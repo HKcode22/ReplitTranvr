@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
-import { Phone, FileText, CalendarDays, ArrowRight, Plane, MapPin, Sparkles, Bell } from "lucide-react";
+import { Phone, FileText, CalendarDays, ArrowRight, MapPin, Sparkles, Bell, Plane } from "lucide-react";
 import type { CallRequest, ItineraryProposal } from "@shared/schema";
 
 export default function DashboardPage() {
@@ -198,9 +198,9 @@ export default function DashboardPage() {
               <Phone className="w-4 h-4 mr-2" /> Request a Call
             </Button>
           </Link>
-          <Link href="/flights">
-            <Button variant="outline" className="w-full justify-start" data-testid="button-quick-search-flights">
-              <Plane className="w-4 h-4 mr-2" /> Search Flights
+          <Link href="/proposals">
+            <Button variant="outline" className="w-full justify-start" data-testid="button-quick-view-proposals">
+              <FileText className="w-4 h-4 mr-2" /> View Proposals
             </Button>
           </Link>
           <Link href="/profile">

@@ -19,7 +19,6 @@ const planningItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Request a Call", url: "/request-call", icon: Phone },
   { title: "Call History", url: "/call-history", icon: PhoneCall },
-  { title: "Search Flights", url: "/flights", icon: Plane },
   { title: "Proposals", url: "/proposals", icon: FileText },
   { title: "Calendar", url: "/calendar", icon: CalendarDays },
 ];

@@ -15,7 +15,6 @@ import { Link } from "wouter";
 import type { TravelerProfile } from "@shared/schema";
 
 const callRequestSchema = z.object({
-  destination: z.string().optional().default(""),
   notes: z.string().optional().default(""),
 });
 
@@ -40,7 +39,7 @@ export default function RequestCallPage() {
   const form = useForm<CallRequestFormValues>({
     resolver: zodResolver(callRequestSchema),
     defaultValues: {
-      destination: "", notes: "",
+      notes: "",
     },
   });
 
@@ -76,7 +75,7 @@ export default function RequestCallPage() {
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       <h1 className="font-serif text-2xl font-bold mb-1" data-testid="text-request-call-title">Request a Call</h1>
-      <p className="text-muted-foreground text-sm mb-6">Tell us about your trip and we'll call you right away.</p>
+      <p className="text-muted-foreground text-sm mb-6">Press the button below and we'll call you right away.</p>
 
       {!hasPhone && (
         <Card className="p-4 mb-4 border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
@@ -112,9 +111,6 @@ export default function RequestCallPage() {
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
-            <FormField control={form.control} name="destination" render={({ field }) => (
-              <FormItem><FormLabel>Destination (optional)</FormLabel><FormControl><Input placeholder="e.g. Tokyo, Japan" {...field} data-testid="input-destination" /></FormControl><FormMessage /></FormItem>
-            )} />
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem><FormLabel>Additional Notes (optional)</FormLabel><FormControl><Textarea placeholder="Any specific requests or preferences..." {...field} data-testid="input-call-notes" /></FormControl><FormMessage /></FormItem>
             )} />

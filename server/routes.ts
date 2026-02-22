@@ -175,13 +175,7 @@ export async function registerRoutes(
   });
 
   const callRequestBodySchema = z.object({
-    tripType: z.enum(["flight", "hotel", "both"]).optional().default("both"),
-    destination: z.string().optional().default(""),
     phone: z.string().optional().default(""),
-    dateFrom: z.string().optional().default(""),
-    dateTo: z.string().optional().default(""),
-    flexibility: z.string().optional().default(""),
-    timeWindow: z.string().optional().default(""),
     notes: z.string().optional().default(""),
   });
 
@@ -229,8 +223,8 @@ export async function registerRoutes(
             const callRequest = await storage.createCallRequest({
               userId: user.id,
               phone: cb.phone,
-              destination: "From concierge call",
-              tripType: "both",
+              destination: "",
+              tripType: "flight",
             });
             await storage.updateCallRequest(callRequest.id, { status: "completed" });
 
@@ -420,6 +414,8 @@ export async function registerRoutes(
     }
     const cr = await storage.createCallRequest({
       ...parsed.data,
+      tripType: "flight",
+      destination: "",
       phone,
       userId: req.session.userId!,
     });
@@ -427,7 +423,7 @@ export async function registerRoutes(
       userId: req.session.userId!,
       type: "call_request",
       title: "Call request submitted",
-      body: cr.destination ? `Your call request for ${cr.destination} has been submitted.` : "Your call request has been submitted.",
+      body: "Your call request has been submitted.",
       linkUrl: "/call-history",
     });
 
@@ -436,14 +432,9 @@ export async function registerRoutes(
       if (user) {
         try {
           const baseUrl = getBaseUrl(req);
-          console.log(`Dispatching Bland AI call for user ${user.id}, phone: ${cr.phone}, destination: ${cr.destination}`);
+          console.log(`Dispatching Bland AI call for user ${user.id}, phone: ${cr.phone}`);
           const task = bland.buildTravelConciergePrompt({
             userName: `${user.firstName} ${user.lastName}`,
-            destination: cr.destination || "",
-            tripType: cr.tripType,
-            dateFrom: cr.dateFrom,
-            dateTo: cr.dateTo,
-            flexibility: cr.flexibility,
             notes: cr.notes,
           });
 
@@ -491,12 +482,6 @@ export async function registerRoutes(
             userEmail: user?.email || "",
             userName: user ? `${user.firstName} ${user.lastName}` : "",
             phone: cr.phone,
-            tripType: cr.tripType,
-            destination: cr.destination,
-            dateFrom: cr.dateFrom,
-            dateTo: cr.dateTo,
-            flexibility: cr.flexibility,
-            timeWindow: cr.timeWindow,
             notes: cr.notes,
             status: cr.status,
             createdAt: cr.createdAt,
@@ -1075,11 +1060,6 @@ export async function registerRoutes(
       const baseUrl = getBaseUrl(req);
       const task = bland.buildTravelConciergePrompt({
         userName: `${user.firstName} ${user.lastName}`,
-        destination: callRequest.destination || "",
-        tripType: callRequest.tripType,
-        dateFrom: callRequest.dateFrom,
-        dateTo: callRequest.dateTo,
-        flexibility: callRequest.flexibility,
         notes: callRequest.notes,
       });
 
@@ -1149,6 +1129,177 @@ export async function registerRoutes(
     }
   });
 
+  function parseTravelDetailsFromTranscript(transcript: string | null, summary: string | null): {
+    origin: string | null;
+    destination: string | null;
+    departureDate: string | null;
+    returnDate: string | null;
+    passengers: number;
+    cabinClass: string;
+    budget: number | null;
+  } {
+    const text = [summary, transcript].filter(Boolean).join("\n").toLowerCase();
+    if (!text) return { origin: null, destination: null, departureDate: null, returnDate: null, passengers: 1, cabinClass: "economy", budget: null };
+
+    let origin: string | null = null;
+    let destination: string | null = null;
+
+    const fromToPatterns = [
+      /(?:from|departing|leaving|flying from|traveling from|depart(?:ing)? from)\s+([a-z\s]+?)\s+(?:to|going to|heading to|flying to|traveling to)\s+([a-z\s]+?)(?:\.|,|$|\s+on|\s+in|\s+around|\s+for)/i,
+      /(?:fly|travel|go|trip|flight)\s+(?:from\s+)?([a-z\s]+?)\s+to\s+([a-z\s]+?)(?:\.|,|$|\s+on|\s+in)/i,
+    ];
+    for (const pat of fromToPatterns) {
+      const match = text.match(pat);
+      if (match) {
+        origin = match[1].trim();
+        destination = match[2].trim();
+        break;
+      }
+    }
+
+    if (!destination) {
+      const destPatterns = [
+        /(?:going to|heading to|traveling to|fly(?:ing)? to|destination(?:\s*:|\s+is)?|trip to|visit(?:ing)?)\s+([a-z][a-z\s]{1,30}?)(?:\.|,|$|\s+on|\s+in|\s+around|\s+for|\s+from)/i,
+      ];
+      for (const pat of destPatterns) {
+        const match = text.match(pat);
+        if (match) {
+          destination = match[1].trim();
+          break;
+        }
+      }
+    }
+
+    if (!origin) {
+      const originPatterns = [
+        /(?:from|departing|leaving|out of|origin(?:\s*:|\s+is)?)\s+([a-z][a-z\s]{1,30}?)(?:\.|,|$|\s+to|\s+on)/i,
+      ];
+      for (const pat of originPatterns) {
+        const match = text.match(pat);
+        if (match) {
+          origin = match[1].trim();
+          break;
+        }
+      }
+    }
+
+    const iataPattern = /\b([A-Z]{3})\b/g;
+    const originalText = [summary, transcript].filter(Boolean).join("\n");
+    const iataCodes: string[] = [];
+    let iataMatch;
+    while ((iataMatch = iataPattern.exec(originalText)) !== null) {
+      const code = iataMatch[1];
+      if (!["THE", "AND", "FOR", "ARE", "NOT", "YOU", "ALL", "CAN", "HER", "WAS", "ONE", "OUR", "OUT", "HAS", "HIS", "HOW", "ITS", "MAY", "NEW", "NOW", "OLD", "SEE", "WAY", "WHO", "DID", "GET", "HAS", "HIM", "LET", "SAY", "SHE", "TOO", "USE"].includes(code)) {
+        iataCodes.push(code);
+      }
+    }
+    if (iataCodes.length >= 2 && !origin) origin = iataCodes[0];
+    if (iataCodes.length >= 2 && !destination) destination = iataCodes[1];
+    if (iataCodes.length === 1 && !destination) destination = iataCodes[0];
+
+    let departureDate: string | null = null;
+    let returnDate: string | null = null;
+
+    const datePattern = /(\d{4}-\d{2}-\d{2})/g;
+    const dates: string[] = [];
+    let dateMatch;
+    while ((dateMatch = datePattern.exec(text)) !== null) {
+      dates.push(dateMatch[1]);
+    }
+    if (dates.length >= 1) departureDate = dates[0];
+    if (dates.length >= 2) returnDate = dates[1];
+
+    if (!departureDate) {
+      const monthDayPatterns = [
+        /(?:on|departing|leaving|departure|depart|leave)(?:\s*(?:on|:))?\s*(?:the\s+)?(\w+\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?)/i,
+        /(\w+\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?)\s*(?:to|through|until|[-–])\s*(\w+\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?)/i,
+        /(\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december)(?:\s*,?\s*\d{4})?)/i,
+      ];
+      for (const pat of monthDayPatterns) {
+        const mdMatch = text.match(pat);
+        if (mdMatch) {
+          const cleanDate = (s: string) => s.replace(/(st|nd|rd|th)/gi, "").replace(/\bof\b/gi, "").trim();
+          const parsed = new Date(cleanDate(mdMatch[1]));
+          if (!isNaN(parsed.getTime())) {
+            if (parsed.getFullYear() < 2000) parsed.setFullYear(new Date().getFullYear());
+            departureDate = parsed.toISOString().split("T")[0];
+          }
+          if (mdMatch[2] && !returnDate) {
+            const parsed2 = new Date(cleanDate(mdMatch[2]));
+            if (!isNaN(parsed2.getTime())) {
+              if (parsed2.getFullYear() < 2000) parsed2.setFullYear(new Date().getFullYear());
+              returnDate = parsed2.toISOString().split("T")[0];
+            }
+          }
+          if (departureDate) break;
+        }
+      }
+    }
+
+    if (!returnDate && departureDate) {
+      const returnPatterns = [
+        /(?:return(?:ing)?|com(?:e|ing)\s+back|back)\s*(?:on|:)?\s*(?:the\s+)?(\w+\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?)/i,
+        /(?:return(?:ing)?|com(?:e|ing)\s+back|back)\s*(?:on|:)?\s*(?:the\s+)?(\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december)(?:\s*,?\s*\d{4})?)/i,
+        /(?:for|stay(?:ing)?)\s+(\d+)\s*(?:days?|nights?|weeks?)/i,
+      ];
+      for (const pat of returnPatterns) {
+        const rMatch = text.match(pat);
+        if (rMatch) {
+          if (/\d+\s*(?:days?|nights?|weeks?)/.test(rMatch[0])) {
+            const num = parseInt(rMatch[1]);
+            const mult = /weeks?/i.test(rMatch[0]) ? 7 : 1;
+            const depDate = new Date(departureDate);
+            depDate.setDate(depDate.getDate() + num * mult);
+            returnDate = depDate.toISOString().split("T")[0];
+          } else {
+            const cleanDate = (s: string) => s.replace(/(st|nd|rd|th)/gi, "").replace(/\bof\b/gi, "").trim();
+            const parsed = new Date(cleanDate(rMatch[1]));
+            if (!isNaN(parsed.getTime())) {
+              if (parsed.getFullYear() < 2000) parsed.setFullYear(new Date().getFullYear());
+              returnDate = parsed.toISOString().split("T")[0];
+            }
+          }
+          if (returnDate) break;
+        }
+      }
+    }
+
+    let passengers = 1;
+    const paxPatterns = [
+      /(\d+)\s*(?:passengers?|travelers?|travellers?|people|adults?|persons?)/i,
+      /(?:passengers?|travelers?|travellers?|people|adults?|persons?)(?:\s*:\s*|\s+)(\d+)/i,
+    ];
+    for (const pat of paxPatterns) {
+      const match = text.match(pat);
+      if (match) {
+        const n = parseInt(match[1]);
+        if (n >= 1 && n <= 20) passengers = n;
+        break;
+      }
+    }
+
+    let cabinClass = "economy";
+    if (/\b(?:first\s*class|first-class)\b/i.test(text)) cabinClass = "first";
+    else if (/\bbusiness\s*class\b/i.test(text) || /\bbusiness\b/i.test(text)) cabinClass = "business";
+    else if (/\bpremium\s*economy\b/i.test(text) || /\bpremium\b/i.test(text)) cabinClass = "premium_economy";
+
+    let budget: number | null = null;
+    const budgetPatterns = [
+      /\$\s*([\d,]+(?:\.\d{2})?)/,
+      /(\d[\d,]+)\s*(?:dollars|usd)/i,
+      /budget(?:\s*(?:is|of|around|about|:))?\s*\$?\s*([\d,]+)/i,
+    ];
+    for (const pat of budgetPatterns) {
+      const match = text.match(pat);
+      if (match) {
+        budget = parseFloat(match[1].replace(/,/g, ""));
+        break;
+      }
+    }
+
+    return { origin, destination, departureDate, returnDate, passengers, cabinClass, budget };
+  }
+
   async function generateProposalFromCall(callRequestId: number, userId: string, callSummary: string | null) {
     const callRequest = await storage.getCallRequest(callRequestId);
     if (!callRequest) {
@@ -1167,44 +1318,61 @@ export async function registerRoutes(
       return;
     }
 
-    const destination = callRequest.destination;
-    const tripType = callRequest.tripType;
-    const dateFrom = callRequest.dateFrom;
-    const dateTo = callRequest.dateTo;
+    const blandCalls = await storage.getBlandCallsByCallRequest(callRequestId);
+    const completedCall = blandCalls?.find(c => c.status === "completed");
+    const transcript = completedCall?.transcript || null;
+    const summary = callSummary || completedCall?.summary || null;
 
-    if (!destination) {
-      console.log(`generateProposalFromCall: no destination for call request ${callRequestId}, creating fallback`);
-      await createFallbackProposal(callRequestId, userId, callRequest, callSummary);
+    const details = parseTravelDetailsFromTranscript(transcript, summary);
+    console.log(`Parsed travel details from transcript for call ${callRequestId}:`, JSON.stringify(details));
+
+    if (!details.destination) {
+      console.log(`generateProposalFromCall: no destination found in transcript for call request ${callRequestId}`);
+      await createFallbackProposal(callRequestId, userId, summary);
       return;
     }
 
-    if (!duffel || tripType === "hotel") {
-      await createFallbackProposal(callRequestId, userId, callRequest, callSummary);
+    if (!duffel) {
+      await createFallbackProposal(callRequestId, userId, summary);
       return;
     }
 
     try {
-      console.log(`Generating proposal for call ${callRequestId}: dest=${destination}, tripType=${tripType}, depart=${dateFrom}, return=${dateTo}`);
-      const placesResponse = await duffel.suggestions.list({ query: destination });
+      const placesResponse = await duffel.suggestions.list({ query: details.destination });
       const places = placesResponse.data || [];
       const destAirport = places.find((p: any) => p.type === "airport") || places[0];
       if (!destAirport?.iata_code) {
-        console.log(`No airport found for destination: ${destination}`);
-        await createFallbackProposal(callRequestId, userId, callRequest, callSummary);
+        console.log(`No airport found for destination: ${details.destination}`);
+        await createFallbackProposal(callRequestId, userId, summary);
         return;
       }
-
       const destCode = destAirport.iata_code;
+      const destName = destAirport.city_name || destAirport.name || details.destination;
 
       let originCode = "JFK";
       const profile = await storage.getProfile(userId);
-      if (profile?.nationality) {
-        const nationalityToHub: Record<string, string> = {
-          "US": "JFK", "GB": "LHR", "CA": "YYZ", "AU": "SYD", "DE": "FRA",
-          "FR": "CDG", "JP": "NRT", "KR": "ICN", "SG": "SIN", "AE": "DXB",
-          "IN": "DEL", "BR": "GRU", "MX": "MEX", "IT": "FCO", "ES": "MAD",
-        };
-        originCode = nationalityToHub[profile.nationality] || "JFK";
+
+      if (details.origin) {
+        try {
+          const originPlaces = await duffel.suggestions.list({ query: details.origin });
+          const originAirport = (originPlaces.data || []).find((p: any) => p.type === "airport") || (originPlaces.data || [])[0];
+          if (originAirport?.iata_code) originCode = originAirport.iata_code;
+        } catch (e) {
+          console.log(`Could not resolve origin "${details.origin}", using fallback`);
+        }
+      }
+
+      if (originCode === "JFK" && !details.origin) {
+        if (profile?.homeAirport) {
+          originCode = profile.homeAirport;
+        } else if (profile?.nationality) {
+          const nationalityToHub: Record<string, string> = {
+            "US": "JFK", "GB": "LHR", "CA": "YYZ", "AU": "SYD", "DE": "FRA",
+            "FR": "CDG", "JP": "NRT", "KR": "ICN", "SG": "SIN", "AE": "DXB",
+            "IN": "DEL", "BR": "GRU", "MX": "MEX", "IT": "FCO", "ES": "MAD",
+          };
+          originCode = nationalityToHub[profile.nationality] || "JFK";
+        }
       }
 
       if (originCode === destCode) {
@@ -1213,40 +1381,77 @@ export async function registerRoutes(
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
-      let departureDate = dateFrom || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
-      let returnDate = dateTo || null;
-      
+
+      let departureDate = details.departureDate || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
+      let returnDate = details.returnDate || null;
+
       if (new Date(departureDate) <= today) {
-        const daysOffset = 14;
-        departureDate = new Date(Date.now() + daysOffset * 86400000).toISOString().split("T")[0];
+        departureDate = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
         if (returnDate) {
-          const originalDuration = dateFrom && dateTo 
-            ? Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / 86400000)
+          const duration = details.departureDate && details.returnDate
+            ? Math.ceil((new Date(details.returnDate).getTime() - new Date(details.departureDate).getTime()) / 86400000)
             : 7;
-          returnDate = new Date(Date.now() + (daysOffset + originalDuration) * 86400000).toISOString().split("T")[0];
+          returnDate = new Date(Date.now() + (14 + duration) * 86400000).toISOString().split("T")[0];
         }
       }
 
+      const passengers: Array<{ type: "adult" }> = [];
+      for (let i = 0; i < details.passengers; i++) {
+        passengers.push({ type: "adult" as const });
+      }
+
       const slices: any[] = [{ origin: originCode, destination: destCode, departure_date: departureDate }];
-      if ((tripType === "flight" || tripType === "both") && returnDate) {
+      if (returnDate) {
         slices.push({ origin: destCode, destination: originCode, departure_date: returnDate });
       }
 
+      console.log(`Searching Duffel for call ${callRequestId}: ${originCode} -> ${destCode}, depart=${departureDate}, return=${returnDate}, cabin=${details.cabinClass}, pax=${details.passengers}`);
+
       const offerRequest = await duffel.offerRequests.create({
         slices,
-        passengers: [{ type: "adult" as const }],
-        cabin_class: "economy",
+        passengers,
+        cabin_class: details.cabinClass as any,
         return_offers: true,
+        max_connections: 1,
       });
 
-      const offers = (offerRequest.data as any).offers || [];
-      if (offers.length === 0) {
-        await createFallbackProposal(callRequestId, userId, callRequest, callSummary);
+      const allOffers = (offerRequest.data as any).offers || [];
+      if (allOffers.length === 0) {
+        await createFallbackProposal(callRequestId, userId, summary);
         return;
       }
 
-      const topOffers = offers.slice(0, 3);
+      allOffers.sort((a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
+
+      const diverseOffers: any[] = [];
+      const seenAirlines = new Set<string>();
+      for (const offer of allOffers) {
+        const airline = offer.owner?.iata_code || offer.owner?.name || "unknown";
+        if (!seenAirlines.has(airline)) {
+          diverseOffers.push(offer);
+          seenAirlines.add(airline);
+          if (diverseOffers.length >= 5) break;
+        }
+      }
+
+      if (diverseOffers.length < 5) {
+        for (const offer of allOffers) {
+          if (!diverseOffers.includes(offer)) {
+            diverseOffers.push(offer);
+            if (diverseOffers.length >= 5) break;
+          }
+        }
+      }
+
+      if (details.budget) {
+        diverseOffers.sort((a: any, b: any) => {
+          const diffA = Math.abs(parseFloat(a.total_amount) - details.budget!);
+          const diffB = Math.abs(parseFloat(b.total_amount) - details.budget!);
+          return diffA - diffB;
+        });
+      }
+
+      const topOffers = diverseOffers.slice(0, 5);
       const bestOffer = topOffers[0];
 
       const simplifyOffer = (offer: any) => ({
@@ -1283,13 +1488,15 @@ export async function registerRoutes(
       const simplified = simplifyOffer(bestOffer);
       const routeSummary = simplified.slices?.map((s: any) =>
         `${s.origin?.city || s.origin?.iata} to ${s.destination?.city || s.destination?.iata}`
-      ).join(", ") || destination;
+      ).join(", ") || destName;
+
+      const cabinLabel = details.cabinClass === "premium_economy" ? "Premium Economy" : details.cabinClass.charAt(0).toUpperCase() + details.cabinClass.slice(1);
 
       const proposal = await storage.createProposal({
         userId,
         callRequestId,
-        title: `Trip to ${destination}`,
-        summary: callSummary || `Based on your concierge call, we found flights for your trip to ${destination}. ${routeSummary}.`,
+        title: `Trip to ${destName}`,
+        summary: summary || `Based on your concierge call, we found ${cabinLabel} class flights for your trip. ${routeSummary}.`,
         totalEstimate: bestOffer.total_amount,
         status: "sent",
       });
@@ -1297,51 +1504,50 @@ export async function registerRoutes(
       await storage.createProposalItem({
         proposalId: proposal.id,
         type: "flight",
-        description: `Flight: ${routeSummary}`,
+        description: `${cabinLabel} Flight: ${routeSummary}`,
         priceEstimate: bestOffer.total_amount,
         duffelOfferId: bestOffer.id,
         duffelOfferData: simplified,
       });
 
-      if (topOffers.length > 1) {
-        for (let i = 1; i < topOffers.length; i++) {
-          const altSimplified = simplifyOffer(topOffers[i]);
-          const altRoute = altSimplified.slices?.map((s: any) =>
-            `${s.origin?.city || s.origin?.iata} to ${s.destination?.city || s.destination?.iata}`
-          ).join(", ") || destination;
+      for (let i = 1; i < topOffers.length; i++) {
+        const altSimplified = simplifyOffer(topOffers[i]);
+        const altRoute = altSimplified.slices?.map((s: any) =>
+          `${s.origin?.city || s.origin?.iata} to ${s.destination?.city || s.destination?.iata}`
+        ).join(", ") || destName;
+        const altCabin = altSimplified.slices?.[0]?.segments?.[0]?.cabinClass || cabinLabel;
 
-          await storage.createProposalItem({
-            proposalId: proposal.id,
-            type: "flight",
-            description: `Alternative flight: ${altRoute}`,
-            priceEstimate: topOffers[i].total_amount,
-            duffelOfferId: topOffers[i].id,
-            duffelOfferData: altSimplified,
-          });
-        }
+        await storage.createProposalItem({
+          proposalId: proposal.id,
+          type: "flight",
+          description: `Alternative ${altCabin} Flight: ${altRoute} (${topOffers[i].owner?.name || "Airline"})`,
+          priceEstimate: topOffers[i].total_amount,
+          duffelOfferId: topOffers[i].id,
+          duffelOfferData: altSimplified,
+        });
       }
 
       await storage.createNotification({
         userId,
         type: "proposal_received",
         title: "New travel proposal ready",
-        body: `Based on your concierge call, we've prepared a flight proposal for your trip to ${destination}.`,
+        body: `Based on your concierge call, we've prepared a flight proposal for your trip to ${destName}.`,
         linkUrl: `/proposals/${proposal.id}`,
       });
 
-      console.log(`Auto-generated proposal ${proposal.id} from call request ${callRequestId}`);
+      console.log(`Auto-generated proposal ${proposal.id} with ${topOffers.length} offers from call request ${callRequestId}`);
     } catch (err: any) {
       console.error("Duffel search for auto-proposal failed:", JSON.stringify(err?.errors || err?.message || err, null, 2));
-      await createFallbackProposal(callRequestId, userId, callRequest, callSummary);
+      await createFallbackProposal(callRequestId, userId, summary);
     }
   }
 
-  async function createFallbackProposal(callRequestId: number, userId: string, callRequest: any, callSummary: string | null) {
+  async function createFallbackProposal(callRequestId: number, userId: string, callSummary: string | null) {
     const proposal = await storage.createProposal({
       userId,
       callRequestId,
-      title: `Trip to ${callRequest.destination}`,
-      summary: callSummary || `Based on your concierge call about ${callRequest.destination}. Our team will add flight options shortly.`,
+      title: "Travel Concierge Proposal",
+      summary: callSummary || "Please provide your travel details so we can search for the best flights.",
       totalEstimate: "0.00",
       status: "sent",
     });
@@ -1349,7 +1555,7 @@ export async function registerRoutes(
     await storage.createProposalItem({
       proposalId: proposal.id,
       type: "other",
-      description: `Travel planning for ${callRequest.destination}${callRequest.dateFrom ? ` (${callRequest.dateFrom}${callRequest.dateTo ? ` - ${callRequest.dateTo}` : ""})` : ""}`,
+      description: "Travel planning - details pending from concierge call",
       priceEstimate: "0.00",
       duffelOfferId: null,
       duffelOfferData: null,
@@ -1359,7 +1565,7 @@ export async function registerRoutes(
       userId,
       type: "proposal_received",
       title: "Travel proposal in progress",
-      body: `We're working on your trip to ${callRequest.destination}. You'll receive flight options soon.`,
+      body: "We're working on your travel proposal. You'll receive flight options soon.",
       linkUrl: `/proposals/${proposal.id}`,
     });
 

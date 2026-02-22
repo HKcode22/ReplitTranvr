@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Phone, Plus, MapPin, Calendar, Clock, Loader2, PhoneCall,
+  Phone, Plus, Calendar, Clock, Loader2, PhoneCall,
   FileText, ChevronDown, ChevronUp, Play, PhoneOff, AlertCircle, Plane, ArrowRight
 } from "lucide-react";
 import type { CallRequest, BlandCall, ItineraryProposal } from "@shared/schema";
@@ -154,29 +154,13 @@ function CallRequestCard({ call, proposals }: { call: CallRequest; proposals?: I
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="space-y-2 flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <MapPin className="w-4 h-4 text-primary" />
-            <span className="font-medium">{call.destination || "No destination specified"}</span>
+            <Phone className="w-4 h-4 text-primary" />
+            <span className="font-medium">Concierge Call</span>
             <StatusBadge status={call.status} />
           </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-            {call.dateFrom && call.dateTo && (
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                {call.dateFrom} — {call.dateTo}
-              </span>
-            )}
-            {call.timeWindow && (
-              <span className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                {call.timeWindow}
-              </span>
-            )}
-          </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="capitalize">{call.tripType === "both" ? "Flight + Hotel" : call.tripType}</span>
             {call.phone && (
               <>
-                <span>|</span>
                 <Phone className="w-3 h-3" />
                 <span>{call.phone}</span>
               </>
