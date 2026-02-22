@@ -124,6 +124,13 @@ shared/
 - **Initialization**: Stripe schema and webhooks initialized on server startup via stripe-replit-sync
 - **Note**: Frontend checkout uses Duffel's built-in card payment (DuffelCardForm) as the primary payment method for both proposal and direct flight bookings
 
+## Integration Status
+- **SendGrid** - Configured (SENDGRID_API_KEY + SENDGRID_FROM_EMAIL set)
+- **Duffel** - Configured with live API token (DUFFEL_API_TOKEN set)
+- **Bland AI** - Configured (BLAND_AI_API_KEY set)
+- **n8n** - Configured (N8N_WEBHOOK_CALL_REQUEST set)
+- **Stripe** - NOT configured yet. User dismissed Replit Stripe connector setup. The app handles this gracefully by skipping Stripe initialization when the connector is not available. Can be set up later through Replit integrations panel.
+
 ## Running
 - `npm run dev` starts the Express server (port 5000)
 - `npm run db:push` pushes schema changes to database
