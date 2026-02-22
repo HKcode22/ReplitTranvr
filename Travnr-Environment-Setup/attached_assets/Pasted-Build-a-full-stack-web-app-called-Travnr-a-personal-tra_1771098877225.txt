@@ -1,0 +1,171 @@
+Build a full-stack web app called "Travnr" — a personal travel concierge platform. The app is the "home base" for a travel concierge service. Users create accounts, manage traveler profiles, request concierge calls, receive and approve travel itinerary proposals with line-item pricing, view a travel calendar, manage notifications, and handle billing/payments. The actual voice call experience is handled by a separate system — this app manages the user-facing web experience and provides webhook endpoints for the voice system to integrate with.
+
+Use the Travnr logo I've attached as the app logo and favicon.
+
+Authentication
+Use custom email/password authentication (NOT Replit Auth or any third-party OAuth). Users register with first name, last name, email, and password. Passwords are hashed with bcrypt (12 rounds). Sessions are managed via express-session with a PostgreSQL-backed session store (connect-pg-simple). User IDs are UUIDs (gen_random_uuid).
+
+Email verification is required. After registering, the user sees a "Check your email" screen with a mail icon, the email they registered with, instructions to click the link, and a "Resend verification email" button. A verification email is sent via SendGrid (from address: hello@travnr.com, sender name: "Travnr"). The email is branded HTML with a "Verify My Email" button linking to the verification endpoint. When the user clicks the link, they are redirected to /auth?verified=true, which shows a "Email verified" success screen with a green checkmark and a "Sign In" button. Unverified users get a 403 error when trying to log in, which redirects them to the check-email screen. If SendGrid is not configured, verification links are logged to the server console in development only (never in production).
+
+The /auth page has login and register modes with a toggle between them. It includes a password visibility toggle (eye icon), inline error messages, and loading states on the submit button. The header on the auth page has the Travnr logo linking back to the landing page and a dark/light theme toggle.
+
+Auth endpoints:
+
+POST /api/auth/register — creates user, sends verification email, returns { ...user, needsVerification: true }
+POST /api/auth/login — validates credentials, returns 403 if not verified, sets session
+POST /api/auth/logout — destroys session
+GET /api/auth/user — returns current user (strips password and verificationToken)
+GET /api/auth/verify?token=... — verifies email, redirects to /auth?verified=true (does NOT set session)
+POST /api/auth/resend-verification — generates new token, sends new email
+Secrets needed: SENDGRID_API_KEY (secret), SESSION_SECRET (secret). Env var: SENDGRID_FROM_EMAIL = hello@travnr.com
+
+Data Model (PostgreSQL with Drizzle ORM)
+Users: id (varchar UUID PK, gen_random_uuid), email (unique), password, firstName, lastName, profileImageUrl, emailVerified (boolean, default false), verificationToken, createdAt, updatedAt
+
+Sessions: sid (varchar PK), sess (jsonb), expire (timestamp, indexed)
+
+TravelerProfile: id (serial PK), userId (FK to users), name, phone, homeAirport, passportCountry, seatPreference, hotelPreference, dietaryNotes, budgetRange, loyaltyPrograms, notes, updatedAt
+
+CallRequest: id (serial PK), userId (FK), tripType (enum: flight/hotel/both), destination, dateFrom (text), dateTo (text), flexibility, timeWindow, status (enum: requested/scheduled/completed/cancelled, default requested), notes, createdAt
+
+ItineraryProposal: id (serial PK), userId (FK), callRequestId (FK nullable), title, summary, totalEstimate (numeric 10,2), status (enum: draft/sent/approved/rejected, default sent), createdAt
+
+ProposalItem: id (serial PK), proposalId (FK), type (enum: flight/hotel/other), description, priceEstimate (numeric 10,2)
+
+Notification: id (serial PK), userId (FK), type (text), title, body, linkUrl, readAt (timestamp nullable), createdAt
+
+Payment: id (serial PK), userId (FK), proposalId (FK), stripeCheckoutSessionId, stripePaymentIntentId, amount (numeric 10,2), currency (text, default "usd"), status (enum: unpaid/processing/paid/failed, default unpaid), createdAt
+
+CallbackRequest: id (serial PK), phone, email, createdAt — stores public "Request a Call" form submissions (no auth required)
+
+All enums are pgEnums. Define Drizzle relations between all tables. Create insert schemas with drizzle-zod, omitting auto-generated fields.
+
+API Endpoints
+All endpoints below /api/profile, /api/call-requests, /api/proposals, /api/notifications, /api/payments require authentication via isAuthenticated middleware that checks session userId.
+
+GET/POST /api/profile — get or upsert traveler profile
+GET/POST /api/call-requests — list or create call requests. Creating a call request also creates a notification.
+GET /api/proposals — list user's proposals
+GET /api/proposals/:id — get proposal with items and payments included (verify ownership)
+POST /api/proposals/:id/approve — approve a "sent" proposal, creates notification
+POST /api/proposals/:id/pay — pay an "approved" proposal, creates payment record (status: "paid", with demo stripe IDs like cs_demo_timestamp and pi_demo_timestamp), creates notification
+GET /api/notifications — list notifications
+POST /api/notifications/:id/read — mark single notification read
+POST /api/notifications/read-all — mark all read
+GET /api/payments — payment history
+POST /api/callback-request — public (no auth), validates phone + email
+POST /api/seed-demo — authenticated, seeds demo data for the current user
+Webhook endpoints (no auth, for external voice system):
+
+POST /api/webhooks/call-status — updates call request status, creates notification
+POST /api/webhooks/proposal-created — creates proposal with items from external system, creates notification
+POST /api/webhooks/stripe — updates payment status
+Demo Data Seeder
+A "Load Demo Data" button on the dashboard (POST /api/seed-demo) creates sample data for the logged-in user:
+
+Three call requests: Tokyo (completed), Santorini (scheduled), Patagonia (requested)
+Two proposals: "Tokyo Cherry Blossom Adventure" ($4,850, status: sent, with 3 line items: flight $1,450, hotel $2,800, activities $600) and "Santorini Honeymoon Escape" ($6,200, status: approved, with 3 line items)
+One payment for the Santorini proposal ($6,200, paid)
+Three notifications: new proposal, payment confirmed, call completed
+Design & Visual Style
+Color scheme: Soft light-blue primary (hue 205, saturation 72%, lightness ~52% light / ~58% dark). Clean whites, subtle neutral grays. The primary color is used for buttons, links, active states, and accent elements. Background is near-white (210 20% 99% light, 215 20% 7% dark). Cards are slightly elevated from background.
+
+Fonts: DM Sans for body text (font-sans), Playfair Display for headings (font-serif), JetBrains Mono for monospace. Import from Google Fonts.
+
+Dark mode: Fully supported with class-based toggling. A theme toggle button (sun/moon icon) appears in the header. All colors have light and dark variants.
+
+Border radius: Small (0.5rem default). Consistent throughout.
+
+Animations defined in CSS:
+
+fade-in-up: translateY(20px) to 0, opacity 0 to 1, 0.7s
+fade-in: opacity 0 to 1, 0.6s
+blink-caret: blinking cursor effect for typing animation
+waveform: height oscillation 4px to 16px for voice visualization
+Animation delay utility classes: .animate-delay-100 through .animate-delay-800
+Landing Page (public, unauthenticated)
+Header: Sticky, backdrop blur, border bottom. Travnr logo + "Travnr" text on left. Theme toggle, ghost "Features" button (hidden on mobile), and "Sign In" primary button on right.
+
+Hero section: Full-width with subtle gradient overlays and decorative blurred circles. Contains:
+
+A pill badge: "Your Personal Travel Concierge" with sparkle icon
+Large heading in serif font: "We help you book your [rotating word]" — the rotating word types and deletes through: trip, vacation, excursion, getaway, work trip, weekend, honeymoon. Typing speed 80ms, deleting 50ms, 2s pause. Has a blinking cursor effect.
+Subheading: "Skip the endless searching. Tell us where you want to go, and our concierge team handles every detail."
+Staggered fade-in-up animations on each element
+Callback Form (below hero): A Card with phone icon, "Request a Call" title, "We'll text or email to confirm" subtitle. Two inputs: phone number and email. Submit button "Get a Call" with arrow icon. Shows loading spinner while submitting. On success, shows green checkmark with "We'll be in touch!" message. Submits to POST /api/callback-request (no auth required).
+
+"How it Works" section: Heading "Like having a travel agent on speed dial". Contains a Voice Conversation animation — a Card styled like a phone call interface:
+
+Header shows "Travnr Concierge" with mic icon, green dot when active, "Connecting..." then "Call in progress" status
+Chat bubbles appear sequentially simulating a conversation: "Where are you headed?" / "New York, next weekend." / "Any preferences?" / "Direct flight, flexible hotel." / "Got it. I'll take care of it."
+Travnr messages align left with primary-tinted background, user messages align right with muted background
+Animated waveform bars appear when someone is "speaking" with label "Speaking" or "Listening"
+Whole animation loops every ~13 seconds
+Bubbles animate in with fade-in-up
+Features section: Background tinted, 6 feature cards in 3-column grid (2-col on tablet, 1-col mobile):
+
+Personal Concierge Calls (Phone icon)
+Curated Itineraries (FileText icon)
+Travel Calendar (CalendarDays icon)
+Secure Payments (Shield icon)
+Traveler Profile (Globe icon)
+End-to-End Management (Sparkles icon)
+Each card has hover-elevate effect, icon in primary-tinted circle, title, and description.
+CTA section: "Ready to transform how you travel?" with "Start Planning" button linking to /auth.
+
+Footer: Logo, year, Privacy and Terms links.
+
+Authenticated App Layout
+When logged in, the app uses a Shadcn sidebar layout (16rem width). Sidebar has:
+
+Header: Travnr logo + "Travnr" text, links to dashboard
+Navigation group labeled "Navigation" with items: Dashboard, Profile, Request a Call, Call History, Proposals, Calendar, Notifications (with unread count badge), Billing
+Footer: User avatar (initials fallback), name, email, logout button
+Main area has a sticky header with sidebar trigger and theme toggle, backdrop blur effect. Content renders in a Switch router below.
+
+When authenticated and visiting /, auto-redirect to /dashboard.
+
+Dashboard Page
+Greeting: "Welcome back, [firstName]" with serif heading
+4 stat cards in a row: Call Requests count, Proposals count, Upcoming Trips count, Payments count — each with relevant icon
+2-column grid: Latest Call Request card (shows destination, status badge, dates, time window, or empty state with "Request Your First Call" button) and Latest Proposal card (shows title, status badge, summary, total price, or empty state)
+Quick Actions card: 3 outline buttons in a grid — "Request a Call", "Edit Profile", "View Calendar"
+"Load Demo Data" button (with sparkle icon) in the Quick Actions header
+Status badges use colored backgrounds per status: amber for requested/unpaid, blue for scheduled/processing, emerald for completed/approved/paid, red for cancelled/rejected/failed, primary for sent, muted for draft. All use Badge with variant="outline" and border-0.
+
+Profile Page
+Form with fields: Full Name, Phone Number, Home Airport, Passport Country, Seat Preference (select: Window/Aisle/Middle/No Preference), Hotel Preference (select: Budget/Mid-Range/Luxury/Boutique), Budget Range (select: Under $1k / $1-3k / $3-5k / $5-10k / $10k+), Dietary Notes (textarea), Loyalty Programs (textarea), Additional Notes (textarea). Uses react-hook-form with zod validation. Pre-fills name from user's first/last name. Save button with save icon.
+
+Call Request Pages
+New Call Request form: Trip Type (select: Flight Only/Hotel Only/Flight + Hotel), Destination (text), From/To dates (date inputs), Flexibility (select: Exact/1-2 days/Up to a week/Very flexible), Best Time to Call (select: Morning/Afternoon/Evening/Anytime with description), Additional Notes (textarea). Submit button with send icon. On success, navigates to /call-request and shows toast.
+
+Call History list: Cards for each request showing destination, status badge, dates, time window, trip type, notes, and creation date. "New Request" button in header. Empty state with phone icon and "Request a Call" button.
+
+Proposals Pages
+List: Cards showing title, status badge, summary (2-line clamp), total price, date, and arrow icon. Clickable, navigates to detail. Empty state links to request a call.
+
+Detail: Back button, title, status badge, paid badge if applicable. Summary card. Line Items card with icons per type (Plane for flight, Hotel for hotel, Package for other), description, type badge, price. Separator then total estimate. Payment history section if payments exist. Action buttons: "Approve Proposal" (when status is sent), "Pay $X" (when status is approved and not yet paid). Both show loading states.
+
+Calendar Page
+Custom month calendar grid (7 columns for days of week). Shows current month with prev/next navigation. Today is highlighted with primary ring. Call request date ranges that fall within the visible month show as small primary-tinted labels in day cells (max 2 visible, "+N" overflow). Below the calendar: "Upcoming Trips" section listing all call requests as cards, and "Approved Itineraries" section listing approved proposals as clickable cards.
+
+Notifications Page
+List of notification cards. Unread notifications have a left primary border and a blue dot next to the title. Each shows title, body, timestamp, optional "View" link button. Unread ones have a checkmark button to mark as read. "Mark All Read" button in header (only shown when unread exist). Empty state with bell icon.
+
+Billing Page
+Summary cards: Total Paid amount and Transaction count. Payment history list below showing amount, currency, proposal ID, date, and status badge. Each payment has a receipt icon. Empty state with credit card icon.
+
+Technical Details
+React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui (frontend)
+Express.js with TypeScript (backend)
+PostgreSQL with Drizzle ORM
+wouter for client-side routing
+TanStack React Query v5 for data fetching
+SendGrid (@sendgrid/mail) for verification emails
+bcryptjs for password hashing
+connect-pg-simple for session storage
+Icons from lucide-react throughout
+All interactive elements have data-testid attributes
+Loading states use Skeleton components
+Toast notifications for success/error feedback
+Responsive design with mobile sidebar collapse
