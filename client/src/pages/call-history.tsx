@@ -10,8 +10,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Phone, Plus, Calendar, Clock, Loader2, PhoneCall,
-  FileText, ChevronDown, ChevronUp, Play, PhoneOff, AlertCircle, Plane, ArrowRight
+  Phone, Plus, Loader2, PhoneCall,
+  FileText, ChevronDown, ChevronUp, AlertCircle, Plane, ArrowRight
 } from "lucide-react";
 import type { CallRequest, BlandCall, ItineraryProposal } from "@shared/schema";
 
@@ -95,13 +95,6 @@ function BlandCallCard({ blandCall }: { blandCall: BlandCall }) {
             {showTranscript ? <ChevronUp className="w-3 h-3 ml-1" /> : <ChevronDown className="w-3 h-3 ml-1" />}
           </Button>
         )}
-        {blandCall.recordingUrl && (
-          <a href={blandCall.recordingUrl} target="_blank" rel="noopener noreferrer">
-            <Button variant="ghost" size="sm" data-testid={`button-play-recording-${blandCall.id}`}>
-              <Play className="w-4 h-4 mr-1" /> Recording
-            </Button>
-          </a>
-        )}
       </div>
 
       {showTranscript && blandCall.transcript && (
@@ -126,6 +119,11 @@ function CallRequestCard({ call, proposals }: { call: CallRequest; proposals?: I
       const res = await fetch(`/api/bland/calls/${call.id}`, { credentials: "include" });
       if (!res.ok) return [];
       return res.json();
+    },
+    refetchInterval: (query) => {
+      const data = query.state.data as BlandCall[] | undefined;
+      const hasActive = data?.some(c => c.status === "queued" || c.status === "ringing" || c.status === "in_progress");
+      return hasActive ? 5000 : call.status !== "completed" ? 10000 : false;
     },
   });
 
@@ -238,10 +236,12 @@ function CallRequestCard({ call, proposals }: { call: CallRequest; proposals?: I
 export default function CallHistoryPage() {
   const { data: callRequests, isLoading } = useQuery<CallRequest[]>({
     queryKey: ["/api/call-requests"],
+    refetchInterval: 15000,
   });
 
   const { data: proposals } = useQuery<ItineraryProposal[]>({
     queryKey: ["/api/proposals"],
+    refetchInterval: 15000,
   });
 
   const { data: blandConfig } = useQuery<{ configured: boolean }>({

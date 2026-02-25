@@ -4,7 +4,7 @@
 Travnr is a full-stack web application serving as the "home base" for a personal travel concierge service. Users create accounts, manage traveler profiles, request concierge calls, receive and approve travel itinerary proposals with line-item pricing, view a travel calendar, manage notifications, and handle billing/payments.
 
 ## Tech Stack
-- **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
+- **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui + @stripe/react-stripe-js
 - **Backend:** Express.js with TypeScript
 - **Database:** PostgreSQL with Drizzle ORM
 - **Auth:** Custom email/password with bcrypt (12 rounds), express-session, connect-pg-simple

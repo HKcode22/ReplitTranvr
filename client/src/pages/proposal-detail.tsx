@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,11 +18,10 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { PhoneInput } from "@/components/phone-input";
 import { useToast } from "@/hooks/use-toast";
-import { DuffelCardForm, useDuffelCardFormActions } from "@duffel/components";
 import type { ItineraryProposal, ProposalItem, Payment, TravelerProfile } from "@shared/schema";
 import {
   ArrowLeft, Plane, Hotel, Package, Check, CreditCard, Loader2, Clock,
-  Luggage, ArrowRight, User, Lock, Shield, AlertCircle
+  Luggage, ArrowRight, User, Lock, Shield, AlertCircle, Users, Plus, Minus
 } from "lucide-react";
 
 type ProposalDetail = ItineraryProposal & {
@@ -157,21 +158,84 @@ function DuffelFlightCard({ offerData }: { offerData: any }) {
   );
 }
 
+function StripePaymentForm({
+  clientSecret,
+  onSuccess,
+  onError,
+  isProcessing,
+  totalAmount,
+  totalCurrency,
+}: {
+  clientSecret: string;
+  onSuccess: (paymentIntentId: string) => void;
+  onError: (msg: string) => void;
+  isProcessing: boolean;
+  totalAmount: number;
+  totalCurrency: string;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!stripe || !elements || submitting || isProcessing) return;
+    setSubmitting(true);
+    const { error, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: window.location.href },
+      redirect: "if_required",
+    });
+    if (error) {
+      onError(error.message || "Payment failed");
+      setSubmitting(false);
+    } else if (paymentIntent?.status === "succeeded") {
+      onSuccess(paymentIntent.id);
+    } else {
+      onError("Payment not completed. Please try again.");
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div data-testid="container-stripe-payment-element">
+        <PaymentElement options={{ layout: "tabs" }} />
+      </div>
+      <Button
+        onClick={handleSubmit}
+        disabled={!stripe || !elements || submitting || isProcessing}
+        className="w-full"
+        data-testid="button-pay-now"
+      >
+        {(submitting || isProcessing) ? (
+          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+        ) : (
+          <Lock className="w-4 h-4 mr-2" />
+        )}
+        Pay {totalCurrency} {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} & Book Flight
+      </Button>
+    </div>
+  );
+}
+
 function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: ProposalDetail; selectedItem: ProposalItem; onCancel: () => void }) {
   const { toast } = useToast();
   const [checkoutStep, setCheckoutStep] = useState<"passengers" | "payment" | "processing">("passengers");
   const [passengerData, setPassengerData] = useState<CheckoutFormValues | null>(null);
-  const [clientKey, setClientKey] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
-  const [cardFormValid, setCardFormValid] = useState(false);
   const [bookingResult, setBookingResult] = useState<any>(null);
-  const { ref: cardFormRef, createCardForTemporaryUse } = useDuffelCardFormActions();
-  const bookingCalledRef = useRef(false);
+  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
+  const [stripePaymentIntentId, setStripePaymentIntentId] = useState<string | null>(null);
+  const [stripeInstance, setStripeInstance] = useState<any>(null);
+  const [activeOfferData, setActiveOfferData] = useState<any>(selectedItem.duffelOfferData as any);
+  const [isLoadingOffer, setIsLoadingOffer] = useState(false);
 
   const offerData = selectedItem.duffelOfferData as any;
-  const passengerCount = offerData?.passengers?.length || 1;
-  const totalCurrency = offerData?.totalCurrency || "USD";
-  const totalAmount = parseFloat(offerData?.totalAmount || selectedItem.priceEstimate);
+  const originalPassengerCount = offerData?.passengers?.length || 1;
+  const totalCurrency = activeOfferData?.totalCurrency || "USD";
+  const totalAmount = parseFloat(activeOfferData?.totalAmount || selectedItem.priceEstimate);
+
+  const [desiredPassengerCount, setDesiredPassengerCount] = useState(originalPassengerCount);
 
   const { data: profile } = useQuery<TravelerProfile | null>({
     queryKey: ["/api/profile"],
@@ -183,37 +247,24 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
     },
   });
 
-  const { data: duffelConfig } = useQuery<{ testMode: boolean }>({
-    queryKey: ["/api/duffel/config"],
+  const { data: stripeConfig } = useQuery<{ publishableKey: string | null }>({
+    queryKey: ["/api/stripe/config"],
   });
 
   const hasProfileData = !!(profile?.name && profile?.dateOfBirth && profile?.gender && profile?.title && profile?.phone);
 
-  const buildDefaultPassenger = () => {
-    if (hasProfileData && profile) {
-      const nameParts = (profile.name || "").split(" ");
-      return {
-        givenName: nameParts[0] || "",
-        familyName: nameParts.slice(1).join(" ") || "",
-        bornOn: profile.dateOfBirth || "",
-        gender: profile.gender || "m",
-        title: profile.title || "mr",
-        phone: profile.phone || "",
-      };
-    }
-    return { givenName: "", familyName: "", bornOn: "", gender: "m", title: "mr", phone: "" };
-  };
+  const emptyPassenger = () => ({ givenName: "", familyName: "", bornOn: "", gender: "m", title: "mr", phone: "" });
 
   const form = useForm<CheckoutFormValues>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
-      passengers: Array.from({ length: passengerCount }, (_, i) =>
-        i === 0 ? buildDefaultPassenger() : { givenName: "", familyName: "", bornOn: "", gender: "m", title: "mr", phone: "" }
+      passengers: Array.from({ length: originalPassengerCount }, (_, i) =>
+        i === 0 ? emptyPassenger() : emptyPassenger()
       ),
     },
   });
 
-  const { fields } = useFieldArray({ control: form.control, name: "passengers" });
+  const { fields, append, remove } = useFieldArray({ control: form.control, name: "passengers" });
 
   useEffect(() => {
     if (profile && hasProfileData) {
@@ -231,27 +282,28 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
     }
   }, [profile]);
 
-  const fetchClientKeyMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/duffel/component-client-key", {});
-      return res.json();
-    },
-    onSuccess: (data: any) => {
-      setClientKey(data.clientKey);
-      setCheckoutStep("payment");
-    },
-    onError: (err: any) => {
-      toast({ title: "Payment setup failed", description: err.message, variant: "destructive" });
-    },
-  });
+  const adjustPassengerCount = (newCount: number) => {
+    const clamped = Math.max(1, Math.min(9, newCount));
+    const current = fields.length;
+    if (clamped > current) {
+      for (let i = current; i < clamped; i++) append(emptyPassenger());
+    } else if (clamped < current) {
+      for (let i = current - 1; i >= clamped; i--) remove(i);
+    }
+    setDesiredPassengerCount(clamped);
+    setActiveOfferData(offerData);
+  };
 
-  const bookMutation = useMutation({
-    mutationFn: async (cardId: string) => {
+  const confirmBookingMutation = useMutation({
+    mutationFn: async ({ paymentIntentId, overrideOfferId, overrideOfferData: ood }: { paymentIntentId: string; overrideOfferId?: string; overrideOfferData?: any }) => {
       if (!passengerData) throw new Error("Missing passenger data");
-      const res = await apiRequest("POST", `/api/proposals/${proposal.id}/book-duffel`, {
-        passengers: passengerData.passengers,
-        cardId,
+      const res = await apiRequest("POST", "/api/stripe/confirm-booking", {
+        paymentIntentId,
+        proposalId: proposal.id,
         itemId: selectedItem.id,
+        passengers: passengerData.passengers,
+        overrideOfferId,
+        overrideOfferData: ood,
       });
       return res.json();
     },
@@ -264,36 +316,82 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
       toast({ title: "Flights booked successfully!" });
     },
     onError: (err: any) => {
-      bookingCalledRef.current = false;
       toast({ title: "Booking failed", description: err.message, variant: "destructive" });
       setCheckoutStep("payment");
       setPaymentError("Booking failed: " + err.message);
     },
   });
 
-  const handleCardCreated = useCallback((data: { id: string }) => {
-    if (bookingCalledRef.current) return;
-    bookingCalledRef.current = true;
-    setPaymentError(null);
+  const handleStripeSuccess = useCallback((paymentIntentId: string) => {
     setCheckoutStep("processing");
-    bookMutation.mutate(data.id);
+    const isOverride = activeOfferData?.id !== offerData?.id;
+    confirmBookingMutation.mutate({
+      paymentIntentId,
+      overrideOfferId: isOverride ? activeOfferData?.id : undefined,
+      overrideOfferData: isOverride ? activeOfferData : undefined,
+    });
+  }, [activeOfferData, offerData]);
+
+  const handleStripeError = useCallback((msg: string) => {
+    setPaymentError(msg);
   }, []);
 
-  const handleCardError = useCallback((error: { message: string }) => {
-    setPaymentError(error?.message || "Card processing failed. Please check your details and try again.");
-  }, []);
-
-  const handlePassengerSubmit = (data: CheckoutFormValues) => {
+  const handlePassengerSubmit = async (data: CheckoutFormValues) => {
     setPassengerData(data);
-    fetchClientKeyMutation.mutate();
-  };
-
-  const handlePayNow = () => {
-    setPaymentError(null);
+    setIsLoadingOffer(true);
     try {
-      createCardForTemporaryUse();
+      let currentOfferData = activeOfferData;
+
+      if (desiredPassengerCount !== (activeOfferData?.passengers?.length || 1)) {
+        const firstSlice = offerData?.slices?.[0];
+        const lastSlice = offerData?.slices?.[offerData.slices.length - 1];
+        const origin = firstSlice?.origin?.iata;
+        const destination = firstSlice?.destination?.iata;
+        const departureDate = firstSlice?.segments?.[0]?.departingAt?.substring(0, 10);
+        const returnDate = offerData?.slices?.length > 1 ? lastSlice?.segments?.[0]?.departingAt?.substring(0, 10) : undefined;
+        const cabinClass = firstSlice?.segments?.[0]?.cabinClass?.toLowerCase().replace(" ", "_") || "economy";
+
+        if (origin && destination && departureDate) {
+          const res = await apiRequest("POST", "/api/duffel/search-for-passengers", {
+            origin,
+            destination,
+            departureDate,
+            returnDate,
+            cabinClass,
+            passengerCount: desiredPassengerCount,
+          });
+          const result = await res.json();
+          currentOfferData = result.offer;
+          setActiveOfferData(currentOfferData);
+        }
+      }
+
+      if (!stripeConfig?.publishableKey) {
+        toast({ title: "Payment setup failed", description: "Stripe is not configured", variant: "destructive" });
+        setIsLoadingOffer(false);
+        return;
+      }
+
+      const stripe = await loadStripe(stripeConfig.publishableKey);
+      setStripeInstance(stripe);
+
+      const amount = parseFloat(currentOfferData?.totalAmount || selectedItem.priceEstimate);
+      const currency = (currentOfferData?.totalCurrency || "USD").toLowerCase();
+
+      const piRes = await apiRequest("POST", "/api/stripe/create-payment-intent", {
+        proposalId: proposal.id,
+        itemId: selectedItem.id,
+        amount,
+        currency,
+      });
+      const piData = await piRes.json();
+      setStripeClientSecret(piData.clientSecret);
+      setStripePaymentIntentId(piData.paymentIntentId);
+      setCheckoutStep("payment");
     } catch (err: any) {
-      setPaymentError("Failed to process card. Please check your details and try again.");
+      toast({ title: "Payment setup failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsLoadingOffer(false);
     }
   };
 
@@ -358,7 +456,7 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
   if (checkoutStep === "payment") {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => { setCheckoutStep("passengers"); setCardFormValid(false); bookingCalledRef.current = false; setPaymentError(null); }} data-testid="button-back-to-passengers">
+        <Button variant="ghost" size="sm" onClick={() => { setCheckoutStep("passengers"); setStripeClientSecret(null); setPaymentError(null); }} data-testid="button-back-to-passengers">
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to passenger details
         </Button>
 
@@ -378,10 +476,10 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
             <Plane className="w-4 h-4" /> Selected Flight
           </h3>
           <p className="text-sm text-muted-foreground mb-2">{selectedItem.description}</p>
-          <DuffelFlightCard offerData={offerData} />
+          <DuffelFlightCard offerData={activeOfferData} />
           <Separator className="my-3" />
           <div className="flex items-center justify-between font-semibold">
-            <span>Total {passengerCount > 1 ? `(${passengerCount} travelers)` : ""}</span>
+            <span>Total {desiredPassengerCount > 1 ? `(${desiredPassengerCount} travelers)` : ""}</span>
             <span data-testid="text-payment-total">
               {totalCurrency} {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </span>
@@ -390,33 +488,34 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
 
         <Card className="p-5">
           <h3 className="font-semibold mb-1 flex items-center gap-2">
-            <Lock className="w-4 h-4" /> Secure Card Payment
+            <Lock className="w-4 h-4" /> Secure Payment
           </h3>
-          <p className="text-xs text-muted-foreground mb-4">Your card details are securely processed by Duffel. We never see or store your full card number.</p>
+          <p className="text-xs text-muted-foreground mb-4">
+            Pay with Apple Pay, Google Pay, or card. Your payment is processed securely by Stripe.
+          </p>
 
-          {duffelConfig?.testMode && (
-            <div className="p-3 rounded-md border bg-muted/30 mb-4">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Shield className="w-3 h-3" /> Test mode active - Use card <span className="font-mono font-semibold">4242 4242 4242 4242</span> with any future expiry and CVC
-              </p>
-            </div>
-          )}
-
-          <div className="min-h-[120px]" data-testid="container-card-form">
-            {clientKey ? (
-              <DuffelCardForm
-                ref={cardFormRef}
-                clientKey={clientKey}
-                intent="to-create-card-for-temporary-use"
-                onValidateSuccess={() => setCardFormValid(true)}
-                onValidateFailure={() => setCardFormValid(false)}
-                onCreateCardForTemporaryUseSuccess={handleCardCreated}
-                onCreateCardForTemporaryUseFailure={handleCardError}
-              />
+          <div className="min-h-[120px]">
+            {stripeClientSecret && stripeInstance ? (
+              <Elements
+                stripe={stripeInstance}
+                options={{
+                  clientSecret: stripeClientSecret,
+                  appearance: { theme: "stripe" },
+                }}
+              >
+                <StripePaymentForm
+                  clientSecret={stripeClientSecret}
+                  onSuccess={handleStripeSuccess}
+                  onError={handleStripeError}
+                  isProcessing={confirmBookingMutation.isPending}
+                  totalAmount={totalAmount}
+                  totalCurrency={totalCurrency}
+                />
+              </Elements>
             ) : (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-sm text-muted-foreground">Loading secure card form...</span>
+                <span className="ml-2 text-sm text-muted-foreground">Loading payment form...</span>
               </div>
             )}
           </div>
@@ -430,20 +529,6 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
             </div>
           )}
         </Card>
-
-        <Button
-          onClick={handlePayNow}
-          disabled={bookMutation.isPending || !clientKey || !cardFormValid}
-          className="w-full"
-          data-testid="button-pay-now"
-        >
-          {bookMutation.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          ) : (
-            <Lock className="w-4 h-4 mr-2" />
-          )}
-          Pay {totalCurrency} {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} & Book Flight
-        </Button>
       </div>
     );
   }
@@ -470,14 +555,49 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
           <Plane className="w-4 h-4" /> Selected Flight
         </h3>
         <p className="text-sm text-muted-foreground mb-2">{selectedItem.description}</p>
-        <DuffelFlightCard offerData={offerData} />
+        <DuffelFlightCard offerData={activeOfferData} />
         <Separator className="my-4" />
         <div className="flex items-center justify-between font-semibold text-lg">
-          <span>Total {passengerCount > 1 ? `(${passengerCount} travelers)` : ""}</span>
+          <span>Total {desiredPassengerCount > 1 ? `(${desiredPassengerCount} travelers)` : ""}</span>
           <span data-testid="text-checkout-total">
             {totalCurrency} {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
           </span>
         </div>
+      </Card>
+
+      <Card className="p-5">
+        <h3 className="font-semibold mb-3 flex items-center gap-2">
+          <Users className="w-4 h-4" /> Number of Passengers
+        </h3>
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => adjustPassengerCount(desiredPassengerCount - 1)}
+            disabled={desiredPassengerCount <= 1}
+            data-testid="button-decrease-passengers"
+          >
+            <Minus className="w-4 h-4" />
+          </Button>
+          <span className="text-xl font-semibold w-8 text-center" data-testid="text-passenger-count">{desiredPassengerCount}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => adjustPassengerCount(desiredPassengerCount + 1)}
+            disabled={desiredPassengerCount >= 9}
+            data-testid="button-increase-passengers"
+          >
+            <Plus className="w-4 h-4" />
+          </Button>
+          <span className="text-sm text-muted-foreground ml-2">traveler{desiredPassengerCount > 1 ? "s" : ""}</span>
+        </div>
+        {desiredPassengerCount !== originalPassengerCount && (
+          <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+            <Shield className="w-3 h-3" /> A new flight offer will be searched for {desiredPassengerCount} passenger{desiredPassengerCount > 1 ? "s" : ""} when you continue.
+          </p>
+        )}
       </Card>
 
       <Form {...form}>
@@ -486,7 +606,7 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
             <Card key={field.id} className="p-5">
               <h3 className="font-semibold mb-1 flex items-center gap-2">
                 <User className="w-4 h-4" />
-                {passengerCount === 1 ? "Passenger Details" : `Traveler ${index + 1}`}
+                {desiredPassengerCount === 1 ? "Passenger Details" : `Traveler ${index + 1}`}
               </h3>
               {index === 0 && hasProfileData && (
                 <p className="text-xs text-muted-foreground mb-4">Auto-filled from your profile</p>
@@ -580,15 +700,19 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
           <Button
             type="submit"
             className="w-full"
-            disabled={fetchClientKeyMutation.isPending}
+            disabled={isLoadingOffer}
             data-testid="button-continue-to-payment"
           >
-            {fetchClientKeyMutation.isPending ? (
+            {isLoadingOffer ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : (
               <CreditCard className="w-4 h-4 mr-2" />
             )}
-            Continue to Payment
+            {isLoadingOffer
+              ? desiredPassengerCount !== originalPassengerCount
+                ? "Searching flights..."
+                : "Setting up payment..."
+              : "Continue to Payment"}
           </Button>
         </form>
       </Form>

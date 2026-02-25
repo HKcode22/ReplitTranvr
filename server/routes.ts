@@ -238,6 +238,10 @@ export async function registerRoutes(
               summary: cb.summary || undefined,
               recordingUrl: cb.recordingUrl || undefined,
             });
+
+            generateProposalFromCall(callRequest.id, user.id, cb.summary || null).catch((err: any) => {
+              console.error("Proposal generation for callback user failed:", err);
+            });
           } catch (err) {
             console.error("Failed to link callback call data to new user:", err);
           }
@@ -888,6 +892,67 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/duffel/search-for-passengers", isAuthenticated, async (req: Request, res: Response) => {
+    if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
+    try {
+      const { origin, destination, departureDate, returnDate, cabinClass, passengerCount } = req.body;
+      if (!origin || !destination || !departureDate || !passengerCount) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      const count = Math.max(1, Math.min(9, parseInt(passengerCount)));
+      const slices: any[] = [{ origin, destination, departure_date: departureDate }];
+      if (returnDate) slices.push({ origin: destination, destination: origin, departure_date: returnDate });
+      const passengerList = Array.from({ length: count }, () => ({ type: "adult" as const }));
+      const offerRequest = await duffel.offerRequests.create({
+        slices,
+        passengers: passengerList,
+        cabin_class: cabinClass || "economy",
+        return_offers: true,
+      });
+      const offers = ((offerRequest.data as any).offers || []).sort(
+        (a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount)
+      );
+      if (offers.length === 0) {
+        return res.status(404).json({ message: "No flights available for that passenger count" });
+      }
+      const best = offers[0];
+      const simplified = {
+        id: best.id,
+        totalAmount: best.total_amount,
+        totalCurrency: best.total_currency,
+        expiresAt: best.expires_at,
+        owner: best.owner,
+        slices: best.slices?.map((slice: any) => ({
+          id: slice.id,
+          duration: slice.duration,
+          origin: { iata: slice.origin?.iata_code, name: slice.origin?.name, city: slice.origin?.city_name },
+          destination: { iata: slice.destination?.iata_code, name: slice.destination?.name, city: slice.destination?.city_name },
+          segments: slice.segments?.map((seg: any) => ({
+            id: seg.id,
+            departingAt: seg.departing_at,
+            arrivingAt: seg.arriving_at,
+            origin: { iata: seg.origin?.iata_code, name: seg.origin?.name },
+            destination: { iata: seg.destination?.iata_code, name: seg.destination?.name },
+            carrier: {
+              name: seg.marketing_carrier?.name,
+              iata: seg.marketing_carrier?.iata_code,
+              logoUrl: seg.marketing_carrier?.logo_symbol_url || seg.marketing_carrier?.logo_lockup_url,
+            },
+            flightNumber: seg.marketing_carrier_flight_number,
+            aircraft: seg.aircraft?.name,
+            cabinClass: seg.passengers?.[0]?.cabin_class_marketing_name || seg.passengers?.[0]?.cabin_class,
+            baggages: seg.passengers?.[0]?.baggages,
+          })),
+        })),
+        passengers: best.passengers,
+      };
+      return res.json({ offer: simplified });
+    } catch (err: any) {
+      console.error("Duffel search-for-passengers error:", err?.errors || err);
+      return res.status(500).json({ message: err?.errors?.[0]?.message || "Flight search failed" });
+    }
+  });
+
   app.post("/api/proposals/:id/book-duffel", isAuthenticated, async (req: Request, res: Response) => {
     if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
     const proposalId = parseInt(req.params.id);
@@ -1409,15 +1474,15 @@ export async function registerRoutes(
         if (!seenAirlines.has(airline)) {
           diverseOffers.push(offer);
           seenAirlines.add(airline);
-          if (diverseOffers.length >= 5) break;
+          if (diverseOffers.length >= 2) break;
         }
       }
 
-      if (diverseOffers.length < 5) {
+      if (diverseOffers.length < 2) {
         for (const offer of allOffers) {
           if (!diverseOffers.includes(offer)) {
             diverseOffers.push(offer);
-            if (diverseOffers.length >= 5) break;
+            if (diverseOffers.length >= 2) break;
           }
         }
       }
@@ -1430,7 +1495,7 @@ export async function registerRoutes(
         });
       }
 
-      const topOffers = diverseOffers.slice(0, 5);
+      const topOffers = diverseOffers.slice(0, 2);
       const bestOffer = topOffers[0];
 
       const simplifyOffer = (offer: any) => ({
@@ -1869,7 +1934,7 @@ export async function registerRoutes(
 
   app.post("/api/stripe/create-payment-intent", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { proposalId, itemId } = req.body;
+      const { proposalId, itemId, amount: amountOverride, currency: currencyOverride } = req.body;
       if (!proposalId || !itemId) {
         return res.status(400).json({ message: "proposalId and itemId are required" });
       }
@@ -1886,8 +1951,8 @@ export async function registerRoutes(
       }
 
       const offerData = selectedItem.duffelOfferData as any;
-      const serverAmount = parseFloat(offerData?.totalAmount || selectedItem.priceEstimate);
-      const serverCurrency = (offerData?.totalCurrency || "USD").toLowerCase();
+      const serverAmount = amountOverride ? parseFloat(String(amountOverride)) : parseFloat(offerData?.totalAmount || selectedItem.priceEstimate);
+      const serverCurrency = currencyOverride ? String(currencyOverride).toLowerCase() : (offerData?.totalCurrency || "USD").toLowerCase();
 
       if (!serverAmount || serverAmount <= 0) {
         return res.status(400).json({ message: "Invalid item amount" });
@@ -1920,7 +1985,7 @@ export async function registerRoutes(
     if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
 
     try {
-      const { paymentIntentId, proposalId, itemId, passengers } = req.body;
+      const { paymentIntentId, proposalId, itemId, passengers, overrideOfferId, overrideOfferData } = req.body;
       if (!paymentIntentId || !proposalId || !itemId || !passengers) {
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -1947,8 +2012,10 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Selected flight not found" });
       }
 
-      const serverOfferData = selectedItem.duffelOfferData as any;
-      const expectedAmount = parseFloat(serverOfferData?.totalAmount || selectedItem.priceEstimate);
+      const offerData = overrideOfferData || (selectedItem.duffelOfferData as any);
+      const offerId = overrideOfferId || selectedItem.duffelOfferId;
+
+      const expectedAmount = parseFloat(offerData?.totalAmount || selectedItem.priceEstimate);
       const expectedCents = Math.round(expectedAmount * 100);
       if (paymentIntent.amount < expectedCents) {
         return res.status(400).json({ message: "Payment amount insufficient" });
@@ -1957,7 +2024,6 @@ export async function registerRoutes(
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
 
-      const offerData = selectedItem.duffelOfferData as any;
       const offerPassengerIds = offerData?.passengers?.map((p: any) => p.id) || [];
       const passengerMappings = passengers.map((p: any, idx: number) => ({
         id: offerPassengerIds[idx] || undefined,
@@ -1974,7 +2040,7 @@ export async function registerRoutes(
       const currency = offerData?.totalCurrency || "USD";
 
       const order = await duffel.orders.create({
-        selected_offers: [selectedItem.duffelOfferId],
+        selected_offers: [offerId],
         passengers: passengerMappings,
         type: "instant",
         payments: [{
