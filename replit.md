@@ -96,7 +96,7 @@ shared/
 - **Webhook**: POST `/api/bland/webhook` (public) - receives Bland AI call events (started, ended, transcript, failed)
 - **Dynamic Data**: POST `/api/bland/dynamic-data` (public, secret-authenticated) - Bland AI calls mid-conversation to fetch traveler profiles, bookings, proposals
 - **Auto-Dispatch**: When Bland AI is configured, new call requests automatically dispatch a voice call
-- **Auto-Proposal**: When a call completes, automatically searches Duffel for flights matching call request details (destination, dates, trip type) and creates a proposal with top 3 offers. Falls back to stub proposal for hotel-only trips or when Duffel is unavailable. Prevents duplicate proposals per call request.
+- **Auto-Proposal**: When a call completes, automatically searches Duffel for flights matching call request details. The webhook passes the transcript directly to the proposal generator so it's available before the DB write completes. Falls back to stub proposal when Duffel is unavailable. Prevents duplicate proposals per call request.
 - **Generate Proposal**: POST `/api/call-requests/:id/generate-proposal` - manually trigger proposal generation for completed calls (for retroactive use)
 - **Call History UI**: Completed calls show "Generate Flight Proposal" button (if no proposal exists) or "View Proposal" link (if proposal exists)
 - **Service Layer**: `server/lib/bland.ts` wraps the Bland AI REST API (POST /v1/calls, GET /v1/calls/:id, etc.)

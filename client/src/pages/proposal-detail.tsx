@@ -122,6 +122,78 @@ function FlightSegmentCard({ segment }: { segment: any }) {
   );
 }
 
+function formatTravelDate(dateStr: string) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}/${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function FlightSummaryCard({ proposal }: { proposal: ProposalDetail }) {
+  const firstFlight = proposal.items?.find(i => i.duffelOfferData && i.duffelOfferId);
+  const offerData = firstFlight?.duffelOfferData as any;
+
+  if (!offerData?.slices?.length) {
+    if (!proposal.summary) return null;
+    return (
+      <Card className="p-5">
+        <h3 className="text-sm font-medium text-muted-foreground mb-2">Trip Summary</h3>
+        <p className="text-sm" data-testid="text-proposal-summary">{proposal.summary}</p>
+      </Card>
+    );
+  }
+
+  const firstSlice = offerData.slices[0];
+  const lastSlice = offerData.slices[offerData.slices.length - 1];
+  const depDate = firstSlice?.segments?.[0]?.departingAt;
+  const retDate = offerData.slices.length > 1 ? lastSlice?.segments?.[0]?.departingAt : null;
+  const cabinClass = firstSlice?.segments?.[0]?.cabinClass || "Economy";
+  const passengerCount = offerData.passengers?.length || 1;
+
+  const origin = firstSlice?.origin;
+  const destination = firstSlice?.destination;
+
+  const rows: { label: string; value: string }[] = [
+    {
+      label: "Date of travel",
+      value: depDate
+        ? retDate
+          ? `${formatTravelDate(depDate)} – ${formatTravelDate(retDate)}`
+          : formatTravelDate(depDate)
+        : "TBD",
+    },
+    {
+      label: "Origin",
+      value: [origin?.iata, origin?.city || origin?.name].filter(Boolean).join(", ") || "TBD",
+    },
+    {
+      label: "Destination",
+      value: [destination?.iata, destination?.city || destination?.name].filter(Boolean).join(", ") || "TBD",
+    },
+    { label: "Cabin Class", value: cabinClass },
+    { label: "Travelers", value: String(passengerCount) },
+  ];
+
+  return (
+    <Card className="p-5" data-testid="card-flight-summary">
+      <h3 className="text-sm font-medium text-muted-foreground mb-3">Trip Overview</h3>
+      <div className="space-y-2">
+        {rows.map(({ label, value }) => (
+          <div key={label} className="flex gap-2 text-sm">
+            <span className="text-muted-foreground min-w-[110px] shrink-0">{label}</span>
+            <span className="font-medium">{value}</span>
+          </div>
+        ))}
+        {proposal.summary && (
+          <div className="flex gap-2 text-sm">
+            <span className="text-muted-foreground min-w-[110px] shrink-0">Preferences</span>
+            <span className="text-sm text-muted-foreground leading-relaxed">{proposal.summary}</span>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function DuffelFlightCard({ offerData }: { offerData: any }) {
   if (!offerData?.slices) return null;
 
@@ -810,12 +882,7 @@ export default function ProposalDetailPage() {
         {isPaid && <StatusBadge status="paid" />}
       </div>
 
-      {proposal.summary && (
-        <Card className="p-5">
-          <h3 className="text-sm font-medium text-muted-foreground mb-2">Summary</h3>
-          <p className="text-sm" data-testid="text-proposal-summary">{proposal.summary}</p>
-        </Card>
-      )}
+      <FlightSummaryCard proposal={proposal} />
 
       <Card className="p-5">
         <h3 className="font-semibold mb-4">Flight Options</h3>

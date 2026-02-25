@@ -239,7 +239,7 @@ export async function registerRoutes(
               recordingUrl: cb.recordingUrl || undefined,
             });
 
-            generateProposalFromCall(callRequest.id, user.id, cb.summary || null).catch((err: any) => {
+            generateProposalFromCall(callRequest.id, user.id, cb.summary || null, cb.transcript || null).catch((err: any) => {
               console.error("Proposal generation for callback user failed:", err);
             });
           } catch (err) {
@@ -1344,7 +1344,7 @@ export async function registerRoutes(
     return { origin, destination, departureDate, returnDate, passengers, cabinClass, budget };
   }
 
-  async function generateProposalFromCall(callRequestId: number, userId: string, callSummary: string | null) {
+  async function generateProposalFromCall(callRequestId: number, userId: string, callSummary: string | null, callTranscript?: string | null) {
     const callRequest = await storage.getCallRequest(callRequestId);
     if (!callRequest) {
       console.log(`generateProposalFromCall: call request ${callRequestId} not found`);
@@ -1362,10 +1362,14 @@ export async function registerRoutes(
       return;
     }
 
-    const blandCalls = await storage.getBlandCallsByCallRequest(callRequestId);
-    const completedCall = blandCalls?.find(c => c.status === "completed");
-    const transcript = completedCall?.transcript || null;
-    const summary = callSummary || completedCall?.summary || null;
+    let transcript = callTranscript ?? null;
+    let summary = callSummary;
+    if (transcript === null || summary === null) {
+      const blandCalls = await storage.getBlandCallsByCallRequest(callRequestId);
+      const completedCall = blandCalls?.find(c => c.status === "completed");
+      if (transcript === null) transcript = completedCall?.transcript || null;
+      if (summary === null) summary = completedCall?.summary || null;
+    }
 
     const details = parseTravelDetailsFromTranscript(transcript, summary);
     console.log(`Parsed travel details from transcript for call ${callRequestId}:`, JSON.stringify(details));
@@ -1705,7 +1709,12 @@ export async function registerRoutes(
         });
 
         if (blandCall.callRequestId && duffel) {
-          generateProposalFromCall(blandCall.callRequestId, blandCall.userId, payload.summary || null).catch((err) => {
+          generateProposalFromCall(
+            blandCall.callRequestId,
+            blandCall.userId,
+            payload.summary || null,
+            payload.concatenated_transcript || null
+          ).catch((err) => {
             console.error("Auto-proposal generation error:", err);
           });
         }
