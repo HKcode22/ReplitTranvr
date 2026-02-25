@@ -1,8 +1,13 @@
 import Stripe from 'stripe';
 
-let connectionSettings: any;
+async function getCredentials(): Promise<{ publishableKey: string; secretKey: string }> {
+  if (process.env.STRIPE_SECRET_KEY) {
+    return {
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
+      secretKey: process.env.STRIPE_SECRET_KEY,
+    };
+  }
 
-async function getCredentials() {
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY
     ? 'repl ' + process.env.REPL_IDENTITY
@@ -10,8 +15,8 @@ async function getCredentials() {
       ? 'depl ' + process.env.WEB_REPL_RENEWAL
       : null;
 
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
+  if (!hostname || !xReplitToken) {
+    throw new Error('Stripe not configured');
   }
 
   const connectorName = 'stripe';
@@ -26,13 +31,12 @@ async function getCredentials() {
   const response = await fetch(url.toString(), {
     headers: {
       'Accept': 'application/json',
-      'X_REPLIT_TOKEN': xReplitToken
-    }
+      'X_REPLIT_TOKEN': xReplitToken,
+    },
   });
 
   const data = await response.json();
-
-  connectionSettings = data.items?.[0];
+  const connectionSettings = data.items?.[0];
 
   if (!connectionSettings || (!connectionSettings.settings.publishable || !connectionSettings.settings.secret)) {
     throw new Error(`Stripe ${targetEnvironment} connection not found`);
@@ -77,4 +81,13 @@ export async function getStripeSync() {
     });
   }
   return stripeSync;
+}
+
+export async function isStripeConfigured(): Promise<boolean> {
+  try {
+    await getCredentials();
+    return true;
+  } catch {
+    return false;
+  }
 }

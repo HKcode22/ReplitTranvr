@@ -469,27 +469,6 @@ export async function registerRoutes(
           console.error("Bland AI auto-dispatch error:", err.message || err);
         }
       }
-    } else {
-      const n8nWebhookUrl = process.env.N8N_WEBHOOK_CALL_REQUEST;
-      if (n8nWebhookUrl) {
-        const user = await storage.getUser(req.session.userId!);
-        fetch(n8nWebhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            callRequestId: cr.id,
-            userId: cr.userId,
-            userEmail: user?.email || "",
-            userName: user ? `${user.firstName} ${user.lastName}` : "",
-            phone: cr.phone,
-            notes: cr.notes,
-            status: cr.status,
-            createdAt: cr.createdAt,
-          }),
-        }).catch((err) => {
-          console.error("n8n webhook error:", err);
-        });
-      }
     }
 
     return res.json(cr);
@@ -1826,22 +1805,6 @@ export async function registerRoutes(
       } catch (err: any) {
         console.error("Bland AI callback dispatch error:", err);
       }
-    }
-
-    const n8nWebhookUrl = process.env.N8N_WEBHOOK_CALL_REQUEST;
-    if (n8nWebhookUrl) {
-      fetch(n8nWebhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: cb.phone,
-          userName: cb.name || "Website Visitor",
-          userEmail: cb.email,
-          source: "landing_page",
-        }),
-      }).catch((err) => {
-        console.error("n8n webhook error (callback):", err);
-      });
     }
 
     return res.json(cb);
