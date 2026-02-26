@@ -73,7 +73,7 @@ shared/
 - Dashboard with stats cards and demo data seeder
 - Traveler profile management with passport details (legal name, DOB, gender, title, passport number, nationality)
 - Call request creation with phone number - auto-dispatches Bland AI voice call when configured, falls back to n8n webhook
-- Bland AI voice concierge: automated AI phone calls with travel concierge persona, dynamic data lookup (profiles, bookings, proposals), post-call transcripts and recordings
+- Bland AI voice concierge: automated AI phone calls with travel concierge persona, explicitly asks for specific airport names and 3-letter codes (e.g. JFK, ORD, STL), dynamic data lookup (profiles, bookings, proposals), post-call transcripts and recordings
 - Duffel flight search with real-time pricing, cabin classes, baggage info, multi-passenger support (1-9 travelers)
 - Flight checkout with profile auto-fill for primary traveler, per-passenger forms for additional travelers
 - Saved payment cards in Billing page (add/remove/set default), auto-selected at checkout
