@@ -1453,28 +1453,50 @@ export async function registerRoutes(
     }
 
     try {
-      const placesResponse = await duffel.suggestions.list({ query: details.destination });
-      const places = placesResponse.data || [];
-      const destAirport = places.find((p: any) => p.type === "airport") || places[0];
-      if (!destAirport?.iata_code) {
+      async function resolveAirport(query: string, preferUS: boolean): Promise<{code: string, name: string} | null> {
+        try {
+          const res = await duffel!.suggestions.list({ query });
+          const places = res.data || [];
+          if (places.length === 0) return null;
+
+          if (preferUS) {
+            const usAirport = places.find((p: any) => p.type === "airport" && p.iata_country_code === "US");
+            if (usAirport?.iata_code) return { code: usAirport.iata_code, name: usAirport.city_name || usAirport.name || query };
+
+            try {
+              const usRes = await duffel!.suggestions.list({ query: query + " USA" });
+              const usPlaces = usRes.data || [];
+              const usAp = usPlaces.find((p: any) => p.type === "airport") || usPlaces[0];
+              if (usAp?.iata_code) return { code: usAp.iata_code, name: usAp.city_name || usAp.name || query };
+            } catch (_) {}
+          }
+
+          const airport = places.find((p: any) => p.type === "airport") || places[0];
+          return airport?.iata_code ? { code: airport.iata_code, name: airport.city_name || airport.name || query } : null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      const callReqForPhone = callRequest as any;
+      const userPhone = callReqForPhone.phoneNumber || "";
+      const isUSUser = userPhone.startsWith("+1") || userPhone.startsWith("1");
+
+      const destResult = await resolveAirport(details.destination, isUSUser);
+      if (!destResult) {
         console.log(`No airport found for destination: ${details.destination}`);
         await createFallbackProposal(callRequestId, userId, summary);
         return;
       }
-      const destCode = destAirport.iata_code;
-      const destName = destAirport.city_name || destAirport.name || details.destination;
+      const destCode = destResult.code;
+      const destName = destResult.name;
 
       let originCode = "JFK";
       const profile = await storage.getProfile(userId);
 
       if (details.origin) {
-        try {
-          const originPlaces = await duffel.suggestions.list({ query: details.origin });
-          const originAirport = (originPlaces.data || []).find((p: any) => p.type === "airport") || (originPlaces.data || [])[0];
-          if (originAirport?.iata_code) originCode = originAirport.iata_code;
-        } catch (e) {
-          console.log(`Could not resolve origin "${details.origin}", using fallback`);
-        }
+        const originResult = await resolveAirport(details.origin, isUSUser);
+        if (originResult) originCode = originResult.code;
       }
 
       if (originCode === "JFK" && !details.origin) {
@@ -1515,6 +1537,8 @@ export async function registerRoutes(
         passengers.push({ type: "adult" as const });
       }
 
+      const cabinLabel = details.cabinClass === "premium_economy" ? "Premium Economy" : details.cabinClass.charAt(0).toUpperCase() + details.cabinClass.slice(1);
+
       const slices: any[] = [{ origin: originCode, destination: destCode, departure_date: departureDate }];
       if (returnDate) {
         slices.push({ origin: destCode, destination: originCode, departure_date: returnDate });
@@ -1532,7 +1556,19 @@ export async function registerRoutes(
 
       const allOffers = (offerRequest.data as any).offers || [];
       if (allOffers.length === 0) {
-        await createFallbackProposal(callRequestId, userId, summary);
+        let originName = details.origin || originCode;
+        if (details.origin) {
+          const originResult = await resolveAirport(details.origin, isUSUser);
+          if (originResult) originName = originResult.name;
+        }
+        const searchParams = {
+          originCode, originName, destCode, destName,
+          departureDate, returnDate,
+          cabinClass: details.cabinClass, cabinLabel,
+          passengers: details.passengers,
+          budget: details.budget,
+        };
+        await createNoFlightsProposal(callRequestId, userId, summary, searchParams);
         return;
       }
 
@@ -1605,8 +1641,6 @@ export async function registerRoutes(
         `${s.origin?.city || s.origin?.iata} to ${s.destination?.city || s.destination?.iata}`
       ).join(", ") || destName;
 
-      const cabinLabel = details.cabinClass === "premium_economy" ? "Premium Economy" : details.cabinClass.charAt(0).toUpperCase() + details.cabinClass.slice(1);
-
       const proposal = await storage.createProposal({
         userId,
         callRequestId,
@@ -1657,12 +1691,75 @@ export async function registerRoutes(
     }
   }
 
+  async function createNoFlightsProposal(
+    callRequestId: number,
+    userId: string,
+    callSummary: string | null,
+    searchParams: {
+      originCode: string; originName: string; destCode: string; destName: string;
+      departureDate: string; returnDate: string | null;
+      cabinClass: string; cabinLabel: string;
+      passengers: number; budget: number | null;
+    }
+  ) {
+    const routeDesc = `${searchParams.originCode} → ${searchParams.destCode}`;
+    const dateDesc = searchParams.returnDate
+      ? `${searchParams.departureDate} to ${searchParams.returnDate}`
+      : searchParams.departureDate;
+    const budgetDesc = searchParams.budget ? ` within a $${searchParams.budget} budget` : "";
+
+    const noFlightsSummary = callSummary
+      ? callSummary + `\n\nNo ${searchParams.cabinLabel} flights were found for ${routeDesc} on ${dateDesc}${budgetDesc}. You can search again with different dates or preferences.`
+      : `No ${searchParams.cabinLabel} flights found for ${routeDesc} on ${dateDesc}${budgetDesc}. Try adjusting your dates, cabin class, or route.`;
+
+    const proposal = await storage.createProposal({
+      userId,
+      callRequestId,
+      title: "Travel Concierge Proposal",
+      summary: noFlightsSummary,
+      totalEstimate: "0.00",
+      status: "sent",
+    });
+
+    await storage.createProposalItem({
+      proposalId: proposal.id,
+      type: "flight",
+      description: `No flights available: ${routeDesc} on ${dateDesc} (${searchParams.cabinLabel})`,
+      priceEstimate: "0.00",
+      duffelOfferId: null,
+      duffelOfferData: {
+        noFlightsFound: true,
+        searchParams: {
+          origin: searchParams.originCode,
+          originName: searchParams.originName,
+          destination: searchParams.destCode,
+          destinationName: searchParams.destName,
+          departureDate: searchParams.departureDate,
+          returnDate: searchParams.returnDate,
+          cabinClass: searchParams.cabinClass,
+          passengers: searchParams.passengers,
+          budget: searchParams.budget,
+        },
+      },
+    });
+
+    await storage.createNotification({
+      userId,
+      type: "proposal_received",
+      title: "No flights found for your trip",
+      body: `We couldn't find ${searchParams.cabinLabel} flights for ${routeDesc} on ${dateDesc}. Try different dates or preferences.`,
+      linkUrl: `/proposals/${proposal.id}`,
+    });
+
+    console.log(`Created no-flights proposal ${proposal.id} for call request ${callRequestId}: ${routeDesc} on ${dateDesc}`);
+  }
+
   async function createFallbackProposal(callRequestId: number, userId: string, callSummary: string | null) {
     const proposal = await storage.createProposal({
       userId,
       callRequestId,
       title: "Travel Concierge Proposal",
-      summary: callSummary || "Please provide your travel details so we can search for the best flights.",
+      summary: callSummary || "We're preparing your travel proposal. Flight options will appear here shortly.",
       totalEstimate: "0.00",
       status: "sent",
     });

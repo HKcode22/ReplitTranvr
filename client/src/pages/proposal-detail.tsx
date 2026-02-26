@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { ItineraryProposal, ProposalItem, Payment, TravelerProfile } from "@shared/schema";
 import {
   ArrowLeft, Plane, Hotel, Package, Check, CreditCard, Loader2, Clock,
-  Luggage, ArrowRight, User, Lock, Shield, AlertCircle, Users, Plus, Minus
+  Luggage, ArrowRight, User, Lock, Shield, AlertCircle, Users, Plus, Minus, Search
 } from "lucide-react";
 
 type ProposalDetail = ItineraryProposal & {
@@ -133,6 +133,36 @@ function FlightSummaryCard({ proposal }: { proposal: ProposalDetail }) {
   const offerData = firstFlight?.duffelOfferData as any;
 
   if (!offerData?.slices?.length) {
+    const noFlightsItem = proposal.items?.find(i => (i.duffelOfferData as any)?.noFlightsFound);
+    const sp = (noFlightsItem?.duffelOfferData as any)?.searchParams;
+
+    if (sp) {
+      const spCabinLabel = sp.cabinClass === "premium_economy" ? "Premium Economy"
+        : sp.cabinClass ? sp.cabinClass.charAt(0).toUpperCase() + sp.cabinClass.slice(1) : "Economy";
+      const rows: { label: string; value: string }[] = [
+        { label: "Date of travel", value: sp.returnDate ? `${sp.departureDate} – ${sp.returnDate}` : sp.departureDate },
+        { label: "Origin", value: `${sp.origin}${sp.originName ? `, ${sp.originName}` : ""}` },
+        { label: "Destination", value: `${sp.destination}${sp.destinationName ? `, ${sp.destinationName}` : ""}` },
+        { label: "Cabin Class", value: spCabinLabel },
+        { label: "Travelers", value: String(sp.passengers || 1) },
+      ];
+      if (sp.budget) rows.push({ label: "Budget", value: `$${sp.budget}` });
+
+      return (
+        <Card className="p-5" data-testid="card-flight-summary">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">Trip Overview</h3>
+          <div className="space-y-2">
+            {rows.map(({ label, value }) => (
+              <div key={label} className="flex gap-2 text-sm">
+                <span className="text-muted-foreground min-w-[110px] shrink-0">{label}</span>
+                <span className="font-medium">{value}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      );
+    }
+
     if (!proposal.summary) return null;
     return (
       <Card className="p-5">
@@ -189,6 +219,58 @@ function FlightSummaryCard({ proposal }: { proposal: ProposalDetail }) {
             <span className="text-sm text-muted-foreground leading-relaxed">{proposal.summary}</span>
           </div>
         )}
+      </div>
+    </Card>
+  );
+}
+
+function NoFlightsCard({ item }: { item: ProposalItem }) {
+  const offerData = item.duffelOfferData as any;
+  const sp = offerData?.searchParams;
+  if (!sp) return null;
+
+  const cabinLabel = sp.cabinClass === "premium_economy" ? "Premium Economy"
+    : sp.cabinClass ? sp.cabinClass.charAt(0).toUpperCase() + sp.cabinClass.slice(1) : "Economy";
+  const dateDesc = sp.returnDate
+    ? `${sp.departureDate} to ${sp.returnDate}`
+    : sp.departureDate;
+
+  const searchUrl = `/flight-search?origin=${sp.origin}&destination=${sp.destination}&date=${sp.departureDate}${sp.returnDate ? `&returnDate=${sp.returnDate}` : ""}&cabin=${sp.cabinClass || "economy"}&passengers=${sp.passengers || 1}`;
+
+  return (
+    <Card className="p-5 border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center shrink-0 mt-0.5">
+          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+        </div>
+        <div className="flex-1 space-y-3">
+          <div>
+            <h4 className="font-semibold text-sm">No flights found</h4>
+            <p className="text-sm text-muted-foreground mt-1">
+              We searched for {cabinLabel} flights from {sp.origin} to {sp.destinationName || sp.destination} on {dateDesc}
+              {sp.budget ? ` within a $${sp.budget} budget` : ""}, but no availability was returned.
+            </p>
+          </div>
+
+          <div className="text-sm space-y-1.5 bg-background/60 rounded-md p-3">
+            <div className="flex gap-2"><span className="text-muted-foreground min-w-[90px]">Route</span><span className="font-medium">{sp.origin}{sp.originName ? `, ${sp.originName}` : ""} → {sp.destination}{sp.destinationName ? `, ${sp.destinationName}` : ""}</span></div>
+            <div className="flex gap-2"><span className="text-muted-foreground min-w-[90px]">Date</span><span className="font-medium">{dateDesc}</span></div>
+            <div className="flex gap-2"><span className="text-muted-foreground min-w-[90px]">Cabin</span><span className="font-medium">{cabinLabel}</span></div>
+            <div className="flex gap-2"><span className="text-muted-foreground min-w-[90px]">Travelers</span><span className="font-medium">{sp.passengers || 1}</span></div>
+            {sp.budget && <div className="flex gap-2"><span className="text-muted-foreground min-w-[90px]">Budget</span><span className="font-medium">${sp.budget}</span></div>}
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Try different dates, a different cabin class, or nearby airports to find available flights.
+          </p>
+
+          <Link href={searchUrl}>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Search className="w-4 h-4" />
+              Search Again with Different Options
+            </Button>
+          </Link>
+        </div>
       </div>
     </Card>
   );
@@ -894,6 +976,10 @@ export default function ProposalDetailPage() {
             const price = offerData?.totalAmount || item.priceEstimate;
             const currency = offerData?.totalCurrency || "USD";
             const canBook = proposal.status === "approved" && !isPaid && item.duffelOfferId;
+
+            if (offerData?.noFlightsFound) {
+              return <NoFlightsCard key={item.id} item={item} />;
+            }
 
             return (
               <Card
