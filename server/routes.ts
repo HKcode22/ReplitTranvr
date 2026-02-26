@@ -1182,28 +1182,37 @@ export async function registerRoutes(
     cabinClass: string;
     budget: number | null;
   } {
-    const text = [summary, transcript].filter(Boolean).join("\n").toLowerCase();
+    const originalText = [summary, transcript].filter(Boolean).join("\n");
+    const text = originalText.toLowerCase();
     if (!text) return { origin: null, destination: null, departureDate: null, returnDate: null, passengers: 1, cabinClass: "economy", budget: null };
 
     let origin: string | null = null;
     let destination: string | null = null;
 
+    // Step 1: try "from X to Y" patterns — allow apostrophes, hyphens, digits in place names
     const fromToPatterns = [
-      /(?:from|departing|leaving|flying from|traveling from|depart(?:ing)? from)\s+([a-z\s]+?)\s+(?:to|going to|heading to|flying to|traveling to)\s+([a-z\s]+?)(?:\.|,|$|\s+on|\s+in|\s+around|\s+for)/i,
-      /(?:fly|travel|go|trip|flight)\s+(?:from\s+)?([a-z\s]+?)\s+to\s+([a-z\s]+?)(?:\.|,|$|\s+on|\s+in)/i,
+      /(?:from|departing|leaving|flying from|traveling from|depart(?:ing)? from)\s+([\w\s''\-]+?)\s+(?:to|going to|heading to|flying to|traveling to)\s+([\w\s''\-]+?)(?:\.|,|$|\s+on\b|\s+in\b|\s+around\b|\s+for\b)/i,
+      /(?:fly|travel|go|trip|flight)\s+(?:from\s+)?([\w\s''\-]+?)\s+to\s+([\w\s''\-]+?)(?:\.|,|$|\s+on\b|\s+in\b)/i,
     ];
     for (const pat of fromToPatterns) {
       const match = text.match(pat);
       if (match) {
-        origin = match[1].trim();
-        destination = match[2].trim();
-        break;
+        const rawOrigin = match[1].trim();
+        const rawDest = match[2].trim();
+        // Reject if capture is just digits or a weekday/month (false positive from date phrases like "from February 27th to March 9th")
+        const MONTHS_RE = /^(?:january|february|march|april|may|june|july|august|september|october|november|december)/i;
+        if (!MONTHS_RE.test(rawOrigin) && !MONTHS_RE.test(rawDest) && rawOrigin.length > 1 && rawDest.length > 1) {
+          origin = rawOrigin;
+          destination = rawDest;
+          break;
+        }
       }
     }
 
+    // Step 2: dedicated destination / origin phrase patterns
     if (!destination) {
       const destPatterns = [
-        /(?:going to|heading to|traveling to|fly(?:ing)? to|destination(?:\s*:|\s+is)?|trip to|visit(?:ing)?)\s+([a-z][a-z\s]{1,30}?)(?:\.|,|$|\s+on|\s+in|\s+around|\s+for|\s+from)/i,
+        /(?:going to|heading to|traveling to|fly(?:ing)? to|destination(?:\s*:|\s+is)?|trip to|visit(?:ing)?|book(?:ing)?\s+(?:a\s+)?(?:flight\s+)?to)\s+([\w][\w\s''\-]{1,30}?)(?:\.|,|$|\s+on\b|\s+in\b|\s+around\b|\s+for\b|\s+from\b)/i,
       ];
       for (const pat of destPatterns) {
         const match = text.match(pat);
@@ -1214,32 +1223,72 @@ export async function registerRoutes(
       }
     }
 
-    if (!origin) {
-      const originPatterns = [
-        /(?:from|departing|leaving|out of|origin(?:\s*:|\s+is)?)\s+([a-z][a-z\s]{1,30}?)(?:\.|,|$|\s+to|\s+on)/i,
-      ];
-      for (const pat of originPatterns) {
-        const match = text.match(pat);
-        if (match) {
-          origin = match[1].trim();
+    // Step 3: scan the ORIGINAL (properly cased) text for "to [ProperNoun]" — handles "to London", "to Paris" etc.
+    if (!destination) {
+      const SKIP_MONTHS = new Set(["January","February","March","April","May","June","July","August","September","October","November","December"]);
+      const SKIP_WORDS = new Set(["The","A","An","Travnr","AI","It","He","She","We","You","They","This","That"]);
+      const toCityRe = /\bto\s+([A-Z][a-zA-Z]+(?:[\s\-][A-Z][a-zA-Z]+)*)/g;
+      let m: RegExpExecArray | null;
+      while ((m = toCityRe.exec(originalText)) !== null) {
+        const candidate = m[1].trim();
+        const firstWord = candidate.split(/[\s\-]/)[0];
+        if (!SKIP_MONTHS.has(firstWord) && !SKIP_WORDS.has(firstWord) && candidate.length > 2 && candidate.length < 40) {
+          destination = candidate.toLowerCase();
           break;
         }
       }
     }
 
-    const iataPattern = /\b([A-Z]{3})\b/g;
-    const originalText = [summary, transcript].filter(Boolean).join("\n");
-    const iataCodes: string[] = [];
-    let iataMatch;
-    while ((iataMatch = iataPattern.exec(originalText)) !== null) {
-      const code = iataMatch[1];
-      if (!["THE", "AND", "FOR", "ARE", "NOT", "YOU", "ALL", "CAN", "HER", "WAS", "ONE", "OUR", "OUT", "HAS", "HIS", "HOW", "ITS", "MAY", "NEW", "NOW", "OLD", "SEE", "WAY", "WHO", "DID", "GET", "HAS", "HIM", "LET", "SAY", "SHE", "TOO", "USE"].includes(code)) {
-        iataCodes.push(code);
+    if (!origin) {
+      const originPatterns = [
+        /(?:from|departing|leaving|out of|origin(?:\s*:|\s+is)?)\s+([\w][\w\s''\-]{1,30}?)(?:\.|,|$|\s+to\b|\s+on\b)/i,
+      ];
+      for (const pat of originPatterns) {
+        const match = text.match(pat);
+        if (match) {
+          const rawOrigin = match[1].trim();
+          const MONTHS_RE = /^(?:january|february|march|april|may|june|july|august|september|october|november|december)/i;
+          if (!MONTHS_RE.test(rawOrigin)) {
+            origin = rawOrigin;
+            break;
+          }
+        }
       }
     }
-    if (iataCodes.length >= 2 && !origin) origin = iataCodes[0];
-    if (iataCodes.length >= 2 && !destination) destination = iataCodes[1];
-    if (iataCodes.length === 1 && !destination) destination = iataCodes[0];
+
+    // Step 4: scan original text for "from [ProperNoun]" to fill origin
+    if (!origin) {
+      const SKIP_MONTHS = new Set(["January","February","March","April","May","June","July","August","September","October","November","December"]);
+      const SKIP_WORDS = new Set(["The","A","An","Travnr","AI","It","He","She","We","You","They","This","That"]);
+      const fromCityRe = /\bfrom\s+([A-Z][a-zA-Z]+(?:[\s\-][A-Z][a-zA-Z]+)*)/g;
+      let m: RegExpExecArray | null;
+      while ((m = fromCityRe.exec(originalText)) !== null) {
+        const candidate = m[1].trim();
+        const firstWord = candidate.split(/[\s\-]/)[0];
+        if (!SKIP_MONTHS.has(firstWord) && !SKIP_WORDS.has(firstWord) && candidate.length > 2 && candidate.length < 40) {
+          origin = candidate.toLowerCase();
+          break;
+        }
+      }
+    }
+
+    // Step 5: IATA code extraction (last resort — only fill slots still empty)
+    const iataPattern = /\b([A-Z]{3})\b/g;
+    const COMMON_WORDS = new Set(["THE","AND","FOR","ARE","NOT","YOU","ALL","CAN","HER","WAS","ONE","OUR","OUT","HAS","HIS","HOW","ITS","MAY","NEW","NOW","OLD","SEE","WAY","WHO","DID","GET","HIM","LET","SAY","SHE","TOO","USE","HAS","JAN","FEB","MAR","APR","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]);
+    const iataCodes: string[] = [];
+    let iataMatch: RegExpExecArray | null;
+    while ((iataMatch = iataPattern.exec(originalText)) !== null) {
+      const code = iataMatch[1];
+      if (!COMMON_WORDS.has(code)) iataCodes.push(code);
+    }
+    if (iataCodes.length >= 2) {
+      if (!origin) origin = iataCodes[0];
+      if (!destination) destination = iataCodes[1];
+    } else if (iataCodes.length === 1) {
+      // One IATA code: treat it as origin if we already have a destination, else destination
+      if (destination && !origin) origin = iataCodes[0];
+      else if (!destination && !origin) destination = iataCodes[0];
+    }
 
     let departureDate: string | null = null;
     let returnDate: string | null = null;
@@ -1263,15 +1312,16 @@ export async function registerRoutes(
         const mdMatch = text.match(pat);
         if (mdMatch) {
           const cleanDate = (s: string) => s.replace(/(st|nd|rd|th)/gi, "").replace(/\bof\b/gi, "").trim();
+          const thisYear = new Date().getFullYear();
           const parsed = new Date(cleanDate(mdMatch[1]));
           if (!isNaN(parsed.getTime())) {
-            if (parsed.getFullYear() < 2000) parsed.setFullYear(new Date().getFullYear());
+            if (parsed.getFullYear() < thisYear) parsed.setFullYear(thisYear);
             departureDate = parsed.toISOString().split("T")[0];
           }
           if (mdMatch[2] && !returnDate) {
             const parsed2 = new Date(cleanDate(mdMatch[2]));
             if (!isNaN(parsed2.getTime())) {
-              if (parsed2.getFullYear() < 2000) parsed2.setFullYear(new Date().getFullYear());
+              if (parsed2.getFullYear() < thisYear) parsed2.setFullYear(thisYear);
               returnDate = parsed2.toISOString().split("T")[0];
             }
           }
@@ -1299,7 +1349,7 @@ export async function registerRoutes(
             const cleanDate = (s: string) => s.replace(/(st|nd|rd|th)/gi, "").replace(/\bof\b/gi, "").trim();
             const parsed = new Date(cleanDate(rMatch[1]));
             if (!isNaN(parsed.getTime())) {
-              if (parsed.getFullYear() < 2000) parsed.setFullYear(new Date().getFullYear());
+              if (parsed.getFullYear() < new Date().getFullYear()) parsed.setFullYear(new Date().getFullYear());
               returnDate = parsed.toISOString().split("T")[0];
             }
           }
