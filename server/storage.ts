@@ -34,6 +34,7 @@ export interface IStorage {
 
   getProposalItems(proposalId: number): Promise<ProposalItem[]>;
   createProposalItem(data: InsertProposalItem): Promise<ProposalItem>;
+  deleteProposalAndItems(proposalId: number): Promise<void>;
 
   getNotifications(userId: string): Promise<Notification[]>;
   getNotification(id: number): Promise<Notification | undefined>;
@@ -161,6 +162,11 @@ export class DatabaseStorage implements IStorage {
   async createProposalItem(data: InsertProposalItem): Promise<ProposalItem> {
     const [item] = await db.insert(proposalItems).values(data).returning();
     return item;
+  }
+
+  async deleteProposalAndItems(proposalId: number): Promise<void> {
+    await db.delete(proposalItems).where(eq(proposalItems.proposalId, proposalId));
+    await db.delete(itineraryProposals).where(eq(itineraryProposals.id, proposalId));
   }
 
   async getNotifications(userId: string): Promise<Notification[]> {

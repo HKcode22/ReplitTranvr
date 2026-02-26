@@ -1408,8 +1408,20 @@ export async function registerRoutes(
 
     const existingProposals = await storage.getProposalsByCallRequest(callRequestId);
     if (existingProposals.length > 0) {
-      console.log(`Proposal already exists for call request ${callRequestId}, skipping`);
-      return;
+      const fallbackIds: number[] = [];
+      for (const ep of existingProposals) {
+        const items = await storage.getProposalItems(ep.id);
+        const isFallback = items.length === 0 || items.every(i => !i.duffelOfferId && (parseFloat(i.amount ?? "0") === 0));
+        if (isFallback) fallbackIds.push(ep.id);
+      }
+      if (fallbackIds.length < existingProposals.length) {
+        console.log(`Real proposal already exists for call request ${callRequestId}, skipping`);
+        return;
+      }
+      console.log(`Replacing ${fallbackIds.length} fallback proposal(s) for call request ${callRequestId}`);
+      for (const id of fallbackIds) {
+        await storage.deleteProposalAndItems(id);
+      }
     }
 
     let transcript = callTranscript ?? null;
@@ -1419,6 +1431,11 @@ export async function registerRoutes(
       const completedCall = blandCalls?.find(c => c.status === "completed");
       if (transcript === null) transcript = completedCall?.transcript || null;
       if (summary === null) summary = completedCall?.summary || null;
+    }
+
+    if (!transcript && !summary) {
+      console.log(`generateProposalFromCall: no transcript or summary available yet for call request ${callRequestId}, skipping`);
+      return;
     }
 
     const details = parseTravelDetailsFromTranscript(transcript, summary);
@@ -1758,16 +1775,6 @@ export async function registerRoutes(
           linkUrl: "/call-history",
         });
 
-        if (blandCall.callRequestId && duffel) {
-          generateProposalFromCall(
-            blandCall.callRequestId,
-            blandCall.userId,
-            payload.summary || null,
-            payload.concatenated_transcript || null
-          ).catch((err) => {
-            console.error("Auto-proposal generation error:", err);
-          });
-        }
       }
 
       if (payload.status === "in_progress" || payload.event === "call.started") {
@@ -1804,6 +1811,22 @@ export async function registerRoutes(
 
       if (Object.keys(updateData).length > 0) {
         await storage.updateBlandCall(blandCall.id, updateData);
+      }
+
+      if (
+        blandCall.callRequestId &&
+        duffel &&
+        updateData.status === "completed" &&
+        (updateData.transcript || updateData.summary)
+      ) {
+        generateProposalFromCall(
+          blandCall.callRequestId,
+          blandCall.userId,
+          updateData.summary || null,
+          updateData.transcript || null
+        ).catch((err) => {
+          console.error("Auto-proposal generation error:", err);
+        });
       }
 
       return res.json({ received: true });
