@@ -1157,15 +1157,24 @@ export async function registerRoutes(
     }
     const existingProposals = await storage.getProposalsByCallRequest(callRequestId);
     if (existingProposals.length > 0) {
-      return res.status(400).json({ message: "A proposal already exists for this call" });
+      let allFallbacks = true;
+      for (const ep of existingProposals) {
+        const items = await storage.getProposalItems(ep.id);
+        const isFallback = items.length === 0 || items.every(i => !i.duffelOfferId && (parseFloat(i.priceEstimate ?? "0") === 0));
+        if (!isFallback) { allFallbacks = false; break; }
+      }
+      if (!allFallbacks) {
+        return res.status(400).json({ message: "A real proposal already exists for this call" });
+      }
     }
 
     const blandCalls = await storage.getBlandCallsByCallRequest(callRequestId);
     const completedCall = blandCalls?.find(c => c.status === "completed");
     const callSummary = completedCall?.summary || null;
+    const callTranscript = completedCall?.transcript || null;
 
     try {
-      await generateProposalFromCall(callRequestId, req.session.userId!, callSummary);
+      await generateProposalFromCall(callRequestId, req.session.userId!, callSummary, callTranscript);
       return res.json({ message: "Proposal generated successfully" });
     } catch (err: any) {
       console.error("Manual proposal generation error:", err);
@@ -1193,8 +1202,8 @@ export async function registerRoutes(
     // The voice AI now includes airport codes in its summary, so these are the most reliable signals
     // Case-insensitive to handle transcription systems that lowercase everything
     const COMMON_WORDS_SET = new Set(["THE","AND","FOR","ARE","NOT","YOU","ALL","CAN","HER","WAS","ONE","OUR","OUT","HAS","HIS","HOW","ITS","MAY","NEW","NOW","OLD","SEE","WAY","WHO","DID","GET","HIM","LET","SAY","SHE","TOO","USE","JAN","FEB","MAR","APR","JUN","JUL","AUG","SEP","OCT","NOV","DEC","BUT","END","SET","RUN","TRY","ANY","DAY","GOT","PUT","OWN","WHY","BIG","FEW","ASK","MAN","OUR","TWO","YET","YES","PER","ADD","AGO","AGE","AID","AIM","AIR","BAD","BAR","BED","BIT","BOX","BOY","BUS","BUY","CAR","CUT","DOG","DRY","DUE","EAR","EAT","ERA","EYE","FAR","FAT","FIT","FLY","FUN","GAP","GAS","GUN","HAD","HIT","HOT","ICE","ILL","JOB","JOY","KEY","LAW","LAY","LED","LEG","LIE","LOT","LOW","MAP","MET","MIX","NOR","NOR","ODD","OIL","PAY","PEN","PIE","PIN","PIT","POP","RAW","RED","RID","ROW","SAD","SAT","SIT","SIX","SKI","SKY","SON","SUM","TAX","TEN","THE","TIE","TIN","TIP","TOP","VAN","VIA","WAR","WAS","WEB","WET","WIN","WON","YET"]);
-    const fromIataMatch = originalText.match(/(?:from|departing|origin[:\s]+)\s+([A-Za-z]{3})(?:\s*[,\-]\s*[\w\s]+)?/i);
-    const toIataMatch = originalText.match(/(?:to|arriving|destination[:\s]+)\s+([A-Za-z]{3})(?:\s*[,\-]\s*[\w\s]+)?/i);
+    const fromIataMatch = originalText.match(/(?:from|departing|origin[:\s]+)\s+([A-Za-z]{3})(?![A-Za-z])(?:\s*[,\-]\s*[\w\s]+)?/i);
+    const toIataMatch = originalText.match(/(?:to|arriving|destination[:\s]+)\s+([A-Za-z]{3})(?![A-Za-z])(?:\s*[,\-]\s*[\w\s]+)?/i);
     if (fromIataMatch) {
       const code = fromIataMatch[1].toUpperCase();
       if (!COMMON_WORDS_SET.has(code)) origin = code;

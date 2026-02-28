@@ -142,10 +142,25 @@ function CallRequestCard({ call, proposals }: { call: CallRequest; proposals?: I
     },
   });
 
+  const regenerateProposalMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/call-requests/${call.id}/generate-proposal`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Proposal regenerated", description: "Your travel proposal has been updated with real flight options." });
+      queryClient.invalidateQueries({ queryKey: ["/api/proposals"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to regenerate proposal", description: err.message, variant: "destructive" });
+    },
+  });
+
   const hasActiveBlandCall = blandCalls?.some(c => c.status === "queued" || c.status === "ringing" || c.status === "in_progress");
   const canDispatch = call.phone && call.status !== "completed" && !hasActiveBlandCall;
   const isCompleted = call.status === "completed";
   const hasProposal = linkedProposals.length > 0;
+  const hasFallbackOnly = hasProposal && linkedProposals.every(p => parseFloat(p.totalEstimate ?? "0") === 0);
 
   return (
     <Card className="p-5" data-testid={`card-call-request-${call.id}`}>
@@ -207,20 +222,40 @@ function CallRequestCard({ call, proposals }: { call: CallRequest; proposals?: I
       {isCompleted && (
         <div className="mt-3 pt-3 border-t space-y-2">
           {hasProposal ? (
-            linkedProposals.map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-2 flex-wrap" data-testid={`linked-proposal-${p.id}`}>
-                <div className="flex items-center gap-2 text-sm">
-                  <Plane className="w-4 h-4 text-primary" />
-                  <span className="font-medium">{p.title}</span>
-                  <StatusBadge status={p.status} />
+            <>
+              {linkedProposals.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-2 flex-wrap" data-testid={`linked-proposal-${p.id}`}>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Plane className="w-4 h-4 text-primary" />
+                    <span className="font-medium">{p.title}</span>
+                    <StatusBadge status={p.status} />
+                  </div>
+                  <Link href={`/proposals/${p.id}`}>
+                    <Button size="sm" variant="outline" data-testid={`button-view-proposal-${p.id}`}>
+                      View Proposal <ArrowRight className="w-3 h-3 ml-1" />
+                    </Button>
+                  </Link>
                 </div>
-                <Link href={`/proposals/${p.id}`}>
-                  <Button size="sm" variant="outline" data-testid={`button-view-proposal-${p.id}`}>
-                    View Proposal <ArrowRight className="w-3 h-3 ml-1" />
+              ))}
+              {hasFallbackOnly && (
+                <div className="flex items-center gap-2 pt-1">
+                  <AlertCircle className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm text-muted-foreground">Proposal has placeholder data.</span>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => regenerateProposalMutation.mutate()}
+                    disabled={regenerateProposalMutation.isPending}
+                  >
+                    {regenerateProposalMutation.isPending ? (
+                      <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Regenerating...</>
+                    ) : (
+                      "Regenerate with Real Flights"
+                    )}
                   </Button>
-                </Link>
-              </div>
-            ))
+                </div>
+              )}
+            </>
           ) : (
             <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid={`text-proposal-pending-${call.id}`}>
               <Loader2 className="w-4 h-4 animate-spin" />
