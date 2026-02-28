@@ -1198,32 +1198,49 @@ export async function registerRoutes(
     let origin: string | null = null;
     let destination: string | null = null;
 
-    // Step 0: Look for explicit IATA codes in "from CODE" / "to CODE" patterns
-    // The voice AI now includes airport codes in its summary, so these are the most reliable signals
-    // Case-insensitive to handle transcription systems that lowercase everything
-    const COMMON_WORDS_SET = new Set(["THE","AND","FOR","ARE","NOT","YOU","ALL","CAN","HER","WAS","ONE","OUR","OUT","HAS","HIS","HOW","ITS","MAY","NEW","NOW","OLD","SEE","WAY","WHO","DID","GET","HIM","LET","SAY","SHE","TOO","USE","JAN","FEB","MAR","APR","JUN","JUL","AUG","SEP","OCT","NOV","DEC","BUT","END","SET","RUN","TRY","ANY","DAY","GOT","PUT","OWN","WHY","BIG","FEW","ASK","MAN","OUR","TWO","YET","YES","PER","ADD","AGO","AGE","AID","AIM","AIR","BAD","BAR","BED","BIT","BOX","BOY","BUS","BUY","CAR","CUT","DOG","DRY","DUE","EAR","EAT","ERA","EYE","FAR","FAT","FIT","FLY","FUN","GAP","GAS","GUN","HAD","HIT","HOT","ICE","ILL","JOB","JOY","KEY","LAW","LAY","LED","LEG","LIE","LOT","LOW","MAP","MET","MIX","NOR","NOR","ODD","OIL","PAY","PEN","PIE","PIN","PIT","POP","RAW","RED","RID","ROW","SAD","SAT","SIT","SIX","SKI","SKY","SON","SUM","TAX","TEN","THE","TIE","TIN","TIP","TOP","VAN","VIA","WAR","WAS","WEB","WET","WIN","WON","YET"]);
-    const fromIataMatch = originalText.match(/(?:from|departing|origin[:\s]+)\s+([A-Za-z]{3})(?![A-Za-z])(?:\s*[,\-]\s*[\w\s]+)?/i);
-    const toIataMatch = originalText.match(/(?:to|arriving|destination[:\s]+)\s+([A-Za-z]{3})(?![A-Za-z])(?:\s*[,\-]\s*[\w\s]+)?/i);
-    if (fromIataMatch) {
-      const code = fromIataMatch[1].toUpperCase();
-      if (!COMMON_WORDS_SET.has(code)) origin = code;
-    }
-    if (toIataMatch) {
-      const code = toIataMatch[1].toUpperCase();
-      if (!COMMON_WORDS_SET.has(code)) destination = code;
+    const COMMON_WORDS_SET = new Set(["THE","AND","FOR","ARE","NOT","YOU","ALL","CAN","HER","WAS","ONE","OUR","OUT","HAS","HIS","HOW","ITS","MAY","NEW","NOW","OLD","SEE","WAY","WHO","DID","GET","HIM","LET","SAY","SHE","TOO","USE","JAN","FEB","MAR","APR","JUN","JUL","AUG","SEP","OCT","NOV","DEC","BUT","END","SET","RUN","TRY","ANY","DAY","GOT","PUT","OWN","WHY","BIG","FEW","ASK","MAN","TWO","YET","YES","PER","ADD","AGO","AGE","AID","AIM","AIR","BAD","BAR","BED","BIT","BOX","BOY","BUS","BUY","CAR","CUT","DOG","DRY","DUE","EAR","EAT","ERA","EYE","FAR","FAT","FIT","FLY","FUN","GAP","GAS","GUN","HAD","HIT","HOT","ICE","ILL","JOB","JOY","KEY","LAW","LAY","LED","LEG","LIE","LOT","LOW","MAP","MET","MIX","NOR","ODD","OIL","PAY","PEN","PIE","PIN","PIT","POP","RAW","RED","RID","ROW","SAD","SAT","SIT","SIX","SKI","SKY","SON","SUM","TAX","TEN","TIE","TIN","TIP","TOP","VAN","VIA","WAR","WEB","WET","WIN","WON"]);
+
+    // Step 0: Extract IATA codes from parentheses — the voice AI includes these in its summary
+    // e.g., "from St. Louis, Missouri (STL) to Los Angeles, California (LAX)"
+    const parenCodes: string[] = [];
+    const parenPattern = /\(([A-Z]{3})\)/g;
+    let pm: RegExpExecArray | null;
+    while ((pm = parenPattern.exec(originalText)) !== null) {
+      if (!COMMON_WORDS_SET.has(pm[1])) parenCodes.push(pm[1]);
     }
 
-    // Step 1: try "from X to Y" patterns — allow apostrophes, hyphens, digits in place names
+    // Also look for "from ORIGIN_CODE" / "to DEST_CODE" patterns — but ONLY for standalone all-uppercase codes
+    // e.g., "from STL to LAX" or "departing STL"
+    const fromCodeMatch = originalText.match(/(?:from|departing)\s+([A-Z]{3})(?:\s|,|\.|\)|$)/);
+    const toCodeMatch = originalText.match(/(?:to|arriving)\s+([A-Z]{3})(?:\s|,|\.|\)|$)/);
+
+    if (fromCodeMatch && !COMMON_WORDS_SET.has(fromCodeMatch[1])) {
+      origin = fromCodeMatch[1];
+    }
+    if (toCodeMatch && !COMMON_WORDS_SET.has(toCodeMatch[1])) {
+      destination = toCodeMatch[1];
+    }
+
+    // Use parenthetical codes if we still need origin/destination
+    if (parenCodes.length >= 2) {
+      if (!origin) origin = parenCodes[0];
+      if (!destination) destination = parenCodes[1];
+    } else if (parenCodes.length === 1) {
+      if (!destination) destination = parenCodes[0];
+      else if (!origin) origin = parenCodes[0];
+    }
+
+    // Step 1: try "from X to Y" patterns — allow apostrophes, hyphens, periods, digits in place names
     const fromToPatterns = [
-      /(?:from|departing|leaving|flying from|traveling from|depart(?:ing)? from)\s+([\w\s''\-]+?)\s+(?:to|going to|heading to|flying to|traveling to)\s+([\w\s''\-]+?)(?:\.|,|$|\s+on\b|\s+in\b|\s+around\b|\s+for\b)/i,
-      /(?:fly|travel|go|trip|flight)\s+(?:from\s+)?([\w\s''\-]+?)\s+to\s+([\w\s''\-]+?)(?:\.|,|$|\s+on\b|\s+in\b)/i,
+      /(?:from|departing|leaving|flying from|traveling from|depart(?:ing)? from)\s+([\w\s''\-\.]+?)\s+(?:to|going to|heading to|flying to|traveling to)\s+([\w\s''\-\.]+?)(?:,|$|\s+on\b|\s+in\b|\s+around\b|\s+for\b|\s+from\b|\s+depart)/i,
+      /(?:fly|travel|go|trip|flight)\s+(?:from\s+)?([\w\s''\-\.]+?)\s+to\s+([\w\s''\-\.]+?)(?:,|$|\s+on\b|\s+in\b)/i,
     ];
     if (!origin || !destination) {
       for (const pat of fromToPatterns) {
         const match = text.match(pat);
         if (match) {
-          const rawOrigin = match[1].trim();
-          const rawDest = match[2].trim();
+          let rawOrigin = match[1].trim().replace(/\s*\([^)]*\)\s*$/, "").trim();
+          let rawDest = match[2].trim().replace(/\s*\([^)]*\)\s*$/, "").trim();
           const MONTHS_RE = /^(?:january|february|march|april|may|june|july|august|september|october|november|december)/i;
           if (!MONTHS_RE.test(rawOrigin) && !MONTHS_RE.test(rawDest) && rawOrigin.length > 1 && rawDest.length > 1) {
             if (!origin) origin = rawOrigin;
@@ -1237,12 +1254,12 @@ export async function registerRoutes(
     // Step 2: dedicated destination / origin phrase patterns
     if (!destination) {
       const destPatterns = [
-        /(?:going to|heading to|traveling to|fly(?:ing)? to|destination(?:\s*:|\s+is)?|trip to|visit(?:ing)?|book(?:ing)?\s+(?:a\s+)?(?:flight\s+)?to)\s+([\w][\w\s''\-]{1,30}?)(?:\.|,|$|\s+on\b|\s+in\b|\s+around\b|\s+for\b|\s+from\b)/i,
+        /(?:going to|heading to|traveling to|fly(?:ing)? to|destination(?:\s*:|\s+is)?|trip to|visit(?:ing)?|book(?:ing)?\s+(?:a\s+)?(?:flight\s+)?to)\s+([\w][\w\s''\-\.]{1,30}?)(?:,|$|\s+on\b|\s+in\b|\s+around\b|\s+for\b|\s+from\b)/i,
       ];
       for (const pat of destPatterns) {
         const match = text.match(pat);
         if (match) {
-          destination = match[1].trim();
+          destination = match[1].trim().replace(/\s*\([^)]*\)\s*$/, "").trim();
           break;
         }
       }
@@ -1252,7 +1269,7 @@ export async function registerRoutes(
     if (!destination) {
       const SKIP_MONTHS = new Set(["January","February","March","April","May","June","July","August","September","October","November","December"]);
       const SKIP_WORDS = new Set(["The","A","An","Travnr","AI","It","He","She","We","You","They","This","That"]);
-      const toCityRe = /\bto\s+([A-Z][a-zA-Z]+(?:[\s\-][A-Z][a-zA-Z]+)*)/g;
+      const toCityRe = /\bto\s+([A-Z][a-zA-Z]+(?:[\s\-\.][A-Z][a-zA-Z]+)*)/g;
       let m: RegExpExecArray | null;
       while ((m = toCityRe.exec(originalText)) !== null) {
         const candidate = m[1].trim();
@@ -1266,12 +1283,12 @@ export async function registerRoutes(
 
     if (!origin) {
       const originPatterns = [
-        /(?:from|departing|leaving|out of|origin(?:\s*:|\s+is)?)\s+([\w][\w\s''\-]{1,30}?)(?:\.|,|$|\s+to\b|\s+on\b)/i,
+        /(?:from|departing|leaving|out of|origin(?:\s*:|\s+is)?)\s+([\w][\w\s''\-\.]{1,30}?)(?:,|$|\s+to\b|\s+on\b)/i,
       ];
       for (const pat of originPatterns) {
         const match = text.match(pat);
         if (match) {
-          const rawOrigin = match[1].trim();
+          const rawOrigin = match[1].trim().replace(/\s*\([^)]*\)\s*$/, "").trim();
           const MONTHS_RE = /^(?:january|february|march|april|may|june|july|august|september|october|november|december)/i;
           if (!MONTHS_RE.test(rawOrigin)) {
             origin = rawOrigin;
@@ -1285,7 +1302,7 @@ export async function registerRoutes(
     if (!origin) {
       const SKIP_MONTHS = new Set(["January","February","March","April","May","June","July","August","September","October","November","December"]);
       const SKIP_WORDS = new Set(["The","A","An","Travnr","AI","It","He","She","We","You","They","This","That"]);
-      const fromCityRe = /\bfrom\s+([A-Z][a-zA-Z]+(?:[\s\-][A-Z][a-zA-Z]+)*)/g;
+      const fromCityRe = /\bfrom\s+([A-Z][a-zA-Z]+(?:[\s\-\.][A-Z][a-zA-Z]+)*)/g;
       let m: RegExpExecArray | null;
       while ((m = fromCityRe.exec(originalText)) !== null) {
         const candidate = m[1].trim();
@@ -1298,20 +1315,20 @@ export async function registerRoutes(
     }
 
     // Step 5: IATA code extraction (last resort — only fill slots still empty)
+    // Only matches all-uppercase standalone 3-letter codes
     const iataPattern = /\b([A-Z]{3})\b/g;
     const iataCodes: string[] = [];
     let iataMatch: RegExpExecArray | null;
     while ((iataMatch = iataPattern.exec(originalText)) !== null) {
       const code = iataMatch[1];
-      if (!COMMON_WORDS_SET.has(code)) iataCodes.push(code);
+      if (!COMMON_WORDS_SET.has(code) && !parenCodes.includes(code)) iataCodes.push(code);
     }
     if (iataCodes.length >= 2) {
       if (!origin) origin = iataCodes[0];
       if (!destination) destination = iataCodes[1];
     } else if (iataCodes.length === 1) {
-      // One IATA code: treat it as origin if we already have a destination, else destination
       if (destination && !origin) origin = iataCodes[0];
-      else if (!destination && !origin) destination = iataCodes[0];
+      else if (!destination) destination = iataCodes[0];
     }
 
     let departureDate: string | null = null;
