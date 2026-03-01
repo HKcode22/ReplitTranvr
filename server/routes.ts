@@ -1902,25 +1902,31 @@ export async function registerRoutes(
 
       if (payload.status === "completed" || payload.event === "call.ended") {
         updateData.status = "completed";
-        updateData.duration = payload.call_length ? parseInt(payload.call_length) : null;
-        updateData.transcript = payload.concatenated_transcript || null;
-        updateData.transcriptJson = payload.transcript || null;
-        updateData.recordingUrl = payload.recording_url || null;
-        updateData.summary = payload.summary || null;
-        updateData.variables = payload.variables || null;
         updateData.endedAt = new Date();
+        if (payload.call_length) updateData.duration = parseInt(payload.call_length);
+        if (payload.concatenated_transcript) updateData.transcript = payload.concatenated_transcript;
+        if (payload.transcript) updateData.transcriptJson = payload.transcript;
+        if (payload.recording_url) updateData.recordingUrl = payload.recording_url;
+        if (payload.summary) updateData.summary = payload.summary;
+        if (payload.variables) updateData.variables = payload.variables;
+
+        const alreadyCompleted = blandCall.status === "completed";
+        const hasData = !!(payload.concatenated_transcript || payload.summary);
+        console.log(`Bland webhook call.ended/completed: callId=${blandCall.id}, alreadyCompleted=${alreadyCompleted}, hasData=${hasData}`);
 
         if (blandCall.callRequestId) {
           await storage.updateCallRequest(blandCall.callRequestId, { status: "completed" });
         }
 
-        await storage.createNotification({
-          userId: blandCall.userId,
-          type: "call_completed",
-          title: "Concierge call completed",
-          body: `Your concierge call has been completed${updateData.duration ? ` (${Math.ceil(updateData.duration / 60)} min)` : ""}.`,
-          linkUrl: "/call-history",
-        });
+        if (!alreadyCompleted) {
+          await storage.createNotification({
+            userId: blandCall.userId,
+            type: "call_completed",
+            title: "Concierge call completed",
+            body: `Your concierge call has been completed${updateData.duration ? ` (${Math.ceil(updateData.duration / 60)} min)` : ""}.`,
+            linkUrl: "/call-history",
+          });
+        }
 
       }
 
