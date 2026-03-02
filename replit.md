@@ -114,15 +114,13 @@ shared/
 - **Saved Cards**: GET/POST/DELETE `/api/saved-cards` - manage saved payment cards
 - **Token**: Uses DUFFEL_API_TOKEN (production) exclusively
 
-## Stripe Integration (Backend Only - Proposal Payments)
+## Stripe Integration (Backend Only - Data Sync)
 - **Stripe Client:** `server/lib/stripeClient.ts` - fetches credentials from Replit connection API
 - **Webhook Handler:** `server/lib/webhookHandlers.ts` - processes Stripe webhooks via stripe-replit-sync
 - **Config**: GET `/api/stripe/config` - returns { publishableKey } for frontend Stripe.js initialization
-- **PaymentIntent**: POST `/api/stripe/create-payment-intent` - creates a PaymentIntent for a proposal item
-- **Confirm Booking**: POST `/api/stripe/confirm-booking` - verifies PaymentIntent succeeded, books flight on Duffel with balance payment, records payment
 - **Stripe Webhook**: POST `/api/stripe/webhook` - registered BEFORE express.json() for raw Buffer access
 - **Initialization**: Stripe schema and webhooks initialized on server startup via stripe-replit-sync
-- **Note**: Frontend checkout uses Duffel's built-in card payment (DuffelCardForm) as the primary payment method for both proposal and direct flight bookings
+- **Note**: All flight checkout (both proposal and direct booking) uses Duffel's built-in card payment (DuffelCardForm) via `/api/proposals/:id/book-duffel` and `/api/duffel/book-direct`. Stripe is NOT used for flight payment — Duffel handles card tokenization and payment directly.
 
 ## Integration Status
 - **SendGrid** - Configured (SENDGRID_API_KEY + SENDGRID_FROM_EMAIL set)

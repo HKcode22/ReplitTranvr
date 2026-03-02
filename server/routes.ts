@@ -977,9 +977,9 @@ export async function registerRoutes(
         return res.status(401).json({ message: "User not found" });
       }
 
-      const { passengers, cardId, itemId } = req.body;
+      const { passengers, cardId, itemId, useBalance, overrideOfferId, overrideOfferData } = req.body;
 
-      if (!cardId) {
+      if (!cardId && !useBalance) {
         return res.status(400).json({ message: "Card payment is required. Please provide card details." });
       }
 
@@ -995,7 +995,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Selected flight offer not found" });
       }
 
-      const offerData = selectedItem.duffelOfferData as any;
+      const effectiveOfferId = overrideOfferId || selectedItem.duffelOfferId!;
+      const offerData = overrideOfferData || selectedItem.duffelOfferData as any;
       const expectedPassengerCount = offerData.passengers?.length || 1;
 
       if (passengers.length !== expectedPassengerCount) {
@@ -1019,16 +1020,15 @@ export async function registerRoutes(
       const amount = offerData.totalAmount || selectedItem.priceEstimate;
       const currency = offerData.totalCurrency || "USD";
 
+      const paymentConfig = useBalance
+        ? { type: "balance" as const, amount: String(amount), currency }
+        : { type: "card" as any, card_id: cardId, amount: String(amount), currency };
+
       const order = await duffel.orders.create({
-        selected_offers: [selectedItem.duffelOfferId!],
+        selected_offers: [effectiveOfferId],
         passengers: passengerMappings,
         type: "instant",
-        payments: [{
-          type: "card" as any,
-          card_id: cardId,
-          amount: String(amount),
-          currency,
-        }],
+        payments: [paymentConfig],
       });
 
       const orderData = order.data as any;

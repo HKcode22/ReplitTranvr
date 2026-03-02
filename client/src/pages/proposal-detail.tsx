@@ -1,12 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRoute, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { loadStripe } from "@stripe/stripe-js";
-import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { DuffelCardForm, useDuffelCardFormActions } from "@duffel/components";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -312,77 +311,18 @@ function DuffelFlightCard({ offerData }: { offerData: any }) {
   );
 }
 
-function StripePaymentForm({
-  clientSecret,
-  onSuccess,
-  onError,
-  isProcessing,
-  totalAmount,
-  totalCurrency,
-}: {
-  clientSecret: string;
-  onSuccess: (paymentIntentId: string) => void;
-  onError: (msg: string) => void;
-  isProcessing: boolean;
-  totalAmount: number;
-  totalCurrency: string;
-}) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async () => {
-    if (!stripe || !elements || submitting || isProcessing) return;
-    setSubmitting(true);
-    const { error, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      confirmParams: { return_url: window.location.href },
-      redirect: "if_required",
-    });
-    if (error) {
-      onError(error.message || "Payment failed");
-      setSubmitting(false);
-    } else if (paymentIntent?.status === "succeeded") {
-      onSuccess(paymentIntent.id);
-    } else {
-      onError("Payment not completed. Please try again.");
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div data-testid="container-stripe-payment-element">
-        <PaymentElement options={{ layout: "tabs" }} />
-      </div>
-      <Button
-        onClick={handleSubmit}
-        disabled={!stripe || !elements || submitting || isProcessing}
-        className="w-full"
-        data-testid="button-pay-now"
-      >
-        {(submitting || isProcessing) ? (
-          <Loader2 className="w-4 h-4 animate-spin mr-2" />
-        ) : (
-          <Lock className="w-4 h-4 mr-2" />
-        )}
-        Pay {totalCurrency} {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} & Book Flight
-      </Button>
-    </div>
-  );
-}
-
 function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: ProposalDetail; selectedItem: ProposalItem; onCancel: () => void }) {
   const { toast } = useToast();
   const [checkoutStep, setCheckoutStep] = useState<"passengers" | "payment" | "processing">("passengers");
   const [passengerData, setPassengerData] = useState<CheckoutFormValues | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [bookingResult, setBookingResult] = useState<any>(null);
-  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
-  const [stripePaymentIntentId, setStripePaymentIntentId] = useState<string | null>(null);
-  const [stripeInstance, setStripeInstance] = useState<any>(null);
   const [activeOfferData, setActiveOfferData] = useState<any>(selectedItem.duffelOfferData as any);
   const [isLoadingOffer, setIsLoadingOffer] = useState(false);
+  const [clientKey, setClientKey] = useState<string | null>(null);
+  const [cardFormValid, setCardFormValid] = useState(false);
+  const { ref: cardFormRef, createCardForTemporaryUse } = useDuffelCardFormActions();
+  const bookingCalledRef = useRef(false);
 
   const offerData = selectedItem.duffelOfferData as any;
   const originalPassengerCount = offerData?.passengers?.length || 1;
@@ -401,9 +341,11 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
     },
   });
 
-  const { data: stripeConfig } = useQuery<{ publishableKey: string | null }>({
-    queryKey: ["/api/stripe/config"],
+  const { data: duffelConfig } = useQuery<{ testMode: boolean }>({
+    queryKey: ["/api/duffel/config"],
   });
+
+  const isTestMode = !!duffelConfig?.testMode;
 
   const hasProfileData = !!(profile?.name && profile?.dateOfBirth && profile?.gender && profile?.title && profile?.phone);
 
@@ -448,16 +390,16 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
     setActiveOfferData(offerData);
   };
 
-  const confirmBookingMutation = useMutation({
-    mutationFn: async ({ paymentIntentId, overrideOfferId, overrideOfferData: ood }: { paymentIntentId: string; overrideOfferId?: string; overrideOfferData?: any }) => {
-      if (!passengerData) throw new Error("Missing passenger data");
-      const res = await apiRequest("POST", "/api/stripe/confirm-booking", {
-        paymentIntentId,
-        proposalId: proposal.id,
+  const bookMutation = useMutation({
+    mutationFn: async ({ cardId, useBalance, passengers }: { cardId?: string; useBalance?: boolean; passengers?: CheckoutFormValues["passengers"] }) => {
+      const pax = passengers || passengerData?.passengers;
+      if (!pax) throw new Error("Missing passenger data");
+      const isOverride = activeOfferData?.id && activeOfferData?.id !== offerData?.id;
+      const res = await apiRequest("POST", `/api/proposals/${proposal.id}/book-duffel`, {
         itemId: selectedItem.id,
-        passengers: passengerData.passengers,
-        overrideOfferId,
-        overrideOfferData: ood,
+        passengers: pax,
+        ...(useBalance ? { useBalance: true } : { cardId }),
+        ...(isOverride ? { overrideOfferId: activeOfferData.id, overrideOfferData: activeOfferData } : {}),
       });
       return res.json();
     },
@@ -470,25 +412,50 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
       toast({ title: "Flights booked successfully!" });
     },
     onError: (err: any) => {
-      toast({ title: "Booking failed", description: err.message, variant: "destructive" });
+      bookingCalledRef.current = false;
+      const raw = err.message?.replace(/^\d+:\s*/, "") || "Booking failed";
+      let msg = raw;
+      try { const parsed = JSON.parse(raw); msg = parsed.message || raw; } catch {}
+      toast({ title: "Booking failed", description: msg, variant: "destructive" });
       setCheckoutStep("payment");
-      setPaymentError("Booking failed: " + err.message);
+      setPaymentError("Booking failed: " + msg);
     },
   });
 
-  const handleStripeSuccess = useCallback((paymentIntentId: string) => {
-    setCheckoutStep("processing");
-    const isOverride = activeOfferData?.id !== offerData?.id;
-    confirmBookingMutation.mutate({
-      paymentIntentId,
-      overrideOfferId: isOverride ? activeOfferData?.id : undefined,
-      overrideOfferData: isOverride ? activeOfferData : undefined,
-    });
-  }, [activeOfferData, offerData]);
+  const fetchClientKeyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/duffel/component-client-key", {});
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setClientKey(data.clientKey);
+      setCheckoutStep("payment");
+    },
+    onError: (err: any) => {
+      toast({ title: "Payment setup failed", description: err.message, variant: "destructive" });
+    },
+  });
 
-  const handleStripeError = useCallback((msg: string) => {
-    setPaymentError(msg);
+  const handleCardCreated = useCallback((data: { id: string }) => {
+    if (bookingCalledRef.current) return;
+    bookingCalledRef.current = true;
+    setPaymentError(null);
+    setCheckoutStep("processing");
+    bookMutation.mutate({ cardId: data.id });
   }, []);
+
+  const handleCardError = useCallback((error: { message: string }) => {
+    setPaymentError(error?.message || "Card processing failed. Please check your details and try again.");
+  }, []);
+
+  const handlePayNow = () => {
+    setPaymentError(null);
+    try {
+      createCardForTemporaryUse();
+    } catch (err: any) {
+      setPaymentError("Failed to process card. Please check your details and try again.");
+    }
+  };
 
   const handlePassengerSubmit = async (data: CheckoutFormValues) => {
     setPassengerData(data);
@@ -520,28 +487,14 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
         }
       }
 
-      if (!stripeConfig?.publishableKey) {
-        toast({ title: "Payment setup failed", description: "Stripe is not configured", variant: "destructive" });
-        setIsLoadingOffer(false);
-        return;
+      setPaymentError(null);
+      if (isTestMode) {
+        bookingCalledRef.current = true;
+        setCheckoutStep("processing");
+        bookMutation.mutate({ useBalance: true, passengers: data.passengers });
+      } else {
+        fetchClientKeyMutation.mutate();
       }
-
-      const stripe = await loadStripe(stripeConfig.publishableKey);
-      setStripeInstance(stripe);
-
-      const amount = parseFloat(currentOfferData?.totalAmount || selectedItem.priceEstimate);
-      const currency = (currentOfferData?.totalCurrency || "USD").toLowerCase();
-
-      const piRes = await apiRequest("POST", "/api/stripe/create-payment-intent", {
-        proposalId: proposal.id,
-        itemId: selectedItem.id,
-        amount,
-        currency,
-      });
-      const piData = await piRes.json();
-      setStripeClientSecret(piData.clientSecret);
-      setStripePaymentIntentId(piData.paymentIntentId);
-      setCheckoutStep("payment");
     } catch (err: any) {
       toast({ title: "Payment setup failed", description: err.message, variant: "destructive" });
     } finally {
@@ -610,7 +563,7 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
   if (checkoutStep === "payment") {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => { setCheckoutStep("passengers"); setStripeClientSecret(null); setPaymentError(null); }} data-testid="button-back-to-passengers">
+        <Button variant="ghost" size="sm" onClick={() => { setCheckoutStep("passengers"); setClientKey(null); setPaymentError(null); bookingCalledRef.current = false; }} data-testid="button-back-to-passengers">
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to passenger details
         </Button>
 
@@ -642,34 +595,27 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
 
         <Card className="p-5">
           <h3 className="font-semibold mb-1 flex items-center gap-2">
-            <Lock className="w-4 h-4" /> Secure Payment
+            <Lock className="w-4 h-4" /> Secure Card Payment
           </h3>
           <p className="text-xs text-muted-foreground mb-4">
-            Pay with Apple Pay, Google Pay, or card. Your payment is processed securely by Stripe.
+            Your card details are securely processed by Duffel. We never see or store your full card number.
           </p>
 
-          <div className="min-h-[120px]">
-            {stripeClientSecret && stripeInstance ? (
-              <Elements
-                stripe={stripeInstance}
-                options={{
-                  clientSecret: stripeClientSecret,
-                  appearance: { theme: "stripe" },
-                }}
-              >
-                <StripePaymentForm
-                  clientSecret={stripeClientSecret}
-                  onSuccess={handleStripeSuccess}
-                  onError={handleStripeError}
-                  isProcessing={confirmBookingMutation.isPending}
-                  totalAmount={totalAmount}
-                  totalCurrency={totalCurrency}
-                />
-              </Elements>
+          <div className="min-h-[120px]" data-testid="container-card-form">
+            {clientKey ? (
+              <DuffelCardForm
+                ref={cardFormRef}
+                clientKey={clientKey}
+                intent="to-create-card-for-temporary-use"
+                onValidateSuccess={() => setCardFormValid(true)}
+                onValidateFailure={() => setCardFormValid(false)}
+                onCreateCardForTemporaryUseSuccess={handleCardCreated}
+                onCreateCardForTemporaryUseFailure={handleCardError}
+              />
             ) : (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-sm text-muted-foreground">Loading payment form...</span>
+                <span className="ml-2 text-sm text-muted-foreground">Loading secure card form...</span>
               </div>
             )}
           </div>
@@ -683,6 +629,20 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
             </div>
           )}
         </Card>
+
+        <Button
+          onClick={handlePayNow}
+          disabled={bookMutation.isPending || !clientKey || !cardFormValid}
+          className="w-full"
+          data-testid="button-pay-now"
+        >
+          {bookMutation.isPending ? (
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          ) : (
+            <Lock className="w-4 h-4 mr-2" />
+          )}
+          Pay {totalCurrency} {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} & Book Flight
+        </Button>
       </div>
     );
   }
