@@ -632,6 +632,44 @@ export async function registerRoutes(
     return res.json(pymts);
   });
 
+  // TRIPS (booked flights with Duffel order details)
+  app.get("/api/trips", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const pymts = await storage.getPayments(req.session.userId!);
+      const bookedPayments = pymts.filter(p => p.duffelOrderId && p.status === "paid");
+
+      const trips = await Promise.all(
+        bookedPayments.map(async (payment) => {
+          let orderData = null;
+          if (duffel && payment.duffelOrderId) {
+            try {
+              const order = await duffel.orders.get(payment.duffelOrderId);
+              orderData = order.data;
+            } catch (err: any) {
+              console.warn(`Failed to fetch Duffel order ${payment.duffelOrderId}:`, err.message);
+            }
+          }
+          return {
+            id: payment.id,
+            bookingReference: payment.duffelBookingRef,
+            duffelOrderId: payment.duffelOrderId,
+            amount: payment.amount,
+            currency: payment.currency,
+            status: payment.status,
+            bookedAt: payment.createdAt,
+            proposalId: payment.proposalId,
+            order: orderData,
+          };
+        })
+      );
+
+      return res.json(trips);
+    } catch (err: any) {
+      console.error("Error fetching trips:", err);
+      return res.status(500).json({ message: "Failed to fetch trips" });
+    }
+  });
+
   // SAVED CARDS
   app.get("/api/saved-cards", isAuthenticated, async (req: Request, res: Response) => {
     const cards = await storage.getSavedCards(req.session.userId!);

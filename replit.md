@@ -39,6 +39,7 @@ client/src/
     proposals.tsx      - List of proposals
     proposal-detail.tsx - Proposal detail with line items, Duffel flight cards, approve/book actions
     flight-search.tsx  - Flight search page using Duffel API
+    trips.tsx          - My Trips page: booked flights with Duffel order details, segments, passengers, conditions
     calendar-page.tsx  - Monthly calendar with trip dates
     notifications-page.tsx - Notification list with mark read
     billing.tsx        - Payment history and summary

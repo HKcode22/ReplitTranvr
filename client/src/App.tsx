@@ -22,6 +22,8 @@ import CalendarPage from "@/pages/calendar-page";
 import NotificationsPage from "@/pages/notifications-page";
 import BillingPage from "@/pages/billing";
 import SecurityPage from "@/pages/security";
+import TripsPage from "@/pages/trips";
+import FlightSearchPage from "@/pages/flight-search";
 import ResetPasswordPage from "@/pages/reset-password";
 import NotFound from "@/pages/not-found";
 
@@ -48,6 +50,8 @@ function AuthenticatedLayout() {
               <Route path="/call-history" component={CallHistoryPage} />
               <Route path="/proposals" component={ProposalsPage} />
               <Route path="/proposals/:id" component={ProposalDetailPage} />
+              <Route path="/trips" component={TripsPage} />
+              <Route path="/flights" component={FlightSearchPage} />
               <Route path="/calendar" component={CalendarPage} />
               <Route path="/notifications" component={NotificationsPage} />
               <Route path="/billing" component={BillingPage} />
