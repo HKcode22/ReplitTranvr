@@ -1490,7 +1490,7 @@ export async function registerRoutes(
       const fallbackIds: number[] = [];
       for (const ep of existingProposals) {
         const items = await storage.getProposalItems(ep.id);
-        const isFallback = items.length === 0 || items.every(i => !i.duffelOfferId && (parseFloat(i.amount ?? "0") === 0));
+        const isFallback = items.length === 0 || items.every(i => !i.duffelOfferId && (parseFloat(i.priceEstimate ?? "0") === 0));
         if (isFallback) fallbackIds.push(ep.id);
       }
       if (fallbackIds.length < existingProposals.length) {
@@ -1519,6 +1519,20 @@ export async function registerRoutes(
 
     const details = parseTravelDetailsFromTranscript(transcript, summary);
     console.log(`Parsed travel details from transcript for call ${callRequestId}:`, JSON.stringify(details));
+
+    // Patch missing parsed fields from user-provided form data
+    if (!details.destination && callRequest.destination) {
+      details.destination = callRequest.destination;
+      console.log(`generateProposalFromCall: using callRequest.destination="${callRequest.destination}" as fallback`);
+    }
+    if (!details.departureDate && callRequest.dateFrom) {
+      details.departureDate = callRequest.dateFrom;
+      console.log(`generateProposalFromCall: using callRequest.dateFrom="${callRequest.dateFrom}" as fallback`);
+    }
+    if (!details.returnDate && callRequest.dateTo) {
+      details.returnDate = callRequest.dateTo;
+      console.log(`generateProposalFromCall: using callRequest.dateTo="${callRequest.dateTo}" as fallback`);
+    }
 
     if (!details.destination) {
       console.log(`generateProposalFromCall: no destination found in transcript for call request ${callRequestId}`);
@@ -2007,8 +2021,7 @@ export async function registerRoutes(
       if (
         blandCall.callRequestId &&
         duffel &&
-        updateData.status === "completed" &&
-        (updateData.transcript || updateData.summary)
+        updateData.status === "completed"
       ) {
         generateProposalFromCall(
           blandCall.callRequestId,
