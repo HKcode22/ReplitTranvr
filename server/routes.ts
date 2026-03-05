@@ -742,10 +742,12 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/duffel/component-client-key", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/duffel/payment-intent", isAuthenticated, async (req: Request, res: Response) => {
     if (!duffelToken) return res.status(503).json({ message: "Duffel is not configured" });
     try {
-      const response = await fetch("https://api.duffel.com/identity/component_client_keys", {
+      const { amount, currency } = req.body;
+      if (!amount || !currency) return res.status(400).json({ message: "Amount and currency are required" });
+      const response = await fetch("https://api.duffel.com/payments/payment_intents", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${duffelToken}`,
@@ -753,27 +755,30 @@ export async function registerRoutes(
           "Content-Type": "application/json",
           "Duffel-Version": "v2",
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ data: { amount: String(amount), currency } }),
       });
       if (!response.ok) {
         const errBody = await response.json().catch(() => ({}));
-        console.error("Duffel client key error:", errBody);
-        return res.status(response.status).json({ message: errBody?.errors?.[0]?.message || "Failed to create client key" });
+        console.error("Duffel payment intent error:", errBody);
+        return res.status(response.status).json({ message: errBody?.errors?.[0]?.message || "Failed to create payment intent" });
       }
       const data = await response.json();
-      return res.json({ clientKey: data.data.component_client_key });
+      return res.json({ paymentIntentId: data.data.id, clientToken: data.data.client_token });
     } catch (err: any) {
-      console.error("Duffel client key error:", err);
-      return res.status(500).json({ message: "Failed to create client key" });
+      console.error("Duffel payment intent error:", err);
+      return res.status(500).json({ message: "Failed to create payment intent" });
     }
   });
 
   app.post("/api/duffel/book-direct", isAuthenticated, async (req: Request, res: Response) => {
     if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
     try {
-      const { offerId, passengers, cardId, threeDSecureSessionId, useBalance } = req.body;
+      const { offerId, passengers, paymentIntentId, useBalance } = req.body;
       if (!offerId) return res.status(400).json({ message: "Offer ID is required" });
-      if (!useBalance && !cardId) return res.status(400).json({ message: "Payment method is required (card or balance)" });
+      if (!useBalance && !paymentIntentId) return res.status(400).json({ message: "Payment method is required" });
+      if (!passengers || !Array.isArray(passengers) || passengers.length === 0) {
+        return res.status(400).json({ message: "Passenger details are required" });
+      }
 
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
@@ -781,47 +786,62 @@ export async function registerRoutes(
       const offer = await duffel.offers.get(offerId);
       const fullOffer = offer.data as any;
 
+      if (fullOffer.expires_at && new Date(fullOffer.expires_at) < new Date()) {
+        return res.status(400).json({ message: "This flight offer has expired. Please search again for current availability." });
+      }
+
+      if (fullOffer.passenger_identity_documents_required) {
+        return res.status(400).json({ message: "This flight requires passenger identity documents (passport/ID), which are not yet supported. Please choose a different flight." });
+      }
+
       const passengerMappings = (fullOffer.passengers || []).map((p: any, idx: number) => {
-        const pax = passengers?.[idx] || passengers?.[0] || {};
+        const pax = passengers[idx] || passengers[0];
+        if (!pax?.bornOn || !pax?.phone || !pax?.title || !pax?.gender) {
+          throw new Error(`Complete details required for passenger ${idx + 1} (date of birth, phone, title, gender)`);
+        }
         return {
           id: p.id,
           given_name: pax.givenName || user.firstName,
           family_name: pax.familyName || user.lastName,
-          born_on: pax.bornOn || "1990-01-01",
+          born_on: pax.bornOn,
           email: user.email,
-          phone_number: pax.phone || "+10000000000",
-          title: pax.title || "mr",
-          gender: pax.gender || "m",
+          phone_number: pax.phone,
+          title: pax.title,
+          gender: pax.gender,
         };
       });
 
-      let paymentObj: any;
-      if (useBalance) {
-        paymentObj = {
-          type: "balance",
-          amount: fullOffer.total_amount,
-          currency: fullOffer.total_currency,
-        };
-      } else {
-        paymentObj = {
-          type: "card",
-          amount: fullOffer.total_amount,
-          currency: fullOffer.total_currency,
-        };
-        if (threeDSecureSessionId) {
-          paymentObj.three_d_secure_session_id = threeDSecureSessionId;
+      if (paymentIntentId) {
+        const confirmRes = await fetch(`https://api.duffel.com/payments/payment_intents/${paymentIntentId}/actions/confirm`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${duffelToken}`,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Duffel-Version": "v2",
+          },
+          body: JSON.stringify({}),
+        });
+        if (!confirmRes.ok) {
+          const errBody = await confirmRes.json().catch(() => ({}));
+          console.error("Duffel payment intent confirm error:", errBody);
+          return res.status(confirmRes.status).json({ message: errBody?.errors?.[0]?.message || "Payment confirmation failed" });
         }
       }
+
+      const paymentObj = {
+        type: "balance" as const,
+        amount: fullOffer.total_amount,
+        currency: fullOffer.total_currency,
+      };
 
       const orderPayload: any = {
         selected_offers: [offerId],
         passengers: passengerMappings,
         type: "instant",
         payments: [paymentObj],
+        ...(paymentIntentId ? { metadata: { payment_intent_id: paymentIntentId } } : {}),
       };
-      if (cardId) {
-        orderPayload.metadata = { card_id: cardId };
-      }
 
       const order = await duffel.orders.create(orderPayload);
       const orderData = order.data as any;
@@ -1015,10 +1035,10 @@ export async function registerRoutes(
         return res.status(401).json({ message: "User not found" });
       }
 
-      const { passengers, cardId, itemId, useBalance, overrideOfferId, overrideOfferData } = req.body;
+      const { passengers, paymentIntentId, itemId, useBalance, overrideOfferId, overrideOfferData } = req.body;
 
-      if (!cardId && !useBalance) {
-        return res.status(400).json({ message: "Card payment is required. Please provide card details." });
+      if (!paymentIntentId && !useBalance) {
+        return res.status(400).json({ message: "Payment method is required" });
       }
 
       if (!passengers || !Array.isArray(passengers) || passengers.length === 0) {
@@ -1035,6 +1055,15 @@ export async function registerRoutes(
 
       const effectiveOfferId = overrideOfferId || selectedItem.duffelOfferId!;
       const offerData = overrideOfferData || selectedItem.duffelOfferData as any;
+
+      if (offerData.expiresAt && new Date(offerData.expiresAt) < new Date()) {
+        return res.status(400).json({ message: "This flight offer has expired. Please search again for current availability." });
+      }
+
+      if (offerData.passengerIdentityDocumentsRequired) {
+        return res.status(400).json({ message: "This flight requires passenger identity documents (passport/ID), which are not yet supported. Please choose a different flight." });
+      }
+
       const expectedPassengerCount = offerData.passengers?.length || 1;
 
       if (passengers.length !== expectedPassengerCount) {
@@ -1058,16 +1087,33 @@ export async function registerRoutes(
       const amount = offerData.totalAmount || selectedItem.priceEstimate;
       const currency = offerData.totalCurrency || "USD";
 
-      const paymentConfig = useBalance
-        ? { type: "balance" as const, amount: String(amount), currency }
-        : { type: "card" as any, card_id: cardId, amount: String(amount), currency };
+      if (paymentIntentId) {
+        const confirmRes = await fetch(`https://api.duffel.com/payments/payment_intents/${paymentIntentId}/actions/confirm`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${duffelToken}`,
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Duffel-Version": "v2",
+          },
+          body: JSON.stringify({}),
+        });
+        if (!confirmRes.ok) {
+          const errBody = await confirmRes.json().catch(() => ({}));
+          console.error("Duffel payment intent confirm error:", errBody);
+          return res.status(confirmRes.status).json({ message: errBody?.errors?.[0]?.message || "Payment confirmation failed" });
+        }
+      }
+
+      const paymentConfig = { type: "balance" as const, amount: String(amount), currency };
 
       const order = await duffel.orders.create({
         selected_offers: [effectiveOfferId],
         passengers: passengerMappings,
         type: "instant",
         payments: [paymentConfig],
-      });
+        ...(paymentIntentId ? { metadata: { payment_intent_id: paymentIntentId } } : {}),
+      } as any);
 
       const orderData = order.data as any;
       const payment = await storage.createPayment({

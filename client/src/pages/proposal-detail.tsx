@@ -5,7 +5,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { DuffelCardForm, useDuffelCardFormActions } from "@duffel/components";
+import { DuffelPayments } from "@duffel/components";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -319,9 +319,8 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
   const [bookingResult, setBookingResult] = useState<any>(null);
   const [activeOfferData, setActiveOfferData] = useState<any>(selectedItem.duffelOfferData as any);
   const [isLoadingOffer, setIsLoadingOffer] = useState(false);
-  const [clientKey, setClientKey] = useState<string | null>(null);
-  const [cardFormValid, setCardFormValid] = useState(false);
-  const { ref: cardFormRef, createCardForTemporaryUse } = useDuffelCardFormActions();
+  const [clientToken, setClientToken] = useState<string | null>(null);
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const bookingCalledRef = useRef(false);
 
   const offerData = selectedItem.duffelOfferData as any;
@@ -391,14 +390,14 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
   };
 
   const bookMutation = useMutation({
-    mutationFn: async ({ cardId, useBalance, passengers }: { cardId?: string; useBalance?: boolean; passengers?: CheckoutFormValues["passengers"] }) => {
+    mutationFn: async ({ paymentIntentId, useBalance, passengers }: { paymentIntentId?: string; useBalance?: boolean; passengers?: CheckoutFormValues["passengers"] }) => {
       const pax = passengers || passengerData?.passengers;
       if (!pax) throw new Error("Missing passenger data");
       const isOverride = activeOfferData?.id && activeOfferData?.id !== offerData?.id;
       const res = await apiRequest("POST", `/api/proposals/${proposal.id}/book-duffel`, {
         itemId: selectedItem.id,
         passengers: pax,
-        ...(useBalance ? { useBalance: true } : { cardId }),
+        ...(useBalance ? { useBalance: true } : { paymentIntentId }),
         ...(isOverride ? { overrideOfferId: activeOfferData.id, overrideOfferData: activeOfferData } : {}),
       });
       return res.json();
@@ -422,13 +421,17 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
     },
   });
 
-  const fetchClientKeyMutation = useMutation({
+  const createPaymentIntentMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/duffel/component-client-key", {});
+      const res = await apiRequest("POST", "/api/duffel/payment-intent", {
+        amount: totalAmount,
+        currency: totalCurrency,
+      });
       return res.json();
     },
     onSuccess: (data: any) => {
-      setClientKey(data.clientKey);
+      setPaymentIntentId(data.paymentIntentId);
+      setClientToken(data.clientToken);
       setCheckoutStep("payment");
     },
     onError: (err: any) => {
@@ -436,26 +439,17 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
     },
   });
 
-  const handleCardCreated = useCallback((data: { id: string }) => {
+  const handlePaymentSuccess = useCallback(() => {
     if (bookingCalledRef.current) return;
     bookingCalledRef.current = true;
     setPaymentError(null);
     setCheckoutStep("processing");
-    bookMutation.mutate({ cardId: data.id });
-  }, []);
+    bookMutation.mutate({ paymentIntentId: paymentIntentId! });
+  }, [paymentIntentId]);
 
-  const handleCardError = useCallback((error: { message: string }) => {
-    setPaymentError(error?.message || "Card processing failed. Please check your details and try again.");
+  const handlePaymentError = useCallback((error: { message: string }) => {
+    setPaymentError(error?.message || "Payment failed. Please check your card details and try again.");
   }, []);
-
-  const handlePayNow = () => {
-    setPaymentError(null);
-    try {
-      createCardForTemporaryUse();
-    } catch (err: any) {
-      setPaymentError("Failed to process card. Please check your details and try again.");
-    }
-  };
 
   const handlePassengerSubmit = async (data: CheckoutFormValues) => {
     setPassengerData(data);
@@ -493,7 +487,7 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
         setCheckoutStep("processing");
         bookMutation.mutate({ useBalance: true, passengers: data.passengers });
       } else {
-        fetchClientKeyMutation.mutate();
+        createPaymentIntentMutation.mutate();
       }
     } catch (err: any) {
       toast({ title: "Payment setup failed", description: err.message, variant: "destructive" });
@@ -563,7 +557,7 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
   if (checkoutStep === "payment") {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => { setCheckoutStep("passengers"); setClientKey(null); setPaymentError(null); bookingCalledRef.current = false; }} data-testid="button-back-to-passengers">
+        <Button variant="ghost" size="sm" onClick={() => { setCheckoutStep("passengers"); setClientToken(null); setPaymentIntentId(null); setPaymentError(null); bookingCalledRef.current = false; }} data-testid="button-back-to-passengers">
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to passenger details
         </Button>
 
@@ -602,20 +596,16 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
           </p>
 
           <div className="min-h-[120px]" data-testid="container-card-form">
-            {clientKey ? (
-              <DuffelCardForm
-                ref={cardFormRef}
-                clientKey={clientKey}
-                intent="to-create-card-for-temporary-use"
-                onValidateSuccess={() => setCardFormValid(true)}
-                onValidateFailure={() => setCardFormValid(false)}
-                onCreateCardForTemporaryUseSuccess={handleCardCreated}
-                onCreateCardForTemporaryUseFailure={handleCardError}
+            {clientToken ? (
+              <DuffelPayments
+                paymentIntentClientToken={clientToken}
+                onSuccessfulPayment={handlePaymentSuccess}
+                onFailedPayment={handlePaymentError}
               />
             ) : (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-sm text-muted-foreground">Loading secure card form...</span>
+                <span className="ml-2 text-sm text-muted-foreground">Loading secure payment form...</span>
               </div>
             )}
           </div>
@@ -629,20 +619,6 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
             </div>
           )}
         </Card>
-
-        <Button
-          onClick={handlePayNow}
-          disabled={bookMutation.isPending || !clientKey || !cardFormValid}
-          className="w-full"
-          data-testid="button-pay-now"
-        >
-          {bookMutation.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          ) : (
-            <Lock className="w-4 h-4 mr-2" />
-          )}
-          Pay {totalCurrency} {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })} & Book Flight
-        </Button>
       </div>
     );
   }
@@ -814,10 +790,10 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
           <Button
             type="submit"
             className="w-full"
-            disabled={isLoadingOffer}
+            disabled={isLoadingOffer || createPaymentIntentMutation.isPending}
             data-testid="button-continue-to-payment"
           >
-            {isLoadingOffer ? (
+            {(isLoadingOffer || createPaymentIntentMutation.isPending) ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : (
               <CreditCard className="w-4 h-4 mr-2" />
@@ -826,6 +802,8 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
               ? desiredPassengerCount !== originalPassengerCount
                 ? "Searching flights..."
                 : "Setting up payment..."
+              : createPaymentIntentMutation.isPending
+              ? "Setting up payment..."
               : "Continue to Payment"}
           </Button>
         </form>

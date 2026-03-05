@@ -16,8 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { PhoneInput } from "@/components/phone-input";
 import { useToast } from "@/hooks/use-toast";
 import { AirportSearch } from "@/components/airport-search";
-import { DuffelCardForm, useDuffelCardFormActions } from "@duffel/components";
-import type { TravelerProfile, SavedCard } from "@shared/schema";
+import { DuffelPayments } from "@duffel/components";
+import type { TravelerProfile } from "@shared/schema";
 import {
   Search, Plane, Clock, Luggage, ArrowRight, Loader2, Check,
   ArrowLeft, User, CreditCard, Users, Shield, Plus, Minus, Lock, AlertCircle, FileText
@@ -184,12 +184,23 @@ function OfferCard({ offer, onSelect, passengerCount }: { offer: any; onSelect: 
             {saveProposalMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <FileText className="w-4 h-4 mr-1" />}
             Save as Proposal
           </Button>
-          <Button onClick={() => onSelect(offer)} data-testid={`button-select-offer-${offer.id}`}>
+          <Button
+            onClick={() => onSelect(offer)}
+            disabled={!!offer.passengerIdentityDocumentsRequired}
+            title={offer.passengerIdentityDocumentsRequired ? "Identity documents required — not yet supported" : undefined}
+            data-testid={`button-select-offer-${offer.id}`}
+          >
             <Check className="w-4 h-4 mr-1" /> Book Now
           </Button>
         </div>
       </div>
       <FlightSummaryCard offer={offer} />
+      {offer.passengerIdentityDocumentsRequired && (
+        <div className="flex items-start gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-400">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>This fare requires passenger identity documents (passport/ID). Online booking is not available for this offer.</span>
+        </div>
+      )}
     </Card>
   );
 }
@@ -199,11 +210,9 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
   const [bookingResult, setBookingResult] = useState<any>(null);
   const [checkoutStep, setCheckoutStep] = useState<"passengers" | "payment" | "processing">("passengers");
   const [passengerData, setPassengerData] = useState<CheckoutFormValues | null>(null);
-  const [clientKey, setClientKey] = useState<string | null>(null);
+  const [clientToken, setClientToken] = useState<string | null>(null);
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
-  const [cardFormValid, setCardFormValid] = useState(false);
-  const [cardTokenId, setCardTokenId] = useState<string | null>(null);
-  const { ref: cardFormRef, createCardForTemporaryUse } = useDuffelCardFormActions();
 
   const { data: profile } = useQuery<TravelerProfile | null>({
     queryKey: ["/api/profile"],
@@ -265,13 +274,17 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
     }
   }, [profile]);
 
-  const fetchClientKeyMutation = useMutation({
+  const createPaymentIntentMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/duffel/component-client-key", {});
+      const res = await apiRequest("POST", "/api/duffel/payment-intent", {
+        amount: offer.totalAmount,
+        currency: offer.totalCurrency,
+      });
       return res.json();
     },
     onSuccess: (data: any) => {
-      setClientKey(data.clientKey);
+      setPaymentIntentId(data.paymentIntentId);
+      setClientToken(data.clientToken);
       setCheckoutStep("payment");
     },
     onError: (err: any) => {
@@ -282,13 +295,13 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
   const bookingCalledRef = useRef(false);
 
   const bookMutation = useMutation({
-    mutationFn: async ({ cardId, useBalance, passengers }: { cardId?: string; useBalance?: boolean; passengers?: CheckoutFormValues["passengers"] }) => {
+    mutationFn: async ({ paymentIntentId, useBalance, passengers }: { paymentIntentId?: string; useBalance?: boolean; passengers?: CheckoutFormValues["passengers"] }) => {
       const pax = passengers || passengerData?.passengers;
       if (!pax) throw new Error("Missing passenger data");
       const res = await apiRequest("POST", "/api/duffel/book-direct", {
         offerId: offer.id,
         passengers: pax,
-        ...(useBalance ? { useBalance: true } : { cardId }),
+        ...(useBalance ? { useBalance: true } : { paymentIntentId }),
       });
       return res.json();
     },
@@ -309,17 +322,16 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
     },
   });
 
-  const handleCardCreated = useCallback((data: { id: string }) => {
+  const handlePaymentSuccess = useCallback(() => {
     if (bookingCalledRef.current) return;
     bookingCalledRef.current = true;
-    setCardTokenId(data.id);
     setPaymentError(null);
     setCheckoutStep("processing");
-    bookMutation.mutate({ cardId: data.id });
-  }, []);
+    bookMutation.mutate({ paymentIntentId: paymentIntentId! });
+  }, [paymentIntentId]);
 
-  const handleCardError = useCallback((error: { message: string }) => {
-    setPaymentError(error?.message || "Card processing failed. Please check your details and try again.");
+  const handlePaymentError = useCallback((error: { message: string }) => {
+    setPaymentError(error?.message || "Payment failed. Please check your card details and try again.");
   }, []);
 
   const handlePassengerSubmit = (data: CheckoutFormValues) => {
@@ -330,16 +342,7 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
       setCheckoutStep("processing");
       bookMutation.mutate({ useBalance: true, passengers: data.passengers });
     } else {
-      fetchClientKeyMutation.mutate();
-    }
-  };
-
-  const handlePayNow = () => {
-    setPaymentError(null);
-    try {
-      createCardForTemporaryUse();
-    } catch (err: any) {
-      setPaymentError("Failed to process card. Please check your details and try again.");
+      createPaymentIntentMutation.mutate();
     }
   };
 
@@ -402,7 +405,7 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
   if (checkoutStep === "payment") {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => { setCheckoutStep("passengers"); setCardFormValid(false); bookingCalledRef.current = false; setPaymentError(null); }} data-testid="button-back-to-passengers">
+        <Button variant="ghost" size="sm" onClick={() => { setCheckoutStep("passengers"); setClientToken(null); setPaymentIntentId(null); bookingCalledRef.current = false; setPaymentError(null); }} data-testid="button-back-to-passengers">
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to passenger details
         </Button>
 
@@ -429,20 +432,16 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
           <p className="text-xs text-muted-foreground mb-4">Your card details are securely processed by Duffel. We never see or store your full card number.</p>
 
           <div className="min-h-[120px]" data-testid="container-card-form">
-            {clientKey ? (
-              <DuffelCardForm
-                ref={cardFormRef}
-                clientKey={clientKey}
-                intent="to-create-card-for-temporary-use"
-                onValidateSuccess={() => setCardFormValid(true)}
-                onValidateFailure={() => setCardFormValid(false)}
-                onCreateCardForTemporaryUseSuccess={handleCardCreated}
-                onCreateCardForTemporaryUseFailure={handleCardError}
+            {clientToken ? (
+              <DuffelPayments
+                paymentIntentClientToken={clientToken}
+                onSuccessfulPayment={handlePaymentSuccess}
+                onFailedPayment={handlePaymentError}
               />
             ) : (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-sm text-muted-foreground">Loading secure card form...</span>
+                <span className="ml-2 text-sm text-muted-foreground">Loading secure payment form...</span>
               </div>
             )}
           </div>
@@ -456,20 +455,6 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
             </div>
           )}
         </Card>
-
-        <Button
-          onClick={handlePayNow}
-          disabled={bookMutation.isPending || !clientKey || !cardFormValid}
-          className="w-full"
-          data-testid="button-pay-now"
-        >
-          {bookMutation.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          ) : (
-            <Lock className="w-4 h-4 mr-2" />
-          )}
-          Pay {offer.totalCurrency} {Number(offer.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })} & Book Flight
-        </Button>
       </div>
     );
   }
@@ -511,6 +496,13 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
           </span>
         </div>
       </Card>
+
+      {requiresIdentityDocs && (
+        <div className="flex items-start gap-2 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-3 text-sm text-yellow-700 dark:text-yellow-400">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>This fare requires passenger identity documents (passport/ID). Booking may not complete — please choose a different offer.</span>
+        </div>
+      )}
 
       {paymentError && (
         <div className="p-3 rounded-md border border-destructive/50 bg-destructive/5">
@@ -612,11 +604,11 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
 
           <Button
             type="submit"
-            disabled={fetchClientKeyMutation.isPending || bookMutation.isPending}
+            disabled={createPaymentIntentMutation.isPending || bookMutation.isPending}
             className="w-full"
             data-testid="button-continue-to-payment"
           >
-            {(fetchClientKeyMutation.isPending || bookMutation.isPending) ? (
+            {(createPaymentIntentMutation.isPending || bookMutation.isPending) ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : isTestMode ? (
               <Plane className="w-4 h-4 mr-2" />
