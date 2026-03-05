@@ -34,6 +34,7 @@ export interface IStorage {
 
   getProposalItems(proposalId: number): Promise<ProposalItem[]>;
   createProposalItem(data: InsertProposalItem): Promise<ProposalItem>;
+  updateProposalItem(id: number, data: Partial<Pick<ProposalItem, "description" | "priceEstimate" | "duffelOfferId" | "duffelOfferData">>): Promise<ProposalItem | undefined>;
   deleteProposalAndItems(proposalId: number): Promise<void>;
 
   getNotifications(userId: string): Promise<Notification[]>;
@@ -161,6 +162,11 @@ export class DatabaseStorage implements IStorage {
 
   async createProposalItem(data: InsertProposalItem): Promise<ProposalItem> {
     const [item] = await db.insert(proposalItems).values(data).returning();
+    return item;
+  }
+
+  async updateProposalItem(id: number, data: Partial<Pick<ProposalItem, "description" | "priceEstimate" | "duffelOfferId" | "duffelOfferData">>): Promise<ProposalItem | undefined> {
+    const [item] = await db.update(proposalItems).set(data).where(eq(proposalItems.id, id)).returning();
     return item;
   }
 

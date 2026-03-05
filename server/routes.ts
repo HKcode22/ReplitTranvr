@@ -1011,6 +1011,97 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/proposals/:proposalId/items/:itemId/refresh-flight", isAuthenticated, async (req: Request, res: Response) => {
+    if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
+    try {
+      const proposalId = parseInt(req.params.proposalId);
+      const itemId = parseInt(req.params.itemId);
+
+      const proposal = await storage.getProposal(proposalId);
+      if (!proposal || proposal.userId !== req.session.userId!) {
+        return res.status(404).json({ message: "Proposal not found" });
+      }
+
+      const items = await storage.getProposalItems(proposalId);
+      const item = items.find((i) => i.id === itemId);
+      if (!item) return res.status(404).json({ message: "Item not found" });
+
+      const { origin, destination, departureDate, returnDate, cabinClass, passengerCount } = req.body;
+      if (!origin || !destination || !departureDate || !cabinClass) {
+        return res.status(400).json({ message: "origin, destination, departureDate, and cabinClass are required" });
+      }
+
+      const count = Math.max(1, Math.min(9, parseInt(passengerCount) || 1));
+      const slices: any[] = [{ origin, destination, departure_date: departureDate }];
+      if (returnDate) slices.push({ origin: destination, destination: origin, departure_date: returnDate });
+      const passengerList = Array.from({ length: count }, () => ({ type: "adult" as const }));
+
+      const offerRequest = await duffel.offerRequests.create({
+        slices,
+        passengers: passengerList,
+        cabin_class: cabinClass as any,
+        return_offers: true,
+      });
+
+      const offers = ((offerRequest.data as any).offers || []).sort(
+        (a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount)
+      );
+
+      if (offers.length === 0) {
+        return res.status(404).json({ message: "No flights found for those preferences. Try different dates or cabin class." });
+      }
+
+      const best = offers[0];
+      const cabinLabels: Record<string, string> = { economy: "Economy", premium_economy: "Premium Economy", business: "Business", first: "First Class" };
+      const cabinLabel = cabinLabels[cabinClass] || cabinClass;
+      const simplified = {
+        id: best.id,
+        totalAmount: best.total_amount,
+        totalCurrency: best.total_currency,
+        expiresAt: best.expires_at,
+        owner: best.owner,
+        slices: best.slices?.map((slice: any) => ({
+          id: slice.id,
+          duration: slice.duration,
+          origin: { iata: slice.origin?.iata_code, name: slice.origin?.name, city: slice.origin?.city_name },
+          destination: { iata: slice.destination?.iata_code, name: slice.destination?.name, city: slice.destination?.city_name },
+          segments: slice.segments?.map((seg: any) => ({
+            id: seg.id,
+            departingAt: seg.departing_at,
+            arrivingAt: seg.arriving_at,
+            origin: { iata: seg.origin?.iata_code, name: seg.origin?.name },
+            destination: { iata: seg.destination?.iata_code, name: seg.destination?.name },
+            carrier: {
+              name: seg.marketing_carrier?.name,
+              iata: seg.marketing_carrier?.iata_code,
+              logoUrl: seg.marketing_carrier?.logo_symbol_url || seg.marketing_carrier?.logo_lockup_url,
+            },
+            flightNumber: seg.marketing_carrier_flight_number,
+            aircraft: seg.aircraft?.name,
+            cabinClass: seg.passengers?.[0]?.cabin_class_marketing_name || seg.passengers?.[0]?.cabin_class,
+            baggages: seg.passengers?.[0]?.baggages,
+          })),
+        })),
+        passengers: best.passengers,
+        passengerIdentityDocumentsRequired: best.passenger_identity_documents_required ?? false,
+        searchParams: { origin, destination, departureDate, returnDate: returnDate || null, cabinClass, passengers: count },
+      };
+
+      const routeSummary = `${origin} to ${destination}`;
+      await storage.updateProposalItem(itemId, {
+        duffelOfferId: best.id,
+        duffelOfferData: simplified,
+        priceEstimate: best.total_amount,
+        description: `${cabinLabel} Flight: ${routeSummary}`,
+      });
+
+      return res.json({ offer: simplified });
+    } catch (err: any) {
+      console.error("Duffel refresh-flight error:", err?.errors || err);
+      return res.status(500).json({ message: err?.errors?.[0]?.message || "Flight search failed" });
+    }
+  });
+
   app.post("/api/proposals/:id/book-duffel", isAuthenticated, async (req: Request, res: Response) => {
     if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
     const proposalId = parseInt(req.params.id);
@@ -1497,10 +1588,28 @@ export async function registerRoutes(
       }
     }
 
+    // Cabin class: look for affirmative preference statements first to avoid matching
+    // the AI agent's option list (e.g. "economy, business, or first class?").
+    // Summary is more reliable than raw transcript, so check it first.
     let cabinClass = "economy";
-    if (/\b(?:first\s*class|first-class)\b/i.test(text)) cabinClass = "first";
-    else if (/\bbusiness\s*class\b/i.test(text) || /\bbusiness\b/i.test(text)) cabinClass = "business";
-    else if (/\bpremium\s*economy\b/i.test(text) || /\bpremium\b/i.test(text)) cabinClass = "premium_economy";
+    const affirmativePrefix = /(?:want(?:s|ed)?|prefer(?:s|red)?|request(?:s|ed)?|chose?|choose|go(?:ing)?\s+with|book(?:s|ed|ing)?|like[sd]?|select(?:s|ed)?|opted?\s+for|confirmed?|fly(?:ing)?)\s+(?:an?\s+)?/i;
+    const findCabinInText = (t: string): string | null => {
+      if (new RegExp(affirmativePrefix.source + /\bfirst[\s-]class\b/.source, "i").test(t)) return "first";
+      if (new RegExp(affirmativePrefix.source + /\bbusiness[\s-]class\b/.source, "i").test(t)) return "business";
+      if (new RegExp(affirmativePrefix.source + /\bpremium[\s-]economy\b/.source, "i").test(t)) return "premium_economy";
+      if (new RegExp(affirmativePrefix.source + /\beconomy\b/.source, "i").test(t)) return "economy";
+      return null;
+    };
+    const summaryText = summary || "";
+    const cabinFromSummary = findCabinInText(summaryText) ?? findCabinInText(text);
+    if (cabinFromSummary) {
+      cabinClass = cabinFromSummary;
+    } else {
+      // Fallback: check summary only for bare keyword (avoids matching agent's option lists in transcript)
+      if (/\bfirst[\s-]class\b/i.test(summaryText)) cabinClass = "first";
+      else if (/\bbusiness[\s-]class\b/i.test(summaryText)) cabinClass = "business";
+      else if (/\bpremium[\s-]economy\b/i.test(summaryText)) cabinClass = "premium_economy";
+    }
 
     let budget: number | null = null;
     const budgetPatterns = [

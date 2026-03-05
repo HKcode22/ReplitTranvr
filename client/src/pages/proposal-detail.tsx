@@ -18,9 +18,11 @@ import { StatusBadge } from "@/components/status-badge";
 import { PhoneInput } from "@/components/phone-input";
 import { useToast } from "@/hooks/use-toast";
 import type { ItineraryProposal, ProposalItem, Payment, TravelerProfile } from "@shared/schema";
+import { AirportSearch } from "@/components/airport-search";
 import {
   ArrowLeft, Plane, Hotel, Package, Check, CreditCard, Loader2, Clock,
-  Luggage, ArrowRight, User, Lock, Shield, AlertCircle, Users, Plus, Minus, Search
+  Luggage, ArrowRight, User, Lock, Shield, AlertCircle, Users, Plus, Minus, Search,
+  Settings2, RefreshCw, X
 } from "lucide-react";
 
 type ProposalDetail = ItineraryProposal & {
@@ -307,6 +309,141 @@ function DuffelFlightCard({ offerData }: { offerData: any }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function UpdateFlightPreferences({ proposal, item, onUpdated }: { proposal: ProposalDetail; item: ProposalItem; onUpdated: () => void }) {
+  const { toast } = useToast();
+  const [expanded, setExpanded] = useState(false);
+
+  const offerData = item.duffelOfferData as any;
+  const sp = offerData?.searchParams;
+  const lastSlice = offerData?.slices?.[offerData.slices.length - 1];
+
+  const originIata = sp?.origin || offerData?.slices?.[0]?.origin?.iata || "";
+  const destIata = sp?.destination || offerData?.slices?.[0]?.destination?.iata || "";
+  const initDepartDate = sp?.departureDate || offerData?.slices?.[0]?.segments?.[0]?.departingAt?.substring(0, 10) || "";
+  const initReturnDate = sp?.returnDate || (offerData?.slices?.length > 1 ? lastSlice?.segments?.[0]?.departingAt?.substring(0, 10) : "") || "";
+  const initPassengers = sp?.passengers || offerData?.passengers?.length || 1;
+  const rawCabin = sp?.cabinClass || offerData?.slices?.[0]?.segments?.[0]?.cabinClass || "economy";
+  const initCabinClass = rawCabin.toLowerCase().replace(/\s+/g, "_");
+
+  const [origin, setOrigin] = useState(originIata);
+  const [destination, setDestination] = useState(destIata);
+  const [cabinClass, setCabinClass] = useState(initCabinClass);
+  const [departureDate, setDepartureDate] = useState(initDepartDate);
+  const [returnDate, setReturnDate] = useState(initReturnDate);
+  const [passengerCount, setPassengerCount] = useState(initPassengers);
+
+  const refreshMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/proposals/${proposal.id}/items/${item.id}/refresh-flight`, {
+        origin,
+        destination,
+        departureDate,
+        returnDate: returnDate || undefined,
+        cabinClass,
+        passengerCount,
+      });
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Server returned an unexpected response. Please restart the server and try again.");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Flight updated", description: "Found a new offer with your updated preferences." });
+      onUpdated();
+      setExpanded(false);
+    },
+    onError: (err: any) => {
+      const raw = err.message?.replace(/^\d+:\s*/, "") || "Update failed";
+      let msg = raw;
+      try { const parsed = JSON.parse(raw); msg = parsed.message || raw; } catch {}
+      toast({ title: "No flights found", description: msg, variant: "destructive" });
+    },
+  });
+
+  if (!expanded) {
+    return (
+      <Button variant="outline" size="sm" onClick={() => setExpanded(true)} className="mt-2 gap-2" data-testid={`button-update-prefs-${item.id}`}>
+        <Settings2 className="w-4 h-4" />
+        Update preferences & reload
+      </Button>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-md border p-4 bg-muted/20 space-y-3" data-testid={`panel-update-prefs-${item.id}`}>
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold">Update flight preferences</h4>
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setExpanded(false)}>
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium mb-1.5 block">From</label>
+          <AirportSearch value={origin} onChange={(iataCode) => setOrigin(iataCode)} placeholder="Origin airport" data-testid={`input-origin-prefs-${item.id}`} />
+        </div>
+        <div>
+          <label className="text-xs font-medium mb-1.5 block">To</label>
+          <AirportSearch value={destination} onChange={(iataCode) => setDestination(iataCode)} placeholder="Destination airport" data-testid={`input-dest-prefs-${item.id}`} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium mb-1.5 block">Cabin Class</label>
+          <Select value={cabinClass} onValueChange={setCabinClass}>
+            <SelectTrigger className="h-8 text-sm" data-testid={`select-cabin-prefs-${item.id}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="economy">Economy</SelectItem>
+              <SelectItem value="premium_economy">Premium Economy</SelectItem>
+              <SelectItem value="business">Business</SelectItem>
+              <SelectItem value="first">First Class</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="text-xs font-medium mb-1.5 block">Passengers</label>
+          <div className="flex items-center gap-1.5">
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setPassengerCount((c) => Math.max(1, c - 1))} disabled={passengerCount <= 1}>
+              <Minus className="w-3 h-3" />
+            </Button>
+            <span className="w-6 text-center text-sm font-medium">{passengerCount}</span>
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setPassengerCount((c) => Math.min(9, c + 1))} disabled={passengerCount >= 9}>
+              <Plus className="w-3 h-3" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-medium mb-1.5 block">Departure Date</label>
+          <Input type="date" value={departureDate} onChange={(e) => setDepartureDate(e.target.value)} className="h-8 text-sm" data-testid={`input-depart-prefs-${item.id}`} />
+        </div>
+        <div>
+          <label className="text-xs font-medium mb-1.5 block">Return Date <span className="text-muted-foreground">(optional)</span></label>
+          <Input type="date" value={returnDate} onChange={(e) => setReturnDate(e.target.value)} className="h-8 text-sm" data-testid={`input-return-prefs-${item.id}`} />
+        </div>
+      </div>
+
+      <Button
+        onClick={() => refreshMutation.mutate()}
+        disabled={refreshMutation.isPending || !departureDate || !origin || !destination}
+        size="sm"
+        className="w-full gap-2"
+        data-testid={`button-search-prefs-${item.id}`}
+      >
+        {refreshMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+        Search & Update Flight
+      </Button>
     </div>
   );
 }
@@ -916,7 +1053,18 @@ export default function ProposalDetailPage() {
             const canBook = proposal.status === "approved" && !isPaid && item.duffelOfferId;
 
             if (offerData?.noFlightsFound) {
-              return <NoFlightsCard key={item.id} item={item} />;
+              return (
+                <div key={item.id} className="space-y-2">
+                  <NoFlightsCard item={item} />
+                  {!isPaid && (
+                    <UpdateFlightPreferences
+                      proposal={proposal}
+                      item={item}
+                      onUpdated={() => queryClient.invalidateQueries({ queryKey: ["/api/proposals", id] })}
+                    />
+                  )}
+                </div>
+              );
             }
 
             return (
@@ -946,6 +1094,13 @@ export default function ProposalDetailPage() {
                 </div>
                 {item.duffelOfferId && offerData && (
                   <DuffelFlightCard offerData={offerData} />
+                )}
+                {!isPaid && item.duffelOfferId && (
+                  <UpdateFlightPreferences
+                    proposal={proposal}
+                    item={item}
+                    onUpdated={() => queryClient.invalidateQueries({ queryKey: ["/api/proposals", id] })}
+                  />
                 )}
                 {canBook && (
                   <div className="mt-3 flex justify-end">
