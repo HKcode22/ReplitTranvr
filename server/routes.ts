@@ -710,7 +710,7 @@ export async function registerRoutes(
   const duffel = duffelToken
     ? new Duffel({ token: duffelToken })
     : null;
-  const isTestMode = false;
+  const isTestMode = duffelToken?.startsWith("duffel_test_") ?? false;
 
   app.get("/api/duffel/config", isAuthenticated, async (_req: Request, res: Response) => {
     return res.json({ testMode: isTestMode });
