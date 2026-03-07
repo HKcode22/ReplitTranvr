@@ -747,6 +747,12 @@ export async function registerRoutes(
     try {
       const { amount, currency } = req.body;
       if (!amount || !currency) return res.status(400).json({ message: "Amount and currency are required" });
+      // Gross up to cover Duffel's processing fee so the net_amount credited to balance
+      // covers the full order total. Formula from Duffel docs:
+      //   customer_charge = offer_total / (1 - duffel_fee_rate)
+      // Using 2.9% as the conservative default (actual rate varies by card type).
+      const DUFFEL_FEE_RATE = 0.029;
+      const chargeAmount = (Math.ceil(parseFloat(String(amount)) / (1 - DUFFEL_FEE_RATE) * 100) / 100).toFixed(2);
       const response = await fetch("https://api.duffel.com/payments/payment_intents", {
         method: "POST",
         headers: {
@@ -755,7 +761,7 @@ export async function registerRoutes(
           "Content-Type": "application/json",
           "Duffel-Version": "v2",
         },
-        body: JSON.stringify({ data: { amount: String(amount), currency } }),
+        body: JSON.stringify({ data: { amount: chargeAmount, currency } }),
       });
       if (!response.ok) {
         const errBody = await response.json().catch(() => ({}));
@@ -1145,17 +1151,21 @@ export async function registerRoutes(
       }
 
       const effectiveOfferId = overrideOfferId || selectedItem.duffelOfferId!;
-      const offerData = overrideOfferData || selectedItem.duffelOfferData as any;
 
-      if (offerData.expiresAt && new Date(offerData.expiresAt) < new Date()) {
+      // Fetch the live offer from Duffel to get current price and validity.
+      // The stored offerData can be stale; Duffel would reject orders with wrong amounts.
+      const liveOffer = await duffel.offers.get(effectiveOfferId);
+      const fullOffer = liveOffer.data as any;
+
+      if (fullOffer.expires_at && new Date(fullOffer.expires_at) < new Date()) {
         return res.status(400).json({ message: "This flight offer has expired. Please search again for current availability." });
       }
 
-      if (offerData.passengerIdentityDocumentsRequired) {
+      if (fullOffer.passenger_identity_documents_required) {
         return res.status(400).json({ message: "This flight requires passenger identity documents (passport/ID), which are not yet supported. Please choose a different flight." });
       }
 
-      const expectedPassengerCount = offerData.passengers?.length || 1;
+      const expectedPassengerCount = fullOffer.passengers?.length || 1;
 
       if (passengers.length !== expectedPassengerCount) {
         return res.status(400).json({
@@ -1163,7 +1173,7 @@ export async function registerRoutes(
         });
       }
 
-      const offerPassengerIds = offerData.passengers?.map((p: any) => p.id) || [];
+      const offerPassengerIds = fullOffer.passengers?.map((p: any) => p.id) || [];
       const passengerMappings = passengers.map((p: any, idx: number) => ({
         id: offerPassengerIds[idx] || undefined,
         given_name: p.givenName,
@@ -1175,8 +1185,8 @@ export async function registerRoutes(
         gender: p.gender,
       }));
 
-      const amount = offerData.totalAmount || selectedItem.priceEstimate;
-      const currency = offerData.totalCurrency || "USD";
+      const amount = fullOffer.total_amount;
+      const currency = fullOffer.total_currency;
 
       if (paymentIntentId) {
         const confirmRes = await fetch(`https://api.duffel.com/payments/payment_intents/${paymentIntentId}/actions/confirm`, {
