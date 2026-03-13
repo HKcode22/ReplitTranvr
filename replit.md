@@ -107,21 +107,20 @@ shared/
 - **Flight Search**: POST `/api/duffel/search` - searches flights by origin/destination/dates/cabin class/passengers (supports multi-passenger)
 - **Airport Autocomplete**: GET `/api/duffel/places?query=...` - airport/city search via Duffel Places API
 - **Offer Details**: GET `/api/duffel/offers/:offerId` - fetches fresh offer data
-- **Component Client Key**: POST `/api/duffel/component-client-key` - creates a Component Client Key JWT for DuffelCardForm authentication
-- **Direct Booking**: POST `/api/duffel/book-direct` - books a flight with passenger array support (multi-traveler), requires cardId from DuffelCardForm tokenization, supports optional threeDSecureSessionId
-- **Checkout Flow**: Multi-step: passengers -> fetch component client key -> DuffelCardForm (card entry) -> createCardForTemporaryUse -> book order with card payment
-- **Frontend Components**: Uses @duffel/components React DuffelCardForm with createCardForTemporaryUse action for PCI-compliant card tokenization
-- **Proposal Booking**: POST `/api/proposals/:id/book-duffel` - books all Duffel offers in a proposal
-- **Saved Cards**: GET/POST/DELETE `/api/saved-cards` - manage saved payment cards
+- **Direct Booking**: POST `/api/duffel/book-direct` - books a flight with Duffel balance after Stripe payment verification
+- **Proposal Booking**: POST `/api/proposals/:id/book-duffel` - books Duffel offers in a proposal with Duffel balance after Stripe payment verification
 - **Token**: Uses DUFFEL_API_TOKEN (production) exclusively
+- **Booking Payment**: All flights are booked on Duffel using the platform's pre-funded balance (`type: "balance"`). Customer payment is collected separately via Stripe.
 
-## Stripe Integration (Backend Only - Data Sync)
+## Stripe Integration (Payment Collection + Data Sync)
 - **Stripe Client:** `server/lib/stripeClient.ts` - fetches credentials from Replit connection API
 - **Webhook Handler:** `server/lib/webhookHandlers.ts` - processes Stripe webhooks via stripe-replit-sync
 - **Config**: GET `/api/stripe/config` - returns { publishableKey } for frontend Stripe.js initialization
+- **Flight Payment Intent**: POST `/api/stripe/create-flight-payment-intent` - creates a Stripe PaymentIntent for flight purchases (supports Apple Pay, Google Pay, cards via `automatic_payment_methods`)
+- **Checkout Flow**: Passengers → Stripe PaymentElement (card/Apple Pay/Google Pay) → Stripe payment succeeds → backend verifies PaymentIntent → books on Duffel with balance
+- **Frontend Components**: Uses @stripe/react-stripe-js PaymentElement with automatic_payment_methods for Apple Pay/Google Pay support
 - **Stripe Webhook**: POST `/api/stripe/webhook` - registered BEFORE express.json() for raw Buffer access
 - **Initialization**: Stripe schema and webhooks initialized on server startup via stripe-replit-sync
-- **Note**: All flight checkout (both proposal and direct booking) uses Duffel's built-in card payment (DuffelCardForm) via `/api/proposals/:id/book-duffel` and `/api/duffel/book-direct`. Stripe is NOT used for flight payment — Duffel handles card tokenization and payment directly.
 
 ## Integration Status
 - **SendGrid** - Configured (SENDGRID_API_KEY + SENDGRID_FROM_EMAIL set)

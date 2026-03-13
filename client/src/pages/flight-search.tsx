@@ -16,7 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { PhoneInput } from "@/components/phone-input";
 import { useToast } from "@/hooks/use-toast";
 import { AirportSearch } from "@/components/airport-search";
-import { DuffelPayments } from "@duffel/components";
+import { loadStripe } from "@stripe/stripe-js";
+import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import type { TravelerProfile } from "@shared/schema";
 import {
   Search, Plane, Clock, Luggage, ArrowRight, Loader2, Check,
@@ -205,13 +206,48 @@ function OfferCard({ offer, onSelect, passengerCount }: { offer: any; onSelect: 
   );
 }
 
+function StripeCheckoutForm({ onSuccess, onError }: { onSuccess: () => void; onError: (msg: string) => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [processing, setProcessing] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setProcessing(true);
+    const { error } = await stripe.confirmPayment({
+      elements,
+      redirect: "if_required",
+    });
+
+    if (error) {
+      onError(error.message || "Payment failed. Please try again.");
+      setProcessing(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <PaymentElement options={{ layout: "tabs", wallets: { applePay: "auto", googlePay: "auto" } }} />
+      <Button type="submit" disabled={!stripe || processing} className="w-full mt-4 gap-2" data-testid="button-pay-stripe">
+        {processing ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+        {processing ? "Processing..." : "Pay Now"}
+      </Button>
+    </form>
+  );
+}
+
 function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: () => void; passengerCount: number }) {
   const { toast } = useToast();
   const [bookingResult, setBookingResult] = useState<any>(null);
   const [checkoutStep, setCheckoutStep] = useState<"passengers" | "payment" | "processing">("passengers");
   const [passengerData, setPassengerData] = useState<CheckoutFormValues | null>(null);
-  const [clientToken, setClientToken] = useState<string | null>(null);
-  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+  const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
+  const [stripePaymentIntentId, setStripePaymentIntentId] = useState<string | null>(null);
+  const [stripePromise, setStripePromise] = useState<ReturnType<typeof loadStripe> | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const { data: profile } = useQuery<TravelerProfile | null>({
@@ -276,15 +312,20 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
 
   const createPaymentIntentMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/duffel/payment-intent", {
-        amount: offer.totalAmount,
-        currency: offer.totalCurrency,
-      });
-      return res.json();
+      const [configRes, piRes] = await Promise.all([
+        fetch("/api/stripe/config", { credentials: "include" }).then(r => r.json()),
+        apiRequest("POST", "/api/stripe/create-flight-payment-intent", {
+          amount: offer.totalAmount,
+          currency: offer.totalCurrency,
+          offerId: offer.id,
+        }).then(r => r.json()),
+      ]);
+      return { ...piRes, publishableKey: configRes.publishableKey };
     },
     onSuccess: (data: any) => {
-      setPaymentIntentId(data.paymentIntentId);
-      setClientToken(data.clientToken);
+      setStripePaymentIntentId(data.paymentIntentId);
+      setStripeClientSecret(data.clientSecret);
+      setStripePromise(loadStripe(data.publishableKey));
       setCheckoutStep("payment");
     },
     onError: (err: any) => {
@@ -295,13 +336,13 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
   const bookingCalledRef = useRef(false);
 
   const bookMutation = useMutation({
-    mutationFn: async ({ paymentIntentId, useBalance, passengers }: { paymentIntentId?: string; useBalance?: boolean; passengers?: CheckoutFormValues["passengers"] }) => {
+    mutationFn: async ({ stripePaymentIntentId: piId, useBalance, passengers }: { stripePaymentIntentId?: string; useBalance?: boolean; passengers?: CheckoutFormValues["passengers"] }) => {
       const pax = passengers || passengerData?.passengers;
       if (!pax) throw new Error("Missing passenger data");
       const res = await apiRequest("POST", "/api/duffel/book-direct", {
         offerId: offer.id,
         passengers: pax,
-        ...(useBalance ? { useBalance: true } : { paymentIntentId }),
+        ...(useBalance ? { useBalance: true } : { stripePaymentIntentId: piId }),
       });
       return res.json();
     },
@@ -322,17 +363,13 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
     },
   });
 
-  const handlePaymentSuccess = useCallback(() => {
+  const handleStripePaymentSuccess = useCallback(() => {
     if (bookingCalledRef.current) return;
     bookingCalledRef.current = true;
     setPaymentError(null);
     setCheckoutStep("processing");
-    bookMutation.mutate({ paymentIntentId: paymentIntentId! });
-  }, [paymentIntentId]);
-
-  const handlePaymentError = useCallback((error: { message: string }) => {
-    setPaymentError(error?.message || "Payment failed. Please check your card details and try again.");
-  }, []);
+    bookMutation.mutate({ stripePaymentIntentId: stripePaymentIntentId! });
+  }, [stripePaymentIntentId]);
 
   const handlePassengerSubmit = (data: CheckoutFormValues) => {
     setPassengerData(data);
@@ -405,7 +442,7 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
   if (checkoutStep === "payment") {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => { setCheckoutStep("passengers"); setClientToken(null); setPaymentIntentId(null); bookingCalledRef.current = false; setPaymentError(null); }} data-testid="button-back-to-passengers">
+        <Button variant="ghost" size="sm" onClick={() => { setCheckoutStep("passengers"); setStripeClientSecret(null); setStripePaymentIntentId(null); setStripePromise(null); bookingCalledRef.current = false; setPaymentError(null); }} data-testid="button-back-to-passengers">
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to passenger details
         </Button>
 
@@ -427,17 +464,15 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
 
         <Card className="p-5">
           <h3 className="font-semibold mb-1 flex items-center gap-2">
-            <Lock className="w-4 h-4" /> Secure Card Payment
+            <Lock className="w-4 h-4" /> Secure Payment
           </h3>
-          <p className="text-xs text-muted-foreground mb-4">Your card details are securely processed by Duffel. We never see or store your full card number.</p>
+          <p className="text-xs text-muted-foreground mb-4">Pay securely with card, Apple Pay, or Google Pay.</p>
 
           <div className="min-h-[120px]" data-testid="container-card-form">
-            {clientToken ? (
-              <DuffelPayments
-                paymentIntentClientToken={clientToken}
-                onSuccessfulPayment={handlePaymentSuccess}
-                onFailedPayment={handlePaymentError}
-              />
+            {stripePromise && stripeClientSecret ? (
+              <Elements stripe={stripePromise} options={{ clientSecret: stripeClientSecret, appearance: { theme: "stripe" } }}>
+                <StripeCheckoutForm onSuccess={handleStripePaymentSuccess} onError={(msg) => setPaymentError(msg)} />
+              </Elements>
             ) : (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />

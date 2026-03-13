@@ -742,46 +742,50 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/duffel/payment-intent", isAuthenticated, async (req: Request, res: Response) => {
-    if (!duffelToken) return res.status(503).json({ message: "Duffel is not configured" });
+  app.post("/api/stripe/create-flight-payment-intent", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { amount, currency } = req.body;
+      const { amount, currency, offerId, proposalId, itemId } = req.body;
       if (!amount || !currency) return res.status(400).json({ message: "Amount and currency are required" });
-      // Gross up to cover Duffel's processing fee so the net_amount credited to balance
-      // covers the full order total. Formula from Duffel docs:
-      //   customer_charge = offer_total / (1 - duffel_fee_rate)
-      // Using 2.9% as the conservative default (actual rate varies by card type).
-      const DUFFEL_FEE_RATE = 0.029;
-      const chargeAmount = (Math.ceil(parseFloat(String(amount)) / (1 - DUFFEL_FEE_RATE) * 100) / 100).toFixed(2);
-      const response = await fetch("https://api.duffel.com/payments/payment_intents", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${duffelToken}`,
-          "Accept": "application/json",
-          "Content-Type": "application/json",
-          "Duffel-Version": "v2",
+
+      const serverAmount = parseFloat(String(amount));
+      if (!serverAmount || serverAmount <= 0) return res.status(400).json({ message: "Invalid amount" });
+
+      const stripe = await getUncachableStripeClient();
+      const amountInCents = Math.round(serverAmount * 100);
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amountInCents,
+        currency: String(currency).toLowerCase(),
+        automatic_payment_methods: { enabled: true },
+        metadata: {
+          userId: req.session.userId!,
+          type: "flight_booking",
+          ...(offerId ? { offerId } : {}),
+          ...(proposalId ? { proposalId: String(proposalId) } : {}),
+          ...(itemId ? { itemId: String(itemId) } : {}),
         },
-        body: JSON.stringify({ data: { amount: chargeAmount, currency } }),
       });
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}));
-        console.error("Duffel payment intent error:", errBody);
-        return res.status(response.status).json({ message: errBody?.errors?.[0]?.message || "Failed to create payment intent" });
-      }
-      const data = await response.json();
-      return res.json({ paymentIntentId: data.data.id, clientToken: data.data.client_token });
+
+      res.json({
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+      });
     } catch (err: any) {
-      console.error("Duffel payment intent error:", err);
-      return res.status(500).json({ message: "Failed to create payment intent" });
+      console.error("Stripe flight PaymentIntent error:", err);
+      res.status(500).json({ message: err.message || "Failed to create payment" });
     }
   });
 
   app.post("/api/duffel/book-direct", isAuthenticated, async (req: Request, res: Response) => {
     if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
     try {
-      const { offerId, passengers, paymentIntentId, useBalance } = req.body;
+      const { offerId, passengers, stripePaymentIntentId, useBalance } = req.body;
       if (!offerId) return res.status(400).json({ message: "Offer ID is required" });
-      if (!useBalance && !paymentIntentId) return res.status(400).json({ message: "Payment method is required" });
+
+      if (useBalance && !isTestMode) {
+        return res.status(400).json({ message: "Balance payment is only available in test mode" });
+      }
+      if (!useBalance && !stripePaymentIntentId) return res.status(400).json({ message: "Payment method is required" });
       if (!passengers || !Array.isArray(passengers) || passengers.length === 0) {
         return res.status(400).json({ message: "Passenger details are required" });
       }
@@ -791,6 +795,24 @@ export async function registerRoutes(
 
       const offer = await duffel.offers.get(offerId);
       const fullOffer = offer.data as any;
+
+      if (stripePaymentIntentId) {
+        const stripe = await getUncachableStripeClient();
+        const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
+        if (pi.status !== "succeeded") {
+          return res.status(400).json({ message: "Payment not confirmed. Please complete payment first." });
+        }
+        if (pi.metadata?.userId !== req.session.userId!) {
+          return res.status(403).json({ message: "Payment does not belong to this user" });
+        }
+        const expectedCents = Math.round(parseFloat(fullOffer.total_amount) * 100);
+        if (pi.amount < expectedCents) {
+          return res.status(400).json({ message: "Payment amount is insufficient for this flight" });
+        }
+        if (pi.currency !== fullOffer.total_currency.toLowerCase()) {
+          return res.status(400).json({ message: "Payment currency does not match the flight currency" });
+        }
+      }
 
       if (fullOffer.expires_at && new Date(fullOffer.expires_at) < new Date()) {
         return res.status(400).json({ message: "This flight offer has expired. Please search again for current availability." });
@@ -817,44 +839,24 @@ export async function registerRoutes(
         };
       });
 
-      if (paymentIntentId) {
-        const confirmRes = await fetch(`https://api.duffel.com/payments/payment_intents/${paymentIntentId}/actions/confirm`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${duffelToken}`,
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Duffel-Version": "v2",
-          },
-          body: JSON.stringify({}),
-        });
-        if (!confirmRes.ok) {
-          const errBody = await confirmRes.json().catch(() => ({}));
-          console.error("Duffel payment intent confirm error:", errBody);
-          return res.status(confirmRes.status).json({ message: errBody?.errors?.[0]?.message || "Payment confirmation failed" });
-        }
-      }
-
-      const paymentObj = {
-        type: "balance" as const,
-        amount: fullOffer.total_amount,
-        currency: fullOffer.total_currency,
-      };
-
-      const orderPayload: any = {
+      const order = await duffel.orders.create({
         selected_offers: [offerId],
         passengers: passengerMappings,
         type: "instant",
-        payments: [paymentObj],
-        ...(paymentIntentId ? { metadata: { payment_intent_id: paymentIntentId } } : {}),
-      };
+        payments: [{
+          type: "balance" as const,
+          amount: fullOffer.total_amount,
+          currency: fullOffer.total_currency,
+        }],
+        ...(stripePaymentIntentId ? { metadata: { stripe_payment_intent_id: stripePaymentIntentId } } : {}),
+      } as any);
 
-      const order = await duffel.orders.create(orderPayload);
       const orderData = order.data as any;
 
       const payment = await storage.createPayment({
         userId: req.session.userId!,
         proposalId: null,
+        stripePaymentIntentId: stripePaymentIntentId || null,
         duffelOrderId: orderData.id,
         duffelBookingRef: orderData.booking_reference,
         amount: orderData.total_amount || fullOffer.total_amount,
@@ -1132,9 +1134,12 @@ export async function registerRoutes(
         return res.status(401).json({ message: "User not found" });
       }
 
-      const { passengers, paymentIntentId, itemId, useBalance, overrideOfferId, overrideOfferData } = req.body;
+      const { passengers, stripePaymentIntentId, itemId, useBalance, overrideOfferId, overrideOfferData } = req.body;
 
-      if (!paymentIntentId && !useBalance) {
+      if (useBalance && !isTestMode) {
+        return res.status(400).json({ message: "Balance payment is only available in test mode" });
+      }
+      if (!stripePaymentIntentId && !useBalance) {
         return res.status(400).json({ message: "Payment method is required" });
       }
 
@@ -1188,38 +1193,41 @@ export async function registerRoutes(
       const amount = fullOffer.total_amount;
       const currency = fullOffer.total_currency;
 
-      if (paymentIntentId) {
-        const confirmRes = await fetch(`https://api.duffel.com/payments/payment_intents/${paymentIntentId}/actions/confirm`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${duffelToken}`,
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "Duffel-Version": "v2",
-          },
-          body: JSON.stringify({}),
-        });
-        if (!confirmRes.ok) {
-          const errBody = await confirmRes.json().catch(() => ({}));
-          console.error("Duffel payment intent confirm error:", errBody);
-          return res.status(confirmRes.status).json({ message: errBody?.errors?.[0]?.message || "Payment confirmation failed" });
+      if (stripePaymentIntentId) {
+        const stripe = await getUncachableStripeClient();
+        const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
+        if (pi.status !== "succeeded") {
+          return res.status(400).json({ message: "Payment not confirmed. Please complete payment first." });
+        }
+        if (pi.metadata?.userId !== req.session.userId!) {
+          return res.status(403).json({ message: "Payment does not belong to this user" });
+        }
+        const expectedCents = Math.round(parseFloat(amount) * 100);
+        if (pi.amount < expectedCents) {
+          return res.status(400).json({ message: "Payment amount is insufficient for this flight" });
+        }
+        if (pi.currency !== currency.toLowerCase()) {
+          return res.status(400).json({ message: "Payment currency does not match the flight currency" });
         }
       }
-
-      const paymentConfig = { type: "balance" as const, amount: String(amount), currency };
 
       const order = await duffel.orders.create({
         selected_offers: [effectiveOfferId],
         passengers: passengerMappings,
         type: "instant",
-        payments: [paymentConfig],
-        ...(paymentIntentId ? { metadata: { payment_intent_id: paymentIntentId } } : {}),
+        payments: [{
+          type: "balance" as const,
+          amount: String(amount),
+          currency,
+        }],
+        ...(stripePaymentIntentId ? { metadata: { stripe_payment_intent_id: stripePaymentIntentId } } : {}),
       } as any);
 
       const orderData = order.data as any;
       const payment = await storage.createPayment({
         userId: req.session.userId!,
         proposalId,
+        stripePaymentIntentId: stripePaymentIntentId || null,
         duffelOrderId: orderData.id,
         duffelBookingRef: orderData.booking_reference,
         amount: orderData.total_amount || selectedItem.priceEstimate,
