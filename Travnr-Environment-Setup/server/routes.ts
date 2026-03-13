@@ -799,6 +799,7 @@ export async function registerRoutes(
       } else {
         paymentObj = {
           type: "card",
+          card_id: cardId,
           amount: fullOffer.total_amount,
           currency: fullOffer.total_currency,
         };
@@ -813,9 +814,6 @@ export async function registerRoutes(
         type: "instant",
         payments: [paymentObj],
       };
-      if (cardId) {
-        orderPayload.metadata = { card_id: cardId };
-      }
 
       const order = await duffel.orders.create(orderPayload);
       const orderData = order.data as any;

@@ -2186,7 +2186,8 @@ export async function registerRoutes(
       if (
         blandCall.callRequestId &&
         duffel &&
-        updateData.status === "completed"
+        updateData.status === "completed" &&
+        (updateData.transcript || updateData.summary)
       ) {
         generateProposalFromCall(
           blandCall.callRequestId,

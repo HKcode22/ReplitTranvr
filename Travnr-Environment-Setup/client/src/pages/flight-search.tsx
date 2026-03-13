@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { PhoneInput } from "@/components/phone-input";
 import { useToast } from "@/hooks/use-toast";
 import { AirportSearch } from "@/components/airport-search";
-import { DuffelCardForm, useDuffelCardFormActions } from "@duffel/components";
+import { DuffelCardForm, useDuffelCardFormActions, createThreeDSecureSession } from "@duffel/components";
 import type { TravelerProfile, SavedCard } from "@shared/schema";
 import {
   Search, Plane, Clock, Luggage, ArrowRight, Loader2, Check,
@@ -282,13 +282,14 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
   const bookingCalledRef = useRef(false);
 
   const bookMutation = useMutation({
-    mutationFn: async ({ cardId, useBalance, passengers }: { cardId?: string; useBalance?: boolean; passengers?: CheckoutFormValues["passengers"] }) => {
+    mutationFn: async ({ cardId, useBalance, passengers, threeDSecureSessionId }: { cardId?: string; useBalance?: boolean; passengers?: CheckoutFormValues["passengers"]; threeDSecureSessionId?: string }) => {
       const pax = passengers || passengerData?.passengers;
       if (!pax) throw new Error("Missing passenger data");
       const res = await apiRequest("POST", "/api/duffel/book-direct", {
         offerId: offer.id,
         passengers: pax,
         ...(useBalance ? { useBalance: true } : { cardId }),
+        ...(threeDSecureSessionId ? { threeDSecureSessionId } : {}),
       });
       return res.json();
     },
@@ -309,14 +310,37 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
     },
   });
 
-  const handleCardCreated = useCallback((data: { id: string }) => {
+  const handleCardCreated = useCallback(async (data: { id: string }) => {
     if (bookingCalledRef.current) return;
     bookingCalledRef.current = true;
     setCardTokenId(data.id);
     setPaymentError(null);
     setCheckoutStep("processing");
-    bookMutation.mutate({ cardId: data.id });
-  }, []);
+
+    try {
+      const services = (offer as any).available_services || [];
+      const threeDsResult = await createThreeDSecureSession(
+        clientKey!,
+        data.id,
+        offer.id,
+        services,
+        true,
+      );
+
+      if (threeDsResult.status !== "ready_for_payment") {
+        bookingCalledRef.current = false;
+        setCheckoutStep("payment");
+        setPaymentError("3D Secure authentication was not completed. Please try again.");
+        return;
+      }
+
+      bookMutation.mutate({ cardId: data.id, threeDSecureSessionId: threeDsResult.id });
+    } catch (err: any) {
+      bookingCalledRef.current = false;
+      setCheckoutStep("payment");
+      setPaymentError("3D Secure authentication failed: " + (err?.message || "Please try again."));
+    }
+  }, [clientKey, offer.id]);
 
   const handleCardError = useCallback((error: { message: string }) => {
     setPaymentError(error?.message || "Card processing failed. Please check your details and try again.");
