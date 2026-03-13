@@ -2376,13 +2376,6 @@ export async function registerRoutes(
     return res.json(proposal);
   });
 
-  app.post("/api/webhooks/stripe", async (req: Request, res: Response) => {
-    const { paymentId, status } = req.body;
-    if (!paymentId || !status) return res.status(400).json({ message: "Missing data" });
-    await storage.updatePayment(paymentId, { status });
-    return res.json({ message: "Updated" });
-  });
-
   app.get("/api/stripe/config", async (_req: Request, res: Response) => {
     try {
       const publishableKey = await getStripePublishableKey();
@@ -2424,6 +2417,7 @@ export async function registerRoutes(
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amountInCents,
         currency: serverCurrency,
+        automatic_payment_methods: { enabled: true },
         metadata: {
           userId: req.session.userId!,
           proposalId: String(proposalId),
@@ -2527,7 +2521,7 @@ export async function registerRoutes(
       await storage.createNotification({
         userId: req.session.userId!,
         type: "payment_confirmed",
-        title: "Flight booked via Apple Pay!",
+        title: "Flight booked!",
         body: `Your flight for "${proposal.title}" has been booked. Reference: ${orderData.booking_reference}`,
         linkUrl: `/proposals/${proposalId}`,
       });
