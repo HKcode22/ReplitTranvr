@@ -485,7 +485,8 @@ function StripeCheckoutForm({ onSuccess, onError }: { onSuccess: () => void; onE
 
 function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: ProposalDetail; selectedItem: ProposalItem; onCancel: () => void }) {
   const { toast } = useToast();
-  const [checkoutStep, setCheckoutStep] = useState<"passengers" | "payment" | "processing">("passengers");
+  const [checkoutStep, setCheckoutStep] = useState<"passengers" | "payment" | "processing" | "payment_error">("passengers");
+  const [bookingError, setBookingError] = useState<{ message: string; paymentCharged: boolean } | null>(null);
   const [passengerData, setPassengerData] = useState<CheckoutFormValues | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [bookingResult, setBookingResult] = useState<any>(null);
@@ -583,14 +584,49 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       toast({ title: "Flights booked successfully!" });
     },
-    onError: (err: any) => {
+    onError: async (err: any, variables: any) => {
       bookingCalledRef.current = false;
       const raw = err.message?.replace(/^\d+:\s*/, "") || "Booking failed";
       let msg = raw;
       try { const parsed = JSON.parse(raw); msg = parsed.message || raw; } catch {}
-      toast({ title: "Booking failed", description: msg, variant: "destructive" });
-      setCheckoutStep("payment");
-      setPaymentError("Booking failed: " + msg);
+
+      const isNetworkError = !err.status && (
+        raw.toLowerCase().includes("load failed") ||
+        raw.toLowerCase().includes("failed to fetch") ||
+        raw.toLowerCase().includes("networkerror") ||
+        raw.toLowerCase().includes("network request failed")
+      );
+
+      const paymentWasCharged = !variables?.useBalance && !!variables?.stripePaymentIntentId;
+
+      if (isNetworkError && paymentWasCharged && variables?.stripePaymentIntentId) {
+        // Payment succeeded but connection dropped — check if booking was recorded server-side
+        try {
+          const recoveryRes = await fetch(`/api/payments/by-intent/${variables.stripePaymentIntentId}`, { credentials: "include" });
+          if (recoveryRes.ok) {
+            const recoveryData = await recoveryRes.json();
+            if (recoveryData.payment) {
+              setBookingResult({ bookings: [{ payment: recoveryData.payment, bookingReference: recoveryData.bookingReference, orderId: recoveryData.orderId }] });
+              queryClient.invalidateQueries({ queryKey: ["/api/proposals", String(proposal.id)] });
+              queryClient.invalidateQueries({ queryKey: ["/api/proposals"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+              toast({ title: "Flights booked successfully!" });
+              return;
+            }
+          }
+        } catch {}
+        setBookingError({
+          message: "Your payment was processed, but we lost the connection before confirming your booking. Your card may have been charged. Please check your email for a booking confirmation, or visit the Trips page. If no booking appears within a few minutes, please contact support.",
+          paymentCharged: true,
+        });
+        setCheckoutStep("payment_error");
+      } else {
+        toast({ title: "Booking failed", description: msg, variant: "destructive" });
+        setCheckoutStep("payment");
+        setPaymentError("Booking failed: " + msg);
+        setBookingError({ message: msg, paymentCharged: false });
+      }
     },
   });
 
@@ -710,6 +746,38 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
             </Button>
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  if (checkoutStep === "payment_error") {
+    const charged = bookingError?.paymentCharged;
+    return (
+      <div className="space-y-4">
+        <Card className="p-6 text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold">Booking {charged ? "Status Unknown" : "Failed"}</h2>
+          <p className="text-sm text-muted-foreground text-left">{bookingError?.message}</p>
+          {!charged && (
+            <div className="flex gap-3 flex-wrap justify-center">
+              <Button variant="outline" onClick={() => { setCheckoutStep("payment"); setBookingError(null); }}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Try Again
+              </Button>
+            </div>
+          )}
+          {charged && (
+            <div className="flex gap-3 flex-wrap justify-center">
+              <Link href="/trips">
+                <Button variant="outline"><ArrowRight className="w-4 h-4 mr-1" /> Check My Trips</Button>
+              </Link>
+              <Link href="/billing">
+                <Button variant="outline"><CreditCard className="w-4 h-4 mr-1" /> View Billing</Button>
+              </Link>
+            </div>
+          )}
+        </Card>
       </div>
     );
   }

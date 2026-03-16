@@ -130,6 +130,64 @@ async function sendAccountCreationEmail(email: string, name: string, callbackReq
   }
 }
 
+const ADMIN_ALERT_EMAILS = ["hello@travnr.com", "almabdella@gmail.com", "mahidbma@gmail.com"];
+
+async function sendBookingFailureAlert(context: {
+  endpoint: string;
+  userId?: string;
+  userEmail?: string;
+  stripePaymentIntentId?: string | null;
+  offerId?: string;
+  proposalId?: number | null;
+  error: any;
+}) {
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+  const { endpoint, userId, userEmail, stripePaymentIntentId, offerId, proposalId, error } = context;
+
+  const duffelErrors = error?.errors;
+  const errorDetail = duffelErrors
+    ? duffelErrors.map((e: any) =>
+        `<li><strong>${e.title || "Error"}</strong>: ${e.message || ""}${e.code ? ` (code: ${e.code})` : ""}${e.type ? ` [type: ${e.type}]` : ""}</li>`
+      ).join("")
+    : `<li>${error?.message || String(error)}</li>`;
+
+  const timestamp = new Date().toISOString();
+
+  const html = `
+    <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 20px;">
+      <div style="background: #dc2626; color: white; padding: 16px 20px; border-radius: 8px 8px 0 0;">
+        <h2 style="margin: 0; font-size: 18px;">Duffel Booking Failure Alert</h2>
+        <p style="margin: 4px 0 0; font-size: 13px; opacity: 0.85;">${timestamp}</p>
+      </div>
+      <div style="border: 1px solid #e5e7eb; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <tr><td style="padding: 6px 0; color: #6b7280; width: 160px;">Endpoint</td><td style="padding: 6px 0; font-family: monospace;">${endpoint}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">User ID</td><td style="padding: 6px 0; font-family: monospace;">${userId || "—"}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">User Email</td><td style="padding: 6px 0;">${userEmail || "—"}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">Stripe PI</td><td style="padding: 6px 0; font-family: monospace;">${stripePaymentIntentId || "—"}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">Duffel Offer ID</td><td style="padding: 6px 0; font-family: monospace;">${offerId || "—"}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">Proposal ID</td><td style="padding: 6px 0;">${proposalId ?? "—"}</td></tr>
+        </table>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
+        <h3 style="font-size: 14px; color: #dc2626; margin: 0 0 8px;">Error Details</h3>
+        <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #1f2937; line-height: 1.7;">${errorDetail}</ul>
+        ${stripePaymentIntentId ? `<div style="margin-top: 16px; padding: 12px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;"><strong>Note:</strong> Stripe payment was charged (PI: ${stripePaymentIntentId}). Customer may need to be refunded if booking cannot be completed.</div>` : ""}
+      </div>
+    </div>
+  `;
+
+  try {
+    await sgMail.send({
+      to: ADMIN_ALERT_EMAILS,
+      from: { email: fromEmail, name: "Travnr Alerts" },
+      subject: `[ACTION REQUIRED] Duffel booking failed — ${userEmail || userId || "unknown user"}`,
+      html,
+    });
+  } catch (mailErr) {
+    console.error("Failed to send booking failure alert email:", mailErr);
+  }
+}
+
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.session?.userId) {
     return next();
@@ -632,6 +690,22 @@ export async function registerRoutes(
     return res.json(pymts);
   });
 
+  // Recovery endpoint: look up a booking by Stripe payment intent ID
+  // Used when the client loses connection mid-booking to check if the booking was actually saved
+  app.get("/api/payments/by-intent/:intentId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { intentId } = req.params;
+      if (!intentId) return res.status(400).json({ message: "Missing intentId" });
+      const payment = await storage.getPaymentByStripeIntentId(intentId);
+      if (!payment || payment.userId !== req.session.userId!) {
+        return res.status(404).json({ message: "No booking found for this payment" });
+      }
+      return res.json({ payment, bookingReference: payment.duffelBookingRef, orderId: payment.duffelOrderId });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to check booking" });
+    }
+  });
+
   // TRIPS (booked flights with Duffel order details)
   app.get("/api/trips", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -793,7 +867,16 @@ export async function registerRoutes(
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
 
-      const offer = await duffel.offers.get(offerId);
+      let offer: any;
+      try {
+        offer = await duffel.offers.get(offerId);
+      } catch (offerErr: any) {
+        const offerErrMsg = offerErr?.errors?.[0]?.message || "";
+        if (offerErrMsg.toLowerCase().includes("does not exist") || offerErr?.status === 404) {
+          return res.status(400).json({ message: "This flight offer is no longer available. Please go back and search for flights again." });
+        }
+        throw offerErr;
+      }
       const fullOffer = offer.data as any;
 
       if (stripePaymentIntentId) {
@@ -881,7 +964,22 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       console.error("Duffel direct booking error:", err?.errors || err);
-      return res.status(500).json({ message: err?.errors?.[0]?.message || "Booking failed" });
+      const duffelErr = err?.errors?.[0];
+      const errMessage = duffelErr
+        ? `${duffelErr.title ? duffelErr.title + ": " : ""}${duffelErr.message || "Booking failed"}${duffelErr.code ? ` (${duffelErr.code})` : ""}`
+        : err.message || "Booking failed";
+      const { offerId, stripePaymentIntentId } = req.body;
+      const alertUser = await storage.getUser(req.session.userId!).catch(() => null);
+      await sendBookingFailureAlert({
+        endpoint: "POST /api/duffel/book-direct",
+        userId: req.session.userId,
+        userEmail: alertUser?.email,
+        stripePaymentIntentId: stripePaymentIntentId || null,
+        offerId,
+        proposalId: null,
+        error: err,
+      });
+      return res.status(500).json({ message: errMessage });
     }
   });
 
@@ -1159,7 +1257,16 @@ export async function registerRoutes(
 
       // Fetch the live offer from Duffel to get current price and validity.
       // The stored offerData can be stale; Duffel would reject orders with wrong amounts.
-      const liveOffer = await duffel.offers.get(effectiveOfferId);
+      let liveOffer: any;
+      try {
+        liveOffer = await duffel.offers.get(effectiveOfferId);
+      } catch (offerErr: any) {
+        const offerErrMsg = offerErr?.errors?.[0]?.message || "";
+        if (offerErrMsg.toLowerCase().includes("does not exist") || offerErr?.status === 404) {
+          return res.status(400).json({ message: "This flight offer is no longer available. Please go back and search for flights again." });
+        }
+        throw offerErr;
+      }
       const fullOffer = liveOffer.data as any;
 
       if (fullOffer.expires_at && new Date(fullOffer.expires_at) < new Date()) {
@@ -1254,7 +1361,21 @@ export async function registerRoutes(
       return res.json({ bookings: [result] });
     } catch (err: any) {
       console.error("Duffel booking error:", err?.errors || err);
-      return res.status(500).json({ message: err?.errors?.[0]?.message || "Booking failed" });
+      const duffelErr = err?.errors?.[0];
+      const errMessage = duffelErr
+        ? `${duffelErr.title ? duffelErr.title + ": " : ""}${duffelErr.message || "Booking failed"}${duffelErr.code ? ` (${duffelErr.code})` : ""}`
+        : err.message || "Booking failed";
+      const alertUser = await storage.getUser(req.session.userId!).catch(() => null);
+      await sendBookingFailureAlert({
+        endpoint: `POST /api/proposals/${proposalId}/book-duffel`,
+        userId: req.session.userId,
+        userEmail: alertUser?.email,
+        stripePaymentIntentId: req.body.stripePaymentIntentId || null,
+        offerId: req.body.overrideOfferId || undefined,
+        proposalId,
+        error: err,
+      });
+      return res.status(500).json({ message: errMessage });
     }
   });
 
@@ -2535,7 +2656,22 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       console.error("Stripe confirm-booking error:", err?.errors || err);
-      res.status(500).json({ message: err?.errors?.[0]?.message || err.message || "Booking failed" });
+      const duffelErr = err?.errors?.[0];
+      const errMessage = duffelErr
+        ? `${duffelErr.title ? duffelErr.title + ": " : ""}${duffelErr.message || "Booking failed"}${duffelErr.code ? ` (${duffelErr.code})` : ""}`
+        : err.message || "Booking failed";
+      const { paymentIntentId, proposalId: alertProposalId, itemId } = req.body;
+      const alertUser = await storage.getUser(req.session.userId!).catch(() => null);
+      await sendBookingFailureAlert({
+        endpoint: "POST /api/stripe/confirm-booking",
+        userId: req.session.userId,
+        userEmail: alertUser?.email,
+        stripePaymentIntentId: paymentIntentId || null,
+        offerId: req.body.overrideOfferId || itemId,
+        proposalId: alertProposalId || null,
+        error: err,
+      });
+      res.status(500).json({ message: errMessage });
     }
   });
 
