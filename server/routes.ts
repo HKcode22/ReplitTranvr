@@ -492,15 +492,22 @@ export async function registerRoutes(
     if (bland.isConfigured() && cr.phone) {
       const user = await storage.getUser(req.session.userId!);
       if (user) {
+        let blandCall: any = null;
         try {
           const baseUrl = getBaseUrl(req);
           console.log(`Dispatching Bland AI call for user ${user.id}, phone: ${cr.phone}`);
           const task = bland.buildTravelConciergePrompt({
             userName: `${user.firstName} ${user.lastName}`,
+            destination: cr.destination,
+            tripType: cr.tripType,
+            dateFrom: cr.dateFrom,
+            dateTo: cr.dateTo,
+            flexibility: cr.flexibility,
+            timeWindow: cr.timeWindow,
             notes: cr.notes,
           });
 
-          const blandCall = await storage.createBlandCall({
+          blandCall = await storage.createBlandCall({
             callRequestId: cr.id,
             userId: user.id,
             phoneNumber: cr.phone,
@@ -529,6 +536,20 @@ export async function registerRoutes(
           console.log(`Bland AI call dispatched: ${result.callId} for call request ${cr.id}`);
         } catch (err: any) {
           console.error("Bland AI auto-dispatch error:", err.message || err);
+          if (blandCall) {
+            await storage.updateBlandCall(blandCall.id, {
+              status: "failed",
+              errorMessage: err?.message || String(err),
+            }).catch(() => {});
+          }
+          await storage.updateCallRequest(cr.id, { status: "cancelled" }).catch(() => {});
+          await storage.createNotification({
+            userId: user.id,
+            type: "call_status",
+            title: "Call could not be placed",
+            body: "We were unable to dispatch your concierge call. Please try again from Call History.",
+            linkUrl: "/call-history",
+          }).catch(() => {});
         }
       }
     }
@@ -1403,25 +1424,34 @@ export async function registerRoutes(
 
   app.post("/api/bland/dispatch", isAuthenticated, async (req: Request, res: Response) => {
     if (!bland.isConfigured()) return res.status(503).json({ message: "Bland AI is not configured" });
+    let blandCall: any = null;
+    let callRequest: any = null;
+    let user: any = null;
     try {
       const { callRequestId } = req.body;
       if (!callRequestId) return res.status(400).json({ message: "Call request ID is required" });
 
-      const callRequest = await storage.getCallRequest(callRequestId);
+      callRequest = await storage.getCallRequest(callRequestId);
       if (!callRequest) return res.status(404).json({ message: "Call request not found" });
       if (callRequest.userId !== req.session.userId!) return res.status(403).json({ message: "Unauthorized" });
       if (!callRequest.phone) return res.status(400).json({ message: "No phone number on call request" });
 
-      const user = await storage.getUser(req.session.userId!);
+      user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
 
       const baseUrl = getBaseUrl(req);
       const task = bland.buildTravelConciergePrompt({
         userName: `${user.firstName} ${user.lastName}`,
+        destination: callRequest.destination,
+        tripType: callRequest.tripType,
+        dateFrom: callRequest.dateFrom,
+        dateTo: callRequest.dateTo,
+        flexibility: callRequest.flexibility,
+        timeWindow: callRequest.timeWindow,
         notes: callRequest.notes,
       });
 
-      const blandCall = await storage.createBlandCall({
+      blandCall = await storage.createBlandCall({
         callRequestId: callRequest.id,
         userId: user.id,
         phoneNumber: callRequest.phone,
@@ -1456,6 +1486,24 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       console.error("Bland AI dispatch error:", err);
+      if (blandCall) {
+        await storage.updateBlandCall(blandCall.id, {
+          status: "failed",
+          errorMessage: err?.message || String(err),
+        }).catch(() => {});
+      }
+      if (callRequest) {
+        await storage.updateCallRequest(callRequest.id, { status: "cancelled" }).catch(() => {});
+      }
+      if (user) {
+        await storage.createNotification({
+          userId: user.id,
+          type: "call_status",
+          title: "Call could not be placed",
+          body: "We were unable to dispatch your concierge call. Please try again from Call History.",
+          linkUrl: "/call-history",
+        }).catch(() => {});
+      }
       return res.status(500).json({ message: err.message || "Failed to dispatch call" });
     }
   });
@@ -2434,6 +2482,8 @@ export async function registerRoutes(
           tripType: "both",
           notes: "This is a new visitor requesting a callback from the website. Learn about their travel needs and preferences.",
         });
+        // Note: no bland_call row is pre-created for callback-request, so dispatch failures
+        // are logged only — no DB row to mark failed (out of task scope).
 
         const result = await bland.dispatchCall({
           phoneNumber: cb.phone,

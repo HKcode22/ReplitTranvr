@@ -1,4 +1,7 @@
 const BLAND_API_BASE = "https://api.bland.ai/v1";
+const BLAND_REQUEST_TIMEOUT_MS = 10_000;
+const BLAND_DISPATCH_MAX_ATTEMPTS = 3;
+const BLAND_DISPATCH_RETRY_DELAY_MS = 2_000;
 
 function getApiKey(): string {
   const key = process.env.BLAND_AI_API_KEY;
@@ -6,23 +9,38 @@ function getApiKey(): string {
   return key;
 }
 
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 async function blandRequest(method: string, path: string, body?: any): Promise<any> {
   const url = `${BLAND_API_BASE}${path}`;
-  const res = await fetch(url, {
-    method,
-    headers: {
-      "authorization": getApiKey(),
-      "Content-Type": "application/json",
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), BLAND_REQUEST_TIMEOUT_MS);
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = data?.message || data?.error || `Bland AI error: ${res.status}`;
-    throw new Error(msg);
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        "authorization": getApiKey(),
+        "Content-Type": "application/json",
+      },
+      signal: controller.signal,
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = data?.message || data?.error || `Bland AI error: ${res.status}`;
+      throw new Error(msg);
+    }
+    return data;
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error(`Bland AI request timed out after ${BLAND_REQUEST_TIMEOUT_MS / 1000}s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return data;
 }
 
 export interface DispatchCallOptions {
@@ -76,11 +94,23 @@ export async function dispatchCall(opts: DispatchCallOptions): Promise<{ callId:
     payload.metadata = opts.metadata;
   }
 
-  const data = await blandRequest("POST", "/calls", payload);
-  return {
-    callId: data.call_id,
-    status: data.status || "queued",
-  };
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= BLAND_DISPATCH_MAX_ATTEMPTS; attempt++) {
+    try {
+      const data = await blandRequest("POST", "/calls", payload);
+      return {
+        callId: data.call_id,
+        status: data.status || "queued",
+      };
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`Bland dispatch attempt ${attempt} failed:`, err?.message || err);
+      if (attempt < BLAND_DISPATCH_MAX_ATTEMPTS) {
+        await sleep(BLAND_DISPATCH_RETRY_DELAY_MS);
+      }
+    }
+  }
+  throw lastErr || new Error("Bland AI dispatch failed");
 }
 
 export async function getCallDetails(callId: string): Promise<any> {
@@ -101,13 +131,31 @@ export function isConfigured(): boolean {
 
 export function buildTravelConciergePrompt(context: {
   userName: string;
+  destination?: string | null;
+  tripType?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  flexibility?: string | null;
+  timeWindow?: string | null;
   notes?: string | null;
 }): string {
+  const knownLines: string[] = [];
+  if (context.destination) knownLines.push(`- Destination: ${context.destination}`);
+  if (context.tripType) knownLines.push(`- Trip type: ${context.tripType}`);
+  if (context.dateFrom) knownLines.push(`- Departure date: ${context.dateFrom}`);
+  if (context.dateTo) knownLines.push(`- Return date: ${context.dateTo}`);
+  if (context.flexibility) knownLines.push(`- Date flexibility: ${context.flexibility}`);
+  if (context.timeWindow) knownLines.push(`- Preferred time window: ${context.timeWindow}`);
+  if (context.notes) knownLines.push(`- Notes: ${context.notes}`);
+
+  const knownBlock = knownLines.length > 0
+    ? `\nKNOWN INFORMATION FROM THE REQUEST:\n${knownLines.join("\n")}\nUse this information as a starting point. Briefly confirm these details with the traveler instead of asking from scratch, then fill in anything still missing.\n`
+    : "";
+
   return `You are a professional travel concierge assistant for Travnr, a premium travel service.
 
 You are speaking with ${context.userName}.
-${context.notes ? `They have the following notes: ${context.notes}` : ""}
-
+${knownBlock}
 YOUR ROLE:
 1. Greet the traveler warmly by name and ask how you can help them today
 2. Find out where they want to travel to — ask for the specific airport they want to fly into (e.g. "JFK in New York", "LAX in Los Angeles", "O'Hare in Chicago"). If they only name a city, ask which airport in that city they prefer.
