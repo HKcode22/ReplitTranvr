@@ -397,6 +397,10 @@ async function sendRefundRequestEmails(args: {
   const { user, payment, reason } = args;
   const amountLine = `${Number(payment.amount).toLocaleString()} ${(payment.currency || "USD").toUpperCase()}`;
 
+  const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+  const safeReason = escapeHtml(reason || "");
+
   const adminHtml = `
     <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;">
       <div style="background:#f59e0b;color:white;padding:16px 20px;border-radius:8px 8px 0 0;">
@@ -412,7 +416,7 @@ async function sendRefundRequestEmails(args: {
         </table>
         <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />
         <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 8px;">Reason</h3>
-        <p style="margin:0;font-size:14px;color:#1f2937;line-height:1.6;white-space:pre-wrap;">${reason || "(none provided)"}</p>
+        <p style="margin:0;font-size:14px;color:#1f2937;line-height:1.6;white-space:pre-wrap;">${safeReason || "(none provided)"}</p>
       </div>
     </div>`;
 

@@ -258,4 +258,13 @@ export type InsertSavedCard = z.infer<typeof insertSavedCardSchema>;
 export type BlandCall = typeof blandCalls.$inferSelect;
 export type InsertBlandCall = z.infer<typeof insertBlandCallSchema>;
 export type CalendarEntry = typeof calendarEntries.$inferSelect;
+export interface CalendarEntryDetails {
+  bookingRef?: string | null;
+  departingAt?: string | null;
+  arrivingAt?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  carrier?: string | null;
+  flightNumber?: string | null;
+}
 export type InsertCalendarEntry = z.infer<typeof insertCalendarEntrySchema>;

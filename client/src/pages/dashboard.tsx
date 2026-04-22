@@ -6,7 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
 import { Phone, FileText, CalendarDays, ArrowRight, MapPin, Sparkles, Bell, Plane } from "lucide-react";
-import type { CallRequest, ItineraryProposal, CalendarEntry } from "@shared/schema";
+import type { CallRequest, ItineraryProposal, CalendarEntry, CalendarEntryDetails } from "@shared/schema";
+
+function entryHref(entry: CalendarEntry): string {
+  if (entry.proposalId) return `/proposals/${entry.proposalId}`;
+  if (entry.paymentId) return `/trips#trip-${entry.paymentId}`;
+  return "/trips";
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -150,9 +156,9 @@ export default function DashboardPage() {
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {upcomingFlights.map((entry) => {
-                const details = (entry.details as { bookingRef?: string; carrier?: string } | null) || {};
+                const details = (entry.details as CalendarEntryDetails | null) || {};
                 return (
-                  <Link key={entry.id} href="/trips">
+                  <Link key={entry.id} href={entryHref(entry)}>
                     <Card className="p-4 hover-elevate cursor-pointer h-full" data-testid={`card-booked-flight-${entry.id}`}>
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-7 h-7 rounded-md bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">

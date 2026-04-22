@@ -6,7 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
 import { ChevronLeft, ChevronRight, MapPin, Plane } from "lucide-react";
-import type { CallRequest, ItineraryProposal, CalendarEntry } from "@shared/schema";
+import type { CallRequest, ItineraryProposal, CalendarEntry, CalendarEntryDetails } from "@shared/schema";
+
+function entryHref(entry: CalendarEntry): string {
+  if (entry.proposalId) return `/proposals/${entry.proposalId}`;
+  if (entry.paymentId) return `/trips#trip-${entry.paymentId}`;
+  return "/trips";
+}
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -103,7 +109,7 @@ export default function CalendarPage() {
                   </span>
                   <div className="mt-0.5 space-y-0.5">
                     {getEntriesForDay(day).slice(0, 2).map((entry) => (
-                      <Link key={entry.id} href="/trips">
+                      <Link key={entry.id} href={entryHref(entry)}>
                         <div
                           className="text-[9px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded px-1 py-0.5 truncate flex items-center gap-0.5 cursor-pointer hover-elevate"
                           data-testid={`calendar-entry-${entry.id}`}
@@ -137,7 +143,7 @@ export default function CalendarPage() {
               .slice()
               .sort((a, b) => a.date.localeCompare(b.date))
               .map((entry) => {
-                const details = (entry.details as any) || {};
+                const details = (entry.details as CalendarEntryDetails | null) || {};
                 return (
                   <Card key={entry.id} className="p-4" data-testid={`card-booked-flight-${entry.id}`}>
                     <div className="flex items-center gap-2 flex-wrap">
