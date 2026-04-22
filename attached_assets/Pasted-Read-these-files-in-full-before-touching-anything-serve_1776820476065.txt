@@ -1,0 +1,14 @@
+Read these files in full before touching anything:
+
+server/routes.ts
+server/lib/bland.ts
+client/src/pages/proposal-detail.tsx
+
+I have a bug where after a Bland AI call completes successfully, the proposal is created with the correct trip summary, but flight options always show "Travel planning – details pending from concierge call" at $0.00 instead of actual flights. The call transcript contains all the right information (origin airport, destination airport, dates, passengers, cabin class) but flights are not being fetched and attached to the proposal.
+Investigate and fix the following:
+1. Trace the full post-call flow. Find where the Bland webhook is received after a call ends, where the transcript is parsed to extract flight details, and where the flight search is triggered. Add console.log statements at each step so we can see exactly where it breaks.
+2. Check the flight search trigger. Is the flight search actually being called after the webhook fires? Is it waiting for the transcript to be processed first? If there's a race condition — where the proposal is created before the transcript is parsed — fix it so the flight search only runs after transcript data is available.
+3. Check Duffel connectivity. Find where Duffel is initialized. Log whether DUFFEL_API_TOKEN is present at startup. If Duffel is not configured, the flight search silently returns nothing — make it log a clear error instead of failing silently.
+4. Fix silent failures. Anywhere a flight search fails or returns empty results, make it log the full error with context (origin, destination, dates) so we can see what's being sent to Duffel and why it's failing.
+5. Fix the inconsistency. Sometimes flights return and sometimes they don't for the same route. Check if the transcript parser is consistently extracting IATA codes, dates, and passenger count in the right format before passing them to the flight search. If the format is wrong or inconsistent, fix the parsing to normalize it before the search call.
+Do not restructure anything. Read first, then make targeted fixes. After making changes, summarize exactly what you found and what you changed.
