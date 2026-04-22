@@ -49,3 +49,7 @@ publicDir = "dist/public"
 
 [userenv.shared]
 SENDGRID_FROM_EMAIL = "hello@travnr.com"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 180000
