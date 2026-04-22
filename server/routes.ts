@@ -1549,6 +1549,125 @@ export async function registerRoutes(
     }
   });
 
+  // Cities served by multiple airports. When the transcript only resolves to a
+  // bare city name (e.g. "New York", "London"), this lets us flag ambiguity in
+  // logs so we can track how often the AI failed to confirm a specific airport.
+  const MULTI_AIRPORT_CITIES: Record<string, string[]> = {
+    "new york": ["JFK", "LGA", "EWR"],
+    "nyc": ["JFK", "LGA", "EWR"],
+    "london": ["LHR", "LGW", "STN", "LTN", "LCY", "SEN"],
+    "paris": ["CDG", "ORY", "BVA"],
+    "tokyo": ["HND", "NRT"],
+    "chicago": ["ORD", "MDW"],
+    "washington": ["DCA", "IAD", "BWI"],
+    "washington dc": ["DCA", "IAD", "BWI"],
+    "houston": ["IAH", "HOU"],
+    "miami": ["MIA", "FLL"],
+    "san francisco": ["SFO", "OAK", "SJC"],
+    "bay area": ["SFO", "OAK", "SJC"],
+    "los angeles": ["LAX", "BUR", "LGB", "SNA", "ONT"],
+    "moscow": ["SVO", "DME", "VKO"],
+    "berlin": ["BER"],
+    "rome": ["FCO", "CIA"],
+    "milan": ["MXP", "LIN", "BGY"],
+    "stockholm": ["ARN", "BMA", "NYO"],
+    "shanghai": ["PVG", "SHA"],
+    "seoul": ["ICN", "GMP"],
+    "buenos aires": ["EZE", "AEP"],
+    "sao paulo": ["GRU", "CGH", "VCP"],
+    "dallas": ["DFW", "DAL"],
+    // Cities that exist in many places — empty list signals "multi-geography ambiguous";
+    // the traveler must specify state/country to disambiguate.
+    "springfield": [], // ambiguous: IL, MA, MO, OR, ...
+    "portland": ["PDX", "PWM"], // OR vs ME
+    "richmond": [], // VA, CA, ...
+    "columbus": [], // OH, GA, IN, ...
+  };
+
+  function isAmbiguousCity(name: string): { ambiguous: boolean; options: string[] } {
+    const key = name.trim().toLowerCase().replace(/[.,]+$/, "");
+    if (!Object.prototype.hasOwnProperty.call(MULTI_AIRPORT_CITIES, key)) {
+      return { ambiguous: false, options: [] };
+    }
+    const options = MULTI_AIRPORT_CITIES[key];
+    // Only flag as ambiguous when there are multiple airport choices, OR when the list
+    // is empty (signaling multi-geography ambiguity that needs state/country). A
+    // single-airport entry is unambiguous and should not produce noisy warnings.
+    if (options.length === 1) return { ambiguous: false, options };
+    return { ambiguous: true, options };
+  }
+
+  // The Bland AI prompt instructs the agent to emit a <TRAVEL_DETAILS>{...}</TRAVEL_DETAILS>
+  // JSON block at the end of the call summary with confirmed IATA codes and ISO dates.
+  // Parsing this structured block is far more reliable than regex over free-form prose,
+  // especially for ambiguous city names and multi-airport cities.
+  function parseStructuredTravelBlock(text: string): {
+    origin: string | null;
+    destination: string | null;
+    departureDate: string | null;
+    returnDate: string | null;
+    passengers: number | null;
+    cabinClass: string | null;
+    budget: number | null;
+  } | null {
+    if (!text) return null;
+    const blockMatch = text.match(/<TRAVEL_DETAILS>\s*([\s\S]*?)\s*<\/TRAVEL_DETAILS>/i);
+    if (!blockMatch) return null;
+    let raw = blockMatch[1].trim();
+    // Strip code fences if the model wrapped the JSON in ```json ... ```
+    raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    let parsed: any;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      // Lenient retry: replace single quotes and trailing commas
+      try {
+        const lenient = raw.replace(/,\s*([}\]])/g, "$1").replace(/'([^']*)'\s*:/g, '"$1":').replace(/:\s*'([^']*)'/g, ': "$1"');
+        parsed = JSON.parse(lenient);
+      } catch (err: any) {
+        console.warn(`parseStructuredTravelBlock: failed to JSON.parse <TRAVEL_DETAILS> block: ${err?.message || err}`);
+        return null;
+      }
+    }
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const normIata = (v: any): string | null => {
+      if (typeof v !== "string") return null;
+      const trimmed = v.trim().toUpperCase();
+      return /^[A-Z]{3}$/.test(trimmed) ? trimmed : null;
+    };
+    const normDate = (v: any): string | null => {
+      if (typeof v !== "string") return null;
+      const trimmed = v.trim();
+      return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+    };
+    const normCabin = (v: any): string | null => {
+      if (typeof v !== "string") return null;
+      const t = v.trim().toLowerCase().replace(/[\s-]+/g, "_");
+      const allowed = ["economy", "premium_economy", "business", "first"];
+      return allowed.includes(t) ? t : null;
+    };
+    const normPax = (v: any): number | null => {
+      const n = typeof v === "number" ? v : parseInt(String(v ?? ""), 10);
+      return Number.isFinite(n) && n >= 1 && n <= 20 ? n : null;
+    };
+    const normBudget = (v: any): number | null => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[^0-9.]/g, ""));
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+
+    return {
+      origin: normIata(parsed.origin_iata),
+      destination: normIata(parsed.destination_iata),
+      departureDate: normDate(parsed.departure_date),
+      returnDate: normDate(parsed.return_date),
+      passengers: normPax(parsed.passengers),
+      cabinClass: normCabin(parsed.cabin_class),
+      budget: normBudget(parsed.budget_usd),
+    };
+  }
+
   function parseTravelDetailsFromTranscript(transcript: string | null, summary: string | null): {
     origin: string | null;
     destination: string | null;
@@ -1557,13 +1676,23 @@ export async function registerRoutes(
     passengers: number;
     cabinClass: string;
     budget: number | null;
+    sources?: Record<string, string>;
   } {
     const originalText = [summary, transcript].filter(Boolean).join("\n");
     const text = originalText.toLowerCase();
-    if (!text) return { origin: null, destination: null, departureDate: null, returnDate: null, passengers: 1, cabinClass: "economy", budget: null };
+    if (!text) return { origin: null, destination: null, departureDate: null, returnDate: null, passengers: 1, cabinClass: "economy", budget: null, sources: {} };
 
-    let origin: string | null = null;
-    let destination: string | null = null;
+    const sources: Record<string, string> = {};
+
+    // Step -1: prefer the structured <TRAVEL_DETAILS> JSON block emitted by the Bland AI
+    // agent. This is the most reliable signal because the agent has already confirmed
+    // each detail with the traveler in-call, including disambiguating multi-airport cities.
+    const structured = parseStructuredTravelBlock(originalText);
+
+    let origin: string | null = structured?.origin ?? null;
+    let destination: string | null = structured?.destination ?? null;
+    if (origin) sources.origin = "structured_block";
+    if (destination) sources.destination = "structured_block";
 
     const COMMON_WORDS_SET = new Set(["THE","AND","FOR","ARE","NOT","YOU","ALL","CAN","HER","WAS","ONE","OUR","OUT","HAS","HIS","HOW","ITS","MAY","NEW","NOW","OLD","SEE","WAY","WHO","DID","GET","HIM","LET","SAY","SHE","TOO","USE","JAN","FEB","MAR","APR","JUN","JUL","AUG","SEP","OCT","NOV","DEC","BUT","END","SET","RUN","TRY","ANY","DAY","GOT","PUT","OWN","WHY","BIG","FEW","ASK","MAN","TWO","YET","YES","PER","ADD","AGO","AGE","AID","AIM","AIR","BAD","BAR","BED","BIT","BOX","BOY","BUS","BUY","CAR","CUT","DOG","DRY","DUE","EAR","EAT","ERA","EYE","FAR","FAT","FIT","FLY","FUN","GAP","GAS","GUN","HAD","HIT","HOT","ICE","ILL","JOB","JOY","KEY","LAW","LAY","LED","LEG","LIE","LOT","LOW","MAP","MET","MIX","NOR","ODD","OIL","PAY","PEN","PIE","PIN","PIT","POP","RAW","RED","RID","ROW","SAD","SAT","SIT","SIX","SKI","SKY","SON","SUM","TAX","TEN","TIE","TIN","TIP","TOP","VAN","VIA","WAR","WEB","WET","WIN","WON"]);
 
@@ -1581,10 +1710,10 @@ export async function registerRoutes(
     const fromCodeMatch = originalText.match(/(?:from|departing)\s+([A-Z]{3})(?:\s|,|\.|\)|$)/);
     const toCodeMatch = originalText.match(/(?:to|arriving)\s+([A-Z]{3})(?:\s|,|\.|\)|$)/);
 
-    if (fromCodeMatch && !COMMON_WORDS_SET.has(fromCodeMatch[1])) {
+    if (!origin && fromCodeMatch && !COMMON_WORDS_SET.has(fromCodeMatch[1])) {
       origin = fromCodeMatch[1];
     }
-    if (toCodeMatch && !COMMON_WORDS_SET.has(toCodeMatch[1])) {
+    if (!destination && toCodeMatch && !COMMON_WORDS_SET.has(toCodeMatch[1])) {
       destination = toCodeMatch[1];
     }
 
@@ -1698,17 +1827,27 @@ export async function registerRoutes(
       else if (!destination) destination = iataCodes[0];
     }
 
-    let departureDate: string | null = null;
-    let returnDate: string | null = null;
+    // Mark sources for any fields filled by the regex passes (structured-block fields
+    // already had their sources set above and could not be overwritten because every
+    // regex pass is gated on `if (!origin)` / `if (!destination)`).
+    if (origin && !sources.origin) sources.origin = "regex";
+    if (destination && !sources.destination) sources.destination = "regex";
 
-    const datePattern = /(\d{4}-\d{2}-\d{2})/g;
-    const dates: string[] = [];
-    let dateMatch;
-    while ((dateMatch = datePattern.exec(text)) !== null) {
-      dates.push(dateMatch[1]);
+    let departureDate: string | null = structured?.departureDate ?? null;
+    let returnDate: string | null = structured?.returnDate ?? null;
+    if (departureDate) sources.departureDate = "structured_block";
+    if (returnDate) sources.returnDate = "structured_block";
+
+    if (!departureDate || !returnDate) {
+      const datePattern = /(\d{4}-\d{2}-\d{2})/g;
+      const dates: string[] = [];
+      let dateMatch;
+      while ((dateMatch = datePattern.exec(text)) !== null) {
+        dates.push(dateMatch[1]);
+      }
+      if (!departureDate && dates.length >= 1) { departureDate = dates[0]; sources.departureDate = "regex_iso"; }
+      if (!returnDate && dates.length >= 2) { returnDate = dates[1]; sources.returnDate = "regex_iso"; }
     }
-    if (dates.length >= 1) departureDate = dates[0];
-    if (dates.length >= 2) returnDate = dates[1];
 
     if (!departureDate) {
       const monthDayPatterns = [
@@ -1766,58 +1905,70 @@ export async function registerRoutes(
       }
     }
 
-    let passengers = 1;
-    const paxPatterns = [
-      /(\d+)\s*(?:passengers?|travelers?|travellers?|people|adults?|persons?)/i,
-      /(?:passengers?|travelers?|travellers?|people|adults?|persons?)(?:\s*:\s*|\s+)(\d+)/i,
-    ];
-    for (const pat of paxPatterns) {
-      const match = text.match(pat);
-      if (match) {
-        const n = parseInt(match[1]);
-        if (n >= 1 && n <= 20) passengers = n;
-        break;
+    let passengers = structured?.passengers ?? 1;
+    if (structured?.passengers) sources.passengers = "structured_block";
+    if (!structured?.passengers) {
+      const paxPatterns = [
+        /(\d+)\s*(?:passengers?|travelers?|travellers?|people|adults?|persons?)/i,
+        /(?:passengers?|travelers?|travellers?|people|adults?|persons?)(?:\s*:\s*|\s+)(\d+)/i,
+      ];
+      for (const pat of paxPatterns) {
+        const match = text.match(pat);
+        if (match) {
+          const n = parseInt(match[1]);
+          if (n >= 1 && n <= 20) { passengers = n; sources.passengers = "regex"; }
+          break;
+        }
       }
+      if (!sources.passengers) sources.passengers = "default";
     }
 
     // Cabin class: look for affirmative preference statements first to avoid matching
     // the AI agent's option list (e.g. "economy, business, or first class?").
     // Summary is more reliable than raw transcript, so check it first.
-    let cabinClass = "economy";
-    const affirmativePrefix = /(?:want(?:s|ed)?|prefer(?:s|red)?|request(?:s|ed)?|chose?|choose|go(?:ing)?\s+with|book(?:s|ed|ing)?|like[sd]?|select(?:s|ed)?|opted?\s+for|confirmed?|fly(?:ing)?)\s+(?:an?\s+)?/i;
-    const findCabinInText = (t: string): string | null => {
-      if (new RegExp(affirmativePrefix.source + /\bfirst[\s-]class\b/.source, "i").test(t)) return "first";
-      if (new RegExp(affirmativePrefix.source + /\bbusiness[\s-]class\b/.source, "i").test(t)) return "business";
-      if (new RegExp(affirmativePrefix.source + /\bpremium[\s-]economy\b/.source, "i").test(t)) return "premium_economy";
-      if (new RegExp(affirmativePrefix.source + /\beconomy\b/.source, "i").test(t)) return "economy";
-      return null;
-    };
-    const summaryText = summary || "";
-    const cabinFromSummary = findCabinInText(summaryText) ?? findCabinInText(text);
-    if (cabinFromSummary) {
-      cabinClass = cabinFromSummary;
-    } else {
-      // Fallback: check summary only for bare keyword (avoids matching agent's option lists in transcript)
-      if (/\bfirst[\s-]class\b/i.test(summaryText)) cabinClass = "first";
-      else if (/\bbusiness[\s-]class\b/i.test(summaryText)) cabinClass = "business";
-      else if (/\bpremium[\s-]economy\b/i.test(summaryText)) cabinClass = "premium_economy";
-    }
-
-    let budget: number | null = null;
-    const budgetPatterns = [
-      /\$\s*([\d,]+(?:\.\d{2})?)/,
-      /(\d[\d,]+)\s*(?:dollars|usd)/i,
-      /budget(?:\s*(?:is|of|around|about|:))?\s*\$?\s*([\d,]+)/i,
-    ];
-    for (const pat of budgetPatterns) {
-      const match = text.match(pat);
-      if (match) {
-        budget = parseFloat(match[1].replace(/,/g, ""));
-        break;
+    let cabinClass = structured?.cabinClass ?? "economy";
+    if (structured?.cabinClass) sources.cabinClass = "structured_block";
+    if (!structured?.cabinClass) {
+      const affirmativePrefix = /(?:want(?:s|ed)?|prefer(?:s|red)?|request(?:s|ed)?|chose?|choose|go(?:ing)?\s+with|book(?:s|ed|ing)?|like[sd]?|select(?:s|ed)?|opted?\s+for|confirmed?|fly(?:ing)?)\s+(?:an?\s+)?/i;
+      const findCabinInText = (t: string): string | null => {
+        if (new RegExp(affirmativePrefix.source + /\bfirst[\s-]class\b/.source, "i").test(t)) return "first";
+        if (new RegExp(affirmativePrefix.source + /\bbusiness[\s-]class\b/.source, "i").test(t)) return "business";
+        if (new RegExp(affirmativePrefix.source + /\bpremium[\s-]economy\b/.source, "i").test(t)) return "premium_economy";
+        if (new RegExp(affirmativePrefix.source + /\beconomy\b/.source, "i").test(t)) return "economy";
+        return null;
+      };
+      const summaryText = summary || "";
+      const cabinFromSummary = findCabinInText(summaryText) ?? findCabinInText(text);
+      if (cabinFromSummary) {
+        cabinClass = cabinFromSummary;
+        sources.cabinClass = "regex";
+      } else {
+        if (/\bfirst[\s-]class\b/i.test(summaryText)) { cabinClass = "first"; sources.cabinClass = "regex_keyword"; }
+        else if (/\bbusiness[\s-]class\b/i.test(summaryText)) { cabinClass = "business"; sources.cabinClass = "regex_keyword"; }
+        else if (/\bpremium[\s-]economy\b/i.test(summaryText)) { cabinClass = "premium_economy"; sources.cabinClass = "regex_keyword"; }
+        else { sources.cabinClass = "default"; }
       }
     }
 
-    return { origin, destination, departureDate, returnDate, passengers, cabinClass, budget };
+    let budget: number | null = structured?.budget ?? null;
+    if (structured?.budget) sources.budget = "structured_block";
+    if (!budget) {
+      const budgetPatterns = [
+        /\$\s*([\d,]+(?:\.\d{2})?)/,
+        /(\d[\d,]+)\s*(?:dollars|usd)/i,
+        /budget(?:\s*(?:is|of|around|about|:))?\s*\$?\s*([\d,]+)/i,
+      ];
+      for (const pat of budgetPatterns) {
+        const match = text.match(pat);
+        if (match) {
+          budget = parseFloat(match[1].replace(/,/g, ""));
+          sources.budget = "regex";
+          break;
+        }
+      }
+    }
+
+    return { origin, destination, departureDate, returnDate, passengers, cabinClass, budget, sources };
   }
 
   async function generateProposalFromCall(callRequestId: number, userId: string, callSummary: string | null, callTranscript?: string | null) {
@@ -1866,6 +2017,24 @@ export async function registerRoutes(
 
     const details = parseTravelDetailsFromTranscript(transcript, summary);
     console.log(`Parsed travel details from transcript for call ${callRequestId}:`, JSON.stringify(details));
+
+    // Surface ambiguity so we can monitor parser accuracy: if the destination/origin
+    // came from regex (not the structured block) AND matches a multi-airport city, log it.
+    const checkAmbiguity = (label: string, value: string | null, source: string | undefined) => {
+      if (!value || source === "structured_block") return;
+      // Skip pure IATA codes (3 uppercase letters) — they're already disambiguated
+      if (/^[A-Z]{3}$/.test(value)) return;
+      const { ambiguous, options } = isAmbiguousCity(value);
+      if (ambiguous) {
+        console.warn(`[post-call ${callRequestId}] AMBIGUOUS_${label.toUpperCase()}: parsed "${value}" maps to multiple airports ${options.length ? `(${options.join("/")})` : "(many cities/airports)"} and was not confirmed in <TRAVEL_DETAILS> block. Source=${source}.`);
+      }
+    };
+    checkAmbiguity("destination", details.destination, details.sources?.destination);
+    checkAmbiguity("origin", details.origin, details.sources?.origin);
+
+    if (!details.sources?.destination || details.sources.destination !== "structured_block") {
+      console.warn(`[post-call ${callRequestId}] PARSE_ACCURACY: destination not from structured block (source=${details.sources?.destination ?? "none"}). Bland AI may have failed to emit a <TRAVEL_DETAILS> block.`);
+    }
 
     // Patch missing parsed fields from user-provided form data
     if (!details.destination && callRequest.destination) {
