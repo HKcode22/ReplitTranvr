@@ -806,6 +806,11 @@ export async function registerRoutes(
     ? new Duffel({ token: duffelToken })
     : null;
   const isTestMode = duffelToken?.startsWith("duffel_test_") ?? false;
+  if (duffel) {
+    console.log(`[Duffel] Initialized (testMode=${isTestMode})`);
+  } else {
+    console.error("[Duffel] DUFFEL_API_TOKEN is NOT set — flight search and booking will be disabled and post-call proposals will fall back to placeholder content");
+  }
 
   app.get("/api/duffel/config", isAuthenticated, async (_req: Request, res: Response) => {
     return res.json({ testMode: isTestMode });
@@ -1883,9 +1888,12 @@ export async function registerRoutes(
     }
 
     if (!duffel) {
+      console.error(`[post-call ${callRequestId}] Duffel client is not initialized (DUFFEL_API_TOKEN missing) — writing fallback proposal`);
       await createFallbackProposal(callRequestId, userId, summary);
       return;
     }
+
+    console.log(`[post-call ${callRequestId}] starting proposal generation: hasTranscript=${!!transcript}, hasSummary=${!!summary}`);
 
     try {
       async function resolveAirport(query: string, preferUS: boolean): Promise<{code: string, name: string} | null> {
@@ -1896,12 +1904,17 @@ export async function registerRoutes(
               const lookupRes = await duffel!.suggestions.list({ query });
               const match = (lookupRes.data || []).find((p: any) => p.iata_code === query);
               if (match) return { code: query, name: match.city_name || match.name || query };
-            } catch (_) {}
+            } catch (e: any) {
+              console.warn(`[post-call ${callRequestId}] Duffel suggestions.list threw for IATA "${query}":`, e?.message || e);
+            }
             return { code: query, name: query };
           }
           const res = await duffel!.suggestions.list({ query });
           const places = res.data || [];
-          if (places.length === 0) return null;
+          if (places.length === 0) {
+            console.warn(`[post-call ${callRequestId}] Duffel suggestions returned 0 places for query="${query}"`);
+            return null;
+          }
 
           if (preferUS) {
             const usAirport = places.find((p: any) => p.type === "airport" && p.iata_country_code === "US");
@@ -1912,28 +1925,33 @@ export async function registerRoutes(
               const usPlaces = usRes.data || [];
               const usAp = usPlaces.find((p: any) => p.type === "airport") || usPlaces[0];
               if (usAp?.iata_code) return { code: usAp.iata_code, name: usAp.city_name || usAp.name || query };
-            } catch (_) {}
+            } catch (e: any) {
+              console.warn(`[post-call ${callRequestId}] Duffel suggestions.list threw for "${query} USA":`, e?.message || e);
+            }
           }
 
           const airport = places.find((p: any) => p.type === "airport") || places[0];
           return airport?.iata_code ? { code: airport.iata_code, name: airport.city_name || airport.name || query } : null;
-        } catch (e) {
+        } catch (e: any) {
+          console.warn(`[post-call ${callRequestId}] Duffel suggestions.list threw for query="${query}":`, e?.message || e);
           return null;
         }
       }
 
       const callReqForPhone = callRequest as any;
-      const userPhone = callReqForPhone.phoneNumber || "";
+      const userPhone = callReqForPhone.phone || callReqForPhone.phoneNumber || "";
       const isUSUser = userPhone.startsWith("+1") || userPhone.startsWith("1");
+      console.log(`[post-call ${callRequestId}] resolved isUSUser=${isUSUser} from phone="${userPhone}"`);
 
       const destResult = await resolveAirport(details.destination, isUSUser);
       if (!destResult) {
-        console.log(`No airport found for destination: ${details.destination}`);
+        console.error(`[post-call ${callRequestId}] No airport could be resolved for destination="${details.destination}" — writing fallback proposal`);
         await createFallbackProposal(callRequestId, userId, summary);
         return;
       }
       const destCode = destResult.code;
       const destName = destResult.name;
+      console.log(`[post-call ${callRequestId}] resolved destination "${details.destination}" -> ${destCode} (${destName})`);
 
       let originCode = "JFK";
       const profile = await storage.getProfile(userId);
@@ -1988,7 +2006,16 @@ export async function registerRoutes(
         slices.push({ origin: destCode, destination: originCode, departure_date: returnDate });
       }
 
-      console.log(`Searching Duffel for call ${callRequestId}: ${originCode} -> ${destCode}, depart=${departureDate}, return=${returnDate}, cabin=${details.cabinClass}, pax=${details.passengers}`);
+      const searchParamsLog = {
+        origin: originCode,
+        destination: destCode,
+        departureDate,
+        returnDate,
+        cabinClass: details.cabinClass,
+        passengers: details.passengers,
+        budget: details.budget,
+      };
+      console.log(`[post-call ${callRequestId}] Searching Duffel:`, JSON.stringify(searchParamsLog));
 
       const offerRequest = await duffel.offerRequests.create({
         slices,
@@ -1999,6 +2026,7 @@ export async function registerRoutes(
       });
 
       const allOffers = (offerRequest.data as any).offers || [];
+      console.log(`[post-call ${callRequestId}] Duffel returned ${allOffers.length} offer(s)`);
       if (allOffers.length === 0) {
         let originName = details.origin || originCode;
         if (details.origin) {
@@ -2130,7 +2158,11 @@ export async function registerRoutes(
 
       console.log(`Auto-generated proposal ${proposal.id} with ${topOffers.length} offers from call request ${callRequestId}`);
     } catch (err: any) {
-      console.error("Duffel search for auto-proposal failed:", JSON.stringify(err?.errors || err?.message || err, null, 2));
+      console.error(
+        `[post-call ${callRequestId}] Duffel search/proposal generation failed.`,
+        "\n  parsedDetails:", JSON.stringify(details),
+        "\n  error:", JSON.stringify(err?.errors || err?.message || err, null, 2)
+      );
       await createFallbackProposal(callRequestId, userId, summary);
     }
   }
