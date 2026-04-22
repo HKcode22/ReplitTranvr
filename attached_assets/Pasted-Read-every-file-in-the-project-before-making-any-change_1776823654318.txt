@@ -1,0 +1,24 @@
+Read every file in the project before making any changes. I want a full audit and bug fix pass on the entire Travnr application. Here's what to check and fix:
+1. Environment variables
+Check every place process.env is used across all server files. For each one, make sure the app either fails loudly with a clear error message at startup if it's missing, or has a safe fallback. No silent failures. At startup, log a checklist of which secrets are present and which are missing.
+2. The full call-to-proposal pipeline
+Trace the complete flow from a user submitting a call request, to Bland dispatching the call, to the webhook firing, to the transcript being parsed, to the proposal being created, to flights being fetched and attached. Add clear console logs at every step of this chain with enough context to debug (user ID, call ID, what data is being passed forward). Make sure no step can silently succeed while actually doing nothing.
+3. Error handling everywhere
+Search for every try/catch block in the server. Any catch block that only logs err.message — update it to log the full error object and also update any relevant database records to reflect the failure state. No errors should disappear silently.
+4. Race conditions
+Check if there are any places where two async operations depend on each other but aren't properly awaited. Specifically look at the webhook handler and anything that creates proposals or fetches flights after a call ends.
+5. Database consistency
+Check that every database write has proper error handling. If a write fails, it should not leave the app in a broken state where the UI shows one thing but the DB has another.
+6. Frontend error states
+Check the main pages — proposals, proposal detail, flight search, call history, dashboard. Make sure every API call has a loading state, an error state, and that errors are shown to the user clearly instead of showing blank content or $0.00 placeholders.
+7. Type safety
+Look for any places where data coming from the Bland webhook or from Amadeus/Duffel is used without validation. Add basic checks to make sure the shape of the data matches what's expected before using it.
+8. Dead code and conflicts
+Look for any duplicate function definitions, old Duffel code conflicting with new affiliate link code, or any routes that are defined twice. Clean them up.
+After the audit, give me a summary of:
+
+What bugs you found and fixed
+What potential issues remain that need my attention
+Any missing secrets or config that would cause failures in production
+
+Do not change any UI design or business logic. Only improve reliability, error visibility, and consistency.
