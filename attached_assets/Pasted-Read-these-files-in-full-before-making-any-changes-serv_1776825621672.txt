@@ -1,0 +1,66 @@
+Read these files in full before making any changes:
+
+server/routes.ts
+server/storage.ts
+shared/schema.ts
+client/src/pages/proposal-detail.tsx
+client/src/pages/flight-search.tsx
+client/src/pages/dashboard.tsx
+client/src/pages/billing.tsx
+
+Then implement the following features:
+Feature 1 — Refund Request
+Add a "Request Refund" button on the booking/billing page for completed bookings. When clicked it should:
+
+Show a simple confirmation dialog asking if they're sure
+POST to a new endpoint /api/refund-request that takes the booking/payment ID
+On the server, send two emails via SendGrid:
+
+One to Hello@travnr.com with the subject "Refund Request — [User Name]" containing the user's name, email, booking reference, amount paid, and date of booking
+One to the user with the subject "Your refund request is being reviewed" — warm, professional tone, tells them the Travnr team has received their request and will be in touch within 2 business days, signed off as "The Travnr Team"
+
+
+Save the refund request status to the database so the button changes to "Refund Requested" and can't be clicked again
+Show the user a success message after submitting
+
+Feature 2 — Full Flight Details on Proposal
+When displaying flight options in proposal-detail.tsx, fetch and show the following from Duffel for each offer:
+
+Cabin class (economy, business, etc.)
+Baggage allowance — checked bags and carry-on, including weight limits if available
+Seat information — whether seat selection is available and if there's a fee
+Cancellation policy — whether the ticket is refundable, partially refundable, or non-refundable
+Change/amendment policy — whether changes are allowed and any associated fees
+Fare conditions in plain language if Duffel provides them
+
+Display these as an expandable section under each flight option so the card doesn't get cluttered. Label it "Flight Details & Policies."
+Feature 3 — Booking Confirmation Email
+After a booking is successfully completed (after the Duffel order is created), send the user a confirmation email via SendGrid containing:
+
+Subject: "Your booking is confirmed — [Route] on [Date]"
+A warm thank you opening: "Thank you for booking with Travnr"
+Their booking confirmation code (Duffel booking reference)
+Full itinerary: origin, destination, departure date and time, arrival date and time, airline, flight number, cabin class
+Passenger details
+Total amount paid
+A note that they can view their full itinerary in their Travnr dashboard
+Signed off warmly as "The Travnr Team"
+
+Use clean, professional HTML email formatting consistent with the existing verification emails in the codebase.
+Feature 4 — Calendar Integration
+When a booking is confirmed, create a calendar entry in the dashboard calendar for:
+
+The departure date, labelled as "[Airline] flight to [Destination]"
+The return date if it's a round trip, labelled as "Return flight from [Destination]"
+
+Check how the existing calendar page works and use the same data structure. The calendar entries should be linked to the booking so clicking them shows booking details.
+Feature 5 — Duffel Offer Detail Enrichment
+In the server route that fetches Duffel offers (both for manual flight search and post-call proposals), enrich each offer with:
+
+Full fare conditions from Duffel's fare conditions endpoint if available
+Baggage allowances per passenger
+Available services (seat selection, extra bags) and their prices
+Whether the ticket is refundable and under what conditions
+
+Include this enriched data in the API response so the frontend can display it without making additional calls.
+After making all changes, summarize what was added, what database schema changes were made if any, and flag anything that needs a new Replit Secret or environment variable.
