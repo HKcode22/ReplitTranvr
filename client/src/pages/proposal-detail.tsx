@@ -23,8 +23,9 @@ import { AirportSearch } from "@/components/airport-search";
 import {
   ArrowLeft, Plane, Hotel, Package, Check, CreditCard, Loader2, Clock,
   Luggage, ArrowRight, User, Lock, Shield, AlertCircle, Users, Plus, Minus, Search,
-  Settings2, RefreshCw, X
+  Settings2, RefreshCw, X, ChevronDown, Info
 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 type ProposalDetail = ItineraryProposal & {
   items: ProposalItem[];
@@ -285,6 +286,69 @@ function NoFlightsCard({ item }: { item: ProposalItem }) {
         </div>
       </div>
     </Card>
+  );
+}
+
+function FlightDetailsCollapsible({ enrichment, itemId }: { enrichment: any; itemId: number }) {
+  const [open, setOpen] = useState(false);
+  const cabin = enrichment.cabinClass;
+  const baggage = enrichment.baggage;
+  const conditions = enrichment.conditions || {};
+  const refundBefore = conditions.refundBeforeDeparture;
+  const changeBefore = conditions.changeBeforeDeparture;
+
+  const fmtCondition = (c: any) => {
+    if (!c) return "Not available";
+    if (c.allowed === false) return "Not allowed";
+    if (c.allowed === true) {
+      const fee = c.penaltyAmount ? ` (fee: ${c.penaltyAmount} ${c.penaltyCurrency || ""})` : " (no fee)";
+      return `Allowed${fee}`;
+    }
+    return "Subject to airline policy";
+  };
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="mt-3">
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-full justify-between" data-testid={`button-flight-details-${itemId}`}>
+          <span className="flex items-center gap-2 text-sm">
+            <Info className="w-4 h-4" /> Flight Details & Policies
+          </span>
+          <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2">
+        <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2 text-sm" data-testid={`flight-details-${itemId}`}>
+          {cabin && (
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Cabin</span>
+              <span className="font-medium capitalize">{String(cabin).replace(/_/g, " ")}</span>
+            </div>
+          )}
+          {Array.isArray(baggage) && baggage.length > 0 && (
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Baggage</span>
+              <span className="font-medium text-right">
+                {baggage
+                  .map((b: any) => `${(b.type || "bag").replace(/_/g, " ")}: ${b.quantity ?? 0}`)
+                  .join(" · ")}
+              </span>
+            </div>
+          )}
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Refund before departure</span>
+            <span className="font-medium text-right">{fmtCondition(refundBefore)}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Change before departure</span>
+            <span className="font-medium text-right">{fmtCondition(changeBefore)}</span>
+          </div>
+          {enrichment.note && (
+            <p className="text-xs text-muted-foreground pt-1 border-t border-border">{enrichment.note}</p>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -1208,6 +1272,9 @@ export default function ProposalDetailPage() {
                 </div>
                 {item.duffelOfferId && offerData && (
                   <DuffelFlightCard offerData={offerData} />
+                )}
+                {item.duffelOfferId && offerData?.enrichment && (
+                  <FlightDetailsCollapsible enrichment={offerData.enrichment} itemId={item.id} />
                 )}
                 {!isPaid && item.duffelOfferId && (
                   <UpdateFlightPreferences

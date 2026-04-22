@@ -188,6 +188,201 @@ async function sendBookingFailureAlert(context: {
   }
 }
 
+function enrichOfferDetails(offer: any) {
+  if (!offer) return null;
+  const firstSlice = offer.slices?.[0];
+  const firstSeg = firstSlice?.segments?.[0];
+  const firstPax = firstSeg?.passengers?.[0];
+
+  const baggageSummary: { type: string; quantity: number }[] = [];
+  if (firstPax?.baggages) {
+    for (const b of firstPax.baggages) {
+      baggageSummary.push({ type: b.type, quantity: b.quantity });
+    }
+  }
+
+  return {
+    cabinClass: firstPax?.cabin_class_marketing_name || firstPax?.cabin_class || null,
+    baggage: baggageSummary,
+    conditions: {
+      changeBeforeDeparture: offer.conditions?.change_before_departure || null,
+      refundBeforeDeparture: offer.conditions?.refund_before_departure || null,
+    },
+    paymentRequirements: offer.payment_requirements ? {
+      requiresInstantPayment: offer.payment_requirements.requires_instant_payment ?? null,
+      paymentRequiredBy: offer.payment_requirements.payment_required_by ?? null,
+    } : null,
+    owner: offer.owner ? { name: offer.owner.name, iata: offer.owner.iata_code } : null,
+  };
+}
+
+async function sendBookingConfirmationEmail(toEmail: string, data: {
+  firstName?: string;
+  bookingReference: string;
+  amount: string | number;
+  currency: string;
+  slices?: Array<{
+    origin?: { iata?: string; city?: string; name?: string };
+    destination?: { iata?: string; city?: string; name?: string };
+    departingAt?: string;
+    arrivingAt?: string;
+  }>;
+  passengers?: Array<{ given_name?: string; family_name?: string }>;
+}) {
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+  const slicesHtml = (data.slices || []).map((s) => {
+    const dep = s.departingAt ? new Date(s.departingAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
+    const arr = s.arrivingAt ? new Date(s.arrivingAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
+    return `
+      <tr>
+        <td style="padding:8px 0;color:#1a1a2e;">
+          <strong>${s.origin?.iata || ""} ${s.origin?.city || s.origin?.name || ""}</strong>
+          → <strong>${s.destination?.iata || ""} ${s.destination?.city || s.destination?.name || ""}</strong><br/>
+          <span style="color:#6b7280;font-size:13px;">Depart: ${dep}<br/>Arrive: ${arr}</span>
+        </td>
+      </tr>`;
+  }).join("");
+
+  const paxList = (data.passengers || []).map(p =>
+    `<li>${[p.given_name, p.family_name].filter(Boolean).join(" ")}</li>`
+  ).join("");
+
+  try {
+    await sgMail.send({
+      to: toEmail,
+      from: { email: fromEmail, name: "Travnr" },
+      subject: `Your flight is booked — Ref ${data.bookingReference}`,
+      html: `
+        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 20px;">
+          <div style="text-align:center;margin-bottom:24px;">
+            <h1 style="color:#2d7abf;font-size:26px;margin:0;">Travnr</h1>
+          </div>
+          <h2 style="font-size:20px;color:#1a1a2e;margin:0 0 12px;">Your flight is booked${data.firstName ? `, ${data.firstName}` : ""}!</h2>
+          <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 16px;">
+            Your booking is confirmed. Reference number: <strong>${data.bookingReference}</strong>.
+          </p>
+          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin-bottom:18px;">
+            <h3 style="margin:0 0 8px;font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Itinerary</h3>
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">${slicesHtml}</table>
+          </div>
+          ${paxList ? `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin-bottom:18px;"><h3 style="margin:0 0 8px;font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Passengers</h3><ul style="margin:0;padding-left:20px;color:#1a1a2e;">${paxList}</ul></div>` : ""}
+          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin-bottom:18px;">
+            <h3 style="margin:0 0 8px;font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Total Charged</h3>
+            <p style="margin:0;font-size:18px;font-weight:600;color:#1a1a2e;">${Number(data.amount).toLocaleString()} ${(data.currency || "USD").toUpperCase()}</p>
+          </div>
+          <p style="color:#555;font-size:14px;line-height:1.6;">
+            Need to change or cancel? Reply to this email or visit your <a href="https://travnr.com/billing" style="color:#2d7abf;">billing page</a> to request a refund.
+          </p>
+          <p style="color:#999;font-size:12px;margin-top:24px;">Travnr · hello@travnr.com</p>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error("Failed to send booking confirmation email:", err);
+  }
+}
+
+async function sendRefundRequestEmails(args: {
+  user: { email: string; firstName?: string; lastName?: string };
+  payment: { id: number; amount: string | number; currency: string; duffelBookingRef?: string | null; duffelOrderId?: string | null };
+  reason: string;
+}) {
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+  const { user, payment, reason } = args;
+  const amountLine = `${Number(payment.amount).toLocaleString()} ${(payment.currency || "USD").toUpperCase()}`;
+
+  const adminHtml = `
+    <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;">
+      <div style="background:#f59e0b;color:white;padding:16px 20px;border-radius:8px 8px 0 0;">
+        <h2 style="margin:0;font-size:18px;">Refund Request</h2>
+      </div>
+      <div style="border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <tr><td style="padding:6px 0;color:#6b7280;width:160px;">Customer</td><td>${[user.firstName, user.lastName].filter(Boolean).join(" ")} (${user.email})</td></tr>
+          <tr><td style="padding:6px 0;color:#6b7280;">Payment ID</td><td>#${payment.id}</td></tr>
+          <tr><td style="padding:6px 0;color:#6b7280;">Amount</td><td>${amountLine}</td></tr>
+          <tr><td style="padding:6px 0;color:#6b7280;">Booking Ref</td><td style="font-family:monospace;">${payment.duffelBookingRef || "—"}</td></tr>
+          <tr><td style="padding:6px 0;color:#6b7280;">Duffel Order ID</td><td style="font-family:monospace;">${payment.duffelOrderId || "—"}</td></tr>
+        </table>
+        <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />
+        <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 8px;">Reason</h3>
+        <p style="margin:0;font-size:14px;color:#1f2937;line-height:1.6;white-space:pre-wrap;">${reason || "(none provided)"}</p>
+      </div>
+    </div>`;
+
+  const userHtml = `
+    <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 20px;">
+      <div style="text-align:center;margin-bottom:24px;"><h1 style="color:#2d7abf;font-size:26px;margin:0;">Travnr</h1></div>
+      <h2 style="font-size:20px;color:#1a1a2e;margin:0 0 12px;">We received your refund request</h2>
+      <p style="color:#555;font-size:15px;line-height:1.6;">
+        Thanks${user.firstName ? `, ${user.firstName}` : ""}. Your refund request for booking
+        ${payment.duffelBookingRef ? `<strong>${payment.duffelBookingRef}</strong>` : `payment #${payment.id}`}
+        (${amountLine}) has been received. A member of our team will reply within one business day.
+      </p>
+      <p style="color:#999;font-size:12px;margin-top:24px;">Travnr · hello@travnr.com</p>
+    </div>`;
+
+  try {
+    await sgMail.send({
+      to: ["hello@travnr.com"],
+      from: { email: fromEmail, name: "Travnr Refunds" },
+      replyTo: user.email,
+      subject: `Refund request — ${user.email} — ${amountLine}`,
+      html: adminHtml,
+    });
+  } catch (err) {
+    console.error("Failed to send refund admin email:", err);
+  }
+  try {
+    await sgMail.send({
+      to: user.email,
+      from: { email: fromEmail, name: "Travnr" },
+      subject: "We received your refund request",
+      html: userHtml,
+    });
+  } catch (err) {
+    console.error("Failed to send refund customer email:", err);
+  }
+}
+
+async function createCalendarEntriesFromOrder(args: {
+  userId: string;
+  paymentId: number;
+  proposalId?: number | null;
+  orderData: any;
+}) {
+  const { userId, paymentId, proposalId, orderData } = args;
+  const slices = orderData?.slices || [];
+  const bookingRef = orderData?.booking_reference || "";
+  for (let i = 0; i < slices.length; i++) {
+    const slice = slices[i];
+    const firstSeg = slice?.segments?.[0];
+    const dateStr = (firstSeg?.departing_at || "").substring(0, 10);
+    if (!dateStr) continue;
+    const orig = slice?.origin?.iata_code || slice?.origin?.city_name || "";
+    const dest = slice?.destination?.iata_code || slice?.destination?.city_name || "";
+    const entryType = i === 0 ? "departure" : "return";
+    try {
+      await storage.createCalendarEntry({
+        userId,
+        paymentId,
+        proposalId: proposalId ?? null,
+        entryType,
+        date: dateStr,
+        label: `${orig} → ${dest}`,
+        details: {
+          bookingRef,
+          departingAt: firstSeg?.departing_at || null,
+          arrivingAt: slice?.segments?.[slice.segments.length - 1]?.arriving_at || null,
+          carrier: firstSeg?.marketing_carrier?.name || null,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to create calendar entry:", err);
+    }
+  }
+}
+
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.session?.userId) {
     return next();
@@ -727,6 +922,64 @@ export async function registerRoutes(
     }
   });
 
+  // REFUND REQUESTS
+  app.post("/api/payments/:id/refund-request", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const reason = (req.body?.reason || "").toString().slice(0, 2000);
+      const payment = await storage.getPayment(id);
+      if (!payment || payment.userId !== req.session.userId!) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+      if (payment.status !== "paid") {
+        return res.status(400).json({ message: "Only paid bookings can be refunded" });
+      }
+      if (payment.refundStatus === "requested" || payment.refundStatus === "approved") {
+        return res.status(400).json({ message: "A refund has already been requested for this booking" });
+      }
+
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "User not found" });
+
+      const updated = await storage.updatePayment(id, {
+        refundStatus: "requested",
+        refundRequestedAt: new Date(),
+        refundReason: reason || null,
+      });
+
+      await storage.createNotification({
+        userId: req.session.userId!,
+        type: "refund_requested",
+        title: "Refund request received",
+        body: `Your refund request for booking ${payment.duffelBookingRef || `#${payment.id}`} was submitted. We'll be in touch shortly.`,
+        linkUrl: `/billing`,
+      });
+
+      sendRefundRequestEmails({
+        user: { email: user.email, firstName: user.firstName, lastName: user.lastName },
+        payment: {
+          id: payment.id,
+          amount: payment.amount,
+          currency: payment.currency,
+          duffelBookingRef: payment.duffelBookingRef,
+          duffelOrderId: payment.duffelOrderId,
+        },
+        reason,
+      }).catch((e) => console.error("refund email error:", e));
+
+      return res.json({ payment: updated });
+    } catch (err: any) {
+      console.error("Refund request error:", err);
+      return res.status(500).json({ message: err.message || "Failed to submit refund request" });
+    }
+  });
+
+  // CALENDAR ENTRIES
+  app.get("/api/calendar-entries", isAuthenticated, async (req: Request, res: Response) => {
+    const entries = await storage.getCalendarEntries(req.session.userId!);
+    return res.json(entries);
+  });
+
   // TRIPS (booked flights with Duffel order details)
   app.get("/api/trips", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -981,6 +1234,27 @@ export async function registerRoutes(
         linkUrl: `/billing`,
       });
 
+      await createCalendarEntriesFromOrder({
+        userId: req.session.userId!,
+        paymentId: payment.id,
+        proposalId: null,
+        orderData,
+      });
+
+      sendBookingConfirmationEmail(user.email, {
+        firstName: user.firstName,
+        bookingReference: orderData.booking_reference,
+        amount: orderData.total_amount || fullOffer.total_amount,
+        currency: orderData.total_currency || fullOffer.total_currency || "usd",
+        slices: (orderData.slices || []).map((s: any) => ({
+          origin: { iata: s.origin?.iata_code, city: s.origin?.city_name, name: s.origin?.name },
+          destination: { iata: s.destination?.iata_code, city: s.destination?.city_name, name: s.destination?.name },
+          departingAt: s.segments?.[0]?.departing_at,
+          arrivingAt: s.segments?.[s.segments.length - 1]?.arriving_at,
+        })),
+        passengers: orderData.passengers,
+      }).catch((e) => console.error("booking email error:", e));
+
       return res.json({
         booking: {
           payment,
@@ -1062,6 +1336,7 @@ export async function registerRoutes(
         })),
         passengers: offer.passengers,
         passengerIdentityDocumentsRequired: offer.passenger_identity_documents_required ?? false,
+        enrichment: enrichOfferDetails(offer),
       }));
 
       return res.json({ offers: simplified });
@@ -1135,6 +1410,7 @@ export async function registerRoutes(
           })),
         })),
         passengers: best.passengers,
+        enrichment: enrichOfferDetails(best),
       };
       return res.json({ offer: simplified });
     } catch (err: any) {
@@ -1383,6 +1659,27 @@ export async function registerRoutes(
         body: `Your flight for "${proposal.title}" has been booked. Reference: ${result.bookingReference}`,
         linkUrl: `/proposals/${proposalId}`,
       });
+
+      await createCalendarEntriesFromOrder({
+        userId: req.session.userId!,
+        paymentId: payment.id,
+        proposalId,
+        orderData,
+      });
+
+      sendBookingConfirmationEmail(user.email, {
+        firstName: user.firstName,
+        bookingReference: orderData.booking_reference,
+        amount: orderData.total_amount || amount,
+        currency: orderData.total_currency || currency || "usd",
+        slices: (orderData.slices || []).map((s: any) => ({
+          origin: { iata: s.origin?.iata_code, city: s.origin?.city_name, name: s.origin?.name },
+          destination: { iata: s.destination?.iata_code, city: s.destination?.city_name, name: s.destination?.name },
+          departingAt: s.segments?.[0]?.departing_at,
+          arrivingAt: s.segments?.[s.segments.length - 1]?.arriving_at,
+        })),
+        passengers: orderData.passengers,
+      }).catch((e) => console.error("booking email error:", e));
 
       return res.json({ bookings: [result] });
     } catch (err: any) {
@@ -2289,6 +2586,7 @@ export async function registerRoutes(
           })),
         })),
         passengers: offer.passengers,
+        enrichment: enrichOfferDetails(offer),
       });
 
       const simplified = simplifyOffer(bestOffer);

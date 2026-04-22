@@ -123,6 +123,21 @@ export const payments = pgTable("payments", {
   amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
   currency: text("currency").default("usd").notNull(),
   status: paymentStatusEnum("status").default("unpaid").notNull(),
+  refundStatus: text("refund_status"),
+  refundRequestedAt: timestamp("refund_requested_at"),
+  refundReason: text("refund_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const calendarEntries = pgTable("calendar_entries", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id),
+  paymentId: integer("payment_id").references(() => payments.id),
+  proposalId: integer("proposal_id").references(() => itineraryProposals.id),
+  entryType: text("entry_type").notNull(),
+  date: text("date").notNull(),
+  label: text("label").notNull(),
+  details: jsonb("details"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -220,6 +235,7 @@ export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true,
 export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({ id: true, createdAt: true });
 export const insertSavedCardSchema = createInsertSchema(savedCards).omit({ id: true, createdAt: true });
 export const insertBlandCallSchema = createInsertSchema(blandCalls).omit({ id: true, createdAt: true });
+export const insertCalendarEntrySchema = createInsertSchema(calendarEntries).omit({ id: true, createdAt: true });
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -241,3 +257,5 @@ export type SavedCard = typeof savedCards.$inferSelect;
 export type InsertSavedCard = z.infer<typeof insertSavedCardSchema>;
 export type BlandCall = typeof blandCalls.$inferSelect;
 export type InsertBlandCall = z.infer<typeof insertBlandCallSchema>;
+export type CalendarEntry = typeof calendarEntries.$inferSelect;
+export type InsertCalendarEntry = z.infer<typeof insertCalendarEntrySchema>;

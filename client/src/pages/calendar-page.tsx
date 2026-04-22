@@ -5,8 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
-import { ChevronLeft, ChevronRight, MapPin } from "lucide-react";
-import type { CallRequest, ItineraryProposal } from "@shared/schema";
+import { ChevronLeft, ChevronRight, MapPin, Plane } from "lucide-react";
+import type { CallRequest, ItineraryProposal, CalendarEntry } from "@shared/schema";
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -28,6 +28,9 @@ export default function CalendarPage() {
   const { data: proposals, isLoading: loadingProposals } = useQuery<ItineraryProposal[]>({
     queryKey: ["/api/proposals"],
   });
+  const { data: calendarEntries } = useQuery<CalendarEntry[]>({
+    queryKey: ["/api/calendar-entries"],
+  });
 
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfWeek(year, month);
@@ -41,6 +44,12 @@ export default function CalendarPage() {
       if (!c.dateFrom || !c.dateTo) return false;
       return dateStr >= c.dateFrom && dateStr <= c.dateTo;
     });
+  };
+
+  const getEntriesForDay = (day: number) => {
+    if (!calendarEntries) return [];
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return calendarEntries.filter((e) => e.date === dateStr);
   };
 
   const isToday = (day: number) =>
@@ -93,6 +102,12 @@ export default function CalendarPage() {
                     {day}
                   </span>
                   <div className="mt-0.5 space-y-0.5">
+                    {getEntriesForDay(day).slice(0, 2).map((entry) => (
+                      <div key={entry.id} className="text-[9px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded px-1 py-0.5 truncate flex items-center gap-0.5" data-testid={`calendar-entry-${entry.id}`}>
+                        <Plane className="w-2 h-2 shrink-0" />
+                        <span className="truncate">{entry.label}</span>
+                      </div>
+                    ))}
                     {trips.slice(0, 2).map((trip) => (
                       <div key={trip.id} className="text-[9px] bg-primary/10 text-primary rounded px-1 py-0.5 truncate">
                         {trip.destination}
@@ -108,6 +123,36 @@ export default function CalendarPage() {
           </div>
         )}
       </Card>
+
+      {calendarEntries && calendarEntries.length > 0 && (
+        <div>
+          <h2 className="font-semibold mb-3">Booked Flights</h2>
+          <div className="space-y-3">
+            {calendarEntries
+              .slice()
+              .sort((a, b) => a.date.localeCompare(b.date))
+              .map((entry) => {
+                const details = (entry.details as any) || {};
+                return (
+                  <Card key={entry.id} className="p-4" data-testid={`card-booked-flight-${entry.id}`}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Plane className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="font-medium">{entry.label}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {entry.entryType === "return" ? "Return" : "Departure"}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {entry.date}
+                      {details.carrier ? ` · ${details.carrier}` : ""}
+                      {details.bookingRef ? ` · Ref ${details.bookingRef}` : ""}
+                    </p>
+                  </Card>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
       {upcomingTrips.length > 0 && (
         <div>

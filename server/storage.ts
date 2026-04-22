@@ -3,11 +3,13 @@ import { db } from "./db";
 import {
   users, travelerProfiles, callRequests, itineraryProposals,
   proposalItems, notifications, payments, callbackRequests, savedCards, blandCalls,
+  calendarEntries,
   type User, type InsertUser, type TravelerProfile, type InsertTravelerProfile,
   type CallRequest, type InsertCallRequest, type ItineraryProposal, type InsertProposal,
   type ProposalItem, type InsertProposalItem, type Notification, type InsertNotification,
   type Payment, type InsertPayment, type CallbackRequest, type InsertCallbackRequest,
   type SavedCard, type InsertSavedCard, type BlandCall, type InsertBlandCall,
+  type CalendarEntry, type InsertCalendarEntry,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -44,10 +46,15 @@ export interface IStorage {
   markAllNotificationsRead(userId: string): Promise<void>;
 
   getPayments(userId: string): Promise<Payment[]>;
+  getPayment(id: number): Promise<Payment | undefined>;
   getPaymentsByProposal(proposalId: number): Promise<Payment[]>;
   getPaymentByStripeIntentId(intentId: string): Promise<Payment | undefined>;
   createPayment(data: InsertPayment): Promise<Payment>;
   updatePayment(id: number, data: Partial<Payment>): Promise<Payment | undefined>;
+
+  getCalendarEntries(userId: string): Promise<CalendarEntry[]>;
+  getCalendarEntriesByPayment(paymentId: number): Promise<CalendarEntry[]>;
+  createCalendarEntry(data: InsertCalendarEntry): Promise<CalendarEntry>;
 
   createCallbackRequest(data: InsertCallbackRequest): Promise<CallbackRequest>;
   getCallbackRequestsByEmail(email: string): Promise<CallbackRequest[]>;
@@ -202,6 +209,24 @@ export class DatabaseStorage implements IStorage {
 
   async getPayments(userId: string): Promise<Payment[]> {
     return db.select().from(payments).where(eq(payments.userId, userId)).orderBy(desc(payments.createdAt));
+  }
+
+  async getPayment(id: number): Promise<Payment | undefined> {
+    const [p] = await db.select().from(payments).where(eq(payments.id, id));
+    return p;
+  }
+
+  async getCalendarEntries(userId: string): Promise<CalendarEntry[]> {
+    return db.select().from(calendarEntries).where(eq(calendarEntries.userId, userId)).orderBy(desc(calendarEntries.date));
+  }
+
+  async getCalendarEntriesByPayment(paymentId: number): Promise<CalendarEntry[]> {
+    return db.select().from(calendarEntries).where(eq(calendarEntries.paymentId, paymentId));
+  }
+
+  async createCalendarEntry(data: InsertCalendarEntry): Promise<CalendarEntry> {
+    const [entry] = await db.insert(calendarEntries).values(data).returning();
+    return entry;
   }
 
   async getPaymentsByProposal(proposalId: number): Promise<Payment[]> {

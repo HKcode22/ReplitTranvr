@@ -4,12 +4,17 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { CreditCard, Receipt, DollarSign, Hash, Plus, Trash2, Star, Loader2, Shield } from "lucide-react";
+import { CreditCard, Receipt, DollarSign, Hash, Plus, Trash2, Star, Loader2, Shield, Undo2 } from "lucide-react";
 import type { Payment, SavedCard } from "@shared/schema";
 
 function detectCardBrand(number: string): string {
@@ -88,6 +93,28 @@ export default function BillingPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/saved-cards"] });
       toast({ title: "Card removed" });
+    },
+  });
+
+  const [refundPayment, setRefundPayment] = useState<Payment | null>(null);
+  const [refundReason, setRefundReason] = useState("");
+
+  const refundMutation = useMutation({
+    mutationFn: async (args: { id: number; reason: string }) => {
+      const res = await apiRequest("POST", `/api/payments/${args.id}/refund-request`, { reason: args.reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+      setRefundPayment(null);
+      setRefundReason("");
+      toast({ title: "Refund request sent", description: "We've emailed our team. You'll hear back shortly." });
+    },
+    onError: (err: any) => {
+      const raw = err.message?.replace(/^\d+:\s*/, "") || "Refund request failed";
+      let msg = raw;
+      try { const parsed = JSON.parse(raw); msg = parsed.message || raw; } catch {}
+      toast({ title: "Could not submit refund", description: msg, variant: "destructive" });
     },
   });
 
@@ -319,27 +346,89 @@ export default function BillingPage() {
             <p className="text-sm text-muted-foreground">Payments for booked flights and approved itineraries will appear here.</p>
           </Card>
         ) : (
+          <>
           <div className="space-y-3">
-            {payments.map((payment) => (
-              <Card key={payment.id} className="p-4" data-testid={`card-payment-${payment.id}`}>
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Receipt className="w-4 h-4 text-primary" />
+            {payments.map((payment) => {
+              const refunded = payment.refundStatus === "approved";
+              const refundPending = payment.refundStatus === "requested";
+              const canRequestRefund = payment.status === "paid" && !payment.refundStatus;
+              return (
+                <Card key={payment.id} className="p-4" data-testid={`card-payment-${payment.id}`}>
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Receipt className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">${Number(payment.amount).toLocaleString()} {payment.currency.toUpperCase()}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {payment.duffelBookingRef ? `Ref: ${payment.duffelBookingRef}` : payment.proposalId ? `Proposal #${payment.proposalId}` : "Direct booking"}
+                          {" "}&middot; {new Date(payment.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">${Number(payment.amount).toLocaleString()} {payment.currency.toUpperCase()}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {payment.duffelBookingRef ? `Ref: ${payment.duffelBookingRef}` : payment.proposalId ? `Proposal #${payment.proposalId}` : "Direct booking"}
-                        {" "}&middot; {new Date(payment.createdAt).toLocaleDateString()}
-                      </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <StatusBadge status={payment.status} />
+                      {refundPending && <Badge variant="outline" className="text-xs" data-testid={`badge-refund-pending-${payment.id}`}>Refund pending</Badge>}
+                      {refunded && <Badge variant="secondary" className="text-xs">Refunded</Badge>}
+                      {canRequestRefund && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { setRefundPayment(payment); setRefundReason(""); }}
+                          data-testid={`button-request-refund-${payment.id}`}
+                        >
+                          <Undo2 className="w-3 h-3 mr-1" /> Request Refund
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  <StatusBadge status={payment.status} />
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
+
+          <AlertDialog open={!!refundPayment} onOpenChange={(open) => !open && setRefundPayment(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Request a refund</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {refundPayment && (
+                    <>
+                      We'll email our team about your booking
+                      {refundPayment.duffelBookingRef ? <> <strong>{refundPayment.duffelBookingRef}</strong></> : <> #{refundPayment.id}</>}
+                      {" "}for ${Number(refundPayment.amount).toLocaleString()} {refundPayment.currency.toUpperCase()}. Refunds are processed manually and depend on the airline's policy.
+                    </>
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Reason (optional)</label>
+                <Textarea
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  placeholder="Let us know why you're requesting a refund..."
+                  rows={4}
+                  data-testid="input-refund-reason"
+                />
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-refund">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (refundPayment) refundMutation.mutate({ id: refundPayment.id, reason: refundReason });
+                  }}
+                  disabled={refundMutation.isPending}
+                  data-testid="button-confirm-refund"
+                >
+                  {refundMutation.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+                  Submit Request
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          </>
         )}
       </div>
     </div>
