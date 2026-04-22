@@ -369,9 +369,18 @@ export default function BillingPage() {
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <StatusBadge status={payment.status} />
-                      {refundPending && <Badge variant="outline" className="text-xs" data-testid={`badge-refund-pending-${payment.id}`}>Refund pending</Badge>}
-                      {refunded && <Badge variant="secondary" className="text-xs">Refunded</Badge>}
-                      {canRequestRefund && (
+                      {refunded ? (
+                        <Badge variant="secondary" className="text-xs">Refunded</Badge>
+                      ) : refundPending ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          data-testid={`button-refund-requested-${payment.id}`}
+                        >
+                          <Undo2 className="w-3 h-3 mr-1" /> Refund Requested
+                        </Button>
+                      ) : canRequestRefund ? (
                         <Button
                           variant="outline"
                           size="sm"
@@ -380,7 +389,7 @@ export default function BillingPage() {
                         >
                           <Undo2 className="w-3 h-3 mr-1" /> Request Refund
                         </Button>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </Card>

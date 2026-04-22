@@ -6,13 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/status-badge";
 import { Phone, FileText, CalendarDays, ArrowRight, MapPin, Sparkles, Bell, Plane } from "lucide-react";
-import type { CallRequest, ItineraryProposal } from "@shared/schema";
+import type { CallRequest, ItineraryProposal, CalendarEntry } from "@shared/schema";
 
 export default function DashboardPage() {
   const { user } = useAuth();
 
   const { data: callRequests, isLoading: loadingCalls } = useQuery<CallRequest[]>({
     queryKey: ["/api/call-requests"],
+  });
+  const { data: calendarEntries } = useQuery<CalendarEntry[]>({
+    queryKey: ["/api/calendar-entries"],
   });
   const { data: proposals, isLoading: loadingProposals } = useQuery<ItineraryProposal[]>({
     queryKey: ["/api/proposals"],
@@ -127,6 +130,48 @@ export default function DashboardPage() {
           </Card>
         )}
       </div>
+
+      {(() => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const upcomingFlights = (calendarEntries || [])
+          .filter((e) => e.date >= todayStr)
+          .sort((a, b) => a.date.localeCompare(b.date))
+          .slice(0, 3);
+        if (upcomingFlights.length === 0) return null;
+        return (
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+              <h2 className="font-semibold text-lg">Upcoming Booked Flights</h2>
+              <Link href="/trips">
+                <Button variant="ghost" size="sm" data-testid="link-view-trips">
+                  My Trips <ArrowRight className="w-3 h-3 ml-1" />
+                </Button>
+              </Link>
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {upcomingFlights.map((entry) => {
+                const details = (entry.details as { bookingRef?: string; carrier?: string } | null) || {};
+                return (
+                  <Link key={entry.id} href="/trips">
+                    <Card className="p-4 hover-elevate cursor-pointer h-full" data-testid={`card-booked-flight-${entry.id}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-7 h-7 rounded-md bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+                          <Plane className="w-3.5 h-3.5 text-emerald-700 dark:text-emerald-300" />
+                        </div>
+                        <span className="font-medium truncate">{entry.label}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{entry.date}</p>
+                      {details.bookingRef && (
+                        <p className="text-xs text-muted-foreground mt-1 font-mono">Ref {details.bookingRef}</p>
+                      )}
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       <div>
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">

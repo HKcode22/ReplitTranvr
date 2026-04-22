@@ -289,23 +289,50 @@ function NoFlightsCard({ item }: { item: ProposalItem }) {
   );
 }
 
-function FlightDetailsCollapsible({ enrichment, itemId }: { enrichment: any; itemId: number }) {
-  const [open, setOpen] = useState(false);
-  const cabin = enrichment.cabinClass;
-  const baggage = enrichment.baggage;
-  const conditions = enrichment.conditions || {};
-  const refundBefore = conditions.refundBeforeDeparture;
-  const changeBefore = conditions.changeBeforeDeparture;
-
-  const fmtCondition = (c: any) => {
-    if (!c) return "Not available";
-    if (c.allowed === false) return "Not allowed";
-    if (c.allowed === true) {
-      const fee = c.penaltyAmount ? ` (fee: ${c.penaltyAmount} ${c.penaltyCurrency || ""})` : " (no fee)";
-      return `Allowed${fee}`;
-    }
-    return "Subject to airline policy";
+interface BaggageAllowance {
+  type: string;
+  quantity: number;
+  weightValue?: number | null;
+  weightUnit?: string | null;
+}
+interface FareCondition {
+  allowed: boolean | null;
+  penaltyAmount: string | null;
+  penaltyCurrency: string | null;
+  description: string;
+}
+interface OfferEnrichment {
+  cabinClass: string | null;
+  fareBrand: string | null;
+  baggage: BaggageAllowance[];
+  baggageSummary: string;
+  seatSelection: {
+    available: boolean | null;
+    feeAmount: string | null;
+    feeCurrency: string | null;
+    description: string;
   };
+  conditions: {
+    changeBeforeDeparture: FareCondition;
+    refundBeforeDeparture: FareCondition;
+    refundable: boolean | null;
+  };
+  fareConditionsText: string[];
+}
+
+function fmtCondition(c: FareCondition | null | undefined): string {
+  if (!c) return "Subject to airline policy";
+  if (c.description) return c.description.split(":").slice(1).join(":").trim() || c.description;
+  if (c.allowed === false) return "Not allowed";
+  if (c.allowed === true) {
+    return c.penaltyAmount ? `Allowed (fee: ${c.penaltyAmount} ${c.penaltyCurrency || ""})` : "Allowed (no fee)";
+  }
+  return "Subject to airline policy";
+}
+
+function FlightDetailsCollapsible({ enrichment, itemId }: { enrichment: OfferEnrichment; itemId: number }) {
+  const [open, setOpen] = useState(false);
+  const { cabinClass, fareBrand, baggage, seatSelection, conditions, fareConditionsText } = enrichment;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="mt-3">
@@ -319,32 +346,52 @@ function FlightDetailsCollapsible({ enrichment, itemId }: { enrichment: any; ite
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-2">
         <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2 text-sm" data-testid={`flight-details-${itemId}`}>
-          {cabin && (
+          {cabinClass && (
             <div className="flex justify-between gap-3">
               <span className="text-muted-foreground">Cabin</span>
-              <span className="font-medium capitalize">{String(cabin).replace(/_/g, " ")}</span>
+              <span className="font-medium capitalize">{cabinClass.replace(/_/g, " ")}{fareBrand ? ` · ${fareBrand}` : ""}</span>
             </div>
           )}
           {Array.isArray(baggage) && baggage.length > 0 && (
-            <div className="flex justify-between gap-3">
+            <div className="space-y-1">
               <span className="text-muted-foreground">Baggage</span>
-              <span className="font-medium text-right">
-                {baggage
-                  .map((b: any) => `${(b.type || "bag").replace(/_/g, " ")}: ${b.quantity ?? 0}`)
-                  .join(" · ")}
-              </span>
+              <ul className="ml-4 list-disc space-y-0.5">
+                {baggage.map((b, i) => (
+                  <li key={i}>
+                    {b.quantity}× <span className="capitalize">{b.type.replace(/_/g, " ")}</span>
+                    {b.weightValue ? ` up to ${b.weightValue}${b.weightUnit || "kg"}` : ""}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           <div className="flex justify-between gap-3">
-            <span className="text-muted-foreground">Refund before departure</span>
-            <span className="font-medium text-right">{fmtCondition(refundBefore)}</span>
+            <span className="text-muted-foreground">Refundable</span>
+            <span className="font-medium text-right">{fmtCondition(conditions?.refundBeforeDeparture)}</span>
           </div>
           <div className="flex justify-between gap-3">
-            <span className="text-muted-foreground">Change before departure</span>
-            <span className="font-medium text-right">{fmtCondition(changeBefore)}</span>
+            <span className="text-muted-foreground">Changes before departure</span>
+            <span className="font-medium text-right">{fmtCondition(conditions?.changeBeforeDeparture)}</span>
           </div>
-          {enrichment.note && (
-            <p className="text-xs text-muted-foreground pt-1 border-t border-border">{enrichment.note}</p>
+          {seatSelection && (
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Seat selection</span>
+              <span className="font-medium text-right">
+                {seatSelection.available === true
+                  ? `Available${seatSelection.feeAmount ? ` from ${seatSelection.feeAmount} ${seatSelection.feeCurrency || ""}` : " (free)"}`
+                  : seatSelection.available === false
+                  ? "Not offered for this fare"
+                  : "Available at check-in"}
+              </span>
+            </div>
+          )}
+          {Array.isArray(fareConditionsText) && fareConditionsText.length > 0 && (
+            <div className="pt-2 border-t border-border">
+              <p className="text-xs text-muted-foreground mb-1">Fare conditions</p>
+              <ul className="text-xs text-muted-foreground space-y-0.5 list-disc ml-4">
+                {fareConditionsText.map((t, i) => <li key={i}>{t}</li>)}
+              </ul>
+            </div>
           )}
         </div>
       </CollapsibleContent>

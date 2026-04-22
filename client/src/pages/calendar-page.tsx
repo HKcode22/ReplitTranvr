@@ -103,10 +103,15 @@ export default function CalendarPage() {
                   </span>
                   <div className="mt-0.5 space-y-0.5">
                     {getEntriesForDay(day).slice(0, 2).map((entry) => (
-                      <div key={entry.id} className="text-[9px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded px-1 py-0.5 truncate flex items-center gap-0.5" data-testid={`calendar-entry-${entry.id}`}>
-                        <Plane className="w-2 h-2 shrink-0" />
-                        <span className="truncate">{entry.label}</span>
-                      </div>
+                      <Link key={entry.id} href="/trips">
+                        <div
+                          className="text-[9px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded px-1 py-0.5 truncate flex items-center gap-0.5 cursor-pointer hover-elevate"
+                          data-testid={`calendar-entry-${entry.id}`}
+                        >
+                          <Plane className="w-2 h-2 shrink-0" />
+                          <span className="truncate">{entry.label}</span>
+                        </div>
+                      </Link>
                     ))}
                     {trips.slice(0, 2).map((trip) => (
                       <div key={trip.id} className="text-[9px] bg-primary/10 text-primary rounded px-1 py-0.5 truncate">

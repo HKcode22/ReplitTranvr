@@ -188,31 +188,116 @@ async function sendBookingFailureAlert(context: {
   }
 }
 
-function enrichOfferDetails(offer: any) {
+export interface BaggageAllowance {
+  type: string;
+  quantity: number;
+  weightValue?: number | null;
+  weightUnit?: string | null;
+}
+
+export interface FareCondition {
+  allowed: boolean | null;
+  penaltyAmount: string | null;
+  penaltyCurrency: string | null;
+  description: string;
+}
+
+export interface OfferEnrichment {
+  cabinClass: string | null;
+  fareBrand: string | null;
+  baggage: BaggageAllowance[];
+  baggageSummary: string;
+  seatSelection: {
+    available: boolean | null;
+    feeAmount: string | null;
+    feeCurrency: string | null;
+    description: string;
+  };
+  conditions: {
+    changeBeforeDeparture: FareCondition;
+    refundBeforeDeparture: FareCondition;
+    refundable: boolean | null;
+  };
+  fareConditionsText: string[];
+  paymentRequirements: {
+    requiresInstantPayment: boolean | null;
+    paymentRequiredBy: string | null;
+  } | null;
+  owner: { name: string | null; iata: string | null } | null;
+}
+
+function describeCondition(c: any, label: string): FareCondition {
+  if (!c) return { allowed: null, penaltyAmount: null, penaltyCurrency: null, description: `${label}: subject to airline policy` };
+  if (c.allowed === false) return { allowed: false, penaltyAmount: null, penaltyCurrency: null, description: `${label}: not allowed` };
+  if (c.allowed === true) {
+    const fee = c.penalty_amount ? ` for a fee of ${c.penalty_amount} ${c.penalty_currency || ""}` : " with no fee";
+    return { allowed: true, penaltyAmount: c.penalty_amount || null, penaltyCurrency: c.penalty_currency || null, description: `${label}: allowed${fee}` };
+  }
+  return { allowed: null, penaltyAmount: null, penaltyCurrency: null, description: `${label}: subject to airline policy` };
+}
+
+function enrichOfferDetails(offer: any): OfferEnrichment | null {
   if (!offer) return null;
   const firstSlice = offer.slices?.[0];
   const firstSeg = firstSlice?.segments?.[0];
   const firstPax = firstSeg?.passengers?.[0];
 
-  const baggageSummary: { type: string; quantity: number }[] = [];
-  if (firstPax?.baggages) {
+  const baggage: BaggageAllowance[] = [];
+  if (Array.isArray(firstPax?.baggages)) {
     for (const b of firstPax.baggages) {
-      baggageSummary.push({ type: b.type, quantity: b.quantity });
+      baggage.push({
+        type: b.type || "bag",
+        quantity: b.quantity ?? 0,
+        weightValue: b.weight_value ?? null,
+        weightUnit: b.weight_unit ?? null,
+      });
     }
   }
+  const baggageSummary = baggage.length
+    ? baggage.map(b => {
+        const wt = b.weightValue ? ` up to ${b.weightValue}${b.weightUnit || "kg"}` : "";
+        return `${b.quantity}× ${b.type.replace(/_/g, " ")}${wt}`;
+      }).join(", ")
+    : "See airline policy";
+
+  const seatService = Array.isArray(offer.available_services)
+    ? offer.available_services.find((s: any) => s.type === "seat")
+    : null;
+  const seatSelection = {
+    available: seatService ? true : (offer.available_services ? false : null),
+    feeAmount: seatService?.total_amount || null,
+    feeCurrency: seatService?.total_currency || null,
+    description: seatService
+      ? `Seat selection available${seatService.total_amount ? ` from ${seatService.total_amount} ${seatService.total_currency || ""}` : ""}`
+      : (offer.available_services ? "Seat selection not offered for this fare" : "Seat selection details available at check-in"),
+  };
+
+  const change = describeCondition(offer.conditions?.change_before_departure, "Changes before departure");
+  const refund = describeCondition(offer.conditions?.refund_before_departure, "Refunds before departure");
+
+  const fareConditionsText: string[] = [];
+  fareConditionsText.push(change.description);
+  fareConditionsText.push(refund.description);
+  fareConditionsText.push(seatSelection.description);
+  fareConditionsText.push(`Baggage: ${baggageSummary}`);
 
   return {
     cabinClass: firstPax?.cabin_class_marketing_name || firstPax?.cabin_class || null,
-    baggage: baggageSummary,
+    fareBrand: firstPax?.fare_basis_code || null,
+    baggage,
+    baggageSummary,
+    seatSelection,
     conditions: {
-      changeBeforeDeparture: offer.conditions?.change_before_departure || null,
-      refundBeforeDeparture: offer.conditions?.refund_before_departure || null,
+      changeBeforeDeparture: change,
+      refundBeforeDeparture: refund,
+      refundable: refund.allowed,
     },
+    fareConditionsText,
     paymentRequirements: offer.payment_requirements ? {
       requiresInstantPayment: offer.payment_requirements.requires_instant_payment ?? null,
       paymentRequiredBy: offer.payment_requirements.payment_required_by ?? null,
     } : null,
-    owner: offer.owner ? { name: offer.owner.name, iata: offer.owner.iata_code } : null,
+    owner: offer.owner ? { name: offer.owner.name || null, iata: offer.owner.iata_code || null } : null,
   };
 }
 
@@ -221,23 +306,39 @@ async function sendBookingConfirmationEmail(toEmail: string, data: {
   bookingReference: string;
   amount: string | number;
   currency: string;
+  cabinClass?: string | null;
   slices?: Array<{
     origin?: { iata?: string; city?: string; name?: string };
     destination?: { iata?: string; city?: string; name?: string };
     departingAt?: string;
     arrivingAt?: string;
+    carrierName?: string | null;
+    carrierIata?: string | null;
+    flightNumber?: string | null;
   }>;
   passengers?: Array<{ given_name?: string; family_name?: string }>;
 }) {
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
-  const slicesHtml = (data.slices || []).map((s) => {
+  const dashboardUrl = `${process.env.APP_BASE_URL || "https://travnr.com"}/calendar`;
+  const slices = data.slices || [];
+  const firstSlice = slices[0];
+  const lastSlice = slices[slices.length - 1] || firstSlice;
+  const routeLabel = firstSlice
+    ? `${firstSlice.origin?.iata || firstSlice.origin?.city || ""} → ${(slices.length > 1 ? lastSlice?.destination?.iata || lastSlice?.destination?.city : firstSlice.destination?.iata || firstSlice.destination?.city) || ""}`
+    : "your trip";
+  const dateLabel = firstSlice?.departingAt ? new Date(firstSlice.departingAt).toLocaleDateString([], { dateStyle: "long" } as any) : "your selected date";
+
+  const slicesHtml = slices.map((s) => {
     const dep = s.departingAt ? new Date(s.departingAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
     const arr = s.arrivingAt ? new Date(s.arrivingAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
+    const flightLabel = [s.carrierIata, s.flightNumber].filter(Boolean).join("");
+    const carrier = s.carrierName ? `${s.carrierName}${flightLabel ? ` · Flight ${flightLabel}` : ""}` : (flightLabel ? `Flight ${flightLabel}` : "");
     return `
       <tr>
-        <td style="padding:8px 0;color:#1a1a2e;">
+        <td style="padding:10px 0;color:#1a1a2e;border-bottom:1px solid #f1f1f4;">
           <strong>${s.origin?.iata || ""} ${s.origin?.city || s.origin?.name || ""}</strong>
           → <strong>${s.destination?.iata || ""} ${s.destination?.city || s.destination?.name || ""}</strong><br/>
+          ${carrier ? `<span style="color:#1a1a2e;font-size:13px;">${carrier}</span><br/>` : ""}
           <span style="color:#6b7280;font-size:13px;">Depart: ${dep}<br/>Arrive: ${arr}</span>
         </td>
       </tr>`;
@@ -251,29 +352,34 @@ async function sendBookingConfirmationEmail(toEmail: string, data: {
     await sgMail.send({
       to: toEmail,
       from: { email: fromEmail, name: "Travnr" },
-      subject: `Your flight is booked — Ref ${data.bookingReference}`,
+      subject: `Your booking is confirmed — ${routeLabel} on ${dateLabel}`,
       html: `
         <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 20px;">
           <div style="text-align:center;margin-bottom:24px;">
             <h1 style="color:#2d7abf;font-size:26px;margin:0;">Travnr</h1>
           </div>
-          <h2 style="font-size:20px;color:#1a1a2e;margin:0 0 12px;">Your flight is booked${data.firstName ? `, ${data.firstName}` : ""}!</h2>
+          <h2 style="font-size:20px;color:#1a1a2e;margin:0 0 12px;">Your booking is confirmed${data.firstName ? `, ${data.firstName}` : ""}!</h2>
           <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 16px;">
-            Your booking is confirmed. Reference number: <strong>${data.bookingReference}</strong>.
+            We've reserved <strong>${routeLabel}</strong> on <strong>${dateLabel}</strong>. Your booking reference is <strong>${data.bookingReference}</strong>.
           </p>
           <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin-bottom:18px;">
             <h3 style="margin:0 0 8px;font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Itinerary</h3>
             <table style="width:100%;border-collapse:collapse;font-size:14px;">${slicesHtml}</table>
+            ${data.cabinClass ? `<p style="margin:10px 0 0;font-size:13px;color:#6b7280;">Cabin: <span style="color:#1a1a2e;text-transform:capitalize;">${String(data.cabinClass).replace(/_/g, " ")}</span></p>` : ""}
           </div>
           ${paxList ? `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin-bottom:18px;"><h3 style="margin:0 0 8px;font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Passengers</h3><ul style="margin:0;padding-left:20px;color:#1a1a2e;">${paxList}</ul></div>` : ""}
           <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin-bottom:18px;">
             <h3 style="margin:0 0 8px;font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Total Charged</h3>
             <p style="margin:0;font-size:18px;font-weight:600;color:#1a1a2e;">${Number(data.amount).toLocaleString()} ${(data.currency || "USD").toUpperCase()}</p>
           </div>
+          <div style="text-align:center;margin:24px 0;">
+            <a href="${dashboardUrl}" style="display:inline-block;background:#2d7abf;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">View on your dashboard</a>
+          </div>
           <p style="color:#555;font-size:14px;line-height:1.6;">
-            Need to change or cancel? Reply to this email or visit your <a href="https://travnr.com/billing" style="color:#2d7abf;">billing page</a> to request a refund.
+            Need to make a change? Reply to this email and we'll take care of it.
           </p>
-          <p style="color:#999;font-size:12px;margin-top:24px;">Travnr · hello@travnr.com</p>
+          <p style="color:#1a1a2e;font-size:14px;line-height:1.6;margin-top:24px;">Safe travels,<br/>The Travnr team</p>
+          <p style="color:#999;font-size:12px;margin-top:16px;">Travnr · hello@travnr.com</p>
         </div>
       `,
     });
@@ -357,11 +463,17 @@ async function createCalendarEntriesFromOrder(args: {
   for (let i = 0; i < slices.length; i++) {
     const slice = slices[i];
     const firstSeg = slice?.segments?.[0];
+    const lastSeg = slice?.segments?.[slice.segments.length - 1];
     const dateStr = (firstSeg?.departing_at || "").substring(0, 10);
     if (!dateStr) continue;
-    const orig = slice?.origin?.iata_code || slice?.origin?.city_name || "";
-    const dest = slice?.destination?.iata_code || slice?.destination?.city_name || "";
-    const entryType = i === 0 ? "departure" : "return";
+    const origCity = slice?.origin?.city_name || slice?.origin?.iata_code || "";
+    const destCity = slice?.destination?.city_name || slice?.destination?.iata_code || "";
+    const carrierName = firstSeg?.marketing_carrier?.name || firstSeg?.operating_carrier?.name || "";
+    const entryType = slices.length > 1 && i === slices.length - 1 ? "return" : (i === 0 ? "departure" : "leg");
+    const label =
+      entryType === "return"
+        ? `Return flight from ${origCity} to ${destCity}`
+        : `${carrierName ? `${carrierName} flight` : "Flight"} to ${destCity}`;
     try {
       await storage.createCalendarEntry({
         userId,
@@ -369,12 +481,15 @@ async function createCalendarEntriesFromOrder(args: {
         proposalId: proposalId ?? null,
         entryType,
         date: dateStr,
-        label: `${orig} → ${dest}`,
+        label,
         details: {
           bookingRef,
           departingAt: firstSeg?.departing_at || null,
-          arrivingAt: slice?.segments?.[slice.segments.length - 1]?.arriving_at || null,
-          carrier: firstSeg?.marketing_carrier?.name || null,
+          arrivingAt: lastSeg?.arriving_at || null,
+          origin: origCity,
+          destination: destCity,
+          carrier: carrierName || null,
+          flightNumber: firstSeg?.marketing_carrier_flight_number || null,
         },
       });
     } catch (err) {
@@ -1246,11 +1361,17 @@ export async function registerRoutes(
         bookingReference: orderData.booking_reference,
         amount: orderData.total_amount || fullOffer.total_amount,
         currency: orderData.total_currency || fullOffer.total_currency || "usd",
+        cabinClass: fullOffer.slices?.[0]?.segments?.[0]?.passengers?.[0]?.cabin_class_marketing_name
+          || fullOffer.slices?.[0]?.segments?.[0]?.passengers?.[0]?.cabin_class
+          || null,
         slices: (orderData.slices || []).map((s: any) => ({
           origin: { iata: s.origin?.iata_code, city: s.origin?.city_name, name: s.origin?.name },
           destination: { iata: s.destination?.iata_code, city: s.destination?.city_name, name: s.destination?.name },
           departingAt: s.segments?.[0]?.departing_at,
           arrivingAt: s.segments?.[s.segments.length - 1]?.arriving_at,
+          carrierName: s.segments?.[0]?.marketing_carrier?.name || null,
+          carrierIata: s.segments?.[0]?.marketing_carrier?.iata_code || null,
+          flightNumber: s.segments?.[0]?.marketing_carrier_flight_number || null,
         })),
         passengers: orderData.passengers,
       }).catch((e) => console.error("booking email error:", e));
@@ -1672,11 +1793,17 @@ export async function registerRoutes(
         bookingReference: orderData.booking_reference,
         amount: orderData.total_amount || amount,
         currency: orderData.total_currency || currency || "usd",
+        cabinClass: orderData.slices?.[0]?.segments?.[0]?.passengers?.[0]?.cabin_class_marketing_name
+          || orderData.slices?.[0]?.segments?.[0]?.passengers?.[0]?.cabin_class
+          || null,
         slices: (orderData.slices || []).map((s: any) => ({
           origin: { iata: s.origin?.iata_code, city: s.origin?.city_name, name: s.origin?.name },
           destination: { iata: s.destination?.iata_code, city: s.destination?.city_name, name: s.destination?.name },
           departingAt: s.segments?.[0]?.departing_at,
           arrivingAt: s.segments?.[s.segments.length - 1]?.arriving_at,
+          carrierName: s.segments?.[0]?.marketing_carrier?.name || null,
+          carrierIata: s.segments?.[0]?.marketing_carrier?.iata_code || null,
+          flightNumber: s.segments?.[0]?.marketing_carrier_flight_number || null,
         })),
         passengers: orderData.passengers,
       }).catch((e) => console.error("booking email error:", e));
