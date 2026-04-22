@@ -1895,6 +1895,8 @@ export async function registerRoutes(
 
     console.log(`[post-call ${callRequestId}] starting proposal generation: hasTranscript=${!!transcript}, hasSummary=${!!summary}`);
 
+    let searchParamsLog: any = null;
+
     try {
       async function resolveAirport(query: string, preferUS: boolean): Promise<{code: string, name: string} | null> {
         try {
@@ -1956,14 +1958,21 @@ export async function registerRoutes(
       let originCode = "JFK";
       const profile = await storage.getProfile(userId);
 
+      let originSource = "default-JFK";
       if (details.origin) {
         const originResult = await resolveAirport(details.origin, isUSUser);
-        if (originResult) originCode = originResult.code;
+        if (originResult) {
+          originCode = originResult.code;
+          originSource = `parsed:"${details.origin}"`;
+        } else {
+          originSource = `parsed-but-unresolved:"${details.origin}"`;
+        }
       }
 
       if (originCode === "JFK" && !details.origin) {
         if (profile?.homeAirport) {
           originCode = profile.homeAirport;
+          originSource = "profile.homeAirport";
         } else if (profile?.nationality) {
           const nationalityToHub: Record<string, string> = {
             "US": "JFK", "GB": "LHR", "CA": "YYZ", "AU": "SYD", "DE": "FRA",
@@ -1971,12 +1980,17 @@ export async function registerRoutes(
             "IN": "DEL", "BR": "GRU", "MX": "MEX", "IT": "FCO", "ES": "MAD",
           };
           originCode = nationalityToHub[profile.nationality] || "JFK";
+          originSource = `nationality:${profile.nationality}`;
         }
       }
 
       if (originCode === destCode) {
+        const before = originCode;
         originCode = originCode === "JFK" ? "LAX" : "JFK";
+        originSource = `${originSource} -> override (collided with destCode ${before})`;
       }
+
+      console.log(`[post-call ${callRequestId}] resolved origin -> ${originCode} (source: ${originSource})`);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -2006,7 +2020,7 @@ export async function registerRoutes(
         slices.push({ origin: destCode, destination: originCode, departure_date: returnDate });
       }
 
-      const searchParamsLog = {
+      searchParamsLog = {
         origin: originCode,
         destination: destCode,
         departureDate,
@@ -2160,6 +2174,7 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error(
         `[post-call ${callRequestId}] Duffel search/proposal generation failed.`,
+        "\n  searchParams:", typeof searchParamsLog !== "undefined" ? JSON.stringify(searchParamsLog) : "(not yet built)",
         "\n  parsedDetails:", JSON.stringify(details),
         "\n  error:", JSON.stringify(err?.errors || err?.message || err, null, 2)
       );
