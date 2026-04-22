@@ -15,16 +15,18 @@ interface AirportSearchProps {
   value: string;
   onChange: (iataCode: string, place: AirportPlace | null) => void;
   placeholder?: string;
+  initialLabel?: string;
   "data-testid"?: string;
 }
 
-export function AirportSearch({ value, onChange, placeholder, "data-testid": testId }: AirportSearchProps) {
-  const [query, setQuery] = useState("");
-  const [displayValue, setDisplayValue] = useState("");
+export function AirportSearch({ value, onChange, placeholder, initialLabel, "data-testid": testId }: AirportSearchProps) {
+  const [query, setQuery] = useState(initialLabel || "");
+  const [displayValue, setDisplayValue] = useState(initialLabel || "");
   const [places, setPlaces] = useState<AirportPlace[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<AirportPlace | null>(null);
+  const [hasBootstrappedValue, setHasBootstrappedValue] = useState(!!initialLabel);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -64,6 +66,9 @@ export function AirportSearch({ value, onChange, placeholder, "data-testid": tes
 
     if (selectedPlace) {
       setSelectedPlace(null);
+      onChange("", null);
+    } else if (hasBootstrappedValue) {
+      setHasBootstrappedValue(false);
       onChange("", null);
     }
 

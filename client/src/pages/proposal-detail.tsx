@@ -237,7 +237,17 @@ function NoFlightsCard({ item }: { item: ProposalItem }) {
     ? `${sp.departureDate} to ${sp.returnDate}`
     : sp.departureDate;
 
-  const searchUrl = `/flight-search?origin=${sp.origin}&destination=${sp.destination}&date=${sp.departureDate}${sp.returnDate ? `&returnDate=${sp.returnDate}` : ""}&cabin=${sp.cabinClass || "economy"}&passengers=${sp.passengers || 1}`;
+  const searchParams = new URLSearchParams({
+    origin: sp.origin || "",
+    destination: sp.destination || "",
+    departureDate: sp.departureDate || "",
+    cabinClass: sp.cabinClass || "economy",
+    passengers: String(sp.passengers || 1),
+  });
+  if (sp.originName) searchParams.set("originName", sp.originName);
+  if (sp.destinationName) searchParams.set("destinationName", sp.destinationName);
+  if (sp.returnDate) searchParams.set("returnDate", sp.returnDate);
+  const searchUrl = `/flight-search?${searchParams.toString()}`;
 
   return (
     <Card className="p-5 border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">

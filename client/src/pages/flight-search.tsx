@@ -726,21 +726,31 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
 }
 
 export default function FlightSearchPage() {
+  const initialParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const initialOrigin = initialParams.get("origin") || "";
+  const initialDestination = initialParams.get("destination") || "";
+  const initialOriginName = initialParams.get("originName") || "";
+  const initialDestinationName = initialParams.get("destinationName") || "";
+  const initialPassengers = Math.max(1, Math.min(9, parseInt(initialParams.get("passengers") || "1", 10) || 1));
+
   const [offers, setOffers] = useState<any[]>([]);
-  const [originCode, setOriginCode] = useState("");
-  const [destCode, setDestCode] = useState("");
+  const [originCode, setOriginCode] = useState(initialOrigin);
+  const [destCode, setDestCode] = useState(initialDestination);
   const [selectedOffer, setSelectedOffer] = useState<any>(null);
-  const [passengerCount, setPassengerCount] = useState(1);
+  const [passengerCount, setPassengerCount] = useState(initialPassengers);
   const { toast } = useToast();
 
   const form = useForm<SearchFormValues>({
     resolver: zodResolver(searchSchema),
     defaultValues: {
-      departureDate: "",
-      returnDate: "",
-      cabinClass: "economy",
+      departureDate: initialParams.get("departureDate") || "",
+      returnDate: initialParams.get("returnDate") || "",
+      cabinClass: initialParams.get("cabinClass") || "economy",
     },
   });
+
+  const originLabel = initialOrigin ? `${initialOrigin}${initialOriginName ? ` - ${initialOriginName}` : ""}` : "";
+  const destLabel = initialDestination ? `${initialDestination}${initialDestinationName ? ` - ${initialDestinationName}` : ""}` : "";
 
   const searchMutation = useMutation({
     mutationFn: async (data: SearchFormValues) => {
@@ -802,6 +812,7 @@ export default function FlightSearchPage() {
                   value={originCode}
                   onChange={(code) => setOriginCode(code)}
                   placeholder="Search city or airport..."
+                  initialLabel={originLabel}
                   data-testid="input-origin"
                 />
               </div>
@@ -811,6 +822,7 @@ export default function FlightSearchPage() {
                   value={destCode}
                   onChange={(code) => setDestCode(code)}
                   placeholder="Search city or airport..."
+                  initialLabel={destLabel}
                   data-testid="input-destination"
                 />
               </div>
