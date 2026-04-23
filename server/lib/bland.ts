@@ -61,6 +61,7 @@ export interface DispatchCallOptions {
 export async function dispatchCall(opts: DispatchCallOptions): Promise<{ callId: string; status: string }> {
   const payload: any = {
     phone_number: opts.phoneNumber,
+    from: "+14159148074",
     task: opts.task,
     webhook: opts.webhookUrl,
     webhook_events: ["call.ended"],
