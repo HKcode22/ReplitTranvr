@@ -1,0 +1,51 @@
+Fix the admin dashboard data issues in `server/routes.ts`. The current `/api/admin/stats` and related endpoints are returning incorrect/incomplete data. Here's what needs to be fixed:
+
+## 1. Duffel Balance — fetch live from Duffel API
+In `GET /api/admin/stats`, replace whatever balance logic exists with a direct call to the Duffel balance endpoint:
+
+```typescript
+const balanceRes = await duffel.balance.get();
+const duffelBalance = {
+  amount: balanceRes.data.available_balance,
+  currency: balanceRes.data.currency
+};
+```
+If it throws, return `duffelBalance: null`.
+
+## 2. Real call data — fetch live from Bland AI
+Add a new endpoint `GET /api/admin/calls-live` that fetches recent calls directly from the Bland AI API:
+GET https://api.bland.ai/v1/calls
+Headers: { authorization: process.env.BLAND_AI_API_KEY }
+Query params: limit=50
+
+Return the raw call list. In the admin dashboard frontend, use this endpoint instead of `/api/admin/calls` for the Recent Calls section.
+
+Also in `GET /api/admin/stats`, fetch the total call count from Bland directly using the same endpoint and use `total_count` from the response for the Call Requests stat.
+
+## 3. Revenue — fix the query
+The revenue sum is wrong. Fix it to properly sum the `amount` column from the `payments` table where `status = 'paid'`. Make sure it handles null/empty cases and returns a proper number, not null or NaN. Use:
+
+```typescript
+const revenueResult = await db
+  .select({ total: sql<string>`COALESCE(SUM(amount), 0)` })
+  .from(payments)
+  .where(eq(payments.status, 'paid'));
+const totalRevenue = parseFloat(revenueResult[0]?.total || '0');
+```
+
+## 4. Bookings — check the query
+Make sure the bookings count includes ALL paid payments, not just ones with a duffelOrderId, since some may have been manually processed. Count all payments where status = 'paid'.
+
+## 5. Recent Bookings in the frontend
+In `client/src/pages/admin-dashboard.tsx`, the Recent Bookings section shows "No bookings yet" even when bookings exist. Make sure it's fetching from `/api/admin/bookings` and rendering correctly. Add a console.log temporarily to debug what the endpoint returns, or just ensure the table renders any payment with status 'paid' regardless of whether duffelOrderId exists.
+
+## 6. Fix the Recent Calls section in the frontend
+Update `client/src/pages/admin-dashboard.tsx` to:
+- Fetch from the new `/api/admin/calls-live` endpoint
+- Show: user email (from `metadata.userId` or `from` field in Bland response), phone number called, status, duration (in minutes), date
+- If the Bland API call fails, fall back to the DB calls
+
+## 7. Duffel Balance display
+In the stat card, if balance is unavailable show "Unavailable" in red. If available, show the amount formatted with currency. Add a yellow warning color if balance is under $200 (not $500).
+
+Make all these changes and ensure the admin dashboard reflects live, accurate data.
