@@ -136,6 +136,30 @@ export async function getCallRecording(callId: string): Promise<any> {
   return blandRequest("GET", `/calls/${callId}/recording`);
 }
 
+export interface BlandCallSummary {
+  call_id?: string;
+  to?: string;
+  from?: string;
+  status?: string;
+  call_length?: number;
+  created_at?: string;
+  ended_at?: string;
+  completed?: boolean;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface BlandCallsListResponse {
+  calls: BlandCallSummary[];
+  total_count?: number;
+}
+
+export async function listCalls(limit: number = 50): Promise<BlandCallsListResponse> {
+  const data = await blandRequest("GET", `/calls?limit=${encodeURIComponent(String(limit))}`);
+  const calls = Array.isArray(data?.calls) ? (data.calls as BlandCallSummary[]) : [];
+  const total_count = typeof data?.total_count === "number" ? data.total_count : undefined;
+  return { calls, total_count };
+}
+
 export function isConfigured(): boolean {
   return !!process.env.BLAND_AI_API_KEY;
 }

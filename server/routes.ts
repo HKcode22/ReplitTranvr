@@ -2119,7 +2119,51 @@ export async function registerRoutes(
   app.get("/api/admin/stats", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
     const stats = await storage.adminGetStats();
     const balance = await getDuffelBalance();
-    return res.json({ ...stats, duffelBalance: balance });
+    let blandCallsTotal: number | null = null;
+    if (bland.isConfigured()) {
+      try {
+        const list = await bland.listCalls(1);
+        if (typeof list.total_count === "number") blandCallsTotal = list.total_count;
+      } catch (e) {
+        console.warn("[Admin] Bland total_count fetch failed:", (e as Error)?.message || e);
+      }
+    }
+    return res.json({
+      ...stats,
+      calls: blandCallsTotal ?? stats.calls,
+      callsSource: blandCallsTotal != null ? "bland" : "db",
+      duffelBalance: balance,
+    });
+  });
+
+  app.get("/api/admin/calls-live", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    if (!bland.isConfigured()) {
+      const fallback = await storage.adminGetAllCallRequests();
+      const userIds = Array.from(new Set(fallback.map((c) => c.userId)));
+      const usersList = await storage.adminGetUsersByIds(userIds);
+      const userMap = new Map(usersList.map((u) => [u.id, { email: u.email, firstName: u.firstName, lastName: u.lastName }]));
+      return res.json({
+        source: "db",
+        calls: fallback.map((c) => ({ ...c, user: userMap.get(c.userId) || null })),
+        total_count: fallback.length,
+      });
+    }
+    try {
+      const list = await bland.listCalls(50);
+      return res.json({ source: "bland", calls: list.calls, total_count: list.total_count ?? list.calls.length });
+    } catch (err) {
+      console.warn("[Admin] /api/admin/calls-live Bland fetch failed, falling back to DB:", (err as Error)?.message || err);
+      const fallback = await storage.adminGetAllCallRequests();
+      const userIds = Array.from(new Set(fallback.map((c) => c.userId)));
+      const usersList = await storage.adminGetUsersByIds(userIds);
+      const userMap = new Map(usersList.map((u) => [u.id, { email: u.email, firstName: u.firstName, lastName: u.lastName }]));
+      return res.json({
+        source: "db",
+        calls: fallback.map((c) => ({ ...c, user: userMap.get(c.userId) || null })),
+        total_count: fallback.length,
+        error: (err as Error)?.message || "Bland AI request failed",
+      });
+    }
   });
 
   app.get("/api/admin/users", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {

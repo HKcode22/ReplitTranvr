@@ -19,11 +19,54 @@ type AdminStats = {
   pendingManual: number;
   bookings: number;
   calls: number;
-  revenue: { currency: string; amount: number }[];
+  callsSource?: "bland" | "db";
+  revenue: number;
+  revenueByCurrency: { currency: string; amount: number }[];
   duffelBalance: { available: number; currency: string } | null;
 };
 
-const LOW_BALANCE_THRESHOLD = 500;
+type BlandLiveCall = {
+  call_id?: string;
+  to?: string;
+  from?: string;
+  status?: string;
+  call_length?: number;
+  created_at?: string;
+  ended_at?: string;
+  completed?: boolean;
+  metadata?: Record<string, unknown> | null;
+};
+
+type LiveCallsResponse = {
+  source: "bland" | "db";
+  calls: BlandLiveCall[] | DbCallRow[];
+  total_count?: number;
+  error?: string;
+};
+
+type DbCallRow = {
+  id: number;
+  userId: number;
+  status: string;
+  destination?: string | null;
+  dateFrom?: string | null;
+  createdAt: string;
+  user?: { email: string; firstName?: string | null; lastName?: string | null } | null;
+};
+
+const LOW_BALANCE_THRESHOLD = 200;
+
+function formatUSD(n: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+}
+
+function formatCurrency(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amount);
+  } catch {
+    return `${currency.toUpperCase()} ${amount.toFixed(2)}`;
+  }
+}
 
 function StatCard({ icon: Icon, label, value, sub, tone = "default" }: { icon: LucideIcon; label: string; value: string; sub?: string; tone?: "default" | "warn" | "danger" }) {
   const toneCls =
@@ -233,22 +276,50 @@ function BookingsTable({ limit }: { limit?: number }) {
 }
 
 function CallsTable({ limit }: { limit?: number }) {
-  const { data, isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/calls"] });
+  const { data, isLoading } = useQuery<LiveCallsResponse>({ queryKey: ["/api/admin/calls-live"] });
   if (isLoading) return <Skeleton className="h-32 w-full" />;
-  if (!data || data.length === 0) return <Card className="p-6 text-center text-muted-foreground">No call requests.</Card>;
+  const calls = data?.calls ?? [];
+  if (calls.length === 0) return <Card className="p-6 text-center text-muted-foreground">No call requests.</Card>;
+  const rows = limit ? calls.slice(0, limit) : calls.slice(0, 50);
+  const isLive = data?.source === "bland";
   return (
     <Card className="divide-y">
-      {(limit ? data.slice(0, limit) : data.slice(0, 50)).map((c) => (
-        <div key={c.id} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`call-row-${c.id}`}>
-          <div className="min-w-0">
-            <div className="text-sm font-medium">{c.user?.email || c.userId}</div>
-            <div className="text-xs text-muted-foreground">
-              {c.destination || "—"} · {c.dateFrom ? new Date(c.dateFrom).toLocaleDateString() : "—"} · {new Date(c.createdAt).toLocaleString()}
+      {rows.map((row, idx) => {
+        if (isLive) {
+          const c = row as BlandLiveCall;
+          const meta = (c.metadata ?? {}) as Record<string, unknown>;
+          const email = typeof meta.userEmail === "string" ? meta.userEmail
+            : typeof meta.email === "string" ? meta.email
+            : typeof meta.userId === "string" || typeof meta.userId === "number" ? `user #${meta.userId}` : null;
+          const phone = c.to || "—";
+          const minutes = typeof c.call_length === "number" ? `${c.call_length.toFixed(1)} min` : "—";
+          const date = c.created_at ? new Date(c.created_at).toLocaleString() : "—";
+          const status = c.status || (c.completed ? "completed" : "—");
+          const key = c.call_id || `bland-${idx}`;
+          return (
+            <div key={key} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`call-row-${key}`}>
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{email || phone}</div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {phone} · {minutes} · {date}
+                </div>
+              </div>
+              <Badge variant="secondary">{status}</Badge>
             </div>
+          );
+        }
+        return (
+          <div key={`db-${c.id}`} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`call-row-${c.id}`}>
+            <div className="min-w-0">
+              <div className="text-sm font-medium">{c.user?.email || c.userId}</div>
+              <div className="text-xs text-muted-foreground">
+                {c.destination || "—"} · {c.dateFrom ? new Date(c.dateFrom).toLocaleDateString() : "—"} · {new Date(c.createdAt).toLocaleString()}
+              </div>
+            </div>
+            <Badge variant="secondary">{c.status}</Badge>
           </div>
-          <Badge variant="secondary">{c.status}</Badge>
-        </div>
-      ))}
+        );
+      })}
     </Card>
   );
 }
@@ -256,18 +327,23 @@ function CallsTable({ limit }: { limit?: number }) {
 export default function AdminDashboardPage() {
   const { data: stats, isLoading } = useQuery<AdminStats>({ queryKey: ["/api/admin/stats"] });
 
-  const balance = stats?.duffelBalance;
+  const balance = stats?.duffelBalance ?? null;
+  const balanceUnavailable = balance == null;
   const balanceLow = balance != null && balance.available < LOW_BALANCE_THRESHOLD;
-  const balanceTone: "default" | "warn" | "danger" = balance == null ? "default" : balanceLow ? "danger" : "default";
-  const balanceText = balance ? `${balance.currency} ${balance.available.toFixed(2)}` : "Unavailable";
+  const balanceTone: "default" | "warn" | "danger" =
+    balanceUnavailable ? "danger" : balanceLow ? "warn" : "default";
+  const balanceText = balance ? formatCurrency(balance.available, balance.currency) : "Unavailable";
+  const balanceSub = balanceUnavailable
+    ? "Could not reach Duffel"
+    : balanceLow
+      ? `Low — below ${formatUSD(LOW_BALANCE_THRESHOLD)}`
+      : undefined;
 
-  const revenue = stats?.revenue || [];
-  const primaryRev = revenue[0];
-  const revenueText = primaryRev
-    ? `${primaryRev.currency.toUpperCase()} ${primaryRev.amount.toFixed(2)}`
-    : "—";
-  const revenueSub = revenue.length > 1
-    ? revenue.slice(1).map((r) => `${r.currency.toUpperCase()} ${r.amount.toFixed(2)}`).join(" · ")
+  const revenueAmount = typeof stats?.revenue === "number" ? stats.revenue : 0;
+  const revenueText = formatUSD(revenueAmount);
+  const otherCurrencies = (stats?.revenueByCurrency || []).filter((r) => r.currency.toUpperCase() !== "USD");
+  const revenueSub = otherCurrencies.length > 0
+    ? otherCurrencies.map((r) => formatCurrency(r.amount, r.currency)).join(" · ")
     : undefined;
 
   return (
@@ -287,7 +363,7 @@ export default function AdminDashboardPage() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <StatCard icon={DollarSign} label="Revenue" value={revenueText} sub={revenueSub} />
-          <StatCard icon={Wallet} label="Duffel Balance" value={balanceText} sub={balanceLow ? "Low — top up" : undefined} tone={balanceTone} />
+          <StatCard icon={Wallet} label="Duffel Balance" value={balanceText} sub={balanceSub} tone={balanceTone} />
           <StatCard icon={AlertTriangle} label="Pending Manual" value={String(stats?.pendingManual ?? 0)} tone={(stats?.pendingManual ?? 0) > 0 ? "warn" : "default"} />
           <StatCard icon={CreditCard} label="Bookings" value={String(stats?.bookings ?? 0)} />
           <StatCard icon={Users} label="Users" value={String(stats?.users ?? 0)} />
