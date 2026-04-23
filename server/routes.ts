@@ -2139,6 +2139,39 @@ export async function registerRoutes(
     });
   });
 
+  // Inferred Duffel balance: admin-set seed minus paid Duffel-booked payments.
+  const DUFFEL_SEED_KEY = "duffel_balance_seed";
+  const DEFAULT_DUFFEL_SEED = 550;
+
+  async function buildInferredBalance() {
+    const setting = await storage.getSetting(DUFFEL_SEED_KEY);
+    const seed = setting ? parseFloat(setting.value) : DEFAULT_DUFFEL_SEED;
+    const seedNumber = Number.isFinite(seed) ? seed : DEFAULT_DUFFEL_SEED;
+    const totalSpent = await storage.getDuffelSpentTotal();
+    return {
+      estimated: seedNumber - totalSpent,
+      seed: seedNumber,
+      totalSpent,
+      lastUpdated: setting ? setting.updatedAt.toISOString() : null,
+    };
+  }
+
+  app.get("/api/admin/duffel-balance", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    const data = await buildInferredBalance();
+    return res.json(data);
+  });
+
+  app.post("/api/admin/duffel-balance/update", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    const raw = req.body?.balance;
+    const parsed = typeof raw === "number" ? raw : parseFloat(String(raw));
+    if (!Number.isFinite(parsed)) {
+      return res.status(400).json({ message: "balance must be a finite number" });
+    }
+    await storage.setSetting(DUFFEL_SEED_KEY, String(parsed));
+    const data = await buildInferredBalance();
+    return res.json(data);
+  });
+
   app.get("/api/admin/calls-live", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
     if (!bland.isConfigured()) {
       const fallback = await storage.adminGetAllCallRequests();

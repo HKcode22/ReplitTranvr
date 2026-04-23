@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, type LucideIcon } from "lucide-react";
 
 type AdminStats = {
   users: number;
@@ -54,8 +54,6 @@ type DbCallRow = {
   user?: { email: string; firstName?: string | null; lastName?: string | null } | null;
 };
 
-const LOW_BALANCE_THRESHOLD = 200;
-
 function formatUSD(n: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }
@@ -68,25 +66,162 @@ function formatCurrency(amount: number, currency: string): string {
   }
 }
 
-function StatCard({ icon: Icon, label, value, sub, tone = "default" }: { icon: LucideIcon; label: string; value: string; sub?: string; tone?: "default" | "warn" | "danger" }) {
-  const toneCls =
+type StatTone = "default" | "warn" | "danger" | "good";
+
+function toneClasses(tone: StatTone) {
+  const card =
     tone === "danger" ? "border-red-500/30 bg-red-500/5" :
     tone === "warn" ? "border-amber-500/30 bg-amber-500/5" :
+    tone === "good" ? "border-emerald-500/30 bg-emerald-500/5" :
     "";
-  const valueCls =
+  const value =
     tone === "danger" ? "text-red-600 dark:text-red-400" :
     tone === "warn" ? "text-amber-700 dark:text-amber-400" :
+    tone === "good" ? "text-emerald-700 dark:text-emerald-400" :
     "";
+  return { card, value };
+}
+
+function StatCard({ icon: Icon, label, value, sub, tone = "default" }: { icon: LucideIcon; label: string; value: string; sub?: string; tone?: StatTone }) {
+  const t = toneClasses(tone);
   return (
-    <Card className={`p-4 ${toneCls}`}>
+    <Card className={`p-4 ${t.card}`}>
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
           <Icon className="w-5 h-5" />
         </div>
         <div className="min-w-0">
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className={`text-2xl font-bold truncate ${valueCls}`}>{value}</div>
+          <div className={`text-2xl font-bold truncate ${t.value}`}>{value}</div>
           {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+type DuffelBalance = {
+  estimated: number;
+  seed: number;
+  totalSpent: number;
+  lastUpdated: string | null;
+};
+
+function DuffelBalanceCard() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<DuffelBalance>({ queryKey: ["/api/admin/duffel-balance"] });
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+
+  const mut = useMutation({
+    mutationFn: async (balance: number) => {
+      const res = await apiRequest("POST", "/api/admin/duffel-balance/update", { balance });
+      return (await res.json()) as DuffelBalance;
+    },
+    onSuccess: () => {
+      toast({ title: "Balance updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/duffel-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      setEditing(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const startEdit = () => {
+    setValue(data ? String(data.seed) : "");
+    setEditing(true);
+  };
+
+  const submit = () => {
+    const n = parseFloat(value);
+    if (!Number.isFinite(n)) {
+      toast({ title: "Enter a number", variant: "destructive" });
+      return;
+    }
+    mut.mutate(n);
+  };
+
+  if (isLoading || !data) {
+    return <Skeleton className="h-20 w-full" />;
+  }
+
+  const tone: StatTone = data.estimated < 100 ? "danger" : data.estimated < 300 ? "warn" : "good";
+  const t = toneClasses(tone);
+  const lastSet = data.lastUpdated
+    ? new Date(data.lastUpdated).toLocaleDateString()
+    : "never";
+
+  return (
+    <Card className={`p-4 ${t.card}`} data-testid="card-duffel-balance">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
+          <Wallet className="w-5 h-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">Duffel Balance</div>
+            {!editing ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={startEdit}
+                data-testid="button-edit-balance"
+              >
+                <Pencil className="w-3 h-3 mr-1" /> Update
+              </Button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setEditing(false)}
+                  disabled={mut.isPending}
+                  data-testid="button-cancel-balance"
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={submit}
+                  disabled={mut.isPending}
+                  data-testid="button-save-balance"
+                >
+                  <Check className="w-3 h-3" />
+                </Button>
+              </div>
+            )}
+          </div>
+          {editing ? (
+            <Input
+              type="number"
+              step="0.01"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              autoFocus
+              className="h-9 text-lg font-bold mt-1"
+              placeholder="Current balance from Duffel"
+              data-testid="input-balance"
+            />
+          ) : (
+            <div className={`text-2xl font-bold truncate ${t.value}`} data-testid="text-balance-estimated">
+              {formatUSD(data.estimated)}
+            </div>
+          )}
+          {!editing && (
+            <div className="text-xs text-muted-foreground mt-0.5">
+              Est. · Last set {lastSet}
+            </div>
+          )}
         </div>
       </div>
     </Card>
@@ -332,18 +467,6 @@ function CallsTable({ limit }: { limit?: number }) {
 export default function AdminDashboardPage() {
   const { data: stats, isLoading } = useQuery<AdminStats>({ queryKey: ["/api/admin/stats"] });
 
-  const balance = stats?.duffelBalance ?? null;
-  const balanceUnavailable = balance == null;
-  const balanceLow = balance != null && balance.available < LOW_BALANCE_THRESHOLD;
-  const balanceTone: "default" | "warn" | "danger" =
-    balanceUnavailable ? "danger" : balanceLow ? "warn" : "default";
-  const balanceText = balance ? formatCurrency(balance.available, balance.currency) : "Unavailable";
-  const balanceSub = balanceUnavailable
-    ? "Could not reach Duffel"
-    : balanceLow
-      ? `Low — below ${formatUSD(LOW_BALANCE_THRESHOLD)}`
-      : undefined;
-
   const revenueAmount = typeof stats?.revenue === "number" ? stats.revenue : 0;
   const revenueText = formatUSD(revenueAmount);
   const otherCurrencies = (stats?.revenueByCurrency || []).filter((r) => r.currency.toUpperCase() !== "USD");
@@ -368,7 +491,7 @@ export default function AdminDashboardPage() {
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <StatCard icon={DollarSign} label="Revenue" value={revenueText} sub={revenueSub} />
-          <StatCard icon={Wallet} label="Duffel Balance" value={balanceText} sub={balanceSub} tone={balanceTone} />
+          <DuffelBalanceCard />
           <StatCard icon={AlertTriangle} label="Pending Manual" value={String(stats?.pendingManual ?? 0)} tone={(stats?.pendingManual ?? 0) > 0 ? "warn" : "default"} />
           <StatCard icon={CreditCard} label="Bookings" value={String(stats?.bookings ?? 0)} />
           <StatCard icon={Users} label="Users" value={String(stats?.users ?? 0)} />

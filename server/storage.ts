@@ -3,7 +3,7 @@ import { db } from "./db";
 import {
   users, travelerProfiles, callRequests, itineraryProposals,
   proposalItems, notifications, payments, callbackRequests, savedCards, blandCalls,
-  calendarEntries,
+  calendarEntries, systemSettings,
   type User, type InsertUser, type TravelerProfile, type InsertTravelerProfile,
   type CallRequest, type InsertCallRequest, type ItineraryProposal, type InsertProposal,
   type ProposalItem, type InsertProposalItem, type Notification, type InsertNotification,
@@ -358,6 +358,31 @@ export class DatabaseStorage implements IStorage {
       revenue: Number.isFinite(revenueTotal) ? revenueTotal : 0,
       revenueByCurrency: revByCurr.map((r) => ({ currency: r.currency, amount: parseFloat(String(r.total)) || 0 })),
     };
+  }
+
+  async getSetting(key: string): Promise<{ value: string; updatedAt: Date } | null> {
+    const [row] = await db.select().from(systemSettings).where(eq(systemSettings.key, key)).limit(1);
+    if (!row) return null;
+    return { value: row.value, updatedAt: row.updatedAt };
+  }
+
+  async setSetting(key: string, value: string): Promise<{ value: string; updatedAt: Date }> {
+    const now = new Date();
+    const [row] = await db
+      .insert(systemSettings)
+      .values({ key, value, updatedAt: now })
+      .onConflictDoUpdate({ target: systemSettings.key, set: { value, updatedAt: now } })
+      .returning();
+    return { value: row.value, updatedAt: row.updatedAt };
+  }
+
+  async getDuffelSpentTotal(): Promise<number> {
+    const [r] = await db
+      .select({ total: sql<string>`COALESCE(SUM(${payments.amount}), 0)` })
+      .from(payments)
+      .where(and(eq(payments.status, "paid"), sql`${payments.duffelOrderId} IS NOT NULL`));
+    const n = parseFloat(String(r?.total ?? "0"));
+    return Number.isFinite(n) ? n : 0;
   }
 }
 

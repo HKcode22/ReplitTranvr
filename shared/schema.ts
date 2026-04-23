@@ -5,6 +5,12 @@ import {
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const systemSettings = pgTable("system_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const tripTypeEnum = pgEnum("trip_type", ["flight", "hotel", "both"]);
 export const callStatusEnum = pgEnum("call_status", ["requested", "scheduled", "completed", "cancelled"]);
 export const proposalStatusEnum = pgEnum("proposal_status", ["draft", "sent", "approved", "rejected"]);
