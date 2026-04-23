@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, Tag, Trash2, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, Tag, Trash2, Mail, Eye, Send, type LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import type { PromoCode } from "@shared/schema";
 
@@ -700,6 +700,7 @@ export default function AdminDashboardPage() {
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
           <TabsTrigger value="calls" data-testid="tab-calls">Calls</TabsTrigger>
           <TabsTrigger value="promos" data-testid="tab-promos">Promo Codes</TabsTrigger>
+          <TabsTrigger value="emails" data-testid="tab-emails">Emails</TabsTrigger>
         </TabsList>
         <TabsContent value="pending" className="mt-4"><PendingManualTable /></TabsContent>
         <TabsContent value="bookings" className="mt-4"><BookingsTable /></TabsContent>
@@ -707,7 +708,148 @@ export default function AdminDashboardPage() {
         <TabsContent value="users" className="mt-4"><UsersTable /></TabsContent>
         <TabsContent value="calls" className="mt-4"><CallsTable /></TabsContent>
         <TabsContent value="promos" className="mt-4"><PromoCodesPanel /></TabsContent>
+        <TabsContent value="emails" className="mt-4"><EmailsPanel /></TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+type EmailCatalogEntry = {
+  id: string;
+  name: string;
+  description: string;
+  audience: "Customer" | "Admin";
+};
+
+type RenderedEmail = { subject: string; html: string };
+
+function EmailsPanel() {
+  const { toast } = useToast();
+  const { data: catalog, isLoading } = useQuery<EmailCatalogEntry[]>({ queryKey: ["/api/admin/email/catalog"] });
+  const { data: me } = useQuery<{ email?: string }>({ queryKey: ["/api/auth/user"] });
+
+  const [previewType, setPreviewType] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<RenderedEmail | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const openPreview = async (id: string) => {
+    setPreviewType(id);
+    setPreviewData(null);
+    setPreviewLoading(true);
+    try {
+      const res = await apiRequest("GET", `/api/admin/email/preview?type=${encodeURIComponent(id)}`);
+      const json: RenderedEmail = await res.json();
+      setPreviewData(json);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load preview";
+      toast({ title: "Preview failed", description: msg, variant: "destructive" });
+      setPreviewType(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    setPreviewType(null);
+    setPreviewData(null);
+  };
+
+  const sendTestMut = useMutation({
+    mutationFn: async (id: string) => {
+      const recipient = me?.email;
+      if (!recipient) throw new Error("Could not determine your email address");
+      const res = await apiRequest("POST", "/api/admin/email/test", { type: id, recipientEmail: recipient });
+      return res.json() as Promise<{ ok: boolean; recipient: string }>;
+    },
+    onSuccess: (data) => {
+      toast({ title: "Test email sent", description: `Sent to ${data.recipient}` });
+    },
+    onError: (err: Error) => {
+      const raw = err.message?.replace(/^\d+:\s*/, "") || "Could not send";
+      let msg = raw;
+      try { const parsed = JSON.parse(raw); msg = parsed.message || raw; } catch {}
+      toast({ title: "Send failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-32 w-full" />;
+  if (!catalog || catalog.length === 0) {
+    return <Card className="p-6 text-center text-muted-foreground">No email templates registered.</Card>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <Card className="p-4">
+        <div className="flex items-start gap-3">
+          <Mail className="w-5 h-5 mt-0.5 text-muted-foreground" />
+          <div>
+            <h3 className="font-semibold text-sm">Email previews &amp; test sends</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Preview any email Travnr sends with realistic sample data, or send a test to{" "}
+              <span className="font-mono">{me?.email || "your admin email"}</span>.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid gap-3">
+        {catalog.map((entry) => (
+          <Card key={entry.id} className="p-4 flex items-start justify-between gap-4 flex-wrap" data-testid={`email-row-${entry.id}`}>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-medium text-sm">{entry.name}</h4>
+                <Badge variant={entry.audience === "Admin" ? "secondary" : "outline"}>{entry.audience}</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">{entry.description}</p>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => openPreview(entry.id)}
+                data-testid={`button-preview-${entry.id}`}
+              >
+                <Eye className="w-4 h-4 mr-1.5" /> Preview
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => sendTestMut.mutate(entry.id)}
+                disabled={sendTestMut.isPending && sendTestMut.variables === entry.id}
+                data-testid={`button-send-test-${entry.id}`}
+              >
+                <Send className="w-4 h-4 mr-1.5" />
+                {sendTestMut.isPending && sendTestMut.variables === entry.id ? "Sending..." : "Send Test"}
+              </Button>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Dialog open={previewType !== null} onOpenChange={(open) => { if (!open) closePreview(); }}>
+        <DialogContent
+          className="p-0 gap-0 max-w-none w-[90vw] h-[90vh] sm:max-w-none flex flex-col"
+          data-testid="dialog-email-preview"
+        >
+          <DialogHeader className="px-5 py-3 border-b shrink-0">
+            <DialogTitle className="text-sm font-medium truncate">
+              {previewData?.subject || (previewLoading ? "Loading preview…" : "Preview")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 bg-muted/30">
+            {previewLoading ? (
+              <div className="h-full flex items-center justify-center"><Skeleton className="w-3/4 h-3/4" /></div>
+            ) : previewData ? (
+              <iframe
+                title="email-preview"
+                srcDoc={previewData.html}
+                sandbox=""
+                className="w-full h-full border-0 bg-white"
+                data-testid="iframe-email-preview"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

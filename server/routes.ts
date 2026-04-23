@@ -11,6 +11,22 @@ import { z } from "zod";
 import { Duffel } from "@duffel/api";
 import * as bland from "./lib/bland";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
+import {
+  buildVerificationEmail,
+  buildPasswordResetEmail,
+  buildAccountCreationEmail,
+  buildBookingFailureAlertEmail,
+  buildManualBookingAdminAlertEmail,
+  buildBookingConfirmationEmail,
+  buildManualBookingConfirmationEmail,
+  buildRefundRequestAdminEmail,
+  buildRefundRequestCustomerEmail,
+  buildSampleEmail,
+  EMAIL_CATALOG,
+  type EmailTypeId,
+  type ManualBookingPassenger,
+  type ManualBookingSlice,
+} from "./lib/emailTemplates";
 
 declare module "express-session" {
   interface SessionData {
@@ -76,99 +92,33 @@ function getBaseUrl(req: Request): string {
 }
 
 async function sendVerificationEmail(email: string, token: string, baseUrl: string) {
-  const verifyUrl = `${baseUrl}/api/auth/verify?token=${token}`;
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
-
+  const { subject, html } = buildVerificationEmail({ verifyUrl: `${baseUrl}/api/auth/verify?token=${token}` });
   try {
-    await sgMail.send({
-      to: email,
-      from: { email: fromEmail, name: "Travnr" },
-      subject: "Verify your Travnr email",
-      html: `
-        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-          <div style="text-align: center; margin-bottom: 32px;">
-            <h1 style="color: #2d7abf; font-size: 28px; margin: 0;">Travnr</h1>
-          </div>
-          <h2 style="font-size: 22px; color: #1a1a2e; margin-bottom: 16px;">Verify your email</h2>
-          <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
-            Thanks for signing up for Travnr! Click the button below to verify your email address and get started.
-          </p>
-          <div style="text-align: center; margin-bottom: 24px;">
-            <a href="${verifyUrl}" style="background-color: #2d7abf; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">Verify My Email</a>
-          </div>
-          <p style="color: #999; font-size: 13px; line-height: 1.5;">
-            If you didn't create a Travnr account, you can safely ignore this email.
-          </p>
-        </div>
-      `,
-    });
+    await sgMail.send({ to: email, from: { email: fromEmail, name: "Travnr" }, subject, html });
   } catch (error) {
     console.error("SendGrid error:", error);
   }
 }
 
 async function sendPasswordResetEmail(email: string, token: string, baseUrl: string) {
-  const resetUrl = `${baseUrl}/reset-password?token=${token}`;
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
-
+  const { subject, html } = buildPasswordResetEmail({ resetUrl: `${baseUrl}/reset-password?token=${token}` });
   try {
-    await sgMail.send({
-      to: email,
-      from: { email: fromEmail, name: "Travnr" },
-      subject: "Reset your Travnr password",
-      html: `
-        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-          <div style="text-align: center; margin-bottom: 32px;">
-            <h1 style="color: #2d7abf; font-size: 28px; margin: 0;">Travnr</h1>
-          </div>
-          <h2 style="font-size: 22px; color: #1a1a2e; margin-bottom: 16px;">Reset your password</h2>
-          <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
-            We received a request to reset your password. Click the button below to choose a new password. This link will expire in 1 hour.
-          </p>
-          <div style="text-align: center; margin-bottom: 24px;">
-            <a href="${resetUrl}" style="background-color: #2d7abf; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">Reset My Password</a>
-          </div>
-          <p style="color: #999; font-size: 13px; line-height: 1.5;">
-            If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.
-          </p>
-        </div>
-      `,
-    });
+    await sgMail.send({ to: email, from: { email: fromEmail, name: "Travnr" }, subject, html });
   } catch (error) {
     console.error("SendGrid password reset email error:", error);
   }
 }
 
 async function sendAccountCreationEmail(email: string, name: string, callbackRequestId: number, baseUrl: string) {
-  const signUpUrl = `${baseUrl}/auth?email=${encodeURIComponent(email)}`;
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
-
+  const { subject, html } = buildAccountCreationEmail({
+    name,
+    signUpUrl: `${baseUrl}/auth?email=${encodeURIComponent(email)}`,
+  });
   try {
-    await sgMail.send({
-      to: email,
-      from: { email: fromEmail, name: "Travnr" },
-      subject: "Your Travnr concierge call is complete — create your account",
-      html: `
-        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 20px;">
-          <div style="text-align: center; margin-bottom: 32px;">
-            <h1 style="color: #2d7abf; font-size: 28px; margin: 0;">Travnr</h1>
-          </div>
-          <h2 style="font-size: 22px; color: #1a1a2e; margin-bottom: 16px;">Thanks for chatting with us${name ? `, ${name}` : ""}!</h2>
-          <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 16px;">
-            Your concierge call has been completed. We're putting together a personalized travel proposal based on our conversation.
-          </p>
-          <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
-            Create your free Travnr account to view your call results, travel proposals, and manage future bookings — all in one place.
-          </p>
-          <div style="text-align: center; margin-bottom: 24px;">
-            <a href="${signUpUrl}" style="background-color: #2d7abf; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">Create My Account</a>
-          </div>
-          <p style="color: #999; font-size: 13px; line-height: 1.5;">
-            If you didn't request a concierge call from Travnr, you can safely ignore this email.
-          </p>
-        </div>
-      `,
-    });
+    await sgMail.send({ to: email, from: { email: fromEmail, name: "Travnr" }, subject, html });
     console.log(`Account creation email sent to ${email} for callback request ${callbackRequestId}`);
   } catch (error) {
     console.error("SendGrid account creation email error:", error);
@@ -189,43 +139,22 @@ async function sendBookingFailureAlert(context: {
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
   const { endpoint, userId, userEmail, stripePaymentIntentId, offerId, proposalId, error } = context;
 
-  const duffelErrors = error?.errors;
-  const errorDetail = duffelErrors
-    ? duffelErrors.map((e: any) =>
-        `<li><strong>${e.title || "Error"}</strong>: ${e.message || ""}${e.code ? ` (code: ${e.code})` : ""}${e.type ? ` [type: ${e.type}]` : ""}</li>`
-      ).join("")
-    : `<li>${error?.message || String(error)}</li>`;
+  const duffelErrors: Array<{ title?: string; message?: string; code?: string; type?: string }> | undefined = error?.errors;
+  const errorMessages = duffelErrors
+    ? duffelErrors.map((e) =>
+        `${e.title || "Error"}: ${e.message || ""}${e.code ? ` (code: ${e.code})` : ""}${e.type ? ` [type: ${e.type}]` : ""}`
+      )
+    : [error?.message || String(error)];
 
-  const timestamp = new Date().toISOString();
-
-  const html = `
-    <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 20px;">
-      <div style="background: #dc2626; color: white; padding: 16px 20px; border-radius: 8px 8px 0 0;">
-        <h2 style="margin: 0; font-size: 18px;">Duffel Booking Failure Alert</h2>
-        <p style="margin: 4px 0 0; font-size: 13px; opacity: 0.85;">${timestamp}</p>
-      </div>
-      <div style="border: 1px solid #e5e7eb; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-          <tr><td style="padding: 6px 0; color: #6b7280; width: 160px;">Endpoint</td><td style="padding: 6px 0; font-family: monospace;">${endpoint}</td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">User ID</td><td style="padding: 6px 0; font-family: monospace;">${userId || "—"}</td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">User Email</td><td style="padding: 6px 0;">${userEmail || "—"}</td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">Stripe PI</td><td style="padding: 6px 0; font-family: monospace;">${stripePaymentIntentId || "—"}</td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">Duffel Offer ID</td><td style="padding: 6px 0; font-family: monospace;">${offerId || "—"}</td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">Proposal ID</td><td style="padding: 6px 0;">${proposalId ?? "—"}</td></tr>
-        </table>
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 16px 0;" />
-        <h3 style="font-size: 14px; color: #dc2626; margin: 0 0 8px;">Error Details</h3>
-        <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #1f2937; line-height: 1.7;">${errorDetail}</ul>
-        ${stripePaymentIntentId ? `<div style="margin-top: 16px; padding: 12px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;"><strong>Note:</strong> Stripe payment was charged (PI: ${stripePaymentIntentId}). Customer may need to be refunded if booking cannot be completed.</div>` : ""}
-      </div>
-    </div>
-  `;
+  const { subject, html } = buildBookingFailureAlertEmail({
+    endpoint, userId, userEmail, stripePaymentIntentId, offerId, proposalId, errorMessages,
+  });
 
   try {
     await sgMail.send({
       to: ADMIN_ALERT_EMAILS,
       from: { email: fromEmail, name: "Travnr Alerts" },
-      subject: `[ACTION REQUIRED] Duffel booking failed — ${userEmail || userId || "unknown user"}`,
+      subject,
       html,
     });
   } catch (mailErr) {
@@ -289,33 +218,12 @@ async function sendManualBookingAdminAlert(context: {
   currency: string;
 }) {
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
-  const { endpoint, userId, userEmail, paymentId, stripePaymentIntentId, offerId, proposalId, amount, currency } = context;
-  const timestamp = new Date().toISOString();
-  const html = `
-    <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 20px;">
-      <div style="background: #b45309; color: white; padding: 16px 20px; border-radius: 8px 8px 0 0;">
-        <h2 style="margin: 0; font-size: 18px;">Manual Booking Required — Duffel Balance Insufficient</h2>
-        <p style="margin: 4px 0 0; font-size: 13px; opacity: 0.85;">${timestamp}</p>
-      </div>
-      <div style="border: 1px solid #e5e7eb; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
-        <p style="font-size: 14px; color: #1f2937;">A customer payment was successfully captured but the Duffel balance is insufficient to complete the booking automatically. Please log into the admin dashboard to complete this booking manually.</p>
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-          <tr><td style="padding: 6px 0; color: #6b7280; width: 160px;">Endpoint</td><td style="padding: 6px 0; font-family: monospace;">${endpoint}</td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">Payment ID</td><td style="padding: 6px 0; font-family: monospace;">${paymentId}</td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">User</td><td style="padding: 6px 0;">${userEmail || userId}</td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">Amount Charged</td><td style="padding: 6px 0;"><strong>${currency.toUpperCase()} ${amount}</strong></td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">Stripe PI</td><td style="padding: 6px 0; font-family: monospace;">${stripePaymentIntentId || "—"}</td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">Duffel Offer ID</td><td style="padding: 6px 0; font-family: monospace;">${offerId || "—"}</td></tr>
-          <tr><td style="padding: 6px 0; color: #6b7280;">Proposal ID</td><td style="padding: 6px 0;">${proposalId ?? "—"}</td></tr>
-        </table>
-      </div>
-    </div>
-  `;
+  const { subject, html } = buildManualBookingAdminAlertEmail(context);
   try {
     await sgMail.send({
       to: ADMIN_ALERT_EMAILS,
       from: { email: fromEmail, name: "Travnr Alerts" },
-      subject: `[MANUAL BOOKING] ${currency.toUpperCase()} ${amount} — ${userEmail || userId}`,
+      subject,
       html,
     });
   } catch (mailErr) {
@@ -527,69 +435,9 @@ async function sendBookingConfirmationEmail(toEmail: string, data: {
 }) {
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
   const dashboardUrl = `${process.env.APP_BASE_URL || "https://travnr.com"}/calendar`;
-  const slices = data.slices || [];
-  const firstSlice = slices[0];
-  const lastSlice = slices[slices.length - 1] || firstSlice;
-  const routeLabel = firstSlice
-    ? `${firstSlice.origin?.iata || firstSlice.origin?.city || ""} → ${(slices.length > 1 ? lastSlice?.destination?.iata || lastSlice?.destination?.city : firstSlice.destination?.iata || firstSlice.destination?.city) || ""}`
-    : "your trip";
-  const dateLabel = firstSlice?.departingAt ? new Date(firstSlice.departingAt).toLocaleDateString([], { dateStyle: "long" } as any) : "your selected date";
-
-  const slicesHtml = slices.map((s) => {
-    const dep = s.departingAt ? new Date(s.departingAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
-    const arr = s.arrivingAt ? new Date(s.arrivingAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
-    const flightLabel = [s.carrierIata, s.flightNumber].filter(Boolean).join("");
-    const carrier = s.carrierName ? `${s.carrierName}${flightLabel ? ` · Flight ${flightLabel}` : ""}` : (flightLabel ? `Flight ${flightLabel}` : "");
-    return `
-      <tr>
-        <td style="padding:10px 0;color:#1a1a2e;border-bottom:1px solid #f1f1f4;">
-          <strong>${s.origin?.iata || ""} ${s.origin?.city || s.origin?.name || ""}</strong>
-          → <strong>${s.destination?.iata || ""} ${s.destination?.city || s.destination?.name || ""}</strong><br/>
-          ${carrier ? `<span style="color:#1a1a2e;font-size:13px;">${carrier}</span><br/>` : ""}
-          <span style="color:#6b7280;font-size:13px;">Depart: ${dep}<br/>Arrive: ${arr}</span>
-        </td>
-      </tr>`;
-  }).join("");
-
-  const paxList = (data.passengers || []).map(p =>
-    `<li>${[p.given_name, p.family_name].filter(Boolean).join(" ")}</li>`
-  ).join("");
-
+  const { subject, html } = buildBookingConfirmationEmail({ ...data, dashboardUrl });
   try {
-    await sgMail.send({
-      to: toEmail,
-      from: { email: fromEmail, name: "Travnr" },
-      subject: `Your booking is confirmed — ${routeLabel} on ${dateLabel}`,
-      html: `
-        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 20px;">
-          <div style="text-align:center;margin-bottom:24px;">
-            <h1 style="color:#2d7abf;font-size:26px;margin:0;">Travnr</h1>
-          </div>
-          <h2 style="font-size:20px;color:#1a1a2e;margin:0 0 12px;">Your booking is confirmed${data.firstName ? `, ${data.firstName}` : ""}!</h2>
-          <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 16px;">
-            We've reserved <strong>${routeLabel}</strong> on <strong>${dateLabel}</strong>. Your booking reference is <strong>${data.bookingReference}</strong>.
-          </p>
-          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin-bottom:18px;">
-            <h3 style="margin:0 0 8px;font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Itinerary</h3>
-            <table style="width:100%;border-collapse:collapse;font-size:14px;">${slicesHtml}</table>
-            ${data.cabinClass ? `<p style="margin:10px 0 0;font-size:13px;color:#6b7280;">Cabin: <span style="color:#1a1a2e;text-transform:capitalize;">${String(data.cabinClass).replace(/_/g, " ")}</span></p>` : ""}
-          </div>
-          ${paxList ? `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin-bottom:18px;"><h3 style="margin:0 0 8px;font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Passengers</h3><ul style="margin:0;padding-left:20px;color:#1a1a2e;">${paxList}</ul></div>` : ""}
-          <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px 18px;margin-bottom:18px;">
-            <h3 style="margin:0 0 8px;font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Total Charged</h3>
-            <p style="margin:0;font-size:18px;font-weight:600;color:#1a1a2e;">${Number(data.amount).toLocaleString()} ${(data.currency || "USD").toUpperCase()}</p>
-          </div>
-          <div style="text-align:center;margin:24px 0;">
-            <a href="${dashboardUrl}" style="display:inline-block;background:#2d7abf;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">View on your dashboard</a>
-          </div>
-          <p style="color:#555;font-size:14px;line-height:1.6;">
-            Need to make a change? Reply to this email and we'll take care of it.
-          </p>
-          <p style="color:#1a1a2e;font-size:14px;line-height:1.6;margin-top:24px;">Safe travels,<br/>The Travnr team</p>
-          <p style="color:#999;font-size:12px;margin-top:16px;">Travnr · hello@travnr.com</p>
-        </div>
-      `,
-    });
+    await sgMail.send({ to: toEmail, from: { email: fromEmail, name: "Travnr" }, subject, html });
   } catch (err) {
     console.error("Failed to send booking confirmation email:", err);
   }
@@ -601,51 +449,17 @@ async function sendRefundRequestEmails(args: {
   reason: string;
 }) {
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
-  const { user, payment, reason } = args;
-  const amountLine = `${Number(payment.amount).toLocaleString()} ${(payment.currency || "USD").toUpperCase()}`;
-
-  const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-  const safeReason = escapeHtml(reason || "");
-
-  const adminHtml = `
-    <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;">
-      <div style="background:#f59e0b;color:white;padding:16px 20px;border-radius:8px 8px 0 0;">
-        <h2 style="margin:0;font-size:18px;">Refund Request</h2>
-      </div>
-      <div style="border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
-        <table style="width:100%;border-collapse:collapse;font-size:14px;">
-          <tr><td style="padding:6px 0;color:#6b7280;width:160px;">Customer</td><td>${[user.firstName, user.lastName].filter(Boolean).join(" ")} (${user.email})</td></tr>
-          <tr><td style="padding:6px 0;color:#6b7280;">Payment ID</td><td>#${payment.id}</td></tr>
-          <tr><td style="padding:6px 0;color:#6b7280;">Amount</td><td>${amountLine}</td></tr>
-          <tr><td style="padding:6px 0;color:#6b7280;">Booking Ref</td><td style="font-family:monospace;">${payment.duffelBookingRef || "—"}</td></tr>
-          <tr><td style="padding:6px 0;color:#6b7280;">Duffel Order ID</td><td style="font-family:monospace;">${payment.duffelOrderId || "—"}</td></tr>
-        </table>
-        <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />
-        <h3 style="font-size:14px;color:#1a1a2e;margin:0 0 8px;">Reason</h3>
-        <p style="margin:0;font-size:14px;color:#1f2937;line-height:1.6;white-space:pre-wrap;">${safeReason || "(none provided)"}</p>
-      </div>
-    </div>`;
-
-  const userHtml = `
-    <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 20px;">
-      <div style="text-align:center;margin-bottom:24px;"><h1 style="color:#2d7abf;font-size:26px;margin:0;">Travnr</h1></div>
-      <h2 style="font-size:20px;color:#1a1a2e;margin:0 0 12px;">We received your refund request</h2>
-      <p style="color:#555;font-size:15px;line-height:1.6;">
-        Thanks${user.firstName ? `, ${user.firstName}` : ""}. Your refund request for booking
-        ${payment.duffelBookingRef ? `<strong>${payment.duffelBookingRef}</strong>` : `payment #${payment.id}`}
-        (${amountLine}) has been received. A member of our team will reply within one business day.
-      </p>
-      <p style="color:#999;font-size:12px;margin-top:24px;">Travnr · hello@travnr.com</p>
-    </div>`;
+  const { user } = args;
+  const adminEmail = buildRefundRequestAdminEmail(args);
+  const userEmail = buildRefundRequestCustomerEmail(args);
 
   try {
     await sgMail.send({
       to: ["hello@travnr.com"],
       from: { email: fromEmail, name: "Travnr Refunds" },
       replyTo: user.email,
-      subject: `Refund request — ${user.email} — ${amountLine}`,
-      html: adminHtml,
+      subject: adminEmail.subject,
+      html: adminEmail.html,
     });
   } catch (err) {
     console.error("Failed to send refund admin email:", err);
@@ -654,8 +468,8 @@ async function sendRefundRequestEmails(args: {
     await sgMail.send({
       to: user.email,
       from: { email: fromEmail, name: "Travnr" },
-      subject: "We received your refund request",
-      html: userHtml,
+      subject: userEmail.subject,
+      html: userEmail.html,
     });
   } catch (err) {
     console.error("Failed to send refund customer email:", err);
@@ -2446,7 +2260,88 @@ export async function registerRoutes(
       body: `Your flight has been booked. Booking reference: ${duffelBookingRef.trim()}`,
       linkUrl: "/billing",
     });
+
+    // Best-effort: send manual booking confirmation email. Failure must not abort the operation.
+    try {
+      const customer = await storage.getUser(payment.userId);
+      if (customer?.email) {
+        const details = (payment.manualBookingDetails || {}) as {
+          slices?: ManualBookingSlice[];
+          passengers?: ManualBookingPassenger[];
+        };
+        const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+        const baseUrl = getBaseUrl(req);
+        const firstSliceCarrier = details.slices?.[0]?.carrier || null;
+        const { subject, html } = buildManualBookingConfirmationEmail({
+          firstName: customer.firstName,
+          bookingReference: duffelBookingRef.trim(),
+          amount: payment.amount,
+          currency: payment.currency,
+          passengers: details.passengers,
+          slices: details.slices,
+          airlineName: firstSliceCarrier,
+          notes: notes || null,
+          dashboardUrl: `${baseUrl}/trips`,
+        });
+        await sgMail.send({ to: customer.email, from: { email: fromEmail, name: "Travnr" }, subject, html });
+        console.log(`[admin] Manual booking confirmation email sent to ${customer.email} for payment ${payment.id}`);
+      }
+    } catch (mailErr) {
+      console.error("[admin] Failed to send manual booking confirmation email (non-fatal):", mailErr);
+    }
+
     return res.json(updated);
+  });
+
+  // ==================== ADMIN EMAIL PREVIEW / TEST ====================
+
+  app.get("/api/admin/email/catalog", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    return res.json(EMAIL_CATALOG);
+  });
+
+  app.get("/api/admin/email/preview", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    const type = String(req.query.type || "") as EmailTypeId;
+    if (!EMAIL_CATALOG.some((e) => e.id === type)) {
+      return res.status(400).json({ message: "Unknown email type" });
+    }
+    const baseUrl = getBaseUrl(req);
+    const rendered = buildSampleEmail(type, baseUrl);
+    return res.json(rendered);
+  });
+
+  app.post("/api/admin/email/test", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    const type = String(req.body?.type || "") as EmailTypeId;
+    if (!EMAIL_CATALOG.some((e) => e.id === type)) {
+      return res.status(400).json({ message: "Unknown email type" });
+    }
+    const recipientRaw = req.body?.recipientEmail;
+    const sessionUser = await storage.getUser(req.session.userId!);
+    const recipient = (typeof recipientRaw === "string" && recipientRaw.trim())
+      ? recipientRaw.trim()
+      : sessionUser?.email;
+    if (!recipient) return res.status(400).json({ message: "Recipient email is required" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+      return res.status(400).json({ message: "Recipient email is not a valid address" });
+    }
+    if (!process.env.SENDGRID_API_KEY) {
+      return res.status(503).json({ message: "SendGrid is not configured" });
+    }
+    const baseUrl = getBaseUrl(req);
+    const { subject, html } = buildSampleEmail(type, baseUrl);
+    const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+    try {
+      await sgMail.send({
+        to: recipient,
+        from: { email: fromEmail, name: "Travnr" },
+        subject: `[TEST] ${subject}`,
+        html,
+      });
+      return res.json({ ok: true, recipient });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to send test email";
+      console.error("[admin] Test email send failed:", err);
+      return res.status(502).json({ message });
+    }
   });
 
   app.get("/api/admin/calls", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
