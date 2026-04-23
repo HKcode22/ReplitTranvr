@@ -1289,6 +1289,7 @@ export async function registerRoutes(
       }
       const fullOffer = offer.data as any;
 
+      let paidPiAmountCents: number | null = null;
       if (stripePaymentIntentId) {
         const stripe = await getUncachableStripeClient();
         const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
@@ -1306,6 +1307,7 @@ export async function registerRoutes(
         if (pi.currency !== fullOffer.total_currency.toLowerCase()) {
           return res.status(400).json({ message: "Payment currency does not match the flight currency" });
         }
+        paidPiAmountCents = pi.amount;
       }
 
       if (fullOffer.expires_at && new Date(fullOffer.expires_at) < new Date()) {
@@ -1349,7 +1351,8 @@ export async function registerRoutes(
 
       const flightAmountStr = orderData.total_amount || fullOffer.total_amount;
       const flightAmountCents = Math.round(parseFloat(flightAmountStr) * 100);
-      const chargedTotalCents = applyConvenienceFee(flightAmountCents).totalCents;
+      const fallbackTotalCents = applyConvenienceFee(flightAmountCents).totalCents;
+      const chargedTotalCents = paidPiAmountCents ?? fallbackTotalCents;
       const chargedTotalAmount = (chargedTotalCents / 100).toFixed(2);
 
       const payment = await storage.createPayment({
@@ -1745,6 +1748,7 @@ export async function registerRoutes(
       const amount = fullOffer.total_amount;
       const currency = fullOffer.total_currency;
 
+      let paidPiAmountCents: number | null = null;
       if (stripePaymentIntentId) {
         const stripe = await getUncachableStripeClient();
         const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
@@ -1762,6 +1766,7 @@ export async function registerRoutes(
         if (pi.currency !== currency.toLowerCase()) {
           return res.status(400).json({ message: "Payment currency does not match the flight currency" });
         }
+        paidPiAmountCents = pi.amount;
       }
 
       const order = await duffel.orders.create({
@@ -1780,7 +1785,8 @@ export async function registerRoutes(
 
       const flightAmountStr = orderData.total_amount || selectedItem.priceEstimate;
       const flightAmountCents = Math.round(parseFloat(String(flightAmountStr)) * 100);
-      const chargedTotalCents = applyConvenienceFee(flightAmountCents).totalCents;
+      const fallbackTotalCents = applyConvenienceFee(flightAmountCents).totalCents;
+      const chargedTotalCents = paidPiAmountCents ?? fallbackTotalCents;
       const chargedTotalAmount = (chargedTotalCents / 100).toFixed(2);
 
       const payment = await storage.createPayment({
@@ -3356,9 +3362,7 @@ export async function registerRoutes(
 
       const orderData = order.data as any;
 
-      const flightAmountStr = orderData.total_amount || selectedItem.priceEstimate;
-      const flightAmountCents = Math.round(parseFloat(String(flightAmountStr)) * 100);
-      const chargedTotalCents = applyConvenienceFee(flightAmountCents).totalCents;
+      const chargedTotalCents = paymentIntent.amount;
       const chargedTotalAmount = (chargedTotalCents / 100).toFixed(2);
 
       const payment = await storage.createPayment({
