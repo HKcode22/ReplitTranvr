@@ -565,7 +565,7 @@ function PromoCodesPanel() {
           <div>
             <Label>Override charge (USD)</Label>
             <Input type="number" step="0.01" min="0.50" value={overrideDollars} onChange={(e) => setOverrideDollars(e.target.value)} data-testid="input-promo-amount" />
-            <p className="text-xs text-muted-foreground mt-1">5% convenience fee will be added on top.</p>
+            <p className="text-xs text-muted-foreground mt-1">This is the exact amount the customer's card will be charged (no convenience fee added).</p>
           </div>
           <div>
             <Label>Max uses (optional)</Label>
