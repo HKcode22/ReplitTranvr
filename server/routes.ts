@@ -301,6 +301,9 @@ async function createManualBookingFallback(args: {
     carrier: s.segments?.[0]?.marketing_carrier?.name,
     flightNumber: s.segments?.[0]?.marketing_carrier_flight_number,
   }));
+  const routeSummary = sliceSummary
+    .map((s: any) => `${s.origin || "?"} → ${s.destination || "?"}`)
+    .join(" / ");
 
   const payment = await storage.createPayment({
     userId,
@@ -318,6 +321,7 @@ async function createManualBookingFallback(args: {
       currency: fullOffer.total_currency,
       slices: sliceSummary,
       passengers: passengerMappings,
+      routeSummary: routeSummary || null,
       proposalTitle: proposalTitle ?? null,
       capturedAt: new Date().toISOString(),
     },
@@ -1187,6 +1191,23 @@ export async function registerRoutes(
             orderData = synthesizeOrderFromManualDetails(payment.manualBookingDetails);
           }
 
+          let manual: { routeSummary: string | null; passengerCount: number; departingAt: string | null } | null = null;
+          if (isManual && payment.manualBookingDetails && typeof payment.manualBookingDetails === "object") {
+            const d = payment.manualBookingDetails as {
+              slices?: Array<{ origin?: string; destination?: string; departingAt?: string }>;
+              passengers?: unknown[];
+              routeSummary?: string | null;
+            };
+            const derived = (d.slices || [])
+              .map((s) => `${s.origin || "?"} → ${s.destination || "?"}`)
+              .join(" / ");
+            manual = {
+              routeSummary: (d.routeSummary && d.routeSummary.trim()) || derived || null,
+              passengerCount: Array.isArray(d.passengers) ? d.passengers.length : 0,
+              departingAt: d.slices?.[0]?.departingAt || null,
+            };
+          }
+
           return {
             id: payment.id,
             bookingReference: payment.duffelBookingRef,
@@ -1197,6 +1218,7 @@ export async function registerRoutes(
             bookedAt: payment.createdAt,
             proposalId: payment.proposalId,
             isManual,
+            manual,
             order: orderData,
           };
         })

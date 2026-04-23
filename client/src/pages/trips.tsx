@@ -11,6 +11,12 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+interface ManualTripDetails {
+  routeSummary: string | null;
+  passengerCount: number;
+  departingAt: string | null;
+}
+
 interface Trip {
   id: number;
   bookingReference: string | null;
@@ -20,6 +26,8 @@ interface Trip {
   status: string;
   bookedAt: string;
   proposalId: number | null;
+  isManual?: boolean;
+  manual?: ManualTripDetails | null;
   order: any;
 }
 
@@ -305,16 +313,33 @@ function TripCard({ trip }: { trip: Trip }) {
 }
 
 function TripCardFallback({ trip }: { trip: Trip }) {
+  const manual = trip.manual || null;
+  const heading = manual?.routeSummary || "Flight Booking";
   return (
-    <Card className="p-4 sm:p-5">
+    <Card id={`trip-${trip.id}`} className="p-4 sm:p-5 scroll-mt-20" data-testid={`card-trip-${trip.id}`}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-lg border flex items-center justify-center bg-muted/30">
             <Plane className="w-6 h-6 text-muted-foreground" />
           </div>
           <div>
-            <h3 className="font-semibold">Flight Booking</h3>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground mt-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold">{heading}</h3>
+              <Badge variant="default">Booked</Badge>
+            </div>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground mt-0.5 flex-wrap">
+              {manual?.departingAt && (
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5" />
+                  {formatDate(manual.departingAt)}
+                </span>
+              )}
+              {manual && manual.passengerCount > 0 && (
+                <span className="flex items-center gap-1">
+                  <Users className="w-3.5 h-3.5" />
+                  {manual.passengerCount} traveler{manual.passengerCount !== 1 ? "s" : ""}
+                </span>
+              )}
               {trip.bookingReference && (
                 <span className="flex items-center gap-1">
                   <Hash className="w-3.5 h-3.5" />
@@ -322,7 +347,7 @@ function TripCardFallback({ trip }: { trip: Trip }) {
                 </span>
               )}
               <span className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" /> {formatDate(trip.bookedAt)}
+                <Clock className="w-3.5 h-3.5" /> Booked {formatDate(trip.bookedAt)}
               </span>
             </div>
           </div>
