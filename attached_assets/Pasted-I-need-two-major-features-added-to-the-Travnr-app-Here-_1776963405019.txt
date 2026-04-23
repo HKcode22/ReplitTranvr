@@ -1,0 +1,118 @@
+I need two major features added to the Travnr app. Here's exactly what to build:
+
+---
+
+## FEATURE 1: Admin Mode for @travnr.com Accounts
+
+### How it works:
+- Any user whose email ends in `@travnr.com` is automatically an admin
+- When they log in, they see the admin dashboard instead of the regular dashboard
+- There is a toggle button (top right, near the ThemeToggle in the header) that says "Customer View" — clicking it switches them to see the normal user dashboard
+- They can toggle back to "Admin View" at any time
+- Store the current view mode in React state (not persisted — defaults to admin view on every login)
+
+### Admin detection:
+- In `server/routes.ts`, add a helper: `const isAdminEmail = (email: string) => email.endsWith('@travnr.com')`
+- In the `/api/auth/user` and `/api/auth/login` responses, add a field `isAdmin: isAdminEmail(user.email)`
+- In `client/src/lib/auth.tsx`, expose `isAdmin` from the user object
+
+### New admin API endpoints in `server/routes.ts`:
+All protected by `isAuthenticated` + a new `isAdmin` middleware that checks `req.session.userId` maps to a `@travnr.com` email.
+
+`GET /api/admin/stats` — returns:
+- `totalUsers`: count of all rows in `users` table
+- `totalRevenue`: sum of `amount` from `payments` where `status = 'paid'`
+- `totalBookings`: count of `payments` where `status = 'paid'` and `duffelOrderId` is not null
+- `totalCalls`: count of all `bland_calls` rows
+- `totalProposals`: count of all `itinerary_proposals` rows
+- `pendingManualBookings`: count of `payments` where `status = 'pending_manual'` (new status we're adding)
+- `duffelBalance`: call Duffel API `GET /air/balance` and return the `available_balance` and `currency` — if it fails return null
+
+`GET /api/admin/users` — returns last 50 users ordered by `created_at` desc, with fields: id, email, firstName, lastName, emailVerified, createdAt
+
+`GET /api/admin/bookings` — returns last 50 payments ordered by `created_at` desc, joined with user email, with all payment fields
+
+`GET /api/admin/pending-manual` — returns payments where `status = 'pending_manual'`, ordered by `created_at` desc, joined with user email and proposal title
+
+`POST /api/admin/pending-manual/:id/complete` — takes `{ bookingReference: string }` in body, updates payment status to `'paid'`, saves `bookingReference` to `duffelBookingRef`, sends a notification to the user: "Your flight has been booked! Reference: {bookingReference}"
+
+`GET /api/admin/calls` — returns last 50 bland_calls ordered by `created_at` desc
+
+### New admin dashboard page `client/src/pages/admin-dashboard.tsx`:
+A clean dashboard with these sections:
+
+**Top stat cards (single row):**
+- Total Users
+- Total Revenue (formatted as $X,XXX)
+- Total Bookings
+- Total Calls
+- Duffel Balance (shows amount + currency, or "Unavailable" if null, with a warning color if under $500)
+
+**Pending Manual Bookings section** (most important — show at top if any exist):
+- Table with columns: User email, Flight details (from proposal title), Amount, Date, Actions
+- "Mark as Booked" button that opens a small dialog asking for the booking reference, then calls `POST /api/admin/pending-manual/:id/complete`
+- If none pending, show a green "No pending manual bookings" message
+
+**Recent Users table:**
+- Columns: Name, Email, Verified (yes/no badge), Joined date
+
+**Recent Bookings table:**
+- Columns: User email, Amount, Booking ref, Status, Date
+
+**Recent Calls table:**
+- Columns: User, Phone, Status, Duration, Date
+
+### Wiring it up in `client/src/App.tsx`:
+- Import the new `AdminDashboardPage`
+- In `AuthenticatedLayout`, read `isAdmin` and `viewMode` from context
+- If `isAdmin && viewMode === 'admin'`, render `AdminDashboardPage` at `/dashboard` instead of `DashboardPage`
+- Add the view toggle button in the header next to `ThemeToggle` — only visible to admins
+
+---
+
+## FEATURE 2: Manual Booking Fallback (when Duffel balance is insufficient)
+
+### New payment status:
+- Add `'pending_manual'` to the `paymentStatusEnum` in `shared/schema.ts`
+- Run the migration
+
+### Balance check logic in `server/routes.ts`:
+Add a new helper function `checkDuffelBalance(requiredAmount: number, currency: string): Promise<boolean>` that:
+- Calls Duffel API to get current balance
+- Returns `true` if balance >= requiredAmount, `false` otherwise
+- Returns `true` if Duffel client is null (will fail at booking anyway)
+
+### Modify the booking endpoints:
+In both `POST /api/duffel/book-direct` and `POST /api/proposals/:id/book-duffel`:
+
+Before attempting to create the Duffel order, call `checkDuffelBalance(parseFloat(fullOffer.total_amount), fullOffer.total_currency)`.
+
+If balance is insufficient:
+- Do NOT attempt the Duffel order
+- If `stripePaymentIntentId` exists and the Stripe payment already succeeded: create a payment record with `status: 'pending_manual'`, save all the flight details in a new `manualBookingDetails` jsonb field (offer id, total amount, currency, passenger details, route summary)
+- Send an email alert to `ADMIN_ALERT_EMAILS` with subject "MANUAL BOOKING REQUIRED" containing: user email, flight details, amount paid, passenger info
+- Create a notification for the user: "Your payment was received. Our concierge team is processing your booking and will confirm within 1 hour."
+- Return response: `{ status: 'pending_manual', message: 'Your payment was received. Our concierge is processing your booking.' }`
+
+If balance is sufficient: proceed with booking as normal.
+
+### Add `manualBookingDetails` jsonb column to payments table in `shared/schema.ts`
+
+### Update the frontend booking flow:
+In `client/src/pages/proposal-detail.tsx` and `client/src/pages/flight-search.tsx`:
+- After a successful booking API call, check if `response.status === 'pending_manual'`
+- If so, show a different success state: a card with a concierge icon that says "Your concierge is processing your booking" with a subtext "You'll receive a confirmation email within 1 hour. Reference your proposals page for updates." — no booking reference shown yet
+- The normal instant booking success state stays the same when it works via Duffel
+
+---
+
+## Summary of files to create/modify:
+- `shared/schema.ts` — add `pending_manual` to enum, add `manualBookingDetails` jsonb column to payments
+- `server/routes.ts` — add admin endpoints, balance check helper, modify booking endpoints
+- `client/src/lib/auth.tsx` — expose `isAdmin`
+- `client/src/App.tsx` — admin routing + toggle
+- `client/src/pages/admin-dashboard.tsx` — NEW FILE
+- `client/src/pages/proposal-detail.tsx` — handle pending_manual response
+- `client/src/pages/flight-search.tsx` — handle pending_manual response
+
+After making all changes, run `npm run db:push` to apply schema changes.
