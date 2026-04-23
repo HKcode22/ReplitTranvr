@@ -9,6 +9,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Shield, User as UserIcon } from "lucide-react";
 
 import LandingPage from "@/pages/landing";
 import AuthPage from "@/pages/auth";
@@ -25,6 +27,7 @@ import SecurityPage from "@/pages/security";
 import TripsPage from "@/pages/trips";
 import FlightSearchPage from "@/pages/flight-search";
 import ResetPasswordPage from "@/pages/reset-password";
+import AdminDashboardPage from "@/pages/admin-dashboard";
 import NotFound from "@/pages/not-found";
 
 function AuthenticatedLayout() {
@@ -32,6 +35,7 @@ function AuthenticatedLayout() {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
+  const { isAdmin, viewMode, setViewMode } = useAuth();
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
@@ -40,11 +44,30 @@ function AuthenticatedLayout() {
         <div className="flex flex-col flex-1 min-w-0">
           <header className="sticky top-0 z-50 flex items-center justify-between gap-2 p-2 border-b backdrop-blur-md bg-background/80">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <Button
+                  variant={viewMode === "admin" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setViewMode(viewMode === "admin" ? "customer" : "admin")}
+                  data-testid="button-view-mode-toggle"
+                  className="gap-1.5"
+                >
+                  {viewMode === "admin" ? (
+                    <><Shield className="w-3.5 h-3.5" /> Admin</>
+                  ) : (
+                    <><UserIcon className="w-3.5 h-3.5" /> Customer</>
+                  )}
+                </Button>
+              )}
+              <ThemeToggle />
+            </div>
           </header>
           <main className="flex-1 overflow-auto">
             <Switch>
-              <Route path="/dashboard" component={DashboardPage} />
+              <Route path="/dashboard">
+                {isAdmin && viewMode === "admin" ? <AdminDashboardPage /> : <DashboardPage />}
+              </Route>
               <Route path="/profile" component={ProfilePage} />
               <Route path="/request-call" component={RequestCallPage} />
               <Route path="/call-history" component={CallHistoryPage} />

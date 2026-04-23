@@ -1,4 +1,4 @@
-import { eq, desc, and, isNull } from "drizzle-orm";
+import { eq, desc, and, isNull, count, sql, inArray } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, travelerProfiles, callRequests, itineraryProposals,
@@ -309,6 +309,43 @@ export class DatabaseStorage implements IStorage {
   async updateBlandCall(id: number, data: Partial<BlandCall>): Promise<BlandCall | undefined> {
     const [call] = await db.update(blandCalls).set(data).where(eq(blandCalls.id, id)).returning();
     return call;
+  }
+
+  // ===== Admin queries =====
+  async adminGetAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
+  async adminGetAllPayments(): Promise<Payment[]> {
+    return db.select().from(payments).orderBy(desc(payments.createdAt));
+  }
+
+  async adminGetPaymentsByStatus(status: any): Promise<Payment[]> {
+    return db.select().from(payments).where(eq(payments.status, status)).orderBy(desc(payments.createdAt));
+  }
+
+  async adminGetAllCallRequests(): Promise<CallRequest[]> {
+    return db.select().from(callRequests).orderBy(desc(callRequests.createdAt));
+  }
+
+  async adminGetUsersByIds(ids: string[]): Promise<User[]> {
+    if (ids.length === 0) return [];
+    return db.select().from(users).where(inArray(users.id, ids));
+  }
+
+  async adminGetStats(): Promise<{ users: number; payments: number; pendingManual: number; bookings: number; calls: number }> {
+    const [u] = await db.select({ c: count() }).from(users);
+    const [p] = await db.select({ c: count() }).from(payments);
+    const [pm] = await db.select({ c: count() }).from(payments).where(eq(payments.status, "pending_manual" as any));
+    const [b] = await db.select({ c: count() }).from(payments).where(eq(payments.status, "paid" as any));
+    const [cr] = await db.select({ c: count() }).from(callRequests);
+    return {
+      users: Number(u?.c || 0),
+      payments: Number(p?.c || 0),
+      pendingManual: Number(pm?.c || 0),
+      bookings: Number(b?.c || 0),
+      calls: Number(cr?.c || 0),
+    };
   }
 }
 

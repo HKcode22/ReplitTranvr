@@ -705,12 +705,16 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
       return res.json();
     },
     onSuccess: (data: any) => {
-      setBookingResult(data);
+      setBookingResult({ ...data, pendingManual: data.status === "pending_manual" });
       queryClient.invalidateQueries({ queryKey: ["/api/proposals", String(proposal.id)] });
       queryClient.invalidateQueries({ queryKey: ["/api/proposals"] });
       queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-      toast({ title: "Flights booked successfully!" });
+      if (data.status === "pending_manual") {
+        toast({ title: "Payment received", description: "Our concierge team will finalize your booking shortly." });
+      } else {
+        toast({ title: "Flights booked successfully!" });
+      }
     },
     onError: async (err: any, variables: any) => {
       bookingCalledRef.current = false;
@@ -834,6 +838,40 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
       setIsLoadingOffer(false);
     }
   };
+
+  if (bookingResult?.pendingManual) {
+    return (
+      <div className="space-y-4">
+        <Card className="p-6 text-center space-y-4 border-amber-500/30">
+          <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto">
+            <Check className="w-8 h-8 text-amber-600" />
+          </div>
+          <h2 className="text-xl font-bold" data-testid="text-booking-pending-manual">Payment Received</h2>
+          <p className="text-muted-foreground">
+            Your payment for "{proposal.title}" has been received. Our concierge team is finalizing your booking and will email you shortly with your confirmation.
+          </p>
+          <div className="rounded-md border p-4 text-left bg-muted/30">
+            <div className="flex justify-between gap-2 text-sm">
+              <span className="text-muted-foreground">Amount Paid</span>
+              <span className="font-semibold">{totalCurrency} {totalWithFeeDisplay}</span>
+            </div>
+          </div>
+        </Card>
+        <div className="flex gap-3 flex-wrap">
+          <Link href="/proposals">
+            <Button variant="outline" data-testid="button-back-to-proposals-pending">
+              <ArrowLeft className="w-4 h-4 mr-1" /> Back to Proposals
+            </Button>
+          </Link>
+          <Link href="/billing">
+            <Button variant="outline" data-testid="button-view-billing-pending">
+              <CreditCard className="w-4 h-4 mr-1" /> View in Billing
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   if (bookingResult) {
     const refs = bookingResult?.bookings?.map((b: any) => b.bookingReference).filter(Boolean).join(", ");

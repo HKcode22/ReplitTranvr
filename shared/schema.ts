@@ -9,7 +9,7 @@ export const tripTypeEnum = pgEnum("trip_type", ["flight", "hotel", "both"]);
 export const callStatusEnum = pgEnum("call_status", ["requested", "scheduled", "completed", "cancelled"]);
 export const proposalStatusEnum = pgEnum("proposal_status", ["draft", "sent", "approved", "rejected"]);
 export const proposalItemTypeEnum = pgEnum("proposal_item_type", ["flight", "hotel", "other"]);
-export const paymentStatusEnum = pgEnum("payment_status", ["unpaid", "processing", "paid", "failed"]);
+export const paymentStatusEnum = pgEnum("payment_status", ["unpaid", "processing", "paid", "failed", "pending_manual"]);
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
@@ -126,6 +126,10 @@ export const payments = pgTable("payments", {
   refundStatus: text("refund_status"),
   refundRequestedAt: timestamp("refund_requested_at"),
   refundReason: text("refund_reason"),
+  manualBookingDetails: jsonb("manual_booking_details"),
+  manualBookingResolvedAt: timestamp("manual_booking_resolved_at"),
+  manualBookingResolvedBy: varchar("manual_booking_resolved_by", { length: 36 }).references(() => users.id),
+  manualBookingNotes: text("manual_booking_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

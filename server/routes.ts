@@ -196,6 +196,168 @@ async function sendBookingFailureAlert(context: {
   }
 }
 
+const ADMIN_EMAIL_DOMAIN = "@travnr.com";
+
+export function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const lower = email.toLowerCase();
+  return lower.endsWith(ADMIN_EMAIL_DOMAIN) || ADMIN_ALERT_EMAILS.map((e) => e.toLowerCase()).includes(lower);
+}
+
+async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session?.userId) return res.status(401).json({ message: "Unauthorized" });
+  const u = await storage.getUser(req.session.userId);
+  if (!u || !isAdminEmail(u.email)) return res.status(403).json({ message: "Admin access required" });
+  next();
+}
+
+async function getDuffelBalance(): Promise<{ available: number; currency: string } | null> {
+  const token = process.env.DUFFEL_API_TOKEN;
+  if (!token) return null;
+  try {
+    const r = await fetch("https://api.duffel.com/air/balance", {
+      headers: { Authorization: `Bearer ${token}`, "Duffel-Version": "v2", Accept: "application/json" },
+    });
+    if (!r.ok) return null;
+    const j: any = await r.json();
+    const data = j?.data || j;
+    const amountStr = data?.available_balance?.amount ?? data?.amount ?? null;
+    const currency = data?.available_balance?.currency ?? data?.currency ?? "USD";
+    if (amountStr == null) return null;
+    const available = parseFloat(String(amountStr));
+    if (Number.isNaN(available)) return null;
+    return { available, currency };
+  } catch (e) {
+    console.error("[Duffel] Balance check failed:", e);
+    return null;
+  }
+}
+
+async function isDuffelBalanceSufficient(amount: number, currency: string): Promise<boolean> {
+  const bal = await getDuffelBalance();
+  if (!bal) return true; // Unknown — don't divert
+  if (bal.currency.toUpperCase() !== currency.toUpperCase()) return true; // Can't compare
+  return bal.available >= amount;
+}
+
+async function sendManualBookingAdminAlert(context: {
+  endpoint: string;
+  userId: string;
+  userEmail?: string;
+  paymentId: number;
+  stripePaymentIntentId?: string | null;
+  offerId?: string;
+  proposalId?: number | null;
+  amount: string;
+  currency: string;
+}) {
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+  const { endpoint, userId, userEmail, paymentId, stripePaymentIntentId, offerId, proposalId, amount, currency } = context;
+  const timestamp = new Date().toISOString();
+  const html = `
+    <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 20px;">
+      <div style="background: #b45309; color: white; padding: 16px 20px; border-radius: 8px 8px 0 0;">
+        <h2 style="margin: 0; font-size: 18px;">Manual Booking Required — Duffel Balance Insufficient</h2>
+        <p style="margin: 4px 0 0; font-size: 13px; opacity: 0.85;">${timestamp}</p>
+      </div>
+      <div style="border: 1px solid #e5e7eb; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
+        <p style="font-size: 14px; color: #1f2937;">A customer payment was successfully captured but the Duffel balance is insufficient to complete the booking automatically. Please log into the admin dashboard to complete this booking manually.</p>
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <tr><td style="padding: 6px 0; color: #6b7280; width: 160px;">Endpoint</td><td style="padding: 6px 0; font-family: monospace;">${endpoint}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">Payment ID</td><td style="padding: 6px 0; font-family: monospace;">${paymentId}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">User</td><td style="padding: 6px 0;">${userEmail || userId}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">Amount Charged</td><td style="padding: 6px 0;"><strong>${currency.toUpperCase()} ${amount}</strong></td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">Stripe PI</td><td style="padding: 6px 0; font-family: monospace;">${stripePaymentIntentId || "—"}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">Duffel Offer ID</td><td style="padding: 6px 0; font-family: monospace;">${offerId || "—"}</td></tr>
+          <tr><td style="padding: 6px 0; color: #6b7280;">Proposal ID</td><td style="padding: 6px 0;">${proposalId ?? "—"}</td></tr>
+        </table>
+      </div>
+    </div>
+  `;
+  try {
+    await sgMail.send({
+      to: ADMIN_ALERT_EMAILS,
+      from: { email: fromEmail, name: "Travnr Alerts" },
+      subject: `[MANUAL BOOKING] ${currency.toUpperCase()} ${amount} — ${userEmail || userId}`,
+      html,
+    });
+  } catch (mailErr) {
+    console.error("Failed to send manual booking alert email:", mailErr);
+  }
+}
+
+async function createManualBookingFallback(args: {
+  userId: string;
+  userEmail?: string;
+  proposalId: number | null;
+  proposalTitle?: string | null;
+  offerId: string;
+  fullOffer: any;
+  passengerMappings: any[];
+  paidPiAmountCents: number | null;
+  stripePaymentIntentId: string | null;
+  endpoint: string;
+}) {
+  const { userId, userEmail, proposalId, proposalTitle, offerId, fullOffer, passengerMappings, paidPiAmountCents, stripePaymentIntentId, endpoint } = args;
+  const flightAmountCents = Math.round(parseFloat(fullOffer.total_amount) * 100);
+  const fallbackTotalCents = applyConvenienceFee(flightAmountCents).totalCents;
+  const chargedTotalCents = paidPiAmountCents ?? fallbackTotalCents;
+  const chargedTotalAmount = (chargedTotalCents / 100).toFixed(2);
+  const currency = (fullOffer.total_currency || "usd").toLowerCase();
+
+  const sliceSummary = (fullOffer.slices || []).map((s: any) => ({
+    origin: s.origin?.iata_code,
+    destination: s.destination?.iata_code,
+    departingAt: s.segments?.[0]?.departing_at,
+    arrivingAt: s.segments?.[s.segments.length - 1]?.arriving_at,
+    carrier: s.segments?.[0]?.marketing_carrier?.name,
+    flightNumber: s.segments?.[0]?.marketing_carrier_flight_number,
+  }));
+
+  const payment = await storage.createPayment({
+    userId,
+    proposalId: proposalId ?? null,
+    stripePaymentIntentId: stripePaymentIntentId ?? null,
+    duffelOrderId: null,
+    duffelBookingRef: null,
+    amount: chargedTotalAmount,
+    currency,
+    status: "pending_manual",
+    manualBookingDetails: {
+      reason: "duffel_balance_insufficient",
+      offerId,
+      totalAmount: fullOffer.total_amount,
+      currency: fullOffer.total_currency,
+      slices: sliceSummary,
+      passengers: passengerMappings,
+      proposalTitle: proposalTitle ?? null,
+      capturedAt: new Date().toISOString(),
+    } as any,
+  } as any);
+
+  await storage.createNotification({
+    userId,
+    type: "manual_booking_pending",
+    title: "Booking received — being processed",
+    body: "Your payment was received. Our concierge team is finalizing your booking and will email you shortly with your confirmation.",
+    linkUrl: "/billing",
+  });
+
+  await sendManualBookingAdminAlert({
+    endpoint,
+    userId,
+    userEmail,
+    paymentId: payment.id,
+    stripePaymentIntentId,
+    offerId,
+    proposalId: proposalId ?? null,
+    amount: chargedTotalAmount,
+    currency,
+  });
+
+  return payment;
+}
+
 export interface BaggageAllowance {
   type: string;
   quantity: number;
@@ -664,7 +826,7 @@ export async function registerRoutes(
       }
       req.session.userId = user.id;
       const { password: _, verificationToken: __, ...safeUser } = user;
-      return res.json(safeUser);
+      return res.json({ ...safeUser, isAdmin: isAdminEmail(user.email) });
     } catch (error: any) {
       console.error("Login error:", error);
       return res.status(500).json({ message: "Login failed" });
@@ -688,7 +850,7 @@ export async function registerRoutes(
       return res.status(401).json({ message: "User not found" });
     }
     const { password: _, verificationToken: __, ...safeUser } = user;
-    return res.json(safeUser);
+    return res.json({ ...safeUser, isAdmin: isAdminEmail(user.email) });
   });
 
   app.get("/api/auth/verify", async (req: Request, res: Response) => {
@@ -1310,6 +1472,27 @@ export async function registerRoutes(
         paidPiAmountCents = pi.amount;
       }
 
+      // Idempotency: if this PaymentIntent was already processed, return the existing booking/fallback
+      if (stripePaymentIntentId) {
+        const existing = await storage.getPaymentByStripeIntentId(stripePaymentIntentId);
+        if (existing) {
+          if (existing.status === "pending_manual") {
+            return res.json({
+              status: "pending_manual",
+              booking: { payment: existing, bookingReference: null, orderId: null },
+              message: "Payment received. Our concierge team will finalize your booking and email you shortly.",
+            });
+          }
+          return res.json({
+            booking: {
+              payment: existing,
+              bookingReference: existing.duffelBookingRef,
+              orderId: existing.duffelOrderId,
+            },
+          });
+        }
+      }
+
       if (fullOffer.expires_at && new Date(fullOffer.expires_at) < new Date()) {
         return res.status(400).json({ message: "This flight offer has expired. Please search again for current availability." });
       }
@@ -1334,6 +1517,27 @@ export async function registerRoutes(
           gender: pax.gender,
         };
       });
+
+      const balanceOk = await isDuffelBalanceSufficient(parseFloat(fullOffer.total_amount), fullOffer.total_currency);
+      if (!balanceOk) {
+        const payment = await createManualBookingFallback({
+          userId: req.session.userId!,
+          userEmail: user.email,
+          proposalId: null,
+          proposalTitle: null,
+          offerId,
+          fullOffer,
+          passengerMappings,
+          paidPiAmountCents,
+          stripePaymentIntentId: stripePaymentIntentId || null,
+          endpoint: "POST /api/duffel/book-direct",
+        });
+        return res.json({
+          status: "pending_manual",
+          booking: { payment, bookingReference: null, orderId: null },
+          message: "Payment received. Our concierge team will finalize your booking and email you shortly.",
+        });
+      }
 
       const order = await duffel.orders.create({
         selected_offers: [offerId],
@@ -1769,6 +1973,48 @@ export async function registerRoutes(
         paidPiAmountCents = pi.amount;
       }
 
+      // Idempotency: if this PaymentIntent was already processed, return the existing booking/fallback
+      if (stripePaymentIntentId) {
+        const existing = await storage.getPaymentByStripeIntentId(stripePaymentIntentId);
+        if (existing) {
+          if (existing.status === "pending_manual") {
+            return res.json({
+              status: "pending_manual",
+              bookings: [{ payment: existing, bookingReference: null, orderId: null }],
+              message: "Payment received. Our concierge team will finalize your booking and email you shortly.",
+            });
+          }
+          return res.json({
+            bookings: [{
+              payment: existing,
+              bookingReference: existing.duffelBookingRef,
+              orderId: existing.duffelOrderId,
+            }],
+          });
+        }
+      }
+
+      const balanceOk = await isDuffelBalanceSufficient(parseFloat(String(amount)), String(currency));
+      if (!balanceOk) {
+        const payment = await createManualBookingFallback({
+          userId: req.session.userId!,
+          userEmail: user.email,
+          proposalId,
+          proposalTitle: proposal.title,
+          offerId: effectiveOfferId,
+          fullOffer,
+          passengerMappings,
+          paidPiAmountCents,
+          stripePaymentIntentId: stripePaymentIntentId || null,
+          endpoint: `POST /api/proposals/${proposalId}/book-duffel`,
+        });
+        return res.json({
+          status: "pending_manual",
+          bookings: [{ payment, bookingReference: null, orderId: null }],
+          message: "Payment received. Our concierge team will finalize your booking and email you shortly.",
+        });
+      }
+
       const order = await duffel.orders.create({
         selected_offers: [effectiveOfferId],
         passengers: passengerMappings,
@@ -1862,6 +2108,72 @@ export async function registerRoutes(
       });
       return res.status(500).json({ message: errMessage });
     }
+  });
+
+  // ==================== ADMIN ====================
+
+  app.get("/api/admin/stats", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    const stats = await storage.adminGetStats();
+    const balance = await getDuffelBalance();
+    return res.json({ ...stats, duffelBalance: balance });
+  });
+
+  app.get("/api/admin/users", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    const all = await storage.adminGetAllUsers();
+    return res.json(all.map(({ password, verificationToken, passwordResetToken, ...rest }) => ({ ...rest, isAdmin: isAdminEmail(rest.email) })));
+  });
+
+  app.get("/api/admin/payments", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    const list = await storage.adminGetAllPayments();
+    const userIds = Array.from(new Set(list.map((p) => p.userId)));
+    const usersList = await storage.adminGetUsersByIds(userIds);
+    const userMap = new Map(usersList.map((u) => [u.id, { email: u.email, firstName: u.firstName, lastName: u.lastName }]));
+    return res.json(list.map((p) => ({ ...p, user: userMap.get(p.userId) || null })));
+  });
+
+  app.get("/api/admin/pending-manual", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    const list = await storage.adminGetPaymentsByStatus("pending_manual");
+    const userIds = Array.from(new Set(list.map((p) => p.userId)));
+    const usersList = await storage.adminGetUsersByIds(userIds);
+    const userMap = new Map(usersList.map((u) => [u.id, { email: u.email, firstName: u.firstName, lastName: u.lastName, phone: null as any }]));
+    return res.json(list.map((p) => ({ ...p, user: userMap.get(p.userId) || null })));
+  });
+
+  app.post("/api/admin/pending-manual/:id/complete", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid payment ID" });
+    const { duffelBookingRef, duffelOrderId, notes } = req.body || {};
+    const payment = await storage.getPayment(id);
+    if (!payment) return res.status(404).json({ message: "Payment not found" });
+    if (payment.status !== "pending_manual") {
+      return res.status(400).json({ message: "Payment is not in pending_manual status" });
+    }
+    const updated = await storage.updatePayment(id, {
+      status: "paid" as any,
+      duffelBookingRef: duffelBookingRef || null,
+      duffelOrderId: duffelOrderId || null,
+      manualBookingNotes: notes || null,
+      manualBookingResolvedAt: new Date(),
+      manualBookingResolvedBy: req.session.userId!,
+    } as any);
+    await storage.createNotification({
+      userId: payment.userId,
+      type: "payment_confirmed",
+      title: "Booking confirmed!",
+      body: duffelBookingRef
+        ? `Your flight has been booked. Booking reference: ${duffelBookingRef}`
+        : "Your flight has been booked. Check your email for details.",
+      linkUrl: "/billing",
+    });
+    return res.json(updated);
+  });
+
+  app.get("/api/admin/calls", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    const list = await storage.adminGetAllCallRequests();
+    const userIds = Array.from(new Set(list.map((c) => c.userId)));
+    const usersList = await storage.adminGetUsersByIds(userIds);
+    const userMap = new Map(usersList.map((u) => [u.id, { email: u.email, firstName: u.firstName, lastName: u.lastName }]));
+    return res.json(list.map((c) => ({ ...c, user: userMap.get(c.userId) || null })));
   });
 
   // ==================== BLAND AI INTEGRATION ====================

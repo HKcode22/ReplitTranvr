@@ -56,7 +56,7 @@ shared/
 ```
 
 ## Database Tables
-- users, sessions, traveler_profiles, call_requests, itinerary_proposals, proposal_items, notifications, payments, callback_requests, saved_cards, bland_calls
+- users, sessions, traveler_profiles, call_requests, itinerary_proposals, proposal_items, notifications, payments (with `pending_manual` status + `manual_booking_details` jsonb for fallback bookings), callback_requests, saved_cards, bland_calls
 
 ## Environment Variables
 - `DATABASE_URL` - PostgreSQL connection string (auto-configured)
@@ -67,6 +67,19 @@ shared/
 - `DUFFEL_API_TOKEN` - Duffel API token for production flight search and booking (secret)
 - `DUFFEL_TEST_API_TOKEN` - Duffel test API token (secret, currently unused - app uses production token only)
 - `BLAND_AI_API_KEY` - Bland AI API key for voice concierge calls (secret)
+
+## Admin Mode & Manual Booking Fallback
+- **Admin Detection**: Users with `@travnr.com` email or in `ADMIN_ALERT_EMAILS` allowlist are treated as admins. `/api/auth/login` and `/api/auth/user` return `isAdmin` flag.
+- **View Toggle**: Admins see a Customer/Admin toggle in the header (defaults to Admin on each session). When in Admin view, `/dashboard` renders the Admin Dashboard; in Customer view, the regular customer dashboard.
+- **Admin Dashboard** (`client/src/pages/admin-dashboard.tsx`): Stat cards (Duffel balance with low-balance warning <$500, pending manual count, bookings, users, calls) + tabs (Pending Manual, Payments, Users, Calls). Pending Manual rows have a "Mark Complete" dialog to record booking ref/order ID/notes.
+- **Admin Endpoints** (all behind `isAuthenticated` + `requireAdmin` which re-checks the session user's email server-side):
+  - `GET /api/admin/stats` — counts + Duffel balance
+  - `GET /api/admin/users` — all users with `isAdmin` flag (passwords stripped)
+  - `GET /api/admin/payments` — all payments with embedded user info
+  - `GET /api/admin/pending-manual` — pending manual bookings
+  - `POST /api/admin/pending-manual/:id/complete` — mark complete (records duffelBookingRef/duffelOrderId/notes/resolvedBy/resolvedAt + notifies user)
+  - `GET /api/admin/calls` — all call requests
+- **Manual Booking Fallback**: Both `/api/duffel/book-direct` and `/api/proposals/:id/book-duffel` check Duffel balance via `https://api.duffel.com/air/balance` AFTER Stripe PI verification but BEFORE `duffel.orders.create`. If known-insufficient, creates a payment row with status `pending_manual` (storing offer/passenger/route details in `manual_booking_details` jsonb), notifies the customer ("Payment received, concierge processing"), emails admins, and returns `{ status: "pending_manual" }` to the client. Both checkout flows render an amber "Payment Received" success card instead of "Booking Confirmed". Balance check returns sufficient on errors/unknown to avoid spurious diversions.
 
 ## Key Features
 - Custom email/password auth with email verification via SendGrid, forgot/reset password flow

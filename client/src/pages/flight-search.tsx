@@ -355,10 +355,14 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
       return res.json();
     },
     onSuccess: (data: any) => {
-      setBookingResult(data.booking);
+      setBookingResult({ ...data.booking, pendingManual: data.status === "pending_manual" });
       queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
-      toast({ title: "Flight booked successfully!" });
+      if (data.status === "pending_manual") {
+        toast({ title: "Payment received", description: "Our concierge team will finalize your booking shortly." });
+      } else {
+        toast({ title: "Flight booked successfully!" });
+      }
     },
     onError: async (err: any, variables: any) => {
       bookingCalledRef.current = false;
@@ -424,6 +428,32 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
       createPaymentIntentMutation.mutate();
     }
   };
+
+  if (bookingResult?.pendingManual) {
+    return (
+      <div className="space-y-4">
+        <Card className="p-6 text-center space-y-4 border-amber-500/30">
+          <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto">
+            <Check className="w-8 h-8 text-amber-600" />
+          </div>
+          <h2 className="text-xl font-bold" data-testid="text-booking-pending-manual">Payment Received</h2>
+          <p className="text-muted-foreground">
+            Your payment has been received. Our concierge team is finalizing your booking and will email you shortly with your confirmation.
+          </p>
+          <div className="rounded-md border p-4 text-left bg-muted/30">
+            <div className="flex justify-between gap-2 text-sm">
+              <span className="text-muted-foreground">Amount Paid</span>
+              <span className="font-semibold">{offer.totalCurrency} {totalWithFee}</span>
+            </div>
+          </div>
+          <FlightSummaryCard offer={offer} compact />
+        </Card>
+        <Button variant="outline" onClick={onBack} data-testid="button-search-again-pending">
+          <ArrowLeft className="w-4 h-4 mr-1" /> Search More Flights
+        </Button>
+      </div>
+    );
+  }
 
   if (bookingResult) {
     return (

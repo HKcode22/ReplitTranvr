@@ -1,12 +1,19 @@
-import { createContext, useContext, ReactNode } from "react";
+import { createContext, useContext, ReactNode, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "./queryClient";
 import type { User } from "@shared/schema";
 import { useLocation } from "wouter";
 
+type AuthUser = User & { isAdmin?: boolean };
+
+type ViewMode = "customer" | "admin";
+
 type AuthContextType = {
-  user: User | null;
+  user: AuthUser | null;
   isLoading: boolean;
+  isAdmin: boolean;
+  viewMode: ViewMode;
+  setViewMode: (mode: ViewMode) => void;
   login: (email: string, password: string) => Promise<any>;
   register: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<any>;
   logout: () => Promise<void>;
@@ -16,8 +23,9 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [, setLocation] = useLocation();
+  const [viewMode, setViewMode] = useState<ViewMode>("admin");
 
-  const { data: user, isLoading } = useQuery<User | null>({
+  const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
       const res = await fetch("/api/auth/user", { credentials: "include" });
@@ -56,11 +64,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  const isAdmin = !!user?.isAdmin;
+
   return (
     <AuthContext.Provider
       value={{
         user: user ?? null,
         isLoading,
+        isAdmin,
+        viewMode,
+        setViewMode,
         login: (email, password) => loginMutation.mutateAsync({ email, password }),
         register: (data) => registerMutation.mutateAsync(data),
         logout: () => logoutMutation.mutateAsync(),
