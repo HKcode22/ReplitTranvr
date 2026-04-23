@@ -132,7 +132,7 @@ function DuffelBalanceCard() {
   });
 
   const startEdit = () => {
-    setValue(data ? String(data.seed) : "");
+    setValue(data ? String(data.estimated) : "");
     setEditing(true);
   };
 
@@ -142,7 +142,11 @@ function DuffelBalanceCard() {
       toast({ title: "Enter a number", variant: "destructive" });
       return;
     }
-    mut.mutate(n);
+    // The backend stores the seed and re-derives `estimated = seed - totalSpent`.
+    // Admins type the displayed estimate, so add totalSpent back to convert it
+    // into the seed the endpoint expects.
+    const seedToPersist = n + (data?.totalSpent ?? 0);
+    mut.mutate(seedToPersist);
   };
 
   if (isLoading) {
