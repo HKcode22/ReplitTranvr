@@ -17,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/status-badge";
 import { PhoneInput } from "@/components/phone-input";
+import { PromoCodeInput, type AppliedPromo } from "@/components/promo-code-input";
 import { useToast } from "@/hooks/use-toast";
 import type { ItineraryProposal, ProposalItem, Payment, TravelerProfile } from "@shared/schema";
 import { AirportSearch } from "@/components/airport-search";
@@ -762,6 +763,13 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
     },
   });
 
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+
+  const effectiveTotalCents = appliedPromo
+    ? Math.ceil(appliedPromo.overrideAmountCents * 1.05)
+    : totalWithFeeCents;
+  const effectiveTotalDisplay = (effectiveTotalCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+
   const createPaymentIntentMutation = useMutation({
     mutationFn: async () => {
       const [configRes, piRes] = await Promise.all([
@@ -771,6 +779,7 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
           currency: totalCurrency,
           proposalId: proposal.id,
           itemId: selectedItem.id,
+          ...(appliedPromo ? { promoCode: appliedPromo.code } : {}),
         }).then(r => r.json()),
       ]);
       return { ...piRes, publishableKey: configRes.publishableKey };
@@ -1212,6 +1221,15 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
             </Card>
           ))}
 
+          <Card className="p-4">
+            <PromoCodeInput
+              applied={appliedPromo}
+              onApply={setAppliedPromo}
+              onClear={() => setAppliedPromo(null)}
+              currency={totalCurrency}
+            />
+          </Card>
+
           <Button
             type="submit"
             className="w-full"
@@ -1229,7 +1247,7 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
                 : "Setting up payment..."
               : createPaymentIntentMutation.isPending
               ? "Setting up payment..."
-              : `Continue to Payment — ${totalCurrency} ${totalWithFeeDisplay}`}
+              : `Continue to Payment — ${totalCurrency} ${effectiveTotalDisplay}`}
           </Button>
         </form>
       </Form>

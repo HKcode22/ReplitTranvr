@@ -30,6 +30,41 @@ function applyConvenienceFee(originalCents: number): { originalCents: number; fe
   return { originalCents, feeCents, totalCents };
 }
 
+type PromoValidationResult =
+  | { ok: false; reason: string }
+  | { ok: true; promoId: number; code: string; overrideAmountCents: number; forceManual: boolean };
+
+async function validatePromoCodeForUser(
+  rawCode: string | undefined | null,
+  userEmail: string | null | undefined,
+): Promise<PromoValidationResult> {
+  if (!rawCode || typeof rawCode !== "string" || !rawCode.trim()) {
+    return { ok: false, reason: "Promo code required" };
+  }
+  const promo = await storage.getPromoCodeByCode(rawCode);
+  if (!promo) return { ok: false, reason: "Promo code not found" };
+  if (!promo.active) return { ok: false, reason: "Promo code is inactive" };
+  if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) {
+    return { ok: false, reason: "Promo code has expired" };
+  }
+  if (promo.maxUses != null && promo.usedCount >= promo.maxUses) {
+    return { ok: false, reason: "Promo code fully redeemed" };
+  }
+  if (promo.adminOnly && !isAdminEmail(userEmail)) {
+    return { ok: false, reason: "Promo code is admin-only" };
+  }
+  if (!Number.isFinite(promo.overrideAmountCents) || promo.overrideAmountCents < 50) {
+    return { ok: false, reason: "Promo override amount is invalid (must be >= 50 cents)" };
+  }
+  return {
+    ok: true,
+    promoId: promo.id,
+    code: promo.code,
+    overrideAmountCents: promo.overrideAmountCents,
+    forceManual: promo.forceManual,
+  };
+}
+
 function getBaseUrl(req: Request): string {
   const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
   const host = req.headers["x-forwarded-host"] || req.headers.host;
@@ -1384,16 +1419,43 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/promo/validate", isAuthenticated, async (req: Request, res: Response) => {
+    const { code } = req.body || {};
+    const user = await storage.getUser(req.session.userId!);
+    const result = await validatePromoCodeForUser(code, user?.email);
+    if (!result.ok) {
+      return res.status(400).json({ valid: false, message: result.reason });
+    }
+    return res.json({
+      valid: true,
+      code: result.code,
+      overrideAmountCents: result.overrideAmountCents,
+      forceManual: result.forceManual,
+    });
+  });
+
   app.post("/api/stripe/create-flight-payment-intent", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { amount, currency, offerId, proposalId, itemId } = req.body;
+      const { amount, currency, offerId, proposalId, itemId, promoCode } = req.body;
       if (!amount || !currency) return res.status(400).json({ message: "Amount and currency are required" });
 
       const serverAmount = parseFloat(String(amount));
       if (!serverAmount || serverAmount <= 0) return res.status(400).json({ message: "Invalid amount" });
 
+      const user = await storage.getUser(req.session.userId!);
+      let promoMeta: { code: string; promoId: number; forceManual: boolean } | null = null;
+      let amountInCents = Math.round(serverAmount * 100);
+
+      if (promoCode) {
+        const promo = await validatePromoCodeForUser(String(promoCode), user?.email);
+        if (!promo.ok) {
+          return res.status(400).json({ message: `Promo code rejected: ${promo.reason}` });
+        }
+        amountInCents = promo.overrideAmountCents;
+        promoMeta = { code: promo.code, promoId: promo.promoId, forceManual: promo.forceManual };
+      }
+
       const stripe = await getUncachableStripeClient();
-      const amountInCents = Math.round(serverAmount * 100);
       const fee = applyConvenienceFee(amountInCents);
 
       const paymentIntent = await stripe.paymentIntents.create({
@@ -1409,12 +1471,18 @@ export async function registerRoutes(
           ...(offerId ? { offerId } : {}),
           ...(proposalId ? { proposalId: String(proposalId) } : {}),
           ...(itemId ? { itemId: String(itemId) } : {}),
+          ...(promoMeta ? {
+            promoCode: promoMeta.code,
+            promoId: String(promoMeta.promoId),
+            promoForceManual: promoMeta.forceManual ? "1" : "0",
+          } : {}),
         },
       });
 
       res.json({
         clientSecret: paymentIntent.client_secret,
         paymentIntentId: paymentIntent.id,
+        promoApplied: promoMeta ? { code: promoMeta.code, forceManual: promoMeta.forceManual, chargedAmountCents: fee.totalCents } : null,
       });
     } catch (err: any) {
       console.error("Stripe flight PaymentIntent error:", err);
@@ -1452,6 +1520,7 @@ export async function registerRoutes(
       const fullOffer = offer.data as any;
 
       let paidPiAmountCents: number | null = null;
+      let appliedPromo: { id: number; code: string; forceManual: boolean } | null = null;
       if (stripePaymentIntentId) {
         const stripe = await getUncachableStripeClient();
         const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
@@ -1461,10 +1530,21 @@ export async function registerRoutes(
         if (pi.metadata?.userId !== req.session.userId!) {
           return res.status(403).json({ message: "Payment does not belong to this user" });
         }
-        const expectedCents = Math.round(parseFloat(fullOffer.total_amount) * 100);
-        const expectedTotalCents = applyConvenienceFee(expectedCents).totalCents;
-        if (pi.amount < expectedTotalCents) {
-          return res.status(400).json({ message: "Payment amount is insufficient for this flight" });
+        const piPromoCode = pi.metadata?.promoCode || null;
+        if (piPromoCode) {
+          const promo = await validatePromoCodeForUser(piPromoCode, user.email);
+          if (promo.ok) {
+            appliedPromo = { id: promo.promoId, code: promo.code, forceManual: promo.forceManual };
+          } else {
+            console.warn("[promo] PI metadata promo no longer valid:", piPromoCode, promo.reason);
+          }
+        }
+        if (!appliedPromo) {
+          const expectedCents = Math.round(parseFloat(fullOffer.total_amount) * 100);
+          const expectedTotalCents = applyConvenienceFee(expectedCents).totalCents;
+          if (pi.amount < expectedTotalCents) {
+            return res.status(400).json({ message: "Payment amount is insufficient for this flight" });
+          }
         }
         if (pi.currency !== fullOffer.total_currency.toLowerCase()) {
           return res.status(400).json({ message: "Payment currency does not match the flight currency" });
@@ -1519,9 +1599,11 @@ export async function registerRoutes(
       });
 
       const balanceOk = await isDuffelBalanceSufficient(parseFloat(fullOffer.total_amount), fullOffer.total_currency);
+      // Force pending-manual when an admin promo with forceManual is in effect, or when balance is insufficient.
+      const forceManualByPromo = !!(appliedPromo?.forceManual);
       // Only divert to manual fallback when the customer has paid via Stripe
       // (useBalance/test-mode flows have no captured payment to back the fallback).
-      if (!balanceOk && stripePaymentIntentId && paidPiAmountCents != null) {
+      if ((forceManualByPromo || !balanceOk) && stripePaymentIntentId && paidPiAmountCents != null) {
         const payment = await createManualBookingFallback({
           userId: req.session.userId!,
           userEmail: user.email,
@@ -1534,6 +1616,10 @@ export async function registerRoutes(
           stripePaymentIntentId: stripePaymentIntentId || null,
           endpoint: "POST /api/duffel/book-direct",
         });
+        if (appliedPromo) {
+          await storage.incrementPromoUsage(appliedPromo.id).catch((e) => console.warn("[promo] increment failed:", e));
+          await storage.updatePayment(payment.id, { appliedPromoCode: appliedPromo.code }).catch((e) => console.warn("[promo] stamp failed:", e));
+        }
         return res.json({
           status: "pending_manual",
           booking: { payment, bookingReference: null, orderId: null },
@@ -1570,7 +1656,12 @@ export async function registerRoutes(
         amount: chargedTotalAmount,
         currency: (orderData.total_currency || "usd").toLowerCase(),
         status: "paid",
+        appliedPromoCode: appliedPromo?.code ?? null,
       });
+
+      if (appliedPromo) {
+        await storage.incrementPromoUsage(appliedPromo.id).catch((e) => console.warn("[promo] increment failed:", e));
+      }
 
       await storage.createNotification({
         userId: req.session.userId!,
@@ -1955,6 +2046,7 @@ export async function registerRoutes(
       const currency = fullOffer.total_currency;
 
       let paidPiAmountCents: number | null = null;
+      let appliedPromo: { id: number; code: string; forceManual: boolean } | null = null;
       if (stripePaymentIntentId) {
         const stripe = await getUncachableStripeClient();
         const pi = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
@@ -1964,10 +2056,21 @@ export async function registerRoutes(
         if (pi.metadata?.userId !== req.session.userId!) {
           return res.status(403).json({ message: "Payment does not belong to this user" });
         }
-        const expectedCents = Math.round(parseFloat(amount) * 100);
-        const expectedTotalCents = applyConvenienceFee(expectedCents).totalCents;
-        if (pi.amount < expectedTotalCents) {
-          return res.status(400).json({ message: "Payment amount is insufficient for this flight" });
+        const piPromoCode = pi.metadata?.promoCode || null;
+        if (piPromoCode) {
+          const promo = await validatePromoCodeForUser(piPromoCode, user.email);
+          if (promo.ok) {
+            appliedPromo = { id: promo.promoId, code: promo.code, forceManual: promo.forceManual };
+          } else {
+            console.warn("[promo] PI metadata promo no longer valid:", piPromoCode, promo.reason);
+          }
+        }
+        if (!appliedPromo) {
+          const expectedCents = Math.round(parseFloat(amount) * 100);
+          const expectedTotalCents = applyConvenienceFee(expectedCents).totalCents;
+          if (pi.amount < expectedTotalCents) {
+            return res.status(400).json({ message: "Payment amount is insufficient for this flight" });
+          }
         }
         if (pi.currency !== currency.toLowerCase()) {
           return res.status(400).json({ message: "Payment currency does not match the flight currency" });
@@ -1997,9 +2100,11 @@ export async function registerRoutes(
       }
 
       const balanceOk = await isDuffelBalanceSufficient(parseFloat(String(amount)), String(currency));
+      // Force pending-manual when an admin promo with forceManual is in effect, or when balance is insufficient.
+      const forceManualByPromo = !!(appliedPromo?.forceManual);
       // Only divert to manual fallback when the customer has paid via Stripe
       // (useBalance/test-mode flows have no captured payment to back the fallback).
-      if (!balanceOk && stripePaymentIntentId && paidPiAmountCents != null) {
+      if ((forceManualByPromo || !balanceOk) && stripePaymentIntentId && paidPiAmountCents != null) {
         const payment = await createManualBookingFallback({
           userId: req.session.userId!,
           userEmail: user.email,
@@ -2012,6 +2117,10 @@ export async function registerRoutes(
           stripePaymentIntentId: stripePaymentIntentId || null,
           endpoint: `POST /api/proposals/${proposalId}/book-duffel`,
         });
+        if (appliedPromo) {
+          await storage.incrementPromoUsage(appliedPromo.id).catch((e) => console.warn("[promo] increment failed:", e));
+          await storage.updatePayment(payment.id, { appliedPromoCode: appliedPromo.code }).catch((e) => console.warn("[promo] stamp failed:", e));
+        }
         return res.json({
           status: "pending_manual",
           bookings: [{ payment, bookingReference: null, orderId: null }],
@@ -2048,7 +2157,12 @@ export async function registerRoutes(
         amount: chargedTotalAmount,
         currency: (orderData.total_currency || "usd").toLowerCase(),
         status: "paid",
+        appliedPromoCode: appliedPromo?.code ?? null,
       });
+
+      if (appliedPromo) {
+        await storage.incrementPromoUsage(appliedPromo.id).catch((e) => console.warn("[promo] increment failed:", e));
+      }
 
       const result = {
         payment,
@@ -2159,6 +2273,68 @@ export async function registerRoutes(
   app.get("/api/admin/duffel-balance", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
     const data = await buildInferredBalance();
     return res.json(data);
+  });
+
+  app.get("/api/admin/promo-codes", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    const list = await storage.listPromoCodes();
+    return res.json(list);
+  });
+
+  app.post("/api/admin/promo-codes", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const body = req.body || {};
+      const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
+      if (!code || code.length < 3 || code.length > 32) {
+        return res.status(400).json({ message: "Code must be 3-32 characters" });
+      }
+      const overrideAmountCents = Number(body.overrideAmountCents);
+      if (!Number.isFinite(overrideAmountCents) || overrideAmountCents < 50) {
+        return res.status(400).json({ message: "overrideAmountCents must be a number >= 50" });
+      }
+      const forceManual = !!body.forceManual;
+      const adminOnly = body.adminOnly === false ? false : true;
+      const maxUses = body.maxUses == null || body.maxUses === ""
+        ? null
+        : Number(body.maxUses);
+      if (maxUses != null && (!Number.isFinite(maxUses) || maxUses < 1)) {
+        return res.status(400).json({ message: "maxUses must be a positive integer or null" });
+      }
+      let expiresAt: Date | null = null;
+      if (body.expiresAt) {
+        const d = new Date(body.expiresAt);
+        if (isNaN(d.getTime())) return res.status(400).json({ message: "Invalid expiresAt" });
+        expiresAt = d;
+      }
+      const description = typeof body.description === "string" ? body.description.trim().slice(0, 280) : null;
+
+      const existing = await storage.getPromoCodeByCode(code);
+      if (existing) return res.status(409).json({ message: "Promo code already exists" });
+
+      const created = await storage.createPromoCode({
+        code,
+        description,
+        overrideAmountCents,
+        forceManual,
+        adminOnly,
+        maxUses,
+        expiresAt,
+        active: true,
+        createdBy: req.session.userId!,
+      });
+      return res.json(created);
+    } catch (err) {
+      console.error("[admin] createPromoCode failed:", err);
+      const msg = err instanceof Error ? err.message : "Failed to create promo code";
+      return res.status(500).json({ message: msg });
+    }
+  });
+
+  app.delete("/api/admin/promo-codes/:id", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
+    const updated = await storage.deactivatePromoCode(id);
+    if (!updated) return res.status(404).json({ message: "Promo code not found" });
+    return res.json(updated);
   });
 
   app.post("/api/admin/duffel-balance/update", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {

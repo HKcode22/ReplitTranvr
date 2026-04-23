@@ -3,13 +3,14 @@ import { db } from "./db";
 import {
   users, travelerProfiles, callRequests, itineraryProposals,
   proposalItems, notifications, payments, callbackRequests, savedCards, blandCalls,
-  calendarEntries, systemSettings,
+  calendarEntries, systemSettings, promoCodes,
   type User, type InsertUser, type TravelerProfile, type InsertTravelerProfile,
   type CallRequest, type InsertCallRequest, type ItineraryProposal, type InsertProposal,
   type ProposalItem, type InsertProposalItem, type Notification, type InsertNotification,
   type Payment, type InsertPayment, type CallbackRequest, type InsertCallbackRequest,
   type SavedCard, type InsertSavedCard, type BlandCall, type InsertBlandCall,
   type CalendarEntry, type InsertCalendarEntry,
+  type PromoCode, type InsertPromoCode,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -374,6 +375,44 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({ target: systemSettings.key, set: { value, updatedAt: now } })
       .returning();
     return { value: row.value, updatedAt: row.updatedAt };
+  }
+
+  async getPromoCodeByCode(code: string): Promise<PromoCode | undefined> {
+    const normalized = code.trim().toUpperCase();
+    const [row] = await db.select().from(promoCodes).where(eq(promoCodes.code, normalized)).limit(1);
+    return row;
+  }
+
+  async listPromoCodes(): Promise<PromoCode[]> {
+    return db.select().from(promoCodes).orderBy(desc(promoCodes.createdAt));
+  }
+
+  async createPromoCode(data: InsertPromoCode): Promise<PromoCode> {
+    const normalized = { ...data, code: data.code.trim().toUpperCase() };
+    const [row] = await db.insert(promoCodes).values(normalized).returning();
+    return row;
+  }
+
+  async deactivatePromoCode(id: number): Promise<PromoCode | undefined> {
+    const [row] = await db
+      .update(promoCodes)
+      .set({ active: false, updatedAt: new Date() })
+      .where(eq(promoCodes.id, id))
+      .returning();
+    return row;
+  }
+
+  async incrementPromoUsage(id: number): Promise<boolean> {
+    const result = await db
+      .update(promoCodes)
+      .set({ usedCount: sql`${promoCodes.usedCount} + 1`, updatedAt: new Date() })
+      .where(and(
+        eq(promoCodes.id, id),
+        eq(promoCodes.active, true),
+        sql`(${promoCodes.maxUses} IS NULL OR ${promoCodes.usedCount} < ${promoCodes.maxUses})`,
+      ))
+      .returning({ id: promoCodes.id });
+    return result.length > 0;
   }
 
   async getDuffelSpentTotal(): Promise<number> {

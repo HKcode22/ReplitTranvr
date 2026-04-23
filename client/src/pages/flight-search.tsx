@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { PhoneInput } from "@/components/phone-input";
+import { PromoCodeInput, type AppliedPromo } from "@/components/promo-code-input";
 import { useToast } from "@/hooks/use-toast";
 import { AirportSearch } from "@/components/airport-search";
 import { loadStripe } from "@stripe/stripe-js";
@@ -318,6 +319,13 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
     }
   }, [profile]);
 
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+
+  const effectiveTotalCents = appliedPromo
+    ? Math.ceil(appliedPromo.overrideAmountCents * 1.05)
+    : totalWithFeeCents;
+  const effectiveTotal = (effectiveTotalCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+
   const createPaymentIntentMutation = useMutation({
     mutationFn: async () => {
       const [configRes, piRes] = await Promise.all([
@@ -326,6 +334,7 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
           amount: offer.totalAmount,
           currency: offer.totalCurrency,
           offerId: offer.id,
+          ...(appliedPromo ? { promoCode: appliedPromo.code } : {}),
         }).then(r => r.json()),
       ]);
       return { ...piRes, publishableKey: configRes.publishableKey };
@@ -756,6 +765,15 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
             </Card>
           ))}
 
+          <Card className="p-4">
+            <PromoCodeInput
+              applied={appliedPromo}
+              onApply={setAppliedPromo}
+              onClear={() => setAppliedPromo(null)}
+              currency={offer.totalCurrency}
+            />
+          </Card>
+
           <Button
             type="submit"
             disabled={createPaymentIntentMutation.isPending || bookMutation.isPending}
@@ -770,8 +788,8 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
               <CreditCard className="w-4 h-4 mr-2" />
             )}
             {isTestMode
-              ? `Book Flight — ${offer.totalCurrency} ${totalWithFee}`
-              : `Continue to Payment — ${offer.totalCurrency} ${totalWithFee}`
+              ? `Book Flight — ${offer.totalCurrency} ${effectiveTotal}`
+              : `Continue to Payment — ${offer.totalCurrency} ${effectiveTotal}`
             }
           </Button>
         </form>

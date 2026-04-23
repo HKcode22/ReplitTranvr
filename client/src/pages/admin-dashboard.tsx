@@ -11,7 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, Tag, Trash2, type LucideIcon } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import type { PromoCode } from "@shared/schema";
 
 type AdminStats = {
   users: number;
@@ -489,6 +491,155 @@ function CallsTable({ limit }: { limit?: number }) {
   );
 }
 
+function PromoCodesPanel() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<PromoCode[]>({ queryKey: ["/api/admin/promo-codes"] });
+  const [code, setCode] = useState("");
+  const [overrideDollars, setOverrideDollars] = useState("1.00");
+  const [forceManual, setForceManual] = useState(false);
+  const [adminOnly, setAdminOnly] = useState(true);
+  const [maxUses, setMaxUses] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [description, setDescription] = useState("");
+
+  const createMut = useMutation({
+    mutationFn: async () => {
+      const overrideAmountCents = Math.round(parseFloat(overrideDollars) * 100);
+      const body = {
+        code: code.trim(),
+        description: description.trim() || null,
+        overrideAmountCents,
+        forceManual,
+        adminOnly,
+        maxUses: maxUses.trim() ? parseInt(maxUses.trim(), 10) : null,
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      };
+      const res = await apiRequest("POST", "/api/admin/promo-codes", body);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Promo code created" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] });
+      setCode("");
+      setDescription("");
+      setMaxUses("");
+      setExpiresAt("");
+      setOverrideDollars("1.00");
+      setForceManual(false);
+      setAdminOnly(true);
+    },
+    onError: (err: Error) => {
+      const raw = err.message?.replace(/^\d+:\s*/, "") || "Could not create";
+      let msg = raw;
+      try { const parsed = JSON.parse(raw); msg = parsed.message || raw; } catch {}
+      toast({ title: "Create failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  const deactivateMut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/admin/promo-codes/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Promo code deactivated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Tag className="w-4 h-4" />
+          <h3 className="font-semibold">Create Promo Code</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <Label>Code</Label>
+            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="TEST1" data-testid="input-promo-code-create" />
+          </div>
+          <div>
+            <Label>Override charge (USD)</Label>
+            <Input type="number" step="0.01" min="0.50" value={overrideDollars} onChange={(e) => setOverrideDollars(e.target.value)} data-testid="input-promo-amount" />
+            <p className="text-xs text-muted-foreground mt-1">5% convenience fee will be added on top.</p>
+          </div>
+          <div>
+            <Label>Max uses (optional)</Label>
+            <Input type="number" min="1" value={maxUses} onChange={(e) => setMaxUses(e.target.value)} placeholder="Unlimited" data-testid="input-promo-max-uses" />
+          </div>
+          <div>
+            <Label>Expires at (optional)</Label>
+            <Input type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} data-testid="input-promo-expires" />
+          </div>
+          <div className="md:col-span-2">
+            <Label>Description (optional)</Label>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is this code used for?" data-testid="input-promo-description" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch checked={forceManual} onCheckedChange={setForceManual} data-testid="switch-promo-force-manual" />
+            <Label className="cursor-pointer">Force manual fallback (skip Duffel order)</Label>
+          </div>
+          <div className="flex items-center gap-3">
+            <Switch checked={adminOnly} onCheckedChange={setAdminOnly} data-testid="switch-promo-admin-only" />
+            <Label className="cursor-pointer">Admin-only</Label>
+          </div>
+        </div>
+        <Button onClick={() => createMut.mutate()} disabled={createMut.isPending || !code.trim() || !overrideDollars} data-testid="button-create-promo">
+          {createMut.isPending ? "Creating..." : "Create Promo Code"}
+        </Button>
+      </Card>
+
+      {isLoading ? (
+        <Skeleton className="h-32 w-full" />
+      ) : !data || data.length === 0 ? (
+        <Card className="p-6 text-center text-muted-foreground">No promo codes yet.</Card>
+      ) : (
+        <Card className="divide-y">
+          {data.map((p) => {
+            const charge = (p.overrideAmountCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+            const expired = p.expiresAt && new Date(p.expiresAt).getTime() < Date.now();
+            const exhausted = p.maxUses != null && p.usedCount >= p.maxUses;
+            return (
+              <div key={p.id} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`promo-row-${p.id}`}>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono font-semibold">{p.code}</span>
+                    {!p.active && <Badge variant="outline">Inactive</Badge>}
+                    {expired && <Badge variant="outline" className="border-red-500 text-red-600">Expired</Badge>}
+                    {exhausted && <Badge variant="outline" className="border-amber-500 text-amber-600">Used up</Badge>}
+                    {p.forceManual && <Badge variant="outline" className="border-violet-500 text-violet-600">Manual</Badge>}
+                    {p.adminOnly && <Badge variant="outline">Admin-only</Badge>}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Charge USD {charge} · Used {p.usedCount}{p.maxUses != null ? ` / ${p.maxUses}` : ""}
+                    {p.expiresAt && <> · expires {new Date(p.expiresAt).toLocaleDateString()}</>}
+                  </div>
+                  {p.description && <div className="text-xs text-muted-foreground mt-0.5">{p.description}</div>}
+                </div>
+                {p.active && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => deactivateMut.mutate(p.id)}
+                    disabled={deactivateMut.isPending}
+                    data-testid={`button-deactivate-promo-${p.id}`}
+                  >
+                    <Trash2 className="w-3 h-3 mr-1" /> Deactivate
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   const { data: stats, isLoading } = useQuery<AdminStats>({ queryKey: ["/api/admin/stats"] });
 
@@ -548,12 +699,14 @@ export default function AdminDashboardPage() {
           <TabsTrigger value="payments" data-testid="tab-payments">Payments</TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
           <TabsTrigger value="calls" data-testid="tab-calls">Calls</TabsTrigger>
+          <TabsTrigger value="promos" data-testid="tab-promos">Promo Codes</TabsTrigger>
         </TabsList>
         <TabsContent value="pending" className="mt-4"><PendingManualTable /></TabsContent>
         <TabsContent value="bookings" className="mt-4"><BookingsTable /></TabsContent>
         <TabsContent value="payments" className="mt-4"><PaymentsTable /></TabsContent>
         <TabsContent value="users" className="mt-4"><UsersTable /></TabsContent>
         <TabsContent value="calls" className="mt-4"><CallsTable /></TabsContent>
+        <TabsContent value="promos" className="mt-4"><PromoCodesPanel /></TabsContent>
       </Tabs>
     </div>
   );

@@ -11,6 +11,22 @@ export const systemSettings = pgTable("system_settings", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const promoCodes = pgTable("promo_codes", {
+  id: serial("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  description: text("description"),
+  overrideAmountCents: integer("override_amount_cents").notNull(),
+  forceManual: boolean("force_manual").default(false).notNull(),
+  adminOnly: boolean("admin_only").default(true).notNull(),
+  maxUses: integer("max_uses"),
+  usedCount: integer("used_count").default(0).notNull(),
+  expiresAt: timestamp("expires_at"),
+  active: boolean("active").default(true).notNull(),
+  createdBy: varchar("created_by", { length: 36 }).references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const tripTypeEnum = pgEnum("trip_type", ["flight", "hotel", "both"]);
 export const callStatusEnum = pgEnum("call_status", ["requested", "scheduled", "completed", "cancelled"]);
 export const proposalStatusEnum = pgEnum("proposal_status", ["draft", "sent", "approved", "rejected"]);
@@ -136,6 +152,7 @@ export const payments = pgTable("payments", {
   manualBookingResolvedAt: timestamp("manual_booking_resolved_at"),
   manualBookingResolvedBy: varchar("manual_booking_resolved_by", { length: 36 }).references(() => users.id),
   manualBookingNotes: text("manual_booking_notes"),
+  appliedPromoCode: text("applied_promo_code"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -246,6 +263,7 @@ export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).
 export const insertSavedCardSchema = createInsertSchema(savedCards).omit({ id: true, createdAt: true });
 export const insertBlandCallSchema = createInsertSchema(blandCalls).omit({ id: true, createdAt: true });
 export const insertCalendarEntrySchema = createInsertSchema(calendarEntries).omit({ id: true, createdAt: true });
+export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({ id: true, usedCount: true, createdAt: true, updatedAt: true });
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -278,3 +296,5 @@ export interface CalendarEntryDetails {
   flightNumber?: string | null;
 }
 export type InsertCalendarEntry = z.infer<typeof insertCalendarEntrySchema>;
+export type PromoCode = typeof promoCodes.$inferSelect;
+export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
