@@ -1,0 +1,134 @@
+Five fixes/additions to the Travnr admin dashboard. Here's each one:
+
+---
+
+## 1. Booking confirmation email to customer after admin submits booking reference
+
+In `POST /api/admin/pending-manual/:id/complete`, after updating the payment record, fetch the full payment + user + proposal data and send a beautiful confirmation email via SendGrid.
+
+The email should look premium and on-brand:
+
+Subject line: `Your flight is confirmed — {BOOKING_REF}`
+From: `hello@travnr.com` with name `Travnr`
+To: the user's email
+
+HTML structure:
+
+<div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
+  <div style="background: #0a0a0a; padding: 32px 40px; text-align: center;">
+    <h1 style="color: #ffffff; font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.5px;">Travnr</h1>
+    <p style="color: #666; font-size: 12px; margin: 4px 0 0; letter-spacing: 2px; text-transform: uppercase;">Your Personal Travel Concierge</p>
+  </div>
+  <div style="background: #f0fdf4; border-left: 4px solid #16a34a; padding: 24px 40px;">
+    <p style="color: #16a34a; font-size: 13px; font-weight: 600; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 1px;">Booking Confirmed</p>
+    <h2 style="color: #0a0a0a; font-size: 28px; font-weight: 800; margin: 0;">Your flight is booked ✓</h2>
+  </div>
+  <div style="padding: 32px 40px; border-bottom: 1px solid #f0f0f0;">
+    <p style="color: #666; font-size: 13px; margin: 0 0 8px;">BOOKING REFERENCE</p>
+    <p style="color: #0a0a0a; font-size: 32px; font-weight: 800; margin: 0; letter-spacing: 4px; font-family: monospace;">{BOOKING_REF}</p>
+  </div>
+  <div style="padding: 32px 40px; border-bottom: 1px solid #f0f0f0;">
+    <p style="color: #666; font-size: 13px; margin: 0 0 16px;">FLIGHT DETAILS</p>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr><td style="padding: 8px 0; color: #666; font-size: 14px; width: 140px;">Trip</td><td style="padding: 8px 0; color: #0a0a0a; font-size: 14px; font-weight: 600;">{ROUTE}</td></tr>
+      <tr><td style="padding: 8px 0; color: #666; font-size: 14px;">Departure</td><td style="padding: 8px 0; color: #0a0a0a; font-size: 14px; font-weight: 600;">{DEPARTURE_DATE}</td></tr>
+      <tr><td style="padding: 8px 0; color: #666; font-size: 14px;">Passengers</td><td style="padding: 8px 0; color: #0a0a0a; font-size: 14px; font-weight: 600;">{PASSENGER_COUNT}</td></tr>
+      <tr><td style="padding: 8px 0; color: #666; font-size: 14px;">Amount Paid</td><td style="padding: 8px 0; color: #0a0a0a; font-size: 14px; font-weight: 600;">{CURRENCY} {AMOUNT}</td></tr>
+    </table>
+  </div>
+  <div style="padding: 32px 40px; border-bottom: 1px solid #f0f0f0; background: #fafafa;">
+    <p style="color: #0a0a0a; font-size: 15px; font-weight: 700; margin: 0 0 12px;">What to do next</p>
+    <p style="color: #555; font-size: 14px; line-height: 1.6; margin: 0 0 8px;">1. Save your booking reference: <strong>{BOOKING_REF}</strong></p>
+    <p style="color: #555; font-size: 14px; line-height: 1.6; margin: 0 0 8px;">2. Check in online 24 hours before departure using the airline's website or app.</p>
+    <p style="color: #555; font-size: 14px; line-height: 1.6; margin: 0;">3. Your e-ticket will be sent directly by the airline to the email used during booking.</p>
+  </div>
+  <div style="padding: 24px 40px; text-align: center;">
+    <p style="color: #999; font-size: 12px; margin: 0;">Questions? Reply to this email or contact us at hello@travnr.com</p>
+    <p style="color: #ccc; font-size: 11px; margin: 8px 0 0;">Travnr · Your Personal Travel Concierge</p>
+  </div>
+</div>
+
+Replace {BOOKING_REF}, {ROUTE}, {DEPARTURE_DATE}, {PASSENGER_COUNT}, {CURRENCY}, {AMOUNT} with real values pulled from the payment record and its manualBookingDetails jsonb field.
+
+---
+
+## 2. Add manually booked flights to My Trips page
+
+In `GET /api/trips`, currently it only returns payments where duffelOrderId is not null. Update it to also return payments where status = 'paid' AND duffelOrderId IS NULL but manualBookingDetails is not null.
+
+For manual bookings, construct the trip object from manualBookingDetails instead of fetching from Duffel:
+
+```typescript
+{
+  id: payment.id,
+  bookingReference: payment.duffelBookingRef,
+  duffelOrderId: null,
+  amount: payment.amount,
+  currency: payment.currency,
+  status: payment.status,
+  bookedAt: payment.createdAt,
+  proposalId: payment.proposalId,
+  isManual: true,
+  order: {
+    booking_reference: payment.duffelBookingRef,
+    slices: manualBookingDetails.slices || [],
+    passengers: manualBookingDetails.passengers || [],
+    total_amount: payment.amount,
+    total_currency: payment.currency,
+  }
+}
+```
+
+In `client/src/pages/trips.tsx`, make sure trip cards render identically for both manual and Duffel bookings. If a manual booking is missing fields Duffel normally provides, use sensible fallbacks — e.g. show manualBookingDetails.routeSummary if slices are empty.
+
+---
+
+## 3. Show manually confirmed bookings in admin Recent Bookings table
+
+In `GET /api/admin/bookings`, return ALL payments with status 'paid', including those with null duffelOrderId but non-null duffelBookingRef. In the admin dashboard bookings table, show a "Manual" badge next to any booking where duffelOrderId is null so you can distinguish them visually.
+
+---
+
+## 4. Fix the Duffel balance "Update" UI
+
+In `client/src/pages/admin-dashboard.tsx`, fix the balance stat card so:
+- The estimated balance amount displays normally in the card
+- There is a small lucide Pencil icon (14px) next to the number, always visible
+- Clicking the pencil replaces just the number with a small inline input (pre-filled with current value) + a green checkmark button to save + a grey X button to cancel
+- On save it calls POST /api/admin/duffel-balance/update and refreshes the display
+- On cancel it goes back to normal display
+- Remove any separate "Update" button — the pencil icon is the only edit trigger
+- Below the balance number show small grey text: "Est. · Last set {date}"
+- Color the balance red if under $100, yellow if under $300, green if $300 or above
+
+---
+
+## 5. Email preview and test panel in admin dashboard
+
+Add a new "Emails" tab to the admin dashboard tab bar (alongside Pending Manual, Bookings, Payments, Users, Calls).
+
+In this tab show a card for each email type Travnr sends:
+- Booking Confirmation (manual)
+- Email Verification
+- Password Reset
+- Account Creation After Call
+- Booking Failure Alert
+
+Each card shows:
+- Email name
+- One-line description of when it triggers
+- "Preview" button — opens a full-screen modal (90vw x 90vh) rendering the email HTML in an iframe with realistic sample data
+- "Send Test" button — sends the actual email to the logged-in admin's email via SendGrid with sample data
+
+Sample data to use everywhere:
+- Passenger name: "Mahid Abdulkarim"
+- Route: "STL → JFK"
+- Departure: "May 15, 2026"
+- Booking ref: "TRAVNR"
+- Amount: "$342.00"
+- Airline: "American Airlines"
+- Recipient: the logged-in admin's actual email
+
+Add a new endpoint `POST /api/admin/email/test` protected by isAdmin middleware. It takes `{ emailType: string, recipientEmail: string }` and sends the appropriate email using the existing SendGrid functions already in `server/routes.ts`. Refactor all email HTML generation into standalone reusable functions at the top of routes.ts so they can be called from both the normal flow and this test endpoint.
+
+The preview modal should render HTML in an iframe so it displays exactly as it would in an email client. Make it closeable with an X button or clicking outside.
