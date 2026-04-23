@@ -43,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return res.json();
     },
     onSuccess: async () => {
+      setViewMode("admin");
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     },
   });
@@ -59,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/auth/logout");
     },
     onSuccess: () => {
+      setViewMode("admin");
       queryClient.clear();
       setLocation("/");
     },

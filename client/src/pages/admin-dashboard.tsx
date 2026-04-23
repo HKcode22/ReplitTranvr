@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign } from "lucide-react";
 
 type AdminStats = {
   users: number;
@@ -19,6 +19,7 @@ type AdminStats = {
   pendingManual: number;
   bookings: number;
   calls: number;
+  revenue: { currency: string; amount: number }[];
   duffelBalance: { available: number; currency: string } | null;
 };
 
@@ -53,7 +54,7 @@ function CompleteDialog({ payment, onClose }: { payment: any; onClose: () => voi
   const mut = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/admin/pending-manual/${payment.id}/complete`, {
-        duffelBookingRef: bookingRef.trim() || null,
+        duffelBookingRef: bookingRef.trim(),
         duffelOrderId: orderId.trim() || null,
         notes: notes.trim() || null,
       });
@@ -92,7 +93,7 @@ function CompleteDialog({ payment, onClose }: { payment: any; onClose: () => voi
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending} data-testid="button-confirm-complete">
+          <Button onClick={() => mut.mutate()} disabled={mut.isPending || !bookingRef.trim()} data-testid="button-confirm-complete">
             {mut.isPending ? "Saving..." : "Confirm Complete"}
           </Button>
         </DialogFooter>
@@ -185,13 +186,14 @@ function PaymentsTable() {
   );
 }
 
-function UsersTable() {
+function UsersTable({ limit }: { limit?: number }) {
   const { data, isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/users"] });
   if (isLoading) return <Skeleton className="h-32 w-full" />;
   if (!data || data.length === 0) return <Card className="p-6 text-center text-muted-foreground">No users.</Card>;
+  const rows = limit ? data.slice(0, limit) : data;
   return (
     <Card className="divide-y">
-      {data.map((u) => (
+      {rows.map((u) => (
         <div key={u.id} className="p-3 flex items-center justify-between gap-3" data-testid={`user-row-${u.id}`}>
           <div className="min-w-0">
             <div className="text-sm font-medium">{u.firstName} {u.lastName}</div>
@@ -207,13 +209,36 @@ function UsersTable() {
   );
 }
 
-function CallsTable() {
+function BookingsTable({ limit }: { limit?: number }) {
+  const { data, isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/bookings"] });
+  if (isLoading) return <Skeleton className="h-32 w-full" />;
+  if (!data || data.length === 0) return <Card className="p-6 text-center text-muted-foreground">No bookings yet.</Card>;
+  const rows = limit ? data.slice(0, limit) : data.slice(0, 50);
+  return (
+    <Card className="divide-y">
+      {rows.map((p) => (
+        <div key={p.id} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`booking-row-${p.id}`}>
+          <div className="min-w-0">
+            <div className="text-sm font-medium">{p.user?.email || p.userId}</div>
+            <div className="text-xs text-muted-foreground">
+              {p.currency?.toUpperCase()} {p.amount} · {new Date(p.createdAt).toLocaleString()}
+              {p.duffelBookingRef && <> · Ref <span className="font-mono">{p.duffelBookingRef}</span></>}
+            </div>
+          </div>
+          <Badge variant="default">Booked</Badge>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function CallsTable({ limit }: { limit?: number }) {
   const { data, isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/calls"] });
   if (isLoading) return <Skeleton className="h-32 w-full" />;
   if (!data || data.length === 0) return <Card className="p-6 text-center text-muted-foreground">No call requests.</Card>;
   return (
     <Card className="divide-y">
-      {data.slice(0, 50).map((c) => (
+      {(limit ? data.slice(0, limit) : data.slice(0, 50)).map((c) => (
         <div key={c.id} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`call-row-${c.id}`}>
           <div className="min-w-0">
             <div className="text-sm font-medium">{c.user?.email || c.userId}</div>
@@ -236,6 +261,15 @@ export default function AdminDashboardPage() {
   const balanceTone: "default" | "warn" | "danger" = balance == null ? "default" : balanceLow ? "danger" : "default";
   const balanceText = balance ? `${balance.currency} ${balance.available.toFixed(2)}` : "Unavailable";
 
+  const revenue = stats?.revenue || [];
+  const primaryRev = revenue[0];
+  const revenueText = primaryRev
+    ? `${primaryRev.currency.toUpperCase()} ${primaryRev.amount.toFixed(2)}`
+    : "—";
+  const revenueSub = revenue.length > 1
+    ? revenue.slice(1).map((r) => `${r.currency.toUpperCase()} ${r.amount.toFixed(2)}`).join(" · ")
+    : undefined;
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
       <div className="rounded-xl bg-gradient-to-r from-violet-500/10 to-violet-500/5 border border-violet-500/20 p-5 sm:p-6">
@@ -251,7 +285,8 @@ export default function AdminDashboardPage() {
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <StatCard icon={DollarSign} label="Revenue" value={revenueText} sub={revenueSub} />
           <StatCard icon={Wallet} label="Duffel Balance" value={balanceText} sub={balanceLow ? "Low — top up" : undefined} tone={balanceTone} />
           <StatCard icon={AlertTriangle} label="Pending Manual" value={String(stats?.pendingManual ?? 0)} tone={(stats?.pendingManual ?? 0) > 0 ? "warn" : "default"} />
           <StatCard icon={CreditCard} label="Bookings" value={String(stats?.bookings ?? 0)} />
@@ -260,16 +295,33 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div>
+          <h2 className="font-serif text-lg font-semibold mb-2">Recent Users</h2>
+          <UsersTable limit={5} />
+        </div>
+        <div>
+          <h2 className="font-serif text-lg font-semibold mb-2">Recent Bookings</h2>
+          <BookingsTable limit={5} />
+        </div>
+        <div>
+          <h2 className="font-serif text-lg font-semibold mb-2">Recent Calls</h2>
+          <CallsTable limit={5} />
+        </div>
+      </div>
+
       <Tabs defaultValue="pending">
         <TabsList>
           <TabsTrigger value="pending" data-testid="tab-pending">
             Pending Manual {stats?.pendingManual ? <Badge variant="outline" className="ml-2 border-amber-500">{stats.pendingManual}</Badge> : null}
           </TabsTrigger>
+          <TabsTrigger value="bookings" data-testid="tab-bookings">Bookings</TabsTrigger>
           <TabsTrigger value="payments" data-testid="tab-payments">Payments</TabsTrigger>
           <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
           <TabsTrigger value="calls" data-testid="tab-calls">Calls</TabsTrigger>
         </TabsList>
         <TabsContent value="pending" className="mt-4"><PendingManualTable /></TabsContent>
+        <TabsContent value="bookings" className="mt-4"><BookingsTable /></TabsContent>
         <TabsContent value="payments" className="mt-4"><PaymentsTable /></TabsContent>
         <TabsContent value="users" className="mt-4"><UsersTable /></TabsContent>
         <TabsContent value="calls" className="mt-4"><CallsTable /></TabsContent>

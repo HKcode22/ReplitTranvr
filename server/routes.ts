@@ -1519,7 +1519,9 @@ export async function registerRoutes(
       });
 
       const balanceOk = await isDuffelBalanceSufficient(parseFloat(fullOffer.total_amount), fullOffer.total_currency);
-      if (!balanceOk) {
+      // Only divert to manual fallback when the customer has paid via Stripe
+      // (useBalance/test-mode flows have no captured payment to back the fallback).
+      if (!balanceOk && stripePaymentIntentId && paidPiAmountCents != null) {
         const payment = await createManualBookingFallback({
           userId: req.session.userId!,
           userEmail: user.email,
@@ -1995,7 +1997,9 @@ export async function registerRoutes(
       }
 
       const balanceOk = await isDuffelBalanceSufficient(parseFloat(String(amount)), String(currency));
-      if (!balanceOk) {
+      // Only divert to manual fallback when the customer has paid via Stripe
+      // (useBalance/test-mode flows have no captured payment to back the fallback).
+      if (!balanceOk && stripePaymentIntentId && paidPiAmountCents != null) {
         const payment = await createManualBookingFallback({
           userId: req.session.userId!,
           userEmail: user.email,
@@ -2131,6 +2135,15 @@ export async function registerRoutes(
     return res.json(list.map((p) => ({ ...p, user: userMap.get(p.userId) || null })));
   });
 
+  // Confirmed bookings: all paid payments
+  app.get("/api/admin/bookings", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    const list = (await storage.adminGetAllPayments()).filter((p) => p.status === "paid");
+    const userIds = Array.from(new Set(list.map((p) => p.userId)));
+    const usersList = await storage.adminGetUsersByIds(userIds);
+    const userMap = new Map(usersList.map((u) => [u.id, { email: u.email, firstName: u.firstName, lastName: u.lastName }]));
+    return res.json(list.map((p) => ({ ...p, user: userMap.get(p.userId) || null })));
+  });
+
   app.get("/api/admin/pending-manual", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
     const list = await storage.adminGetPaymentsByStatus("pending_manual");
     const userIds = Array.from(new Set(list.map((p) => p.userId)));
@@ -2143,6 +2156,9 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ message: "Invalid payment ID" });
     const { duffelBookingRef, duffelOrderId, notes } = req.body || {};
+    if (!duffelBookingRef || typeof duffelBookingRef !== "string" || !duffelBookingRef.trim()) {
+      return res.status(400).json({ message: "Booking reference is required to mark a manual booking complete" });
+    }
     const payment = await storage.getPayment(id);
     if (!payment) return res.status(404).json({ message: "Payment not found" });
     if (payment.status !== "pending_manual") {
@@ -2150,7 +2166,7 @@ export async function registerRoutes(
     }
     const updated = await storage.updatePayment(id, {
       status: "paid" as any,
-      duffelBookingRef: duffelBookingRef || null,
+      duffelBookingRef: duffelBookingRef.trim(),
       duffelOrderId: duffelOrderId || null,
       manualBookingNotes: notes || null,
       manualBookingResolvedAt: new Date(),
@@ -2160,9 +2176,7 @@ export async function registerRoutes(
       userId: payment.userId,
       type: "payment_confirmed",
       title: "Booking confirmed!",
-      body: duffelBookingRef
-        ? `Your flight has been booked. Booking reference: ${duffelBookingRef}`
-        : "Your flight has been booked. Check your email for details.",
+      body: `Your flight has been booked. Booking reference: ${duffelBookingRef.trim()}`,
       linkUrl: "/billing",
     });
     return res.json(updated);
