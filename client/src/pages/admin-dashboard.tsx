@@ -248,7 +248,7 @@ function DuffelBalanceCard() {
           )}
           {!editing && (
             <div className="text-xs text-muted-foreground mt-0.5">
-              Est.{lastSetDate ? ` · Last set ${lastSetDate}` : ""}
+              Est. · Last set{lastSetDate ? ` ${lastSetDate}` : ""}
             </div>
           )}
         </div>
