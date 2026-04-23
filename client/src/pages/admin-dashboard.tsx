@@ -73,6 +73,10 @@ function StatCard({ icon: Icon, label, value, sub, tone = "default" }: { icon: L
     tone === "danger" ? "border-red-500/30 bg-red-500/5" :
     tone === "warn" ? "border-amber-500/30 bg-amber-500/5" :
     "";
+  const valueCls =
+    tone === "danger" ? "text-red-600 dark:text-red-400" :
+    tone === "warn" ? "text-amber-700 dark:text-amber-400" :
+    "";
   return (
     <Card className={`p-4 ${toneCls}`}>
       <div className="flex items-center gap-3">
@@ -81,7 +85,7 @@ function StatCard({ icon: Icon, label, value, sub, tone = "default" }: { icon: L
         </div>
         <div className="min-w-0">
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="text-2xl font-bold truncate">{value}</div>
+          <div className={`text-2xl font-bold truncate ${valueCls}`}>{value}</div>
           {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
         </div>
       </div>
