@@ -841,7 +841,7 @@ export async function registerRoutes(
             task,
             webhookUrl: `${baseUrl}/api/bland/webhook`,
             dynamicDataUrl: `${baseUrl}/api/bland/dynamic-data`,
-            dynamicDataHeaders: { "x-bland-secret": process.env.BLAND_AI_API_KEY || "" },
+            dynamicDataHeaders: { "x-bland-secret": bland.getWebhookSecret() },
             metadata: {
               callRequestId: cr.id,
               userId: user.id,
@@ -1927,7 +1927,7 @@ export async function registerRoutes(
         task,
         webhookUrl: `${baseUrl}/api/bland/webhook`,
         dynamicDataUrl: `${baseUrl}/api/bland/dynamic-data`,
-        dynamicDataHeaders: { "x-bland-secret": process.env.BLAND_AI_API_KEY || "" },
+        dynamicDataHeaders: { "x-bland-secret": bland.getWebhookSecret() },
         metadata: {
           callRequestId: callRequest.id,
           userId: user.id,
@@ -2922,7 +2922,7 @@ export async function registerRoutes(
         dynamic_data: [{
           url: `${baseUrl}/api/bland/dynamic-data`,
           method: "POST",
-          headers: { "x-bland-secret": process.env.BLAND_AI_API_KEY || "" },
+          headers: { "x-bland-secret": bland.getWebhookSecret() },
           cache: false,
           response_data: [
             { name: "traveler_info", data: "$.traveler_info", context: "Traveler information: {{traveler_info}}" },
@@ -2940,8 +2940,8 @@ export async function registerRoutes(
   app.post("/api/bland/webhook", async (req: Request, res: Response) => {
     try {
       const webhookSecret = req.headers["x-bland-secret"] as string;
-      const blandApiKey = process.env.BLAND_AI_API_KEY;
-      if (blandApiKey && webhookSecret && webhookSecret !== blandApiKey) {
+      const expectedSecret = bland.getWebhookSecret();
+      if (expectedSecret && webhookSecret && webhookSecret !== expectedSecret && webhookSecret !== process.env.BLAND_AI_API_KEY) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
@@ -3095,7 +3095,8 @@ export async function registerRoutes(
   app.post("/api/bland/dynamic-data", async (req: Request, res: Response) => {
     try {
       const secret = req.headers["x-bland-secret"] as string;
-      if (!secret || secret !== process.env.BLAND_AI_API_KEY) {
+      const expectedSecret = bland.getWebhookSecret();
+      if (!secret || (secret !== expectedSecret && secret !== process.env.BLAND_AI_API_KEY)) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 

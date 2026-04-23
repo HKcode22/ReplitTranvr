@@ -1,3 +1,5 @@
+import { createHmac } from "crypto";
+
 const BLAND_API_BASE = "https://api.bland.ai/v1";
 const BLAND_REQUEST_TIMEOUT_MS = 10_000;
 const BLAND_DISPATCH_MAX_ATTEMPTS = 3;
@@ -7,6 +9,14 @@ function getApiKey(): string {
   const key = process.env.BLAND_AI_API_KEY;
   if (!key) throw new Error("BLAND_AI_API_KEY is not configured");
   return key;
+}
+
+export function getWebhookSecret(): string {
+  const explicit = process.env.BLAND_WEBHOOK_SECRET;
+  if (explicit) return explicit;
+  const apiKey = process.env.BLAND_AI_API_KEY;
+  if (!apiKey) return "";
+  return createHmac("sha256", apiKey).update("travnr:bland:webhook").digest("hex");
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
