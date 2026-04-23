@@ -2314,12 +2314,9 @@ export async function registerRoutes(
     if (!EMAIL_CATALOG.some((e) => e.id === type)) {
       return res.status(400).json({ message: "Unknown email type" });
     }
-    const recipientRaw = req.body?.recipientEmail;
     const sessionUser = await storage.getUser(req.session.userId!);
-    const recipient = (typeof recipientRaw === "string" && recipientRaw.trim())
-      ? recipientRaw.trim()
-      : sessionUser?.email;
-    if (!recipient) return res.status(400).json({ message: "Recipient email is required" });
+    const recipient = sessionUser?.email;
+    if (!recipient) return res.status(400).json({ message: "Could not resolve admin email" });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
       return res.status(400).json({ message: "Recipient email is not a valid address" });
     }

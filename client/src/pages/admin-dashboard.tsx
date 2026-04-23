@@ -756,9 +756,7 @@ function EmailsPanel() {
 
   const sendTestMut = useMutation({
     mutationFn: async (id: string) => {
-      const recipient = me?.email;
-      if (!recipient) throw new Error("Could not determine your email address");
-      const res = await apiRequest("POST", "/api/admin/email/test", { type: id, recipientEmail: recipient });
+      const res = await apiRequest("POST", "/api/admin/email/test", { type: id });
       return res.json() as Promise<{ ok: boolean; recipient: string }>;
     },
     onSuccess: (data) => {
