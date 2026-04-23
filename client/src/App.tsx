@@ -54,9 +54,9 @@ function AuthenticatedLayout() {
                   className="gap-1.5"
                 >
                   {viewMode === "admin" ? (
-                    <><Shield className="w-3.5 h-3.5" /> Admin</>
+                    <><Shield className="w-3.5 h-3.5" /> Admin View</>
                   ) : (
-                    <><UserIcon className="w-3.5 h-3.5" /> Customer</>
+                    <><UserIcon className="w-3.5 h-3.5" /> Customer View</>
                   )}
                 </Button>
               )}

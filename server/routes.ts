@@ -332,8 +332,8 @@ async function createManualBookingFallback(args: {
       passengers: passengerMappings,
       proposalTitle: proposalTitle ?? null,
       capturedAt: new Date().toISOString(),
-    } as any,
-  } as any);
+    },
+  });
 
   await storage.createNotification({
     userId,
@@ -2148,7 +2148,7 @@ export async function registerRoutes(
     const list = await storage.adminGetPaymentsByStatus("pending_manual");
     const userIds = Array.from(new Set(list.map((p) => p.userId)));
     const usersList = await storage.adminGetUsersByIds(userIds);
-    const userMap = new Map(usersList.map((u) => [u.id, { email: u.email, firstName: u.firstName, lastName: u.lastName, phone: null as any }]));
+    const userMap = new Map(usersList.map((u) => [u.id, { email: u.email, firstName: u.firstName, lastName: u.lastName }]));
     return res.json(list.map((p) => ({ ...p, user: userMap.get(p.userId) || null })));
   });
 
@@ -2165,13 +2165,13 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Payment is not in pending_manual status" });
     }
     const updated = await storage.updatePayment(id, {
-      status: "paid" as any,
+      status: "paid",
       duffelBookingRef: duffelBookingRef.trim(),
       duffelOrderId: duffelOrderId || null,
       manualBookingNotes: notes || null,
       manualBookingResolvedAt: new Date(),
       manualBookingResolvedBy: req.session.userId!,
-    } as any);
+    });
     await storage.createNotification({
       userId: payment.userId,
       type: "payment_confirmed",

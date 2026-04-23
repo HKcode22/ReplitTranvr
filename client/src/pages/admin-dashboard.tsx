@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign } from "lucide-react";
+import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, type LucideIcon } from "lucide-react";
 
 type AdminStats = {
   users: number;
@@ -25,7 +25,7 @@ type AdminStats = {
 
 const LOW_BALANCE_THRESHOLD = 500;
 
-function StatCard({ icon: Icon, label, value, sub, tone = "default" }: { icon: any; label: string; value: string; sub?: string; tone?: "default" | "warn" | "danger" }) {
+function StatCard({ icon: Icon, label, value, sub, tone = "default" }: { icon: LucideIcon; label: string; value: string; sub?: string; tone?: "default" | "warn" | "danger" }) {
   const toneCls =
     tone === "danger" ? "border-red-500/30 bg-red-500/5" :
     tone === "warn" ? "border-amber-500/30 bg-amber-500/5" :
@@ -190,7 +190,7 @@ function UsersTable({ limit }: { limit?: number }) {
   const { data, isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/users"] });
   if (isLoading) return <Skeleton className="h-32 w-full" />;
   if (!data || data.length === 0) return <Card className="p-6 text-center text-muted-foreground">No users.</Card>;
-  const rows = limit ? data.slice(0, limit) : data;
+  const rows = data.slice(0, limit ?? 50);
   return (
     <Card className="divide-y">
       {rows.map((u) => (

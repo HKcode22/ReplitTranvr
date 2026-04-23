@@ -320,7 +320,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(payments).orderBy(desc(payments.createdAt));
   }
 
-  async adminGetPaymentsByStatus(status: any): Promise<Payment[]> {
+  async adminGetPaymentsByStatus(status: Payment["status"]): Promise<Payment[]> {
     return db.select().from(payments).where(eq(payments.status, status)).orderBy(desc(payments.createdAt));
   }
 
@@ -336,13 +336,13 @@ export class DatabaseStorage implements IStorage {
   async adminGetStats(): Promise<{ users: number; payments: number; pendingManual: number; bookings: number; calls: number; revenue: { currency: string; amount: number }[] }> {
     const [u] = await db.select({ c: count() }).from(users);
     const [p] = await db.select({ c: count() }).from(payments);
-    const [pm] = await db.select({ c: count() }).from(payments).where(eq(payments.status, "pending_manual" as any));
-    const [b] = await db.select({ c: count() }).from(payments).where(eq(payments.status, "paid" as any));
+    const [pm] = await db.select({ c: count() }).from(payments).where(eq(payments.status, "pending_manual"));
+    const [b] = await db.select({ c: count() }).from(payments).where(eq(payments.status, "paid"));
     const [cr] = await db.select({ c: count() }).from(callRequests);
     const revRows = await db
       .select({ currency: payments.currency, total: sql<string>`COALESCE(SUM(${payments.amount}), 0)` })
       .from(payments)
-      .where(eq(payments.status, "paid" as any))
+      .where(eq(payments.status, "paid"))
       .groupBy(payments.currency);
     return {
       users: Number(u?.c || 0),
