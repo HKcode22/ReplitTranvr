@@ -2118,7 +2118,36 @@ export async function registerRoutes(
 
   app.get("/api/admin/stats", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
     const stats = await storage.adminGetStats();
-    const balance = await getDuffelBalance();
+    // Live Duffel balance: direct HTTP call to /air/balance (the @duffel/api SDK
+    // does not expose a Balance resource). Returns null on any failure so the
+    // admin UI can render an explicit "Unavailable" state.
+    let balance: { available: number; currency: string } | null = null;
+    if (duffel && process.env.DUFFEL_API_TOKEN) {
+      try {
+        const r = await fetch("https://api.duffel.com/air/balance", {
+          headers: {
+            Authorization: `Bearer ${process.env.DUFFEL_API_TOKEN}`,
+            "Duffel-Version": "v2",
+            Accept: "application/json",
+          },
+        });
+        if (r.ok) {
+          const j = (await r.json()) as { data?: { available_balance?: { amount?: string; currency?: string } } };
+          const amountStr = j?.data?.available_balance?.amount ?? null;
+          const currency = j?.data?.available_balance?.currency ?? "USD";
+          if (amountStr != null) {
+            const available = parseFloat(String(amountStr));
+            if (Number.isFinite(available)) {
+              balance = { available, currency };
+            }
+          }
+        } else {
+          console.warn(`[Admin] Duffel balance request returned status ${r.status}`);
+        }
+      } catch (err) {
+        console.warn("[Admin] Duffel balance request failed:", (err as Error)?.message || err);
+      }
+    }
     let blandCallsTotal: number | null = null;
     if (bland.isConfigured()) {
       try {

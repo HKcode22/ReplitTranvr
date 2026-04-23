@@ -308,15 +308,16 @@ function CallsTable({ limit }: { limit?: number }) {
             </div>
           );
         }
+        const dbRow = row as DbCallRow;
         return (
-          <div key={`db-${c.id}`} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`call-row-${c.id}`}>
+          <div key={`db-${dbRow.id}`} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`call-row-${dbRow.id}`}>
             <div className="min-w-0">
-              <div className="text-sm font-medium">{c.user?.email || c.userId}</div>
+              <div className="text-sm font-medium">{dbRow.user?.email || dbRow.userId}</div>
               <div className="text-xs text-muted-foreground">
-                {c.destination || "—"} · {c.dateFrom ? new Date(c.dateFrom).toLocaleDateString() : "—"} · {new Date(c.createdAt).toLocaleString()}
+                {dbRow.destination || "—"} · {dbRow.dateFrom ? new Date(dbRow.dateFrom).toLocaleDateString() : "—"} · {new Date(dbRow.createdAt).toLocaleString()}
               </div>
             </div>
-            <Badge variant="secondary">{c.status}</Badge>
+            <Badge variant="secondary">{dbRow.status}</Badge>
           </div>
         );
       })}
