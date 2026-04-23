@@ -267,6 +267,13 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
 
   const isTestMode = !!duffelConfig?.testMode;
   const requiresIdentityDocs = !!offer?.passengerIdentityDocumentsRequired;
+
+  const flightSubtotalCents = Math.round(parseFloat(offer.totalAmount) * 100);
+  const totalWithFeeCents = Math.ceil(flightSubtotalCents * 1.05);
+  const convenienceFeeCents = totalWithFeeCents - flightSubtotalCents;
+  const flightSubtotal = (flightSubtotalCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+  const convenienceFee = (convenienceFeeCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+  const totalWithFee = (totalWithFeeCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
   const hasProfileData = !!(profile?.name || profile?.dateOfBirth || profile?.gender || profile?.title || profile?.phone);
 
   const buildDefaultPassenger = () => {
@@ -440,7 +447,7 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">Amount Paid</span>
                 <span className="font-semibold">
-                  {offer.totalCurrency} {Number(offer.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {offer.totalCurrency} {totalWithFee}
                 </span>
               </div>
               <div className="flex justify-between gap-2">
@@ -518,11 +525,20 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
           </h3>
           <FlightSummaryCard offer={offer} compact />
           <Separator className="my-3" />
-          <div className="flex items-center justify-between font-semibold">
-            <span>Total {passengerCount > 1 ? `(${passengerCount} travelers)` : ""}</span>
-            <span data-testid="text-payment-total">
-              {offer.totalCurrency} {Number(offer.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </span>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Flight subtotal {passengerCount > 1 ? `(${passengerCount} travelers)` : ""}</span>
+              <span data-testid="text-payment-subtotal">{offer.totalCurrency} {flightSubtotal}</span>
+            </div>
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Convenience fee (5%)</span>
+              <span data-testid="text-payment-fee">{offer.totalCurrency} {convenienceFee}</span>
+            </div>
+            <Separator className="my-2" />
+            <div className="flex items-center justify-between font-semibold text-base">
+              <span>Total</span>
+              <span data-testid="text-payment-total">{offer.totalCurrency} {totalWithFee}</span>
+            </div>
           </div>
         </Card>
 
@@ -588,11 +604,20 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
         </h3>
         <FlightSummaryCard offer={offer} />
         <Separator className="my-4" />
-        <div className="flex items-center justify-between font-semibold text-lg">
-          <span>Total {passengerCount > 1 ? `(${passengerCount} travelers)` : ""}</span>
-          <span data-testid="text-checkout-total">
-            {offer.totalCurrency} {Number(offer.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-          </span>
+        <div className="space-y-1.5 text-sm">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span>Flight subtotal {passengerCount > 1 ? `(${passengerCount} travelers)` : ""}</span>
+            <span data-testid="text-checkout-subtotal">{offer.totalCurrency} {flightSubtotal}</span>
+          </div>
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span>Convenience fee (5%)</span>
+            <span data-testid="text-checkout-fee">{offer.totalCurrency} {convenienceFee}</span>
+          </div>
+          <Separator className="my-2" />
+          <div className="flex items-center justify-between font-semibold text-lg">
+            <span>Total</span>
+            <span data-testid="text-checkout-total">{offer.totalCurrency} {totalWithFee}</span>
+          </div>
         </div>
       </Card>
 
@@ -715,8 +740,8 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
               <CreditCard className="w-4 h-4 mr-2" />
             )}
             {isTestMode
-              ? `Book Flight — ${offer.totalCurrency} ${Number(offer.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-              : "Continue to Payment"
+              ? `Book Flight — ${offer.totalCurrency} ${totalWithFee}`
+              : `Continue to Payment — ${offer.totalCurrency} ${totalWithFee}`
             }
           </Button>
         </form>

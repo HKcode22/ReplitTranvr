@@ -22,6 +22,14 @@ if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 }
 
+const CONVENIENCE_FEE_PERCENT = 5;
+
+function applyConvenienceFee(originalCents: number): { originalCents: number; feeCents: number; totalCents: number } {
+  const totalCents = Math.ceil(originalCents * (1 + CONVENIENCE_FEE_PERCENT / 100));
+  const feeCents = totalCents - originalCents;
+  return { originalCents, feeCents, totalCents };
+}
+
 function getBaseUrl(req: Request): string {
   const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
   const host = req.headers["x-forwarded-host"] || req.headers.host;
@@ -1224,14 +1232,18 @@ export async function registerRoutes(
 
       const stripe = await getUncachableStripeClient();
       const amountInCents = Math.round(serverAmount * 100);
+      const fee = applyConvenienceFee(amountInCents);
 
       const paymentIntent = await stripe.paymentIntents.create({
-        amount: amountInCents,
+        amount: fee.totalCents,
         currency: String(currency).toLowerCase(),
         automatic_payment_methods: { enabled: true },
         metadata: {
           userId: req.session.userId!,
           type: "flight_booking",
+          original_amount: String(fee.originalCents),
+          convenience_fee: String(fee.feeCents),
+          convenience_fee_percent: String(CONVENIENCE_FEE_PERCENT),
           ...(offerId ? { offerId } : {}),
           ...(proposalId ? { proposalId: String(proposalId) } : {}),
           ...(itemId ? { itemId: String(itemId) } : {}),
@@ -1287,7 +1299,8 @@ export async function registerRoutes(
           return res.status(403).json({ message: "Payment does not belong to this user" });
         }
         const expectedCents = Math.round(parseFloat(fullOffer.total_amount) * 100);
-        if (pi.amount < expectedCents) {
+        const expectedTotalCents = applyConvenienceFee(expectedCents).totalCents;
+        if (pi.amount < expectedTotalCents) {
           return res.status(400).json({ message: "Payment amount is insufficient for this flight" });
         }
         if (pi.currency !== fullOffer.total_currency.toLowerCase()) {
@@ -1334,13 +1347,18 @@ export async function registerRoutes(
 
       const orderData = order.data as any;
 
+      const flightAmountStr = orderData.total_amount || fullOffer.total_amount;
+      const flightAmountCents = Math.round(parseFloat(flightAmountStr) * 100);
+      const chargedTotalCents = applyConvenienceFee(flightAmountCents).totalCents;
+      const chargedTotalAmount = (chargedTotalCents / 100).toFixed(2);
+
       const payment = await storage.createPayment({
         userId: req.session.userId!,
         proposalId: null,
         stripePaymentIntentId: stripePaymentIntentId || null,
         duffelOrderId: orderData.id,
         duffelBookingRef: orderData.booking_reference,
-        amount: orderData.total_amount || fullOffer.total_amount,
+        amount: chargedTotalAmount,
         currency: (orderData.total_currency || "usd").toLowerCase(),
         status: "paid",
       });
@@ -1737,7 +1755,8 @@ export async function registerRoutes(
           return res.status(403).json({ message: "Payment does not belong to this user" });
         }
         const expectedCents = Math.round(parseFloat(amount) * 100);
-        if (pi.amount < expectedCents) {
+        const expectedTotalCents = applyConvenienceFee(expectedCents).totalCents;
+        if (pi.amount < expectedTotalCents) {
           return res.status(400).json({ message: "Payment amount is insufficient for this flight" });
         }
         if (pi.currency !== currency.toLowerCase()) {
@@ -1758,13 +1777,19 @@ export async function registerRoutes(
       } as any);
 
       const orderData = order.data as any;
+
+      const flightAmountStr = orderData.total_amount || selectedItem.priceEstimate;
+      const flightAmountCents = Math.round(parseFloat(String(flightAmountStr)) * 100);
+      const chargedTotalCents = applyConvenienceFee(flightAmountCents).totalCents;
+      const chargedTotalAmount = (chargedTotalCents / 100).toFixed(2);
+
       const payment = await storage.createPayment({
         userId: req.session.userId!,
         proposalId,
         stripePaymentIntentId: stripePaymentIntentId || null,
         duffelOrderId: orderData.id,
         duffelBookingRef: orderData.booking_reference,
-        amount: orderData.total_amount || selectedItem.priceEstimate,
+        amount: chargedTotalAmount,
         currency: (orderData.total_currency || "usd").toLowerCase(),
         status: "paid",
       });
@@ -3229,15 +3254,19 @@ export async function registerRoutes(
 
       const stripe = await getUncachableStripeClient();
       const amountInCents = Math.round(serverAmount * 100);
+      const fee = applyConvenienceFee(amountInCents);
 
       const paymentIntent = await stripe.paymentIntents.create({
-        amount: amountInCents,
+        amount: fee.totalCents,
         currency: serverCurrency,
         automatic_payment_methods: { enabled: true },
         metadata: {
           userId: req.session.userId!,
           proposalId: String(proposalId),
           itemId: String(itemId),
+          original_amount: String(fee.originalCents),
+          convenience_fee: String(fee.feeCents),
+          convenience_fee_percent: String(CONVENIENCE_FEE_PERCENT),
         },
       });
 
@@ -3287,8 +3316,13 @@ export async function registerRoutes(
 
       const expectedAmount = parseFloat(offerData?.totalAmount || selectedItem.priceEstimate);
       const expectedCents = Math.round(expectedAmount * 100);
-      if (paymentIntent.amount < expectedCents) {
+      const expectedTotalCents = applyConvenienceFee(expectedCents).totalCents;
+      if (paymentIntent.amount < expectedTotalCents) {
         return res.status(400).json({ message: "Payment amount insufficient" });
+      }
+      const expectedCurrency = String(offerData?.totalCurrency || "USD").toLowerCase();
+      if (paymentIntent.currency !== expectedCurrency) {
+        return res.status(400).json({ message: "Payment currency does not match the flight currency" });
       }
 
       const user = await storage.getUser(req.session.userId!);
@@ -3321,13 +3355,19 @@ export async function registerRoutes(
       });
 
       const orderData = order.data as any;
+
+      const flightAmountStr = orderData.total_amount || selectedItem.priceEstimate;
+      const flightAmountCents = Math.round(parseFloat(String(flightAmountStr)) * 100);
+      const chargedTotalCents = applyConvenienceFee(flightAmountCents).totalCents;
+      const chargedTotalAmount = (chargedTotalCents / 100).toFixed(2);
+
       const payment = await storage.createPayment({
         userId: req.session.userId!,
         proposalId,
         stripePaymentIntentId: paymentIntentId,
         duffelOrderId: orderData.id,
         duffelBookingRef: orderData.booking_reference,
-        amount: orderData.total_amount || selectedItem.priceEstimate,
+        amount: chargedTotalAmount,
         currency: (orderData.total_currency || "usd").toLowerCase(),
         status: "paid",
       });

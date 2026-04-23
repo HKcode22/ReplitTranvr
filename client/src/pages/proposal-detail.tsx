@@ -623,6 +623,13 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
   const totalCurrency = activeOfferData?.totalCurrency || "USD";
   const totalAmount = parseFloat(activeOfferData?.totalAmount || selectedItem.priceEstimate);
 
+  const flightSubtotalCents = Math.round(totalAmount * 100);
+  const totalWithFeeCents = Math.ceil(flightSubtotalCents * 1.05);
+  const convenienceFeeCents = totalWithFeeCents - flightSubtotalCents;
+  const flightSubtotalDisplay = (flightSubtotalCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+  const convenienceFeeDisplay = (convenienceFeeCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+  const totalWithFeeDisplay = (totalWithFeeCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+
   const [desiredPassengerCount, setDesiredPassengerCount] = useState(originalPassengerCount);
 
   const { data: profile } = useQuery<TravelerProfile | null>({
@@ -848,7 +855,7 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
                 <div className="flex justify-between gap-2">
                   <span className="text-muted-foreground">Amount Paid</span>
                   <span className="font-semibold">
-                    {totalCurrency} {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    {totalCurrency} {totalWithFeeDisplay}
                   </span>
                 </div>
               </div>
@@ -943,11 +950,20 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
           <p className="text-sm text-muted-foreground mb-2">{selectedItem.description}</p>
           <DuffelFlightCard offerData={activeOfferData} />
           <Separator className="my-3" />
-          <div className="flex items-center justify-between font-semibold">
-            <span>Total {desiredPassengerCount > 1 ? `(${desiredPassengerCount} travelers)` : ""}</span>
-            <span data-testid="text-payment-total">
-              {totalCurrency} {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </span>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Flight subtotal {desiredPassengerCount > 1 ? `(${desiredPassengerCount} travelers)` : ""}</span>
+              <span data-testid="text-payment-subtotal">{totalCurrency} {flightSubtotalDisplay}</span>
+            </div>
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Convenience fee (5%)</span>
+              <span data-testid="text-payment-fee">{totalCurrency} {convenienceFeeDisplay}</span>
+            </div>
+            <Separator className="my-2" />
+            <div className="flex items-center justify-between font-semibold text-base">
+              <span>Total</span>
+              <span data-testid="text-payment-total">{totalCurrency} {totalWithFeeDisplay}</span>
+            </div>
           </div>
         </Card>
 
@@ -1009,11 +1025,20 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
         <p className="text-sm text-muted-foreground mb-2">{selectedItem.description}</p>
         <DuffelFlightCard offerData={activeOfferData} />
         <Separator className="my-4" />
-        <div className="flex items-center justify-between font-semibold text-lg">
-          <span>Total {desiredPassengerCount > 1 ? `(${desiredPassengerCount} travelers)` : ""}</span>
-          <span data-testid="text-checkout-total">
-            {totalCurrency} {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-          </span>
+        <div className="space-y-1.5 text-sm">
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span>Flight subtotal {desiredPassengerCount > 1 ? `(${desiredPassengerCount} travelers)` : ""}</span>
+            <span data-testid="text-checkout-subtotal">{totalCurrency} {flightSubtotalDisplay}</span>
+          </div>
+          <div className="flex items-center justify-between text-muted-foreground">
+            <span>Convenience fee (5%)</span>
+            <span data-testid="text-checkout-fee">{totalCurrency} {convenienceFeeDisplay}</span>
+          </div>
+          <Separator className="my-2" />
+          <div className="flex items-center justify-between font-semibold text-lg">
+            <span>Total</span>
+            <span data-testid="text-checkout-total">{totalCurrency} {totalWithFeeDisplay}</span>
+          </div>
         </div>
       </Card>
 
