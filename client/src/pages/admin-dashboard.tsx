@@ -84,17 +84,24 @@ function toneClasses(tone: StatTone) {
   return { card, value };
 }
 
+function valueSizeClass(value: string): string {
+  const len = value.length;
+  if (len >= 13) return "text-lg";
+  if (len >= 10) return "text-xl";
+  return "text-2xl";
+}
+
 function StatCard({ icon: Icon, label, value, sub, tone = "default" }: { icon: LucideIcon; label: string; value: string; sub?: string; tone?: StatTone }) {
   const t = toneClasses(tone);
   return (
     <Card className={`p-4 ${t.card}`}>
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
+        <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center shrink-0">
           <Icon className="w-5 h-5" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-xs text-muted-foreground">{label}</div>
-          <div className={`text-2xl font-bold truncate ${t.value}`}>{value}</div>
+          <div className={`${valueSizeClass(value)} font-bold whitespace-nowrap tabular-nums ${t.value}`}>{value}</div>
           {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
         </div>
       </div>
@@ -230,8 +237,11 @@ function DuffelBalanceCard() {
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <div className={`text-2xl font-bold truncate ${t.value}`} data-testid="text-balance-estimated">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div
+                className={`${valueSizeClass(formatUSD(data.estimated))} font-bold whitespace-nowrap tabular-nums ${t.value}`}
+                data-testid="text-balance-estimated"
+              >
                 {formatUSD(data.estimated)}
               </div>
               <button
