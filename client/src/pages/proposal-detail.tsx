@@ -1191,7 +1191,7 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
                 : "Setting up payment..."
               : createPaymentIntentMutation.isPending
               ? "Setting up payment..."
-              : "Continue to Payment"}
+              : `Continue to Payment — ${totalCurrency} ${totalWithFeeDisplay}`}
           </Button>
         </form>
       </Form>
