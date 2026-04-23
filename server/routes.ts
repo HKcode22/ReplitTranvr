@@ -231,6 +231,49 @@ async function sendManualBookingAdminAlert(context: {
   }
 }
 
+// Build a Duffel-order-shaped object from manualBookingDetails so the
+// existing trip card UI can render manually-completed bookings without
+// any branching. Slice/segment fields mirror the Duffel order schema.
+function synthesizeOrderFromManualDetails(details: unknown): any {
+  if (!details || typeof details !== "object") return null;
+  const d = details as {
+    slices?: Array<{
+      origin?: string;
+      destination?: string;
+      departingAt?: string;
+      arrivingAt?: string;
+      carrier?: string;
+      flightNumber?: string;
+    }>;
+    passengers?: Array<{
+      given_name?: string;
+      family_name?: string;
+      title?: string;
+      type?: string;
+    }>;
+  };
+  const slices = (d.slices || []).map((s) => ({
+    segments: [
+      {
+        origin: { iata_code: s.origin || "", city_name: s.origin || "" },
+        destination: { iata_code: s.destination || "", city_name: s.destination || "" },
+        departing_at: s.departingAt,
+        arriving_at: s.arrivingAt,
+        marketing_carrier: { name: s.carrier || "Airline", logo_symbol_url: null },
+        marketing_carrier_flight_number: s.flightNumber || "",
+        passengers: [],
+      },
+    ],
+  }));
+  const passengers = (d.passengers || []).map((p) => ({
+    given_name: p.given_name || "",
+    family_name: p.family_name || "",
+    title: p.title || "",
+    type: p.type || "adult",
+  }));
+  return { slices, passengers, conditions: null };
+}
+
 async function createManualBookingFallback(args: {
   userId: string;
   userEmail?: string;
@@ -1124,19 +1167,26 @@ export async function registerRoutes(
   app.get("/api/trips", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const pymts = await storage.getPayments(req.session.userId!);
-      const bookedPayments = pymts.filter(p => p.duffelOrderId && p.status === "paid");
+      const bookedPayments = pymts.filter(p =>
+        p.status === "paid" && (p.duffelOrderId || p.manualBookingDetails)
+      );
 
       const trips = await Promise.all(
         bookedPayments.map(async (payment) => {
-          let orderData = null;
-          if (duffel && payment.duffelOrderId) {
+          const isManual = !payment.duffelOrderId && !!payment.manualBookingDetails;
+          let orderData: any = null;
+
+          if (payment.duffelOrderId && duffel) {
             try {
               const order = await duffel.orders.get(payment.duffelOrderId);
               orderData = order.data;
             } catch (err: any) {
               console.warn(`Failed to fetch Duffel order ${payment.duffelOrderId}:`, err.message);
             }
+          } else if (isManual) {
+            orderData = synthesizeOrderFromManualDetails(payment.manualBookingDetails);
           }
+
           return {
             id: payment.id,
             bookingReference: payment.duffelBookingRef,
@@ -1146,6 +1196,7 @@ export async function registerRoutes(
             status: payment.status,
             bookedAt: payment.createdAt,
             proposalId: payment.proposalId,
+            isManual,
             order: orderData,
           };
         })

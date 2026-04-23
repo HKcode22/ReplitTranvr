@@ -425,18 +425,28 @@ function BookingsTable({ limit }: { limit?: number }) {
   const rows = limit ? data.slice(0, limit) : data.slice(0, 50);
   return (
     <Card className="divide-y">
-      {rows.map((p) => (
-        <div key={p.id} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`booking-row-${p.id}`}>
-          <div className="min-w-0">
-            <div className="text-sm font-medium">{p.user?.email || p.userId}</div>
-            <div className="text-xs text-muted-foreground">
-              {p.currency?.toUpperCase()} {p.amount} · {new Date(p.createdAt).toLocaleString()}
-              {p.duffelBookingRef && <> · Ref <span className="font-mono">{p.duffelBookingRef}</span></>}
+      {rows.map((p) => {
+        const isManual = !p.duffelOrderId;
+        return (
+          <div key={p.id} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`booking-row-${p.id}`}>
+            <div className="min-w-0">
+              <div className="text-sm font-medium">{p.user?.email || p.userId}</div>
+              <div className="text-xs text-muted-foreground">
+                {p.currency?.toUpperCase()} {p.amount} · {new Date(p.createdAt).toLocaleString()}
+                {p.duffelBookingRef && <> · Ref <span className="font-mono">{p.duffelBookingRef}</span></>}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {isManual && (
+                <Badge variant="outline" className="text-[10px]" data-testid={`badge-manual-${p.id}`}>
+                  Manual
+                </Badge>
+              )}
+              <Badge variant="default">Booked</Badge>
             </div>
           </div>
-          <Badge variant="default">Booked</Badge>
-        </div>
-      ))}
+        );
+      })}
     </Card>
   );
 }
