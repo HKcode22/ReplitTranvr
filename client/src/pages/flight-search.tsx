@@ -322,7 +322,7 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
 
   const effectiveTotalCents = appliedPromo
-    ? Math.ceil(appliedPromo.overrideAmountCents * 1.05)
+    ? appliedPromo.overrideAmountCents
     : totalWithFeeCents;
   const effectiveTotal = (effectiveTotalCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
 

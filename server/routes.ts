@@ -38,23 +38,25 @@ async function validatePromoCodeForUser(
   rawCode: string | undefined | null,
   userEmail: string | null | undefined,
 ): Promise<PromoValidationResult> {
+  const GENERIC_INVALID = "Promo code is not valid";
   if (!rawCode || typeof rawCode !== "string" || !rawCode.trim()) {
-    return { ok: false, reason: "Promo code required" };
+    return { ok: false, reason: GENERIC_INVALID };
   }
   const promo = await storage.getPromoCodeByCode(rawCode);
-  if (!promo) return { ok: false, reason: "Promo code not found" };
-  if (!promo.active) return { ok: false, reason: "Promo code is inactive" };
+  if (!promo) return { ok: false, reason: GENERIC_INVALID };
+  if (!promo.active) return { ok: false, reason: GENERIC_INVALID };
   if (promo.expiresAt && new Date(promo.expiresAt).getTime() < Date.now()) {
-    return { ok: false, reason: "Promo code has expired" };
+    return { ok: false, reason: GENERIC_INVALID };
   }
   if (promo.maxUses != null && promo.usedCount >= promo.maxUses) {
-    return { ok: false, reason: "Promo code fully redeemed" };
+    return { ok: false, reason: GENERIC_INVALID };
   }
   if (promo.adminOnly && !isAdminEmail(userEmail)) {
-    return { ok: false, reason: "Promo code is admin-only" };
+    console.warn(`[promo] non-admin user ${userEmail || "?"} attempted admin-only code ${promo.code}`);
+    return { ok: false, reason: GENERIC_INVALID };
   }
   if (!Number.isFinite(promo.overrideAmountCents) || promo.overrideAmountCents < 50) {
-    return { ok: false, reason: "Promo override amount is invalid (must be >= 50 cents)" };
+    return { ok: false, reason: GENERIC_INVALID };
   }
   return {
     ok: true,
@@ -1456,7 +1458,9 @@ export async function registerRoutes(
       }
 
       const stripe = await getUncachableStripeClient();
-      const fee = applyConvenienceFee(amountInCents);
+      const fee = promoMeta
+        ? { originalCents: amountInCents, feeCents: 0, totalCents: amountInCents }
+        : applyConvenienceFee(amountInCents);
 
       const paymentIntent = await stripe.paymentIntents.create({
         amount: fee.totalCents,
@@ -1467,7 +1471,7 @@ export async function registerRoutes(
           type: "flight_booking",
           original_amount: String(fee.originalCents),
           convenience_fee: String(fee.feeCents),
-          convenience_fee_percent: String(CONVENIENCE_FEE_PERCENT),
+          convenience_fee_percent: promoMeta ? "0" : String(CONVENIENCE_FEE_PERCENT),
           ...(offerId ? { offerId } : {}),
           ...(proposalId ? { proposalId: String(proposalId) } : {}),
           ...(itemId ? { itemId: String(itemId) } : {}),
@@ -1598,6 +1602,15 @@ export async function registerRoutes(
         };
       });
 
+      // Atomically consume one promo slot BEFORE we touch Duffel or write a fallback row.
+      // If maxUses has just been reached by a concurrent request, abort cleanly.
+      if (appliedPromo) {
+        const consumed = await storage.incrementPromoUsage(appliedPromo.id);
+        if (!consumed) {
+          return res.status(409).json({ message: "Promo code is no longer available (fully redeemed)." });
+        }
+      }
+
       const balanceOk = await isDuffelBalanceSufficient(parseFloat(fullOffer.total_amount), fullOffer.total_currency);
       // Force pending-manual when an admin promo with forceManual is in effect, or when balance is insufficient.
       const forceManualByPromo = !!(appliedPromo?.forceManual);
@@ -1617,7 +1630,6 @@ export async function registerRoutes(
           endpoint: "POST /api/duffel/book-direct",
         });
         if (appliedPromo) {
-          await storage.incrementPromoUsage(appliedPromo.id).catch((e) => console.warn("[promo] increment failed:", e));
           await storage.updatePayment(payment.id, { appliedPromoCode: appliedPromo.code }).catch((e) => console.warn("[promo] stamp failed:", e));
         }
         return res.json({
@@ -1658,10 +1670,6 @@ export async function registerRoutes(
         status: "paid",
         appliedPromoCode: appliedPromo?.code ?? null,
       });
-
-      if (appliedPromo) {
-        await storage.incrementPromoUsage(appliedPromo.id).catch((e) => console.warn("[promo] increment failed:", e));
-      }
 
       await storage.createNotification({
         userId: req.session.userId!,
@@ -2099,6 +2107,14 @@ export async function registerRoutes(
         }
       }
 
+      // Atomically consume one promo slot BEFORE we touch Duffel or write a fallback row.
+      if (appliedPromo) {
+        const consumed = await storage.incrementPromoUsage(appliedPromo.id);
+        if (!consumed) {
+          return res.status(409).json({ message: "Promo code is no longer available (fully redeemed)." });
+        }
+      }
+
       const balanceOk = await isDuffelBalanceSufficient(parseFloat(String(amount)), String(currency));
       // Force pending-manual when an admin promo with forceManual is in effect, or when balance is insufficient.
       const forceManualByPromo = !!(appliedPromo?.forceManual);
@@ -2118,7 +2134,6 @@ export async function registerRoutes(
           endpoint: `POST /api/proposals/${proposalId}/book-duffel`,
         });
         if (appliedPromo) {
-          await storage.incrementPromoUsage(appliedPromo.id).catch((e) => console.warn("[promo] increment failed:", e));
           await storage.updatePayment(payment.id, { appliedPromoCode: appliedPromo.code }).catch((e) => console.warn("[promo] stamp failed:", e));
         }
         return res.json({
@@ -2159,10 +2174,6 @@ export async function registerRoutes(
         status: "paid",
         appliedPromoCode: appliedPromo?.code ?? null,
       });
-
-      if (appliedPromo) {
-        await storage.incrementPromoUsage(appliedPromo.id).catch((e) => console.warn("[promo] increment failed:", e));
-      }
 
       const result = {
         payment,

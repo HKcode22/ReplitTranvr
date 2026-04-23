@@ -766,7 +766,7 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
 
   const effectiveTotalCents = appliedPromo
-    ? Math.ceil(appliedPromo.overrideAmountCents * 1.05)
+    ? appliedPromo.overrideAmountCents
     : totalWithFeeCents;
   const effectiveTotalDisplay = (effectiveTotalCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
 
