@@ -2904,6 +2904,39 @@ export async function registerRoutes(
     console.log(`Created fallback proposal ${proposal.id} for call request ${callRequestId}`);
   }
 
+  app.post("/api/bland/inbound", async (req: Request, res: Response) => {
+    try {
+      const baseUrl = getBaseUrl(req);
+      const task = bland.buildTravelConciergePrompt({ userName: "there" });
+
+      return res.status(200).json({
+        task,
+        voice: "mason",
+        language: "eng",
+        max_duration: 15,
+        model: "enhanced",
+        record: true,
+        wait_for_greeting: true,
+        webhook: `${baseUrl}/api/bland/webhook`,
+        webhook_events: ["call.ended"],
+        dynamic_data: [{
+          url: `${baseUrl}/api/bland/dynamic-data`,
+          method: "POST",
+          headers: { "x-bland-secret": process.env.BLAND_AI_API_KEY || "" },
+          cache: false,
+          response_data: [
+            { name: "traveler_info", data: "$.traveler_info", context: "Traveler information: {{traveler_info}}" },
+            { name: "booking_info", data: "$.booking_info", context: "Booking information: {{booking_info}}" },
+            { name: "proposal_info", data: "$.proposal_info", context: "Proposal information: {{proposal_info}}" },
+          ],
+        }],
+      });
+    } catch (err: any) {
+      console.error("Bland inbound webhook error:", err?.message || err);
+      return res.status(500).json({ message: "Failed to build inbound call config" });
+    }
+  });
+
   app.post("/api/bland/webhook", async (req: Request, res: Response) => {
     try {
       const webhookSecret = req.headers["x-bland-secret"] as string;
