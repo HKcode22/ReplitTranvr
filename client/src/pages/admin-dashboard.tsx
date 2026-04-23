@@ -296,7 +296,7 @@ function CallsTable({ limit }: { limit?: number }) {
             : typeof meta.email === "string" ? meta.email
             : typeof meta.userId === "string" || typeof meta.userId === "number" ? `user #${meta.userId}` : null;
           const phone = c.to || "—";
-          const minutes = typeof c.call_length === "number" ? `${c.call_length.toFixed(1)} min` : "—";
+          const minutes = typeof c.call_length === "number" ? `${Math.max(1, Math.ceil(c.call_length / 60))} min` : "—";
           const date = c.created_at ? new Date(c.created_at).toLocaleString() : "—";
           const status = c.status || (c.completed ? "completed" : "—");
           const key = c.call_id || `bland-${idx}`;
