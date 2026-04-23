@@ -176,9 +176,7 @@ function DuffelBalanceCard() {
 
   const tone: StatTone = data.estimated < 100 ? "danger" : data.estimated < 300 ? "warn" : "good";
   const t = toneClasses(tone);
-  const lastSet = data.lastUpdated
-    ? new Date(data.lastUpdated).toLocaleDateString()
-    : "never";
+  const lastSetDate = data.lastUpdated ? new Date(data.lastUpdated).toLocaleDateString() : null;
 
   return (
     <Card className={`p-4 ${t.card}`} data-testid="card-duffel-balance">
@@ -187,66 +185,66 @@ function DuffelBalanceCard() {
           <Wallet className="w-5 h-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-xs text-muted-foreground">Duffel Balance</div>
-            {!editing ? (
+          <div className="text-xs text-muted-foreground">Duffel Balance</div>
+          {editing ? (
+            <div className="flex items-center gap-1.5 mt-1">
+              <Input
+                type="number"
+                step="0.01"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submit();
+                  if (e.key === "Escape") setEditing(false);
+                }}
+                autoFocus
+                className="h-9 text-lg font-bold flex-1 min-w-0"
+                placeholder="Current balance from Duffel"
+                data-testid="input-balance"
+              />
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={startEdit}
-                data-testid="button-edit-balance"
+                size="icon"
+                className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-500/10 shrink-0"
+                onClick={submit}
+                disabled={mut.isPending}
+                data-testid="button-save-balance"
+                aria-label="Save balance"
               >
-                <Pencil className="w-3 h-3 mr-1" /> Update
+                <Check className="w-4 h-4" />
               </Button>
-            ) : (
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setEditing(false)}
-                  disabled={mut.isPending}
-                  data-testid="button-cancel-balance"
-                >
-                  <X className="w-3 h-3" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={submit}
-                  disabled={mut.isPending}
-                  data-testid="button-save-balance"
-                >
-                  <Check className="w-3 h-3" />
-                </Button>
-              </div>
-            )}
-          </div>
-          {editing ? (
-            <Input
-              type="number"
-              step="0.01"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submit();
-                if (e.key === "Escape") setEditing(false);
-              }}
-              autoFocus
-              className="h-9 text-lg font-bold mt-1"
-              placeholder="Current balance from Duffel"
-              data-testid="input-balance"
-            />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
+                onClick={() => setEditing(false)}
+                disabled={mut.isPending}
+                data-testid="button-cancel-balance"
+                aria-label="Cancel"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
           ) : (
-            <div className={`text-2xl font-bold truncate ${t.value}`} data-testid="text-balance-estimated">
-              {formatUSD(data.estimated)}
+            <div className="flex items-center gap-1.5">
+              <div className={`text-2xl font-bold truncate ${t.value}`} data-testid="text-balance-estimated">
+                {formatUSD(data.estimated)}
+              </div>
+              <button
+                type="button"
+                onClick={startEdit}
+                className="text-muted-foreground hover:text-foreground transition-colors shrink-0 p-0.5 rounded-sm hover:bg-muted"
+                data-testid="button-edit-balance"
+                aria-label="Edit balance"
+                title="Edit balance"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
           {!editing && (
             <div className="text-xs text-muted-foreground mt-0.5">
-              Est. · Last set {lastSet}
+              Est.{lastSetDate ? ` · Last set ${lastSetDate}` : ""}
             </div>
           )}
         </div>
