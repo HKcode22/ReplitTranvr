@@ -3097,15 +3097,13 @@ export async function registerRoutes(
     }
 
     // Last-resort: scan raw transcript/summary for any 3-letter IATA-style code
-    // so we can still attempt a Duffel search on early hangups.
+    // so we can still attempt a Duffel search on early hangups. Skip non-airport
+    // tokens like country codes that commonly appear in transcripts.
     if (!details.destination) {
       const haystack = `${transcript || ""}\n${summary || ""}`;
       const iataMatches = haystack.match(/\b([A-Z]{3})\b/g) || [];
-      const ignored = new Set([
-        "USA", "JFK", // JFK only ignored if it's the only thing — handled below
-      ]);
-      // Don't actually ignore JFK; just dedupe and pick first sensible one.
-      const candidate = iataMatches.find(c => c !== "USA");
+      const nonAirportTokens = new Set(["USA", "GMT", "EST", "PST", "CST", "MST", "UTC"]);
+      const candidate = iataMatches.find(c => !nonAirportTokens.has(c));
       if (candidate) {
         details.destination = candidate;
         console.log(`generateProposalFromCall: last-resort IATA scan found "${candidate}" in transcript for call request ${callRequestId}`);

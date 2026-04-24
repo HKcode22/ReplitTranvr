@@ -1348,12 +1348,37 @@ export default function ProposalDetailPage() {
   // This is the fallback state created when the concierge call ended without enough info.
   const isEmptyProposal = !!proposal && !hasDuffelFlights && !hasNoFlightsCard;
 
-  const buildFlightSearchUrl = (cr: ProposalCallRequest | null | undefined): string => {
-    if (!cr) return "/flight-search";
+  const buildFlightSearchUrl = (
+    cr: ProposalCallRequest | null | undefined,
+    items: ProposalItem[] | undefined
+  ): string => {
     const params = new URLSearchParams();
-    if (cr.destination) params.set("destination", cr.destination);
-    if (cr.dateFrom) params.set("departureDate", cr.dateFrom);
-    if (cr.dateTo) params.set("returnDate", cr.dateTo);
+    // Prefer richer details from any prior search (e.g. an existing no-flights item),
+    // then fall back to the linked call request fields.
+    const priorSearch = items?.find(
+      (i) => (i.duffelOfferData as any)?.searchParams
+    );
+    const sp = (priorSearch?.duffelOfferData as any)?.searchParams as
+      | { origin?: string; originName?: string; destination?: string; destinationName?: string;
+          departureDate?: string; returnDate?: string; cabinClass?: string; passengers?: number }
+      | undefined;
+
+    const destination = sp?.destination || cr?.destination;
+    const departureDate = sp?.departureDate || cr?.dateFrom;
+    const returnDate = sp?.returnDate || cr?.dateTo;
+    const origin = sp?.origin;
+    const cabinClass = sp?.cabinClass;
+    const passengers = sp?.passengers;
+
+    if (destination) params.set("destination", destination);
+    if (sp?.destinationName) params.set("destinationName", sp.destinationName);
+    if (origin) params.set("origin", origin);
+    if (sp?.originName) params.set("originName", sp.originName);
+    if (departureDate) params.set("departureDate", departureDate);
+    if (returnDate) params.set("returnDate", returnDate);
+    if (cabinClass) params.set("cabinClass", cabinClass);
+    if (passengers) params.set("passengers", String(passengers));
+
     const qs = params.toString();
     return qs ? `/flight-search?${qs}` : "/flight-search";
   };
@@ -1410,7 +1435,7 @@ export default function ProposalDetailPage() {
           <p className="text-sm text-muted-foreground mb-4">
             Search live availability for your trip and book the option that works best for you.
           </p>
-          <Link href={buildFlightSearchUrl(proposal.callRequest)}>
+          <Link href={buildFlightSearchUrl(proposal.callRequest, proposal.items)}>
             <Button data-testid="button-search-available-flights">
               <Search className="w-4 h-4 mr-2" />
               Search Available Flights
