@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.91.0",
     "@duffel/api": "^4.21.5",
     "@duffel/components": "^3.13.1",
     "@hookform/resolvers": "^3.10.0",

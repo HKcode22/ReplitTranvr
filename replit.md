@@ -45,12 +45,13 @@ client/src/
     billing.tsx        - Payment history and summary
     security.tsx       - Security & compliance information page
 server/
-  index.ts             - Express server setup
+  index.ts             - Express server setup (warns at startup if ANTHROPIC_API_KEY missing)
   routes.ts            - All API routes (auth, profile, calls, proposals, notifications, payments, Duffel flights, Bland AI, webhooks)
   storage.ts           - DatabaseStorage class implementing IStorage interface
   db.ts                - Drizzle ORM connection with pg pool
   lib/
     bland.ts           - Bland AI service wrapper (dispatch calls, build prompts, get call details)
+    proposalVerifier.ts - Claude-based silent QA pass for post-call proposals (verifyProposalAgainstTranscript + fixAndRegenerateProposal)
 shared/
   schema.ts            - All Drizzle schemas, enums, relations, Zod insert schemas, types
 ```

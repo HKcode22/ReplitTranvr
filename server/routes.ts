@@ -12,6 +12,12 @@ import { Duffel } from "@duffel/api";
 import * as bland from "./lib/bland";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
 import {
+  verifyProposalAgainstTranscript,
+  fixAndRegenerateProposal,
+  buildProposalSnapshot,
+  type ParsedDetails as VerifierParsedDetails,
+} from "./lib/proposalVerifier";
+import {
   buildVerificationEmail,
   buildPasswordResetEmail,
   buildAccountCreationEmail,
@@ -204,6 +210,20 @@ async function isDuffelBalanceSufficient(amount: number, currency: string): Prom
   if (!bal) return true; // Unknown — don't divert
   if (bal.currency.toUpperCase() !== currency.toUpperCase()) return true; // Can't compare
   return bal.available >= amount;
+}
+
+async function sendInternalEmail(subject: string, html: string): Promise<void> {
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+  try {
+    await sgMail.send({
+      to: ADMIN_ALERT_EMAILS,
+      from: { email: fromEmail, name: "Travnr Alerts" },
+      subject,
+      html,
+    });
+  } catch (mailErr) {
+    console.error("Failed to send internal alert email:", mailErr);
+  }
 }
 
 async function sendManualBookingAdminAlert(context: {
@@ -3030,7 +3050,13 @@ export async function registerRoutes(
       });
   }
 
-  async function generateProposalFromCall(callRequestId: number, userId: string, callSummary: string | null, callTranscript?: string | null) {
+  async function generateProposalFromCall(
+    callRequestId: number,
+    userId: string,
+    callSummary: string | null,
+    callTranscript?: string | null,
+    override?: { details: VerifierParsedDetails; skipVerification: true },
+  ) {
     const callRequest = await storage.getCallRequest(callRequestId);
     if (!callRequest) {
       console.log(`generateProposalFromCall: call request ${callRequestId} not found`);
@@ -3042,21 +3068,23 @@ export async function registerRoutes(
       return;
     }
 
-    const existingProposals = await storage.getProposalsByCallRequest(callRequestId);
-    if (existingProposals.length > 0) {
-      const fallbackIds: number[] = [];
-      for (const ep of existingProposals) {
-        const items = await storage.getProposalItems(ep.id);
-        const isFallback = items.length === 0 || items.every(i => !i.duffelOfferId && (parseFloat(i.priceEstimate ?? "0") === 0));
-        if (isFallback) fallbackIds.push(ep.id);
-      }
-      if (fallbackIds.length < existingProposals.length) {
-        console.log(`Real proposal already exists for call request ${callRequestId}, skipping`);
-        return;
-      }
-      console.log(`Replacing ${fallbackIds.length} fallback proposal(s) for call request ${callRequestId}`);
-      for (const id of fallbackIds) {
-        await storage.deleteProposalAndItems(id);
+    if (!override) {
+      const existingProposals = await storage.getProposalsByCallRequest(callRequestId);
+      if (existingProposals.length > 0) {
+        const fallbackIds: number[] = [];
+        for (const ep of existingProposals) {
+          const items = await storage.getProposalItems(ep.id);
+          const isFallback = items.length === 0 || items.every(i => !i.duffelOfferId && (parseFloat(i.priceEstimate ?? "0") === 0));
+          if (isFallback) fallbackIds.push(ep.id);
+        }
+        if (fallbackIds.length < existingProposals.length) {
+          console.log(`Real proposal already exists for call request ${callRequestId}, skipping`);
+          return;
+        }
+        console.log(`Replacing ${fallbackIds.length} fallback proposal(s) for call request ${callRequestId}`);
+        for (const id of fallbackIds) {
+          await storage.deleteProposalAndItems(id);
+        }
       }
     }
 
@@ -3074,52 +3102,58 @@ export async function registerRoutes(
       return;
     }
 
-    const details = parseTravelDetailsFromTranscript(transcript, summary);
-    console.log(`Parsed travel details from transcript for call ${callRequestId}:`, JSON.stringify(details));
+    let details: VerifierParsedDetails;
+    if (override) {
+      details = override.details;
+      console.log(`[post-call ${callRequestId}] using Claude-corrected details:`, JSON.stringify(details));
+    } else {
+      details = parseTravelDetailsFromTranscript(transcript, summary);
+      console.log(`Parsed travel details from transcript for call ${callRequestId}:`, JSON.stringify(details));
 
-    // Surface ambiguity so we can monitor parser accuracy: if the destination/origin
-    // came from regex (not the structured block) AND matches a multi-airport city, log it.
-    const checkAmbiguity = (label: string, value: string | null, source: string | undefined) => {
-      if (!value || source === "structured_block") return;
-      // Skip pure IATA codes (3 uppercase letters) — they're already disambiguated
-      if (/^[A-Z]{3}$/.test(value)) return;
-      const { ambiguous, options } = isAmbiguousCity(value);
-      if (ambiguous) {
-        console.warn(`[post-call ${callRequestId}] AMBIGUOUS_${label.toUpperCase()}: parsed "${value}" maps to multiple airports ${options.length ? `(${options.join("/")})` : "(many cities/airports)"} and was not confirmed in <TRAVEL_DETAILS> block. Source=${source}.`);
+      // Surface ambiguity so we can monitor parser accuracy: if the destination/origin
+      // came from regex (not the structured block) AND matches a multi-airport city, log it.
+      const checkAmbiguity = (label: string, value: string | null, source: string | undefined) => {
+        if (!value || source === "structured_block") return;
+        // Skip pure IATA codes (3 uppercase letters) — they're already disambiguated
+        if (/^[A-Z]{3}$/.test(value)) return;
+        const { ambiguous, options } = isAmbiguousCity(value);
+        if (ambiguous) {
+          console.warn(`[post-call ${callRequestId}] AMBIGUOUS_${label.toUpperCase()}: parsed "${value}" maps to multiple airports ${options.length ? `(${options.join("/")})` : "(many cities/airports)"} and was not confirmed in <TRAVEL_DETAILS> block. Source=${source}.`);
+        }
+      };
+      checkAmbiguity("destination", details.destination, details.sources?.destination);
+      checkAmbiguity("origin", details.origin, details.sources?.origin);
+
+      if (!details.sources?.destination || details.sources.destination !== "structured_block") {
+        console.warn(`[post-call ${callRequestId}] PARSE_ACCURACY: destination not from structured block (source=${details.sources?.destination ?? "none"}). Bland AI may have failed to emit a <TRAVEL_DETAILS> block.`);
       }
-    };
-    checkAmbiguity("destination", details.destination, details.sources?.destination);
-    checkAmbiguity("origin", details.origin, details.sources?.origin);
 
-    if (!details.sources?.destination || details.sources.destination !== "structured_block") {
-      console.warn(`[post-call ${callRequestId}] PARSE_ACCURACY: destination not from structured block (source=${details.sources?.destination ?? "none"}). Bland AI may have failed to emit a <TRAVEL_DETAILS> block.`);
-    }
+      // Patch missing parsed fields from user-provided form data
+      if (!details.destination && callRequest.destination) {
+        details.destination = callRequest.destination;
+        console.log(`generateProposalFromCall: using callRequest.destination="${callRequest.destination}" as fallback`);
+      }
+      if (!details.departureDate && callRequest.dateFrom) {
+        details.departureDate = callRequest.dateFrom;
+        console.log(`generateProposalFromCall: using callRequest.dateFrom="${callRequest.dateFrom}" as fallback`);
+      }
+      if (!details.returnDate && callRequest.dateTo) {
+        details.returnDate = callRequest.dateTo;
+        console.log(`generateProposalFromCall: using callRequest.dateTo="${callRequest.dateTo}" as fallback`);
+      }
 
-    // Patch missing parsed fields from user-provided form data
-    if (!details.destination && callRequest.destination) {
-      details.destination = callRequest.destination;
-      console.log(`generateProposalFromCall: using callRequest.destination="${callRequest.destination}" as fallback`);
-    }
-    if (!details.departureDate && callRequest.dateFrom) {
-      details.departureDate = callRequest.dateFrom;
-      console.log(`generateProposalFromCall: using callRequest.dateFrom="${callRequest.dateFrom}" as fallback`);
-    }
-    if (!details.returnDate && callRequest.dateTo) {
-      details.returnDate = callRequest.dateTo;
-      console.log(`generateProposalFromCall: using callRequest.dateTo="${callRequest.dateTo}" as fallback`);
-    }
-
-    // Last-resort: scan raw transcript/summary for any 3-letter IATA-style code
-    // so we can still attempt a Duffel search on early hangups. Skip non-airport
-    // tokens like country codes that commonly appear in transcripts.
-    if (!details.destination) {
-      const haystack = `${transcript || ""}\n${summary || ""}`;
-      const iataMatches = haystack.match(/\b([A-Z]{3})\b/g) || [];
-      const nonAirportTokens = new Set(["USA", "GMT", "EST", "PST", "CST", "MST", "UTC"]);
-      const candidate = iataMatches.find(c => !nonAirportTokens.has(c));
-      if (candidate) {
-        details.destination = candidate;
-        console.log(`generateProposalFromCall: last-resort IATA scan found "${candidate}" in transcript for call request ${callRequestId}`);
+      // Last-resort: scan raw transcript/summary for any 3-letter IATA-style code
+      // so we can still attempt a Duffel search on early hangups. Skip non-airport
+      // tokens like country codes that commonly appear in transcripts.
+      if (!details.destination) {
+        const haystack = `${transcript || ""}\n${summary || ""}`;
+        const iataMatches = haystack.match(/\b([A-Z]{3})\b/g) || [];
+        const nonAirportTokens = new Set(["USA", "GMT", "EST", "PST", "CST", "MST", "UTC"]);
+        const candidate = iataMatches.find(c => !nonAirportTokens.has(c));
+        if (candidate) {
+          details.destination = candidate;
+          console.log(`generateProposalFromCall: last-resort IATA scan found "${candidate}" in transcript for call request ${callRequestId}`);
+        }
       }
     }
 
@@ -3405,15 +3439,91 @@ export async function registerRoutes(
         });
       }
 
-      await storage.createNotification({
-        userId,
-        type: "proposal_received",
-        title: "New travel proposal ready",
-        body: `Based on your concierge call, we've prepared a flight proposal for your trip to ${destName}.`,
-        linkUrl: `/proposals/${proposal.id}`,
-      });
-
       console.log(`Auto-generated proposal ${proposal.id} with ${topOffers.length} offers from call request ${callRequestId}`);
+
+      // Post-generation Claude verification: silently double-check that the
+      // proposal we just wrote actually matches the call transcript. If anything
+      // is off, delete this proposal and regenerate using Claude's
+      // corrected_details. The customer-facing notification is held back until
+      // verification settles so the user only ever sees one alert pointing at
+      // the final (possibly corrected) proposal.
+      let suppressCustomerNotification = false;
+      if (!override?.skipVerification) {
+        try {
+          const flightItems = await storage.getProposalItems(proposal.id);
+          const snapshot = buildProposalSnapshot(
+            proposal.id,
+            details,
+            originCode,
+            destCode,
+            departureDate,
+            returnDate,
+            flightItems.map((it) => ({
+              description: it.description,
+              priceEstimate: it.priceEstimate,
+              duffelOfferData: it.duffelOfferData,
+            })),
+          );
+          const verification = await verifyProposalAgainstTranscript(
+            transcript,
+            details,
+            snapshot,
+          ).catch((err) => {
+            console.warn(`[claude-verify] verifyProposalAgainstTranscript threw for proposal=${proposal.id}:`, err?.message || err);
+            return null;
+          });
+          if (verification && (!verification.verified || verification.confidence < 0.85)) {
+            suppressCustomerNotification = true;
+            const userRecord = await storage.getUser(userId).catch(() => undefined);
+            const userName = userRecord
+              ? `${userRecord.firstName ?? ""} ${userRecord.lastName ?? ""}`.trim() || userRecord.email || userId
+              : userId;
+            await fixAndRegenerateProposal({
+              callRequestId,
+              userId,
+              oldProposalId: proposal.id,
+              correctedDetails: verification.corrected_details,
+              parsedDetails: details,
+              verificationResult: verification,
+              callSummary: summary,
+              callTranscript: transcript,
+              userName,
+              userEmail: userRecord?.email ?? null,
+              regenerate: async (overrideDetails) => {
+                await generateProposalFromCall(
+                  callRequestId,
+                  userId,
+                  summary,
+                  transcript,
+                  { details: overrideDetails, skipVerification: true },
+                );
+                const refetched = await storage.getProposalsByCallRequest(callRequestId);
+                return refetched[refetched.length - 1]?.id ?? null;
+              },
+              deleteOldProposal: async () => {
+                await storage.deleteProposalAndItems(proposal.id);
+              },
+              sendInternalEmail,
+            }).catch((err) => {
+              console.error(`[claude-verify] fixAndRegenerateProposal threw for callRequest=${callRequestId}:`, err?.message || err);
+            });
+          }
+        } catch (verifyErr: any) {
+          // Never let verification break the user flow — fall back to the normal
+          // notification using the proposal we already created.
+          console.warn(`[claude-verify] verification block threw for proposal=${proposal.id}:`, verifyErr?.message || verifyErr);
+        }
+      }
+
+      if (!suppressCustomerNotification) {
+        await storage.createNotification({
+          userId,
+          type: "proposal_received",
+          title: "New travel proposal ready",
+          body: `Based on your concierge call, we've prepared a flight proposal for your trip to ${destName}.`,
+          linkUrl: `/proposals/${proposal.id}`,
+        });
+      }
     } catch (err: any) {
       console.error(
         `[post-call ${callRequestId}] Duffel search/proposal generation failed.`,
