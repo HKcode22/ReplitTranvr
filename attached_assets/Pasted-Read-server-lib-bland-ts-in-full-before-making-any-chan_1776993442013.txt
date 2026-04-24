@@ -1,0 +1,27 @@
+Read server/lib/bland.ts in full before making any changes.
+I need to improve the Bland AI call experience in three ways:
+Fix 1 — Background noise sensitivity
+In the dispatchCall function, add the following parameters to the payload to make the call less sensitive to background noise and interruptions:
+noise_cancellation: true,
+interruption_threshold: 100,
+The interruption_threshold controls how easily the AI gets interrupted — higher numbers mean it's harder to interrupt. 100 is more robust than the default. Also add:
+endpoint_sensitivity: 0.5,
+This makes the AI wait longer before deciding the user has finished speaking, reducing awkward cutoffs.
+Fix 2 — Clean call ending
+In the buildTravelConciergePrompt function, update the closing instructions. After the agent summarizes the trip details, it should:
+
+Ask the traveler "Does everything sound good?" or "Does that all sound right?"
+Wait for confirmation
+Then say something brief and warm like "Perfect, we'll get that proposal over to you shortly. Safe travels!" and end the call immediately
+It should NOT ask any more questions after confirmation
+It should NOT repeat information again after the traveler confirms
+
+Add this to the IMPORTANT RULES section of the prompt:
+"After the traveler confirms everything sounds correct, say a brief warm closing line and end the call immediately. Do not ask additional questions, do not repeat information, do not add filler. The closing should be one sentence maximum."
+Fix 3 — Reduce repetition
+In the same prompt, add this rule:
+"When summarizing trip details at the end, read through them once clearly and concisely. Do not repeat any detail more than once. Do not re-confirm individual items after the full summary has been given."
+Also add this to the payload in dispatchCall:
+max_duration: 10,
+This caps the call at 10 minutes so it can't drag on unnecessarily. Check what the current max_duration is set to and reduce it if it's higher than 10.
+Do not change anything else. Read the file first, then make targeted changes to the prompt text and the payload parameters.
