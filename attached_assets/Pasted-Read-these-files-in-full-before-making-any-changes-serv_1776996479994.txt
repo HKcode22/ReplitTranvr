@@ -1,0 +1,21 @@
+Read these files in full before making any changes:
+
+server/lib/bland.ts
+server/routes.ts
+client/src/pages/proposal-detail.tsx
+
+Then make the following fixes:
+Fix 1 — Force call to end automatically
+In server/lib/bland.ts, in the dispatchCall function, add these parameters to the payload:
+end_call_after_speech: true,
+end_call_phrases: ["GOODBYE", "Safe travels", "have a great trip"],
+In buildTravelConciergePrompt, add this to the IMPORTANT RULES section: "When you have finished your closing line, say the word GOODBYE and stop speaking immediately. Do not say anything after that. Do not wait for the user to respond."
+Fix 2 — Handle early hangups and missing TRAVEL_DETAILS block
+In server/routes.ts, in the Bland webhook handler, make sure generateProposalFromCall is called whenever any transcript content exists — even if the call ended early, the user hung up, or the status is no-answer. Do not skip proposal generation just because the call ended unexpectedly.
+In generateProposalFromCall, if the <TRAVEL_DETAILS> block is missing but there is any transcript content, use whatever the regex parser can extract. If a destination can be found through any means, attempt the Duffel flight search rather than falling back to the $0 placeholder. Only fall back to the placeholder if absolutely no usable information can be extracted from the transcript at all.
+Fix 3 — Remove placeholder data messaging from the UI
+In client/src/pages/proposal-detail.tsx, find and remove any UI elements, messages, banners, or buttons that reference "placeholder data", "regenerate with real flight data", "click here to regenerate", or any similar internal system language. These should never be visible to users.
+When a proposal exists but has no flight options, display the trip summary cleanly and show a single "Search Available Flights" button that takes the user to the flight search page prefilled with their route and dates. Nothing should indicate to the user that the product is unfinished or that data is missing.
+Fix 4 — Mobile consistency
+The $0 placeholder issue appears on mobile but not desktop. Check proposal-detail.tsx for any conditional rendering logic that behaves differently based on screen size or device type. Make sure the flight options display logic is identical regardless of viewport size — if flights exist they should show on both mobile and desktop, and if they don't exist the clean fallback from Fix 3 should show on both.
+Do not change any other logic, design, or functionality. Read all three files first, then make targeted changes. After completing, summarize exactly what was changed in each file.
