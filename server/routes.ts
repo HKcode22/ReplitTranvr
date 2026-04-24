@@ -1858,8 +1858,8 @@ export async function registerRoutes(
     if (!proposal || proposal.userId !== req.session.userId!) {
       return res.status(404).json({ message: "Proposal not found" });
     }
-    if (proposal.status !== "approved") {
-      return res.status(400).json({ message: "Proposal must be approved before booking" });
+    if (proposal.status !== "approved" && proposal.status !== "sent") {
+      return res.status(400).json({ message: "Proposal cannot be booked in its current state" });
     }
 
     try {
@@ -1868,6 +1868,19 @@ export async function registerRoutes(
 
       if (flightItems.length === 0) {
         return res.status(400).json({ message: "No Duffel flight offers attached to this proposal" });
+      }
+
+      // Implicit approval: booking a specific flight is itself the approval action.
+      // Promote `sent` proposals to `approved` here so the user doesn't need a separate click.
+      if (proposal.status === "sent") {
+        await storage.updateProposal(proposalId, { status: "approved" });
+        await storage.createNotification({
+          userId: req.session.userId!,
+          type: "proposal_approved",
+          title: "Proposal approved",
+          body: `You approved "${proposal.title}".`,
+          linkUrl: `/proposals/${proposalId}`,
+        });
       }
 
       const user = await storage.getUser(req.session.userId!);

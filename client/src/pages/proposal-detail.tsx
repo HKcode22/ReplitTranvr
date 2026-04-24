@@ -1401,7 +1401,7 @@ export default function ProposalDetailPage() {
     );
   }
 
-  if (showCheckout && selectedFlightItem && proposal.status === "approved" && hasDuffelFlights && !isPaid) {
+  if (showCheckout && selectedFlightItem && (proposal.status === "approved" || proposal.status === "sent") && hasDuffelFlights && !isPaid) {
     return (
       <div className="p-4 sm:p-6 max-w-3xl mx-auto">
         <ProposalCheckout
@@ -1454,7 +1454,7 @@ export default function ProposalDetailPage() {
             const isFirst = idx === 0;
             const price = offerData?.totalAmount || item.priceEstimate;
             const currency = offerData?.totalCurrency || "USD";
-            const canBook = proposal.status === "approved" && !isPaid && item.duffelOfferId;
+            const canBook = (proposal.status === "approved" || proposal.status === "sent") && !isPaid && item.duffelOfferId;
 
             if (offerData?.noFlightsFound) {
               return (
@@ -1516,7 +1516,7 @@ export default function ProposalDetailPage() {
                       data-testid={`button-book-item-${item.id}`}
                     >
                       <Plane className="w-4 h-4 mr-2" />
-                      Select & Book
+                      Book
                     </Button>
                   </div>
                 )}
@@ -1552,7 +1552,7 @@ export default function ProposalDetailPage() {
       )}
 
       <div className="flex gap-3 flex-wrap">
-        {proposal.status === "sent" && !isEmptyProposal && (
+        {proposal.status === "sent" && !isEmptyProposal && !hasDuffelFlights && (
           <Button onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending} data-testid="button-approve-proposal">
             {approveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
             Approve Proposal
