@@ -1,0 +1,51 @@
+IMPORTANT: This codebase is in active use and mostly working. Read every relevant file in full before touching anything. Make only minimal targeted changes. Do not refactor or change anything unrelated to this task.
+Read server/routes.ts and server/lib/bland.ts in full before starting.
+Here is context on how Travnr works so you understand the full picture:
+Travnr is an AI-powered travel concierge. Users request a call, Bland AI calls them and has a conversation collecting their travel preferences — origin airport, destination airport, departure date, return date, number of passengers, cabin class, budget, and airline preferences. After the call ends, Bland sends a webhook to the server with the full transcript. The server parses the transcript to extract travel details, searches Duffel for real flights, and generates a proposal that the user sees in their dashboard. The problem we are solving is that sometimes the parser extracts the wrong details from the transcript — for example wrong dates or wrong airports — and the user receives a proposal that doesn't match what they asked for on the call. We want to catch and fix this automatically before the user ever sees the proposal.
+Build two new functions:
+Function 1: verifyProposalAgainstTranscript
+This function takes the raw transcript, the parsed travel details object, and the generated proposal items. It calls the Anthropic API (process.env.ANTHROPIC_API_KEY, model claude-sonnet-4-5) with the following:
+System prompt: "You are a quality assurance agent for Travnr, an AI travel concierge. Your job is to verify that a generated travel proposal matches exactly what the customer requested during their call. You will receive the full call transcript and the details of the generated proposal. Check every detail carefully. Respond only in valid JSON with no markdown, no extra text, nothing outside the JSON object."
+User prompt: include the full transcript and all proposal details including origin, destination, departure date, return date, passengers, cabin class, airline, and price range. Ask it to verify each field and return this exact structure:
+json{
+  "verified": true,
+  "confidence": 0.95,
+  "issues": [],
+  "corrected_details": {
+    "origin_iata": "ORD",
+    "destination_iata": "DEN",
+    "departure_date": "2026-05-27",
+    "return_date": null,
+    "passengers": 1,
+    "cabin_class": "economy",
+    "budget_usd": null,
+    "airline_preference": "Frontier"
+  },
+  "summary": "Proposal matches transcript"
+}
+The corrected_details field should always be populated with what Claude believes the correct values should be based on the transcript, regardless of whether verified is true or false. This way even when verified is true we have a second source of truth.
+Function 2: fixAndRegenerateProposal
+This function takes the corrected_details from the verification result and the callRequestId. It should:
+
+Delete the existing incorrect proposal and its items
+Re-run the Duffel flight search using the corrected details instead of the originally parsed details
+Create a new proposal with the corrected flights
+Log clearly that a correction was made and what changed
+Send an internal email to Hello@travnr.com with subject "Auto-Correction Applied — [User Name]" detailing what was wrong and what was fixed, so you have visibility into how often this happens
+
+Integration into existing flow
+Inside generateProposalFromCall, after the proposal and flight items are created, call verifyProposalAgainstTranscript. Then:
+
+If verified is true and confidence is above 0.85: continue normally, set proposal to "sent"
+If verified is false OR confidence is below 0.85:
+
+Call fixAndRegenerateProposal with the corrected_details
+The user receives the corrected proposal instead — they experience zero delay and see nothing unusual
+Do not notify the user that a correction happened
+Do log it internally and send the Hello@travnr.com email
+
+
+
+Startup check
+Where other environment variables are checked at startup, add a loud console warning if ANTHROPIC_API_KEY is missing, since this verification system depends on it.
+Do not change any existing parsing logic, do not touch the frontend, do not modify Bland or Duffel integrations. This is purely additive. After completing summarize exactly what functions were added, where they were inserted into the existing flow, and what lines were modified.
