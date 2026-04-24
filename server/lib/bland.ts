@@ -84,6 +84,8 @@ export async function dispatchCall(opts: DispatchCallOptions): Promise<{ callId:
     noise_cancellation: true,
     interruption_threshold: 100,
     endpoint_sensitivity: 0.5,
+    end_call_after_speech: true,
+    end_call_phrases: ["GOODBYE", "Safe travels", "have a great trip"],
   };
 
   if (opts.dynamicDataUrl) {
@@ -216,6 +218,7 @@ IMPORTANT RULES:
 - At the end, summarize all the details back to the traveler for confirmation.
 - When summarizing trip details at the end, read through them once clearly and concisely. Do not repeat any detail more than once. Do not re-confirm individual items after the full summary has been given.
 - After the traveler confirms everything sounds correct, say a brief warm closing line and end the call immediately. Do not ask additional questions, do not repeat information, do not add filler. The closing should be one sentence maximum.
+- When you have finished your closing line, say the word GOODBYE and stop speaking immediately. Do not say anything after that. Do not wait for the user to respond.
 
 POST-CALL STRUCTURED SUMMARY (REQUIRED):
 After your spoken summary to the traveler, you MUST emit a single machine-readable block exactly matching the format below, on its own lines, with no extra commentary inside the tags. Use null for anything truly unknown. Use the confirmed three-letter IATA airport codes (not city names). Dates must be in YYYY-MM-DD format. Cabin class must be one of: economy, premium_economy, business, first. Budget is a number in USD with no currency symbol or commas.

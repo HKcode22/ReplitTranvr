@@ -1015,7 +1015,10 @@ export async function registerRoutes(
     }
     const items = await storage.getProposalItems(id);
     const proposalPayments = await storage.getPaymentsByProposal(id);
-    return res.json({ ...proposal, items, payments: proposalPayments });
+    const callRequest = proposal.callRequestId
+      ? await storage.getCallRequest(proposal.callRequestId)
+      : null;
+    return res.json({ ...proposal, items, payments: proposalPayments, callRequest });
   });
 
   app.post("/api/proposals/:id/approve", isAuthenticated, async (req: Request, res: Response) => {
@@ -2988,6 +2991,32 @@ export async function registerRoutes(
     return { origin, destination, departureDate, returnDate, passengers, cabinClass, budget, sources };
   }
 
+  // In-flight guard: prevents two webhook events from racing into duplicate proposal
+  // generation for the same call request (e.g. call.ended + status=failed arriving close together).
+  const proposalGenerationInFlight = new Set<number>();
+
+  function triggerProposalGenerationOnce(
+    callRequestId: number,
+    userId: string,
+    summary: string | null,
+    transcript: string | null
+  ): void {
+    if (proposalGenerationInFlight.has(callRequestId)) {
+      console.log(
+        `triggerProposalGenerationOnce: skipping callRequestId=${callRequestId} — generation already in flight`
+      );
+      return;
+    }
+    proposalGenerationInFlight.add(callRequestId);
+    generateProposalFromCall(callRequestId, userId, summary, transcript)
+      .catch((err) => {
+        console.error("Auto-proposal generation error:", err);
+      })
+      .finally(() => {
+        proposalGenerationInFlight.delete(callRequestId);
+      });
+  }
+
   async function generateProposalFromCall(callRequestId: number, userId: string, callSummary: string | null, callTranscript?: string | null) {
     const callRequest = await storage.getCallRequest(callRequestId);
     if (!callRequest) {
@@ -3065,6 +3094,22 @@ export async function registerRoutes(
     if (!details.returnDate && callRequest.dateTo) {
       details.returnDate = callRequest.dateTo;
       console.log(`generateProposalFromCall: using callRequest.dateTo="${callRequest.dateTo}" as fallback`);
+    }
+
+    // Last-resort: scan raw transcript/summary for any 3-letter IATA-style code
+    // so we can still attempt a Duffel search on early hangups.
+    if (!details.destination) {
+      const haystack = `${transcript || ""}\n${summary || ""}`;
+      const iataMatches = haystack.match(/\b([A-Z]{3})\b/g) || [];
+      const ignored = new Set([
+        "USA", "JFK", // JFK only ignored if it's the only thing — handled below
+      ]);
+      // Don't actually ignore JFK; just dedupe and pick first sensible one.
+      const candidate = iataMatches.find(c => c !== "USA");
+      if (candidate) {
+        details.destination = candidate;
+        console.log(`generateProposalFromCall: last-resort IATA scan found "${candidate}" in transcript for call request ${callRequestId}`);
+      }
     }
 
     if (!details.destination) {
@@ -3561,15 +3606,18 @@ export async function registerRoutes(
 
       const updateData: any = {};
 
+      // Always capture transcript/summary/recording data when present, regardless of status.
+      // Early hangups, no-answers, and failed calls can still have partial transcripts we want to use.
+      if (payload.call_length) updateData.duration = parseInt(payload.call_length);
+      if (payload.concatenated_transcript) updateData.transcript = payload.concatenated_transcript;
+      if (payload.transcript) updateData.transcriptJson = payload.transcript;
+      if (payload.recording_url) updateData.recordingUrl = payload.recording_url;
+      if (payload.summary) updateData.summary = payload.summary;
+      if (payload.variables) updateData.variables = payload.variables;
+
       if (payload.status === "completed" || payload.event === "call.ended") {
         updateData.status = "completed";
         updateData.endedAt = new Date();
-        if (payload.call_length) updateData.duration = parseInt(payload.call_length);
-        if (payload.concatenated_transcript) updateData.transcript = payload.concatenated_transcript;
-        if (payload.transcript) updateData.transcriptJson = payload.transcript;
-        if (payload.recording_url) updateData.recordingUrl = payload.recording_url;
-        if (payload.summary) updateData.summary = payload.summary;
-        if (payload.variables) updateData.variables = payload.variables;
 
         const alreadyCompleted = blandCall.status === "completed";
         const hasData = !!(payload.concatenated_transcript || payload.summary);
@@ -3627,20 +3675,30 @@ export async function registerRoutes(
         await storage.updateBlandCall(blandCall.id, updateData);
       }
 
-      if (
-        blandCall.callRequestId &&
-        duffel &&
-        updateData.status === "completed" &&
-        (updateData.transcript || updateData.summary)
-      ) {
-        generateProposalFromCall(
-          blandCall.callRequestId,
-          blandCall.userId,
-          updateData.summary || null,
-          updateData.transcript || null
-        ).catch((err) => {
-          console.error("Auto-proposal generation error:", err);
-        });
+      // Trigger proposal generation whenever we have any transcript/summary content,
+      // regardless of whether the call ended cleanly. Early hangups, no-answers,
+      // and failed calls can still yield enough signal to find a destination.
+      // Use the persisted bland_call row so content captured by an earlier event
+      // can still drive generation when the terminal event omits it.
+      const isTerminalStatus =
+        updateData.status === "completed" ||
+        updateData.status === "failed" ||
+        updateData.status === "no_answer";
+      if (blandCall.callRequestId && duffel && isTerminalStatus) {
+        const persisted = await storage.getBlandCallByBlandId(blandCallId);
+        const finalTranscript = persisted?.transcript || updateData.transcript || null;
+        const finalSummary = persisted?.summary || updateData.summary || null;
+        if (finalTranscript || finalSummary) {
+          console.log(
+            `Bland webhook: triggering proposal generation for callRequestId=${blandCall.callRequestId} (status=${updateData.status}, hasTranscript=${!!finalTranscript}, hasSummary=${!!finalSummary})`
+          );
+          triggerProposalGenerationOnce(
+            blandCall.callRequestId,
+            blandCall.userId,
+            finalSummary,
+            finalTranscript
+          );
+        }
       }
 
       return res.json({ received: true });

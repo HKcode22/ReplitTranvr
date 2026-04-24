@@ -28,9 +28,18 @@ import {
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
+type ProposalCallRequest = {
+  id: number;
+  destination?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  tripType?: string | null;
+};
+
 type ProposalDetail = ItineraryProposal & {
   items: ProposalItem[];
   payments: Payment[];
+  callRequest?: ProposalCallRequest | null;
 };
 
 const passengerSchema = z.object({
@@ -139,6 +148,40 @@ function FlightSummaryCard({ proposal }: { proposal: ProposalDetail }) {
   if (!offerData?.slices?.length) {
     const noFlightsItem = proposal.items?.find(i => (i.duffelOfferData as any)?.noFlightsFound);
     const sp = (noFlightsItem?.duffelOfferData as any)?.searchParams;
+
+    // Empty fallback proposal: build Trip Overview from the linked call request when available.
+    const hasNoOffers = !proposal.items?.some(i => i.duffelOfferId);
+    const cr = proposal.callRequest;
+    if (hasNoOffers && !sp && cr && (cr.destination || cr.dateFrom)) {
+      const rows: { label: string; value: string }[] = [];
+      if (cr.dateFrom) {
+        rows.push({
+          label: "Date of travel",
+          value: cr.dateTo ? `${cr.dateFrom} – ${cr.dateTo}` : cr.dateFrom,
+        });
+      }
+      if (cr.destination) rows.push({ label: "Destination", value: cr.destination });
+      if (cr.tripType) rows.push({ label: "Trip type", value: cr.tripType });
+      return (
+        <Card className="p-5" data-testid="card-flight-summary">
+          <h3 className="text-sm font-medium text-muted-foreground mb-3">Trip Overview</h3>
+          <div className="space-y-2">
+            {rows.map(({ label, value }) => (
+              <div key={label} className="flex gap-2 text-sm">
+                <span className="text-muted-foreground min-w-[110px] shrink-0">{label}</span>
+                <span className="font-medium">{value}</span>
+              </div>
+            ))}
+            {proposal.summary && (
+              <div className="flex gap-2 text-sm pt-1">
+                <span className="text-muted-foreground min-w-[110px] shrink-0">Notes</span>
+                <span className="text-sm text-muted-foreground leading-relaxed">{proposal.summary}</span>
+              </div>
+            )}
+          </div>
+        </Card>
+      );
+    }
 
     if (sp) {
       const spCabinLabel = sp.cabinClass === "premium_economy" ? "Premium Economy"
@@ -1300,6 +1343,20 @@ export default function ProposalDetailPage() {
 
   const isPaid = proposal?.payments?.some((p) => p.status === "paid");
   const hasDuffelFlights = proposal?.items?.some((i) => i.duffelOfferId);
+  const hasNoFlightsCard = proposal?.items?.some((i) => (i.duffelOfferData as any)?.noFlightsFound);
+  // "Empty proposal" = no Duffel offers AND no explicit no-flights card.
+  // This is the fallback state created when the concierge call ended without enough info.
+  const isEmptyProposal = !!proposal && !hasDuffelFlights && !hasNoFlightsCard;
+
+  const buildFlightSearchUrl = (cr: ProposalCallRequest | null | undefined): string => {
+    if (!cr) return "/flight-search";
+    const params = new URLSearchParams();
+    if (cr.destination) params.set("destination", cr.destination);
+    if (cr.dateFrom) params.set("departureDate", cr.dateFrom);
+    if (cr.dateTo) params.set("returnDate", cr.dateTo);
+    const qs = params.toString();
+    return qs ? `/flight-search?${qs}` : "/flight-search";
+  };
 
   if (isLoading) {
     return (
@@ -1347,6 +1404,22 @@ export default function ProposalDetailPage() {
 
       <FlightSummaryCard proposal={proposal} />
 
+      {isEmptyProposal && (
+        <Card className="p-5">
+          <h3 className="font-semibold mb-2">Ready to find your flights</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Search live availability for your trip and book the option that works best for you.
+          </p>
+          <Link href={buildFlightSearchUrl(proposal.callRequest)}>
+            <Button data-testid="button-search-available-flights">
+              <Search className="w-4 h-4 mr-2" />
+              Search Available Flights
+            </Button>
+          </Link>
+        </Card>
+      )}
+
+      {!isEmptyProposal && (
       <Card className="p-5">
         <h3 className="font-semibold mb-4">Flight Options</h3>
         <div className="space-y-4">
@@ -1427,6 +1500,7 @@ export default function ProposalDetailPage() {
           })}
         </div>
       </Card>
+      )}
 
       {proposal.payments && proposal.payments.length > 0 && (
         <Card className="p-5">
@@ -1453,13 +1527,13 @@ export default function ProposalDetailPage() {
       )}
 
       <div className="flex gap-3 flex-wrap">
-        {proposal.status === "sent" && (
+        {proposal.status === "sent" && !isEmptyProposal && (
           <Button onClick={() => approveMutation.mutate()} disabled={approveMutation.isPending} data-testid="button-approve-proposal">
             {approveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
             Approve Proposal
           </Button>
         )}
-        {proposal.status === "approved" && !isPaid && !hasDuffelFlights && (
+        {proposal.status === "approved" && !isPaid && !hasDuffelFlights && !isEmptyProposal && (
           <Button onClick={() => payMutation.mutate()} disabled={payMutation.isPending} data-testid="button-pay-proposal">
             {payMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CreditCard className="w-4 h-4 mr-2" />}
             Pay ${Number(proposal.totalEstimate).toLocaleString()}
