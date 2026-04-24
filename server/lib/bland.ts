@@ -77,10 +77,13 @@ export async function dispatchCall(opts: DispatchCallOptions): Promise<{ callId:
     webhook_events: ["call.ended"],
     voice: opts.voice || "mason",
     language: opts.language || "eng",
-    max_duration: opts.maxDuration || 15,
+    max_duration: Math.min(opts.maxDuration || 10, 10),
     record: opts.record !== false,
     wait_for_greeting: opts.waitForGreeting !== false,
     model: "enhanced",
+    noise_cancellation: true,
+    interruption_threshold: 100,
+    endpoint_sensitivity: 0.5,
   };
 
   if (opts.dynamicDataUrl) {
@@ -200,7 +203,7 @@ YOUR ROLE:
 6. Ask about their cabin class preference (economy, premium economy, business, or first class)
 7. Ask about their budget range for the trip
 8. Ask about any seat preferences or airline preferences
-9. Summarize everything discussed and let them know you'll prepare a personalized travel proposal
+9. Summarize everything discussed once, then ask a single confirmation question such as "Does everything sound good?" or "Does that all sound right?" and wait for the traveler's response. Once they confirm, say one brief warm closing line (for example: "Perfect, we'll get that proposal over to you shortly. Safe travels!") and end the call immediately.
 
 IMPORTANT RULES:
 - Ask ONE question at a time. Do not ask multiple questions in one response.
@@ -211,6 +214,8 @@ IMPORTANT RULES:
 - Make sure to confirm the destination airport, origin airport, dates, number of travelers, and cabin class before ending the call.
 - When summarizing at the end, always include the full airport name and its three-letter code (e.g. "St. Louis Lambert International, STL") for both origin and destination.
 - At the end, summarize all the details back to the traveler for confirmation.
+- When summarizing trip details at the end, read through them once clearly and concisely. Do not repeat any detail more than once. Do not re-confirm individual items after the full summary has been given.
+- After the traveler confirms everything sounds correct, say a brief warm closing line and end the call immediately. Do not ask additional questions, do not repeat information, do not add filler. The closing should be one sentence maximum.
 
 POST-CALL STRUCTURED SUMMARY (REQUIRED):
 After your spoken summary to the traveler, you MUST emit a single machine-readable block exactly matching the format below, on its own lines, with no extra commentary inside the tags. Use null for anything truly unknown. Use the confirmed three-letter IATA airport codes (not city names). Dates must be in YYYY-MM-DD format. Cabin class must be one of: economy, premium_economy, business, first. Budget is a number in USD with no currency symbol or commas.
