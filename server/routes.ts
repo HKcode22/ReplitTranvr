@@ -3653,22 +3653,27 @@ export async function registerRoutes(
       details = parseTravelDetailsFromTranscript(transcript, summary, analysis);
       console.log(`Parsed travel details from transcript for call ${callRequestId}:`, JSON.stringify(details));
 
-      // Surface ambiguity so we can monitor parser accuracy: if the destination/origin
-      // came from regex (not the structured block) AND matches a multi-airport city, log it.
+      // Surface ambiguity so we can monitor parser accuracy: only warn when
+      // the destination/origin came from a regex pass (not from a confirmed
+      // high-confidence source) AND matches a multi-airport city.
+      // High-confidence sources: `bland_analysis` (post-call analysis_schema)
+      // and `structured_block` (legacy <TRAVEL_DETAILS> for in-flight calls).
+      const HIGH_CONFIDENCE_SOURCES = new Set(["bland_analysis", "structured_block"]);
       const checkAmbiguity = (label: string, value: string | null, source: string | undefined) => {
-        if (!value || source === "structured_block") return;
+        if (!value || (source && HIGH_CONFIDENCE_SOURCES.has(source))) return;
         // Skip pure IATA codes (3 uppercase letters) — they're already disambiguated
         if (/^[A-Z]{3}$/.test(value)) return;
         const { ambiguous, options } = isAmbiguousCity(value);
         if (ambiguous) {
-          console.warn(`[post-call ${callRequestId}] AMBIGUOUS_${label.toUpperCase()}: parsed "${value}" maps to multiple airports ${options.length ? `(${options.join("/")})` : "(many cities/airports)"} and was not confirmed in <TRAVEL_DETAILS> block. Source=${source}.`);
+          console.warn(`[post-call ${callRequestId}] AMBIGUOUS_${label.toUpperCase()}: parsed "${value}" maps to multiple airports ${options.length ? `(${options.join("/")})` : "(many cities/airports)"} and was not confirmed by Bland post-call analysis or a legacy <TRAVEL_DETAILS> block. Source=${source}.`);
         }
       };
       checkAmbiguity("destination", details.destination, details.sources?.destination);
       checkAmbiguity("origin", details.origin, details.sources?.origin);
 
-      if (!details.sources?.destination || details.sources.destination !== "structured_block") {
-        console.warn(`[post-call ${callRequestId}] PARSE_ACCURACY: destination not from structured block (source=${details.sources?.destination ?? "none"}). Bland AI may have failed to emit a <TRAVEL_DETAILS> block.`);
+      const destSource = details.sources?.destination;
+      if (!destSource || !HIGH_CONFIDENCE_SOURCES.has(destSource)) {
+        console.warn(`[post-call ${callRequestId}] PARSE_ACCURACY: destination not from high-confidence source (source=${destSource ?? "none"}). Bland post-call analysis_schema may not have populated destination_iata; falling back to regex heuristics.`);
       }
 
       // Patch missing parsed fields from user-provided form data
