@@ -202,6 +202,14 @@ export const callbackRequests = pgTable("callback_requests", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const phoneEmailMap = pgTable("phone_email_map", {
+  id: serial("id").primaryKey(),
+  phone: text("phone").notNull().unique(),
+  email: text("email").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const savedCardsRelations = relations(savedCards, ({ one }) => ({
   user: one(users, { fields: [savedCards.userId], references: [users.id] }),
 }));
@@ -260,6 +268,7 @@ export const insertProposalItemSchema = createInsertSchema(proposalItems).omit({
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, readAt: true, createdAt: true });
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({ id: true, createdAt: true });
+export const insertPhoneEmailMapSchema = createInsertSchema(phoneEmailMap).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertSavedCardSchema = createInsertSchema(savedCards).omit({ id: true, createdAt: true });
 export const insertBlandCallSchema = createInsertSchema(blandCalls).omit({ id: true, createdAt: true });
 export const insertCalendarEntrySchema = createInsertSchema(calendarEntries).omit({ id: true, createdAt: true });
@@ -281,6 +290,8 @@ export type Payment = typeof payments.$inferSelect;
 export type InsertPayment = z.infer<typeof insertPaymentSchema>;
 export type CallbackRequest = typeof callbackRequests.$inferSelect;
 export type InsertCallbackRequest = z.infer<typeof insertCallbackRequestSchema>;
+export type PhoneEmailMap = typeof phoneEmailMap.$inferSelect;
+export type InsertPhoneEmailMap = z.infer<typeof insertPhoneEmailMapSchema>;
 export type SavedCard = typeof savedCards.$inferSelect;
 export type InsertSavedCard = z.infer<typeof insertSavedCardSchema>;
 export type BlandCall = typeof blandCalls.$inferSelect;

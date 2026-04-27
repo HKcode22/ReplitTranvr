@@ -10,6 +10,7 @@ import sgMail from "@sendgrid/mail";
 import { z } from "zod";
 import { Duffel } from "@duffel/api";
 import * as bland from "./lib/bland";
+import { normalizePhoneE164 } from "./lib/phone";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
 import {
   verifyProposalAgainstTranscript,
@@ -851,6 +852,14 @@ export async function registerRoutes(
 
   app.post("/api/profile", isAuthenticated, async (req: Request, res: Response) => {
     const profile = await storage.upsertProfile(req.session.userId!, req.body);
+    if (profile?.phone) {
+      const owner = await storage.getUser(req.session.userId!).catch(() => null);
+      if (owner?.email) {
+        await storage.upsertPhoneEmailMap(profile.phone, owner.email).catch((e) =>
+          console.warn("[phone-email-map] upsert from profile failed:", e?.message || e)
+        );
+      }
+    }
     return res.json(profile);
   });
 
@@ -907,6 +916,7 @@ export async function registerRoutes(
             flexibility: cr.flexibility,
             timeWindow: cr.timeWindow,
             notes: cr.notes,
+            email: user.email || null,
           });
 
           blandCall = await storage.createBlandCall({
@@ -1512,6 +1522,16 @@ export async function registerRoutes(
         };
       });
 
+      if (user.email) {
+        for (const pax of passengers) {
+          if (pax?.phone) {
+            await storage.upsertPhoneEmailMap(pax.phone, user.email).catch((e) =>
+              console.warn("[phone-email-map] upsert from book-direct failed:", e?.message || e)
+            );
+          }
+        }
+      }
+
       // Atomically consume one promo slot BEFORE we touch Duffel or write a fallback row.
       // If maxUses has just been reached by a concurrent request, abort cleanly.
       if (appliedPromo) {
@@ -1972,6 +1992,16 @@ export async function registerRoutes(
         title: p.title,
         gender: p.gender,
       }));
+
+      if (user.email) {
+        for (const p of passengers) {
+          if (p?.phone) {
+            await storage.upsertPhoneEmailMap(p.phone, user.email).catch((e) =>
+              console.warn("[phone-email-map] upsert from proposal book-duffel failed:", e?.message || e)
+            );
+          }
+        }
+      }
 
       const amount = fullOffer.total_amount;
       const currency = fullOffer.total_currency;
@@ -2507,6 +2537,7 @@ export async function registerRoutes(
         flexibility: callRequest.flexibility,
         timeWindow: callRequest.timeWindow,
         notes: callRequest.notes,
+        email: user.email || null,
       });
 
       blandCall = await storage.createBlandCall({
@@ -2662,6 +2693,7 @@ export async function registerRoutes(
     passengers: number | null;
     cabinClass: string | null;
     budget: number | null;
+    email: string | null;
   } | null {
     if (!text) return null;
     const blockMatch = text.match(/<TRAVEL_DETAILS>\s*([\s\S]*?)\s*<\/TRAVEL_DETAILS>/i);
@@ -2709,6 +2741,12 @@ export async function registerRoutes(
       const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[^0-9.]/g, ""));
       return Number.isFinite(n) && n > 0 ? n : null;
     };
+    const normEmail = (v: any): string | null => {
+      if (typeof v !== "string") return null;
+      const t = v.trim().toLowerCase();
+      // Basic shape check; downstream sender layers should re-validate before send.
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) ? t : null;
+    };
 
     return {
       origin: normIata(parsed.origin_iata),
@@ -2718,12 +2756,14 @@ export async function registerRoutes(
       passengers: normPax(parsed.passengers),
       cabinClass: normCabin(parsed.cabin_class),
       budget: normBudget(parsed.budget_usd),
+      email: normEmail(parsed.email),
     };
   }
 
   function parseTravelDetailsFromTranscript(transcript: string | null, summary: string | null): {
     origin: string | null;
     destination: string | null;
+    email: string | null;
     departureDate: string | null;
     returnDate: string | null;
     passengers: number;
@@ -2733,7 +2773,7 @@ export async function registerRoutes(
   } {
     const originalText = [summary, transcript].filter(Boolean).join("\n");
     const text = originalText.toLowerCase();
-    if (!text) return { origin: null, destination: null, departureDate: null, returnDate: null, passengers: 1, cabinClass: "economy", budget: null, sources: {} };
+    if (!text) return { origin: null, destination: null, email: null, departureDate: null, returnDate: null, passengers: 1, cabinClass: "economy", budget: null, sources: {} };
 
     const sources: Record<string, string> = {};
 
@@ -3021,7 +3061,10 @@ export async function registerRoutes(
       }
     }
 
-    return { origin, destination, departureDate, returnDate, passengers, cabinClass, budget, sources };
+    let email: string | null = structured?.email ?? null;
+    if (email) sources.email = "structured_block";
+
+    return { origin, destination, email, departureDate, returnDate, passengers, cabinClass, budget, sources };
   }
 
   // In-flight guard: prevents two webhook events from racing into duplicate proposal
@@ -3657,6 +3700,7 @@ export async function registerRoutes(
             { name: "traveler_info", data: "$.traveler_info", context: "Traveler information: {{traveler_info}}" },
             { name: "booking_info", data: "$.booking_info", context: "Booking information: {{booking_info}}" },
             { name: "proposal_info", data: "$.proposal_info", context: "Proposal information: {{proposal_info}}" },
+            { name: "email_info", data: "$.email_info", context: "Traveler email on file: {{email_info}}" },
           ],
         }],
       });
@@ -3854,6 +3898,7 @@ export async function registerRoutes(
       let travelerInfo = "No traveler profile found.";
       let bookingInfo = "No recent bookings.";
       let proposalInfo = "No active proposals.";
+      let emailInfo = "No email on file. Please ask the traveler for their best email address during the call.";
 
       if (userId) {
         const profile = await storage.getProfile(userId);
@@ -3883,12 +3928,23 @@ export async function registerRoutes(
           .map(p => `"${p.title}" - $${p.totalEstimate} (${p.status})`)
           .join("; ");
         if (activeProposals) proposalInfo = activeProposals;
+
+        const owner = await storage.getUser(userId);
+        if (owner?.email) emailInfo = owner.email;
+      }
+
+      // Fall back to the phone↔email map (covers guest callers and inbound calls
+      // where call_id doesn't resolve to a Travnr user).
+      if (emailInfo.startsWith("No email on file") && phone_number) {
+        const mapped = await storage.getEmailForPhone(phone_number).catch(() => null);
+        if (mapped) emailInfo = mapped;
       }
 
       return res.json({
         traveler_info: travelerInfo,
         booking_info: bookingInfo,
         proposal_info: proposalInfo,
+        email_info: emailInfo,
       });
     } catch (err: any) {
       console.error("Bland dynamic data error:", err);
@@ -3896,6 +3952,7 @@ export async function registerRoutes(
         traveler_info: "Error loading profile.",
         booking_info: "Error loading bookings.",
         proposal_info: "Error loading proposals.",
+        email_info: "No email on file. Please ask the traveler for their best email address during the call.",
       });
     }
   });
@@ -3925,6 +3982,12 @@ export async function registerRoutes(
     }
     const cb = await storage.createCallbackRequest(parsed.data);
 
+    if (cb.phone && cb.email) {
+      await storage.upsertPhoneEmailMap(cb.phone, cb.email).catch((e) =>
+        console.warn("[phone-email-map] upsert from callback failed:", e?.message || e)
+      );
+    }
+
     if (bland.isConfigured() && cb.phone) {
       try {
         const baseUrl = getBaseUrl(req);
@@ -3933,6 +3996,7 @@ export async function registerRoutes(
           destination: "your ideal destination",
           tripType: "both",
           notes: "This is a new visitor requesting a callback from the website. Learn about their travel needs and preferences.",
+          email: cb.email || null,
         });
         // Note: no bland_call row is pre-created for callback-request, so dispatch failures
         // are logged only — no DB row to mark failed (out of task scope).

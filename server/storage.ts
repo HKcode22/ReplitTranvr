@@ -3,7 +3,7 @@ import { db } from "./db";
 import {
   users, travelerProfiles, callRequests, itineraryProposals,
   proposalItems, notifications, payments, callbackRequests, savedCards, blandCalls,
-  calendarEntries, systemSettings, promoCodes,
+  calendarEntries, systemSettings, promoCodes, phoneEmailMap,
   type User, type InsertUser, type TravelerProfile, type InsertTravelerProfile,
   type CallRequest, type InsertCallRequest, type ItineraryProposal, type InsertProposal,
   type ProposalItem, type InsertProposalItem, type Notification, type InsertNotification,
@@ -11,7 +11,9 @@ import {
   type SavedCard, type InsertSavedCard, type BlandCall, type InsertBlandCall,
   type CalendarEntry, type InsertCalendarEntry,
   type PromoCode, type InsertPromoCode,
+  type PhoneEmailMap,
 } from "@shared/schema";
+import { normalizePhoneE164 } from "./lib/phone";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -72,6 +74,9 @@ export interface IStorage {
   getBlandCallsByCallRequest(callRequestId: number): Promise<BlandCall[]>;
   createBlandCall(data: InsertBlandCall): Promise<BlandCall>;
   updateBlandCall(id: number, data: Partial<BlandCall>): Promise<BlandCall | undefined>;
+
+  upsertPhoneEmailMap(phone: string, email: string): Promise<PhoneEmailMap | null>;
+  getEmailForPhone(phone: string): Promise<string | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -422,6 +427,28 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(payments.status, "paid"), sql`${payments.duffelOrderId} IS NOT NULL`));
     const n = parseFloat(String(r?.total ?? "0"));
     return Number.isFinite(n) ? n : 0;
+  }
+
+  async upsertPhoneEmailMap(phone: string, email: string): Promise<PhoneEmailMap | null> {
+    const normalizedPhone = normalizePhoneE164(phone);
+    const normalizedEmail = (email || "").trim().toLowerCase();
+    if (!normalizedPhone || !normalizedEmail || !normalizedEmail.includes("@")) return null;
+    const [row] = await db
+      .insert(phoneEmailMap)
+      .values({ phone: normalizedPhone, email: normalizedEmail })
+      .onConflictDoUpdate({
+        target: phoneEmailMap.phone,
+        set: { email: normalizedEmail, updatedAt: new Date() },
+      })
+      .returning();
+    return row ?? null;
+  }
+
+  async getEmailForPhone(phone: string): Promise<string | null> {
+    const normalizedPhone = normalizePhoneE164(phone);
+    if (!normalizedPhone) return null;
+    const [row] = await db.select().from(phoneEmailMap).where(eq(phoneEmailMap.phone, normalizedPhone));
+    return row?.email ?? null;
   }
 }
 
