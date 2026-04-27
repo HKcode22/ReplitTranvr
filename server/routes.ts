@@ -10,7 +10,6 @@ import sgMail from "@sendgrid/mail";
 import { z } from "zod";
 import { Duffel } from "@duffel/api";
 import * as bland from "./lib/bland";
-import { normalizePhoneE164 } from "./lib/phone";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
 import {
   verifyProposalAgainstTranscript,
@@ -3898,7 +3897,7 @@ export async function registerRoutes(
       let travelerInfo = "No traveler profile found.";
       let bookingInfo = "No recent bookings.";
       let proposalInfo = "No active proposals.";
-      let emailInfo = "No email on file. Please ask the traveler for their best email address during the call.";
+      let emailInfo = "No email on file — ask at the end of the call.";
 
       if (userId) {
         const profile = await storage.getProfile(userId);
@@ -3930,14 +3929,14 @@ export async function registerRoutes(
         if (activeProposals) proposalInfo = activeProposals;
 
         const owner = await storage.getUser(userId);
-        if (owner?.email) emailInfo = owner.email;
+        if (owner?.email) emailInfo = `Email on file: ${owner.email}`;
       }
 
       // Fall back to the phone↔email map (covers guest callers and inbound calls
       // where call_id doesn't resolve to a Travnr user).
       if (emailInfo.startsWith("No email on file") && phone_number) {
         const mapped = await storage.getEmailForPhone(phone_number).catch(() => null);
-        if (mapped) emailInfo = mapped;
+        if (mapped) emailInfo = `Email on file: ${mapped}`;
       }
 
       return res.json({
@@ -3952,7 +3951,7 @@ export async function registerRoutes(
         traveler_info: "Error loading profile.",
         booking_info: "Error loading bookings.",
         proposal_info: "Error loading proposals.",
-        email_info: "No email on file. Please ask the traveler for their best email address during the call.",
+        email_info: "No email on file — ask at the end of the call.",
       });
     }
   });
