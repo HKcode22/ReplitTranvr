@@ -248,6 +248,9 @@ function CheckoutForm({
             title: p.title,
             email: contact.email,
             phone: contact.phone,
+            ...(p.passportNumber ? { passportNumber: p.passportNumber } : {}),
+            ...(p.passportCountry ? { passportCountry: p.passportCountry } : {}),
+            ...(p.passportExpiry ? { passportExpiry: p.passportExpiry } : {}),
           })),
         }),
       });

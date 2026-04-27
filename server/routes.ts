@@ -918,9 +918,15 @@ export async function registerRoutes(
           password: hashedPassword,
           firstName,
           lastName,
-          phone: phone || undefined,
           verificationToken,
         });
+        // Phone (when supplied) is stored on the traveler profile, not users.
+        if (phone) {
+          await storage.upsertProfile(user.id, {
+            name: [firstName, lastName].filter(Boolean).join(" ") || null,
+            phone,
+          }).catch((e) => console.warn("[register] upsertProfile (phone) failed:", e?.message || e));
+        }
       }
       await sendVerificationEmail(email, verificationToken, getBaseUrl(req));
 
@@ -4570,12 +4576,25 @@ export async function registerRoutes(
       const originalCents = Math.round(parseFloat(option.totalAmount) * 100);
       const fee = applyConvenienceFee(originalCents);
 
+      // Fetch the live offer to discover whether Duffel requires passenger
+      // passport details for this fare. We only need the boolean — best-effort
+      // (default to false on lookup failure so the page still renders).
+      let passportRequired = false;
+      if (duffel) {
+        try {
+          const offerRes = await duffel.offers.get(option.duffelOfferId);
+          passportRequired = Boolean((offerRes.data as any)?.passenger_identity_documents_required);
+        } catch (e: any) {
+          console.warn("[guest-booking] passport-required lookup failed:", e?.message || e);
+        }
+      }
+
       return res.json({
         token: option.token,
         guestEmail: row.email,
         passengerCount: row.passengers,
         cabinClass: row.cabinClass,
-        passportRequired: Boolean(option.passengerIdentityDocumentsRequired),
+        passportRequired,
         proposal: {
           originIata: proposalData.originIata,
           originName: proposalData.originName,
