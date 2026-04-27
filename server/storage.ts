@@ -83,6 +83,7 @@ export interface IStorage {
   getGuestProposalByOptionToken(optionToken: string): Promise<GuestProposal | undefined>;
   updateGuestProposalStatus(id: number, status: string): Promise<GuestProposal | undefined>;
   claimGuestProposalForBooking(id: number): Promise<{ row: GuestProposal; priorStatus: string } | undefined>;
+  getRecentGuestProposalForPhone(phone: string, hoursWindow: number): Promise<{ row: GuestProposal; expired: boolean } | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -505,6 +506,32 @@ export class DatabaseStorage implements IStorage {
       .returning();
     if (!row) return undefined;
     return { row, priorStatus: before.status };
+  }
+
+  // Look up the most recent unbooked guest_proposal for a phone number by
+  // joining through phone_email_map → email. Returns the row plus a derived
+  // `expired` flag (computed from expiresAt). Used by the inbound dynamic-data
+  // endpoint so the AI can acknowledge prior options on returning calls.
+  async getRecentGuestProposalForPhone(phone: string, hoursWindow: number): Promise<{ row: GuestProposal; expired: boolean } | undefined> {
+    const normalizedPhone = normalizePhoneE164(phone);
+    if (!normalizedPhone) return undefined;
+    const email = await this.getEmailForPhone(normalizedPhone);
+    if (!email) return undefined;
+    const sinceMs = Date.now() - Math.max(1, hoursWindow) * 60 * 60 * 1000;
+    const since = new Date(sinceMs);
+    const [row] = await db
+      .select()
+      .from(guestProposals)
+      .where(and(
+        eq(guestProposals.email, email),
+        sql`${guestProposals.status} != 'booked'`,
+        sql`${guestProposals.createdAt} >= ${since}`,
+      ))
+      .orderBy(desc(guestProposals.createdAt))
+      .limit(1);
+    if (!row) return undefined;
+    const expired = !!row.expiresAt && new Date(row.expiresAt).getTime() < Date.now();
+    return { row, expired };
   }
 }
 

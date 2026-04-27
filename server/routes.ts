@@ -4073,6 +4073,7 @@ export async function registerRoutes(
             { name: "booking_info", data: "$.booking_info", context: "Booking information: {{booking_info}}" },
             { name: "proposal_info", data: "$.proposal_info", context: "Proposal information: {{proposal_info}}" },
             { name: "email_info", data: "$.email_info", context: "Traveler email on file: {{email_info}}" },
+            { name: "previous_proposal_info", data: "$.previous_proposal_info", context: "Previous options: {{previous_proposal_info}}" },
           ],
         }],
       });
@@ -4312,11 +4313,31 @@ export async function registerRoutes(
         if (mapped) emailInfo = `Email on file: ${mapped}`;
       }
 
+      // Returning-caller context: when Bland reports the inbound phone number,
+      // surface the most recent unbooked guest proposal (within 24h) so the AI
+      // can offer to revisit it. Wrapped in try/catch so a lookup failure can
+      // never break the existing dynamic-data response.
+      let previousProposalInfo = "No prior options to revisit";
+      if (phone_number) {
+        try {
+          const recent = await storage.getRecentGuestProposalForPhone(phone_number, 24);
+          if (recent) {
+            const route = `${recent.row.originIata} → ${recent.row.destinationIata}`;
+            previousProposalInfo = recent.expired
+              ? `Sent flight options for ${route} earlier — those have expired, plan something new`
+              : `Sent flight options for ${route} earlier today, status ${recent.row.status}`;
+          }
+        } catch (e: any) {
+          console.warn("[bland/dynamic-data] previous_proposal_info lookup failed:", e?.message || e);
+        }
+      }
+
       return res.json({
         traveler_info: travelerInfo,
         booking_info: bookingInfo,
         proposal_info: proposalInfo,
         email_info: emailInfo,
+        previous_proposal_info: previousProposalInfo,
       });
     } catch (err: any) {
       console.error("Bland dynamic data error:", err);
@@ -4325,6 +4346,7 @@ export async function registerRoutes(
         booking_info: "Error loading bookings.",
         proposal_info: "Error loading proposals.",
         email_info: "No email on file — ask at the end of the call.",
+        previous_proposal_info: "No prior options to revisit",
       });
     }
   });
