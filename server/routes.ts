@@ -540,63 +540,37 @@ function offerTotalDurationMinutes(offer: any): number {
   return mins;
 }
 
-// Flight signature for dedup. Duffel often returns multiple offers for the
-// SAME physical flight at different fares — those must be treated as one
-// option in the email, not three near-duplicates. Key on the outbound first
-// segment's marketing carrier + flight number + departing-at timestamp.
-//
-// Robustness: if ANY of those three fields is missing on the offer, fall back
-// to the offer.id as a unique suffix. Otherwise unrelated offers with missing
-// carrier metadata would collapse into the same synthetic signature
-// ("????|??") and be treated as duplicates — silently breaking the
-// "three distinct options" guarantee.
+// Dedup key for an offer: outbound first segment's carrier + flight number +
+// departing-at. Duffel returns the same physical flight at multiple fares,
+// and we don't want three near-identical cards in one email. If any field is
+// missing, fall back to offer.id so unrelated offers can't collapse together.
 function offerFlightSignature(offer: any): string {
   const seg = offer?.slices?.[0]?.segments?.[0];
   if (!seg) return `id:${offer?.id || "unknown"}`;
-  const carrier =
-    seg.marketing_carrier?.iata_code || seg.marketing_carrier?.name || null;
+  const carrier = seg.marketing_carrier?.iata_code || seg.marketing_carrier?.name || null;
   const flightNum = seg.marketing_carrier_flight_number || null;
   const dep = seg.departing_at || null;
-  if (!carrier || !flightNum || !dep) {
-    // At least one identifying field is missing — fall back to the unique
-    // offer id so we never collide with another offer's partial signature.
-    return `id:${offer?.id || "unknown"}`;
-  }
+  if (!carrier || !flightNum || !dep) return `id:${offer?.id || "unknown"}`;
   return `${carrier}${flightNum}|${dep}`;
 }
 
-// Marketing carrier of the outbound first segment — used as a "differentiator"
-// when the natural pick for Best Value / Fastest collides with an already-
-// taken option.
 function offerOutboundCarrier(offer: any): string {
   const seg = offer?.slices?.[0]?.segments?.[0];
-  return (
-    seg?.marketing_carrier?.iata_code || seg?.marketing_carrier?.name || "??"
-  );
+  return seg?.marketing_carrier?.iata_code || seg?.marketing_carrier?.name || "??";
 }
 
-// Departure-time bucket for the outbound first segment. Duffel's `departing_at`
-// is an ISO local timestamp (no timezone offset), so the hour parsed straight
-// out of the string is local-airport time.
-function offerOutboundDepartureBucket(
-  offer: any,
-): "morning" | "afternoon" | "evening" | "unknown" {
+// Departure-time bucket. Duffel's `departing_at` is local time (no offset).
+function offerOutboundDepartureBucket(offer: any): "morning" | "afternoon" | "evening" | "unknown" {
   const dep = offer?.slices?.[0]?.segments?.[0]?.departing_at;
-  if (!dep) return "unknown";
-  const m = String(dep).match(/T(\d{2}):/);
+  const m = dep ? String(dep).match(/T(\d{2}):/) : null;
   if (!m) return "unknown";
   const h = parseInt(m[1], 10);
   if (Number.isNaN(h)) return "unknown";
-  if (h < 12) return "morning";
-  if (h < 18) return "afternoon";
-  return "evening";
+  return h < 12 ? "morning" : h < 18 ? "afternoon" : "evening";
 }
 
-// Longest layover (in minutes) across every slice of the offer. A layover is
-// the gap between one segment's arrival and the next segment's departure
-// within the same slice. Used as a routing-quality differentiator when two
-// candidate offers collide on signature — we'd rather show a 1-stop with a
-// 90m layover than a 1-stop with an 8h layover.
+// Longest layover (minutes) across every slice — used by Best Value's
+// differentiator to prefer routings with shorter waits.
 function offerLongestLayoverMinutes(offer: any): number {
   let longestMs = 0;
   for (const slice of offer?.slices || []) {
@@ -612,23 +586,19 @@ function offerLongestLayoverMinutes(offer: any): number {
   return Math.round(longestMs / 60000);
 }
 
-// "Meaningfully different" from every already-picked offer for differentiator-
-// walk purposes: differs by marketing carrier OR departure-time bucket OR has
-// a noticeably shorter longest layover (>=30 minutes shorter than the prior
-// pick's longest layover). Any one of these counts as a real differentiation
-// the customer can perceive in the email.
+// Differentiator predicates for collision-walk. Best Value tolerates layover
+// quality as a third axis; Fastest sticks to carrier OR time-bucket only
+// (per spec — for the "fastest" label, layover length doesn't define
+// distinctness from another fast option).
 const LAYOVER_DIFF_THRESHOLD_MINUTES = 30;
-function isMeaningfullyDifferent(candidate: any, prior: any[]): boolean {
-  const cCarrier = offerOutboundCarrier(candidate);
-  const cBucket = offerOutboundDepartureBucket(candidate);
-  const cLayover = offerLongestLayoverMinutes(candidate);
-  return prior.every((p) => {
-    if (offerOutboundCarrier(p) !== cCarrier) return true;
-    if (offerOutboundDepartureBucket(p) !== cBucket) return true;
-    const pLayover = offerLongestLayoverMinutes(p);
-    if (pLayover - cLayover >= LAYOVER_DIFF_THRESHOLD_MINUTES) return true;
-    return false;
-  });
+function differsByCarrierOrBucket(candidate: any, prior: any): boolean {
+  return offerOutboundCarrier(candidate) !== offerOutboundCarrier(prior)
+    || offerOutboundDepartureBucket(candidate) !== offerOutboundDepartureBucket(prior);
+}
+function differsByCarrierBucketOrLayover(candidate: any, prior: any): boolean {
+  if (differsByCarrierOrBucket(candidate, prior)) return true;
+  return offerLongestLayoverMinutes(prior) - offerLongestLayoverMinutes(candidate)
+    >= LAYOVER_DIFF_THRESHOLD_MINUTES;
 }
 
 function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> {
@@ -661,88 +631,56 @@ function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price"
     return parseFloat(a.total_amount) - parseFloat(b.total_amount);
   });
 
-  // Selection algorithm for Best Value / Fastest within a category-sorted
-  // list, given the set of signatures already taken by earlier picks:
-  //
-  //  1. Find the natural top of `list` — defined as the FIRST entry whose
-  //     signature is not yet in `takenSigs`. (If the very first entry
-  //     happens to be signature-distinct, that's the natural top — no
-  //     collision occurred and the differentiator-walk does NOT run, even
-  //     if its carrier/bucket matches a prior pick.)
-  //  2. If the natural top sits at index 0 of `list`, return it. There was
-  //     no signature collision with any prior pick.
-  //  3. If the natural top sits at a later index, that means earlier list
-  //     entries collided by signature with prior picks. ONLY in this case
-  //     do we walk forward looking for a candidate that ALSO differs from
-  //     every prior pick by carrier OR departure-time bucket OR a
-  //     noticeably shorter longest layover. If we find one, return it.
-  //  4. If no differentiator-meeting candidate exists, fall back to the
-  //     natural top from step 1 — it's still signature-distinct, just
-  //     shares some attributes with prior picks.
-  //  5. If `list` contains no signature-distinct candidate at all, return
-  //     null and let the caller try a fallback list.
+  // Walk a category-sorted list for the next pick. Returns the first
+  // signature-distinct entry (the "natural top"). The differentiator walk
+  // ONLY runs when the natural top sits at index > 0 — i.e. an earlier entry
+  // was eliminated by signature collision; in that case we prefer a
+  // candidate that ALSO satisfies `differs(...)` against every prior pick.
+  // If no such candidate exists, fall back to the natural top.
   function pickDistinct(
     list: any[],
     takenSigs: Set<string>,
     pickedOffers: any[],
+    differs: (candidate: any, prior: any) => boolean,
   ): any | null {
     if (list.length === 0) return null;
     let naturalTopIdx = -1;
     for (let i = 0; i < list.length; i++) {
-      if (!takenSigs.has(offerFlightSignature(list[i]))) {
-        naturalTopIdx = i;
-        break;
-      }
+      if (!takenSigs.has(offerFlightSignature(list[i]))) { naturalTopIdx = i; break; }
     }
-    if (naturalTopIdx === -1) return null; // nothing signature-distinct
-
-    // No signature collision with prior picks — return the category's top
-    // candidate as-is. Sharing carrier/bucket with a prior pick is fine here;
-    // the differentiator only matters as a tie-breaker, not a hard filter.
-    if (naturalTopIdx === 0 || pickedOffers.length === 0) {
-      return list[naturalTopIdx];
-    }
-
-    // Collision happened (prior picks consumed earlier list entries by
-    // signature). Walk from the natural top onward, preferring a candidate
-    // meaningfully different from every prior pick.
+    if (naturalTopIdx === -1) return null;
+    if (naturalTopIdx === 0 || pickedOffers.length === 0) return list[naturalTopIdx];
     for (let i = naturalTopIdx; i < list.length; i++) {
       const o = list[i];
       if (takenSigs.has(offerFlightSignature(o))) continue;
-      if (isMeaningfullyDifferent(o, pickedOffers)) return o;
+      if (pickedOffers.every((p) => differs(o, p))) return o;
     }
-
-    // Differentiator-walk found nothing better — fall back to the natural top
-    // (still signature-distinct, just shares attributes with prior picks).
     return list[naturalTopIdx];
   }
 
   const picks: Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> = [];
   const takenSigs = new Set<string>();
 
-  // 1) Best Price = cheapest, full stop. No constraints — this is the seed.
+  // Best Price: cheapest, no constraints — seeds the pick set.
   const bestPrice = sortedByPrice[0];
   picks.push({ offer: bestPrice, label: "Best Price" });
   takenSigs.add(offerFlightSignature(bestPrice));
 
-  // 2) Best Value = cheapest among 0/1-stop offers. If that natural top has a
-  //    signature collision with Best Price, walk for a candidate also
-  //    differing by carrier / departure-time bucket / shorter layover; on
-  //    failure, fall back to the value pool's natural top (signature-distinct
-  //    but may share attributes), and ultimately to the cheapest overall.
+  // Best Value: cheapest 0/1-stop. On signature collision, prefer a candidate
+  // differing by carrier, time-bucket, or noticeably shorter longest layover.
   const bestValue =
-    pickDistinct(sortedByValue, takenSigs, picks.map((p) => p.offer)) ??
-    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer));
+    pickDistinct(sortedByValue, takenSigs, picks.map((p) => p.offer), differsByCarrierBucketOrLayover) ??
+    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer), differsByCarrierBucketOrLayover);
   if (bestValue) {
     picks.push({ offer: bestValue, label: "Best Value" });
     takenSigs.add(offerFlightSignature(bestValue));
   }
 
-  // 3) Fastest = shortest total door-to-door time. Same collision/walk
-  //    semantics as Best Value, against BOTH prior picks.
+  // Fastest: shortest total door-to-door. On signature collision, prefer a
+  // candidate differing by carrier OR time-bucket only (not layover).
   const fastest =
-    pickDistinct(sortedByDuration, takenSigs, picks.map((p) => p.offer)) ??
-    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer));
+    pickDistinct(sortedByDuration, takenSigs, picks.map((p) => p.offer), differsByCarrierOrBucket) ??
+    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer), differsByCarrierOrBucket);
   if (fastest) {
     picks.push({ offer: fastest, label: "Fastest" });
     takenSigs.add(offerFlightSignature(fastest));
@@ -3803,30 +3741,14 @@ export async function registerRoutes(
 
       allOffers.sort((a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
 
-      // ──────────────────────────────────────────────────────────────────────
-      // SPEED: kick the guest proposal email send IMMEDIATELY, the moment
-      // Duffel returns flight results — in parallel with the in-app proposal
-      // save, Claude verification, and notification creation below. The
-      // bottleneck before this change was that the email waited for ALL
-      // downstream work (DB writes + Claude verification, often 5–15s) before
-      // SendGrid was even called. That defeats the conversational promise of
-      // "options in your inbox within a minute."
-      //
-      // Tradeoff: if Claude later finds the proposal is wrong and triggers a
-      // regeneration, the regenerated call will fire a SECOND guest email
-      // with the corrected options. The user has accepted this in exchange
-      // for the speed win — verification rejections are rare in practice.
-      //
-      // Fully wrapped in fire-and-forget so failures here NEVER block the
-      // in-app flow, and surface only in server logs.
+      // Fire the guest proposal email immediately, in parallel with proposal
+      // save / verification below. Failures stay isolated and never block the
+      // in-app flow. (Note: a verification-driven regenerate may send a 2nd
+      // email with corrected options — accepted tradeoff for the speed win.)
       void (async () => {
         try {
-          // Email resolution priority (highest first):
-          //   1. Email parsed from the in-call <TRAVEL_DETAILS> block — what
-          //      the caller said live and the agent confirmed.
-          //   2. Dispatch metadata callbackEmail from the BlandCall row.
-          //   3. phone -> email map (returning callers).
-          //   4. The signed-in user's account email.
+          // Email resolution priority: parsed <TRAVEL_DETAILS> email →
+          // BlandCall callbackEmail → phone→email map → user account email.
           let guestEmail: string | null = null;
           const parsedEmailRaw = (details as any)?.email;
           if (typeof parsedEmailRaw === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsedEmailRaw)) {
@@ -3892,15 +3814,9 @@ export async function registerRoutes(
             expiresAt,
           });
 
-          // No live request available in the post-call hook. Resolve the base
-          // URL with the right precedence for each environment:
-          //   1. APP_URL — explicit override, highest priority everywhere.
-          //   2. Production / deployed (NODE_ENV=production OR
-          //      REPLIT_DEPLOYMENT=1) — hardcode https://travnr.com so a
-          //      missing APP_URL never accidentally points booking links at
-          //      the dev preview domain (REPLIT_DEV_DOMAIN can leak in).
-          //   3. REPLIT_DEV_DOMAIN — only used in non-production (dev preview).
-          //   4. localhost — last-resort dev fallback.
+          // Booking-link host: APP_URL → travnr.com (prod) → dev domain (dev)
+          // → localhost. Production defaults to travnr.com so a missing
+          // APP_URL never leaks the dev preview domain into emailed links.
           const isProduction =
             process.env.NODE_ENV === "production" ||
             process.env.REPLIT_DEPLOYMENT === "1";
@@ -3908,9 +3824,7 @@ export async function registerRoutes(
           if (process.env.APP_URL) {
             canonicalHost = process.env.APP_URL;
           } else if (isProduction) {
-            console.warn(
-              "[guest-proposal] APP_URL not set in production — defaulting booking links to https://travnr.com",
-            );
+            console.warn("[guest-proposal] APP_URL not set in production — defaulting to https://travnr.com");
             canonicalHost = "https://travnr.com";
           } else if (process.env.REPLIT_DEV_DOMAIN) {
             canonicalHost = `https://${process.env.REPLIT_DEV_DOMAIN}`;
@@ -4141,11 +4055,8 @@ export async function registerRoutes(
           linkUrl: `/proposals/${proposal.id}`,
         });
 
-        // NOTE: Guest proposal email is no longer sent here. It's now fired
-        // earlier (in parallel) right after `allOffers.sort(...)` so the
-        // caller receives their email seconds after the call ends instead of
-        // waiting for the in-app proposal save + Claude verification to
-        // complete. See the void-IIFE block above for the full send logic.
+        // Guest email send moved up — it now fires in parallel right after
+        // `allOffers.sort(...)`, before this verification gate.
       }
     } catch (err: any) {
       console.error(
