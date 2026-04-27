@@ -16,6 +16,7 @@ interface OptionResponse {
   guestEmail: string;
   passengerCount: number;
   cabinClass: string;
+  passportRequired: boolean;
   proposal: {
     originIata: string;
     originName?: string | null;
@@ -60,6 +61,9 @@ interface PassengerForm {
   bornOn: string;
   gender: "m" | "f" | "x" | "u";
   title: "mr" | "ms" | "mrs" | "miss" | "dr";
+  passportNumber?: string;
+  passportCountry?: string;
+  passportExpiry?: string;
 }
 
 function formatMoney(cents: number, currency: string) {
@@ -575,6 +579,57 @@ export default function GuestBookingPage() {
                     </select>
                   </div>
                 </div>
+                {data.passportRequired && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-xs font-medium text-gray-700 mb-2">
+                      This flight requires passport details for every passenger.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <Label htmlFor={`p-${idx}-passport-num`}>Passport number</Label>
+                        <Input
+                          id={`p-${idx}-passport-num`}
+                          value={p.passportNumber || ""}
+                          onChange={(e) => {
+                            const next = [...passengers];
+                            next[idx] = { ...next[idx], passportNumber: e.target.value };
+                            setPassengers(next);
+                          }}
+                          data-testid={`input-pax-passport-num-${idx}`}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`p-${idx}-passport-country`}>Issuing country (2-letter)</Label>
+                        <Input
+                          id={`p-${idx}-passport-country`}
+                          maxLength={2}
+                          placeholder="US"
+                          value={p.passportCountry || ""}
+                          onChange={(e) => {
+                            const next = [...passengers];
+                            next[idx] = { ...next[idx], passportCountry: e.target.value.toUpperCase() };
+                            setPassengers(next);
+                          }}
+                          data-testid={`input-pax-passport-country-${idx}`}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`p-${idx}-passport-expiry`}>Expiry date</Label>
+                        <Input
+                          id={`p-${idx}-passport-expiry`}
+                          type="date"
+                          value={p.passportExpiry || ""}
+                          onChange={(e) => {
+                            const next = [...passengers];
+                            next[idx] = { ...next[idx], passportExpiry: e.target.value };
+                            setPassengers(next);
+                          }}
+                          data-testid={`input-pax-passport-expiry-${idx}`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
 

@@ -15,7 +15,7 @@ type AuthContextType = {
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
   login: (email: string, password: string) => Promise<any>;
-  register: (data: { email: string; password: string; firstName: string; lastName: string; claimToken?: string }) => Promise<any>;
+  register: (data: { email: string; password: string; firstName: string; lastName: string; phone?: string; claimToken?: string }) => Promise<any>;
   logout: () => Promise<void>;
 };
 

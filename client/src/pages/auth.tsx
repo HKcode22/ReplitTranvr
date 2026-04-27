@@ -31,6 +31,7 @@ export default function AuthPage() {
 
   const emailFromUrl = params.get("email") || "";
   const nameFromUrl = params.get("name") || "";
+  const phoneFromUrl = params.get("phone") || "";
   const claimToken = params.get("claim") || "";
   const [firstFromUrl, ...restNameParts] = nameFromUrl.trim().split(/\s+/);
   const lastFromUrl = restNameParts.join(" ");
@@ -38,11 +39,12 @@ export default function AuthPage() {
     firstName: firstFromUrl || "",
     lastName: lastFromUrl || "",
     email: emailFromUrl,
+    phone: phoneFromUrl,
     password: "",
   });
 
   useEffect(() => {
-    if ((emailFromUrl || nameFromUrl) && !params.get("mode")) {
+    if ((emailFromUrl || nameFromUrl || phoneFromUrl) && !params.get("mode")) {
       setMode("register");
     }
   }, []);
@@ -77,7 +79,11 @@ export default function AuthPage() {
     setLoading(true);
     try {
       if (mode === "register") {
-        const result = await register({ ...form, claimToken: claimToken || undefined });
+        const result = await register({
+          ...form,
+          phone: form.phone || undefined,
+          claimToken: claimToken || undefined,
+        });
         if (result.needsVerification) {
           setNeedsVerification(true);
           setRegisteredEmail(form.email);
@@ -269,6 +275,18 @@ export default function AuthPage() {
                 data-testid="input-email"
               />
             </div>
+            {mode === "register" && (
+              <div>
+                <Label htmlFor="phone">Phone (optional)</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  data-testid="input-phone"
+                />
+              </div>
+            )}
             <div>
               <Label htmlFor="password">Password</Label>
               <div className="relative">

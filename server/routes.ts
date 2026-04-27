@@ -853,10 +853,9 @@ export async function registerRoutes(
     password: z.string().min(6, "Password must be at least 6 characters"),
     firstName: z.string().min(1, "First name is required"),
     lastName: z.string().min(1, "Last name is required"),
-    // Optional: when set, promotes a placeholder (unverified) user that was
-    // created during a guest booking. The token is the placeholder user's
-    // verificationToken which we mailed to them — proves email ownership
-    // without letting just anyone overwrite an unverified account.
+    phone: z.string().optional(),
+    // Optional claim token from guest booking confirmation email — promotes
+    // the placeholder user instead of rejecting as duplicate.
     claimToken: z.string().min(8).optional(),
   });
 
@@ -883,7 +882,7 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
-      const { email, password, firstName, lastName, claimToken } = parsed.data;
+      const { email, password, firstName, lastName, phone, claimToken } = parsed.data;
       const existing = await storage.getUserByEmail(email);
       if (existing) {
         // Only allow promoting an unverified placeholder when the caller can
@@ -919,6 +918,7 @@ export async function registerRoutes(
           password: hashedPassword,
           firstName,
           lastName,
+          phone: phone || undefined,
           verificationToken,
         });
       }
@@ -4532,7 +4532,7 @@ export async function registerRoutes(
       firstName: (args.firstName || "Guest").slice(0, 60),
       lastName: (args.lastName || "Traveler").slice(0, 60),
       verificationToken,
-    } as any);
+    });
     if (args.phone) {
       await storage.upsertProfile(created.id, {
         name: [created.firstName, created.lastName].filter(Boolean).join(" ") || null,
@@ -4575,6 +4575,7 @@ export async function registerRoutes(
         guestEmail: row.email,
         passengerCount: row.passengers,
         cabinClass: row.cabinClass,
+        passportRequired: Boolean(option.passengerIdentityDocumentsRequired),
         proposal: {
           originIata: proposalData.originIata,
           originName: proposalData.originName,
@@ -4744,22 +4745,14 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Payment currency does not match the flight currency." });
       }
 
-      // Compensation helper: if a DUPLICATE PaymentIntent has succeeded for
-      // this option but we cannot complete the booking, refund it so the
-      // customer is not left with an uncovered charge. Crucially, we first
-      // check whether this PI is already the legitimate charge backing an
-      // existing payment row — in that case it is NOT a duplicate (e.g. a
-      // simple client retry of /confirm with the same PI after the original
-      // succeeded), and refunding it would void a real booking's charge.
-      // Stripe rejects double refunds, so re-running this is safe.
+      // Auto-refund duplicate PIs but skip when the PI already backs a real
+      // payment row (legitimate same-PI retry).
       const refundStrandedPI = async (reason: string) => {
         try {
           if (pi.status !== "succeeded") return { refunded: false };
           const existingPayment = await storage.getPaymentByStripeIntentId(pi.id).catch(() => null);
           if (existingPayment) {
-            // This PI already backs a real payment row — it is the legitimate
-            // charge for whatever booking was completed. Do NOT refund.
-            console.log(`[guest-booking] skipping refund of PI ${pi.id} (${reason}): PI already linked to payment row ${existingPayment.id} — this is the legitimate charge.`);
+            console.log(`[guest-booking] skip refund of PI ${pi.id} (${reason}): backs payment row ${existingPayment.id}`);
             return { refunded: false };
           }
           const refund = await stripe.refunds.create({
@@ -4767,21 +4760,18 @@ export async function registerRoutes(
             reason: "duplicate",
             metadata: { strandedReason: reason, optionToken },
           });
-          console.log(`[guest-booking] auto-refunded duplicate PI ${pi.id}: ${reason} (refund ${refund.id})`);
+          console.log(`[guest-booking] refunded duplicate PI ${pi.id} (${reason}): ${refund.id}`);
           return { refunded: true, refundId: refund.id };
         } catch (e: any) {
-          console.error(`[guest-booking] CRITICAL: failed to auto-refund stranded PI ${pi.id} (${reason}). Manual refund required:`, e?.message || e);
+          console.error(`[guest-booking] CRITICAL: refund of PI ${pi.id} (${reason}) failed; manual refund required:`, e?.message || e);
         }
         return { refunded: false };
       };
 
       const expired = row.expiresAt && new Date(row.expiresAt).getTime() < Date.now();
       if (expired) {
-        // Only auto-refund when no other /confirm is in-flight. If
-        // row.status === "booking", another confirm is mid-Duffel-call and
-        // its payment row hasn't been committed yet — refunding here could
-        // void a PI that the other request is legitimately processing (same
-        // ambiguity class as the claim-lost branch below).
+        // Skip auto-refund while another confirm holds the booking lock —
+        // its in-flight PI may be the same one and refunding would void it.
         if (row.status === "booking") {
           return res.status(410).json({
             expired: true,
@@ -4808,25 +4798,13 @@ export async function registerRoutes(
         });
       }
 
-      // Atomic claim — only one concurrent /confirm wins. The proposal can
-      // legitimately be in pending/viewed/sent here; the storage helper only
-      // matches those and flips to a transient "booking" marker so we can
-      // roll back to its actual prior status if anything below fails. On
-      // success we promote to "booked" at the end. The variables are hoisted
-      // outside this try block so the outer catch can also roll back if any
-      // unexpected exception escapes.
+      // Atomic claim: only matches pending/viewed/sent → "booking", so a
+      // single concurrent /confirm wins. Hoisted vars below let the outer
+      // catch roll back if any throw escapes before we reach "booked".
       const claim = await storage.claimGuestProposalForBooking(row.id);
       if (!claim) {
-        // Another /confirm currently holds the transient "booking" lock. We
-        // do NOT auto-refund here because we cannot tell from this code path
-        // whether the in-flight confirm is using THIS same PI (a simple
-        // client retry mid-flight) or a different one (true duplicate). A
-        // false refund would void the legitimate charge that the in-flight
-        // confirm is about to record. Once the other confirm completes and
-        // commits its payment row, a subsequent retry of /confirm will hit
-        // the row.status === "booked" branch above, where refundStrandedPI()
-        // can safely distinguish duplicates from same-PI retries via the
-        // existing-payment lookup.
+        // Another /confirm holds the lock. Skip auto-refund — its in-flight
+        // PI may be the same one and refunding would void it.
         return res.status(409).json({
           alreadyBooked: true,
           message: "This proposal is currently being booked. Please wait a moment and refresh — if your payment was duplicated, contact support and it will be refunded.",
