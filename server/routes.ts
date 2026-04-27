@@ -28,6 +28,8 @@ import {
   buildRefundRequestAdminEmail,
   buildRefundRequestCustomerEmail,
   buildGuestProposalEmail,
+  buildGuestBookingConfirmationEmail,
+  buildGuestBookingHoldingEmail,
   buildSampleEmail,
   EMAIL_CATALOG,
   type EmailTypeId,
@@ -851,6 +853,11 @@ export async function registerRoutes(
     password: z.string().min(6, "Password must be at least 6 characters"),
     firstName: z.string().min(1, "First name is required"),
     lastName: z.string().min(1, "Last name is required"),
+    // Optional: when set, promotes a placeholder (unverified) user that was
+    // created during a guest booking. The token is the placeholder user's
+    // verificationToken which we mailed to them — proves email ownership
+    // without letting just anyone overwrite an unverified account.
+    claimToken: z.string().min(8).optional(),
   });
 
   const loginSchema = z.object({
@@ -876,20 +883,45 @@ export async function registerRoutes(
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
-      const { email, password, firstName, lastName } = parsed.data;
+      const { email, password, firstName, lastName, claimToken } = parsed.data;
       const existing = await storage.getUserByEmail(email);
       if (existing) {
-        return res.status(400).json({ message: "Email already registered" });
+        // Only allow promoting an unverified placeholder when the caller can
+        // present that user's verificationToken (mailed only to that address).
+        // Otherwise reject — knowing the email alone must NOT be enough to
+        // overwrite credentials, even on an unverified account.
+        const canClaim =
+          !existing.emailVerified &&
+          claimToken &&
+          existing.verificationToken &&
+          claimToken === existing.verificationToken;
+        if (!canClaim) {
+          return res.status(400).json({ message: "Email already registered" });
+        }
       }
       const hashedPassword = await bcrypt.hash(password, 12);
       const verificationToken = randomBytes(32).toString("hex");
-      const user = await storage.createUser({
-        email,
-        password: hashedPassword,
-        firstName,
-        lastName,
-        verificationToken,
-      });
+
+      // Either promote the existing placeholder (proven via claimToken) or
+      // create a brand new user.
+      let user;
+      if (existing) {
+        const updated = await storage.updateUser(existing.id, {
+          password: hashedPassword,
+          firstName,
+          lastName,
+          verificationToken,
+        });
+        user = updated || existing;
+      } else {
+        user = await storage.createUser({
+          email,
+          password: hashedPassword,
+          firstName,
+          lastName,
+          verificationToken,
+        });
+      }
       await sendVerificationEmail(email, verificationToken, getBaseUrl(req));
 
       const callbackReqs = await storage.getCallbackRequestsByEmail(email);
@@ -4448,6 +4480,612 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[guest-proposal] GET error:", err);
       return res.status(500).json({ message: "Failed to load proposal" });
+    }
+  });
+
+  // ==================== GUEST BOOKING (public, by per-option token) ====================
+  // Closes the loop on the guest flow: a recipient clicks "Book This Flight"
+  // in the email, lands on /book/:optionToken, enters passenger details,
+  // pays via Stripe, and receives either an automatic confirmation OR a
+  // warm "we're on it" holding email if the Duffel balance is insufficient
+  // (mirrors the existing manual-fallback path used by the logged-in flow).
+  // No account is required — a placeholder user is created server-side so
+  // payments + calendar entries can be linked once they (optionally) sign up.
+
+  // Resolve a guest_proposal + selected option from a per-option token.
+  async function resolveGuestOption(optionToken: string) {
+    const row = await storage.getGuestProposalByOptionToken(optionToken);
+    if (!row) return null;
+    const proposalData = (row.proposalData as any) as GuestProposalData;
+    const option = (proposalData?.options || []).find((o) => o.token === optionToken) || null;
+    if (!option) return null;
+    return { row, proposalData, option };
+  }
+
+  // Create or fetch a placeholder user keyed by email so we can satisfy the
+  // payments.user_id FK without forcing the guest to sign up. The placeholder
+  // has a random unguessable password (so they can't log in) and is marked
+  // unverified.
+  //
+  // Security: the caller MUST have already verified that `email` matches the
+  // guest_proposal's stored email (i.e. the proposal recipient). For an
+  // existing user, we link the booking but do NOT mutate their profile —
+  // anyone who knows a user's email could otherwise overwrite contact info.
+  async function ensureGuestUser(args: {
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    phone?: string | null;
+  }): Promise<{ user: any; createdNew: boolean }> {
+    const email = args.email.trim().toLowerCase();
+    const existing = await storage.getUserByEmail(email);
+    if (existing) {
+      // Existing account — return as-is, do NOT mutate their profile.
+      return { user: existing, createdNew: false };
+    }
+    const randomPassword = randomBytes(32).toString("hex");
+    const hashed = await bcrypt.hash(randomPassword, 12);
+    const verificationToken = randomBytes(32).toString("hex");
+    const created = await storage.createUser({
+      email,
+      password: hashed,
+      firstName: (args.firstName || "Guest").slice(0, 60),
+      lastName: (args.lastName || "Traveler").slice(0, 60),
+      verificationToken,
+    } as any);
+    if (args.phone) {
+      await storage.upsertProfile(created.id, {
+        name: [created.firstName, created.lastName].filter(Boolean).join(" ") || null,
+        phone: args.phone,
+      }).catch((e) => console.warn("[guest-booking] upsertProfile (new) failed:", e?.message || e));
+    }
+    return { user: created, createdNew: true };
+  }
+
+  // GET /api/guest-booking/:optionToken/option
+  // Returns the selected option summary + Stripe publishable key so the
+  // public booking page can render the flight + Payment Element without
+  // any auth.
+  app.get("/api/guest-booking/:optionToken/option", async (req: Request, res: Response) => {
+    try {
+      const { optionToken } = req.params;
+      if (!optionToken) return res.status(400).json({ message: "Missing token" });
+
+      const resolved = await resolveGuestOption(optionToken);
+      if (!resolved) return res.status(404).json({ message: "This booking link is no longer valid." });
+      const { row, proposalData, option } = resolved;
+
+      const expired = row.expiresAt && new Date(row.expiresAt).getTime() < Date.now();
+      if (expired) {
+        return res.status(410).json({ expired: true, message: "This flight option has expired. Please request fresh options." });
+      }
+      if (row.status === "booked") {
+        return res.status(409).json({ alreadyBooked: true, message: "This proposal has already been booked." });
+      }
+      if (row.status === "booking") {
+        return res.status(409).json({ alreadyBooked: true, message: "This proposal is currently being booked. Please refresh in a moment." });
+      }
+
+      const publishableKey = await getStripePublishableKey().catch(() => null);
+      const originalCents = Math.round(parseFloat(option.totalAmount) * 100);
+      const fee = applyConvenienceFee(originalCents);
+
+      return res.json({
+        token: option.token,
+        guestEmail: row.email,
+        passengerCount: row.passengers,
+        cabinClass: row.cabinClass,
+        proposal: {
+          originIata: proposalData.originIata,
+          originName: proposalData.originName,
+          destinationIata: proposalData.destinationIata,
+          destinationName: proposalData.destinationName,
+          departureDate: proposalData.departureDate,
+          returnDate: proposalData.returnDate,
+        },
+        option,
+        pricing: {
+          originalAmountCents: fee.originalCents,
+          convenienceFeeCents: fee.feeCents,
+          totalAmountCents: fee.totalCents,
+          currency: option.totalCurrency,
+        },
+        publishableKey,
+      });
+    } catch (err: any) {
+      console.error("[guest-booking] option lookup error:", err);
+      return res.status(500).json({ message: "Failed to load booking option" });
+    }
+  });
+
+  // POST /api/guest-booking/:optionToken/payment-intent
+  // Mirrors POST /api/stripe/create-flight-payment-intent for the no-auth case.
+  app.post("/api/guest-booking/:optionToken/payment-intent", async (req: Request, res: Response) => {
+    try {
+      const { optionToken } = req.params;
+      const resolved = await resolveGuestOption(optionToken);
+      if (!resolved) return res.status(404).json({ message: "Booking option not found" });
+      const { row, option } = resolved;
+
+      const expired = row.expiresAt && new Date(row.expiresAt).getTime() < Date.now();
+      if (expired) return res.status(410).json({ expired: true, message: "This option has expired." });
+      if (row.status === "booked") return res.status(409).json({ alreadyBooked: true });
+      // Block PaymentIntent creation while another /confirm is mid-flight to
+      // prevent a double-charge race: status is set to "booking" inside the
+      // confirm endpoint between claim and terminal state. Allowing a new PI
+      // here could capture a second charge that confirm would then 409 on.
+      if (row.status === "booking") {
+        return res.status(409).json({ alreadyBooked: true, message: "This proposal is currently being booked." });
+      }
+
+      const stripe = await getUncachableStripeClient();
+      const originalCents = Math.round(parseFloat(option.totalAmount) * 100);
+      const fee = applyConvenienceFee(originalCents);
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: fee.totalCents,
+        currency: String(option.totalCurrency || "usd").toLowerCase(),
+        automatic_payment_methods: { enabled: true },
+        metadata: {
+          type: "guest_flight_booking",
+          optionToken,
+          guestProposalId: String(row.id),
+          guestEmail: row.email,
+          duffelOfferId: option.duffelOfferId,
+          original_amount: String(fee.originalCents),
+          convenience_fee: String(fee.feeCents),
+          convenience_fee_percent: String(CONVENIENCE_FEE_PERCENT),
+        },
+        receipt_email: row.email,
+      });
+
+      return res.json({
+        clientSecret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        amountCents: fee.totalCents,
+        currency: option.totalCurrency,
+      });
+    } catch (err: any) {
+      console.error("[guest-booking] PaymentIntent error:", err);
+      return res.status(500).json({ message: err.message || "Failed to create payment" });
+    }
+  });
+
+  // POST /api/guest-booking/:optionToken/confirm
+  // Verifies the PI, books on Duffel (or routes to manual fallback), persists
+  // a payments row + calendar entries, and emails the guest.
+  const guestConfirmSchema = z.object({
+    paymentIntentId: z.string().min(1),
+    contact: z.object({
+      firstName: z.string().min(1),
+      lastName: z.string().min(1),
+      email: z.string().email(),
+      phone: z.string().min(3),
+    }),
+    passengers: z.array(z.object({
+      givenName: z.string().min(1),
+      familyName: z.string().min(1),
+      bornOn: z.string().min(4), // YYYY-MM-DD
+      gender: z.enum(["m", "f", "x", "u"]).optional().default("u"),
+      title: z.enum(["mr", "ms", "mrs", "miss", "dr"]).optional().default("mr"),
+      email: z.string().email().optional(),
+      phone: z.string().optional(),
+      passportNumber: z.string().optional(),
+      passportCountry: z.string().optional(),
+      passportExpiry: z.string().optional(),
+    })).min(1),
+  });
+
+  app.post("/api/guest-booking/:optionToken/confirm", async (req: Request, res: Response) => {
+    if (!duffel) return res.status(503).json({ message: "Booking is temporarily unavailable" });
+    // Hoisted so the outer catch below can roll back the transient "booking"
+    // claim if any throw escapes between claim and terminal state.
+    let claimedRowId: number | null = null;
+    let claimPriorStatus: string | null = null;
+    let bookingComplete = false;
+    try {
+      const { optionToken } = req.params;
+      const parsed = guestConfirmSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
+      }
+      const { paymentIntentId, contact, passengers } = parsed.data;
+
+      const resolved = await resolveGuestOption(optionToken);
+      if (!resolved) return res.status(404).json({ message: "Booking option not found" });
+      const { row, proposalData, option } = resolved;
+
+      // Strict ownership: the contact email submitted by the booker MUST match
+      // the proposal recipient. Otherwise an attacker who knows or guesses an
+      // option token could route a payment + booking to their own account.
+      if (contact.email.trim().toLowerCase() !== row.email.trim().toLowerCase()) {
+        return res.status(403).json({ message: "Contact email must match the email this proposal was sent to." });
+      }
+
+      // Idempotency: if we've already processed this PaymentIntent, return the
+      // existing booking instead of double-charging Duffel.
+      const existingPayment = await storage.getPaymentByStripeIntentId(paymentIntentId);
+      if (existingPayment) {
+        if (existingPayment.status === "pending_manual") {
+          return res.json({
+            status: "pending_manual",
+            message: "Your payment was received. Our concierge team will email you the confirmation within 2 hours.",
+          });
+        }
+        return res.json({
+          status: "confirmed",
+          bookingRef: existingPayment.duffelBookingRef,
+          orderId: existingPayment.duffelOrderId,
+        });
+      }
+
+      // Verify Stripe PaymentIntent belongs to this option + is succeeded.
+      // We re-check every metadata field that the create-PI endpoint stamped,
+      // so a PI created elsewhere cannot be cross-applied here.
+      const stripe = await getUncachableStripeClient();
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (pi.status !== "succeeded") {
+        return res.status(400).json({ message: "Payment not confirmed yet. Please try again." });
+      }
+      const md = pi.metadata || {};
+      if (md.type !== "guest_flight_booking"
+          || md.optionToken !== optionToken
+          || md.guestProposalId !== String(row.id)
+          || (md.guestEmail || "").toLowerCase() !== row.email.toLowerCase()
+          || md.duffelOfferId !== option.duffelOfferId) {
+        return res.status(403).json({ message: "Payment does not belong to this booking option." });
+      }
+      const originalCents = Math.round(parseFloat(option.totalAmount) * 100);
+      const expectedTotalCents = applyConvenienceFee(originalCents).totalCents;
+      if (pi.amount < expectedTotalCents) {
+        return res.status(400).json({ message: "Payment amount is insufficient for this flight." });
+      }
+      if (pi.currency !== String(option.totalCurrency).toLowerCase()) {
+        return res.status(400).json({ message: "Payment currency does not match the flight currency." });
+      }
+
+      // Compensation helper: if a DUPLICATE PaymentIntent has succeeded for
+      // this option but we cannot complete the booking, refund it so the
+      // customer is not left with an uncovered charge. Crucially, we first
+      // check whether this PI is already the legitimate charge backing an
+      // existing payment row — in that case it is NOT a duplicate (e.g. a
+      // simple client retry of /confirm with the same PI after the original
+      // succeeded), and refunding it would void a real booking's charge.
+      // Stripe rejects double refunds, so re-running this is safe.
+      const refundStrandedPI = async (reason: string) => {
+        try {
+          if (pi.status !== "succeeded") return { refunded: false };
+          const existingPayment = await storage.getPaymentByStripeIntentId(pi.id).catch(() => null);
+          if (existingPayment) {
+            // This PI already backs a real payment row — it is the legitimate
+            // charge for whatever booking was completed. Do NOT refund.
+            console.log(`[guest-booking] skipping refund of PI ${pi.id} (${reason}): PI already linked to payment row ${existingPayment.id} — this is the legitimate charge.`);
+            return { refunded: false };
+          }
+          const refund = await stripe.refunds.create({
+            payment_intent: pi.id,
+            reason: "duplicate",
+            metadata: { strandedReason: reason, optionToken },
+          });
+          console.log(`[guest-booking] auto-refunded duplicate PI ${pi.id}: ${reason} (refund ${refund.id})`);
+          return { refunded: true, refundId: refund.id };
+        } catch (e: any) {
+          console.error(`[guest-booking] CRITICAL: failed to auto-refund stranded PI ${pi.id} (${reason}). Manual refund required:`, e?.message || e);
+        }
+        return { refunded: false };
+      };
+
+      const expired = row.expiresAt && new Date(row.expiresAt).getTime() < Date.now();
+      if (expired) {
+        // Only auto-refund when no other /confirm is in-flight. If
+        // row.status === "booking", another confirm is mid-Duffel-call and
+        // its payment row hasn't been committed yet — refunding here could
+        // void a PI that the other request is legitimately processing (same
+        // ambiguity class as the claim-lost branch below).
+        if (row.status === "booking") {
+          return res.status(410).json({
+            expired: true,
+            message: "This option has expired but a booking is currently in progress. Please wait a moment and refresh — if your payment was duplicated, contact support and it will be refunded.",
+          });
+        }
+        const refundInfo = await refundStrandedPI("option_expired");
+        return res.status(410).json({
+          expired: true,
+          ...refundInfo,
+          message: refundInfo.refunded
+            ? "This option expired before booking could complete. Your payment has been refunded."
+            : "This option has expired before booking could complete. Please contact support — your payment has been received.",
+        });
+      }
+      if (row.status === "booked") {
+        const refundInfo = await refundStrandedPI("already_booked");
+        return res.status(409).json({
+          alreadyBooked: true,
+          ...refundInfo,
+          message: refundInfo.refunded
+            ? "This proposal was already booked in another session. Your duplicate payment has been refunded."
+            : "This proposal has already been booked.",
+        });
+      }
+
+      // Atomic claim — only one concurrent /confirm wins. The proposal can
+      // legitimately be in pending/viewed/sent here; the storage helper only
+      // matches those and flips to a transient "booking" marker so we can
+      // roll back to its actual prior status if anything below fails. On
+      // success we promote to "booked" at the end. The variables are hoisted
+      // outside this try block so the outer catch can also roll back if any
+      // unexpected exception escapes.
+      const claim = await storage.claimGuestProposalForBooking(row.id);
+      if (!claim) {
+        // Another /confirm currently holds the transient "booking" lock. We
+        // do NOT auto-refund here because we cannot tell from this code path
+        // whether the in-flight confirm is using THIS same PI (a simple
+        // client retry mid-flight) or a different one (true duplicate). A
+        // false refund would void the legitimate charge that the in-flight
+        // confirm is about to record. Once the other confirm completes and
+        // commits its payment row, a subsequent retry of /confirm will hit
+        // the row.status === "booked" branch above, where refundStrandedPI()
+        // can safely distinguish duplicates from same-PI retries via the
+        // existing-payment lookup.
+        return res.status(409).json({
+          alreadyBooked: true,
+          message: "This proposal is currently being booked. Please wait a moment and refresh — if your payment was duplicated, contact support and it will be refunded.",
+        });
+      }
+      claimedRowId = row.id;
+      claimPriorStatus = claim.priorStatus;
+      const rollbackClaim = async () => {
+        if (bookingComplete || claimedRowId == null || claimPriorStatus == null) return;
+        await storage.updateGuestProposalStatus(claimedRowId, claimPriorStatus).catch((e) =>
+          console.warn("[guest-booking] failed to rollback claim:", e?.message || e)
+        );
+      };
+
+      // Re-fetch the offer to ensure it's still valid + get full passenger schema.
+      let offer: any;
+      try {
+        const offerRes = await duffel.offers.get(option.duffelOfferId);
+        offer = offerRes.data as any;
+      } catch (offerErr: any) {
+        const offerErrMsg = offerErr?.errors?.[0]?.message || "";
+        if (offerErrMsg.toLowerCase().includes("does not exist") || offerErr?.status === 404) {
+          await rollbackClaim();
+          return res.status(400).json({ message: "This flight offer is no longer available. Please request fresh options." });
+        }
+        await rollbackClaim();
+        throw offerErr;
+      }
+      if (offer.expires_at && new Date(offer.expires_at) < new Date()) {
+        await rollbackClaim();
+        return res.status(400).json({ message: "This flight offer has expired. Please request fresh options." });
+      }
+      if (offer.passenger_identity_documents_required) {
+        const allHavePassport = passengers.every((p) => p.passportNumber && p.passportCountry && p.passportExpiry);
+        if (!allHavePassport) {
+          await rollbackClaim();
+          return res.status(400).json({ message: "This flight requires passport details for every passenger." });
+        }
+      }
+
+      // Map passengers to Duffel offer.passengers (by index).
+      const passengerMappings = (offer.passengers || []).map((p: any, idx: number) => {
+        const pax = passengers[idx] || passengers[0];
+        const mapping: any = {
+          id: p.id,
+          given_name: pax.givenName,
+          family_name: pax.familyName,
+          born_on: pax.bornOn,
+          email: pax.email || contact.email,
+          phone_number: pax.phone || contact.phone,
+          gender: pax.gender || "u",
+          title: pax.title || "mr",
+        };
+        if (offer.passenger_identity_documents_required && pax.passportNumber) {
+          mapping.identity_documents = [{
+            type: "passport",
+            unique_identifier: pax.passportNumber,
+            issuing_country_code: pax.passportCountry,
+            expires_on: pax.passportExpiry,
+          }];
+        }
+        return mapping;
+      });
+
+      // Ensure a placeholder user exists so payments.user_id is satisfied.
+      // Email match against `row.email` was enforced above, so this either
+      // returns the legitimate existing user or creates a placeholder.
+      const { user: guestUser, createdNew: guestUserCreated } = await ensureGuestUser({
+        email: contact.email,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        phone: contact.phone,
+      });
+
+      // Build route + date labels for emails (used in both branches).
+      const sliceSummary = (offer.slices || []).map((s: any) => ({
+        origin: s.origin?.iata_code,
+        destination: s.destination?.iata_code,
+        departingAt: s.segments?.[0]?.departing_at,
+        arrivingAt: s.segments?.[s.segments.length - 1]?.arriving_at,
+        carrier: s.segments?.[0]?.marketing_carrier?.name,
+        flightNumber: s.segments?.[0]?.marketing_carrier_flight_number,
+      }));
+      const routeLabel = sliceSummary.length
+        ? `${sliceSummary[0].origin || "?"} → ${sliceSummary[sliceSummary.length - 1].destination || "?"}`
+        : `${proposalData.originIata} → ${proposalData.destinationIata}`;
+      const departingAt = sliceSummary[0]?.departingAt;
+      const dateLabel = departingAt
+        ? new Date(departingAt).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" } as Intl.DateTimeFormatOptions)
+        : proposalData.departureDate;
+      const carrierName = offer.owner?.name || option.carrierName || null;
+      const chargedTotalAmount = (pi.amount / 100).toFixed(2);
+      const currencyLower = String(option.totalCurrency || "usd").toLowerCase();
+
+      // Branch on Duffel balance sufficiency. Any failure here defaults to manual.
+      let balanceSufficient = false;
+      try {
+        balanceSufficient = await isDuffelBalanceSufficient(parseFloat(offer.total_amount), offer.total_currency);
+      } catch (e: any) {
+        console.warn("[guest-booking] balance check failed; routing to manual:", e?.message || e);
+        balanceSufficient = false;
+      }
+
+      const baseUrl = getBaseUrl(req);
+      const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+
+      if (!balanceSufficient) {
+        // ---- MANUAL FALLBACK PATH ----
+        const payment = await storage.createPayment({
+          userId: guestUser.id,
+          proposalId: null,
+          stripePaymentIntentId: paymentIntentId,
+          duffelOrderId: null,
+          duffelBookingRef: null,
+          amount: chargedTotalAmount,
+          currency: currencyLower,
+          status: "pending_manual",
+          manualBookingDetails: {
+            reason: "duffel_balance_insufficient",
+            source: "guest_booking",
+            offerId: offer.id,
+            totalAmount: offer.total_amount,
+            currency: offer.total_currency,
+            slices: sliceSummary,
+            passengers: passengerMappings,
+            routeSummary: routeLabel,
+            guestProposalId: row.id,
+            optionToken,
+            guestEmail: contact.email,
+            guestPhone: contact.phone,
+            capturedAt: new Date().toISOString(),
+          },
+        });
+
+        // INTENTIONAL: do NOT roll back the claim if this status write fails.
+        // At this point Stripe has captured the payment and the manual-booking
+        // record + admin alert below will fire — the booking is real. A failed
+        // status flag becomes an admin cleanup task (row stuck in "booking"),
+        // not a financial issue. Logging at error level so it surfaces.
+        await storage.updateGuestProposalStatus(row.id, "booked").catch((e) =>
+          console.error("[guest-booking] CRITICAL: payment captured + manual booking queued but failed to mark proposal booked. Row stuck in 'booking' state, manual DB cleanup required:", e?.message || e)
+        );
+        bookingComplete = true;
+
+        // Admin alert (reuses the existing helper).
+        sendManualBookingAdminAlert({
+          endpoint: "POST /api/guest-booking/:optionToken/confirm",
+          userId: guestUser.id,
+          userEmail: contact.email,
+          paymentId: payment.id,
+          stripePaymentIntentId: paymentIntentId,
+          offerId: offer.id,
+          proposalId: null,
+          amount: chargedTotalAmount,
+          currency: currencyLower,
+        }).catch((e) => console.error("[guest-booking] admin alert failed:", e));
+
+        // Warm holding email to the guest.
+        const { subject, html } = buildGuestBookingHoldingEmail({
+          firstName: contact.firstName,
+          amount: chargedTotalAmount,
+          currency: currencyLower,
+          routeLabel,
+          dateLabel,
+        });
+        sgMail.send({ to: contact.email, from: { email: fromEmail, name: "Travnr" }, subject, html })
+          .catch((e) => console.error("[guest-booking] holding email failed:", e));
+
+        return res.json({ status: "pending_manual" });
+      }
+
+      // ---- AUTO PATH: book on Duffel using balance ----
+      const order = await duffel.orders.create({
+        selected_offers: [offer.id],
+        passengers: passengerMappings,
+        type: "instant",
+        payments: [{
+          type: "balance" as const,
+          amount: offer.total_amount,
+          currency: offer.total_currency,
+        }],
+        metadata: { stripe_payment_intent_id: paymentIntentId, source: "guest_booking" },
+      } as any);
+      const orderData = order.data as any;
+
+      const payment = await storage.createPayment({
+        userId: guestUser.id,
+        proposalId: null,
+        stripePaymentIntentId: paymentIntentId,
+        duffelOrderId: orderData.id,
+        duffelBookingRef: orderData.booking_reference,
+        amount: chargedTotalAmount,
+        currency: currencyLower,
+        status: "paid",
+      });
+
+      // INTENTIONAL: do NOT roll back the claim if this status write fails.
+      // Stripe captured the payment AND the Duffel order is created above —
+      // the booking is real. A failed status flag becomes an admin cleanup
+      // task (row stuck in "booking"), not a financial issue. We log loudly
+      // so it surfaces, then proceed to send the confirmation email.
+      await storage.updateGuestProposalStatus(row.id, "booked").catch((e) =>
+        console.error("[guest-booking] CRITICAL: payment captured + Duffel order " + orderData.id + " booked but failed to mark proposal booked. Row stuck in 'booking' state, manual DB cleanup required:", e?.message || e)
+      );
+      bookingComplete = true;
+
+      // Calendar entries — same helper as logged-in flow. Linked to the
+      // placeholder user so they auto-populate the calendar after signup.
+      await createCalendarEntriesFromOrder({
+        userId: guestUser.id,
+        paymentId: payment.id,
+        proposalId: null,
+        orderData,
+      }).catch((e) => console.warn("[guest-booking] calendar entry failed:", e?.message || e));
+
+      // Confirmation email with pre-filled signup CTA.
+      // Pre-filled signup URL. We include `claim=<verificationToken>` ONLY for
+      // a freshly-created placeholder user (createdNew === true) — that token
+      // proves email ownership and lets the register endpoint promote the
+      // placeholder. For an existing real account we never expose any
+      // verificationToken; the user just logs in.
+      const claimQuery = guestUserCreated && (guestUser as any).verificationToken
+        ? `&claim=${encodeURIComponent((guestUser as any).verificationToken)}`
+        : "";
+      const signupUrl = `${baseUrl}/auth?mode=register&email=${encodeURIComponent(contact.email)}&name=${encodeURIComponent(`${contact.firstName} ${contact.lastName}`.trim())}&phone=${encodeURIComponent(contact.phone)}${claimQuery}`;
+      const { subject, html } = buildGuestBookingConfirmationEmail({
+        firstName: contact.firstName,
+        bookingReference: orderData.booking_reference,
+        amount: chargedTotalAmount,
+        currency: currencyLower,
+        routeLabel,
+        dateLabel,
+        carrierName,
+        signupUrl,
+      });
+      sgMail.send({ to: contact.email, from: { email: fromEmail, name: "Travnr" }, subject, html })
+        .catch((e) => console.error("[guest-booking] confirmation email failed:", e));
+
+      return res.json({
+        status: "confirmed",
+        bookingRef: orderData.booking_reference,
+        orderId: orderData.id,
+      });
+    } catch (err: any) {
+      console.error("[guest-booking] confirm error:", err?.errors || err);
+      // If we had claimed the proposal but never reached terminal state,
+      // restore the prior status so the guest (or admin) can retry without
+      // a permanent lock. We swallow rollback errors — they would only mask
+      // the original failure.
+      if (!bookingComplete && claimedRowId != null && claimPriorStatus != null) {
+        await storage.updateGuestProposalStatus(claimedRowId, claimPriorStatus).catch((e) =>
+          console.warn("[guest-booking] outer rollback failed:", e?.message || e)
+        );
+      }
+      const duffelErr = err?.errors?.[0];
+      const errMessage = duffelErr
+        ? `${duffelErr.title ? duffelErr.title + ": " : ""}${duffelErr.message || "Booking failed"}`
+        : err.message || "Booking failed";
+      return res.status(500).json({ message: errMessage });
     }
   });
 

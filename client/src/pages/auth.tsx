@@ -30,10 +30,19 @@ export default function AuthPage() {
   const [forgotSent, setForgotSent] = useState(false);
 
   const emailFromUrl = params.get("email") || "";
-  const [form, setForm] = useState({ firstName: "", lastName: "", email: emailFromUrl, password: "" });
+  const nameFromUrl = params.get("name") || "";
+  const claimToken = params.get("claim") || "";
+  const [firstFromUrl, ...restNameParts] = nameFromUrl.trim().split(/\s+/);
+  const lastFromUrl = restNameParts.join(" ");
+  const [form, setForm] = useState({
+    firstName: firstFromUrl || "",
+    lastName: lastFromUrl || "",
+    email: emailFromUrl,
+    password: "",
+  });
 
   useEffect(() => {
-    if (emailFromUrl && !params.get("mode")) {
+    if ((emailFromUrl || nameFromUrl) && !params.get("mode")) {
       setMode("register");
     }
   }, []);
@@ -68,7 +77,7 @@ export default function AuthPage() {
     setLoading(true);
     try {
       if (mode === "register") {
-        const result = await register(form);
+        const result = await register({ ...form, claimToken: claimToken || undefined });
         if (result.needsVerification) {
           setNeedsVerification(true);
           setRegisteredEmail(form.email);

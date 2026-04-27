@@ -82,6 +82,7 @@ export interface IStorage {
   getGuestProposalByToken(token: string): Promise<GuestProposal | undefined>;
   getGuestProposalByOptionToken(optionToken: string): Promise<GuestProposal | undefined>;
   updateGuestProposalStatus(id: number, status: string): Promise<GuestProposal | undefined>;
+  claimGuestProposalForBooking(id: number): Promise<{ row: GuestProposal; priorStatus: string } | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -478,6 +479,32 @@ export class DatabaseStorage implements IStorage {
   async updateGuestProposalStatus(id: number, status: string): Promise<GuestProposal | undefined> {
     const [row] = await db.update(guestProposals).set({ status }).where(eq(guestProposals.id, id)).returning();
     return row;
+  }
+
+  // Atomically claim a guest_proposal for booking so concurrent /confirm calls
+  // cannot both proceed. Sets status to a transient "booking" marker (the
+  // schema column is free-form text). Only succeeds when current status is one
+  // of the pre-booking states (pending / viewed / sent) — we explicitly do
+  // NOT claim from already-terminal states like "booked" or "expired".
+  // The caller must either promote the row to a final status ("booked") or
+  // restore the prior status on failure.
+  async claimGuestProposalForBooking(id: number): Promise<{ row: GuestProposal; priorStatus: string } | undefined> {
+    // Read the current status first so we can capture the true prior value
+    // for rollback. The subsequent conditional UPDATE then guards against
+    // races (it will only succeed if status is still one of the allowed set).
+    const [before] = await db.select().from(guestProposals).where(eq(guestProposals.id, id)).limit(1);
+    if (!before) return undefined;
+    const allowed = new Set(["pending", "viewed", "sent"]);
+    if (!allowed.has(before.status)) return undefined;
+    const [row] = await db.update(guestProposals)
+      .set({ status: "booking" })
+      .where(and(
+        eq(guestProposals.id, id),
+        inArray(guestProposals.status, ["pending", "viewed", "sent"]),
+      ))
+      .returning();
+    if (!row) return undefined;
+    return { row, priorStatus: before.status };
   }
 }
 

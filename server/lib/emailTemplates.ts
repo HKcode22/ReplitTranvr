@@ -488,7 +488,9 @@ export type EmailTypeId =
   | "manualBookingAdminAlert"
   | "refundRequestAdmin"
   | "refundRequestCustomer"
-  | "guestProposal";
+  | "guestProposal"
+  | "guestBookingConfirmation"
+  | "guestBookingHolding";
 
 export interface EmailCatalogEntry {
   id: EmailTypeId;
@@ -556,6 +558,18 @@ export const EMAIL_CATALOG: EmailCatalogEntry[] = [
     id: "guestProposal",
     name: "Guest Flight Options",
     description: "Sent after a concierge call with three flight options (Best Price / Best Value / Fastest), each with a one-click booking link.",
+    audience: "Customer",
+  },
+  {
+    id: "guestBookingConfirmation",
+    name: "Guest Booking Confirmation",
+    description: "Sent to a guest after their flight is automatically booked. Includes a pre-filled signup link to optionally create a Travnr account.",
+    audience: "Customer",
+  },
+  {
+    id: "guestBookingHolding",
+    name: "Guest Booking In Progress (Manual)",
+    description: "Warm holding email sent when payment was captured but the booking will be finalized manually by the concierge team within 2 hours.",
     audience: "Customer",
   },
 ];
@@ -702,6 +716,134 @@ export function buildGuestProposalEmail(input: GuestProposalEmailInput): Rendere
   return { subject, html };
 }
 
+// ==================== Guest Booking Confirmation (auto path) ====================
+
+export interface GuestBookingConfirmationInput {
+  firstName?: string | null;
+  bookingReference: string;
+  amount: string | number;
+  currency: string;
+  routeLabel: string;
+  dateLabel: string;
+  carrierName?: string | null;
+  signupUrl: string;
+}
+
+export function buildGuestBookingConfirmationEmail(
+  input: GuestBookingConfirmationInput,
+): RenderedEmail {
+  const amountFormatted = `${(input.currency || "USD").toUpperCase()} ${Number(input.amount).toLocaleString(
+    undefined,
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+  )}`;
+  const greeting = input.firstName ? `, ${escapeHtml(input.firstName)}` : "";
+  const carrierLine = input.carrierName
+    ? `<div style="color:#6b7280;font-size:13px;margin-top:6px;">${escapeHtml(input.carrierName)}</div>`
+    : "";
+  return {
+    subject: `Your flight is booked — ${input.bookingReference}`,
+    html: `
+      <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;background:#ffffff;">
+        ${brandHeader()}
+        <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:18px 20px;margin:0 0 24px;">
+          <div style="color:#065f46;font-weight:600;font-size:15px;">Booking confirmed</div>
+          <div style="color:#047857;font-size:13px;margin-top:2px;">Your flight is locked in.</div>
+        </div>
+        <h2 style="font-size:22px;color:${TEXT_DARK};margin:0 0 12px;">You're all set${greeting}!</h2>
+        <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          We've confirmed your flight from <strong>${escapeHtml(input.routeLabel)}</strong> on <strong>${escapeHtml(input.dateLabel)}</strong>. Keep this email for your records — you'll need the booking reference at check-in.
+        </p>
+        <div style="border:1px solid #e5e7eb;border-radius:10px;padding:20px;margin-bottom:24px;background:#fafafa;">
+          <div style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;">Booking Reference</div>
+          <div style="font-family:'SF Mono',Menlo,Monaco,Consolas,monospace;font-size:28px;font-weight:700;color:${TEXT_DARK};letter-spacing:2px;">${escapeHtml(input.bookingReference)}</div>
+          ${carrierLine}
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+          <tr>
+            <td style="padding:14px 18px;color:#6b7280;background:#f9fafb;width:40%;border-bottom:1px solid #e5e7eb;">Trip</td>
+            <td style="padding:14px 18px;color:${TEXT_DARK};font-weight:600;border-bottom:1px solid #e5e7eb;">${escapeHtml(input.routeLabel)}</td>
+          </tr>
+          <tr>
+            <td style="padding:14px 18px;color:#6b7280;background:#f9fafb;border-bottom:1px solid #e5e7eb;">Departure</td>
+            <td style="padding:14px 18px;color:${TEXT_DARK};border-bottom:1px solid #e5e7eb;">${escapeHtml(input.dateLabel)}</td>
+          </tr>
+          <tr>
+            <td style="padding:14px 18px;color:#6b7280;background:#f9fafb;">Total Charged</td>
+            <td style="padding:14px 18px;color:${TEXT_DARK};font-weight:600;">${escapeHtml(amountFormatted)}</td>
+          </tr>
+        </table>
+        <div style="border:1px solid ${BRAND_BLUE}33;background:#f0f7fc;border-radius:10px;padding:18px 20px;margin-bottom:18px;">
+          <h3 style="margin:0 0 6px;font-size:15px;color:${BRAND_BLUE};">Want to track your trip?</h3>
+          <p style="margin:0 0 12px;color:${TEXT_DARK};font-size:14px;line-height:1.6;">
+            Set up your free Travnr account to get disruption alerts, manage future trips, and keep your traveler profile saved.
+          </p>
+          <div style="text-align:center;">
+            <a href="${input.signupUrl}" style="display:inline-block;background:${BRAND_BLUE};color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;">Set up my account</a>
+          </div>
+        </div>
+        <p style="color:${TEXT_DARK};font-size:14px;line-height:1.6;margin:18px 0 0;">Safe travels,<br/>The Travnr Team</p>
+        ${brandFooter()}
+      </div>
+    `,
+  };
+}
+
+// ==================== Guest Booking Holding Email (manual path) ====================
+
+export interface GuestBookingHoldingInput {
+  firstName?: string | null;
+  amount: string | number;
+  currency: string;
+  routeLabel: string;
+  dateLabel: string;
+}
+
+export function buildGuestBookingHoldingEmail(
+  input: GuestBookingHoldingInput,
+): RenderedEmail {
+  const amountFormatted = `${(input.currency || "USD").toUpperCase()} ${Number(input.amount).toLocaleString(
+    undefined,
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+  )}`;
+  const greeting = input.firstName ? `, ${escapeHtml(input.firstName)}` : "";
+  return {
+    subject: `We've got your flight — confirmation coming shortly`,
+    html: `
+      <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;background:#ffffff;">
+        ${brandHeader()}
+        <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:10px;padding:18px 20px;margin:0 0 24px;">
+          <div style="color:#92400e;font-weight:600;font-size:15px;">Payment received — confirmation in progress</div>
+          <div style="color:#a16207;font-size:13px;margin-top:2px;">Your concierge is finalizing the booking now.</div>
+        </div>
+        <h2 style="font-size:22px;color:${TEXT_DARK};margin:0 0 12px;">Thanks${greeting} — we're on it.</h2>
+        <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 18px;">
+          We've received your payment for <strong>${escapeHtml(input.routeLabel)}</strong> on <strong>${escapeHtml(input.dateLabel)}</strong>. A member of our concierge team is finalizing your booking right now.
+        </p>
+        <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 24px;">
+          You'll have your confirmation and booking reference within <strong>2 hours</strong>. We'll send it to this email — no action needed from you.
+        </p>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+          <tr>
+            <td style="padding:14px 18px;color:#6b7280;background:#f9fafb;width:40%;border-bottom:1px solid #e5e7eb;">Trip</td>
+            <td style="padding:14px 18px;color:${TEXT_DARK};font-weight:600;border-bottom:1px solid #e5e7eb;">${escapeHtml(input.routeLabel)}</td>
+          </tr>
+          <tr>
+            <td style="padding:14px 18px;color:#6b7280;background:#f9fafb;border-bottom:1px solid #e5e7eb;">Departure</td>
+            <td style="padding:14px 18px;color:${TEXT_DARK};border-bottom:1px solid #e5e7eb;">${escapeHtml(input.dateLabel)}</td>
+          </tr>
+          <tr>
+            <td style="padding:14px 18px;color:#6b7280;background:#f9fafb;">Total Charged</td>
+            <td style="padding:14px 18px;color:${TEXT_DARK};font-weight:600;">${escapeHtml(amountFormatted)}</td>
+          </tr>
+        </table>
+        <p style="color:#6b7280;font-size:13px;line-height:1.6;margin:0 0 18px;text-align:center;">Questions in the meantime? Just reply to this email.</p>
+        <p style="color:${TEXT_DARK};font-size:14px;line-height:1.6;margin:18px 0 0;">The Travnr Team</p>
+        ${brandFooter()}
+      </div>
+    `,
+  };
+}
+
 const SAMPLE_REFUND_REQUEST: RefundRequestInput = {
   user: { email: "mahid@example.com", firstName: "Mahid", lastName: "Abdulkarim" },
   payment: { id: 1234, amount: "342.00", currency: "USD", duffelBookingRef: "TRAVNR", duffelOrderId: "ord_sampleXYZ" },
@@ -790,6 +932,25 @@ export function buildSampleEmail(type: EmailTypeId, baseUrl: string): RenderedEm
       return buildRefundRequestAdminEmail(SAMPLE_REFUND_REQUEST);
     case "refundRequestCustomer":
       return buildRefundRequestCustomerEmail(SAMPLE_REFUND_REQUEST);
+    case "guestBookingConfirmation":
+      return buildGuestBookingConfirmationEmail({
+        firstName: "Mahid",
+        bookingReference: "TRAVNR",
+        amount: "342.00",
+        currency: "USD",
+        routeLabel: "STL → JFK",
+        dateLabel: "Friday, June 15, 2026",
+        carrierName: "American Airlines",
+        signupUrl: `${baseUrl}/auth?email=${encodeURIComponent("mahid@example.com")}&name=${encodeURIComponent("Mahid Abdulkarim")}&phone=${encodeURIComponent("+15551234567")}`,
+      });
+    case "guestBookingHolding":
+      return buildGuestBookingHoldingEmail({
+        firstName: "Mahid",
+        amount: "342.00",
+        currency: "USD",
+        routeLabel: "STL → JFK",
+        dateLabel: "Friday, June 15, 2026",
+      });
     case "guestProposal":
       return buildGuestProposalEmail({
         baseUrl,
