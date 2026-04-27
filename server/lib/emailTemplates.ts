@@ -487,7 +487,8 @@ export type EmailTypeId =
   | "bookingConfirmation"
   | "manualBookingAdminAlert"
   | "refundRequestAdmin"
-  | "refundRequestCustomer";
+  | "refundRequestCustomer"
+  | "guestProposal";
 
 export interface EmailCatalogEntry {
   id: EmailTypeId;
@@ -551,7 +552,131 @@ export const EMAIL_CATALOG: EmailCatalogEntry[] = [
     description: "Sent to the customer confirming their refund request has been received.",
     audience: "Customer",
   },
+  {
+    id: "guestProposal",
+    name: "Guest Flight Options",
+    description: "Sent after a concierge call with three flight options (Best Price / Best Value / Fastest), each with a one-click booking link.",
+    audience: "Customer",
+  },
 ];
+
+// ==================== Guest Proposal (3 options) ====================
+
+export interface GuestProposalEmailOption {
+  token: string;
+  label: "Best Price" | "Best Value" | "Fastest";
+  totalAmount: string | number;
+  totalCurrency: string;
+  totalDurationMinutes: number;
+  stops: number;
+  carrierName?: string | null;
+  carrierLogo?: string | null;
+  outboundDepartingAt?: string | null;
+  outboundArrivingAt?: string | null;
+}
+
+export interface GuestProposalEmailInput {
+  baseUrl: string;
+  originIata: string;
+  originName?: string | null;
+  destinationIata: string;
+  destinationName?: string | null;
+  departureDate: string;
+  returnDate?: string | null;
+  passengers: number;
+  options: GuestProposalEmailOption[];
+}
+
+function formatDurationMins(mins: number): string {
+  if (!mins || mins <= 0) return "—";
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
+}
+
+function formatTime(iso?: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString([], { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return "—";
+  }
+}
+
+function formatLongDate(iso?: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  } catch {
+    return iso || "—";
+  }
+}
+
+export function buildGuestProposalEmail(input: GuestProposalEmailInput): RenderedEmail {
+  const originLabel = input.originName ? `${input.originName} (${input.originIata})` : input.originIata;
+  const destLabel = input.destinationName ? `${input.destinationName} (${input.destinationIata})` : input.destinationIata;
+  const subject = `Your flight options — ${input.originIata} to ${input.destinationIata}`;
+
+  const tripLine = input.returnDate
+    ? `${formatLongDate(input.departureDate)} – ${formatLongDate(input.returnDate)}`
+    : formatLongDate(input.departureDate);
+  const paxLine = `${input.passengers} ${input.passengers === 1 ? "traveler" : "travelers"}`;
+
+  const cardsHtml = input.options.map((opt) => {
+    const bookUrl = `${input.baseUrl}/book/${encodeURIComponent(opt.token)}`;
+    const stopsLabel = opt.stops === 0 ? "Nonstop" : `${opt.stops} stop${opt.stops === 1 ? "" : "s"}`;
+    const carrierBlock = opt.carrierLogo
+      ? `<img src="${opt.carrierLogo}" alt="${escapeHtml(opt.carrierName || "")}" style="height:22px;vertical-align:middle;margin-right:8px;" />`
+      : "";
+    const carrierName = opt.carrierName ? `<span style="color:${TEXT_DARK};font-weight:600;">${escapeHtml(opt.carrierName)}</span>` : "";
+    const amount = `${(opt.totalCurrency || "USD").toUpperCase()} ${Number(opt.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `
+      <div style="border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:16px;background:#ffffff;">
+        <div style="display:inline-block;background:${BRAND_BLUE};color:#fff;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin-bottom:12px;">${escapeHtml(opt.label)}</div>
+        <div style="margin-bottom:14px;">${carrierBlock}${carrierName}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;color:${TEXT_DARK};">
+          <tr>
+            <td style="padding:0 0 4px;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:.5px;">Depart</td>
+            <td style="padding:0 0 4px;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:.5px;text-align:right;">Arrive</td>
+          </tr>
+          <tr>
+            <td style="font-size:18px;font-weight:600;">${escapeHtml(formatTime(opt.outboundDepartingAt))}</td>
+            <td style="font-size:18px;font-weight:600;text-align:right;">${escapeHtml(formatTime(opt.outboundArrivingAt))}</td>
+          </tr>
+          <tr>
+            <td colspan="2" style="padding:8px 0 0;color:#6b7280;font-size:13px;">${escapeHtml(formatDurationMins(opt.totalDurationMinutes))} &middot; ${escapeHtml(stopsLabel)}</td>
+          </tr>
+        </table>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;gap:12px;">
+          <div style="font-size:22px;font-weight:700;color:${TEXT_DARK};">${escapeHtml(amount)}</div>
+          <a href="${bookUrl}" style="display:inline-block;background:${BRAND_BLUE};color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;">Book This Flight</a>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  const html = `
+    <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;background:#ffffff;">
+      ${brandHeader()}
+      <h2 style="font-size:22px;color:${TEXT_DARK};margin:0 0 8px;">Your flight options are ready</h2>
+      <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 18px;">
+        Based on our call, here are three options for <strong>${escapeHtml(originLabel)} → ${escapeHtml(destLabel)}</strong>.
+      </p>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px 18px;margin-bottom:24px;font-size:14px;color:${TEXT_DARK};">
+        <div><strong>${escapeHtml(tripLine)}</strong></div>
+        <div style="color:#6b7280;font-size:13px;margin-top:2px;">${escapeHtml(paxLine)}</div>
+      </div>
+      ${cardsHtml}
+      <p style="color:#6b7280;font-size:13px;line-height:1.6;margin:18px 0 4px;text-align:center;">Options valid for 24 hours. Questions? Reply to this email.</p>
+      <p style="color:${TEXT_DARK};font-size:14px;line-height:1.6;margin:18px 0 0;">The Travnr Team</p>
+      ${brandFooter()}
+    </div>
+  `;
+
+  return { subject, html };
+}
 
 const SAMPLE_REFUND_REQUEST: RefundRequestInput = {
   user: { email: "mahid@example.com", firstName: "Mahid", lastName: "Abdulkarim" },
@@ -641,5 +766,51 @@ export function buildSampleEmail(type: EmailTypeId, baseUrl: string): RenderedEm
       return buildRefundRequestAdminEmail(SAMPLE_REFUND_REQUEST);
     case "refundRequestCustomer":
       return buildRefundRequestCustomerEmail(SAMPLE_REFUND_REQUEST);
+    case "guestProposal":
+      return buildGuestProposalEmail({
+        baseUrl,
+        originIata: "STL",
+        originName: "St. Louis",
+        destinationIata: "JFK",
+        destinationName: "New York",
+        departureDate: "2026-06-15",
+        returnDate: "2026-06-22",
+        passengers: 1,
+        options: [
+          {
+            token: "sample-best-price",
+            label: "Best Price",
+            totalAmount: "242.00",
+            totalCurrency: "USD",
+            totalDurationMinutes: 380,
+            stops: 1,
+            carrierName: "Spirit Airlines",
+            outboundDepartingAt: "2026-06-15T06:30:00.000Z",
+            outboundArrivingAt: "2026-06-15T12:50:00.000Z",
+          },
+          {
+            token: "sample-best-value",
+            label: "Best Value",
+            totalAmount: "298.00",
+            totalCurrency: "USD",
+            totalDurationMinutes: 215,
+            stops: 0,
+            carrierName: "American Airlines",
+            outboundDepartingAt: "2026-06-15T08:30:00.000Z",
+            outboundArrivingAt: "2026-06-15T12:05:00.000Z",
+          },
+          {
+            token: "sample-fastest",
+            label: "Fastest",
+            totalAmount: "342.00",
+            totalCurrency: "USD",
+            totalDurationMinutes: 195,
+            stops: 0,
+            carrierName: "Delta",
+            outboundDepartingAt: "2026-06-15T09:15:00.000Z",
+            outboundArrivingAt: "2026-06-15T12:30:00.000Z",
+          },
+        ],
+      });
   }
 }

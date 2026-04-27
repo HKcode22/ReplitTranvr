@@ -3,7 +3,7 @@ import { db } from "./db";
 import {
   users, travelerProfiles, callRequests, itineraryProposals,
   proposalItems, notifications, payments, callbackRequests, savedCards, blandCalls,
-  calendarEntries, systemSettings, promoCodes, phoneEmailMap,
+  calendarEntries, systemSettings, promoCodes, phoneEmailMap, guestProposals,
   type User, type InsertUser, type TravelerProfile, type InsertTravelerProfile,
   type CallRequest, type InsertCallRequest, type ItineraryProposal, type InsertProposal,
   type ProposalItem, type InsertProposalItem, type Notification, type InsertNotification,
@@ -11,7 +11,7 @@ import {
   type SavedCard, type InsertSavedCard, type BlandCall, type InsertBlandCall,
   type CalendarEntry, type InsertCalendarEntry,
   type PromoCode, type InsertPromoCode,
-  type PhoneEmailMap,
+  type PhoneEmailMap, type GuestProposal, type InsertGuestProposal,
 } from "@shared/schema";
 import { normalizePhoneE164 } from "./lib/phone";
 
@@ -77,6 +77,11 @@ export interface IStorage {
 
   upsertPhoneEmailMap(phone: string, email: string): Promise<PhoneEmailMap | null>;
   getEmailForPhone(phone: string): Promise<string | null>;
+
+  createGuestProposal(data: InsertGuestProposal): Promise<GuestProposal>;
+  getGuestProposalByToken(token: string): Promise<GuestProposal | undefined>;
+  getGuestProposalByOptionToken(optionToken: string): Promise<GuestProposal | undefined>;
+  updateGuestProposalStatus(id: number, status: string): Promise<GuestProposal | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -449,6 +454,30 @@ export class DatabaseStorage implements IStorage {
     if (!normalizedPhone) return null;
     const [row] = await db.select().from(phoneEmailMap).where(eq(phoneEmailMap.phone, normalizedPhone));
     return row?.email ?? null;
+  }
+
+  async createGuestProposal(data: InsertGuestProposal): Promise<GuestProposal> {
+    const [row] = await db.insert(guestProposals).values(data).returning();
+    return row;
+  }
+
+  async getGuestProposalByToken(token: string): Promise<GuestProposal | undefined> {
+    const [row] = await db.select().from(guestProposals).where(eq(guestProposals.token, token));
+    return row;
+  }
+
+  async getGuestProposalByOptionToken(optionToken: string): Promise<GuestProposal | undefined> {
+    const [row] = await db
+      .select()
+      .from(guestProposals)
+      .where(sql`${guestProposals.proposalData}->'options' @> ${JSON.stringify([{ token: optionToken }])}::jsonb`)
+      .limit(1);
+    return row;
+  }
+
+  async updateGuestProposalStatus(id: number, status: string): Promise<GuestProposal | undefined> {
+    const [row] = await db.update(guestProposals).set({ status }).where(eq(guestProposals.id, id)).returning();
+    return row;
   }
 }
 

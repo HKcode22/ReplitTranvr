@@ -210,6 +210,22 @@ export const phoneEmailMap = pgTable("phone_email_map", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const guestProposals = pgTable("guest_proposals", {
+  id: serial("id").primaryKey(),
+  token: varchar("token").notNull().unique().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  originIata: text("origin_iata").notNull(),
+  destinationIata: text("destination_iata").notNull(),
+  departureDate: text("departure_date").notNull(),
+  returnDate: text("return_date"),
+  passengers: integer("passengers").default(1).notNull(),
+  cabinClass: text("cabin_class").default("economy").notNull(),
+  proposalData: jsonb("proposal_data").notNull(),
+  status: text("status").default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
 export const savedCardsRelations = relations(savedCards, ({ one }) => ({
   user: one(users, { fields: [savedCards.userId], references: [users.id] }),
 }));
@@ -269,6 +285,7 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
 export const insertCallbackRequestSchema = createInsertSchema(callbackRequests).omit({ id: true, createdAt: true });
 export const insertPhoneEmailMapSchema = createInsertSchema(phoneEmailMap).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertGuestProposalSchema = createInsertSchema(guestProposals).omit({ id: true, token: true, createdAt: true });
 export const insertSavedCardSchema = createInsertSchema(savedCards).omit({ id: true, createdAt: true });
 export const insertBlandCallSchema = createInsertSchema(blandCalls).omit({ id: true, createdAt: true });
 export const insertCalendarEntrySchema = createInsertSchema(calendarEntries).omit({ id: true, createdAt: true });
@@ -292,6 +309,51 @@ export type CallbackRequest = typeof callbackRequests.$inferSelect;
 export type InsertCallbackRequest = z.infer<typeof insertCallbackRequestSchema>;
 export type PhoneEmailMap = typeof phoneEmailMap.$inferSelect;
 export type InsertPhoneEmailMap = z.infer<typeof insertPhoneEmailMapSchema>;
+export type GuestProposal = typeof guestProposals.$inferSelect;
+export type InsertGuestProposal = z.infer<typeof insertGuestProposalSchema>;
+export interface GuestProposalOption {
+  token: string;
+  label: "Best Price" | "Best Value" | "Fastest";
+  duffelOfferId: string;
+  totalAmount: string;
+  totalCurrency: string;
+  totalDurationMinutes: number;
+  stops: number;
+  carrierName?: string | null;
+  carrierIata?: string | null;
+  carrierLogo?: string | null;
+  slices: Array<{
+    origin: { iata?: string | null; city?: string | null; name?: string | null };
+    destination: { iata?: string | null; city?: string | null; name?: string | null };
+    departingAt?: string | null;
+    arrivingAt?: string | null;
+    durationMinutes: number;
+    stops: number;
+    segments: Array<{
+      carrierName?: string | null;
+      carrierIata?: string | null;
+      flightNumber?: string | null;
+      departingAt?: string | null;
+      arrivingAt?: string | null;
+      origin?: { iata?: string | null; name?: string | null };
+      destination?: { iata?: string | null; name?: string | null };
+    }>;
+  }>;
+  baggage?: string | null;
+  refundable?: boolean | null;
+  changeable?: boolean | null;
+}
+export interface GuestProposalData {
+  originIata: string;
+  originName?: string | null;
+  destinationIata: string;
+  destinationName?: string | null;
+  departureDate: string;
+  returnDate?: string | null;
+  passengers: number;
+  cabinClass: string;
+  options: GuestProposalOption[];
+}
 export type SavedCard = typeof savedCards.$inferSelect;
 export type InsertSavedCard = z.infer<typeof insertSavedCardSchema>;
 export type BlandCall = typeof blandCalls.$inferSelect;

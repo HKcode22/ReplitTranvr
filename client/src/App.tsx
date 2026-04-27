@@ -28,6 +28,7 @@ import TripsPage from "@/pages/trips";
 import FlightSearchPage from "@/pages/flight-search";
 import ResetPasswordPage from "@/pages/reset-password";
 import AdminDashboardPage from "@/pages/admin-dashboard";
+import GuestProposalPage from "@/pages/guest-proposal";
 import NotFound from "@/pages/not-found";
 
 function AuthenticatedLayout() {
@@ -109,6 +110,7 @@ function AppRouter() {
   if (!user) {
     return (
       <Switch>
+        <Route path="/proposal/:token" component={GuestProposalPage} />
         <Route path="/" component={LandingPage} />
         <Route path="/auth" component={AuthPage} />
         <Route path="/reset-password" component={ResetPasswordPage} />
@@ -121,6 +123,7 @@ function AppRouter() {
 
   return (
     <Switch>
+      <Route path="/proposal/:token" component={GuestProposalPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
       <Route>
         <AuthenticatedLayout />

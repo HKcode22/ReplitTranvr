@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import sgMail from "@sendgrid/mail";
 import { z } from "zod";
 import { Duffel } from "@duffel/api";
@@ -27,12 +27,15 @@ import {
   buildManualBookingConfirmationEmail,
   buildRefundRequestAdminEmail,
   buildRefundRequestCustomerEmail,
+  buildGuestProposalEmail,
   buildSampleEmail,
   EMAIL_CATALOG,
   type EmailTypeId,
   type ManualBookingPassenger,
   type ManualBookingSlice,
+  type GuestProposalEmailOption,
 } from "./lib/emailTemplates";
+import type { GuestProposalData, GuestProposalOption } from "@shared/schema";
 
 declare module "express-session" {
   interface SessionData {
@@ -507,6 +510,177 @@ async function sendBookingConfirmationEmail(toEmail: string, data: {
     await sgMail.send({ to: toEmail, from: { email: fromEmail, name: "Travnr" }, subject, html });
   } catch (err) {
     console.error("Failed to send booking confirmation email:", err);
+  }
+}
+
+function parseDurationToMinutes(d: string | null | undefined): number {
+  if (!d) return 0;
+  const m = d.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+  if (!m) return 0;
+  const hours = parseInt(m[1] || "0", 10);
+  const mins = parseInt(m[2] || "0", 10);
+  return hours * 60 + mins;
+}
+
+function offerStops(offer: any): number {
+  let n = 0;
+  for (const s of offer.slices || []) {
+    n += Math.max(0, (s.segments?.length ?? 1) - 1);
+  }
+  return n;
+}
+
+function offerTotalDurationMinutes(offer: any): number {
+  let mins = 0;
+  for (const s of offer.slices || []) {
+    mins += parseDurationToMinutes(s.duration);
+  }
+  return mins;
+}
+
+function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> {
+  if (!offers || offers.length === 0) return [];
+  const sortedByPrice = [...offers].sort(
+    (a, b) => parseFloat(a.total_amount) - parseFloat(b.total_amount),
+  );
+  const cheapest = sortedByPrice[0];
+  const cheapestPrice = parseFloat(cheapest.total_amount);
+  const valueThreshold = cheapestPrice * 1.3;
+
+  const valueCandidates = sortedByPrice.filter(
+    (o) => parseFloat(o.total_amount) <= valueThreshold,
+  );
+  valueCandidates.sort((a, b) => {
+    const sa = offerStops(a);
+    const sb = offerStops(b);
+    if (sa !== sb) return sa - sb;
+    return parseFloat(a.total_amount) - parseFloat(b.total_amount);
+  });
+  const bestValue = valueCandidates[0] || cheapest;
+
+  const sortedByDuration = [...offers].sort(
+    (a, b) => offerTotalDurationMinutes(a) - offerTotalDurationMinutes(b),
+  );
+  const fastest = sortedByDuration[0];
+
+  const picks: Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> = [];
+  const seen = new Set<string>();
+  const add = (offer: any, label: "Best Price" | "Best Value" | "Fastest") => {
+    if (!offer || seen.has(offer.id)) return;
+    seen.add(offer.id);
+    picks.push({ offer, label });
+  };
+  add(cheapest, "Best Price");
+  add(bestValue, "Best Value");
+  add(fastest, "Fastest");
+
+  if (picks.length < 3) {
+    const labels: Array<"Best Price" | "Best Value" | "Fastest"> = ["Best Price", "Best Value", "Fastest"];
+    for (const o of sortedByPrice) {
+      if (seen.has(o.id)) continue;
+      add(o, labels[picks.length] || "Best Price");
+      if (picks.length >= 3) break;
+    }
+  }
+  while (picks.length < 3 && offers.length > 0) {
+    const labels: Array<"Best Price" | "Best Value" | "Fastest"> = ["Best Price", "Best Value", "Fastest"];
+    picks.push({ offer: cheapest, label: labels[picks.length] });
+  }
+  return picks.slice(0, 3);
+}
+
+function offerToGuestOption(
+  offer: any,
+  label: "Best Price" | "Best Value" | "Fastest",
+): GuestProposalOption {
+  const slices = (offer.slices || []).map((s: any) => {
+    const segments = (s.segments || []).map((seg: any) => ({
+      carrierName: seg.marketing_carrier?.name ?? null,
+      carrierIata: seg.marketing_carrier?.iata_code ?? null,
+      flightNumber: seg.marketing_carrier_flight_number ?? null,
+      departingAt: seg.departing_at ?? null,
+      arrivingAt: seg.arriving_at ?? null,
+      origin: { iata: seg.origin?.iata_code ?? null, name: seg.origin?.name ?? null },
+      destination: { iata: seg.destination?.iata_code ?? null, name: seg.destination?.name ?? null },
+    }));
+    return {
+      origin: {
+        iata: s.origin?.iata_code ?? null,
+        city: s.origin?.city_name ?? null,
+        name: s.origin?.name ?? null,
+      },
+      destination: {
+        iata: s.destination?.iata_code ?? null,
+        city: s.destination?.city_name ?? null,
+        name: s.destination?.name ?? null,
+      },
+      departingAt: segments[0]?.departingAt ?? null,
+      arrivingAt: segments[segments.length - 1]?.arrivingAt ?? null,
+      durationMinutes: parseDurationToMinutes(s.duration),
+      stops: Math.max(0, segments.length - 1),
+      segments,
+    };
+  });
+
+  return {
+    token: randomUUID(),
+    label,
+    duffelOfferId: offer.id,
+    totalAmount: String(offer.total_amount),
+    totalCurrency: String(offer.total_currency || "USD"),
+    totalDurationMinutes: offerTotalDurationMinutes(offer),
+    stops: offerStops(offer),
+    carrierName: offer.owner?.name ?? null,
+    carrierIata: offer.owner?.iata_code ?? null,
+    carrierLogo: offer.owner?.logo_symbol_url || offer.owner?.logo_lockup_url || null,
+    slices,
+  };
+}
+
+function buildGuestProposalDataFromOffers(args: {
+  offers: any[];
+  originIata: string;
+  originName?: string | null;
+  destinationIata: string;
+  destinationName?: string | null;
+  departureDate: string;
+  returnDate?: string | null;
+  passengers: number;
+  cabinClass: string;
+}): GuestProposalData {
+  const picks = pickThreeOffers(args.offers);
+  const options: GuestProposalOption[] = picks.map((p) => offerToGuestOption(p.offer, p.label));
+  return {
+    originIata: args.originIata,
+    originName: args.originName ?? null,
+    destinationIata: args.destinationIata,
+    destinationName: args.destinationName ?? null,
+    departureDate: args.departureDate,
+    returnDate: args.returnDate ?? null,
+    passengers: args.passengers,
+    cabinClass: args.cabinClass,
+    options,
+  };
+}
+
+async function sendGuestProposalEmail(toEmail: string, data: {
+  baseUrl: string;
+  originIata: string;
+  originName?: string | null;
+  destinationIata: string;
+  destinationName?: string | null;
+  departureDate: string;
+  returnDate?: string | null;
+  passengers: number;
+  options: GuestProposalEmailOption[];
+}): Promise<void> {
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+  const { subject, html } = buildGuestProposalEmail(data);
+  try {
+    await sgMail.send({ to: toEmail, from: { email: fromEmail, name: "Travnr" }, subject, html });
+    console.log(`[guest-proposal] email sent to ${toEmail} with ${data.options.length} options`);
+  } catch (err) {
+    console.error("[guest-proposal] email send failed:", err);
   }
 }
 
@@ -3565,6 +3739,80 @@ export async function registerRoutes(
           body: `Based on your concierge call, we've prepared a flight proposal for your trip to ${destName}.`,
           linkUrl: `/proposals/${proposal.id}`,
         });
+
+        // Guest proposal email: pick 3 options (Best Price/Best Value/Fastest)
+        // and email a one-click booking link to the caller. Wrapped in try/catch
+        // so failure never breaks the in-app proposal flow.
+        try {
+          let guestEmail: string | null = null;
+          const phoneForLookup = (callRequest as any).phone || (callRequest as any).phoneNumber || null;
+          if (phoneForLookup) {
+            guestEmail = await storage.getEmailForPhone(phoneForLookup).catch(() => null);
+          }
+          if (!guestEmail) {
+            const userRec = await storage.getUser(userId).catch(() => undefined);
+            guestEmail = userRec?.email || null;
+          }
+          if (guestEmail) {
+            const guestData = buildGuestProposalDataFromOffers({
+              offers: allOffers,
+              originIata: originCode,
+              originName: details.origin || originCode,
+              destinationIata: destCode,
+              destinationName: destName,
+              departureDate,
+              returnDate,
+              passengers: details.passengers,
+              cabinClass: details.cabinClass,
+            });
+            if (guestData.options.length > 0) {
+              const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+              const saved = await storage.createGuestProposal({
+                email: guestEmail,
+                originIata: guestData.originIata,
+                destinationIata: guestData.destinationIata,
+                departureDate: guestData.departureDate,
+                returnDate: guestData.returnDate ?? null,
+                passengers: guestData.passengers,
+                cabinClass: guestData.cabinClass,
+                proposalData: guestData as any,
+                status: "pending",
+                expiresAt,
+              });
+              const baseUrl = getBaseUrl({
+                headers: { host: process.env.REPLIT_DEV_DOMAIN || "" },
+                protocol: "https",
+              } as any);
+              await sendGuestProposalEmail(guestEmail, {
+                baseUrl,
+                originIata: guestData.originIata,
+                originName: guestData.originName,
+                destinationIata: guestData.destinationIata,
+                destinationName: guestData.destinationName,
+                departureDate: guestData.departureDate,
+                returnDate: guestData.returnDate,
+                passengers: guestData.passengers,
+                options: guestData.options.map((o) => ({
+                  token: o.token,
+                  label: o.label,
+                  totalAmount: o.totalAmount,
+                  totalCurrency: o.totalCurrency,
+                  totalDurationMinutes: o.totalDurationMinutes,
+                  stops: o.stops,
+                  carrierName: o.carrierName,
+                  carrierLogo: o.carrierLogo,
+                  outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
+                  outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+                })),
+              });
+              console.log(`[guest-proposal] created token=${saved.token} for callRequest=${callRequestId} email=${guestEmail}`);
+            }
+          } else {
+            console.log(`[guest-proposal] skipped — no email could be resolved for callRequest=${callRequestId}`);
+          }
+        } catch (guestErr: any) {
+          console.error(`[guest-proposal] failed for callRequest=${callRequestId}:`, guestErr?.message || guestErr);
+        }
       }
     } catch (err: any) {
       console.error(
@@ -3970,6 +4218,137 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Bland stop call error:", err);
       return res.status(500).json({ message: err.message || "Failed to stop call" });
+    }
+  });
+
+  // GUEST PROPOSAL (public, by token)
+  app.get("/api/guest-proposal/:token", async (req: Request, res: Response) => {
+    try {
+      const token = req.params.token;
+      if (!token) return res.status(400).json({ message: "Missing token" });
+      const row = await storage.getGuestProposalByToken(token);
+      if (!row) return res.status(404).json({ message: "Not found" });
+
+      const now = Date.now();
+      const expired = row.expiresAt && new Date(row.expiresAt).getTime() < now;
+      if (!expired) {
+        return res.json({
+          token: row.token,
+          status: row.status,
+          email: row.email,
+          createdAt: row.createdAt,
+          expiresAt: row.expiresAt,
+          proposal: row.proposalData,
+        });
+      }
+
+      // Expired: mark this row as 'expired' synchronously (acts as a lock to prevent
+      // duplicate regenerations from rapid repeat clicks / link-preview crawlers),
+      // then kick off background regeneration. If the row was already expired, skip.
+      if (row.status === "expired") {
+        return res.status(410).json({
+          expired: true,
+          refreshed: false,
+          message: "These options have expired. A fresh email was already on its way.",
+          email: row.email,
+        });
+      }
+      await storage.updateGuestProposalStatus(row.id, "expired").catch((e) =>
+        console.warn(`[guest-proposal] failed to mark token=${token} expired:`, e?.message || e)
+      );
+
+      // Background regeneration — produces a brand new guest_proposal row + new email.
+      (async () => {
+        try {
+          if (!duffel) {
+            console.warn(`[guest-proposal] cannot regenerate token=${token}: Duffel not configured`);
+            return;
+          }
+          const slices: any[] = [
+            { origin: row.originIata, destination: row.destinationIata, departure_date: row.departureDate },
+          ];
+          if (row.returnDate) {
+            slices.push({ origin: row.destinationIata, destination: row.originIata, departure_date: row.returnDate });
+          }
+          const passengers: Array<{ type: "adult" }> = [];
+          for (let i = 0; i < (row.passengers || 1); i++) passengers.push({ type: "adult" as const });
+          const offerRequest = await duffel.offerRequests.create({
+            slices,
+            passengers,
+            cabin_class: (row.cabinClass || "economy") as any,
+            return_offers: true,
+            max_connections: 1,
+          });
+          const allOffers = (offerRequest.data as any).offers || [];
+          if (allOffers.length === 0) {
+            console.warn(`[guest-proposal] regeneration found no offers for token=${token}`);
+            return;
+          }
+          allOffers.sort((a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
+          const prevData = (row.proposalData as any) as GuestProposalData;
+          const guestData = buildGuestProposalDataFromOffers({
+            offers: allOffers,
+            originIata: row.originIata,
+            originName: prevData?.originName ?? row.originIata,
+            destinationIata: row.destinationIata,
+            destinationName: prevData?.destinationName ?? row.destinationIata,
+            departureDate: row.departureDate,
+            returnDate: row.returnDate,
+            passengers: row.passengers,
+            cabinClass: row.cabinClass,
+          });
+          if (guestData.options.length === 0) return;
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const saved = await storage.createGuestProposal({
+            email: row.email,
+            originIata: row.originIata,
+            destinationIata: row.destinationIata,
+            departureDate: row.departureDate,
+            returnDate: row.returnDate,
+            passengers: row.passengers,
+            cabinClass: row.cabinClass,
+            proposalData: guestData as any,
+            status: "pending",
+            expiresAt,
+          });
+          const baseUrl = getBaseUrl(req);
+          await sendGuestProposalEmail(row.email, {
+            baseUrl,
+            originIata: guestData.originIata,
+            originName: guestData.originName,
+            destinationIata: guestData.destinationIata,
+            destinationName: guestData.destinationName,
+            departureDate: guestData.departureDate,
+            returnDate: guestData.returnDate,
+            passengers: guestData.passengers,
+            options: guestData.options.map((o) => ({
+              token: o.token,
+              label: o.label,
+              totalAmount: o.totalAmount,
+              totalCurrency: o.totalCurrency,
+              totalDurationMinutes: o.totalDurationMinutes,
+              stops: o.stops,
+              carrierName: o.carrierName,
+              carrierLogo: o.carrierLogo,
+              outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
+              outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+            })),
+          });
+          console.log(`[guest-proposal] regenerated expired token=${token} -> new token=${saved.token}`);
+        } catch (regenErr: any) {
+          console.error(`[guest-proposal] regeneration failed for token=${token}:`, regenErr?.message || regenErr);
+        }
+      })();
+
+      return res.status(410).json({
+        expired: true,
+        refreshed: true,
+        message: "These options have expired. We're sending a fresh set of flights to your email now.",
+        email: row.email,
+      });
+    } catch (err: any) {
+      console.error("[guest-proposal] GET error:", err);
+      return res.status(500).json({ message: "Failed to load proposal" });
     }
   });
 
