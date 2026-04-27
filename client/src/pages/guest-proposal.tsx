@@ -39,6 +39,18 @@ interface GuestOption {
   carrierIata?: string | null;
   carrierLogo?: string | null;
   slices: GuestSlice[];
+  baggage?: string | null;
+  refundable?: boolean | null;
+  changeable?: boolean | null;
+}
+
+function policyText(refundable?: boolean | null, changeable?: boolean | null): string | null {
+  if (refundable == null && changeable == null) return null;
+  const refundLabel =
+    refundable == null ? "Cancellation policy unavailable" : refundable ? "Refundable" : "Non-refundable";
+  const changeLabel =
+    changeable == null ? null : changeable ? "Changes allowed" : "No changes";
+  return changeLabel ? `${refundLabel} · ${changeLabel}` : refundLabel;
 }
 
 interface GuestProposalPayload {
@@ -150,10 +162,24 @@ function FlightOptionCard({ option }: { option: GuestOption }) {
       )}
 
       {option.slices.length > 1 && (
-        <div className="text-xs text-muted-foreground mb-4">
+        <div className="text-xs text-muted-foreground mb-3">
           + Return flight {formatDate(option.slices[1].departingAt)} · {formatDuration(option.slices[1].durationMinutes)}
         </div>
       )}
+
+      <div className="space-y-1 text-xs text-muted-foreground mb-4">
+        {option.baggage && (
+          <div data-testid={`text-baggage-${option.label.replace(/\s+/g, "-").toLowerCase()}`}>
+            <span className="font-medium text-foreground">Baggage:</span> {option.baggage}
+          </div>
+        )}
+        {policyText(option.refundable, option.changeable) && (
+          <div data-testid={`text-cancellation-${option.label.replace(/\s+/g, "-").toLowerCase()}`}>
+            <span className="font-medium text-foreground">Cancellation:</span>{" "}
+            {policyText(option.refundable, option.changeable)}
+          </div>
+        )}
+      </div>
 
       <Button
         asChild

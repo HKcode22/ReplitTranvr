@@ -540,51 +540,59 @@ function offerTotalDurationMinutes(offer: any): number {
 
 function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> {
   if (!offers || offers.length === 0) return [];
+
+  // Pre-sort each canonical category so we can walk down the list when the
+  // top pick collides with another category's pick. This guarantees that
+  // each label is filled by the *next-best candidate within that category*
+  // (not a random cheap offer mislabeled as "Fastest").
   const sortedByPrice = [...offers].sort(
     (a, b) => parseFloat(a.total_amount) - parseFloat(b.total_amount),
   );
-  const cheapest = sortedByPrice[0];
-  const cheapestPrice = parseFloat(cheapest.total_amount);
+  const cheapestPrice = parseFloat(sortedByPrice[0].total_amount);
   const valueThreshold = cheapestPrice * 1.3;
-
-  const valueCandidates = sortedByPrice.filter(
-    (o) => parseFloat(o.total_amount) <= valueThreshold,
-  );
-  valueCandidates.sort((a, b) => {
-    const sa = offerStops(a);
-    const sb = offerStops(b);
-    if (sa !== sb) return sa - sb;
-    return parseFloat(a.total_amount) - parseFloat(b.total_amount);
-  });
-  const bestValue = valueCandidates[0] || cheapest;
-
+  const sortedByValue = [...offers]
+    .filter((o) => parseFloat(o.total_amount) <= valueThreshold)
+    .sort((a, b) => {
+      const sa = offerStops(a);
+      const sb = offerStops(b);
+      if (sa !== sb) return sa - sb;
+      return parseFloat(a.total_amount) - parseFloat(b.total_amount);
+    });
   const sortedByDuration = [...offers].sort(
     (a, b) => offerTotalDurationMinutes(a) - offerTotalDurationMinutes(b),
   );
-  const fastest = sortedByDuration[0];
+
+  // Helper: pick the first offer from the given list whose id is not in `taken`.
+  const firstAvailable = (list: any[], taken: Set<string>) => {
+    for (const o of list) if (o && !taken.has(o.id)) return o;
+    return null;
+  };
 
   const picks: Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> = [];
-  const seen = new Set<string>();
-  const add = (offer: any, label: "Best Price" | "Best Value" | "Fastest") => {
-    if (!offer || seen.has(offer.id)) return;
-    seen.add(offer.id);
-    picks.push({ offer, label });
-  };
-  add(cheapest, "Best Price");
-  add(bestValue, "Best Value");
-  add(fastest, "Fastest");
+  const taken = new Set<string>();
 
-  if (picks.length < 3) {
-    const labels: Array<"Best Price" | "Best Value" | "Fastest"> = ["Best Price", "Best Value", "Fastest"];
-    for (const o of sortedByPrice) {
-      if (seen.has(o.id)) continue;
-      add(o, labels[picks.length] || "Best Price");
-      if (picks.length >= 3) break;
+  // Always assign the labels in this order, picking the next-best candidate
+  // from the matching sorted list each time so labels remain meaningful even
+  // when categories overlap (e.g. cheapest offer is also the fastest).
+  const order: Array<{ label: "Best Price" | "Best Value" | "Fastest"; list: any[] }> = [
+    { label: "Best Price", list: sortedByPrice },
+    { label: "Best Value", list: sortedByValue.length ? sortedByValue : sortedByPrice },
+    { label: "Fastest", list: sortedByDuration },
+  ];
+  for (const { label, list } of order) {
+    const offer =
+      firstAvailable(list, taken) ?? firstAvailable(sortedByPrice, taken);
+    if (offer) {
+      taken.add(offer.id);
+      picks.push({ offer, label });
     }
   }
-  while (picks.length < 3 && offers.length > 0) {
-    const labels: Array<"Best Price" | "Best Value" | "Fastest"> = ["Best Price", "Best Value", "Fastest"];
-    picks.push({ offer: cheapest, label: labels[picks.length] });
+
+  // If the input pool has fewer than 3 distinct offers, repeat the cheapest
+  // for the remaining label(s). The label is always preserved.
+  while (picks.length < 3) {
+    const label = order[picks.length].label;
+    picks.push({ offer: sortedByPrice[0], label });
   }
   return picks.slice(0, 3);
 }
@@ -622,6 +630,45 @@ function offerToGuestOption(
     };
   });
 
+  // Best-effort baggage summary, sourced from the first segment's first
+  // passenger's baggages array (Duffel's standard shape).
+  let baggage: string | null = null;
+  try {
+    const firstSeg = (offer.slices?.[0]?.segments?.[0]?.passengers?.[0]?.baggages || []) as Array<{
+      type?: string;
+      quantity?: number;
+    }>;
+    const counts: Record<string, number> = {};
+    for (const b of firstSeg) {
+      const k = (b.type || "").toLowerCase();
+      if (!k) continue;
+      counts[k] = (counts[k] || 0) + (typeof b.quantity === "number" ? b.quantity : 0);
+    }
+    const parts: string[] = [];
+    if (counts["carry_on"]) parts.push(`${counts["carry_on"]} carry-on`);
+    if (counts["checked"]) parts.push(`${counts["checked"]} checked`);
+    if (parts.length === 0 && Object.keys(counts).length > 0) {
+      // Unknown bag types — surface raw counts.
+      for (const [k, v] of Object.entries(counts)) parts.push(`${v} ${k.replace(/_/g, " ")}`);
+    }
+    baggage = parts.length ? parts.join(", ") : null;
+  } catch {
+    baggage = null;
+  }
+
+  // Best-effort cancellation/change policy, sourced from offer.conditions.
+  // Duffel exposes `refund_before_departure.allowed` and
+  // `change_before_departure.allowed` (each may be null when unknown).
+  const conds = offer.conditions || {};
+  const refundable: boolean | null =
+    conds.refund_before_departure && typeof conds.refund_before_departure.allowed === "boolean"
+      ? conds.refund_before_departure.allowed
+      : null;
+  const changeable: boolean | null =
+    conds.change_before_departure && typeof conds.change_before_departure.allowed === "boolean"
+      ? conds.change_before_departure.allowed
+      : null;
+
   return {
     token: randomUUID(),
     label,
@@ -634,6 +681,9 @@ function offerToGuestOption(
     carrierIata: offer.owner?.iata_code ?? null,
     carrierLogo: offer.owner?.logo_symbol_url || offer.owner?.logo_lockup_url || null,
     slices,
+    baggage,
+    refundable,
+    changeable,
   };
 }
 
@@ -3744,10 +3794,38 @@ export async function registerRoutes(
         // and email a one-click booking link to the caller. Wrapped in try/catch
         // so failure never breaks the in-app proposal flow.
         try {
+          // Email resolution priority (highest first):
+          //   1. Email parsed from the in-call <TRAVEL_DETAILS> block — this is
+          //      what the caller said live and was confirmed by the agent.
+          //   2. Dispatch metadata callbackEmail from the BlandCall row
+          //      (used for callback flows).
+          //   3. phone -> email map (returning callers).
+          //   4. The signed-in user's account email.
           let guestEmail: string | null = null;
-          const phoneForLookup = (callRequest as any).phone || (callRequest as any).phoneNumber || null;
-          if (phoneForLookup) {
-            guestEmail = await storage.getEmailForPhone(phoneForLookup).catch(() => null);
+          const parsedEmailRaw = (details as any)?.email;
+          if (typeof parsedEmailRaw === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsedEmailRaw)) {
+            guestEmail = parsedEmailRaw.trim().toLowerCase();
+          }
+          if (!guestEmail) {
+            try {
+              const blandRows = await storage.getBlandCallsByCallRequest(callRequestId);
+              for (const bc of blandRows || []) {
+                const meta = (bc as any).metadata || (bc as any).variables || {};
+                const cbEmail = meta?.callbackEmail || meta?.email || null;
+                if (cbEmail && typeof cbEmail === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cbEmail)) {
+                  guestEmail = cbEmail.trim().toLowerCase();
+                  break;
+                }
+              }
+            } catch {
+              /* best-effort */
+            }
+          }
+          if (!guestEmail) {
+            const phoneForLookup = (callRequest as any).phone || (callRequest as any).phoneNumber || null;
+            if (phoneForLookup) {
+              guestEmail = await storage.getEmailForPhone(phoneForLookup).catch(() => null);
+            }
           }
           if (!guestEmail) {
             const userRec = await storage.getUser(userId).catch(() => undefined);
@@ -3803,6 +3881,9 @@ export async function registerRoutes(
                   carrierLogo: o.carrierLogo,
                   outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
                   outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+                  baggage: o.baggage,
+                  refundable: o.refundable,
+                  changeable: o.changeable,
                 })),
               });
               console.log(`[guest-proposal] created token=${saved.token} for callRequest=${callRequestId} email=${guestEmail}`);
@@ -4232,9 +4313,18 @@ export async function registerRoutes(
       const now = Date.now();
       const expired = row.expiresAt && new Date(row.expiresAt).getTime() < now;
       if (!expired) {
+        // Best-effort transition pending -> viewed so we can track engagement
+        // and (later) suppress redundant follow-ups. Never block the response.
+        let surfacedStatus = row.status;
+        if (row.status === "pending") {
+          await storage.updateGuestProposalStatus(row.id, "viewed").catch((e) =>
+            console.warn(`[guest-proposal] failed to mark token=${token} viewed:`, e?.message || e)
+          );
+          surfacedStatus = "viewed";
+        }
         return res.json({
           token: row.token,
-          status: row.status,
+          status: surfacedStatus,
           email: row.email,
           createdAt: row.createdAt,
           expiresAt: row.expiresAt,
@@ -4332,6 +4422,9 @@ export async function registerRoutes(
               carrierLogo: o.carrierLogo,
               outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
               outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+              baggage: o.baggage,
+              refundable: o.refundable,
+              changeable: o.changeable,
             })),
           });
           console.log(`[guest-proposal] regenerated expired token=${token} -> new token=${saved.token}`);

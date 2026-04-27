@@ -573,6 +573,21 @@ export interface GuestProposalEmailOption {
   carrierLogo?: string | null;
   outboundDepartingAt?: string | null;
   outboundArrivingAt?: string | null;
+  baggage?: string | null;
+  refundable?: boolean | null;
+  changeable?: boolean | null;
+}
+
+function policyLabel(refundable?: boolean | null, changeable?: boolean | null): string | null {
+  // Surface the airline's cancellation/change policy in plain English.
+  // Returns null when both fields are unknown so we don't show a misleading
+  // "Non-refundable" line for offers that never declared a policy.
+  if (refundable == null && changeable == null) return null;
+  const refundText =
+    refundable == null ? "Cancellation policy unavailable" : refundable ? "Refundable" : "Non-refundable";
+  const changeText =
+    changeable == null ? null : changeable ? "Changes allowed" : "No changes";
+  return changeText ? `${refundText} · ${changeText}` : refundText;
 }
 
 export interface GuestProposalEmailInput {
@@ -632,6 +647,13 @@ export function buildGuestProposalEmail(input: GuestProposalEmailInput): Rendere
       : "";
     const carrierName = opt.carrierName ? `<span style="color:${TEXT_DARK};font-weight:600;">${escapeHtml(opt.carrierName)}</span>` : "";
     const amount = `${(opt.totalCurrency || "USD").toUpperCase()} ${Number(opt.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const baggageRow = opt.baggage
+      ? `<div style="margin-top:10px;font-size:13px;color:#374151;"><strong style="color:${TEXT_DARK};">Baggage:</strong> ${escapeHtml(opt.baggage)}</div>`
+      : "";
+    const policy = policyLabel(opt.refundable, opt.changeable);
+    const policyRow = policy
+      ? `<div style="margin-top:4px;font-size:13px;color:#374151;"><strong style="color:${TEXT_DARK};">Cancellation:</strong> ${escapeHtml(policy)}</div>`
+      : "";
     return `
       <div style="border:1px solid #e5e7eb;border-radius:12px;padding:20px;margin-bottom:16px;background:#ffffff;">
         <div style="display:inline-block;background:${BRAND_BLUE};color:#fff;font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin-bottom:12px;">${escapeHtml(opt.label)}</div>
@@ -649,6 +671,8 @@ export function buildGuestProposalEmail(input: GuestProposalEmailInput): Rendere
             <td colspan="2" style="padding:8px 0 0;color:#6b7280;font-size:13px;">${escapeHtml(formatDurationMins(opt.totalDurationMinutes))} &middot; ${escapeHtml(stopsLabel)}</td>
           </tr>
         </table>
+        ${baggageRow}
+        ${policyRow}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;gap:12px;">
           <div style="font-size:22px;font-weight:700;color:${TEXT_DARK};">${escapeHtml(amount)}</div>
           <a href="${bookUrl}" style="display:inline-block;background:${BRAND_BLUE};color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;">Book This Flight</a>
