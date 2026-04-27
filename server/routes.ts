@@ -540,61 +540,162 @@ function offerTotalDurationMinutes(offer: any): number {
   return mins;
 }
 
+// Flight signature for dedup. Duffel often returns multiple offers for the
+// SAME physical flight at different fares — those must be treated as one
+// option in the email, not three near-duplicates. Key on the outbound first
+// segment's marketing carrier + flight number + departing-at timestamp.
+//
+// Robustness: if ANY of those three fields is missing on the offer, fall back
+// to the offer.id as a unique suffix. Otherwise unrelated offers with missing
+// carrier metadata would collapse into the same synthetic signature
+// ("????|??") and be treated as duplicates — silently breaking the
+// "three distinct options" guarantee.
+function offerFlightSignature(offer: any): string {
+  const seg = offer?.slices?.[0]?.segments?.[0];
+  if (!seg) return `id:${offer?.id || "unknown"}`;
+  const carrier =
+    seg.marketing_carrier?.iata_code || seg.marketing_carrier?.name || null;
+  const flightNum = seg.marketing_carrier_flight_number || null;
+  const dep = seg.departing_at || null;
+  if (!carrier || !flightNum || !dep) {
+    // At least one identifying field is missing — fall back to the unique
+    // offer id so we never collide with another offer's partial signature.
+    return `id:${offer?.id || "unknown"}`;
+  }
+  return `${carrier}${flightNum}|${dep}`;
+}
+
+// Marketing carrier of the outbound first segment — used as a "differentiator"
+// when the natural pick for Best Value / Fastest collides with an already-
+// taken option.
+function offerOutboundCarrier(offer: any): string {
+  const seg = offer?.slices?.[0]?.segments?.[0];
+  return (
+    seg?.marketing_carrier?.iata_code || seg?.marketing_carrier?.name || "??"
+  );
+}
+
+// Departure-time bucket for the outbound first segment. Duffel's `departing_at`
+// is an ISO local timestamp (no timezone offset), so the hour parsed straight
+// out of the string is local-airport time.
+function offerOutboundDepartureBucket(
+  offer: any,
+): "morning" | "afternoon" | "evening" | "unknown" {
+  const dep = offer?.slices?.[0]?.segments?.[0]?.departing_at;
+  if (!dep) return "unknown";
+  const m = String(dep).match(/T(\d{2}):/);
+  if (!m) return "unknown";
+  const h = parseInt(m[1], 10);
+  if (Number.isNaN(h)) return "unknown";
+  if (h < 12) return "morning";
+  if (h < 18) return "afternoon";
+  return "evening";
+}
+
 function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> {
   if (!offers || offers.length === 0) return [];
 
-  // Pre-sort each canonical category so we can walk down the list when the
-  // top pick collides with another category's pick. This guarantees that
-  // each label is filled by the *next-best candidate within that category*
-  // (not a random cheap offer mislabeled as "Fastest").
-  const sortedByPrice = [...offers].sort(
-    (a, b) => parseFloat(a.total_amount) - parseFloat(b.total_amount),
-  );
-  const cheapestPrice = parseFloat(sortedByPrice[0].total_amount);
-  const valueThreshold = cheapestPrice * 1.3;
-  const sortedByValue = [...offers]
-    .filter((o) => parseFloat(o.total_amount) <= valueThreshold)
-    .sort((a, b) => {
-      const sa = offerStops(a);
-      const sb = offerStops(b);
-      if (sa !== sb) return sa - sb;
-      return parseFloat(a.total_amount) - parseFloat(b.total_amount);
-    });
-  const sortedByDuration = [...offers].sort(
-    (a, b) => offerTotalDurationMinutes(a) - offerTotalDurationMinutes(b),
-  );
+  // Best Price sort: lowest total_amount, ties broken by shortest duration,
+  // then by stable offer id for deterministic output.
+  const sortedByPrice = [...offers].sort((a, b) => {
+    const pa = parseFloat(a.total_amount);
+    const pb = parseFloat(b.total_amount);
+    if (pa !== pb) return pa - pb;
+    const da = offerTotalDurationMinutes(a);
+    const db = offerTotalDurationMinutes(b);
+    if (da !== db) return da - db;
+    return String(a.id).localeCompare(String(b.id));
+  });
 
-  // Helper: pick the first offer from the given list whose id is not in `taken`.
-  const firstAvailable = (list: any[], taken: Set<string>) => {
-    for (const o of list) if (o && !taken.has(o.id)) return o;
-    return null;
-  };
+  // Best Value pool: nonstop or one-stop only (per spec). Within the pool,
+  // sort by cheapest first. If no offer has stops <= 1, fall back to the full
+  // sorted-by-price list so we still produce three options.
+  const valuePool = sortedByPrice.filter((o) => offerStops(o) <= 1);
+  const sortedByValue = valuePool.length ? valuePool : sortedByPrice;
 
-  const picks: Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> = [];
-  const taken = new Set<string>();
+  // Fastest sort: shortest total door-to-door duration (departure of first
+  // segment to arrival of last segment, including layovers), ties by price.
+  const sortedByDuration = [...offers].sort((a, b) => {
+    const da = offerTotalDurationMinutes(a);
+    const db = offerTotalDurationMinutes(b);
+    if (da !== db) return da - db;
+    return parseFloat(a.total_amount) - parseFloat(b.total_amount);
+  });
 
-  // Always assign the labels in this order, picking the next-best candidate
-  // from the matching sorted list each time so labels remain meaningful even
-  // when categories overlap (e.g. cheapest offer is also the fastest).
-  const order: Array<{ label: "Best Price" | "Best Value" | "Fastest"; list: any[] }> = [
-    { label: "Best Price", list: sortedByPrice },
-    { label: "Best Value", list: sortedByValue.length ? sortedByValue : sortedByPrice },
-    { label: "Fastest", list: sortedByDuration },
-  ];
-  for (const { label, list } of order) {
-    const offer =
-      firstAvailable(list, taken) ?? firstAvailable(sortedByPrice, taken);
-    if (offer) {
-      taken.add(offer.id);
-      picks.push({ offer, label });
+  // Pick the next entry in `list` that is signature-distinct from every
+  // already-picked offer. When `requireDifferentiator` is true we additionally
+  // prefer a candidate that differs from EVERY prior pick by either marketing
+  // carrier OR departure-time bucket — falling back to any signature-distinct
+  // entry if no such candidate exists.
+  function pickDistinct(
+    list: any[],
+    takenSigs: Set<string>,
+    pickedOffers: any[],
+    requireDifferentiator: boolean,
+  ): any | null {
+    if (requireDifferentiator && pickedOffers.length > 0) {
+      for (const o of list) {
+        const sig = offerFlightSignature(o);
+        if (takenSigs.has(sig)) continue;
+        const carrier = offerOutboundCarrier(o);
+        const bucket = offerOutboundDepartureBucket(o);
+        const meaningfullyDifferent = pickedOffers.every(
+          (p) =>
+            offerOutboundCarrier(p) !== carrier ||
+            offerOutboundDepartureBucket(p) !== bucket,
+        );
+        if (meaningfullyDifferent) return o;
+      }
     }
+    for (const o of list) {
+      const sig = offerFlightSignature(o);
+      if (!takenSigs.has(sig)) return o;
+    }
+    return null;
   }
 
-  // If the input pool has fewer than 3 distinct offers, repeat the cheapest
-  // for the remaining label(s). The label is always preserved.
+  const picks: Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> = [];
+  const takenSigs = new Set<string>();
+
+  // 1) Best Price = cheapest, full stop. No constraints — this is the seed.
+  const bestPrice = sortedByPrice[0];
+  picks.push({ offer: bestPrice, label: "Best Price" });
+  takenSigs.add(offerFlightSignature(bestPrice));
+
+  // 2) Best Value = cheapest among 0/1-stop offers, signature-distinct from
+  //    Best Price. If the natural top of the value pool collides with Best
+  //    Price by signature, walk down to the next entry that ALSO differs by
+  //    carrier or departure-time bucket; if no such entry exists, fall back to
+  //    any signature-distinct value-pool entry, then to the cheapest overall.
+  const bestValue =
+    pickDistinct(sortedByValue, takenSigs, picks.map((p) => p.offer), true) ??
+    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer), false);
+  if (bestValue) {
+    picks.push({ offer: bestValue, label: "Best Value" });
+    takenSigs.add(offerFlightSignature(bestValue));
+  }
+
+  // 3) Fastest = shortest total travel time, signature-distinct from both
+  //    above. On collision, prefer a candidate differing by carrier or
+  //    departure-time bucket from BOTH prior picks.
+  const fastest =
+    pickDistinct(sortedByDuration, takenSigs, picks.map((p) => p.offer), true) ??
+    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer), false);
+  if (fastest) {
+    picks.push({ offer: fastest, label: "Fastest" });
+    takenSigs.add(offerFlightSignature(fastest));
+  }
+
+  // Always emit exactly three labelled options. If fewer than three signature-
+  // distinct flights exist in the input pool, repeat Best Price for the
+  // remaining label(s) — preserves today's "always three options" guarantee.
+  const labelOrder: Array<"Best Price" | "Best Value" | "Fastest"> = [
+    "Best Price",
+    "Best Value",
+    "Fastest",
+  ];
   while (picks.length < 3) {
-    const label = order[picks.length].label;
-    picks.push({ offer: sortedByPrice[0], label });
+    picks.push({ offer: bestPrice, label: labelOrder[picks.length] });
   }
   return picks.slice(0, 3);
 }
@@ -3640,6 +3741,156 @@ export async function registerRoutes(
 
       allOffers.sort((a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
 
+      // ──────────────────────────────────────────────────────────────────────
+      // SPEED: kick the guest proposal email send IMMEDIATELY, the moment
+      // Duffel returns flight results — in parallel with the in-app proposal
+      // save, Claude verification, and notification creation below. The
+      // bottleneck before this change was that the email waited for ALL
+      // downstream work (DB writes + Claude verification, often 5–15s) before
+      // SendGrid was even called. That defeats the conversational promise of
+      // "options in your inbox within a minute."
+      //
+      // Tradeoff: if Claude later finds the proposal is wrong and triggers a
+      // regeneration, the regenerated call will fire a SECOND guest email
+      // with the corrected options. The user has accepted this in exchange
+      // for the speed win — verification rejections are rare in practice.
+      //
+      // Fully wrapped in fire-and-forget so failures here NEVER block the
+      // in-app flow, and surface only in server logs.
+      void (async () => {
+        try {
+          // Email resolution priority (highest first):
+          //   1. Email parsed from the in-call <TRAVEL_DETAILS> block — what
+          //      the caller said live and the agent confirmed.
+          //   2. Dispatch metadata callbackEmail from the BlandCall row.
+          //   3. phone -> email map (returning callers).
+          //   4. The signed-in user's account email.
+          let guestEmail: string | null = null;
+          const parsedEmailRaw = (details as any)?.email;
+          if (typeof parsedEmailRaw === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsedEmailRaw)) {
+            guestEmail = parsedEmailRaw.trim().toLowerCase();
+          }
+          if (!guestEmail) {
+            try {
+              const blandRows = await storage.getBlandCallsByCallRequest(callRequestId);
+              for (const bc of blandRows || []) {
+                const meta = (bc as any).metadata || (bc as any).variables || {};
+                const cbEmail = meta?.callbackEmail || meta?.email || null;
+                if (cbEmail && typeof cbEmail === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cbEmail)) {
+                  guestEmail = cbEmail.trim().toLowerCase();
+                  break;
+                }
+              }
+            } catch {
+              /* best-effort */
+            }
+          }
+          if (!guestEmail) {
+            const phoneForLookup = (callRequest as any).phone || (callRequest as any).phoneNumber || null;
+            if (phoneForLookup) {
+              guestEmail = await storage.getEmailForPhone(phoneForLookup).catch(() => null);
+            }
+          }
+          if (!guestEmail) {
+            const userRec = await storage.getUser(userId).catch(() => undefined);
+            guestEmail = userRec?.email || null;
+          }
+          if (!guestEmail) {
+            console.log(`[guest-proposal] skipped — no email could be resolved for callRequest=${callRequestId}`);
+            return;
+          }
+
+          const guestData = buildGuestProposalDataFromOffers({
+            offers: allOffers,
+            originIata: originCode,
+            originName: details.origin || originCode,
+            destinationIata: destCode,
+            destinationName: destName,
+            departureDate,
+            returnDate,
+            passengers: details.passengers,
+            cabinClass: details.cabinClass,
+          });
+          if (guestData.options.length === 0) {
+            console.log(`[guest-proposal] skipped — no options built for callRequest=${callRequestId}`);
+            return;
+          }
+
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const saved = await storage.createGuestProposal({
+            email: guestEmail,
+            originIata: guestData.originIata,
+            destinationIata: guestData.destinationIata,
+            departureDate: guestData.departureDate,
+            returnDate: guestData.returnDate ?? null,
+            passengers: guestData.passengers,
+            cabinClass: guestData.cabinClass,
+            proposalData: guestData as any,
+            status: "pending",
+            expiresAt,
+          });
+
+          // No live request available in the post-call hook. Resolve the base
+          // URL with the right precedence for each environment:
+          //   1. APP_URL — explicit override, highest priority everywhere.
+          //   2. Production / deployed (NODE_ENV=production OR
+          //      REPLIT_DEPLOYMENT=1) — hardcode https://travnr.com so a
+          //      missing APP_URL never accidentally points booking links at
+          //      the dev preview domain (REPLIT_DEV_DOMAIN can leak in).
+          //   3. REPLIT_DEV_DOMAIN — only used in non-production (dev preview).
+          //   4. localhost — last-resort dev fallback.
+          const isProduction =
+            process.env.NODE_ENV === "production" ||
+            process.env.REPLIT_DEPLOYMENT === "1";
+          let canonicalHost: string;
+          if (process.env.APP_URL) {
+            canonicalHost = process.env.APP_URL;
+          } else if (isProduction) {
+            console.warn(
+              "[guest-proposal] APP_URL not set in production — defaulting booking links to https://travnr.com",
+            );
+            canonicalHost = "https://travnr.com";
+          } else if (process.env.REPLIT_DEV_DOMAIN) {
+            canonicalHost = `https://${process.env.REPLIT_DEV_DOMAIN}`;
+          } else {
+            canonicalHost = `http://localhost:${process.env.PORT || 5000}`;
+          }
+          const baseUrl = canonicalHost.replace(/\/+$/, "");
+
+          await sendGuestProposalEmail(guestEmail, {
+            baseUrl,
+            originIata: guestData.originIata,
+            originName: guestData.originName,
+            destinationIata: guestData.destinationIata,
+            destinationName: guestData.destinationName,
+            departureDate: guestData.departureDate,
+            returnDate: guestData.returnDate,
+            passengers: guestData.passengers,
+            options: guestData.options.map((o) => ({
+              token: o.token,
+              label: o.label,
+              totalAmount: o.totalAmount,
+              totalCurrency: o.totalCurrency,
+              totalDurationMinutes: o.totalDurationMinutes,
+              stops: o.stops,
+              carrierName: o.carrierName,
+              carrierLogo: o.carrierLogo,
+              outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
+              outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+              baggage: o.baggage,
+              refundable: o.refundable,
+              changeable: o.changeable,
+            })),
+          });
+          console.log(`[guest-proposal] created token=${saved.token} for callRequest=${callRequestId} email=${guestEmail} (parallel send)`);
+        } catch (guestErr: any) {
+          console.error(
+            `[guest-proposal] failed for callRequest=${callRequestId}:`,
+            guestErr?.message || guestErr,
+          );
+        }
+      })();
+
       const diverseOffers: any[] = [];
       const seenAirlines = new Set<string>();
       for (const offer of allOffers) {
@@ -3828,116 +4079,11 @@ export async function registerRoutes(
           linkUrl: `/proposals/${proposal.id}`,
         });
 
-        // Guest proposal email: pick 3 options (Best Price/Best Value/Fastest)
-        // and email a one-click booking link to the caller. Wrapped in try/catch
-        // so failure never breaks the in-app proposal flow.
-        try {
-          // Email resolution priority (highest first):
-          //   1. Email parsed from the in-call <TRAVEL_DETAILS> block — this is
-          //      what the caller said live and was confirmed by the agent.
-          //   2. Dispatch metadata callbackEmail from the BlandCall row
-          //      (used for callback flows).
-          //   3. phone -> email map (returning callers).
-          //   4. The signed-in user's account email.
-          let guestEmail: string | null = null;
-          const parsedEmailRaw = (details as any)?.email;
-          if (typeof parsedEmailRaw === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsedEmailRaw)) {
-            guestEmail = parsedEmailRaw.trim().toLowerCase();
-          }
-          if (!guestEmail) {
-            try {
-              const blandRows = await storage.getBlandCallsByCallRequest(callRequestId);
-              for (const bc of blandRows || []) {
-                const meta = (bc as any).metadata || (bc as any).variables || {};
-                const cbEmail = meta?.callbackEmail || meta?.email || null;
-                if (cbEmail && typeof cbEmail === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cbEmail)) {
-                  guestEmail = cbEmail.trim().toLowerCase();
-                  break;
-                }
-              }
-            } catch {
-              /* best-effort */
-            }
-          }
-          if (!guestEmail) {
-            const phoneForLookup = (callRequest as any).phone || (callRequest as any).phoneNumber || null;
-            if (phoneForLookup) {
-              guestEmail = await storage.getEmailForPhone(phoneForLookup).catch(() => null);
-            }
-          }
-          if (!guestEmail) {
-            const userRec = await storage.getUser(userId).catch(() => undefined);
-            guestEmail = userRec?.email || null;
-          }
-          if (guestEmail) {
-            const guestData = buildGuestProposalDataFromOffers({
-              offers: allOffers,
-              originIata: originCode,
-              originName: details.origin || originCode,
-              destinationIata: destCode,
-              destinationName: destName,
-              departureDate,
-              returnDate,
-              passengers: details.passengers,
-              cabinClass: details.cabinClass,
-            });
-            if (guestData.options.length > 0) {
-              const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-              const saved = await storage.createGuestProposal({
-                email: guestEmail,
-                originIata: guestData.originIata,
-                destinationIata: guestData.destinationIata,
-                departureDate: guestData.departureDate,
-                returnDate: guestData.returnDate ?? null,
-                passengers: guestData.passengers,
-                cabinClass: guestData.cabinClass,
-                proposalData: guestData as any,
-                status: "pending",
-                expiresAt,
-              });
-              // No live request available in the post-call hook. Prefer an
-              // explicitly configured canonical app URL (set on production
-              // deployments), fall back to the Replit dev domain, and only
-              // localhost as a last resort so links never silently become
-              // unreachable in deployed environments.
-              const canonicalHost =
-                process.env.APP_URL ||
-                (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null) ||
-                `http://localhost:${process.env.PORT || 5000}`;
-              const baseUrl = canonicalHost.replace(/\/+$/, "");
-              await sendGuestProposalEmail(guestEmail, {
-                baseUrl,
-                originIata: guestData.originIata,
-                originName: guestData.originName,
-                destinationIata: guestData.destinationIata,
-                destinationName: guestData.destinationName,
-                departureDate: guestData.departureDate,
-                returnDate: guestData.returnDate,
-                passengers: guestData.passengers,
-                options: guestData.options.map((o) => ({
-                  token: o.token,
-                  label: o.label,
-                  totalAmount: o.totalAmount,
-                  totalCurrency: o.totalCurrency,
-                  totalDurationMinutes: o.totalDurationMinutes,
-                  stops: o.stops,
-                  carrierName: o.carrierName,
-                  carrierLogo: o.carrierLogo,
-                  outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
-                  outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
-                  baggage: o.baggage,
-                  refundable: o.refundable,
-                  changeable: o.changeable,
-                })),
-              });
-              console.log(`[guest-proposal] created token=${saved.token} for callRequest=${callRequestId} email=${guestEmail}`);
-            }
-          } else {
-            console.log(`[guest-proposal] skipped — no email could be resolved for callRequest=${callRequestId}`);
-          }
-        } catch (guestErr: any) {
-          console.error(`[guest-proposal] failed for callRequest=${callRequestId}:`, guestErr?.message || guestErr);
-        }
+        // NOTE: Guest proposal email is no longer sent here. It's now fired
+        // earlier (in parallel) right after `allOffers.sort(...)` so the
+        // caller receives their email seconds after the call ends instead of
+        // waiting for the in-app proposal save + Claude verification to
+        // complete. See the void-IIFE block above for the full send logic.
       }
     } catch (err: any) {
       console.error(
