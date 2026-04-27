@@ -590,7 +590,9 @@ function offerLongestLayoverMinutes(offer: any): number {
 // quality as a third axis; Fastest sticks to carrier OR time-bucket only
 // (per spec — for the "fastest" label, layover length doesn't define
 // distinctness from another fast option).
-const LAYOVER_DIFF_THRESHOLD_MINUTES = 30;
+// 90 min = the smallest gap a customer will notice as a "shorter layover"
+// without being so strict the differentiator never fires.
+const LAYOVER_DIFF_THRESHOLD_MINUTES = 90;
 function differsByCarrierOrBucket(candidate: any, prior: any): boolean {
   return offerOutboundCarrier(candidate) !== offerOutboundCarrier(prior)
     || offerOutboundDepartureBucket(candidate) !== offerOutboundDepartureBucket(prior);
