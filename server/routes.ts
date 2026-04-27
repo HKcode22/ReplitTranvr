@@ -592,6 +592,45 @@ function offerOutboundDepartureBucket(
   return "evening";
 }
 
+// Longest layover (in minutes) across every slice of the offer. A layover is
+// the gap between one segment's arrival and the next segment's departure
+// within the same slice. Used as a routing-quality differentiator when two
+// candidate offers collide on signature — we'd rather show a 1-stop with a
+// 90m layover than a 1-stop with an 8h layover.
+function offerLongestLayoverMinutes(offer: any): number {
+  let longestMs = 0;
+  for (const slice of offer?.slices || []) {
+    const segs = slice.segments || [];
+    for (let i = 1; i < segs.length; i++) {
+      const arr = Date.parse(segs[i - 1]?.arriving_at);
+      const dep = Date.parse(segs[i]?.departing_at);
+      if (Number.isNaN(arr) || Number.isNaN(dep)) continue;
+      const gap = dep - arr;
+      if (gap > longestMs) longestMs = gap;
+    }
+  }
+  return Math.round(longestMs / 60000);
+}
+
+// "Meaningfully different" from every already-picked offer for differentiator-
+// walk purposes: differs by marketing carrier OR departure-time bucket OR has
+// a noticeably shorter longest layover (>=30 minutes shorter than the prior
+// pick's longest layover). Any one of these counts as a real differentiation
+// the customer can perceive in the email.
+const LAYOVER_DIFF_THRESHOLD_MINUTES = 30;
+function isMeaningfullyDifferent(candidate: any, prior: any[]): boolean {
+  const cCarrier = offerOutboundCarrier(candidate);
+  const cBucket = offerOutboundDepartureBucket(candidate);
+  const cLayover = offerLongestLayoverMinutes(candidate);
+  return prior.every((p) => {
+    if (offerOutboundCarrier(p) !== cCarrier) return true;
+    if (offerOutboundDepartureBucket(p) !== cBucket) return true;
+    const pLayover = offerLongestLayoverMinutes(p);
+    if (pLayover - cLayover >= LAYOVER_DIFF_THRESHOLD_MINUTES) return true;
+    return false;
+  });
+}
+
 function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> {
   if (!offers || offers.length === 0) return [];
 
@@ -622,36 +661,60 @@ function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price"
     return parseFloat(a.total_amount) - parseFloat(b.total_amount);
   });
 
-  // Pick the next entry in `list` that is signature-distinct from every
-  // already-picked offer. When `requireDifferentiator` is true we additionally
-  // prefer a candidate that differs from EVERY prior pick by either marketing
-  // carrier OR departure-time bucket — falling back to any signature-distinct
-  // entry if no such candidate exists.
+  // Selection algorithm for Best Value / Fastest within a category-sorted
+  // list, given the set of signatures already taken by earlier picks:
+  //
+  //  1. Find the natural top of `list` — defined as the FIRST entry whose
+  //     signature is not yet in `takenSigs`. (If the very first entry
+  //     happens to be signature-distinct, that's the natural top — no
+  //     collision occurred and the differentiator-walk does NOT run, even
+  //     if its carrier/bucket matches a prior pick.)
+  //  2. If the natural top sits at index 0 of `list`, return it. There was
+  //     no signature collision with any prior pick.
+  //  3. If the natural top sits at a later index, that means earlier list
+  //     entries collided by signature with prior picks. ONLY in this case
+  //     do we walk forward looking for a candidate that ALSO differs from
+  //     every prior pick by carrier OR departure-time bucket OR a
+  //     noticeably shorter longest layover. If we find one, return it.
+  //  4. If no differentiator-meeting candidate exists, fall back to the
+  //     natural top from step 1 — it's still signature-distinct, just
+  //     shares some attributes with prior picks.
+  //  5. If `list` contains no signature-distinct candidate at all, return
+  //     null and let the caller try a fallback list.
   function pickDistinct(
     list: any[],
     takenSigs: Set<string>,
     pickedOffers: any[],
-    requireDifferentiator: boolean,
   ): any | null {
-    if (requireDifferentiator && pickedOffers.length > 0) {
-      for (const o of list) {
-        const sig = offerFlightSignature(o);
-        if (takenSigs.has(sig)) continue;
-        const carrier = offerOutboundCarrier(o);
-        const bucket = offerOutboundDepartureBucket(o);
-        const meaningfullyDifferent = pickedOffers.every(
-          (p) =>
-            offerOutboundCarrier(p) !== carrier ||
-            offerOutboundDepartureBucket(p) !== bucket,
-        );
-        if (meaningfullyDifferent) return o;
+    if (list.length === 0) return null;
+    let naturalTopIdx = -1;
+    for (let i = 0; i < list.length; i++) {
+      if (!takenSigs.has(offerFlightSignature(list[i]))) {
+        naturalTopIdx = i;
+        break;
       }
     }
-    for (const o of list) {
-      const sig = offerFlightSignature(o);
-      if (!takenSigs.has(sig)) return o;
+    if (naturalTopIdx === -1) return null; // nothing signature-distinct
+
+    // No signature collision with prior picks — return the category's top
+    // candidate as-is. Sharing carrier/bucket with a prior pick is fine here;
+    // the differentiator only matters as a tie-breaker, not a hard filter.
+    if (naturalTopIdx === 0 || pickedOffers.length === 0) {
+      return list[naturalTopIdx];
     }
-    return null;
+
+    // Collision happened (prior picks consumed earlier list entries by
+    // signature). Walk from the natural top onward, preferring a candidate
+    // meaningfully different from every prior pick.
+    for (let i = naturalTopIdx; i < list.length; i++) {
+      const o = list[i];
+      if (takenSigs.has(offerFlightSignature(o))) continue;
+      if (isMeaningfullyDifferent(o, pickedOffers)) return o;
+    }
+
+    // Differentiator-walk found nothing better — fall back to the natural top
+    // (still signature-distinct, just shares attributes with prior picks).
+    return list[naturalTopIdx];
   }
 
   const picks: Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> = [];
@@ -662,25 +725,24 @@ function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price"
   picks.push({ offer: bestPrice, label: "Best Price" });
   takenSigs.add(offerFlightSignature(bestPrice));
 
-  // 2) Best Value = cheapest among 0/1-stop offers, signature-distinct from
-  //    Best Price. If the natural top of the value pool collides with Best
-  //    Price by signature, walk down to the next entry that ALSO differs by
-  //    carrier or departure-time bucket; if no such entry exists, fall back to
-  //    any signature-distinct value-pool entry, then to the cheapest overall.
+  // 2) Best Value = cheapest among 0/1-stop offers. If that natural top has a
+  //    signature collision with Best Price, walk for a candidate also
+  //    differing by carrier / departure-time bucket / shorter layover; on
+  //    failure, fall back to the value pool's natural top (signature-distinct
+  //    but may share attributes), and ultimately to the cheapest overall.
   const bestValue =
-    pickDistinct(sortedByValue, takenSigs, picks.map((p) => p.offer), true) ??
-    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer), false);
+    pickDistinct(sortedByValue, takenSigs, picks.map((p) => p.offer)) ??
+    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer));
   if (bestValue) {
     picks.push({ offer: bestValue, label: "Best Value" });
     takenSigs.add(offerFlightSignature(bestValue));
   }
 
-  // 3) Fastest = shortest total travel time, signature-distinct from both
-  //    above. On collision, prefer a candidate differing by carrier or
-  //    departure-time bucket from BOTH prior picks.
+  // 3) Fastest = shortest total door-to-door time. Same collision/walk
+  //    semantics as Best Value, against BOTH prior picks.
   const fastest =
-    pickDistinct(sortedByDuration, takenSigs, picks.map((p) => p.offer), true) ??
-    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer), false);
+    pickDistinct(sortedByDuration, takenSigs, picks.map((p) => p.offer)) ??
+    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer));
   if (fastest) {
     picks.push({ offer: fastest, label: "Fastest" });
     takenSigs.add(offerFlightSignature(fastest));
