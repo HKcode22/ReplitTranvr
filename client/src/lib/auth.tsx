@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const registerMutation = useMutation({
-    mutationFn: async (data: { email: string; password: string; firstName: string; lastName: string; claimToken?: string }) => {
+    mutationFn: async (data: { email: string; password: string; firstName: string; lastName: string; phone?: string; claimToken?: string }) => {
       const res = await apiRequest("POST", "/api/auth/register", data);
       return res.json();
     },
