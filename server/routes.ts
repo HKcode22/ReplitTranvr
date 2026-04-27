@@ -3124,7 +3124,63 @@ export async function registerRoutes(
     };
   }
 
-  function parseTravelDetailsFromTranscript(transcript: string | null, summary: string | null): {
+  // Normalize Bland's post-call analysis_schema output into the same shape as
+  // parseStructuredTravelBlock. Bland returns the analysis as a plain object
+  // matching the schema keys (with values typed as strings/numbers/null per
+  // the field descriptions). Returns null if analysis is absent or unusable.
+  function normalizeBlandAnalysis(analysis: any): {
+    origin: string | null;
+    destination: string | null;
+    departureDate: string | null;
+    returnDate: string | null;
+    passengers: number | null;
+    cabinClass: string | null;
+    budget: number | null;
+    email: string | null;
+  } | null {
+    if (!analysis || typeof analysis !== "object") return null;
+    const normIata = (v: any): string | null => {
+      if (typeof v !== "string") return null;
+      const t = v.trim().toUpperCase();
+      return /^[A-Z]{3}$/.test(t) ? t : null;
+    };
+    const normDate = (v: any): string | null => {
+      if (typeof v !== "string") return null;
+      const t = v.trim();
+      return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
+    };
+    const normCabin = (v: any): string | null => {
+      if (typeof v !== "string") return null;
+      const t = v.trim().toLowerCase().replace(/[\s-]+/g, "_");
+      return ["economy", "premium_economy", "business", "first"].includes(t) ? t : null;
+    };
+    const normPax = (v: any): number | null => {
+      const n = typeof v === "number" ? v : parseInt(String(v ?? ""), 10);
+      return Number.isFinite(n) && n >= 1 && n <= 20 ? n : null;
+    };
+    const normBudget = (v: any): number | null => {
+      if (v === null || v === undefined || v === "") return null;
+      const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[^0-9.]/g, ""));
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    const normEmail = (v: any): string | null => {
+      if (typeof v !== "string") return null;
+      const t = v.trim().toLowerCase();
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) ? t : null;
+    };
+    return {
+      origin: normIata(analysis.origin_iata),
+      destination: normIata(analysis.destination_iata),
+      departureDate: normDate(analysis.departure_date),
+      returnDate: normDate(analysis.return_date),
+      passengers: normPax(analysis.passengers),
+      cabinClass: normCabin(analysis.cabin_class),
+      budget: normBudget(analysis.budget_usd),
+      email: normEmail(analysis.email),
+    };
+  }
+
+  function parseTravelDetailsFromTranscript(transcript: string | null, summary: string | null, analysis?: any): {
     origin: string | null;
     destination: string | null;
     email: string | null;
@@ -3137,19 +3193,35 @@ export async function registerRoutes(
   } {
     const originalText = [summary, transcript].filter(Boolean).join("\n");
     const text = originalText.toLowerCase();
-    if (!text) return { origin: null, destination: null, email: null, departureDate: null, returnDate: null, passengers: 1, cabinClass: "economy", budget: null, sources: {} };
+    if (!text && !analysis) return { origin: null, destination: null, email: null, departureDate: null, returnDate: null, passengers: 1, cabinClass: "economy", budget: null, sources: {} };
 
     const sources: Record<string, string> = {};
 
-    // Step -1: prefer the structured <TRAVEL_DETAILS> JSON block emitted by the Bland AI
-    // agent. This is the most reliable signal because the agent has already confirmed
-    // each detail with the traveler in-call, including disambiguating multi-airport cities.
+    // Highest priority: Bland's post-call analysis_schema output. It runs as a
+    // separate LLM pass over the transcript that the caller never hears, so
+    // the live agent's prompt no longer carries any JSON example. Falls back
+    // to the legacy <TRAVEL_DETAILS> block (for in-flight calls dispatched
+    // before this change) and then to regex heuristics over the transcript.
+    const blandAnalysis = normalizeBlandAnalysis(analysis);
     const structured = parseStructuredTravelBlock(originalText);
+    const pickField = <K extends keyof NonNullable<typeof blandAnalysis>>(
+      key: K,
+    ): { value: NonNullable<typeof blandAnalysis>[K] | null; source: string | null } => {
+      if (blandAnalysis && blandAnalysis[key] !== null && blandAnalysis[key] !== undefined) {
+        return { value: blandAnalysis[key], source: "bland_analysis" };
+      }
+      if (structured && structured[key as keyof typeof structured] !== null && structured[key as keyof typeof structured] !== undefined) {
+        return { value: structured[key as keyof typeof structured] as any, source: "structured_block" };
+      }
+      return { value: null, source: null };
+    };
 
-    let origin: string | null = structured?.origin ?? null;
-    let destination: string | null = structured?.destination ?? null;
-    if (origin) sources.origin = "structured_block";
-    if (destination) sources.destination = "structured_block";
+    const originPick = pickField("origin");
+    const destPick = pickField("destination");
+    let origin: string | null = originPick.value as string | null;
+    let destination: string | null = destPick.value as string | null;
+    if (originPick.source) sources.origin = originPick.source;
+    if (destPick.source) sources.destination = destPick.source;
 
     const COMMON_WORDS_SET = new Set(["THE","AND","FOR","ARE","NOT","YOU","ALL","CAN","HER","WAS","ONE","OUR","OUT","HAS","HIS","HOW","ITS","MAY","NEW","NOW","OLD","SEE","WAY","WHO","DID","GET","HIM","LET","SAY","SHE","TOO","USE","JAN","FEB","MAR","APR","JUN","JUL","AUG","SEP","OCT","NOV","DEC","BUT","END","SET","RUN","TRY","ANY","DAY","GOT","PUT","OWN","WHY","BIG","FEW","ASK","MAN","TWO","YET","YES","PER","ADD","AGO","AGE","AID","AIM","AIR","BAD","BAR","BED","BIT","BOX","BOY","BUS","BUY","CAR","CUT","DOG","DRY","DUE","EAR","EAT","ERA","EYE","FAR","FAT","FIT","FLY","FUN","GAP","GAS","GUN","HAD","HIT","HOT","ICE","ILL","JOB","JOY","KEY","LAW","LAY","LED","LEG","LIE","LOT","LOW","MAP","MET","MIX","NOR","ODD","OIL","PAY","PEN","PIE","PIN","PIT","POP","RAW","RED","RID","ROW","SAD","SAT","SIT","SIX","SKI","SKY","SON","SUM","TAX","TEN","TIE","TIN","TIP","TOP","VAN","VIA","WAR","WEB","WET","WIN","WON"]);
 
@@ -3290,10 +3362,10 @@ export async function registerRoutes(
     if (origin && !sources.origin) sources.origin = "regex";
     if (destination && !sources.destination) sources.destination = "regex";
 
-    let departureDate: string | null = structured?.departureDate ?? null;
-    let returnDate: string | null = structured?.returnDate ?? null;
-    if (departureDate) sources.departureDate = "structured_block";
-    if (returnDate) sources.returnDate = "structured_block";
+    let departureDate: string | null = blandAnalysis?.departureDate ?? structured?.departureDate ?? null;
+    let returnDate: string | null = blandAnalysis?.returnDate ?? structured?.returnDate ?? null;
+    if (departureDate) sources.departureDate = blandAnalysis?.departureDate ? "bland_analysis" : "structured_block";
+    if (returnDate) sources.returnDate = blandAnalysis?.returnDate ? "bland_analysis" : "structured_block";
 
     if (!departureDate || !returnDate) {
       const datePattern = /(\d{4}-\d{2}-\d{2})/g;
@@ -3362,9 +3434,10 @@ export async function registerRoutes(
       }
     }
 
-    let passengers = structured?.passengers ?? 1;
-    if (structured?.passengers) sources.passengers = "structured_block";
-    if (!structured?.passengers) {
+    let passengers = blandAnalysis?.passengers ?? structured?.passengers ?? 1;
+    if (blandAnalysis?.passengers) sources.passengers = "bland_analysis";
+    else if (structured?.passengers) sources.passengers = "structured_block";
+    if (!blandAnalysis?.passengers && !structured?.passengers) {
       const paxPatterns = [
         /(\d+)\s*(?:passengers?|travelers?|travellers?|people|adults?|persons?)/i,
         /(?:passengers?|travelers?|travellers?|people|adults?|persons?)(?:\s*:\s*|\s+)(\d+)/i,
@@ -3383,9 +3456,10 @@ export async function registerRoutes(
     // Cabin class: look for affirmative preference statements first to avoid matching
     // the AI agent's option list (e.g. "economy, business, or first class?").
     // Summary is more reliable than raw transcript, so check it first.
-    let cabinClass = structured?.cabinClass ?? "economy";
-    if (structured?.cabinClass) sources.cabinClass = "structured_block";
-    if (!structured?.cabinClass) {
+    let cabinClass = blandAnalysis?.cabinClass ?? structured?.cabinClass ?? "economy";
+    if (blandAnalysis?.cabinClass) sources.cabinClass = "bland_analysis";
+    else if (structured?.cabinClass) sources.cabinClass = "structured_block";
+    if (!blandAnalysis?.cabinClass && !structured?.cabinClass) {
       const affirmativePrefix = /(?:want(?:s|ed)?|prefer(?:s|red)?|request(?:s|ed)?|chose?|choose|go(?:ing)?\s+with|book(?:s|ed|ing)?|like[sd]?|select(?:s|ed)?|opted?\s+for|confirmed?|fly(?:ing)?)\s+(?:an?\s+)?/i;
       const findCabinInText = (t: string): string | null => {
         if (new RegExp(affirmativePrefix.source + /\bfirst[\s-]class\b/.source, "i").test(t)) return "first";
@@ -3407,8 +3481,9 @@ export async function registerRoutes(
       }
     }
 
-    let budget: number | null = structured?.budget ?? null;
-    if (structured?.budget) sources.budget = "structured_block";
+    let budget: number | null = blandAnalysis?.budget ?? structured?.budget ?? null;
+    if (blandAnalysis?.budget) sources.budget = "bland_analysis";
+    else if (structured?.budget) sources.budget = "structured_block";
     if (!budget) {
       const budgetPatterns = [
         /\$\s*([\d,]+(?:\.\d{2})?)/,
@@ -3425,8 +3500,9 @@ export async function registerRoutes(
       }
     }
 
-    let email: string | null = structured?.email ?? null;
-    if (email) sources.email = "structured_block";
+    let email: string | null = blandAnalysis?.email ?? structured?.email ?? null;
+    if (blandAnalysis?.email) sources.email = "bland_analysis";
+    else if (email) sources.email = "structured_block";
 
     return { origin, destination, email, departureDate, returnDate, passengers, cabinClass, budget, sources };
   }
@@ -3439,7 +3515,8 @@ export async function registerRoutes(
     callRequestId: number,
     userId: string,
     summary: string | null,
-    transcript: string | null
+    transcript: string | null,
+    analysis?: any,
   ): void {
     if (proposalGenerationInFlight.has(callRequestId)) {
       console.log(
@@ -3448,7 +3525,7 @@ export async function registerRoutes(
       return;
     }
     proposalGenerationInFlight.add(callRequestId);
-    generateProposalFromCall(callRequestId, userId, summary, transcript)
+    generateProposalFromCall(callRequestId, userId, summary, transcript, undefined, analysis)
       .catch((err) => {
         console.error("Auto-proposal generation error:", err);
       })
@@ -3463,6 +3540,7 @@ export async function registerRoutes(
     callSummary: string | null,
     callTranscript?: string | null,
     override?: { details: VerifierParsedDetails; skipVerification: true },
+    callAnalysis?: any,
   ) {
     const callRequest = await storage.getCallRequest(callRequestId);
     if (!callRequest) {
@@ -3497,11 +3575,19 @@ export async function registerRoutes(
 
     let transcript = callTranscript ?? null;
     let summary = callSummary;
-    if (transcript === null || summary === null) {
+    let analysis: any = callAnalysis ?? null;
+    if (transcript === null || summary === null || analysis === null) {
       const blandCalls = await storage.getBlandCallsByCallRequest(callRequestId);
       const completedCall = blandCalls?.find(c => c.status === "completed");
       if (transcript === null) transcript = completedCall?.transcript || null;
       if (summary === null) summary = completedCall?.summary || null;
+      // Recover the Bland analysis_schema output stashed in variables.__analysis
+      // for re-trigger paths (manual regenerate, Claude verifier loop) that
+      // didn't receive analysis as an explicit argument.
+      if (analysis === null && completedCall?.variables) {
+        const v: any = completedCall.variables;
+        analysis = v?.__analysis ?? null;
+      }
     }
 
     if (!transcript && !summary) {
@@ -3514,7 +3600,7 @@ export async function registerRoutes(
       details = override.details;
       console.log(`[post-call ${callRequestId}] using Claude-corrected details:`, JSON.stringify(details));
     } else {
-      details = parseTravelDetailsFromTranscript(transcript, summary);
+      details = parseTravelDetailsFromTranscript(transcript, summary, analysis);
       console.log(`Parsed travel details from transcript for call ${callRequestId}:`, JSON.stringify(details));
 
       // Surface ambiguity so we can monitor parser accuracy: if the destination/origin
@@ -4277,7 +4363,19 @@ export async function registerRoutes(
       if (payload.transcript) updateData.transcriptJson = payload.transcript;
       if (payload.recording_url) updateData.recordingUrl = payload.recording_url;
       if (payload.summary) updateData.summary = payload.summary;
-      if (payload.variables) updateData.variables = payload.variables;
+      // Stash Bland's analysis_schema output under variables.__analysis so
+      // re-trigger paths (manual regenerate, Claude verifier loop) can recover
+      // it later without depending on this webhook still being in scope.
+      // Bland's docs use `analysis` as the canonical key, but accept alternates
+      // defensively in case the payload shape varies across event types.
+      const blandAnalysis =
+        payload.analysis ?? payload.analysis_schema ?? payload.analysisSchema ?? null;
+      if (payload.variables || blandAnalysis) {
+        updateData.variables = {
+          ...(payload.variables || {}),
+          ...(blandAnalysis ? { __analysis: blandAnalysis } : {}),
+        };
+      }
 
       if (payload.status === "completed" || payload.event === "call.ended") {
         updateData.status = "completed";
@@ -4360,7 +4458,8 @@ export async function registerRoutes(
             blandCall.callRequestId,
             blandCall.userId,
             finalSummary,
-            finalTranscript
+            finalTranscript,
+            blandAnalysis ?? (persisted?.variables as any)?.__analysis ?? null,
           );
         }
       }

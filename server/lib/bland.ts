@@ -86,6 +86,21 @@ export async function dispatchCall(opts: DispatchCallOptions): Promise<{ callId:
     endpoint_sensitivity: 0.5,
     end_call_after_speech: true,
     end_call_phrases: ["GOODBYE", "Safe travels", "have a great trip"],
+    // Bland runs analysis_schema as a SEPARATE post-call LLM pass over the
+    // transcript. The live agent never sees these field names, so it can't
+    // accidentally read "iata", "null", or any JSON aloud at end of call.
+    analysis_schema: {
+      origin_iata: "3-letter IATA airport code of the departure airport in uppercase (e.g., STL, JFK, LAX). null if not confirmed in the call.",
+      origin_airport_name: "Full name of the departure airport (e.g., 'St. Louis Lambert International'). null if unknown.",
+      destination_iata: "3-letter IATA airport code of the arrival airport in uppercase. null if not confirmed in the call.",
+      destination_airport_name: "Full name of the arrival airport. null if unknown.",
+      departure_date: "Departure date in YYYY-MM-DD format. null if not given.",
+      return_date: "Return date in YYYY-MM-DD format. null for one-way trips or if not given.",
+      passengers: "Number of travelers as an integer. Default 1 if not mentioned.",
+      cabin_class: "One of: economy, premium_economy, business, first. Default economy if not mentioned.",
+      budget_usd: "Total trip budget in USD as a number with no currency symbol. null if not mentioned.",
+      email: "Email address the traveler wants flight options sent to. null if not given.",
+    },
   };
 
   if (opts.dynamicDataUrl) {
@@ -226,27 +241,5 @@ IMPORTANT RULES:
 - For destination and origin, do not grill the traveler about specific airports. Use the assume-and-offer pattern above. Single-airport cities get no airport question at all.
 - Do not invent information. If you don't know something, say you'll look into it.
 - After your spoken closing line, say the word GOODBYE and stop speaking immediately. Do not wait for the user to respond.
-- After saying GOODBYE stop immediately and do not speak another word. Do not say "Thank you for calling." Do not add any filler after GOODBYE. The call ends the moment GOODBYE is spoken.
-
-POST-CALL STRUCTURED SUMMARY (REQUIRED):
-After your spoken summary to the traveler, you MUST emit a single machine-readable block exactly matching the format below, on its own lines, with no extra commentary inside the tags. Use null for anything truly unknown. Use the confirmed three-letter IATA airport codes (not city names). Dates must be in YYYY-MM-DD format. Cabin class must be one of: economy, premium_economy, business, first. Budget is a number in USD with no currency symbol or commas. For the email field, if I gave you an email above in KNOWN INFORMATION, echo that exact value; otherwise use the email the traveler gave you during the call.
-
-CRITICAL: Everything after the word GOODBYE is a silent machine-readable system output processed automatically by our servers. You must say GOODBYE and completely stop speaking before this block appears. Never read any part of this block aloud. Never speak JSON, curly braces, field names, or any structured data to the caller under any circumstances.
-
-<TRAVEL_DETAILS>
-{
-  "origin_iata": "STL",
-  "origin_airport_name": "St. Louis Lambert International",
-  "destination_iata": "LAX",
-  "destination_airport_name": "Los Angeles International",
-  "departure_date": "2026-05-12",
-  "return_date": "2026-05-19",
-  "passengers": 1,
-  "cabin_class": "economy",
-  "budget_usd": null,
-  "email": "traveler@example.com"
-}
-</TRAVEL_DETAILS>
-
-This block is parsed by an automated system and must always be present at the very end of the call summary, even if some fields are null.`;
+- After saying GOODBYE stop immediately and do not speak another word. Do not say "Thank you for calling." Do not add any filler after GOODBYE. The call ends the moment GOODBYE is spoken.`;
 }
