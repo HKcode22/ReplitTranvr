@@ -1,0 +1,34 @@
+IMPORTANT: This codebase is in active use and mostly working. Read every relevant file in full before touching anything. Make only minimal targeted changes. Do not break any existing functionality.
+Read these files in full before starting:
+
+server/routes.ts
+server/storage.ts
+client/src/pages/proposal-detail.tsx
+client/src/App.tsx or wherever routing is defined
+The existing authenticated booking page/component
+
+Fix 1 — Email speed
+In generateProposalFromCall, find where the email is being sent after proposal generation. The email is taking too long because it is waiting for too many sequential steps before sending. Restructure so that the moment Duffel returns flight results, the email send is triggered immediately in parallel with any remaining proposal saving logic. Do not wait for verification, database writes, or any other steps to complete before firing the email. Use Promise.all or fire-and-forget with .catch logging where appropriate so nothing blocks the email from going out within seconds of the call ending.
+Fix 2 — Best Price and Best Value must be different flights
+In the 3 options selection logic, enforce that all 3 options are always distinct flights. Specifically:
+
+Best Price: cheapest available
+Best Value: must be a different flight from Best Price. Define as fewest stops with reasonable price. If the fewest-stops flight is the same as cheapest, pick the next best option by value — could be a different time of day, different airline, or slightly higher price with meaningfully better routing. Never show the same flight twice.
+Fastest: shortest total travel time, must also be different from both above. If it would duplicate one of them, pick the next fastest distinct option.
+
+Add a deduplication check by flight number and departure time before finalizing the 3 options.
+Fix 3 — Booking link goes to real Travnr booking page
+The "Book This Flight" links in the email currently point somewhere that shows a Replit placeholder page. Fix this so every booking link in the email goes to the actual Travnr website at the correct URL — for example https://travnr.com/book/[option-token] or whatever the production domain is.
+Add a public route GET /api/guest-booking/:token that looks up the flight option by its token and returns the offer ID and proposal details needed to render the booking page.
+The booking page at /book/[token] should:
+
+Work for both guests and logged in users
+Show the selected flight summary at the top — airline, route, times, price, baggage, cabin class
+Use the exact same booking UI and Stripe PaymentElement that exists for authenticated users already — do not build a new payment flow, reuse what is already there
+After payment, run the same manual/automatic threshold check already in the codebase
+If automatic: complete Duffel booking, send confirmation email, show confirmation screen
+If manual: send request to Hello@travnr.com, show user "We're confirming your flight — you'll receive confirmation within 2 hours"
+At the bottom of the confirmation screen for guest users: "Want to manage your trip and get disruption alerts? Create your Travnr account" with a pre-filled signup link
+
+Check what the existing authenticated booking flow looks like and match it exactly in terms of functionality. The only difference is this page works without requiring a login first.
+Do not change the existing authenticated booking flow. Do not change any Duffel search logic beyond the deduplication fix. After completing summarize every file changed and every new route added.
