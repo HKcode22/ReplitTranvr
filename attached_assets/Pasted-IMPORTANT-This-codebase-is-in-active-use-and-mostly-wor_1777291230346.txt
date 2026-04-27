@@ -1,0 +1,78 @@
+IMPORTANT: This codebase is in active use and mostly working. Read every relevant file in full before touching anything. Make only minimal targeted changes. Do not break any existing functionality for logged-in users.
+Read these files in full before starting:
+
+server/routes.ts
+server/storage.ts
+shared/schema.ts
+server/lib/bland.ts
+client/src/pages/proposal-detail.tsx
+client/src/App.tsx or wherever routing is defined
+Any existing email template files
+Any existing Stripe payment components
+
+Here is full context on Travnr and what we are building:
+Travnr is an AI travel concierge. Users can request a call through the website where they submit a form including their email and phone number, or they can call a Travnr inbound number directly. The AI has a conversation, collects travel preferences, and generates a proposal with flight options. We are restructuring the flow so no account is required to get value — the experience is: call → AI conversation → email with 3 flight options → click to book → account offered post-booking. The dashboard and existing account flow stays intact for existing users.
+Change 1 — Phone number to email association
+When a user submits any form on the website that includes both a phone number and an email address — whether or not they create an account — store that phone-to-email mapping in the database. Add a phone_email_map table with fields: phone (normalized to E.164 format, unique), email, createdAt, updatedAt.
+When an inbound call comes in, look up the caller's phone number in this table first. If a match is found, use that email for the proposal without asking. If no match is found and the caller has no account, only then ask for their email address at the end of the call as a last resort. Frame it naturally: "What email should I send your flight options to?" — not as part of the standard flow but only when genuinely needed.
+Change 2 — Updated Bland AI prompt
+Update buildTravelConciergePrompt in server/lib/bland.ts:
+
+Assume economy class unless the user specifies otherwise
+Assume 1 passenger unless told otherwise
+Assume flexible times unless told otherwise
+Ask only for what is genuinely needed: where they want to go, where they're flying from, and their travel dates
+Do not aggressively clarify airports — if the user says Chicago assume O'Hare, if they say New York assume JFK, if they say LA assume LAX. Only clarify if the city is genuinely ambiguous with no obvious primary airport
+Do not ask about loyalty programs, seat preferences, dietary needs, or other secondary details on the first call
+If the email was pre-loaded from the phone lookup, do not ask for it
+If no email was found via phone lookup, ask for it naturally at the end: "What email should I send your options to?" — only once, do not repeat
+Close with: "Perfect — you'll have your options in your inbox within a minute. Talk soon." then GOODBYE immediately
+Update the <TRAVEL_DETAILS> JSON block to include an email field (can be null if not collected and not found via phone lookup)
+
+Change 3 — Guest proposal database and public page
+Add a guest_proposals table: id, token (unique random UUID), email, originIata, destinationIata, departureDate, returnDate, passengers, cabinClass, proposalData (JSON with 3 flight options), status (pending/viewed/booked/expired), createdAt, expiresAt (24 hours after creation).
+Each of the 3 flight options in proposalData should have its own unique booking token so each option has its own direct booking link.
+Add public route GET /api/guest-proposal/:token — no auth required. Returns proposal data if not expired. If expired, automatically trigger a fresh Duffel search for the same route in the background, generate a new guest proposal with a new token, send it to the user's email immediately, and return { expired: true, refreshed: true } so the frontend can show the right message.
+Add public page client/src/pages/guest-proposal.tsx:
+
+Light, premium design — white background, clean typography, teal accents consistent with existing Travnr color scheme. Beautiful and trustworthy. Travnr logo at top.
+Shows trip summary: route, dates, passengers, cabin class
+Shows 3 flight option cards labeled "Best Price", "Best Value", and "Fastest", each with: airline name and logo if available, departure and arrival times, flight duration, number of stops, price, baggage info, cancellation policy, and a prominent "Book This Flight" button
+Each Book button links to its own unique URL like travnr.com/book/[option-token]
+If proposal is expired, show a clean warm message: "Your options have been refreshed with the latest prices — check your inbox." Do not show a dead end.
+No login required to view any of this
+
+Change 4 — The 3 flight options logic
+When generating options for the guest proposal, always return exactly 3 options:
+
+Option 1 "Best Price": Cheapest available regardless of stops
+Option 2 "Best Value": Nonstop or fewest stops with price no more than 30% above cheapest
+Option 3 "Fastest": Shortest total travel time regardless of price
+
+If fewer than 3 distinct options exist fill with next best alternatives. Label each clearly on the proposal page and in the email.
+Change 5 — Booking flow with manual/automatic threshold
+Add public page client/src/pages/guest-booking.tsx:
+
+Light, premium design consistent with the guest proposal page — white background, teal accents, clean typography, Travnr logo. Beautiful and consistent, not dark.
+Shows selected flight summary at the top
+Collects passenger details: full name, date of birth, passport number if required by Duffel
+Payment via existing Stripe PaymentElement flow styled to match the light color scheme
+
+After payment is collected, check total amount against the existing manual booking threshold already in the codebase:
+
+If below threshold: process automatically via Duffel, send confirmation email immediately
+If above threshold: do not charge yet, send email to Hello@travnr.com with full booking details and passenger info, show user: "We're processing your booking — you'll receive your confirmation within 2 hours." Send user an email confirming their request is being handled warmly.
+
+Change 6 — Post-call email with 3 options
+After generateProposalFromCall runs and verification passes, send an HTML email to the user's email address:
+Subject: "Your flight options — [Origin] to [Destination]"
+Email design: light background, Travnr logo, clean and premium. Show 3 flight option cards with airline, times, duration, stops, price, and a "Book This Flight" button per option linking to travnr.com/book/[option-token]. Each option clearly labeled Best Price, Best Value, Fastest. Footer: "Options valid for 24 hours. Questions? Reply to this email." Signed as "The Travnr Team." Consistent with existing email templates in the codebase.
+Change 7 — Returning caller recognition
+In the Bland dynamic data endpoint, when looking up user context by phone number, also check the phone_email_map table and guest_proposals table. If the caller has a previous unbooked guest proposal less than 24 hours old, include that context so the AI can say: "I see we sent you some options for Denver earlier — did you want to revisit those or plan something new?" If the previous proposal has expired, the AI should acknowledge it and move forward with collecting fresh details.
+Change 8 — Post-booking account creation
+In the booking confirmation email after a successful guest booking, include a warm section at the bottom: "Want to track your trip and get disruption alerts? Set up your Travnr account." Link to travnr.com/signup?email=[encoded_email]&name=[encoded_name]&phone=[encoded_phone] so the signup form is pre-filled and takes under 10 seconds to complete.
+Change 9 — Manual booking notification to user
+When a booking goes to manual processing, show the user a clean message on screen and send them an email: "We've received your booking request and are confirming your flight. You'll receive your full confirmation within 2 hours. Thank you for choosing Travnr." Warm, reassuring, signed as "The Travnr Team." Make sure the user never sees a broken or confusing state.
+Change 10 — Keep everything existing intact
+Do not change anything about the existing authenticated user flow. Dashboard, existing proposals, account-based call requests, existing booking flow — all must work exactly as before. All changes are purely additive. Existing logged-in users should notice nothing different.
+After completing, summarize every file changed, every new endpoint added, every new page added, every new database table added, and flag anything that needs a new environment variable or Replit secret.
