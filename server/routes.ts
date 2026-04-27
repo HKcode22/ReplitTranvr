@@ -4931,57 +4931,30 @@ export async function registerRoutes(
       const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
 
       if (!balanceSufficient) {
-        // ---- MANUAL FALLBACK PATH ----
-        const payment = await storage.createPayment({
+        // Reuse the shared manual-fallback helper so guest + logged-in flows
+        // stay in sync (creates payment row, in-app notification, admin email).
+        await createManualBookingFallback({
           userId: guestUser.id,
+          userEmail: contact.email,
           proposalId: null,
+          proposalTitle: routeLabel,
+          offerId: offer.id,
+          fullOffer: offer,
+          passengerMappings,
+          paidPiAmountCents: pi.amount,
           stripePaymentIntentId: paymentIntentId,
-          duffelOrderId: null,
-          duffelBookingRef: null,
-          amount: chargedTotalAmount,
-          currency: currencyLower,
-          status: "pending_manual",
-          manualBookingDetails: {
-            reason: "duffel_balance_insufficient",
-            source: "guest_booking",
-            offerId: offer.id,
-            totalAmount: offer.total_amount,
-            currency: offer.total_currency,
-            slices: sliceSummary,
-            passengers: passengerMappings,
-            routeSummary: routeLabel,
-            guestProposalId: row.id,
-            optionToken,
-            guestEmail: contact.email,
-            guestPhone: contact.phone,
-            capturedAt: new Date().toISOString(),
-          },
+          endpoint: "POST /api/guest-booking/:optionToken/confirm",
         });
 
-        // INTENTIONAL: do NOT roll back the claim if this status write fails.
-        // At this point Stripe has captured the payment and the manual-booking
-        // record + admin alert below will fire — the booking is real. A failed
-        // status flag becomes an admin cleanup task (row stuck in "booking"),
-        // not a financial issue. Logging at error level so it surfaces.
+        // Mark the proposal as booked. We do not roll back on a failed write
+        // here because the payment + manual-fallback record above already
+        // succeeded; a stuck status row is an admin cleanup task only.
         await storage.updateGuestProposalStatus(row.id, "booked").catch((e) =>
-          console.error("[guest-booking] CRITICAL: payment captured + manual booking queued but failed to mark proposal booked. Row stuck in 'booking' state, manual DB cleanup required:", e?.message || e)
+          console.error("[guest-booking] CRITICAL: manual fallback queued but failed to mark proposal booked:", e?.message || e)
         );
         bookingComplete = true;
 
-        // Admin alert (reuses the existing helper).
-        sendManualBookingAdminAlert({
-          endpoint: "POST /api/guest-booking/:optionToken/confirm",
-          userId: guestUser.id,
-          userEmail: contact.email,
-          paymentId: payment.id,
-          stripePaymentIntentId: paymentIntentId,
-          offerId: offer.id,
-          proposalId: null,
-          amount: chargedTotalAmount,
-          currency: currencyLower,
-        }).catch((e) => console.error("[guest-booking] admin alert failed:", e));
-
-        // Warm holding email to the guest.
+        // Warm holding email to the guest (specific to the guest flow).
         const { subject, html } = buildGuestBookingHoldingEmail({
           firstName: contact.firstName,
           amount: chargedTotalAmount,
@@ -5020,18 +4993,14 @@ export async function registerRoutes(
         status: "paid",
       });
 
-      // INTENTIONAL: do NOT roll back the claim if this status write fails.
-      // Stripe captured the payment AND the Duffel order is created above —
-      // the booking is real. A failed status flag becomes an admin cleanup
-      // task (row stuck in "booking"), not a financial issue. We log loudly
-      // so it surfaces, then proceed to send the confirmation email.
+      // Payment + Duffel order have succeeded; a failed status write is an
+      // admin cleanup task, not a financial issue. Do not roll back here.
       await storage.updateGuestProposalStatus(row.id, "booked").catch((e) =>
-        console.error("[guest-booking] CRITICAL: payment captured + Duffel order " + orderData.id + " booked but failed to mark proposal booked. Row stuck in 'booking' state, manual DB cleanup required:", e?.message || e)
+        console.error(`[guest-booking] order ${orderData.id} booked but failed to mark proposal booked:`, e?.message || e)
       );
       bookingComplete = true;
 
-      // Calendar entries — same helper as logged-in flow. Linked to the
-      // placeholder user so they auto-populate the calendar after signup.
+      // Calendar entries linked to the placeholder user so they appear after signup.
       await createCalendarEntriesFromOrder({
         userId: guestUser.id,
         paymentId: payment.id,
@@ -5039,13 +5008,13 @@ export async function registerRoutes(
         orderData,
       }).catch((e) => console.warn("[guest-booking] calendar entry failed:", e?.message || e));
 
-      // Confirmation email with pre-filled signup CTA.
-      // Pre-filled signup URL. We include `claim=<verificationToken>` ONLY for
-      // a freshly-created placeholder user (createdNew === true) — that token
-      // proves email ownership and lets the register endpoint promote the
-      // placeholder. For an existing real account we never expose any
-      // verificationToken; the user just logs in.
-      const claimQuery = guestUserCreated && (guestUser as any).verificationToken
+      // Confirmation email with pre-filled signup CTA. We include
+      // `claim=<verificationToken>` for any unverified placeholder (whether
+      // freshly created or one left over from a prior guest booking) so the
+      // CTA is never broken when the same email books twice. The token is
+      // only ever mailed to that email's owner, and verified accounts never
+      // receive a claim link — they just log in.
+      const claimQuery = !guestUser.emailVerified && (guestUser as any).verificationToken
         ? `&claim=${encodeURIComponent((guestUser as any).verificationToken)}`
         : "";
       const signupUrl = `${baseUrl}/auth?mode=register&email=${encodeURIComponent(contact.email)}&name=${encodeURIComponent(`${contact.firstName} ${contact.lastName}`.trim())}&phone=${encodeURIComponent(contact.phone)}${claimQuery}`;
