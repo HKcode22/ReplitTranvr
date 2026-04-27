@@ -3124,11 +3124,25 @@ export async function registerRoutes(
     };
   }
 
-  // Normalize Bland's post-call analysis_schema output into the same shape as
-  // parseStructuredTravelBlock. Bland returns the analysis as a plain object
-  // matching the schema keys (with values typed as strings/numbers/null per
-  // the field descriptions). Returns null if analysis is absent or unusable.
-  function normalizeBlandAnalysis(analysis: any): {
+  // Shape of Bland's post-call analysis_schema output. Every field is optional
+  // because Bland returns null (or omits) any field it could not determine
+  // from the transcript. Numeric fields can arrive as numbers or strings.
+  interface BlandAnalysisPayload {
+    origin_iata?: string | null;
+    origin_airport_name?: string | null;
+    destination_iata?: string | null;
+    destination_airport_name?: string | null;
+    departure_date?: string | null;
+    return_date?: string | null;
+    passengers?: number | string | null;
+    cabin_class?: string | null;
+    budget_usd?: number | string | null;
+    email?: string | null;
+  }
+
+  // Canonical normalized shape shared by parseStructuredTravelBlock and
+  // normalizeBlandAnalysis so the precedence logic can mix them safely.
+  interface NormalizedTravelDetails {
     origin: string | null;
     destination: string | null;
     departureDate: string | null;
@@ -3137,33 +3151,70 @@ export async function registerRoutes(
     cabinClass: string | null;
     budget: number | null;
     email: string | null;
-  } | null {
+  }
+
+  // Bland delivers the analysis_schema output under different keys depending
+  // on the event/version. Walk the known locations and return the first
+  // object-shaped match, so persistence + parsing don't silently miss it.
+  function extractAnalysisFromBlandPayload(payload: any): BlandAnalysisPayload | null {
+    if (!payload || typeof payload !== "object") return null;
+    const candidates: unknown[] = [
+      payload.analysis,
+      payload.summary?.analysis,
+      payload.analysis_schema,
+      payload.analysisSchema,
+    ];
+    for (const c of candidates) {
+      if (c && typeof c === "object" && !Array.isArray(c)) {
+        return c as BlandAnalysisPayload;
+      }
+    }
+    return null;
+  }
+
+  // Recover analysis from a persisted bland_calls.variables jsonb blob (the
+  // webhook stashes it under `__analysis`). Returns null when the column is
+  // empty or the sub-key isn't present.
+  function extractAnalysisFromVariables(variables: unknown): BlandAnalysisPayload | null {
+    if (!variables || typeof variables !== "object") return null;
+    const candidate = (variables as { __analysis?: unknown }).__analysis;
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+      return candidate as BlandAnalysisPayload;
+    }
+    return null;
+  }
+
+  // Normalize Bland's post-call analysis_schema output into the same shape as
+  // parseStructuredTravelBlock. Bland returns the analysis as a plain object
+  // matching the schema keys (with values typed as strings/numbers/null per
+  // the field descriptions). Returns null if analysis is absent or unusable.
+  function normalizeBlandAnalysis(analysis: BlandAnalysisPayload | null | undefined): NormalizedTravelDetails | null {
     if (!analysis || typeof analysis !== "object") return null;
-    const normIata = (v: any): string | null => {
+    const normIata = (v: unknown): string | null => {
       if (typeof v !== "string") return null;
       const t = v.trim().toUpperCase();
       return /^[A-Z]{3}$/.test(t) ? t : null;
     };
-    const normDate = (v: any): string | null => {
+    const normDate = (v: unknown): string | null => {
       if (typeof v !== "string") return null;
       const t = v.trim();
       return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
     };
-    const normCabin = (v: any): string | null => {
+    const normCabin = (v: unknown): string | null => {
       if (typeof v !== "string") return null;
       const t = v.trim().toLowerCase().replace(/[\s-]+/g, "_");
       return ["economy", "premium_economy", "business", "first"].includes(t) ? t : null;
     };
-    const normPax = (v: any): number | null => {
+    const normPax = (v: unknown): number | null => {
       const n = typeof v === "number" ? v : parseInt(String(v ?? ""), 10);
       return Number.isFinite(n) && n >= 1 && n <= 20 ? n : null;
     };
-    const normBudget = (v: any): number | null => {
+    const normBudget = (v: unknown): number | null => {
       if (v === null || v === undefined || v === "") return null;
       const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[^0-9.]/g, ""));
       return Number.isFinite(n) && n > 0 ? n : null;
     };
-    const normEmail = (v: any): string | null => {
+    const normEmail = (v: unknown): string | null => {
       if (typeof v !== "string") return null;
       const t = v.trim().toLowerCase();
       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) ? t : null;
@@ -3180,7 +3231,7 @@ export async function registerRoutes(
     };
   }
 
-  function parseTravelDetailsFromTranscript(transcript: string | null, summary: string | null, analysis?: any): {
+  function parseTravelDetailsFromTranscript(transcript: string | null, summary: string | null, analysis?: BlandAnalysisPayload | null): {
     origin: string | null;
     destination: string | null;
     email: string | null;
@@ -3202,24 +3253,24 @@ export async function registerRoutes(
     // the live agent's prompt no longer carries any JSON example. Falls back
     // to the legacy <TRAVEL_DETAILS> block (for in-flight calls dispatched
     // before this change) and then to regex heuristics over the transcript.
-    const blandAnalysis = normalizeBlandAnalysis(analysis);
-    const structured = parseStructuredTravelBlock(originalText);
-    const pickField = <K extends keyof NonNullable<typeof blandAnalysis>>(
+    const blandAnalysis: NormalizedTravelDetails | null = normalizeBlandAnalysis(analysis ?? null);
+    const structured: NormalizedTravelDetails | null = parseStructuredTravelBlock(originalText);
+    function pickField<K extends keyof NormalizedTravelDetails>(
       key: K,
-    ): { value: NonNullable<typeof blandAnalysis>[K] | null; source: string | null } => {
+    ): { value: NormalizedTravelDetails[K] | null; source: string | null } {
       if (blandAnalysis && blandAnalysis[key] !== null && blandAnalysis[key] !== undefined) {
         return { value: blandAnalysis[key], source: "bland_analysis" };
       }
-      if (structured && structured[key as keyof typeof structured] !== null && structured[key as keyof typeof structured] !== undefined) {
-        return { value: structured[key as keyof typeof structured] as any, source: "structured_block" };
+      if (structured && structured[key] !== null && structured[key] !== undefined) {
+        return { value: structured[key], source: "structured_block" };
       }
       return { value: null, source: null };
-    };
+    }
 
     const originPick = pickField("origin");
     const destPick = pickField("destination");
-    let origin: string | null = originPick.value as string | null;
-    let destination: string | null = destPick.value as string | null;
+    let origin: string | null = originPick.value;
+    let destination: string | null = destPick.value;
     if (originPick.source) sources.origin = originPick.source;
     if (destPick.source) sources.destination = destPick.source;
 
@@ -3516,7 +3567,7 @@ export async function registerRoutes(
     userId: string,
     summary: string | null,
     transcript: string | null,
-    analysis?: any,
+    analysis?: BlandAnalysisPayload | null,
   ): void {
     if (proposalGenerationInFlight.has(callRequestId)) {
       console.log(
@@ -3540,7 +3591,7 @@ export async function registerRoutes(
     callSummary: string | null,
     callTranscript?: string | null,
     override?: { details: VerifierParsedDetails; skipVerification: true },
-    callAnalysis?: any,
+    callAnalysis?: BlandAnalysisPayload | null,
   ) {
     const callRequest = await storage.getCallRequest(callRequestId);
     if (!callRequest) {
@@ -3575,7 +3626,7 @@ export async function registerRoutes(
 
     let transcript = callTranscript ?? null;
     let summary = callSummary;
-    let analysis: any = callAnalysis ?? null;
+    let analysis: BlandAnalysisPayload | null = callAnalysis ?? null;
     if (transcript === null || summary === null || analysis === null) {
       const blandCalls = await storage.getBlandCallsByCallRequest(callRequestId);
       const completedCall = blandCalls?.find(c => c.status === "completed");
@@ -3584,9 +3635,8 @@ export async function registerRoutes(
       // Recover the Bland analysis_schema output stashed in variables.__analysis
       // for re-trigger paths (manual regenerate, Claude verifier loop) that
       // didn't receive analysis as an explicit argument.
-      if (analysis === null && completedCall?.variables) {
-        const v: any = completedCall.variables;
-        analysis = v?.__analysis ?? null;
+      if (analysis === null) {
+        analysis = extractAnalysisFromVariables(completedCall?.variables);
       }
     }
 
@@ -4366,10 +4416,10 @@ export async function registerRoutes(
       // Stash Bland's analysis_schema output under variables.__analysis so
       // re-trigger paths (manual regenerate, Claude verifier loop) can recover
       // it later without depending on this webhook still being in scope.
-      // Bland's docs use `analysis` as the canonical key, but accept alternates
-      // defensively in case the payload shape varies across event types.
-      const blandAnalysis =
-        payload.analysis ?? payload.analysis_schema ?? payload.analysisSchema ?? null;
+      // Bland delivers analysis under multiple known keys depending on event
+      // type (`analysis`, `summary.analysis`, `analysis_schema`); the helper
+      // walks all of them so structured extraction never silently misses.
+      const blandAnalysis = extractAnalysisFromBlandPayload(payload);
       if (payload.variables || blandAnalysis) {
         updateData.variables = {
           ...(payload.variables || {}),
@@ -4459,7 +4509,7 @@ export async function registerRoutes(
             blandCall.userId,
             finalSummary,
             finalTranscript,
-            blandAnalysis ?? (persisted?.variables as any)?.__analysis ?? null,
+            blandAnalysis ?? extractAnalysisFromVariables(persisted?.variables),
           );
         }
       }
