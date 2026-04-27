@@ -53,6 +53,24 @@ async function blandRequest(method: string, path: string, body?: any): Promise<a
   }
 }
 
+// Shared travel-detail extraction schema used by both dispatched (outbound)
+// calls and the inbound call config endpoint. Bland runs this as a separate
+// post-call LLM pass over the transcript, never spoken to the caller.
+export function getTravelAnalysisSchema(): Record<string, string> {
+  return {
+    origin_iata: "3-letter IATA airport code of the departure airport in uppercase (e.g., STL, JFK, LAX). null if not confirmed in the call.",
+    origin_airport_name: "Full name of the departure airport (e.g., 'St. Louis Lambert International'). null if unknown.",
+    destination_iata: "3-letter IATA airport code of the arrival airport in uppercase. null if not confirmed in the call.",
+    destination_airport_name: "Full name of the arrival airport. null if unknown.",
+    departure_date: "Departure date in YYYY-MM-DD format. null if not given.",
+    return_date: "Return date in YYYY-MM-DD format. null for one-way trips or if not given.",
+    passengers: "Number of travelers as an integer. Default 1 if not mentioned.",
+    cabin_class: "One of: economy, premium_economy, business, first. Default economy if not mentioned.",
+    budget_usd: "Total trip budget in USD as a number with no currency symbol. null if not mentioned.",
+    email: "Email address the traveler wants flight options sent to. null if not given.",
+  };
+}
+
 export interface DispatchCallOptions {
   phoneNumber: string;
   task: string;
@@ -89,18 +107,7 @@ export async function dispatchCall(opts: DispatchCallOptions): Promise<{ callId:
     // Bland runs analysis_schema as a SEPARATE post-call LLM pass over the
     // transcript. The live agent never sees these field names, so it can't
     // accidentally read "iata", "null", or any JSON aloud at end of call.
-    analysis_schema: {
-      origin_iata: "3-letter IATA airport code of the departure airport in uppercase (e.g., STL, JFK, LAX). null if not confirmed in the call.",
-      origin_airport_name: "Full name of the departure airport (e.g., 'St. Louis Lambert International'). null if unknown.",
-      destination_iata: "3-letter IATA airport code of the arrival airport in uppercase. null if not confirmed in the call.",
-      destination_airport_name: "Full name of the arrival airport. null if unknown.",
-      departure_date: "Departure date in YYYY-MM-DD format. null if not given.",
-      return_date: "Return date in YYYY-MM-DD format. null for one-way trips or if not given.",
-      passengers: "Number of travelers as an integer. Default 1 if not mentioned.",
-      cabin_class: "One of: economy, premium_economy, business, first. Default economy if not mentioned.",
-      budget_usd: "Total trip budget in USD as a number with no currency symbol. null if not mentioned.",
-      email: "Email address the traveler wants flight options sent to. null if not given.",
-    },
+    analysis_schema: getTravelAnalysisSchema(),
   };
 
   if (opts.dynamicDataUrl) {

@@ -4318,6 +4318,10 @@ export async function registerRoutes(
         endpoint_sensitivity: 0.5,
         end_call_after_speech: true,
         end_call_phrases: ["GOODBYE", "Safe travels", "have a great trip"],
+        // Parity with the outbound dispatch path: post-call analysis_schema
+        // runs as a separate LLM pass so structured extraction works for
+        // inbound calls too, with no JSON in the live spoken prompt.
+        analysis_schema: bland.getTravelAnalysisSchema(),
         webhook: `${baseUrl}/api/bland/webhook`,
         webhook_events: ["call.ended"],
         dynamic_data: [{
@@ -4421,7 +4425,15 @@ export async function registerRoutes(
       // walks all of them so structured extraction never silently misses.
       const blandAnalysis = extractAnalysisFromBlandPayload(payload);
       if (payload.variables || blandAnalysis) {
+        // Merge order: prior persisted variables → payload.variables (if any)
+        // → analysis. This preserves earlier keys when a follow-up event
+        // arrives carrying only analysis (or only different variables), so
+        // we never accidentally drop data captured by a previous webhook.
+        const existing = (blandCall.variables && typeof blandCall.variables === "object")
+          ? (blandCall.variables as Record<string, unknown>)
+          : {};
         updateData.variables = {
+          ...existing,
           ...(payload.variables || {}),
           ...(blandAnalysis ? { __analysis: blandAnalysis } : {}),
         };
