@@ -3857,10 +3857,16 @@ export async function registerRoutes(
                 status: "pending",
                 expiresAt,
               });
-              const baseUrl = getBaseUrl({
-                headers: { host: process.env.REPLIT_DEV_DOMAIN || "" },
-                protocol: "https",
-              } as any);
+              // No live request available in the post-call hook. Prefer an
+              // explicitly configured canonical app URL (set on production
+              // deployments), fall back to the Replit dev domain, and only
+              // localhost as a last resort so links never silently become
+              // unreachable in deployed environments.
+              const canonicalHost =
+                process.env.APP_URL ||
+                (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : null) ||
+                `http://localhost:${process.env.PORT || 5000}`;
+              const baseUrl = canonicalHost.replace(/\/+$/, "");
               await sendGuestProposalEmail(guestEmail, {
                 baseUrl,
                 originIata: guestData.originIata,
