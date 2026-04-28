@@ -5132,41 +5132,10 @@ export async function registerRoutes(
       // exhausted falls back to the standard amount check so we never honor
       // a stale discount, but a still-valid promo lets the PI amount equal
       // the override instead of the convenience-fee total.
-      const piPromoCode = pi.metadata?.promoCode || null;
-      let appliedPromo: { id: number; code: string; forceManual: boolean; overrideAmountCents: number } | null = null;
-      if (piPromoCode) {
-        const promo = await validatePromoCodeForUser(piPromoCode, row.email);
-        if (promo.ok) {
-          appliedPromo = {
-            id: promo.promoId,
-            code: promo.code,
-            forceManual: promo.forceManual,
-            overrideAmountCents: promo.overrideAmountCents,
-          };
-        } else {
-          console.warn(`[guest-booking] PI metadata promo no longer valid for token ${optionToken}: ${piPromoCode} (${promo.reason})`);
-        }
-      }
-
-      const originalCents = Math.round(parseFloat(option.totalAmount) * 100);
-      if (appliedPromo) {
-        // Promo override: charged amount must be exactly the override (any
-        // mismatch implies tampering since the PI was server-issued).
-        if (pi.amount !== appliedPromo.overrideAmountCents) {
-          return res.status(400).json({ message: "Payment amount does not match the promo-overridden total." });
-        }
-      } else {
-        const expectedTotalCents = applyConvenienceFee(originalCents).totalCents;
-        if (pi.amount < expectedTotalCents) {
-          return res.status(400).json({ message: "Payment amount is insufficient for this flight." });
-        }
-      }
-      if (pi.currency !== String(option.totalCurrency).toLowerCase()) {
-        return res.status(400).json({ message: "Payment currency does not match the flight currency." });
-      }
-
-      // Auto-refund duplicate PIs but skip when the PI already backs a real
-      // payment row (legitimate same-PI retry).
+      // Auto-refund duplicate / orphaned PIs but skip when the PI already
+      // backs a real payment row (legitimate same-PI retry). Defined before
+      // the promo/amount checks so those branches can call it when they
+      // need to reject a PI that has already been captured by Stripe.
       const refundStrandedPI = async (reason: string) => {
         try {
           if (pi.status !== "succeeded") return { refunded: false };
@@ -5187,6 +5156,58 @@ export async function registerRoutes(
         }
         return { refunded: false };
       };
+
+      const piPromoCode = pi.metadata?.promoCode || null;
+      let appliedPromo: { id: number; code: string; forceManual: boolean; overrideAmountCents: number } | null = null;
+      let promoBecameInvalid = false;
+      if (piPromoCode) {
+        const promo = await validatePromoCodeForUser(piPromoCode, row.email);
+        if (promo.ok) {
+          appliedPromo = {
+            id: promo.promoId,
+            code: promo.code,
+            forceManual: promo.forceManual,
+            overrideAmountCents: promo.overrideAmountCents,
+          };
+        } else {
+          // The promo was valid when the PI was created but has since been
+          // disabled, expired, or fully redeemed. The customer paid the
+          // discounted amount in good faith — we must NOT silently fall
+          // through to the standard amount check (which would reject and
+          // strand the captured payment). Refund the customer below.
+          promoBecameInvalid = true;
+          console.warn(`[guest-booking] PI metadata promo no longer valid for token ${optionToken}: ${piPromoCode} (${promo.reason})`);
+        }
+      }
+
+      const originalCents = Math.round(parseFloat(option.totalAmount) * 100);
+      if (appliedPromo) {
+        // Promo override: charged amount must be exactly the override (any
+        // mismatch implies tampering since the PI was server-issued).
+        if (pi.amount !== appliedPromo.overrideAmountCents) {
+          return res.status(400).json({ message: "Payment amount does not match the promo-overridden total." });
+        }
+      } else if (promoBecameInvalid) {
+        // The customer paid based on a promo that's no longer valid. Refund
+        // them and ask them to retry without the promo (or contact support
+        // if the promo expired mid-checkout). We do NOT consume the option
+        // or status (caller can retry; refundStrandedPI is a no-op if a
+        // payment row already exists for this PI).
+        await refundStrandedPI("promo_invalid_at_confirm");
+        return res.status(409).json({
+          message: "The promo code used at checkout is no longer valid. Your payment has been refunded — please retry your booking.",
+          promoInvalid: true,
+          refunded: pi.status === "succeeded",
+        });
+      } else {
+        const expectedTotalCents = applyConvenienceFee(originalCents).totalCents;
+        if (pi.amount < expectedTotalCents) {
+          return res.status(400).json({ message: "Payment amount is insufficient for this flight." });
+        }
+      }
+      if (pi.currency !== String(option.totalCurrency).toLowerCase()) {
+        return res.status(400).json({ message: "Payment currency does not match the flight currency." });
+      }
 
       const expired = row.expiresAt && new Date(row.expiresAt).getTime() < Date.now();
       if (expired) {
