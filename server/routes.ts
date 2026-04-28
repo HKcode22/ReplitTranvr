@@ -4927,8 +4927,43 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/guest-booking/:optionToken/validate-promo
+  // No-auth promo validation scoped to a guest option token. Mirrors the
+  // authenticated `/api/promo/validate` response shape exactly so the shared
+  // PromoCodeInput component (which receives this URL via `validateEndpoint`)
+  // can consume the response without any branching. The guest's email is
+  // derived from the option token rather than trusted from the request, so a
+  // caller cannot impersonate an admin email to unlock admin-only codes.
+  app.post("/api/guest-booking/:optionToken/validate-promo", async (req: Request, res: Response) => {
+    try {
+      const optionToken = String(req.params.optionToken);
+      const resolved = await resolveGuestOption(optionToken);
+      if (!resolved) return res.status(404).json({ valid: false, message: "Booking option not found" });
+      const { row } = resolved;
+
+      const { code } = req.body || {};
+      const result = await validatePromoCodeForUser(code, row.email);
+      if (!result.ok) {
+        return res.status(400).json({ valid: false, message: result.reason });
+      }
+      return res.json({
+        valid: true,
+        code: result.code,
+        overrideAmountCents: result.overrideAmountCents,
+        forceManual: result.forceManual,
+      });
+    } catch (err: any) {
+      console.error("[guest-booking] validate-promo error:", err);
+      return res.status(500).json({ valid: false, message: "Failed to validate promo" });
+    }
+  });
+
   // POST /api/guest-booking/:optionToken/payment-intent
   // Mirrors POST /api/stripe/create-flight-payment-intent for the no-auth case.
+  // When a promo code is supplied, server-side re-validates it against the
+  // guest's email (NOT a request-supplied email — token-derived only) and
+  // overrides the charged amount + skips the convenience fee, mirroring the
+  // authenticated flight payment-intent endpoint.
   app.post("/api/guest-booking/:optionToken/payment-intent", async (req: Request, res: Response) => {
     try {
       const { optionToken } = req.params;
@@ -4947,12 +4982,32 @@ export async function registerRoutes(
         return res.status(409).json({ alreadyBooked: true, message: "This proposal is currently being booked." });
       }
 
-      const stripe = await getUncachableStripeClient();
+      const { promoCode } = req.body || {};
+      let promoMeta: { code: string; promoId: number; forceManual: boolean } | null = null;
       const originalCents = Math.round(parseFloat(option.totalAmount) * 100);
-      const fee = applyConvenienceFee(originalCents);
+      let chargeCents: number;
+      let feeOriginalCents = originalCents;
+      let feeCents = 0;
+      let promoOverrideCents: number | null = null;
 
+      if (promoCode) {
+        const promo = await validatePromoCodeForUser(String(promoCode), row.email);
+        if (!promo.ok) {
+          return res.status(400).json({ message: `Promo code rejected: ${promo.reason}` });
+        }
+        promoMeta = { code: promo.code, promoId: promo.promoId, forceManual: promo.forceManual };
+        promoOverrideCents = promo.overrideAmountCents;
+        chargeCents = promo.overrideAmountCents;
+      } else {
+        const fee = applyConvenienceFee(originalCents);
+        chargeCents = fee.totalCents;
+        feeOriginalCents = fee.originalCents;
+        feeCents = fee.feeCents;
+      }
+
+      const stripe = await getUncachableStripeClient();
       const paymentIntent = await stripe.paymentIntents.create({
-        amount: fee.totalCents,
+        amount: chargeCents,
         currency: String(option.totalCurrency || "usd").toLowerCase(),
         automatic_payment_methods: { enabled: true },
         metadata: {
@@ -4961,9 +5016,15 @@ export async function registerRoutes(
           guestProposalId: String(row.id),
           guestEmail: row.email,
           duffelOfferId: option.duffelOfferId,
-          original_amount: String(fee.originalCents),
-          convenience_fee: String(fee.feeCents),
-          convenience_fee_percent: String(CONVENIENCE_FEE_PERCENT),
+          original_amount: String(feeOriginalCents),
+          convenience_fee: String(feeCents),
+          convenience_fee_percent: promoMeta ? "0" : String(CONVENIENCE_FEE_PERCENT),
+          ...(promoMeta ? {
+            promoCode: promoMeta.code,
+            promoId: String(promoMeta.promoId),
+            promoForceManual: promoMeta.forceManual ? "1" : "0",
+            promoOverrideAmountCents: String(promoOverrideCents ?? chargeCents),
+          } : {}),
         },
         receipt_email: row.email,
       });
@@ -4971,8 +5032,9 @@ export async function registerRoutes(
       return res.json({
         clientSecret: paymentIntent.client_secret,
         paymentIntentId: paymentIntent.id,
-        amountCents: fee.totalCents,
+        amountCents: chargeCents,
         currency: option.totalCurrency,
+        promoApplied: promoMeta ? { code: promoMeta.code, forceManual: promoMeta.forceManual, chargedAmountCents: chargeCents } : null,
       });
     } catch (err: any) {
       console.error("[guest-booking] PaymentIntent error:", err);
@@ -5064,10 +5126,40 @@ export async function registerRoutes(
           || md.duffelOfferId !== option.duffelOfferId) {
         return res.status(403).json({ message: "Payment does not belong to this booking option." });
       }
+      // If the PI was created with a promo, re-validate that promo NOW
+      // (against the token-derived email — same source of truth used at PI
+      // creation time). A promo that has since been disabled, expired, or
+      // exhausted falls back to the standard amount check so we never honor
+      // a stale discount, but a still-valid promo lets the PI amount equal
+      // the override instead of the convenience-fee total.
+      const piPromoCode = pi.metadata?.promoCode || null;
+      let appliedPromo: { id: number; code: string; forceManual: boolean; overrideAmountCents: number } | null = null;
+      if (piPromoCode) {
+        const promo = await validatePromoCodeForUser(piPromoCode, row.email);
+        if (promo.ok) {
+          appliedPromo = {
+            id: promo.promoId,
+            code: promo.code,
+            forceManual: promo.forceManual,
+            overrideAmountCents: promo.overrideAmountCents,
+          };
+        } else {
+          console.warn(`[guest-booking] PI metadata promo no longer valid for token ${optionToken}: ${piPromoCode} (${promo.reason})`);
+        }
+      }
+
       const originalCents = Math.round(parseFloat(option.totalAmount) * 100);
-      const expectedTotalCents = applyConvenienceFee(originalCents).totalCents;
-      if (pi.amount < expectedTotalCents) {
-        return res.status(400).json({ message: "Payment amount is insufficient for this flight." });
+      if (appliedPromo) {
+        // Promo override: charged amount must be exactly the override (any
+        // mismatch implies tampering since the PI was server-issued).
+        if (pi.amount !== appliedPromo.overrideAmountCents) {
+          return res.status(400).json({ message: "Payment amount does not match the promo-overridden total." });
+        }
+      } else {
+        const expectedTotalCents = applyConvenienceFee(originalCents).totalCents;
+        if (pi.amount < expectedTotalCents) {
+          return res.status(400).json({ message: "Payment amount is insufficient for this flight." });
+        }
       }
       if (pi.currency !== String(option.totalCurrency).toLowerCase()) {
         return res.status(400).json({ message: "Payment currency does not match the flight currency." });
@@ -5227,7 +5319,21 @@ export async function registerRoutes(
       const chargedTotalAmount = (pi.amount / 100).toFixed(2);
       const currencyLower = String(option.totalCurrency || "usd").toLowerCase();
 
+      // Atomically consume one promo slot BEFORE we touch Duffel or write a
+      // fallback row. If maxUses has just been reached by a concurrent
+      // booking, abort cleanly and roll back the booking-status claim — the
+      // guest can retry without their option being permanently locked.
+      if (appliedPromo) {
+        const consumed = await storage.incrementPromoUsage(appliedPromo.id);
+        if (!consumed) {
+          await rollbackClaim();
+          return res.status(409).json({ message: "Promo code is no longer available (fully redeemed)." });
+        }
+      }
+
       // Branch on Duffel balance sufficiency. Any failure here defaults to manual.
+      // Admin promos with forceManual always route to manual regardless of
+      // balance — same behavior as the authenticated book-direct flow.
       let balanceSufficient = false;
       try {
         balanceSufficient = await isDuffelBalanceSufficient(parseFloat(offer.total_amount), offer.total_currency);
@@ -5235,14 +5341,15 @@ export async function registerRoutes(
         console.warn("[guest-booking] balance check failed; routing to manual:", e?.message || e);
         balanceSufficient = false;
       }
+      const forceManualByPromo = !!(appliedPromo?.forceManual);
 
       const baseUrl = getBaseUrl(req);
       const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
 
-      if (!balanceSufficient) {
+      if (!balanceSufficient || forceManualByPromo) {
         // Reuse the shared manual-fallback helper so guest + logged-in flows
         // stay in sync (creates payment row, in-app notification, admin email).
-        await createManualBookingFallback({
+        const fallbackPayment = await createManualBookingFallback({
           userId: guestUser.id,
           userEmail: contact.email,
           proposalId: null,
@@ -5254,6 +5361,11 @@ export async function registerRoutes(
           stripePaymentIntentId: paymentIntentId,
           endpoint: "POST /api/guest-booking/:optionToken/confirm",
         });
+        if (appliedPromo) {
+          await storage.updatePayment(fallbackPayment.id, { appliedPromoCode: appliedPromo.code }).catch((e) =>
+            console.warn("[guest-booking] promo stamp on manual fallback failed:", e?.message || e)
+          );
+        }
 
         // Mark the proposal as booked. We do not roll back on a failed write
         // here because the payment + manual-fallback record above already
@@ -5300,6 +5412,7 @@ export async function registerRoutes(
         amount: chargedTotalAmount,
         currency: currencyLower,
         status: "paid",
+        appliedPromoCode: appliedPromo?.code ?? null,
       });
 
       // Payment + Duffel order have succeeded; a failed status write is an

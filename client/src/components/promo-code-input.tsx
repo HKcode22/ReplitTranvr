@@ -17,15 +17,20 @@ type Props = {
   onApply: (promo: AppliedPromo) => void;
   onClear: () => void;
   currency: string;
+  // Optional: override the validation endpoint for callers that need a
+  // different, scoped path (e.g. the no-auth guest booking page validates
+  // against `/api/guest-booking/:token/validate-promo`). Defaults to the
+  // authenticated `/api/promo/validate` endpoint to preserve current usage.
+  validateEndpoint?: string;
 };
 
-export function PromoCodeInput({ applied, onApply, onClear, currency }: Props) {
+export function PromoCodeInput({ applied, onApply, onClear, currency, validateEndpoint }: Props) {
   const { toast } = useToast();
   const [code, setCode] = useState("");
 
   const mutation = useMutation({
     mutationFn: async (rawCode: string) => {
-      const res = await apiRequest("POST", "/api/promo/validate", { code: rawCode });
+      const res = await apiRequest("POST", validateEndpoint || "/api/promo/validate", { code: rawCode });
       return (await res.json()) as { valid: boolean; code: string; overrideAmountCents: number; forceManual: boolean };
     },
     onSuccess: (data) => {

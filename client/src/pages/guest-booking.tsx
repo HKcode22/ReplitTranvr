@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { loadStripe, Stripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { PromoCodeInput, type AppliedPromo } from "@/components/promo-code-input";
 
 const BRAND_BLUE = "#2d7abf";
 
@@ -156,23 +157,42 @@ function FlightSummary({ data }: { data: OptionResponse }) {
   );
 }
 
-function PriceBreakdown({ pricing }: { pricing: OptionResponse["pricing"] }) {
+function PriceBreakdown({
+  pricing,
+  appliedPromo,
+}: {
+  pricing: OptionResponse["pricing"];
+  appliedPromo: AppliedPromo | null;
+}) {
+  // When a promo is active the displayed total is the promo override (server
+  // also bypasses the convenience fee in that case). We hide the service-fee
+  // line and add an explicit "Promo discount" line so the math reads cleanly.
+  const totalCents = appliedPromo ? appliedPromo.overrideAmountCents : pricing.totalAmountCents;
+  const discountCents = appliedPromo
+    ? Math.max(0, pricing.originalAmountCents - appliedPromo.overrideAmountCents)
+    : 0;
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-xl p-5">
       <div className="flex items-center justify-between text-sm text-gray-700 mb-2">
         <span>Flight</span>
         <span data-testid="text-price-flight">{formatMoney(pricing.originalAmountCents, pricing.currency)}</span>
       </div>
-      {pricing.convenienceFeeCents > 0 && (
+      {!appliedPromo && pricing.convenienceFeeCents > 0 && (
         <div className="flex items-center justify-between text-sm text-gray-700 mb-2">
           <span>Service fee</span>
           <span data-testid="text-price-fee">{formatMoney(pricing.convenienceFeeCents, pricing.currency)}</span>
         </div>
       )}
+      {appliedPromo && (
+        <div className="flex items-center justify-between text-sm text-emerald-700 mb-2">
+          <span>Promo {appliedPromo.code}</span>
+          <span data-testid="text-price-promo">−{formatMoney(discountCents, pricing.currency)}</span>
+        </div>
+      )}
       <div className="border-t border-gray-200 mt-3 pt-3 flex items-center justify-between font-semibold text-gray-900">
         <span>Total</span>
         <span className="text-xl" data-testid="text-price-total" style={{ color: BRAND_BLUE }}>
-          {formatMoney(pricing.totalAmountCents, pricing.currency)}
+          {formatMoney(totalCents, pricing.currency)}
         </span>
       </div>
     </div>
@@ -183,11 +203,13 @@ function CheckoutForm({
   data,
   contact,
   passengers,
+  appliedPromo,
   onResult,
 }: {
   data: OptionResponse;
   contact: { firstName: string; lastName: string; email: string; phone: string };
   passengers: PassengerForm[];
+  appliedPromo: AppliedPromo | null;
   onResult: (status: "confirmed" | "pending_manual", bookingRef?: string | null) => void;
 }) {
   const stripe = useStripe();
@@ -278,7 +300,10 @@ function CheckoutForm({
         data-testid="button-submit-payment"
       >
         {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-        Pay {formatMoney(data.pricing.totalAmountCents, data.pricing.currency)} & Book
+        Pay {formatMoney(
+          appliedPromo ? appliedPromo.overrideAmountCents : data.pricing.totalAmountCents,
+          data.pricing.currency,
+        )} & Book
       </Button>
     </form>
   );
@@ -299,6 +324,7 @@ export default function GuestBookingPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [piLoading, setPiLoading] = useState(false);
   const [done, setDone] = useState<{ status: "confirmed" | "pending_manual"; bookingRef?: string | null } | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
 
   // Fetch option details
   useEffect(() => {
@@ -335,24 +361,59 @@ export default function GuestBookingPage() {
     return () => { cancelled = true; };
   }, [optionToken]);
 
+  // Monotonic request id for the PI-creation effect. We cancel any in-flight
+  // request whose id no longer matches the latest, so a slow response from a
+  // prior promo state cannot overwrite the clientSecret for the current one
+  // (e.g. user types an invalid promo, then a valid one before the first
+  // /payment-intent finishes — the late "no-promo" response must be ignored).
+  const piRequestIdRef = useRef(0);
+
   // Create PaymentIntent once contact email is filled and option loaded.
+  // Re-runs whenever the applied promo changes — onApply/onClear below null
+  // out clientSecret so this effect refires with the new amount, ensuring
+  // the PaymentElement always reflects the price the guest will be charged.
   useEffect(() => {
-    if (!data || clientSecret || piLoading) return;
+    if (!data || clientSecret) return;
     if (!contact.email) return;
+    // Note: we intentionally DO NOT gate on `piLoading`. The request-id +
+    // AbortController pair ensures any in-flight request is cancelled and
+    // its late response ignored, so re-firing here is safe. Gating on
+    // piLoading would deadlock the UI: when promo changes mid-request, the
+    // cleanup aborts the old fetch, then the re-fire would see piLoading
+    // still true and early-return, and the late finally — guarded by the
+    // requestId mismatch — would never reset piLoading, leaving the form
+    // stuck at "Preparing payment…".
+    const requestId = ++piRequestIdRef.current;
+    const controller = new AbortController();
     setPiLoading(true);
     fetch(`/api/guest-booking/${encodeURIComponent(data.token)}/payment-intent`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify(appliedPromo ? { promoCode: appliedPromo.code } : {}),
+      signal: controller.signal,
     })
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
       .then(({ ok, j }) => {
+        // Drop the response if a newer request has been issued in the
+        // meantime (promo state changed while this fetch was in flight).
+        if (requestId !== piRequestIdRef.current) return;
         if (!ok) throw new Error(j.message || "Failed to create payment");
         setClientSecret(j.clientSecret);
       })
-      .catch((err) => setLoadError(err.message))
-      .finally(() => setPiLoading(false));
-  }, [data, contact.email]);
+      .catch((err) => {
+        if (err?.name === "AbortError") return;
+        if (requestId !== piRequestIdRef.current) return;
+        setLoadError(err.message);
+      })
+      .finally(() => {
+        if (requestId === piRequestIdRef.current) setPiLoading(false);
+      });
+    return () => {
+      // Promo (or other deps) changed before this request resolved — cancel
+      // it so the stale response cannot win the setClientSecret race.
+      controller.abort();
+    };
+  }, [data, contact.email, appliedPromo]);
 
   const elementsOptions = useMemo(
     () => (clientSecret ? { clientSecret, appearance: { theme: "stripe" as const } } : null),
@@ -466,7 +527,7 @@ export default function GuestBookingPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-5">
             <FlightSummary data={data} />
-            <PriceBreakdown pricing={data.pricing} />
+            <PriceBreakdown pricing={data.pricing} appliedPromo={appliedPromo} />
           </div>
 
           <div className="space-y-5">
@@ -638,17 +699,40 @@ export default function GuestBookingPage() {
 
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <h3 className="text-base font-semibold text-gray-900 mb-3">Payment</h3>
+              <div className="mb-4">
+                <PromoCodeInput
+                  applied={appliedPromo}
+                  onApply={(promo) => {
+                    setAppliedPromo(promo);
+                    // Force PaymentIntent recreation at the new amount.
+                    setClientSecret(null);
+                  }}
+                  onClear={() => {
+                    setAppliedPromo(null);
+                    setClientSecret(null);
+                  }}
+                  currency={data.pricing.currency}
+                  validateEndpoint={`/api/guest-booking/${encodeURIComponent(data.token)}/validate-promo`}
+                />
+              </div>
               {!clientSecret || !stripePromise || !elementsOptions ? (
                 <div className="flex items-center gap-2 text-sm text-gray-500 py-6 justify-center">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Preparing payment…
                 </div>
               ) : (
-                <Elements stripe={stripePromise} options={elementsOptions}>
+                <Elements
+                  /* Re-mount Elements when the PI changes so the wallet
+                     buttons (Apple Pay / Google Pay) re-quote the new total. */
+                  key={clientSecret}
+                  stripe={stripePromise}
+                  options={elementsOptions}
+                >
                   <CheckoutForm
                     data={data}
                     contact={contact}
                     passengers={passengers}
+                    appliedPromo={appliedPromo}
                     onResult={(status, bookingRef) => setDone({ status, bookingRef })}
                   />
                 </Elements>
