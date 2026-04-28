@@ -3069,6 +3069,8 @@ export async function registerRoutes(
     passengers: number | null;
     cabinClass: string | null;
     budget: number | null;
+    timePreference: string | null;
+    notes: string | null;
     email: string | null;
   } | null {
     if (!text) return null;
@@ -3132,6 +3134,11 @@ export async function registerRoutes(
       passengers: normPax(parsed.passengers),
       cabinClass: normCabin(parsed.cabin_class),
       budget: normBudget(parsed.budget_usd),
+      // The legacy <TRAVEL_DETAILS> block predates these analysis fields, so
+      // they are always null here. Bland's post-call analysis_schema is now
+      // the sole source for time_preference / notes.
+      timePreference: null,
+      notes: null,
       email: normEmail(parsed.email),
     };
   }
@@ -3149,6 +3156,8 @@ export async function registerRoutes(
     passengers?: number | string | null;
     cabin_class?: string | null;
     budget_usd?: number | string | null;
+    time_preference?: string | null;
+    notes?: string | null;
     email?: string | null;
   }
 
@@ -3162,6 +3171,8 @@ export async function registerRoutes(
     passengers: number | null;
     cabinClass: string | null;
     budget: number | null;
+    timePreference: string | null;
+    notes: string | null;
     email: string | null;
   }
 
@@ -3231,6 +3242,18 @@ export async function registerRoutes(
       const t = v.trim().toLowerCase();
       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) ? t : null;
     };
+    // Short free-form preference fields. Bland may return "", "null", or
+    // "none" when the analysis pass had nothing to record — treat all of
+    // those as null. Cap length so an oversized response can't bloat
+    // downstream payloads.
+    const normShortText = (v: unknown, maxLen: number): string | null => {
+      if (typeof v !== "string") return null;
+      const t = v.trim();
+      if (!t) return null;
+      const lower = t.toLowerCase();
+      if (lower === "null" || lower === "none" || lower === "n/a") return null;
+      return t.length > maxLen ? t.slice(0, maxLen) : t;
+    };
     return {
       origin: normIata(analysis.origin_iata),
       destination: normIata(analysis.destination_iata),
@@ -3239,6 +3262,8 @@ export async function registerRoutes(
       passengers: normPax(analysis.passengers),
       cabinClass: normCabin(analysis.cabin_class),
       budget: normBudget(analysis.budget_usd),
+      timePreference: normShortText(analysis.time_preference, 80),
+      notes: normShortText(analysis.notes, 200),
       email: normEmail(analysis.email),
     };
   }
@@ -3252,11 +3277,13 @@ export async function registerRoutes(
     passengers: number;
     cabinClass: string;
     budget: number | null;
+    timePreference: string | null;
+    notes: string | null;
     sources?: Record<string, string>;
   } {
     const originalText = [summary, transcript].filter(Boolean).join("\n");
     const text = originalText.toLowerCase();
-    if (!text && !analysis) return { origin: null, destination: null, email: null, departureDate: null, returnDate: null, passengers: 1, cabinClass: "economy", budget: null, sources: {} };
+    if (!text && !analysis) return { origin: null, destination: null, email: null, departureDate: null, returnDate: null, passengers: 1, cabinClass: "economy", budget: null, timePreference: null, notes: null, sources: {} };
 
     const sources: Record<string, string> = {};
 
@@ -3567,7 +3594,16 @@ export async function registerRoutes(
     if (blandAnalysis?.email) sources.email = "bland_analysis";
     else if (email) sources.email = "structured_block";
 
-    return { origin, destination, email, departureDate, returnDate, passengers, cabinClass, budget, sources };
+    // time_preference and notes only come from Bland's post-call analysis pass
+    // (regex over free-form transcript would be too noisy for these short
+    // free-form preference fields). They stay null when the analysis pass
+    // didn't surface them.
+    const timePreference: string | null = blandAnalysis?.timePreference ?? null;
+    const notes: string | null = blandAnalysis?.notes ?? null;
+    if (timePreference) sources.timePreference = "bland_analysis";
+    if (notes) sources.notes = "bland_analysis";
+
+    return { origin, destination, email, departureDate, returnDate, passengers, cabinClass, budget, timePreference, notes, sources };
   }
 
   // In-flight guard: prevents two webhook events from racing into duplicate proposal
