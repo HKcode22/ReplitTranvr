@@ -569,8 +569,9 @@ function offerOutboundDepartureBucket(offer: any): "morning" | "afternoon" | "ev
   return h < 12 ? "morning" : h < 18 ? "afternoon" : "evening";
 }
 
-// Longest layover (minutes) across every slice — used by Best Value's
-// differentiator to prefer routings with shorter waits.
+// Longest layover (minutes) across every slice. Currently unused by the
+// picker but kept as a general-purpose helper — distinct from
+// `offerTotalLayoverMinutes` below, which sums every layover.
 function offerLongestLayoverMinutes(offer: any): number {
   let longestMs = 0;
   for (const slice of offer?.slices || []) {
@@ -586,21 +587,35 @@ function offerLongestLayoverMinutes(offer: any): number {
   return Math.round(longestMs / 60000);
 }
 
-// Differentiator predicates for collision-walk. Best Value tolerates layover
-// quality as a third axis; Fastest sticks to carrier OR time-bucket only
-// (per spec — for the "fastest" label, layover length doesn't define
-// distinctness from another fast option).
-// 90 min = the smallest gap a customer will notice as a "shorter layover"
-// without being so strict the differentiator never fires.
-const LAYOVER_DIFF_THRESHOLD_MINUTES = 90;
-function differsByCarrierOrBucket(candidate: any, prior: any): boolean {
-  return offerOutboundCarrier(candidate) !== offerOutboundCarrier(prior)
-    || offerOutboundDepartureBucket(candidate) !== offerOutboundDepartureBucket(prior);
+// Total layover time (minutes) summed across every stop on every slice.
+// Used by the Best Value rule to enforce a 4-hour total-layover ceiling
+// regardless of how that wait is distributed across the trip. Distinct
+// from `offerLongestLayoverMinutes` (which returns only the largest gap).
+function offerTotalLayoverMinutes(offer: any): number {
+  let totalMs = 0;
+  for (const slice of offer?.slices || []) {
+    const segs = slice.segments || [];
+    for (let i = 1; i < segs.length; i++) {
+      const arr = Date.parse(segs[i - 1]?.arriving_at);
+      const dep = Date.parse(segs[i]?.departing_at);
+      if (Number.isNaN(arr) || Number.isNaN(dep)) continue;
+      const gap = dep - arr;
+      if (gap > 0) totalMs += gap;
+    }
+  }
+  return Math.round(totalMs / 60000);
 }
-function differsByCarrierBucketOrLayover(candidate: any, prior: any): boolean {
-  if (differsByCarrierOrBucket(candidate, prior)) return true;
-  return offerLongestLayoverMinutes(prior) - offerLongestLayoverMinutes(candidate)
-    >= LAYOVER_DIFF_THRESHOLD_MINUTES;
+
+// Best Value rule: per spec, exclude any offer whose total layover across
+// all stops exceeds 4 hours. Captured as a constant so the threshold is
+// auditable in one place.
+const VALUE_MAX_TOTAL_LAYOVER_MIN = 240;
+
+// Best Value scoring per spec: price (in the offer's currency, NOT cents)
+// plus half the total door-to-door duration in minutes. The 0.5 weight is
+// part of the spec — do not adjust without product approval.
+function offerValueScore(offer: any): number {
+  return parseFloat(offer.total_amount) + offerTotalDurationMinutes(offer) * 0.5;
 }
 
 function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> {
@@ -618,46 +633,41 @@ function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price"
     return String(a.id).localeCompare(String(b.id));
   });
 
-  // Best Value pool: nonstop or one-stop only (per spec). Within the pool,
-  // sort by cheapest first. If no offer has stops <= 1, fall back to the full
-  // sorted-by-price list so we still produce three options.
-  const valuePool = sortedByPrice.filter((o) => offerStops(o) <= 1);
-  const sortedByValue = valuePool.length ? valuePool : sortedByPrice;
+  // Best Value sort: lowest `price + duration * 0.5` score, after excluding
+  // any offer whose TOTAL layover across all stops exceeds 4 hours. Ties
+  // broken by stable offer id. If the layover filter wipes the pool out,
+  // we'll fall back to sortedByPrice when picking below (per spec).
+  const sortedByValue = offers
+    .filter((o) => offerTotalLayoverMinutes(o) <= VALUE_MAX_TOTAL_LAYOVER_MIN)
+    .sort((a, b) => {
+      const sa = offerValueScore(a);
+      const sb = offerValueScore(b);
+      if (sa !== sb) return sa - sb;
+      return String(a.id).localeCompare(String(b.id));
+    });
 
-  // Fastest sort: shortest total door-to-door duration (departure of first
-  // segment to arrival of last segment, including layovers), ties by price.
+  // Fastest sort: shortest total door-to-door duration (first departure to
+  // last arrival, including layovers). Ties broken by cheapest, then id.
   const sortedByDuration = [...offers].sort((a, b) => {
     const da = offerTotalDurationMinutes(a);
     const db = offerTotalDurationMinutes(b);
     if (da !== db) return da - db;
-    return parseFloat(a.total_amount) - parseFloat(b.total_amount);
+    const pa = parseFloat(a.total_amount);
+    const pb = parseFloat(b.total_amount);
+    if (pa !== pb) return pa - pb;
+    return String(a.id).localeCompare(String(b.id));
   });
 
-  // Walk a category-sorted list for the next pick. Returns the first
-  // signature-distinct entry (the "natural top"). The differentiator walk
-  // ONLY runs when the natural top sits at index > 0 — i.e. an earlier entry
-  // was eliminated by signature collision; in that case we prefer a
-  // candidate that ALSO satisfies `differs(...)` against every prior pick.
-  // If no such candidate exists, fall back to the natural top.
-  function pickDistinct(
-    list: any[],
-    takenSigs: Set<string>,
-    pickedOffers: any[],
-    differs: (candidate: any, prior: any) => boolean,
-  ): any | null {
-    if (list.length === 0) return null;
-    let naturalTopIdx = -1;
-    for (let i = 0; i < list.length; i++) {
-      if (!takenSigs.has(offerFlightSignature(list[i]))) { naturalTopIdx = i; break; }
+  // Walk a category-sorted list for the next pick whose flight signature is
+  // not already taken. Per the new spec, signature distinctness IS the only
+  // distinctness rule — different flight number AND departure time. There
+  // is no secondary differentiator (carrier/time-bucket/layover). Same
+  // airline appearing in multiple options is allowed.
+  function nextDistinct(list: any[], takenSigs: Set<string>): any | null {
+    for (const o of list) {
+      if (!takenSigs.has(offerFlightSignature(o))) return o;
     }
-    if (naturalTopIdx === -1) return null;
-    if (naturalTopIdx === 0 || pickedOffers.length === 0) return list[naturalTopIdx];
-    for (let i = naturalTopIdx; i < list.length; i++) {
-      const o = list[i];
-      if (takenSigs.has(offerFlightSignature(o))) continue;
-      if (pickedOffers.every((p) => differs(o, p))) return o;
-    }
-    return list[naturalTopIdx];
+    return null;
   }
 
   const picks: Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> = [];
@@ -668,21 +678,23 @@ function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price"
   picks.push({ offer: bestPrice, label: "Best Price" });
   takenSigs.add(offerFlightSignature(bestPrice));
 
-  // Best Value: cheapest 0/1-stop. On signature collision, prefer a candidate
-  // differing by carrier, time-bucket, or noticeably shorter longest layover.
+  // Best Value: lowest value score within the layover-filtered pool that is
+  // a different physical flight from Best Price. Fall back to the price-
+  // sorted list ONLY if the value pool has no distinct candidate at all
+  // (so we still emit three labels when possible).
   const bestValue =
-    pickDistinct(sortedByValue, takenSigs, picks.map((p) => p.offer), differsByCarrierBucketOrLayover) ??
-    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer), differsByCarrierBucketOrLayover);
+    nextDistinct(sortedByValue, takenSigs) ??
+    nextDistinct(sortedByPrice, takenSigs);
   if (bestValue) {
     picks.push({ offer: bestValue, label: "Best Value" });
     takenSigs.add(offerFlightSignature(bestValue));
   }
 
-  // Fastest: shortest total door-to-door. On signature collision, prefer a
-  // candidate differing by carrier OR time-bucket only (not layover).
+  // Fastest: shortest total door-to-door that is a different physical
+  // flight from BOTH Best Price and Best Value. Same fallback rule.
   const fastest =
-    pickDistinct(sortedByDuration, takenSigs, picks.map((p) => p.offer), differsByCarrierOrBucket) ??
-    pickDistinct(sortedByPrice, takenSigs, picks.map((p) => p.offer), differsByCarrierOrBucket);
+    nextDistinct(sortedByDuration, takenSigs) ??
+    nextDistinct(sortedByPrice, takenSigs);
   if (fastest) {
     picks.push({ offer: fastest, label: "Fastest" });
     takenSigs.add(offerFlightSignature(fastest));
