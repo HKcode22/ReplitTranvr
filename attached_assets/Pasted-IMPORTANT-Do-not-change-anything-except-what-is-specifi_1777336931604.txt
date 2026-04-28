@@ -1,0 +1,31 @@
+IMPORTANT: Do not change anything except what is specified here. This codebase is in active use.
+Read these files in full before making any changes:
+
+server/routes.ts
+server/lib/bland.ts
+The existing authenticated booking page and any guest booking page
+
+Fix 1 — Promo code input on guest booking page
+Find the guest booking page that users land on from the emailed flight links. Add a promo code input field to the payment section, styled consistently with the rest of the page. It should work exactly the same way the promo code field works on the existing authenticated booking page. If there is no promo code logic yet, add a simple field that sends the code to the server with the payment request and validates it there. Make sure it is visible and easy to find before the user hits pay.
+Fix 2 — Flight selection logic
+Find where the 3 flight options are selected from Duffel results. Replace the current selection logic with the following:
+
+Best Price: lowest total cost among all results, no other constraints
+Best Value: best combination of price and total travel time. Score each flight as price + (total_duration_in_minutes * 0.5) and pick the lowest score. Exclude any flight where the total layover time across all stops exceeds 4 hours — these are never good value regardless of price. Must be a different flight from Best Price by flight number and departure time.
+Fastest: shortest total travel time from departure to arrival including all layovers. Must be different from both Best Price and Best Value by flight number and departure time.
+
+If any two options would be duplicates after selection, replace the duplicate with the next best option in that category that is genuinely distinct. Airlines do not need to be different — the same airline can appear in multiple options if it objectively wins that category.
+Fix 3 — Preferences question in the call
+In buildTravelConciergePrompt in server/lib/bland.ts, after collecting the origin, destination, and dates, add one natural preferences question before the summary:
+"Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else?"
+Rules for handling the response:
+
+If they say no or nothing specific, move straight to the summary
+If they mention a budget, capture it in the budget_usd field of the <TRAVEL_DETAILS> block
+If they mention a time preference like morning or evening, add it to a new time_preference field in the <TRAVEL_DETAILS> block as a string
+If they mention anything else relevant, add it to the notes field
+Ask this as one single casual question, do not break it into multiple follow ups
+Do not ask about seat preferences, loyalty programs, or anything beyond what they volunteer
+
+Update the <TRAVEL_DETAILS> block to include time_preference and notes fields, both nullable.
+Do not change anything else. After completing confirm exactly what was changed in each file.
