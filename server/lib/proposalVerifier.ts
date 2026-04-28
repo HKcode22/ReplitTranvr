@@ -27,6 +27,13 @@ export type ParsedDetails = {
   passengers: number;
   cabinClass: string;
   budget: number | null;
+  // Captured by Bland's post-call analysis pass when the traveler volunteers
+  // a time-of-day preference or other offhand preferences. Both stay null
+  // when nothing was volunteered. The Claude verifier does not currently
+  // round-trip these fields, so they are passed through from the parser
+  // unchanged.
+  timePreference?: string | null;
+  notes?: string | null;
   sources?: Record<string, string>;
 };
 
@@ -297,7 +304,20 @@ export function correctedDetailsToParsed(
     passengers: "claude_verifier",
     budget: "claude_verifier",
   };
-  return { origin, destination, departureDate, returnDate, passengers, cabinClass, budget, sources };
+  // The Claude verifier does not produce time_preference / notes today, so
+  // pass them through from the parser fallback unchanged.
+  return {
+    origin,
+    destination,
+    departureDate,
+    returnDate,
+    passengers,
+    cabinClass,
+    budget,
+    timePreference: fallback.timePreference ?? null,
+    notes: fallback.notes ?? null,
+    sources,
+  };
 }
 
 function diffFields(a: ParsedDetails, b: ParsedDetails): string[] {
