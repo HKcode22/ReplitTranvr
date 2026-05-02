@@ -10,6 +10,7 @@ import sgMail from "@sendgrid/mail";
 import { z } from "zod";
 import { Duffel } from "@duffel/api";
 import * as bland from "./lib/bland";
+import { normalizePhoneE164 } from "./lib/phone";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
 import {
   verifyProposalAgainstTranscript,
@@ -3610,6 +3611,14 @@ export async function registerRoutes(
   // generation for the same call request (e.g. call.ended + status=failed arriving close together).
   const proposalGenerationInFlight = new Set<number>();
 
+  // Same idea as proposalGenerationInFlight, but keyed by Bland's call_id for the
+  // stateless inbound flow (no callRequestId exists for inbound calls). Entries are
+  // never deleted — Bland can retry the same call.ended payload minutes later, and
+  // the cost of a permanently-held short string per processed inbound call is
+  // negligible. Process restart resets it; the alternative (persisting to DB) is
+  // out of scope here.
+  const inboundGuestProposalDispatched = new Set<string>();
+
   function triggerProposalGenerationOnce(
     callRequestId: number,
     userId: string,
@@ -3631,6 +3640,272 @@ export async function registerRoutes(
       .finally(() => {
         proposalGenerationInFlight.delete(callRequestId);
       });
+  }
+
+  // Resolve a free-text origin/destination (city name, airport name, or already-IATA
+  // code) to a Duffel place. Lifted out of generateProposalFromCall so the inbound
+  // guest-proposal flow can share the exact same lookup behavior. Takes a logPrefix
+  // so post-call vs inbound-guest log lines remain distinguishable.
+  async function resolveAirport(
+    query: string,
+    preferUS: boolean,
+    logPrefix: string,
+  ): Promise<{ code: string; name: string } | null> {
+    if (!duffel) return null;
+    try {
+      // If the query is already an IATA code (3 uppercase letters), look up the full name via Duffel
+      if (/^[A-Z]{3}$/.test(query)) {
+        try {
+          const lookupRes = await duffel.suggestions.list({ query });
+          const match = (lookupRes.data || []).find((p: any) => p.iata_code === query);
+          if (match) return { code: query, name: match.city_name || match.name || query };
+        } catch (e: any) {
+          console.warn(`${logPrefix} Duffel suggestions.list threw for IATA "${query}":`, e?.message || e);
+        }
+        return { code: query, name: query };
+      }
+      const res = await duffel.suggestions.list({ query });
+      const places = res.data || [];
+      if (places.length === 0) {
+        console.warn(`${logPrefix} Duffel suggestions returned 0 places for query="${query}"`);
+        return null;
+      }
+
+      if (preferUS) {
+        const usAirport = places.find((p: any) => p.type === "airport" && p.iata_country_code === "US");
+        if (usAirport?.iata_code) return { code: usAirport.iata_code, name: usAirport.city_name || usAirport.name || query };
+
+        try {
+          const usRes = await duffel.suggestions.list({ query: query + " USA" });
+          const usPlaces = usRes.data || [];
+          const usAp = usPlaces.find((p: any) => p.type === "airport") || usPlaces[0];
+          if (usAp?.iata_code) return { code: usAp.iata_code, name: usAp.city_name || usAp.name || query };
+        } catch (e: any) {
+          console.warn(`${logPrefix} Duffel suggestions.list threw for "${query} USA":`, e?.message || e);
+        }
+      }
+
+      const airport = places.find((p: any) => p.type === "airport") || places[0];
+      return airport?.iata_code ? { code: airport.iata_code, name: airport.city_name || airport.name || query } : null;
+    } catch (e: any) {
+      console.warn(`${logPrefix} Duffel suggestions.list threw for query="${query}":`, e?.message || e);
+      return null;
+    }
+  }
+
+  // Stateless guest-proposal generator for inbound phone calls.
+  // The post-call webhook calls this when a payload arrives that does NOT match
+  // any bland_calls row (i.e. the caller dialed in directly without a prior
+  // /api/bland/call dispatch). It mirrors the post-call branch of
+  // generateProposalFromCall — parse details, resolve airports, search Duffel,
+  // build the guest proposal data, persist a guest_proposals row, and email the
+  // three options — but skips everything that requires a userId (no in-app
+  // proposal save, no Claude verification loop, no createNoFlightsProposal).
+  // Always swallows its own errors so the webhook ack stays a 200.
+  async function generateGuestProposalForInboundCall(opts: {
+    blandCallId: string;
+    phoneE164: string;
+    transcript: string | null;
+    summary: string | null;
+    analysis: BlandAnalysisPayload | null;
+  }): Promise<void> {
+    const { blandCallId, phoneE164, transcript, summary, analysis } = opts;
+    const logPrefix = `[bland-inbound ${blandCallId}]`;
+
+    if (!duffel) {
+      console.warn(`${logPrefix} Duffel client not configured — skipping inbound guest proposal`);
+      return;
+    }
+    if (!transcript && !summary && !analysis) {
+      console.log(`${logPrefix} skipping — no transcript / summary / analysis to parse`);
+      return;
+    }
+
+    const details = parseTravelDetailsFromTranscript(transcript, summary, analysis);
+    if (!details.destination) {
+      console.log(`${logPrefix} skipping — no destination resolved from call`);
+      return;
+    }
+
+    // Email resolution: post-call analysis email > phone↔email map.
+    // No account exists for inbound guest callers, so we don't try storage.getUser.
+    let guestEmail: string | null = null;
+    if (typeof details.email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.email)) {
+      guestEmail = details.email.trim().toLowerCase();
+      // Promote a fresh email from the call onto the phone↔email map so future
+      // dynamic-data calls and proposals can use it without re-asking.
+      try {
+        await storage.upsertPhoneEmailMap(phoneE164, guestEmail);
+      } catch (e: any) {
+        console.warn(`${logPrefix} upsertPhoneEmailMap failed:`, e?.message || e);
+      }
+    }
+    if (!guestEmail) {
+      try {
+        guestEmail = await storage.getEmailForPhone(phoneE164);
+      } catch (e: any) {
+        console.warn(`${logPrefix} getEmailForPhone failed:`, e?.message || e);
+      }
+    }
+    if (!guestEmail) {
+      console.log(`${logPrefix} skipping — no email could be resolved for phone=${phoneE164}`);
+      return;
+    }
+
+    // Origin/destination resolution. US bias when caller phone is +1.
+    const isUSUser = phoneE164.startsWith("+1");
+    const destResult = await resolveAirport(details.destination, isUSUser, logPrefix);
+    if (!destResult) {
+      console.warn(`${logPrefix} skipping — no airport resolved for destination="${details.destination}"`);
+      return;
+    }
+    const destCode = destResult.code;
+    const destName = destResult.name;
+
+    let originCode: string | null = null;
+    let originName: string | null = null;
+    if (details.origin) {
+      const originResult = await resolveAirport(details.origin, isUSUser, logPrefix);
+      if (originResult) {
+        originCode = originResult.code;
+        originName = originResult.name;
+      }
+    }
+    if (!originCode) {
+      // Inbound has no profile to fall back to; default to the same JFK that
+      // the post-call flow uses when nothing else is known. Override if it
+      // collides with destination.
+      originCode = destCode === "JFK" ? "LAX" : "JFK";
+      originName = originCode;
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let departureDate = details.departureDate || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
+    let returnDate = details.returnDate || null;
+    if (new Date(departureDate) <= today) {
+      departureDate = new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0];
+      if (returnDate) {
+        const duration = details.departureDate && details.returnDate
+          ? Math.ceil((new Date(details.returnDate).getTime() - new Date(details.departureDate).getTime()) / 86400000)
+          : 7;
+        returnDate = new Date(Date.now() + (14 + duration) * 86400000).toISOString().split("T")[0];
+      }
+    }
+
+    const passengers: Array<{ type: "adult" }> = [];
+    for (let i = 0; i < details.passengers; i++) passengers.push({ type: "adult" as const });
+    const slices: any[] = [{ origin: originCode, destination: destCode, departure_date: departureDate }];
+    if (returnDate) slices.push({ origin: destCode, destination: originCode, departure_date: returnDate });
+
+    console.log(`${logPrefix} Searching Duffel: ${originCode}->${destCode} dep=${departureDate} ret=${returnDate || "—"} pax=${details.passengers} cabin=${details.cabinClass}`);
+
+    let allOffers: any[] = [];
+    try {
+      const offerRequest = await duffel.offerRequests.create({
+        slices,
+        passengers,
+        cabin_class: details.cabinClass as any,
+        return_offers: true,
+        max_connections: 1,
+      });
+      allOffers = (offerRequest.data as any).offers || [];
+    } catch (e: any) {
+      console.error(`${logPrefix} Duffel offerRequests.create failed:`, e?.message || e);
+      return;
+    }
+    console.log(`${logPrefix} Duffel returned ${allOffers.length} offer(s)`);
+    if (allOffers.length === 0) {
+      console.log(`${logPrefix} skipping — Duffel returned no offers`);
+      return;
+    }
+    allOffers.sort((a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
+
+    const guestData = buildGuestProposalDataFromOffers({
+      offers: allOffers,
+      originIata: originCode,
+      originName: originName || originCode,
+      destinationIata: destCode,
+      destinationName: destName,
+      departureDate,
+      returnDate,
+      passengers: details.passengers,
+      cabinClass: details.cabinClass,
+    });
+    if (guestData.options.length === 0) {
+      console.log(`${logPrefix} skipping — no options built from offers`);
+      return;
+    }
+
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    let saved;
+    try {
+      saved = await storage.createGuestProposal({
+        email: guestEmail,
+        originIata: guestData.originIata,
+        destinationIata: guestData.destinationIata,
+        departureDate: guestData.departureDate,
+        returnDate: guestData.returnDate ?? null,
+        passengers: guestData.passengers,
+        cabinClass: guestData.cabinClass,
+        proposalData: guestData as any,
+        status: "pending",
+        expiresAt,
+      });
+    } catch (e: any) {
+      console.error(`${logPrefix} createGuestProposal failed:`, e?.message || e);
+      return;
+    }
+
+    // Booking-link host: APP_URL → travnr.com (prod) → dev domain (dev) → localhost.
+    // Identical fallback chain to the post-call IIFE so emailed links never leak the
+    // dev preview domain in production.
+    const isProduction =
+      process.env.NODE_ENV === "production" ||
+      process.env.REPLIT_DEPLOYMENT === "1";
+    let canonicalHost: string;
+    if (process.env.APP_URL) {
+      canonicalHost = process.env.APP_URL;
+    } else if (isProduction) {
+      console.warn(`${logPrefix} APP_URL not set in production — defaulting to https://travnr.com`);
+      canonicalHost = "https://travnr.com";
+    } else if (process.env.REPLIT_DEV_DOMAIN) {
+      canonicalHost = `https://${process.env.REPLIT_DEV_DOMAIN}`;
+    } else {
+      canonicalHost = `http://localhost:${process.env.PORT || 5000}`;
+    }
+    const baseUrl = canonicalHost.replace(/\/+$/, "");
+
+    try {
+      await sendGuestProposalEmail(guestEmail, {
+        baseUrl,
+        originIata: guestData.originIata,
+        originName: guestData.originName,
+        destinationIata: guestData.destinationIata,
+        destinationName: guestData.destinationName,
+        departureDate: guestData.departureDate,
+        returnDate: guestData.returnDate,
+        passengers: guestData.passengers,
+        options: guestData.options.map((o) => ({
+          token: o.token,
+          label: o.label,
+          totalAmount: o.totalAmount,
+          totalCurrency: o.totalCurrency,
+          totalDurationMinutes: o.totalDurationMinutes,
+          stops: o.stops,
+          carrierName: o.carrierName,
+          carrierLogo: o.carrierLogo,
+          outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
+          outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+          baggage: o.baggage,
+          refundable: o.refundable,
+          changeable: o.changeable,
+        })),
+      });
+      console.log(`${logPrefix} created guest proposal token=${saved.token} email=${guestEmail}`);
+    } catch (e: any) {
+      console.error(`${logPrefix} sendGuestProposalEmail failed:`, e?.message || e);
+    }
   }
 
   async function generateProposalFromCall(
@@ -3770,54 +4045,13 @@ export async function registerRoutes(
     let searchParamsLog: any = null;
 
     try {
-      async function resolveAirport(query: string, preferUS: boolean): Promise<{code: string, name: string} | null> {
-        try {
-          // If the query is already an IATA code (3 uppercase letters), look up the full name via Duffel
-          if (/^[A-Z]{3}$/.test(query)) {
-            try {
-              const lookupRes = await duffel!.suggestions.list({ query });
-              const match = (lookupRes.data || []).find((p: any) => p.iata_code === query);
-              if (match) return { code: query, name: match.city_name || match.name || query };
-            } catch (e: any) {
-              console.warn(`[post-call ${callRequestId}] Duffel suggestions.list threw for IATA "${query}":`, e?.message || e);
-            }
-            return { code: query, name: query };
-          }
-          const res = await duffel!.suggestions.list({ query });
-          const places = res.data || [];
-          if (places.length === 0) {
-            console.warn(`[post-call ${callRequestId}] Duffel suggestions returned 0 places for query="${query}"`);
-            return null;
-          }
-
-          if (preferUS) {
-            const usAirport = places.find((p: any) => p.type === "airport" && p.iata_country_code === "US");
-            if (usAirport?.iata_code) return { code: usAirport.iata_code, name: usAirport.city_name || usAirport.name || query };
-
-            try {
-              const usRes = await duffel!.suggestions.list({ query: query + " USA" });
-              const usPlaces = usRes.data || [];
-              const usAp = usPlaces.find((p: any) => p.type === "airport") || usPlaces[0];
-              if (usAp?.iata_code) return { code: usAp.iata_code, name: usAp.city_name || usAp.name || query };
-            } catch (e: any) {
-              console.warn(`[post-call ${callRequestId}] Duffel suggestions.list threw for "${query} USA":`, e?.message || e);
-            }
-          }
-
-          const airport = places.find((p: any) => p.type === "airport") || places[0];
-          return airport?.iata_code ? { code: airport.iata_code, name: airport.city_name || airport.name || query } : null;
-        } catch (e: any) {
-          console.warn(`[post-call ${callRequestId}] Duffel suggestions.list threw for query="${query}":`, e?.message || e);
-          return null;
-        }
-      }
-
       const callReqForPhone = callRequest as any;
       const userPhone = callReqForPhone.phone || callReqForPhone.phoneNumber || "";
       const isUSUser = userPhone.startsWith("+1") || userPhone.startsWith("1");
       console.log(`[post-call ${callRequestId}] resolved isUSUser=${isUSUser} from phone="${userPhone}"`);
 
-      const destResult = await resolveAirport(details.destination, isUSUser);
+      const postCallLogPrefix = `[post-call ${callRequestId}]`;
+      const destResult = await resolveAirport(details.destination, isUSUser, postCallLogPrefix);
       if (!destResult) {
         console.error(`[post-call ${callRequestId}] No airport could be resolved for destination="${details.destination}" — writing fallback proposal`);
         await createFallbackProposal(callRequestId, userId, summary);
@@ -3832,7 +4066,7 @@ export async function registerRoutes(
 
       let originSource = "default-JFK";
       if (details.origin) {
-        const originResult = await resolveAirport(details.origin, isUSUser);
+        const originResult = await resolveAirport(details.origin, isUSUser, postCallLogPrefix);
         if (originResult) {
           originCode = originResult.code;
           originSource = `parsed:"${details.origin}"`;
@@ -3916,7 +4150,7 @@ export async function registerRoutes(
       if (allOffers.length === 0) {
         let originName = details.origin || originCode;
         if (details.origin) {
-          const originResult = await resolveAirport(details.origin, isUSUser);
+          const originResult = await resolveAirport(details.origin, isUSUser, postCallLogPrefix);
           if (originResult) originName = originResult.name;
         }
         const searchParams = {
@@ -4356,41 +4590,21 @@ export async function registerRoutes(
   app.post("/api/bland/inbound", async (req: Request, res: Response) => {
     try {
       const baseUrl = getBaseUrl(req);
-      const task = bland.buildTravelConciergePrompt({ userName: "there" });
 
-      return res.status(200).json({
-        task,
-        voice: "mason",
-        language: "eng",
-        max_duration: 10,
-        model: "enhanced",
-        record: true,
-        wait_for_greeting: true,
-        noise_cancellation: true,
-        interruption_threshold: 100,
-        endpoint_sensitivity: 0.5,
-        end_call_after_speech: true,
-        end_call_phrases: ["GOODBYE", "Safe travels", "have a great trip"],
-        // Parity with the outbound dispatch path: post-call analysis_schema
-        // runs as a separate LLM pass so structured extraction works for
-        // inbound calls too, with no JSON in the live spoken prompt.
-        analysis_schema: bland.getTravelAnalysisSchema(),
-        webhook: `${baseUrl}/api/bland/webhook`,
-        webhook_events: ["call.ended"],
-        dynamic_data: [{
-          url: `${baseUrl}/api/bland/dynamic-data`,
-          method: "POST",
-          headers: { "x-bland-secret": bland.getWebhookSecret() },
-          cache: false,
-          response_data: [
-            { name: "traveler_info", data: "$.traveler_info", context: "Traveler information: {{traveler_info}}" },
-            { name: "booking_info", data: "$.booking_info", context: "Booking information: {{booking_info}}" },
-            { name: "proposal_info", data: "$.proposal_info", context: "Proposal information: {{proposal_info}}" },
-            { name: "email_info", data: "$.email_info", context: "Traveler email on file: {{email_info}}" },
-            { name: "previous_proposal_info", data: "$.previous_proposal_info", context: "Previous options: {{previous_proposal_info}}" },
-          ],
-        }],
+      // Use the shared buildBlandCallConfig helper so inbound and outbound
+      // calls cannot drift on voice, model, prompt, dynamic_data, analysis
+      // schema, or end-call behavior. Inbound's only unique field is the
+      // metadata.source flag the post-call webhook uses to detect inbound
+      // payloads and run the stateless guest-proposal branch.
+      const config = bland.buildBlandCallConfig({
+        task: bland.buildTravelConciergePrompt({ userName: "there" }),
+        webhookUrl: `${baseUrl}/api/bland/webhook`,
+        dynamicDataUrl: `${baseUrl}/api/bland/dynamic-data`,
+        dynamicDataHeaders: { "x-bland-secret": bland.getWebhookSecret() },
+        metadata: { source: "inbound_phone" },
       });
+
+      return res.status(200).json(config);
     } catch (err: any) {
       console.error("Bland inbound webhook error:", err?.message || err);
       return res.status(500).json({ message: "Failed to build inbound call config" });
@@ -4456,8 +4670,70 @@ export async function registerRoutes(
         return res.json({ received: true });
       }
 
+      // Inbound-call branch: when no bland_calls row exists AND the payload
+      // is flagged as an inbound call (via metadata.source from
+      // /api/bland/inbound, or an explicit payload.inbound flag), generate a
+      // stateless guest proposal directly from this payload. Mirrors the
+      // post-call branch of the outbound flow but skips everything that
+      // requires a userId. Always ACKs 200 — failures are logged and
+      // swallowed so Bland never retries the webhook into a tight loop.
       if (!blandCall) {
-        console.warn(`No matching bland_call found for bland_call_id=${blandCallId}`);
+        const isInboundCall =
+          payload.inbound === true ||
+          payload.metadata?.source === "inbound_phone";
+        const isTerminal =
+          payload.status === "completed" || payload.event === "call.ended";
+
+        if (isInboundCall && isTerminal) {
+          // Idempotency: Bland sometimes redelivers the same terminal webhook
+          // (network retry, dual events). Claim the dispatch slot synchronously
+          // BEFORE launching the fire-and-forget generator, so two webhook
+          // events arriving back-to-back cannot both create a guest proposal
+          // and email the caller twice.
+          if (inboundGuestProposalDispatched.has(blandCallId)) {
+            console.log(
+              `[bland-inbound ${blandCallId}] skipping — guest proposal already dispatched for this call_id`
+            );
+          } else {
+            // Phone resolution priority: payload.from (caller) → payload.phone_number
+            // → payload.variables.phone_number → payload.variables.from. Bland's
+            // payload shape varies between events; we walk all of them.
+            const rawPhone =
+              payload.from ||
+              payload.phone_number ||
+              (payload.variables && (payload.variables.phone_number || payload.variables.from)) ||
+              null;
+            const phoneE164 = normalizePhoneE164(rawPhone);
+            if (!phoneE164) {
+              console.warn(
+                `[bland-inbound ${blandCallId}] skipping — could not normalize caller phone (raw="${rawPhone}")`
+              );
+            } else {
+              // Mark dispatched BEFORE launching so a duplicate webhook arriving
+              // mid-generation also short-circuits.
+              inboundGuestProposalDispatched.add(blandCallId);
+              const inboundAnalysis = extractAnalysisFromBlandPayload(payload);
+              const transcript = payload.concatenated_transcript || null;
+              const summary = payload.summary || null;
+              // Fire-and-forget so the webhook ack is not blocked on Duffel +
+              // SendGrid latency. Errors are swallowed inside the helper.
+              void generateGuestProposalForInboundCall({
+                blandCallId,
+                phoneE164,
+                transcript,
+                summary,
+                analysis: inboundAnalysis,
+              }).catch((err) => {
+                console.error(
+                  `[bland-inbound ${blandCallId}] unexpected throw from generator:`,
+                  err?.message || err,
+                );
+              });
+            }
+          }
+        } else {
+          console.warn(`No matching bland_call found for bland_call_id=${blandCallId}`);
+        }
         return res.json({ received: true });
       }
 

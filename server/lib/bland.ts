@@ -73,25 +73,29 @@ export function getTravelAnalysisSchema(): Record<string, string> {
   };
 }
 
-export interface DispatchCallOptions {
-  phoneNumber: string;
+export interface BuildBlandCallConfigOptions {
   task: string;
   webhookUrl: string;
   dynamicDataUrl?: string;
   dynamicDataHeaders?: Record<string, string>;
   transferPhoneNumber?: string;
+  metadata?: Record<string, any>;
   voice?: string;
   language?: string;
   maxDuration?: number;
   record?: boolean;
   waitForGreeting?: boolean;
-  metadata?: Record<string, any>;
 }
 
-export async function dispatchCall(opts: DispatchCallOptions): Promise<{ callId: string; status: string }> {
-  const payload: any = {
-    phone_number: opts.phoneNumber,
-    from: "+14159148074",
+// Single source of truth for the in-call Bland config. Both outbound
+// dispatchCall and the inbound /api/bland/inbound endpoint build their
+// payload by calling this helper, so the live agent's behavior (voice,
+// model, prompt builder, dynamic_data URL/headers/body/response_data,
+// analysis_schema, end-call phrases, turn-taking knobs) cannot drift.
+// The only call-targeting fields (`phone_number`, `from`) are intentionally
+// excluded — those belong only on the outbound /v1/calls POST.
+export function buildBlandCallConfig(opts: BuildBlandCallConfigOptions): Record<string, any> {
+  const config: Record<string, any> = {
     task: opts.task,
     webhook: opts.webhookUrl,
     webhook_events: ["call.ended"],
@@ -113,27 +117,78 @@ export async function dispatchCall(opts: DispatchCallOptions): Promise<{ callId:
   };
 
   if (opts.dynamicDataUrl) {
-    payload.dynamic_data = [{
+    config.dynamic_data = [{
       url: opts.dynamicDataUrl,
       method: "POST",
       headers: opts.dynamicDataHeaders || {},
       cache: false,
+      // Body is interpolated by Bland at call time. Sending phone_number /
+      // call_id / from / to lets /api/bland/dynamic-data resolve email-on-file
+      // and previous_proposal_info for inbound callers (and outbound too).
+      body: {
+        phone_number: "{{phone_number}}",
+        call_id: "{{call_id}}",
+        from: "{{from}}",
+        to: "{{to}}",
+      },
       response_data: [
         { name: "traveler_info", data: "$.traveler_info", context: "Traveler information: {{traveler_info}}" },
         { name: "booking_info", data: "$.booking_info", context: "Booking information: {{booking_info}}" },
         { name: "proposal_info", data: "$.proposal_info", context: "Proposal information: {{proposal_info}}" },
         { name: "email_info", data: "$.email_info", context: "Traveler email on file: {{email_info}}" },
+        { name: "previous_proposal_info", data: "$.previous_proposal_info", context: "Previous options: {{previous_proposal_info}}" },
       ],
     }];
   }
 
   if (opts.transferPhoneNumber) {
-    payload.transfer_phone_number = opts.transferPhoneNumber;
+    config.transfer_phone_number = opts.transferPhoneNumber;
   }
 
   if (opts.metadata) {
-    payload.metadata = opts.metadata;
+    config.metadata = opts.metadata;
   }
+
+  return config;
+}
+
+export interface DispatchCallOptions {
+  phoneNumber: string;
+  task: string;
+  webhookUrl: string;
+  dynamicDataUrl?: string;
+  dynamicDataHeaders?: Record<string, string>;
+  transferPhoneNumber?: string;
+  voice?: string;
+  language?: string;
+  maxDuration?: number;
+  record?: boolean;
+  waitForGreeting?: boolean;
+  metadata?: Record<string, any>;
+}
+
+export async function dispatchCall(opts: DispatchCallOptions): Promise<{ callId: string; status: string }> {
+  // Build the shared in-call config first, then attach the outbound-only
+  // top-level call-targeting fields (`phone_number`, `from`).
+  const config = buildBlandCallConfig({
+    task: opts.task,
+    webhookUrl: opts.webhookUrl,
+    dynamicDataUrl: opts.dynamicDataUrl,
+    dynamicDataHeaders: opts.dynamicDataHeaders,
+    transferPhoneNumber: opts.transferPhoneNumber,
+    metadata: opts.metadata,
+    voice: opts.voice,
+    language: opts.language,
+    maxDuration: opts.maxDuration,
+    record: opts.record,
+    waitForGreeting: opts.waitForGreeting,
+  });
+
+  const payload: any = {
+    phone_number: opts.phoneNumber,
+    from: "+14159148074",
+    ...config,
+  };
 
   let lastErr: any = null;
   for (let attempt = 1; attempt <= BLAND_DISPATCH_MAX_ATTEMPTS; attempt++) {
