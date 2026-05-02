@@ -77,6 +77,7 @@ export interface IStorage {
 
   upsertPhoneEmailMap(phone: string, email: string): Promise<PhoneEmailMap | null>;
   getEmailForPhone(phone: string): Promise<string | null>;
+  getUserIdByPhone(phone: string): Promise<{ userId: string; source: "phone_traveler_profile" | "phone_bland_calls" | "phone_email_map_to_user" } | null>;
 
   createGuestProposal(data: InsertGuestProposal): Promise<GuestProposal>;
   getGuestProposalByToken(token: string): Promise<GuestProposal | undefined>;
@@ -456,6 +457,104 @@ export class DatabaseStorage implements IStorage {
     if (!normalizedPhone) return null;
     const [row] = await db.select().from(phoneEmailMap).where(eq(phoneEmailMap.phone, normalizedPhone));
     return row?.email ?? null;
+  }
+
+  // Resolve a Travnr user from an inbound caller phone number using three
+  // read-only sources in priority order. The `users` table has no phone
+  // column (and shared/schema.ts is locked), so we join through:
+  //   1. traveler_profiles.phone — owner-entered, primary source.
+  //   2. bland_calls.phone_number — any prior outbound call from this phone
+  //      implies that user owns it.
+  //   3. phone_email_map.email → users.email — covers callers who appeared
+  //      via the guest flow with an email that matches a registered user.
+  // For each source, if multiple distinct user IDs match, treat the source as
+  // ambiguous and skip to the next source rather than picking arbitrarily —
+  // when all sources are exhausted without a unique match, the caller falls
+  // back to the email-only phone↔email map path so no user context is leaked
+  // across accounts that happen to share a phone number. Never throws —
+  // returns null on any unexpected error.
+  async getUserIdByPhone(phone: string): Promise<{ userId: string; source: "phone_traveler_profile" | "phone_bland_calls" | "phone_email_map_to_user" } | null> {
+    try {
+      const normalizedPhone = normalizePhoneE164(phone);
+      if (!normalizedPhone) return null;
+      // Compare digits-only on BOTH sides so stored values like "3145551234",
+      // "(314) 555-1234", "13145551234", or "+13145551234" all match the same
+      // normalized E.164 input. We also compare the last 10 digits to handle
+      // stored 10-digit US numbers without a country code (e.g., stored
+      // "3145551234" vs input normalized to "+13145551234" → "13145551234").
+      const digits = normalizedPhone.replace(/[^0-9]/g, "");
+      const last10 = digits.slice(-10);
+      const matchSql = (col: any) => sql`(
+        regexp_replace(COALESCE(${col}, ''), '[^0-9]', '', 'g') = ${digits}
+        OR right(regexp_replace(COALESCE(${col}, ''), '[^0-9]', '', 'g'), 10) = ${last10}
+      )`;
+
+      // Ambiguity policy: if a phone source returns multiple distinct user IDs
+      // (i.e. the phone is shared across accounts in that source), skip it and
+      // try the next source rather than picking arbitrarily. If no source ever
+      // yields a unique match, return null so the caller falls back to the
+      // email-only phone↔email map path — no profile/booking context is ever
+      // attached to a phone that resolves to multiple users in every source.
+
+      // Source 1: traveler_profiles.phone (free-form text — normalize in SQL)
+      try {
+        const rows = await db
+          .select({ userId: travelerProfiles.userId })
+          .from(travelerProfiles)
+          .where(matchSql(travelerProfiles.phone));
+        const distinct = Array.from(new Set(rows.map(r => r.userId).filter(Boolean)));
+        if (distinct.length === 1) {
+          return { userId: distinct[0]!, source: "phone_traveler_profile" };
+        }
+      } catch (e: any) {
+        console.warn("[storage.getUserIdByPhone] traveler_profiles lookup failed:", e?.message || e);
+      }
+
+      // Source 2: bland_calls.phone_number (already E.164 from outbound dispatch,
+      // but normalize defensively in SQL in case of legacy rows)
+      try {
+        const rows = await db
+          .select({ userId: blandCalls.userId })
+          .from(blandCalls)
+          .where(matchSql(blandCalls.phoneNumber));
+        const distinct = Array.from(new Set(rows.map(r => r.userId).filter(Boolean)));
+        if (distinct.length === 1) {
+          return { userId: distinct[0]!, source: "phone_bland_calls" };
+        }
+      } catch (e: any) {
+        console.warn("[storage.getUserIdByPhone] bland_calls lookup failed:", e?.message || e);
+      }
+
+      // Source 3: phone_email_map.email → users.email (weakest fallback).
+      // Extra guards: only resolve when the matched user's email is verified,
+      // because the phone↔email link can be established by an unverified guest
+      // flow and we don't want to reveal full account history (profile,
+      // bookings, proposals) based on an unverified email association. Also
+      // treat any case where multiple users share that email as ambiguous.
+      try {
+        const email = await this.getEmailForPhone(normalizedPhone);
+        if (email) {
+          const matches = await db
+            .select({ id: users.id, emailVerified: users.emailVerified })
+            .from(users)
+            .where(eq(users.email, email));
+          const distinct = Array.from(new Set(matches.map(r => r.id).filter(Boolean)));
+          if (distinct.length === 1) {
+            const matched = matches.find(r => r.id === distinct[0]);
+            if (matched?.emailVerified) {
+              return { userId: distinct[0]!, source: "phone_email_map_to_user" };
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn("[storage.getUserIdByPhone] phone_email_map lookup failed:", e?.message || e);
+      }
+
+      return null;
+    } catch (e: any) {
+      console.warn("[storage.getUserIdByPhone] unexpected error:", e?.message || e);
+      return null;
+    }
   }
 
   async createGuestProposal(data: InsertGuestProposal): Promise<GuestProposal> {

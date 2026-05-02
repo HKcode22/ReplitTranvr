@@ -4945,13 +4945,33 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const { phone_number, call_id } = req.body;
+      const { phone_number, call_id, from } = req.body;
 
       let userId: string | null = null;
+      let userLookupSource: "call_id" | "phone_traveler_profile" | "phone_bland_calls" | "phone_email_map_to_user" | "none" = "none";
 
       if (call_id) {
         const blandCall = await storage.getBlandCallByBlandId(call_id);
-        if (blandCall) userId = blandCall.userId;
+        if (blandCall) {
+          userId = blandCall.userId;
+          userLookupSource = "call_id";
+        }
+      }
+
+      // Inbound-caller resolution: if call_id didn't yield a Travnr user (the
+      // typical cold-inbound case), try to resolve by caller phone. Priority
+      // is `phone_number → from`; we ignore `to` because for inbound calls
+      // `to` is the Travnr DID, not the caller.
+      const rawCallerPhone = (phone_number as string | undefined) || (from as string | undefined) || null;
+      const normalizedCallerPhone = rawCallerPhone ? normalizePhoneE164(rawCallerPhone) : null;
+      console.log(`[bland/dynamic-data] phone_normalized=${normalizedCallerPhone || "—"}`);
+
+      if (!userId && normalizedCallerPhone) {
+        const phoneMatch = await storage.getUserIdByPhone(normalizedCallerPhone).catch(() => null);
+        if (phoneMatch) {
+          userId = phoneMatch.userId;
+          userLookupSource = phoneMatch.source;
+        }
       }
 
       let travelerInfo = "No traveler profile found.";
@@ -4993,9 +5013,12 @@ export async function registerRoutes(
       }
 
       // Fall back to the phone↔email map (covers guest callers and inbound calls
-      // where call_id doesn't resolve to a Travnr user).
-      if (emailInfo.startsWith("No email on file") && phone_number) {
-        const mapped = await storage.getEmailForPhone(phone_number).catch(() => null);
+      // where call_id doesn't resolve to a Travnr user). Use the resolved
+      // caller phone (phone_number || from) so inbound payloads that only
+      // carry `from` still benefit from the fallback.
+      const fallbackPhone = normalizedCallerPhone || phone_number;
+      if (emailInfo.startsWith("No email on file") && fallbackPhone) {
+        const mapped = await storage.getEmailForPhone(fallbackPhone).catch(() => null);
         if (mapped) emailInfo = `Email on file: ${mapped}`;
       }
 
@@ -5004,9 +5027,9 @@ export async function registerRoutes(
       // can offer to revisit it. Wrapped in try/catch so a lookup failure can
       // never break the existing dynamic-data response.
       let previousProposalInfo = "No prior options to revisit";
-      if (phone_number) {
+      if (fallbackPhone) {
         try {
-          const recent = await storage.getRecentGuestProposalForPhone(phone_number, 24);
+          const recent = await storage.getRecentGuestProposalForPhone(fallbackPhone, 24);
           if (recent) {
             const route = `${recent.row.originIata} → ${recent.row.destinationIata}`;
             previousProposalInfo = recent.expired
@@ -5017,6 +5040,31 @@ export async function registerRoutes(
           console.warn("[bland/dynamic-data] previous_proposal_info lookup failed:", e?.message || e);
         }
       }
+
+      // Opportunistic phone↔email map upsert: when the phone-based path
+      // resolved a user with an email on file, persist the mapping so future
+      // inbound calls from this number can short-circuit via the cheaper
+      // phone↔email map path. Wrapped in try/catch — never block the response.
+      const emailFound = emailInfo.startsWith("Email on file:");
+      if (
+        normalizedCallerPhone &&
+        emailFound &&
+        userLookupSource !== "call_id" &&
+        userLookupSource !== "none"
+      ) {
+        try {
+          const emailValue = emailInfo.slice("Email on file:".length).trim();
+          if (emailValue) {
+            await storage.upsertPhoneEmailMap(normalizedCallerPhone, emailValue);
+          }
+        } catch (e: any) {
+          console.warn("[bland/dynamic-data] phone_email_map upsert failed:", e?.message || e);
+        }
+      }
+
+      console.log(`[bland/dynamic-data] user_lookup_source=${userLookupSource}`);
+      console.log(`[bland/dynamic-data] user_found=${!!userId}`);
+      console.log(`[bland/dynamic-data] email_found=${emailFound}`);
 
       return res.json({
         traveler_info: travelerInfo,
