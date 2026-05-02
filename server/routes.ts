@@ -4886,8 +4886,59 @@ export async function registerRoutes(
     }
   });
 
+  // Apply minimal CORS headers ONLY to /api/bland/dynamic-data so the Bland
+  // dashboard "Test Request" button (a cross-origin browser fetch from e.g.
+  // https://app.bland.ai) can reach the endpoint. Real Bland production calls
+  // are server-to-server and don't enforce CORS, so this is purely a
+  // dashboard-tooling convenience and not a security relaxation.
+  //
+  // We use Access-Control-Allow-Origin: * because:
+  //   1. Auth is via the x-bland-secret header (not cookies), so widening
+  //      origin does not weaken auth.
+  //   2. We do NOT set Access-Control-Allow-Credentials, so browsers will
+  //      refuse to send cookies along even if the calling page tried.
+  //   3. The response payload is concierge context already gated by the
+  //      secret header.
+  function applyBlandDynamicDataCors(_req: Request, res: Response) {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, x-bland-secret",
+    );
+    res.setHeader("Access-Control-Max-Age", "86400");
+    // Vary so any caching layer keys correctly on Origin.
+    res.setHeader("Vary", "Origin");
+  }
+
+  // Preflight handler so the browser's OPTIONS preflight (triggered by the
+  // custom x-bland-secret header) gets a 204 with the CORS allow-list.
+  // Without this, the browser blocks the actual POST from ever firing and
+  // the dashboard surfaces a generic FetchError.
+  app.options("/api/bland/dynamic-data", (req: Request, res: Response) => {
+    applyBlandDynamicDataCors(req, res);
+    return res.status(204).end();
+  });
+
   app.post("/api/bland/dynamic-data", async (req: Request, res: Response) => {
     try {
+      // Headers and diagnostic log must run BEFORE the secret check so:
+      //  (a) 401 responses still carry the CORS headers (otherwise the
+      //      browser hides the 401 behind a generic CORS error and the
+      //      dashboard can't tell auth from reachability).
+      //  (b) misconfigured-secret attempts still appear in logs so an
+      //      operator can debug a typo in the dashboard secret value.
+      applyBlandDynamicDataCors(req, res);
+      const _origin = (req.headers.origin as string) || "—";
+      const _ct = (req.headers["content-type"] as string) || "—";
+      // Boolean-only — never log the actual secret value.
+      const _hasSecret = !!req.headers["x-bland-secret"];
+      console.log(
+        `[bland/dynamic-data] method=${req.method} origin=${_origin} ` +
+          `content_type=${_ct} x_bland_secret_present=${_hasSecret} ` +
+          `body=${JSON.stringify(req.body || {})}`,
+      );
+
       const secret = req.headers["x-bland-secret"] as string;
       const expectedSecret = bland.getWebhookSecret();
       if (!secret || (secret !== expectedSecret && secret !== process.env.BLAND_AI_API_KEY)) {
@@ -4976,6 +5027,11 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       console.error("Bland dynamic data error:", err);
+      // Re-apply CORS headers on the error path. They were already set at the
+      // top of the try block, but if anything in this hot path ever throws
+      // before that line (e.g. a future refactor), this guarantees the dashboard
+      // still gets a useful CORS response instead of an opaque browser error.
+      applyBlandDynamicDataCors(req, res);
       return res.json({
         traveler_info: "Error loading profile.",
         booking_info: "Error loading bookings.",
