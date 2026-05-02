@@ -1,0 +1,93 @@
+The Bland webhook URL in the Bland dashboard is already set correctly to:
+https://travnr.com/api/bland/webhook
+
+So the issue is NOT the post-call webhook URL.
+
+The real issue is that inbound calls are answering, but they are not using the same live call configuration as outbound calls. The inbound call feels like a different agent: different sequence, different script, and different API-connected context.
+
+Please inspect and fix the Bland inbound vs outbound configuration.
+
+Files to inspect:
+- server/lib/bland.ts
+- server/routes.ts
+- server/storage.ts
+- server/lib/phone.ts
+- server/lib/emailTemplates.ts
+
+What I need fixed:
+1. Make inbound calls and outbound calls use the same Travnr concierge behavior.
+2. Do not let /api/bland/inbound manually drift from the outbound dispatchCall setup.
+3. Create one shared helper in server/lib/bland.ts that builds the full Bland config used by both inbound and outbound.
+4. Use that helper inside outbound dispatchCall.
+5. Use that same helper inside /api/bland/inbound.
+
+The shared config should include the same:
+- prompt/task behavior
+- voice
+- model
+- webhook
+- webhook_events
+- analysis_schema
+- dynamic_data
+- max_duration
+- wait_for_greeting
+- interruption_threshold
+- endpoint_sensitivity
+- end_call_phrases
+- record setting
+
+Also fix dynamic_data for both inbound and outbound.
+
+Right now dynamic_data is not sending phone_number or call_id to /api/bland/dynamic-data. Add this body to the dynamic_data block in both flows:
+
+{
+  "phone_number": "{{phone_number}}",
+  "call_id": "{{call_id}}",
+  "from": "{{from}}",
+  "to": "{{to}}"
+}
+
+The dynamic_data response_data should include the same useful context for both inbound and outbound:
+- traveler_info
+- booking_info
+- proposal_info
+- email_info
+- previous_proposal_info
+
+For inbound specifically:
+- Add metadata: { source: "inbound_phone" }
+- Use buildTravelConciergePrompt for the inbound task too.
+- Inbound can start with less known info than outbound, but it should still use the exact same prompt style, voice behavior, dynamic data, analysis schema, and API-connected context.
+- If phone/email context is available through dynamic_data, the agent should use it.
+- Do not use an old static prompt or separate inbound-only script.
+
+Also keep the post-call inbound fix:
+- In /api/bland/webhook, before returning “No matching bland_call found,” add an inbound branch.
+- Detect inbound with payload.inbound === true or payload.metadata?.source === "inbound_phone".
+- Resolve phone from payload.from, payload.phone_number, payload.variables?.phone_number, or payload.variables?.from.
+- Normalize the phone.
+- Resolve email from storage.getEmailForPhone(phone), then fall back to analysis.email.
+- If email comes from analysis and phone exists, upsert the phone-email map.
+- If no email is found, log clearly and return { received: true }.
+- If email exists, generate and send a guest proposal email without requiring userId or callRequestId.
+- Do not throw or return 500 from the inbound branch, because Bland may retry and duplicate emails.
+- Run the inbound proposal generation in the background and return { received: true } quickly.
+
+Important constraints:
+- Do not modify shared/schema.ts.
+- Do not modify server/lib/stripeClient.ts.
+- Do not break existing outbound calls.
+- Do not break callback-request flows.
+- Preserve current authenticated user proposal flow.
+- Preserve post-call analysis_schema behavior.
+- Add clear logs with prefix [bland-inbound] showing:
+  - call_id
+  - phone found or not found
+  - email found via map or analysis
+  - transcript present or missing
+  - proposal generated or skipped
+
+After implementing, tell me:
+1. What exact fields are now shared between inbound and outbound.
+2. Whether /api/bland/inbound still has any unique config.
+3. Whether the Bland dashboard needs any other manual change besides the webhook already being set to /api/bland/webhook.
