@@ -1,0 +1,70 @@
+We found a real issue with inbound caller identity.
+
+When I call Travnr from a phone number that is already associated with my Travnr account, /api/bland/dynamic-data does not connect the inbound caller to my account. It returns no traveler profile and no email on file, which causes the AI to ask me to spell my email on the call. That experience is bad and unreliable.
+
+Replit previously confirmed the current endpoint only resolves a user by call_id for outbound calls and does NOT do a direct phone-to-user lookup for cold inbound callers. This needs to be fixed.
+
+Please add direct phone-to-user resolution for inbound dynamic data.
+
+Goal:
+When /api/bland/dynamic-data receives phone_number or from, it should normalize the phone number and look up any Travnr user account connected to that phone number. If found, it should return that user's profile, email, saved preferences, booking context, and proposal context just like outbound calls do.
+
+Implementation requirements:
+1. In /api/bland/dynamic-data, resolve caller phone in this order:
+   - req.body.phone_number
+   - req.body.from
+   - req.body.to only as a last resort if appropriate, but be careful because for inbound calls "to" is usually the Travnr number.
+
+2. Normalize the caller phone using normalizePhoneE164.
+
+3. Add or use a storage method to find a user by normalized phone number.
+   Possible names:
+   - getUserByPhone
+   - getUserByPhoneNumber
+   - getUserByNormalizedPhone
+
+4. The lookup should handle phone formatting differences:
+   - +13145551234
+   - 13145551234
+   - (314) 555-1234
+   - 3145551234
+
+5. If a user is found by phone:
+   - set userId from that user
+   - return traveler_info from their profile
+   - return email_info using their account email
+   - return booking_info from their recent bookings
+   - return proposal_info from their active proposals
+   - return previous_proposal_info if there is a recent guest proposal or unfinished proposal context
+
+6. Lookup priority should be:
+   A. call_id → bland_calls → userId, for outbound calls
+   B. normalized caller phone → user account, for inbound calls
+   C. phoneEmailMap fallback
+   D. no email found
+
+7. If user is found by phone and has an email, also upsert phoneEmailMap so future inbound calls can resolve faster.
+
+8. Add clear logs:
+   [bland/dynamic-data] phone_normalized=...
+   [bland/dynamic-data] user_lookup_source=call_id|phone_user|phone_email_map|none
+   [bland/dynamic-data] user_found=true/false
+   [bland/dynamic-data] email_found=true/false
+
+9. Do not log the full email or secret values.
+
+10. Do not modify shared/schema.ts unless absolutely necessary. First check whether the users table already has a phone/phoneNumber field.
+
+11. Do not modify server/lib/stripeClient.ts.
+
+12. Preserve the existing response shape exactly:
+   - traveler_info
+   - booking_info
+   - proposal_info
+   - email_info
+   - previous_proposal_info
+
+13. After implementing, give me a test plan:
+   - what phone number format to use in the Bland Dynamic Data test
+   - what Replit logs should show
+   - what the returned JSON should look like for a known account phone number
