@@ -1,0 +1,98 @@
+Before I manually configure Bland Dynamic Data in the Bland dashboard, verify exactly what our Replit backend expects.
+
+Context:
+I am on the Bland inbound phone number Dynamic Data screen. I want Bland to call our Replit endpoint during inbound calls so Replit can identify the caller by phone number, find saved email/account/history/proposal context, and return it to the live agent.
+
+Please inspect:
+- server/routes.ts
+- server/lib/bland.ts
+- server/storage.ts
+- server/lib/phone.ts
+- any files involved in /api/bland/dynamic-data
+
+I need you to answer these clearly:
+
+1. What is the exact dynamic data endpoint URL I should put into Bland?
+   Example:
+   POST https://travnr.com/api/bland/dynamic-data
+
+2. What HTTP method does the endpoint expect?
+   Is it POST or GET?
+
+3. What headers does it require?
+   Specifically:
+   - Does it require Content-Type: application/json?
+   - Does it require x-bland-secret?
+   - If yes, what environment variable provides the value?
+   - If x-bland-secret is required, tell me the exact header name and whether the dashboard value should match BLAND_WEBHOOK_SECRET or another env var.
+
+4. What exact request body keys does /api/bland/dynamic-data expect?
+   I am planning to send:
+   {
+     "phone_number": "{{phone_number}}",
+     "call_id": "{{call_id}}",
+     "from": "{{from}}",
+     "to": "{{to}}"
+   }
+
+   Confirm whether these are correct.
+   Also tell me if Bland inbound calls use a different variable name for caller phone, like {{from}} instead of {{phone_number}}.
+
+5. What exact JSON response does /api/bland/dynamic-data return?
+   Please show an example response with all fields.
+
+6. Confirm whether the response includes these fields:
+   - traveler_info
+   - booking_info
+   - proposal_info
+   - email_info
+   - previous_proposal_info
+
+7. For each returned field, tell me the exact JSON Path I should put in Bland:
+   Example:
+   traveler_info = $.traveler_info
+
+8. For each returned field, give me the exact Variable Name I should put in Bland:
+   Example:
+   traveler_info
+
+9. For each returned field, give me a short Context description I should paste into Bland.
+
+10. Does /api/bland/dynamic-data currently look up:
+   - phoneEmailMap
+   - previous guest proposals
+   - existing user account by phone number
+   - saved traveler preferences
+   - unfinished itinerary or booking context
+
+   If any of those are not currently implemented, tell me exactly what is missing.
+
+11. Confirm whether Cache/Save Response should be ON or OFF in Bland.
+   My assumption is OFF because caller context should be fresh every call.
+
+12. Confirm whether this manual Bland Dynamic Data setup will work even if /api/bland/inbound is not being used to fetch the whole inbound call config.
+
+13. Give me the final Bland dashboard values to enter in this exact format:
+
+   Method:
+   URL:
+   Headers:
+   Body key/value pairs:
+   Variable 1 JSON Path:
+   Variable 1 Name:
+   Variable 1 Context:
+   Variable 2 JSON Path:
+   Variable 2 Name:
+   Variable 2 Context:
+   Variable 3 JSON Path:
+   Variable 3 Name:
+   Variable 3 Context:
+   Variable 4 JSON Path:
+   Variable 4 Name:
+   Variable 4 Context:
+   Variable 5 JSON Path:
+   Variable 5 Name:
+   Variable 5 Context:
+
+Important:
+Do not change code yet unless there is a clear mismatch between what Bland dashboard will send and what Replit expects. If there is a mismatch, explain it first and propose the smallest safe fix.
