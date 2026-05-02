@@ -3704,59 +3704,80 @@ export async function registerRoutes(
   // Always swallows its own errors so the webhook ack stays a 200.
   async function generateGuestProposalForInboundCall(opts: {
     blandCallId: string;
-    phoneE164: string;
+    phoneE164: string | null;
     transcript: string | null;
     summary: string | null;
     analysis: BlandAnalysisPayload | null;
   }): Promise<void> {
     const { blandCallId, phoneE164, transcript, summary, analysis } = opts;
-    const logPrefix = `[bland-inbound ${blandCallId}]`;
+    // Standardized trace prefix per task spec — every line is grep-able with
+    // `[bland-inbound] call_id=<id>` so an operator can reconstruct the full
+    // path of any single inbound call from the log file.
+    const lp = `[bland-inbound] call_id=${blandCallId}`;
+
+    console.log(
+      `${lp} phone_resolved=${phoneE164 ? "yes" : "no"} transcript_present=${!!transcript} summary_present=${!!summary} analysis_present=${!!analysis}`
+    );
 
     if (!duffel) {
-      console.warn(`${logPrefix} Duffel client not configured — skipping inbound guest proposal`);
+      console.warn(`${lp} skipping reason=duffel_not_configured`);
       return;
     }
     if (!transcript && !summary && !analysis) {
-      console.log(`${logPrefix} skipping — no transcript / summary / analysis to parse`);
+      console.log(`${lp} skipping reason=no_transcript_or_summary_or_analysis`);
       return;
     }
 
     const details = parseTravelDetailsFromTranscript(transcript, summary, analysis);
-    if (!details.destination) {
-      console.log(`${logPrefix} skipping — no destination resolved from call`);
-      return;
-    }
 
-    // Email resolution: post-call analysis email > phone↔email map.
-    // No account exists for inbound guest callers, so we don't try storage.getUser.
+    // Email resolution per task spec:
+    //   1) phone↔email map first (covers returning callers — preserves the email
+    //      we already know is good rather than overwriting with whatever the
+    //      analysis pass extracted this time).
+    //   2) Fall back to analysis.email after regex validation.
+    //   3) When the analysis fallback fires AND a phone is present, upsert the
+    //      map so the next inbound call from this number hits step (1) directly.
     let guestEmail: string | null = null;
-    if (typeof details.email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(details.email)) {
-      guestEmail = details.email.trim().toLowerCase();
-      // Promote a fresh email from the call onto the phone↔email map so future
-      // dynamic-data calls and proposals can use it without re-asking.
-      try {
-        await storage.upsertPhoneEmailMap(phoneE164, guestEmail);
-      } catch (e: any) {
-        console.warn(`${logPrefix} upsertPhoneEmailMap failed:`, e?.message || e);
-      }
-    }
-    if (!guestEmail) {
+    let emailSource: "phone_map" | "analysis" | "none" = "none";
+    if (phoneE164) {
       try {
         guestEmail = await storage.getEmailForPhone(phoneE164);
+        if (guestEmail) emailSource = "phone_map";
       } catch (e: any) {
-        console.warn(`${logPrefix} getEmailForPhone failed:`, e?.message || e);
+        console.warn(`${lp} getEmailForPhone failed:`, e?.message || e);
       }
     }
     if (!guestEmail) {
-      console.log(`${logPrefix} skipping — no email could be resolved for phone=${phoneE164}`);
+      const analysisEmailRaw = (details as any)?.email;
+      if (typeof analysisEmailRaw === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(analysisEmailRaw)) {
+        guestEmail = analysisEmailRaw.trim().toLowerCase();
+        emailSource = "analysis";
+        if (phoneE164) {
+          try {
+            await storage.upsertPhoneEmailMap(phoneE164, guestEmail);
+          } catch (e: any) {
+            console.warn(`${lp} upsertPhoneEmailMap failed:`, e?.message || e);
+          }
+        }
+      }
+    }
+    if (!guestEmail) {
+      console.log(`${lp} no email resolvable, skipping (email_source=none, phone=${phoneE164 || "—"})`);
+      return;
+    }
+    console.log(`${lp} email_resolved=${guestEmail} email_source=${emailSource}`);
+
+    if (!details.destination) {
+      console.log(`${lp} skipping reason=no_destination_parsed (email_source=${emailSource})`);
       return;
     }
 
-    // Origin/destination resolution. US bias when caller phone is +1.
-    const isUSUser = phoneE164.startsWith("+1");
-    const destResult = await resolveAirport(details.destination, isUSUser, logPrefix);
+    // Origin/destination resolution. US bias when caller phone is +1; no bias
+    // when phone wasn't normalizable (we don't want to falsely default to US).
+    const isUSUser = !!phoneE164 && phoneE164.startsWith("+1");
+    const destResult = await resolveAirport(details.destination, isUSUser, lp);
     if (!destResult) {
-      console.warn(`${logPrefix} skipping — no airport resolved for destination="${details.destination}"`);
+      console.warn(`${lp} skipping reason=destination_unresolvable destination="${details.destination}"`);
       return;
     }
     const destCode = destResult.code;
@@ -3765,7 +3786,7 @@ export async function registerRoutes(
     let originCode: string | null = null;
     let originName: string | null = null;
     if (details.origin) {
-      const originResult = await resolveAirport(details.origin, isUSUser, logPrefix);
+      const originResult = await resolveAirport(details.origin, isUSUser, lp);
       if (originResult) {
         originCode = originResult.code;
         originName = originResult.name;
@@ -3798,7 +3819,7 @@ export async function registerRoutes(
     const slices: any[] = [{ origin: originCode, destination: destCode, departure_date: departureDate }];
     if (returnDate) slices.push({ origin: destCode, destination: originCode, departure_date: returnDate });
 
-    console.log(`${logPrefix} Searching Duffel: ${originCode}->${destCode} dep=${departureDate} ret=${returnDate || "—"} pax=${details.passengers} cabin=${details.cabinClass}`);
+    console.log(`${lp} searching Duffel ${originCode}->${destCode} dep=${departureDate} ret=${returnDate || "—"} pax=${details.passengers} cabin=${details.cabinClass}`);
 
     let allOffers: any[] = [];
     try {
@@ -3811,12 +3832,12 @@ export async function registerRoutes(
       });
       allOffers = (offerRequest.data as any).offers || [];
     } catch (e: any) {
-      console.error(`${logPrefix} Duffel offerRequests.create failed:`, e?.message || e);
+      console.error(`${lp} skipping reason=duffel_offer_request_failed:`, e?.message || e);
       return;
     }
-    console.log(`${logPrefix} Duffel returned ${allOffers.length} offer(s)`);
+    console.log(`${lp} duffel_returned offers=${allOffers.length}`);
     if (allOffers.length === 0) {
-      console.log(`${logPrefix} skipping — Duffel returned no offers`);
+      console.log(`${lp} skipping reason=zero_offers`);
       return;
     }
     allOffers.sort((a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
@@ -3833,7 +3854,7 @@ export async function registerRoutes(
       cabinClass: details.cabinClass,
     });
     if (guestData.options.length === 0) {
-      console.log(`${logPrefix} skipping — no options built from offers`);
+      console.log(`${lp} skipping reason=no_options_built_from_offers`);
       return;
     }
 
@@ -3853,7 +3874,7 @@ export async function registerRoutes(
         expiresAt,
       });
     } catch (e: any) {
-      console.error(`${logPrefix} createGuestProposal failed:`, e?.message || e);
+      console.error(`${lp} skipping reason=create_guest_proposal_failed:`, e?.message || e);
       return;
     }
 
@@ -3867,7 +3888,7 @@ export async function registerRoutes(
     if (process.env.APP_URL) {
       canonicalHost = process.env.APP_URL;
     } else if (isProduction) {
-      console.warn(`${logPrefix} APP_URL not set in production — defaulting to https://travnr.com`);
+      console.warn(`${lp} APP_URL not set in production — defaulting to https://travnr.com`);
       canonicalHost = "https://travnr.com";
     } else if (process.env.REPLIT_DEV_DOMAIN) {
       canonicalHost = `https://${process.env.REPLIT_DEV_DOMAIN}`;
@@ -3902,9 +3923,9 @@ export async function registerRoutes(
           changeable: o.changeable,
         })),
       });
-      console.log(`${logPrefix} created guest proposal token=${saved.token} email=${guestEmail}`);
+      console.log(`${lp} guest proposal sent token=${saved.token} email=${guestEmail} email_source=${emailSource} origin=${originCode} destination=${destCode}`);
     } catch (e: any) {
-      console.error(`${logPrefix} sendGuestProposalEmail failed:`, e?.message || e);
+      console.error(`${lp} sendGuestProposalEmail failed:`, e?.message || e);
     }
   }
 
@@ -4692,44 +4713,47 @@ export async function registerRoutes(
           // and email the caller twice.
           if (inboundGuestProposalDispatched.has(blandCallId)) {
             console.log(
-              `[bland-inbound ${blandCallId}] skipping — guest proposal already dispatched for this call_id`
+              `[bland-inbound] call_id=${blandCallId} skipping reason=already_dispatched`
             );
           } else {
             // Phone resolution priority: payload.from (caller) → payload.phone_number
             // → payload.variables.phone_number → payload.variables.from. Bland's
-            // payload shape varies between events; we walk all of them.
+            // payload shape varies between events; we walk all of them. A null
+            // result is fine — the helper will still try analysis.email and
+            // can email the caller without a phone (the phone↔email upsert
+            // just gets skipped).
             const rawPhone =
               payload.from ||
               payload.phone_number ||
               (payload.variables && (payload.variables.phone_number || payload.variables.from)) ||
               null;
             const phoneE164 = normalizePhoneE164(rawPhone);
-            if (!phoneE164) {
-              console.warn(
-                `[bland-inbound ${blandCallId}] skipping — could not normalize caller phone (raw="${rawPhone}")`
+            console.log(
+              `[bland-inbound] call_id=${blandCallId} webhook_received phone_raw="${rawPhone || "—"}" phone_normalized=${phoneE164 || "—"}`
+            );
+
+            // Mark dispatched BEFORE launching so a duplicate webhook arriving
+            // mid-generation also short-circuits. We do this even when the
+            // helper later finds nothing usable — that way Bland retries on
+            // the same call_id never re-attempt and never spam the caller.
+            inboundGuestProposalDispatched.add(blandCallId);
+            const inboundAnalysis = extractAnalysisFromBlandPayload(payload);
+            const transcript = payload.concatenated_transcript || null;
+            const summary = payload.summary || null;
+            // Fire-and-forget so the webhook ack is not blocked on Duffel +
+            // SendGrid latency. Errors are swallowed inside the helper.
+            void generateGuestProposalForInboundCall({
+              blandCallId,
+              phoneE164,
+              transcript,
+              summary,
+              analysis: inboundAnalysis,
+            }).catch((err) => {
+              console.error(
+                `[bland-inbound] call_id=${blandCallId} unexpected throw from generator:`,
+                err?.message || err,
               );
-            } else {
-              // Mark dispatched BEFORE launching so a duplicate webhook arriving
-              // mid-generation also short-circuits.
-              inboundGuestProposalDispatched.add(blandCallId);
-              const inboundAnalysis = extractAnalysisFromBlandPayload(payload);
-              const transcript = payload.concatenated_transcript || null;
-              const summary = payload.summary || null;
-              // Fire-and-forget so the webhook ack is not blocked on Duffel +
-              // SendGrid latency. Errors are swallowed inside the helper.
-              void generateGuestProposalForInboundCall({
-                blandCallId,
-                phoneE164,
-                transcript,
-                summary,
-                analysis: inboundAnalysis,
-              }).catch((err) => {
-                console.error(
-                  `[bland-inbound ${blandCallId}] unexpected throw from generator:`,
-                  err?.message || err,
-                );
-              });
-            }
+            });
           }
         } else {
           console.warn(`No matching bland_call found for bland_call_id=${blandCallId}`);
