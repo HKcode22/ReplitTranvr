@@ -17,6 +17,7 @@ import { buildGuestProposalSms } from "./lib/smsTemplates";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
 import {
   verifyProposalAgainstTranscript,
+  verifyProposalPicks,
   fixAndRegenerateProposal,
   buildProposalSnapshot,
   type ParsedDetails as VerifierParsedDetails,
@@ -655,7 +656,57 @@ function offerValueScore(offer: any): number {
   return parseFloat(offer.total_amount) + offerTotalDurationMinutes(offer) * 0.5;
 }
 
-function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> {
+// Compact diagnostic summary of a Duffel offer pool. Used both for the
+// post-search diagnostic log line ("why did all picks come back as AA?")
+// and as the input to the Claude pick-quality verifier (which needs to
+// see what the picker saw to second-guess the labels). Keep field names
+// short — this string is logged verbatim and we want it scan-friendly.
+export function summarizeCarrierMix(offers: any[]): string {
+  if (!offers || offers.length === 0) return "empty";
+  const byCarrier = new Map<string, { count: number; cheapest: number }>();
+  let nonstopCount = 0;
+  for (const o of offers) {
+    const c = offerOutboundCarrier(o);
+    const price = parseFloat(o.total_amount);
+    const cur = byCarrier.get(c);
+    if (!cur) byCarrier.set(c, { count: 1, cheapest: Number.isFinite(price) ? price : Infinity });
+    else {
+      cur.count += 1;
+      if (Number.isFinite(price) && price < cur.cheapest) cur.cheapest = price;
+    }
+    if (offerStops(o) === 0) nonstopCount += 1;
+  }
+  const parts = Array.from(byCarrier.entries())
+    .sort((a, b) => a[1].cheapest - b[1].cheapest)
+    .map(([c, v]) => `${c}:${v.count}@${Number.isFinite(v.cheapest) ? v.cheapest.toFixed(0) : "?"}`);
+  return `total=${offers.length} nonstops=${nonstopCount} carriers=[${parts.join(",")}]`;
+}
+
+// Per-offer summary tuple consumed by the Claude pick-quality verifier
+// (see server/lib/proposalVerifier.ts > verifyProposalPicks). Kept tiny
+// and serializable so the prompt fits comfortably in one Claude turn even
+// when the offer pool is large.
+export interface OfferPoolEntry {
+  id: string;
+  carrier: string;
+  price: number;
+  currency: string;
+  duration_minutes: number;
+  stops: number;
+}
+
+export function summarizeOfferPool(offers: any[], limit = 30): OfferPoolEntry[] {
+  return (offers || []).slice(0, limit).map((o) => ({
+    id: String(o.id ?? ""),
+    carrier: offerOutboundCarrier(o),
+    price: parseFloat(o.total_amount),
+    currency: String(o.total_currency || "USD"),
+    duration_minutes: offerTotalDurationMinutes(o),
+    stops: offerStops(o),
+  }));
+}
+
+export function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> {
   if (!offers || offers.length === 0) return [];
 
   // Best Price sort: lowest total_amount, ties broken by shortest duration,
@@ -707,6 +758,30 @@ function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price"
     return null;
   }
 
+  // Like nextDistinct, but additionally rejects any candidate that is
+  // strictly worse-or-equal-on-both-axes than the supplied baseline. We
+  // use this for Best Value: if the value-pool winner is at least as
+  // expensive AND at least as long as Best Price, that label is a lie —
+  // it's the same compromise (or worse) for more money. Skip it and try
+  // the next value candidate.
+  function nextDistinctNotDominated(
+    list: any[],
+    takenSigs: Set<string>,
+    baseline: any,
+  ): any | null {
+    const basePrice = parseFloat(baseline.total_amount);
+    const baseDur = offerTotalDurationMinutes(baseline);
+    for (const o of list) {
+      if (takenSigs.has(offerFlightSignature(o))) continue;
+      const p = parseFloat(o.total_amount);
+      const d = offerTotalDurationMinutes(o);
+      // Dominated = at least as costly AND at least as long. Reject.
+      if (p >= basePrice && d >= baseDur) continue;
+      return o;
+    }
+    return null;
+  }
+
   const picks: Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> = [];
   const takenSigs = new Set<string>();
 
@@ -716,20 +791,28 @@ function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price"
   takenSigs.add(offerFlightSignature(bestPrice));
 
   // Best Value: lowest value score within the layover-filtered pool that is
-  // a different physical flight from Best Price. Fall back to the price-
-  // sorted list ONLY if the value pool has no distinct candidate at all
-  // (so we still emit three labels when possible).
+  // a different physical flight from Best Price AND is not strictly
+  // dominated by Best Price (would be both pricier AND longer). Fall back
+  // to the price-sorted list ONLY if no value candidate survives — and
+  // even there, prefer a non-dominated one before degrading to "any
+  // distinct offer at all".
   const bestValue =
-    nextDistinct(sortedByValue, takenSigs) ??
+    nextDistinctNotDominated(sortedByValue, takenSigs, bestPrice) ??
+    nextDistinctNotDominated(sortedByPrice, takenSigs, bestPrice) ??
     nextDistinct(sortedByPrice, takenSigs);
   if (bestValue) {
     picks.push({ offer: bestValue, label: "Best Value" });
     takenSigs.add(offerFlightSignature(bestValue));
   }
 
-  // Fastest: shortest total door-to-door that is a different physical
-  // flight from BOTH Best Price and Best Value. Same fallback rule.
+  // Fastest: prefer a nonstop when at least one nonstop exists in the
+  // offer pool that isn't already taken — even if a 1-stop edges it out
+  // on raw door-to-door minutes, a nonstop is the right answer for the
+  // "Fastest" label. Only if no untaken nonstop exists do we fall back
+  // to the existing shortest-total-duration sort.
+  const sortedNonstops = sortedByDuration.filter((o) => offerStops(o) === 0);
   const fastest =
+    nextDistinct(sortedNonstops, takenSigs) ??
     nextDistinct(sortedByDuration, takenSigs) ??
     nextDistinct(sortedByPrice, takenSigs);
   if (fastest) {
@@ -841,7 +924,7 @@ function offerToGuestOption(
   };
 }
 
-function buildGuestProposalDataFromOffers(args: {
+async function buildGuestProposalDataFromOffers(args: {
   offers: any[];
   originIata: string;
   originName?: string | null;
@@ -851,8 +934,62 @@ function buildGuestProposalDataFromOffers(args: {
   returnDate?: string | null;
   passengers: number;
   cabinClass: string;
-}): GuestProposalData {
-  const picks = pickThreeOffers(args.offers);
+  // When set, run the Claude pick-quality verifier on the picks; on a
+  // should_regenerate verdict, re-run the picker once with the offending
+  // offers excluded and use the new picks. Falls back to the original
+  // picks if Claude is unavailable, throws, or flags again on the second
+  // pass — verification never blocks the email path.
+  verifyPicks?: { logTag: string };
+}): Promise<GuestProposalData> {
+  let picks = pickThreeOffers(args.offers);
+
+  if (args.verifyPicks && picks.length > 0) {
+    const tag = args.verifyPicks.logTag;
+    try {
+      const verdict = await verifyProposalPicks({
+        picks: picks.map((p) => ({
+          label: p.label,
+          id: String(p.offer.id ?? ""),
+          carrier: offerOutboundCarrier(p.offer),
+          price: parseFloat(p.offer.total_amount),
+          currency: String(p.offer.total_currency || "USD"),
+          duration_minutes: offerTotalDurationMinutes(p.offer),
+          stops: offerStops(p.offer),
+        })),
+        pool: summarizeOfferPool(args.offers),
+        logTag: tag,
+      });
+      if (verdict && verdict.should_regenerate) {
+        const exclude = new Set((verdict.exclude_offer_ids || []).map(String));
+        if (exclude.size > 0) {
+          const filtered = args.offers.filter((o) => !exclude.has(String(o.id)));
+          const repicked = pickThreeOffers(filtered);
+          if (repicked.length > 0) {
+            console.log(
+              `${tag} pick-verify regenerated picks excluded=${Array.from(exclude).join(",")} issues=${JSON.stringify(verdict.issues)}`,
+            );
+            picks = repicked;
+          } else {
+            console.log(
+              `${tag} pick-verify regen aborted reason=empty_after_filter — shipping original picks. issues=${JSON.stringify(verdict.issues)}`,
+            );
+          }
+        } else {
+          console.log(
+            `${tag} pick-verify flagged but no exclude_offer_ids — shipping original picks. issues=${JSON.stringify(verdict.issues)}`,
+          );
+        }
+      } else if (verdict) {
+        console.log(`${tag} pick-verify ok issues=${verdict.issues.length}`);
+      }
+    } catch (err: any) {
+      // Never let verification failures block the email send. The
+      // deterministic picker rules (dominance guard, nonstop preference)
+      // already enforce the floor.
+      console.warn(`${tag} pick-verify threw, shipping original picks:`, err?.message || err);
+    }
+  }
+
   const options: GuestProposalOption[] = picks.map((p) => offerToGuestOption(p.offer, p.label));
   return {
     originIata: args.originIata,
@@ -5062,13 +5199,18 @@ export async function registerRoutes(
       return;
     }
     console.log(`${lp} duffel_returned offers=${allOffers.length}`);
+    // Diagnostic: per-carrier counts + cheapest-per-carrier + nonstop count
+    // straight from Duffel. Lets us answer "why did the picker label all
+    // three options as carrier X?" by inspecting what was actually in the
+    // pool before the picker ran.
+    console.log(`${lp} duffel_pool ${summarizeCarrierMix(allOffers)}`);
     if (allOffers.length === 0) {
       console.log(`${lp} skipping reason=zero_offers`);
       return;
     }
     allOffers.sort((a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
 
-    const guestData = buildGuestProposalDataFromOffers({
+    const guestData = await buildGuestProposalDataFromOffers({
       offers: allOffers,
       originIata: originCode,
       originName: originName || originCode,
@@ -5078,6 +5220,7 @@ export async function registerRoutes(
       returnDate,
       passengers: details.passengers,
       cabinClass: details.cabinClass,
+      verifyPicks: { logTag: lp },
     });
     if (guestData.options.length === 0) {
       console.log(`${lp} skipping reason=no_options_built_from_offers`);
@@ -5149,6 +5292,10 @@ export async function registerRoutes(
           carrierLogo: o.carrierLogo,
           outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
           outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+          inboundDepartingAt: o.slices?.[1]?.departingAt ?? null,
+          inboundArrivingAt: o.slices?.[1]?.arrivingAt ?? null,
+          inboundDurationMinutes: o.slices?.[1]?.durationMinutes ?? null,
+          inboundStops: o.slices?.[1]?.stops ?? null,
           baggage: o.baggage,
           refundable: o.refundable,
           changeable: o.changeable,
@@ -5452,6 +5599,8 @@ export async function registerRoutes(
 
       const allOffers = (offerRequest.data as any).offers || [];
       console.log(`[post-call ${callRequestId}] Duffel returned ${allOffers.length} offer(s)`);
+      // Diagnostic carrier mix — see inbound flow for rationale.
+      console.log(`[post-call ${callRequestId}] duffel_pool ${summarizeCarrierMix(allOffers)}`);
       if (allOffers.length === 0) {
         let originName = details.origin || originCode;
         if (details.origin) {
@@ -5514,7 +5663,7 @@ export async function registerRoutes(
             return;
           }
 
-          const guestData = buildGuestProposalDataFromOffers({
+          const guestData = await buildGuestProposalDataFromOffers({
             offers: allOffers,
             originIata: originCode,
             originName: details.origin || originCode,
@@ -5524,6 +5673,7 @@ export async function registerRoutes(
             returnDate,
             passengers: details.passengers,
             cabinClass: details.cabinClass,
+            verifyPicks: { logTag: `[guest-proposal callRequest=${callRequestId}]` },
           });
           if (guestData.options.length === 0) {
             console.log(`[guest-proposal] skipped — no options built for callRequest=${callRequestId}`);
@@ -5598,6 +5748,10 @@ export async function registerRoutes(
               carrierLogo: o.carrierLogo,
               outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
               outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+              inboundDepartingAt: o.slices?.[1]?.departingAt ?? null,
+              inboundArrivingAt: o.slices?.[1]?.arrivingAt ?? null,
+              inboundDurationMinutes: o.slices?.[1]?.durationMinutes ?? null,
+              inboundStops: o.slices?.[1]?.stops ?? null,
               baggage: o.baggage,
               refundable: o.refundable,
               changeable: o.changeable,
@@ -6577,13 +6731,14 @@ export async function registerRoutes(
             max_connections: 1,
           });
           const allOffers = (offerRequest.data as any).offers || [];
+          console.log(`[guest-proposal regen token=${maskToken(token)}] duffel_pool ${summarizeCarrierMix(allOffers)}`);
           if (allOffers.length === 0) {
             console.warn(`[guest-proposal] regeneration found no offers for token=${maskToken(token)}`);
             return;
           }
           allOffers.sort((a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
           const prevData = (row.proposalData as any) as GuestProposalData;
-          const guestData = buildGuestProposalDataFromOffers({
+          const guestData = await buildGuestProposalDataFromOffers({
             offers: allOffers,
             originIata: row.originIata,
             originName: prevData?.originName ?? row.originIata,
@@ -6593,6 +6748,7 @@ export async function registerRoutes(
             returnDate: row.returnDate,
             passengers: row.passengers,
             cabinClass: row.cabinClass,
+            verifyPicks: { logTag: `[guest-proposal regen token=${maskToken(token)}]` },
           });
           if (guestData.options.length === 0) return;
           const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -6629,6 +6785,10 @@ export async function registerRoutes(
               carrierLogo: o.carrierLogo,
               outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
               outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+              inboundDepartingAt: o.slices?.[1]?.departingAt ?? null,
+              inboundArrivingAt: o.slices?.[1]?.arrivingAt ?? null,
+              inboundDurationMinutes: o.slices?.[1]?.durationMinutes ?? null,
+              inboundStops: o.slices?.[1]?.stops ?? null,
               baggage: o.baggage,
               refundable: o.refundable,
               changeable: o.changeable,

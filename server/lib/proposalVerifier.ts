@@ -263,6 +263,136 @@ export async function verifyProposalAgainstTranscript(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Pick-quality verifier (separate from the request-match verifier above).
+//
+// The transcript verifier asks "did we search for the right trip?". This one
+// asks "given the offers Duffel returned, did we label the right three?".
+// It is intentionally narrow: it does not look at the transcript, it does
+// not re-check the route, it just sanity-checks Best Price / Best Value /
+// Fastest against the full offer pool. The deterministic picker rules
+// (Best Value dominance guard, Fastest nonstop preference) already enforce
+// the floor; this is the safety net for edge cases the picker missed.
+// ---------------------------------------------------------------------------
+
+export type OfferSummary = {
+  id: string;
+  carrier: string;
+  price: number;
+  currency: string;
+  duration_minutes: number;
+  stops: number;
+};
+
+export type PickSummary = OfferSummary & {
+  label: "Best Price" | "Best Value" | "Fastest";
+};
+
+export type PickVerification = {
+  ok: boolean;
+  issues: string[];
+  should_regenerate: boolean;
+  // IDs of offers Claude believes the picker should exclude on a re-run
+  // (e.g. an AA fare it labelled Best Price when a cheaper UA fare exists
+  // in the pool). Empty when ok=true OR when Claude can't pinpoint a
+  // specific offender.
+  exclude_offer_ids: string[];
+};
+
+const PICK_SYSTEM_PROMPT =
+  "You are a quality assurance agent for a flight proposal pipeline. You will receive three picks (Best Price, Best Value, Fastest) and a summary of the full offer pool they were selected from. Decide whether each pick is correct given the pool. Respond only in valid JSON, no markdown, no extra text.";
+
+function buildPickPrompt(picks: PickSummary[], pool: OfferSummary[]): string {
+  const fmtOffer = (o: OfferSummary) =>
+    `id=${o.id} carrier=${o.carrier} price=${o.price.toFixed(2)} ${o.currency} duration_min=${o.duration_minutes} stops=${o.stops}`;
+  const picksBlock = picks.map((p) => `- [${p.label}] ${fmtOffer(p)}`).join("\n");
+  const poolBlock = pool.map((o) => `- ${fmtOffer(o)}`).join("\n");
+  return [
+    "PICKS (the three labelled options we are about to email the customer):",
+    picksBlock || "(no picks)",
+    "",
+    "OFFER POOL (every offer Duffel returned for this search, sorted by price):",
+    poolBlock || "(empty pool)",
+    "",
+    "Rules to enforce:",
+    '1. "Best Price" must be the strictly cheapest offer in the pool by `price`. Ties on price are fine; a non-tied cheaper offer existing in the pool is NOT.',
+    '2. "Fastest" must have the shortest `duration_minutes` of any pick — and if any nonstop (`stops=0`) exists in the pool, the Fastest pick MUST be a nonstop.',
+    '3. "Best Value" must NOT be strictly worse than the Best Price pick on BOTH price AND duration (i.e. price >= BestPrice.price AND duration_minutes >= BestPrice.duration_minutes). It can be more expensive only if it is also faster, or longer only if it is also cheaper.',
+    "",
+    'Set should_regenerate=true if any rule above is violated. Populate exclude_offer_ids with the IDs of the picked offers that violate a rule (so the picker can re-run with them removed). If everything looks fine, set ok=true and leave issues+exclude_offer_ids empty.',
+    "",
+    "Respond with this exact JSON structure and nothing else:",
+    "{",
+    '  "ok": true,',
+    '  "issues": [],',
+    '  "should_regenerate": false,',
+    '  "exclude_offer_ids": []',
+    "}",
+  ].join("\n");
+}
+
+function parsePickJson(raw: string): PickVerification | null {
+  if (!raw) return null;
+  let text = raw.trim();
+  if (text.startsWith("```")) {
+    text = text.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  }
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  let parsed: any;
+  try {
+    parsed = JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  if (typeof parsed.ok !== "boolean") return null;
+  if (typeof parsed.should_regenerate !== "boolean") return null;
+  return {
+    ok: parsed.ok,
+    should_regenerate: parsed.should_regenerate,
+    issues: Array.isArray(parsed.issues)
+      ? parsed.issues.filter((i: any) => typeof i === "string")
+      : [],
+    exclude_offer_ids: Array.isArray(parsed.exclude_offer_ids)
+      ? parsed.exclude_offer_ids
+          .map((x: any) => (typeof x === "string" ? x : typeof x === "number" ? String(x) : null))
+          .filter((x: string | null): x is string => x !== null && x.length > 0)
+      : [],
+  };
+}
+
+export async function verifyProposalPicks(args: {
+  picks: PickSummary[];
+  pool: OfferSummary[];
+  logTag: string;
+}): Promise<PickVerification | null> {
+  const client = getClient();
+  if (!client) return null;
+  if (!args.picks || args.picks.length === 0) return null;
+  try {
+    const resp = await client.messages.create({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 600,
+      system: PICK_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: buildPickPrompt(args.picks, args.pool) }],
+    });
+    const textBlock = (resp.content || []).find((b: any) => b.type === "text") as
+      | { type: "text"; text: string }
+      | undefined;
+    const parsed = parsePickJson(textBlock?.text ?? "");
+    if (!parsed) {
+      console.warn(`${args.logTag} pick-verify could not parse Claude response`);
+      return null;
+    }
+    return parsed;
+  } catch (err: any) {
+    console.warn(`${args.logTag} pick-verify Anthropic error:`, err?.message || err);
+    return null;
+  }
+}
+
 const ALLOWED_CABINS = new Set(["economy", "premium_economy", "business", "first"]);
 
 export function correctedDetailsToParsed(
