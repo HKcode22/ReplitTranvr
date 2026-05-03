@@ -33,6 +33,7 @@ Key architectural decisions and features include:
 -   **Rate Limiting:** Implemented using `express-rate-limit` for authentication, callback requests, guest bookings, and general API access.
 -   **Security Headers:** Utilizes `helmet` for robust HTTP security headers, including Content Security Policy (CSP) allowing only whitelisted third-party origins.
 -   **Legal Pages:** Dedicated public pages for privacy policy and terms of service.
+-   **PII Redaction in Logs:** The request logger never prints response bodies by default — only the response size. A `redact()` helper in `server/lib/redact.ts` masks known sensitive fields (`email`, `phone`, `name`, `dateOfBirth`, `passportNumber`, `address`, tokens, secrets, transcripts, summaries) wherever request/response/webhook payloads are still logged for debugging. Bland AI webhook payloads and dynamic-data bodies are routed through `redactJSON()`; ad-hoc emails/phones in log lines use `maskEmail()` / `maskPhone()`. Set `LOG_RESPONSE_BODIES=1` in development to enable a redacted preview of `/api` response bodies for debugging.
 -   **SEO & Social Share:** Optimized with Open Graph, Twitter Card meta blocks, canonical links, `robots.txt`, and `sitemap.xml`.
 
 ## External Dependencies

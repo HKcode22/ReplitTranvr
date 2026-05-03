@@ -12,6 +12,7 @@ import { Duffel } from "@duffel/api";
 import * as bland from "./lib/bland";
 import { normalizePhoneE164 } from "./lib/phone";
 import { sendSms, maskPhone } from "./lib/sms";
+import { redactJSON, maskEmail, maskToken } from "./lib/redact";
 import { buildGuestProposalSms } from "./lib/smsTemplates";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
 import {
@@ -98,7 +99,7 @@ async function validatePromoCodeForUser(
     return { ok: false, reason: GENERIC_INVALID };
   }
   if (promo.adminOnly && !isAdminEmail(userEmail)) {
-    console.warn(`[promo] non-admin user ${userEmail || "?"} attempted admin-only code ${promo.code}`);
+    console.warn(`[promo] non-admin user ${maskEmail(userEmail)} attempted admin-only code ${promo.code}`);
     return { ok: false, reason: GENERIC_INVALID };
   }
   if (!Number.isFinite(promo.overrideAmountCents) || promo.overrideAmountCents < 50) {
@@ -149,7 +150,7 @@ async function sendAccountCreationEmail(email: string, name: string, callbackReq
   });
   try {
     await sgMail.send({ to: email, from: { email: fromEmail, name: "Travnr" }, subject, html });
-    console.log(`Account creation email sent to ${email} for callback request ${callbackRequestId}`);
+    console.log(`Account creation email sent to ${maskEmail(email)} for callback request ${callbackRequestId}`);
   } catch (error) {
     console.error("SendGrid account creation email error:", error);
   }
@@ -864,7 +865,7 @@ async function sendGuestProposalEmail(toEmail: string, data: {
   const { subject, html } = buildGuestProposalEmail(data);
   try {
     await sgMail.send({ to: toEmail, from: { email: fromEmail, name: "Travnr" }, subject, html });
-    console.log(`[guest-proposal] email sent to ${toEmail} with ${data.options.length} options`);
+    console.log(`[guest-proposal] email sent to ${maskEmail(toEmail)} with ${data.options.length} options`);
   } catch (err) {
     console.error("[guest-proposal] email send failed:", err);
   }
@@ -1480,7 +1481,7 @@ export async function registerRoutes(
         let blandCall: any = null;
         try {
           const baseUrl = getBaseUrl(req);
-          console.log(`Dispatching Bland AI call for user ${user.id}, phone: ${cr.phone}`);
+          console.log(`Dispatching Bland AI call for user ${user.id}, phone: ${maskPhone(cr.phone)}`);
           const task = bland.buildTravelConciergePrompt({
             userName: `${user.firstName} ${user.lastName}`,
             destination: cr.destination,
@@ -3671,7 +3672,7 @@ export async function registerRoutes(
           dashboardUrl: `${baseUrl}/trips`,
         });
         await sgMail.send({ to: customer.email, from: { email: fromEmail, name: "Travnr" }, subject, html });
-        console.log(`[admin] Manual booking confirmation email sent to ${customer.email} for payment ${payment.id}`);
+        console.log(`[admin] Manual booking confirmation email sent to ${maskEmail(customer.email)} for payment ${payment.id}`);
       }
     } catch (mailErr) {
       console.error("[admin] Failed to send manual booking confirmation email (non-fatal):", mailErr);
@@ -4664,10 +4665,10 @@ export async function registerRoutes(
       }
     }
     if (!guestEmail) {
-      console.log(`${lp} no email resolvable, skipping (email_source=none, phone=${phoneE164 || "—"})`);
+      console.log(`${lp} no email resolvable, skipping (email_source=none, phone=${maskPhone(phoneE164)})`);
       return;
     }
-    console.log(`${lp} email_resolved=${guestEmail} email_source=${emailSource}`);
+    console.log(`${lp} email_resolved=${maskEmail(guestEmail)} email_source=${emailSource}`);
 
     if (!details.destination) {
       console.log(`${lp} skipping reason=no_destination_parsed (email_source=${emailSource})`);
@@ -4825,7 +4826,7 @@ export async function registerRoutes(
           changeable: o.changeable,
         })),
       });
-      console.log(`${lp} guest proposal sent token=${saved.token} email=${guestEmail} email_source=${emailSource} origin=${originCode} destination=${destCode}`);
+      console.log(`${lp} guest proposal sent token=${maskToken(saved.token)} email=${maskEmail(guestEmail)} email_source=${emailSource} origin=${originCode} destination=${destCode}`);
     } catch (e: any) {
       console.error(`${lp} sendGuestProposalEmail failed:`, e?.message || e);
     }
@@ -4842,10 +4843,10 @@ export async function registerRoutes(
         smsProposalSent.add(dedupeKey);
         const proposalUrl = `${baseUrl}/proposal/${saved.token}`;
         const smsBody = buildGuestProposalSms({ proposalUrl });
-        console.log(`${lp} [sms] sending proposal_ready token=${saved.token} phone=${maskPhone(phoneE164)} body_length=${smsBody.length}`);
+        console.log(`${lp} [sms] sending proposal_ready token=${maskToken(saved.token)} phone=${maskPhone(phoneE164)} body_length=${smsBody.length}`);
         void sendSms({ to: phoneE164, body: smsBody, dedupeKey })
           .then((result) => {
-            console.log(`${lp} [sms] result token=${saved.token} ${JSON.stringify(result)}`);
+            console.log(`${lp} [sms] result token=${maskToken(saved.token)} ${redactJSON(result)}`);
           })
           .catch((err: any) => {
             console.error(`${lp} [sms] unexpected throw:`, err?.message || err);
@@ -4944,10 +4945,10 @@ export async function registerRoutes(
     let details: VerifierParsedDetails;
     if (override) {
       details = override.details;
-      console.log(`[post-call ${callRequestId}] using Claude-corrected details:`, JSON.stringify(details));
+      console.log(`[post-call ${callRequestId}] using Claude-corrected details:`, redactJSON(details));
     } else {
       details = parseTravelDetailsFromTranscript(transcript, summary, analysis);
-      console.log(`Parsed travel details from transcript for call ${callRequestId}:`, JSON.stringify(details));
+      console.log(`Parsed travel details from transcript for call ${callRequestId}:`, redactJSON(details));
 
       // Surface ambiguity so we can monitor parser accuracy: only warn when
       // the destination/origin came from a regex pass (not from a confirmed
@@ -5021,7 +5022,7 @@ export async function registerRoutes(
       const callReqForPhone = callRequest as any;
       const userPhone = callReqForPhone.phone || callReqForPhone.phoneNumber || "";
       const isUSUser = userPhone.startsWith("+1") || userPhone.startsWith("1");
-      console.log(`[post-call ${callRequestId}] resolved isUSUser=${isUSUser} from phone="${userPhone}"`);
+      console.log(`[post-call ${callRequestId}] resolved isUSUser=${isUSUser} from phone=${maskPhone(userPhone)}`);
 
       const postCallLogPrefix = `[post-call ${callRequestId}]`;
       const destResult = await resolveAirport(details.destination, isUSUser, postCallLogPrefix);
@@ -5108,7 +5109,7 @@ export async function registerRoutes(
         passengers: details.passengers,
         budget: details.budget,
       };
-      console.log(`[post-call ${callRequestId}] Searching Duffel:`, JSON.stringify(searchParamsLog));
+      console.log(`[post-call ${callRequestId}] Searching Duffel:`, redactJSON(searchParamsLog));
 
       const offerRequest = await duffel.offerRequests.create({
         slices,
@@ -5256,7 +5257,7 @@ export async function registerRoutes(
               changeable: o.changeable,
             })),
           });
-          console.log(`[guest-proposal] created token=${saved.token} for callRequest=${callRequestId} email=${guestEmail} (parallel send)`);
+          console.log(`[guest-proposal] created token=${maskToken(saved.token)} for callRequest=${callRequestId} email=${maskEmail(guestEmail)} (parallel send)`);
 
           // SMS hook — fire-and-forget. Recipient phone comes from the
           // call request that triggered this outbound call.
@@ -5275,10 +5276,10 @@ export async function registerRoutes(
               smsProposalSent.add(dedupeKey);
               const proposalUrl = `${baseUrl}/proposal/${saved.token}`;
               const smsBody = buildGuestProposalSms({ proposalUrl });
-              console.log(`[sms] sending proposal_ready token=${saved.token} phone=${maskPhone(smsPhone)} body_length=${smsBody.length} callRequest=${callRequestId}`);
+              console.log(`[sms] sending proposal_ready token=${maskToken(saved.token)} phone=${maskPhone(smsPhone)} body_length=${smsBody.length} callRequest=${callRequestId}`);
               void sendSms({ to: smsPhone, body: smsBody, dedupeKey })
                 .then((result) => {
-                  console.log(`[sms] result token=${saved.token} ${JSON.stringify(result)}`);
+                  console.log(`[sms] result token=${maskToken(saved.token)} ${redactJSON(result)}`);
                 })
                 .catch((err: any) => {
                   console.error(`[sms] unexpected throw:`, err?.message || err);
@@ -5515,9 +5516,9 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error(
         `[post-call ${callRequestId}] Duffel search/proposal generation failed.`,
-        "\n  searchParams:", typeof searchParamsLog !== "undefined" ? JSON.stringify(searchParamsLog) : "(not yet built)",
-        "\n  parsedDetails:", JSON.stringify(details),
-        "\n  error:", JSON.stringify(err?.errors || err?.message || err, null, 2)
+        "\n  searchParams:", typeof searchParamsLog !== "undefined" ? redactJSON(searchParamsLog) : "(not yet built)",
+        "\n  parsedDetails:", redactJSON(details),
+        "\n  error:", redactJSON(err?.errors || err?.message || err)
       );
       await createFallbackProposal(callRequestId, userId, summary);
     }
@@ -5656,7 +5657,7 @@ export async function registerRoutes(
         return res.json({ received: true });
       }
 
-      console.log(`Bland webhook received: event=${payload.event || "unknown"}, call_id=${blandCallId}`);
+      console.log(`Bland webhook received: event=${payload.event || "unknown"}, call_id=${blandCallId}, transcript_present=${!!payload.concatenated_transcript}, summary_present=${!!payload.summary}`);
 
       let blandCall = await storage.getBlandCallByBlandId(blandCallId);
 
@@ -5694,7 +5695,7 @@ export async function registerRoutes(
             }
           }
 
-          console.log(`Callback call completed for ${payload.metadata.callbackEmail}, signup email sent`);
+          console.log(`Callback call completed for ${maskEmail(payload.metadata.callbackEmail)}, signup email sent`);
         }
         return res.json({ received: true });
       }
@@ -5737,7 +5738,7 @@ export async function registerRoutes(
               null;
             const phoneE164 = normalizePhoneE164(rawPhone);
             console.log(
-              `[bland-inbound] call_id=${blandCallId} webhook_received phone_raw="${rawPhone || "—"}" phone_normalized=${phoneE164 || "—"}`
+              `[bland-inbound] call_id=${blandCallId} webhook_received phone_present=${!!rawPhone} phone_normalized=${maskPhone(phoneE164)}`
             );
 
             // Mark dispatched BEFORE launching so a duplicate webhook arriving
@@ -5944,7 +5945,7 @@ export async function registerRoutes(
       console.log(
         `[bland/dynamic-data] method=${req.method} origin=${_origin} ` +
           `content_type=${_ct} x_bland_secret_present=${_hasSecret} ` +
-          `body=${JSON.stringify(req.body || {})}`,
+          `body=${redactJSON(req.body || {})}`,
       );
 
       const secret = req.headers["x-bland-secret"] as string;
@@ -5972,7 +5973,7 @@ export async function registerRoutes(
       // `to` is the Travnr DID, not the caller.
       const rawCallerPhone = (phone_number as string | undefined) || (from as string | undefined) || null;
       const normalizedCallerPhone = rawCallerPhone ? normalizePhoneE164(rawCallerPhone) : null;
-      console.log(`[bland/dynamic-data] phone_normalized=${normalizedCallerPhone || "—"}`);
+      console.log(`[bland/dynamic-data] phone_normalized=${maskPhone(normalizedCallerPhone)}`);
 
       if (!userId && normalizedCallerPhone) {
         const phoneMatch = await storage.getUserIdByPhone(normalizedCallerPhone).catch(() => null);
@@ -6131,7 +6132,7 @@ export async function registerRoutes(
         let surfacedStatus = row.status;
         if (row.status === "pending") {
           await storage.updateGuestProposalStatus(row.id, "viewed").catch((e) =>
-            console.warn(`[guest-proposal] failed to mark token=${token} viewed:`, e?.message || e)
+            console.warn(`[guest-proposal] failed to mark token=${maskToken(token)} viewed:`, e?.message || e)
           );
           surfacedStatus = "viewed";
         }
@@ -6157,7 +6158,7 @@ export async function registerRoutes(
         });
       }
       await storage.updateGuestProposalStatus(row.id, "expired").catch((e) =>
-        console.warn(`[guest-proposal] failed to mark token=${token} expired:`, e?.message || e)
+        console.warn(`[guest-proposal] failed to mark token=${maskToken(token)} expired:`, e?.message || e)
       );
 
       // Background regeneration — produces a brand new guest_proposal row + new email.
@@ -6172,7 +6173,7 @@ export async function registerRoutes(
       (async () => {
         try {
           if (!duffel) {
-            console.warn(`[guest-proposal] cannot regenerate token=${token}: Duffel not configured`);
+            console.warn(`[guest-proposal] cannot regenerate token=${maskToken(token)}: Duffel not configured`);
             return;
           }
           const slices: any[] = [
@@ -6192,7 +6193,7 @@ export async function registerRoutes(
           });
           const allOffers = (offerRequest.data as any).offers || [];
           if (allOffers.length === 0) {
-            console.warn(`[guest-proposal] regeneration found no offers for token=${token}`);
+            console.warn(`[guest-proposal] regeneration found no offers for token=${maskToken(token)}`);
             return;
           }
           allOffers.sort((a: any, b: any) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
@@ -6248,9 +6249,9 @@ export async function registerRoutes(
               changeable: o.changeable,
             })),
           });
-          console.log(`[guest-proposal] regenerated expired token=${token} -> new token=${saved.token}`);
+          console.log(`[guest-proposal] regenerated expired token=${maskToken(token)} -> new token=${maskToken(saved.token)}`);
         } catch (regenErr: any) {
-          console.error(`[guest-proposal] regeneration failed for token=${token}:`, regenErr?.message || regenErr);
+          console.error(`[guest-proposal] regeneration failed for token=${maskToken(token)}:`, regenErr?.message || regenErr);
         }
       })();
 

@@ -6,6 +6,7 @@ import { createServer } from "http";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './lib/stripeClient';
 import { WebhookHandlers } from './lib/webhookHandlers';
+import { redactJSON } from './lib/redact';
 
 const app = express();
 app.set("trust proxy", 1);
@@ -173,14 +174,30 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// PII policy: by default we never log the response body — many /api routes
+// return traveler emails, phone numbers, names, DOB and passport numbers.
+// We capture only the response size. Set LOG_RESPONSE_BODIES=1 in dev to
+// enable a redacted preview for debugging (sensitive fields are masked by
+// the redact() helper).
+const LOG_RESPONSE_BODIES = process.env.LOG_RESPONSE_BODIES === "1";
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let capturedJsonResponse: unknown = undefined;
+  let capturedByteLength = 0;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
+    if (LOG_RESPONSE_BODIES) {
+      capturedJsonResponse = bodyJson;
+    } else {
+      try {
+        capturedByteLength = Buffer.byteLength(JSON.stringify(bodyJson) || "");
+      } catch {
+        capturedByteLength = -1;
+      }
+    }
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
@@ -188,8 +205,10 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+      if (LOG_RESPONSE_BODIES && capturedJsonResponse !== undefined) {
+        logLine += ` :: ${redactJSON(capturedJsonResponse)}`;
+      } else if (!LOG_RESPONSE_BODIES) {
+        logLine += ` body=${capturedByteLength}b`;
       }
 
       log(logLine);

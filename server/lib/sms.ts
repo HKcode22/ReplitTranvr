@@ -98,7 +98,7 @@ export async function sendSms(args: SendSmsArgs): Promise<SendSmsResult> {
   }
   const normalized = normalizePhoneE164(to);
   if (!normalized) {
-    console.log(`[sms] skipped reason=invalid_phone raw="${to}"`);
+    console.log(`[sms] skipped reason=invalid_phone raw=${maskPhone(to)}`);
     return { sent: false, skipped: true, dryRun: false, providerMessageId: null, reason: "invalid_phone" };
   }
   const masked = maskPhone(normalized);
@@ -120,7 +120,7 @@ export async function sendSms(args: SendSmsArgs): Promise<SendSmsResult> {
   }
 
   if (effectiveDryRun) {
-    console.log(`[sms] dry_run to=${masked} body_length=${bodyLength} body=${JSON.stringify(body)}`);
+    console.log(`[sms] dry_run to=${masked} body_length=${bodyLength}`);
     return {
       sent: false,
       skipped: true,
