@@ -46,6 +46,10 @@ import { HotelProviderNotConfiguredError } from "./lib/hotels/types";
 import { rankHotels } from "./lib/hotels/rank";
 import { runHotelSearchForCall } from "./lib/hotels/runHotelSearch";
 import {
+  issueBookingApprovalToken,
+  consumeBookingApprovalToken,
+} from "./lib/hotels/bookingApprovals";
+import {
   authIpLimiter,
   loginEmailLimiter,
   forgotPasswordEmailLimiter,
@@ -2845,6 +2849,418 @@ export async function registerRoutes(
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to load hotel search";
         console.error("[hotels] admin search detail failed:", msg);
+        return res.status(500).json({ message: msg });
+      }
+    },
+  );
+
+  // ============================================================
+  // Hotels Phase 5 — Booking guardrails skeleton (admin-only).
+  //
+  // Six independent guardrails gate every booking attempt. Failing ANY
+  // returns a structured error and writes nothing. The dry-run flag is
+  // the safe default at every layer (default behavior + missing env).
+  //
+  //   1. ENABLE_HOTEL_BOOKING === "true"     (top-level kill switch)
+  //   2. provider.capabilities.supportsBooking === true
+  //   3. provider.isConfigured() === true OR provider.name === "mock"
+  //   4. HOTEL_BOOKING_DRY_RUN !== "false"   → dry-run path (default safe)
+  //   5. valid single-use bookingApprovalToken scoped to this option
+  //   6. quoted total <= HOTEL_BOOKING_MAX_TOTAL_USD (default 1000)
+  //
+  // Audit logging: traveler full names, DOBs, and special-instruction
+  // free text are NEVER logged. Names use first-initial + last-initial.
+  // ============================================================
+
+  // Helper: redact a single traveler to "Fl." form for logs only.
+  // Never log full names or DOBs from this module.
+  const redactTraveler = (t: { firstName?: string; lastName?: string }) => {
+    const f = (t.firstName || "?").trim().charAt(0).toUpperCase() || "?";
+    const l = (t.lastName || "?").trim().charAt(0).toUpperCase() || "?";
+    return `${f}${l}.`;
+  };
+
+  // Treat MISSING dry-run env var as "true" — fail safe.
+  const isHotelDryRun = (): boolean => {
+    const raw = process.env.HOTEL_BOOKING_DRY_RUN;
+    if (raw === undefined || raw === null || raw === "") return true;
+    return String(raw).toLowerCase() !== "false";
+  };
+
+  const getHotelBookingMaxUsd = (): number => {
+    const raw = process.env.HOTEL_BOOKING_MAX_TOTAL_USD;
+    const n = raw ? parseFloat(raw) : NaN;
+    if (!Number.isFinite(n) || n <= 0) return 1000;
+    return n;
+  };
+
+  // POST /api/admin/hotels/booking-approval — issues a single-use,
+  // 30-min-TTL approval token scoped to a specific hotelOptionId.
+  app.post(
+    "/api/admin/hotels/booking-approval",
+    isAuthenticated,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const body = req.body || {};
+        const hotelOptionId = parseInt(String(body.hotelOptionId ?? ""), 10);
+        if (!Number.isFinite(hotelOptionId) || hotelOptionId <= 0) {
+          return res.status(400).json({ message: "hotelOptionId is required" });
+        }
+        const opt = await storage.getHotelOption(hotelOptionId);
+        if (!opt) {
+          return res.status(404).json({ message: "Hotel option not found" });
+        }
+        const maxTotalUsd = getHotelBookingMaxUsd();
+        const issuedByUserId = req.session.userId!;
+        const rec = issueBookingApprovalToken({ hotelOptionId, maxTotalUsd, issuedByUserId });
+        console.log(
+          `[hotels] booking-approval issued optionId=${hotelOptionId} maxUsd=${maxTotalUsd} by=${issuedByUserId}`,
+        );
+        return res.json({
+          token: rec.token,
+          expiresAt: new Date(rec.expiresAt).toISOString(),
+          hotelOptionId: rec.hotelOptionId,
+          maxTotalUsd: rec.maxTotalUsd,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to issue approval";
+        console.error("[hotels] booking-approval failed:", msg);
+        return res.status(500).json({ message: msg });
+      }
+    },
+  );
+
+  // Body schema for the booking endpoint. NO payment-instrument fields
+  // — PCI lives only in Stripe's PI flow, which is deferred from Phase 5.
+  const hotelBookingBodySchema = z.object({
+    hotelOptionId: z.number().int().positive(),
+    bookingApprovalToken: z.string().min(8),
+    travelers: z
+      .array(
+        z.object({
+          firstName: z.string().min(1).max(100),
+          lastName: z.string().min(1).max(100),
+          dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "DOB must be YYYY-MM-DD"),
+        }),
+      )
+      .min(1)
+      .max(8),
+    contactEmail: z.string().email().max(254),
+    specialRequests: z.string().max(500).optional(),
+  });
+
+  // POST /api/admin/hotels/bookings — admin-only booking entry point.
+  // Returns a structured error with `blockReason` whenever any guardrail
+  // rejects the attempt. The mock provider is the only path that reaches
+  // a "confirmed" status in Phase 5; real provider stubs intentionally
+  // throw HotelProviderNotConfiguredError and the endpoint surfaces a
+  // 501 with `provider_not_implemented`.
+  app.post(
+    "/api/admin/hotels/bookings",
+    isAuthenticated,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      // === Guardrail 1: top-level kill switch. ===
+      if (process.env.ENABLE_HOTEL_BOOKING !== "true") {
+        console.log(`[hotels] booking attempt result=blocked blockReason=flag_off`);
+        return res.status(403).json({
+          message: "Hotel booking is disabled",
+          blockReason: "flag_off",
+        });
+      }
+
+      // Validate body up front so we don't burn an approval token on a
+      // malformed request.
+      const parsed = hotelBookingBodySchema.safeParse(req.body || {});
+      if (!parsed.success) {
+        return res.status(400).json({
+          message: parsed.error.errors[0]?.message || "Invalid request",
+          blockReason: "invalid_body",
+        });
+      }
+      const body = parsed.data;
+
+      const opt = await storage.getHotelOption(body.hotelOptionId);
+      if (!opt) {
+        return res.status(404).json({ message: "Hotel option not found", blockReason: "option_not_found" });
+      }
+
+      const provider = getHotelProvider();
+
+      // === Guardrail 2: provider must support booking. ===
+      if (!provider.capabilities.supportsBooking) {
+        console.log(
+          `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} result=blocked blockReason=capability_missing`,
+        );
+        return res.status(403).json({
+          message: `Provider ${provider.name} does not support booking`,
+          blockReason: "capability_missing",
+        });
+      }
+
+      // === Guardrail 3: provider must be configured (mock is exempt). ===
+      if (provider.name !== "mock" && !provider.isConfigured()) {
+        console.log(
+          `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} result=blocked blockReason=not_configured`,
+        );
+        return res.status(403).json({
+          message: `Provider ${provider.name} is not configured`,
+          blockReason: "not_configured",
+        });
+      }
+
+      // === Guardrail 5: consume the approval token (single-use). ===
+      // Burn-on-lookup means a leaked token can't be replayed against
+      // multiple option ids.
+      const consumed = consumeBookingApprovalToken(body.bookingApprovalToken, body.hotelOptionId);
+      if (!consumed.ok) {
+        const reason =
+          consumed.reason === "expired"
+            ? "expired_token"
+            : consumed.reason === "wrong_option"
+              ? "missing_token"
+              : "missing_token";
+        console.log(
+          `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} result=blocked blockReason=${reason}`,
+        );
+        return res.status(403).json({
+          message: "Invalid or expired booking approval token",
+          blockReason: reason,
+        });
+      }
+
+      // === Guardrail 6: quoted total must be under the cap. ===
+      // Use stored option price as the reference total (real providers
+      // would re-quote here, but in Phase 5 the mock and stubs both can
+      // be reasoned about from option.totalPrice — and we never charge).
+      const optTotal = parseFloat(String(opt.totalPrice ?? "0"));
+      const cap = getHotelBookingMaxUsd();
+      if (!Number.isFinite(optTotal) || optTotal <= 0 || optTotal > cap) {
+        console.log(
+          `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} result=blocked blockReason=over_cap total=${optTotal} cap=${cap}`,
+        );
+        return res.status(400).json({
+          message: `Total ${optTotal} exceeds HOTEL_BOOKING_MAX_TOTAL_USD=${cap}`,
+          blockReason: "over_cap",
+          total: optTotal,
+          cap,
+        });
+      }
+
+      // === Concurrency claim (separate from the six guardrails). ===
+      const claimed = await storage.claimHotelOptionForBooking(body.hotelOptionId);
+      if (!claimed) {
+        console.log(
+          `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} result=blocked blockReason=claim_taken`,
+        );
+        return res.status(409).json({
+          message: "Another booking attempt is in progress for this option",
+          blockReason: "claim_taken",
+        });
+      }
+
+      const dryRun = isHotelDryRun();
+      const currency = (opt.currency || "USD").toUpperCase();
+      const userId = req.session.userId!;
+      const redactedRoster = body.travelers.map(redactTraveler).join(",");
+
+      try {
+        // === Guardrail 4: dry-run is the default. ===
+        // Dry-run: validate everything (already done), write a `dry_run`
+        // booking row, return the would-be Stripe amount. NO PI created,
+        // NO provider.createBooking call.
+        if (dryRun) {
+          const booking = await storage.createHotelBooking({
+            userId,
+            hotelOptionId: body.hotelOptionId,
+            paymentId: null,
+            provider: provider.name,
+            providerBookingId: null,
+            confirmationNumber: null,
+            status: "dry_run",
+            travelerDetails: {
+              travelers: body.travelers,
+              contactEmail: body.contactEmail,
+              specialRequests: body.specialRequests ?? null,
+            },
+            totalCharged: "0",
+            currency,
+            errorMessage: null,
+          });
+          console.log(
+            `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} dryRun=true result=allowed bookingId=${booking.id} pax=${body.travelers.length} roster=${redactedRoster}`,
+          );
+          return res.json({
+            booking,
+            dryRun: true,
+            stripeQuote: {
+              amount: optTotal,
+              currency,
+              note: "Stripe payment intent intentionally NOT created in Phase 5.",
+            },
+          });
+        }
+
+        // === Live path (mock-only end-to-end in Phase 5). ===
+        // Real provider stubs throw HotelProviderNotConfiguredError from
+        // createBooking; the catch below converts that to a 501.
+        try {
+          // The DB column is `providerRateId`; the in-memory HotelOption
+          // type uses `providerOfferId`. The Phase 2 mapper writes the
+          // option's offer id into `providerRateId`, so we read it back
+          // here. If the persisted row lost it somehow, fail loudly.
+          const offerId = opt.providerRateId;
+          if (!offerId) {
+            return res.status(400).json({
+              message: "Stored hotel option is missing providerRateId",
+              blockReason: "missing_provider_offer_id",
+            });
+          }
+          const result = await provider.createBooking({
+            providerOfferId: offerId,
+            travelers: body.travelers.map((t) => ({
+              givenName: t.firstName,
+              familyName: t.lastName,
+              dateOfBirth: t.dob,
+            })),
+            contactEmail: body.contactEmail,
+            specialRequests: body.specialRequests,
+          });
+
+          const booking = await storage.createHotelBooking({
+            userId,
+            hotelOptionId: body.hotelOptionId,
+            paymentId: null,
+            provider: provider.name,
+            providerBookingId: result.providerBookingId,
+            confirmationNumber: result.confirmationCode ?? null,
+            status: result.status === "confirmed" ? "confirmed" : "pending",
+            travelerDetails: {
+              travelers: body.travelers,
+              contactEmail: body.contactEmail,
+              specialRequests: body.specialRequests ?? null,
+            },
+            // No Stripe charge in Phase 5 even on the live path. Stripe
+            // wiring requires modifying server/lib/stripeClient.ts (locked).
+            totalCharged: "0",
+            currency,
+            errorMessage: null,
+          });
+          console.log(
+            `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} dryRun=false result=completed bookingId=${booking.id} pax=${body.travelers.length} roster=${redactedRoster}`,
+          );
+          return res.json({
+            booking,
+            dryRun: false,
+            stripeQuote: {
+              amount: optTotal,
+              currency,
+              note: "No Stripe charge created in Phase 5.",
+            },
+          });
+        } catch (innerErr) {
+          if (innerErr instanceof HotelProviderNotConfiguredError) {
+            console.log(
+              `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} dryRun=false result=blocked blockReason=provider_not_implemented`,
+            );
+            return res.status(501).json({
+              message: innerErr.message,
+              blockReason: "provider_not_implemented",
+            });
+          }
+          const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+          console.error(
+            `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} dryRun=false result=failed err=${msg}`,
+          );
+          await storage.createHotelBooking({
+            userId,
+            hotelOptionId: body.hotelOptionId,
+            paymentId: null,
+            provider: provider.name,
+            providerBookingId: null,
+            confirmationNumber: null,
+            status: "failed",
+            travelerDetails: {
+              travelers: body.travelers,
+              contactEmail: body.contactEmail,
+              specialRequests: body.specialRequests ?? null,
+            },
+            totalCharged: "0",
+            currency,
+            errorMessage: msg.slice(0, 500),
+          }).catch(() => undefined);
+          return res.status(502).json({
+            message: "Provider booking failed",
+            blockReason: "provider_failed",
+          });
+        }
+      } finally {
+        // Always release the claim — success, validation failure, or
+        // thrown error. Otherwise a single bug would permanently lock
+        // the option until the process restarts.
+        await storage.releaseHotelOptionClaim(body.hotelOptionId).catch(() => undefined);
+      }
+    },
+  );
+
+  // POST /api/admin/hotels/bookings/:id/cancel — admin-only cancellation.
+  // Dry-run rows flip to `cancelled_dry_run`. Mock-confirmed rows call
+  // provider.cancelBooking and flip to `cancelled`. Real provider stubs
+  // surface a 501.
+  app.post(
+    "/api/admin/hotels/bookings/:id/cancel",
+    isAuthenticated,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (!Number.isFinite(id) || id <= 0) {
+          return res.status(400).json({ message: "Invalid booking id" });
+        }
+        const booking = await storage.getHotelBooking(id);
+        if (!booking) return res.status(404).json({ message: "Booking not found" });
+
+        // Dry-run cancellation — never touches a provider.
+        if (booking.status === "dry_run") {
+          await storage.updateHotelBookingStatus(id, "cancelled_dry_run");
+          console.log(`[hotels] cancel bookingId=${id} provider=${booking.provider} result=cancelled_dry_run`);
+          return res.json({ ok: true, status: "cancelled_dry_run" });
+        }
+
+        if (booking.status !== "confirmed" && booking.status !== "pending") {
+          return res.status(400).json({
+            message: `Booking is in terminal status ${booking.status}`,
+            blockReason: "not_cancellable",
+          });
+        }
+
+        const provider = getHotelProvider();
+        if (!booking.providerBookingId) {
+          return res.status(400).json({ message: "Booking has no providerBookingId", blockReason: "missing_provider_id" });
+        }
+        try {
+          await provider.cancelBooking(booking.providerBookingId);
+          await storage.updateHotelBookingStatus(id, "cancelled");
+          console.log(`[hotels] cancel bookingId=${id} provider=${provider.name} result=cancelled`);
+          return res.json({ ok: true, status: "cancelled" });
+        } catch (innerErr) {
+          if (innerErr instanceof HotelProviderNotConfiguredError) {
+            console.log(
+              `[hotels] cancel bookingId=${id} provider=${provider.name} result=blocked blockReason=provider_not_implemented`,
+            );
+            return res.status(501).json({
+              message: innerErr.message,
+              blockReason: "provider_not_implemented",
+            });
+          }
+          const msg = innerErr instanceof Error ? innerErr.message : String(innerErr);
+          console.error(`[hotels] cancel bookingId=${id} provider=${provider.name} result=failed err=${msg}`);
+          return res.status(502).json({ message: "Provider cancellation failed", blockReason: "provider_failed" });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Cancellation failed";
+        console.error("[hotels] cancel failed:", msg);
         return res.status(500).json({ message: msg });
       }
     },

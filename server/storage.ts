@@ -102,6 +102,14 @@ export interface IStorage {
   createHotelBooking(data: InsertHotelBooking): Promise<HotelBooking>;
   getHotelBooking(id: number): Promise<HotelBooking | undefined>;
   updateHotelBookingStatus(id: number, status: string, fields?: Partial<HotelBooking>): Promise<void>;
+
+  // ===== Hotels (Phase 5 — booking concurrency) =====
+  // Atomic, in-memory claim on a hotel_options row to prevent two
+  // admin-initiated booking attempts from racing on the same option.
+  // Returns true on successful claim, false if already claimed.
+  // TODO: move to a DB-backed advisory lock once we have real volume.
+  claimHotelOptionForBooking(hotelOptionId: number): Promise<boolean>;
+  releaseHotelOptionClaim(hotelOptionId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -732,6 +740,29 @@ export class DatabaseStorage implements IStorage {
       .update(hotelBookings)
       .set({ ...safeFields, status, updatedAt: new Date() })
       .where(eq(hotelBookings.id, id));
+  }
+
+  // ===== Hotels (Phase 5 — booking concurrency) =====
+  // In-memory claim set. Mirrors the spirit of `claimGuestProposalForBooking`
+  // (atomic flip via a unique-constraint write) but in process memory because
+  // the schema is locked for Phase 5 and admin booking volume is tiny. Two
+  // concurrent /api/admin/hotels/bookings calls for the same hotelOptionId
+  // can only have one winner — the loser sees `claim_taken`. The booking
+  // endpoint MUST wrap its work in try/finally and call
+  // `releaseHotelOptionClaim` so a thrown error does not permanently lock
+  // the option.
+  // TODO: replace with a Postgres advisory lock (`pg_try_advisory_lock`)
+  // when we have multi-instance deployments.
+  private static hotelOptionClaims: Set<number> = new Set();
+
+  async claimHotelOptionForBooking(hotelOptionId: number): Promise<boolean> {
+    if (DatabaseStorage.hotelOptionClaims.has(hotelOptionId)) return false;
+    DatabaseStorage.hotelOptionClaims.add(hotelOptionId);
+    return true;
+  }
+
+  async releaseHotelOptionClaim(hotelOptionId: number): Promise<void> {
+    DatabaseStorage.hotelOptionClaims.delete(hotelOptionId);
   }
 }
 
