@@ -36,12 +36,11 @@ export const providerInfo: HotelProviderInfo = {
   supportsInstantConfirmation: true,
   certificationRequired: true,
   estimatedTimeToProduction: "3-6 weeks (contract + cert env + production switch)",
-  monthlyMinimums:
-    "Wholesale rates require a credit/contract agreement; specific minimums are negotiated and not published.",
+  monthlyMinimums: null,
   requiredEnv: ["HOTELBEDS_API_KEY", "HOTELBEDS_SECRET"],
   docsUrl: "https://developer.hotelbeds.com/documentation/hotels/",
   notes:
-    "Bedbank-style wholesale inventory with strong margins. Authentication uses API key + SHA-256 signature of (key + secret + timestamp).",
+    "Bedbank-style wholesale inventory with strong margins. Authentication uses API key + SHA-256 signature of (key + secret + timestamp). Wholesale rates require a credit/contract agreement; specific minimums are negotiated and not published.",
 };
 
 export class HotelbedsProvider implements HotelProvider {

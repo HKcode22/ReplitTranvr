@@ -36,12 +36,11 @@ export const providerInfo: HotelProviderInfo = {
   supportsInstantConfirmation: true,
   certificationRequired: true,
   estimatedTimeToProduction: "4-8 weeks (contract + commercial review + cert tests)",
-  monthlyMinimums:
-    "Public docs do not state hard monthly minimums; commercial terms are negotiated per partner — confirm during contract.",
+  monthlyMinimums: null,
   requiredEnv: ["EXPEDIA_API_KEY", "EXPEDIA_SECRET"],
   docsUrl: "https://developers.expediagroup.com/docs/rapid",
   notes:
-    "Largest global inventory of the candidates and includes vacation rentals. Requires an Expedia Partner Solutions agreement and certification before going live.",
+    "Largest global inventory of the candidates and includes vacation rentals. Requires an Expedia Partner Solutions agreement and certification before going live. Public docs do not state hard monthly minimums; commercial terms are negotiated per partner — confirm during contract.",
 };
 
 export class ExpediaRapidProvider implements HotelProvider {

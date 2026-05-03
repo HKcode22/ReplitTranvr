@@ -36,12 +36,11 @@ export const providerInfo: HotelProviderInfo = {
   supportsInstantConfirmation: true,
   certificationRequired: true,
   estimatedTimeToProduction: "3-5 weeks (contract + integration review)",
-  monthlyMinimums:
-    "B2B partner program; commercial terms negotiated per partner. Public docs do not list hard minimums.",
+  monthlyMinimums: null,
   requiredEnv: ["RATEHAWK_API_KEY"],
   docsUrl: "https://www.ratehawk.com/lp/b2b/api",
   notes:
-    "Strong inventory in EMEA/APAC and competitive on apartments. Single-key auth simplifies the integration vs Hotelbeds/Expedia.",
+    "Strong inventory in EMEA/APAC and competitive on apartments. Single-key auth simplifies the integration vs Hotelbeds/Expedia. B2B partner program; commercial terms negotiated per partner, no public minimums.",
 };
 
 export class RateHawkProvider implements HotelProvider {

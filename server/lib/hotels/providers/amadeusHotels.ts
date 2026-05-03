@@ -37,12 +37,11 @@ export const providerInfo: HotelProviderInfo = {
   certificationRequired: true,
   estimatedTimeToProduction:
     "Self-service test API is open; production requires an Amadeus production agreement (4-8 weeks).",
-  monthlyMinimums:
-    "Self-service test tier is free with rate limits; production pricing is negotiated, no public minimums.",
+  monthlyMinimums: null,
   requiredEnv: ["AMADEUS_CLIENT_ID", "AMADEUS_CLIENT_SECRET"],
   docsUrl: "https://developers.amadeus.com/self-service/category/hotels",
   notes:
-    "GDS-backed inventory with strong corporate-travel coverage. OAuth2 client-credentials flow. Test environment is easy to spin up; production requires commercial sign-off.",
+    "GDS-backed inventory with strong corporate-travel coverage. OAuth2 client-credentials flow. Test environment is free with rate limits; production pricing is negotiated, no public minimums. Production requires commercial sign-off.",
 };
 
 export class AmadeusHotelsProvider implements HotelProvider {

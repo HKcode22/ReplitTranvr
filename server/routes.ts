@@ -2752,9 +2752,14 @@ export async function registerRoutes(
   // values — only env var names from `requiredEnv`.
   app.get("/api/admin/hotels/providers", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
     try {
-      const active = (process.env.HOTEL_PROVIDER || "mock").toLowerCase();
+      // `requested` = raw HOTEL_PROVIDER env value. `resolved` = the
+      // adapter we're actually running after fallback-to-mock. We surface
+      // both so admins can spot misconfigurations at a glance (e.g.
+      // requested=expedia, resolved=mock means creds are missing).
+      const requested = (process.env.HOTEL_PROVIDER || "mock").toLowerCase();
+      const resolved = getHotelProvider().name;
       const providers = getAllProviderInfo();
-      return res.json({ active, providers });
+      return res.json({ active: resolved, requested, resolved, providers });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to list hotel providers";
       console.error("[hotels] providers list failed:", msg);
