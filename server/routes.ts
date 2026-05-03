@@ -2768,10 +2768,27 @@ export async function registerRoutes(
     }
   });
 
-  // Hotels Phase 4: read-only admin lookup of recent hotel searches for a
-  // given call request. Returns the search rows only (not options) so the
-  // admin UI can list/select. `sourceRawPayload` lives on options, not on
-  // searches, so nothing PII-sensitive is exposed here.
+  // Helpers for the Phase 4 admin endpoints below. Strip the admin-only
+  // raw payload columns by default — pass `?raw=true` to include them.
+  // Both fields are admin-gated even with raw=true; this is defense in
+  // depth against an admin endpoint accidentally being widened later.
+  type HotelSearchRow = Awaited<ReturnType<typeof storage.getHotelSearch>>;
+  type HotelOptionRow = Awaited<ReturnType<typeof storage.getHotelOptionsBySearch>>[number];
+  const stripSearchRaw = (s: NonNullable<HotelSearchRow>) => {
+    const { rawProviderPayloadTruncated: _r, ...rest } = s;
+    return rest;
+  };
+  const stripOptionRaw = (o: HotelOptionRow) => {
+    const { sourceRawPayload: _s, ...rest } = o;
+    return rest;
+  };
+
+  // Hotels Phase 4: admin read for the most-recent hotel search produced
+  // by a given call request, plus its persisted options. When multiple
+  // searches exist for the same call request, we deterministically return
+  // the latest by createdAt (storage returns them desc). Both
+  // `sourceRawPayload` (option) and `rawProviderPayloadTruncated` (search)
+  // are stripped unless `?raw=true`.
   app.get(
     "/api/admin/hotels/searches",
     isAuthenticated,
@@ -2783,8 +2800,18 @@ export async function registerRoutes(
         if (!Number.isFinite(callRequestId) || callRequestId <= 0) {
           return res.status(400).json({ message: "callRequestId query param is required" });
         }
+        const includeRaw = String(req.query.raw || "").toLowerCase() === "true";
         const searches = await storage.getHotelSearchesByCallRequest(callRequestId);
-        return res.json({ callRequestId, searches });
+        if (searches.length === 0) {
+          return res.json({ search: null, options: [] });
+        }
+        // Deterministic selection: latest search (storage orders desc).
+        const latest = searches[0];
+        const options = await storage.getHotelOptionsBySearch(latest.id);
+        return res.json({
+          search: includeRaw ? latest : stripSearchRaw(latest),
+          options: includeRaw ? options : options.map(stripOptionRaw),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to list hotel searches";
         console.error("[hotels] admin searches list failed:", msg);
@@ -2794,10 +2821,7 @@ export async function registerRoutes(
   );
 
   // Hotels Phase 4: read-only admin detail for a single hotel search +
-  // its persisted options. By default we strip the admin-only
-  // `sourceRawPayload` field from each option (it can be huge and contains
-  // raw provider responses). Pass `?raw=true` to include it for deep
-  // debugging — still gated behind requireAdmin.
+  // its persisted options. Same redaction rules as the list endpoint above.
   app.get(
     "/api/admin/hotels/searches/:id",
     isAuthenticated,
@@ -2814,10 +2838,10 @@ export async function registerRoutes(
         }
         const options = await storage.getHotelOptionsBySearch(id);
         const includeRaw = String(req.query.raw || "").toLowerCase() === "true";
-        const sanitizedOptions = includeRaw
-          ? options
-          : options.map(({ sourceRawPayload, ...rest }) => rest);
-        return res.json({ search, options: sanitizedOptions });
+        return res.json({
+          search: includeRaw ? search : stripSearchRaw(search),
+          options: includeRaw ? options : options.map(stripOptionRaw),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to load hotel search";
         console.error("[hotels] admin search detail failed:", msg);
@@ -4205,8 +4229,9 @@ export async function registerRoutes(
         userId: null,
         proposalId: null,
         logPrefix: lp,
-      }).catch((err: any) => {
-        console.error(`${lp} [hotels] unexpected throw from runHotelSearchForCall:`, err?.message || err);
+      }).catch((err: unknown) => {
+        const m = err instanceof Error ? err.message : String(err);
+        console.error(`${lp} [hotels] unexpected throw from runHotelSearchForCall:`, m);
       });
     }
   }
@@ -4637,15 +4662,16 @@ export async function registerRoutes(
         void runHotelSearchForCall({
           source: "outbound",
           callRequestId,
-          callRequest: callRequest as any,
+          callRequest,
           details,
           userId,
           proposalId: null,
           logPrefix: postCallLogPrefix,
-        }).catch((err: any) => {
+        }).catch((err: unknown) => {
+          const m = err instanceof Error ? err.message : String(err);
           console.error(
             `${postCallLogPrefix} [hotels] unexpected throw from runHotelSearchForCall:`,
-            err?.message || err,
+            m,
           );
         });
       }

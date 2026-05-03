@@ -40,6 +40,11 @@ export interface RunHotelSearchInput {
   logPrefix: string;
 }
 
+function errMsg(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 // Convert a numeric value to the string form drizzle wants for `numeric`
 // columns (Postgres NUMERIC). Returns null for missing/NaN.
 function num(v: number | null | undefined): string | null {
@@ -50,7 +55,8 @@ function num(v: number | null | undefined): string | null {
 function mapOptionToRow(
   searchId: number,
   provider: string,
-  opt: HotelOptionDTO & { rankScore?: number; rankReasons?: Record<string, number> },
+  opt: HotelOptionDTO,
+  rankMeta: { rankScore: number; rankReasons: Record<string, number> } | undefined,
 ): InsertHotelOption {
   // Free-cancellation deadline arrives as ISO string; persist as Date or null.
   let freeCancellationUntil: Date | null = null;
@@ -89,10 +95,10 @@ function mapOptionToRow(
     checkInInstructions: null,
     specialInstructions: null,
     // Admin-only field — never surfaced to non-admin endpoints.
-    sourceRawPayload: (opt.sourceRawPayload ?? null) as any,
-    rankScore: num(opt.rankScore ?? null),
-    rankReasons: (opt.rankReasons ?? null) as any,
-  } as InsertHotelOption;
+    sourceRawPayload: opt.sourceRawPayload ?? null,
+    rankScore: num(rankMeta?.rankScore ?? null),
+    rankReasons: rankMeta?.rankReasons ?? null,
+  };
 }
 
 export async function runHotelSearchForCall(input: RunHotelSearchInput): Promise<void> {
@@ -104,8 +110,8 @@ export async function runHotelSearchForCall(input: RunHotelSearchInput): Promise
   let request: HotelSearchRequest | null;
   try {
     request = extractHotelDetailsFromAnalysis(details, callRequest);
-  } catch (err: any) {
-    console.error(`${lp} extract threw unexpectedly:`, err?.message || err);
+  } catch (err) {
+    console.error(`${lp} extract threw unexpectedly:`, errMsg(err));
     return;
   }
   if (!request) {
@@ -127,12 +133,12 @@ export async function runHotelSearchForCall(input: RunHotelSearchInput): Promise
       callRequestId: callRequestId ?? null,
       proposalId: proposalId ?? null,
       provider: provider.name,
-      request: request as any,
+      request,
       status: "pending",
     });
     searchId = row.id;
-  } catch (err: any) {
-    console.error(`${lp} createHotelSearch failed:`, err?.message || err);
+  } catch (err) {
+    console.error(`${lp} createHotelSearch failed:`, errMsg(err));
     return;
   }
 
@@ -141,16 +147,16 @@ export async function runHotelSearchForCall(input: RunHotelSearchInput): Promise
   let options: HotelOptionDTO[];
   try {
     options = await provider.searchHotels(request);
-  } catch (err: any) {
+  } catch (err) {
     const isStub = err instanceof HotelProviderNotConfiguredError;
-    const msg = err?.message || String(err);
+    const msg = errMsg(err);
     console[isStub ? "warn" : "error"](
       `${lp} search failed search_id=${searchId} provider=${provider.name} err=${msg}`,
     );
     await storage
       .updateHotelSearchStatus(searchId, "failed", msg.slice(0, 1000))
-      .catch((upErr: any) => {
-        console.error(`${lp} updateHotelSearchStatus(failed) threw:`, upErr?.message || upErr);
+      .catch((upErr: unknown) => {
+        console.error(`${lp} updateHotelSearchStatus(failed) threw:`, errMsg(upErr));
       });
     return;
   }
@@ -161,8 +167,8 @@ export async function runHotelSearchForCall(input: RunHotelSearchInput): Promise
     console.log(`${lp} search_id=${searchId} provider=${provider.name} returned 0 options`);
     await storage
       .updateHotelSearchStatus(searchId, "completed")
-      .catch((upErr: any) => {
-        console.error(`${lp} updateHotelSearchStatus(completed) threw:`, upErr?.message || upErr);
+      .catch((upErr: unknown) => {
+        console.error(`${lp} updateHotelSearchStatus(completed) threw:`, errMsg(upErr));
       });
     return;
   }
@@ -179,29 +185,24 @@ export async function runHotelSearchForCall(input: RunHotelSearchInput): Promise
     });
   }
 
-  const rows: InsertHotelOption[] = options.map((o) => {
-    const rankMeta = rankByOfferId.get(o.providerOfferId);
-    return mapOptionToRow(searchId, provider.name, {
-      ...o,
-      rankScore: rankMeta?.rankScore,
-      rankReasons: rankMeta?.rankReasons,
-    });
-  });
+  const rows: InsertHotelOption[] = options.map((o) =>
+    mapOptionToRow(searchId, provider.name, o, rankByOfferId.get(o.providerOfferId)),
+  );
 
   try {
     await storage.bulkCreateHotelOptions(rows);
-  } catch (err: any) {
-    console.error(`${lp} bulkCreateHotelOptions failed search_id=${searchId}:`, err?.message || err);
+  } catch (err) {
+    console.error(`${lp} bulkCreateHotelOptions failed search_id=${searchId}:`, errMsg(err));
     await storage
-      .updateHotelSearchStatus(searchId, "failed", `persist_options: ${err?.message || err}`.slice(0, 1000))
+      .updateHotelSearchStatus(searchId, "failed", `persist_options: ${errMsg(err)}`.slice(0, 1000))
       .catch(() => undefined);
     return;
   }
 
   await storage
     .updateHotelSearchStatus(searchId, "completed")
-    .catch((upErr: any) => {
-      console.error(`${lp} updateHotelSearchStatus(completed) threw:`, upErr?.message || upErr);
+    .catch((upErr: unknown) => {
+      console.error(`${lp} updateHotelSearchStatus(completed) threw:`, errMsg(upErr));
     });
 
   console.log(
