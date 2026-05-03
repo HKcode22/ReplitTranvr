@@ -41,6 +41,8 @@ import {
   type GuestProposalEmailOption,
 } from "./lib/emailTemplates";
 import type { GuestProposalData, GuestProposalOption } from "@shared/schema";
+import { getHotelProvider } from "./lib/hotels";
+import { rankHotels } from "./lib/hotels/rank";
 import {
   authIpLimiter,
   loginEmailLimiter,
@@ -2667,6 +2669,60 @@ export async function registerRoutes(
   app.get("/api/admin/duffel-balance", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
     const data = await buildInferredBalance();
     return res.json(data);
+  });
+
+  // Hotels Phase 1: admin-only sanity-check for the hotel provider abstraction.
+  // Read-only — does NOT persist anything (Phase 2 owns persistence). Returns
+  // normalized search results plus the top 3-5 ranked options. Logs are
+  // truncated to first 300 chars and never include credentials.
+  const hotelTestSearchSchema = z.object({
+    destination: z.string().trim().min(1).max(120),
+    checkInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "checkInDate must be YYYY-MM-DD"),
+    checkOutDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "checkOutDate must be YYYY-MM-DD"),
+    adults: z.number().int().min(1).max(20),
+    children: z.number().int().min(0).max(20).optional(),
+    rooms: z.number().int().min(1).max(10).optional(),
+    budgetPerNight: z.number().positive().max(100_000).optional(),
+    totalHotelBudget: z.number().positive().max(1_000_000).optional(),
+    refundableOnly: z.boolean().optional(),
+    amenities: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+    neighborhood: z.string().trim().min(1).max(120).optional(),
+    hotelType: z.string().trim().min(1).max(40).optional(),
+    starRatingMin: z.number().min(1).max(5).optional(),
+    provider: z.string().trim().min(1).max(40).optional(),
+  });
+
+  app.post("/api/admin/hotels/test-search", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const parsed = hotelTestSearchSchema.safeParse(req.body || {});
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid request" });
+      }
+      const request = parsed.data;
+      if (Date.parse(request.checkOutDate) <= Date.parse(request.checkInDate)) {
+        return res.status(400).json({ message: "checkOutDate must be after checkInDate" });
+      }
+
+      const provider = getHotelProvider();
+      // Truncate echoed body to first 300 chars per the no-PII-in-logs rule.
+      const echoed = JSON.stringify(request).slice(0, 300);
+      console.log(`[hotels] test-search provider=${provider.name} body=${echoed}`);
+
+      const options = await provider.searchHotels(request);
+      const rankedTop = rankHotels(options, request);
+
+      return res.json({
+        provider: provider.name,
+        configured: provider.isConfigured(),
+        request,
+        options,
+        rankedTop,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Hotel test search failed";
+      console.error("[hotels] test-search failed:", msg);
+      return res.status(500).json({ message: msg });
+    }
   });
 
   app.get("/api/admin/promo-codes", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
