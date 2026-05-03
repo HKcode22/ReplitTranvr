@@ -1,0 +1,333 @@
+Create proper Privacy Policy and Terms of Service pages for Travnr.
+
+Context:
+Travnr is an AI travel concierge. Users can enter their phone number/email or call Travnr directly. The AI collects travel preferences through a voice call and Travnr may send tailored flight/travel options by email or SMS. Travnr may use services like Bland AI for voice calls, Twilio for SMS/phone, Duffel/Amadeus or other travel APIs for flight search/booking, email providers for transactional emails, hosting/database providers, analytics tools, and payment processors if booking/payment is enabled.
+
+Need:
+1. Create a /privacy page.
+2. Create a /terms page.
+3. Link both pages from the existing website footer/options.
+4. Use the site’s existing design system/styles.
+5. Make the pages readable, professional, and startup-appropriate.
+6. Include a “Last updated” date.
+7. Add a short note in the code/comments that these are template policies and should be reviewed by legal counsel before public launch.
+
+Privacy Policy should include:
+- Information we collect:
+  - account/contact info: name, email, phone number
+  - travel preferences: origin, destination, dates, budget, cabin/time preferences, notes
+  - call data: call recordings, transcripts, summaries, AI-extracted travel details
+  - booking/payment-related info if applicable
+  - device/usage info, cookies, logs, analytics
+- How we use information:
+  - provide travel concierge service
+  - identify returning callers by phone/email
+  - generate travel options
+  - send emails/SMS/call updates
+  - improve AI and product experience
+  - safety, fraud prevention, legal compliance
+- Sharing with service providers:
+  - voice/AI providers
+  - SMS/phone providers
+  - travel search/booking API providers
+  - email providers
+  - hosting/database providers
+  - analytics providers
+  - payment processors
+- State that Travnr does not sell personal information in the traditional sense.
+- Be careful about data monetization wording. Say Travnr may use aggregated or de-identified travel insights that do not identify individual users, unless users are told otherwise and given choices required by law.
+- Call recording/transcripts:
+  - calls may be recorded, transcribed, analyzed, and processed by AI to provide the service.
+- User choices:
+  - request access, correction, deletion
+  - opt out of marketing communications
+  - SMS opt-out by replying STOP if SMS is used
+  - contact email for privacy requests
+- Data retention:
+  - retain only as long as needed for service, legal, fraud prevention, and business purposes.
+- Security:
+  - reasonable safeguards but no guarantee of perfect security.
+- Children:
+  - service not intended for children under 13.
+- U.S. state privacy rights:
+  - include general language for applicable privacy rights, including California rights if applicable.
+- International users:
+  - data may be processed in the United States.
+- Contact:
+  - privacy@travnr.com or support@travnr.com, use whichever exists in the app. If neither exists, use support@travnr.com as placeholder.
+
+Terms of Service should include:
+- Acceptance of terms
+- Description of Travnr service
+- Eligibility: users must be at least 18 or age of majority to make bookings
+- User responsibilities:
+  - provide accurate travel and contact info
+  - confirm itinerary details before purchase
+  - comply with airline/travel rules
+- AI/concierge limitation:
+  - Travnr may use AI and third-party providers
+  - AI outputs may be incomplete or inaccurate
+  - user must review final details before booking
+- No guarantee of availability/prices:
+  - prices, schedules, fares, availability can change until ticketing/booking is confirmed
+- Third-party travel providers:
+  - flights/hotels/transport may be provided by airlines, OTAs, GDS/API providers, or other third parties
+  - third-party terms may apply
+- Payments/refunds/cancellations:
+  - if booking/payment is enabled, charges, refunds, cancellations, baggage, changes, and credits may be governed by travel providers
+  - Travnr does not guarantee refunds unless expressly stated
+- Communications consent:
+  - by providing phone/email or calling, users agree Travnr may contact them about their request by call, SMS, or email
+  - message/data rates may apply
+  - reply STOP to opt out of SMS if SMS is used
+- Call recording:
+  - calls may be recorded/transcribed for service, quality, safety, and support
+- Prohibited uses
+- Account security
+- Intellectual property
+- Feedback
+- Disclaimers
+- Limitation of liability
+- Indemnification
+- Termination
+- Changes to terms
+- Governing law:
+  - use Missouri, USA unless the app already uses another state/company jurisdiction.
+- Contact:
+  - support@travnr.com placeholder if no official support email exists.
+
+Important:
+- Do not claim Travnr is a licensed travel agency unless the code/company materials already say that.
+- Do not promise live search or guaranteed booking.
+- Do not say user data is sold.
+- Do not overstate security.
+- Do not mention internal tools in a way that exposes secrets.
+- Do not include fake company address.
+- If a legal company name exists in the code/env/docs, use it. Otherwise write “Travnr” and leave a TODO for legal entity name.
+- Keep the language plain-English and not overly long.
+- After implementation, show me the exact file paths changed and the final URLs.
+
+Use this copy inside the pages if Replit asks for content.
+
+Privacy Policy draft
+Privacy Policy
+
+Last updated: May 2, 2026
+
+Travnr (“Travnr,” “we,” “us,” or “our”) provides an AI-powered travel concierge service that helps users share travel preferences through calls, forms, email, SMS, or other interactions so we can provide tailored travel options.
+
+This Privacy Policy explains how we collect, use, disclose, and protect information when you use Travnr’s website, call our travel concierge, submit a request, receive travel options, or otherwise interact with our services.
+
+1. Information We Collect
+
+We may collect the following information:
+
+Contact and account information, such as your name, email address, phone number, and account details.
+
+Travel request information, such as departure city or airport, destination, travel dates, flexibility, number of travelers, budget, cabin preferences, time preferences, airline preferences, baggage needs, notes, and other trip details you choose to provide.
+
+Call information, such as call recordings, transcripts, summaries, AI-extracted travel details, call metadata, phone numbers, call timing, and related support information.
+
+Booking and transaction information, if booking or payment features are available, such as selected itinerary details, booking references, payment status, refunds, credits, and transaction records. Payment card details may be processed by third-party payment processors and may not be stored by Travnr.
+
+Device and usage information, such as IP address, browser type, device information, pages viewed, referral information, logs, cookies, and analytics data.
+
+Communications, such as emails, SMS messages, support requests, feedback, survey responses, and other messages you send to us.
+
+2. How We Use Information
+
+We may use information to:
+
+Provide, operate, and improve Travnr.
+Identify returning callers or users.
+Understand your travel request and generate tailored travel options.
+Send travel options, confirmations, reminders, support messages, and service updates.
+Communicate with you by phone, email, or SMS.
+Process bookings or transactions if those features are available.
+Improve our AI systems, product experience, call quality, and customer support.
+Detect, prevent, and address fraud, abuse, security issues, and technical problems.
+Comply with legal obligations and enforce our terms.
+
+3. Calls, Recordings, Transcripts, and AI Processing
+
+When you call Travnr or receive a call from Travnr, the call may be recorded, transcribed, summarized, and analyzed by AI or other automated systems. We use this information to understand your request, generate travel options, improve service quality, provide support, and maintain safety and reliability.
+
+Do not share sensitive personal information during a call unless it is necessary for your travel request.
+
+4. How We Share Information
+
+We may share information with service providers and partners that help us operate Travnr, including:
+
+Voice and AI call providers.
+SMS and phone providers.
+Email delivery providers.
+Travel search, booking, airline, hotel, transportation, and travel API providers.
+Payment processors.
+Hosting, database, infrastructure, and security providers.
+Analytics and product improvement providers.
+Professional advisors, such as legal, accounting, or compliance advisors.
+
+We may also disclose information if required by law, to protect rights and safety, to investigate fraud or abuse, or as part of a merger, acquisition, financing, or sale of assets.
+
+Travnr does not sell personal information in the traditional sense. We may use aggregated or de-identified travel insights that do not identify individual users. If we engage in activities that legally require opt-out rights or additional disclosures, we will provide those rights and disclosures as required by law.
+
+5. Cookies and Analytics
+
+We may use cookies, pixels, logs, and analytics tools to understand how users interact with Travnr, improve the website, measure performance, and support security. You can control cookies through your browser settings, but some features may not work properly if cookies are disabled.
+
+6. Your Choices
+
+You may contact us to request access, correction, or deletion of your personal information. You may also request that we stop using your information for certain purposes, subject to legal and operational limits.
+
+You can opt out of marketing emails by using the unsubscribe link if available. If we send SMS messages, you may be able to opt out by replying STOP. Even if you opt out of marketing, we may still send service-related messages about your requests, bookings, account, or security.
+
+7. Data Retention
+
+We retain information for as long as reasonably necessary to provide Travnr, complete transactions, support users, comply with legal obligations, resolve disputes, prevent fraud, and improve our services. Retention periods may vary depending on the type of information and the reason it was collected.
+
+8. Security
+
+We use reasonable administrative, technical, and organizational safeguards designed to protect information. However, no method of transmission or storage is completely secure, and we cannot guarantee absolute security.
+
+9. Children’s Privacy
+
+Travnr is not intended for children under 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us personal information, contact us and we will take appropriate steps.
+
+10. U.S. State Privacy Rights
+
+Depending on where you live, you may have privacy rights under applicable state laws, such as the right to access, correct, delete, or receive a copy of certain personal information, and the right to opt out of certain uses of personal information. We will respond to valid requests as required by applicable law.
+
+California residents may have additional rights under the California Consumer Privacy Act, as amended, if it applies to Travnr. These rights may include the right to know, delete, correct, and opt out of certain sales or sharing of personal information. The California Attorney General describes CCPA rights and business obligations, including disclosures about categories of personal information, purposes, and sale or sharing. :contentReference[oaicite:0]{index=0}
+
+11. International Users
+
+Travnr is operated from the United States. If you use Travnr from outside the United States, your information may be processed and stored in the United States or other countries where our service providers operate.
+
+12. Changes to This Privacy Policy
+
+We may update this Privacy Policy from time to time. The updated version will be posted on this page with a new “Last updated” date. Your continued use of Travnr after an update means you acknowledge the updated policy.
+
+13. Contact Us
+
+For privacy questions or requests, contact us at:
+
+support@travnr.com
+Terms of Service draft
+Terms of Service
+
+Last updated: May 2, 2026
+
+These Terms of Service (“Terms”) govern your use of Travnr’s website, AI travel concierge, call services, travel option delivery, and related services (“Services”). By using Travnr, submitting a request, calling Travnr, receiving a call from Travnr, or otherwise interacting with our Services, you agree to these Terms.
+
+If you do not agree, do not use Travnr.
+
+1. Travnr’s Service
+
+Travnr provides an AI-powered travel concierge experience. Users can share travel preferences through calls, forms, email, SMS, or other interactions. Travnr may use those details to generate tailored travel options, send itinerary suggestions, support booking flows, and assist with travel-related requests.
+
+Travnr may use AI systems and third-party service providers to operate the Services.
+
+2. Eligibility
+
+You must be at least 18 years old or the age of majority in your jurisdiction to make purchases or bookings through Travnr. By using Travnr, you represent that you have the authority to provide the information you submit and to make travel decisions for yourself or any travelers included in your request.
+
+3. Your Responsibilities
+
+You agree to provide accurate and complete information, including travel dates, traveler details, contact information, and preferences.
+
+You are responsible for reviewing all travel options, prices, dates, airports, passenger names, baggage rules, visa or entry requirements, cancellation rules, and other details before making or approving any booking.
+
+You are responsible for complying with airline, hotel, transportation, government, and other third-party rules that apply to your travel.
+
+4. AI and Travel Information
+
+Travnr may use AI to collect preferences, summarize calls, identify trip details, and generate travel options. AI-generated outputs may be incomplete, delayed, or inaccurate. Travnr does not guarantee that every suggestion is error-free or that every available option is shown.
+
+You should review all important details before relying on any travel option or completing a booking.
+
+5. Prices, Availability, and Bookings
+
+Travel prices, schedules, fares, routes, availability, baggage rules, and cancellation policies can change at any time until a booking is ticketed or confirmed by the relevant travel provider.
+
+Travnr does not guarantee that a displayed or suggested price, schedule, or option will remain available.
+
+If booking or payment features are enabled, a booking is not final until it is confirmed by the applicable provider and any required payment is successfully processed.
+
+6. Third-Party Providers
+
+Flights, hotels, transportation, payment processing, communications, and other travel services may be provided by airlines, hotels, travel suppliers, travel APIs, payment processors, or other third parties. Third-party terms, conditions, privacy policies, fare rules, cancellation rules, and refund policies may apply.
+
+Travnr is not responsible for third-party services, provider changes, delays, cancellations, schedule changes, baggage decisions, denied boarding, travel disruptions, or other actions outside Travnr’s control.
+
+7. Payments, Refunds, Cancellations, and Changes
+
+If Travnr supports booking or payment, you agree to pay all applicable prices, taxes, fees, and charges shown to you before purchase.
+
+Refunds, cancellations, credits, baggage fees, seat fees, and changes may be governed by the applicable airline, hotel, transportation provider, payment processor, or travel supplier. Travnr does not guarantee refunds, credits, cancellations, or changes unless expressly stated in writing.
+
+8. Communications Consent
+
+By providing your phone number or email address, submitting a request, calling Travnr, or asking Travnr to contact you, you agree that Travnr may contact you by phone, SMS, email, or similar methods about your request, travel options, account, bookings, support, and related services.
+
+Message and data rates may apply. If SMS is used, you may opt out by replying STOP where supported. Opting out may limit our ability to provide parts of the Services.
+
+9. Calls, Recordings, and Transcripts
+
+Calls with Travnr may be recorded, transcribed, summarized, and analyzed by AI or other automated systems for service delivery, quality, safety, support, training, and product improvement. By calling Travnr or accepting a call from Travnr, you consent to this processing to the extent permitted by law.
+
+10. Accounts and Security
+
+If you create an account, you are responsible for maintaining the security of your account credentials and for activity under your account. Notify us promptly if you believe your account has been compromised.
+
+11. Prohibited Uses
+
+You agree not to misuse Travnr, including by:
+
+Providing false, misleading, or unauthorized information.
+Using the Services for unlawful, fraudulent, abusive, or harmful purposes.
+Attempting to interfere with or disrupt the Services.
+Attempting to access systems, data, or accounts without permission.
+Scraping, copying, or reverse engineering the Services except as allowed by law.
+Using Travnr to violate third-party rights or travel provider rules.
+
+12. Intellectual Property
+
+Travnr and its content, designs, software, branding, logos, and other materials are owned by Travnr or its licensors and are protected by intellectual property laws. You may not copy, modify, distribute, sell, or exploit Travnr materials without permission.
+
+13. Feedback
+
+If you provide feedback, suggestions, or ideas, you grant Travnr the right to use them without restriction or compensation.
+
+14. Disclaimers
+
+Travnr is provided on an “as is” and “as available” basis. To the fullest extent permitted by law, Travnr disclaims warranties of any kind, whether express, implied, or statutory, including warranties of merchantability, fitness for a particular purpose, title, and non-infringement.
+
+Travnr does not guarantee uninterrupted service, error-free results, perfect accuracy, travel availability, specific prices, successful bookings, or uninterrupted travel.
+
+15. Limitation of Liability
+
+To the fullest extent permitted by law, Travnr and its officers, employees, contractors, partners, and service providers will not be liable for indirect, incidental, special, consequential, exemplary, or punitive damages, or for lost profits, lost data, travel disruptions, missed flights, provider cancellations, or costs of substitute services.
+
+To the fullest extent permitted by law, Travnr’s total liability for any claim related to the Services will not exceed the greater of the amount you paid to Travnr for the relevant Service or $100.
+
+16. Indemnification
+
+You agree to indemnify and hold harmless Travnr and its officers, employees, contractors, partners, and service providers from claims, damages, liabilities, costs, and expenses arising from your use of the Services, your violation of these Terms, your travel decisions, or your violation of law or third-party rights.
+
+17. Termination
+
+We may suspend or terminate access to Travnr at any time if we believe you violated these Terms, created risk, or used the Services improperly. You may stop using Travnr at any time.
+
+18. Changes to These Terms
+
+We may update these Terms from time to time. The updated version will be posted with a new “Last updated” date. Your continued use of Travnr after changes means you accept the updated Terms.
+
+19. Governing Law
+
+These Terms are governed by the laws of the State of Missouri, without regard to conflict-of-law principles, unless applicable law requires otherwise.
+
+20. Contact
+
+Questions about these Terms can be sent to:
+
+support@travnr.com
