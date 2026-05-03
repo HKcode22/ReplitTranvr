@@ -122,9 +122,12 @@ const MONTHS = [
 // error than juggling per-month day counts here.
 const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
 
-// Year range: now-100 .. now-1 (no future birth dates).
+// Year range covers infants born this year through 120-year-old travelers
+// (broader than any practical airline ticketing case). Real-calendar +
+// past-date validity is enforced separately via isValidBornOn() so we don't
+// need to gate Feb 30 / future dates here.
 const CURRENT_YEAR = new Date().getFullYear();
-const YEARS = Array.from({ length: 100 }, (_, i) => String(CURRENT_YEAR - 1 - i));
+const YEARS = Array.from({ length: 121 }, (_, i) => String(CURRENT_YEAR - i));
 
 // Tailwind class for a native select styled like shadcn Input.
 const SELECT_CLASS =
@@ -507,7 +510,18 @@ function PassengerCard({
   showAllErrors: boolean;
   onChange: (updater: (prev: PassengerForm) => PassengerForm) => void;
 }) {
+  // Auto-open the secure traveler section whenever a pair-validation error
+  // exists in it AND the user has attempted submit (showAllErrors), so the
+  // user can immediately see the inline message instead of only the toast.
+  const hasSecureError = !!(
+    validatePassenger(passenger, passportRequired).knownTraveler ||
+    validatePassenger(passenger, passportRequired).redress ||
+    validatePassenger(passenger, passportRequired).secondaryRedress
+  );
   const [secureOpen, setSecureOpen] = useState(false);
+  useEffect(() => {
+    if (showAllErrors && hasSecureError) setSecureOpen(true);
+  }, [showAllErrors, hasSecureError]);
   const [showSecondaryRedress, setShowSecondaryRedress] = useState(
     !!passenger.secondaryRedressNumber,
   );
@@ -788,9 +802,13 @@ function PassengerCard({
                   onChange={(code) => set("knownTravelerCountry", code)}
                   ariaLabel="KTN issuing country"
                   testId={`select-pax-ktn-country-${idx}`}
+                  hasError={showAllErrors && !!errors.knownTraveler}
                 />
               </div>
             </div>
+            {showAllErrors && errors.knownTraveler && (
+              <p className="text-xs text-red-600" data-testid={`error-pax-ktn-${idx}`}>{errors.knownTraveler}</p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label htmlFor={`p-${idx}-redress`}>Redress number</Label>
@@ -808,9 +826,13 @@ function PassengerCard({
                   onChange={(code) => set("redressCountry", code)}
                   ariaLabel="Redress issuing country"
                   testId={`select-pax-redress-country-${idx}`}
+                  hasError={showAllErrors && !!errors.redress}
                 />
               </div>
             </div>
+            {showAllErrors && errors.redress && (
+              <p className="text-xs text-red-600" data-testid={`error-pax-redress-${idx}`}>{errors.redress}</p>
+            )}
             {!showSecondaryRedress ? (
               <button
                 type="button"
@@ -839,9 +861,13 @@ function PassengerCard({
                     onChange={(code) => set("secondaryRedressCountry", code)}
                     ariaLabel="Secondary redress issuing country"
                     testId={`select-pax-redress2-country-${idx}`}
+                    hasError={showAllErrors && !!errors.secondaryRedress}
                   />
                 </div>
               </div>
+            )}
+            {showAllErrors && errors.secondaryRedress && (
+              <p className="text-xs text-red-600" data-testid={`error-pax-redress2-${idx}`}>{errors.secondaryRedress}</p>
             )}
           </div>
         )}
