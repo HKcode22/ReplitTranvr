@@ -5968,10 +5968,11 @@ export async function registerRoutes(
             if (!summary) return;
             const merged = mergeSummaryIntoVariables(persisted.variables, summary);
             await storage.updateBlandCall(dbId, { variables: merged });
-          } catch (err: any) {
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
             console.warn(
               `[call-summary] post-webhook generation failed for bland_call=${blandCallId}:`,
-              err?.message || err,
+              msg,
             );
           }
         })();

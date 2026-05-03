@@ -492,12 +492,17 @@ function confidenceTone(c: number): { label: string; cls: string } {
 // Inline summary block: compact AI one-liner + confidence badge + a
 // "regenerate" button visible only when we have a DB row to target. Used
 // by both the live-calls and DB-fallback rows in the admin calls list.
+// When the AI summary is missing, we still render a deterministic
+// fallback line from whatever extracted fields the row provides so
+// admins are never left staring at a blank summary slot.
 function CallSummaryBlock({
   summary,
   dbCallId,
+  fallbackLine,
 }: {
   summary: AiCallSummary | null | undefined;
   dbCallId: number | null | undefined;
+  fallbackLine: string | null;
 }) {
   const { toast } = useToast();
   const mut = useMutation({
@@ -517,7 +522,7 @@ function CallSummaryBlock({
     },
   });
 
-  if (!summary && !dbCallId) return null;
+  if (!summary && !dbCallId && !fallbackLine) return null;
   const tone = summary ? confidenceTone(summary.confidence) : null;
   return (
     <div className="mt-1.5 flex items-start gap-2 flex-wrap" data-testid={`call-summary-${dbCallId ?? "none"}`}>
@@ -533,8 +538,12 @@ function CallSummaryBlock({
             </Badge>
           )}
         </>
+      ) : fallbackLine ? (
+        <span className="text-xs text-muted-foreground break-words flex-1 min-w-0" data-testid="text-call-summary-fallback">
+          {fallbackLine}
+        </span>
       ) : (
-        <span className="text-xs text-muted-foreground italic">No AI summary yet.</span>
+        <span className="text-xs text-muted-foreground italic flex-1 min-w-0">No AI summary yet.</span>
       )}
       {dbCallId && (
         <button
@@ -583,7 +592,20 @@ function CallsTable({ limit }: { limit?: number }) {
                   {phone} · {minutes} · {date}
                 </div>
                 {isCompleted && (
-                  <CallSummaryBlock summary={c.aiSummary} dbCallId={c.dbCallId ?? null} />
+                  <CallSummaryBlock
+                    summary={c.aiSummary}
+                    dbCallId={c.dbCallId ?? null}
+                    fallbackLine={(() => {
+                      // Best-effort deterministic fallback when Claude is
+                      // unavailable: surface whatever metadata Bland gave us
+                      // so the row is never blank.
+                      const parts: string[] = [];
+                      if (typeof meta.destination === "string") parts.push(String(meta.destination));
+                      if (typeof meta.dateFrom === "string") parts.push(new Date(meta.dateFrom).toLocaleDateString());
+                      if (typeof c.call_length === "number") parts.push(minutes);
+                      return parts.length > 0 ? parts.join(" · ") : null;
+                    })()}
+                  />
                 )}
               </div>
               <Badge variant="secondary" className="shrink-0">{status}</Badge>
@@ -600,7 +622,16 @@ function CallsTable({ limit }: { limit?: number }) {
                 {dbRow.destination || "—"} · {dbRow.dateFrom ? new Date(dbRow.dateFrom).toLocaleDateString() : "—"} · {new Date(dbRow.createdAt).toLocaleString()}
               </div>
               {isCompleted && (
-                <CallSummaryBlock summary={dbRow.aiSummary} dbCallId={dbRow.dbCallId ?? null} />
+                <CallSummaryBlock
+                  summary={dbRow.aiSummary}
+                  dbCallId={dbRow.dbCallId ?? null}
+                  fallbackLine={(() => {
+                    const parts: string[] = [];
+                    if (dbRow.destination) parts.push(dbRow.destination);
+                    if (dbRow.dateFrom) parts.push(new Date(dbRow.dateFrom).toLocaleDateString());
+                    return parts.length > 0 ? parts.join(" · ") : null;
+                  })()}
+                />
               )}
             </div>
             <Badge variant="secondary" className="shrink-0">{dbRow.status}</Badge>

@@ -87,20 +87,23 @@ function parseClaudeJson(raw: string): CallSummary | null {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) return null;
-  let parsed: any;
+  let parsed: unknown;
   try {
     parsed = JSON.parse(text.slice(start, end + 1));
   } catch {
     return null;
   }
   if (!parsed || typeof parsed !== "object") return null;
-  const oneLinerRaw = typeof parsed.one_liner === "string" ? parsed.one_liner.trim() : "";
+  const obj = parsed as Record<string, unknown>;
+  const oneLinerRaw = typeof obj.one_liner === "string" ? obj.one_liner.trim() : "";
   if (!oneLinerRaw) return null;
   const oneLiner =
     oneLinerRaw.length > MAX_ONELINER_CHARS
       ? oneLinerRaw.slice(0, MAX_ONELINER_CHARS - 1) + "…"
       : oneLinerRaw;
-  const s = parsed.structured ?? {};
+  const s = (obj.structured && typeof obj.structured === "object"
+    ? (obj.structured as Record<string, unknown>)
+    : {}) as Record<string, unknown>;
   const asStr = (v: unknown): string | null => {
     if (v === null || v === undefined) return null;
     if (typeof v === "string") {
@@ -110,13 +113,15 @@ function parseClaudeJson(raw: string): CallSummary | null {
     if (typeof v === "number" && Number.isFinite(v)) return String(v);
     return null;
   };
+  const paxRaw = s.pax;
   const pax =
-    typeof s.pax === "number" && Number.isFinite(s.pax) && s.pax >= 0
-      ? Math.floor(s.pax)
+    typeof paxRaw === "number" && Number.isFinite(paxRaw) && paxRaw >= 0
+      ? Math.floor(paxRaw)
       : null;
+  const confidenceRaw = obj.confidence;
   const confidence =
-    typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence)
-      ? Math.max(0, Math.min(1, parsed.confidence))
+    typeof confidenceRaw === "number" && Number.isFinite(confidenceRaw)
+      ? Math.max(0, Math.min(1, confidenceRaw))
       : 0;
   return {
     oneLiner,
@@ -156,10 +161,10 @@ export async function summarizeCall(args: {
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: buildUserPrompt(transcript, args.summary ?? null, args.analysis ?? null) }],
     });
-    const block = (resp.content || []).find((b: any) => b.type === "text") as
-      | { type: "text"; text: string }
-      | undefined;
-    const result = parseClaudeJson(block?.text ?? "");
+    const textBlock = resp.content.find(
+      (b): b is Extract<typeof b, { type: "text" }> => b.type === "text",
+    );
+    const result = parseClaudeJson(textBlock?.text ?? "");
     if (!result) {
       console.warn(`[call-summary] ${tag} failed to parse Claude response`);
       return null;
@@ -168,8 +173,9 @@ export async function summarizeCall(args: {
       `[call-summary] ${tag} generated confidence=${result.confidence.toFixed(2)} chars=${result.oneLiner.length}`,
     );
     return result;
-  } catch (err: any) {
-    console.warn(`[call-summary] ${tag} Anthropic error:`, err?.message || err);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[call-summary] ${tag} Anthropic error:`, msg);
     return null;
   }
 }
