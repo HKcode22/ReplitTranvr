@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 
 
 const WORDS = ["trip", "vacation", "excursion", "getaway", "work trip", "weekend", "honeymoon"];
@@ -170,6 +171,7 @@ function CallbackForm() {
     setLoading(true);
     try {
       await apiRequest("POST", "/api/callback-request", { name, phone, email });
+      trackEvent("call_requested", { source: "landing" });
       setSubmitted(true);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });

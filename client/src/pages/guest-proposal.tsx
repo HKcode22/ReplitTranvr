@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plane, Clock, ArrowRight, CheckCircle2, MailCheck, AlertCircle, Sparkles } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 interface GuestSegment {
   carrierName?: string | null;
@@ -223,6 +224,14 @@ export default function GuestProposalPage() {
   useEffect(() => {
     document.title = "Your Flight Options — Travnr";
   }, []);
+
+  useEffect(() => {
+    if (data) {
+      trackEvent("proposal_viewed", {
+        optionCount: data.proposal.options.length,
+      });
+    }
+  }, [data]);
 
   if (!token) {
     return (

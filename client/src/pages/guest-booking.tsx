@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PromoCodeInput, type AppliedPromo } from "@/components/promo-code-input";
 import { ensureCsrfToken } from "@/lib/queryClient";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { trackEvent } from "@/lib/analytics";
 
 const BRAND_BLUE = "#2d7abf";
 
@@ -288,6 +289,10 @@ function CheckoutForm({
         setSubmitting(false);
         return;
       }
+      trackEvent("guest_booking_completed", {
+        status: json.status,
+        promoApplied: !!appliedPromo,
+      });
       onResult(json.status, json.bookingRef);
     } catch (err: any) {
       toast({ title: "Booking failed", description: err.message || "Please try again.", variant: "destructive" });
@@ -347,6 +352,12 @@ export default function GuestBookingPage() {
           return;
         }
         setData(json);
+        trackEvent("guest_booking_started", {
+          passengerCount: json.passengerCount,
+          cabinClass: json.cabinClass,
+          optionLabel: json.option?.label,
+          stops: json.option?.stops,
+        });
         setContact((c) => ({ ...c, email: c.email || json.guestEmail || "" }));
         setPassengers(
           Array.from({ length: json.passengerCount || 1 }, () => ({

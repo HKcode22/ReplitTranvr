@@ -1,3 +1,5 @@
+import { captureException } from "./sentry";
+
 type ErrorContext = {
   boundary?: string;
   componentStack?: string | null;
@@ -14,4 +16,7 @@ export function reportError(error: unknown, context: ErrorContext = {}): void {
   if (typeof console !== "undefined") {
     console.error("[reportError]", payload);
   }
+  // Forward to Sentry. The captureException no-ops when Sentry isn't
+  // initialized (dev, DNT, missing DSN), so this is always safe to call.
+  captureException(err, context);
 }

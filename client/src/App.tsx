@@ -12,6 +12,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Shield, User as UserIcon } from "lucide-react";
 
+import { useEffect } from "react";
+import { trackPageView, identifyUser } from "@/lib/analytics";
+import { setSentryUser, setSentryRoute } from "@/lib/sentry";
 import LandingPage from "@/pages/landing";
 import AuthPage from "@/pages/auth";
 import DashboardPage from "@/pages/dashboard";
@@ -109,6 +112,22 @@ function AuthenticatedLayout() {
 function AppRouter() {
   const { user, isLoading } = useAuth();
   const [location] = useLocation();
+
+  // Identify the (or anonymous) user in PostHog/Sentry whenever auth state
+  // changes. We pass only the opaque user id — never email/name/phone.
+  useEffect(() => {
+    const id = user?.id ?? null;
+    identifyUser(id);
+    setSentryUser(id);
+  }, [user?.id]);
+
+  // Capture a sanitized pageview on every route change. Token-bearing
+  // segments (guest booking option tokens, password reset tokens, ids)
+  // are replaced inside trackPageView before being sent.
+  useEffect(() => {
+    trackPageView(location);
+    setSentryRoute(location);
+  }, [location]);
 
   if (isLoading) {
     return (

@@ -7,6 +7,9 @@ import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from './lib/stripeClient';
 import { WebhookHandlers } from './lib/webhookHandlers';
 import { redactJSON } from './lib/redact';
+import { initSentry, captureRequestError, sentryRequestContext } from './lib/sentry';
+
+initSentry();
 
 const app = express();
 app.set("trust proxy", 1);
@@ -33,6 +36,18 @@ const stripeConnectSrc = [
 ];
 const stripeImgSrc = ["https://*.stripe.com"];
 
+// Sentry (error reporting) and PostHog (product analytics) endpoints. Both
+// are loaded only in production when their respective env vars are set, but
+// the CSP allowlist needs the hosts unconditionally so the SDKs can phone
+// home from a deployed build. PostHog also serves its lazy-loaded chunks
+// from `*-assets.i.posthog.com`.
+const sentryConnectSrc = ["https://*.ingest.sentry.io", "https://*.ingest.us.sentry.io"];
+const posthogConnectSrc = [
+  "https://*.i.posthog.com",
+  "https://*.posthog.com",
+];
+const posthogScriptSrc = ["https://*.i.posthog.com", "https://*.posthog.com"];
+
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -45,6 +60,7 @@ app.use(
         scriptSrc: [
           "'self'",
           ...stripeScriptSrc,
+          ...posthogScriptSrc,
           ...(isProduction ? [] : ["'unsafe-inline'", "'unsafe-eval'"]),
         ],
         scriptSrcAttr: ["'none'"],
@@ -54,6 +70,8 @@ app.use(
         connectSrc: [
           "'self'",
           ...stripeConnectSrc,
+          ...sentryConnectSrc,
+          ...posthogConnectSrc,
           ...(isProduction ? [] : ["ws:", "wss:", "http:", "https:"]),
         ],
         frameSrc: ["'self'", ...stripeFrameSrc],
@@ -163,6 +181,13 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Attach a Sentry scope per request so any captureException — whether it
+// comes from a route handler, an async chain, or the global error
+// middleware below — is automatically tagged with the matched route
+// template, HTTP method, and (on finish) the response status. No-ops
+// when Sentry isn't initialized (dev / missing DSN).
+app.use(sentryRequestContext());
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -227,11 +252,18 @@ app.use((req, res, next) => {
 
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
+
+    // Only forward server-side faults to Sentry; 4xx are client problems
+    // and would just be noise. captureRequestError no-ops in dev / when
+    // SENTRY_DSN is unset, so this is always safe to call.
+    if (status >= 500) {
+      captureRequestError(err, req, status);
+    }
 
     if (res.headersSent) {
       return next(err);

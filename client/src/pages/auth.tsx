@@ -11,6 +11,7 @@ import { Eye, EyeOff, Loader2, Mail, ArrowLeft, KeyRound } from "lucide-react";
 import SEO from "@/components/seo";
 
 import { apiRequest } from "@/lib/queryClient";
+import { trackEvent } from "@/lib/analytics";
 
 // Mirror of server/lib/phone.ts:normalizePhoneE164 so the register form can
 // validate before submit and surface inline errors instead of round-tripping
@@ -111,12 +112,17 @@ export default function AuthPage() {
           phone: form.phone,
           claimToken: claimToken || undefined,
         });
+        trackEvent("signup_completed", {
+          needsVerification: !!result?.needsVerification,
+          claimed: !!claimToken,
+        });
         if (result.needsVerification) {
           setNeedsVerification(true);
           setRegisteredEmail(form.email);
         }
       } else {
         await login(form.email, form.password);
+        trackEvent("login", {});
       }
     } catch (err: any) {
       setError(err.message?.replace(/^\d+:\s*/, "") || "Something went wrong");
