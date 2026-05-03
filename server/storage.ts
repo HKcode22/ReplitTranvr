@@ -349,9 +349,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(blandCalls).where(inArray(blandCalls.blandCallId, cleaned));
   }
 
-  // Recent completed bland_calls with a transcript — used by the backfill
-  // script to find calls that never got an AI summary. Bounded so the
-  // script doesn't try to summarize the entire history at once.
+  // Recent completed bland_calls — used by the backfill script to find
+  // calls that never got an AI summary. The transcript-presence and
+  // already-cached checks live in the script itself; this query just
+  // bounds the candidate set so we don't scan the entire history at once.
   async getRecentCompletedBlandCalls(limit: number = 100): Promise<BlandCall[]> {
     return db
       .select()
