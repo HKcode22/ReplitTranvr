@@ -4219,7 +4219,15 @@ export async function registerRoutes(
     // Phase 4 hotel-search hook (inbound). Off by default — only fires when
     // ENABLE_HOTEL_SEARCH=true. Fire-and-forget, single attempt, never
     // re-throws. Email/proposal/SMS paths above are completely untouched.
-    // Inbound has no callRequest row (stateless caller) and no userId.
+    //
+    // Linkage exception (intentional, schema-driven): inbound is a stateless
+    // caller flow. There is NO `call_requests` row (the caller dialed in
+    // directly without a prior /api/bland/call dispatch) and NO
+    // `itinerary_proposals` row (only a `guest_proposals` row was created
+    // above — a different table that hotel_searches.proposal_id does not
+    // reference). Both `callRequestId` and `proposalId` are therefore null.
+    // The persisted hotel_search is correlated back via the log prefix
+    // (`[bland-inbound] call_id=<id>`) and timestamp.
     if (process.env.ENABLE_HOTEL_SEARCH === "true") {
       void runHotelSearchForCall({
         source: "inbound",
@@ -5516,6 +5524,14 @@ export async function registerRoutes(
       );
 
       // Background regeneration — produces a brand new guest_proposal row + new email.
+      //
+      // Phase 4 (hotels) note: the hotel-search hook is intentionally NOT
+      // wired here. Re-running provider hotel queries on every expired-link
+      // click would multiply provider quota cost without giving the caller
+      // anything new (their hotel needs haven't changed since the original
+      // call). Future phases that want fresh hotel pricing on expiry should
+      // re-use the most recent completed hotel_search row for this caller
+      // rather than re-issuing a new provider request.
       (async () => {
         try {
           if (!duffel) {

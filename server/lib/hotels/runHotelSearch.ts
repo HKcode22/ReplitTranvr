@@ -173,20 +173,18 @@ export async function runHotelSearchForCall(input: RunHotelSearchInput): Promise
     return;
   }
 
+  // Persist only the ranked top set (rankHotels returns 3-5 best matches).
+  // Phase 4 contract: the post-call hotel store is curated, not exhaustive
+  // — admins / future surfaces consume the ranked options directly without
+  // needing to re-rank. The full provider response is intentionally
+  // dropped here; debug-level inspection is available via the
+  // `sourceRawPayload` field on each persisted ranked row.
   const ranked = rankHotels(options, request);
-  // Build a quick lookup so we can attach rank metadata to every persisted
-  // row (not just the top N). Keyed by providerOfferId which the ranker
-  // preserves from the input options.
-  const rankByOfferId = new Map<string, { rankScore: number; rankReasons: Record<string, number> }>();
-  for (const r of ranked) {
-    rankByOfferId.set(r.providerOfferId, {
+  const rows: InsertHotelOption[] = ranked.map((r) =>
+    mapOptionToRow(searchId, provider.name, r, {
       rankScore: r.rankScore,
       rankReasons: r.rankReasons,
-    });
-  }
-
-  const rows: InsertHotelOption[] = options.map((o) =>
-    mapOptionToRow(searchId, provider.name, o, rankByOfferId.get(o.providerOfferId)),
+    }),
   );
 
   try {
@@ -206,6 +204,6 @@ export async function runHotelSearchForCall(input: RunHotelSearchInput): Promise
     });
 
   console.log(
-    `${lp} completed search_id=${searchId} provider=${provider.name} options=${options.length} ranked_top=${ranked.length}`,
+    `${lp} completed search_id=${searchId} provider=${provider.name} returned=${options.length} persisted_ranked=${ranked.length}`,
   );
 }
