@@ -1,9 +1,9 @@
-// Template policy. Review with legal counsel before public launch.
-// Do not ship as-is for production legal compliance.
-//
-// TODO: legal entity name — when Travnr is incorporated, replace the
-// stand-alone "Travnr" references below with the registered legal entity
-// name (e.g., "Travnr, Inc." / "Travnr LLC") on first mention.
+// Travnr Terms of Service. Versioned via the "Last updated" line + the
+// `#terms-v1` anchor below; bump both when the substantive copy changes.
+// First-mention legal entity is left as a clearly labeled placeholder
+// (`[LEGAL ENTITY NAME]`) until the registered entity is finalized — swap
+// in the real name (e.g., "Travnr, Inc.") in one place when ready.
+// Governing-law jurisdiction (Missouri, USA) is set in §19.
 
 import { Link } from "wouter";
 import SEO from "@/components/seo";
@@ -40,13 +40,17 @@ export default function TermsPage() {
         <h1 className="font-serif text-4xl sm:text-5xl font-bold mb-3" data-testid="text-terms-title">
           Terms of Service
         </h1>
-        <p className="text-sm text-muted-foreground mb-10" data-testid="text-terms-updated">
-          Last updated: May 2, 2026
+        <p
+          id="terms-v1"
+          className="text-sm text-muted-foreground mb-10"
+          data-testid="text-terms-updated"
+        >
+          Version 1.0 · Last updated: May 2, 2026
         </p>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none prose-headings:font-serif prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4 prose-p:leading-relaxed prose-li:my-1">
           <p>
-            These Terms of Service ("Terms") govern your use of Travnr's website, AI travel concierge, call services, travel option delivery, and related services ("Services"). By using Travnr, submitting a request, calling Travnr, receiving a call from Travnr, or otherwise interacting with our Services, you agree to these Terms.
+            These Terms of Service ("Terms") are entered into between you and <strong>[LEGAL ENTITY NAME]</strong>, doing business as Travnr ("Travnr," "we," "us," or "our"), and govern your use of Travnr's website, AI travel concierge, call services, travel option delivery, and related services ("Services"). By using Travnr, submitting a request, calling Travnr, receiving a call from Travnr, or otherwise interacting with our Services, you agree to these Terms.
           </p>
           <p>If you do not agree, do not use Travnr.</p>
 

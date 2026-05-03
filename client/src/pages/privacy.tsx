@@ -1,9 +1,8 @@
-// Template policy. Review with legal counsel before public launch.
-// Do not ship as-is for production legal compliance.
-//
-// TODO: legal entity name — when Travnr is incorporated, replace the
-// stand-alone "Travnr" references below with the registered legal entity
-// name (e.g., "Travnr, Inc." / "Travnr LLC") on first mention.
+// Travnr Privacy Policy. Versioned via the "Last updated" line + the
+// `#policy-v1` anchor below; bump both when the substantive copy changes.
+// First-mention legal entity is left as a clearly labeled placeholder
+// (`[LEGAL ENTITY NAME]`) until the registered entity is finalized — swap
+// in the real name (e.g., "Travnr, Inc.") in one place when ready.
 
 import { Link } from "wouter";
 import SEO from "@/components/seo";
@@ -40,13 +39,17 @@ export default function PrivacyPage() {
         <h1 className="font-serif text-4xl sm:text-5xl font-bold mb-3" data-testid="text-privacy-title">
           Privacy Policy
         </h1>
-        <p className="text-sm text-muted-foreground mb-10" data-testid="text-privacy-updated">
-          Last updated: May 2, 2026
+        <p
+          id="policy-v1"
+          className="text-sm text-muted-foreground mb-10"
+          data-testid="text-privacy-updated"
+        >
+          Version 1.0 · Last updated: May 2, 2026
         </p>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none prose-headings:font-serif prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4 prose-p:leading-relaxed prose-li:my-1">
           <p>
-            Travnr ("Travnr," "we," "us," or "our") provides an AI-powered travel concierge service that helps users share travel preferences through calls, forms, email, SMS, or other interactions so we can provide tailored travel options.
+            <strong>[LEGAL ENTITY NAME]</strong>, doing business as Travnr ("Travnr," "we," "us," or "our"), provides an AI-powered travel concierge service that helps users share travel preferences through calls, forms, email, SMS, or other interactions so we can provide tailored travel options.
           </p>
           <p>
             This Privacy Policy explains how we collect, use, disclose, and protect information when you use Travnr's website, call our travel concierge, submit a request, receive travel options, or otherwise interact with our services.
