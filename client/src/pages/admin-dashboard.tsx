@@ -874,7 +874,16 @@ type EmailCatalogEntry = {
   audience: "Customer" | "Admin";
 };
 
-type RenderedEmail = { subject: string; html: string };
+type EmailPreviewMeta = {
+  variant?: "llm" | "fallback";
+  reason?: string | null;
+  latencyMs?: number | null;
+  model?: string | null;
+  flagEnabled?: boolean;
+  configured?: boolean;
+};
+type RenderedEmail = { subject: string; html: string; meta?: EmailPreviewMeta };
+type PreviewVariant = "fallback" | "personalized";
 
 function EmailsPanel() {
   const { toast } = useToast();
@@ -882,15 +891,16 @@ function EmailsPanel() {
   const { data: me } = useQuery<{ email?: string }>({ queryKey: ["/api/auth/user"] });
 
   const [previewType, setPreviewType] = useState<string | null>(null);
+  const [previewVariant, setPreviewVariant] = useState<PreviewVariant>("fallback");
   const [previewData, setPreviewData] = useState<RenderedEmail | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  const openPreview = async (id: string) => {
-    setPreviewType(id);
-    setPreviewData(null);
+  const fetchPreview = async (id: string, variant: PreviewVariant) => {
     setPreviewLoading(true);
+    setPreviewData(null);
     try {
-      const res = await apiRequest("GET", `/api/admin/email/preview?type=${encodeURIComponent(id)}`);
+      const qs = id === "guestProposal" ? `&variant=${variant}` : "";
+      const res = await apiRequest("GET", `/api/admin/email/preview?type=${encodeURIComponent(id)}${qs}`);
       const json: RenderedEmail = await res.json();
       setPreviewData(json);
     } catch (err) {
@@ -900,6 +910,21 @@ function EmailsPanel() {
     } finally {
       setPreviewLoading(false);
     }
+  };
+
+  const openPreview = async (id: string) => {
+    setPreviewType(id);
+    // Default the guest-proposal preview to "personalized" so admins see
+    // what real recipients get when the LLM flag is on.
+    const initial: PreviewVariant = id === "guestProposal" ? "personalized" : "fallback";
+    setPreviewVariant(initial);
+    await fetchPreview(id, initial);
+  };
+
+  const switchVariant = async (variant: PreviewVariant) => {
+    if (!previewType) return;
+    setPreviewVariant(variant);
+    await fetchPreview(previewType, variant);
   };
 
   const closePreview = () => {
@@ -985,6 +1010,49 @@ function EmailsPanel() {
             <DialogTitle className="text-sm font-medium truncate">
               {previewData?.subject || (previewLoading ? "Loading preview…" : "Preview")}
             </DialogTitle>
+            {previewType === "guestProposal" && (
+              <div className="flex items-center gap-2 flex-wrap pt-2">
+                <div className="inline-flex rounded-md border overflow-hidden text-xs">
+                  <button
+                    type="button"
+                    onClick={() => switchVariant("personalized")}
+                    disabled={previewLoading}
+                    className={`px-3 py-1 ${previewVariant === "personalized" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                    data-testid="button-variant-personalized"
+                  >
+                    <Sparkles className="w-3 h-3 inline mr-1" />Personalized (LLM)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => switchVariant("fallback")}
+                    disabled={previewLoading}
+                    className={`px-3 py-1 border-l ${previewVariant === "fallback" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"}`}
+                    data-testid="button-variant-fallback"
+                  >
+                    Deterministic
+                  </button>
+                </div>
+                {previewData?.meta && (
+                  <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap" data-testid="text-preview-meta">
+                    <Badge variant="outline" className="text-[10px]">
+                      {previewData.meta.variant === "llm" ? "LLM" : "Fallback"}
+                    </Badge>
+                    {previewData.meta.latencyMs != null && (
+                      <span>{previewData.meta.latencyMs}ms</span>
+                    )}
+                    {previewData.meta.reason && previewData.meta.variant === "fallback" && previewVariant === "personalized" && (
+                      <span title="Why fallback was used">reason: {previewData.meta.reason}</span>
+                    )}
+                    {previewData.meta.flagEnabled === false && (
+                      <span className="text-amber-600">PROPOSAL_EMAIL_LLM_PERSONALIZATION=off</span>
+                    )}
+                    {previewData.meta.configured === false && (
+                      <span className="text-amber-600">ANTHROPIC_API_KEY missing</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </DialogHeader>
           <div className="flex-1 min-h-0 bg-muted/30">
             {previewLoading ? (

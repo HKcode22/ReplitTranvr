@@ -29,6 +29,11 @@ import {
   type CallSummary,
 } from "./lib/callSummary";
 import {
+  personalizeProposalEmail,
+  isProposalPersonalizationEnabled,
+  isProposalPersonalizationConfigured,
+} from "./lib/proposalEmailPersonalizer";
+import {
   buildVerificationEmail,
   buildPasswordResetEmail,
   buildAccountCreationEmail,
@@ -867,15 +872,66 @@ async function sendGuestProposalEmail(toEmail: string, data: {
   returnDate?: string | null;
   passengers: number;
   options: GuestProposalEmailOption[];
-}): Promise<void> {
+  // Optional context for LLM personalization. Never required — fall back
+  // to deterministic copy when missing.
+  cabinClass?: string | null;
+  travelerFirstName?: string | null;
+  statedPreferences?: string | null;
+  logTag?: string;
+}): Promise<{ personalizationVariant: "llm" | "fallback" }> {
   const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
-  const { subject, html } = buildGuestProposalEmail(data);
+  const tag = data.logTag || "guest-proposal";
+
+  // Personalize subject + intro before render. Wrapped in its own try so a
+  // personalization throw can never block the actual email send.
+  let personalization: Awaited<ReturnType<typeof personalizeProposalEmail>> | null = null;
+  try {
+    personalization = await personalizeProposalEmail(
+      {
+        originIata: data.originIata,
+        originName: data.originName,
+        destinationIata: data.destinationIata,
+        destinationName: data.destinationName,
+        departureDate: data.departureDate,
+        returnDate: data.returnDate,
+        passengers: data.passengers,
+        cabinClass: data.cabinClass ?? null,
+        travelerFirstName: data.travelerFirstName ?? null,
+        statedPreferences: data.statedPreferences ?? null,
+        options: data.options.map((o) => ({
+          label: o.label,
+          carrierName: o.carrierName ?? null,
+          totalAmount: o.totalAmount,
+          totalCurrency: o.totalCurrency,
+          stops: o.stops,
+          totalDurationMinutes: o.totalDurationMinutes,
+        })),
+      },
+      { logTag: tag },
+    );
+  } catch (e: any) {
+    console.warn(`[${tag}] personalization threw, using fallback:`, e?.message || e);
+  }
+
+  const { subject, html } = buildGuestProposalEmail({
+    ...data,
+    subjectOverride: personalization?.subject ?? null,
+    introOverride: personalization?.intro ?? null,
+  });
+  const variant = personalization?.variant ?? "fallback";
   try {
     await sgMail.send({ to: toEmail, from: { email: fromEmail, name: "Travnr" }, subject, html });
-    console.log(`[guest-proposal] email sent to ${maskEmail(toEmail)} with ${data.options.length} options`);
+    // A/B logging: which variant was used per send. Keep keys parseable so
+    // log queries (e.g. ratio of llm vs fallback over time) stay easy.
+    console.log(
+      `[${tag}] email sent to ${maskEmail(toEmail)} options=${data.options.length} personalization_variant=${variant}` +
+        (personalization?.reason ? ` reason=${personalization.reason}` : "") +
+        (personalization?.latencyMs != null ? ` personalization_ms=${personalization.latencyMs}` : ""),
+    );
   } catch (err) {
-    console.error("[guest-proposal] email send failed:", err);
+    console.error(`[${tag}] email send failed:`, err);
   }
+  return { personalizationVariant: variant };
 }
 
 async function sendRefundRequestEmails(args: {
@@ -3775,8 +3831,66 @@ export async function registerRoutes(
       return res.status(400).json({ message: "Unknown email type" });
     }
     const baseUrl = getBaseUrl(req);
+
+    // Variant switch is currently only meaningful for the guest proposal
+    // email (LLM-personalized vs deterministic fallback). For every other
+    // template we ignore it and render the sample as-is.
+    const variant = String(req.query.variant || "fallback").toLowerCase();
+    if (type === "guestProposal" && variant === "personalized") {
+      // Live-call the personalizer with sample facts so admins see what
+      // Claude actually produces today (subject to current prompt + flag).
+      const personalization = await personalizeProposalEmail(
+        {
+          originIata: "STL",
+          originName: "St. Louis",
+          destinationIata: "JFK",
+          destinationName: "New York",
+          departureDate: "2026-06-15",
+          returnDate: "2026-06-22",
+          passengers: 1,
+          cabinClass: "economy",
+          travelerFirstName: "Mahid",
+          statedPreferences: "prefers nonstop and mornings",
+          options: [
+            { label: "Best Price", carrierName: "Spirit Airlines", totalAmount: "242.00", totalCurrency: "USD", stops: 1, totalDurationMinutes: 380 },
+            { label: "Best Value", carrierName: "American Airlines", totalAmount: "298.00", totalCurrency: "USD", stops: 0, totalDurationMinutes: 215 },
+            { label: "Fastest", carrierName: "Delta Air Lines", totalAmount: "342.00", totalCurrency: "USD", stops: 0, totalDurationMinutes: 195 },
+          ],
+        },
+        { logTag: "admin-preview" },
+      );
+      const rendered = buildSampleEmail(type, baseUrl, {
+        guestProposal: {
+          subjectOverride: personalization.subject,
+          introOverride: personalization.intro,
+        },
+      });
+      return res.json({
+        ...rendered,
+        meta: {
+          variant: personalization.variant,
+          reason: personalization.reason ?? null,
+          latencyMs: personalization.latencyMs ?? null,
+          model: personalization.model ?? null,
+          flagEnabled: isProposalPersonalizationEnabled(),
+          configured: isProposalPersonalizationConfigured(),
+        },
+      });
+    }
+
     const rendered = buildSampleEmail(type, baseUrl);
-    return res.json(rendered);
+    return res.json({
+      ...rendered,
+      meta:
+        type === "guestProposal"
+          ? {
+              variant: "fallback" as const,
+              reason: "deterministic_default",
+              flagEnabled: isProposalPersonalizationEnabled(),
+              configured: isProposalPersonalizationConfigured(),
+            }
+          : undefined,
+    });
   });
 
   app.post("/api/admin/email/test", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
@@ -4883,7 +4997,12 @@ export async function registerRoutes(
     const baseUrl = canonicalHost.replace(/\/+$/, "");
 
     try {
-      await sendGuestProposalEmail(guestEmail, {
+      // Inbound is anonymous — no traveler firstName available. Stated
+      // preferences come from Bland post-call analysis (timePreference / notes).
+      const inboundStatedPreferences = [details.timePreference, details.notes]
+        .filter((s): s is string => Boolean(s && s.trim().length > 0))
+        .join(" • ") || undefined;
+      const sendResult = await sendGuestProposalEmail(guestEmail, {
         baseUrl,
         originIata: guestData.originIata,
         originName: guestData.originName,
@@ -4907,10 +5026,13 @@ export async function registerRoutes(
           refundable: o.refundable,
           changeable: o.changeable,
         })),
+        cabinClass: guestData.cabinClass,
+        statedPreferences: inboundStatedPreferences,
+        logTag: lp,
       });
-      console.log(`${lp} guest proposal sent token=${maskToken(saved.token)} email=${maskEmail(guestEmail)} email_source=${emailSource} origin=${originCode} destination=${destCode}`);
+      console.log(`${lp} guest proposal sent token=${maskToken(saved.token)} email=${maskEmail(guestEmail)} email_source=${emailSource} origin=${originCode} destination=${destCode} personalization_variant=${sendResult?.personalizationVariant ?? "unknown"}`);
     } catch (e: any) {
-      console.error(`${lp} sendGuestProposalEmail failed:`, e?.message || e);
+      console.error(`${lp} sendGuestProposalEmail failed personalization_variant=error:`, e?.message || e);
     }
 
     // SMS hook — fire-and-forget, never blocks email or proposal save.
@@ -5314,7 +5436,22 @@ export async function registerRoutes(
           }
           const baseUrl = canonicalHost.replace(/\/+$/, "");
 
-          await sendGuestProposalEmail(guestEmail, {
+          // Personalization context: traveler firstName from the user account
+          // (best-effort), and any time-of-day / freeform notes the caller
+          // shared on the call. Both feed Claude only — they are not logged.
+          let postCallFirstName: string | undefined;
+          try {
+            const owner = await storage.getUser(userId);
+            const fn = (owner as any)?.firstName;
+            if (typeof fn === "string" && fn.trim().length > 0) postCallFirstName = fn.trim();
+          } catch {
+            /* best-effort */
+          }
+          const postCallStatedPreferences = [details.timePreference, details.notes]
+            .filter((s): s is string => Boolean(s && s.trim().length > 0))
+            .join(" • ") || undefined;
+
+          const sendResult = await sendGuestProposalEmail(guestEmail, {
             baseUrl,
             originIata: guestData.originIata,
             originName: guestData.originName,
@@ -5338,8 +5475,12 @@ export async function registerRoutes(
               refundable: o.refundable,
               changeable: o.changeable,
             })),
+            cabinClass: guestData.cabinClass,
+            travelerFirstName: postCallFirstName,
+            statedPreferences: postCallStatedPreferences,
+            logTag: `[guest-proposal callRequest=${callRequestId}]`,
           });
-          console.log(`[guest-proposal] created token=${maskToken(saved.token)} for callRequest=${callRequestId} email=${maskEmail(guestEmail)} (parallel send)`);
+          console.log(`[guest-proposal] created token=${maskToken(saved.token)} for callRequest=${callRequestId} email=${maskEmail(guestEmail)} personalization_variant=${sendResult?.personalizationVariant ?? "unknown"} (parallel send)`);
 
           // SMS hook — fire-and-forget. Recipient phone comes from the
           // call request that triggered this outbound call.
@@ -6365,6 +6506,11 @@ export async function registerRoutes(
               refundable: o.refundable,
               changeable: o.changeable,
             })),
+            cabinClass: guestData.cabinClass,
+            // Regenerate flow has no transcript context (no firstName / preferences
+            // are persisted on the guest_proposals row), so personalization will
+            // either rely on minimal facts or fall back deterministically.
+            logTag: `[guest-proposal regen token=${maskToken(token)}]`,
           });
           console.log(`[guest-proposal] regenerated expired token=${maskToken(token)} -> new token=${maskToken(saved.token)}`);
         } catch (regenErr: any) {

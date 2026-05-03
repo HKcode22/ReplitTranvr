@@ -614,6 +614,11 @@ export interface GuestProposalEmailInput {
   returnDate?: string | null;
   passengers: number;
   options: GuestProposalEmailOption[];
+  // Optional personalized copy (LLM-generated). When omitted we fall back
+  // to the deterministic strings below so this template stays usable
+  // standalone (tests, regenerate path without Anthropic, etc).
+  subjectOverride?: string | null;
+  introOverride?: string | null;
 }
 
 function formatDurationMins(mins: number): string {
@@ -646,7 +651,16 @@ function formatLongDate(iso?: string | null): string {
 export function buildGuestProposalEmail(input: GuestProposalEmailInput): RenderedEmail {
   const originLabel = input.originName ? `${input.originName} (${input.originIata})` : input.originIata;
   const destLabel = input.destinationName ? `${input.destinationName} (${input.destinationIata})` : input.destinationIata;
-  const subject = `Your flight options — ${input.originIata} to ${input.destinationIata}`;
+  const defaultSubject = `Your flight options — ${input.originIata} to ${input.destinationIata}`;
+  const subject =
+    input.subjectOverride && input.subjectOverride.trim() ? input.subjectOverride.trim() : defaultSubject;
+  const defaultIntro = `Based on our call, here are three options for <strong>${escapeHtml(originLabel)} → ${escapeHtml(destLabel)}</strong>.`;
+  // Personalized intros are escaped because they're plain text from the LLM;
+  // the deterministic default already contains the route <strong> markup.
+  const introHtml =
+    input.introOverride && input.introOverride.trim()
+      ? escapeHtml(input.introOverride.trim())
+      : defaultIntro;
 
   const tripLine = input.returnDate
     ? `${formatLongDate(input.departureDate)} – ${formatLongDate(input.returnDate)}`
@@ -700,7 +714,7 @@ export function buildGuestProposalEmail(input: GuestProposalEmailInput): Rendere
       ${brandHeader()}
       <h2 style="font-size:22px;color:${TEXT_DARK};margin:0 0 8px;">Your flight options are ready</h2>
       <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 18px;">
-        Based on our call, here are three options for <strong>${escapeHtml(originLabel)} → ${escapeHtml(destLabel)}</strong>.
+        ${introHtml}
       </p>
       <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:14px 18px;margin-bottom:24px;font-size:14px;color:${TEXT_DARK};">
         <div><strong>${escapeHtml(tripLine)}</strong></div>
@@ -868,7 +882,20 @@ const SAMPLE_BOOKING_CONFIRMATION_DATA: Omit<BookingConfirmationEmailInput, "das
   }],
 };
 
-export function buildSampleEmail(type: EmailTypeId, baseUrl: string): RenderedEmail {
+export interface BuildSampleEmailOptions {
+  // Optional per-type overrides used by admin preview tooling so the
+  // operator can compare deterministic vs personalized variants.
+  guestProposal?: {
+    subjectOverride?: string | null;
+    introOverride?: string | null;
+  };
+}
+
+export function buildSampleEmail(
+  type: EmailTypeId,
+  baseUrl: string,
+  opts: BuildSampleEmailOptions = {},
+): RenderedEmail {
   const sampleToken = "sample-token-1234";
   switch (type) {
     case "verification":
@@ -961,6 +988,8 @@ export function buildSampleEmail(type: EmailTypeId, baseUrl: string): RenderedEm
         departureDate: "2026-06-15",
         returnDate: "2026-06-22",
         passengers: 1,
+        subjectOverride: opts.guestProposal?.subjectOverride ?? null,
+        introOverride: opts.guestProposal?.introOverride ?? null,
         options: [
           {
             token: "sample-best-price",
