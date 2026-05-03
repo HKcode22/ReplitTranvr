@@ -309,7 +309,9 @@ export const hotelBookings = pgTable("hotel_bookings", {
   provider: text("provider").notNull(),
   providerBookingId: text("provider_booking_id"),
   confirmationNumber: text("confirmation_number"),
-  // pending | confirmed | failed | cancelled | manual_fallback | dry_run | cancelled_dry_run | booking
+  // Spec-approved values for Phase 2: pending | confirmed | failed | cancelled.
+  // Phase 5 (booking guardrails) will add `manual_fallback` and `dry_run`
+  // states; column is free-form text to allow that without another migration.
   status: text("status").default("pending").notNull(),
   // HARD RULE: traveler names + DOB only. NO payment instruments,
   // NO loyalty card numbers, NO government IDs at this layer. PCI lives
