@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { useLocation } from "wouter";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +21,14 @@ import { AirportSearch } from "@/components/airport-search";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import type { TravelerProfile } from "@shared/schema";
+import { PassengerCard } from "@/components/passenger-card";
+import {
+  emptyPassenger,
+  decomposeBornOn,
+  validatePassenger,
+  serializePassenger,
+  type PassengerForm,
+} from "@/lib/passenger-form";
 import {
   Search, Plane, Clock, Luggage, ArrowRight, Loader2, Check,
   ArrowLeft, User, CreditCard, Users, Shield, Plus, Minus, Lock, AlertCircle, FileText
@@ -32,21 +41,6 @@ const searchSchema = z.object({
 });
 
 type SearchFormValues = z.infer<typeof searchSchema>;
-
-const passengerSchema = z.object({
-  givenName: z.string().min(1, "First name is required"),
-  familyName: z.string().min(1, "Last name is required"),
-  bornOn: z.string().min(1, "Date of birth is required"),
-  gender: z.string().min(1, "Gender is required"),
-  title: z.string().min(1, "Title is required"),
-  phone: z.string().min(1, "Phone is required").regex(/^\+/, "Must start with + (international format)"),
-});
-
-const checkoutSchema = z.object({
-  passengers: z.array(passengerSchema).min(1),
-});
-
-type CheckoutFormValues = z.infer<typeof checkoutSchema>;
 
 function formatTime(dateStr: string) {
   return new Date(dateStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -246,7 +240,9 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
   const [bookingResult, setBookingResult] = useState<any>(null);
   const [checkoutStep, setCheckoutStep] = useState<"passengers" | "payment" | "processing" | "payment_error">("passengers");
   const [bookingError, setBookingError] = useState<{ message: string; paymentCharged: boolean } | null>(null);
-  const [passengerData, setPassengerData] = useState<CheckoutFormValues | null>(null);
+  // Serialized passenger payload (post-validation) cached so we can re-fire
+  // bookMutation after Stripe confirms without re-reading form state.
+  const [passengerData, setPassengerData] = useState<Record<string, unknown>[] | null>(null);
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
   const [stripePaymentIntentId, setStripePaymentIntentId] = useState<string | null>(null);
   const [stripePromise, setStripePromise] = useState<ReturnType<typeof loadStripe> | null>(null);
@@ -277,46 +273,56 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
   const totalWithFee = (totalWithFeeCents / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
   const hasProfileData = !!(profile?.name || profile?.dateOfBirth || profile?.gender || profile?.title || profile?.phone);
 
-  const buildDefaultPassenger = () => {
-    if (profile) {
-      const nameParts = (profile.name || "").split(" ");
-      return {
-        givenName: nameParts[0] || "",
-        familyName: nameParts.slice(1).join(" ") || "",
-        bornOn: profile.dateOfBirth || "",
-        gender: profile.gender || "m",
-        title: profile.title || "mr",
-        phone: profile.phone || "",
-      };
-    }
-    return { givenName: "", familyName: "", bornOn: "", gender: "m", title: "mr", phone: "" };
-  };
+  // Local passenger state (one card per traveler). Uses the same standardized
+  // PassengerForm shape as the guest-booking flow so the wire contract and
+  // validation are shared via @/lib/passenger-form.
+  const [passengers, setPassengers] = useState<PassengerForm[]>(() =>
+    Array.from({ length: passengerCount }, () => emptyPassenger()),
+  );
+  // Single contact phone for the whole booking. The new PassengerCard does
+  // not collect phone per-passenger (Duffel only needs one contact phone),
+  // and this matches the guest-booking flow's contact section.
+  const [contactPhone, setContactPhone] = useState("");
+  // Flipped to true after a submit attempt with any invalid passenger field
+  // so every PassengerCard surfaces its inline errors at once.
+  const [showAllErrors, setShowAllErrors] = useState(false);
 
-  const form = useForm<CheckoutFormValues>({
-    resolver: zodResolver(checkoutSchema),
-    defaultValues: {
-      passengers: Array.from({ length: passengerCount }, (_, i) =>
-        i === 0 ? buildDefaultPassenger() : { givenName: "", familyName: "", bornOn: "", gender: "m", title: "mr", phone: "" }
-      ),
-    },
-  });
-
-  const { fields } = useFieldArray({ control: form.control, name: "passengers" });
-
+  // Resize the passenger array when the search-step traveler count changes.
   useEffect(() => {
-    if (profile) {
-      const current = form.getValues("passengers");
-      const nameParts = (profile.name || "").split(" ");
-      current[0] = {
-        givenName: nameParts[0] || current[0].givenName,
-        familyName: nameParts.slice(1).join(" ") || current[0].familyName,
-        bornOn: profile.dateOfBirth || current[0].bornOn,
-        gender: profile.gender || current[0].gender,
-        title: profile.title || current[0].title,
-        phone: profile.phone || current[0].phone,
+    setPassengers((prev) => {
+      if (prev.length === passengerCount) return prev;
+      if (prev.length < passengerCount) {
+        return [...prev, ...Array.from({ length: passengerCount - prev.length }, () => emptyPassenger())];
+      }
+      return prev.slice(0, passengerCount);
+    });
+  }, [passengerCount]);
+
+  // Auto-fill the first passenger from the user's saved TravelerProfile.
+  // Only fires once when the profile arrives AND the first passenger is
+  // still pristine, so we never clobber user edits.
+  const profileSeededRef = useRef(false);
+  useEffect(() => {
+    if (!profile || profileSeededRef.current) return;
+    profileSeededRef.current = true;
+    setPassengers((prev) => {
+      const next = [...prev];
+      const first = next[0] || emptyPassenger();
+      const nameParts = (profile.name || "").trim().split(/\s+/);
+      const dob = decomposeBornOn(profile.dateOfBirth);
+      next[0] = {
+        ...first,
+        firstName: first.firstName || nameParts[0] || "",
+        lastName: first.lastName || nameParts.slice(1).join(" ") || "",
+        dobYear: first.dobYear || dob.dobYear,
+        dobMonth: first.dobMonth || dob.dobMonth,
+        dobDay: first.dobDay || dob.dobDay,
+        gender: first.gender || (((profile.gender as PassengerForm["gender"]) || "")),
+        title: first.title || ((profile.title as PassengerForm["title"]) || "mr"),
       };
-      form.reset({ passengers: current });
-    }
+      return next;
+    });
+    if (profile.phone) setContactPhone((p) => p || profile.phone || "");
   }, [profile]);
 
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
@@ -353,8 +359,8 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
   const bookingCalledRef = useRef(false);
 
   const bookMutation = useMutation({
-    mutationFn: async ({ stripePaymentIntentId: piId, useBalance, passengers }: { stripePaymentIntentId?: string; useBalance?: boolean; passengers?: CheckoutFormValues["passengers"] }) => {
-      const pax = passengers || passengerData?.passengers;
+    mutationFn: async ({ stripePaymentIntentId: piId, useBalance, passengers: paxArg }: { stripePaymentIntentId?: string; useBalance?: boolean; passengers?: Record<string, unknown>[] }) => {
+      const pax = paxArg || passengerData;
       if (!pax) throw new Error("Missing passenger data");
       const res = await apiRequest("POST", "/api/duffel/book-direct", {
         offerId: offer.id,
@@ -426,13 +432,38 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
     bookMutation.mutate({ stripePaymentIntentId: stripePaymentIntentId! });
   }, [stripePaymentIntentId]);
 
-  const handlePassengerSubmit = (data: CheckoutFormValues) => {
-    setPassengerData(data);
+  const handlePassengerSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Validate every passenger card AND the single contact phone before
+    // even thinking about creating a Stripe PaymentIntent. We surface all
+    // errors at once (rather than one-card-at-a-time) so the traveler can
+    // fix everything in a single pass.
+    const allErrors = passengers.map((p) => validatePassenger(p, requiresIdentityDocs));
+    const hasFieldError = allErrors.some((errs) => Object.keys(errs).length > 0);
+    const phoneOk = !!contactPhone && /^\+/.test(contactPhone);
+    if (hasFieldError || !phoneOk) {
+      setShowAllErrors(true);
+      toast({
+        title: "Please complete all required fields",
+        description: !phoneOk
+          ? "A contact phone in international format (+1...) is required."
+          : "Some passenger details are missing or invalid.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Inject the single contact phone into every passenger record — the
+    // server's buildPassengerMappings reads pax.phone first, then falls back.
+    const serialized = passengers.map((p) => ({
+      ...serializePassenger(p),
+      phone: contactPhone,
+    }));
+    setPassengerData(serialized);
     setPaymentError(null);
     if (isTestMode) {
       bookingCalledRef.current = true;
       setCheckoutStep("processing");
-      bookMutation.mutate({ useBalance: true, passengers: data.passengers });
+      bookMutation.mutate({ useBalance: true, passengers: serialized });
     } else {
       createPaymentIntentMutation.mutate();
     }
@@ -676,124 +707,84 @@ function CheckoutView({ offer, onBack, passengerCount }: { offer: any; onBack: (
         </div>
       )}
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(handlePassengerSubmit)} className="space-y-4">
-          {fields.map((field, index) => (
-            <Card key={field.id} className="p-5">
-              <h3 className="font-semibold mb-1 flex items-center gap-2">
-                <User className="w-4 h-4" />
-                {passengerCount === 1 ? "Passenger Details" : `Traveler ${index + 1}`}
-              </h3>
-              {index === 0 && hasProfileData && (
-                <p className="text-xs text-muted-foreground mb-4">Auto-filled from your profile</p>
-              )}
-              {index === 0 && !hasProfileData && (
-                <p className="text-xs text-muted-foreground mb-4">Complete your profile to auto-fill this next time</p>
-              )}
-              {index > 0 && (
-                <p className="text-xs text-muted-foreground mb-4">Enter details for additional traveler</p>
-              )}
-              <div className="space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField control={form.control} name={`passengers.${index}.title`} render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Title</FormLabel>
-                      <Select onValueChange={f.onChange} value={f.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid={`select-title-${index}`}><SelectValue /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="mr">Mr</SelectItem>
-                          <SelectItem value="mrs">Mrs</SelectItem>
-                          <SelectItem value="ms">Ms</SelectItem>
-                          <SelectItem value="miss">Miss</SelectItem>
-                          <SelectItem value="dr">Dr</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name={`passengers.${index}.gender`} render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Gender</FormLabel>
-                      <Select onValueChange={f.onChange} value={f.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid={`select-gender-${index}`}><SelectValue /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="m">Male</SelectItem>
-                          <SelectItem value="f">Female</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField control={form.control} name={`passengers.${index}.givenName`} render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>First Name</FormLabel>
-                      <FormControl><Input {...f} placeholder="As on passport" data-testid={`input-given-name-${index}`} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name={`passengers.${index}.familyName`} render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Last Name</FormLabel>
-                      <FormControl><Input {...f} placeholder="As on passport" data-testid={`input-family-name-${index}`} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <FormField control={form.control} name={`passengers.${index}.bornOn`} render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Date of Birth</FormLabel>
-                      <FormControl><Input type="date" {...f} data-testid={`input-dob-${index}`} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name={`passengers.${index}.phone`} render={({ field: f }) => (
-                    <FormItem>
-                      <FormLabel>Phone Number</FormLabel>
-                      <FormControl><PhoneInput value={f.value} onChange={f.onChange} data-testid={`input-phone-${index}`} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                </div>
-              </div>
-            </Card>
-          ))}
+      <form onSubmit={handlePassengerSubmit} className="space-y-4">
+        {/* Single contact phone for the booking — Duffel needs one phone on
+            the order, not one per traveler. Defaults from the user's saved
+            profile when available. */}
+        <Card className="p-5">
+          <h3 className="font-semibold mb-1 flex items-center gap-2">
+            <User className="w-4 h-4" /> Contact phone
+          </h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Used by the airline to reach you about this booking.
+          </p>
+          <Label htmlFor="contact-phone">Phone number</Label>
+          <PhoneInput
+            value={contactPhone}
+            onChange={setContactPhone}
+            data-testid="input-contact-phone"
+          />
+          {showAllErrors && (!contactPhone || !/^\+/.test(contactPhone)) && (
+            <p className="text-xs text-red-600 mt-2" data-testid="error-contact-phone">
+              A contact phone in international format (+1...) is required.
+            </p>
+          )}
+        </Card>
 
-          <Card className="p-4">
-            <PromoCodeInput
-              applied={appliedPromo}
-              onApply={setAppliedPromo}
-              onClear={() => setAppliedPromo(null)}
-              currency={offer.totalCurrency}
-            />
-          </Card>
-
-          <Button
-            type="submit"
-            disabled={createPaymentIntentMutation.isPending || bookMutation.isPending}
-            className="w-full"
-            data-testid="button-continue-to-payment"
-          >
-            {(createPaymentIntentMutation.isPending || bookMutation.isPending) ? (
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            ) : isTestMode ? (
-              <Plane className="w-4 h-4 mr-2" />
-            ) : (
-              <CreditCard className="w-4 h-4 mr-2" />
+        {passengers.map((passenger, index) => (
+          <div key={index} className="space-y-2">
+            {/* PassengerCard renders its own bordered card + numbered header,
+                so we only add a small auto-fill caption above it here. */}
+            {index === 0 && hasProfileData && (
+              <p className="text-xs text-muted-foreground">Auto-filled from your profile</p>
             )}
-            {isTestMode
-              ? `Book Flight — ${offer.totalCurrency} ${effectiveTotal}`
-              : `Continue to Payment — ${offer.totalCurrency} ${effectiveTotal}`
-            }
-          </Button>
-        </form>
-      </Form>
+            {index === 0 && !hasProfileData && (
+              <p className="text-xs text-muted-foreground">Complete your profile to auto-fill this next time</p>
+            )}
+            <PassengerCard
+              idx={index}
+              passenger={passenger}
+              passportRequired={requiresIdentityDocs}
+              showAllErrors={showAllErrors}
+              onChange={(updater) =>
+                setPassengers((prev) => {
+                  const next = [...prev];
+                  next[index] = updater(next[index]);
+                  return next;
+                })
+              }
+            />
+          </div>
+        ))}
+
+        <Card className="p-4">
+          <PromoCodeInput
+            applied={appliedPromo}
+            onApply={setAppliedPromo}
+            onClear={() => setAppliedPromo(null)}
+            currency={offer.totalCurrency}
+          />
+        </Card>
+
+        <Button
+          type="submit"
+          disabled={createPaymentIntentMutation.isPending || bookMutation.isPending}
+          className="w-full"
+          data-testid="button-continue-to-payment"
+        >
+          {(createPaymentIntentMutation.isPending || bookMutation.isPending) ? (
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          ) : isTestMode ? (
+            <Plane className="w-4 h-4 mr-2" />
+          ) : (
+            <CreditCard className="w-4 h-4 mr-2" />
+          )}
+          {isTestMode
+            ? `Book Flight — ${offer.totalCurrency} ${effectiveTotal}`
+            : `Continue to Payment — ${offer.totalCurrency} ${effectiveTotal}`
+          }
+        </Button>
+      </form>
     </div>
   );
 }

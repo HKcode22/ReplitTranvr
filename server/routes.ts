@@ -14,6 +14,12 @@ import { normalizePhoneE164 } from "./lib/phone";
 import { sendSms, maskPhone } from "./lib/sms";
 import { redactJSON, maskEmail, maskToken } from "./lib/redact";
 import { ISO_3166_1_ALPHA2 } from "./lib/isoCountries";
+import {
+  passengerInputSchema,
+  buildPassengerMappings,
+  buildExtendedPassengerSnapshot,
+  buildDuffelOrderMetadata,
+} from "./lib/passengerForm";
 import { buildGuestProposalSms } from "./lib/smsTemplates";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
 import {
@@ -2232,16 +2238,23 @@ export async function registerRoutes(
   app.post("/api/duffel/book-direct", isAuthenticated, async (req: Request, res: Response) => {
     if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
     try {
-      const { offerId, passengers, stripePaymentIntentId, useBalance } = req.body;
-      if (!offerId) return res.status(400).json({ message: "Offer ID is required" });
+      const bookDirectBodySchema = z.object({
+        offerId: z.string().min(1, "Offer ID is required"),
+        stripePaymentIntentId: z.string().optional(),
+        useBalance: z.boolean().optional(),
+        passengers: z.array(passengerInputSchema).min(1, "Passenger details are required"),
+      });
+      const parsed = bookDirectBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        const first = parsed.error.issues[0];
+        return res.status(400).json({ message: first?.message || "Invalid request body" });
+      }
+      const { offerId, passengers, stripePaymentIntentId, useBalance } = parsed.data;
 
       if (useBalance && !isTestMode) {
         return res.status(400).json({ message: "Balance payment is only available in test mode" });
       }
       if (!useBalance && !stripePaymentIntentId) return res.status(400).json({ message: "Payment method is required" });
-      if (!passengers || !Array.isArray(passengers) || passengers.length === 0) {
-        return res.status(400).json({ message: "Passenger details are required" });
-      }
 
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
@@ -2320,22 +2333,13 @@ export async function registerRoutes(
         return res.status(400).json({ message: "This flight requires passenger identity documents (passport/ID), which are not yet supported. Please choose a different flight." });
       }
 
-      const passengerMappings = (fullOffer.passengers || []).map((p: any, idx: number) => {
-        const pax = passengers[idx] || passengers[0];
-        if (!pax?.bornOn || !pax?.phone || !pax?.title || !pax?.gender) {
-          throw new Error(`Complete details required for passenger ${idx + 1} (date of birth, phone, title, gender)`);
-        }
-        return {
-          id: p.id,
-          given_name: pax.givenName || user.firstName,
-          family_name: pax.familyName || user.lastName,
-          born_on: pax.bornOn,
-          email: user.email,
-          phone_number: pax.phone,
-          title: pax.title,
-          gender: pax.gender,
-        };
+      const passengerMappings = buildPassengerMappings({
+        offer: fullOffer,
+        passengers,
+        fallbackEmail: user.email,
+        fallbackPhone: "",
       });
+      const extendedPassengerSnapshot = buildExtendedPassengerSnapshot(passengers);
 
       if (user.email) {
         for (const pax of passengers) {
@@ -2370,6 +2374,7 @@ export async function registerRoutes(
           offerId,
           fullOffer,
           passengerMappings,
+          extendedPassengers: extendedPassengerSnapshot,
           paidPiAmountCents,
           stripePaymentIntentId: stripePaymentIntentId || null,
           endpoint: "POST /api/duffel/book-direct",
@@ -2393,7 +2398,15 @@ export async function registerRoutes(
           amount: fullOffer.total_amount,
           currency: fullOffer.total_currency,
         }],
-        ...(stripePaymentIntentId ? { metadata: { stripe_payment_intent_id: stripePaymentIntentId } } : {}),
+        ...(stripePaymentIntentId
+          ? {
+              metadata: buildDuffelOrderMetadata({
+                stripe_payment_intent_id: stripePaymentIntentId,
+                source: "book_direct",
+                extendedPassengers: extendedPassengerSnapshot,
+              }),
+            }
+          : {}),
       } as any);
 
       const orderData = order.data as any;
@@ -2414,6 +2427,14 @@ export async function registerRoutes(
         currency: (orderData.total_currency || "usd").toLowerCase(),
         status: "paid",
         appliedPromoCode: appliedPromo?.code ?? null,
+        // Persist the full standard-airline passenger snapshot alongside the
+        // Duffel order so admin/concierge tooling sees every field the
+        // traveler entered (Duffel only stores name/dob/gender/loyalty/passport).
+        manualBookingDetails: {
+          source: "book_direct_auto",
+          offerId,
+          extendedPassengers: extendedPassengerSnapshot,
+        },
       });
 
       await storage.createNotification({
