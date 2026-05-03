@@ -56,7 +56,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card className="p-3 sm:p-4 flex items-center gap-2 sm:gap-3" data-testid="stat-proposals">
           <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-[hsl(207,55%,92%)] dark:bg-[hsl(210,30%,18%)] flex items-center justify-center shrink-0">
             <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-[hsl(207,65%,45%)] dark:text-[hsl(210,60%,60%)]" />

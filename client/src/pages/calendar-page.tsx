@@ -92,7 +92,7 @@ export default function CalendarPage() {
               <div key={d} className="text-center text-xs font-medium text-muted-foreground py-2">{d}</div>
             ))}
             {Array.from({ length: firstDay }).map((_, i) => (
-              <div key={`empty-${i}`} className="min-h-[60px]" />
+              <div key={`empty-${i}`} className="min-h-[52px] sm:min-h-[60px]" />
             ))}
             {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1;
@@ -100,32 +100,32 @@ export default function CalendarPage() {
               return (
                 <div
                   key={day}
-                  className={`min-h-[60px] p-1 rounded-md border ${
+                  className={`min-h-[52px] sm:min-h-[60px] p-0.5 sm:p-1 rounded-md border ${
                     isToday(day) ? "ring-2 ring-primary bg-primary/5" : "border-transparent"
                   }`}
                 >
-                  <span className={`text-xs ${isToday(day) ? "font-bold text-primary" : "text-muted-foreground"}`}>
+                  <span className={`text-[11px] sm:text-xs ${isToday(day) ? "font-bold text-primary" : "text-muted-foreground"}`}>
                     {day}
                   </span>
                   <div className="mt-0.5 space-y-0.5">
                     {getEntriesForDay(day).slice(0, 2).map((entry) => (
                       <Link key={entry.id} href={entryHref(entry)}>
                         <div
-                          className="text-[9px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded px-1 py-0.5 truncate flex items-center gap-0.5 cursor-pointer hover-elevate"
+                          className="text-[9px] sm:text-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded px-1 py-0.5 truncate flex items-center gap-0.5 cursor-pointer hover-elevate"
                           data-testid={`calendar-entry-${entry.id}`}
                         >
-                          <Plane className="w-2 h-2 shrink-0" />
+                          <Plane className="w-2 h-2 shrink-0 hidden sm:block" />
                           <span className="truncate">{entry.label}</span>
                         </div>
                       </Link>
                     ))}
                     {trips.slice(0, 2).map((trip) => (
-                      <div key={trip.id} className="text-[9px] bg-primary/10 text-primary rounded px-1 py-0.5 truncate">
+                      <div key={trip.id} className="text-[9px] sm:text-[10px] bg-primary/10 text-primary rounded px-1 py-0.5 truncate">
                         {trip.destination}
                       </div>
                     ))}
                     {trips.length > 2 && (
-                      <div className="text-[9px] text-muted-foreground">+{trips.length - 2}</div>
+                      <div className="text-[9px] sm:text-[10px] text-muted-foreground">+{trips.length - 2}</div>
                     )}
                   </div>
                 </div>

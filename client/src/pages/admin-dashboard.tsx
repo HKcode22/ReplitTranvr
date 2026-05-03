@@ -354,7 +354,7 @@ function PendingManualTable() {
                   </div>
                   <div className="mt-2 text-sm">
                     <span className="font-mono font-semibold">{p.currency?.toUpperCase()} {p.amount}</span>
-                    {p.stripePaymentIntentId && <span className="text-xs text-muted-foreground ml-2">PI: {p.stripePaymentIntentId}</span>}
+                    {p.stripePaymentIntentId && <span className="text-xs text-muted-foreground ml-2 break-all">PI: {p.stripePaymentIntentId}</span>}
                   </div>
                   {slices.length > 0 && (
                     <div className="mt-2 text-sm text-muted-foreground space-y-0.5">
@@ -367,7 +367,7 @@ function PendingManualTable() {
                       ))}
                     </div>
                   )}
-                  {details.offerId && <div className="mt-1 text-xs text-muted-foreground">Offer: <span className="font-mono">{details.offerId}</span></div>}
+                  {details.offerId && <div className="mt-1 text-xs text-muted-foreground">Offer: <span className="font-mono break-all">{details.offerId}</span></div>}
                   <div className="mt-1 text-xs text-muted-foreground">Captured: {new Date(p.createdAt).toLocaleString()}</div>
                 </div>
                 <Button onClick={() => setSelected(p)} data-testid={`button-resolve-${p.id}`}>
@@ -683,11 +683,11 @@ export default function AdminDashboardPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-5 gap-3">
           {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <StatCard icon={DollarSign} label="Revenue" value={revenueText} sub={revenueSub} />
           <DuffelBalanceCard />
           <StatCard icon={AlertTriangle} label="Pending Manual" value={String(stats?.pendingManual ?? 0)} tone={(stats?.pendingManual ?? 0) > 0 ? "warn" : "default"} />
@@ -713,7 +713,8 @@ export default function AdminDashboardPage() {
       </div>
 
       <Tabs defaultValue="pending">
-        <TabsList>
+        <div className="-mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
+          <TabsList className="inline-flex w-max">
           <TabsTrigger value="pending" data-testid="tab-pending">
             Pending Manual {stats?.pendingManual ? <Badge variant="outline" className="ml-2 border-amber-500">{stats.pendingManual}</Badge> : null}
           </TabsTrigger>
@@ -723,7 +724,8 @@ export default function AdminDashboardPage() {
           <TabsTrigger value="calls" data-testid="tab-calls">Calls</TabsTrigger>
           <TabsTrigger value="promos" data-testid="tab-promos">Promo Codes</TabsTrigger>
           <TabsTrigger value="emails" data-testid="tab-emails">Emails</TabsTrigger>
-        </TabsList>
+          </TabsList>
+        </div>
         <TabsContent value="pending" className="mt-4"><PendingManualTable /></TabsContent>
         <TabsContent value="bookings" className="mt-4"><BookingsTable /></TabsContent>
         <TabsContent value="payments" className="mt-4"><PaymentsTable /></TabsContent>
