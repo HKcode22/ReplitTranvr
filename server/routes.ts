@@ -41,6 +41,14 @@ import {
   type GuestProposalEmailOption,
 } from "./lib/emailTemplates";
 import type { GuestProposalData, GuestProposalOption } from "@shared/schema";
+import {
+  authIpLimiter,
+  loginEmailLimiter,
+  forgotPasswordEmailLimiter,
+  callbackLimiter,
+  guestBookingLimiter,
+  genericApiLimiter,
+} from "./lib/rateLimit";
 
 declare module "express-session" {
   interface SessionData {
@@ -996,8 +1004,12 @@ export async function registerRoutes(
     email: z.string().email("Invalid email"),
   });
 
+  // Generic /api fallback limiter — applied first so the per-route stricter
+  // limiters below still get the final say (rate-limit shortcut on first hit).
+  app.use("/api", genericApiLimiter);
+
   // AUTH ROUTES
-  app.post("/api/auth/register", async (req: Request, res: Response) => {
+  app.post("/api/auth/register", authIpLimiter, async (req: Request, res: Response) => {
     try {
       const parsed = registerSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1143,7 +1155,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
+  app.post("/api/auth/login", authIpLimiter, loginEmailLimiter, async (req: Request, res: Response) => {
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -1204,7 +1216,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/resend-verification", async (req: Request, res: Response) => {
+  app.post("/api/auth/resend-verification", authIpLimiter, async (req: Request, res: Response) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ message: "Email is required" });
     const user = await storage.getUserByEmail(email);
@@ -1216,7 +1228,7 @@ export async function registerRoutes(
     return res.json({ message: "Verification email sent" });
   });
 
-  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+  app.post("/api/auth/forgot-password", authIpLimiter, forgotPasswordEmailLimiter, async (req: Request, res: Response) => {
     try {
       const { email } = req.body;
       if (!email) return res.status(400).json({ message: "Email is required" });
@@ -1238,7 +1250,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+  app.post("/api/auth/reset-password", authIpLimiter, async (req: Request, res: Response) => {
     try {
       const { token, password } = req.body;
       if (!token || !password) return res.status(400).json({ message: "Token and new password are required" });
@@ -5509,7 +5521,7 @@ export async function registerRoutes(
   // can consume the response without any branching. The guest's email is
   // derived from the option token rather than trusted from the request, so a
   // caller cannot impersonate an admin email to unlock admin-only codes.
-  app.post("/api/guest-booking/:optionToken/validate-promo", async (req: Request, res: Response) => {
+  app.post("/api/guest-booking/:optionToken/validate-promo", guestBookingLimiter, async (req: Request, res: Response) => {
     try {
       const optionToken = String(req.params.optionToken);
       const resolved = await resolveGuestOption(optionToken);
@@ -5539,7 +5551,7 @@ export async function registerRoutes(
   // guest's email (NOT a request-supplied email — token-derived only) and
   // overrides the charged amount + skips the convenience fee, mirroring the
   // authenticated flight payment-intent endpoint.
-  app.post("/api/guest-booking/:optionToken/payment-intent", async (req: Request, res: Response) => {
+  app.post("/api/guest-booking/:optionToken/payment-intent", guestBookingLimiter, async (req: Request, res: Response) => {
     try {
       const { optionToken } = req.params;
       const resolved = await resolveGuestOption(optionToken);
@@ -5642,7 +5654,7 @@ export async function registerRoutes(
     })).min(1),
   });
 
-  app.post("/api/guest-booking/:optionToken/confirm", async (req: Request, res: Response) => {
+  app.post("/api/guest-booking/:optionToken/confirm", guestBookingLimiter, async (req: Request, res: Response) => {
     if (!duffel) return res.status(503).json({ message: "Booking is temporarily unavailable" });
     // Hoisted so the outer catch below can roll back the transient "booking"
     // claim if any throw escapes between claim and terminal state.
@@ -6074,7 +6086,7 @@ export async function registerRoutes(
   });
 
   // CALLBACK REQUEST (public)
-  app.post("/api/callback-request", async (req: Request, res: Response) => {
+  app.post("/api/callback-request", callbackLimiter, async (req: Request, res: Response) => {
     const parsed = callbackBodySchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ message: parsed.error.errors[0]?.message || "Phone and email are required" });
