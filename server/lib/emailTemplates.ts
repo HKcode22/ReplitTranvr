@@ -9,14 +9,47 @@ function escapeHtml(s: string): string {
 }
 
 function brandHeader(): string {
+  // Use a presentation table so vertical spacing renders consistently in
+  // Outlook (which collapses div margin-bottom in many templates AND
+  // ignores margin on tables in the Word renderer). Spacing is applied
+  // via cell PADDING, not margin, so Outlook desktop honors it.
   return `
-    <div style="text-align:center;margin-bottom:24px;">
-      <h1 style="color:${BRAND_BLUE};font-size:28px;margin:0;letter-spacing:-0.5px;">Travnr</h1>
-    </div>`;
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+      <tr>
+        <td align="center" style="padding:0 0 24px;">
+          <h1 style="color:${BRAND_BLUE};font-size:28px;margin:0;letter-spacing:-0.5px;font-family:'Helvetica Neue',Arial,sans-serif;">Travnr</h1>
+        </td>
+      </tr>
+    </table>`;
 }
 
 function brandFooter(): string {
-  return `<p style="color:#999;font-size:12px;margin-top:16px;text-align:center;">Travnr &middot; hello@travnr.com</p>`;
+  // Same Outlook-safe pattern as brandHeader: padding on the td handles
+  // the gap above the footer line so we don't depend on table/p margin.
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+      <tr>
+        <td align="center" style="padding:16px 0 0;color:#999;font-size:12px;font-family:'Helvetica Neue',Arial,sans-serif;">Travnr &middot; hello@travnr.com</td>
+      </tr>
+    </table>`;
+}
+
+// Bulletproof centered CTA. Wraps an inline-block anchor in a 100%-width
+// presentation table with align="center" on the cell so Outlook
+// (especially Outlook 2007–2019 on Windows) reliably centers the button
+// instead of left-aligning the inline element inside a div. The 24px
+// gap below the button is applied as bottom PADDING on the td, since
+// Outlook desktop ignores margin on tables.
+function ctaButton(href: string, label: string, opts: { color?: string } = {}): string {
+  const bg = opts.color ?? BRAND_BLUE;
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
+      <tr>
+        <td align="center" style="padding:0 0 24px;">
+          <a href="${href}" style="background-color:${bg};color:#ffffff;padding:12px 32px;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px;display:inline-block;font-family:'Helvetica Neue',Arial,sans-serif;">${label}</a>
+        </td>
+      </tr>
+    </table>`;
 }
 
 // ==================== Verification ====================
@@ -36,9 +69,7 @@ export function buildVerificationEmail(input: VerificationEmailInput): RenderedE
         <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
           Thanks for signing up for Travnr! Click the button below to verify your email address and get started.
         </p>
-        <div style="text-align: center; margin-bottom: 24px;">
-          <a href="${verifyUrl}" style="background-color: ${BRAND_BLUE}; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">Verify My Email</a>
-        </div>
+        ${ctaButton(verifyUrl, "Verify My Email")}
         <p style="color: #999; font-size: 13px; line-height: 1.5;">
           If you didn't create a Travnr account, you can safely ignore this email.
         </p>
@@ -65,9 +96,7 @@ export function buildPasswordResetEmail(input: PasswordResetEmailInput): Rendere
         <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
           We received a request to reset your password. Click the button below to choose a new password. This link will expire in 1 hour.
         </p>
-        <div style="text-align: center; margin-bottom: 24px;">
-          <a href="${resetUrl}" style="background-color: ${BRAND_BLUE}; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">Reset My Password</a>
-        </div>
+        ${ctaButton(resetUrl, "Reset My Password")}
         <p style="color: #999; font-size: 13px; line-height: 1.5;">
           If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.
         </p>
@@ -98,9 +127,7 @@ export function buildAccountCreationEmail(input: AccountCreationEmailInput): Ren
         <p style="color: #555; font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
           Create your free Travnr account to view your call results, travel proposals, and manage future bookings — all in one place.
         </p>
-        <div style="text-align: center; margin-bottom: 24px;">
-          <a href="${signUpUrl}" style="background-color: ${BRAND_BLUE}; color: white; padding: 12px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px; display: inline-block;">Create My Account</a>
-        </div>
+        ${ctaButton(signUpUrl, "Create My Account")}
         <p style="color: #999; font-size: 13px; line-height: 1.5;">
           If you didn't request a concierge call from Travnr, you can safely ignore this email.
         </p>

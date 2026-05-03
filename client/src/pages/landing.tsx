@@ -299,7 +299,7 @@ export default function LandingPage() {
           </div>
           <h1 className="font-serif text-3xl sm:text-5xl md:text-6xl font-bold tracking-tight mb-6 opacity-0 animate-fade-in-up break-words" style={{ animationDelay: "0.3s" }}>
             We help you book your{" "}
-            <span className="block">
+            <span className="block min-h-[1.2em]">
               <TypingAnimation />
             </span>
           </h1>
