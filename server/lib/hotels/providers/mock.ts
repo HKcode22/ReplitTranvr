@@ -286,7 +286,7 @@ export class MockHotelProvider implements HotelProvider {
   async cancelBooking(providerBookingId: string): Promise<HotelBookingResult> {
     return {
       providerBookingId,
-      status: "confirmed",
+      status: "cancelled",
       confirmationCode: providerBookingId.toUpperCase(),
       totalPrice: 0,
       currency: "USD",

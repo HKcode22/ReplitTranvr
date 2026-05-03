@@ -2689,7 +2689,9 @@ export async function registerRoutes(
     neighborhood: z.string().trim().min(1).max(120).optional(),
     hotelType: z.string().trim().min(1).max(40).optional(),
     starRatingMin: z.number().min(1).max(5).optional(),
-    provider: z.string().trim().min(1).max(40).optional(),
+    // `provider` is intentionally omitted: provider selection is driven by
+    // the HOTEL_PROVIDER env var via getHotelProvider() so the admin
+    // endpoint mirrors what production code would actually use.
   });
 
   app.post("/api/admin/hotels/test-search", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {

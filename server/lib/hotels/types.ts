@@ -98,7 +98,7 @@ export interface HotelBookingRequest {
 
 export interface HotelBookingResult {
   providerBookingId: string;
-  status: "confirmed" | "pending" | "failed";
+  status: "confirmed" | "pending" | "failed" | "cancelled";
   confirmationCode?: string;
   totalPrice: number;
   currency: string;
