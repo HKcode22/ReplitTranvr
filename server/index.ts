@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -9,6 +10,70 @@ import { WebhookHandlers } from './lib/webhookHandlers';
 const app = express();
 app.set("trust proxy", 1);
 const httpServer = createServer(app);
+
+const isProduction = process.env.NODE_ENV === "production";
+
+// Security headers via Helmet. CSP allowlist is tuned for the third parties
+// we actually use: Stripe (Elements, Apple/Google Pay, Link), Google Fonts,
+// and our own assets. Duffel, SendGrid and Bland are server-to-server, so
+// they don't need to be in connect-src/script-src here.
+//
+// In development we relax script/style/connect for Vite's HMR (inline
+// modules, eval, ws/wss). HSTS is production-only because Replit dev
+// previews are served over HTTP-with-TLS-termination at the proxy and we
+// don't want to lock browsers into HTTPS for non-prod hostnames.
+const stripeScriptSrc = ["https://js.stripe.com", "https://*.js.stripe.com"];
+const stripeFrameSrc = ["https://js.stripe.com", "https://*.js.stripe.com", "https://hooks.stripe.com"];
+const stripeConnectSrc = [
+  "https://api.stripe.com",
+  "https://*.stripe.com",
+  "https://m.stripe.network",
+  "https://maps.googleapis.com",
+];
+const stripeImgSrc = ["https://*.stripe.com"];
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        baseUri: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: isProduction ? ["'self'"] : ["'self'", "https://*.replit.dev", "https://*.repl.co", "https://replit.com"],
+        scriptSrc: [
+          "'self'",
+          ...stripeScriptSrc,
+          ...(isProduction ? [] : ["'unsafe-inline'", "'unsafe-eval'"]),
+        ],
+        scriptSrcAttr: ["'none'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https:", ...stripeImgSrc],
+        connectSrc: [
+          "'self'",
+          ...stripeConnectSrc,
+          ...(isProduction ? [] : ["ws:", "wss:", "http:", "https:"]),
+        ],
+        frameSrc: ["'self'", ...stripeFrameSrc],
+        workerSrc: ["'self'", "blob:"],
+        formAction: ["'self'"],
+        upgradeInsecureRequests: isProduction ? [] : null,
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    // CSP `frame-ancestors` is the modern equivalent and more expressive
+    // (we need to allow the Replit preview iframe in dev), so disable the
+    // legacy X-Frame-Options header to avoid a SAMEORIGIN conflict.
+    xFrameOptions: false,
+    strictTransportSecurity: isProduction
+      ? { maxAge: 15552000, includeSubDomains: true, preload: false }
+      : false,
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  }),
+);
 
 declare module "http" {
   interface IncomingMessage {
