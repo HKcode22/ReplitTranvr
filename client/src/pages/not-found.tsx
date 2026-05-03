@@ -5,7 +5,15 @@ import SEO from "@/components/seo";
 export default function NotFound() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <SEO title="Page not found" description="The page you're looking for doesn't exist." noindex />
+      {/* 404 is noindex, but we still set an explicit canonical to the
+          requested path so accidental indexing doesn't collapse onto
+          the homepage. */}
+      <SEO
+        title="Page not found"
+        description="The page you're looking for doesn't exist on Travnr."
+        path={typeof window !== "undefined" ? window.location.pathname : "/404"}
+        noindex
+      />
       <Card className="w-full max-w-md mx-4">
         <CardContent className="pt-6">
           <div className="flex mb-4 gap-2">

@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
-import SEO from "@/components/seo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/phone-input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -275,29 +277,63 @@ function CallbackForm() {
 
 
 const features = [
-  { icon: Phone, title: "Personal Concierge Calls", description: "Speak with a real travel concierge who understands your preferences and handles every detail." },
-  { icon: FileText, title: "Curated Itineraries", description: "Receive custom travel proposals with flights, hotels, and activities tailored to you." },
-  { icon: CalendarDays, title: "Travel Calendar", description: "View all your upcoming trips at a glance with an intuitive calendar view." },
-  { icon: Shield, title: "Secure Payments", description: "Pay for approved itineraries directly through the platform with secure processing." },
-  { icon: Globe, title: "Traveler Profile", description: "Save your preferences, loyalty programs, and travel style for personalized service." },
-  { icon: Sparkles, title: "End-to-End Management", description: "From the first call to your last day of travel, we manage the entire journey." },
+  { icon: Phone, title: "AI concierge call", description: "A 2-minute AI phone call captures where you want to go, when, and what matters to you." },
+  { icon: FileText, title: "Curated trip options", description: "Get a short, AI-curated set of flight and trip options instead of a wall of search results." },
+  { icon: CalendarDays, title: "Travel calendar", description: "See every upcoming trip at a glance in a clean monthly calendar." },
+  { icon: Shield, title: "Secure booking", description: "Book the option you like with secure payment, and get a confirmation by email." },
+  { icon: Globe, title: "Traveler profile", description: "Save your preferences and travel style so the AI tailors options to you." },
+  { icon: Sparkles, title: "End-to-end planning", description: "From the first AI call to the day you fly, Travnr keeps the trip details in one place." },
 ];
 
 const steps = [
-  { num: "1", title: "Tell us where", description: "Share your destination and dates", icon: MapPin },
-  { num: "2", title: "We call you", description: "Our concierge dials you in seconds", icon: Phone },
-  { num: "3", title: "Review & book", description: "Get a custom proposal and book instantly", icon: Plane },
+  { num: "1", title: "Tell us where", description: "Request a quick AI call and share your destination and dates", icon: MapPin },
+  { num: "2", title: "AI calls you", description: "Our AI concierge dials you in seconds for a 2-minute chat", icon: Phone },
+  { num: "3", title: "Review & book", description: "Get tailored trip options and book the one you like", icon: Plane },
+];
+
+const faqs = [
+  {
+    q: "What is Travnr?",
+    a: "Travnr is an AI travel concierge. You take a quick AI phone call, share where you want to go, and we send back tailored flight and trip options you can review and book.",
+  },
+  {
+    q: "How is Travnr different from a regular travel site?",
+    a: "Instead of clicking through dozens of tabs and filters, you talk for about 2 minutes and Travnr's AI does the searching for you. You get a short, curated set of options instead of a wall of results.",
+  },
+  {
+    q: "How long does the AI call take?",
+    a: "Most calls take about 2 minutes. We ask where you're going, when, and what matters to you (budget, direct flights, etc.).",
+  },
+  {
+    q: "Is Travnr really AI, or is it a human travel agent?",
+    a: "The phone call and the trip option generation are powered by AI. A human team reviews edge cases and helps with anything tricky during this beta.",
+  },
+  {
+    q: "How much does Travnr cost?",
+    a: "Trying Travnr and getting trip options is free during beta. You only pay for flights or other travel you choose to book.",
+  },
+  {
+    q: "Can I book through Travnr?",
+    a: "Yes. When you pick an option you like, you can book it through Travnr with secure payment. You'll get a confirmation email with your booking details.",
+  },
+  {
+    q: "Is my information private?",
+    a: "Yes. We only use the information you share to plan your trip and operate the service. See our Privacy Policy for details.",
+  },
+  {
+    q: "How do I get help?",
+    a: "Email hello@travnr.com any time. During beta we respond personally — usually within a few hours.",
+  },
 ];
 
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
-      <SEO
-        title="Travnr — Your Personal Travel Concierge"
-        titleIsAbsolute
-        description="Skip the endless searching. Tell us where you want to go, and our concierge team handles every detail — flights, hotels, and the entire trip."
-        path="/"
-      />
+      {/* Homepage <title>, meta description, canonical, OG, Twitter, and
+          JSON-LD structured data are all defined statically in
+          `client/index.html` so crawlers see them in the initial HTML
+          response. Non-home routes manage their own head via the <SEO>
+          wrapper. */}
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/80">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <Link href="/" className="flex items-center" data-testid="link-landing-logo">
@@ -329,17 +365,18 @@ export default function LandingPage() {
           <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
             <Badge variant="outline" className="border-0 bg-primary/10 text-primary mb-6 px-4 py-1.5">
               <Sparkles className="w-3 h-3 mr-1.5" />
-              Your Personal Travel Concierge
+              AI Travel Concierge
             </Badge>
           </div>
           <h1 className="font-serif text-3xl sm:text-5xl md:text-6xl font-bold tracking-tight mb-6 opacity-0 animate-fade-in-up break-words" style={{ animationDelay: "0.3s" }}>
-            We help you book your{" "}
-            <span className="block min-h-[1.2em]">
+            Your{" "}
+            <span className="inline-block min-w-[3ch]">
               <TypingAnimation />
             </span>
+            <span className="block">planned through one quick AI call</span>
           </h1>
           <p className="text-lg text-muted-foreground max-w-xl mx-auto mb-10 opacity-0 animate-fade-in-up" style={{ animationDelay: "0.5s" }}>
-            Skip the endless searching. Tell us where you want to go, and our concierge team handles every detail.
+            Travnr is your AI travel concierge. Take a 2-minute AI phone call and get tailored flight and trip options — no endless tabs, no comparison spreadsheets.
           </p>
         </div>
         <div className="max-w-6xl mx-auto px-4 opacity-0 animate-fade-in-up" style={{ animationDelay: "0.7s" }}>
@@ -365,15 +402,15 @@ export default function LandingPage() {
       </section>
 
       <section className="py-14 sm:py-20 max-w-6xl mx-auto px-4">
-        <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-4">Like having a travel agent on speed dial</h2>
-        <p className="text-muted-foreground text-center mb-8 sm:mb-12 max-w-lg mx-auto">See how a typical concierge conversation works</p>
+        <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-4">How the AI travel call works</h2>
+        <p className="text-muted-foreground text-center mb-8 sm:mb-12 max-w-lg mx-auto">A quick 2-minute conversation — here's what it sounds like.</p>
         <VoiceAnimation />
       </section>
 
       <section className="py-20 bg-[hsl(207,60%,96%)] dark:bg-[hsl(210,30%,12%)]">
         <div className="max-w-6xl mx-auto px-4">
-          <h2 className="font-serif text-3xl sm:text-4xl font-bold text-center mb-4">Everything you need</h2>
-          <p className="text-muted-foreground text-center mb-12 max-w-lg mx-auto">A complete platform for managing your travel</p>
+          <h2 className="font-serif text-3xl sm:text-4xl font-bold text-center mb-4">Travel planning without endless tabs</h2>
+          <p className="text-muted-foreground text-center mb-12 max-w-lg mx-auto">Why travelers use Travnr as their AI travel planner.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {features.map((f, i) => (
               <Card key={f.title} className="p-6 hover-elevate opacity-0 animate-fade-in-up bg-[hsl(207,50%,98%)] dark:bg-[hsl(210,25%,15%)] border-[hsl(207,45%,88%)] dark:border-[hsl(210,20%,22%)]" style={{ animationDelay: `${0.1 + i * 0.1}s` }} data-testid={`card-feature-${i}`}>
@@ -413,17 +450,38 @@ export default function LandingPage() {
 
       <section className="py-20 relative overflow-hidden bg-[hsl(207,60%,96%)] dark:bg-[hsl(210,30%,12%)]">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[80px]" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[80px]" aria-hidden="true" />
         </div>
         <div className="max-w-3xl mx-auto px-4 text-center relative z-10">
-          <h2 className="font-serif text-3xl sm:text-4xl font-bold mb-4">Ready to transform how you travel?</h2>
-          <p className="text-muted-foreground mb-8 max-w-md mx-auto">Join Travnr and let our concierge team handle the details. Your next adventure is just a phone call away.</p>
+          <h2 className="font-serif text-3xl sm:text-4xl font-bold mb-4">Ready to plan your next trip with AI?</h2>
+          <p className="text-muted-foreground mb-8 max-w-md mx-auto">Take a 2-minute AI call and get tailored trip options. Your next trip is one phone call away.</p>
           <Link href="/auth">
             <Button size="lg" data-testid="button-start-planning">
               Start Planning
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </Link>
+        </div>
+      </section>
+
+      <section className="py-16 sm:py-20 border-t" data-testid="section-faq">
+        <div className="max-w-3xl mx-auto px-4">
+          <h2 className="font-serif text-3xl sm:text-4xl font-bold text-center mb-3">Frequently asked questions</h2>
+          <p className="text-muted-foreground text-center mb-10 max-w-lg mx-auto">
+            Quick answers about Travnr — our AI travel concierge, the AI call, pricing, and bookings.
+          </p>
+          <Accordion type="single" collapsible className="w-full" data-testid="accordion-faq">
+            {faqs.map((item, i) => (
+              <AccordionItem key={item.q} value={`faq-${i}`} data-testid={`faq-item-${i}`}>
+                <AccordionTrigger className="text-left" data-testid={`faq-question-${i}`}>
+                  {item.q}
+                </AccordionTrigger>
+                <AccordionContent data-testid={`faq-answer-${i}`}>
+                  {item.a}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </div>
       </section>
 
@@ -434,7 +492,7 @@ export default function LandingPage() {
             <span className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()}</span>
           </div>
           <div className="flex gap-4 text-sm text-muted-foreground">
-            <Link href="/contact" className="hover:underline" data-testid="link-contact-footer">Contact</Link>
+            <a href="mailto:hello@travnr.com" className="hover:underline" data-testid="link-contact-footer">Contact</a>
             <Link href="/privacy" className="hover:underline" data-testid="link-privacy">Privacy</Link>
             <Link href="/terms" className="hover:underline" data-testid="link-terms">Terms</Link>
           </div>

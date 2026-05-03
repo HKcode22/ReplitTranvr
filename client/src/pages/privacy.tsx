@@ -15,7 +15,7 @@ export default function PrivacyPage() {
     <div className="min-h-screen bg-background">
       <SEO
         title="Privacy Policy"
-        description="How Travnr collects, uses, and protects information when you use our travel concierge service."
+        description="How Travnr collects, uses, and protects your information when you use our AI travel concierge — including AI calls, transcripts, and bookings."
         path="/privacy"
       />
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/80 border-b">

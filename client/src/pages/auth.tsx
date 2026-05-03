@@ -253,7 +253,7 @@ export default function AuthPage() {
     <div className="min-h-screen bg-background flex flex-col">
       <SEO
         title={mode === "login" ? "Sign in" : "Create your account"}
-        description="Sign in to Travnr or create an account to manage your trips, proposals, and travel preferences."
+        description="Sign in to Travnr or create an account to manage your AI-planned trips, proposals, and travel preferences."
         path="/auth"
         noindex
       />

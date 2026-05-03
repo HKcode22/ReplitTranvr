@@ -16,7 +16,7 @@ export default function TermsPage() {
     <div className="min-h-screen bg-background">
       <SEO
         title="Terms of Service"
-        description="The terms governing your use of Travnr's website, AI travel concierge, and related services."
+        description="The terms governing your use of Travnr's AI travel concierge, AI calls, trip option delivery, and bookings."
         path="/terms"
       />
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/80 border-b">
