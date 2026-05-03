@@ -1,0 +1,234 @@
+You are working on the Travnr website.
+
+Goal:
+Improve Travnr’s technical SEO, search visibility foundation, and shareability without changing the core product flow, backend logic, phone/email form behavior, AI call trigger, Duffel logic, hotel infrastructure, database schema, or public user flow.
+
+Important context:
+Travnr is an AI travel concierge. Users enter their phone number and email, receive a quick AI phone call, explain their trip naturally, and later receive tailored travel options. The core SEO positioning should be around:
+- AI travel concierge
+- AI travel planner
+- AI travel agent
+- AI flight booking assistant
+- travel planning by phone
+- personalized trip planning
+- planning travel without endless tabs
+
+Do not promise impossible SEO outcomes like “rank #1.” Focus on technical SEO, metadata, crawlability, structured data, performance, and content clarity.
+
+Before making changes:
+1. Inspect the existing frontend structure.
+2. Identify where page metadata is handled.
+3. Identify whether the app uses React Helmet, Next metadata, Vite index.html, or another system.
+4. Identify whether robots.txt, sitemap.xml, manifest, and Open Graph image support already exist.
+5. Preserve existing routes and functionality.
+
+Do not change:
+- backend routes
+- database schema
+- auth logic
+- phone call trigger logic
+- form field names or form submission behavior
+- email sending logic
+- Duffel/flight logic
+- hotel infrastructure logic
+- Stripe/payment logic
+- environment variables
+- locked/sensitive files
+
+SEO tasks:
+
+1. Homepage title and meta description
+Update the homepage SEO title to something like:
+“Travnr | AI Travel Concierge for Personalized Trip Planning”
+
+Update the meta description to something like:
+“Travnr is an AI travel concierge that helps you plan trips through a quick phone call. Share your travel preferences and receive tailored flight and trip options without endless tabs.”
+
+Keep it concise and search-friendly.
+
+2. Headings
+Make sure the homepage has one clear H1.
+Recommended H1:
+“Your trip, planned through one quick AI call”
+
+Use H2s for major sections:
+- How Travnr Works
+- Why Travnr
+- Travel Planning Without Endless Tabs
+- Frequently Asked Questions
+
+Do not create multiple H1s.
+
+3. Open Graph and social sharing
+Add or improve:
+- og:title
+- og:description
+- og:type
+- og:url
+- og:image if a suitable image exists
+- twitter:card
+- twitter:title
+- twitter:description
+- twitter:image if available
+
+Use Travnr’s real domain:
+https://travnr.com
+
+If no proper social image exists, add a TODO comment or create a simple placeholder only if the project already has a safe assets pattern. Do not add huge image files unnecessarily.
+
+4. Canonical URL
+Add a canonical link for the homepage:
+https://travnr.com/
+
+Make sure duplicate URLs do not create conflicting canonical tags.
+
+5. Structured data
+Add JSON-LD structured data for:
+- Organization
+- WebSite
+- SoftwareApplication if appropriate
+- FAQPage if the homepage has an FAQ section
+
+Use accurate claims only. Do not add fake reviews, fake ratings, fake aggregateRating, fake offers, or fake company size.
+
+Organization name:
+Travnr
+
+Website:
+https://travnr.com
+
+Description:
+“Travnr is an AI travel concierge that helps users plan trips through a quick phone call and receive tailored travel options.”
+
+6. FAQ content and FAQ schema
+If the homepage already has an FAQ section, improve it.
+If it does not, add a small FAQ section near the bottom.
+
+FAQ questions:
+- What is Travnr?
+- How does Travnr work?
+- Is Travnr free to try?
+- Am I booking immediately?
+- How long does the AI call take?
+- Why do you need my phone number?
+- Why do you need my email?
+- What happens if I miss the call?
+
+Suggested answers:
+Travnr is an AI travel concierge that helps you plan trips through a quick phone call.
+You enter your phone and email, take a short AI travel call, and receive tailored trip options.
+Travnr is currently free to test during beta.
+Right now, Travnr helps generate tailored travel options. Full end-to-end booking is being built.
+The call usually takes about 2 minutes.
+We use your phone number to start the AI travel call.
+We use your email to send your trip options.
+If you miss the call, you can submit the form again.
+
+Keep answers short, honest, and beta-appropriate.
+
+7. robots.txt
+Check whether robots.txt exists.
+If not, add one that allows crawling of public pages and points to the sitemap.
+
+Example:
+User-agent: *
+Allow: /
+
+Sitemap: https://travnr.com/sitemap.xml
+
+Do not expose private/admin/API routes through sitemap.
+
+8. sitemap.xml
+Check whether sitemap.xml exists.
+If not, create one for public pages only.
+
+At minimum include:
+https://travnr.com/
+
+If public SEO landing pages already exist, include them too.
+Do not include admin pages, API routes, auth callback routes, or private dashboards.
+
+9. Image alt text
+Review homepage images and visual components.
+Add meaningful alt text where images are important.
+Use empty alt="" only for purely decorative images.
+
+Good alt text examples:
+“Travnr AI travel call preview”
+“AI travel concierge planning a trip by phone”
+“Personalized travel options generated by Travnr”
+
+10. Internal linking
+If there are multiple public sections or pages, make sure links use descriptive anchor text.
+Avoid vague anchors like “click here.”
+Use anchors like:
+- “Start your AI travel call”
+- “See how Travnr works”
+- “Learn about AI travel planning”
+
+11. Performance basics
+Do not do a full performance rewrite, but check for obvious issues:
+- oversized images
+- unnecessary large assets
+- render-blocking scripts
+- unused heavy dependencies on the homepage
+- missing lazy loading for below-the-fold images
+
+Make safe improvements only.
+
+12. Content clarity
+Work light SEO keywords naturally into the page copy.
+Do not keyword-stuff.
+The page should still sound human and clean.
+
+Priority phrases to naturally include:
+- AI travel concierge
+- AI travel planner
+- personalized travel options
+- quick AI phone call
+- travel planning without endless tabs
+- AI flight booking assistant
+
+13. Local/business credibility basics
+Add footer links or footer text if appropriate:
+- Privacy Policy
+- Terms
+- Contact
+- Support email if one exists
+
+Do not invent legal pages if they do not exist. If missing, add TODO recommendations.
+
+14. Backlink foundation
+Do not attempt fake backlinks or spammy link schemes.
+Instead, add a short internal markdown file called SEO_BACKLINK_PLAN.md or add a section in replit.md with ethical backlink ideas:
+- submit to startup directories
+- Product Hunt launch
+- university startup pages
+- founder LinkedIn posts linking to Travnr
+- Skandalaris/WashU entrepreneurship profile links
+- relevant travel-tech directories
+- guest posts about AI travel planning
+- partnerships with student travel groups
+- beta tester referral page later
+- press/blog posts around building Travnr
+
+Make clear that backlinks require external outreach and cannot be fully handled in code.
+
+15. Optional SEO landing page recommendations
+Do not create many thin pages.
+If it fits the current routing system, optionally create one useful landing page:
+/ai-travel-planner
+
+The page should have real content explaining how Travnr works as an AI travel planner. It should not be duplicate copy from the homepage.
+
+If creating a new page risks breaking routing or taking too long, skip it and list it as a recommendation.
+
+After changes:
+1. Run build/lint/typecheck if available.
+2. Report exact files changed.
+3. Confirm homepage form behavior was not changed.
+4. Confirm backend/API logic was not changed.
+5. Confirm sitemap and robots.txt status.
+6. Confirm metadata and structured data added.
+7. List backlink ideas separately as non-code follow-ups.
+8. Mention any commands that failed.
