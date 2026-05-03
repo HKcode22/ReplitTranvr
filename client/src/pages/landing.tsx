@@ -379,8 +379,8 @@ export default function LandingPage() {
             <span className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()}</span>
           </div>
           <div className="flex gap-4 text-sm text-muted-foreground">
-            <a href="#" className="hover:underline" data-testid="link-privacy">Privacy</a>
-            <a href="#" className="hover:underline" data-testid="link-terms">Terms</a>
+            <Link href="/privacy" className="hover:underline" data-testid="link-privacy">Privacy</Link>
+            <Link href="/terms" className="hover:underline" data-testid="link-terms">Terms</Link>
           </div>
         </div>
       </footer>

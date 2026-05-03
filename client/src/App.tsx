@@ -30,6 +30,8 @@ import ResetPasswordPage from "@/pages/reset-password";
 import AdminDashboardPage from "@/pages/admin-dashboard";
 import GuestProposalPage from "@/pages/guest-proposal";
 import GuestBookingPage from "@/pages/guest-booking";
+import PrivacyPage from "@/pages/privacy";
+import TermsPage from "@/pages/terms";
 import NotFound from "@/pages/not-found";
 
 function AuthenticatedLayout() {
@@ -113,6 +115,8 @@ function AppRouter() {
       <Switch>
         <Route path="/proposal/:token" component={GuestProposalPage} />
         <Route path="/book/:optionToken" component={GuestBookingPage} />
+        <Route path="/privacy" component={PrivacyPage} />
+        <Route path="/terms" component={TermsPage} />
         <Route path="/" component={LandingPage} />
         <Route path="/auth" component={AuthPage} />
         <Route path="/reset-password" component={ResetPasswordPage} />
@@ -128,6 +132,8 @@ function AppRouter() {
       <Route path="/proposal/:token" component={GuestProposalPage} />
       <Route path="/book/:optionToken" component={GuestBookingPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/terms" component={TermsPage} />
       <Route>
         <AuthenticatedLayout />
       </Route>

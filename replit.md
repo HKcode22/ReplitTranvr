@@ -31,6 +31,7 @@ Key features and their technical implementations include:
 -   **Admin Features:** An admin mode (for `@travnr.com` emails or whitelisted users) provides an administrative dashboard with stats, user management, payment history, and a manual booking fallback system for cases where Duffel balance is insufficient, ensuring bookings can still be processed.
 -   **Notification System:** A robust system for user notifications with read/unread states.
 -   **Travel Calendar:** A monthly calendar view for managing trip dates.
+-   **Legal Pages:** Public `/privacy` and `/terms` pages (in `client/src/pages/privacy.tsx` and `client/src/pages/terms.tsx`, registered in both the signed-out and signed-in route switches in `client/src/App.tsx`) render template Privacy Policy and Terms of Service content marked as pending legal review (see top-of-file comment). Linked from the landing-page footer. Contact emails: `hello@travnr.com` (primary) and `support@travnr.com` (placeholder).
 
 The project structure is organized into `client/`, `server/`, and `shared/` directories, with `shared/schema.ts` defining common database schemas and types across the application.
 
