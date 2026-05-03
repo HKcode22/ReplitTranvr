@@ -390,7 +390,11 @@ function DetailRow({ label, value, mono, copy }: { label: string; value: React.R
   );
 }
 
-function PendingManualDetailsDialog({ payment, onClose, onComplete }: { payment: any; onClose: () => void; onComplete: () => void }) {
+// Shared "everything we know about this booking" rendering used by both the
+// pending-manual details modal and the confirmed-booking details modal.
+// Extracted so cancel / refund / edit screens stay visually consistent with
+// the pending-manual screen and don't drift over time.
+function BookingCoreSections({ payment }: { payment: any }) {
   const details = payment.manualBookingDetails || {};
   // Defensive Array.isArray guards in case a historical/malformed row stored
   // these as a non-array shape (object, null, etc.).
@@ -408,6 +412,141 @@ function PendingManualDetailsDialog({ payment, onClose, onComplete }: { payment:
   }));
 
   return (
+    <div className="space-y-5">
+      {/* Customer */}
+      <section>
+        <h3 className="text-sm font-semibold mb-2 text-foreground/80">Customer</h3>
+        <div className="rounded-lg border bg-muted/30 px-3 py-1">
+          <DetailRow label="Name" value={[payment.user?.firstName, payment.user?.lastName].filter(Boolean).join(" ") || null} />
+          <DetailRow label="Email" value={payment.user?.email || null} copy={payment.user?.email || null} />
+          <DetailRow label="User ID" value={payment.userId} mono copy={payment.userId} />
+        </div>
+      </section>
+
+      {/* Payment & references */}
+      <section>
+        <h3 className="text-sm font-semibold mb-2 text-foreground/80">Payment & references</h3>
+        <div className="rounded-lg border bg-muted/30 px-3 py-1">
+          <DetailRow label="Charged" value={<span className="font-mono font-semibold">{payment.currency?.toUpperCase()} {payment.amount}</span>} />
+          <DetailRow label="Stripe PI" value={payment.stripePaymentIntentId || null} mono copy={payment.stripePaymentIntentId || null} />
+          <DetailRow label="Duffel order" value={payment.duffelOrderId || null} mono copy={payment.duffelOrderId || null} />
+          <DetailRow label="Booking ref" value={payment.duffelBookingRef || null} mono copy={payment.duffelBookingRef || null} />
+          <DetailRow label="Offer ID" value={details.offerId || null} mono copy={details.offerId || null} />
+          <DetailRow label="Offer total" value={details.totalAmount && details.currency ? `${String(details.currency).toUpperCase()} ${details.totalAmount}` : null} mono />
+          <DetailRow label="Proposal ID" value={payment.proposalId || null} mono />
+          <DetailRow label="Proposal title" value={details.proposalTitle || null} />
+          <DetailRow label="Reason" value={details.reason || null} />
+          <DetailRow label="Captured at" value={new Date(payment.createdAt).toLocaleString()} />
+        </div>
+      </section>
+
+      {/* Itinerary */}
+      <section>
+        <h3 className="text-sm font-semibold mb-2 text-foreground/80">Itinerary</h3>
+        {slices.length === 0 ? (
+          <div className="rounded-lg border bg-muted/30 px-3 py-3 text-sm text-muted-foreground italic">
+            No flight slices captured for this booking.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {slices.map((s: any, i: number) => (
+              <div key={i} className="rounded-lg border bg-muted/30 px-3 py-1" data-testid={`slice-${i}`}>
+                <DetailRow label="Route" value={<span className="font-mono">{s.origin || "?"} → {s.destination || "?"}</span>} />
+                <DetailRow label="Departing" value={s.departingAt ? new Date(s.departingAt).toLocaleString() : null} />
+                <DetailRow label="Arriving" value={s.arrivingAt ? new Date(s.arrivingAt).toLocaleString() : null} />
+                <DetailRow label="Carrier" value={[s.carrier, s.flightNumber].filter(Boolean).join(" ") || null} />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Passengers */}
+      <section>
+        <h3 className="text-sm font-semibold mb-2 text-foreground/80">
+          Passengers <span className="text-xs text-muted-foreground font-normal">({passengerCount})</span>
+        </h3>
+        {passengerCount === 0 ? (
+          <div className="rounded-lg border bg-muted/30 px-3 py-3 text-sm text-muted-foreground italic">
+            No passenger details captured for this booking.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {passengers.map(({ duffel, extended }, i) => {
+              // Prefer the extended snapshot for name/dob/gender/title.
+              const fullName = extended
+                ? [extended.firstName, extended.middleName, extended.lastName].filter(Boolean).join(" ")
+                : [duffel.given_name, duffel.family_name].filter(Boolean).join(" ");
+              const dob = extended?.bornOn || duffel?.born_on || null;
+              const gender = extended?.gender || duffel?.gender || null;
+              const title = extended?.title || duffel?.title || null;
+              const email = duffel?.email || null;
+              const phone = duffel?.phone_number || null;
+              // Passport: extendedPassengers has the canonical fields.
+              // Fall back to duffel.identity_documents[0] for older rows.
+              const idDoc = Array.isArray(duffel?.identity_documents) ? duffel.identity_documents[0] : null;
+              const passportNumber = extended?.passportNumber ?? idDoc?.unique_identifier ?? null;
+              const passportCountry = extended?.passportCountry ?? idDoc?.issuing_country_code ?? null;
+              const passportExpiry = extended?.passportExpiry ?? idDoc?.expires_on ?? null;
+              // Loyalty: extendedPassengers carries the programme name; the
+              // Duffel mapping carries the airline IATA we sent.
+              const loyaltyAcct = Array.isArray(duffel?.loyalty_programme_accounts) ? duffel.loyalty_programme_accounts[0] : null;
+              const loyaltyProgramme = extended?.loyaltyProgramme || loyaltyAcct?.airline_iata_code || null;
+              const loyaltyNumber = extended?.loyaltyNumber || loyaltyAcct?.account_number || null;
+
+              return (
+                <div key={i} className="rounded-lg border bg-muted/30 px-3 py-1" data-testid={`passenger-${i}`}>
+                  <div className="px-0 py-2 text-sm font-semibold">Passenger {i + 1}{title ? ` · ${title.toUpperCase()}` : ""}</div>
+                  <DetailRow label="Full name" value={fullName || null} />
+                  <DetailRow label="Date of birth" value={dob} mono />
+                  <DetailRow label="Gender" value={gender} />
+                  <DetailRow label="Email" value={email} copy={email} />
+                  <DetailRow label="Phone" value={phone} copy={phone} />
+                  {extended && (
+                    <DetailRow
+                      label="Residence"
+                      value={[extended.residenceState, extended.residenceCountry].filter(Boolean).join(", ") || null}
+                    />
+                  )}
+                  <DetailRow label="Passport #" value={passportNumber} mono copy={passportNumber} />
+                  <DetailRow label="Passport country" value={passportCountry} mono />
+                  <DetailRow label="Passport expiry" value={passportExpiry} mono />
+                  {(loyaltyProgramme || loyaltyNumber) && (
+                    <>
+                      <DetailRow label="Loyalty prog." value={loyaltyProgramme} />
+                      <DetailRow label="Loyalty #" value={loyaltyNumber} mono copy={loyaltyNumber} />
+                    </>
+                  )}
+                  {extended?.knownTravelerNumber && (
+                    <>
+                      <DetailRow label="KTN" value={extended.knownTravelerNumber} mono copy={extended.knownTravelerNumber} />
+                      <DetailRow label="KTN country" value={extended.knownTravelerCountry} mono />
+                    </>
+                  )}
+                  {extended?.redressNumber && (
+                    <>
+                      <DetailRow label="Redress #" value={extended.redressNumber} mono copy={extended.redressNumber} />
+                      <DetailRow label="Redress country" value={extended.redressCountry} mono />
+                    </>
+                  )}
+                  {extended?.secondaryRedressNumber && (
+                    <>
+                      <DetailRow label="2nd Redress #" value={extended.secondaryRedressNumber} mono copy={extended.secondaryRedressNumber} />
+                      <DetailRow label="2nd Redress country" value={extended.secondaryRedressCountry} mono />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PendingManualDetailsDialog({ payment, onClose, onComplete }: { payment: any; onClose: () => void; onComplete: () => void }) {
+  return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="dialog-pending-manual-details">
         <DialogHeader>
@@ -416,136 +555,7 @@ function PendingManualDetailsDialog({ payment, onClose, onComplete }: { payment:
             <span>Manual booking #{payment.id}</span>
           </DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-5">
-          {/* Customer */}
-          <section>
-            <h3 className="text-sm font-semibold mb-2 text-foreground/80">Customer</h3>
-            <div className="rounded-lg border bg-muted/30 px-3 py-1">
-              <DetailRow label="Name" value={[payment.user?.firstName, payment.user?.lastName].filter(Boolean).join(" ") || null} />
-              <DetailRow label="Email" value={payment.user?.email || null} copy={payment.user?.email || null} />
-              <DetailRow label="User ID" value={payment.userId} mono copy={payment.userId} />
-            </div>
-          </section>
-
-          {/* Payment & references */}
-          <section>
-            <h3 className="text-sm font-semibold mb-2 text-foreground/80">Payment & references</h3>
-            <div className="rounded-lg border bg-muted/30 px-3 py-1">
-              <DetailRow label="Charged" value={<span className="font-mono font-semibold">{payment.currency?.toUpperCase()} {payment.amount}</span>} />
-              <DetailRow label="Stripe PI" value={payment.stripePaymentIntentId || null} mono copy={payment.stripePaymentIntentId || null} />
-              <DetailRow label="Offer ID" value={details.offerId || null} mono copy={details.offerId || null} />
-              <DetailRow label="Offer total" value={details.totalAmount && details.currency ? `${String(details.currency).toUpperCase()} ${details.totalAmount}` : null} mono />
-              <DetailRow label="Proposal ID" value={payment.proposalId || null} mono />
-              <DetailRow label="Proposal title" value={details.proposalTitle || null} />
-              <DetailRow label="Reason" value={details.reason || null} />
-              <DetailRow label="Captured at" value={new Date(payment.createdAt).toLocaleString()} />
-            </div>
-          </section>
-
-          {/* Itinerary */}
-          <section>
-            <h3 className="text-sm font-semibold mb-2 text-foreground/80">Itinerary</h3>
-            {slices.length === 0 ? (
-              <div className="rounded-lg border bg-muted/30 px-3 py-3 text-sm text-muted-foreground italic">
-                No flight slices captured for this booking.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {slices.map((s: any, i: number) => (
-                  <div key={i} className="rounded-lg border bg-muted/30 px-3 py-1" data-testid={`slice-${i}`}>
-                    <DetailRow label="Route" value={<span className="font-mono">{s.origin || "?"} → {s.destination || "?"}</span>} />
-                    <DetailRow label="Departing" value={s.departingAt ? new Date(s.departingAt).toLocaleString() : null} />
-                    <DetailRow label="Arriving" value={s.arrivingAt ? new Date(s.arrivingAt).toLocaleString() : null} />
-                    <DetailRow label="Carrier" value={[s.carrier, s.flightNumber].filter(Boolean).join(" ") || null} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* Passengers */}
-          <section>
-            <h3 className="text-sm font-semibold mb-2 text-foreground/80">
-              Passengers <span className="text-xs text-muted-foreground font-normal">({passengerCount})</span>
-            </h3>
-            {passengerCount === 0 ? (
-              <div className="rounded-lg border bg-muted/30 px-3 py-3 text-sm text-muted-foreground italic">
-                No passenger details captured for this booking.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {passengers.map(({ duffel, extended }, i) => {
-                  // Prefer the extended snapshot for name/dob/gender/title.
-                  const fullName = extended
-                    ? [extended.firstName, extended.middleName, extended.lastName].filter(Boolean).join(" ")
-                    : [duffel.given_name, duffel.family_name].filter(Boolean).join(" ");
-                  const dob = extended?.bornOn || duffel?.born_on || null;
-                  const gender = extended?.gender || duffel?.gender || null;
-                  const title = extended?.title || duffel?.title || null;
-                  const email = duffel?.email || null;
-                  const phone = duffel?.phone_number || null;
-                  // Passport: extendedPassengers has the canonical fields.
-                  // Fall back to duffel.identity_documents[0] for older rows.
-                  const idDoc = Array.isArray(duffel?.identity_documents) ? duffel.identity_documents[0] : null;
-                  const passportNumber = extended?.passportNumber ?? idDoc?.unique_identifier ?? null;
-                  const passportCountry = extended?.passportCountry ?? idDoc?.issuing_country_code ?? null;
-                  const passportExpiry = extended?.passportExpiry ?? idDoc?.expires_on ?? null;
-                  // Loyalty: extendedPassengers carries the programme name; the
-                  // Duffel mapping carries the airline IATA we sent.
-                  const loyaltyAcct = Array.isArray(duffel?.loyalty_programme_accounts) ? duffel.loyalty_programme_accounts[0] : null;
-                  const loyaltyProgramme = extended?.loyaltyProgramme || loyaltyAcct?.airline_iata_code || null;
-                  const loyaltyNumber = extended?.loyaltyNumber || loyaltyAcct?.account_number || null;
-
-                  return (
-                    <div key={i} className="rounded-lg border bg-muted/30 px-3 py-1" data-testid={`passenger-${i}`}>
-                      <div className="px-0 py-2 text-sm font-semibold">Passenger {i + 1}{title ? ` · ${title.toUpperCase()}` : ""}</div>
-                      <DetailRow label="Full name" value={fullName || null} />
-                      <DetailRow label="Date of birth" value={dob} mono />
-                      <DetailRow label="Gender" value={gender} />
-                      <DetailRow label="Email" value={email} copy={email} />
-                      <DetailRow label="Phone" value={phone} copy={phone} />
-                      {extended && (
-                        <DetailRow
-                          label="Residence"
-                          value={[extended.residenceState, extended.residenceCountry].filter(Boolean).join(", ") || null}
-                        />
-                      )}
-                      <DetailRow label="Passport #" value={passportNumber} mono copy={passportNumber} />
-                      <DetailRow label="Passport country" value={passportCountry} mono />
-                      <DetailRow label="Passport expiry" value={passportExpiry} mono />
-                      {(loyaltyProgramme || loyaltyNumber) && (
-                        <>
-                          <DetailRow label="Loyalty prog." value={loyaltyProgramme} />
-                          <DetailRow label="Loyalty #" value={loyaltyNumber} mono copy={loyaltyNumber} />
-                        </>
-                      )}
-                      {extended?.knownTravelerNumber && (
-                        <>
-                          <DetailRow label="KTN" value={extended.knownTravelerNumber} mono copy={extended.knownTravelerNumber} />
-                          <DetailRow label="KTN country" value={extended.knownTravelerCountry} mono />
-                        </>
-                      )}
-                      {extended?.redressNumber && (
-                        <>
-                          <DetailRow label="Redress #" value={extended.redressNumber} mono copy={extended.redressNumber} />
-                          <DetailRow label="Redress country" value={extended.redressCountry} mono />
-                        </>
-                      )}
-                      {extended?.secondaryRedressNumber && (
-                        <>
-                          <DetailRow label="2nd Redress #" value={extended.secondaryRedressNumber} mono copy={extended.secondaryRedressNumber} />
-                          <DetailRow label="2nd Redress country" value={extended.secondaryRedressCountry} mono />
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </div>
-
+        <BookingCoreSections payment={payment} />
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Close</Button>
           <Button onClick={onComplete} data-testid="button-open-complete-from-details">

@@ -53,6 +53,9 @@ import {
   buildRefundRequestCustomerEmail,
   buildTripRequestAdminEmail,
   buildTripRequestCustomerEmail,
+  buildBookingCancelledByAdminEmail,
+  buildBookingRefundedByAdminEmail,
+  buildBookingChangedByAdminEmail,
   type TripRequestEmailInput,
   buildGuestProposalEmail,
   buildGuestBookingConfirmationEmail,
@@ -2213,8 +2216,14 @@ export async function registerRoutes(
   app.get("/api/trips", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const pymts = await storage.getPayments(req.session.userId!);
+      // Hide bookings that admin has cancelled or refunded — these stay
+      // visible on /billing for history but should not appear under
+      // "upcoming/recent trips" once the booking is no longer valid.
       const bookedPayments = pymts.filter(p =>
-        p.status === "paid" && (p.duffelOrderId || p.manualBookingDetails)
+        p.status === "paid"
+        && (p.duffelOrderId || p.manualBookingDetails)
+        && p.refundStatus !== "cancelled"
+        && p.refundStatus !== "refunded"
       );
       const trips = await Promise.all(bookedPayments.map(buildTripPayloadFromPayment));
       return res.json(trips);
@@ -4525,6 +4534,281 @@ export async function registerRoutes(
       }
     } catch (mailErr) {
       console.error("[admin] Failed to send manual booking confirmation email (non-fatal):", mailErr);
+    }
+
+    return res.json(updated);
+  });
+
+  // ==================== ADMIN BOOKING ACTIONS (cancel / refund / edit) ====================
+  //
+  // Record-only workflow: the concierge handles the actual Stripe refund or
+  // Duffel cancellation in those tools (where they can see fees, refundable
+  // amounts, and policy), then logs the outcome here. We persist the action
+  // metadata onto payments.manualBookingDetails (jsonb), flip refundStatus
+  // for cancel/refund so /api/trips hides the booking from the customer's
+  // upcoming list, notify the customer, and email them.
+
+  // Build a small {routeLabel,dateLabel} summary for the customer email.
+  // Mirrors the snippet inside processTripRequest so we degrade gracefully
+  // when the trip payload can't be reconstructed (e.g. expired Duffel order).
+  async function buildAdminActionTripLabels(payment: Payment): Promise<{ routeLabel: string; dateLabel: string }> {
+    let routeLabel = `Booking #${payment.id}`;
+    let dateLabel = "—";
+    try {
+      const trip = await buildTripPayloadFromPayment(payment);
+      const slices = trip.order?.slices || [];
+      const first = slices[0]?.segments?.[0];
+      const last = slices[slices.length - 1]?.segments?.slice(-1)?.[0] || slices[0]?.segments?.slice(-1)?.[0];
+      if (first && last) {
+        const o = first.origin?.iata_code || first.origin?.city_name || "?";
+        const d = last.destination?.iata_code || last.destination?.city_name || "?";
+        routeLabel = `${o} → ${d}`;
+      } else if (trip.manual?.routeSummary) {
+        routeLabel = trip.manual.routeSummary;
+      }
+      const dep = first?.departing_at || trip.manual?.departingAt;
+      if (dep) {
+        dateLabel = new Date(dep).toLocaleDateString("en-US", {
+          weekday: "short", month: "short", day: "numeric", year: "numeric",
+        });
+      }
+    } catch (err) {
+      console.warn("[admin-booking-action] could not build trip labels", err);
+    }
+    return { routeLabel, dateLabel };
+  }
+
+  // Shared shape for the small JSON action records we append to manualBookingDetails.
+  function nowIso(): string { return new Date().toISOString(); }
+
+  // POST /api/admin/bookings/:id/cancel — record an admin-initiated cancellation.
+  // Body: { reason: string (required), customerMessage?: string, externalCancellationRef?: string }
+  app.post("/api/admin/bookings/:id/cancel", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid booking ID" });
+    const { reason, customerMessage, externalCancellationRef } = (req.body || {}) as {
+      reason?: string; customerMessage?: string; externalCancellationRef?: string;
+    };
+    if (!reason || typeof reason !== "string" || !reason.trim()) {
+      return res.status(400).json({ message: "Cancellation reason is required" });
+    }
+    const payment = await storage.getPayment(id);
+    if (!payment) return res.status(404).json({ message: "Booking not found" });
+    if (payment.status !== "paid") {
+      return res.status(400).json({ message: "Only paid bookings can be cancelled" });
+    }
+    if (payment.refundStatus === "cancelled" || payment.refundStatus === "refunded") {
+      return res.status(400).json({ message: "Booking is already cancelled or refunded" });
+    }
+
+    const existingDetails = (payment.manualBookingDetails || {}) as Record<string, unknown>;
+    const cancellationRecord = {
+      at: nowIso(),
+      by: req.session.userId!,
+      reason: reason.trim(),
+      customerMessage: customerMessage?.trim() || null,
+      externalCancellationRef: externalCancellationRef?.trim() || null,
+    };
+
+    const updated = await storage.updatePayment(id, {
+      refundStatus: "cancelled",
+      manualBookingDetails: { ...existingDetails, cancellation: cancellationRecord },
+    });
+
+    await storage.createNotification({
+      userId: payment.userId,
+      type: "booking_cancelled",
+      title: "Your booking has been cancelled",
+      body: `Your booking ${payment.duffelBookingRef ? payment.duffelBookingRef : `#${payment.id}`} was cancelled by our concierge team. Reason: ${reason.trim()}`,
+      linkUrl: "/billing",
+    });
+
+    // Best-effort customer email; failure must not abort the action.
+    try {
+      const customer = await storage.getUser(payment.userId);
+      if (customer?.email) {
+        const labels = await buildAdminActionTripLabels(payment);
+        const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+        const baseUrl = getBaseUrl(req);
+        const { subject, html } = buildBookingCancelledByAdminEmail({
+          user: { email: customer.email, firstName: customer.firstName, lastName: customer.lastName },
+          payment: { id: payment.id, amount: payment.amount, currency: payment.currency, duffelBookingRef: payment.duffelBookingRef, duffelOrderId: payment.duffelOrderId },
+          trip: labels,
+          customerMessage: customerMessage?.trim() || null,
+          dashboardUrl: `${baseUrl}/billing`,
+          reason: reason.trim(),
+        });
+        await sgMail.send({ to: customer.email, from: { email: fromEmail, name: "Travnr" }, subject, html });
+        console.log(`[admin] booking ${payment.id} cancelled, customer notified at ${maskEmail(customer.email)}`);
+      }
+    } catch (mailErr) {
+      console.error("[admin] booking cancellation email failed (non-fatal):", mailErr);
+    }
+
+    return res.json(updated);
+  });
+
+  // POST /api/admin/bookings/:id/refund — record a refund the admin already
+  // issued in Stripe. Body: { amount: string (required), stripeRefundId: string (required), reason: string (required), customerMessage?: string }
+  app.post("/api/admin/bookings/:id/refund", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid booking ID" });
+    const { amount, stripeRefundId, reason, customerMessage } = (req.body || {}) as {
+      amount?: string; stripeRefundId?: string; reason?: string; customerMessage?: string;
+    };
+    if (!amount || typeof amount !== "string" || !amount.trim()) {
+      return res.status(400).json({ message: "Refund amount is required" });
+    }
+    const amtNum = Number(amount);
+    if (!isFinite(amtNum) || amtNum <= 0) {
+      return res.status(400).json({ message: "Refund amount must be a positive number" });
+    }
+    if (!stripeRefundId || typeof stripeRefundId !== "string" || !stripeRefundId.trim()) {
+      return res.status(400).json({ message: "Stripe refund ID is required (issue the refund in Stripe first, then paste re_… here)" });
+    }
+    if (!reason || typeof reason !== "string" || !reason.trim()) {
+      return res.status(400).json({ message: "Refund reason is required" });
+    }
+    const payment = await storage.getPayment(id);
+    if (!payment) return res.status(404).json({ message: "Booking not found" });
+    if (payment.status !== "paid") {
+      return res.status(400).json({ message: "Only paid bookings can be refunded" });
+    }
+    if (payment.refundStatus === "refunded") {
+      return res.status(400).json({ message: "This booking has already been refunded" });
+    }
+
+    const existingDetails = (payment.manualBookingDetails || {}) as Record<string, unknown>;
+    const refundRecord = {
+      at: nowIso(),
+      by: req.session.userId!,
+      amount: amount.trim(),
+      currency: payment.currency,
+      stripeRefundId: stripeRefundId.trim(),
+      reason: reason.trim(),
+      customerMessage: customerMessage?.trim() || null,
+    };
+
+    const updated = await storage.updatePayment(id, {
+      refundStatus: "refunded",
+      refundReason: reason.trim(),
+      manualBookingDetails: { ...existingDetails, refund: refundRecord },
+    });
+
+    await storage.createNotification({
+      userId: payment.userId,
+      type: "refund_processed",
+      title: "Refund processed",
+      body: `A refund of ${payment.currency.toUpperCase()} ${amount.trim()} has been processed for your booking. It will appear on your card within 5–10 business days.`,
+      linkUrl: "/billing",
+    });
+
+    try {
+      const customer = await storage.getUser(payment.userId);
+      if (customer?.email) {
+        const labels = await buildAdminActionTripLabels(payment);
+        const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+        const baseUrl = getBaseUrl(req);
+        const { subject, html } = buildBookingRefundedByAdminEmail({
+          user: { email: customer.email, firstName: customer.firstName, lastName: customer.lastName },
+          payment: { id: payment.id, amount: payment.amount, currency: payment.currency, duffelBookingRef: payment.duffelBookingRef, duffelOrderId: payment.duffelOrderId },
+          trip: labels,
+          customerMessage: customerMessage?.trim() || null,
+          dashboardUrl: `${baseUrl}/billing`,
+          refundAmount: amount.trim(),
+          refundCurrency: payment.currency,
+          reason: reason.trim(),
+        });
+        await sgMail.send({ to: customer.email, from: { email: fromEmail, name: "Travnr" }, subject, html });
+        console.log(`[admin] booking ${payment.id} refunded, customer notified at ${maskEmail(customer.email)}`);
+      }
+    } catch (mailErr) {
+      console.error("[admin] booking refund email failed (non-fatal):", mailErr);
+    }
+
+    return res.json(updated);
+  });
+
+  // POST /api/admin/bookings/:id/edit — record a flight-detail change the
+  // admin has made manually with the airline. Body: { summary: string (required),
+  // customerMessage: string (required), newBookingRef?: string, newDuffelOrderId?: string }
+  app.post("/api/admin/bookings/:id/edit", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid booking ID" });
+    const { summary, customerMessage, newBookingRef, newDuffelOrderId } = (req.body || {}) as {
+      summary?: string; customerMessage?: string; newBookingRef?: string; newDuffelOrderId?: string;
+    };
+    if (!summary || typeof summary !== "string" || !summary.trim()) {
+      return res.status(400).json({ message: "Change summary is required" });
+    }
+    if (!customerMessage || typeof customerMessage !== "string" || !customerMessage.trim()) {
+      return res.status(400).json({ message: "Customer message is required (this is what we'll email them)" });
+    }
+    const payment = await storage.getPayment(id);
+    if (!payment) return res.status(404).json({ message: "Booking not found" });
+    if (payment.status !== "paid") {
+      return res.status(400).json({ message: "Only paid bookings can be edited" });
+    }
+    if (payment.refundStatus === "cancelled" || payment.refundStatus === "refunded") {
+      return res.status(400).json({ message: "Cannot edit a cancelled or refunded booking" });
+    }
+
+    const existingDetails = (payment.manualBookingDetails || {}) as { edits?: unknown[] } & Record<string, unknown>;
+    const existingEdits = Array.isArray(existingDetails.edits) ? existingDetails.edits : [];
+    const editRecord = {
+      at: nowIso(),
+      by: req.session.userId!,
+      summary: summary.trim(),
+      customerMessage: customerMessage.trim(),
+      newBookingRef: newBookingRef?.trim() || null,
+      newDuffelOrderId: newDuffelOrderId?.trim() || null,
+      previousBookingRef: payment.duffelBookingRef ?? null,
+      previousDuffelOrderId: payment.duffelOrderId ?? null,
+    };
+
+    const updates: Partial<Payment> = {
+      manualBookingDetails: { ...existingDetails, edits: [...existingEdits, editRecord] },
+    };
+    if (newBookingRef?.trim()) updates.duffelBookingRef = newBookingRef.trim();
+    if (newDuffelOrderId?.trim()) updates.duffelOrderId = newDuffelOrderId.trim();
+
+    const updated = await storage.updatePayment(id, updates);
+
+    await storage.createNotification({
+      userId: payment.userId,
+      type: "booking_updated",
+      title: "Your booking has been updated",
+      body: summary.trim(),
+      linkUrl: "/trips",
+    });
+
+    try {
+      const customer = await storage.getUser(payment.userId);
+      if (customer?.email) {
+        const labels = await buildAdminActionTripLabels(payment);
+        const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+        const baseUrl = getBaseUrl(req);
+        const { subject, html } = buildBookingChangedByAdminEmail({
+          user: { email: customer.email, firstName: customer.firstName, lastName: customer.lastName },
+          payment: {
+            id: payment.id,
+            amount: payment.amount,
+            currency: payment.currency,
+            // Use the new ref in the email if it changed.
+            duffelBookingRef: newBookingRef?.trim() || payment.duffelBookingRef,
+            duffelOrderId: newDuffelOrderId?.trim() || payment.duffelOrderId,
+          },
+          trip: labels,
+          customerMessage: customerMessage.trim(),
+          dashboardUrl: `${baseUrl}/trips`,
+          summary: summary.trim(),
+          newBookingRef: newBookingRef?.trim() || null,
+        });
+        await sgMail.send({ to: customer.email, from: { email: fromEmail, name: "Travnr" }, subject, html });
+        console.log(`[admin] booking ${payment.id} edited, customer notified at ${maskEmail(customer.email)}`);
+      }
+    } catch (mailErr) {
+      console.error("[admin] booking edit email failed (non-fatal):", mailErr);
     }
 
     return res.json(updated);

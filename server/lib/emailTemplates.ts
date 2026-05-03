@@ -609,6 +609,129 @@ export function buildTripRequestCustomerEmail(input: TripRequestEmailInput): Ren
   };
 }
 
+// ==================== Admin-actioned booking events (cancel/refund/edit) ====================
+//
+// Sent by the admin dashboard when the concierge team records a cancellation,
+// processes a refund (after issuing it in Stripe), or edits a booking's
+// flight details. All three follow the same envelope shape so they share the
+// trip-summary block and footer styling.
+
+export interface AdminBookingActionEmailInput {
+  user: { email: string; firstName?: string | null; lastName?: string | null };
+  payment: {
+    id: number;
+    amount: string | number;
+    currency: string;
+    duffelBookingRef?: string | null;
+    duffelOrderId?: string | null;
+  };
+  trip: { routeLabel: string; dateLabel: string };
+  // Free-text note the concierge team writes for the customer. Plain text;
+  // we escape and preserve newlines.
+  customerMessage?: string | null;
+  dashboardUrl: string;
+}
+
+function adminActionTripBlock(trip: { routeLabel: string; dateLabel: string }): string {
+  return `
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;margin:14px 0;font-size:14px;color:${TEXT_DARK};">
+      <div><strong>${escapeHtml(trip.routeLabel)}</strong></div>
+      <div style="color:#6b7280;font-size:13px;margin-top:2px;">${escapeHtml(trip.dateLabel)}</div>
+    </div>`;
+}
+
+function adminActionMessageBlock(message: string | null | undefined): string {
+  if (!message || !message.trim()) return "";
+  return `
+    <div style="border-left:3px solid #e5e7eb;padding:8px 14px;margin:14px 0;color:#1f2937;font-size:14px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(message)}</div>`;
+}
+
+export function buildBookingCancelledByAdminEmail(
+  input: AdminBookingActionEmailInput & { reason: string },
+): RenderedEmail {
+  const { user, payment, trip, customerMessage, dashboardUrl, reason } = input;
+  const refLabel = payment.duffelBookingRef
+    ? `<strong style="font-family:monospace;">${escapeHtml(payment.duffelBookingRef)}</strong>`
+    : `payment #${payment.id}`;
+  return {
+    subject: `Your booking has been cancelled — ${payment.duffelBookingRef || `#${payment.id}`}`,
+    html: `
+      <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 20px;">
+        ${brandHeader()}
+        <h2 style="font-size:20px;color:${TEXT_DARK};margin:0 0 12px;">Booking cancelled</h2>
+        <p style="color:#555;font-size:15px;line-height:1.6;">
+          Hi${user.firstName ? `, ${escapeHtml(user.firstName)}` : ""}. Your Travnr booking ${refLabel} has been cancelled by our concierge team.
+        </p>
+        ${adminActionTripBlock(trip)}
+        <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 4px;"><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+        ${adminActionMessageBlock(customerMessage)}
+        <p style="color:#555;font-size:15px;line-height:1.6;">
+          If a refund is owed, you'll receive a separate email when it's processed. Reply to this email if you have any questions.
+        </p>
+        ${ctaButton(dashboardUrl, "View billing")}
+        ${brandFooter()}
+      </div>`,
+  };
+}
+
+export function buildBookingRefundedByAdminEmail(
+  input: AdminBookingActionEmailInput & { refundAmount: string | number; refundCurrency: string; reason: string },
+): RenderedEmail {
+  const { user, payment, trip, customerMessage, dashboardUrl, refundAmount, refundCurrency, reason } = input;
+  const refLabel = payment.duffelBookingRef
+    ? `<strong style="font-family:monospace;">${escapeHtml(payment.duffelBookingRef)}</strong>`
+    : `payment #${payment.id}`;
+  const amountLine = `${Number(refundAmount).toLocaleString()} ${(refundCurrency || "USD").toUpperCase()}`;
+  return {
+    subject: `Refund processed for your booking — ${payment.duffelBookingRef || `#${payment.id}`}`,
+    html: `
+      <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 20px;">
+        ${brandHeader()}
+        <h2 style="font-size:20px;color:${TEXT_DARK};margin:0 0 12px;">Refund processed</h2>
+        <p style="color:#555;font-size:15px;line-height:1.6;">
+          Hi${user.firstName ? `, ${escapeHtml(user.firstName)}` : ""}. We've processed a refund of <strong>${escapeHtml(amountLine)}</strong> for your booking ${refLabel}.
+        </p>
+        ${adminActionTripBlock(trip)}
+        <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 4px;"><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+        ${adminActionMessageBlock(customerMessage)}
+        <p style="color:#555;font-size:15px;line-height:1.6;">
+          The refund will appear on the original payment method within 5–10 business days, depending on your bank.
+        </p>
+        ${ctaButton(dashboardUrl, "View billing")}
+        ${brandFooter()}
+      </div>`,
+  };
+}
+
+export function buildBookingChangedByAdminEmail(
+  input: AdminBookingActionEmailInput & { summary: string; newBookingRef?: string | null },
+): RenderedEmail {
+  const { user, payment, trip, customerMessage, dashboardUrl, summary, newBookingRef } = input;
+  const refLabel = payment.duffelBookingRef
+    ? `<strong style="font-family:monospace;">${escapeHtml(payment.duffelBookingRef)}</strong>`
+    : `payment #${payment.id}`;
+  const newRefBlock = newBookingRef
+    ? `<p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 4px;"><strong>New confirmation code:</strong> <span style="font-family:monospace;">${escapeHtml(newBookingRef)}</span></p>`
+    : "";
+  return {
+    subject: `Your booking has been updated — ${newBookingRef || payment.duffelBookingRef || `#${payment.id}`}`,
+    html: `
+      <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 20px;">
+        ${brandHeader()}
+        <h2 style="font-size:20px;color:${TEXT_DARK};margin:0 0 12px;">Your booking has been updated</h2>
+        <p style="color:#555;font-size:15px;line-height:1.6;">
+          Hi${user.firstName ? `, ${escapeHtml(user.firstName)}` : ""}. Our concierge team has updated your Travnr booking ${refLabel}.
+        </p>
+        ${adminActionTripBlock(trip)}
+        <p style="color:#555;font-size:15px;line-height:1.6;margin:0 0 4px;"><strong>What changed:</strong> ${escapeHtml(summary)}</p>
+        ${newRefBlock}
+        ${adminActionMessageBlock(customerMessage)}
+        ${ctaButton(dashboardUrl, "View my trips")}
+        ${brandFooter()}
+      </div>`,
+  };
+}
+
 // ==================== Sample Data + Catalog (for admin preview/test) ====================
 
 export type EmailTypeId =
