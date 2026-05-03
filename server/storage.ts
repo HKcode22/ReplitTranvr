@@ -75,6 +75,7 @@ export interface IStorage {
   createBlandCall(data: InsertBlandCall): Promise<BlandCall>;
   updateBlandCall(id: number, data: Partial<BlandCall>): Promise<BlandCall | undefined>;
 
+  getUserIdByTravelerProfilePhone(normalizedPhone: string): Promise<string | null>;
   upsertPhoneEmailMap(phone: string, email: string): Promise<PhoneEmailMap | null>;
   getEmailForPhone(phone: string): Promise<string | null>;
   getUserIdByPhone(phone: string): Promise<{ userId: string; source: "phone_traveler_profile" | "phone_bland_calls" | "phone_email_map_to_user" } | null>;
@@ -435,6 +436,20 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(payments.status, "paid"), sql`${payments.duffelOrderId} IS NOT NULL`));
     const n = parseFloat(String(r?.total ?? "0"));
     return Number.isFinite(n) ? n : 0;
+  }
+
+  // Strict lookup: returns the userId of any traveler_profile whose phone
+  // equals the supplied already-normalized E.164 phone string. Used by the
+  // signup path to surface a friendly "Phone number already registered"
+  // error before relying on the DB unique constraint as the final guard.
+  async getUserIdByTravelerProfilePhone(normalizedPhone: string): Promise<string | null> {
+    if (!normalizedPhone) return null;
+    const [row] = await db
+      .select({ userId: travelerProfiles.userId })
+      .from(travelerProfiles)
+      .where(eq(travelerProfiles.phone, normalizedPhone))
+      .limit(1);
+    return row?.userId ?? null;
   }
 
   async upsertPhoneEmailMap(phone: string, email: string): Promise<PhoneEmailMap | null> {

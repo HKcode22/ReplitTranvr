@@ -971,7 +971,10 @@ export async function registerRoutes(
     password: z.string().min(6, "Password must be at least 6 characters"),
     firstName: z.string().min(1, "First name is required"),
     lastName: z.string().min(1, "Last name is required"),
-    phone: z.string().optional(),
+    phone: z.string().min(1, "Phone number is required").refine(
+      (v) => normalizePhoneE164(v) !== null,
+      { message: "Please enter a valid phone number" },
+    ),
     // Optional claim token from guest booking confirmation email — promotes
     // the placeholder user instead of rejecting as duplicate.
     claimToken: z.string().min(8).optional(),
@@ -1001,6 +1004,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });
       }
       const { email, password, firstName, lastName, phone, claimToken } = parsed.data;
+      const normalizedPhone = normalizePhoneE164(phone)!; // schema guarantees non-null
       const existing = await storage.getUserByEmail(email);
       if (existing) {
         // Only allow promoting an unverified placeholder when the caller can
@@ -1016,35 +1020,63 @@ export async function registerRoutes(
           return res.status(400).json({ message: "Email already registered" });
         }
       }
+
+      // Phone uniqueness check: reject if any OTHER user already owns this
+      // normalized phone on their traveler profile. The DB-level unique
+      // partial index is the ultimate guard (covers concurrent signups);
+      // this lookup just gives a clean 400 for the common case.
+      const phoneOwnerUserId = await storage.getUserIdByTravelerProfilePhone(normalizedPhone);
+      if (phoneOwnerUserId && phoneOwnerUserId !== existing?.id) {
+        return res.status(400).json({ message: "Phone number already registered" });
+      }
+
       const hashedPassword = await bcrypt.hash(password, 12);
       const verificationToken = randomBytes(32).toString("hex");
 
       // Either promote the existing placeholder (proven via claimToken) or
       // create a brand new user.
       let user;
-      if (existing) {
-        const updated = await storage.updateUser(existing.id, {
-          password: hashedPassword,
-          firstName,
-          lastName,
-          verificationToken,
-        });
-        user = updated || existing;
-      } else {
-        user = await storage.createUser({
-          email,
-          password: hashedPassword,
-          firstName,
-          lastName,
-          verificationToken,
-        });
-        // Phone (when supplied) is stored on the traveler profile, not users.
-        if (phone) {
+      try {
+        if (existing) {
+          const updated = await storage.updateUser(existing.id, {
+            password: hashedPassword,
+            firstName,
+            lastName,
+            verificationToken,
+          });
+          user = updated || existing;
+          // Promote/refresh phone on the placeholder's profile too. If the
+          // placeholder already owned this phone the upsert is a no-op; if
+          // it owned a different phone, we replace it with the one the user
+          // just confirmed at signup.
           await storage.upsertProfile(user.id, {
             name: [firstName, lastName].filter(Boolean).join(" ") || null,
-            phone,
-          }).catch((e) => console.warn("[register] upsertProfile (phone) failed:", e?.message || e));
+            phone: normalizedPhone,
+          });
+        } else {
+          user = await storage.createUser({
+            email,
+            password: hashedPassword,
+            firstName,
+            lastName,
+            verificationToken,
+          });
+          // Phone is stored on the traveler profile, not users.
+          await storage.upsertProfile(user.id, {
+            name: [firstName, lastName].filter(Boolean).join(" ") || null,
+            phone: normalizedPhone,
+          });
         }
+      } catch (err: any) {
+        // Postgres unique_violation — fired by the partial unique index on
+        // traveler_profiles.phone when two signups race past the lookup
+        // above. Surface the same friendly error.
+        const code = err?.code || err?.cause?.code;
+        const constraint = err?.constraint || err?.cause?.constraint || "";
+        if (code === "23505" && (constraint.includes("phone") || /traveler_profiles_phone/.test(String(err?.message || "")))) {
+          return res.status(400).json({ message: "Phone number already registered" });
+        }
+        throw err;
       }
       await sendVerificationEmail(email, verificationToken, getBaseUrl(req));
 
@@ -1052,10 +1084,17 @@ export async function registerRoutes(
       if (callbackReqs.length > 0) {
         const cb = callbackReqs[0];
         if (cb.phone) {
-          await storage.upsertProfile(user.id, {
-            name: `${firstName} ${lastName}`,
-            phone: cb.phone,
-          });
+          // Best-effort: only overwrite the profile phone if the callback
+          // phone normalizes to the same E.164 the user just registered
+          // with. Otherwise we'd risk hitting the unique-phone index for
+          // an unrelated stale callback row.
+          const cbNormalized = normalizePhoneE164(cb.phone);
+          if (cbNormalized && cbNormalized === normalizedPhone) {
+            await storage.upsertProfile(user.id, {
+              name: `${firstName} ${lastName}`,
+              phone: cbNormalized,
+            }).catch((e) => console.warn("[register] callback phone upsert failed:", e?.message || e));
+          }
         }
 
         if (cb.status === "completed" && cb.transcript) {

@@ -11,6 +11,25 @@ import { Eye, EyeOff, Loader2, Mail, ArrowLeft, KeyRound } from "lucide-react";
 
 import { apiRequest } from "@/lib/queryClient";
 
+// Mirror of server/lib/phone.ts:normalizePhoneE164 so the register form can
+// validate before submit and surface inline errors instead of round-tripping
+// to the server for obviously invalid input.
+function normalizePhoneE164Client(input: string): string | null {
+  if (!input) return null;
+  const cleaned = String(input).replace(/[\s\-().]/g, "");
+  if (!cleaned) return null;
+  if (cleaned.startsWith("+")) {
+    const digits = cleaned.slice(1);
+    if (!/^\d+$/.test(digits) || digits.length < 7 || digits.length > 15) return null;
+    return cleaned;
+  }
+  if (!/^\d+$/.test(cleaned)) return null;
+  if (cleaned.length === 10) return `+1${cleaned}`;
+  if (cleaned.length === 11 && cleaned.startsWith("1")) return `+${cleaned}`;
+  if (cleaned.length >= 7 && cleaned.length <= 15) return `+${cleaned}`;
+  return null;
+}
+
 export default function AuthPage() {
   const search = useSearch();
   const params = new URLSearchParams(search);
@@ -76,12 +95,19 @@ export default function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (mode === "register") {
+      const normalized = normalizePhoneE164Client(form.phone);
+      if (!normalized) {
+        setError("Please enter a valid phone number");
+        return;
+      }
+    }
     setLoading(true);
     try {
       if (mode === "register") {
         const result = await register({
           ...form,
-          phone: form.phone || undefined,
+          phone: form.phone,
           claimToken: claimToken || undefined,
         });
         if (result.needsVerification) {
@@ -277,12 +303,16 @@ export default function AuthPage() {
             </div>
             {mode === "register" && (
               <div>
-                <Label htmlFor="phone">Phone (optional)</Label>
+                <Label htmlFor="phone">Phone</Label>
                 <Input
                   id="phone"
                   type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="+1 555 123 4567"
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  required
                   data-testid="input-phone"
                 />
               </div>
