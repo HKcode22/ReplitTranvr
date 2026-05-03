@@ -1,0 +1,165 @@
+Set up Travnr SMS proposal delivery infrastructure with Twilio, but keep it disabled until A2P approval is complete.
+
+Context:
+Travnr currently sends proposal links by email after a Bland AI call. I want the same proposal flow to support SMS later. When a user calls Travnr, after the proposal is generated, Travnr should be able to text the phone number they called from with a message like “Your Travnr options are ready” and a link to the Travnr proposal page. The proposal page should show the options. When the user chooses an option, it should take them to the Travnr payment/checkout page, same as the email flow.
+
+Important:
+A2P approval is still under review, so do not enable production SMS sending by default. Build the infrastructure now with a feature flag so later I can enable it by setting env vars.
+
+Goals:
+1. Add Twilio SMS infrastructure.
+2. Reuse the existing guest proposal link/page that email uses.
+3. Send SMS to the caller phone number after proposal generation, but only when SMS is enabled.
+4. Keep email sending working exactly as it does now.
+5. Do not create duplicate proposals.
+6. Do not send duplicate SMS messages if the webhook retries.
+7. Make the final activation later very simple.
+
+Files to inspect first:
+- server/routes.ts
+- server/storage.ts
+- server/lib/emailTemplates.ts
+- server/lib/bland.ts
+- server/lib/phone.ts
+- shared/schema.ts
+- package.json
+- any existing proposal, guest proposal, payment, checkout, or Duffel files
+
+Environment variables to support:
+- TWILIO_ACCOUNT_SID
+- TWILIO_AUTH_TOKEN
+- TWILIO_MESSAGING_SERVICE_SID
+- TWILIO_FROM_NUMBER as fallback only if no Messaging Service SID is set
+- SMS_ENABLED=false by default
+- SMS_DRY_RUN=true by default
+- APP_URL or canonical host for proposal links
+
+Implementation requirements:
+
+1. Install and configure Twilio
+- Add the official twilio Node package if it is not already installed.
+- Create server/lib/twilio.ts or server/lib/sms.ts.
+- Export a safe sendSms function.
+- The function should:
+  - normalize the recipient phone number using the existing normalizePhoneE164 helper
+  - refuse to send if SMS_ENABLED is not true
+  - dry-run/log only if SMS_DRY_RUN is true
+  - use TWILIO_MESSAGING_SERVICE_SID when available
+  - otherwise use TWILIO_FROM_NUMBER
+  - never log TWILIO_AUTH_TOKEN
+  - return a structured result: sent, skipped, dryRun, providerMessageId, reason
+
+2. Add SMS proposal message template
+Create a reusable template function, for example buildGuestProposalSms({ proposalUrl }).
+
+SMS copy should be short and compliant:
+“Travnr: Your travel options are ready: <link> Reply STOP to opt out or HELP for help. Msg & data rates may apply.”
+
+Also create optional templates for:
+- booking update
+- payment/checkout reminder
+But do not wire those unless the existing app already has the right events.
+
+3. Wire SMS into guest proposal generation
+Find where guest proposals are created and emailed:
+- storage.createGuestProposal
+- sendGuestProposalEmail
+- generateGuestProposalForInboundCall
+- any outbound guest proposal IIFE or helper
+
+After a guest proposal is successfully created and the proposal URL/token exists:
+- keep sending email exactly as today
+- also attempt SMS only if a valid recipient phone exists and SMS_ENABLED is true
+- recipient should be the phone number the caller used:
+  - inbound: payload.from / payload.phone_number / variables.phone_number
+  - outbound: original call request phone number / blandCall.phone_number
+- if SMS is disabled or dry-run, log clearly and do not error
+- SMS failure should never block email or proposal creation
+
+4. Prevent duplicate SMS on webhook retry
+Bland can retry webhooks. We already have duplicate protection for inbound emails. Add similar protection for SMS.
+Options:
+- best: persist an sms delivery record if there is already a suitable table
+- acceptable for now: in-memory dedupe by proposal token + phone + message type
+- if using in-memory dedupe, add a TODO that it should be persisted later
+
+The dedupe key should look like:
+guest_proposal_ready:<proposalToken>:<normalizedPhone>
+
+5. Make proposal links work
+Use the exact same public proposal URL that the email uses.
+Do not create a separate SMS-only page unless necessary.
+The URL should be canonical:
+- APP_URL if set
+- https://travnr.com in production
+- REPLIT_DEV_DOMAIN in dev if available
+- localhost fallback
+
+The proposal page should already show the flight options.
+Confirm that the proposal page has a clear CTA to choose an option and continue to checkout/payment.
+If the CTA or payment route is not connected, do not fake it. Report exactly what is missing.
+
+6. Payment flow check
+Inspect the existing proposal selection and payment flow.
+Confirm:
+- when a user opens the proposal link, they can view options
+- when they select an option, the app creates/uses the correct payment checkout flow
+- after payment, booking creation still works as currently implemented
+Do not rewrite the payment flow unless broken.
+Do not modify server/lib/stripeClient.ts unless absolutely required, and ask/report first.
+
+7. Inbound caller phone handling
+For inbound calls, make sure generateGuestProposalForInboundCall receives and preserves the caller phone.
+If the inbound call only has `from`, use that.
+Do not use `to` as the recipient because for inbound calls `to` is usually the Travnr number.
+
+8. Consent and compliance guardrails
+Do not send SMS unless:
+- SMS_ENABLED=true
+- recipient phone exists
+- proposal link exists
+- message type is transactional/service-related
+- user has provided phone number through website/app/call flow
+
+Add comments that A2P approval must be complete before production SMS is enabled.
+Do not add marketing SMS.
+Do not send to arbitrary scraped or imported numbers.
+
+9. Logging
+Add logs:
+- [sms] disabled
+- [sms] dry_run
+- [sms] sending proposal_ready
+- [sms] sent providerMessageId=...
+- [sms] skipped reason=...
+- [sms] failed reason=...
+
+Never log auth token.
+Avoid logging full phone number if possible. Mask it like +1******1234.
+
+10. Admin/test endpoint or script
+Create a safe dev-only way to test SMS formatting without sending real messages.
+For example:
+- a dry-run script
+- or an admin route guarded by NODE_ENV !== production
+It should print the final message and target number mask.
+Do not create an unprotected production endpoint that can send SMS.
+
+11. Final report
+After implementation, tell me:
+- exact files changed
+- exact env vars I need to add
+- whether SMS is currently disabled by default
+- how to enable it after A2P approval
+- how to dry-run test it now
+- where in the proposal flow SMS gets triggered
+- whether the existing proposal link already leads to payment correctly
+- any missing pieces before “100% working” SMS-to-payment flow
+
+Constraints:
+- Do not modify shared/schema.ts unless absolutely necessary.
+- Do not modify server/lib/stripeClient.ts unless absolutely necessary.
+- Do not break email proposal delivery.
+- Do not break Bland inbound or outbound webhook flows.
+- Do not send real SMS while SMS_ENABLED is false.
+- Keep this cheap and simple.
