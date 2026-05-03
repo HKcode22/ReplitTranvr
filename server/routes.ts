@@ -44,6 +44,7 @@ import type { GuestProposalData, GuestProposalOption } from "@shared/schema";
 import { getHotelProvider, getAllProviderInfo } from "./lib/hotels";
 import { HotelProviderNotConfiguredError } from "./lib/hotels/types";
 import { rankHotels } from "./lib/hotels/rank";
+import { runHotelSearchForCall } from "./lib/hotels/runHotelSearch";
 import {
   authIpLimiter,
   loginEmailLimiter,
@@ -2767,6 +2768,64 @@ export async function registerRoutes(
     }
   });
 
+  // Hotels Phase 4: read-only admin lookup of recent hotel searches for a
+  // given call request. Returns the search rows only (not options) so the
+  // admin UI can list/select. `sourceRawPayload` lives on options, not on
+  // searches, so nothing PII-sensitive is exposed here.
+  app.get(
+    "/api/admin/hotels/searches",
+    isAuthenticated,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const callRequestIdRaw = req.query.callRequestId;
+        const callRequestId = parseInt(String(callRequestIdRaw ?? ""), 10);
+        if (!Number.isFinite(callRequestId) || callRequestId <= 0) {
+          return res.status(400).json({ message: "callRequestId query param is required" });
+        }
+        const searches = await storage.getHotelSearchesByCallRequest(callRequestId);
+        return res.json({ callRequestId, searches });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to list hotel searches";
+        console.error("[hotels] admin searches list failed:", msg);
+        return res.status(500).json({ message: msg });
+      }
+    },
+  );
+
+  // Hotels Phase 4: read-only admin detail for a single hotel search +
+  // its persisted options. By default we strip the admin-only
+  // `sourceRawPayload` field from each option (it can be huge and contains
+  // raw provider responses). Pass `?raw=true` to include it for deep
+  // debugging — still gated behind requireAdmin.
+  app.get(
+    "/api/admin/hotels/searches/:id",
+    isAuthenticated,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(req.params.id, 10);
+        if (!Number.isFinite(id) || id <= 0) {
+          return res.status(400).json({ message: "Invalid search id" });
+        }
+        const search = await storage.getHotelSearch(id);
+        if (!search) {
+          return res.status(404).json({ message: "Hotel search not found" });
+        }
+        const options = await storage.getHotelOptionsBySearch(id);
+        const includeRaw = String(req.query.raw || "").toLowerCase() === "true";
+        const sanitizedOptions = includeRaw
+          ? options
+          : options.map(({ sourceRawPayload, ...rest }) => rest);
+        return res.json({ search, options: sanitizedOptions });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to load hotel search";
+        console.error("[hotels] admin search detail failed:", msg);
+        return res.status(500).json({ message: msg });
+      }
+    },
+  );
+
   app.get("/api/admin/promo-codes", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
     const list = await storage.listPromoCodes();
     return res.json(list);
@@ -4132,6 +4191,24 @@ export async function registerRoutes(
           });
       }
     }
+
+    // Phase 4 hotel-search hook (inbound). Off by default — only fires when
+    // ENABLE_HOTEL_SEARCH=true. Fire-and-forget, single attempt, never
+    // re-throws. Email/proposal/SMS paths above are completely untouched.
+    // Inbound has no callRequest row (stateless caller) and no userId.
+    if (process.env.ENABLE_HOTEL_SEARCH === "true") {
+      void runHotelSearchForCall({
+        source: "inbound",
+        callRequestId: null,
+        callRequest: null,
+        details,
+        userId: null,
+        proposalId: null,
+        logPrefix: lp,
+      }).catch((err: any) => {
+        console.error(`${lp} [hotels] unexpected throw from runHotelSearchForCall:`, err?.message || err);
+      });
+    }
   }
 
   async function generateProposalFromCall(
@@ -4545,6 +4622,33 @@ export async function registerRoutes(
           );
         }
       })();
+
+      // Phase 4 hotel-search hook (outbound). Off by default — only fires
+      // when ENABLE_HOTEL_SEARCH=true. Fire-and-forget, single attempt,
+      // never re-throws. Runs in parallel with the guest-proposal IIFE
+      // above and the proposal-save / verifier flow below — none of those
+      // paths touch hotel state. proposalId is null here because the
+      // itinerary_proposals row doesn't exist yet at this point in the
+      // flow; we may wire it in a later phase.
+      // Note: the manual /regenerate-proposal endpoint is intentionally NOT
+      // wired in Phase 4 — admins regenerating to fix flight options
+      // shouldn't double-charge the hotel search budget.
+      if (process.env.ENABLE_HOTEL_SEARCH === "true") {
+        void runHotelSearchForCall({
+          source: "outbound",
+          callRequestId,
+          callRequest: callRequest as any,
+          details,
+          userId,
+          proposalId: null,
+          logPrefix: postCallLogPrefix,
+        }).catch((err: any) => {
+          console.error(
+            `${postCallLogPrefix} [hotels] unexpected throw from runHotelSearchForCall:`,
+            err?.message || err,
+          );
+        });
+      }
 
       const diverseOffers: any[] = [];
       const seenAirlines = new Set<string>();
