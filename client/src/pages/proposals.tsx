@@ -40,19 +40,19 @@ export default function ProposalsPage() {
         <div className="space-y-4">
           {proposals.map((proposal) => (
             <Link key={proposal.id} href={`/proposals/${proposal.id}`}>
-              <Card className="p-5 hover-elevate cursor-pointer" data-testid={`card-proposal-${proposal.id}`}>
+              <Card className="p-4 sm:p-5 hover-elevate cursor-pointer" data-testid={`card-proposal-${proposal.id}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0 space-y-2">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium">{proposal.title}</span>
+                      <span className="font-medium break-words min-w-0">{proposal.title}</span>
                       <StatusBadge status={proposal.status} />
                     </div>
                     {proposal.summary && (
                       <p className="text-sm text-muted-foreground line-clamp-2">{proposal.summary}</p>
                     )}
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="font-semibold">${Number(proposal.totalEstimate).toLocaleString()}</span>
-                      <span className="text-muted-foreground">{new Date(proposal.createdAt).toLocaleDateString()}</span>
+                    <div className="flex items-center gap-3 sm:gap-4 text-sm flex-wrap">
+                      <span className="font-semibold tabular-nums whitespace-nowrap">${Number(proposal.totalEstimate).toLocaleString()}</span>
+                      <span className="text-muted-foreground whitespace-nowrap">{new Date(proposal.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
                   <ArrowRight className="w-4 h-4 text-muted-foreground mt-1 shrink-0" />

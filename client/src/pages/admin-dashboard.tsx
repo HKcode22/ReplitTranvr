@@ -713,7 +713,7 @@ export default function AdminDashboardPage() {
       </div>
 
       <Tabs defaultValue="pending">
-        <div className="-mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
+        <div className="-mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto [-webkit-overflow-scrolling:touch]">
           <TabsList className="inline-flex w-max">
           <TabsTrigger value="pending" data-testid="tab-pending">
             Pending Manual {stats?.pendingManual ? <Badge variant="outline" className="ml-2 border-amber-500">{stats.pendingManual}</Badge> : null}

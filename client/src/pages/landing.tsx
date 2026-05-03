@@ -271,7 +271,7 @@ export default function LandingPage() {
         <div className="h-[2px] bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
       </header>
 
-      <section className="relative overflow-hidden py-20 sm:py-28">
+      <section className="relative overflow-hidden py-14 sm:py-20 md:py-28">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-10 left-1/4 w-72 h-72 bg-primary/8 rounded-full blur-3xl animate-pulse" style={{ animationDuration: "4s" }} />
           <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: "6s" }} />
@@ -284,7 +284,7 @@ export default function LandingPage() {
               Your Personal Travel Concierge
             </Badge>
           </div>
-          <h1 className="font-serif text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight mb-6 opacity-0 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
+          <h1 className="font-serif text-3xl sm:text-5xl md:text-6xl font-bold tracking-tight mb-6 opacity-0 animate-fade-in-up break-words" style={{ animationDelay: "0.3s" }}>
             We help you book your{" "}
             <span className="block">
               <TypingAnimation />
@@ -316,9 +316,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="py-20 max-w-6xl mx-auto px-4">
-        <h2 className="font-serif text-3xl sm:text-4xl font-bold text-center mb-4">Like having a travel agent on speed dial</h2>
-        <p className="text-muted-foreground text-center mb-12 max-w-lg mx-auto">See how a typical concierge conversation works</p>
+      <section className="py-14 sm:py-20 max-w-6xl mx-auto px-4">
+        <h2 className="font-serif text-2xl sm:text-3xl md:text-4xl font-bold text-center mb-4">Like having a travel agent on speed dial</h2>
+        <p className="text-muted-foreground text-center mb-8 sm:mb-12 max-w-lg mx-auto">See how a typical concierge conversation works</p>
         <VoiceAnimation />
       </section>
 
@@ -341,20 +341,20 @@ export default function LandingPage() {
       </section>
 
       <section className="py-16 border-t" data-testid="section-stats">
-        <div className="max-w-4xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-          <div className="rounded-xl bg-[hsl(207,50%,97%)] dark:bg-[hsl(210,25%,14%)] border border-[hsl(207,45%,90%)] dark:border-[hsl(210,20%,22%)] p-5" data-testid="stat-availability">
-            <p className="text-3xl font-bold text-primary">24/7</p>
-            <p className="text-sm text-muted-foreground mt-1">Concierge Available</p>
+        <div className="max-w-4xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6 text-center">
+          <div className="rounded-xl bg-[hsl(207,50%,97%)] dark:bg-[hsl(210,25%,14%)] border border-[hsl(207,45%,90%)] dark:border-[hsl(210,20%,22%)] p-4 sm:p-5" data-testid="stat-availability">
+            <p className="text-2xl sm:text-3xl font-bold text-primary tabular-nums">24/7</p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">Concierge Available</p>
           </div>
-          <div className="rounded-xl bg-[hsl(207,50%,97%)] dark:bg-[hsl(210,25%,14%)] border border-[hsl(207,45%,90%)] dark:border-[hsl(210,20%,22%)] p-5" data-testid="stat-airlines">
-            <p className="text-3xl font-bold text-primary">100+</p>
-            <p className="text-sm text-muted-foreground mt-1">Airlines Covered</p>
+          <div className="rounded-xl bg-[hsl(207,50%,97%)] dark:bg-[hsl(210,25%,14%)] border border-[hsl(207,45%,90%)] dark:border-[hsl(210,20%,22%)] p-4 sm:p-5" data-testid="stat-airlines">
+            <p className="text-2xl sm:text-3xl font-bold text-primary tabular-nums">100+</p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">Airlines Covered</p>
           </div>
-          <div className="rounded-xl bg-[hsl(207,50%,97%)] dark:bg-[hsl(210,25%,14%)] border border-[hsl(207,45%,90%)] dark:border-[hsl(210,20%,22%)] p-5" data-testid="stat-pickup">
-            <p className="text-3xl font-bold text-primary">30s</p>
-            <p className="text-sm text-muted-foreground mt-1">Avg. Call Pickup</p>
+          <div className="rounded-xl bg-[hsl(207,50%,97%)] dark:bg-[hsl(210,25%,14%)] border border-[hsl(207,45%,90%)] dark:border-[hsl(210,20%,22%)] p-4 sm:p-5" data-testid="stat-pickup">
+            <p className="text-2xl sm:text-3xl font-bold text-primary tabular-nums">30s</p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">Avg. Call Pickup</p>
           </div>
-          <div className="rounded-xl bg-[hsl(207,50%,97%)] dark:bg-[hsl(210,25%,14%)] border border-[hsl(207,45%,90%)] dark:border-[hsl(210,20%,22%)] p-5" data-testid="stat-rating">
+          <div className="rounded-xl bg-[hsl(207,50%,97%)] dark:bg-[hsl(210,25%,14%)] border border-[hsl(207,45%,90%)] dark:border-[hsl(210,20%,22%)] p-4 sm:p-5" data-testid="stat-rating">
             <div className="flex items-center justify-center gap-0.5">
               {[1,2,3,4,5].map(s => <Star key={s} className="w-5 h-5 text-primary fill-primary" />)}
             </div>

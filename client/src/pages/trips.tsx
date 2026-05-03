@@ -164,7 +164,7 @@ function TripCard({ trip }: { trip: Trip }) {
     <Card id={`trip-${trip.id}`} className="overflow-hidden scroll-mt-20" data-testid={`card-trip-${trip.id}`}>
       <div className="p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className="w-12 h-12 rounded-lg border flex items-center justify-center bg-muted/30 shrink-0 overflow-hidden">
               {carrierLogo ? (
                 <img src={carrierLogo} alt={carrierName} className="w-8 h-8 object-contain" />
@@ -172,9 +172,9 @@ function TripCard({ trip }: { trip: Trip }) {
                 <Plane className="w-6 h-6 text-muted-foreground" />
               )}
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-semibold text-base">
+                <h3 className="font-semibold text-sm sm:text-base break-words min-w-0">
                   {originCity} ({originCode}) <ArrowRight className="w-4 h-4 inline text-muted-foreground" /> {destCity} ({destCode})
                 </h3>
                 <Badge variant={status.variant}>{status.label}</Badge>
@@ -192,13 +192,13 @@ function TripCard({ trip }: { trip: Trip }) {
             </div>
           </div>
           <div className="text-right shrink-0">
-            <div className="font-semibold text-base">
+            <div className="font-semibold text-sm sm:text-base whitespace-nowrap tabular-nums">
               {trip.currency.toUpperCase()} {Number(trip.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </div>
             {trip.bookingReference && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5 justify-end">
-                <Hash className="w-3 h-3" />
-                <span className="font-mono">{trip.bookingReference}</span>
+                <Hash className="w-3 h-3 shrink-0" />
+                <span className="font-mono break-all">{trip.bookingReference}</span>
               </div>
             )}
           </div>
@@ -318,41 +318,41 @@ function TripCardFallback({ trip }: { trip: Trip }) {
   return (
     <Card id={`trip-${trip.id}`} className="p-4 sm:p-5 scroll-mt-20" data-testid={`card-trip-${trip.id}`}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg border flex items-center justify-center bg-muted/30">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="w-12 h-12 rounded-lg border flex items-center justify-center bg-muted/30 shrink-0">
             <Plane className="w-6 h-6 text-muted-foreground" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold">{heading}</h3>
+              <h3 className="font-semibold text-sm sm:text-base break-words min-w-0">{heading}</h3>
               <Badge variant="default">Booked</Badge>
             </div>
             <div className="flex items-center gap-3 text-sm text-muted-foreground mt-0.5 flex-wrap">
               {manual?.departingAt && (
                 <span className="flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5" />
+                  <Calendar className="w-3.5 h-3.5 shrink-0" />
                   {formatDate(manual.departingAt)}
                 </span>
               )}
               {manual && manual.passengerCount > 0 && (
                 <span className="flex items-center gap-1">
-                  <Users className="w-3.5 h-3.5" />
+                  <Users className="w-3.5 h-3.5 shrink-0" />
                   {manual.passengerCount} traveler{manual.passengerCount !== 1 ? "s" : ""}
                 </span>
               )}
               {trip.bookingReference && (
-                <span className="flex items-center gap-1">
-                  <Hash className="w-3.5 h-3.5" />
-                  <span className="font-mono">{trip.bookingReference}</span>
+                <span className="flex items-center gap-1 min-w-0">
+                  <Hash className="w-3.5 h-3.5 shrink-0" />
+                  <span className="font-mono break-all">{trip.bookingReference}</span>
                 </span>
               )}
               <span className="flex items-center gap-1">
-                <Clock className="w-3.5 h-3.5" /> Booked {formatDate(trip.bookedAt)}
+                <Clock className="w-3.5 h-3.5 shrink-0" /> Booked {formatDate(trip.bookedAt)}
               </span>
             </div>
           </div>
         </div>
-        <div className="font-semibold text-right">
+        <div className="font-semibold text-right text-sm sm:text-base whitespace-nowrap tabular-nums shrink-0">
           {trip.currency.toUpperCase()} {Number(trip.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
         </div>
       </div>
@@ -368,8 +368,8 @@ export default function TripsPage() {
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">My Trips</h1>
+        <div className="min-w-0">
+          <h1 className="font-serif text-2xl font-bold">My Trips</h1>
           <p className="text-muted-foreground text-sm mt-1">Your booked flights and travel itineraries</p>
         </div>
         <Link href="/flights">
