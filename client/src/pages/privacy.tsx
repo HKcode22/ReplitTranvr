@@ -154,15 +154,10 @@ export default function PrivacyPage() {
           </p>
 
           <h2>13. Contact Us</h2>
-          <p>For privacy questions or requests, contact us at:</p>
-          <ul>
-            <li>
-              <a href="mailto:hello@travnr.com" data-testid="link-privacy-contact-hello">hello@travnr.com</a> (primary)
-            </li>
-            <li>
-              <a href="mailto:support@travnr.com" data-testid="link-privacy-contact-support">support@travnr.com</a> (support requests)
-            </li>
-          </ul>
+          <p>
+            For privacy questions or requests, contact us at{" "}
+            <a href="mailto:hello@travnr.com" data-testid="link-privacy-contact-hello">hello@travnr.com</a>.
+          </p>
         </div>
       </main>
 

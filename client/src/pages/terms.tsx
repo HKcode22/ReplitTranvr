@@ -158,15 +158,10 @@ export default function TermsPage() {
           </p>
 
           <h2>20. Contact Us</h2>
-          <p>For questions about these Terms or the Services, contact us at:</p>
-          <ul>
-            <li>
-              <a href="mailto:hello@travnr.com" data-testid="link-terms-contact-hello">hello@travnr.com</a> (primary)
-            </li>
-            <li>
-              <a href="mailto:support@travnr.com" data-testid="link-terms-contact-support">support@travnr.com</a> (support requests)
-            </li>
-          </ul>
+          <p>
+            For questions about these Terms or the Services, contact us at{" "}
+            <a href="mailto:hello@travnr.com" data-testid="link-terms-contact-hello">hello@travnr.com</a>.
+          </p>
         </div>
       </main>
 
