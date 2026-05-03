@@ -777,10 +777,14 @@ export function buildGuestProposalEmail(input: GuestProposalEmailInput): Rendere
         </table>
         ${baggageRow}
         ${policyRow}
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;gap:12px;">
-          <div style="font-size:22px;font-weight:700;color:${TEXT_DARK};">${escapeHtml(amount)}</div>
-          <a href="${bookUrl}" style="display:inline-block;background:${BRAND_BLUE};color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;">Book This Flight</a>
-        </div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:16px;border-collapse:collapse;">
+          <tr>
+            <td align="left" valign="middle" style="font-size:22px;font-weight:700;color:${TEXT_DARK};padding:0 12px 0 0;">${escapeHtml(amount)}</td>
+            <td align="right" valign="middle" style="white-space:nowrap;">
+              <a href="${bookUrl}" style="display:inline-block;background:${BRAND_BLUE};color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px;">Book This Flight</a>
+            </td>
+          </tr>
+        </table>
       </div>
     `;
   }).join("");
