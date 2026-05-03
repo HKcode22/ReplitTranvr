@@ -7106,6 +7106,11 @@ export async function registerRoutes(
     z.literal(""),
     z.undefined(),
   ]).optional();
+  // Countries whose residence selection requires a state/province on the
+  // server too (mirrors client/src/lib/countries.ts hasSubdivisions). Kept
+  // intentionally narrow — extend as the product expands to more residence
+  // markets so server validation matches what the UI enforces.
+  const SUBDIVISION_COUNTRIES = new Set(["US", "CA"]);
   const guestConfirmSchema = z.object({
     paymentIntentId: z.string().min(1),
     contact: z.object({
@@ -7119,7 +7124,13 @@ export async function registerRoutes(
       middleName: z.string().optional(),
       lastName: z.string().min(1, "Last name is required"),
       bornOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be YYYY-MM-DD"),
-      gender: z.enum(["m", "f", "x", "u"]).optional().default("u"),
+      // Gender requires an explicit selection — no silent default. The UI
+      // ships an empty placeholder option so users must affirmatively pick
+      // one (m/f/x/u) before submit.
+      gender: z.enum(["m", "f", "x", "u"], {
+        required_error: "Gender is required",
+        invalid_type_error: "Gender is required",
+      }),
       title: z.enum(["mr", "ms", "mrs", "miss", "dr"]).optional().default("mr"),
       residenceCountry: isoCountry,
       residenceState: z.string().optional(),
@@ -7136,6 +7147,46 @@ export async function registerRoutes(
       passportNumber: z.string().optional(),
       passportCountry: z.string().optional(),
       passportExpiry: z.string().optional(),
+    }).superRefine((pax, ctx) => {
+      // Conditional residence-state: required when the residence country has
+      // subdivisions in our picker. Mirrors the client UI gating so the API
+      // can't accept silently-blank state for US/CA residents.
+      if (SUBDIVISION_COUNTRIES.has(pax.residenceCountry) && !pax.residenceState?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["residenceState"],
+          message: "State / province is required for this country",
+        });
+      }
+      // KTN and redress numbers: if a number is supplied, the matching
+      // issuing country must be supplied too (and vice versa) so airline
+      // ops gets a complete pair when forwarded via Duffel order metadata.
+      const pair = (
+        num: string | undefined,
+        country: string | undefined,
+        numField: string,
+        countryField: string,
+        label: string,
+      ) => {
+        const hasNum = !!num?.trim();
+        const hasCountry = !!country?.trim();
+        if (hasNum && !hasCountry) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [countryField],
+            message: `Issuing country is required when ${label} is provided`,
+          });
+        } else if (hasCountry && !hasNum) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [numField],
+            message: `${label} is required when issuing country is provided`,
+          });
+        }
+      };
+      pair(pax.knownTravelerNumber, pax.knownTravelerCountry, "knownTravelerNumber", "knownTravelerCountry", "KTN");
+      pair(pax.redressNumber, pax.redressCountry, "redressNumber", "redressCountry", "Redress number");
+      pair(pax.secondaryRedressNumber, pax.secondaryRedressCountry, "secondaryRedressNumber", "secondaryRedressCountry", "Secondary redress number");
     })).min(1),
   });
 

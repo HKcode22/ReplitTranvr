@@ -70,7 +70,7 @@ interface PassengerForm {
   dobMonth: string;
   dobDay: string;
   dobYear: string;
-  gender: "m" | "f" | "x" | "u";
+  gender: "" | "m" | "f" | "x" | "u";
   title: "mr" | "ms" | "mrs" | "miss" | "dr";
   residenceCountry: string;
   residenceState?: string;
@@ -156,7 +156,7 @@ function emptyPassenger(): PassengerForm {
     dobMonth: "",
     dobDay: "",
     dobYear: "",
-    gender: "u",
+    gender: "",
     title: "mr",
     residenceCountry: "",
     residenceState: "",
@@ -615,13 +615,18 @@ function PassengerCard({
             className={`${SELECT_CLASS} ${errorClass("gender")}`}
             value={passenger.gender}
             onChange={(e) => set("gender", e.target.value as PassengerForm["gender"])}
+            onBlur={() => touch("gender")}
             data-testid={`select-pax-gender-${idx}`}
           >
+            <option value="">Select gender</option>
             <option value="m">Male</option>
             <option value="f">Female</option>
             <option value="x">Non-binary / X</option>
-            <option value="u">Undisclosed</option>
+            <option value="u">Prefer not to say</option>
           </select>
+          {showError("gender") && (
+            <p className="text-xs text-red-600 mt-1">{errors.gender}</p>
+          )}
         </div>
         <div>
           <Label htmlFor={`p-${idx}-title`}>Title</Label>
