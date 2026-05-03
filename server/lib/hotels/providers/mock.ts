@@ -1,6 +1,7 @@
 import {
   HotelProvider,
   HotelProviderCapabilities,
+  HotelProviderInfo,
   HotelSearchRequest,
   HotelOption,
   HotelQuote,
@@ -8,6 +9,26 @@ import {
   HotelBookingResult,
   HotelProviderError,
 } from "../types";
+
+// Phase 3: providerInfo for the mock so the admin comparison endpoint can
+// list all six adapters uniformly.
+export const providerInfo: HotelProviderInfo = {
+  name: "Mock (in-memory)",
+  slug: "mock",
+  status: "production", // production-ready for QA/testing — not for real bookings
+  inventoryType: ["hotels"],
+  regions: ["global"],
+  paymentModel: ["pay_now"],
+  currencies: ["USD"],
+  commissionModel: "n/a",
+  supportsInstantConfirmation: true,
+  certificationRequired: false,
+  estimatedTimeToProduction: "n/a (deterministic mock)",
+  monthlyMinimums: null,
+  requiredEnv: [],
+  docsUrl: "internal",
+  notes: "Deterministic seeded mock used for QA, ranking sanity checks, and Phase 4/5 dry-runs. Never hits a real API.",
+};
 
 // Deterministic mock hotel provider used in Phase 1. Same input always
 // produces the same output so QA can sanity-check ranking changes without

@@ -154,3 +154,24 @@ export class HotelProviderNotConfiguredError extends HotelProviderError {
     this.name = "HotelProviderNotConfiguredError";
   }
 }
+
+// Phase 3: typed metadata block declared next to each adapter. The admin
+// comparison endpoint enumerates these so the team can pick a real
+// provider before any one of them ships a real implementation.
+export interface HotelProviderInfo {
+  name: string; // human-readable
+  slug: string; // matches HOTEL_PROVIDER value
+  status: "stub" | "beta" | "production"; // implementation maturity
+  inventoryType: Array<"hotels" | "vacation_rentals" | "apartments" | "hostels">;
+  regions: string[]; // ISO country codes or "global"
+  paymentModel: Array<"pay_now" | "pay_at_property" | "deposit">;
+  currencies: string[]; // ISO 4217
+  commissionModel: "merchant" | "agency" | "wholesale" | "mixed" | "n/a";
+  supportsInstantConfirmation: boolean;
+  certificationRequired: boolean;
+  estimatedTimeToProduction: string;
+  monthlyMinimums: string | null;
+  requiredEnv: string[]; // env var NAMES only — never values
+  docsUrl: string;
+  notes: string;
+}

@@ -41,7 +41,8 @@ import {
   type GuestProposalEmailOption,
 } from "./lib/emailTemplates";
 import type { GuestProposalData, GuestProposalOption } from "@shared/schema";
-import { getHotelProvider } from "./lib/hotels";
+import { getHotelProvider, getAllProviderInfo } from "./lib/hotels";
+import { HotelProviderNotConfiguredError } from "./lib/hotels/types";
 import { rankHotels } from "./lib/hotels/rank";
 import {
   authIpLimiter,
@@ -2711,19 +2712,52 @@ export async function registerRoutes(
       const echoed = JSON.stringify(request).slice(0, 300);
       console.log(`[hotels] test-search provider=${provider.name} body=${echoed}`);
 
-      const options = await provider.searchHotels(request);
-      const rankedTop = rankHotels(options, request);
+      try {
+        const options = await provider.searchHotels(request);
+        const rankedTop = rankHotels(options, request);
 
-      return res.json({
-        provider: provider.name,
-        configured: provider.isConfigured(),
-        request,
-        options,
-        rankedTop,
-      });
+        return res.json({
+          provider: provider.name,
+          configured: provider.isConfigured(),
+          request,
+          options,
+          rankedTop,
+        });
+      } catch (innerErr) {
+        // Phase 3: real adapters are stubs that throw NotConfiguredError on
+        // every method until a future task implements them. Surface a clear
+        // status to the admin tester instead of a 500.
+        if (innerErr instanceof HotelProviderNotConfiguredError) {
+          return res.status(200).json({
+            provider: provider.name,
+            configured: provider.isConfigured(),
+            request,
+            options: [],
+            rankedTop: [],
+            stubNotImplemented: true,
+            message: innerErr.message,
+          });
+        }
+        throw innerErr;
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Hotel test search failed";
       console.error("[hotels] test-search failed:", msg);
+      return res.status(500).json({ message: msg });
+    }
+  });
+
+  // Hotels Phase 3: admin-only side-by-side comparison of all registered
+  // hotel providers (mock + 5 real stubs). Read-only. Never returns env
+  // values — only env var names from `requiredEnv`.
+  app.get("/api/admin/hotels/providers", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const active = (process.env.HOTEL_PROVIDER || "mock").toLowerCase();
+      const providers = getAllProviderInfo();
+      return res.json({ active, providers });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to list hotel providers";
+      console.error("[hotels] providers list failed:", msg);
       return res.status(500).json({ message: msg });
     }
   });
