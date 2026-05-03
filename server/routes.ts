@@ -957,6 +957,92 @@ function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   return res.status(401).json({ message: "Unauthorized" });
 }
 
+// Routes that perform their own signature/secret verification and must NOT
+// require a CSRF token (third parties can't fetch our cookies). Stripe's
+// webhook is mounted before session middleware in server/index.ts and is
+// therefore already exempt; the Bland endpoints below verify their own
+// payloads upstream and run server-to-server. The internal
+// /api/webhooks/* routes are intentionally NOT listed here — they have
+// no signature verification today, so they get the same CSRF protection
+// as any other state-changing endpoint.
+const CSRF_EXEMPT_PATHS = new Set<string>([
+  "/api/bland/webhook",
+  "/api/bland/inbound",
+  "/api/bland/dynamic-data",
+]);
+
+function parseCookieHeader(header: string | undefined, name: string): string | null {
+  if (!header) return null;
+  const parts = header.split(";");
+  for (const p of parts) {
+    const idx = p.indexOf("=");
+    if (idx < 0) continue;
+    const k = p.slice(0, idx).trim();
+    if (k === name) {
+      try {
+        return decodeURIComponent(p.slice(idx + 1).trim());
+      } catch {
+        return p.slice(idx + 1).trim();
+      }
+    }
+  }
+  return null;
+}
+
+const CSRF_COOKIE_NAME = "csrf_token";
+const CSRF_HEADER_NAME = "x-csrf-token";
+
+function csrfMiddleware(req: Request, res: Response, next: NextFunction) {
+  let token = parseCookieHeader(req.headers.cookie, CSRF_COOKIE_NAME);
+  if (!token) {
+    token = randomBytes(24).toString("hex");
+    res.cookie(CSRF_COOKIE_NAME, token, {
+      httpOnly: false, // intentionally readable by JS — double-submit pattern
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+  }
+  (req as any).csrfToken = token;
+
+  const method = req.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+    return next();
+  }
+  if (CSRF_EXEMPT_PATHS.has(req.path)) {
+    return next();
+  }
+  const headerToken = req.get(CSRF_HEADER_NAME);
+  if (!headerToken || headerToken !== token) {
+    return res.status(403).json({ message: "Invalid CSRF token" });
+  }
+  return next();
+}
+
+// Delete every server-side session row that belongs to a user, optionally
+// keeping the caller's current session alive. Used after password change
+// (keep current device, evict others) and password reset (kick everyone).
+async function destroyOtherSessionsForUser(
+  userId: string,
+  keepSid?: string,
+): Promise<void> {
+  // Intentionally NOT swallowed — callers (password change/reset) must
+  // know if we failed to evict other devices so they don't return a
+  // misleading success that leaves a leaked session alive.
+  if (keepSid) {
+    await pool.query(
+      `DELETE FROM sessions WHERE sess->>'userId' = $1 AND sid <> $2`,
+      [userId, keepSid],
+    );
+  } else {
+    await pool.query(
+      `DELETE FROM sessions WHERE sess->>'userId' = $1`,
+      [userId],
+    );
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -1015,6 +1101,19 @@ export async function registerRoutes(
   // Generic /api fallback limiter — applied first so the per-route stricter
   // limiters below still get the final say (rate-limit shortcut on first hit).
   app.use("/api", genericApiLimiter);
+
+  // CSRF protection for browser-originated state-changing requests. Uses a
+  // double-submit cookie (`csrf_token`) which the React app reads and echoes
+  // back in the `X-CSRF-Token` header on POST/PUT/PATCH/DELETE. Webhooks
+  // listed in CSRF_EXEMPT_PATHS verify their own signatures.
+  app.use(csrfMiddleware);
+
+  // Lets the SPA bootstrap a CSRF token before any mutation. The cookie was
+  // set by the middleware above on this very request; we just echo the value
+  // for clients that prefer reading from the response body.
+  app.get("/api/csrf-token", (req: Request, res: Response) => {
+    res.json({ csrfToken: (req as any).csrfToken });
+  });
 
   // AUTH ROUTES
   app.post("/api/auth/register", authIpLimiter, async (req: Request, res: Response) => {
@@ -1190,12 +1289,20 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/logout", (req: Request, res: Response) => {
-    req.session.destroy((err) => {
-      if (err) return res.status(500).json({ message: "Logout failed" });
-      res.clearCookie("connect.sid");
-      return res.json({ message: "Logged out" });
-    });
+  app.post("/api/auth/logout", async (req: Request, res: Response) => {
+    // Promisify session.destroy so we can await it; clearing the cookie
+    // alone leaves the row in the session store and the sid still valid.
+    try {
+      await new Promise<void>((resolve, reject) => {
+        if (!req.session) return resolve();
+        req.session.destroy((err) => (err ? reject(err) : resolve()));
+      });
+    } catch (err) {
+      console.error("[auth] logout session destroy failed:", err);
+      return res.status(500).json({ message: "Logout failed" });
+    }
+    res.clearCookie("connect.sid", { path: "/" });
+    return res.json({ message: "Logged out" });
   });
 
   app.get("/api/auth/user", async (req: Request, res: Response) => {
@@ -1274,9 +1381,38 @@ export async function registerRoutes(
         passwordResetToken: null,
         passwordResetExpires: null,
       });
+      // Reset is initiated via an email link, so the legitimate user is not
+      // currently logged in here. Drop every active session for this user
+      // so a leaked password can't keep a stolen device signed in.
+      await destroyOtherSessionsForUser(user.id);
       return res.json({ message: "Password has been reset successfully. You can now log in." });
     } catch (error) {
       console.error("Reset password error:", error);
+      return res.status(500).json({ message: "Something went wrong. Please try again." });
+    }
+  });
+
+  app.post("/api/auth/change-password", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const { currentPassword, newPassword } = req.body || {};
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Current and new password are required" });
+      }
+      if (typeof newPassword !== "string" || newPassword.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const valid = await bcrypt.compare(currentPassword, user.password);
+      if (!valid) return res.status(401).json({ message: "Current password is incorrect" });
+      const hashed = await bcrypt.hash(newPassword, 12);
+      await storage.updateUser(user.id, { password: hashed });
+      // Keep the current device logged in, evict every other session for
+      // this user — matches the "log out other devices" expectation.
+      await destroyOtherSessionsForUser(user.id, req.sessionID);
+      return res.json({ message: "Password updated" });
+    } catch (error) {
+      console.error("Change password error:", error);
       return res.status(500).json({ message: "Something went wrong. Please try again." });
     }
   });

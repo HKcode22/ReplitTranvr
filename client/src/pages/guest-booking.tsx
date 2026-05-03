@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { PromoCodeInput, type AppliedPromo } from "@/components/promo-code-input";
+import { ensureCsrfToken } from "@/lib/queryClient";
 
 const BRAND_BLUE = "#2d7abf";
 
@@ -255,9 +256,13 @@ function CheckoutForm({
         return;
       }
 
+      const csrf = await ensureCsrfToken();
       const confirmRes = await fetch(`/api/guest-booking/${encodeURIComponent(data.token)}/confirm`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
         credentials: "include",
         body: JSON.stringify({
           paymentIntentId: pi.id,
@@ -386,12 +391,18 @@ export default function GuestBookingPage() {
     const requestId = ++piRequestIdRef.current;
     const controller = new AbortController();
     setPiLoading(true);
-    fetch(`/api/guest-booking/${encodeURIComponent(data.token)}/payment-intent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(appliedPromo ? { promoCode: appliedPromo.code } : {}),
-      signal: controller.signal,
-    })
+    ensureCsrfToken().then((csrf) =>
+      fetch(`/api/guest-booking/${encodeURIComponent(data.token)}/payment-intent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify(appliedPromo ? { promoCode: appliedPromo.code } : {}),
+        signal: controller.signal,
+      }),
+    )
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
       .then(({ ok, j }) => {
         // Drop the response if a newer request has been issued in the

@@ -1,15 +1,119 @@
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Shield, Lock, Eye, Server, FileCheck, Globe, Users, Database } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Shield, Lock, Eye, Server, FileCheck, Globe, Users, Database, KeyRound, Loader2 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 
 export default function SecurityPage() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError("");
+    if (newPassword.length < 6) {
+      setPasswordError("New password must be at least 6 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      await apiRequest("POST", "/api/auth/change-password", { currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast({
+        title: "Password updated",
+        description: "Other devices have been signed out.",
+      });
+    } catch (err: any) {
+      setPasswordError(err?.message || "Could not update password");
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="font-serif text-2xl font-bold" data-testid="text-security-title">Security & Compliance</h1>
         <p className="text-muted-foreground text-sm mt-1">How we protect your data and ensure your privacy</p>
       </div>
+
+      {user && (
+        <Card className="p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <KeyRound className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h2 className="font-semibold" data-testid="text-change-password-heading">Change Password</h2>
+              <p className="text-sm text-muted-foreground">Updating your password signs out every other device.</p>
+            </div>
+          </div>
+          <Separator />
+          <form onSubmit={handleChangePassword} className="space-y-3">
+            {passwordError && (
+              <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md" data-testid="text-change-password-error">
+                {passwordError}
+              </div>
+            )}
+            <div>
+              <Label htmlFor="current-password">Current password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+                data-testid="input-current-password"
+              />
+            </div>
+            <div>
+              <Label htmlFor="new-password">New password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                minLength={6}
+                data-testid="input-change-new-password"
+              />
+            </div>
+            <div>
+              <Label htmlFor="confirm-new-password">Confirm new password</Label>
+              <Input
+                id="confirm-new-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={6}
+                data-testid="input-confirm-new-password"
+              />
+            </div>
+            <Button type="submit" disabled={savingPassword} data-testid="button-change-password">
+              {savingPassword && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Update password
+            </Button>
+          </form>
+        </Card>
+      )}
 
       <Card className="p-5 space-y-4">
         <div className="flex items-center gap-3">

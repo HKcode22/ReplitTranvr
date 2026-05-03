@@ -1,6 +1,6 @@
-import { createContext, useContext, ReactNode, useState } from "react";
+import { createContext, useContext, ReactNode, useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "./queryClient";
+import { queryClient, apiRequest, ensureCsrfToken } from "./queryClient";
 import type { User } from "@shared/schema";
 import { useLocation } from "wouter";
 
@@ -24,6 +24,13 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [, setLocation] = useLocation();
   const [viewMode, setViewMode] = useState<ViewMode>("admin");
+
+  // Make sure the CSRF cookie is in place before the user clicks anything
+  // mutating. Failure here just logs — the apiRequest helper retries the
+  // fetch on demand if the cookie is still missing.
+  useEffect(() => {
+    ensureCsrfToken().catch((err) => console.warn("[auth] csrf bootstrap failed:", err));
+  }, []);
 
   const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/user"],
