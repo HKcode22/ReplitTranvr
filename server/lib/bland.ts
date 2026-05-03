@@ -107,9 +107,18 @@ export function buildBlandCallConfig(opts: BuildBlandCallConfigOptions): Record<
     model: "enhanced",
     noise_cancellation: true,
     interruption_threshold: 100,
-    endpoint_sensitivity: 0.5,
+    // endpoint_sensitivity: lowered from 0.5 -> 0.35 so Bland waits a beat
+    // longer at the end of the agent's last utterance before triggering
+    // hangup. The previous value clipped the closing word ("Talk soo—")
+    // because the end-call detector fired on the prior pause.
+    endpoint_sensitivity: 0.35,
     end_call_after_speech: true,
-    end_call_phrases: ["GOODBYE", "Safe travels", "have a great trip"],
+    // Single natural end_call_phrase that the model says as part of its
+    // normal closing sentence ("...you'll have your options in your inbox.
+    // Talk soon!"). Folding the trigger into the natural closing avoids the
+    // old "say closing line, then literally say GOODBYE" two-utterance
+    // pattern that produced a stutter-like cutoff between them.
+    end_call_phrases: ["Talk soon"],
     // Bland runs analysis_schema as a SEPARATE post-call LLM pass over the
     // transcript. The live agent never sees these field names, so it can't
     // accidentally read "iata", "null", or any JSON aloud at end of call.
@@ -298,7 +307,7 @@ YOUR ROLE — keep this conversation FAST and EASY. The goal is to learn just en
 3. Ask where they're departing from. Same rules as above — assume the obvious airport for single-airport cities, offer one alternative for multi-airport cities, and only ask for clarification when truly ambiguous.
 4. Ask about their travel dates — departure and (if it's a round trip) return. If they're flexible, that's fine.
 5. Ask ONE casual preferences question, exactly once, in this wording: "Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else?" Listen to whatever they share. If they say no or have nothing to add, just say "Got it" and move on. Do not break this into multiple follow-ups.
-${emailStep}${closingStepNum}. Recap the trip in one sentence ("So that's [origin] to [destination], departing [date], returning [date]"), then say this exact closing line: "Perfect — you'll have your options in your inbox within a minute. Talk soon." Then end the call immediately.
+${emailStep}${closingStepNum}. Recap the trip in one sentence ("So that's [origin] to [destination], departing [date], returning [date]"), pause briefly, and then say ONE single natural closing sentence that ends with the exact words "Talk soon." Use this exact wording: "Perfect — you'll have your options in your inbox within a minute. Talk soon." That's the entire ending — no extra word after "Talk soon."
 
 IMPORTANT RULES:
 - Ask ONE question at a time. Do not stack questions.
@@ -308,6 +317,5 @@ IMPORTANT RULES:
 - The single preferences question in step 5 is the ONLY open-ended preferences ask. Ask it exactly once with the exact wording given. Do not re-ask it, do not break it into separate budget / time-of-day / extras follow-ups, and do not probe further if the traveler says no or gives a brief answer — just acknowledge and continue.
 - For destination and origin, do not grill the traveler about specific airports. Use the assume-and-offer pattern above. Single-airport cities get no airport question at all.
 - Do not invent information. If you don't know something, say you'll look into it.
-- After your spoken closing line, say the word GOODBYE and stop speaking immediately. Do not wait for the user to respond.
-- After saying GOODBYE stop immediately and do not speak another word. Do not say "Thank you for calling." Do not add any filler after GOODBYE. The call ends the moment GOODBYE is spoken.`;
+- The closing line in the final step is the entire ending. Speak it as one calm, natural sentence. Do NOT say the word "goodbye" out loud, do NOT say "Thank you for calling", and do NOT add any extra filler after "Talk soon." The call ends automatically the moment you finish that closing sentence — there is nothing for you to do after it.`;
 }
