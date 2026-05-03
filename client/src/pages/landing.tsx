@@ -105,20 +105,20 @@ function VoiceAnimation() {
   }, []);
 
   return (
-    <Card className="max-w-sm mx-auto bg-[hsl(215,25%,12%)] dark:bg-[hsl(215,25%,8%)] border-[hsl(215,20%,18%)] overflow-visible">
-      <div className="p-4 border-b border-[hsl(215,20%,18%)] flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+    <Card className="w-full max-w-md mx-auto bg-[hsl(215,25%,12%)] dark:bg-[hsl(215,25%,8%)] border-[hsl(215,20%,18%)] overflow-visible">
+      <div className="p-3 sm:p-4 border-b border-[hsl(215,20%,18%)] flex items-center gap-3">
+        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
           <Mic className="w-4 h-4 text-primary" />
         </div>
-        <div>
-          <p className="text-sm font-medium text-white">Travnr Concierge</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-white truncate">Travnr Concierge</p>
           <div className="flex items-center gap-1.5">
-            <div className={`w-1.5 h-1.5 rounded-full ${callStatus === "Call in progress" ? "bg-emerald-400" : "bg-amber-400"}`} />
+            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${callStatus === "Call in progress" ? "bg-emerald-400" : "bg-amber-400"}`} />
             <p className="text-[11px] text-[hsl(210,15%,60%)]">{callStatus}</p>
           </div>
         </div>
       </div>
-      <div className="p-4 space-y-3 min-h-[280px]">
+      <div className="p-3 sm:p-4 space-y-3 min-h-[260px] sm:min-h-[280px]">
         {messages.slice(0, step + 1).map((msg, i) => (
           <div key={i} className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"} animate-fade-in-up`}>
             <div className={`max-w-[80%] rounded-lg px-3 py-2 ${

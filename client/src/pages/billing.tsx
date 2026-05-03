@@ -355,13 +355,13 @@ export default function BillingPage() {
               return (
                 <Card key={payment.id} className="p-4" data-testid={`card-payment-${payment.id}`}>
                   <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                         <Receipt className="w-4 h-4 text-primary" />
                       </div>
-                      <div>
-                        <p className="font-medium">${Number(payment.amount).toLocaleString()} {payment.currency.toUpperCase()}</p>
-                        <p className="text-xs text-muted-foreground">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium tabular-nums">${Number(payment.amount).toLocaleString()} {payment.currency.toUpperCase()}</p>
+                        <p className="text-xs text-muted-foreground break-all">
                           {payment.duffelBookingRef ? `Ref: ${payment.duffelBookingRef}` : payment.proposalId ? `Proposal #${payment.proposalId}` : "Direct booking"}
                           {" "}&middot; {new Date(payment.createdAt).toLocaleDateString()}
                         </p>
