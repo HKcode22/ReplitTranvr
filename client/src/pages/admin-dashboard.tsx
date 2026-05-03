@@ -696,36 +696,506 @@ function UsersTable({ limit }: { limit?: number }) {
   );
 }
 
+// Maps the persisted refundStatus values onto a simple visual lifecycle.
+// "cancelled" and "refunded" are admin-set; "requested"/"approved" are
+// historical customer-initiated refund flows.
+function bookingLifecycleStatus(p: any): { label: string; tone: "booked" | "cancelled" | "refunded" | "refund_requested" } {
+  const rs = p?.refundStatus;
+  if (rs === "cancelled") return { label: "Cancelled", tone: "cancelled" };
+  if (rs === "refunded") return { label: "Refunded", tone: "refunded" };
+  if (rs === "requested" || rs === "approved") return { label: "Refund pending", tone: "refund_requested" };
+  return { label: "Booked", tone: "booked" };
+}
+
+function BookingStatusBadge({ payment }: { payment: any }) {
+  const s = bookingLifecycleStatus(payment);
+  if (s.tone === "cancelled") {
+    return <Badge variant="outline" className="border-red-500 text-red-700 dark:text-red-400" data-testid={`status-${payment.id}`}>Cancelled</Badge>;
+  }
+  if (s.tone === "refunded") {
+    return <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400" data-testid={`status-${payment.id}`}>Refunded</Badge>;
+  }
+  if (s.tone === "refund_requested") {
+    return <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400" data-testid={`status-${payment.id}`}>Refund pending</Badge>;
+  }
+  return <Badge variant="default" data-testid={`status-${payment.id}`}>Booked</Badge>;
+}
+
+// ==================== Admin-action sub-dialogs (cancel / refund / edit) ====================
+//
+// These call the new POST /api/admin/bookings/:id/{cancel|refund|edit} routes.
+// All three invalidate the bookings + payments + stats queries on success so
+// the table immediately reflects the new lifecycle state.
+
+const ADMIN_BOOKING_INVALIDATE_KEYS = [
+  ["/api/admin/bookings"],
+  ["/api/admin/payments"],
+  ["/api/admin/stats"],
+];
+
+function invalidateAdminBookingQueries() {
+  for (const key of ADMIN_BOOKING_INVALIDATE_KEYS) {
+    queryClient.invalidateQueries({ queryKey: key });
+  }
+}
+
+function CancelBookingDialog({ payment, onClose }: { payment: any; onClose: () => void }) {
+  const { toast } = useToast();
+  const [reason, setReason] = useState("");
+  const [customerMessage, setCustomerMessage] = useState("");
+  const [externalRef, setExternalRef] = useState("");
+  const mut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/bookings/${payment.id}/cancel`, {
+        reason: reason.trim(),
+        customerMessage: customerMessage.trim() || undefined,
+        externalCancellationRef: externalRef.trim() || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Booking cancelled", description: "Customer has been notified by email." });
+      invalidateAdminBookingQueries();
+      onClose();
+    },
+    onError: (err: Error) => {
+      const raw = err.message?.replace(/^\d+:\s*/, "") || "Could not cancel booking";
+      let msg = raw;
+      try { msg = JSON.parse(raw).message || raw; } catch {}
+      toast({ title: "Cancel failed", description: msg, variant: "destructive" });
+    },
+  });
+  return (
+    <Dialog open onOpenChange={() => !mut.isPending && onClose()}>
+      <DialogContent className="max-w-lg" data-testid="dialog-cancel-booking">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Badge variant="outline" className="border-red-500 text-red-700 dark:text-red-400">Record-only</Badge>
+            <span>Cancel booking #{payment.id}</span>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            This is record-only — handle the actual airline/Duffel cancellation in their portal first, then log the outcome here. The customer will be emailed and the booking will be hidden from their /trips list.
+          </p>
+          <div>
+            <label className="block text-xs font-medium mb-1">Reason (internal + shown to customer) *</label>
+            <textarea
+              className="w-full border rounded-md p-2 text-sm bg-background"
+              rows={2}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Schedule change — flight no longer operating"
+              data-testid="input-cancel-reason"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Customer message (optional)</label>
+            <textarea
+              className="w-full border rounded-md p-2 text-sm bg-background"
+              rows={3}
+              value={customerMessage}
+              onChange={(e) => setCustomerMessage(e.target.value)}
+              placeholder="Friendly note added to the cancellation email"
+              data-testid="input-cancel-customer-message"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">External cancellation ref (optional)</label>
+            <input
+              className="w-full border rounded-md p-2 text-sm bg-background font-mono"
+              value={externalRef}
+              onChange={(e) => setExternalRef(e.target.value)}
+              placeholder="Airline / Duffel cancellation confirmation"
+              data-testid="input-cancel-external-ref"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={mut.isPending}>Close</Button>
+          <Button
+            variant="destructive"
+            onClick={() => mut.mutate()}
+            disabled={mut.isPending || !reason.trim()}
+            data-testid="button-confirm-cancel"
+          >
+            {mut.isPending ? "Cancelling…" : "Cancel booking"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function RefundBookingDialog({ payment, onClose }: { payment: any; onClose: () => void }) {
+  const { toast } = useToast();
+  const [amount, setAmount] = useState(String(payment.amount ?? ""));
+  const [stripeRefundId, setStripeRefundId] = useState("");
+  const [reason, setReason] = useState("");
+  const [customerMessage, setCustomerMessage] = useState("");
+  const mut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/bookings/${payment.id}/refund`, {
+        amount: amount.trim(),
+        stripeRefundId: stripeRefundId.trim(),
+        reason: reason.trim(),
+        customerMessage: customerMessage.trim() || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Refund recorded", description: "Customer has been notified by email." });
+      invalidateAdminBookingQueries();
+      onClose();
+    },
+    onError: (err: Error) => {
+      const raw = err.message?.replace(/^\d+:\s*/, "") || "Could not record refund";
+      let msg = raw;
+      try { msg = JSON.parse(raw).message || raw; } catch {}
+      toast({ title: "Refund failed", description: msg, variant: "destructive" });
+    },
+  });
+  const amtNum = Number(amount);
+  const amountValid = isFinite(amtNum) && amtNum > 0;
+  return (
+    <Dialog open onOpenChange={() => !mut.isPending && onClose()}>
+      <DialogContent className="max-w-lg" data-testid="dialog-refund-booking">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400">Record-only</Badge>
+            <span>Refund booking #{payment.id}</span>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            <strong>Issue the refund in Stripe first</strong>, then paste the Stripe refund ID (<code className="font-mono">re_…</code>) here. This screen only records the outcome — it does <strong>not</strong> trigger a Stripe refund.
+          </p>
+          <div>
+            <label className="block text-xs font-medium mb-1">
+              Amount ({(payment.currency || "usd").toUpperCase()}) — original charge: {payment.amount} *
+            </label>
+            <input
+              className="w-full border rounded-md p-2 text-sm bg-background font-mono"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+              data-testid="input-refund-amount"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Stripe refund ID *</label>
+            <input
+              className="w-full border rounded-md p-2 text-sm bg-background font-mono"
+              value={stripeRefundId}
+              onChange={(e) => setStripeRefundId(e.target.value)}
+              placeholder="re_1Abc..."
+              data-testid="input-refund-stripe-id"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Reason (internal + shown to customer) *</label>
+            <textarea
+              className="w-full border rounded-md p-2 text-sm bg-background"
+              rows={2}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Cancelled by customer, full refund issued"
+              data-testid="input-refund-reason"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Customer message (optional)</label>
+            <textarea
+              className="w-full border rounded-md p-2 text-sm bg-background"
+              rows={3}
+              value={customerMessage}
+              onChange={(e) => setCustomerMessage(e.target.value)}
+              placeholder="Friendly note added to the refund email"
+              data-testid="input-refund-customer-message"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={mut.isPending}>Close</Button>
+          <Button
+            onClick={() => mut.mutate()}
+            disabled={mut.isPending || !amountValid || !stripeRefundId.trim() || !reason.trim()}
+            data-testid="button-confirm-refund"
+          >
+            {mut.isPending ? "Recording…" : "Record refund"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditBookingDialog({ payment, onClose }: { payment: any; onClose: () => void }) {
+  const { toast } = useToast();
+  const [summary, setSummary] = useState("");
+  const [customerMessage, setCustomerMessage] = useState("");
+  const [newBookingRef, setNewBookingRef] = useState("");
+  const [newDuffelOrderId, setNewDuffelOrderId] = useState("");
+  const mut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/bookings/${payment.id}/edit`, {
+        summary: summary.trim(),
+        customerMessage: customerMessage.trim(),
+        newBookingRef: newBookingRef.trim() || undefined,
+        newDuffelOrderId: newDuffelOrderId.trim() || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Booking updated", description: "Customer has been notified by email." });
+      invalidateAdminBookingQueries();
+      onClose();
+    },
+    onError: (err: Error) => {
+      const raw = err.message?.replace(/^\d+:\s*/, "") || "Could not update booking";
+      let msg = raw;
+      try { msg = JSON.parse(raw).message || raw; } catch {}
+      toast({ title: "Update failed", description: msg, variant: "destructive" });
+    },
+  });
+  return (
+    <Dialog open onOpenChange={() => !mut.isPending && onClose()}>
+      <DialogContent className="max-w-lg" data-testid="dialog-edit-booking">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Badge variant="outline" className="border-blue-500 text-blue-700 dark:text-blue-400">Record-only</Badge>
+            <span>Edit booking #{payment.id}</span>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            Make the actual flight change with the airline/Duffel first, then log a brief summary here. The customer will be emailed.
+          </p>
+          <div>
+            <label className="block text-xs font-medium mb-1">Internal change summary *</label>
+            <textarea
+              className="w-full border rounded-md p-2 text-sm bg-background"
+              rows={2}
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              placeholder="e.g. Outbound moved from 8:00pm to 9:15pm; same airline"
+              data-testid="input-edit-summary"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Customer message (sent in email) *</label>
+            <textarea
+              className="w-full border rounded-md p-2 text-sm bg-background"
+              rows={3}
+              value={customerMessage}
+              onChange={(e) => setCustomerMessage(e.target.value)}
+              placeholder="What you want the customer to read about the change"
+              data-testid="input-edit-customer-message"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">
+              New confirmation code (optional) — current: <span className="font-mono">{payment.duffelBookingRef || "—"}</span>
+            </label>
+            <input
+              className="w-full border rounded-md p-2 text-sm bg-background font-mono"
+              value={newBookingRef}
+              onChange={(e) => setNewBookingRef(e.target.value)}
+              placeholder="Leave blank if unchanged"
+              data-testid="input-edit-booking-ref"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">
+              New Duffel order ID (optional) — current: <span className="font-mono break-all">{payment.duffelOrderId || "—"}</span>
+            </label>
+            <input
+              className="w-full border rounded-md p-2 text-sm bg-background font-mono"
+              value={newDuffelOrderId}
+              onChange={(e) => setNewDuffelOrderId(e.target.value)}
+              placeholder="Leave blank if unchanged"
+              data-testid="input-edit-duffel-order"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={mut.isPending}>Close</Button>
+          <Button
+            onClick={() => mut.mutate()}
+            disabled={mut.isPending || !summary.trim() || !customerMessage.trim()}
+            data-testid="button-confirm-edit"
+          >
+            {mut.isPending ? "Saving…" : "Save change"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// History block summarizing prior admin actions stored on
+// payment.manualBookingDetails (cancellation / refund / edits[]).
+function BookingHistorySection({ payment }: { payment: any }) {
+  const details = (payment.manualBookingDetails || {}) as any;
+  const cancellation = details.cancellation || null;
+  const refund = details.refund || null;
+  const edits: any[] = Array.isArray(details.edits) ? details.edits : [];
+  if (!cancellation && !refund && edits.length === 0) return null;
+  return (
+    <section>
+      <h3 className="text-sm font-semibold mb-2 text-foreground/80">Admin action history</h3>
+      <div className="space-y-2">
+        {cancellation && (
+          <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm" data-testid={`history-cancellation-${payment.id}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <Badge variant="outline" className="border-red-500 text-red-700 dark:text-red-400">Cancelled</Badge>
+              <span className="text-xs text-muted-foreground">{cancellation.at ? new Date(cancellation.at).toLocaleString() : "—"}</span>
+            </div>
+            <div><span className="text-muted-foreground">Reason:</span> {cancellation.reason || "—"}</div>
+            {cancellation.customerMessage && <div className="mt-1 italic text-muted-foreground">"{cancellation.customerMessage}"</div>}
+            {cancellation.externalCancellationRef && <div className="mt-1 text-xs">Ref: <span className="font-mono">{cancellation.externalCancellationRef}</span></div>}
+          </div>
+        )}
+        {refund && (
+          <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm" data-testid={`history-refund-${payment.id}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400">Refunded</Badge>
+              <span className="text-xs text-muted-foreground">{refund.at ? new Date(refund.at).toLocaleString() : "—"}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Amount:</span>{" "}
+              <span className="font-mono">{(refund.currency || "USD").toUpperCase()} {refund.amount}</span>
+            </div>
+            <div className="text-xs">Stripe refund: <span className="font-mono">{refund.stripeRefundId}</span></div>
+            <div className="mt-1"><span className="text-muted-foreground">Reason:</span> {refund.reason || "—"}</div>
+            {refund.customerMessage && <div className="mt-1 italic text-muted-foreground">"{refund.customerMessage}"</div>}
+          </div>
+        )}
+        {edits.map((e, i) => (
+          <div key={i} className="rounded-lg border bg-muted/30 px-3 py-2 text-sm" data-testid={`history-edit-${payment.id}-${i}`}>
+            <div className="flex items-center gap-2 mb-1">
+              <Badge variant="outline" className="border-blue-500 text-blue-700 dark:text-blue-400">Edited</Badge>
+              <span className="text-xs text-muted-foreground">{e.at ? new Date(e.at).toLocaleString() : "—"}</span>
+            </div>
+            <div><span className="text-muted-foreground">Summary:</span> {e.summary || "—"}</div>
+            {e.customerMessage && <div className="mt-1 italic text-muted-foreground">"{e.customerMessage}"</div>}
+            {(e.newBookingRef || e.newDuffelOrderId) && (
+              <div className="mt-1 text-xs space-y-0.5">
+                {e.newBookingRef && <div>New ref: <span className="font-mono">{e.newBookingRef}</span> (was <span className="font-mono">{e.previousBookingRef || "—"}</span>)</div>}
+                {e.newDuffelOrderId && <div>New order: <span className="font-mono break-all">{e.newDuffelOrderId}</span></div>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function BookingDetailsDialog({ payment, onClose }: { payment: any; onClose: () => void }) {
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const isCancelled = payment.refundStatus === "cancelled";
+  const isRefunded = payment.refundStatus === "refunded";
+  // Cannot cancel an already cancelled/refunded booking.
+  // Cannot refund an already refunded booking (but can refund a cancelled one).
+  // Cannot edit a cancelled or refunded booking.
+  const canCancel = !isCancelled && !isRefunded;
+  const canRefund = !isRefunded;
+  const canEdit = !isCancelled && !isRefunded;
+
+  return (
+    <>
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="dialog-booking-details">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
+              <BookingStatusBadge payment={payment} />
+              <span>Booking #{payment.id}</span>
+              {payment.duffelBookingRef && <span className="font-mono text-sm text-muted-foreground">· {payment.duffelBookingRef}</span>}
+            </DialogTitle>
+          </DialogHeader>
+          <BookingCoreSections payment={payment} />
+          <BookingHistorySection payment={payment} />
+          <DialogFooter className="flex-wrap gap-2">
+            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button
+              variant="outline"
+              onClick={() => setEditOpen(true)}
+              disabled={!canEdit}
+              data-testid="button-open-edit"
+              title={!canEdit ? "Cannot edit a cancelled or refunded booking" : undefined}
+            >
+              Edit details
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setRefundOpen(true)}
+              disabled={!canRefund}
+              data-testid="button-open-refund"
+              title={!canRefund ? "Already refunded" : undefined}
+            >
+              Refund
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => setCancelOpen(true)}
+              disabled={!canCancel}
+              data-testid="button-open-cancel"
+              title={!canCancel ? "Already cancelled or refunded" : undefined}
+            >
+              Cancel booking
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {cancelOpen && <CancelBookingDialog payment={payment} onClose={() => setCancelOpen(false)} />}
+      {refundOpen && <RefundBookingDialog payment={payment} onClose={() => setRefundOpen(false)} />}
+      {editOpen && <EditBookingDialog payment={payment} onClose={() => setEditOpen(false)} />}
+    </>
+  );
+}
+
 function BookingsTable({ limit }: { limit?: number }) {
   const { data, isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/bookings"] });
+  const [detailsFor, setDetailsFor] = useState<any>(null);
   if (isLoading) return <Skeleton className="h-32 w-full" />;
   if (!data || data.length === 0) return <Card className="p-6 text-center text-muted-foreground">No bookings yet.</Card>;
   const rows = limit ? data.slice(0, limit) : data.slice(0, 50);
   return (
-    <Card className="divide-y">
-      {rows.map((p) => {
-        const isManual = !p.duffelOrderId;
-        return (
-          <div key={p.id} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`booking-row-${p.id}`}>
-            <div className="min-w-0">
-              <div className="text-sm font-medium">{p.user?.email || p.userId}</div>
-              <div className="text-xs text-muted-foreground">
-                {p.currency?.toUpperCase()} {p.amount} · {new Date(p.createdAt).toLocaleString()}
-                {p.duffelBookingRef && <> · Ref <span className="font-mono">{p.duffelBookingRef}</span></>}
+    <>
+      <Card className="divide-y">
+        {rows.map((p) => {
+          const isManual = !p.duffelOrderId;
+          return (
+            <div
+              key={p.id}
+              className="p-3 flex items-center justify-between gap-3 flex-wrap hover-elevate cursor-pointer"
+              data-testid={`booking-row-${p.id}`}
+              onClick={() => setDetailsFor(p)}
+            >
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{p.user?.email || p.userId}</div>
+                <div className="text-xs text-muted-foreground">
+                  {p.currency?.toUpperCase()} {p.amount} · {new Date(p.createdAt).toLocaleString()}
+                  {p.duffelBookingRef && <> · Ref <span className="font-mono">{p.duffelBookingRef}</span></>}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {isManual && (
+                  <Badge variant="outline" className="text-[10px]" data-testid={`badge-manual-${p.id}`}>
+                    Manual
+                  </Badge>
+                )}
+                <BookingStatusBadge payment={p} />
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {isManual && (
-                <Badge variant="outline" className="text-[10px]" data-testid={`badge-manual-${p.id}`}>
-                  Manual
-                </Badge>
-              )}
-              <Badge variant="default">Booked</Badge>
-            </div>
-          </div>
-        );
-      })}
-    </Card>
+          );
+        })}
+      </Card>
+      {detailsFor && <BookingDetailsDialog payment={detailsFor} onClose={() => setDetailsFor(null)} />}
+    </>
   );
 }
 

@@ -4677,6 +4677,16 @@ export async function registerRoutes(
     if (payment.refundStatus === "refunded") {
       return res.status(400).json({ message: "This booking has already been refunded" });
     }
+    // Defense-in-depth: prevent recording a refund larger than the original
+    // charge. Stripe itself enforces this on the actual refund, but since
+    // this endpoint only logs the outcome, an admin typo could otherwise
+    // misrepresent what was refunded in our records / customer email.
+    const originalAmt = Number(payment.amount);
+    if (isFinite(originalAmt) && amtNum > originalAmt + 0.005) {
+      return res.status(400).json({
+        message: `Refund amount (${amtNum.toFixed(2)}) exceeds the original charge (${originalAmt.toFixed(2)}).`,
+      });
+    }
 
     const existingDetails = (payment.manualBookingDetails || {}) as Record<string, unknown>;
     const refundRecord = {
