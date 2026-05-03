@@ -269,9 +269,9 @@ function DuffelBalanceCard() {
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center justify-between gap-3 min-w-0">
               <div
-                className={`${valueSizeClass(formatUSD(data.estimated))} font-bold whitespace-nowrap tabular-nums ${t.value}`}
+                className={`${valueSizeClass(formatUSD(data.estimated))} font-bold whitespace-nowrap tabular-nums ${t.value} min-w-0`}
                 data-testid="text-balance-estimated"
               >
                 {formatUSD(data.estimated)}
@@ -279,7 +279,7 @@ function DuffelBalanceCard() {
               <button
                 type="button"
                 onClick={startEdit}
-                className="text-muted-foreground hover:text-foreground transition-colors shrink-0 p-0.5 rounded-sm hover:bg-muted"
+                className="text-muted-foreground hover:text-foreground transition-colors shrink-0 p-1 rounded-md hover:bg-muted -mr-1"
                 data-testid="button-edit-balance"
                 aria-label="Edit balance"
                 title="Edit balance"
