@@ -2689,9 +2689,10 @@ export async function registerRoutes(
     neighborhood: z.string().trim().min(1).max(120).optional(),
     hotelType: z.string().trim().min(1).max(40).optional(),
     starRatingMin: z.number().min(1).max(5).optional(),
-    // `provider` is intentionally omitted: provider selection is driven by
-    // the HOTEL_PROVIDER env var via getHotelProvider() so the admin
-    // endpoint mirrors what production code would actually use.
+    // Phase 1 only knows the mock provider, so this field is accepted for
+    // API-contract completeness but ignored — selection is driven by the
+    // HOTEL_PROVIDER env via getHotelProvider(). Phase 3 will honor it.
+    provider: z.string().trim().min(1).max(40).optional(),
   });
 
   app.post("/api/admin/hotels/test-search", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
