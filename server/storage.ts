@@ -95,19 +95,13 @@ export interface IStorage {
   createHotelSearch(data: InsertHotelSearch): Promise<HotelSearch>;
   getHotelSearch(id: number): Promise<HotelSearch | undefined>;
   getHotelSearchesByCallRequest(callRequestId: number): Promise<HotelSearch[]>;
-  updateHotelSearchStatus(
-    id: number,
-    data: Partial<Pick<HotelSearch, "status" | "errorMessage" | "rawProviderPayloadTruncated" | "completedAt">>,
-  ): Promise<HotelSearch | undefined>;
+  updateHotelSearchStatus(id: number, status: string, errorMessage?: string): Promise<void>;
   bulkCreateHotelOptions(rows: InsertHotelOption[]): Promise<HotelOption[]>;
   getHotelOptionsBySearch(searchId: number): Promise<HotelOption[]>;
   getHotelOption(id: number): Promise<HotelOption | undefined>;
   createHotelBooking(data: InsertHotelBooking): Promise<HotelBooking>;
   getHotelBooking(id: number): Promise<HotelBooking | undefined>;
-  updateHotelBookingStatus(
-    id: number,
-    data: Partial<Pick<HotelBooking, "status" | "providerBookingId" | "confirmationNumber" | "totalCharged" | "currency" | "errorMessage" | "paymentId">>,
-  ): Promise<HotelBooking | undefined>;
+  updateHotelBookingStatus(id: number, status: string, fields?: Partial<HotelBooking>): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -693,12 +687,15 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(hotelSearches.createdAt));
   }
 
-  async updateHotelSearchStatus(
-    id: number,
-    data: Partial<Pick<HotelSearch, "status" | "errorMessage" | "rawProviderPayloadTruncated" | "completedAt">>,
-  ): Promise<HotelSearch | undefined> {
-    const [row] = await db.update(hotelSearches).set(data).where(eq(hotelSearches.id, id)).returning();
-    return row;
+  // Status transitions also stamp `completed_at` for the terminal states
+  // (`completed`, `failed`, `partial`) so callers don't have to remember to
+  // set it themselves. `pending` leaves `completed_at` untouched.
+  async updateHotelSearchStatus(id: number, status: string, errorMessage?: string): Promise<void> {
+    const isTerminal = status === "completed" || status === "failed" || status === "partial";
+    const patch: Partial<HotelSearch> = { status };
+    if (errorMessage !== undefined) patch.errorMessage = errorMessage;
+    if (isTerminal) patch.completedAt = new Date();
+    await db.update(hotelSearches).set(patch).where(eq(hotelSearches.id, id));
   }
 
   async bulkCreateHotelOptions(rows: InsertHotelOption[]): Promise<HotelOption[]> {
@@ -725,16 +722,16 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateHotelBookingStatus(
-    id: number,
-    data: Partial<Pick<HotelBooking, "status" | "providerBookingId" | "confirmationNumber" | "totalCharged" | "currency" | "errorMessage" | "paymentId">>,
-  ): Promise<HotelBooking | undefined> {
-    const [row] = await db
+  // `fields` lets callers patch additional columns (provider IDs, totals,
+  // error messages, payment link) in the same write. `id`, `createdAt`, and
+  // `updatedAt` are stripped from `fields` to prevent accidental clobbering;
+  // `updatedAt` is always bumped to now.
+  async updateHotelBookingStatus(id: number, status: string, fields?: Partial<HotelBooking>): Promise<void> {
+    const { id: _ignoredId, createdAt: _ignoredCreated, updatedAt: _ignoredUpdated, ...safeFields } = (fields ?? {}) as Partial<HotelBooking>;
+    await db
       .update(hotelBookings)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(hotelBookings.id, id))
-      .returning();
-    return row;
+      .set({ ...safeFields, status, updatedAt: new Date() })
+      .where(eq(hotelBookings.id, id));
   }
 }
 
