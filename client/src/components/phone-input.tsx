@@ -81,7 +81,11 @@ export function PhoneInput({ value, onChange, placeholder, "data-testid": testId
   return (
     <div className="flex gap-2">
       <Select value={countryCode} onValueChange={handleCodeChange}>
-        <SelectTrigger className="w-[90px] shrink-0" data-testid={testId ? `${testId}-code` : undefined}>
+        <SelectTrigger
+          className="w-[90px] shrink-0"
+          data-testid={testId ? `${testId}-code` : undefined}
+          aria-label="Country code"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -93,10 +97,14 @@ export function PhoneInput({ value, onChange, placeholder, "data-testid": testId
         </SelectContent>
       </Select>
       <Input
+        type="tel"
+        inputMode="tel"
+        autoComplete="tel-national"
         value={number}
         onChange={(e) => handleNumberChange(e.target.value)}
         placeholder={placeholder || "555 123 4567"}
         data-testid={testId}
+        aria-label="Phone number"
       />
     </div>
   );

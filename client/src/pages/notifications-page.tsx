@@ -92,8 +92,8 @@ export default function NotificationsPage() {
                   <div className="flex items-center gap-1 shrink-0">
                     {notif.linkUrl && (
                       <Link href={notif.linkUrl}>
-                        <Button variant="ghost" size="icon" data-testid={`button-view-notification-${notif.id}`}>
-                          <ExternalLink className="w-3 h-3" />
+                        <Button variant="ghost" size="icon" data-testid={`button-view-notification-${notif.id}`} aria-label="View notification">
+                          <ExternalLink className="w-3 h-3" aria-hidden="true" />
                         </Button>
                       </Link>
                     )}
@@ -103,8 +103,9 @@ export default function NotificationsPage() {
                         size="icon"
                         onClick={() => markReadMutation.mutate(notif.id)}
                         data-testid={`button-mark-read-${notif.id}`}
+                        aria-label="Mark notification as read"
                       >
-                        <Check className="w-3 h-3" />
+                        <Check className="w-3 h-3" aria-hidden="true" />
                       </Button>
                     )}
                   </div>

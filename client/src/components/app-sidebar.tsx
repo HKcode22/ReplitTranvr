@@ -99,8 +99,8 @@ export function AppSidebar() {
             <p className="text-sm font-medium truncate" data-testid="text-sidebar-name">{user?.firstName} {user?.lastName}</p>
             <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => logout()} data-testid="button-logout">
-            <LogOut className="w-4 h-4" />
+          <Button variant="ghost" size="icon" onClick={() => logout()} data-testid="button-logout" aria-label="Log out" title="Log out">
+            <LogOut className="w-4 h-4" aria-hidden="true" />
           </Button>
         </div>
       </SidebarFooter>

@@ -948,12 +948,13 @@ export default function FlightSearchPage() {
                     onClick={() => setPassengerCount((c) => Math.max(1, c - 1))}
                     disabled={passengerCount <= 1}
                     data-testid="button-decrease-passengers"
+                    aria-label="Decrease traveler count"
                   >
-                    <Minus className="w-4 h-4" />
+                    <Minus className="w-4 h-4" aria-hidden="true" />
                   </Button>
                   <div className="flex items-center gap-1.5 min-w-[60px] justify-center">
-                    <Users className="w-4 h-4 text-muted-foreground" />
-                    <span className="font-medium" data-testid="text-passenger-count">{passengerCount}</span>
+                    <Users className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                    <span className="font-medium" data-testid="text-passenger-count" aria-live="polite" aria-label={`${passengerCount} traveler${passengerCount === 1 ? "" : "s"}`}>{passengerCount}</span>
                   </div>
                   <Button
                     type="button"
@@ -962,8 +963,9 @@ export default function FlightSearchPage() {
                     onClick={() => setPassengerCount((c) => Math.min(9, c + 1))}
                     disabled={passengerCount >= 9}
                     data-testid="button-increase-passengers"
+                    aria-label="Increase traveler count"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="w-4 h-4" aria-hidden="true" />
                   </Button>
                 </div>
               </div>

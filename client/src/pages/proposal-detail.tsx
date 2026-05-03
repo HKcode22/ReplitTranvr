@@ -544,8 +544,8 @@ function UpdateFlightPreferences({ proposal, item, onUpdated }: { proposal: Prop
     <div className="mt-3 rounded-md border p-4 bg-muted/20 space-y-3" data-testid={`panel-update-prefs-${item.id}`}>
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">Update flight preferences</h4>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setExpanded(false)}>
-          <X className="w-4 h-4" />
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setExpanded(false)} aria-label="Close preferences panel">
+          <X className="w-4 h-4" aria-hidden="true" />
         </Button>
       </div>
 
@@ -578,12 +578,12 @@ function UpdateFlightPreferences({ proposal, item, onUpdated }: { proposal: Prop
         <div>
           <label className="text-xs font-medium mb-1.5 block">Passengers</label>
           <div className="flex items-center gap-1.5">
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setPassengerCount((c) => Math.max(1, c - 1))} disabled={passengerCount <= 1}>
-              <Minus className="w-3 h-3" />
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setPassengerCount((c) => Math.max(1, c - 1))} disabled={passengerCount <= 1} aria-label="Decrease passenger count">
+              <Minus className="w-3 h-3" aria-hidden="true" />
             </Button>
-            <span className="w-6 text-center text-sm font-medium">{passengerCount}</span>
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setPassengerCount((c) => Math.min(9, c + 1))} disabled={passengerCount >= 9}>
-              <Plus className="w-3 h-3" />
+            <span className="w-6 text-center text-sm font-medium" aria-live="polite">{passengerCount}</span>
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setPassengerCount((c) => Math.min(9, c + 1))} disabled={passengerCount >= 9} aria-label="Increase passenger count">
+              <Plus className="w-3 h-3" aria-hidden="true" />
             </Button>
           </div>
         </div>
@@ -1144,10 +1144,11 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
             onClick={() => adjustPassengerCount(desiredPassengerCount - 1)}
             disabled={desiredPassengerCount <= 1}
             data-testid="button-decrease-passengers"
+            aria-label="Decrease passenger count"
           >
-            <Minus className="w-4 h-4" />
+            <Minus className="w-4 h-4" aria-hidden="true" />
           </Button>
-          <span className="text-xl font-semibold w-8 text-center" data-testid="text-passenger-count">{desiredPassengerCount}</span>
+          <span className="text-xl font-semibold w-8 text-center" data-testid="text-passenger-count" aria-live="polite">{desiredPassengerCount}</span>
           <Button
             type="button"
             variant="outline"
@@ -1155,8 +1156,9 @@ function ProposalCheckout({ proposal, selectedItem, onCancel }: { proposal: Prop
             onClick={() => adjustPassengerCount(desiredPassengerCount + 1)}
             disabled={desiredPassengerCount >= 9}
             data-testid="button-increase-passengers"
+            aria-label="Increase passenger count"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-4 h-4" aria-hidden="true" />
           </Button>
           <span className="text-sm text-muted-foreground ml-2">traveler{desiredPassengerCount > 1 ? "s" : ""}</span>
         </div>

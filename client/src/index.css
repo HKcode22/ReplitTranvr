@@ -287,6 +287,21 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-pulse,
+  .animate-waveform,
+  .animate-blink-caret,
+  .animate-spin {
+    animation: none !important;
+  }
+}
+
 [class*="replit"] iframe[src*="replit"],
 #replit-badge,
 a[href*="replit.com/badge"],

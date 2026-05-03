@@ -45,18 +45,18 @@ function TypingAnimation() {
   return (
     <span className="text-primary">
       {text}
-      <span className="animate-blink-caret border-r-2 border-primary ml-0.5">&nbsp;</span>
+      <span className="animate-blink-caret motion-reduce:animate-none border-r-2 border-primary ml-0.5" aria-hidden="true">&nbsp;</span>
     </span>
   );
 }
 
 function WaveformBars({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5" aria-hidden="true">
       {[0, 1, 2, 3, 4].map((i) => (
         <div
           key={i}
-          className="w-0.5 bg-emerald-400 rounded-full animate-waveform"
+          className="w-0.5 bg-emerald-400 rounded-full animate-waveform motion-reduce:animate-none"
           style={{ animationDelay: `${i * 0.12}s`, height: "8px" }}
         />
       ))}
@@ -104,20 +104,31 @@ function VoiceAnimation() {
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, []);
 
+  const visibleMessages = messages.slice(0, step + 1);
+  const lastVisible = visibleMessages[visibleMessages.length - 1];
+  const liveSummary = lastVisible
+    ? `${lastVisible.from === "travnr" ? "Concierge" : "Caller"} said: ${lastVisible.text}`
+    : callStatus;
+
   return (
-    <Card className="w-full max-w-md mx-auto bg-[hsl(215,25%,12%)] dark:bg-[hsl(215,25%,8%)] border-[hsl(215,20%,18%)] overflow-visible">
+    <Card
+      className="w-full max-w-md mx-auto bg-[hsl(215,25%,12%)] dark:bg-[hsl(215,25%,8%)] border-[hsl(215,20%,18%)] overflow-visible"
+      role="region"
+      aria-label="Sample concierge call demo"
+    >
       <div className="p-3 sm:p-4 border-b border-[hsl(215,20%,18%)] flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0" aria-hidden="true">
           <Mic className="w-4 h-4 text-primary" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-white truncate">Travnr Concierge</p>
           <div className="flex items-center gap-1.5">
-            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${callStatus === "Call in progress" ? "bg-emerald-400" : "bg-amber-400"}`} />
+            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${callStatus === "Call in progress" ? "bg-emerald-400" : "bg-amber-400"}`} aria-hidden="true" />
             <p className="text-[11px] text-[hsl(210,15%,60%)]">{callStatus}</p>
           </div>
         </div>
       </div>
+      <div className="sr-only" aria-live="polite" aria-atomic="true">{liveSummary}</div>
       <div className="p-3 sm:p-4 space-y-3 min-h-[260px] sm:min-h-[280px]">
         {messages.slice(0, step + 1).map((msg, i) => (
           <div key={i} className={`flex ${msg.from === "user" ? "justify-end" : "justify-start"} animate-fade-in-up`}>
@@ -273,8 +284,8 @@ export default function LandingPage() {
 
       <section className="relative overflow-hidden py-14 sm:py-20 md:py-28">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-10 left-1/4 w-72 h-72 bg-primary/8 rounded-full blur-3xl animate-pulse" style={{ animationDuration: "4s" }} />
-          <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: "6s" }} />
+          <div className="absolute top-10 left-1/4 w-72 h-72 bg-primary/8 rounded-full blur-3xl animate-pulse motion-reduce:animate-none" style={{ animationDuration: "4s" }} aria-hidden="true" />
+          <div className="absolute bottom-10 right-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse motion-reduce:animate-none" style={{ animationDuration: "6s" }} aria-hidden="true" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/3 rounded-full blur-[100px]" />
         </div>
         <div className="max-w-3xl mx-auto px-4 text-center relative z-10">

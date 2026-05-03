@@ -217,8 +217,9 @@ export default function BillingPage() {
                         onClick={() => setDefaultMutation.mutate(card.id)}
                         disabled={setDefaultMutation.isPending}
                         data-testid={`button-set-default-${card.id}`}
+                        aria-label={`Set card ending in ${card.lastFour} as default`}
                       >
-                        <Star className="w-4 h-4" />
+                        <Star className="w-4 h-4" aria-hidden="true" />
                       </Button>
                     )}
                     <Button
@@ -227,8 +228,9 @@ export default function BillingPage() {
                       onClick={() => deleteCardMutation.mutate(card.id)}
                       disabled={deleteCardMutation.isPending}
                       data-testid={`button-delete-card-${card.id}`}
+                      aria-label={`Remove card ending in ${card.lastFour}`}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>

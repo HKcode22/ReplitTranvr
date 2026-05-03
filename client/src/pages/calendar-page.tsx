@@ -75,12 +75,12 @@ export default function CalendarPage() {
 
       <Card className="p-5">
         <div className="flex items-center justify-between gap-2 mb-4">
-          <Button variant="ghost" size="icon" onClick={prev} data-testid="button-prev-month">
-            <ChevronLeft className="w-4 h-4" />
+          <Button variant="ghost" size="icon" onClick={prev} data-testid="button-prev-month" aria-label="Previous month">
+            <ChevronLeft className="w-4 h-4" aria-hidden="true" />
           </Button>
-          <h2 className="font-semibold" data-testid="text-calendar-month">{monthName}</h2>
-          <Button variant="ghost" size="icon" onClick={next} data-testid="button-next-month">
-            <ChevronRight className="w-4 h-4" />
+          <h2 className="font-semibold" data-testid="text-calendar-month" aria-live="polite" aria-atomic="true">{monthName}</h2>
+          <Button variant="ghost" size="icon" onClick={next} data-testid="button-next-month" aria-label="Next month">
+            <ChevronRight className="w-4 h-4" aria-hidden="true" />
           </Button>
         </div>
 
