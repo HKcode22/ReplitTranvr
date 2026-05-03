@@ -300,9 +300,7 @@ export function buildBookingConfirmationEmail(input: BookingConfirmationEmailInp
           <h3 style="margin:0 0 8px;font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Total Charged</h3>
           <p style="margin:0;font-size:18px;font-weight:600;color:${TEXT_DARK};">${Number(input.amount).toLocaleString()} ${(input.currency || "USD").toUpperCase()}</p>
         </div>
-        <div style="text-align:center;margin:24px 0;">
-          <a href="${input.dashboardUrl}" style="display:inline-block;background:${BRAND_BLUE};color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">View on your dashboard</a>
-        </div>
+        ${ctaButton(input.dashboardUrl, "View on your dashboard")}
         <p style="color:#555;font-size:14px;line-height:1.6;">
           Need to make a change? Reply to this email and we'll take care of it.
         </p>
@@ -433,9 +431,7 @@ export function buildManualBookingConfirmationEmail(input: ManualBookingConfirma
 
         ${input.notes ? `<div style="border:1px dashed #d1d5db;border-radius:8px;padding:14px 16px;margin-bottom:24px;color:#374151;font-size:13px;line-height:1.6;"><strong style="color:${TEXT_DARK};">Note from your concierge:</strong> ${escapeHtml(input.notes)}</div>` : ""}
 
-        <div style="text-align:center;margin:24px 0;">
-          <a href="${input.dashboardUrl}" style="display:inline-block;background:${BRAND_BLUE};color:white;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px;">View in your dashboard</a>
-        </div>
+        ${ctaButton(input.dashboardUrl, "View in your dashboard")}
 
         <p style="color:${TEXT_DARK};font-size:14px;line-height:1.6;margin:24px 0 8px;">Safe travels,<br/>The Travnr team</p>
       </div>
