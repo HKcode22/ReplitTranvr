@@ -357,7 +357,7 @@ function CheckoutForm({
   contact: { firstName: string; lastName: string; email: string; phone: string };
   passengers: PassengerForm[];
   appliedPromo: AppliedPromo | null;
-  onShowAllErrors: () => void;
+  onShowAllErrors: (next: boolean) => void;
   onResult: (status: "confirmed" | "pending_manual", bookingRef?: string | null) => void;
 }) {
   const stripe = useStripe();
@@ -385,7 +385,7 @@ function CheckoutForm({
     if (firstError != null) {
       // Reveal every required-field error inline (across every passenger card)
       // so the user doesn't have to blur each input one by one.
-      onShowAllErrors();
+      onShowAllErrors(true);
       toast({
         title: `Passenger ${(firstErrorPaxIdx ?? 0) + 1} is incomplete`,
         description: firstError,
@@ -393,6 +393,9 @@ function CheckoutForm({
       });
       return;
     }
+    // Validation passed — clear the bulk-reveal flag so subsequent edits
+    // fall back to the gentler per-field touched-state behavior.
+    onShowAllErrors(false);
 
     setSubmitting(true);
     try {
@@ -1261,7 +1264,7 @@ export default function GuestBookingPage() {
                       contact={contact}
                       passengers={passengers}
                       appliedPromo={appliedPromo}
-                      onShowAllErrors={() => setShowAllErrors(true)}
+                      onShowAllErrors={(next) => setShowAllErrors(next)}
                       onResult={(status, bookingRef) => setDone({ status, bookingRef })}
                     />
                   </Elements>
