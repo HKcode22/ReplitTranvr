@@ -12,7 +12,8 @@ import { PromoCodeInput, type AppliedPromo } from "@/components/promo-code-input
 import { ensureCsrfToken } from "@/lib/queryClient";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { trackEvent } from "@/lib/analytics";
-import { COUNTRIES, STATES_BY_COUNTRY, hasSubdivisions } from "@/lib/countries";
+import { STATES_BY_COUNTRY, hasSubdivisions } from "@/lib/countries";
+import { CountryCombobox } from "@/components/country-combobox";
 
 const BRAND_BLUE = "#2d7abf";
 
@@ -307,12 +308,14 @@ function CheckoutForm({
   contact,
   passengers,
   appliedPromo,
+  onShowAllErrors,
   onResult,
 }: {
   data: OptionResponse;
   contact: { firstName: string; lastName: string; email: string; phone: string };
   passengers: PassengerForm[];
   appliedPromo: AppliedPromo | null;
+  onShowAllErrors: () => void;
   onResult: (status: "confirmed" | "pending_manual", bookingRef?: string | null) => void;
 }) {
   const stripe = useStripe();
@@ -328,16 +331,25 @@ function CheckoutForm({
       toast({ title: "Missing details", description: "Please fill in your contact details.", variant: "destructive" });
       return;
     }
+    let firstError: string | null = null;
+    let firstErrorPaxIdx: number | null = null;
     for (let i = 0; i < passengers.length; i++) {
       const errs = validatePassenger(passengers[i], data.passportRequired);
-      if (Object.keys(errs).length > 0) {
-        toast({
-          title: `Passenger ${i + 1} is incomplete`,
-          description: Object.values(errs)[0] || "Please complete every required field.",
-          variant: "destructive",
-        });
-        return;
+      if (Object.keys(errs).length > 0 && firstError == null) {
+        firstError = Object.values(errs)[0] || "Please complete every required field.";
+        firstErrorPaxIdx = i;
       }
+    }
+    if (firstError != null) {
+      // Reveal every required-field error inline (across every passenger card)
+      // so the user doesn't have to blur each input one by one.
+      onShowAllErrors();
+      toast({
+        title: `Passenger ${(firstErrorPaxIdx ?? 0) + 1} is incomplete`,
+        description: firstError,
+        variant: "destructive",
+      });
+      return;
     }
 
     setSubmitting(true);
@@ -447,11 +459,13 @@ function PassengerCard({
   idx,
   passenger,
   passportRequired,
+  showAllErrors,
   onChange,
 }: {
   idx: number;
   passenger: PassengerForm;
   passportRequired: boolean;
+  showAllErrors: boolean;
   onChange: (updater: (prev: PassengerForm) => PassengerForm) => void;
 }) {
   const [secureOpen, setSecureOpen] = useState(false);
@@ -460,10 +474,12 @@ function PassengerCard({
   );
   const errors = validatePassenger(passenger, passportRequired);
   // Errors are only surfaced inline when a field has been touched (reduces
-  // noise on first render). Touched-state is field-keyed so we only flag the
-  // input the user actually left empty after editing it.
+  // noise on first render) OR when the parent passes showAllErrors=true after
+  // a submit attempt — in which case every required-field error is revealed
+  // across every passenger card at once.
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const touch = (k: string) => setTouched((t) => (t[k] ? t : { ...t, [k]: true }));
+  const showError = (k: keyof PassengerErrors) => (touched[k] || showAllErrors) && !!errors[k];
 
   const set = <K extends keyof PassengerForm>(key: K, value: PassengerForm[K]) => {
     onChange((prev) => ({ ...prev, [key]: value }));
@@ -475,7 +491,7 @@ function PassengerCard({
   const stateEnabled = states.length > 0;
 
   const errorClass = (key: keyof PassengerErrors) =>
-    touched[key] && errors[key] ? "border-red-400 focus-visible:ring-red-400" : "";
+    showError(key) ? "border-red-400 focus-visible:ring-red-400" : "";
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5">
@@ -504,7 +520,7 @@ function PassengerCard({
             data-testid={`input-pax-first-${idx}`}
             autoComplete="given-name"
           />
-          {touched.firstName && errors.firstName && (
+          {showError("firstName") && (
             <p className="text-xs text-red-600 mt-1">{errors.firstName}</p>
           )}
         </div>
@@ -531,7 +547,7 @@ function PassengerCard({
             data-testid={`input-pax-last-${idx}`}
             autoComplete="family-name"
           />
-          {touched.lastName && errors.lastName && (
+          {showError("lastName") && (
             <p className="text-xs text-red-600 mt-1">{errors.lastName}</p>
           )}
         </div>
@@ -545,7 +561,7 @@ function PassengerCard({
         <div className="grid grid-cols-3 gap-3 mt-1">
           <select
             aria-label="Birth month"
-            className={`${SELECT_CLASS} ${touched.bornOn && errors.bornOn ? "border-red-400" : ""}`}
+            className={`${SELECT_CLASS} ${showError("bornOn") ? "border-red-400" : ""}`}
             value={passenger.dobMonth}
             onChange={(e) => set("dobMonth", e.target.value)}
             onBlur={() => touch("bornOn")}
@@ -558,7 +574,7 @@ function PassengerCard({
           </select>
           <select
             aria-label="Birth day"
-            className={`${SELECT_CLASS} ${touched.bornOn && errors.bornOn ? "border-red-400" : ""}`}
+            className={`${SELECT_CLASS} ${showError("bornOn") ? "border-red-400" : ""}`}
             value={passenger.dobDay}
             onChange={(e) => set("dobDay", e.target.value)}
             onBlur={() => touch("bornOn")}
@@ -571,7 +587,7 @@ function PassengerCard({
           </select>
           <select
             aria-label="Birth year"
-            className={`${SELECT_CLASS} ${touched.bornOn && errors.bornOn ? "border-red-400" : ""}`}
+            className={`${SELECT_CLASS} ${showError("bornOn") ? "border-red-400" : ""}`}
             value={passenger.dobYear}
             onChange={(e) => set("dobYear", e.target.value)}
             onBlur={() => touch("bornOn")}
@@ -583,7 +599,7 @@ function PassengerCard({
             ))}
           </select>
         </div>
-        {touched.bornOn && errors.bornOn && (
+        {showError("bornOn") && (
           <p className="text-xs text-red-600 mt-1">{errors.bornOn}</p>
         )}
       </div>
@@ -631,12 +647,10 @@ function PassengerCard({
           <Label htmlFor={`p-${idx}-residence-country`}>
             Country / region of residence<RequiredDot />
           </Label>
-          <select
-            id={`p-${idx}-residence-country`}
-            className={`${SELECT_CLASS} ${errorClass("residenceCountry")}`}
+          <CountryCombobox
             value={passenger.residenceCountry}
-            onChange={(e) => {
-              const code = e.target.value;
+            onChange={(code) => {
+              touch("residenceCountry");
               onChange((prev) => ({
                 ...prev,
                 residenceCountry: code,
@@ -645,15 +659,11 @@ function PassengerCard({
                 residenceState: "",
               }));
             }}
-            onBlur={() => touch("residenceCountry")}
-            data-testid={`select-pax-residence-country-${idx}`}
-          >
-            <option value="">Select a country</option>
-            {COUNTRIES.map((c) => (
-              <option key={c.code} value={c.code}>{c.name}</option>
-            ))}
-          </select>
-          {touched.residenceCountry && errors.residenceCountry && (
+            ariaLabel="Country or region of residence"
+            testId={`select-pax-residence-country-${idx}`}
+            hasError={showError("residenceCountry")}
+          />
+          {showError("residenceCountry") && (
             <p className="text-xs text-red-600 mt-1">{errors.residenceCountry}</p>
           )}
         </div>
@@ -675,7 +685,7 @@ function PassengerCard({
               <option key={s.code} value={s.code}>{s.name}</option>
             ))}
           </select>
-          {touched.residenceState && errors.residenceState && (
+          {showError("residenceState") && (
             <p className="text-xs text-red-600 mt-1">{errors.residenceState}</p>
           )}
         </div>
@@ -729,18 +739,12 @@ function PassengerCard({
               </div>
               <div>
                 <Label htmlFor={`p-${idx}-ktn-country`}>KTN issuing country</Label>
-                <select
-                  id={`p-${idx}-ktn-country`}
-                  className={SELECT_CLASS}
+                <CountryCombobox
                   value={passenger.knownTravelerCountry || ""}
-                  onChange={(e) => set("knownTravelerCountry", e.target.value)}
-                  data-testid={`select-pax-ktn-country-${idx}`}
-                >
-                  <option value="">Select a country</option>
-                  {COUNTRIES.map((c) => (
-                    <option key={c.code} value={c.code}>{c.name}</option>
-                  ))}
-                </select>
+                  onChange={(code) => set("knownTravelerCountry", code)}
+                  ariaLabel="KTN issuing country"
+                  testId={`select-pax-ktn-country-${idx}`}
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -755,18 +759,12 @@ function PassengerCard({
               </div>
               <div>
                 <Label htmlFor={`p-${idx}-redress-country`}>Redress issuing country</Label>
-                <select
-                  id={`p-${idx}-redress-country`}
-                  className={SELECT_CLASS}
+                <CountryCombobox
                   value={passenger.redressCountry || ""}
-                  onChange={(e) => set("redressCountry", e.target.value)}
-                  data-testid={`select-pax-redress-country-${idx}`}
-                >
-                  <option value="">Select a country</option>
-                  {COUNTRIES.map((c) => (
-                    <option key={c.code} value={c.code}>{c.name}</option>
-                  ))}
-                </select>
+                  onChange={(code) => set("redressCountry", code)}
+                  ariaLabel="Redress issuing country"
+                  testId={`select-pax-redress-country-${idx}`}
+                />
               </div>
             </div>
             {!showSecondaryRedress ? (
@@ -792,18 +790,12 @@ function PassengerCard({
                 </div>
                 <div>
                   <Label htmlFor={`p-${idx}-redress2-country`}>Issuing country</Label>
-                  <select
-                    id={`p-${idx}-redress2-country`}
-                    className={SELECT_CLASS}
+                  <CountryCombobox
                     value={passenger.secondaryRedressCountry || ""}
-                    onChange={(e) => set("secondaryRedressCountry", e.target.value)}
-                    data-testid={`select-pax-redress2-country-${idx}`}
-                  >
-                    <option value="">Select a country</option>
-                    {COUNTRIES.map((c) => (
-                      <option key={c.code} value={c.code}>{c.name}</option>
-                    ))}
-                  </select>
+                    onChange={(code) => set("secondaryRedressCountry", code)}
+                    ariaLabel="Secondary redress issuing country"
+                    testId={`select-pax-redress2-country-${idx}`}
+                  />
                 </div>
               </div>
             )}
@@ -835,19 +827,16 @@ function PassengerCard({
               <Label htmlFor={`p-${idx}-passport-country`}>
                 Issuing country<RequiredDot />
               </Label>
-              <select
-                id={`p-${idx}-passport-country`}
-                className={`${SELECT_CLASS} ${errorClass("passport")}`}
+              <CountryCombobox
                 value={passenger.passportCountry || ""}
-                onChange={(e) => set("passportCountry", e.target.value)}
-                onBlur={() => touch("passport")}
-                data-testid={`select-pax-passport-country-${idx}`}
-              >
-                <option value="">Select a country</option>
-                {COUNTRIES.map((c) => (
-                  <option key={c.code} value={c.code}>{c.name}</option>
-                ))}
-              </select>
+                onChange={(code) => {
+                  touch("passport");
+                  set("passportCountry", code);
+                }}
+                ariaLabel="Passport issuing country"
+                testId={`select-pax-passport-country-${idx}`}
+                hasError={showError("passport")}
+              />
             </div>
             <div>
               <Label htmlFor={`p-${idx}-passport-expiry`}>
@@ -864,7 +853,7 @@ function PassengerCard({
               />
             </div>
           </div>
-          {touched.passport && errors.passport && (
+          {showError("passport") && (
             <p className="text-xs text-red-600 mt-2">{errors.passport}</p>
           )}
         </div>
@@ -889,6 +878,10 @@ export default function GuestBookingPage() {
   const [piLoading, setPiLoading] = useState(false);
   const [done, setDone] = useState<{ status: "confirmed" | "pending_manual"; bookingRef?: string | null } | null>(null);
   const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
+  // Flipped to true after a submit attempt with any invalid passenger field —
+  // this forces every PassengerCard to surface its inline errors at once
+  // instead of waiting for per-field blur events.
+  const [showAllErrors, setShowAllErrors] = useState(false);
 
   // Fetch option details
   useEffect(() => {
@@ -1152,6 +1145,7 @@ export default function GuestBookingPage() {
                 idx={idx}
                 passenger={p}
                 passportRequired={data.passportRequired}
+                showAllErrors={showAllErrors}
                 onChange={(updater) => {
                   const next = [...passengers];
                   next[idx] = updater(next[idx]);
@@ -1197,6 +1191,7 @@ export default function GuestBookingPage() {
                       contact={contact}
                       passengers={passengers}
                       appliedPromo={appliedPromo}
+                      onShowAllErrors={() => setShowAllErrors(true)}
                       onResult={(status, bookingRef) => setDone({ status, bookingRef })}
                     />
                   </Elements>

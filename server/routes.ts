@@ -7402,7 +7402,9 @@ export async function registerRoutes(
 
       // Snapshot the full set of standard-airline fields so the concierge team
       // (and any later admin tooling) can see exactly what the traveler
-      // entered, even on the auto-Duffel path where we only forward a subset.
+      // entered. The same snapshot is also forwarded to Duffel via the order
+      // metadata bag (see buildDuffelOrderMetadata below) so airline ops can
+      // surface KTN/redress/loyalty/residence on PNR amendments.
       const extendedPassengerSnapshot = passengers.map((pax) => ({
         firstName: pax.firstName,
         middleName: pax.middleName ?? null,
@@ -7424,6 +7426,40 @@ export async function registerRoutes(
         passportCountry: pax.passportCountry ?? null,
         passportExpiry: pax.passportExpiry ?? null,
       }));
+
+      // Build a Duffel order metadata bag. Duffel requires metadata values to
+      // be short strings, so we flatten one passenger per group of keys with a
+      // safe truncation. Only fields the airline care about for PNR amendment
+      // (KTN / redress / residence / loyalty / gender / DOB) are forwarded —
+      // the rest stay in our DB snapshot. Keys are kept short and stable so
+      // ops tooling can pivot on them.
+      const buildDuffelOrderMetadata = (base: {
+        stripe_payment_intent_id: string;
+        source: string;
+        extendedPassengers: typeof extendedPassengerSnapshot;
+      }): Record<string, string> => {
+        const out: Record<string, string> = {
+          stripe_payment_intent_id: base.stripe_payment_intent_id,
+          source: base.source,
+        };
+        const clip = (v: string | null | undefined, max = 120) =>
+          (v ?? "").toString().slice(0, max);
+        // Duffel caps metadata at 50 keys total. Each passenger uses up to 9
+        // keys, so 5 passengers stays comfortably under the cap.
+        const cappedPax = base.extendedPassengers.slice(0, 5);
+        cappedPax.forEach((pax, i) => {
+          out[`pax_${i}_dob`] = clip(pax.bornOn, 10);
+          out[`pax_${i}_gender`] = clip(pax.gender, 4);
+          out[`pax_${i}_residence_country`] = clip(pax.residenceCountry, 2);
+          if (pax.knownTravelerNumber) out[`pax_${i}_ktn`] = clip(pax.knownTravelerNumber, 32);
+          if (pax.knownTravelerCountry) out[`pax_${i}_ktn_country`] = clip(pax.knownTravelerCountry, 2);
+          if (pax.redressNumber) out[`pax_${i}_redress`] = clip(pax.redressNumber, 32);
+          if (pax.redressCountry) out[`pax_${i}_redress_country`] = clip(pax.redressCountry, 2);
+          if (pax.loyaltyProgramme) out[`pax_${i}_loyalty_prog`] = clip(pax.loyaltyProgramme, 60);
+          if (pax.loyaltyNumber) out[`pax_${i}_loyalty_num`] = clip(pax.loyaltyNumber, 60);
+        });
+        return out;
+      };
 
       // Ensure a placeholder user exists so payments.user_id is satisfied.
       // Email match against `row.email` was enforced above, so this either
@@ -7536,7 +7572,11 @@ export async function registerRoutes(
           amount: offer.total_amount,
           currency: offer.total_currency,
         }],
-        metadata: { stripe_payment_intent_id: paymentIntentId, source: "guest_booking" },
+        metadata: buildDuffelOrderMetadata({
+          stripe_payment_intent_id: paymentIntentId,
+          source: "guest_booking",
+          extendedPassengers: extendedPassengerSnapshot,
+        }),
       } as any);
       const orderData = order.data as any;
 
