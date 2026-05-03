@@ -59,6 +59,13 @@ import { HotelProviderNotConfiguredError } from "./lib/hotels/types";
 import { rankHotels } from "./lib/hotels/rank";
 import { runHotelSearchForCall } from "./lib/hotels/runHotelSearch";
 import {
+  resolveCityToPrimaryIata,
+  isAmbiguousCityName,
+  guardAgainstSecondaryAirport,
+  SINGLE_AIRPORT_CITIES,
+  MULTI_AIRPORT_PRIMARY,
+} from "./lib/airportMap";
+import {
   issueBookingApprovalToken,
   consumeBookingApprovalToken,
 } from "./lib/hotels/bookingApprovals";
@@ -4236,52 +4243,11 @@ export async function registerRoutes(
     }
   });
 
-  // Cities served by multiple airports. When the transcript only resolves to a
-  // bare city name (e.g. "New York", "London"), this lets us flag ambiguity in
-  // logs so we can track how often the AI failed to confirm a specific airport.
-  const MULTI_AIRPORT_CITIES: Record<string, string[]> = {
-    "new york": ["JFK", "LGA", "EWR"],
-    "nyc": ["JFK", "LGA", "EWR"],
-    "london": ["LHR", "LGW", "STN", "LTN", "LCY", "SEN"],
-    "paris": ["CDG", "ORY", "BVA"],
-    "tokyo": ["HND", "NRT"],
-    "chicago": ["ORD", "MDW"],
-    "washington": ["DCA", "IAD", "BWI"],
-    "washington dc": ["DCA", "IAD", "BWI"],
-    "houston": ["IAH", "HOU"],
-    "miami": ["MIA", "FLL"],
-    "san francisco": ["SFO", "OAK", "SJC"],
-    "bay area": ["SFO", "OAK", "SJC"],
-    "los angeles": ["LAX", "BUR", "LGB", "SNA", "ONT"],
-    "moscow": ["SVO", "DME", "VKO"],
-    "berlin": ["BER"],
-    "rome": ["FCO", "CIA"],
-    "milan": ["MXP", "LIN", "BGY"],
-    "stockholm": ["ARN", "BMA", "NYO"],
-    "shanghai": ["PVG", "SHA"],
-    "seoul": ["ICN", "GMP"],
-    "buenos aires": ["EZE", "AEP"],
-    "sao paulo": ["GRU", "CGH", "VCP"],
-    "dallas": ["DFW", "DAL"],
-    // Cities that exist in many places — empty list signals "multi-geography ambiguous";
-    // the traveler must specify state/country to disambiguate.
-    "springfield": [], // ambiguous: IL, MA, MO, OR, ...
-    "portland": ["PDX", "PWM"], // OR vs ME
-    "richmond": [], // VA, CA, ...
-    "columbus": [], // OH, GA, IN, ...
-  };
-
+  // Curated city → IATA helpers live in server/lib/airportMap.ts so they can
+  // be unit-tested without booting Express. `isAmbiguousCity` here is a thin
+  // adapter that preserves the existing call sites in this file.
   function isAmbiguousCity(name: string): { ambiguous: boolean; options: string[] } {
-    const key = name.trim().toLowerCase().replace(/[.,]+$/, "");
-    if (!Object.prototype.hasOwnProperty.call(MULTI_AIRPORT_CITIES, key)) {
-      return { ambiguous: false, options: [] };
-    }
-    const options = MULTI_AIRPORT_CITIES[key];
-    // Only flag as ambiguous when there are multiple airport choices, OR when the list
-    // is empty (signaling multi-geography ambiguity that needs state/country). A
-    // single-airport entry is unambiguous and should not produce noisy warnings.
-    if (options.length === 1) return { ambiguous: false, options };
-    return { ambiguous: true, options };
+    return isAmbiguousCityName(name);
   }
 
   // The Bland AI prompt instructs the agent to emit a <TRAVEL_DETAILS>{...}</TRAVEL_DETAILS>
@@ -4897,6 +4863,22 @@ export async function registerRoutes(
         }
         return { code: query, name: query };
       }
+      // Curated city → primary IATA: short-circuits Duffel for the cities our
+      // travelers actually use. This is the fix for "Boston" → MHT — the
+      // curated map always returns BOS, even if Duffel ranks Manchester first.
+      const curated = resolveCityToPrimaryIata(query);
+      if (curated) {
+        try {
+          const lookupRes = await duffel.suggestions.list({ query: curated.iata });
+          const match = (lookupRes.data || []).find((p: any) => p.iata_code === curated.iata);
+          const name = match?.city_name || match?.name || query;
+          console.log(`${logPrefix} curated city resolution "${query}" -> ${curated.iata} (${curated.source})`);
+          return { code: curated.iata, name };
+        } catch (e: any) {
+          console.warn(`${logPrefix} Duffel suggestions.list threw for curated IATA "${curated.iata}":`, e?.message || e);
+          return { code: curated.iata, name: query };
+        }
+      }
       const res = await duffel.suggestions.list({ query });
       const places = res.data || [];
       if (places.length === 0) {
@@ -4904,22 +4886,35 @@ export async function registerRoutes(
         return null;
       }
 
+      // Helper: every Duffel-return path goes through the curated guard so a
+      // noisy query like "Boston, MA" can't slip past the early-return
+      // branches and reach the caller as MHT. Logs a warning on substitution.
+      const applyGuard = (iata: string, name: string) => {
+        const guarded = guardAgainstSecondaryAirport(query, iata);
+        if (guarded.substituted) {
+          console.warn(`${logPrefix} secondary-airport guard: Duffel returned "${iata}" for query="${query}"; forcing primary "${guarded.iata}"`);
+          return { code: guarded.iata, name };
+        }
+        return { code: iata, name };
+      };
+
       if (preferUS) {
         const usAirport = places.find((p: any) => p.type === "airport" && p.iata_country_code === "US");
-        if (usAirport?.iata_code) return { code: usAirport.iata_code, name: usAirport.city_name || usAirport.name || query };
+        if (usAirport?.iata_code) return applyGuard(usAirport.iata_code, usAirport.city_name || usAirport.name || query);
 
         try {
           const usRes = await duffel.suggestions.list({ query: query + " USA" });
           const usPlaces = usRes.data || [];
           const usAp = usPlaces.find((p: any) => p.type === "airport") || usPlaces[0];
-          if (usAp?.iata_code) return { code: usAp.iata_code, name: usAp.city_name || usAp.name || query };
+          if (usAp?.iata_code) return applyGuard(usAp.iata_code, usAp.city_name || usAp.name || query);
         } catch (e: any) {
           console.warn(`${logPrefix} Duffel suggestions.list threw for "${query} USA":`, e?.message || e);
         }
       }
 
       const airport = places.find((p: any) => p.type === "airport") || places[0];
-      return airport?.iata_code ? { code: airport.iata_code, name: airport.city_name || airport.name || query } : null;
+      if (!airport?.iata_code) return null;
+      return applyGuard(airport.iata_code, airport.city_name || airport.name || query);
     } catch (e: any) {
       console.warn(`${logPrefix} Duffel suggestions.list threw for query="${query}":`, e?.message || e);
       return null;
