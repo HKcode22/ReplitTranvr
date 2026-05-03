@@ -2977,8 +2977,10 @@ export async function registerRoutes(
       // malformed request.
       const parsed = hotelBookingBodySchema.safeParse(req.body || {});
       if (!parsed.success) {
+        const firstErr = parsed.error.errors[0]?.message || "Invalid request";
+        console.log(`[hotels] booking attempt result=blocked blockReason=invalid_body err=${firstErr}`);
         return res.status(400).json({
-          message: parsed.error.errors[0]?.message || "Invalid request",
+          message: firstErr,
           blockReason: "invalid_body",
         });
       }
@@ -2986,6 +2988,9 @@ export async function registerRoutes(
 
       const opt = await storage.getHotelOption(body.hotelOptionId);
       if (!opt) {
+        console.log(
+          `[hotels] booking attempt optionId=${body.hotelOptionId} result=blocked blockReason=option_not_found`,
+        );
         return res.status(404).json({ message: "Hotel option not found", blockReason: "option_not_found" });
       }
 
@@ -3297,8 +3302,26 @@ export async function registerRoutes(
           });
         }
 
+        // Cancellation must route through the provider that originally
+        // BOOKED this row — not whatever HOTEL_PROVIDER currently
+        // points at. If an admin flips HOTEL_PROVIDER between the
+        // booking and the cancellation, calling the new provider with
+        // an old providerBookingId would either no-op or worse, hit
+        // the wrong external system. Refuse the mismatch instead.
         const provider = getHotelProvider();
+        if (provider.name !== booking.provider) {
+          console.log(
+            `[hotels] cancel bookingId=${id} bookingProvider=${booking.provider} envProvider=${provider.name} result=blocked blockReason=provider_mismatch`,
+          );
+          return res.status(409).json({
+            message: `Booking was created with provider=${booking.provider} but current provider=${provider.name}. Restore HOTEL_PROVIDER and retry.`,
+            blockReason: "provider_mismatch",
+          });
+        }
         if (!booking.providerBookingId) {
+          console.log(
+            `[hotels] cancel bookingId=${id} provider=${provider.name} result=blocked blockReason=missing_provider_id`,
+          );
           return res.status(400).json({ message: "Booking has no providerBookingId", blockReason: "missing_provider_id" });
         }
         try {

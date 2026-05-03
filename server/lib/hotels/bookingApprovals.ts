@@ -76,12 +76,20 @@ export function consumeBookingApprovalToken(
 ): { ok: true; record: BookingApprovalRecord } | { ok: false; reason: ConsumeFailure } {
   if (!token || typeof token !== "string") return { ok: false, reason: "missing" };
   const now = Date.now();
-  sweepExpired(now);
+  // IMPORTANT: do NOT sweep expired entries before the lookup — that
+  // would erase a just-expired record and collapse `expired` failures
+  // into `missing`, weakening audit fidelity. Look up the requested
+  // token first, decide its outcome, THEN sweep the rest of the map
+  // so it can't grow unbounded.
   const rec = approvals.get(token);
-  if (!rec) return { ok: false, reason: "missing" };
+  if (!rec) {
+    sweepExpired(now);
+    return { ok: false, reason: "missing" };
+  }
   // Burn the token on first lookup — regardless of validity outcome — so
   // a leaked token cannot be replayed against different option ids.
   approvals.delete(token);
+  sweepExpired(now);
   if (rec.expiresAt < now) return { ok: false, reason: "expired" };
   if (rec.hotelOptionId !== hotelOptionId) return { ok: false, reason: "wrong_option" };
   return { ok: true, record: rec };
