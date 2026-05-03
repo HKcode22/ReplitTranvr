@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, Tag, Trash2, Mail, Eye, Send, RefreshCw, Sparkles, PhoneIncoming, PhoneOutgoing, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, Tag, Trash2, Mail, Eye, Send, RefreshCw, Sparkles, PhoneIncoming, PhoneOutgoing, Copy, type LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import type { PromoCode } from "@shared/schema";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -355,9 +355,212 @@ function CompleteDialog({ payment, onClose }: { payment: any; onClose: () => voi
   );
 }
 
+// Small helper that renders a label/value row. When `mono` is true the value
+// is rendered in a monospace font (good for IDs and reference numbers).
+// Pass a `copy` value to enable a click-to-copy button beside the value.
+function DetailRow({ label, value, mono, copy }: { label: string; value: React.ReactNode; mono?: boolean; copy?: string | null }) {
+  const { toast } = useToast();
+  const display = value === null || value === undefined || value === "" ? <span className="text-muted-foreground italic">—</span> : value;
+  const handleCopy = () => {
+    if (!copy) return;
+    void navigator.clipboard.writeText(copy).then(
+      () => toast({ description: `Copied ${label.toLowerCase()}` }),
+      () => toast({ description: "Could not copy", variant: "destructive" }),
+    );
+  };
+  return (
+    <div className="grid grid-cols-[140px_1fr] gap-3 py-1.5 text-sm border-b border-border/40 last:border-b-0">
+      <div className="text-muted-foreground">{label}</div>
+      <div className="flex items-start gap-1.5 min-w-0">
+        <div className={`min-w-0 break-all ${mono ? "font-mono text-xs" : ""}`}>{display}</div>
+        {copy && typeof value === "string" && value && (
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="shrink-0 p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+            aria-label={`Copy ${label}`}
+            title={`Copy ${label}`}
+            data-testid={`copy-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            <Copy className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PendingManualDetailsDialog({ payment, onClose, onComplete }: { payment: any; onClose: () => void; onComplete: () => void }) {
+  const details = payment.manualBookingDetails || {};
+  // Defensive Array.isArray guards in case a historical/malformed row stored
+  // these as a non-array shape (object, null, etc.).
+  const slices: any[] = Array.isArray(details.slices) ? details.slices : [];
+  // Prefer the richer extendedPassengers snapshot (loyalty / KTN / redress /
+  // residence) when present; fall back to the Duffel-shaped passengers that
+  // were sent at booking time. We zip them so we can always show email/phone
+  // (which only live on the Duffel mapping) alongside the extended data.
+  const duffelPax: any[] = Array.isArray(details.passengers) ? details.passengers : [];
+  const extendedPax: any[] = Array.isArray(details.extendedPassengers) ? details.extendedPassengers : [];
+  const passengerCount = Math.max(duffelPax.length, extendedPax.length);
+  const passengers = Array.from({ length: passengerCount }).map((_, i) => ({
+    duffel: duffelPax[i] || {},
+    extended: extendedPax[i] || null,
+  }));
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="dialog-pending-manual-details">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 flex-wrap">
+            <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400">Pending Manual</Badge>
+            <span>Manual booking #{payment.id}</span>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          {/* Customer */}
+          <section>
+            <h3 className="text-sm font-semibold mb-2 text-foreground/80">Customer</h3>
+            <div className="rounded-lg border bg-muted/30 px-3 py-1">
+              <DetailRow label="Name" value={[payment.user?.firstName, payment.user?.lastName].filter(Boolean).join(" ") || null} />
+              <DetailRow label="Email" value={payment.user?.email || null} copy={payment.user?.email || null} />
+              <DetailRow label="User ID" value={payment.userId} mono copy={payment.userId} />
+            </div>
+          </section>
+
+          {/* Payment & references */}
+          <section>
+            <h3 className="text-sm font-semibold mb-2 text-foreground/80">Payment & references</h3>
+            <div className="rounded-lg border bg-muted/30 px-3 py-1">
+              <DetailRow label="Charged" value={<span className="font-mono font-semibold">{payment.currency?.toUpperCase()} {payment.amount}</span>} />
+              <DetailRow label="Stripe PI" value={payment.stripePaymentIntentId || null} mono copy={payment.stripePaymentIntentId || null} />
+              <DetailRow label="Offer ID" value={details.offerId || null} mono copy={details.offerId || null} />
+              <DetailRow label="Offer total" value={details.totalAmount && details.currency ? `${String(details.currency).toUpperCase()} ${details.totalAmount}` : null} mono />
+              <DetailRow label="Proposal ID" value={payment.proposalId || null} mono />
+              <DetailRow label="Proposal title" value={details.proposalTitle || null} />
+              <DetailRow label="Reason" value={details.reason || null} />
+              <DetailRow label="Captured at" value={new Date(payment.createdAt).toLocaleString()} />
+            </div>
+          </section>
+
+          {/* Itinerary */}
+          <section>
+            <h3 className="text-sm font-semibold mb-2 text-foreground/80">Itinerary</h3>
+            {slices.length === 0 ? (
+              <div className="rounded-lg border bg-muted/30 px-3 py-3 text-sm text-muted-foreground italic">
+                No flight slices captured for this booking.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {slices.map((s: any, i: number) => (
+                  <div key={i} className="rounded-lg border bg-muted/30 px-3 py-1" data-testid={`slice-${i}`}>
+                    <DetailRow label="Route" value={<span className="font-mono">{s.origin || "?"} → {s.destination || "?"}</span>} />
+                    <DetailRow label="Departing" value={s.departingAt ? new Date(s.departingAt).toLocaleString() : null} />
+                    <DetailRow label="Arriving" value={s.arrivingAt ? new Date(s.arrivingAt).toLocaleString() : null} />
+                    <DetailRow label="Carrier" value={[s.carrier, s.flightNumber].filter(Boolean).join(" ") || null} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Passengers */}
+          <section>
+            <h3 className="text-sm font-semibold mb-2 text-foreground/80">
+              Passengers <span className="text-xs text-muted-foreground font-normal">({passengerCount})</span>
+            </h3>
+            {passengerCount === 0 ? (
+              <div className="rounded-lg border bg-muted/30 px-3 py-3 text-sm text-muted-foreground italic">
+                No passenger details captured for this booking.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {passengers.map(({ duffel, extended }, i) => {
+                  // Prefer the extended snapshot for name/dob/gender/title.
+                  const fullName = extended
+                    ? [extended.firstName, extended.middleName, extended.lastName].filter(Boolean).join(" ")
+                    : [duffel.given_name, duffel.family_name].filter(Boolean).join(" ");
+                  const dob = extended?.bornOn || duffel?.born_on || null;
+                  const gender = extended?.gender || duffel?.gender || null;
+                  const title = extended?.title || duffel?.title || null;
+                  const email = duffel?.email || null;
+                  const phone = duffel?.phone_number || null;
+                  // Passport: extendedPassengers has the canonical fields.
+                  // Fall back to duffel.identity_documents[0] for older rows.
+                  const idDoc = Array.isArray(duffel?.identity_documents) ? duffel.identity_documents[0] : null;
+                  const passportNumber = extended?.passportNumber ?? idDoc?.unique_identifier ?? null;
+                  const passportCountry = extended?.passportCountry ?? idDoc?.issuing_country_code ?? null;
+                  const passportExpiry = extended?.passportExpiry ?? idDoc?.expires_on ?? null;
+                  // Loyalty: extendedPassengers carries the programme name; the
+                  // Duffel mapping carries the airline IATA we sent.
+                  const loyaltyAcct = Array.isArray(duffel?.loyalty_programme_accounts) ? duffel.loyalty_programme_accounts[0] : null;
+                  const loyaltyProgramme = extended?.loyaltyProgramme || loyaltyAcct?.airline_iata_code || null;
+                  const loyaltyNumber = extended?.loyaltyNumber || loyaltyAcct?.account_number || null;
+
+                  return (
+                    <div key={i} className="rounded-lg border bg-muted/30 px-3 py-1" data-testid={`passenger-${i}`}>
+                      <div className="px-0 py-2 text-sm font-semibold">Passenger {i + 1}{title ? ` · ${title.toUpperCase()}` : ""}</div>
+                      <DetailRow label="Full name" value={fullName || null} />
+                      <DetailRow label="Date of birth" value={dob} mono />
+                      <DetailRow label="Gender" value={gender} />
+                      <DetailRow label="Email" value={email} copy={email} />
+                      <DetailRow label="Phone" value={phone} copy={phone} />
+                      {extended && (
+                        <DetailRow
+                          label="Residence"
+                          value={[extended.residenceState, extended.residenceCountry].filter(Boolean).join(", ") || null}
+                        />
+                      )}
+                      <DetailRow label="Passport #" value={passportNumber} mono copy={passportNumber} />
+                      <DetailRow label="Passport country" value={passportCountry} mono />
+                      <DetailRow label="Passport expiry" value={passportExpiry} mono />
+                      {(loyaltyProgramme || loyaltyNumber) && (
+                        <>
+                          <DetailRow label="Loyalty prog." value={loyaltyProgramme} />
+                          <DetailRow label="Loyalty #" value={loyaltyNumber} mono copy={loyaltyNumber} />
+                        </>
+                      )}
+                      {extended?.knownTravelerNumber && (
+                        <>
+                          <DetailRow label="KTN" value={extended.knownTravelerNumber} mono copy={extended.knownTravelerNumber} />
+                          <DetailRow label="KTN country" value={extended.knownTravelerCountry} mono />
+                        </>
+                      )}
+                      {extended?.redressNumber && (
+                        <>
+                          <DetailRow label="Redress #" value={extended.redressNumber} mono copy={extended.redressNumber} />
+                          <DetailRow label="Redress country" value={extended.redressCountry} mono />
+                        </>
+                      )}
+                      {extended?.secondaryRedressNumber && (
+                        <>
+                          <DetailRow label="2nd Redress #" value={extended.secondaryRedressNumber} mono copy={extended.secondaryRedressNumber} />
+                          <DetailRow label="2nd Redress country" value={extended.secondaryRedressCountry} mono />
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button onClick={onComplete} data-testid="button-open-complete-from-details">
+            Mark Complete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PendingManualTable() {
   const { data, isLoading } = useQuery<any[]>({ queryKey: ["/api/admin/pending-manual"] });
-  const [selected, setSelected] = useState<any>(null);
+  const [detailsFor, setDetailsFor] = useState<any>(null);
+  const [completeFor, setCompleteFor] = useState<any>(null);
 
   if (isLoading) return <Skeleton className="h-32 w-full" />;
   if (!data || data.length === 0) {
@@ -374,9 +577,17 @@ function PendingManualTable() {
       <div className="space-y-2">
         {data.map((p) => {
           const details = p.manualBookingDetails || {};
-          const slices = details.slices || [];
+          const slices: any[] = Array.isArray(details.slices) ? details.slices : [];
+          // Whole row (everything but the action button) is clickable so the
+          // concierge team can pull up full passenger / itinerary / ID info
+          // before booking the flight manually.
           return (
-            <Card key={p.id} className="p-4" data-testid={`pending-manual-${p.id}`}>
+            <Card
+              key={p.id}
+              className="p-4 hover-elevate cursor-pointer"
+              data-testid={`pending-manual-${p.id}`}
+              onClick={() => setDetailsFor(p)}
+            >
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -400,9 +611,15 @@ function PendingManualTable() {
                     </div>
                   )}
                   {details.offerId && <div className="mt-1 text-xs text-muted-foreground">Offer: <span className="font-mono break-all">{details.offerId}</span></div>}
-                  <div className="mt-1 text-xs text-muted-foreground">Captured: {new Date(p.createdAt).toLocaleString()}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Captured: {new Date(p.createdAt).toLocaleString()} · Click for full passenger details
+                  </div>
                 </div>
-                <Button onClick={() => setSelected(p)} data-testid={`button-resolve-${p.id}`}>
+                {/* Stop propagation so the action button does NOT open details. */}
+                <Button
+                  onClick={(e) => { e.stopPropagation(); setCompleteFor(p); }}
+                  data-testid={`button-resolve-${p.id}`}
+                >
                   Mark Complete
                 </Button>
               </div>
@@ -410,7 +627,14 @@ function PendingManualTable() {
           );
         })}
       </div>
-      {selected && <CompleteDialog payment={selected} onClose={() => setSelected(null)} />}
+      {detailsFor && (
+        <PendingManualDetailsDialog
+          payment={detailsFor}
+          onClose={() => setDetailsFor(null)}
+          onComplete={() => { setCompleteFor(detailsFor); setDetailsFor(null); }}
+        />
+      )}
+      {completeFor && <CompleteDialog payment={completeFor} onClose={() => setCompleteFor(null)} />}
     </>
   );
 }
