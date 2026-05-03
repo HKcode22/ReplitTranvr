@@ -35,6 +35,7 @@ Key architectural decisions and features include:
 -   **Legal Pages:** Dedicated public pages for privacy policy and terms of service.
 -   **PII Redaction in Logs:** The request logger never prints response bodies by default — only the response size. A `redact()` helper in `server/lib/redact.ts` masks known sensitive fields (`email`, `phone`, `name`, `dateOfBirth`, `passportNumber`, `address`, tokens, secrets, transcripts, summaries) wherever request/response/webhook payloads are still logged for debugging. Bland AI webhook payloads and dynamic-data bodies are routed through `redactJSON()`; ad-hoc emails/phones in log lines use `maskEmail()` / `maskPhone()`. Set `LOG_RESPONSE_BODIES=1` in development to enable a redacted preview of `/api` response bodies for debugging.
 -   **SEO & Social Share:** Optimized with Open Graph, Twitter Card meta blocks, canonical links, `robots.txt`, and `sitemap.xml`.
+-   **AI Call Summaries:** After a Bland call completes, a Claude Sonnet 4.5 helper (`server/lib/callSummary.ts`) generates a one-line triage summary plus a small structured object and caches it on `bland_calls.variables.aiSummary` (jsonb). Generation is fire-and-forget post-webhook, gracefully degrades when `ANTHROPIC_API_KEY` is unset, and is rendered in the admin "Recent Calls" table with a confidence badge and a regenerate action (`POST /api/admin/calls/:id/resummarize`). Backfill script at `scripts/backfill-call-summaries.ts`.
 
 ## External Dependencies
 

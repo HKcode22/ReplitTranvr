@@ -75,7 +75,11 @@ export interface IStorage {
 
   getBlandCalls(userId: string): Promise<BlandCall[]>;
   getBlandCallByBlandId(blandCallId: string): Promise<BlandCall | undefined>;
+  getBlandCallsByBlandIds(ids: string[]): Promise<BlandCall[]>;
+  getBlandCallById(id: number): Promise<BlandCall | undefined>;
+  getRecentCompletedBlandCalls(limit?: number): Promise<BlandCall[]>;
   getBlandCallsByCallRequest(callRequestId: number): Promise<BlandCall[]>;
+  getBlandCallsByCallRequestIds(ids: number[]): Promise<BlandCall[]>;
   createBlandCall(data: InsertBlandCall): Promise<BlandCall>;
   updateBlandCall(id: number, data: Partial<BlandCall>): Promise<BlandCall | undefined>;
 
@@ -336,8 +340,48 @@ export class DatabaseStorage implements IStorage {
     return call;
   }
 
+  // Bulk lookup by Bland's external call_id. Used by /api/admin/calls-live
+  // to enrich the live Bland-API list with cached AI summaries from our DB
+  // without an N+1 query loop.
+  async getBlandCallsByBlandIds(ids: string[]): Promise<BlandCall[]> {
+    const cleaned = Array.from(new Set(ids.filter((id): id is string => typeof id === "string" && !!id)));
+    if (cleaned.length === 0) return [];
+    return db.select().from(blandCalls).where(inArray(blandCalls.blandCallId, cleaned));
+  }
+
+  // Recent completed bland_calls with a transcript — used by the backfill
+  // script to find calls that never got an AI summary. Bounded so the
+  // script doesn't try to summarize the entire history at once.
+  async getRecentCompletedBlandCalls(limit: number = 100): Promise<BlandCall[]> {
+    return db
+      .select()
+      .from(blandCalls)
+      .where(eq(blandCalls.status, "completed"))
+      .orderBy(desc(blandCalls.createdAt))
+      .limit(limit);
+  }
+
   async getBlandCallsByCallRequest(callRequestId: number): Promise<BlandCall[]> {
     return db.select().from(blandCalls).where(eq(blandCalls.callRequestId, callRequestId)).orderBy(desc(blandCalls.createdAt));
+  }
+
+  // Bulk variant: one query for many call_request ids. Used by the
+  // /api/admin/calls-live DB-fallback branch to avoid N+1 lookups while
+  // resolving the most-recent bland_call (and its cached aiSummary)
+  // per call request.
+  async getBlandCallsByCallRequestIds(ids: number[]): Promise<BlandCall[]> {
+    const cleaned = Array.from(new Set(ids.filter((n): n is number => Number.isFinite(n))));
+    if (cleaned.length === 0) return [];
+    return db
+      .select()
+      .from(blandCalls)
+      .where(inArray(blandCalls.callRequestId, cleaned))
+      .orderBy(desc(blandCalls.createdAt));
+  }
+
+  async getBlandCallById(id: number): Promise<BlandCall | undefined> {
+    const [row] = await db.select().from(blandCalls).where(eq(blandCalls.id, id));
+    return row;
   }
 
   async createBlandCall(data: InsertBlandCall): Promise<BlandCall> {

@@ -22,6 +22,13 @@ import {
   type ParsedDetails as VerifierParsedDetails,
 } from "./lib/proposalVerifier";
 import {
+  summarizeCall,
+  pickStoredSummary,
+  mergeSummaryIntoVariables,
+  isCallSummaryAvailable,
+  type CallSummary,
+} from "./lib/callSummary";
+import {
   buildVerificationEmail,
   buildPasswordResetEmail,
   buildAccountCreationEmail,
@@ -3562,33 +3569,108 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/calls-live", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
-    if (!bland.isConfigured()) {
+    // Helper: render a DB-source response (used by both no-Bland-config and
+    // fallback branches). Joins user info plus cached aiSummary off
+    // bland_calls.variables for any call_request that has a Bland row.
+    const respondFromDb = async (errorMessage?: string) => {
       const fallback = await storage.adminGetAllCallRequests();
       const userIds = Array.from(new Set(fallback.map((c) => c.userId)));
       const usersList = await storage.adminGetUsersByIds(userIds);
       const userMap = new Map(usersList.map((u) => [u.id, { email: u.email, firstName: u.firstName, lastName: u.lastName }]));
+
+      // Pull bland_calls rows for all listed call requests in ONE query.
+      // For each call request we keep the most-recent bland_call as the
+      // canonical row (since results come back ordered desc by createdAt),
+      // exposing its dbCallId for the regenerate action and the cached
+      // aiSummary (if any) for display.
+      const callReqIds = fallback.map((c) => c.id);
+      const summaryByCallReq = new Map<number, CallSummary>();
+      const dbIdByCallReq = new Map<number, number>();
+      if (callReqIds.length > 0) {
+        const blandRows = await storage.getBlandCallsByCallRequestIds(callReqIds);
+        for (const r of blandRows) {
+          if (r.callRequestId == null) continue;
+          // First-seen wins (rows are ordered newest-first).
+          if (!dbIdByCallReq.has(r.callRequestId)) {
+            dbIdByCallReq.set(r.callRequestId, r.id);
+          }
+          if (!summaryByCallReq.has(r.callRequestId)) {
+            const s = pickStoredSummary(r.variables);
+            if (s) summaryByCallReq.set(r.callRequestId, s);
+          }
+        }
+      }
+
       return res.json({
         source: "db",
-        calls: fallback.map((c) => ({ ...c, user: userMap.get(c.userId) || null })),
+        calls: fallback.map((c) => ({
+          ...c,
+          user: userMap.get(c.userId) || null,
+          aiSummary: summaryByCallReq.get(c.id) || null,
+          dbCallId: dbIdByCallReq.get(c.id) ?? null,
+        })),
         total_count: fallback.length,
+        ...(errorMessage ? { error: errorMessage } : {}),
       });
+    };
+
+    if (!bland.isConfigured()) {
+      return respondFromDb();
     }
     try {
       const list = await bland.listCalls(50);
-      return res.json({ source: "bland", calls: list.calls, total_count: list.total_count ?? list.calls.length });
+      // Enrich each Bland live row with the cached aiSummary (if any) from
+      // its matching bland_calls row. One bulk DB query, no N+1.
+      const ids = list.calls.map((c) => c.call_id).filter((id): id is string => !!id);
+      const dbRows = await storage.getBlandCallsByBlandIds(ids);
+      const summaryByBlandId = new Map<string, CallSummary>();
+      const dbIdByBlandId = new Map<string, number>();
+      for (const r of dbRows) {
+        if (r.blandCallId) {
+          dbIdByBlandId.set(r.blandCallId, r.id);
+          const s = pickStoredSummary(r.variables);
+          if (s) summaryByBlandId.set(r.blandCallId, s);
+        }
+      }
+      const enriched = list.calls.map((c) => ({
+        ...c,
+        aiSummary: c.call_id ? summaryByBlandId.get(c.call_id) || null : null,
+        dbCallId: c.call_id ? dbIdByBlandId.get(c.call_id) ?? null : null,
+      }));
+      return res.json({ source: "bland", calls: enriched, total_count: list.total_count ?? list.calls.length });
     } catch (err) {
       console.warn("[Admin] /api/admin/calls-live Bland fetch failed, falling back to DB:", (err as Error)?.message || err);
-      const fallback = await storage.adminGetAllCallRequests();
-      const userIds = Array.from(new Set(fallback.map((c) => c.userId)));
-      const usersList = await storage.adminGetUsersByIds(userIds);
-      const userMap = new Map(usersList.map((u) => [u.id, { email: u.email, firstName: u.firstName, lastName: u.lastName }]));
-      return res.json({
-        source: "db",
-        calls: fallback.map((c) => ({ ...c, user: userMap.get(c.userId) || null })),
-        total_count: fallback.length,
-        error: (err as Error)?.message || "Bland AI request failed",
-      });
+      return respondFromDb((err as Error)?.message || "Bland AI request failed");
     }
+  });
+
+  // Manual regenerate: admin-triggered re-run of the Claude one-liner for a
+  // specific bland_calls row. Useful when the cached summary looks off, or
+  // when a recent backend change has improved the prompt. Returns the new
+  // summary (or 422 when Claude can't produce one — e.g. empty transcript).
+  app.post("/api/admin/calls/:id/resummarize", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid call id" });
+    if (!isCallSummaryAvailable()) {
+      return res.status(503).json({ message: "Claude is not configured" });
+    }
+    const row = await storage.getBlandCallById(id);
+    if (!row) return res.status(404).json({ message: "Call not found" });
+    if (!row.transcript || !row.transcript.trim()) {
+      return res.status(422).json({ message: "Call has no transcript to summarize" });
+    }
+    const summary = await summarizeCall({
+      transcript: row.transcript,
+      summary: row.summary,
+      analysis: extractAnalysisFromVariables(row.variables),
+      blandCallId: row.blandCallId,
+    });
+    if (!summary) {
+      return res.status(502).json({ message: "Claude could not produce a summary" });
+    }
+    const merged = mergeSummaryIntoVariables(row.variables, summary);
+    await storage.updateBlandCall(row.id, { variables: merged });
+    return res.json({ aiSummary: summary });
   });
 
   app.get("/api/admin/users", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
@@ -5859,6 +5941,40 @@ export async function registerRoutes(
 
       if (Object.keys(updateData).length > 0) {
         await storage.updateBlandCall(blandCall.id, updateData);
+      }
+
+      // Fire-and-forget Claude one-line summary for completed calls. Runs
+      // after the row is persisted so we always read the latest transcript
+      // (including content from earlier events). Failures are swallowed
+      // inside the helper — admins fall back to the raw metadata row.
+      if (
+        updateData.status === "completed" &&
+        (updateData.transcript || blandCall.transcript) &&
+        isCallSummaryAvailable()
+      ) {
+        const dbId = blandCall.id;
+        void (async () => {
+          try {
+            const persisted = await storage.getBlandCallByBlandId(blandCallId);
+            if (!persisted) return;
+            // Skip if a summary was already cached (e.g. duplicate webhook).
+            if (pickStoredSummary(persisted.variables)) return;
+            const summary = await summarizeCall({
+              transcript: persisted.transcript,
+              summary: persisted.summary,
+              analysis: extractAnalysisFromVariables(persisted.variables),
+              blandCallId,
+            });
+            if (!summary) return;
+            const merged = mergeSummaryIntoVariables(persisted.variables, summary);
+            await storage.updateBlandCall(dbId, { variables: merged });
+          } catch (err: any) {
+            console.warn(
+              `[call-summary] post-webhook generation failed for bland_call=${blandCallId}:`,
+              err?.message || err,
+            );
+          }
+        })();
       }
 
       // Trigger proposal generation whenever we have any transcript/summary content,

@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, Tag, Trash2, Mail, Eye, Send, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, Tag, Trash2, Mail, Eye, Send, RefreshCw, Sparkles, type LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import type { PromoCode } from "@shared/schema";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -28,6 +28,21 @@ type AdminStats = {
   duffelBalance: { available: number; currency: string } | null;
 };
 
+type AiCallSummary = {
+  oneLiner: string;
+  structured: {
+    route: string | null;
+    dates: string | null;
+    pax: number | null;
+    cabin: string | null;
+    budget: string | null;
+    preferences: string | null;
+  };
+  confidence: number;
+  generatedAt: string;
+  model: string;
+};
+
 type BlandLiveCall = {
   call_id?: string;
   to?: string;
@@ -38,6 +53,8 @@ type BlandLiveCall = {
   ended_at?: string;
   completed?: boolean;
   metadata?: Record<string, unknown> | null;
+  aiSummary?: AiCallSummary | null;
+  dbCallId?: number | null;
 };
 
 type LiveCallsResponse = {
@@ -55,6 +72,8 @@ type DbCallRow = {
   dateFrom?: string | null;
   createdAt: string;
   user?: { email: string; firstName?: string | null; lastName?: string | null } | null;
+  aiSummary?: AiCallSummary | null;
+  dbCallId?: number | null;
 };
 
 function formatUSD(n: number): string {
@@ -464,6 +483,76 @@ function BookingsTable({ limit }: { limit?: number }) {
   );
 }
 
+function confidenceTone(c: number): { label: string; cls: string } {
+  if (c >= 0.75) return { label: "high", cls: "border-emerald-500 text-emerald-700 dark:text-emerald-400" };
+  if (c >= 0.4) return { label: "med", cls: "border-amber-500 text-amber-700 dark:text-amber-400" };
+  return { label: "low", cls: "border-muted-foreground text-muted-foreground" };
+}
+
+// Inline summary block: compact AI one-liner + confidence badge + a
+// "regenerate" button visible only when we have a DB row to target. Used
+// by both the live-calls and DB-fallback rows in the admin calls list.
+function CallSummaryBlock({
+  summary,
+  dbCallId,
+}: {
+  summary: AiCallSummary | null | undefined;
+  dbCallId: number | null | undefined;
+}) {
+  const { toast } = useToast();
+  const mut = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/admin/calls/${id}/resummarize`);
+      return res.json() as Promise<{ aiSummary: AiCallSummary }>;
+    },
+    onSuccess: () => {
+      toast({ title: "Summary regenerated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/calls-live"] });
+    },
+    onError: (err: Error) => {
+      const raw = err.message?.replace(/^\d+:\s*/, "") || "Could not regenerate";
+      let msg = raw;
+      try { const parsed = JSON.parse(raw); msg = parsed.message || raw; } catch {}
+      toast({ title: "Regenerate failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  if (!summary && !dbCallId) return null;
+  const tone = summary ? confidenceTone(summary.confidence) : null;
+  return (
+    <div className="mt-1.5 flex items-start gap-2 flex-wrap" data-testid={`call-summary-${dbCallId ?? "none"}`}>
+      {summary ? (
+        <>
+          <Sparkles className="w-3.5 h-3.5 text-violet-500 mt-0.5 shrink-0" aria-hidden />
+          <span className="text-xs text-foreground/90 break-words flex-1 min-w-0" data-testid="text-call-summary">
+            {summary.oneLiner}
+          </span>
+          {tone && (
+            <Badge variant="outline" className={`text-[10px] py-0 h-4 shrink-0 ${tone.cls}`}>
+              {tone.label}
+            </Badge>
+          )}
+        </>
+      ) : (
+        <span className="text-xs text-muted-foreground italic">No AI summary yet.</span>
+      )}
+      {dbCallId && (
+        <button
+          type="button"
+          onClick={() => mut.mutate(dbCallId)}
+          disabled={mut.isPending}
+          className="text-muted-foreground hover:text-foreground transition-colors shrink-0 p-0.5 rounded-sm hover:bg-muted disabled:opacity-50"
+          title="Regenerate summary"
+          aria-label="Regenerate summary"
+          data-testid={`button-resummarize-${dbCallId}`}
+        >
+          <RefreshCw className={`w-3 h-3 ${mut.isPending ? "animate-spin" : ""}`} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function CallsTable({ limit }: { limit?: number }) {
   const { data, isLoading } = useQuery<LiveCallsResponse>({ queryKey: ["/api/admin/calls-live"] });
   if (isLoading) return <Skeleton className="h-32 w-full" />;
@@ -485,28 +574,36 @@ function CallsTable({ limit }: { limit?: number }) {
           const date = c.created_at ? new Date(c.created_at).toLocaleString() : "—";
           const status = c.status || (c.completed ? "completed" : "—");
           const key = c.call_id || `bland-${idx}`;
+          const isCompleted = status === "completed" || c.completed === true;
           return (
-            <div key={key} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`call-row-${key}`}>
-              <div className="min-w-0">
+            <div key={key} className="p-3 flex items-start justify-between gap-3 flex-wrap" data-testid={`call-row-${key}`}>
+              <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate">{email || phone}</div>
                 <div className="text-xs text-muted-foreground truncate">
                   {phone} · {minutes} · {date}
                 </div>
+                {isCompleted && (
+                  <CallSummaryBlock summary={c.aiSummary} dbCallId={c.dbCallId ?? null} />
+                )}
               </div>
-              <Badge variant="secondary">{status}</Badge>
+              <Badge variant="secondary" className="shrink-0">{status}</Badge>
             </div>
           );
         }
         const dbRow = row as DbCallRow;
+        const isCompleted = dbRow.status === "completed";
         return (
-          <div key={`db-${dbRow.id}`} className="p-3 flex items-center justify-between gap-3 flex-wrap" data-testid={`call-row-${dbRow.id}`}>
-            <div className="min-w-0">
+          <div key={`db-${dbRow.id}`} className="p-3 flex items-start justify-between gap-3 flex-wrap" data-testid={`call-row-${dbRow.id}`}>
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-medium">{dbRow.user?.email || dbRow.userId}</div>
               <div className="text-xs text-muted-foreground">
                 {dbRow.destination || "—"} · {dbRow.dateFrom ? new Date(dbRow.dateFrom).toLocaleDateString() : "—"} · {new Date(dbRow.createdAt).toLocaleString()}
               </div>
+              {isCompleted && (
+                <CallSummaryBlock summary={dbRow.aiSummary} dbCallId={dbRow.dbCallId ?? null} />
+              )}
             </div>
-            <Badge variant="secondary">{dbRow.status}</Badge>
+            <Badge variant="secondary" className="shrink-0">{dbRow.status}</Badge>
           </div>
         );
       })}
