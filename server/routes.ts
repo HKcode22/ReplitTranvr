@@ -13,6 +13,7 @@ import * as bland from "./lib/bland";
 import { normalizePhoneE164 } from "./lib/phone";
 import { sendSms, maskPhone } from "./lib/sms";
 import { redactJSON, maskEmail, maskToken } from "./lib/redact";
+import { ISO_3166_1_ALPHA2 } from "./lib/isoCountries";
 import { buildGuestProposalSms } from "./lib/smsTemplates";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
 import {
@@ -7100,7 +7101,13 @@ export async function registerRoutes(
   // last (mapped to Duffel's given_name + family_name on submit). ISO-3166-1
   // alpha-2 codes are validated as exactly two uppercase letters; optional
   // country codes accept "" so the client can omit them cleanly.
-  const isoCountry = z.string().regex(/^[A-Z]{2}$/, "Country must be a 2-letter ISO code");
+  // Country codes are validated as exactly two uppercase letters AND verified
+  // against the canonical ISO-3166-1 alpha-2 set so the API can't accept
+  // syntactically-valid-but-bogus codes like "ZZ" that the UI never offers.
+  const isoCountry = z
+    .string()
+    .regex(/^[A-Z]{2}$/, "Country must be a 2-letter ISO code")
+    .refine((c) => ISO_3166_1_ALPHA2.has(c), "Unknown country code");
   const optionalIsoCountry = z.union([
     isoCountry,
     z.literal(""),
@@ -7145,7 +7152,7 @@ export async function registerRoutes(
       email: z.string().email().optional(),
       phone: z.string().optional(),
       passportNumber: z.string().optional(),
-      passportCountry: z.string().optional(),
+      passportCountry: optionalIsoCountry,
       passportExpiry: z.string().optional(),
     }).superRefine((pax, ctx) => {
       // Conditional residence-state: required when the residence country has
@@ -7493,22 +7500,36 @@ export async function registerRoutes(
           stripe_payment_intent_id: base.stripe_payment_intent_id,
           source: base.source,
         };
-        const clip = (v: string | null | undefined, max = 120) =>
-          (v ?? "").toString().slice(0, max);
-        // Duffel caps metadata at 50 keys total. Each passenger uses up to 9
-        // keys, so 5 passengers stays comfortably under the cap.
-        const cappedPax = base.extendedPassengers.slice(0, 5);
-        cappedPax.forEach((pax, i) => {
-          out[`pax_${i}_dob`] = clip(pax.bornOn, 10);
-          out[`pax_${i}_gender`] = clip(pax.gender, 4);
-          out[`pax_${i}_residence_country`] = clip(pax.residenceCountry, 2);
-          if (pax.knownTravelerNumber) out[`pax_${i}_ktn`] = clip(pax.knownTravelerNumber, 32);
-          if (pax.knownTravelerCountry) out[`pax_${i}_ktn_country`] = clip(pax.knownTravelerCountry, 2);
-          if (pax.redressNumber) out[`pax_${i}_redress`] = clip(pax.redressNumber, 32);
-          if (pax.redressCountry) out[`pax_${i}_redress_country`] = clip(pax.redressCountry, 2);
-          if (pax.loyaltyProgramme) out[`pax_${i}_loyalty_prog`] = clip(pax.loyaltyProgramme, 60);
-          if (pax.loyaltyNumber) out[`pax_${i}_loyalty_num`] = clip(pax.loyaltyNumber, 60);
-        });
+        // Build a compact per-passenger record with only the airline-relevant
+        // fields. Then serialize ALL passengers (no truncation) into a single
+        // JSON string and split it across `pax_extras_<n>` keys so we never
+        // silently drop travelers in larger parties — Duffel caps metadata
+        // values at ~500 chars per key but allows up to 50 keys, giving us
+        // comfortable headroom for any practical group size.
+        const compact = base.extendedPassengers.map((pax) => ({
+          dob: pax.bornOn,
+          gender: pax.gender,
+          residence: pax.residenceCountry,
+          ktn: pax.knownTravelerNumber || undefined,
+          ktnCountry: pax.knownTravelerCountry || undefined,
+          redress: pax.redressNumber || undefined,
+          redressCountry: pax.redressCountry || undefined,
+          redress2: pax.secondaryRedressNumber || undefined,
+          redress2Country: pax.secondaryRedressCountry || undefined,
+          loyaltyProg: pax.loyaltyProgramme || undefined,
+          loyaltyNum: pax.loyaltyNumber || undefined,
+        }));
+        const json = JSON.stringify(compact);
+        const CHUNK = 480; // safely under Duffel's per-value limit
+        const MAX_CHUNK_KEYS = 40; // leaves room for stripe + source + count keys
+        const chunkCount = Math.ceil(json.length / CHUNK);
+        const usable = Math.min(chunkCount, MAX_CHUNK_KEYS);
+        for (let i = 0; i < usable; i++) {
+          out[`pax_extras_${i}`] = json.slice(i * CHUNK, (i + 1) * CHUNK);
+        }
+        out["pax_extras_count"] = String(compact.length);
+        out["pax_extras_chunks"] = String(usable);
+        out["pax_extras_truncated"] = String(usable < chunkCount);
         return out;
       };
 
