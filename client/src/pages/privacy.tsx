@@ -5,12 +5,21 @@
 // stand-alone "Travnr" references below with the registered legal entity
 // name (e.g., "Travnr, Inc." / "Travnr LLC") on first mention.
 
+import { useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ArrowLeft } from "lucide-react";
 
 export default function PrivacyPage() {
+  useEffect(() => {
+    const previous = document.title;
+    document.title = "Privacy Policy · Travnr";
+    return () => {
+      document.title = previous;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/80 border-b">
