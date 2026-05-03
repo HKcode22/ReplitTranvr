@@ -21,6 +21,49 @@ export function getWebhookSecret(): string {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+// Curated Bland voice pool. The user maintains a matching pool in the Bland
+// dashboard (which governs INBOUND calls). Outbound calls go through our
+// /v1/calls API and pick a voice from this same list, so callers hear the
+// same set of natural voices regardless of who initiated the call.
+//
+// Override at runtime by setting BLAND_VOICE_POOL to a comma-separated list
+// (e.g. `BLAND_VOICE_POOL="Allan,Sophie"`); falls back to DEFAULT_VOICE_POOL
+// when the env var is unset, empty, or contains no usable names.
+export const DEFAULT_VOICE_POOL: readonly string[] = [
+  "Allan",
+  "Carl",
+  "Alley",
+  "Trixie",
+  "Violette",
+  "Sophie",
+] as const;
+
+export function getVoicePool(): string[] {
+  const raw = process.env.BLAND_VOICE_POOL;
+  if (raw) {
+    const parsed = raw
+      .split(",")
+      .map(v => v.trim())
+      .filter(v => v.length > 0);
+    if (parsed.length > 0) return parsed;
+  }
+  return [...DEFAULT_VOICE_POOL];
+}
+
+// Pure pick: caller supplies the pool and rng, no env reads, no globals.
+// Easy to unit-test deterministically.
+export function pickVoiceFrom(pool: readonly string[], rng: () => number = Math.random): string {
+  if (pool.length === 0) return "Allan"; // safety net — should never hit
+  const idx = Math.floor(rng() * pool.length);
+  return pool[Math.min(idx, pool.length - 1)];
+}
+
+// Runtime convenience wrapper used by buildBlandCallConfig — resolves the
+// active pool (env override or defaults) and delegates to the pure picker.
+export function pickVoice(rng: () => number = Math.random): string {
+  return pickVoiceFrom(getVoicePool(), rng);
+}
+
 async function blandRequest(method: string, path: string, body?: any): Promise<any> {
   const url = `${BLAND_API_BASE}${path}`;
   const controller = new AbortController();
@@ -99,7 +142,10 @@ export function buildBlandCallConfig(opts: BuildBlandCallConfigOptions): Record<
     task: opts.task,
     webhook: opts.webhookUrl,
     webhook_events: ["call.ended"],
-    voice: opts.voice || "mason",
+    // Voice resolution: explicit caller-supplied voice wins (e.g. an admin
+    // override), otherwise pick a random voice from the curated pool. Both
+    // inbound and outbound paths route through here, so behavior matches.
+    voice: opts.voice || pickVoice(),
     language: opts.language || "eng",
     max_duration: Math.min(opts.maxDuration || 10, 10),
     record: opts.record !== false,
