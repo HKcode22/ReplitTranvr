@@ -4,13 +4,14 @@ import {
   users, travelerProfiles, callRequests, itineraryProposals,
   proposalItems, notifications, payments, callbackRequests, savedCards, blandCalls,
   calendarEntries, systemSettings, promoCodes, phoneEmailMap, guestProposals,
-  hotelSearches, hotelOptions, hotelBookings,
+  hotelSearches, hotelOptions, hotelBookings, tripRequests,
   type User, type InsertUser, type TravelerProfile, type InsertTravelerProfile,
   type CallRequest, type InsertCallRequest, type ItineraryProposal, type InsertProposal,
   type ProposalItem, type InsertProposalItem, type Notification, type InsertNotification,
   type Payment, type InsertPayment, type CallbackRequest, type InsertCallbackRequest,
   type SavedCard, type InsertSavedCard, type BlandCall, type InsertBlandCall,
   type CalendarEntry, type InsertCalendarEntry,
+  type TripRequest, type InsertTripRequest,
   type PromoCode, type InsertPromoCode,
   type PhoneEmailMap, type GuestProposal, type InsertGuestProposal,
   type HotelSearch, type InsertHotelSearch,
@@ -58,6 +59,9 @@ export interface IStorage {
   getPaymentByStripeIntentId(intentId: string): Promise<Payment | undefined>;
   createPayment(data: InsertPayment): Promise<Payment>;
   updatePayment(id: number, data: Partial<Payment>): Promise<Payment | undefined>;
+  getPaymentByDuffelBookingRef(ref: string): Promise<Payment | undefined>;
+
+  createTripRequest(data: InsertTripRequest): Promise<TripRequest>;
 
   getCalendarEntries(userId: string): Promise<CalendarEntry[]>;
   getCalendarEntriesByPayment(paymentId: number): Promise<CalendarEntry[]>;
@@ -290,6 +294,22 @@ export class DatabaseStorage implements IStorage {
   async updatePayment(id: number, data: Partial<Payment>): Promise<Payment | undefined> {
     const [p] = await db.update(payments).set(data).where(eq(payments.id, id)).returning();
     return p;
+  }
+
+  async getPaymentByDuffelBookingRef(ref: string): Promise<Payment | undefined> {
+    // Booking refs are normalized to upper-case throughout the codebase
+    // (Duffel returns them upper-case), but compare case-insensitively
+    // for the public lookup so guests don't fail on shift-key mistakes.
+    const [p] = await db
+      .select()
+      .from(payments)
+      .where(sql`upper(${payments.duffelBookingRef}) = upper(${ref})`);
+    return p;
+  }
+
+  async createTripRequest(data: InsertTripRequest): Promise<TripRequest> {
+    const [row] = await db.insert(tripRequests).values(data).returning();
+    return row;
   }
 
   async createCallbackRequest(data: InsertCallbackRequest): Promise<CallbackRequest> {

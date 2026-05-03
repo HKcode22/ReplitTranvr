@@ -51,6 +51,9 @@ import {
   buildManualBookingConfirmationEmail,
   buildRefundRequestAdminEmail,
   buildRefundRequestCustomerEmail,
+  buildTripRequestAdminEmail,
+  buildTripRequestCustomerEmail,
+  type TripRequestEmailInput,
   buildGuestProposalEmail,
   buildGuestBookingConfirmationEmail,
   buildGuestBookingHoldingEmail,
@@ -82,7 +85,10 @@ import {
   callbackLimiter,
   guestBookingLimiter,
   genericApiLimiter,
+  manageTripLimiter,
+  contactFormLimiter,
 } from "./lib/rateLimit";
+import crypto from "crypto";
 
 declare module "express-session" {
   interface SessionData {
@@ -93,6 +99,11 @@ declare module "express-session" {
 if (process.env.SENDGRID_API_KEY) {
   sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 }
+
+// Module-level Duffel client, initialized inside registerRoutes once env
+// is read. Module-level helpers (e.g. buildTripPayloadFromPayment) read
+// this so they don't need to be passed the client explicitly.
+let duffel: Duffel | null = null;
 
 const CONVENIENCE_FEE_PERCENT = 5;
 
@@ -1150,6 +1161,183 @@ async function sendRefundRequestEmails(args: {
   }
 }
 
+
+type Payment = NonNullable<Awaited<ReturnType<typeof storage.getPayment>>>;
+
+interface TripPayload {
+  id: number;
+  bookingReference: string | null;
+  duffelOrderId: string | null;
+  amount: string;
+  currency: string;
+  status: string;
+  refundStatus: string | null;
+  bookedAt: Date | string | null;
+  proposalId: number | null;
+  isManual: boolean;
+  manual: { routeSummary: string | null; passengerCount: number; departingAt: string | null } | null;
+  order: any;
+}
+
+async function buildTripPayloadFromPayment(payment: Payment): Promise<TripPayload> {
+  const isManual = !payment.duffelOrderId && !!payment.manualBookingDetails;
+  let orderData: any = null;
+  if (payment.duffelOrderId && duffel) {
+    try {
+      const order = await duffel.orders.get(payment.duffelOrderId);
+      orderData = order.data;
+    } catch (err: any) {
+      console.warn(`Failed to fetch Duffel order ${payment.duffelOrderId}:`, err.message);
+    }
+  } else if (isManual) {
+    orderData = synthesizeOrderFromManualDetails(payment.manualBookingDetails);
+  }
+
+  let manual: TripPayload["manual"] = null;
+  if (isManual && payment.manualBookingDetails && typeof payment.manualBookingDetails === "object") {
+    const d = payment.manualBookingDetails as {
+      slices?: Array<{ origin?: string; destination?: string; departingAt?: string }>;
+      passengers?: unknown[];
+      routeSummary?: string | null;
+    };
+    const derived = (d.slices || [])
+      .map((s) => `${s.origin || "?"} → ${s.destination || "?"}`)
+      .join(" / ");
+    manual = {
+      routeSummary: (d.routeSummary && d.routeSummary.trim()) || derived || null,
+      passengerCount: Array.isArray(d.passengers) ? d.passengers.length : 0,
+      departingAt: d.slices?.[0]?.departingAt || null,
+    };
+  }
+
+  return {
+    id: payment.id,
+    bookingReference: payment.duffelBookingRef,
+    duffelOrderId: payment.duffelOrderId,
+    amount: payment.amount,
+    currency: payment.currency,
+    status: payment.status,
+    refundStatus: payment.refundStatus,
+    bookedAt: payment.createdAt,
+    proposalId: payment.proposalId,
+    isManual,
+    manual,
+    order: orderData,
+  };
+}
+
+// Manage a Trip validation schemas.
+const tripRequestTypeSchema = z.enum(["refund", "cancel", "change"]);
+const tripRequestMessageSchema = z.string().trim().min(1, "Please describe what you'd like us to do.").max(2000);
+
+const tripRequestBodySchema = z.object({
+  type: tripRequestTypeSchema,
+  message: tripRequestMessageSchema,
+});
+
+const manageTripLookupSchema = z.object({
+  lastName: z.string().trim().min(1).max(120),
+  confirmationCode: z.string().trim().min(1).max(40),
+});
+
+const manageTripRequestSchema = z.object({
+  token: z.string().min(1),
+  type: tripRequestTypeSchema,
+  message: tripRequestMessageSchema,
+});
+
+type TripRequestType = z.infer<typeof tripRequestTypeSchema>;
+
+// Verify that `lastName` matches at least one passenger on the booking.
+// Both Duffel and manual bookings expose passengers; we fall back to the
+// account holder's last name when no passenger is available so a traveler
+// who booked under their own name can still self-serve.
+async function passengerLastNameMatches(payment: Payment, lastName: string): Promise<boolean> {
+  const target = lastName.trim().toLowerCase();
+  if (!target) return false;
+
+  // Manual bookings store passengers inline on the payment row.
+  if (payment.manualBookingDetails && typeof payment.manualBookingDetails === "object") {
+    const d = payment.manualBookingDetails as { passengers?: Array<{ family_name?: string }> };
+    if (Array.isArray(d.passengers)) {
+      for (const p of d.passengers) {
+        if ((p.family_name || "").trim().toLowerCase() === target) return true;
+      }
+    }
+  }
+
+  // Duffel orders carry passengers on the remote order resource.
+  if (payment.duffelOrderId && duffel) {
+    try {
+      const order = await duffel.orders.get(payment.duffelOrderId);
+      const passengers = (order.data?.passengers || []) as Array<{ family_name?: string }>;
+      for (const p of passengers) {
+        if ((p.family_name || "").trim().toLowerCase() === target) return true;
+      }
+    } catch (err) {
+      console.warn("passengerLastNameMatches: failed to fetch Duffel order", err);
+    }
+  }
+
+  // Fallback: account holder's last name.
+  if (payment.userId) {
+    const owner = await storage.getUser(payment.userId);
+    if ((owner?.lastName || "").trim().toLowerCase() === target) return true;
+  }
+  return false;
+}
+
+function inferBookingTravelerEmail(payment: Payment): string | null {
+  if (payment.manualBookingDetails && typeof payment.manualBookingDetails === "object") {
+    const d = payment.manualBookingDetails as { passengers?: Array<{ email?: string }> };
+    const fromManual = d.passengers?.map((p) => p.email).find((e) => e && e.includes("@"));
+    if (fromManual) return fromManual!;
+  }
+  return null;
+}
+
+// HMAC-signed token for the public Manage a Trip flow: `paymentId.expiry.sig`.
+const MANAGE_TRIP_TOKEN_TTL_MS = 30 * 60 * 1000;
+
+function manageTripSecret(): string {
+  // Reuse SESSION_SECRET — it's already required for the app to boot, so
+  // we don't introduce a new must-set env var. If it's somehow missing
+  // we fall back to a process-lifetime random key (tokens won't survive
+  // a restart but the endpoint still works) and log loudly.
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  if (!fallbackManageTripSecret) {
+    console.warn("[manage-trip] SESSION_SECRET missing — tokens won't survive restart");
+    fallbackManageTripSecret = randomBytes(32).toString("hex");
+  }
+  return fallbackManageTripSecret;
+}
+let fallbackManageTripSecret: string | null = null;
+
+function signManageTripToken(paymentId: number): string {
+  const expiry = Date.now() + MANAGE_TRIP_TOKEN_TTL_MS;
+  const payload = `${paymentId}.${expiry}`;
+  const sig = crypto.createHmac("sha256", manageTripSecret()).update(payload).digest("hex");
+  return `${payload}.${sig}`;
+}
+
+function verifyManageTripToken(token: string): { ok: true; paymentId: number } | { ok: false } {
+  if (!token || typeof token !== "string") return { ok: false };
+  const parts = token.split(".");
+  if (parts.length !== 3) return { ok: false };
+  const [pidStr, expStr, sig] = parts;
+  const expected = crypto.createHmac("sha256", manageTripSecret()).update(`${pidStr}.${expStr}`).digest("hex");
+  // Constant-time compare to thwart timing oracles.
+  const a = Buffer.from(sig, "hex");
+  const b = Buffer.from(expected, "hex");
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return { ok: false };
+  const exp = Number(expStr);
+  if (!Number.isFinite(exp) || exp < Date.now()) return { ok: false };
+  const paymentId = Number(pidStr);
+  if (!Number.isFinite(paymentId)) return { ok: false };
+  return { ok: true, paymentId };
+}
+
 async function createCalendarEntriesFromOrder(args: {
   userId: string;
   paymentId: number;
@@ -2028,60 +2216,253 @@ export async function registerRoutes(
       const bookedPayments = pymts.filter(p =>
         p.status === "paid" && (p.duffelOrderId || p.manualBookingDetails)
       );
-
-      const trips = await Promise.all(
-        bookedPayments.map(async (payment) => {
-          const isManual = !payment.duffelOrderId && !!payment.manualBookingDetails;
-          let orderData: any = null;
-
-          if (payment.duffelOrderId && duffel) {
-            try {
-              const order = await duffel.orders.get(payment.duffelOrderId);
-              orderData = order.data;
-            } catch (err: any) {
-              console.warn(`Failed to fetch Duffel order ${payment.duffelOrderId}:`, err.message);
-            }
-          } else if (isManual) {
-            orderData = synthesizeOrderFromManualDetails(payment.manualBookingDetails);
-          }
-
-          let manual: { routeSummary: string | null; passengerCount: number; departingAt: string | null } | null = null;
-          if (isManual && payment.manualBookingDetails && typeof payment.manualBookingDetails === "object") {
-            const d = payment.manualBookingDetails as {
-              slices?: Array<{ origin?: string; destination?: string; departingAt?: string }>;
-              passengers?: unknown[];
-              routeSummary?: string | null;
-            };
-            const derived = (d.slices || [])
-              .map((s) => `${s.origin || "?"} → ${s.destination || "?"}`)
-              .join(" / ");
-            manual = {
-              routeSummary: (d.routeSummary && d.routeSummary.trim()) || derived || null,
-              passengerCount: Array.isArray(d.passengers) ? d.passengers.length : 0,
-              departingAt: d.slices?.[0]?.departingAt || null,
-            };
-          }
-
-          return {
-            id: payment.id,
-            bookingReference: payment.duffelBookingRef,
-            duffelOrderId: payment.duffelOrderId,
-            amount: payment.amount,
-            currency: payment.currency,
-            status: payment.status,
-            bookedAt: payment.createdAt,
-            proposalId: payment.proposalId,
-            isManual,
-            manual,
-            order: orderData,
-          };
-        })
-      );
-
+      const trips = await Promise.all(bookedPayments.map(buildTripPayloadFromPayment));
       return res.json(trips);
     } catch (err: any) {
       console.error("Error fetching trips:", err);
       return res.status(500).json({ message: "Failed to fetch trips" });
+    }
+  });
+
+  // Manage a Trip: shared handler for authed + guest submissions.
+  // Inserts a trip_requests audit row, sets payments.refundStatus for refunds,
+  // and sends admin + customer emails.
+  async function processTripRequest(args: {
+    payment: Payment;
+    user: { id?: string | null; email: string; firstName?: string | null; lastName?: string | null };
+    type: TripRequestType;
+    message: string;
+    source: "account" | "guest";
+  }): Promise<{ ok: true } | { ok: false; status: number; message: string }> {
+    const { payment, user, type, message, source } = args;
+    if (payment.status !== "paid") {
+      return { ok: false, status: 400, message: "Only paid bookings can be managed." };
+    }
+    if (type === "refund" && (payment.refundStatus === "requested" || payment.refundStatus === "approved")) {
+      return { ok: false, status: 400, message: "A refund has already been requested for this booking." };
+    }
+
+    await storage.createTripRequest({
+      paymentId: payment.id,
+      userId: payment.userId ?? user.id ?? null,
+      type,
+      source,
+      message: message.slice(0, 2000),
+    });
+
+    if (type === "refund") {
+      await storage.updatePayment(payment.id, {
+        refundStatus: "requested",
+        refundRequestedAt: new Date(),
+        refundReason: message || null,
+      });
+    }
+
+    if (payment.userId) {
+      await storage.createNotification({
+        userId: payment.userId,
+        type: type === "refund" ? "refund_requested" : `trip_${type}_requested`,
+        title:
+          type === "refund" ? "Refund request received"
+          : type === "cancel" ? "Cancellation request received"
+          : "Change request received",
+        body: `Your ${type} request for booking ${payment.duffelBookingRef || `#${payment.id}`} was submitted. We'll be in touch shortly.`,
+        linkUrl: type === "refund" ? "/billing" : "/trips",
+      });
+    }
+
+    // Build a human-friendly route + date label for the email body.
+    let routeLabel = `Booking #${payment.id}`;
+    let dateLabel = "—";
+    try {
+      const trip = await buildTripPayloadFromPayment(payment);
+      const slices = trip.order?.slices || [];
+      const first = slices[0]?.segments?.[0];
+      const last = slices[slices.length - 1]?.segments?.slice(-1)?.[0] || slices[0]?.segments?.slice(-1)?.[0];
+      if (first && last) {
+        const o = first.origin?.iata_code || first.origin?.city_name || "?";
+        const d = last.destination?.iata_code || last.destination?.city_name || "?";
+        routeLabel = `${o} → ${d}`;
+      } else if (trip.manual?.routeSummary) {
+        routeLabel = trip.manual.routeSummary;
+      }
+      const dep = first?.departing_at || trip.manual?.departingAt;
+      if (dep) {
+        dateLabel = new Date(dep).toLocaleDateString("en-US", {
+          weekday: "short", month: "short", day: "numeric", year: "numeric",
+        });
+      }
+    } catch (err) {
+      console.warn("Trip request: could not build route label", err);
+    }
+
+    const emailInput: TripRequestEmailInput = {
+      type,
+      source,
+      user: { email: user.email, firstName: user.firstName, lastName: user.lastName },
+      payment: {
+        id: payment.id,
+        amount: payment.amount,
+        currency: payment.currency,
+        duffelBookingRef: payment.duffelBookingRef,
+        duffelOrderId: payment.duffelOrderId,
+      },
+      trip: { routeLabel, dateLabel },
+      message,
+    };
+
+    // Account-origin refunds keep the legacy refund template; everything
+    // else uses the trip-request templates (which surface the guest source).
+    const refundUser = {
+      email: user.email,
+      firstName: user.firstName ?? undefined,
+      lastName: user.lastName ?? undefined,
+    };
+    const useLegacyRefundTemplate = type === "refund" && source === "account";
+    const adminEmail = useLegacyRefundTemplate
+      ? buildRefundRequestAdminEmail({ user: refundUser, payment: emailInput.payment, reason: message })
+      : buildTripRequestAdminEmail(emailInput);
+    const customerEmail = useLegacyRefundTemplate
+      ? buildRefundRequestCustomerEmail({ user: refundUser, payment: emailInput.payment, reason: message })
+      : buildTripRequestCustomerEmail(emailInput);
+
+    const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+    sgMail.send({
+      to: ADMIN_ALERT_EMAILS,
+      from: { email: fromEmail, name: "Travnr Trip Requests" },
+      replyTo: user.email,
+      subject: adminEmail.subject,
+      html: adminEmail.html,
+    }).catch((err) => console.error("trip-request admin email failed:", err));
+    sgMail.send({
+      to: user.email,
+      from: { email: fromEmail, name: "Travnr" },
+      subject: customerEmail.subject,
+      html: customerEmail.html,
+    }).catch((err) => console.error("trip-request customer email failed:", err));
+
+    return { ok: true };
+  }
+
+  // Authenticated My Trips → Manage trip submissions (refund/cancel/change).
+  app.post("/api/trips/:paymentId/request", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const paymentId = parseInt(req.params.paymentId);
+      const parsed = tripRequestBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid request" });
+      }
+      const payment = await storage.getPayment(paymentId);
+      if (!payment || payment.userId !== req.session.userId!) {
+        return res.status(404).json({ message: "Trip not found" });
+      }
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) return res.status(401).json({ message: "User not found" });
+      const result = await processTripRequest({
+        payment, user, type: parsed.data.type, message: parsed.data.message, source: "account",
+      });
+      if (!result.ok) return res.status(result.status).json({ message: result.message });
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("Trip request error:", err);
+      return res.status(500).json({ message: err.message || "Failed to submit request" });
+    }
+  });
+
+  // Public Manage a Trip lookup. Returns a signed token; collapses all
+  // failure modes into a 404 to avoid enumerating confirmation codes.
+  app.post("/api/public/manage-trip/lookup", manageTripLimiter, async (req: Request, res: Response) => {
+    try {
+      const parsed = manageTripLookupSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Last name and confirmation code are required." });
+      }
+      const { lastName, confirmationCode } = parsed.data;
+      const payment = await storage.getPaymentByDuffelBookingRef(confirmationCode);
+      const matched = payment && payment.status === "paid" && (await passengerLastNameMatches(payment, lastName));
+      if (!payment || !matched) {
+        return res.status(404).json({ message: "We couldn't find that booking" });
+      }
+      const trip = await buildTripPayloadFromPayment(payment);
+      const token = signManageTripToken(payment.id);
+      return res.json({ token, trip });
+    } catch (err: any) {
+      console.error("Manage-trip lookup error:", err);
+      return res.status(500).json({ message: "Lookup failed" });
+    }
+  });
+
+  // Public Manage a Trip submit. Signed token scopes to one payment id;
+  // traveler email comes from the booking record (not the request body).
+  app.post("/api/public/manage-trip/request", manageTripLimiter, async (req: Request, res: Response) => {
+    try {
+      const parsed = manageTripRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid request" });
+      }
+      const verified = verifyManageTripToken(parsed.data.token);
+      if (!verified.ok) return res.status(401).json({ message: "Your session expired — please look up the booking again." });
+      const payment = await storage.getPayment(verified.paymentId);
+      if (!payment) return res.status(404).json({ message: "Trip not found" });
+      const owner = payment.userId ? await storage.getUser(payment.userId) : null;
+      const guestEmail = inferBookingTravelerEmail(payment) || owner?.email;
+      if (!guestEmail) return res.status(400).json({ message: "No traveler email on file." });
+      const result = await processTripRequest({
+        payment,
+        user: {
+          id: owner?.id ?? null,
+          email: guestEmail,
+          firstName: owner?.firstName ?? null,
+          lastName: owner?.lastName ?? null,
+        },
+        type: parsed.data.type,
+        message: parsed.data.message,
+        source: "guest",
+      });
+      if (!result.ok) return res.status(result.status).json({ message: result.message });
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("Public manage-trip request error:", err);
+      return res.status(500).json({ message: "Failed to submit request" });
+    }
+  });
+
+  // Public Contact us endpoint — emails ADMIN_ALERT_EMAILS, replyTo = visitor.
+  const escapeContactHtml = (s: string) => s
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  const contactFormSchema = z.object({
+    name: z.string().trim().min(1).max(120),
+    email: z.string().trim().email().max(200),
+    subject: z.string().trim().max(200).nullable().optional(),
+    message: z.string().trim().min(1).max(4000),
+  });
+
+  app.post("/api/public/contact", contactFormLimiter, async (req: Request, res: Response) => {
+    try {
+      const parsed = contactFormSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid form" });
+      }
+      const { name, email, subject, message } = parsed.data;
+      const subjectLine = `Contact form — ${subject?.trim() || name}`;
+      const bodyHtml = `
+        <p><strong>From:</strong> ${escapeContactHtml(name)} &lt;${escapeContactHtml(email)}&gt;</p>
+        ${subject ? `<p><strong>Subject:</strong> ${escapeContactHtml(subject)}</p>` : ""}
+        <p style="white-space:pre-wrap;">${escapeContactHtml(message)}</p>
+      `;
+      const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+      sgMail.send({
+        to: ADMIN_ALERT_EMAILS,
+        from: fromEmail,
+        replyTo: email,
+        subject: subjectLine,
+        html: bodyHtml,
+      }).catch((err) => console.error("Contact form email error:", err));
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("Contact form error:", err);
+      return res.status(500).json({ message: "Could not send your message" });
     }
   });
 
@@ -2122,7 +2503,10 @@ export async function registerRoutes(
 
   // DUFFEL FLIGHT SEARCH & BOOKING
   const duffelToken = process.env.DUFFEL_API_TOKEN;
-  const duffel = duffelToken
+  // duffel is also referenced by module-level helpers (e.g. trip helpers
+  // in this file). Mirror the local instance to a module-level binding so
+  // those helpers can use the same client.
+  duffel = duffelToken
     ? new Duffel({ token: duffelToken })
     : null;
   const isTestMode = duffelToken?.startsWith("duffel_test_") ?? false;

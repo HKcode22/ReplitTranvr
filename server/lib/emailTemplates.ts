@@ -503,6 +503,112 @@ export function buildRefundRequestCustomerEmail(input: RefundRequestInput): Rend
   };
 }
 
+// ==================== Trip Requests (refund / cancel / change) ====================
+
+export type TripRequestType = "refund" | "cancel" | "change";
+
+export interface TripRequestEmailInput {
+  type: TripRequestType;
+  source: "account" | "guest";
+  user: { email: string; firstName?: string | null; lastName?: string | null };
+  payment: {
+    id: number;
+    amount: string | number;
+    currency: string;
+    duffelBookingRef?: string | null;
+    duffelOrderId?: string | null;
+  };
+  trip: {
+    routeLabel: string;
+    dateLabel: string;
+  };
+  message: string;
+}
+
+function tripRequestActionLabel(type: TripRequestType): string {
+  switch (type) {
+    case "refund": return "Refund Request";
+    case "cancel": return "Cancellation Request";
+    case "change": return "Change Request";
+  }
+}
+
+function tripRequestVerb(type: TripRequestType): string {
+  switch (type) {
+    case "refund": return "request a refund for";
+    case "cancel": return "cancel";
+    case "change": return "change";
+  }
+}
+
+export function buildTripRequestAdminEmail(input: TripRequestEmailInput): RenderedEmail {
+  const { type, source, user, payment, trip, message } = input;
+  const amountLine = `${Number(payment.amount).toLocaleString()} ${(payment.currency || "USD").toUpperCase()}`;
+  const safeMessage = escapeHtml(message || "");
+  const actionLabel = tripRequestActionLabel(type);
+  const headerColor = type === "refund" ? "#f59e0b" : type === "cancel" ? "#dc2626" : "#2563eb";
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email;
+  const refLabel = payment.duffelBookingRef || `#${payment.id}`;
+  const sourceTag = source === "guest" ? "Guest (Manage a Trip)" : "Signed-in account";
+
+  return {
+    subject: `${actionLabel} — ${refLabel} — ${fullName}${source === "guest" ? " (guest)" : ""}`,
+    html: `
+      <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;">
+        <div style="background:${headerColor};color:white;padding:16px 20px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;font-size:18px;">${escapeHtml(actionLabel)}</h2>
+          <div style="font-size:12px;opacity:.9;margin-top:2px;">Source: ${escapeHtml(sourceTag)}</div>
+        </div>
+        <div style="border:1px solid #e5e7eb;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:6px 0;color:#6b7280;width:160px;">Customer</td><td>${escapeHtml(fullName)} (${escapeHtml(user.email)})</td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280;">Payment ID</td><td>#${payment.id}</td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280;">Amount</td><td>${amountLine}</td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280;">Booking Ref</td><td style="font-family:monospace;">${escapeHtml(payment.duffelBookingRef || "—")}</td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280;">Duffel Order ID</td><td style="font-family:monospace;">${escapeHtml(payment.duffelOrderId || "—")}</td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280;">Trip</td><td>${escapeHtml(trip.routeLabel)}</td></tr>
+            <tr><td style="padding:6px 0;color:#6b7280;">Date</td><td>${escapeHtml(trip.dateLabel)}</td></tr>
+          </table>
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;" />
+          <h3 style="font-size:14px;color:${TEXT_DARK};margin:0 0 8px;">Traveler message</h3>
+          <p style="margin:0;font-size:14px;color:#1f2937;line-height:1.6;white-space:pre-wrap;">${safeMessage || "(none provided)"}</p>
+        </div>
+      </div>
+    `,
+  };
+}
+
+export function buildTripRequestCustomerEmail(input: TripRequestEmailInput): RenderedEmail {
+  const { type, user, payment, trip } = input;
+  const amountLine = `${Number(payment.amount).toLocaleString()} ${(payment.currency || "USD").toUpperCase()}`;
+  const verb = tripRequestVerb(type);
+  const refLabel = payment.duffelBookingRef
+    ? `<strong>${escapeHtml(payment.duffelBookingRef)}</strong>`
+    : `payment #${payment.id}`;
+
+  return {
+    subject: `We received your ${type === "refund" ? "refund" : type === "cancel" ? "cancellation" : "change"} request`,
+    html: `
+      <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:520px;margin:0 auto;padding:32px 20px;">
+        ${brandHeader()}
+        <h2 style="font-size:20px;color:${TEXT_DARK};margin:0 0 12px;">We received your request</h2>
+        <p style="color:#555;font-size:15px;line-height:1.6;">
+          Thanks${user.firstName ? `, ${escapeHtml(user.firstName)}` : ""}. Your request to ${escapeHtml(verb)}
+          booking ${refLabel} (${amountLine}) has been received.
+        </p>
+        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px 16px;margin:14px 0;font-size:14px;color:${TEXT_DARK};">
+          <div><strong>${escapeHtml(trip.routeLabel)}</strong></div>
+          <div style="color:#6b7280;font-size:13px;margin-top:2px;">${escapeHtml(trip.dateLabel)}</div>
+        </div>
+        <p style="color:#555;font-size:15px;line-height:1.6;">
+          A member of our concierge team will reply within one business day.
+        </p>
+        ${brandFooter()}
+      </div>
+    `,
+  };
+}
+
 // ==================== Sample Data + Catalog (for admin preview/test) ====================
 
 export type EmailTypeId =
@@ -515,6 +621,8 @@ export type EmailTypeId =
   | "manualBookingAdminAlert"
   | "refundRequestAdmin"
   | "refundRequestCustomer"
+  | "tripRequestAdmin"
+  | "tripRequestCustomer"
   | "guestProposal"
   | "guestBookingConfirmation"
   | "guestBookingHolding";
@@ -579,6 +687,18 @@ export const EMAIL_CATALOG: EmailCatalogEntry[] = [
     id: "refundRequestCustomer",
     name: "Refund Request Acknowledgement",
     description: "Sent to the customer confirming their refund request has been received.",
+    audience: "Customer",
+  },
+  {
+    id: "tripRequestAdmin",
+    name: "Trip Request (Admin)",
+    description: "Internal alert sent to admins when a traveler submits a refund/cancel/change request from My Trips or the public Manage a Trip page.",
+    audience: "Admin",
+  },
+  {
+    id: "tripRequestCustomer",
+    name: "Trip Request Acknowledgement",
+    description: "Sent to the traveler confirming their refund/cancel/change request has been received.",
     audience: "Customer",
   },
   {
@@ -965,6 +1085,15 @@ export function buildGuestBookingHoldingEmail(
   };
 }
 
+const SAMPLE_TRIP_REQUEST: TripRequestEmailInput = {
+  type: "change",
+  source: "account",
+  user: { email: "mahid@example.com", firstName: "Mahid", lastName: "Abdulkarim" },
+  payment: { id: 1234, amount: "342.00", currency: "USD", duffelBookingRef: "TRAVNR", duffelOrderId: "ord_sampleXYZ" },
+  trip: { routeLabel: "St. Louis (STL) → New York (JFK)", dateLabel: "Mon, Jun 15, 2026" },
+  message: "Could we move the return flight to Friday afternoon if possible? Thanks.",
+};
+
 const SAMPLE_REFUND_REQUEST: RefundRequestInput = {
   user: { email: "mahid@example.com", firstName: "Mahid", lastName: "Abdulkarim" },
   payment: { id: 1234, amount: "342.00", currency: "USD", duffelBookingRef: "TRAVNR", duffelOrderId: "ord_sampleXYZ" },
@@ -1066,6 +1195,10 @@ export function buildSampleEmail(
       return buildRefundRequestAdminEmail(SAMPLE_REFUND_REQUEST);
     case "refundRequestCustomer":
       return buildRefundRequestCustomerEmail(SAMPLE_REFUND_REQUEST);
+    case "tripRequestAdmin":
+      return buildTripRequestAdminEmail(SAMPLE_TRIP_REQUEST);
+    case "tripRequestCustomer":
+      return buildTripRequestCustomerEmail(SAMPLE_TRIP_REQUEST);
     case "guestBookingConfirmation":
       return buildGuestBookingConfirmationEmail({
         firstName: "Mahid",

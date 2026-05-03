@@ -107,6 +107,25 @@ export const guestBookingLimiter = makeLimiter({
   keyGenerator: perIp,
 });
 
+// ---------- Public Manage-a-Trip lookup + request (per-IP) ----------
+// Tight enough to deter enumeration of last-name/booking-ref pairs while
+// still letting a real traveler retry a typo. Same shape as authIpLimiter.
+export const manageTripLimiter = makeLimiter({
+  windowMs: envInt("RATE_LIMIT_MANAGE_TRIP_WINDOW_MS", 15 * 60 * 1000),
+  max: envInt("RATE_LIMIT_MANAGE_TRIP_MAX", isDev ? 100 : 10),
+  keyGenerator: perIp,
+});
+
+// ---------- Public Contact form (per-IP) ----------
+// Prevents the unauthenticated /api/public/contact endpoint from being
+// abused as a free outbound-email service, while staying generous enough
+// for a real visitor on a shared NAT.
+export const contactFormLimiter = makeLimiter({
+  windowMs: envInt("RATE_LIMIT_CONTACT_WINDOW_MS", 15 * 60 * 1000),
+  max: envInt("RATE_LIMIT_CONTACT_MAX", isDev ? 50 : 5),
+  keyGenerator: perIp,
+});
+
 // ---------- Generic /api fallback ----------
 export const genericApiLimiter = makeLimiter({
   windowMs: envInt("RATE_LIMIT_API_WINDOW_MS", 15 * 60 * 1000),

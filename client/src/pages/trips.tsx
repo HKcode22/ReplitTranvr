@@ -10,6 +10,9 @@ import {
   Luggage, Users, ExternalLink, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ManageTripMenu, type ManageTripType } from "@/components/manage-trip-menu";
 
 interface ManualTripDetails {
   routeSummary: string | null;
@@ -17,13 +20,14 @@ interface ManualTripDetails {
   departingAt: string | null;
 }
 
-interface Trip {
+export interface Trip {
   id: number;
   bookingReference: string | null;
   duffelOrderId: string | null;
   amount: string;
   currency: string;
   status: string;
+  refundStatus?: string | null;
   bookedAt: string;
   proposalId: number | null;
   isManual?: boolean;
@@ -135,7 +139,39 @@ function SliceCard({ slice, label }: { slice: any; label: string }) {
   );
 }
 
-function TripCard({ trip }: { trip: Trip }) {
+// Submits via /api/trips/:id/request for all request types.
+// `onSubmit` overrides the default (used by /manage-trip guest flow).
+function ManageTripControls({
+  trip,
+  onSubmit,
+}: {
+  trip: Trip;
+  onSubmit?: (args: { type: ManageTripType; message: string }) => Promise<void>;
+}) {
+  const { toast } = useToast();
+
+  const defaultSubmit = async ({ type, message }: { type: ManageTripType; message: string }) => {
+    await apiRequest("POST", `/api/trips/${trip.id}/request`, { type, message });
+    toast({
+      title:
+        type === "refund" ? "Refund request received"
+        : type === "cancel" ? "Cancellation request received"
+        : "Change request received",
+      description: "Our concierge team will reply within one business day.",
+    });
+    queryClient.invalidateQueries({ queryKey: ["/api/payments"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/trips"] });
+  };
+
+  return <ManageTripMenu trip={trip} onSubmit={onSubmit ?? defaultSubmit} />;
+}
+
+export interface TripCardProps {
+  trip: Trip;
+  onManageSubmit?: (args: { type: ManageTripType; message: string }) => Promise<void>;
+}
+
+export function TripCard({ trip, onManageSubmit }: TripCardProps) {
   const [expanded, setExpanded] = useState(false);
   const order = trip.order;
   const slices = order?.slices || [];
@@ -244,6 +280,9 @@ function TripCard({ trip }: { trip: Trip }) {
               </Button>
             </Link>
           )}
+          <div className="ml-auto">
+            <ManageTripControls trip={trip} onSubmit={onManageSubmit} />
+          </div>
         </div>
       </div>
 
@@ -312,7 +351,7 @@ function TripCard({ trip }: { trip: Trip }) {
   );
 }
 
-function TripCardFallback({ trip }: { trip: Trip }) {
+export function TripCardFallback({ trip, onManageSubmit }: TripCardProps) {
   const manual = trip.manual || null;
   const heading = manual?.routeSummary || "Flight Booking";
   return (
@@ -355,6 +394,9 @@ function TripCardFallback({ trip }: { trip: Trip }) {
         <div className="font-semibold text-right text-sm sm:text-base whitespace-nowrap tabular-nums shrink-0">
           {trip.currency.toUpperCase()} {Number(trip.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
         </div>
+      </div>
+      <div className="flex items-center justify-end mt-3">
+        <ManageTripControls trip={trip} onSubmit={onManageSubmit} />
       </div>
     </Card>
   );

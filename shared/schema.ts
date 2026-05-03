@@ -158,6 +158,21 @@ export const payments = pgTable("payments", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const tripRequestTypeEnum = pgEnum("trip_request_type", ["refund", "cancel", "change"]);
+export const tripRequestSourceEnum = pgEnum("trip_request_source", ["account", "guest"]);
+
+export const tripRequests = pgTable("trip_requests", {
+  id: serial("id").primaryKey(),
+  paymentId: integer("payment_id").notNull().references(() => payments.id),
+  userId: varchar("user_id", { length: 36 }).references(() => users.id),
+  type: tripRequestTypeEnum("type").notNull(),
+  source: tripRequestSourceEnum("source").notNull(),
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("trip_requests_payment_id_idx").on(table.paymentId),
+]);
+
 export const calendarEntries = pgTable("calendar_entries", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id),
@@ -408,6 +423,7 @@ export const insertGuestProposalSchema = createInsertSchema(guestProposals).omit
 export const insertSavedCardSchema = createInsertSchema(savedCards).omit({ id: true, createdAt: true });
 export const insertBlandCallSchema = createInsertSchema(blandCalls).omit({ id: true, createdAt: true });
 export const insertCalendarEntrySchema = createInsertSchema(calendarEntries).omit({ id: true, createdAt: true });
+export const insertTripRequestSchema = createInsertSchema(tripRequests).omit({ id: true, createdAt: true });
 export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({ id: true, usedCount: true, createdAt: true, updatedAt: true });
 export const insertHotelSearchSchema = createInsertSchema(hotelSearches).omit({ id: true, createdAt: true, completedAt: true });
 export const insertHotelOptionSchema = createInsertSchema(hotelOptions).omit({ id: true, createdAt: true });
@@ -480,6 +496,8 @@ export type SavedCard = typeof savedCards.$inferSelect;
 export type InsertSavedCard = z.infer<typeof insertSavedCardSchema>;
 export type BlandCall = typeof blandCalls.$inferSelect;
 export type InsertBlandCall = z.infer<typeof insertBlandCallSchema>;
+export type TripRequest = typeof tripRequests.$inferSelect;
+export type InsertTripRequest = z.infer<typeof insertTripRequestSchema>;
 export type CalendarEntry = typeof calendarEntries.$inferSelect;
 export interface CalendarEntryDetails {
   bookingRef?: string | null;

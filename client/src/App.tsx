@@ -23,8 +23,9 @@ import RequestCallPage from "@/pages/request-call";
 import CallHistoryPage from "@/pages/call-history";
 import ProposalsPage from "@/pages/proposals";
 import ProposalDetailPage from "@/pages/proposal-detail";
-import CalendarPage from "@/pages/calendar-page";
 import NotificationsPage from "@/pages/notifications-page";
+import ManageTripPage from "@/pages/manage-trip";
+import ContactPage from "@/pages/contact";
 import BillingPage from "@/pages/billing";
 import SecurityPage from "@/pages/security";
 import TripsPage from "@/pages/trips";
@@ -93,7 +94,8 @@ function AuthenticatedLayout() {
               </Route>
               <Route path="/trips" component={TripsPage} />
               <Route path="/flights" component={FlightSearchPage} />
-              <Route path="/calendar" component={CalendarPage} />
+              <Route path="/manage-trip" component={ManageTripPage} />
+              <Route path="/contact" component={ContactPage} />
               <Route path="/notifications" component={NotificationsPage} />
               <Route path="/billing" component={BillingPage} />
               <Route path="/security" component={SecurityPage} />
@@ -152,6 +154,8 @@ function AppRouter() {
         </Route>
         <Route path="/privacy" component={PrivacyPage} />
         <Route path="/terms" component={TermsPage} />
+        <Route path="/manage-trip" component={ManageTripPage} />
+        <Route path="/contact" component={ContactPage} />
         <Route path="/" component={LandingPage} />
         <Route path="/auth" component={AuthPage} />
         <Route path="/reset-password" component={ResetPasswordPage} />

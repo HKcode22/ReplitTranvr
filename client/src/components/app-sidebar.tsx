@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import {
-  LayoutDashboard, User, Phone, PhoneCall, FileText, CalendarDays, Bell, CreditCard, LogOut, Plane, Shield, Luggage,
+  LayoutDashboard, User, Phone, PhoneCall, FileText, Bell, CreditCard, LogOut, Plane, Shield, Luggage,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -15,25 +15,30 @@ import { Button } from "@/components/ui/button";
 import type { Notification } from "@shared/schema";
 
 
-const planningItems = [
+// Top group is intentionally label-less per task #152 — those items are
+// the traveler's day-to-day "do something" surfaces, and a "Planning"
+// header above them implied a category that didn't exist in practice.
+const primaryItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Request a Call", url: "/request-call", icon: Phone },
-  { title: "Call History", url: "/call-history", icon: PhoneCall },
   { title: "Proposals", url: "/proposals", icon: FileText },
   { title: "My Trips", url: "/trips", icon: Luggage },
   { title: "Search Flights", url: "/flights", icon: Plane },
-  { title: "Calendar", url: "/calendar", icon: CalendarDays },
+  { title: "Billing", url: "/billing", icon: CreditCard },
 ];
 
-const accountItems = [
+// Settings group consolidates account/admin surfaces, including
+// Call History which lives here so power users can review past concierge
+// calls without crowding the primary nav.
+const settingsItems = [
   { title: "Profile", url: "/profile", icon: User },
   { title: "Notifications", url: "/notifications", icon: Bell },
-  { title: "Billing", url: "/billing", icon: CreditCard },
   { title: "Security", url: "/security", icon: Shield },
+  { title: "Call History", url: "/call-history", icon: PhoneCall },
 ];
 
 export function AppSidebar() {
-  const [location, setLocation] = useLocation();
+  const [location] = useLocation();
   const { user, logout } = useAuth();
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -45,7 +50,7 @@ export function AppSidebar() {
   const unreadCount = notifications?.filter((n) => !n.readAt).length || 0;
   const initials = user ? `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`.toUpperCase() : "?";
 
-  const renderNavItem = (item: typeof planningItems[0]) => (
+  const renderNavItem = (item: typeof primaryItems[number]) => (
     <SidebarMenuItem key={item.title}>
       <SidebarMenuButton asChild isActive={location === item.url || (item.url === "/call-history" && location.startsWith("/call-request"))}>
         <Link
@@ -74,18 +79,17 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Planning</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {planningItems.map(renderNavItem)}
+              {primaryItems.map(renderNavItem)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel>Account</SidebarGroupLabel>
+          <SidebarGroupLabel>Settings</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {accountItems.map(renderNavItem)}
+              {settingsItems.map(renderNavItem)}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

@@ -6,17 +6,46 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/phone-input";
 import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sparkles, ArrowRight, Phone, FileText, CalendarDays, Shield, Globe, Mic, Check, Loader2,
-  MapPin, Plane, Star,
+  MapPin, Plane, Star, Menu, LogIn, LifeBuoy, Settings2,
 } from "lucide-react";
+import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
 
 
 const WORDS = ["trip", "vacation", "excursion", "getaway", "work trip", "weekend", "honeymoon"];
+
+// Mobile-only landing header menu (Sign in / Manage a Trip / Contact us).
+function MobileLandingMenu() {
+  const [, navigate] = useLocation();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label="Open menu" data-testid="button-landing-menu">
+          <Menu className="w-5 h-5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem onSelect={() => navigate("/auth")} data-testid="menu-landing-sign-in">
+          <LogIn className="w-4 h-4 mr-2" /> Sign in
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => navigate("/manage-trip")} data-testid="menu-landing-manage-trip">
+          <Settings2 className="w-4 h-4 mr-2" /> Manage a Trip
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => navigate("/contact")} data-testid="menu-landing-contact">
+          <LifeBuoy className="w-4 h-4 mr-2" /> Contact us
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function TypingAnimation() {
   const [text, setText] = useState("");
@@ -274,11 +303,17 @@ export default function LandingPage() {
           <Link href="/" className="flex items-center" data-testid="link-landing-logo">
             <span className="font-serif font-semibold text-lg">Travnr</span>
           </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
+          <div className="hidden sm:flex items-center gap-2">
+            <Link href="/manage-trip">
+              <Button variant="ghost" size="sm" data-testid="link-manage-trip">Manage a Trip</Button>
+            </Link>
             <Link href="/auth">
               <Button data-testid="button-sign-in">Sign In</Button>
             </Link>
+          </div>
+
+          <div className="sm:hidden">
+            <MobileLandingMenu />
           </div>
         </div>
         <div className="h-[2px] bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
@@ -399,6 +434,7 @@ export default function LandingPage() {
             <span className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()}</span>
           </div>
           <div className="flex gap-4 text-sm text-muted-foreground">
+            <Link href="/contact" className="hover:underline" data-testid="link-contact-footer">Contact</Link>
             <Link href="/privacy" className="hover:underline" data-testid="link-privacy">Privacy</Link>
             <Link href="/terms" className="hover:underline" data-testid="link-terms">Terms</Link>
           </div>
