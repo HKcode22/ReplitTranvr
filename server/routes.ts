@@ -2933,9 +2933,13 @@ export async function registerRoutes(
 
   // Body schema for the booking endpoint. NO payment-instrument fields
   // — PCI lives only in Stripe's PI flow, which is deferred from Phase 5.
+  // `bookingApprovalToken` is intentionally OPTIONAL at the schema layer
+  // so a missing/empty token surfaces as guardrail #5
+  // (`403 missing_token`), not as a generic schema-level 400. The
+  // booking endpoint enforces presence + validity below.
   const hotelBookingBodySchema = z.object({
     hotelOptionId: z.number().int().positive(),
-    bookingApprovalToken: z.string().min(8),
+    bookingApprovalToken: z.string().optional(),
     travelers: z
       .array(
         z.object({
@@ -2946,7 +2950,6 @@ export async function registerRoutes(
       )
       .min(1)
       .max(8),
-    contactEmail: z.string().email().max(254),
     specialRequests: z.string().max(500).optional(),
   });
 
@@ -2999,7 +3002,23 @@ export async function registerRoutes(
         });
       }
 
-      // === Guardrail 3: provider must be configured (mock is exempt). ===
+      // === Guardrail 3: provider must be configured. ===
+      // The factory `getHotelProvider()` silently falls back to the mock
+      // adapter when a requested real provider's creds are missing —
+      // that is by design for read paths (hotel search). For BOOKING
+      // we must NOT silently accept that fallback: if an admin set
+      // HOTEL_PROVIDER=expedia and the creds aren't set, the booking
+      // endpoint should refuse rather than book against the mock.
+      const requestedProvider = (process.env.HOTEL_PROVIDER || "mock").toLowerCase();
+      if (requestedProvider !== "mock" && provider.name === "mock") {
+        console.log(
+          `[hotels] booking attempt provider=${provider.name} requested=${requestedProvider} optionId=${body.hotelOptionId} result=blocked blockReason=not_configured`,
+        );
+        return res.status(403).json({
+          message: `Provider ${requestedProvider} is not configured (factory fell back to mock)`,
+          blockReason: "not_configured",
+        });
+      }
       if (provider.name !== "mock" && !provider.isConfigured()) {
         console.log(
           `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} result=blocked blockReason=not_configured`,
@@ -3011,9 +3030,20 @@ export async function registerRoutes(
       }
 
       // === Guardrail 5: consume the approval token (single-use). ===
-      // Burn-on-lookup means a leaked token can't be replayed against
-      // multiple option ids.
-      const consumed = consumeBookingApprovalToken(body.bookingApprovalToken, body.hotelOptionId);
+      // Token must be present (empty/missing → 403 missing_token, NOT
+      // a schema 400). Burn-on-lookup means a leaked token can't be
+      // replayed against multiple option ids.
+      const tokenStr = (body.bookingApprovalToken || "").trim();
+      if (!tokenStr) {
+        console.log(
+          `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} result=blocked blockReason=missing_token`,
+        );
+        return res.status(403).json({
+          message: "Booking approval token is required",
+          blockReason: "missing_token",
+        });
+      }
+      const consumed = consumeBookingApprovalToken(tokenStr, body.hotelOptionId);
       if (!consumed.ok) {
         const reason =
           consumed.reason === "expired"
@@ -3030,21 +3060,56 @@ export async function registerRoutes(
         });
       }
 
-      // === Guardrail 6: quoted total must be under the cap. ===
-      // Use stored option price as the reference total (real providers
-      // would re-quote here, but in Phase 5 the mock and stubs both can
-      // be reasoned about from option.totalPrice — and we never charge).
-      const optTotal = parseFloat(String(opt.totalPrice ?? "0"));
-      const cap = getHotelBookingMaxUsd();
-      if (!Number.isFinite(optTotal) || optTotal <= 0 || optTotal > cap) {
+      // === Phase-5 quote/price-check (synthetic for mock; real providers
+      // would re-quote here when implemented). The returned amount, NOT
+      // the stored option price, is what the cap check enforces — this
+      // matches what we'd actually try to charge if Stripe were wired.
+      let quotedAmount: number;
+      let quotedCurrency: string;
+      try {
+        const offerId = opt.providerRateId;
+        if (!offerId) {
+          return res.status(400).json({
+            message: "Stored hotel option is missing providerRateId",
+            blockReason: "missing_provider_offer_id",
+          });
+        }
+        const quote = await provider.priceCheckOrQuote(offerId);
+        quotedAmount = Number(quote.totalPrice);
+        quotedCurrency = (quote.currency || opt.currency || "USD").toUpperCase();
+      } catch (qErr) {
+        if (qErr instanceof HotelProviderNotConfiguredError) {
+          console.log(
+            `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} result=blocked blockReason=provider_not_implemented stage=quote`,
+          );
+          return res.status(501).json({
+            message: qErr.message,
+            blockReason: "provider_not_implemented",
+          });
+        }
+        const msg = qErr instanceof Error ? qErr.message : String(qErr);
+        console.error(`[hotels] price-check failed optionId=${body.hotelOptionId} err=${msg}`);
+        return res.status(502).json({ message: "Price check failed", blockReason: "quote_failed" });
+      }
+
+      // === Guardrail 6: quoted total must be under BOTH the env cap
+      // AND the cap that was locked into the approval token at issuance
+      // time. Using the lower of the two prevents a sneaky env bump
+      // between issuance and use from raising the ceiling for an
+      // already-issued token.
+      const envCap = getHotelBookingMaxUsd();
+      const tokenCap = consumed.record.maxTotalUsd;
+      const cap = Math.min(envCap, tokenCap);
+      if (!Number.isFinite(quotedAmount) || quotedAmount <= 0 || quotedAmount > cap) {
         console.log(
-          `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} result=blocked blockReason=over_cap total=${optTotal} cap=${cap}`,
+          `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} result=blocked blockReason=over_cap quoted=${quotedAmount} envCap=${envCap} tokenCap=${tokenCap}`,
         );
         return res.status(400).json({
-          message: `Total ${optTotal} exceeds HOTEL_BOOKING_MAX_TOTAL_USD=${cap}`,
+          message: `Quoted total ${quotedAmount} exceeds cap ${cap} (env=${envCap}, token=${tokenCap})`,
           blockReason: "over_cap",
-          total: optTotal,
-          cap,
+          quoted: quotedAmount,
+          envCap,
+          tokenCap,
         });
       }
 
@@ -3061,9 +3126,14 @@ export async function registerRoutes(
       }
 
       const dryRun = isHotelDryRun();
-      const currency = (opt.currency || "USD").toUpperCase();
+      const currency = quotedCurrency;
       const userId = req.session.userId!;
       const redactedRoster = body.travelers.map(redactTraveler).join(",");
+      // No contact-email field on the request body per the Phase 5 task
+      // contract. The mock provider doesn't require one; future real
+      // providers that do can be wired by pulling from the admin's user
+      // record at call time.
+      const contactEmailForProvider = "";
 
       try {
         // === Guardrail 4: dry-run is the default. ===
@@ -3081,7 +3151,6 @@ export async function registerRoutes(
             status: "dry_run",
             travelerDetails: {
               travelers: body.travelers,
-              contactEmail: body.contactEmail,
               specialRequests: body.specialRequests ?? null,
             },
             totalCharged: "0",
@@ -3089,13 +3158,13 @@ export async function registerRoutes(
             errorMessage: null,
           });
           console.log(
-            `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} dryRun=true result=allowed bookingId=${booking.id} pax=${body.travelers.length} roster=${redactedRoster}`,
+            `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} dryRun=true result=allowed bookingId=${booking.id} pax=${body.travelers.length} roster=${redactedRoster} quoted=${quotedAmount}`,
           );
           return res.json({
             booking,
             dryRun: true,
             stripeQuote: {
-              amount: optTotal,
+              amount: quotedAmount,
               currency,
               note: "Stripe payment intent intentionally NOT created in Phase 5.",
             },
@@ -3109,14 +3178,9 @@ export async function registerRoutes(
           // The DB column is `providerRateId`; the in-memory HotelOption
           // type uses `providerOfferId`. The Phase 2 mapper writes the
           // option's offer id into `providerRateId`, so we read it back
-          // here. If the persisted row lost it somehow, fail loudly.
-          const offerId = opt.providerRateId;
-          if (!offerId) {
-            return res.status(400).json({
-              message: "Stored hotel option is missing providerRateId",
-              blockReason: "missing_provider_offer_id",
-            });
-          }
+          // here. (Already validated non-null during the quote stage
+          // above — this re-read keeps the call site self-contained.)
+          const offerId = opt.providerRateId!;
           const result = await provider.createBooking({
             providerOfferId: offerId,
             travelers: body.travelers.map((t) => ({
@@ -3124,7 +3188,7 @@ export async function registerRoutes(
               familyName: t.lastName,
               dateOfBirth: t.dob,
             })),
-            contactEmail: body.contactEmail,
+            contactEmail: contactEmailForProvider,
             specialRequests: body.specialRequests,
           });
 
@@ -3138,7 +3202,6 @@ export async function registerRoutes(
             status: result.status === "confirmed" ? "confirmed" : "pending",
             travelerDetails: {
               travelers: body.travelers,
-              contactEmail: body.contactEmail,
               specialRequests: body.specialRequests ?? null,
             },
             // No Stripe charge in Phase 5 even on the live path. Stripe
@@ -3148,13 +3211,13 @@ export async function registerRoutes(
             errorMessage: null,
           });
           console.log(
-            `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} dryRun=false result=completed bookingId=${booking.id} pax=${body.travelers.length} roster=${redactedRoster}`,
+            `[hotels] booking attempt provider=${provider.name} optionId=${body.hotelOptionId} dryRun=false result=completed bookingId=${booking.id} pax=${body.travelers.length} roster=${redactedRoster} quoted=${quotedAmount}`,
           );
           return res.json({
             booking,
             dryRun: false,
             stripeQuote: {
-              amount: optTotal,
+              amount: quotedAmount,
               currency,
               note: "No Stripe charge created in Phase 5.",
             },
@@ -3183,7 +3246,6 @@ export async function registerRoutes(
             status: "failed",
             travelerDetails: {
               travelers: body.travelers,
-              contactEmail: body.contactEmail,
               specialRequests: body.specialRequests ?? null,
             },
             totalCharged: "0",
