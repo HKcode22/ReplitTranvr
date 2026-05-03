@@ -345,11 +345,16 @@ async function createManualBookingFallback(args: {
   offerId: string;
   fullOffer: any;
   passengerMappings: any[];
+  // Optional richer snapshot of the standard airline passenger fields the
+  // traveler filled in (loyalty, KTN, redress, residence, etc). Stored on
+  // manual_booking_details.extendedPassengers so the concierge team has
+  // everything the airline will ask for at booking time.
+  extendedPassengers?: unknown[];
   paidPiAmountCents: number | null;
   stripePaymentIntentId: string | null;
   endpoint: string;
 }) {
-  const { userId, userEmail, proposalId, proposalTitle, offerId, fullOffer, passengerMappings, paidPiAmountCents, stripePaymentIntentId, endpoint } = args;
+  const { userId, userEmail, proposalId, proposalTitle, offerId, fullOffer, passengerMappings, extendedPassengers, paidPiAmountCents, stripePaymentIntentId, endpoint } = args;
   const flightAmountCents = Math.round(parseFloat(fullOffer.total_amount) * 100);
   const fallbackTotalCents = applyConvenienceFee(flightAmountCents).totalCents;
   const chargedTotalCents = paidPiAmountCents ?? fallbackTotalCents;
@@ -384,6 +389,7 @@ async function createManualBookingFallback(args: {
       currency: fullOffer.total_currency,
       slices: sliceSummary,
       passengers: passengerMappings,
+      ...(extendedPassengers ? { extendedPassengers } : {}),
       routeSummary: routeSummary || null,
       proposalTitle: proposalTitle ?? null,
       capturedAt: new Date().toISOString(),
@@ -7090,6 +7096,16 @@ export async function registerRoutes(
   // POST /api/guest-booking/:optionToken/confirm
   // Verifies the PI, books on Duffel (or routes to manual fallback), persists
   // a payments row + calendar entries, and emails the guest.
+  // Standard airline passenger schema. Names are split into first / middle /
+  // last (mapped to Duffel's given_name + family_name on submit). ISO-3166-1
+  // alpha-2 codes are validated as exactly two uppercase letters; optional
+  // country codes accept "" so the client can omit them cleanly.
+  const isoCountry = z.string().regex(/^[A-Z]{2}$/, "Country must be a 2-letter ISO code");
+  const optionalIsoCountry = z.union([
+    isoCountry,
+    z.literal(""),
+    z.undefined(),
+  ]).optional();
   const guestConfirmSchema = z.object({
     paymentIntentId: z.string().min(1),
     contact: z.object({
@@ -7099,11 +7115,22 @@ export async function registerRoutes(
       phone: z.string().min(3),
     }),
     passengers: z.array(z.object({
-      givenName: z.string().min(1),
-      familyName: z.string().min(1),
-      bornOn: z.string().min(4), // YYYY-MM-DD
+      firstName: z.string().min(1, "First name is required"),
+      middleName: z.string().optional(),
+      lastName: z.string().min(1, "Last name is required"),
+      bornOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be YYYY-MM-DD"),
       gender: z.enum(["m", "f", "x", "u"]).optional().default("u"),
       title: z.enum(["mr", "ms", "mrs", "miss", "dr"]).optional().default("mr"),
+      residenceCountry: isoCountry,
+      residenceState: z.string().optional(),
+      loyaltyProgramme: z.string().optional(),
+      loyaltyNumber: z.string().optional(),
+      knownTravelerNumber: z.string().optional(),
+      knownTravelerCountry: optionalIsoCountry,
+      redressNumber: z.string().optional(),
+      redressCountry: optionalIsoCountry,
+      secondaryRedressNumber: z.string().optional(),
+      secondaryRedressCountry: optionalIsoCountry,
       email: z.string().email().optional(),
       phone: z.string().optional(),
       passportNumber: z.string().optional(),
@@ -7331,13 +7358,20 @@ export async function registerRoutes(
         }
       }
 
-      // Map passengers to Duffel offer.passengers (by index).
+      // Map passengers to Duffel offer.passengers (by index). Combine
+      // first + middle into Duffel's `given_name` (Duffel has no middle-name
+      // field; combining is the airline-industry-standard approach so the
+      // ticket prints exactly as on the traveler's ID). KTN, redress, and
+      // residence info aren't first-class Duffel fields — they're persisted
+      // server-side below for the concierge team and any post-booking PNR
+      // updates, but not forwarded in the order create call.
       const passengerMappings = (offer.passengers || []).map((p: any, idx: number) => {
         const pax = passengers[idx] || passengers[0];
-        const mapping: any = {
+        const givenName = [pax.firstName, pax.middleName].filter((x) => x && x.trim()).join(" ");
+        const mapping: Record<string, unknown> = {
           id: p.id,
-          given_name: pax.givenName,
-          family_name: pax.familyName,
+          given_name: givenName,
+          family_name: pax.lastName,
           born_on: pax.bornOn,
           email: pax.email || contact.email,
           phone_number: pax.phone || contact.phone,
@@ -7352,8 +7386,44 @@ export async function registerRoutes(
             expires_on: pax.passportExpiry,
           }];
         }
+        // Forward loyalty programme + number to Duffel only when both are
+        // present and we have a marketing carrier IATA to attach them to.
+        if (pax.loyaltyProgramme && pax.loyaltyNumber) {
+          const airlineIata = offer.owner?.iata_code || null;
+          if (airlineIata) {
+            mapping.loyalty_programme_accounts = [{
+              account_number: pax.loyaltyNumber,
+              airline_iata_code: airlineIata,
+            }];
+          }
+        }
         return mapping;
       });
+
+      // Snapshot the full set of standard-airline fields so the concierge team
+      // (and any later admin tooling) can see exactly what the traveler
+      // entered, even on the auto-Duffel path where we only forward a subset.
+      const extendedPassengerSnapshot = passengers.map((pax) => ({
+        firstName: pax.firstName,
+        middleName: pax.middleName ?? null,
+        lastName: pax.lastName,
+        bornOn: pax.bornOn,
+        gender: pax.gender,
+        title: pax.title,
+        residenceCountry: pax.residenceCountry,
+        residenceState: pax.residenceState ?? null,
+        loyaltyProgramme: pax.loyaltyProgramme ?? null,
+        loyaltyNumber: pax.loyaltyNumber ?? null,
+        knownTravelerNumber: pax.knownTravelerNumber ?? null,
+        knownTravelerCountry: pax.knownTravelerCountry || null,
+        redressNumber: pax.redressNumber ?? null,
+        redressCountry: pax.redressCountry || null,
+        secondaryRedressNumber: pax.secondaryRedressNumber ?? null,
+        secondaryRedressCountry: pax.secondaryRedressCountry || null,
+        passportNumber: pax.passportNumber ?? null,
+        passportCountry: pax.passportCountry ?? null,
+        passportExpiry: pax.passportExpiry ?? null,
+      }));
 
       // Ensure a placeholder user exists so payments.user_id is satisfied.
       // Email match against `row.email` was enforced above, so this either
@@ -7423,6 +7493,7 @@ export async function registerRoutes(
           offerId: offer.id,
           fullOffer: offer,
           passengerMappings,
+          extendedPassengers: extendedPassengerSnapshot,
           paidPiAmountCents: pi.amount,
           stripePaymentIntentId: paymentIntentId,
           endpoint: "POST /api/guest-booking/:optionToken/confirm",
@@ -7479,6 +7550,16 @@ export async function registerRoutes(
         currency: currencyLower,
         status: "paid",
         appliedPromoCode: appliedPromo?.code ?? null,
+        // Persist the full standard-airline passenger snapshot alongside the
+        // Duffel order so admin/concierge tooling can show every field the
+        // traveler entered, even when Duffel only stores the subset it
+        // natively supports (name/dob/gender/loyalty/passport).
+        manualBookingDetails: {
+          source: "guest_booking_auto",
+          offerId: offer.id,
+          extendedPassengers: extendedPassengerSnapshot,
+          capturedAt: new Date().toISOString(),
+        },
       });
 
       // Payment + Duffel order have succeeded; a failed status write is an

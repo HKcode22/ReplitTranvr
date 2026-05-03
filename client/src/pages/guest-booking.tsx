@@ -12,6 +12,7 @@ import { PromoCodeInput, type AppliedPromo } from "@/components/promo-code-input
 import { ensureCsrfToken } from "@/lib/queryClient";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { trackEvent } from "@/lib/analytics";
+import { COUNTRIES, STATES_BY_COUNTRY, hasSubdivisions } from "@/lib/countries";
 
 const BRAND_BLUE = "#2d7abf";
 
@@ -60,14 +61,113 @@ interface OptionResponse {
 }
 
 interface PassengerForm {
-  givenName: string;
-  familyName: string;
-  bornOn: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  // Date of birth captured as separate Month / Day / Year selects (AA-style)
+  // and composed to YYYY-MM-DD on submit.
+  dobMonth: string;
+  dobDay: string;
+  dobYear: string;
   gender: "m" | "f" | "x" | "u";
   title: "mr" | "ms" | "mrs" | "miss" | "dr";
+  residenceCountry: string;
+  residenceState?: string;
+  loyaltyProgramme?: string;
+  loyaltyNumber?: string;
+  knownTravelerNumber?: string;
+  knownTravelerCountry?: string;
+  redressNumber?: string;
+  redressCountry?: string;
+  secondaryRedressNumber?: string;
+  secondaryRedressCountry?: string;
   passportNumber?: string;
   passportCountry?: string;
   passportExpiry?: string;
+}
+
+// Compose YYYY-MM-DD from the three DOB selects, zero-padding month/day.
+// Returns "" if any part is missing so the validator can flag it.
+function composeBornOn(p: PassengerForm): string {
+  if (!p.dobYear || !p.dobMonth || !p.dobDay) return "";
+  const mm = String(p.dobMonth).padStart(2, "0");
+  const dd = String(p.dobDay).padStart(2, "0");
+  return `${p.dobYear}-${mm}-${dd}`;
+}
+
+const MONTHS = [
+  { v: "1", n: "January" }, { v: "2", n: "February" }, { v: "3", n: "March" },
+  { v: "4", n: "April" }, { v: "5", n: "May" }, { v: "6", n: "June" },
+  { v: "7", n: "July" }, { v: "8", n: "August" }, { v: "9", n: "September" },
+  { v: "10", n: "October" }, { v: "11", n: "November" }, { v: "12", n: "December" },
+];
+
+// 1..31 — we don't disable invalid combinations (e.g. Feb 30) because the
+// server-side schema and Duffel both reject malformed dates with a clearer
+// error than juggling per-month day counts here.
+const DAYS = Array.from({ length: 31 }, (_, i) => String(i + 1));
+
+// Year range: now-100 .. now-1 (no future birth dates).
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 100 }, (_, i) => String(CURRENT_YEAR - 1 - i));
+
+// Tailwind class for a native select styled like shadcn Input.
+const SELECT_CLASS =
+  "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+
+function RequiredDot() {
+  return <span className="text-red-500 ml-0.5" aria-hidden>•</span>;
+}
+
+interface PassengerErrors {
+  firstName?: string;
+  lastName?: string;
+  bornOn?: string;
+  gender?: string;
+  residenceCountry?: string;
+  residenceState?: string;
+  passport?: string;
+}
+
+function validatePassenger(p: PassengerForm, passportRequired: boolean): PassengerErrors {
+  const errs: PassengerErrors = {};
+  if (!p.firstName.trim()) errs.firstName = "First name is required";
+  if (!p.lastName.trim()) errs.lastName = "Last name is required";
+  if (!composeBornOn(p)) errs.bornOn = "Date of birth is required";
+  if (!p.gender) errs.gender = "Gender is required";
+  if (!p.residenceCountry) errs.residenceCountry = "Country / region is required";
+  if (hasSubdivisions(p.residenceCountry) && !p.residenceState) {
+    errs.residenceState = "State / province is required";
+  }
+  if (passportRequired) {
+    if (!p.passportNumber || !p.passportCountry || !p.passportExpiry) {
+      errs.passport = "Passport details are required for this trip";
+    }
+  }
+  return errs;
+}
+
+function emptyPassenger(): PassengerForm {
+  return {
+    firstName: "",
+    middleName: "",
+    lastName: "",
+    dobMonth: "",
+    dobDay: "",
+    dobYear: "",
+    gender: "u",
+    title: "mr",
+    residenceCountry: "",
+    residenceState: "",
+    loyaltyProgramme: "",
+    loyaltyNumber: "",
+    knownTravelerNumber: "",
+    knownTravelerCountry: "",
+    redressNumber: "",
+    redressCountry: "",
+    secondaryRedressNumber: "",
+    secondaryRedressCountry: "",
+  };
 }
 
 function formatMoney(cents: number, currency: string) {
@@ -229,9 +329,13 @@ function CheckoutForm({
       return;
     }
     for (let i = 0; i < passengers.length; i++) {
-      const p = passengers[i];
-      if (!p.givenName || !p.familyName || !p.bornOn) {
-        toast({ title: "Missing passenger details", description: `Please complete passenger ${i + 1}.`, variant: "destructive" });
+      const errs = validatePassenger(passengers[i], data.passportRequired);
+      if (Object.keys(errs).length > 0) {
+        toast({
+          title: `Passenger ${i + 1} is incomplete`,
+          description: Object.values(errs)[0] || "Please complete every required field.",
+          variant: "destructive",
+        });
         return;
       }
     }
@@ -270,11 +374,22 @@ function CheckoutForm({
           paymentIntentId: pi.id,
           contact,
           passengers: passengers.map((p) => ({
-            givenName: p.givenName,
-            familyName: p.familyName,
-            bornOn: p.bornOn,
+            firstName: p.firstName.trim(),
+            ...(p.middleName?.trim() ? { middleName: p.middleName.trim() } : {}),
+            lastName: p.lastName.trim(),
+            bornOn: composeBornOn(p),
             gender: p.gender,
             title: p.title,
+            residenceCountry: p.residenceCountry,
+            ...(p.residenceState ? { residenceState: p.residenceState } : {}),
+            ...(p.loyaltyProgramme?.trim() ? { loyaltyProgramme: p.loyaltyProgramme.trim() } : {}),
+            ...(p.loyaltyNumber?.trim() ? { loyaltyNumber: p.loyaltyNumber.trim() } : {}),
+            ...(p.knownTravelerNumber?.trim() ? { knownTravelerNumber: p.knownTravelerNumber.trim() } : {}),
+            ...(p.knownTravelerCountry ? { knownTravelerCountry: p.knownTravelerCountry } : {}),
+            ...(p.redressNumber?.trim() ? { redressNumber: p.redressNumber.trim() } : {}),
+            ...(p.redressCountry ? { redressCountry: p.redressCountry } : {}),
+            ...(p.secondaryRedressNumber?.trim() ? { secondaryRedressNumber: p.secondaryRedressNumber.trim() } : {}),
+            ...(p.secondaryRedressCountry ? { secondaryRedressCountry: p.secondaryRedressCountry } : {}),
             email: contact.email,
             phone: contact.phone,
             ...(p.passportNumber ? { passportNumber: p.passportNumber } : {}),
@@ -320,6 +435,444 @@ function CheckoutForm({
   );
 }
 
+// PassengerCard renders the standard airline-style passenger form. Layout
+// mirrors the AA reference: required-field legend at the top, a 3-column
+// First/Middle/Last row, Month/Day/Year DOB selects, a Gender + Country row
+// with a State select that enables only when the country has subdivisions, a
+// loyalty row, and a collapsible "Secure traveler information" section for
+// KTN + redress (with an "Add secondary redress number" affordance). The
+// existing passport section is preserved for trips where Duffel marks the
+// offer as identity-document-required.
+function PassengerCard({
+  idx,
+  passenger,
+  passportRequired,
+  onChange,
+}: {
+  idx: number;
+  passenger: PassengerForm;
+  passportRequired: boolean;
+  onChange: (updater: (prev: PassengerForm) => PassengerForm) => void;
+}) {
+  const [secureOpen, setSecureOpen] = useState(false);
+  const [showSecondaryRedress, setShowSecondaryRedress] = useState(
+    !!passenger.secondaryRedressNumber,
+  );
+  const errors = validatePassenger(passenger, passportRequired);
+  // Errors are only surfaced inline when a field has been touched (reduces
+  // noise on first render). Touched-state is field-keyed so we only flag the
+  // input the user actually left empty after editing it.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const touch = (k: string) => setTouched((t) => (t[k] ? t : { ...t, [k]: true }));
+
+  const set = <K extends keyof PassengerForm>(key: K, value: PassengerForm[K]) => {
+    onChange((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const states = passenger.residenceCountry
+    ? STATES_BY_COUNTRY[passenger.residenceCountry] || []
+    : [];
+  const stateEnabled = states.length > 0;
+
+  const errorClass = (key: keyof PassengerErrors) =>
+    touched[key] && errors[key] ? "border-red-400 focus-visible:ring-red-400" : "";
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-base font-semibold text-gray-900">Passenger {idx + 1}</h3>
+        <span className="text-xs text-gray-500">
+          <RequiredDot /> required
+        </span>
+      </div>
+      <p className="text-xs text-gray-500 mb-4">
+        Enter name as printed on government-issued photo ID.
+      </p>
+
+      {/* Name row */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <div>
+          <Label htmlFor={`p-${idx}-first`}>
+            First name<RequiredDot />
+          </Label>
+          <Input
+            id={`p-${idx}-first`}
+            value={passenger.firstName}
+            onChange={(e) => set("firstName", e.target.value)}
+            onBlur={() => touch("firstName")}
+            className={errorClass("firstName")}
+            data-testid={`input-pax-first-${idx}`}
+            autoComplete="given-name"
+          />
+          {touched.firstName && errors.firstName && (
+            <p className="text-xs text-red-600 mt-1">{errors.firstName}</p>
+          )}
+        </div>
+        <div>
+          <Label htmlFor={`p-${idx}-middle`}>Middle name (optional)</Label>
+          <Input
+            id={`p-${idx}-middle`}
+            value={passenger.middleName || ""}
+            onChange={(e) => set("middleName", e.target.value)}
+            data-testid={`input-pax-middle-${idx}`}
+            autoComplete="additional-name"
+          />
+        </div>
+        <div>
+          <Label htmlFor={`p-${idx}-last`}>
+            Last name<RequiredDot />
+          </Label>
+          <Input
+            id={`p-${idx}-last`}
+            value={passenger.lastName}
+            onChange={(e) => set("lastName", e.target.value)}
+            onBlur={() => touch("lastName")}
+            className={errorClass("lastName")}
+            data-testid={`input-pax-last-${idx}`}
+            autoComplete="family-name"
+          />
+          {touched.lastName && errors.lastName && (
+            <p className="text-xs text-red-600 mt-1">{errors.lastName}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Date of birth — Month / Day / Year selects (AA reference) */}
+      <div className="mb-4">
+        <Label>
+          Date of birth<RequiredDot />
+        </Label>
+        <div className="grid grid-cols-3 gap-3 mt-1">
+          <select
+            aria-label="Birth month"
+            className={`${SELECT_CLASS} ${touched.bornOn && errors.bornOn ? "border-red-400" : ""}`}
+            value={passenger.dobMonth}
+            onChange={(e) => set("dobMonth", e.target.value)}
+            onBlur={() => touch("bornOn")}
+            data-testid={`select-pax-dob-month-${idx}`}
+          >
+            <option value="">Month</option>
+            {MONTHS.map((m) => (
+              <option key={m.v} value={m.v}>{m.n}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Birth day"
+            className={`${SELECT_CLASS} ${touched.bornOn && errors.bornOn ? "border-red-400" : ""}`}
+            value={passenger.dobDay}
+            onChange={(e) => set("dobDay", e.target.value)}
+            onBlur={() => touch("bornOn")}
+            data-testid={`select-pax-dob-day-${idx}`}
+          >
+            <option value="">Day</option>
+            {DAYS.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Birth year"
+            className={`${SELECT_CLASS} ${touched.bornOn && errors.bornOn ? "border-red-400" : ""}`}
+            value={passenger.dobYear}
+            onChange={(e) => set("dobYear", e.target.value)}
+            onBlur={() => touch("bornOn")}
+            data-testid={`select-pax-dob-year-${idx}`}
+          >
+            <option value="">Year</option>
+            {YEARS.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        {touched.bornOn && errors.bornOn && (
+          <p className="text-xs text-red-600 mt-1">{errors.bornOn}</p>
+        )}
+      </div>
+
+      {/* Gender + Title */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div>
+          <Label htmlFor={`p-${idx}-gender`}>
+            Gender<RequiredDot />
+          </Label>
+          <select
+            id={`p-${idx}-gender`}
+            className={`${SELECT_CLASS} ${errorClass("gender")}`}
+            value={passenger.gender}
+            onChange={(e) => set("gender", e.target.value as PassengerForm["gender"])}
+            data-testid={`select-pax-gender-${idx}`}
+          >
+            <option value="m">Male</option>
+            <option value="f">Female</option>
+            <option value="x">Non-binary / X</option>
+            <option value="u">Undisclosed</option>
+          </select>
+        </div>
+        <div>
+          <Label htmlFor={`p-${idx}-title`}>Title</Label>
+          <select
+            id={`p-${idx}-title`}
+            className={SELECT_CLASS}
+            value={passenger.title}
+            onChange={(e) => set("title", e.target.value as PassengerForm["title"])}
+            data-testid={`select-pax-title-${idx}`}
+          >
+            <option value="mr">Mr</option>
+            <option value="ms">Ms</option>
+            <option value="mrs">Mrs</option>
+            <option value="miss">Miss</option>
+            <option value="dr">Dr</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Country / region of residence + State */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div>
+          <Label htmlFor={`p-${idx}-residence-country`}>
+            Country / region of residence<RequiredDot />
+          </Label>
+          <select
+            id={`p-${idx}-residence-country`}
+            className={`${SELECT_CLASS} ${errorClass("residenceCountry")}`}
+            value={passenger.residenceCountry}
+            onChange={(e) => {
+              const code = e.target.value;
+              onChange((prev) => ({
+                ...prev,
+                residenceCountry: code,
+                // Reset state whenever country changes — the previous state
+                // code is meaningless under the new country's subdivisions.
+                residenceState: "",
+              }));
+            }}
+            onBlur={() => touch("residenceCountry")}
+            data-testid={`select-pax-residence-country-${idx}`}
+          >
+            <option value="">Select a country</option>
+            {COUNTRIES.map((c) => (
+              <option key={c.code} value={c.code}>{c.name}</option>
+            ))}
+          </select>
+          {touched.residenceCountry && errors.residenceCountry && (
+            <p className="text-xs text-red-600 mt-1">{errors.residenceCountry}</p>
+          )}
+        </div>
+        <div>
+          <Label htmlFor={`p-${idx}-residence-state`}>
+            State / province{stateEnabled && <RequiredDot />}
+          </Label>
+          <select
+            id={`p-${idx}-residence-state`}
+            className={`${SELECT_CLASS} ${errorClass("residenceState")}`}
+            value={passenger.residenceState || ""}
+            onChange={(e) => set("residenceState", e.target.value)}
+            onBlur={() => touch("residenceState")}
+            disabled={!stateEnabled}
+            data-testid={`select-pax-residence-state-${idx}`}
+          >
+            <option value="">{stateEnabled ? "Select a state / province" : "—"}</option>
+            {states.map((s) => (
+              <option key={s.code} value={s.code}>{s.name}</option>
+            ))}
+          </select>
+          {touched.residenceState && errors.residenceState && (
+            <p className="text-xs text-red-600 mt-1">{errors.residenceState}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Loyalty programme (optional) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div>
+          <Label htmlFor={`p-${idx}-loyalty-prog`}>Loyalty program (optional)</Label>
+          <Input
+            id={`p-${idx}-loyalty-prog`}
+            value={passenger.loyaltyProgramme || ""}
+            onChange={(e) => set("loyaltyProgramme", e.target.value)}
+            placeholder="e.g. AAdvantage"
+            data-testid={`input-pax-loyalty-prog-${idx}`}
+          />
+        </div>
+        <div>
+          <Label htmlFor={`p-${idx}-loyalty-num`}>Loyalty number (optional)</Label>
+          <Input
+            id={`p-${idx}-loyalty-num`}
+            value={passenger.loyaltyNumber || ""}
+            onChange={(e) => set("loyaltyNumber", e.target.value)}
+            data-testid={`input-pax-loyalty-num-${idx}`}
+          />
+        </div>
+      </div>
+
+      {/* Secure traveler information (collapsible) */}
+      <div className="border-t border-gray-200 pt-3">
+        <button
+          type="button"
+          onClick={() => setSecureOpen((v) => !v)}
+          className="text-sm font-medium text-gray-800 hover:text-gray-900 focus:outline-none"
+          data-testid={`button-pax-secure-toggle-${idx}`}
+          aria-expanded={secureOpen}
+        >
+          {secureOpen ? "− " : "+ "}Secure traveler information (optional)
+        </button>
+        {secureOpen && (
+          <div className="mt-3 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor={`p-${idx}-ktn`}>Known Traveler Number (KTN)</Label>
+                <Input
+                  id={`p-${idx}-ktn`}
+                  value={passenger.knownTravelerNumber || ""}
+                  onChange={(e) => set("knownTravelerNumber", e.target.value)}
+                  data-testid={`input-pax-ktn-${idx}`}
+                />
+              </div>
+              <div>
+                <Label htmlFor={`p-${idx}-ktn-country`}>KTN issuing country</Label>
+                <select
+                  id={`p-${idx}-ktn-country`}
+                  className={SELECT_CLASS}
+                  value={passenger.knownTravelerCountry || ""}
+                  onChange={(e) => set("knownTravelerCountry", e.target.value)}
+                  data-testid={`select-pax-ktn-country-${idx}`}
+                >
+                  <option value="">Select a country</option>
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor={`p-${idx}-redress`}>Redress number</Label>
+                <Input
+                  id={`p-${idx}-redress`}
+                  value={passenger.redressNumber || ""}
+                  onChange={(e) => set("redressNumber", e.target.value)}
+                  data-testid={`input-pax-redress-${idx}`}
+                />
+              </div>
+              <div>
+                <Label htmlFor={`p-${idx}-redress-country`}>Redress issuing country</Label>
+                <select
+                  id={`p-${idx}-redress-country`}
+                  className={SELECT_CLASS}
+                  value={passenger.redressCountry || ""}
+                  onChange={(e) => set("redressCountry", e.target.value)}
+                  data-testid={`select-pax-redress-country-${idx}`}
+                >
+                  <option value="">Select a country</option>
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {!showSecondaryRedress ? (
+              <button
+                type="button"
+                onClick={() => setShowSecondaryRedress(true)}
+                className="text-sm font-medium hover:underline focus:outline-none"
+                style={{ color: BRAND_BLUE }}
+                data-testid={`button-pax-add-secondary-redress-${idx}`}
+              >
+                + Add secondary redress number
+              </button>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor={`p-${idx}-redress2`}>Secondary redress number</Label>
+                  <Input
+                    id={`p-${idx}-redress2`}
+                    value={passenger.secondaryRedressNumber || ""}
+                    onChange={(e) => set("secondaryRedressNumber", e.target.value)}
+                    data-testid={`input-pax-redress2-${idx}`}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`p-${idx}-redress2-country`}>Issuing country</Label>
+                  <select
+                    id={`p-${idx}-redress2-country`}
+                    className={SELECT_CLASS}
+                    value={passenger.secondaryRedressCountry || ""}
+                    onChange={(e) => set("secondaryRedressCountry", e.target.value)}
+                    data-testid={`select-pax-redress2-country-${idx}`}
+                  >
+                    <option value="">Select a country</option>
+                    {COUNTRIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Passport section — only when Duffel marks the offer as identity-doc-required */}
+      {passportRequired && (
+        <div className="mt-4 pt-3 border-t border-gray-200">
+          <p className="text-xs font-medium text-gray-700 mb-2">
+            This flight requires passport details for every passenger.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <Label htmlFor={`p-${idx}-passport-num`}>
+                Passport number<RequiredDot />
+              </Label>
+              <Input
+                id={`p-${idx}-passport-num`}
+                value={passenger.passportNumber || ""}
+                onChange={(e) => set("passportNumber", e.target.value)}
+                onBlur={() => touch("passport")}
+                className={errorClass("passport")}
+                data-testid={`input-pax-passport-num-${idx}`}
+              />
+            </div>
+            <div>
+              <Label htmlFor={`p-${idx}-passport-country`}>
+                Issuing country<RequiredDot />
+              </Label>
+              <select
+                id={`p-${idx}-passport-country`}
+                className={`${SELECT_CLASS} ${errorClass("passport")}`}
+                value={passenger.passportCountry || ""}
+                onChange={(e) => set("passportCountry", e.target.value)}
+                onBlur={() => touch("passport")}
+                data-testid={`select-pax-passport-country-${idx}`}
+              >
+                <option value="">Select a country</option>
+                {COUNTRIES.map((c) => (
+                  <option key={c.code} value={c.code}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor={`p-${idx}-passport-expiry`}>
+                Expiry date<RequiredDot />
+              </Label>
+              <Input
+                id={`p-${idx}-passport-expiry`}
+                type="date"
+                value={passenger.passportExpiry || ""}
+                onChange={(e) => set("passportExpiry", e.target.value)}
+                onBlur={() => touch("passport")}
+                className={errorClass("passport")}
+                data-testid={`input-pax-passport-expiry-${idx}`}
+              />
+            </div>
+          </div>
+          {touched.passport && errors.passport && (
+            <p className="text-xs text-red-600 mt-2">{errors.passport}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GuestBookingPage() {
   const params = useParams<{ optionToken: string }>();
   const optionToken = params.optionToken;
@@ -360,13 +913,7 @@ export default function GuestBookingPage() {
         });
         setContact((c) => ({ ...c, email: c.email || json.guestEmail || "" }));
         setPassengers(
-          Array.from({ length: json.passengerCount || 1 }, () => ({
-            givenName: "",
-            familyName: "",
-            bornOn: "",
-            gender: "u" as const,
-            title: "mr" as const,
-          })),
+          Array.from({ length: json.passengerCount || 1 }, () => emptyPassenger()),
         );
         if (json.publishableKey) setStripePromise(loadStripe(json.publishableKey));
       } catch (err: any) {
@@ -600,124 +1147,17 @@ export default function GuestBookingPage() {
             </div>
 
             {passengers.map((p, idx) => (
-              <div key={idx} className="bg-white border border-gray-200 rounded-xl p-5">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">Passenger {idx + 1}</h3>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <Label htmlFor={`p-${idx}-given`}>Given name</Label>
-                    <Input
-                      id={`p-${idx}-given`}
-                      value={p.givenName}
-                      onChange={(e) => {
-                        const next = [...passengers];
-                        next[idx] = { ...next[idx], givenName: e.target.value };
-                        setPassengers(next);
-                      }}
-                      data-testid={`input-pax-given-${idx}`}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`p-${idx}-family`}>Family name</Label>
-                    <Input
-                      id={`p-${idx}-family`}
-                      value={p.familyName}
-                      onChange={(e) => {
-                        const next = [...passengers];
-                        next[idx] = { ...next[idx], familyName: e.target.value };
-                        setPassengers(next);
-                      }}
-                      data-testid={`input-pax-family-${idx}`}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor={`p-${idx}-dob`}>Date of birth</Label>
-                    <Input
-                      id={`p-${idx}-dob`}
-                      type="date"
-                      value={p.bornOn}
-                      onChange={(e) => {
-                        const next = [...passengers];
-                        next[idx] = { ...next[idx], bornOn: e.target.value };
-                        setPassengers(next);
-                      }}
-                      data-testid={`input-pax-dob-${idx}`}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor={`p-${idx}-title`}>Title</Label>
-                    <select
-                      id={`p-${idx}-title`}
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                      value={p.title}
-                      onChange={(e) => {
-                        const next = [...passengers];
-                        next[idx] = { ...next[idx], title: e.target.value as PassengerForm["title"] };
-                        setPassengers(next);
-                      }}
-                      data-testid={`select-pax-title-${idx}`}
-                    >
-                      <option value="mr">Mr</option>
-                      <option value="ms">Ms</option>
-                      <option value="mrs">Mrs</option>
-                      <option value="miss">Miss</option>
-                      <option value="dr">Dr</option>
-                    </select>
-                  </div>
-                </div>
-                {data.passportRequired && (
-                  <div className="mt-3 pt-3 border-t border-gray-200">
-                    <p className="text-xs font-medium text-gray-700 mb-2">
-                      This flight requires passport details for every passenger.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <Label htmlFor={`p-${idx}-passport-num`}>Passport number</Label>
-                        <Input
-                          id={`p-${idx}-passport-num`}
-                          value={p.passportNumber || ""}
-                          onChange={(e) => {
-                            const next = [...passengers];
-                            next[idx] = { ...next[idx], passportNumber: e.target.value };
-                            setPassengers(next);
-                          }}
-                          data-testid={`input-pax-passport-num-${idx}`}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor={`p-${idx}-passport-country`}>Issuing country (2-letter)</Label>
-                        <Input
-                          id={`p-${idx}-passport-country`}
-                          maxLength={2}
-                          placeholder="US"
-                          value={p.passportCountry || ""}
-                          onChange={(e) => {
-                            const next = [...passengers];
-                            next[idx] = { ...next[idx], passportCountry: e.target.value.toUpperCase() };
-                            setPassengers(next);
-                          }}
-                          data-testid={`input-pax-passport-country-${idx}`}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor={`p-${idx}-passport-expiry`}>Expiry date</Label>
-                        <Input
-                          id={`p-${idx}-passport-expiry`}
-                          type="date"
-                          value={p.passportExpiry || ""}
-                          onChange={(e) => {
-                            const next = [...passengers];
-                            next[idx] = { ...next[idx], passportExpiry: e.target.value };
-                            setPassengers(next);
-                          }}
-                          data-testid={`input-pax-passport-expiry-${idx}`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <PassengerCard
+                key={idx}
+                idx={idx}
+                passenger={p}
+                passportRequired={data.passportRequired}
+                onChange={(updater) => {
+                  const next = [...passengers];
+                  next[idx] = updater(next[idx]);
+                  setPassengers(next);
+                }}
+              />
             ))}
 
             <div className="bg-white border border-gray-200 rounded-xl p-5">
