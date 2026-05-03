@@ -3664,12 +3664,25 @@ export async function registerRoutes(
 
       return res.json({
         source: "db",
-        calls: fallback.map((c) => ({
-          ...c,
-          user: userMap.get(c.userId) || null,
-          aiSummary: summaryByCallReq.get(c.id) || null,
-          dbCallId: dbIdByCallReq.get(c.id) ?? null,
-        })),
+        calls: fallback.map((c) => {
+          const u = userMap.get(c.userId) || null;
+          // DB-fallback rows are call_requests created by signed-in users —
+          // always outbound from Travnr's perspective. customerPhone is the
+          // dialed number stored on the request itself.
+          const customerName = u
+            ? [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || null
+            : null;
+          return {
+            ...c,
+            user: u,
+            aiSummary: summaryByCallReq.get(c.id) || null,
+            dbCallId: dbIdByCallReq.get(c.id) ?? null,
+            direction: "outbound" as const,
+            customerPhone: c.phone || null,
+            customerName,
+            customerEmail: u?.email ?? null,
+          };
+        }),
         total_count: fallback.length,
         ...(errorMessage ? { error: errorMessage } : {}),
       });
@@ -3686,18 +3699,134 @@ export async function registerRoutes(
       const dbRows = await storage.getBlandCallsByBlandIds(ids);
       const summaryByBlandId = new Map<string, CallSummary>();
       const dbIdByBlandId = new Map<string, number>();
+      const dbRowByBlandId = new Map<string, typeof dbRows[number]>();
       for (const r of dbRows) {
         if (r.blandCallId) {
           dbIdByBlandId.set(r.blandCallId, r.id);
+          dbRowByBlandId.set(r.blandCallId, r);
           const s = pickStoredSummary(r.variables);
           if (s) summaryByBlandId.set(r.blandCallId, s);
         }
       }
-      const enriched = list.calls.map((c) => ({
-        ...c,
-        aiSummary: c.call_id ? summaryByBlandId.get(c.call_id) || null : null,
-        dbCallId: c.call_id ? dbIdByBlandId.get(c.call_id) ?? null : null,
-      }));
+
+      // ---- Direction + customer-identity enrichment ----
+      // Step 1: Derive Travnr's own DID(s) from rows whose direction we
+      // *know* (explicit `metadata.source = "inbound_phone"` flag set by our
+      // dispatch path). For inbound rows, `c.to` is Travnr's number; for
+      // explicitly-tagged outbound rows it would be `c.from`. We then use
+      // this DID set as a guard: if a row's "customer" leg matches a known
+      // Travnr DID we suppress it rather than leaking the office number as
+      // the caller's identity (e.g. when an inbound row arrives without the
+      // metadata flag and falls through the outbound default).
+      const travnrDidsRaw = new Set<string>();
+      for (const c of list.calls) {
+        const meta =
+          c.metadata && typeof c.metadata === "object"
+            ? (c.metadata as Record<string, unknown>)
+            : null;
+        if (meta?.source === "inbound_phone" && c.to) travnrDidsRaw.add(c.to);
+      }
+      const travnrDids = new Set<string>();
+      for (const did of travnrDidsRaw) {
+        travnrDids.add(did);
+        const norm = normalizePhoneE164(did);
+        if (norm) travnrDids.add(norm);
+      }
+      const isTravnrDid = (phone: string | null | undefined): boolean => {
+        if (!phone) return false;
+        if (travnrDids.has(phone)) return true;
+        const norm = normalizePhoneE164(phone);
+        return norm ? travnrDids.has(norm) : false;
+      };
+
+      // Step 2: For each row decide direction + extract the customer-side
+      // phone. Direction prefers the explicit metadata flag; when missing,
+      // falls back to checking whether `c.to` is a known Travnr DID (then
+      // it must be inbound). Final guard: never emit a Travnr DID as the
+      // customer phone — null it out instead.
+      type LiveEnrichment = {
+        direction: "inbound" | "outbound";
+        customerPhone: string | null;
+        userId: string | null;
+      };
+      const enrichments: LiveEnrichment[] = list.calls.map((c) => {
+        const meta =
+          c.metadata && typeof c.metadata === "object"
+            ? (c.metadata as Record<string, unknown>)
+            : null;
+        const liveSource = meta?.source;
+        let direction: "inbound" | "outbound";
+        if (liveSource === "inbound_phone") direction = "inbound";
+        else if (isTravnrDid(c.to)) direction = "inbound";
+        else direction = "outbound";
+
+        let customerPhone = direction === "inbound" ? c.from : c.to;
+        // Final DID guard — under no circumstances expose Travnr's own
+        // number as the "customer" phone in the admin UI.
+        if (isTravnrDid(customerPhone)) customerPhone = null;
+
+        const dbRow = c.call_id ? dbRowByBlandId.get(c.call_id) : undefined;
+        return {
+          direction,
+          customerPhone: customerPhone || null,
+          userId: dbRow?.userId ?? null,
+        };
+      });
+
+      // Step 3: For rows lacking a userId from bland_calls, resolve via the
+      // multi-source `getUserIdByPhone` helper. This helper joins three
+      // tables with ambiguity handling and isn't trivially bulk-friendly,
+      // so we run lookups in parallel — bounded by Bland's 50-row page
+      // limit, this is at most ~50 concurrent reads. Failures stay null.
+      await Promise.all(
+        enrichments.map(async (e) => {
+          if (e.userId || !e.customerPhone) return;
+          try {
+            const found = await storage.getUserIdByPhone(e.customerPhone);
+            if (found) e.userId = found.userId;
+          } catch {
+            /* best-effort */
+          }
+        }),
+      );
+
+      // Step 4: Bulk-load every resolved user in one query.
+      const liveUserIds = Array.from(
+        new Set(enrichments.map((e) => e.userId).filter((id): id is string => !!id)),
+      );
+      const liveUsers = liveUserIds.length > 0 ? await storage.adminGetUsersByIds(liveUserIds) : [];
+      const liveUserMap = new Map(liveUsers.map((u) => [u.id, u]));
+
+      // Step 5: For rows that still have no user but do have a customer
+      // phone, fetch fallback emails from phone_email_map in ONE query.
+      const phonesNeedingEmail = enrichments
+        .filter((e) => !e.userId && e.customerPhone)
+        .map((e) => e.customerPhone as string);
+      const phoneEmailLookup = phonesNeedingEmail.length > 0
+        ? await storage.getEmailsForPhones(phonesNeedingEmail)
+        : new Map<string, string>();
+
+      const enriched = list.calls.map((c, idx) => {
+        const e = enrichments[idx];
+        const u = e.userId ? liveUserMap.get(e.userId) : undefined;
+        const customerName = u
+          ? [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || null
+          : null;
+        // The bulk email map is keyed by *normalized* phone — normalize the
+        // lookup key before reading.
+        const phoneKey = e.customerPhone ? normalizePhoneE164(e.customerPhone) : null;
+        const customerEmail =
+          u?.email ?? (phoneKey ? phoneEmailLookup.get(phoneKey) ?? null : null);
+        return {
+          ...c,
+          aiSummary: c.call_id ? summaryByBlandId.get(c.call_id) || null : null,
+          dbCallId: c.call_id ? dbIdByBlandId.get(c.call_id) ?? null : null,
+          direction: e.direction,
+          customerPhone: e.customerPhone,
+          customerName,
+          customerEmail,
+        };
+      });
       return res.json({ source: "bland", calls: enriched, total_count: list.total_count ?? list.calls.length });
     } catch (err) {
       console.warn("[Admin] /api/admin/calls-live Bland fetch failed, falling back to DB:", (err as Error)?.message || err);

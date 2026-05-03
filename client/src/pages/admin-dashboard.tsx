@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, Tag, Trash2, Mail, Eye, Send, RefreshCw, Sparkles, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, Tag, Trash2, Mail, Eye, Send, RefreshCw, Sparkles, PhoneIncoming, PhoneOutgoing, type LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import type { PromoCode } from "@shared/schema";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -43,6 +43,8 @@ type AiCallSummary = {
   model: string;
 };
 
+type CallDirection = "inbound" | "outbound";
+
 type BlandLiveCall = {
   call_id?: string;
   to?: string;
@@ -55,6 +57,11 @@ type BlandLiveCall = {
   metadata?: Record<string, unknown> | null;
   aiSummary?: AiCallSummary | null;
   dbCallId?: number | null;
+  // Server-enriched fields (Task #137):
+  direction?: CallDirection;
+  customerPhone?: string | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
 };
 
 type LiveCallsResponse = {
@@ -74,6 +81,11 @@ type DbCallRow = {
   user?: { email: string; firstName?: string | null; lastName?: string | null } | null;
   aiSummary?: AiCallSummary | null;
   dbCallId?: number | null;
+  // Server-enriched fields (Task #137):
+  direction?: CallDirection;
+  customerPhone?: string | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
 };
 
 function formatUSD(n: number): string {
@@ -562,6 +574,24 @@ function CallSummaryBlock({
   );
 }
 
+// Small "Inbound" / "Outbound" pill rendered next to the status badge so
+// admins can tell who initiated the call at a glance.
+function DirectionBadge({ direction, testId }: { direction: CallDirection; testId: string }) {
+  const isInbound = direction === "inbound";
+  const Icon = isInbound ? PhoneIncoming : PhoneOutgoing;
+  const label = isInbound ? "Inbound" : "Outbound";
+  return (
+    <Badge
+      variant="outline"
+      className={`shrink-0 text-[10px] py-0 h-5 gap-1 ${isInbound ? "border-blue-400/60 text-blue-600 dark:text-blue-300" : "border-emerald-400/60 text-emerald-700 dark:text-emerald-300"}`}
+      data-testid={testId}
+    >
+      <Icon className="w-3 h-3" aria-hidden />
+      {label}
+    </Badge>
+  );
+}
+
 function CallsTable({ limit }: { limit?: number }) {
   const { data, isLoading } = useQuery<LiveCallsResponse>({ queryKey: ["/api/admin/calls-live"] });
   if (isLoading) return <Skeleton className="h-32 w-full" />;
@@ -575,10 +605,24 @@ function CallsTable({ limit }: { limit?: number }) {
         if (isLive) {
           const c = row as BlandLiveCall;
           const meta = (c.metadata ?? {}) as Record<string, unknown>;
-          const email = typeof meta.userEmail === "string" ? meta.userEmail
-            : typeof meta.email === "string" ? meta.email
-            : typeof meta.userId === "string" || typeof meta.userId === "number" ? `user #${meta.userId}` : null;
-          const phone = c.to || "—";
+          // Server-side enrichment provides direction + the customer's
+          // (non-Travnr) phone. Keep a defensive fallback for cached
+          // responses that predate the enrichment.
+          const direction: CallDirection = c.direction
+            ?? (meta.source === "inbound_phone" ? "inbound" : "outbound");
+          const customerPhone = c.customerPhone
+            ?? (direction === "inbound" ? c.from : c.to)
+            ?? null;
+          const customerName = c.customerName ?? null;
+          const customerEmail = c.customerEmail ?? null;
+          // Primary label resolution: name → email → phone → "Unknown caller".
+          // Never show "user #<id>" — the server no longer sends opaque ids.
+          const primary = customerName || customerEmail || customerPhone || "Unknown caller";
+          // Secondary line: email + phone, deduped, separated by middle dot.
+          const secondaryParts: string[] = [];
+          if (customerName && customerEmail) secondaryParts.push(customerEmail);
+          else if (!customerName && customerEmail && primary !== customerEmail) secondaryParts.push(customerEmail);
+          if (customerPhone && primary !== customerPhone) secondaryParts.push(customerPhone);
           const minutes = typeof c.call_length === "number" ? `${Math.max(1, Math.ceil(c.call_length / 60))} min` : "—";
           const date = c.created_at ? new Date(c.created_at).toLocaleString() : "—";
           const status = c.status || (c.completed ? "completed" : "—");
@@ -587,9 +631,9 @@ function CallsTable({ limit }: { limit?: number }) {
           return (
             <div key={key} className="p-3 flex items-start justify-between gap-3 flex-wrap" data-testid={`call-row-${key}`}>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium truncate">{email || phone}</div>
+                <div className="text-sm font-medium truncate" data-testid={`call-name-${key}`}>{primary}</div>
                 <div className="text-xs text-muted-foreground truncate">
-                  {phone} · {minutes} · {date}
+                  {secondaryParts.length > 0 ? secondaryParts.join(" · ") + " · " : ""}{minutes} · {date}
                 </div>
                 {isCompleted && (
                   <CallSummaryBlock
@@ -608,18 +652,32 @@ function CallsTable({ limit }: { limit?: number }) {
                   />
                 )}
               </div>
-              <Badge variant="secondary" className="shrink-0">{status}</Badge>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <DirectionBadge direction={direction} testId={`call-direction-${key}`} />
+                <Badge variant="secondary">{status}</Badge>
+              </div>
             </div>
           );
         }
         const dbRow = row as DbCallRow;
         const isCompleted = dbRow.status === "completed";
+        const direction: CallDirection = dbRow.direction ?? "outbound";
+        const customerPhone = dbRow.customerPhone ?? null;
+        const customerEmail = dbRow.customerEmail ?? dbRow.user?.email ?? null;
+        const customerName = dbRow.customerName
+          ?? ([dbRow.user?.firstName, dbRow.user?.lastName].filter(Boolean).join(" ").trim() || null);
+        const primary = customerName || customerEmail || customerPhone || "Unknown caller";
+        const secondaryParts: string[] = [];
+        if (customerName && customerEmail) secondaryParts.push(customerEmail);
+        else if (!customerName && customerEmail && primary !== customerEmail) secondaryParts.push(customerEmail);
+        if (customerPhone && primary !== customerPhone) secondaryParts.push(customerPhone);
+        const key = `db-${dbRow.id}`;
         return (
-          <div key={`db-${dbRow.id}`} className="p-3 flex items-start justify-between gap-3 flex-wrap" data-testid={`call-row-${dbRow.id}`}>
+          <div key={key} className="p-3 flex items-start justify-between gap-3 flex-wrap" data-testid={`call-row-${dbRow.id}`}>
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">{dbRow.user?.email || dbRow.userId}</div>
-              <div className="text-xs text-muted-foreground">
-                {dbRow.destination || "—"} · {dbRow.dateFrom ? new Date(dbRow.dateFrom).toLocaleDateString() : "—"} · {new Date(dbRow.createdAt).toLocaleString()}
+              <div className="text-sm font-medium truncate" data-testid={`call-name-${key}`}>{primary}</div>
+              <div className="text-xs text-muted-foreground truncate">
+                {secondaryParts.length > 0 ? secondaryParts.join(" · ") + " · " : ""}{dbRow.destination || "—"} · {dbRow.dateFrom ? new Date(dbRow.dateFrom).toLocaleDateString() : "—"} · {new Date(dbRow.createdAt).toLocaleString()}
               </div>
               {isCompleted && (
                 <CallSummaryBlock
@@ -634,7 +692,10 @@ function CallsTable({ limit }: { limit?: number }) {
                 />
               )}
             </div>
-            <Badge variant="secondary" className="shrink-0">{dbRow.status}</Badge>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <DirectionBadge direction={direction} testId={`call-direction-${key}`} />
+              <Badge variant="secondary">{dbRow.status}</Badge>
+            </div>
           </div>
         );
       })}

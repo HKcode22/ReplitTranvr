@@ -86,6 +86,7 @@ export interface IStorage {
   getUserIdByTravelerProfilePhone(normalizedPhone: string): Promise<string | null>;
   upsertPhoneEmailMap(phone: string, email: string): Promise<PhoneEmailMap | null>;
   getEmailForPhone(phone: string): Promise<string | null>;
+  getEmailsForPhones(phones: string[]): Promise<Map<string, string>>;
   getUserIdByPhone(phone: string): Promise<{ userId: string; source: "phone_traveler_profile" | "phone_bland_calls" | "phone_email_map_to_user" } | null>;
 
   createGuestProposal(data: InsertGuestProposal): Promise<GuestProposal>;
@@ -541,6 +542,28 @@ export class DatabaseStorage implements IStorage {
     if (!normalizedPhone) return null;
     const [row] = await db.select().from(phoneEmailMap).where(eq(phoneEmailMap.phone, normalizedPhone));
     return row?.email ?? null;
+  }
+
+  // Bulk variant of `getEmailForPhone` — looks up many phones in a single
+  // SQL query (`IN (...)`) and returns a map keyed by the *normalized* phone.
+  // Callers should normalize their lookup keys with `normalizePhoneE164`
+  // when reading from the returned map. Unknown / unnormalizable phones are
+  // simply absent from the map.
+  async getEmailsForPhones(phones: string[]): Promise<Map<string, string>> {
+    const normalized = Array.from(
+      new Set(
+        phones
+          .map((p) => normalizePhoneE164(p))
+          .filter((p): p is string => p !== null),
+      ),
+    );
+    const out = new Map<string, string>();
+    if (normalized.length === 0) return out;
+    const rows = await db.select().from(phoneEmailMap).where(inArray(phoneEmailMap.phone, normalized));
+    for (const r of rows) {
+      if (r.phone && r.email) out.set(r.phone, r.email);
+    }
+    return out;
   }
 
   // Resolve a Travnr user from an inbound caller phone number using three
