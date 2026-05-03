@@ -83,15 +83,7 @@ export function getHotelProvider(): HotelProvider {
 // Adapters do NOT make network calls in their constructor, so this is
 // safe to call on every request.
 export function getAllProviderInfo(): Array<HotelProviderInfo & { configured: boolean }> {
-  return REGISTRY.map((e) => {
-    let configured = false;
-    try {
-      configured = e.build().isConfigured();
-    } catch {
-      configured = false;
-    }
-    return { ...e.info, configured };
-  });
+  return REGISTRY.map((e) => ({ ...e.info, configured: e.build().isConfigured() }));
 }
 
 // Test-only seam: clears the singleton so unit tests can re-init with a
