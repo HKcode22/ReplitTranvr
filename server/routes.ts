@@ -913,12 +913,17 @@ async function sendGuestProposalEmail(toEmail: string, data: {
     console.warn(`[${tag}] personalization threw, using fallback:`, e?.message || e);
   }
 
+  // Only override the template when Claude actually produced (and we
+  // accepted) a personalized copy. On fallback/error the template renders
+  // its existing deterministic subject + intro byte-for-byte, so this
+  // change is invisible to recipients when the LLM path is off.
+  const usePersonalized = personalization?.variant === "llm";
   const { subject, html } = buildGuestProposalEmail({
     ...data,
-    subjectOverride: personalization?.subject ?? null,
-    introOverride: personalization?.intro ?? null,
+    subjectOverride: usePersonalized ? personalization!.subject : null,
+    introOverride: usePersonalized ? personalization!.intro : null,
   });
-  const variant = personalization?.variant ?? "fallback";
+  const variant: "llm" | "fallback" = usePersonalized ? "llm" : "fallback";
   try {
     await sgMail.send({ to: toEmail, from: { email: fromEmail, name: "Travnr" }, subject, html });
     // A/B logging: which variant was used per send. Keep keys parseable so
@@ -5442,7 +5447,7 @@ export async function registerRoutes(
           let postCallFirstName: string | undefined;
           try {
             const owner = await storage.getUser(userId);
-            const fn = (owner as any)?.firstName;
+            const fn = owner?.firstName;
             if (typeof fn === "string" && fn.trim().length > 0) postCallFirstName = fn.trim();
           } catch {
             /* best-effort */
