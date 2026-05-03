@@ -96,6 +96,20 @@ function composeBornOn(p: PassengerForm): string {
   return `${p.dobYear}-${mm}-${dd}`;
 }
 
+// Real-calendar validation for the composed YYYY-MM-DD. Returns true only if
+// the date round-trips through Date (e.g. Feb 30 fails) AND is in the past.
+function isValidBornOn(iso: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const [y, m, d] = iso.split("-").map((s) => parseInt(s, 10));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (
+    dt.getUTCFullYear() !== y ||
+    dt.getUTCMonth() !== m - 1 ||
+    dt.getUTCDate() !== d
+  ) return false;
+  return dt.getTime() < Date.now();
+}
+
 const MONTHS = [
   { v: "1", n: "January" }, { v: "2", n: "February" }, { v: "3", n: "March" },
   { v: "4", n: "April" }, { v: "5", n: "May" }, { v: "6", n: "June" },
@@ -127,6 +141,9 @@ interface PassengerErrors {
   gender?: string;
   residenceCountry?: string;
   residenceState?: string;
+  knownTraveler?: string;
+  redress?: string;
+  secondaryRedress?: string;
   passport?: string;
 }
 
@@ -134,12 +151,34 @@ function validatePassenger(p: PassengerForm, passportRequired: boolean): Passeng
   const errs: PassengerErrors = {};
   if (!p.firstName.trim()) errs.firstName = "First name is required";
   if (!p.lastName.trim()) errs.lastName = "Last name is required";
-  if (!composeBornOn(p)) errs.bornOn = "Date of birth is required";
+  const dob = composeBornOn(p);
+  if (!dob) errs.bornOn = "Date of birth is required";
+  else if (!isValidBornOn(dob)) errs.bornOn = "Please enter a valid date of birth";
   if (!p.gender) errs.gender = "Gender is required";
   if (!p.residenceCountry) errs.residenceCountry = "Country / region is required";
   if (hasSubdivisions(p.residenceCountry) && !p.residenceState) {
     errs.residenceState = "State / province is required";
   }
+  // KTN / redress pair validation — mirrors the server's superRefine so users
+  // can't pass client checks, complete payment, then hit a 400. If a number is
+  // present, the issuing country must be too (and vice versa).
+  const pair = (
+    num: string | undefined,
+    country: string | undefined,
+    label: string,
+  ): string | undefined => {
+    const hasNum = !!num?.trim();
+    const hasCountry = !!country?.trim();
+    if (hasNum && !hasCountry) return `Issuing country is required when ${label} is provided`;
+    if (hasCountry && !hasNum) return `${label} is required when issuing country is provided`;
+    return undefined;
+  };
+  const ktnErr = pair(p.knownTravelerNumber, p.knownTravelerCountry, "KTN");
+  if (ktnErr) errs.knownTraveler = ktnErr;
+  const redressErr = pair(p.redressNumber, p.redressCountry, "Redress number");
+  if (redressErr) errs.redress = redressErr;
+  const redress2Err = pair(p.secondaryRedressNumber, p.secondaryRedressCountry, "Secondary redress number");
+  if (redress2Err) errs.secondaryRedress = redress2Err;
   if (passportRequired) {
     if (!p.passportNumber || !p.passportCountry || !p.passportExpiry) {
       errs.passport = "Passport details are required for this trip";

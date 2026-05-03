@@ -7155,6 +7155,26 @@ export async function registerRoutes(
       passportCountry: optionalIsoCountry,
       passportExpiry: z.string().optional(),
     }).superRefine((pax, ctx) => {
+      // Real-calendar DOB check — the regex above only verifies shape, so
+      // Feb 30 / Sep 31 etc. would slip through. Round-trip through Date and
+      // also reject any future birth date.
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(pax.bornOn);
+      if (m) {
+        const [, ys, ms, ds] = m;
+        const y = Number(ys), mo = Number(ms), d = Number(ds);
+        const dt = new Date(Date.UTC(y, mo - 1, d));
+        const calendarOk =
+          dt.getUTCFullYear() === y &&
+          dt.getUTCMonth() === mo - 1 &&
+          dt.getUTCDate() === d;
+        if (!calendarOk || dt.getTime() >= Date.now()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["bornOn"],
+            message: "Date of birth must be a real past date",
+          });
+        }
+      }
       // Conditional residence-state: required when the residence country has
       // subdivisions in our picker. Mirrors the client UI gating so the API
       // can't accept silently-blank state for US/CA residents.
