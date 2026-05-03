@@ -62,8 +62,6 @@ import {
   resolveCityToPrimaryIata,
   isAmbiguousCityName,
   guardAgainstSecondaryAirport,
-  SINGLE_AIRPORT_CITIES,
-  MULTI_AIRPORT_PRIMARY,
 } from "./lib/airportMap";
 import {
   issueBookingApprovalToken,

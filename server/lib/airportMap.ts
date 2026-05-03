@@ -301,7 +301,9 @@ export function guardAgainstSecondaryAirport(
   if (!resolved) return { iata: duffelIata, substituted: false, expected: null };
   // If the caller spelled out an explicit IATA in the query (e.g. "MHT"),
   // skip the guard — they meant the secondary airport on purpose.
-  if (/\b[A-Z]{3}\b/.test(originalQuery) && originalQuery.toUpperCase().includes(duffelIata)) {
+  // Normalize first so lowercase ("mht") is treated the same as "MHT".
+  const upperQuery = originalQuery.toUpperCase();
+  if (/\b[A-Z]{3}\b/.test(upperQuery) && upperQuery.includes(duffelIata)) {
     return { iata: duffelIata, substituted: false, expected: resolved.iata };
   }
   if (duffelIata !== resolved.iata) {

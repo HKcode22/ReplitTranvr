@@ -88,6 +88,8 @@ expect("Chicago + MDW -> forced to ORD", guardAgainstSecondaryAirport("Chicago",
   { iata: "ORD", substituted: true, expected: "ORD" });
 expect("explicit 'MHT' query -> respect caller", guardAgainstSecondaryAirport("MHT", "MHT"),
   { iata: "MHT", substituted: false, expected: null });
+expect("lowercase explicit 'mht' query -> respect caller", guardAgainstSecondaryAirport("mht", "MHT"),
+  { iata: "MHT", substituted: false, expected: null });
 expect("unknown city + any IATA -> pass through", guardAgainstSecondaryAirport("Smallville", "ABC"),
   { iata: "ABC", substituted: false, expected: null });
 
