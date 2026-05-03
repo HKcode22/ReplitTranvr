@@ -11,6 +11,8 @@ import { z } from "zod";
 import { Duffel } from "@duffel/api";
 import * as bland from "./lib/bland";
 import { normalizePhoneE164 } from "./lib/phone";
+import { sendSms, maskPhone } from "./lib/sms";
+import { buildGuestProposalSms } from "./lib/smsTemplates";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
 import {
   verifyProposalAgainstTranscript,
@@ -2857,6 +2859,30 @@ export async function registerRoutes(
     }
   });
 
+  // Dev-only SMS dry-run endpoint. Returns 404 in production so there is no
+  // production endpoint that can send SMS to arbitrary numbers. Even in dev,
+  // `sendSms` will dry-run by default (SMS_DRY_RUN defaults to on).
+  app.post("/api/admin/sms-dry-run", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(404).json({ message: "Not found" });
+    }
+    const phone = typeof req.body?.phone === "string" ? req.body.phone : "";
+    if (!phone.trim()) return res.status(400).json({ message: "phone is required" });
+    const normalized = normalizePhoneE164(phone);
+    const proposalUrl =
+      typeof req.body?.proposalUrl === "string" && req.body.proposalUrl.trim()
+        ? req.body.proposalUrl.trim()
+        : `${getBaseUrl(req)}/proposal/sample-token`;
+    const message = buildGuestProposalSms({ proposalUrl });
+    const result = await sendSms({ to: normalized || phone, body: message });
+    return res.json({
+      message,
+      messageLength: message.length,
+      maskedTo: maskPhone(normalized),
+      result,
+    });
+  });
+
   app.get("/api/admin/calls", isAuthenticated, requireAdmin, async (_req: Request, res: Response) => {
     const list = await storage.adminGetAllCallRequests();
     const userIds = Array.from(new Set(list.map((c) => c.userId)));
@@ -3619,6 +3645,13 @@ export async function registerRoutes(
   // out of scope here.
   const inboundGuestProposalDispatched = new Set<string>();
 
+  // Process-local dedupe for guest-proposal SMS sends. Keyed by
+  // `guest_proposal_ready:<proposalToken>:<normalizedPhone>`. Protects
+  // against Bland webhook retries and the manual-regenerate path firing two
+  // SMS for the same proposal+phone pair.
+  // TODO: persist (e.g., sms_log table) once A2P approved.
+  const smsProposalSent = new Set<string>();
+
   function triggerProposalGenerationOnce(
     callRequestId: number,
     userId: string,
@@ -3926,6 +3959,29 @@ export async function registerRoutes(
       console.log(`${lp} guest proposal sent token=${saved.token} email=${guestEmail} email_source=${emailSource} origin=${originCode} destination=${destCode}`);
     } catch (e: any) {
       console.error(`${lp} sendGuestProposalEmail failed:`, e?.message || e);
+    }
+
+    // SMS hook — fire-and-forget, never blocks email or proposal save.
+    // Inbound has phoneE164 already resolved by the caller.
+    if (!phoneE164) {
+      console.log(`${lp} [sms] skipped reason=no_phone_available`);
+    } else {
+      const dedupeKey = `guest_proposal_ready:${saved.token}:${phoneE164}`;
+      if (smsProposalSent.has(dedupeKey)) {
+        console.log(`${lp} [sms] skipped reason=duplicate dedupe_key=${dedupeKey}`);
+      } else {
+        smsProposalSent.add(dedupeKey);
+        const proposalUrl = `${baseUrl}/proposal/${saved.token}`;
+        const smsBody = buildGuestProposalSms({ proposalUrl });
+        console.log(`${lp} [sms] sending proposal_ready token=${saved.token} phone=${maskPhone(phoneE164)} body_length=${smsBody.length}`);
+        void sendSms({ to: phoneE164, body: smsBody, dedupeKey })
+          .then((result) => {
+            console.log(`${lp} [sms] result token=${saved.token} ${JSON.stringify(result)}`);
+          })
+          .catch((err: any) => {
+            console.error(`${lp} [sms] unexpected throw:`, err?.message || err);
+          });
+      }
     }
   }
 
@@ -4305,6 +4361,34 @@ export async function registerRoutes(
             })),
           });
           console.log(`[guest-proposal] created token=${saved.token} for callRequest=${callRequestId} email=${guestEmail} (parallel send)`);
+
+          // SMS hook — fire-and-forget. Recipient phone comes from the
+          // call request that triggered this outbound call.
+          const rawPhone =
+            (callRequest as any).phone ||
+            (callRequest as any).phoneNumber ||
+            null;
+          const smsPhone = normalizePhoneE164(rawPhone);
+          if (!smsPhone) {
+            console.log(`[sms] skipped reason=no_phone_available callRequest=${callRequestId}`);
+          } else {
+            const dedupeKey = `guest_proposal_ready:${saved.token}:${smsPhone}`;
+            if (smsProposalSent.has(dedupeKey)) {
+              console.log(`[sms] skipped reason=duplicate dedupe_key=${dedupeKey}`);
+            } else {
+              smsProposalSent.add(dedupeKey);
+              const proposalUrl = `${baseUrl}/proposal/${saved.token}`;
+              const smsBody = buildGuestProposalSms({ proposalUrl });
+              console.log(`[sms] sending proposal_ready token=${saved.token} phone=${maskPhone(smsPhone)} body_length=${smsBody.length} callRequest=${callRequestId}`);
+              void sendSms({ to: smsPhone, body: smsBody, dedupeKey })
+                .then((result) => {
+                  console.log(`[sms] result token=${saved.token} ${JSON.stringify(result)}`);
+                })
+                .catch((err: any) => {
+                  console.error(`[sms] unexpected throw:`, err?.message || err);
+                });
+            }
+          }
         } catch (guestErr: any) {
           console.error(
             `[guest-proposal] failed for callRequest=${callRequestId}:`,
