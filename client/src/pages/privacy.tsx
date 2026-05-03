@@ -5,23 +5,20 @@
 // stand-alone "Travnr" references below with the registered legal entity
 // name (e.g., "Travnr, Inc." / "Travnr LLC") on first mention.
 
-import { useEffect } from "react";
 import { Link } from "wouter";
+import SEO from "@/components/seo";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ArrowLeft } from "lucide-react";
 
 export default function PrivacyPage() {
-  useEffect(() => {
-    const previous = document.title;
-    document.title = "Privacy Policy · Travnr";
-    return () => {
-      document.title = previous;
-    };
-  }, []);
-
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Privacy Policy"
+        description="How Travnr collects, uses, and protects information when you use our travel concierge service."
+        path="/privacy"
+      />
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/80 border-b">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <Link href="/" className="flex items-center" data-testid="link-privacy-logo">

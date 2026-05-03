@@ -5,23 +5,20 @@
 // stand-alone "Travnr" references below with the registered legal entity
 // name (e.g., "Travnr, Inc." / "Travnr LLC") on first mention.
 
-import { useEffect } from "react";
 import { Link } from "wouter";
+import SEO from "@/components/seo";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ArrowLeft } from "lucide-react";
 
 export default function TermsPage() {
-  useEffect(() => {
-    const previous = document.title;
-    document.title = "Terms of Service · Travnr";
-    return () => {
-      document.title = previous;
-    };
-  }, []);
-
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Terms of Service"
+        description="The terms governing your use of Travnr's website, AI travel concierge, and related services."
+        path="/terms"
+      />
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/80 border-b">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <Link href="/" className="flex items-center" data-testid="link-terms-logo">

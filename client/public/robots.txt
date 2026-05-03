@@ -1,0 +1,32 @@
+User-agent: *
+Allow: /
+Allow: /privacy
+Allow: /terms
+
+# Authenticated, admin, and one-off transactional surfaces should not
+# appear in search results. They either require auth, contain
+# personalized booking links, or are operator-only views.
+Disallow: /admin
+Disallow: /admin/
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /dashboard
+Disallow: /profile
+Disallow: /request-call
+Disallow: /call-history
+Disallow: /proposals
+Disallow: /proposals/
+Disallow: /trips
+Disallow: /flights
+Disallow: /calendar
+Disallow: /notifications
+Disallow: /billing
+Disallow: /security
+Disallow: /book/
+Disallow: /booking/
+Disallow: /proposal/
+Disallow: /guest-proposal/
+Disallow: /guest-booking/
+Disallow: /api/
+
+Sitemap: https://travnr.com/sitemap.xml

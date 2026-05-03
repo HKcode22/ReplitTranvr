@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
+import SEO from "@/components/seo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -249,6 +250,12 @@ const steps = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background overflow-x-hidden">
+      <SEO
+        title="Travnr — Your Personal Travel Concierge"
+        titleIsAbsolute
+        description="Skip the endless searching. Tell us where you want to go, and our concierge team handles every detail — flights, hotels, and the entire trip."
+        path="/"
+      />
       <header className="sticky top-0 z-50 backdrop-blur-md bg-background/80">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <Link href="/" className="flex items-center" data-testid="link-landing-logo">

@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "5e5w4ZLGF5TiAe-71cteq"
+uri = "file://client/public/og-image.png"
+type = "image"
+title = "travnr og image"

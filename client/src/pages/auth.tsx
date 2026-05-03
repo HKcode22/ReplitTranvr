@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, Loader2, Mail, ArrowLeft, KeyRound } from "lucide-react";
+import SEO from "@/components/seo";
 
 import { apiRequest } from "@/lib/queryClient";
 
@@ -244,6 +245,12 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <SEO
+        title={mode === "login" ? "Sign in" : "Create your account"}
+        description="Sign in to Travnr or create an account to manage your trips, proposals, and travel preferences."
+        path="/auth"
+        noindex
+      />
       <header className="border-b h-14 flex items-center px-4 justify-between">
         <Link href="/" className="flex items-center gap-2">
           <span className="font-serif font-semibold text-lg">Travnr</span>
