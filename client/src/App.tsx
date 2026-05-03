@@ -33,6 +33,7 @@ import GuestBookingPage from "@/pages/guest-booking";
 import PrivacyPage from "@/pages/privacy";
 import TermsPage from "@/pages/terms";
 import NotFound from "@/pages/not-found";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 function AuthenticatedLayout() {
   const style = {
@@ -40,6 +41,7 @@ function AuthenticatedLayout() {
     "--sidebar-width-icon": "3rem",
   };
   const { isAdmin, viewMode, setViewMode } = useAuth();
+  const [routeLocation] = useLocation();
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
@@ -68,15 +70,24 @@ function AuthenticatedLayout() {
             </div>
           </header>
           <main className="flex-1 overflow-auto">
+            <ErrorBoundary key={routeLocation} boundary="authenticated-routes">
             <Switch>
               <Route path="/dashboard">
-                {isAdmin && viewMode === "admin" ? <AdminDashboardPage /> : <DashboardPage />}
+                {isAdmin && viewMode === "admin" ? (
+                  <ErrorBoundary boundary="admin-dashboard"><AdminDashboardPage /></ErrorBoundary>
+                ) : (
+                  <DashboardPage />
+                )}
               </Route>
               <Route path="/profile" component={ProfilePage} />
               <Route path="/request-call" component={RequestCallPage} />
               <Route path="/call-history" component={CallHistoryPage} />
-              <Route path="/proposals" component={ProposalsPage} />
-              <Route path="/proposals/:id" component={ProposalDetailPage} />
+              <Route path="/proposals">
+                <ErrorBoundary boundary="proposals-list"><ProposalsPage /></ErrorBoundary>
+              </Route>
+              <Route path="/proposals/:id">
+                <ErrorBoundary boundary="proposal-detail"><ProposalDetailPage /></ErrorBoundary>
+              </Route>
               <Route path="/trips" component={TripsPage} />
               <Route path="/flights" component={FlightSearchPage} />
               <Route path="/calendar" component={CalendarPage} />
@@ -87,6 +98,7 @@ function AuthenticatedLayout() {
                 <Redirect to="/dashboard" />
               </Route>
             </Switch>
+            </ErrorBoundary>
           </main>
         </div>
       </div>
@@ -113,8 +125,12 @@ function AppRouter() {
   if (!user) {
     return (
       <Switch>
-        <Route path="/proposal/:token" component={GuestProposalPage} />
-        <Route path="/book/:optionToken" component={GuestBookingPage} />
+        <Route path="/proposal/:token">
+          <ErrorBoundary boundary="guest-proposal"><GuestProposalPage /></ErrorBoundary>
+        </Route>
+        <Route path="/book/:optionToken">
+          <ErrorBoundary boundary="guest-booking"><GuestBookingPage /></ErrorBoundary>
+        </Route>
         <Route path="/privacy" component={PrivacyPage} />
         <Route path="/terms" component={TermsPage} />
         <Route path="/" component={LandingPage} />
@@ -129,8 +145,12 @@ function AppRouter() {
 
   return (
     <Switch>
-      <Route path="/proposal/:token" component={GuestProposalPage} />
-      <Route path="/book/:optionToken" component={GuestBookingPage} />
+      <Route path="/proposal/:token">
+        <ErrorBoundary boundary="guest-proposal"><GuestProposalPage /></ErrorBoundary>
+      </Route>
+      <Route path="/book/:optionToken">
+        <ErrorBoundary boundary="guest-booking"><GuestBookingPage /></ErrorBoundary>
+      </Route>
       <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/privacy" component={PrivacyPage} />
       <Route path="/terms" component={TermsPage} />
@@ -143,16 +163,20 @@ function AppRouter() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <TooltipProvider>
-          <AuthProvider>
-            <AppRouter />
-          </AuthProvider>
-          <Toaster />
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary boundary="app-root">
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <TooltipProvider>
+            <AuthProvider>
+              <ErrorBoundary boundary="app-router">
+                <AppRouter />
+              </ErrorBoundary>
+            </AuthProvider>
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

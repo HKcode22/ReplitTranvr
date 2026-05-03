@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { PromoCodeInput, type AppliedPromo } from "@/components/promo-code-input";
 import { ensureCsrfToken } from "@/lib/queryClient";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 const BRAND_BLUE = "#2d7abf";
 
@@ -732,21 +733,23 @@ export default function GuestBookingPage() {
                   Preparing payment…
                 </div>
               ) : (
-                <Elements
-                  /* Re-mount Elements when the PI changes so the wallet
-                     buttons (Apple Pay / Google Pay) re-quote the new total. */
-                  key={clientSecret}
-                  stripe={stripePromise}
-                  options={elementsOptions}
-                >
-                  <CheckoutForm
-                    data={data}
-                    contact={contact}
-                    passengers={passengers}
-                    appliedPromo={appliedPromo}
-                    onResult={(status, bookingRef) => setDone({ status, bookingRef })}
-                  />
-                </Elements>
+                <ErrorBoundary boundary="guest-booking-payment">
+                  <Elements
+                    /* Re-mount Elements when the PI changes so the wallet
+                       buttons (Apple Pay / Google Pay) re-quote the new total. */
+                    key={clientSecret}
+                    stripe={stripePromise}
+                    options={elementsOptions}
+                  >
+                    <CheckoutForm
+                      data={data}
+                      contact={contact}
+                      passengers={passengers}
+                      appliedPromo={appliedPromo}
+                      onResult={(status, bookingRef) => setDone({ status, bookingRef })}
+                    />
+                  </Elements>
+                </ErrorBoundary>
               )}
             </div>
 

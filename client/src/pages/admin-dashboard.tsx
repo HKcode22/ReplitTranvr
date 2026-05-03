@@ -14,6 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AlertTriangle, Wallet, Users, CreditCard, Phone, Shield, CheckCircle2, DollarSign, Pencil, X, Check, Tag, Trash2, Mail, Eye, Send, type LucideIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import type { PromoCode } from "@shared/schema";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 type AdminStats = {
   users: number;
@@ -726,13 +727,13 @@ export default function AdminDashboardPage() {
           <TabsTrigger value="emails" data-testid="tab-emails">Emails</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="pending" className="mt-4"><PendingManualTable /></TabsContent>
-        <TabsContent value="bookings" className="mt-4"><BookingsTable /></TabsContent>
-        <TabsContent value="payments" className="mt-4"><PaymentsTable /></TabsContent>
-        <TabsContent value="users" className="mt-4"><UsersTable /></TabsContent>
-        <TabsContent value="calls" className="mt-4"><CallsTable /></TabsContent>
-        <TabsContent value="promos" className="mt-4"><PromoCodesPanel /></TabsContent>
-        <TabsContent value="emails" className="mt-4"><EmailsPanel /></TabsContent>
+        <TabsContent value="pending" className="mt-4"><ErrorBoundary boundary="admin-tab-pending"><PendingManualTable /></ErrorBoundary></TabsContent>
+        <TabsContent value="bookings" className="mt-4"><ErrorBoundary boundary="admin-tab-bookings"><BookingsTable /></ErrorBoundary></TabsContent>
+        <TabsContent value="payments" className="mt-4"><ErrorBoundary boundary="admin-tab-payments"><PaymentsTable /></ErrorBoundary></TabsContent>
+        <TabsContent value="users" className="mt-4"><ErrorBoundary boundary="admin-tab-users"><UsersTable /></ErrorBoundary></TabsContent>
+        <TabsContent value="calls" className="mt-4"><ErrorBoundary boundary="admin-tab-calls"><CallsTable /></ErrorBoundary></TabsContent>
+        <TabsContent value="promos" className="mt-4"><ErrorBoundary boundary="admin-tab-promos"><PromoCodesPanel /></ErrorBoundary></TabsContent>
+        <TabsContent value="emails" className="mt-4"><ErrorBoundary boundary="admin-tab-emails"><EmailsPanel /></ErrorBoundary></TabsContent>
       </Tabs>
     </div>
   );
