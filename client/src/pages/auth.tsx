@@ -280,7 +280,7 @@ export default function AuthPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "register" && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="firstName">First name</Label>
                   <Input
@@ -340,6 +340,7 @@ export default function AuthPage() {
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   required
                   minLength={6}
+                  className="pr-10"
                   data-testid="input-password"
                 />
                 <button

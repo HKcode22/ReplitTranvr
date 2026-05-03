@@ -106,16 +106,16 @@ function FlightSegmentCard({ segment }: { segment: any }) {
           )}
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <div className="text-center">
+          <div className="text-center shrink-0 min-w-[52px]">
             <p className="text-sm font-semibold" data-testid={`text-depart-time-${segment.id}`}>{formatTime(segment.departingAt)}</p>
             <p className="text-xs text-muted-foreground">{segment.origin?.iata}</p>
           </div>
-          <div className="flex-1 flex items-center gap-1 px-2">
+          <div className="flex-1 flex items-center gap-1 px-2 min-w-[40px]">
             <div className="flex-1 border-t border-dashed border-muted-foreground/30" />
             <Plane className="w-3 h-3 text-muted-foreground rotate-90 shrink-0" />
             <div className="flex-1 border-t border-dashed border-muted-foreground/30" />
           </div>
-          <div className="text-center">
+          <div className="text-center shrink-0 min-w-[52px]">
             <p className="text-sm font-semibold" data-testid={`text-arrive-time-${segment.id}`}>{formatTime(segment.arrivingAt)}</p>
             <p className="text-xs text-muted-foreground">{segment.destination?.iata}</p>
           </div>

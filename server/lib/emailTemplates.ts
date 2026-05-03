@@ -352,13 +352,17 @@ export function buildManualBookingConfirmationEmail(input: ManualBookingConfirma
       </div>
 
       <div style="padding:0 24px;">
-        <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:18px 20px;margin:24px 0;display:flex;align-items:center;gap:12px;">
-          <div style="width:36px;height:36px;border-radius:50%;background:#10b981;color:white;display:inline-flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;line-height:1;">&#10003;</div>
-          <div>
-            <div style="color:#065f46;font-weight:600;font-size:15px;">Booking confirmed</div>
-            <div style="color:#047857;font-size:13px;margin-top:2px;">Your flight is locked in. Details below.</div>
-          </div>
-        </div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;margin:24px 0;border-collapse:separate;">
+          <tr>
+            <td valign="middle" width="56" style="padding:18px 0 18px 20px;">
+              <div style="width:36px;height:36px;border-radius:50%;background:#10b981;color:#ffffff;text-align:center;font-size:20px;font-weight:700;line-height:36px;">&#10003;</div>
+            </td>
+            <td valign="middle" style="padding:18px 20px 18px 12px;">
+              <div style="color:#065f46;font-weight:600;font-size:15px;">Booking confirmed</div>
+              <div style="color:#047857;font-size:13px;margin-top:2px;">Your flight is locked in. Details below.</div>
+            </td>
+          </tr>
+        </table>
 
         <h2 style="font-size:22px;color:${TEXT_DARK};margin:0 0 12px;">You're all set${input.firstName ? `, ${escapeHtml(input.firstName)}` : ""}!</h2>
         <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 24px;">
