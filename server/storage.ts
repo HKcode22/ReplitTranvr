@@ -4,6 +4,7 @@ import {
   users, travelerProfiles, callRequests, itineraryProposals,
   proposalItems, notifications, payments, callbackRequests, savedCards, blandCalls,
   calendarEntries, systemSettings, promoCodes, phoneEmailMap, guestProposals,
+  hotelSearches, hotelOptions, hotelBookings,
   type User, type InsertUser, type TravelerProfile, type InsertTravelerProfile,
   type CallRequest, type InsertCallRequest, type ItineraryProposal, type InsertProposal,
   type ProposalItem, type InsertProposalItem, type Notification, type InsertNotification,
@@ -12,6 +13,9 @@ import {
   type CalendarEntry, type InsertCalendarEntry,
   type PromoCode, type InsertPromoCode,
   type PhoneEmailMap, type GuestProposal, type InsertGuestProposal,
+  type HotelSearch, type InsertHotelSearch,
+  type HotelOption, type InsertHotelOption,
+  type HotelBooking, type InsertHotelBooking,
 } from "@shared/schema";
 import { normalizePhoneE164 } from "./lib/phone";
 
@@ -86,6 +90,24 @@ export interface IStorage {
   updateGuestProposalStatus(id: number, status: string): Promise<GuestProposal | undefined>;
   claimGuestProposalForBooking(id: number): Promise<{ row: GuestProposal; priorStatus: string } | undefined>;
   getRecentGuestProposalForPhone(phone: string, hoursWindow: number): Promise<{ row: GuestProposal; expired: boolean } | undefined>;
+
+  // ===== Hotels (Phase 2 — persistence) =====
+  createHotelSearch(data: InsertHotelSearch): Promise<HotelSearch>;
+  getHotelSearch(id: number): Promise<HotelSearch | undefined>;
+  getHotelSearchesByCallRequest(callRequestId: number): Promise<HotelSearch[]>;
+  updateHotelSearchStatus(
+    id: number,
+    data: Partial<Pick<HotelSearch, "status" | "errorMessage" | "rawProviderPayloadTruncated" | "completedAt">>,
+  ): Promise<HotelSearch | undefined>;
+  bulkCreateHotelOptions(rows: InsertHotelOption[]): Promise<HotelOption[]>;
+  getHotelOptionsBySearch(searchId: number): Promise<HotelOption[]>;
+  getHotelOption(id: number): Promise<HotelOption | undefined>;
+  createHotelBooking(data: InsertHotelBooking): Promise<HotelBooking>;
+  getHotelBooking(id: number): Promise<HotelBooking | undefined>;
+  updateHotelBookingStatus(
+    id: number,
+    data: Partial<Pick<HotelBooking, "status" | "providerBookingId" | "confirmationNumber" | "totalCharged" | "currency" | "errorMessage" | "paymentId">>,
+  ): Promise<HotelBooking | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -646,6 +668,73 @@ export class DatabaseStorage implements IStorage {
     if (!row) return undefined;
     const expired = !!row.expiresAt && new Date(row.expiresAt).getTime() < Date.now();
     return { row, expired };
+  }
+
+  // ===== Hotels (Phase 2 — persistence) =====
+  // These methods are pure CRUD wrappers used by the admin test endpoint
+  // (Phase 1) and, later, by the post-call hotel-search hook (Phase 4) and
+  // booking guardrails (Phase 5). No business logic lives here.
+
+  async createHotelSearch(data: InsertHotelSearch): Promise<HotelSearch> {
+    const [row] = await db.insert(hotelSearches).values(data).returning();
+    return row;
+  }
+
+  async getHotelSearch(id: number): Promise<HotelSearch | undefined> {
+    const [row] = await db.select().from(hotelSearches).where(eq(hotelSearches.id, id));
+    return row;
+  }
+
+  async getHotelSearchesByCallRequest(callRequestId: number): Promise<HotelSearch[]> {
+    return db
+      .select()
+      .from(hotelSearches)
+      .where(eq(hotelSearches.callRequestId, callRequestId))
+      .orderBy(desc(hotelSearches.createdAt));
+  }
+
+  async updateHotelSearchStatus(
+    id: number,
+    data: Partial<Pick<HotelSearch, "status" | "errorMessage" | "rawProviderPayloadTruncated" | "completedAt">>,
+  ): Promise<HotelSearch | undefined> {
+    const [row] = await db.update(hotelSearches).set(data).where(eq(hotelSearches.id, id)).returning();
+    return row;
+  }
+
+  async bulkCreateHotelOptions(rows: InsertHotelOption[]): Promise<HotelOption[]> {
+    if (rows.length === 0) return [];
+    return db.insert(hotelOptions).values(rows).returning();
+  }
+
+  async getHotelOptionsBySearch(searchId: number): Promise<HotelOption[]> {
+    return db.select().from(hotelOptions).where(eq(hotelOptions.searchId, searchId));
+  }
+
+  async getHotelOption(id: number): Promise<HotelOption | undefined> {
+    const [row] = await db.select().from(hotelOptions).where(eq(hotelOptions.id, id));
+    return row;
+  }
+
+  async createHotelBooking(data: InsertHotelBooking): Promise<HotelBooking> {
+    const [row] = await db.insert(hotelBookings).values(data).returning();
+    return row;
+  }
+
+  async getHotelBooking(id: number): Promise<HotelBooking | undefined> {
+    const [row] = await db.select().from(hotelBookings).where(eq(hotelBookings.id, id));
+    return row;
+  }
+
+  async updateHotelBookingStatus(
+    id: number,
+    data: Partial<Pick<HotelBooking, "status" | "providerBookingId" | "confirmationNumber" | "totalCharged" | "currency" | "errorMessage" | "paymentId">>,
+  ): Promise<HotelBooking | undefined> {
+    const [row] = await db
+      .update(hotelBookings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(hotelBookings.id, id))
+      .returning();
+    return row;
   }
 }
 

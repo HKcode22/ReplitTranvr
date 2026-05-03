@@ -228,6 +228,121 @@ export const guestProposals = pgTable("guest_proposals", {
   expiresAt: timestamp("expires_at").notNull(),
 });
 
+// =====================================================================
+// Hotels (Phase 2 — persistence only). Provider-agnostic hotel search,
+// option storage, and booking record. Wired only from the admin test
+// endpoint at this stage; the post-call hotel-search hook is Phase 4 and
+// the booking flow is Phase 5. All tables are additive — no existing
+// columns or enums are touched. `tripTypeEnum` and `proposalItemTypeEnum`
+// already include "hotel" from earlier work, so no enum migration here.
+// =====================================================================
+
+export const hotelSearches = pgTable("hotel_searches", {
+  id: serial("id").primaryKey(),
+  // Nullable: inbound guest flow has no user yet at search time.
+  userId: varchar("user_id", { length: 36 }).references(() => users.id),
+  callRequestId: integer("call_request_id").references(() => callRequests.id),
+  proposalId: integer("proposal_id").references(() => itineraryProposals.id),
+  provider: text("provider").notNull(),
+  // Full normalized HotelSearchRequest. Provider-agnostic shape.
+  request: jsonb("request").notNull(),
+  // pending | completed | failed | partial
+  status: text("status").default("pending").notNull(),
+  errorMessage: text("error_message"),
+  // Provider payload truncated to first 2000 chars for debugging only.
+  // Full payloads (when needed) live on hotel_options.source_raw_payload.
+  rawProviderPayloadTruncated: text("raw_provider_payload_truncated"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const hotelOptions = pgTable("hotel_options", {
+  id: serial("id").primaryKey(),
+  searchId: integer("search_id").notNull().references(() => hotelSearches.id),
+  provider: text("provider").notNull(),
+  providerHotelId: text("provider_hotel_id").notNull(),
+  providerRateId: text("provider_rate_id"),
+  name: text("name").notNull(),
+  address: text("address"),
+  neighborhood: text("neighborhood"),
+  latitude: numeric("latitude", { precision: 9, scale: 6 }),
+  longitude: numeric("longitude", { precision: 9, scale: 6 }),
+  starRating: numeric("star_rating", { precision: 2, scale: 1 }),
+  guestRating: numeric("guest_rating", { precision: 3, scale: 2 }),
+  // String[] of image URLs.
+  images: jsonb("images"),
+  description: text("description"),
+  // String[] of amenity names (provider-specific until Phase 3+ normalizes).
+  amenities: jsonb("amenities"),
+  roomName: text("room_name"),
+  bedType: text("bed_type"),
+  boardType: text("board_type"),
+  cancellationPolicy: text("cancellation_policy"),
+  refundable: boolean("refundable"),
+  freeCancellationUntil: timestamp("free_cancellation_until"),
+  nightlyPrice: numeric("nightly_price", { precision: 10, scale: 2 }),
+  taxesAndFees: numeric("taxes_and_fees", { precision: 10, scale: 2 }),
+  totalPrice: numeric("total_price", { precision: 10, scale: 2 }),
+  currency: varchar("currency", { length: 3 }),
+  // pay_now | pay_at_property | deposit
+  payNowOrLater: text("pay_now_or_later"),
+  checkInInstructions: text("check_in_instructions"),
+  specialInstructions: text("special_instructions"),
+  // ADMIN-ONLY: never returned to non-admin endpoints. Future endpoints
+  // that surface options to non-admins must explicitly omit this column.
+  sourceRawPayload: jsonb("source_raw_payload"),
+  // Populated by the Phase 1 ranking function.
+  rankScore: numeric("rank_score", { precision: 5, scale: 2 }),
+  // Per-signal debug breakdown of why this option scored where it did.
+  rankReasons: jsonb("rank_reasons"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("hotel_options_search_id_idx").on(table.searchId),
+]);
+
+export const hotelBookings = pgTable("hotel_bookings", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id),
+  hotelOptionId: integer("hotel_option_id").notNull().references(() => hotelOptions.id),
+  // Nullable until Phase 5 wires the Stripe payment link.
+  paymentId: integer("payment_id").references(() => payments.id),
+  provider: text("provider").notNull(),
+  providerBookingId: text("provider_booking_id"),
+  confirmationNumber: text("confirmation_number"),
+  // pending | confirmed | failed | cancelled | manual_fallback | dry_run | cancelled_dry_run | booking
+  status: text("status").default("pending").notNull(),
+  // HARD RULE: traveler names + DOB only. NO payment instruments,
+  // NO loyalty card numbers, NO government IDs at this layer. PCI lives
+  // only in the existing payments table once Phase 5 wires the link.
+  travelerDetails: jsonb("traveler_details").notNull(),
+  totalCharged: numeric("total_charged", { precision: 10, scale: 2 }),
+  currency: varchar("currency", { length: 3 }),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("hotel_bookings_user_id_idx").on(table.userId),
+  index("hotel_bookings_hotel_option_id_idx").on(table.hotelOptionId),
+]);
+
+export const hotelSearchesRelations = relations(hotelSearches, ({ one, many }) => ({
+  user: one(users, { fields: [hotelSearches.userId], references: [users.id] }),
+  callRequest: one(callRequests, { fields: [hotelSearches.callRequestId], references: [callRequests.id] }),
+  proposal: one(itineraryProposals, { fields: [hotelSearches.proposalId], references: [itineraryProposals.id] }),
+  options: many(hotelOptions),
+}));
+
+export const hotelOptionsRelations = relations(hotelOptions, ({ one, many }) => ({
+  search: one(hotelSearches, { fields: [hotelOptions.searchId], references: [hotelSearches.id] }),
+  bookings: many(hotelBookings),
+}));
+
+export const hotelBookingsRelations = relations(hotelBookings, ({ one }) => ({
+  user: one(users, { fields: [hotelBookings.userId], references: [users.id] }),
+  option: one(hotelOptions, { fields: [hotelBookings.hotelOptionId], references: [hotelOptions.id] }),
+  payment: one(payments, { fields: [hotelBookings.paymentId], references: [payments.id] }),
+}));
+
 export const savedCardsRelations = relations(savedCards, ({ one }) => ({
   user: one(users, { fields: [savedCards.userId], references: [users.id] }),
 }));
@@ -292,6 +407,9 @@ export const insertSavedCardSchema = createInsertSchema(savedCards).omit({ id: t
 export const insertBlandCallSchema = createInsertSchema(blandCalls).omit({ id: true, createdAt: true });
 export const insertCalendarEntrySchema = createInsertSchema(calendarEntries).omit({ id: true, createdAt: true });
 export const insertPromoCodeSchema = createInsertSchema(promoCodes).omit({ id: true, usedCount: true, createdAt: true, updatedAt: true });
+export const insertHotelSearchSchema = createInsertSchema(hotelSearches).omit({ id: true, createdAt: true, completedAt: true });
+export const insertHotelOptionSchema = createInsertSchema(hotelOptions).omit({ id: true, createdAt: true });
+export const insertHotelBookingSchema = createInsertSchema(hotelBookings).omit({ id: true, createdAt: true, updatedAt: true });
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -373,3 +491,9 @@ export interface CalendarEntryDetails {
 export type InsertCalendarEntry = z.infer<typeof insertCalendarEntrySchema>;
 export type PromoCode = typeof promoCodes.$inferSelect;
 export type InsertPromoCode = z.infer<typeof insertPromoCodeSchema>;
+export type HotelSearch = typeof hotelSearches.$inferSelect;
+export type InsertHotelSearch = z.infer<typeof insertHotelSearchSchema>;
+export type HotelOption = typeof hotelOptions.$inferSelect;
+export type InsertHotelOption = z.infer<typeof insertHotelOptionSchema>;
+export type HotelBooking = typeof hotelBookings.$inferSelect;
+export type InsertHotelBooking = z.infer<typeof insertHotelBookingSchema>;
