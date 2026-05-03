@@ -1,0 +1,158 @@
+We are adding hidden hotel infrastructure to Travnr, but do not expose it visibly on the website yet unless there is already a safe internal/admin testing page.
+
+Current product context:
+Travnr is an AI travel concierge. The user enters phone/email, receives an AI call, explains their trip naturally, and the backend should eventually return structured travel options. Flights are currently being built around Duffel. We now need a hotel/stays layer that can work with Duffel Stays, Expedia Rapid, Hotelbeds, Amadeus Hotels, RateHawk, or a mock provider.
+
+Important:
+Do not hard-code the hotel backend around one provider. Build a provider-agnostic hotel architecture.
+
+Please inspect the existing Travnr codebase first and adapt to the current structure. If there are existing trip, user, flight, itinerary, email, or booking models, extend those instead of creating disconnected duplicate systems.
+
+Goal:
+Create the backend structure for hotel search, hotel option storage, hotel ranking, and future booking support. Keep it flexible so we can plug in Duffel Stays first if available, but switch to Expedia Rapid or another provider later.
+
+Build the following:
+
+1. A hotel provider interface
+Create a standard interface that any hotel provider must implement:
+- searchHotels(tripDetails)
+- getHotelDetails(hotelId)
+- getRoomRates(hotelId, tripDetails)
+- priceCheckOrQuote(rateId, tripDetails)
+- createBooking(quoteId, travelerDetails, paymentDetails)
+- getBooking(bookingId)
+- cancelBooking(bookingId)
+
+Not every provider will support every method. Add a capability map like:
+- supportsSearch
+- supportsRoomRates
+- supportsPriceCheck
+- supportsBooking
+- supportsCancellation
+- supportsLoyalty
+- supportsPayAtProperty
+- supportsSpecialRequests
+
+2. Add provider adapters
+Create placeholder adapters for:
+- Duffel Stays
+- Expedia Rapid
+- Hotelbeds
+- Amadeus Hotels
+- RateHawk
+- MockHotelProvider
+
+Only MockHotelProvider needs to work immediately if real API keys are not present. Real providers should be structured but safely disabled unless environment variables are set.
+
+3. Add environment variable support
+Prepare env variables like:
+- HOTEL_PROVIDER=mock or duffel or expedia or hotelbeds or amadeus or ratehawk
+- DUFFEL_ACCESS_TOKEN
+- EXPEDIA_API_KEY
+- EXPEDIA_SECRET
+- HOTELBEDS_API_KEY
+- HOTELBEDS_SECRET
+- AMADEUS_CLIENT_ID
+- AMADEUS_CLIENT_SECRET
+- RATEHAWK_API_KEY
+
+Do not break the current app if these are missing.
+
+4. Add hotel trip details schema
+The system should be able to store and use:
+- destination
+- checkInDate
+- checkOutDate
+- guests
+- rooms
+- adults
+- children
+- budgetPerNight
+- totalHotelBudget
+- preferredNeighborhood
+- hotelType
+- starRatingMin
+- amenities
+- refundableOnly
+- freeBreakfast
+- parking
+- petFriendly
+- accessibilityNeeds
+- loyaltyProgram
+- specialRequests
+- lateCheckIn
+- earlyCheckIn
+
+5. Add hotel option schema
+Each hotel option should normalize provider data into our own Travnr format:
+- provider
+- providerHotelId
+- providerRateId
+- name
+- address
+- neighborhood
+- latitude
+- longitude
+- starRating
+- guestRating
+- images
+- description
+- amenities
+- roomName
+- bedType
+- boardType
+- cancellationPolicy
+- refundable
+- freeCancellationUntil
+- nightlyPrice
+- taxesAndFees
+- totalPrice
+- currency
+- payNowOrLater
+- checkInInstructions
+- specialInstructions
+- sourceRawPayload
+
+6. Add hotel ranking logic
+Rank hotels based on:
+- budget fit
+- distance/location match
+- star rating
+- refundable preference
+- amenities match
+- total price
+- family/business suitability if inferred
+- confidence score from the AI call
+
+Return a ranked list of 3 to 5 hotels.
+
+7. Add integration with the existing Travnr trip flow
+After a call or trip intake, the backend should be able to:
+- extract hotel requirements
+- search hotels in the background during the normal trip processing flow
+- store hotel options
+- include hotel options in the internal trip object
+- optionally include hotel options in the email only if a feature flag is enabled
+
+Add feature flags:
+- ENABLE_HOTEL_SEARCH=false by default
+- SHOW_HOTELS_TO_USERS=false by default
+- ENABLE_HOTEL_BOOKING=false by default
+
+8. Add logging and safety
+Log provider requests and responses safely, but do not log sensitive payment details.
+Store raw provider payloads only where useful for debugging.
+Handle provider failures gracefully.
+If hotel search fails, the flight flow should still work.
+
+9. Add admin/internal testing route if appropriate
+If the app already has admin/test routes, add a simple internal hotel test endpoint or page where we can input:
+- destination
+- check-in/check-out
+- guests
+- rooms
+- budget
+Then return mock hotel results in Travnr’s normalized format.
+
+10. Do not redesign the public website yet
+This is infrastructure only. Keep public UI unchanged unless needed for internal testing.
