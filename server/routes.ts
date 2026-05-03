@@ -941,52 +941,75 @@ async function buildGuestProposalDataFromOffers(args: {
   // pass — verification never blocks the email path.
   verifyPicks?: { logTag: string };
 }): Promise<GuestProposalData> {
-  let picks = pickThreeOffers(args.offers);
+  const originalPicks = pickThreeOffers(args.offers);
+  let picks = originalPicks;
 
   if (args.verifyPicks && picks.length > 0) {
     const tag = args.verifyPicks.logTag;
+    const pool = summarizeOfferPool(args.offers);
+    const toPickSummary = (
+      ps: Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }>,
+    ) =>
+      ps.map((p) => ({
+        label: p.label,
+        id: String(p.offer.id ?? ""),
+        carrier: offerOutboundCarrier(p.offer),
+        price: parseFloat(p.offer.total_amount),
+        currency: String(p.offer.total_currency || "USD"),
+        duration_minutes: offerTotalDurationMinutes(p.offer),
+        stops: offerStops(p.offer),
+      }));
     try {
-      const verdict = await verifyProposalPicks({
-        picks: picks.map((p) => ({
-          label: p.label,
-          id: String(p.offer.id ?? ""),
-          carrier: offerOutboundCarrier(p.offer),
-          price: parseFloat(p.offer.total_amount),
-          currency: String(p.offer.total_currency || "USD"),
-          duration_minutes: offerTotalDurationMinutes(p.offer),
-          stops: offerStops(p.offer),
-        })),
-        pool: summarizeOfferPool(args.offers),
+      // Pass 1: verify the deterministic picks against the full offer pool.
+      const verdict1 = await verifyProposalPicks({
+        picks: toPickSummary(originalPicks),
+        pool,
         logTag: tag,
       });
-      if (verdict && verdict.should_regenerate) {
-        const exclude = new Set((verdict.exclude_offer_ids || []).map(String));
-        if (exclude.size > 0) {
+      if (verdict1 && verdict1.should_regenerate) {
+        const exclude = new Set((verdict1.exclude_offer_ids || []).map(String));
+        if (exclude.size === 0) {
+          console.log(
+            `${tag} pick-verify flagged but no exclude_offer_ids — shipping original picks. issues=${JSON.stringify(verdict1.issues)}`,
+          );
+        } else {
           const filtered = args.offers.filter((o) => !exclude.has(String(o.id)));
           const repicked = pickThreeOffers(filtered);
-          if (repicked.length > 0) {
+          if (repicked.length === 0) {
             console.log(
-              `${tag} pick-verify regenerated picks excluded=${Array.from(exclude).join(",")} issues=${JSON.stringify(verdict.issues)}`,
+              `${tag} pick-verify regen aborted reason=empty_after_filter — shipping original picks. issues=${JSON.stringify(verdict1.issues)}`,
             );
-            picks = repicked;
           } else {
-            console.log(
-              `${tag} pick-verify regen aborted reason=empty_after_filter — shipping original picks. issues=${JSON.stringify(verdict.issues)}`,
-            );
+            // Pass 2: re-verify the repicked set so a still-bad picker output
+            // can be detected. On second failure we ship the ORIGINAL picks
+            // (not the repick) and log loudly — better the devil we know.
+            const verdict2 = await verifyProposalPicks({
+              picks: toPickSummary(repicked),
+              pool,
+              logTag: `${tag} pass2`,
+            });
+            if (verdict2 && verdict2.should_regenerate) {
+              console.warn(
+                `${tag} pick-verify second pass STILL flagged — shipping ORIGINAL picks. excluded=${Array.from(exclude).join(",")} issues_pass1=${JSON.stringify(verdict1.issues)} issues_pass2=${JSON.stringify(verdict2.issues)}`,
+              );
+              picks = originalPicks;
+            } else {
+              console.log(
+                `${tag} pick-verify regenerated picks excluded=${Array.from(exclude).join(",")} issues_pass1=${JSON.stringify(verdict1.issues)} pass2=${verdict2 ? "ok" : "unavailable_accepting_repick"}`,
+              );
+              picks = repicked;
+            }
           }
-        } else {
-          console.log(
-            `${tag} pick-verify flagged but no exclude_offer_ids — shipping original picks. issues=${JSON.stringify(verdict.issues)}`,
-          );
         }
-      } else if (verdict) {
-        console.log(`${tag} pick-verify ok issues=${verdict.issues.length}`);
+      } else if (verdict1) {
+        console.log(`${tag} pick-verify ok issues=${verdict1.issues.length}`);
       }
     } catch (err: any) {
       // Never let verification failures block the email send. The
       // deterministic picker rules (dominance guard, nonstop preference)
       // already enforce the floor.
       console.warn(`${tag} pick-verify threw, shipping original picks:`, err?.message || err);
+      picks = originalPicks;
     }
   }
 
@@ -5292,6 +5315,7 @@ export async function registerRoutes(
           carrierLogo: o.carrierLogo,
           outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
           outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+          outboundDurationMinutes: o.slices?.[0]?.durationMinutes ?? null,
           inboundDepartingAt: o.slices?.[1]?.departingAt ?? null,
           inboundArrivingAt: o.slices?.[1]?.arrivingAt ?? null,
           inboundDurationMinutes: o.slices?.[1]?.durationMinutes ?? null,
@@ -5748,6 +5772,7 @@ export async function registerRoutes(
               carrierLogo: o.carrierLogo,
               outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
               outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+              outboundDurationMinutes: o.slices?.[0]?.durationMinutes ?? null,
               inboundDepartingAt: o.slices?.[1]?.departingAt ?? null,
               inboundArrivingAt: o.slices?.[1]?.arrivingAt ?? null,
               inboundDurationMinutes: o.slices?.[1]?.durationMinutes ?? null,
@@ -6785,6 +6810,7 @@ export async function registerRoutes(
               carrierLogo: o.carrierLogo,
               outboundDepartingAt: o.slices?.[0]?.departingAt ?? null,
               outboundArrivingAt: o.slices?.[0]?.arrivingAt ?? null,
+              outboundDurationMinutes: o.slices?.[0]?.durationMinutes ?? null,
               inboundDepartingAt: o.slices?.[1]?.departingAt ?? null,
               inboundArrivingAt: o.slices?.[1]?.arrivingAt ?? null,
               inboundDurationMinutes: o.slices?.[1]?.durationMinutes ?? null,

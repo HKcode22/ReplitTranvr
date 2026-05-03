@@ -587,6 +587,7 @@ export interface GuestProposalEmailOption {
   carrierLogo?: string | null;
   outboundDepartingAt?: string | null;
   outboundArrivingAt?: string | null;
+  outboundDurationMinutes?: number | null;
   // Round-trip return leg. All four fields are populated together when the
   // offer has a second slice; all stay undefined for one-way offers (in
   // which case the email card hides the return row entirely).
@@ -703,19 +704,27 @@ export function buildGuestProposalEmail(input: GuestProposalEmailInput): Rendere
         : inboundStopsNum === 0
           ? "Nonstop"
           : `${inboundStopsNum} stop${inboundStopsNum === 1 ? "" : "s"}`;
-    const outboundDurationLabel = isRoundTrip
-      // Only show per-leg duration when we have it broken out (round-trip
-      // case). For one-way the existing total-duration line below covers it.
-      // We use a literal middle-dot (·) here rather than the `&middot;` HTML
-      // entity because this whole string is run through `escapeHtml` below
-      // — entities would be double-encoded into visible text.
-      ? null
-      : `${formatDurationMins(opt.totalDurationMinutes)} · ${stopsLabel}`;
+    // Per-leg sub-line: "<date> · <duration> · <stops>". Built once per
+    // leg so both Outbound and Return rows render the same shape.
+    // We use literal middle-dot characters (not the `&middot;` entity)
+    // because this string flows through `escapeHtml` below.
+    const legSubLine = (
+      depart: string | null | undefined,
+      durationMin: number | null | undefined,
+      stopsTxt: string,
+    ): string => {
+      const parts: string[] = [];
+      const date = formatLongDate(depart);
+      if (date && date !== "—") parts.push(date);
+      if (typeof durationMin === "number" && durationMin > 0) parts.push(formatDurationMins(durationMin));
+      if (stopsTxt) parts.push(stopsTxt);
+      return parts.join(" · ");
+    };
     const legRow = (
       label: string,
       depart: string | null | undefined,
       arrive: string | null | undefined,
-      sub: string | null,
+      sub: string,
     ) => `
       <tr>
         <td colspan="2" style="padding:10px 0 2px;color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">${escapeHtml(label)}</td>
@@ -728,7 +737,7 @@ export function buildGuestProposalEmail(input: GuestProposalEmailInput): Rendere
         <td style="font-size:17px;font-weight:600;">${escapeHtml(formatTime(depart))}</td>
         <td style="font-size:17px;font-weight:600;text-align:right;">${escapeHtml(formatTime(arrive))}</td>
       </tr>
-      ${sub ? `<tr><td colspan="2" style="padding:2px 0 0;color:#6b7280;font-size:12px;">${sub}</td></tr>` : ""}
+      ${sub ? `<tr><td colspan="2" style="padding:2px 0 0;color:#6b7280;font-size:12px;">${escapeHtml(sub)}</td></tr>` : ""}
     `;
 
     const tripTableInner = isRoundTrip
@@ -736,17 +745,13 @@ export function buildGuestProposalEmail(input: GuestProposalEmailInput): Rendere
           "Outbound",
           opt.outboundDepartingAt,
           opt.outboundArrivingAt,
-          // Per-leg sub-line for the outbound. We don't have a broken-out
-          // outbound duration on the email payload today, so we just show
-          // the outbound stops label; the total trip duration is summarized
-          // in the footer line below the second leg.
-          escapeHtml(stopsLabel),
+          legSubLine(opt.outboundDepartingAt, opt.outboundDurationMinutes ?? null, stopsLabel),
         ) +
         legRow(
           "Return",
           opt.inboundDepartingAt,
           opt.inboundArrivingAt,
-          inboundStopsLabel ? escapeHtml(inboundStopsLabel) : null,
+          legSubLine(opt.inboundDepartingAt, opt.inboundDurationMinutes ?? null, inboundStopsLabel),
         ) +
         `<tr><td colspan="2" style="padding:10px 0 0;color:#6b7280;font-size:12px;border-top:1px solid #f1f5f9;">Total trip: ${escapeHtml(formatDurationMins(opt.totalDurationMinutes))}</td></tr>`
       : `
@@ -759,7 +764,7 @@ export function buildGuestProposalEmail(input: GuestProposalEmailInput): Rendere
             <td style="font-size:18px;font-weight:600;text-align:right;">${escapeHtml(formatTime(opt.outboundArrivingAt))}</td>
           </tr>
           <tr>
-            <td colspan="2" style="padding:8px 0 0;color:#6b7280;font-size:13px;">${escapeHtml(outboundDurationLabel ?? `${formatDurationMins(opt.totalDurationMinutes)} · ${stopsLabel}`)}</td>
+            <td colspan="2" style="padding:8px 0 0;color:#6b7280;font-size:13px;">${escapeHtml(`${formatLongDate(opt.outboundDepartingAt)} · ${formatDurationMins(opt.totalDurationMinutes)} · ${stopsLabel}`)}</td>
           </tr>
         `;
 
