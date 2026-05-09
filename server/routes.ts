@@ -619,6 +619,102 @@ function offerFlightSignature(offer: any): string {
   return `${carrier}${flightNum}|${dep}`;
 }
 
+async function searchSerpApiFlights(params: {
+  origin: string;
+  destination: string;
+  departureDate: string;
+  returnDate?: string | null;
+  passengers: number;
+  cabinClass: string;
+}): Promise<any[]> {
+  const key = process.env.SERPAPI_KEY;
+  if (!key) {
+    console.warn("[serpapi] SERPAPI_KEY not set — skipping Google Flights search");
+    return [];
+  }
+  const cabinClassMap: Record<string, number> = {
+    economy: 1, premium_economy: 2, business: 3, first: 4,
+  };
+  const travelClass = cabinClassMap[params.cabinClass] ?? 1;
+  const url = new URL("https://serpapi.com/search.json");
+  url.searchParams.set("engine", "google_flights");
+  url.searchParams.set("departure_id", params.origin);
+  url.searchParams.set("arrival_id", params.destination);
+  url.searchParams.set("outbound_date", params.departureDate);
+  if (params.returnDate) url.searchParams.set("return_date", params.returnDate);
+  url.searchParams.set("adults", String(params.passengers));
+  url.searchParams.set("travel_class", String(travelClass));
+  url.searchParams.set("currency", "USD");
+  url.searchParams.set("api_key", key);
+  try {
+    const resp = await fetch(url.toString());
+    if (!resp.ok) {
+      console.warn(`[serpapi] HTTP ${resp.status} from Google Flights search`);
+      return [];
+    }
+    const data: any = await resp.json();
+    if (data.error) {
+      console.warn("[serpapi] Google Flights API error:", data.error);
+      return [];
+    }
+    const results: any[] = [];
+    const allFlights: any[] = [...(data.best_flights || []), ...(data.other_flights || [])];
+    for (const flight of allFlights) {
+      const legs: any[] = flight.flights || [];
+      if (legs.length === 0) continue;
+      const firstLeg = legs[0];
+      const lastLeg = legs[legs.length - 1];
+      const airlineIata = firstLeg.airline || "";
+      const flightNumber = firstLeg.flight_number || "";
+      const departureAt = (firstLeg.departure_airport?.time || "").replace(/\s+/g, "T");
+      const id = `serpapi-${airlineIata}${flightNumber}|${departureAt}`;
+      const totalMinutes: number = typeof flight.total_duration === "number"
+        ? flight.total_duration
+        : legs.reduce((sum: number, l: any) => sum + (typeof l.duration === "number" ? l.duration : 0), 0);
+      const durationIso = `PT${Math.floor(totalMinutes / 60)}H${totalMinutes % 60}M`;
+      const segments = legs.map((leg: any) => ({
+        departing_at: leg.departure_airport?.time || null,
+        arriving_at: leg.arrival_airport?.time || null,
+        marketing_carrier: { iata_code: leg.airline || "", name: leg.airline_logo ? leg.airline : (leg.airline || "") },
+        marketing_carrier_flight_number: leg.flight_number || "",
+        origin: { iata_code: leg.departure_airport?.id || "" },
+        destination: { iata_code: leg.arrival_airport?.id || "" },
+      }));
+      const price = typeof flight.price === "number" ? flight.price : 0;
+      if (price <= 0) continue;
+      results.push({
+        id,
+        total_amount: String(price),
+        total_currency: "USD",
+        source: "serpapi",
+        isDuffel: false,
+        owner: { iata_code: airlineIata, name: airlineIata },
+        slices: [{
+          origin: { iata_code: firstLeg.departure_airport?.id || "" },
+          destination: { iata_code: lastLeg.arrival_airport?.id || "" },
+          duration: durationIso,
+          segments,
+        }],
+        passengers: Array.from({ length: params.passengers }, () => ({ type: "adult" })),
+      });
+    }
+    console.log(`[serpapi] Google Flights returned ${results.length} normalized offers for ${params.origin}->${params.destination}`);
+    return results;
+  } catch (err: any) {
+    console.warn("[serpapi] Google Flights search failed (non-fatal):", err?.message || err);
+    return [];
+  }
+}
+
+function mergeSerpApiOffers(duffelOffers: any[], serpApiOffers: any[]): any[] {
+  const duffelSigs = new Set(duffelOffers.map(offerFlightSignature));
+  const filtered = serpApiOffers.filter((o) => !duffelSigs.has(offerFlightSignature(o)));
+  if (filtered.length > 0) {
+    console.log(`[serpapi] merged ${filtered.length} unique SerpApi offer(s) (${serpApiOffers.length - filtered.length} deduplicated)`);
+  }
+  return [...duffelOffers, ...filtered];
+}
+
 function offerOutboundCarrier(offer: any): string {
   const seg = offer?.slices?.[0]?.segments?.[0];
   return seg?.marketing_carrier?.iata_code || seg?.marketing_carrier?.name || "??";
@@ -948,6 +1044,8 @@ function offerToGuestOption(
     baggage,
     refundable,
     changeable,
+    isDuffel: offer.isDuffel !== false,
+    source: offer.source ?? undefined,
   };
 }
 
@@ -2524,6 +2622,9 @@ export async function registerRoutes(
   } else {
     console.error("[Duffel] DUFFEL_API_TOKEN is NOT set — flight search and booking will be disabled and post-call proposals will fall back to placeholder content");
   }
+  if (!process.env.SERPAPI_KEY) {
+    console.warn("[SerpApi] SERPAPI_KEY is not set — Google Flights supplemental search will be disabled");
+  }
 
   app.get("/api/duffel/config", isAuthenticated, async (_req: Request, res: Response) => {
     return res.json({ testMode: isTestMode });
@@ -2629,13 +2730,13 @@ export async function registerRoutes(
   });
 
   app.post("/api/duffel/book-direct", isAuthenticated, async (req: Request, res: Response) => {
-    if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
     try {
       const bookDirectBodySchema = z.object({
         offerId: z.string().min(1, "Offer ID is required"),
         stripePaymentIntentId: z.string().optional(),
         useBalance: z.boolean().optional(),
         passengers: z.array(passengerInputSchema).min(1, "Passenger details are required"),
+        offerData: z.any().optional(),
       });
       const parsed = bookDirectBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -2643,7 +2744,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: first?.message || "Invalid request body" });
       }
       const { offerId, passengers, stripePaymentIntentId, useBalance } = parsed.data;
+      const isSerpApiOffer = offerId.startsWith("serpapi-") || req.body.offerData?.source === "serpapi" || req.body.offerData?.isDuffel === false;
 
+      if (!isSerpApiOffer && !duffel) {
+        return res.status(503).json({ message: "Duffel is not configured" });
+      }
       if (useBalance && !isTestMode) {
         return res.status(400).json({ message: "Balance payment is only available in test mode" });
       }
@@ -2652,17 +2757,35 @@ export async function registerRoutes(
       const user = await storage.getUser(req.session.userId!);
       if (!user) return res.status(401).json({ message: "User not found" });
 
-      let offer: any;
-      try {
-        offer = await duffel.offers.get(offerId);
-      } catch (offerErr: any) {
-        const offerErrMsg = offerErr?.errors?.[0]?.message || "";
-        if (offerErrMsg.toLowerCase().includes("does not exist") || offerErr?.status === 404) {
-          return res.status(400).json({ message: "This flight offer is no longer available. Please go back and search for flights again." });
+      let fullOffer: any;
+      if (isSerpApiOffer) {
+        const providedOfferData = req.body.offerData;
+        if (!providedOfferData) {
+          return res.status(400).json({ message: "offerData is required for Google Flights (SerpApi) offers" });
         }
-        throw offerErr;
+        fullOffer = {
+          id: offerId,
+          total_amount: String(providedOfferData.totalAmount || providedOfferData.total_amount || "0"),
+          total_currency: String(providedOfferData.totalCurrency || providedOfferData.total_currency || "USD"),
+          owner: providedOfferData.owner || null,
+          slices: providedOfferData.slices || [],
+          passengers: passengers.map((_: any, idx: number) => ({ id: `pax_${idx}`, type: "adult" })),
+          source: "serpapi",
+          isDuffel: false,
+        };
+      } else {
+        let offer: any;
+        try {
+          offer = await duffel!.offers.get(offerId);
+        } catch (offerErr: any) {
+          const offerErrMsg = offerErr?.errors?.[0]?.message || "";
+          if (offerErrMsg.toLowerCase().includes("does not exist") || offerErr?.status === 404) {
+            return res.status(400).json({ message: "This flight offer is no longer available. Please go back and search for flights again." });
+          }
+          throw offerErr;
+        }
+        fullOffer = offer.data as any;
       }
-      const fullOffer = offer.data as any;
 
       let paidPiAmountCents: number | null = null;
       let appliedPromo: { id: number; code: string; forceManual: boolean } | null = null;
@@ -2753,6 +2876,62 @@ export async function registerRoutes(
         }
       }
 
+      // SerpApi (Google Flights) offers always go to manual booking.
+      if (isSerpApiOffer && stripePaymentIntentId && paidPiAmountCents != null) {
+        const serpApiPayment = await createManualBookingFallback({
+          userId: req.session.userId!,
+          userEmail: user.email,
+          proposalId: null,
+          proposalTitle: null,
+          offerId,
+          fullOffer,
+          passengerMappings,
+          extendedPassengers: extendedPassengerSnapshot,
+          paidPiAmountCents,
+          stripePaymentIntentId: stripePaymentIntentId || null,
+          endpoint: "POST /api/duffel/book-direct",
+        });
+        if (appliedPromo) {
+          await storage.updatePayment(serpApiPayment.id, { appliedPromoCode: appliedPromo.code }).catch((e) => console.warn("[promo] stamp failed:", e));
+        }
+        const serpApiSlice = fullOffer.slices?.[0];
+        const serpApiSeg = serpApiSlice?.segments?.[0];
+        const serpApiRouteLabel = serpApiSlice
+          ? `${serpApiSlice.origin?.iata_code || "?"} → ${(fullOffer.slices[fullOffer.slices.length - 1]?.destination?.iata_code || "?")}`
+          : offerId;
+        const serpApiDepartingAt = serpApiSeg?.departing_at || serpApiSeg?.departingAt;
+        const serpApiDateLabel = serpApiDepartingAt
+          ? new Date(serpApiDepartingAt).toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" } as Intl.DateTimeFormatOptions)
+          : "";
+        const serpApiCarrier = fullOffer.owner?.name || fullOffer.owner?.iata_code || "Airline";
+        const adminSubjectBookDirect = `Manual Booking Required — ${serpApiCarrier} ${serpApiRouteLabel} ${serpApiDateLabel}`.trim();
+        const adminHtmlBookDirect = `
+          <p><strong>A new manual booking is required for a Google Flights selection.</strong></p>
+          <p><strong>Route:</strong> ${serpApiRouteLabel}</p>
+          <p><strong>Date:</strong> ${serpApiDateLabel || "N/A"}</p>
+          <p><strong>Airline:</strong> ${serpApiCarrier}</p>
+          <p><strong>Flight number:</strong> ${serpApiSeg?.marketing_carrier_flight_number || serpApiSeg?.flightNumber || "N/A"}</p>
+          <p><strong>Passengers:</strong></p>
+          <ul>${passengers.map((p: any) => `<li>${p.firstName} ${p.lastName}</li>`).join("")}</ul>
+          <p><strong>Customer email:</strong> ${user.email || "N/A"}</p>
+          <p><strong>Total price:</strong> ${fullOffer.total_currency} ${fullOffer.total_amount}</p>
+          <p><em>This flight was found via Google Flights inventory (not Duffel). Please book manually and send the customer their confirmation.</em></p>
+          <p><strong>Payment ID:</strong> ${serpApiPayment.id}</p>
+        `;
+        const fromEmailBookDirect = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+        sgMail.send({
+          to: ADMIN_ALERT_EMAILS,
+          from: { email: fromEmailBookDirect, name: "Travnr Alerts" },
+          subject: adminSubjectBookDirect,
+          html: adminHtmlBookDirect,
+        }).catch((e) => console.error("[book-direct] serpapi admin alert email failed:", e));
+        return res.json({
+          status: "pending_manual",
+          booking: { payment: serpApiPayment, bookingReference: null, orderId: null },
+          message: "Payment received. Our concierge team will finalize your booking and email you shortly.",
+        });
+      }
+
       const balanceOk = await isDuffelBalanceSufficient(parseFloat(fullOffer.total_amount), fullOffer.total_currency);
       // Force pending-manual when an admin promo with forceManual is in effect, or when balance is insufficient.
       const forceManualByPromo = !!(appliedPromo?.forceManual);
@@ -2782,7 +2961,7 @@ export async function registerRoutes(
         });
       }
 
-      const order = await duffel.orders.create({
+      const order = await duffel!.orders.create({
         selected_offers: [offerId],
         passengers: passengerMappings,
         type: "instant",
@@ -2908,20 +3087,33 @@ export async function registerRoutes(
 
       const passengerList = passengers || [{ type: "adult" as const }];
 
-      const offerRequest = await duffel.offerRequests.create({
-        slices,
-        passengers: passengerList,
-        cabin_class: cabinClass || "economy",
-        return_offers: true,
-      });
+      const [offerRequest, serpApiOffers] = await Promise.all([
+        duffel.offerRequests.create({
+          slices,
+          passengers: passengerList,
+          cabin_class: cabinClass || "economy",
+          return_offers: true,
+        }),
+        searchSerpApiFlights({
+          origin,
+          destination,
+          departureDate,
+          returnDate: returnDate || null,
+          passengers: passengerList.length,
+          cabinClass: cabinClass || "economy",
+        }),
+      ]);
 
-      const offers = (offerRequest.data as any).offers || [];
-      const simplified = offers.slice(0, 20).map((offer: any) => ({
+      const duffelOffers = (offerRequest.data as any).offers || [];
+      const allOffers = mergeSerpApiOffers(duffelOffers, serpApiOffers);
+      const simplified = allOffers.slice(0, 20).map((offer: any) => ({
         id: offer.id,
         totalAmount: offer.total_amount,
         totalCurrency: offer.total_currency,
         expiresAt: offer.expires_at,
         owner: offer.owner,
+        isDuffel: offer.isDuffel !== false,
+        source: offer.source || undefined,
         slices: offer.slices?.map((slice: any) => ({
           id: slice.id,
           duration: slice.duration,
@@ -3179,20 +3371,38 @@ export async function registerRoutes(
       }
 
       const effectiveOfferId = overrideOfferId || selectedItem.duffelOfferId!;
+      const storedOfferData = overrideOfferData || (selectedItem.duffelOfferData as any);
+      const isSerpApiBookDuffel = effectiveOfferId.startsWith("serpapi-")
+        || storedOfferData?.source === "serpapi"
+        || storedOfferData?.isDuffel === false;
 
-      // Fetch the live offer from Duffel to get current price and validity.
-      // The stored offerData can be stale; Duffel would reject orders with wrong amounts.
-      let liveOffer: any;
-      try {
-        liveOffer = await duffel.offers.get(effectiveOfferId);
-      } catch (offerErr: any) {
-        const offerErrMsg = offerErr?.errors?.[0]?.message || "";
-        if (offerErrMsg.toLowerCase().includes("does not exist") || offerErr?.status === 404) {
-          return res.status(400).json({ message: "This flight offer is no longer available. Please go back and search for flights again." });
+      let fullOffer: any;
+      if (isSerpApiBookDuffel) {
+        fullOffer = {
+          id: effectiveOfferId,
+          total_amount: String(storedOfferData?.totalAmount || storedOfferData?.total_amount || "0"),
+          total_currency: String(storedOfferData?.totalCurrency || storedOfferData?.total_currency || "USD"),
+          owner: storedOfferData?.owner || null,
+          slices: storedOfferData?.slices || [],
+          passengers: passengers.map((_: any, idx: number) => ({ id: `pax_${idx}`, type: "adult" })),
+          source: "serpapi",
+          isDuffel: false,
+        };
+      } else {
+        // Fetch the live offer from Duffel to get current price and validity.
+        // The stored offerData can be stale; Duffel would reject orders with wrong amounts.
+        let liveOffer: any;
+        try {
+          liveOffer = await duffel.offers.get(effectiveOfferId);
+        } catch (offerErr: any) {
+          const offerErrMsg = offerErr?.errors?.[0]?.message || "";
+          if (offerErrMsg.toLowerCase().includes("does not exist") || offerErr?.status === 404) {
+            return res.status(400).json({ message: "This flight offer is no longer available. Please go back and search for flights again." });
+          }
+          throw offerErr;
         }
-        throw offerErr;
+        fullOffer = liveOffer.data as any;
       }
-      const fullOffer = liveOffer.data as any;
 
       if (fullOffer.expires_at && new Date(fullOffer.expires_at) < new Date()) {
         return res.status(400).json({ message: "This flight offer has expired. Please search again for current availability." });
@@ -3295,6 +3505,71 @@ export async function registerRoutes(
         if (!consumed) {
           return res.status(409).json({ message: "Promo code is no longer available (fully redeemed)." });
         }
+      }
+
+      // SerpApi (Google Flights) offers always go to manual booking.
+      if (isSerpApiBookDuffel && stripePaymentIntentId && paidPiAmountCents != null) {
+        const serpApiMappings = passengers.map((p: any, idx: number) => ({
+          id: `pax_${idx}`,
+          given_name: p.givenName || p.firstName || "",
+          family_name: p.familyName || p.lastName || "",
+          born_on: p.bornOn,
+          email: user.email,
+          phone_number: p.phone,
+        }));
+        const serpApiPaymentDuffel = await createManualBookingFallback({
+          userId: req.session.userId!,
+          userEmail: user.email,
+          proposalId,
+          proposalTitle: proposal.title,
+          offerId: effectiveOfferId,
+          fullOffer,
+          passengerMappings: serpApiMappings,
+          extendedPassengers: passengers,
+          paidPiAmountCents,
+          stripePaymentIntentId: stripePaymentIntentId || null,
+          endpoint: `POST /api/proposals/${proposalId}/book-duffel`,
+        });
+        if (appliedPromo) {
+          await storage.updatePayment(serpApiPaymentDuffel.id, { appliedPromoCode: appliedPromo.code }).catch((e) => console.warn("[promo] stamp failed:", e));
+        }
+        const serpSlice = fullOffer.slices?.[0];
+        const serpSeg = serpSlice?.segments?.[0];
+        const serpRouteLabel = serpSlice
+          ? `${serpSlice.origin?.iata_code || serpSlice.origin?.iata || "?"} → ${(fullOffer.slices[fullOffer.slices.length - 1]?.destination?.iata_code || fullOffer.slices[fullOffer.slices.length - 1]?.destination?.iata || "?")}`
+          : effectiveOfferId;
+        const serpDepartingAt = serpSeg?.departing_at || serpSeg?.departingAt;
+        const serpDateLabel = serpDepartingAt
+          ? new Date(serpDepartingAt).toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" } as Intl.DateTimeFormatOptions)
+          : "";
+        const serpCarrier = fullOffer.owner?.name || fullOffer.owner?.iata_code || "Airline";
+        const serpAdminSubject = `Manual Booking Required — ${serpCarrier} ${serpRouteLabel} ${serpDateLabel}`.trim();
+        const serpAdminHtml = `
+          <p><strong>A new manual booking is required for a Google Flights selection.</strong></p>
+          <p><strong>Proposal:</strong> ${proposal.title || proposalId}</p>
+          <p><strong>Route:</strong> ${serpRouteLabel}</p>
+          <p><strong>Date:</strong> ${serpDateLabel || "N/A"}</p>
+          <p><strong>Airline:</strong> ${serpCarrier}</p>
+          <p><strong>Flight number:</strong> ${serpSeg?.marketing_carrier_flight_number || serpSeg?.flightNumber || "N/A"}</p>
+          <p><strong>Passengers:</strong></p>
+          <ul>${passengers.map((p: any) => `<li>${p.givenName || p.firstName || ""} ${p.familyName || p.lastName || ""}</li>`).join("")}</ul>
+          <p><strong>Customer email:</strong> ${user.email || "N/A"}</p>
+          <p><strong>Total price:</strong> ${fullOffer.total_currency} ${fullOffer.total_amount}</p>
+          <p><em>This flight was found via Google Flights inventory (not Duffel). Please book manually and send the customer their confirmation.</em></p>
+          <p><strong>Payment ID:</strong> ${serpApiPaymentDuffel.id}</p>
+        `;
+        const fromEmailDuffel = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+        sgMail.send({
+          to: ADMIN_ALERT_EMAILS,
+          from: { email: fromEmailDuffel, name: "Travnr Alerts" },
+          subject: serpAdminSubject,
+          html: serpAdminHtml,
+        }).catch((e) => console.error("[book-duffel] serpapi admin alert email failed:", e));
+        return res.json({
+          status: "pending_manual",
+          bookings: [{ payment: serpApiPaymentDuffel, bookingReference: null, orderId: null }],
+          message: "Payment received. Our concierge team will finalize your booking and email you shortly.",
+        });
       }
 
       const balanceOk = await isDuffelBalanceSufficient(parseFloat(String(amount)), String(currency));
@@ -5915,14 +6190,25 @@ export async function registerRoutes(
 
     let allOffers: any[] = [];
     try {
-      const offerRequest = await duffel.offerRequests.create({
-        slices,
-        passengers,
-        cabin_class: details.cabinClass as any,
-        return_offers: true,
-        max_connections: 1,
-      });
-      allOffers = (offerRequest.data as any).offers || [];
+      const [offerRequest, serpApiOffers] = await Promise.all([
+        duffel.offerRequests.create({
+          slices,
+          passengers,
+          cabin_class: details.cabinClass as any,
+          return_offers: true,
+          max_connections: 1,
+        }),
+        searchSerpApiFlights({
+          origin: originCode,
+          destination: destCode,
+          departureDate,
+          returnDate: returnDate || null,
+          passengers: details.passengers,
+          cabinClass: details.cabinClass,
+        }),
+      ]);
+      const duffelOffers = (offerRequest.data as any).offers || [];
+      allOffers = mergeSerpApiOffers(duffelOffers, serpApiOffers);
     } catch (e: any) {
       console.error(`${lp} skipping reason=duffel_offer_request_failed:`, e?.message || e);
       return;
@@ -6319,16 +6605,27 @@ export async function registerRoutes(
       };
       console.log(`[post-call ${callRequestId}] Searching Duffel:`, redactJSON(searchParamsLog));
 
-      const offerRequest = await duffel.offerRequests.create({
-        slices,
-        passengers,
-        cabin_class: details.cabinClass as any,
-        return_offers: true,
-        max_connections: 1,
-      });
+      const [offerRequest, serpApiOffersPostCall] = await Promise.all([
+        duffel.offerRequests.create({
+          slices,
+          passengers,
+          cabin_class: details.cabinClass as any,
+          return_offers: true,
+          max_connections: 1,
+        }),
+        searchSerpApiFlights({
+          origin: originCode,
+          destination: destCode,
+          departureDate,
+          returnDate: returnDate || null,
+          passengers: details.passengers,
+          cabinClass: details.cabinClass,
+        }),
+      ]);
 
-      const allOffers = (offerRequest.data as any).offers || [];
-      console.log(`[post-call ${callRequestId}] Duffel returned ${allOffers.length} offer(s)`);
+      const duffelOffersPostCall = (offerRequest.data as any).offers || [];
+      const allOffers = mergeSerpApiOffers(duffelOffersPostCall, serpApiOffersPostCall);
+      console.log(`[post-call ${callRequestId}] Duffel returned ${duffelOffersPostCall.length} offer(s), SerpApi added ${allOffers.length - duffelOffersPostCall.length}`);
       // Diagnostic carrier mix — see inbound flow for rationale.
       console.log(`[post-call ${callRequestId}] duffel_pool ${summarizeCarrierMix(allOffers)}`);
       if (allOffers.length === 0) {
@@ -7639,8 +7936,9 @@ export async function registerRoutes(
       // Fetch the live offer to discover whether Duffel requires passenger
       // passport details for this fare. We only need the boolean — best-effort
       // (default to false on lookup failure so the page still renders).
+      // SerpApi offers are not in Duffel, so skip the lookup for them.
       let passportRequired = false;
-      if (duffel) {
+      if (duffel && option.isDuffel !== false) {
         try {
           const offerRes = await duffel.offers.get(option.duffelOfferId);
           passportRequired = Boolean((offerRes.data as any)?.passenger_identity_documents_required);
@@ -7917,7 +8215,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/guest-booking/:optionToken/confirm", guestBookingLimiter, async (req: Request, res: Response) => {
-    if (!duffel) return res.status(503).json({ message: "Booking is temporarily unavailable" });
+    // Duffel check is deferred until after we know the offer source
+    // (SerpApi offers route to manual booking and don't need Duffel).
     // Hoisted so the outer catch below can roll back the transient "booking"
     // claim if any throw escapes between claim and terminal state.
     let claimedRowId: number | null = null;
@@ -7934,6 +8233,11 @@ export async function registerRoutes(
       const resolved = await resolveGuestOption(optionToken);
       if (!resolved) return res.status(404).json({ message: "Booking option not found" });
       const { row, proposalData, option } = resolved;
+
+      // SerpApi (Google Flights) offers do not need Duffel; Duffel offers do.
+      if (!duffel && option.isDuffel !== false) {
+        return res.status(503).json({ message: "Booking is temporarily unavailable" });
+      }
 
       // Strict ownership: the contact email submitted by the booker MUST match
       // the proposal recipient. Otherwise an attacker who knows or guesses an
@@ -8109,10 +8413,146 @@ export async function registerRoutes(
         );
       };
 
+      // SerpApi (Google Flights) offers go directly to manual booking —
+      // no Duffel lookup needed.
+      if (option.isDuffel === false) {
+        const { user: guestUser } = await ensureGuestUser({
+          email: contact.email,
+          firstName: contact.firstName,
+          lastName: contact.lastName,
+          phone: contact.phone,
+        });
+
+        const syntheticOffer = {
+          id: option.duffelOfferId,
+          total_amount: option.totalAmount,
+          total_currency: option.totalCurrency,
+          owner: { name: option.carrierName ?? null, iata_code: option.carrierIata ?? null },
+          slices: (option.slices || []).map((s: any) => ({
+            origin: { iata_code: s.origin?.iata ?? null },
+            destination: { iata_code: s.destination?.iata ?? null },
+            segments: (s.segments || []).map((seg: any) => ({
+              marketing_carrier: { name: seg.carrierName ?? null, iata_code: seg.carrierIata ?? null },
+              marketing_carrier_flight_number: seg.flightNumber ?? null,
+              departing_at: seg.departingAt ?? null,
+              arriving_at: seg.arrivingAt ?? null,
+              origin: { iata_code: seg.origin?.iata ?? null },
+              destination: { iata_code: seg.destination?.iata ?? null },
+            })),
+          })),
+          passengers: passengers.map((_: any, idx: number) => ({ id: `pax_${idx}`, type: "adult" })),
+        };
+
+        const syntheticPassengerMappings = passengers.map((pax: any, idx: number) => ({
+          id: `pax_${idx}`,
+          given_name: [pax.firstName, pax.middleName].filter((x: any) => x && String(x).trim()).join(" "),
+          family_name: pax.lastName,
+          born_on: pax.bornOn,
+          email: pax.email || contact.email,
+          phone_number: pax.phone || contact.phone,
+        }));
+
+        const serpApiExtendedSnapshot = passengers.map((pax: any) => ({
+          firstName: pax.firstName, middleName: pax.middleName ?? null,
+          lastName: pax.lastName, bornOn: pax.bornOn, gender: pax.gender, title: pax.title,
+          residenceCountry: pax.residenceCountry, residenceState: pax.residenceState ?? null,
+          loyaltyProgramme: pax.loyaltyProgramme ?? null, loyaltyNumber: pax.loyaltyNumber ?? null,
+          knownTravelerNumber: pax.knownTravelerNumber ?? null, knownTravelerCountry: pax.knownTravelerCountry || null,
+          redressNumber: pax.redressNumber ?? null, redressCountry: pax.redressCountry || null,
+          secondaryRedressNumber: pax.secondaryRedressNumber ?? null, secondaryRedressCountry: pax.secondaryRedressCountry || null,
+          passportNumber: pax.passportNumber ?? null, passportCountry: pax.passportCountry ?? null, passportExpiry: pax.passportExpiry ?? null,
+        }));
+
+        const sliceSummary2 = syntheticOffer.slices.map((s: any) => ({
+          origin: s.origin?.iata_code,
+          destination: s.destination?.iata_code,
+          departingAt: s.segments?.[0]?.departing_at,
+          carrier: s.segments?.[0]?.marketing_carrier?.name,
+          flightNumber: s.segments?.[0]?.marketing_carrier_flight_number,
+        }));
+        const routeLabel2 = sliceSummary2.length
+          ? `${sliceSummary2[0].origin || "?"} → ${sliceSummary2[sliceSummary2.length - 1].destination || "?"}`
+          : `${proposalData.originIata} → ${proposalData.destinationIata}`;
+        const departingAt2 = sliceSummary2[0]?.departingAt;
+        const dateLabel2 = departingAt2
+          ? new Date(departingAt2).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" } as Intl.DateTimeFormatOptions)
+          : proposalData.departureDate;
+        const chargedTotalAmount2 = (pi.amount / 100).toFixed(2);
+        const currencyLower2 = String(option.totalCurrency || "usd").toLowerCase();
+        const fromEmail2 = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+
+        if (appliedPromo) {
+          const consumed = await storage.incrementPromoUsage(appliedPromo.id);
+          if (!consumed) {
+            await rollbackClaim();
+            return res.status(409).json({ message: "Promo code is no longer available (fully redeemed)." });
+          }
+        }
+
+        const serpApiFallbackPayment = await createManualBookingFallback({
+          userId: guestUser.id,
+          userEmail: contact.email,
+          proposalId: null,
+          proposalTitle: routeLabel2,
+          offerId: syntheticOffer.id,
+          fullOffer: syntheticOffer,
+          passengerMappings: syntheticPassengerMappings,
+          extendedPassengers: serpApiExtendedSnapshot,
+          paidPiAmountCents: pi.amount,
+          stripePaymentIntentId: paymentIntentId,
+          endpoint: "POST /api/guest-booking/:optionToken/confirm",
+        });
+        if (appliedPromo) {
+          await storage.updatePayment(serpApiFallbackPayment.id, { appliedPromoCode: appliedPromo.code }).catch((e) =>
+            console.warn("[guest-booking] promo stamp on serpapi manual fallback failed:", e?.message || e)
+          );
+        }
+
+        const adminSubject = `Manual Booking Required — ${option.carrierName || option.carrierIata || "Airline"} ${routeLabel2} ${dateLabel2}`;
+        const adminHtml = `
+          <p><strong>A new manual booking is required for a Google Flights selection.</strong></p>
+          <p><strong>Route:</strong> ${routeLabel2}</p>
+          <p><strong>Date:</strong> ${dateLabel2}</p>
+          <p><strong>Airline:</strong> ${option.carrierName || option.carrierIata || "Unknown"}</p>
+          <p><strong>Flight number:</strong> ${sliceSummary2[0]?.flightNumber || "N/A"}</p>
+          <p><strong>Passengers:</strong></p>
+          <ul>${passengers.map((p: any) => `<li>${p.firstName} ${p.lastName}</li>`).join("")}</ul>
+          <p><strong>Customer email:</strong> ${contact.email}</p>
+          <p><strong>Total price:</strong> ${currencyLower2.toUpperCase()} ${chargedTotalAmount2}</p>
+          <p><em>This flight was found via Google Flights inventory (not Duffel). Please book manually and send the customer their confirmation.</em></p>
+          <p><strong>Payment ID:</strong> ${serpApiFallbackPayment.id}</p>
+        `;
+        sgMail.send({
+          to: ADMIN_ALERT_EMAILS,
+          from: { email: fromEmail2, name: "Travnr Alerts" },
+          subject: adminSubject,
+          html: adminHtml,
+        }).catch((e) => console.error("[guest-booking] serpapi admin alert email failed:", e));
+
+        await storage.updateGuestProposalStatus(row.id, "booked").catch((e) =>
+          console.error("[guest-booking] CRITICAL: serpapi manual fallback queued but failed to mark proposal booked:", e?.message || e)
+        );
+        bookingComplete = true;
+
+        const { subject: holdSubject2, html: holdHtml2 } = buildGuestBookingHoldingEmail({
+          firstName: contact.firstName,
+          amount: chargedTotalAmount2,
+          currency: currencyLower2,
+          routeLabel: routeLabel2,
+          dateLabel: dateLabel2,
+        });
+        sgMail.send({ to: contact.email, from: { email: fromEmail2, name: "Travnr" }, subject: holdSubject2, html: holdHtml2 })
+          .catch((e) => console.error("[guest-booking] serpapi holding email failed:", e));
+
+        return res.json({ status: "pending_manual", message: "We're confirming your flight — you'll receive confirmation within 2 hours." });
+      }
+
       // Re-fetch the offer to ensure it's still valid + get full passenger schema.
+      // duffel is non-null here: the SerpApi branch above exits early, and the
+      // null guard on line ~8078 rejects Duffel offers when duffel is null.
       let offer: any;
       try {
-        const offerRes = await duffel.offers.get(option.duffelOfferId);
+        const offerRes = await duffel!.offers.get(option.duffelOfferId);
         offer = offerRes.data as any;
       } catch (offerErr: any) {
         const offerErrMsg = offerErr?.errors?.[0]?.message || "";
@@ -8354,7 +8794,7 @@ export async function registerRoutes(
       }
 
       // ---- AUTO PATH: book on Duffel using balance ----
-      const order = await duffel.orders.create({
+      const order = await duffel!.orders.create({
         selected_offers: [offer.id],
         passengers: passengerMappings,
         type: "instant",

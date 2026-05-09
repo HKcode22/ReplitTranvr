@@ -480,6 +480,8 @@ export interface GuestProposalOption {
   baggage?: string | null;
   refundable?: boolean | null;
   changeable?: boolean | null;
+  isDuffel?: boolean;
+  source?: string;
 }
 export interface GuestProposalData {
   originIata: string;
