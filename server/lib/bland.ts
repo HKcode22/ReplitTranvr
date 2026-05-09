@@ -106,7 +106,7 @@ export function getTravelAnalysisSchema(): Record<string, string> {
     destination_iata: "3-letter IATA airport code of the arrival airport in uppercase. null if not confirmed in the call.",
     destination_airport_name: "Full name of the arrival airport. null if unknown.",
     departure_date: "Departure date in YYYY-MM-DD format. null if not given.",
-    return_date: "Return date in YYYY-MM-DD format. null for one-way trips or if not given.",
+    return_date: "Return date in YYYY-MM-DD format for round trips, null for one-way flights.",
     passengers: "Number of travelers as an integer. Default 1 if not mentioned.",
     cabin_class: "One of: economy, premium_economy, business, first. Default economy if not mentioned.",
     budget_usd: "Total trip budget in USD as a number with no currency symbol. null if not mentioned.",

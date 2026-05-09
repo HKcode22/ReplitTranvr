@@ -4,6 +4,15 @@ import { loadStripe, Stripe } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { Loader2, CheckCircle2, Clock, AlertTriangle, Plane } from "lucide-react";
 
+// Free airline logo CDN. Kiwi.com publishes 64x64 PNGs by IATA code without
+// an API key. We fall back to the generic Plane icon if the lookup fails.
+function airlineLogoUrl(iata?: string | null): string | null {
+  if (!iata) return null;
+  const code = iata.trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,3}$/.test(code)) return null;
+  return `https://images.kiwi.com/airlines/64/${code}.png`;
+}
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +53,7 @@ interface OptionResponse {
     totalDurationMinutes: number;
     stops: number;
     carrierName?: string | null;
+    carrierIata?: string | null;
     carrierLogo?: string | null;
     slices: Array<{
       origin: { iata?: string | null; city?: string | null; name?: string | null };
@@ -56,6 +66,12 @@ interface OptionResponse {
     baggage?: string | null;
     refundable?: boolean | null;
     changeable?: boolean | null;
+    refundPolicyText?: string | null;
+    changePolicyText?: string | null;
+    seatSelectionText?: string | null;
+    extensions?: string[] | null;
+    isDuffel?: boolean;
+    source?: string;
   };
   pricing: {
     originalAmountCents: number;
@@ -102,32 +118,143 @@ function formatDuration(mins: number) {
   return h && m ? `${h}h ${m}m` : h ? `${h}h` : `${m}m`;
 }
 
-function policyText(refundable?: boolean | null, changeable?: boolean | null): string | null {
-  if (refundable == null && changeable == null) return null;
-  const r = refundable == null ? "Cancellation policy unavailable" : refundable ? "Refundable" : "Non-refundable";
-  const c = changeable == null ? null : changeable ? "Changes allowed" : "No changes";
-  return c ? `${r} · ${c}` : r;
+function AirlineLogoImg({
+  carrierIata,
+  carrierName,
+  carrierLogo,
+  size = 32,
+}: {
+  carrierIata?: string | null;
+  carrierName?: string | null;
+  carrierLogo?: string | null;
+  size?: number;
+}) {
+  const kiwiUrl = airlineLogoUrl(carrierIata);
+  const initialSrc = carrierLogo || kiwiUrl;
+  const [src, setSrc] = useState<string | null>(initialSrc);
+  const [triedKiwi, setTriedKiwi] = useState(!!carrierLogo ? false : true);
+  if (!src) {
+    return <Plane className="w-5 h-5 text-gray-400 shrink-0" aria-label={carrierName || "Airline"} />;
+  }
+  return (
+    <img
+      src={src}
+      alt={carrierName || ""}
+      style={{ width: size, height: size }}
+      className="object-contain rounded shrink-0"
+      onError={() => {
+        if (!triedKiwi && kiwiUrl) {
+          setTriedKiwi(true);
+          setSrc(kiwiUrl);
+        } else {
+          setSrc(null);
+        }
+      }}
+    />
+  );
+}
+
+function prettyCabin(cabin: string): string {
+  return cabin
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function PolicySection({ data }: { data: OptionResponse }) {
+  const opt = data.option;
+  // Prefer the structured display strings the server now computes (which
+  // distinguish "Partially refundable" from "Non-refundable" and surface
+  // "Contact us for details" for SerpApi offers). Fall back to the older
+  // boolean-only text for proposals saved before this field existed.
+  const refundDisplay =
+    opt.refundPolicyText ??
+    (opt.refundable == null ? "Contact us for details" : opt.refundable ? "Refundable" : "Non-refundable");
+  const changeDisplay =
+    opt.changePolicyText ??
+    (opt.changeable == null ? "Contact us for details" : opt.changeable ? "Changes allowed" : "No changes allowed");
+  const seatsDisplay =
+    opt.seatSelectionText ?? (opt.isDuffel === false ? "Contact us for details" : "Available during booking");
+  const baggageDisplay = opt.baggage ?? "Contact us for details";
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5">
+      <h3 className="text-base font-semibold text-gray-900 mb-3">Fare details</h3>
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-gray-500">Cabin class</dt>
+          <dd className="text-gray-900 font-medium" data-testid="text-policy-cabin">{prettyCabin(data.cabinClass)}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-gray-500">Baggage allowance</dt>
+          <dd className="text-gray-900" data-testid="text-policy-baggage">{baggageDisplay}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-gray-500">Cancellation policy</dt>
+          <dd className="text-gray-900" data-testid="text-policy-cancellation">{refundDisplay}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-gray-500">Change policy</dt>
+          <dd className="text-gray-900" data-testid="text-policy-change">{changeDisplay}</dd>
+        </div>
+        <div className="sm:col-span-2">
+          <dt className="text-[11px] uppercase tracking-wide text-gray-500">Seat selection</dt>
+          <dd className="text-gray-900" data-testid="text-policy-seats">{seatsDisplay}</dd>
+        </div>
+      </dl>
+      {opt.extensions && opt.extensions.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-gray-100">
+          <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Included details</div>
+          <ul className="text-xs text-gray-700 space-y-0.5 list-disc pl-5">
+            {opt.extensions.map((ext, i) => (
+              <li key={i}>{ext}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function FlightSummary({ data }: { data: OptionResponse }) {
   const opt = data.option;
-  const policy = policyText(opt.refundable, opt.changeable);
+  const isRoundTrip = opt.slices.length > 1;
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <span
-          className="inline-block text-[11px] font-bold tracking-wide uppercase text-white px-3 py-1 rounded-full"
-          style={{ background: BRAND_BLUE }}
-          data-testid="badge-option-label"
-        >
-          {opt.label}
-        </span>
-        {opt.carrierName && (
-          <span className="text-sm text-gray-700 font-medium" data-testid="text-carrier-name">{opt.carrierName}</span>
-        )}
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span
+            className="inline-block text-[11px] font-bold tracking-wide uppercase text-white px-3 py-1 rounded-full"
+            style={{ background: BRAND_BLUE }}
+            data-testid="badge-option-label"
+          >
+            {opt.label}
+          </span>
+          <span
+            className="inline-block text-[10px] font-semibold tracking-wide uppercase text-gray-700 bg-gray-100 px-2 py-1 rounded-full"
+            data-testid="badge-trip-type"
+          >
+            {isRoundTrip ? "Round Trip" : "One Way"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 ml-auto">
+          <AirlineLogoImg
+            carrierIata={opt.carrierIata}
+            carrierName={opt.carrierName}
+            carrierLogo={opt.carrierLogo}
+            size={32}
+          />
+          {opt.carrierName && (
+            <span className="text-sm text-gray-700 font-medium" data-testid="text-carrier-name">{opt.carrierName}</span>
+          )}
+        </div>
       </div>
       {opt.slices.map((s, i) => (
         <div key={i} className="border-t border-gray-100 pt-3 mt-3 first:border-0 first:pt-0 first:mt-0">
+          {isRoundTrip && (
+            <div className="text-[10px] uppercase text-gray-500 tracking-wide font-semibold mb-1">
+              {i === 0 ? "Outbound" : "Return"}
+            </div>
+          )}
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[11px] uppercase text-gray-500 tracking-wide">Depart</div>
@@ -146,12 +273,6 @@ function FlightSummary({ data }: { data: OptionResponse }) {
           </div>
         </div>
       ))}
-      {opt.baggage && (
-        <div className="text-sm text-gray-700 mt-3"><span className="font-medium text-gray-900">Baggage:</span> {opt.baggage}</div>
-      )}
-      {policy && (
-        <div className="text-sm text-gray-700 mt-1"><span className="font-medium text-gray-900">Cancellation:</span> {policy}</div>
-      )}
     </div>
   );
 }
@@ -556,6 +677,7 @@ export default function GuestBookingPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="space-y-5">
             <FlightSummary data={data} />
+            <PolicySection data={data} />
             <PriceBreakdown pricing={data.pricing} appliedPromo={appliedPromo} />
           </div>
 

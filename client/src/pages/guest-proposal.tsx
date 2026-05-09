@@ -5,8 +5,19 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plane, Clock, ArrowRight, CheckCircle2, MailCheck, AlertCircle, Sparkles } from "lucide-react";
+import { Plane, Clock, ArrowRight, CheckCircle2, MailCheck, AlertCircle, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
+
+// Free airline-logo CDN. Kiwi.com publishes 64x64 PNGs for every IATA code
+// without an API key. We render at 32–40px and fall back to hiding the
+// broken <img> via onError so an unknown carrier code doesn't show a broken
+// image icon next to the airline name.
+function airlineLogoUrl(iata?: string | null): string | null {
+  if (!iata) return null;
+  const code = iata.trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,3}$/.test(code)) return null;
+  return `https://images.kiwi.com/airlines/64/${code}.png`;
+}
 
 interface GuestSegment {
   carrierName?: string | null;
@@ -43,6 +54,11 @@ interface GuestOption {
   baggage?: string | null;
   refundable?: boolean | null;
   changeable?: boolean | null;
+  refundPolicyText?: string | null;
+  changePolicyText?: string | null;
+  seatSelectionText?: string | null;
+  extensions?: string[] | null;
+  similarOptions?: GuestOption[] | null;
 }
 
 function policyText(refundable?: boolean | null, changeable?: boolean | null): string | null {
@@ -109,73 +125,212 @@ function formatDate(iso?: string | null): string {
   }
 }
 
-function FlightOptionCard({ option }: { option: GuestOption }) {
-  const slice = option.slices?.[0];
+// Airline logo with onError fallback. Tries the carrier's own logo first
+// (Duffel offers ship one), then the kiwi.com CDN by IATA code, and finally
+// hides the <img> entirely so only the airline name shows.
+function AirlineLogo({
+  carrierIata,
+  carrierName,
+  carrierLogo,
+  size = 40,
+}: {
+  carrierIata?: string | null;
+  carrierName?: string | null;
+  carrierLogo?: string | null;
+  size?: number;
+}) {
+  const kiwiUrl = airlineLogoUrl(carrierIata);
+  const initialSrc = carrierLogo || kiwiUrl;
+  const [src, setSrc] = useState<string | null>(initialSrc);
+  const [triedKiwi, setTriedKiwi] = useState(!!carrierLogo ? false : true);
+  if (!src) {
+    return <Plane className="w-5 h-5 text-primary" aria-label={carrierName || "Airline"} />;
+  }
+  return (
+    <img
+      src={src}
+      alt={carrierName || ""}
+      style={{ width: size, height: size }}
+      className="object-contain rounded"
+      onError={() => {
+        // First failure: fall back from carrier-supplied logo to kiwi.com.
+        // Second failure: hide the image entirely (the parent renders the
+        // airline name as a text label so identity is still preserved).
+        if (!triedKiwi && kiwiUrl) {
+          setTriedKiwi(true);
+          setSrc(kiwiUrl);
+        } else {
+          setSrc(null);
+        }
+      }}
+    />
+  );
+}
+
+function SliceRow({
+  slice,
+  totalDurationMinutes,
+  stops,
+}: {
+  slice: GuestSlice;
+  totalDurationMinutes: number;
+  stops: number;
+}) {
+  const stopsLabel = stops === 0 ? "Nonstop" : `${stops} stop${stops === 1 ? "" : "s"}`;
+  return (
+    <div className="rounded-lg bg-muted/40 border p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-center">
+          <div className="text-xl font-semibold">{formatTime(slice.departingAt)}</div>
+          <div className="text-sm text-muted-foreground">{slice.origin?.iata}</div>
+        </div>
+        <div className="flex-1 flex flex-col items-center">
+          <div className="text-xs text-muted-foreground flex items-center gap-1">
+            <Clock className="w-3 h-3" /> {formatDuration(totalDurationMinutes)}
+          </div>
+          <div className="w-full h-px bg-border my-1 relative">
+            <ArrowRight className="w-3 h-3 text-muted-foreground absolute right-0 -top-1.5" />
+          </div>
+          <div className="text-xs text-muted-foreground">{stopsLabel}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-xl font-semibold">{formatTime(slice.arrivingAt)}</div>
+          <div className="text-sm text-muted-foreground">{slice.destination?.iata}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Compact card for nested "Other similar options" — same booking flow as the
+// main pick (each carries its own option token), just visually denser.
+function SimilarOptionRow({ option }: { option: GuestOption }) {
+  const outbound = option.slices?.[0];
   const stopsLabel = option.stops === 0 ? "Nonstop" : `${option.stops} stop${option.stops === 1 ? "" : "s"}`;
   const amount = `${(option.totalCurrency || "USD").toUpperCase()} ${Number(option.totalAmount).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+  const returnSlice = option.slices?.[1];
+  return (
+    <div
+      className="border rounded-lg p-3 bg-background"
+      data-testid={`row-similar-${option.token}`}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <AirlineLogo
+          carrierIata={option.carrierIata}
+          carrierName={option.carrierName}
+          carrierLogo={option.carrierLogo}
+          size={28}
+        />
+        <span className="text-sm font-medium">{option.carrierName || "Airline"}</span>
+        <span className="ml-auto text-sm font-semibold">{amount}</span>
+      </div>
+      {outbound && (
+        <div className="text-xs text-muted-foreground">
+          {formatTime(outbound.departingAt)} {outbound.origin?.iata} → {formatTime(outbound.arrivingAt)} {outbound.destination?.iata}
+          <span className="mx-1">·</span>
+          {formatDuration(option.totalDurationMinutes)}
+          <span className="mx-1">·</span>
+          {stopsLabel}
+        </div>
+      )}
+      {returnSlice && (
+        <div className="text-xs text-muted-foreground mt-1">
+          Return {formatDate(returnSlice.departingAt)} · {formatTime(returnSlice.departingAt)} → {formatTime(returnSlice.arrivingAt)} · {formatDuration(returnSlice.durationMinutes)}
+        </div>
+      )}
+      <Button
+        asChild
+        size="sm"
+        variant="outline"
+        className="w-full mt-2"
+        data-testid={`button-book-similar-${option.token}`}
+      >
+        <a href={`/book/${encodeURIComponent(option.token)}`}>
+          Book This Flight <ArrowRight className="w-3 h-3 ml-1" />
+        </a>
+      </Button>
+    </div>
+  );
+}
+
+function FlightOptionCard({ option }: { option: GuestOption }) {
+  const outbound = option.slices?.[0];
+  const returnSlice = option.slices?.[1];
+  const isRoundTrip = !!returnSlice;
+  const amount = `${(option.totalCurrency || "USD").toUpperCase()} ${Number(option.totalAmount).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+  const [showSimilar, setShowSimilar] = useState(false);
+  const similarCount = option.similarOptions?.length || 0;
+  const slug = option.label.replace(/\s+/g, "-").toLowerCase();
 
   return (
-    <Card className="p-6 border-2 hover-elevate transition-all" data-testid={`card-option-${option.label.replace(/\s+/g, "-").toLowerCase()}`}>
+    <Card className="p-6 border-2 hover-elevate transition-all" data-testid={`card-option-${slug}`}>
       <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
-        <Badge className="bg-primary text-primary-foreground hover:bg-primary uppercase tracking-wide text-xs font-semibold shrink-0">
-          {option.label}
-        </Badge>
+        <div className="flex flex-col gap-1 min-w-0">
+          <Badge className="bg-primary text-primary-foreground hover:bg-primary uppercase tracking-wide text-xs font-semibold w-fit">
+            {option.label}
+          </Badge>
+          <Badge variant="outline" className="text-[10px] uppercase tracking-wide w-fit">
+            {isRoundTrip ? "Round Trip" : "One Way"}
+          </Badge>
+        </div>
         <div className="text-right min-w-0">
-          <div className="text-2xl font-bold break-words" data-testid={`text-price-${option.label.replace(/\s+/g, "-").toLowerCase()}`}>{amount}</div>
+          <div className="text-2xl font-bold break-words" data-testid={`text-price-${slug}`}>{amount}</div>
           <div className="text-xs text-muted-foreground">total for all travelers</div>
         </div>
       </div>
 
       <div className="flex items-center gap-3 mb-4">
-        {option.carrierLogo ? (
-          <img src={option.carrierLogo} alt={option.carrierName || ""} className="h-6" />
-        ) : (
-          <Plane className="w-5 h-5 text-primary" />
-        )}
+        <AirlineLogo
+          carrierIata={option.carrierIata}
+          carrierName={option.carrierName}
+          carrierLogo={option.carrierLogo}
+          size={40}
+        />
         <span className="font-medium">{option.carrierName || "Airline"}</span>
       </div>
 
-      {slice && (
-        <div className="rounded-lg bg-muted/40 border p-4 mb-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-center">
-              <div className="text-xl font-semibold">{formatTime(slice.departingAt)}</div>
-              <div className="text-sm text-muted-foreground">{slice.origin?.iata}</div>
+      {outbound && (
+        <div className="mb-4">
+          {isRoundTrip && (
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">
+              Outbound · {formatDate(outbound.departingAt)}
             </div>
-            <div className="flex-1 flex flex-col items-center">
-              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                <Clock className="w-3 h-3" /> {formatDuration(option.totalDurationMinutes)}
-              </div>
-              <div className="w-full h-px bg-border my-1 relative">
-                <ArrowRight className="w-3 h-3 text-muted-foreground absolute right-0 -top-1.5" />
-              </div>
-              <div className="text-xs text-muted-foreground">{stopsLabel}</div>
-            </div>
-            <div className="text-center">
-              <div className="text-xl font-semibold">{formatTime(slice.arrivingAt)}</div>
-              <div className="text-sm text-muted-foreground">{slice.destination?.iata}</div>
-            </div>
-          </div>
+          )}
+          <SliceRow
+            slice={outbound}
+            totalDurationMinutes={isRoundTrip ? outbound.durationMinutes : option.totalDurationMinutes}
+            stops={outbound.stops}
+          />
         </div>
       )}
 
-      {option.slices.length > 1 && (
-        <div className="text-xs text-muted-foreground mb-3">
-          + Return flight {formatDate(option.slices[1].departingAt)} · {formatDuration(option.slices[1].durationMinutes)}
+      {returnSlice && (
+        <div className="mb-4">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">
+            Return · {formatDate(returnSlice.departingAt)}
+          </div>
+          <SliceRow
+            slice={returnSlice}
+            totalDurationMinutes={returnSlice.durationMinutes}
+            stops={returnSlice.stops}
+          />
         </div>
       )}
 
       <div className="space-y-1 text-xs text-muted-foreground mb-4">
         {option.baggage && (
-          <div data-testid={`text-baggage-${option.label.replace(/\s+/g, "-").toLowerCase()}`}>
+          <div data-testid={`text-baggage-${slug}`}>
             <span className="font-medium text-foreground">Baggage:</span> {option.baggage}
           </div>
         )}
         {policyText(option.refundable, option.changeable) && (
-          <div data-testid={`text-cancellation-${option.label.replace(/\s+/g, "-").toLowerCase()}`}>
+          <div data-testid={`text-cancellation-${slug}`}>
             <span className="font-medium text-foreground">Cancellation:</span>{" "}
             {policyText(option.refundable, option.changeable)}
           </div>
@@ -186,12 +341,42 @@ function FlightOptionCard({ option }: { option: GuestOption }) {
         asChild
         size="lg"
         className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-        data-testid={`button-book-${option.label.replace(/\s+/g, "-").toLowerCase()}`}
+        data-testid={`button-book-${slug}`}
       >
         <a href={`/book/${encodeURIComponent(option.token)}`}>
           Book This Flight <ArrowRight className="w-4 h-4 ml-2" />
         </a>
       </Button>
+
+      {similarCount > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowSimilar((v) => !v)}
+            className="mt-4 w-full text-sm text-primary font-medium flex items-center justify-center gap-1 hover:underline"
+            data-testid={`button-toggle-similar-${slug}`}
+          >
+            {showSimilar ? (
+              <>
+                <ChevronUp className="w-4 h-4" /> Hide other options
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-4 h-4" /> See {similarCount} other similar option{similarCount === 1 ? "" : "s"}
+              </>
+            )}
+          </button>
+          {/* Pre-rendered, hidden via CSS so the expansion is instant. */}
+          <div
+            className={showSimilar ? "block mt-3 space-y-2" : "hidden"}
+            data-testid={`section-similar-${slug}`}
+          >
+            {option.similarOptions!.map((s) => (
+              <SimilarOptionRow key={s.token} option={s} />
+            ))}
+          </div>
+        </>
+      )}
     </Card>
   );
 }
@@ -327,6 +512,9 @@ export default function GuestProposalPage() {
             <span className="font-medium text-foreground">{destLabel}</span>
           </p>
           <div className="mt-3 flex flex-wrap gap-3 text-sm text-muted-foreground">
+            <span className="rounded-full bg-primary/10 text-primary font-medium px-3 py-1" data-testid="badge-trip-type">
+              {p.returnDate ? "Round Trip" : "One Way"}
+            </span>
             <span className="rounded-full bg-muted px-3 py-1">
               {formatDate(p.departureDate)}
               {p.returnDate ? ` – ${formatDate(p.returnDate)}` : ""}

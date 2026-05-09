@@ -695,10 +695,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getGuestProposalByOptionToken(optionToken: string): Promise<GuestProposal | undefined> {
+    // Match either a top-level option token OR a token nested inside an
+    // option's `similarOptions` array (the "Other similar options" expander
+    // on the guest proposal page books through these the same way). The
+    // jsonb_typeof guards keep the EXISTS branch safe on rows whose
+    // `options`/`similarOptions` are absent or non-array.
+    const tokenJsonb = JSON.stringify([{ token: optionToken }]);
     const [row] = await db
       .select()
       .from(guestProposals)
-      .where(sql`${guestProposals.proposalData}->'options' @> ${JSON.stringify([{ token: optionToken }])}::jsonb`)
+      .where(
+        sql`(${guestProposals.proposalData}->'options' @> ${tokenJsonb}::jsonb)
+            OR (
+              jsonb_typeof(${guestProposals.proposalData}->'options') = 'array'
+              AND EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements(${guestProposals.proposalData}->'options') AS o
+                WHERE jsonb_typeof(o->'similarOptions') = 'array'
+                  AND o->'similarOptions' @> ${tokenJsonb}::jsonb
+              )
+            )`,
+      )
       .limit(1);
     return row;
   }

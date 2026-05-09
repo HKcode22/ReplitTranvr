@@ -480,6 +480,20 @@ export interface GuestProposalOption {
   baggage?: string | null;
   refundable?: boolean | null;
   changeable?: boolean | null;
+  // Display-ready policy strings, computed server-side. Surface "Contact us
+  // for details" when the source provider didn't return structured policy
+  // info (e.g. SerpApi/Google Flights offers).
+  refundPolicyText?: string | null;
+  changePolicyText?: string | null;
+  seatSelectionText?: string | null;
+  // Raw SerpApi extension strings (e.g. "1 carry-on bag", "Wi-Fi for a fee")
+  // — populated only for SerpApi offers, used by the booking page to surface
+  // the available amenity info verbatim.
+  extensions?: string[] | null;
+  // Other near-equivalent flights for the same category (Best Price / Best
+  // Value / Fastest), pre-computed at proposal-build time so the guest
+  // proposal page can show an instant-expand "See other options" section.
+  similarOptions?: GuestProposalOption[];
   isDuffel?: boolean;
   source?: string;
 }

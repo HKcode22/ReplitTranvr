@@ -659,36 +659,77 @@ async function searchSerpApiFlights(params: {
     }
     const results: any[] = [];
     const allFlights: any[] = [...(data.best_flights || []), ...(data.other_flights || [])];
+    // SerpApi exposes the airline name (e.g. "Frontier") in `flight.airline`
+    // but not its IATA code as a top-level field — the IATA prefix lives at
+    // the front of `flight_number` ("F9 4838"). Extracting it lets us:
+    //   1) hit the kiwi.com logo CDN (which keys by IATA), and
+    //   2) match on `marketing_carrier.iata_code` against Duffel offers in
+    //      `offerFlightSignature` so SerpApi/Duffel duplicates dedup.
+    const extractIata = (flightNumber: string): string => {
+      const m = (flightNumber || "").trim().match(/^([A-Z0-9]{2,3})\s+/);
+      return m ? m[1] : "";
+    };
     for (const flight of allFlights) {
       const legs: any[] = flight.flights || [];
       if (legs.length === 0) continue;
       const firstLeg = legs[0];
       const lastLeg = legs[legs.length - 1];
-      const airlineIata = firstLeg.airline || "";
+      const airlineName = firstLeg.airline || "";
       const flightNumber = firstLeg.flight_number || "";
+      const airlineIata = extractIata(flightNumber) || airlineName;
       const departureAt = (firstLeg.departure_airport?.time || "").replace(/\s+/g, "T");
       const id = `serpapi-${airlineIata}${flightNumber}|${departureAt}`;
       const totalMinutes: number = typeof flight.total_duration === "number"
         ? flight.total_duration
         : legs.reduce((sum: number, l: any) => sum + (typeof l.duration === "number" ? l.duration : 0), 0);
       const durationIso = `PT${Math.floor(totalMinutes / 60)}H${totalMinutes % 60}M`;
-      const segments = legs.map((leg: any) => ({
-        departing_at: leg.departure_airport?.time || null,
-        arriving_at: leg.arrival_airport?.time || null,
-        marketing_carrier: { iata_code: leg.airline || "", name: leg.airline_logo ? leg.airline : (leg.airline || "") },
-        marketing_carrier_flight_number: leg.flight_number || "",
-        origin: { iata_code: leg.departure_airport?.id || "" },
-        destination: { iata_code: leg.arrival_airport?.id || "" },
-      }));
-      const price = typeof flight.price === "number" ? flight.price : 0;
+      const segments = legs.map((leg: any) => {
+        const legIata = extractIata(leg.flight_number || "") || (leg.airline || "");
+        return {
+          departing_at: leg.departure_airport?.time || null,
+          arriving_at: leg.arrival_airport?.time || null,
+          marketing_carrier: { iata_code: legIata, name: leg.airline || "" },
+          marketing_carrier_flight_number: leg.flight_number || "",
+          origin: { iata_code: leg.departure_airport?.id || "" },
+          destination: { iata_code: leg.arrival_airport?.id || "" },
+        };
+      });
+      // Price extraction: SerpApi returns the all-in fare (taxes + fees
+      // included) as `flight.price`. Pass it through verbatim with no
+      // rounding/markup. Log raw vs normalized side-by-side so any future
+      // mutation is immediately visible in the diagnostic output.
+      const rawPrice = flight.price;
+      const price = typeof rawPrice === "number" ? rawPrice : 0;
       if (price <= 0) continue;
+      const normalizedPrice = String(price);
+      console.log(
+        `[serpapi] price ${airlineIata}${flightNumber} raw=${JSON.stringify(rawPrice)} normalized=${normalizedPrice} ${params.origin}->${params.destination}`,
+      );
+      // Aggregate every extension string SerpApi returned for this flight —
+      // both top-level (covers trip-wide policies / amenities) and per-leg
+      // (covers leg-specific bag rules). Deduplicated, preserved in order so
+      // the booking page can render them as-is when no Duffel-style
+      // structured policy is available.
+      const flightLevelExt: string[] = Array.isArray(flight.extensions) ? flight.extensions : [];
+      const legLevelExt: string[] = legs.flatMap((l: any) =>
+        Array.isArray(l.extensions) ? l.extensions : [],
+      );
+      const seenExt = new Set<string>();
+      const extensions: string[] = [];
+      for (const e of [...flightLevelExt, ...legLevelExt]) {
+        if (typeof e !== "string") continue;
+        const trimmed = e.trim();
+        if (!trimmed || seenExt.has(trimmed)) continue;
+        seenExt.add(trimmed);
+        extensions.push(trimmed);
+      }
       results.push({
         id,
-        total_amount: String(price),
+        total_amount: normalizedPrice,
         total_currency: "USD",
         source: "serpapi",
         isDuffel: false,
-        owner: { iata_code: airlineIata, name: airlineIata },
+        owner: { iata_code: airlineIata, name: airlineName || airlineIata },
         slices: [{
           origin: { iata_code: firstLeg.departure_airport?.id || "" },
           destination: { iata_code: lastLeg.arrival_airport?.id || "" },
@@ -696,6 +737,10 @@ async function searchSerpApiFlights(params: {
           segments,
         }],
         passengers: Array.from({ length: params.passengers }, () => ({ type: "adult" })),
+        // Stash raw extensions under an underscore-prefixed key so downstream
+        // offer normalization can read them without polluting the
+        // Duffel-shaped public surface of the offer object.
+        _serpApiExtensions: extensions,
       });
     }
     console.log(`[serpapi] Google Flights returned ${results.length} normalized offers for ${params.origin}->${params.destination}`);
@@ -957,6 +1002,46 @@ export function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best
   return picks.slice(0, 3);
 }
 
+// Parse SerpApi extensions array into a "Carry-on: included / Checked bags: 1
+// included" style baggage summary. Returns null when neither carry-on nor
+// checked-bag info could be extracted, so the caller can decide whether to
+// show the line at all.
+function parseSerpApiBaggageFromExtensions(extensions: string[]): string | null {
+  if (!extensions || extensions.length === 0) return null;
+  const joined = extensions.join(" | ");
+  const lower = joined.toLowerCase();
+
+  // Carry-on detection. SerpApi commonly emits one of:
+  //   "1 carry-on bag", "Carry-on bag included", "No carry-on bag"
+  let carryOnText: string | null = null;
+  if (/no\s+carry-?on/i.test(lower)) {
+    carryOnText = "No carry-on bag included";
+  } else if (/carry-?on\s+bag(?:\s+for\s+a\s+fee)/i.test(lower)) {
+    carryOnText = "Carry-on for a fee";
+  } else if (/carry-?on/i.test(lower)) {
+    carryOnText = "Included";
+  }
+
+  // Checked-bag detection.
+  let checkedText: string | null = null;
+  if (/no\s+checked\s+bag/i.test(lower)) {
+    checkedText = "No checked bags included";
+  } else {
+    const m = lower.match(/(\d+)\s*(?:1st\s+)?checked\s+bag/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      checkedText = Number.isFinite(n) ? `${n} included` : "Included";
+    } else if (/checked\s+bag.*for\s+a\s+fee/.test(lower)) {
+      checkedText = "Available for a fee";
+    }
+  }
+
+  const parts: string[] = [];
+  if (carryOnText) parts.push(`Carry-on: ${carryOnText}`);
+  if (checkedText) parts.push(`Checked bags: ${checkedText}`);
+  return parts.length ? parts.join(" / ") : null;
+}
+
 function offerToGuestOption(
   offer: any,
   label: "Best Price" | "Best Value" | "Fastest",
@@ -990,30 +1075,38 @@ function offerToGuestOption(
     };
   });
 
-  // Best-effort baggage summary, sourced from the first segment's first
-  // passenger's baggages array (Duffel's standard shape).
+  const isSerpApi = offer.source === "serpapi" || offer.isDuffel === false;
+  const serpExtensions: string[] = Array.isArray(offer._serpApiExtensions) ? offer._serpApiExtensions : [];
+
+  // Best-effort baggage summary. Duffel offers expose this on the first
+  // segment's first passenger's `baggages` array; SerpApi offers expose it as
+  // free-form English in the `extensions` array we captured above.
   let baggage: string | null = null;
-  try {
-    const firstSeg = (offer.slices?.[0]?.segments?.[0]?.passengers?.[0]?.baggages || []) as Array<{
-      type?: string;
-      quantity?: number;
-    }>;
-    const counts: Record<string, number> = {};
-    for (const b of firstSeg) {
-      const k = (b.type || "").toLowerCase();
-      if (!k) continue;
-      counts[k] = (counts[k] || 0) + (typeof b.quantity === "number" ? b.quantity : 0);
+  if (isSerpApi) {
+    baggage = parseSerpApiBaggageFromExtensions(serpExtensions);
+  } else {
+    try {
+      const firstSeg = (offer.slices?.[0]?.segments?.[0]?.passengers?.[0]?.baggages || []) as Array<{
+        type?: string;
+        quantity?: number;
+      }>;
+      const counts: Record<string, number> = {};
+      for (const b of firstSeg) {
+        const k = (b.type || "").toLowerCase();
+        if (!k) continue;
+        counts[k] = (counts[k] || 0) + (typeof b.quantity === "number" ? b.quantity : 0);
+      }
+      const parts: string[] = [];
+      if (counts["carry_on"]) parts.push(`Carry-on: ${counts["carry_on"]} included`);
+      if (counts["checked"]) parts.push(`Checked bags: ${counts["checked"]} included`);
+      if (parts.length === 0 && Object.keys(counts).length > 0) {
+        // Unknown bag types — surface raw counts.
+        for (const [k, v] of Object.entries(counts)) parts.push(`${v} ${k.replace(/_/g, " ")}`);
+      }
+      baggage = parts.length ? parts.join(" / ") : null;
+    } catch {
+      baggage = null;
     }
-    const parts: string[] = [];
-    if (counts["carry_on"]) parts.push(`${counts["carry_on"]} carry-on`);
-    if (counts["checked"]) parts.push(`${counts["checked"]} checked`);
-    if (parts.length === 0 && Object.keys(counts).length > 0) {
-      // Unknown bag types — surface raw counts.
-      for (const [k, v] of Object.entries(counts)) parts.push(`${v} ${k.replace(/_/g, " ")}`);
-    }
-    baggage = parts.length ? parts.join(", ") : null;
-  } catch {
-    baggage = null;
   }
 
   // Best-effort cancellation/change policy, sourced from offer.conditions.
@@ -1028,6 +1121,44 @@ function offerToGuestOption(
     conds.change_before_departure && typeof conds.change_before_departure.allowed === "boolean"
       ? conds.change_before_departure.allowed
       : null;
+
+  // Display-ready policy strings. For Duffel we synthesize a phrase from the
+  // boolean + penalty (refundable with a fee = partial refund). For SerpApi
+  // we surface "Contact us for details" because Google Flights doesn't return
+  // structured policy info.
+  const formatPenalty = (p: any): string | null => {
+    if (!p) return null;
+    const amt = parseFloat(p.penalty_amount);
+    const cur = (p.penalty_currency || "USD").toUpperCase();
+    if (!Number.isFinite(amt) || amt <= 0) return null;
+    return `${cur} ${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+  let refundPolicyText: string | null = null;
+  let changePolicyText: string | null = null;
+  let seatSelectionText: string | null = null;
+  if (isSerpApi) {
+    refundPolicyText = "Contact us for details";
+    changePolicyText = "Contact us for details";
+    seatSelectionText = "Contact us for details";
+  } else {
+    if (refundable === true) {
+      const fee = formatPenalty(conds.refund_before_departure);
+      refundPolicyText = fee ? `Partially refundable (fee ${fee})` : "Fully refundable";
+    } else if (refundable === false) {
+      refundPolicyText = "Non-refundable";
+    } else {
+      refundPolicyText = "Contact us for details";
+    }
+    if (changeable === true) {
+      const fee = formatPenalty(conds.change_before_departure);
+      changePolicyText = fee ? `Changes allowed (fee ${fee})` : "Changes allowed";
+    } else if (changeable === false) {
+      changePolicyText = "No changes allowed";
+    } else {
+      changePolicyText = "Contact us for details";
+    }
+    seatSelectionText = "Available during booking";
+  }
 
   return {
     token: randomUUID(),
@@ -1044,6 +1175,10 @@ function offerToGuestOption(
     baggage,
     refundable,
     changeable,
+    refundPolicyText,
+    changePolicyText,
+    seatSelectionText,
+    extensions: isSerpApi && serpExtensions.length > 0 ? serpExtensions : null,
     isDuffel: offer.isDuffel !== false,
     source: offer.source ?? undefined,
   };
@@ -1139,6 +1274,48 @@ async function buildGuestProposalDataFromOffers(args: {
   }
 
   const options: GuestProposalOption[] = picks.map((p) => offerToGuestOption(p.offer, p.label));
+
+  // Compute "Other similar options" per main pick from the remaining offer
+  // pool (signature-distinct from every main pick). Per spec:
+  //   - Best Price: any offer within $50 of the Best Price total, sorted ascending by price
+  //   - Best Value: within $50 AND within 60 minutes total duration of Best Value, sorted by value score
+  //   - Fastest:    within 30 minutes total duration of Fastest, sorted by duration ascending
+  // Each similar option is offerToGuestOption-shaped with its own randomUUID
+  // booking token so the guest-booking page can resolve it the same way as
+  // the main picks.
+  const SIMILAR_OPTIONS_LIMIT = 6;
+  const mainSigs = new Set(picks.map((p) => offerFlightSignature(p.offer)));
+  const remainingOffers = args.offers.filter((o) => !mainSigs.has(offerFlightSignature(o)));
+  for (let i = 0; i < picks.length; i++) {
+    const main = picks[i].offer;
+    const label = picks[i].label;
+    const mainPrice = parseFloat(main.total_amount);
+    const mainDuration = offerTotalDurationMinutes(main);
+    let similars: any[] = [];
+    if (label === "Best Price") {
+      similars = remainingOffers
+        .filter((o) => Math.abs(parseFloat(o.total_amount) - mainPrice) <= 50)
+        .sort((a, b) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
+    } else if (label === "Best Value") {
+      similars = remainingOffers
+        .filter((o) =>
+          Math.abs(parseFloat(o.total_amount) - mainPrice) <= 50 &&
+          Math.abs(offerTotalDurationMinutes(o) - mainDuration) <= 60,
+        )
+        .sort((a, b) => offerValueScore(a) - offerValueScore(b));
+    } else if (label === "Fastest") {
+      similars = remainingOffers
+        .filter((o) => Math.abs(offerTotalDurationMinutes(o) - mainDuration) <= 30)
+        .sort((a, b) => offerTotalDurationMinutes(a) - offerTotalDurationMinutes(b));
+    }
+    // Cap to keep proposalData JSON column from ballooning on large search
+    // pools — the UI shows them in a collapsed expander anyway.
+    similars = similars.slice(0, SIMILAR_OPTIONS_LIMIT);
+    if (similars.length > 0) {
+      options[i].similarOptions = similars.map((o) => offerToGuestOption(o, label));
+    }
+  }
+
   return {
     originIata: args.originIata,
     originName: args.originName ?? null,
@@ -6186,6 +6363,13 @@ export async function registerRoutes(
     const slices: any[] = [{ origin: originCode, destination: destCode, departure_date: departureDate }];
     if (returnDate) slices.push({ origin: destCode, destination: originCode, departure_date: returnDate });
 
+    // Round-trip diagnostic: surface the exact returnDate value being passed
+    // to Duffel/SerpApi so we can quickly tell from logs whether the call's
+    // return date survived parsing intact (versus dropped by the analysis
+    // pass and falling back to one-way).
+    console.log(
+      `${lp} return_date_check parsed_returnDate=${JSON.stringify(details.returnDate)} effective_returnDate=${JSON.stringify(returnDate)} trip_type=${returnDate ? "round_trip" : "one_way"} duffel_slices=${slices.length}`,
+    );
     console.log(`${lp} searching Duffel ${originCode}->${destCode} dep=${departureDate} ret=${returnDate || "—"} pax=${details.passengers} cabin=${details.cabinClass}`);
 
     let allOffers: any[] = [];
@@ -6603,6 +6787,12 @@ export async function registerRoutes(
         passengers: details.passengers,
         budget: details.budget,
       };
+      // Round-trip diagnostic: log the exact returnDate value being passed
+      // to Duffel + SerpApi so we can confirm the analysis schema's
+      // return_date came through end-to-end before the search fires.
+      console.log(
+        `[post-call ${callRequestId}] return_date_check parsed_returnDate=${JSON.stringify(details.returnDate)} effective_returnDate=${JSON.stringify(returnDate)} trip_type=${returnDate ? "round_trip" : "one_way"} duffel_slices=${slices.length}`,
+      );
       console.log(`[post-call ${callRequestId}] Searching Duffel:`, redactJSON(searchParamsLog));
 
       const [offerRequest, serpApiOffersPostCall] = await Promise.all([
@@ -7860,9 +8050,15 @@ export async function registerRoutes(
     const row = await storage.getGuestProposalByOptionToken(optionToken);
     if (!row) return null;
     const proposalData = (row.proposalData as any) as GuestProposalData;
-    const option = (proposalData?.options || []).find((o) => o.token === optionToken) || null;
-    if (!option) return null;
-    return { row, proposalData, option };
+    const top = (proposalData?.options || []).find((o) => o.token === optionToken);
+    if (top) return { row, proposalData, option: top };
+    // Fall through to the "Other similar options" tokens nested under each
+    // main pick. Booking through these uses the exact same flow.
+    for (const main of proposalData?.options || []) {
+      const nested = (main.similarOptions || []).find((s) => s.token === optionToken);
+      if (nested) return { row, proposalData, option: nested };
+    }
+    return null;
   }
 
   // Create or fetch a placeholder user keyed by email so we can satisfy the
