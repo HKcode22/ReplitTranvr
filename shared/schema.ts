@@ -73,9 +73,7 @@ export const travelerProfiles = pgTable("traveler_profiles", {
   loyaltyPrograms: text("loyalty_programs"),
   notes: text("notes"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-}, (table) => [
-  uniqueIndex("traveler_profiles_phone_unique_idx").on(table.phone).where(sql`${table.phone} IS NOT NULL`),
-]);
+});
 
 export const savedCards = pgTable("saved_cards", {
   id: serial("id").primaryKey(),
