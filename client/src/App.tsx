@@ -131,6 +131,12 @@ function AppRouter() {
   useEffect(() => {
     trackPageView(location);
     setSentryRoute(location);
+    // Reset scroll on route change unless the URL points at an in-page
+    // anchor — wouter preserves scroll position by default, which makes
+    // long pages (privacy/terms) open mid-document.
+    if (!window.location.hash) {
+      window.scrollTo(0, 0);
+    }
   }, [location]);
 
   if (isLoading) {

@@ -1,8 +1,6 @@
 // Travnr Terms of Service. Versioned via the "Last updated" line + the
 // `#terms-v1` anchor below; bump both when the substantive copy changes.
-// First-mention legal entity is left as a clearly labeled placeholder
-// (`[LEGAL ENTITY NAME]`) until the registered entity is finalized — swap
-// in the real name (e.g., "Travnr, Inc.") in one place when ready.
+// Registered legal entity is BMA North America LLC, doing business as Travnr.
 // Governing-law jurisdiction (Missouri, USA) is set in §19.
 
 import { Link } from "wouter";
@@ -50,7 +48,7 @@ export default function TermsPage() {
 
         <div className="prose prose-neutral dark:prose-invert max-w-none prose-headings:font-serif prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4 prose-p:leading-relaxed prose-li:my-1">
           <p>
-            These Terms of Service ("Terms") are entered into between you and <strong>[LEGAL ENTITY NAME]</strong>, doing business as Travnr ("Travnr," "we," "us," or "our"), and govern your use of Travnr's website, AI travel concierge, call services, travel option delivery, and related services ("Services"). By using Travnr, submitting a request, calling Travnr, receiving a call from Travnr, or otherwise interacting with our Services, you agree to these Terms.
+            These Terms of Service ("Terms") are entered into between you and <strong>BMA North America LLC</strong>, doing business as Travnr ("Travnr," "we," "us," or "our"), and govern your use of Travnr's website, AI travel concierge, call services, travel option delivery, and related services ("Services"). By using Travnr, submitting a request, calling Travnr, receiving a call from Travnr, or otherwise interacting with our Services, you agree to these Terms.
           </p>
           <p>If you do not agree, do not use Travnr.</p>
 

@@ -1,8 +1,6 @@
 // Travnr Privacy Policy. Versioned via the "Last updated" line + the
 // `#policy-v1` anchor below; bump both when the substantive copy changes.
-// First-mention legal entity is left as a clearly labeled placeholder
-// (`[LEGAL ENTITY NAME]`) until the registered entity is finalized — swap
-// in the real name (e.g., "Travnr, Inc.") in one place when ready.
+// Registered legal entity is BMA North America LLC, doing business as Travnr.
 
 import { Link } from "wouter";
 import SEO from "@/components/seo";
@@ -49,7 +47,7 @@ export default function PrivacyPage() {
 
         <div className="prose prose-neutral dark:prose-invert max-w-none prose-headings:font-serif prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4 prose-p:leading-relaxed prose-li:my-1">
           <p>
-            <strong>[LEGAL ENTITY NAME]</strong>, doing business as Travnr ("Travnr," "we," "us," or "our"), provides an AI-powered travel concierge service that helps users share travel preferences through calls, forms, email, SMS, or other interactions so we can provide tailored travel options.
+            <strong>BMA North America LLC</strong>, doing business as Travnr ("Travnr," "we," "us," or "our"), provides an AI-powered travel concierge service that helps users share travel preferences through calls, forms, email, SMS, or other interactions so we can provide tailored travel options.
           </p>
           <p>
             This Privacy Policy explains how we collect, use, disclose, and protect information when you use Travnr's website, call our travel concierge, submit a request, receive travel options, or otherwise interact with our services.
