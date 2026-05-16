@@ -147,7 +147,8 @@ async function initStripe() {
   }
 }
 
-await initStripe();
+// Kicked off below after the HTTP server starts listening, so a slow Stripe
+// connector or migration can't hold the preview hostage.
 
 app.post(
   '/api/stripe/webhook',
@@ -295,6 +296,9 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      initStripe().catch((err) => {
+        console.warn('Stripe initialization failed:', err?.message || err);
+      });
     },
   );
 })();

@@ -16,6 +16,8 @@ import { useEffect } from "react";
 import { trackPageView, identifyUser } from "@/lib/analytics";
 import { setSentryUser, setSentryRoute } from "@/lib/sentry";
 import LandingPage from "@/pages/landing";
+import TravelersPage from "@/pages/travelers";
+import AgenciesPage from "@/pages/agencies";
 import AuthPage from "@/pages/auth";
 import DashboardPage from "@/pages/dashboard";
 import ProfilePage from "@/pages/profile";
@@ -157,6 +159,8 @@ function AppRouter() {
         <Route path="/manage-trip" component={ManageTripPage} />
         <Route path="/contact" component={ContactPage} />
         <Route path="/" component={LandingPage} />
+        <Route path="/travelers" component={TravelersPage} />
+        <Route path="/agencies" component={AgenciesPage} />
         <Route path="/auth" component={AuthPage} />
         <Route path="/reset-password" component={ResetPasswordPage} />
         <Route>
