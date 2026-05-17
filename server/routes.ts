@@ -9387,7 +9387,7 @@ export async function registerRoutes(
     } = await import("./lib/agencyAuth");
     const { scoreFlightRisk } = await import("./lib/disruption/riskScorer");
     const { findLowRiskAlternatives } = await import("./lib/disruption/alternativeFinder");
-    const { sendAgencyNotification } = await import("./lib/disruption/alertSender");
+    const { sendAgencyNotification, sendTravelerAlert } = await import("./lib/disruption/alertSender");
     const { scoreFlightOnce } = await import("./lib/disruption/monitor");
     const { db } = await import("./db");
     const {
@@ -9659,6 +9659,266 @@ export async function registerRoutes(
       } catch (err: any) {
         console.error("[agency-flights-resolve] error:", err);
         return res.status(500).json({ error: "Failed to resolve flight" });
+      }
+    });
+
+    // =================================================================
+    // Debug / simulation endpoints. Temporary surface for agency users to
+    // (a) force an immediate rescore, (b) push a synthetic risk score
+    // through the full alert pipeline using REAL alternatives + REAL
+    // email, and (c) wipe alert state so the same flight can be tested
+    // again.
+    // =================================================================
+
+    const simulateSchema = z.object({
+      targetScore: z.number().int().min(0).max(100),
+      reason: z.string().optional(),
+    });
+
+    app.post("/api/agency/flights/:id/rescore", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const agency = (req as any).agency;
+        const id = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+        const [flight] = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dAnd(dEq(tMonitoredFlights.id, id), dEq(tMonitoredFlights.agencyId, agency.id)))
+          .limit(1);
+        if (!flight) return res.status(404).json({ error: "Flight not found" });
+        await scoreFlightOnce(id);
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.error("[agency-rescore] error:", err);
+        return res.status(500).json({ error: "Failed to rescore" });
+      }
+    });
+
+    app.post("/api/agency/flights/:id/simulate", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const agency = (req as any).agency;
+        const id = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+        const parsed = simulateSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
+        }
+        const [flight] = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dAnd(dEq(tMonitoredFlights.id, id), dEq(tMonitoredFlights.agencyId, agency.id)))
+          .limit(1);
+        if (!flight) return res.status(404).json({ error: "Flight not found" });
+
+        const { targetScore, reason } = parsed.data;
+        const tier: "green" | "amber" | "red" =
+          targetScore >= 60 ? "red" : targetScore >= 25 ? "amber" : "green";
+
+        // Distribute the target score across the same signal buckets the
+        // real scorer uses so the breakdown UI looks plausible. Caps mirror
+        // the real scorer's per-signal max points.
+        const inbound = Math.min(40, Math.round(targetScore * 0.55));
+        const originWx = Math.min(25, Math.round(targetScore * 0.28));
+        const destWx = Math.min(20, Math.round(targetScore * 0.10));
+        const tod = Math.min(5, Math.round(targetScore * 0.04));
+        const hist = Math.min(10, Math.max(3, Math.round(targetScore * 0.06)));
+
+        const signalsBlob = {
+          signals: {
+            inboundAircraftDelay: inbound,
+            originWeather: originWx,
+            destinationWeather: destWx,
+            timeOfDayRisk: tod,
+            historicalRisk: hist,
+          },
+          cancelled: false,
+          simulated: true,
+          simulatedReason: reason || "Manual simulation",
+          flightStatus: {
+            status: "Simulated",
+            delayMinutes: inbound >= 28 ? 90 : 0,
+            inboundDelayMinutes: inbound >= 28 ? 90 : 0,
+            cancelled: false,
+            departureTime: flight.departureTime,
+          },
+          originWeather: {
+            flightCategory: originWx >= 18 ? "IFR" : originWx >= 10 ? "MVFR" : "VFR",
+            hasThunderstorm: originWx >= 20,
+            hasFreezing: false,
+          },
+          destinationWeather: {
+            flightCategory: destWx >= 14 ? "IFR" : destWx >= 8 ? "MVFR" : "VFR",
+            hasThunderstorm: destWx >= 18,
+            hasFreezing: false,
+          },
+        };
+
+        // Reset prior alert state so the same flight can be re-simulated.
+        await db
+          .delete(tDisruptionAlternatives)
+          .where(dEq(tDisruptionAlternatives.monitoredFlightId, id));
+        await db
+          .update(tMonitoredFlights)
+          .set({
+            alertSentAt: null,
+            travelerSelectionToken: null,
+            travelerSelectedOptionId: null,
+            travelerSelectedAt: null,
+            agencyNotifiedAt: null,
+            agencyResolvedAt: null,
+            riskScore: targetScore,
+            riskTier: tier,
+            lastCheckedAt: new Date(),
+          })
+          .where(dEq(tMonitoredFlights.id, id));
+
+        await db.insert(tRiskScoreHistory).values({
+          monitoredFlightId: id,
+          score: targetScore,
+          tier,
+          signals: signalsBlob,
+        });
+
+        if (tier !== "red") {
+          return res.json({
+            success: true,
+            fired: false,
+            message:
+              "Simulation saved. Alert only fires at tier red (score ≥ 60). Bump the target score to send an email.",
+          });
+        }
+
+        const refreshed = {
+          ...flight,
+          riskScore: targetScore,
+          riskTier: tier,
+          alertSentAt: null,
+          travelerSelectionToken: null,
+        } as typeof flight;
+
+        let alternatives: Awaited<ReturnType<typeof findLowRiskAlternatives>> = [];
+        try {
+          alternatives = await findLowRiskAlternatives(refreshed, 3);
+        } catch (err: any) {
+          console.warn("[simulate] alt search failed (non-fatal):", err?.message || err);
+        }
+
+        if (alternatives.length > 0) {
+          try {
+            await db.insert(tDisruptionAlternatives).values(
+              alternatives.map((a) => ({
+                monitoredFlightId: id,
+                flightNumber: a.flightNumber,
+                carrierIata: a.carrierIata,
+                carrierName: a.carrierName,
+                departureTime: a.departureTime,
+                arrivalTime: a.arrivalTime,
+                durationMinutes: a.durationMinutes,
+                stops: a.stops,
+                price: a.price,
+                riskScore: a.riskScore,
+                riskTier: a.riskTier,
+                offerData: a.offerData,
+                selectionToken: a.selectionToken,
+              })),
+            );
+          } catch (err: any) {
+            console.error("[simulate] failed to persist alternatives:", err?.message || err);
+          }
+        }
+
+        const travelerSelectionToken = dRandomUUID();
+        await db
+          .update(tMonitoredFlights)
+          .set({ travelerSelectionToken })
+          .where(dEq(tMonitoredFlights.id, id));
+
+        const simulatedRisk = {
+          score: targetScore,
+          tier,
+          signals: signalsBlob.signals,
+          flightStatus: signalsBlob.flightStatus as any,
+          originWeather: {
+            ...signalsBlob.originWeather,
+            iataCode: flight.originIata,
+            icaoCode: "",
+            windSpeedKt: 0,
+            gustSpeedKt: 0,
+            visibilityMiles: 10,
+            ceilingFt: 99999,
+            rawMetar: "",
+            riskContribution: originWx,
+          } as any,
+          destinationWeather: {
+            ...signalsBlob.destinationWeather,
+            iataCode: flight.destinationIata,
+            icaoCode: "",
+            windSpeedKt: 0,
+            gustSpeedKt: 0,
+            visibilityMiles: 10,
+            ceilingFt: 99999,
+            rawMetar: "",
+            riskContribution: destWx,
+          } as any,
+          cancelled: false,
+        };
+
+        const updatedFlight = {
+          ...refreshed,
+          travelerSelectionToken,
+        } as typeof flight;
+
+        try {
+          await sendTravelerAlert(updatedFlight, alternatives, agency, simulatedRisk as any);
+          await db
+            .update(tMonitoredFlights)
+            .set({ alertSentAt: new Date() })
+            .where(dEq(tMonitoredFlights.id, id));
+        } catch (err: any) {
+          console.error("[simulate] email send failed:", err?.message || err);
+        }
+
+        return res.json({
+          success: true,
+          fired: true,
+          alternativeCount: alternatives.length,
+          travelerSelectionToken,
+        });
+      } catch (err: any) {
+        console.error("[agency-simulate] error:", err);
+        return res.status(500).json({ error: "Simulation failed" });
+      }
+    });
+
+    app.post("/api/agency/flights/:id/reset-alert", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const agency = (req as any).agency;
+        const id = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+        const [flight] = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dAnd(dEq(tMonitoredFlights.id, id), dEq(tMonitoredFlights.agencyId, agency.id)))
+          .limit(1);
+        if (!flight) return res.status(404).json({ error: "Flight not found" });
+        await db
+          .delete(tDisruptionAlternatives)
+          .where(dEq(tDisruptionAlternatives.monitoredFlightId, id));
+        await db
+          .update(tMonitoredFlights)
+          .set({
+            alertSentAt: null,
+            travelerSelectionToken: null,
+            travelerSelectedOptionId: null,
+            travelerSelectedAt: null,
+            agencyNotifiedAt: null,
+            agencyResolvedAt: null,
+          })
+          .where(dEq(tMonitoredFlights.id, id));
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.error("[agency-reset-alert] error:", err);
+        return res.status(500).json({ error: "Failed to reset" });
       }
     });
 

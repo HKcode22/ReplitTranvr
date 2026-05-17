@@ -41,6 +41,7 @@ import TermsPage from "@/pages/terms";
 import NotFound from "@/pages/not-found";
 import AgencyAuthPage from "@/pages/agency/auth";
 import AgencyDashboardPage from "@/pages/agency/dashboard";
+import AgencyFlightDetailPage from "@/pages/agency/flight-detail";
 import DisruptionSelectionPage from "@/pages/disruption/selection";
 import DisruptionConfirmedPage from "@/pages/disruption/confirmed";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -169,6 +170,9 @@ function AppRouter() {
         </Route>
         <Route path="/agency/dashboard">
           <ErrorBoundary boundary="agency-dashboard"><AgencyDashboardPage /></ErrorBoundary>
+        </Route>
+        <Route path="/agency/flights/:id">
+          <ErrorBoundary boundary="agency-flight-detail"><AgencyFlightDetailPage /></ErrorBoundary>
         </Route>
         <Route path="/disruption/confirmed">
           <ErrorBoundary boundary="disruption-confirmed"><DisruptionConfirmedPage /></ErrorBoundary>

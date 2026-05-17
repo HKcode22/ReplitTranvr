@@ -381,7 +381,8 @@ export default function AgencyDashboardPage() {
                     {flights.map((f) => (
                       <tr
                         key={f.id}
-                        className="border-t border-border hover:bg-muted/30"
+                        className="border-t border-border hover:bg-muted/30 cursor-pointer"
+                        onClick={() => setLocation(`/agency/flights/${f.id}`)}
                         data-testid={`row-flight-${f.id}`}
                       >
                         <td className="px-4 py-3 font-medium text-foreground">{f.flightNumber}</td>
@@ -400,7 +401,7 @@ export default function AgencyDashboardPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => deleteMutation.mutate(f.id)}
+                            onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(f.id); }}
                             disabled={deleteMutation.isPending}
                             data-testid={`button-remove-flight-${f.id}`}
                           >
@@ -416,7 +417,12 @@ export default function AgencyDashboardPage() {
 
             <div className="md:hidden space-y-3">
               {flights.map((f) => (
-                <Card key={f.id} className="p-4" data-testid={`card-flight-${f.id}`}>
+                <Card
+                  key={f.id}
+                  className="p-4 cursor-pointer"
+                  onClick={() => setLocation(`/agency/flights/${f.id}`)}
+                  data-testid={`card-flight-${f.id}`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-medium text-foreground">{f.flightNumber}</div>
@@ -434,7 +440,7 @@ export default function AgencyDashboardPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => deleteMutation.mutate(f.id)}
+                        onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(f.id); }}
                         disabled={deleteMutation.isPending}
                       >
                         <Trash2 className="h-4 w-4 text-muted-foreground" />
