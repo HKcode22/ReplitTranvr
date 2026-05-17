@@ -8,6 +8,8 @@ import { getStripeSync } from './lib/stripeClient';
 import { WebhookHandlers } from './lib/webhookHandlers';
 import { redactJSON } from './lib/redact';
 import { initSentry, captureRequestError, sentryRequestContext } from './lib/sentry';
+import { applyBootMigrations } from './db';
+import { startMonitoringEngine } from './lib/disruption/monitor';
 
 initSentry();
 
@@ -251,6 +253,16 @@ app.use((req, res, next) => {
     );
   }
 
+  // Apply additive boot-time migrations (Agency Disruption Monitoring
+  // tables). Idempotent and isolated from the consumer schema — never
+  // alters or drops existing tables. Logged failures here are fatal
+  // because the agency routes registered below depend on these tables.
+  try {
+    await applyBootMigrations();
+  } catch (err: any) {
+    console.error("Boot migrations failed:", err?.message || err);
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
@@ -299,6 +311,15 @@ app.use((req, res, next) => {
       initStripe().catch((err) => {
         console.warn('Stripe initialization failed:', err?.message || err);
       });
+      // Start the Travnr Agency Disruption Monitoring engine. Wrapped in
+      // try/catch so a startup failure (e.g. missing AERODATABOX_API_KEY)
+      // never crashes the server — the engine logs its own warnings and
+      // degrades gracefully when downstream APIs are unavailable.
+      try {
+        startMonitoringEngine();
+      } catch (err: any) {
+        console.error('Disruption monitoring engine failed to start:', err?.message || err);
+      }
     },
   );
 })();

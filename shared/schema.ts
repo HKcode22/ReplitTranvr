@@ -531,3 +531,120 @@ export type HotelOption = typeof hotelOptions.$inferSelect;
 export type InsertHotelOption = z.infer<typeof insertHotelOptionSchema>;
 export type HotelBooking = typeof hotelBookings.$inferSelect;
 export type InsertHotelBooking = z.infer<typeof insertHotelBookingSchema>;
+
+// =====================================================================
+// Agency Disruption Monitoring System (standalone from consumer flow).
+// Additive only — no existing table, enum, or relation is modified.
+// =====================================================================
+
+export const agencyAccounts = pgTable("agency_accounts", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  contactEmail: text("contact_email").notNull().unique(),
+  contactName: text("contact_name").notNull(),
+  password: text("password").notNull(),
+  plan: text("plan").default("trial").notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const monitoredFlights = pgTable("monitored_flights", {
+  id: serial("id").primaryKey(),
+  agencyId: integer("agency_id").notNull().references(() => agencyAccounts.id),
+  flightNumber: text("flight_number").notNull(),
+  carrierIata: text("carrier_iata").notNull(),
+  departureDate: text("departure_date").notNull(),
+  departureTime: text("departure_time"),
+  originIata: text("origin_iata").notNull(),
+  destinationIata: text("destination_iata").notNull(),
+  travelerName: text("traveler_name").notNull(),
+  travelerEmail: text("traveler_email").notNull(),
+  travelerPhone: text("traveler_phone"),
+  riskScore: integer("risk_score").default(0).notNull(),
+  riskTier: text("risk_tier").default("green").notNull(),
+  lastCheckedAt: timestamp("last_checked_at"),
+  status: text("status").default("active").notNull(),
+  alertSentAt: timestamp("alert_sent_at"),
+  travelerSelectionToken: text("traveler_selection_token").unique(),
+  travelerSelectedOptionId: text("traveler_selected_option_id"),
+  travelerSelectedAt: timestamp("traveler_selected_at"),
+  agencyNotifiedAt: timestamp("agency_notified_at"),
+  agencyResolvedAt: timestamp("agency_resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("monitored_flights_agency_id_idx").on(table.agencyId),
+  index("monitored_flights_status_idx").on(table.status),
+]);
+
+export const riskScoreHistory = pgTable("risk_score_history", {
+  id: serial("id").primaryKey(),
+  monitoredFlightId: integer("monitored_flight_id").notNull().references(() => monitoredFlights.id),
+  score: integer("score").notNull(),
+  tier: text("tier").notNull(),
+  signals: jsonb("signals").notNull(),
+  scoredAt: timestamp("scored_at").defaultNow().notNull(),
+}, (table) => [
+  index("risk_score_history_flight_id_idx").on(table.monitoredFlightId),
+]);
+
+export const disruptionAlternatives = pgTable("disruption_alternatives", {
+  id: serial("id").primaryKey(),
+  monitoredFlightId: integer("monitored_flight_id").notNull().references(() => monitoredFlights.id),
+  flightNumber: text("flight_number").notNull(),
+  carrierIata: text("carrier_iata").notNull(),
+  carrierName: text("carrier_name"),
+  departureTime: text("departure_time").notNull(),
+  arrivalTime: text("arrival_time").notNull(),
+  durationMinutes: integer("duration_minutes"),
+  stops: integer("stops").default(0).notNull(),
+  price: text("price"),
+  riskScore: integer("risk_score").notNull(),
+  riskTier: text("risk_tier").notNull(),
+  offerData: jsonb("offer_data"),
+  selectionToken: text("selection_token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("disruption_alternatives_flight_id_idx").on(table.monitoredFlightId),
+]);
+
+export const agencyAccountsRelations = relations(agencyAccounts, ({ many }) => ({
+  flights: many(monitoredFlights),
+}));
+
+export const monitoredFlightsRelations = relations(monitoredFlights, ({ one, many }) => ({
+  agency: one(agencyAccounts, { fields: [monitoredFlights.agencyId], references: [agencyAccounts.id] }),
+  riskHistory: many(riskScoreHistory),
+  alternatives: many(disruptionAlternatives),
+}));
+
+export const riskScoreHistoryRelations = relations(riskScoreHistory, ({ one }) => ({
+  flight: one(monitoredFlights, { fields: [riskScoreHistory.monitoredFlightId], references: [monitoredFlights.id] }),
+}));
+
+export const disruptionAlternativesRelations = relations(disruptionAlternatives, ({ one }) => ({
+  flight: one(monitoredFlights, { fields: [disruptionAlternatives.monitoredFlightId], references: [monitoredFlights.id] }),
+}));
+
+export const insertAgencyAccountSchema = createInsertSchema(agencyAccounts).omit({
+  id: true, createdAt: true, active: true, plan: true,
+});
+export const insertMonitoredFlightSchema = createInsertSchema(monitoredFlights).omit({
+  id: true, createdAt: true, riskScore: true, riskTier: true, lastCheckedAt: true,
+  status: true, alertSentAt: true, travelerSelectionToken: true, travelerSelectedOptionId: true,
+  travelerSelectedAt: true, agencyNotifiedAt: true, agencyResolvedAt: true, departureTime: true,
+});
+export const insertRiskScoreHistorySchema = createInsertSchema(riskScoreHistory).omit({
+  id: true, scoredAt: true,
+});
+export const insertDisruptionAlternativeSchema = createInsertSchema(disruptionAlternatives).omit({
+  id: true, createdAt: true,
+});
+
+export type AgencyAccount = typeof agencyAccounts.$inferSelect;
+export type InsertAgencyAccount = z.infer<typeof insertAgencyAccountSchema>;
+export type MonitoredFlight = typeof monitoredFlights.$inferSelect;
+export type InsertMonitoredFlight = z.infer<typeof insertMonitoredFlightSchema>;
+export type RiskScoreHistory = typeof riskScoreHistory.$inferSelect;
+export type InsertRiskScoreHistory = z.infer<typeof insertRiskScoreHistorySchema>;
+export type DisruptionAlternative = typeof disruptionAlternatives.$inferSelect;
+export type InsertDisruptionAlternative = z.infer<typeof insertDisruptionAlternativeSchema>;

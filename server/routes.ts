@@ -9371,5 +9371,456 @@ export async function registerRoutes(
     }
   });
 
+  // =====================================================================
+  // Travnr Agency Disruption Monitoring System
+  // ---------------------------------------------------------------------
+  // Standalone surface — separate session field (agencyId), separate auth
+  // middleware (isAgencyAuthenticated), separate tables. Nothing here
+  // mutates the consumer flow above; do not refactor existing endpoints
+  // to share helpers with these.
+  // =====================================================================
+  {
+    const {
+      isAgencyAuthenticated,
+      hashAgencyPassword,
+      verifyAgencyPassword,
+    } = await import("./lib/agencyAuth");
+    const { scoreFlightRisk } = await import("./lib/disruption/riskScorer");
+    const { findLowRiskAlternatives } = await import("./lib/disruption/alternativeFinder");
+    const { sendAgencyNotification } = await import("./lib/disruption/alertSender");
+    const { scoreFlightOnce } = await import("./lib/disruption/monitor");
+    const { db } = await import("./db");
+    const {
+      agencyAccounts: tAgencyAccounts,
+      monitoredFlights: tMonitoredFlights,
+      riskScoreHistory: tRiskScoreHistory,
+      disruptionAlternatives: tDisruptionAlternatives,
+    } = await import("@shared/schema");
+    const { eq: dEq, and: dAnd, desc: dDesc } = await import("drizzle-orm");
+    const { randomUUID: dRandomUUID } = await import("crypto");
+
+    const agencyRegisterSchema = z.object({
+      name: z.string().min(1, "Agency name is required"),
+      contactEmail: z.string().email("Valid email is required"),
+      contactName: z.string().min(1, "Contact name is required"),
+      password: z.string().min(8, "Password must be at least 8 characters"),
+    });
+
+    const agencyLoginSchema = z.object({
+      email: z.string().email("Valid email is required"),
+      password: z.string().min(1, "Password is required"),
+    });
+
+    const monitoredFlightCreateSchema = z.object({
+      flightNumber: z.string().min(2).max(10),
+      carrierIata: z.string().min(1).max(3).optional(),
+      departureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+      originIata: z.string().length(3, "Origin must be a 3-letter IATA code"),
+      destinationIata: z.string().length(3, "Destination must be a 3-letter IATA code"),
+      travelerName: z.string().min(1),
+      travelerEmail: z.string().email(),
+      travelerPhone: z.string().optional().nullable(),
+    });
+
+    const publicAgency = (a: any) => {
+      if (!a) return null;
+      const { password, ...rest } = a;
+      return rest;
+    };
+
+    app.post("/api/agency/auth/register", async (req: Request, res: Response) => {
+      try {
+        const parsed = agencyRegisterSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res
+            .status(400)
+            .json({ error: parsed.error.errors[0]?.message || "Invalid input" });
+        }
+        const { name, contactEmail, contactName, password } = parsed.data;
+        const normalizedEmail = contactEmail.toLowerCase().trim();
+        const existing = await db
+          .select()
+          .from(tAgencyAccounts)
+          .where(dEq(tAgencyAccounts.contactEmail, normalizedEmail))
+          .limit(1);
+        if (existing.length > 0) {
+          return res.status(400).json({ error: "An agency with this email already exists" });
+        }
+        const hashed = await hashAgencyPassword(password);
+        const [created] = await db
+          .insert(tAgencyAccounts)
+          .values({
+            name,
+            contactEmail: normalizedEmail,
+            contactName,
+            password: hashed,
+          })
+          .returning();
+        (req.session as any).agencyId = created.id;
+        return res.status(201).json(publicAgency(created));
+      } catch (err: any) {
+        console.error("[agency-register] error:", err);
+        return res.status(500).json({ error: "Failed to register agency" });
+      }
+    });
+
+    app.post("/api/agency/auth/login", async (req: Request, res: Response) => {
+      try {
+        const parsed = agencyLoginSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res
+            .status(400)
+            .json({ error: parsed.error.errors[0]?.message || "Invalid input" });
+        }
+        const normalizedEmail = parsed.data.email.toLowerCase().trim();
+        const [agency] = await db
+          .select()
+          .from(tAgencyAccounts)
+          .where(dEq(tAgencyAccounts.contactEmail, normalizedEmail))
+          .limit(1);
+        if (!agency || !agency.active) {
+          return res.status(401).json({ error: "Invalid email or password" });
+        }
+        const ok = await verifyAgencyPassword(parsed.data.password, agency.password);
+        if (!ok) return res.status(401).json({ error: "Invalid email or password" });
+        (req.session as any).agencyId = agency.id;
+        return res.json(publicAgency(agency));
+      } catch (err: any) {
+        console.error("[agency-login] error:", err);
+        return res.status(500).json({ error: "Failed to log in" });
+      }
+    });
+
+    app.post("/api/agency/auth/logout", async (req: Request, res: Response) => {
+      try {
+        if (req.session) (req.session as any).agencyId = undefined;
+        return res.json({ success: true });
+      } catch (err) {
+        return res.json({ success: true });
+      }
+    });
+
+    app.get("/api/agency/auth/me", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      const agency = (req as any).agency;
+      return res.json(publicAgency(agency));
+    });
+
+    app.get("/api/agency/flights", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const agency = (req as any).agency;
+        const flights = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dEq(tMonitoredFlights.agencyId, agency.id))
+          .orderBy(dDesc(tMonitoredFlights.riskScore));
+
+        const flightsWithAlts = await Promise.all(
+          flights.map(async (f: any) => {
+            if (!f.alertSentAt) return { ...f, alternatives: [] };
+            const alts = await db
+              .select()
+              .from(tDisruptionAlternatives)
+              .where(dEq(tDisruptionAlternatives.monitoredFlightId, f.id));
+            return { ...f, alternatives: alts };
+          }),
+        );
+        return res.json(flightsWithAlts);
+      } catch (err: any) {
+        console.error("[agency-flights-list] error:", err);
+        return res.status(500).json({ error: "Failed to load flights" });
+      }
+    });
+
+    app.post("/api/agency/flights", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const agency = (req as any).agency;
+        const parsed = monitoredFlightCreateSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res
+            .status(400)
+            .json({ error: parsed.error.errors[0]?.message || "Invalid input" });
+        }
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (parsed.data.departureDate < todayStr) {
+          return res.status(400).json({ error: "Departure date must be today or later" });
+        }
+        const flightNumberCompact = parsed.data.flightNumber.replace(/\s+/g, "").toUpperCase();
+        const carrierIata = (parsed.data.carrierIata
+          || flightNumberCompact.replace(/[^A-Z]/g, "").slice(0, 2)
+          || flightNumberCompact.slice(0, 2)).toUpperCase();
+
+        const [created] = await db
+          .insert(tMonitoredFlights)
+          .values({
+            agencyId: agency.id,
+            flightNumber: flightNumberCompact,
+            carrierIata,
+            departureDate: parsed.data.departureDate,
+            originIata: parsed.data.originIata.toUpperCase(),
+            destinationIata: parsed.data.destinationIata.toUpperCase(),
+            travelerName: parsed.data.travelerName,
+            travelerEmail: parsed.data.travelerEmail,
+            travelerPhone: parsed.data.travelerPhone || null,
+          })
+          .returning();
+
+        // Score immediately so the dashboard reflects risk on first load,
+        // not after the next 30-minute tick. Fire-and-forget so a slow
+        // AeroDataBox call doesn't block the create response. Errors are
+        // logged inside scoreFlightOnce.
+        scoreFlightOnce(created.id).catch((err) =>
+          console.error("[agency-flights-create] initial score failed:", err?.message || err),
+        );
+
+        return res.status(201).json(created);
+      } catch (err: any) {
+        console.error("[agency-flights-create] error:", err);
+        return res.status(500).json({ error: "Failed to add flight" });
+      }
+    });
+
+    app.get("/api/agency/flights/:id", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const agency = (req as any).agency;
+        const id = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+        const [flight] = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dAnd(dEq(tMonitoredFlights.id, id), dEq(tMonitoredFlights.agencyId, agency.id)))
+          .limit(1);
+        if (!flight) return res.status(404).json({ error: "Flight not found" });
+        const history = await db
+          .select()
+          .from(tRiskScoreHistory)
+          .where(dEq(tRiskScoreHistory.monitoredFlightId, flight.id))
+          .orderBy(dDesc(tRiskScoreHistory.scoredAt))
+          .limit(10);
+        const alternatives = await db
+          .select()
+          .from(tDisruptionAlternatives)
+          .where(dEq(tDisruptionAlternatives.monitoredFlightId, flight.id));
+        return res.json({ ...flight, history, alternatives });
+      } catch (err: any) {
+        console.error("[agency-flights-get] error:", err);
+        return res.status(500).json({ error: "Failed to load flight" });
+      }
+    });
+
+    app.delete("/api/agency/flights/:id", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const agency = (req as any).agency;
+        const id = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+        const [flight] = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dAnd(dEq(tMonitoredFlights.id, id), dEq(tMonitoredFlights.agencyId, agency.id)))
+          .limit(1);
+        if (!flight) return res.status(404).json({ error: "Flight not found" });
+        await db
+          .update(tMonitoredFlights)
+          .set({ status: "cancelled" })
+          .where(dEq(tMonitoredFlights.id, id));
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.error("[agency-flights-delete] error:", err);
+        return res.status(500).json({ error: "Failed to remove flight" });
+      }
+    });
+
+    app.post("/api/agency/flights/:id/resolve", async (req: Request, res: Response) => {
+      try {
+        const id = parseInt(String(req.params.id), 10);
+        if (Number.isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+        const magicToken = typeof req.query.token === "string" ? req.query.token : null;
+        const sessionAgencyId = (req.session as any)?.agencyId as number | undefined;
+
+        const [flight] = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dEq(tMonitoredFlights.id, id))
+          .limit(1);
+        if (!flight) return res.status(404).json({ error: "Flight not found" });
+
+        const tokenMatches =
+          magicToken && flight.travelerSelectionToken && flight.travelerSelectionToken === magicToken;
+        const sessionMatches = sessionAgencyId && sessionAgencyId === flight.agencyId;
+        if (!tokenMatches && !sessionMatches) {
+          if (sessionAgencyId) return res.status(403).json({ error: "Not authorized" });
+          return res.status(401).json({ error: "Authentication required" });
+        }
+
+        await db
+          .update(tMonitoredFlights)
+          .set({ agencyResolvedAt: new Date() })
+          .where(dEq(tMonitoredFlights.id, id));
+        return res.json({ success: true });
+      } catch (err: any) {
+        console.error("[agency-flights-resolve] error:", err);
+        return res.status(500).json({ error: "Failed to resolve flight" });
+      }
+    });
+
+    // =================================================================
+    // Public traveler-facing disruption endpoints (no auth required).
+    // =================================================================
+    app.get("/api/disruption/flight/:travelerSelectionToken", async (req: Request, res: Response) => {
+      try {
+        const token = String(req.params.travelerSelectionToken || "");
+        if (!token) return res.status(400).json({ error: "Token required" });
+        const [flight] = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dEq(tMonitoredFlights.travelerSelectionToken, token))
+          .limit(1);
+        if (!flight) return res.status(404).json({ error: "Not found" });
+        const alternatives = await db
+          .select()
+          .from(tDisruptionAlternatives)
+          .where(dEq(tDisruptionAlternatives.monitoredFlightId, flight.id));
+        const [agency] = await db
+          .select()
+          .from(tAgencyAccounts)
+          .where(dEq(tAgencyAccounts.id, flight.agencyId))
+          .limit(1);
+        return res.json({
+          flight: {
+            id: flight.id,
+            flightNumber: flight.flightNumber,
+            carrierIata: flight.carrierIata,
+            departureDate: flight.departureDate,
+            departureTime: flight.departureTime,
+            originIata: flight.originIata,
+            destinationIata: flight.destinationIata,
+            travelerName: flight.travelerName,
+            riskScore: flight.riskScore,
+            riskTier: flight.riskTier,
+            travelerSelectedOptionId: flight.travelerSelectedOptionId,
+            travelerSelectedAt: flight.travelerSelectedAt,
+            travelerSelectionToken: flight.travelerSelectionToken,
+          },
+          agency: agency
+            ? { name: agency.name, contactEmail: agency.contactEmail }
+            : null,
+          alternatives,
+        });
+      } catch (err: any) {
+        console.error("[disruption-flight] error:", err);
+        return res.status(500).json({ error: "Failed to load disruption" });
+      }
+    });
+
+    app.get("/api/disruption/select/:selectionToken", async (req: Request, res: Response) => {
+      try {
+        const token = String(req.params.selectionToken || "");
+        if (!token) return res.status(400).send("Invalid selection link");
+        const [alt] = await db
+          .select()
+          .from(tDisruptionAlternatives)
+          .where(dEq(tDisruptionAlternatives.selectionToken, token))
+          .limit(1);
+        if (!alt) return res.status(404).send("Alternative not found");
+        const [flight] = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dEq(tMonitoredFlights.id, alt.monitoredFlightId))
+          .limit(1);
+        if (!flight) return res.status(404).send("Flight not found");
+
+        const baseRedirect = (qs: string) => `/disruption/confirmed?${qs}`;
+
+        if (flight.travelerSelectedOptionId) {
+          return res.redirect(
+            baseRedirect(
+              `already=true&flight=${encodeURIComponent(flight.flightNumber)}`,
+            ),
+          );
+        }
+
+        await db
+          .update(tMonitoredFlights)
+          .set({
+            travelerSelectedOptionId: String(alt.id),
+            travelerSelectedAt: new Date(),
+            agencyNotifiedAt: new Date(),
+          })
+          .where(dEq(tMonitoredFlights.id, flight.id));
+
+        const [agency] = await db
+          .select()
+          .from(tAgencyAccounts)
+          .where(dEq(tAgencyAccounts.id, flight.agencyId))
+          .limit(1);
+
+        if (agency) {
+          try {
+            await sendAgencyNotification(
+              { ...flight, travelerSelectedOptionId: String(alt.id) },
+              {
+                flightNumber: alt.flightNumber,
+                carrierIata: alt.carrierIata,
+                carrierName: alt.carrierName || alt.carrierIata,
+                departureTime: alt.departureTime,
+                arrivalTime: alt.arrivalTime,
+                durationMinutes: alt.durationMinutes || 0,
+                stops: alt.stops,
+                price: alt.price || "",
+                riskScore: alt.riskScore,
+                riskTier: alt.riskTier,
+                selectionToken: alt.selectionToken,
+                offerData: alt.offerData,
+              },
+              agency,
+            );
+          } catch (err: any) {
+            console.error("[disruption-select] agency notify failed:", err?.message || err);
+          }
+        }
+
+        return res.redirect(
+          baseRedirect(
+            `flight=${encodeURIComponent(flight.flightNumber)}&selected=${encodeURIComponent(alt.flightNumber)}`,
+          ),
+        );
+      } catch (err: any) {
+        console.error("[disruption-select] error:", err);
+        return res.status(500).send("Selection failed");
+      }
+    });
+
+    app.get("/api/disruption/keep/:travelerSelectionToken", async (req: Request, res: Response) => {
+      try {
+        const token = String(req.params.travelerSelectionToken || "");
+        if (!token) return res.status(400).send("Invalid link");
+        const [flight] = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dEq(tMonitoredFlights.travelerSelectionToken, token))
+          .limit(1);
+        if (!flight) return res.status(404).send("Flight not found");
+        if (flight.travelerSelectedOptionId) {
+          return res.redirect(
+            `/disruption/confirmed?already=true&flight=${encodeURIComponent(flight.flightNumber)}`,
+          );
+        }
+        await db
+          .update(tMonitoredFlights)
+          .set({
+            travelerSelectedOptionId: "keep_original",
+            travelerSelectedAt: new Date(),
+            agencyNotifiedAt: new Date(),
+          })
+          .where(dEq(tMonitoredFlights.id, flight.id));
+        return res.redirect(
+          `/disruption/confirmed?kept=true&flight=${encodeURIComponent(flight.flightNumber)}`,
+        );
+      } catch (err: any) {
+        console.error("[disruption-keep] error:", err);
+        return res.status(500).send("Failed to record selection");
+      }
+    });
+  }
+
   return httpServer;
 }

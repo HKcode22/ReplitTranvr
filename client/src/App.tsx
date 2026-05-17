@@ -39,6 +39,10 @@ import GuestBookingPage from "@/pages/guest-booking";
 import PrivacyPage from "@/pages/privacy";
 import TermsPage from "@/pages/terms";
 import NotFound from "@/pages/not-found";
+import AgencyAuthPage from "@/pages/agency/auth";
+import AgencyDashboardPage from "@/pages/agency/dashboard";
+import DisruptionSelectionPage from "@/pages/disruption/selection";
+import DisruptionConfirmedPage from "@/pages/disruption/confirmed";
 import { ErrorBoundary } from "@/components/error-boundary";
 
 function AuthenticatedLayout() {
@@ -160,6 +164,18 @@ function AppRouter() {
         <Route path="/book/:optionToken">
           <ErrorBoundary boundary="guest-booking"><GuestBookingPage /></ErrorBoundary>
         </Route>
+        <Route path="/agency/auth">
+          <ErrorBoundary boundary="agency-auth"><AgencyAuthPage /></ErrorBoundary>
+        </Route>
+        <Route path="/agency/dashboard">
+          <ErrorBoundary boundary="agency-dashboard"><AgencyDashboardPage /></ErrorBoundary>
+        </Route>
+        <Route path="/disruption/confirmed">
+          <ErrorBoundary boundary="disruption-confirmed"><DisruptionConfirmedPage /></ErrorBoundary>
+        </Route>
+        <Route path="/disruption/:token">
+          <ErrorBoundary boundary="disruption-selection"><DisruptionSelectionPage /></ErrorBoundary>
+        </Route>
         <Route path="/privacy" component={PrivacyPage} />
         <Route path="/terms" component={TermsPage} />
         <Route path="/manage-trip" component={ManageTripPage} />
@@ -183,6 +199,18 @@ function AppRouter() {
       </Route>
       <Route path="/book/:optionToken">
         <ErrorBoundary boundary="guest-booking"><GuestBookingPage /></ErrorBoundary>
+      </Route>
+      <Route path="/agency/auth">
+        <ErrorBoundary boundary="agency-auth"><AgencyAuthPage /></ErrorBoundary>
+      </Route>
+      <Route path="/agency/dashboard">
+        <ErrorBoundary boundary="agency-dashboard"><AgencyDashboardPage /></ErrorBoundary>
+      </Route>
+      <Route path="/disruption/confirmed">
+        <ErrorBoundary boundary="disruption-confirmed"><DisruptionConfirmedPage /></ErrorBoundary>
+      </Route>
+      <Route path="/disruption/:token">
+        <ErrorBoundary boundary="disruption-selection"><DisruptionSelectionPage /></ErrorBoundary>
       </Route>
       <Route path="/reset-password" component={ResetPasswordPage} />
       <Route path="/privacy" component={PrivacyPage} />
