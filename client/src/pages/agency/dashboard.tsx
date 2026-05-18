@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { AirportSearch } from "@/components/airport-search";
+import { AirportAutocomplete } from "@/components/airport-autocomplete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatFlightTime } from "@/lib/airportTimezone";
@@ -425,19 +425,19 @@ export default function AgencyDashboardPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-2">
                       <Label htmlFor="originIata">Origin</Label>
-                      <AirportSearch
+                      <AirportAutocomplete
                         value={form.originIata}
-                        onChange={(iata) => setForm((s) => ({ ...s, originIata: iata }))}
-                        placeholder="Search origin..."
+                        onSelect={(code) => setForm({ ...form, originIata: code })}
+                        placeholder="City or airport (e.g. Chicago, ORD)"
                         data-testid="input-origin-iata"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="destinationIata">Destination</Label>
-                      <AirportSearch
+                      <AirportAutocomplete
                         value={form.destinationIata}
-                        onChange={(iata) => setForm((s) => ({ ...s, destinationIata: iata }))}
-                        placeholder="Search destination..."
+                        onSelect={(code) => setForm({ ...form, destinationIata: code })}
+                        placeholder="City or airport (e.g. New York, JFK)"
                         data-testid="input-destination-iata"
                       />
                     </div>
