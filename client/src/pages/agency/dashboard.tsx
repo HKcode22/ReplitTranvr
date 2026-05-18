@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { AirportAutocomplete } from "@/components/airport-autocomplete";
+import { FlightSearchModal, type FoundFlight } from "@/components/flight-search-modal";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatFlightTime } from "@/lib/airportTimezone";
@@ -143,12 +143,10 @@ export default function AgencyDashboardPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [form, setForm] = useState({
-    flightNumber: "",
-    originIata: "",
-    destinationIata: "",
-    departureDate: "",
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [selectedFlight, setSelectedFlight] = useState<FoundFlight | null>(null);
+  const [travelerSheetOpen, setTravelerSheetOpen] = useState(false);
+  const [travelerForm, setTravelerForm] = useState({
     travelerName: "",
     travelerEmail: "",
     travelerPhone: "",
@@ -218,40 +216,57 @@ export default function AgencyDashboardPage() {
     setLocation("/agency/auth");
   };
 
+  const handleSearchSelect = (flight: FoundFlight) => {
+    setSelectedFlight(flight);
+    setSearchModalOpen(false);
+    setTravelerSheetOpen(true);
+    setFormError("");
+    setTravelerForm({ travelerName: "", travelerEmail: "", travelerPhone: "" });
+  };
+
+  const closeTravelerSheet = () => {
+    setTravelerSheetOpen(false);
+    setSelectedFlight(null);
+    setFormError("");
+    setTravelerForm({ travelerName: "", travelerEmail: "", travelerPhone: "" });
+  };
+
+  const parseDepartureParts = (
+    raw: string,
+  ): { departureDate: string; departureTime: string } => {
+    if (!raw) return { departureDate: "", departureTime: "" };
+    const m = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+    if (m) return { departureDate: m[1], departureTime: m[2] };
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) {
+      const departureDate = d.toISOString().slice(0, 10);
+      const departureTime = d.toISOString().slice(11, 16);
+      return { departureDate, departureTime };
+    }
+    return { departureDate: "", departureTime: raw };
+  };
+
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedFlight) return;
     setFormError("");
     setSubmitting(true);
     try {
-      const flightNumber = form.flightNumber.trim().toUpperCase().replace(/\s+/g, "");
-      const carrierIata = flightNumber.replace(/[^A-Z]/g, "").slice(0, 2) || flightNumber.slice(0, 2);
+      const { departureDate, departureTime } = parseDepartureParts(selectedFlight.departureTime);
       const payload = {
-        flightNumber,
-        carrierIata,
-        originIata: form.originIata.trim().toUpperCase(),
-        destinationIata: form.destinationIata.trim().toUpperCase(),
-        departureDate: form.departureDate,
-        travelerName: form.travelerName.trim(),
-        travelerEmail: form.travelerEmail.trim(),
-        travelerPhone: form.travelerPhone.trim() || null,
+        flightNumber: selectedFlight.flightNumber,
+        carrierIata: selectedFlight.carrierIata,
+        originIata: selectedFlight.originIata,
+        destinationIata: selectedFlight.destinationIata,
+        departureDate: departureDate || todayStr,
+        departureTime: departureTime || selectedFlight.departureTime,
+        travelerName: travelerForm.travelerName.trim(),
+        travelerEmail: travelerForm.travelerEmail.trim(),
+        travelerPhone: travelerForm.travelerPhone.trim() || null,
       };
-      if (!payload.originIata || !payload.destinationIata) {
-        setFormError("Pick an origin and destination airport from the suggestions.");
-        setSubmitting(false);
-        return;
-      }
       await apiRequest("POST", "/api/agency/flights", payload);
-      toast({ title: "Flight added", description: "We'll start monitoring it now." });
-      setForm({
-        flightNumber: "",
-        originIata: "",
-        destinationIata: "",
-        departureDate: "",
-        travelerName: "",
-        travelerEmail: "",
-        travelerPhone: "",
-      });
-      setSheetOpen(false);
+      toast({ title: "Flight added", description: "Monitoring active." });
+      closeTravelerSheet();
       qc.invalidateQueries({ queryKey: ["/api/agency/flights"] });
     } catch (err: any) {
       setFormError(err?.message || "Failed to add flight");
@@ -399,104 +414,99 @@ export default function AgencyDashboardPage() {
             >
               <RefreshCw className={`h-4 w-4 ${flightsQuery.isFetching ? "animate-spin" : ""}`} />
             </Button>
-            <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-              <SheetTrigger asChild>
-                <Button data-testid="button-add-flight">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add flight
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-                <SheetHeader>
-                  <SheetTitle>Add a flight to monitor</SheetTitle>
-                </SheetHeader>
-                <form onSubmit={handleAdd} className="space-y-4 mt-6" data-testid="form-add-flight">
-                  <div className="space-y-2">
-                    <Label htmlFor="flightNumber">Flight number</Label>
-                    <Input
-                      id="flightNumber"
-                      placeholder="UA487"
-                      required
-                      value={form.flightNumber}
-                      onChange={(e) => setForm({ ...form, flightNumber: e.target.value })}
-                      data-testid="input-flight-number"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="originIata">Origin</Label>
-                      <AirportAutocomplete
-                        value={form.originIata}
-                        onSelect={(code) => setForm({ ...form, originIata: code })}
-                        placeholder="City or airport (e.g. Chicago, ORD)"
-                        data-testid="input-origin-iata"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="destinationIata">Destination</Label>
-                      <AirportAutocomplete
-                        value={form.destinationIata}
-                        onSelect={(code) => setForm({ ...form, destinationIata: code })}
-                        placeholder="City or airport (e.g. New York, JFK)"
-                        data-testid="input-destination-iata"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="departureDate">Departure date</Label>
-                    <Input
-                      id="departureDate"
-                      type="date"
-                      required
-                      min={todayStr}
-                      value={form.departureDate}
-                      onChange={(e) => setForm({ ...form, departureDate: e.target.value })}
-                      data-testid="input-departure-date"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="travelerName">Traveler name</Label>
-                    <Input
-                      id="travelerName"
-                      required
-                      value={form.travelerName}
-                      onChange={(e) => setForm({ ...form, travelerName: e.target.value })}
-                      data-testid="input-traveler-name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="travelerEmail">Traveler email</Label>
-                    <Input
-                      id="travelerEmail"
-                      type="email"
-                      required
-                      value={form.travelerEmail}
-                      onChange={(e) => setForm({ ...form, travelerEmail: e.target.value })}
-                      data-testid="input-traveler-email"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="travelerPhone">Traveler phone (optional)</Label>
-                    <Input
-                      id="travelerPhone"
-                      type="tel"
-                      placeholder="+1 555 123 4567"
-                      value={form.travelerPhone}
-                      onChange={(e) => setForm({ ...form, travelerPhone: e.target.value })}
-                      data-testid="input-traveler-phone"
-                    />
-                  </div>
-                  {formError && (
-                    <p className="text-sm text-destructive" data-testid="text-add-flight-error">{formError}</p>
-                  )}
-                  <Button type="submit" className="w-full" disabled={submitting} data-testid="button-submit-flight">
-                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Start monitoring"}
-                  </Button>
-                </form>
-              </SheetContent>
-            </Sheet>
+            <Button
+              onClick={() => setSearchModalOpen(true)}
+              data-testid="button-add-flight"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add flight
+            </Button>
           </div>
         </div>
+
+        <FlightSearchModal
+          open={searchModalOpen}
+          onClose={() => setSearchModalOpen(false)}
+          onSelect={handleSearchSelect}
+        />
+
+        <Sheet
+          open={travelerSheetOpen}
+          onOpenChange={(o) => { if (!o) closeTravelerSheet(); }}
+        >
+          <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>Add Traveler Details</SheetTitle>
+            </SheetHeader>
+            {selectedFlight && (
+              <form onSubmit={handleAdd} className="space-y-4 mt-6" data-testid="form-add-traveler">
+                <Card className="p-4 bg-muted/40">
+                  <div className="text-xs text-muted-foreground">Flight</div>
+                  <div className="font-semibold text-foreground">
+                    {selectedFlight.flightNumber}
+                    {selectedFlight.carrierName && (
+                      <span className="ml-2 text-sm font-normal text-muted-foreground">
+                        {selectedFlight.carrierName}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-foreground mt-1">
+                    {selectedFlight.originIata} → {selectedFlight.destinationIata}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Departs {selectedFlight.departureTime}
+                  </div>
+                </Card>
+
+                <div className="space-y-2">
+                  <Label htmlFor="travelerName">Traveler name</Label>
+                  <Input
+                    id="travelerName"
+                    required
+                    value={travelerForm.travelerName}
+                    onChange={(e) => setTravelerForm({ ...travelerForm, travelerName: e.target.value })}
+                    data-testid="input-traveler-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="travelerEmail">Traveler email</Label>
+                  <Input
+                    id="travelerEmail"
+                    type="email"
+                    required
+                    value={travelerForm.travelerEmail}
+                    onChange={(e) => setTravelerForm({ ...travelerForm, travelerEmail: e.target.value })}
+                    data-testid="input-traveler-email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="travelerPhone">Traveler phone (optional)</Label>
+                  <Input
+                    id="travelerPhone"
+                    type="tel"
+                    placeholder="+1 555 000 0000"
+                    value={travelerForm.travelerPhone}
+                    onChange={(e) => setTravelerForm({ ...travelerForm, travelerPhone: e.target.value })}
+                    data-testid="input-traveler-phone"
+                  />
+                </div>
+                {formError && (
+                  <p className="text-sm text-destructive" data-testid="text-add-flight-error">{formError}</p>
+                )}
+                <Button type="submit" className="w-full" disabled={submitting} data-testid="button-submit-flight">
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    "Start Monitoring"
+                  )}
+                </Button>
+              </form>
+            )}
+          </SheetContent>
+        </Sheet>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <StatCard
@@ -568,7 +578,7 @@ export default function AgencyDashboardPage() {
                   {travelerFilter ? "Try clearing the filter." : "Add your first flight to get started."}
                 </p>
                 {!travelerFilter && (
-                  <Button className="mt-6" onClick={() => setSheetOpen(true)}>
+                  <Button className="mt-6" onClick={() => setSearchModalOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add flight
                   </Button>

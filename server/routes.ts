@@ -9928,6 +9928,189 @@ export async function registerRoutes(
     });
 
     // =================================================================
+    // Flight search — used by the Add Flight UI to verify a flight exists
+    // before adding it to monitoring. Calls AeroDataBox in two modes:
+    //   - "flightNumber": single flight lookup
+    //   - "route": filtered departures from an origin to a destination
+    // Errors and missing API key are normalized into an empty result with
+    // a user-readable message so the UI never sees a thrown error.
+    // =================================================================
+    const flightSearchSchema = z.object({
+      mode: z.enum(["route", "flightNumber"]),
+      origin: z.string().optional(),
+      destination: z.string().optional(),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+      flightNumber: z.string().optional(),
+    });
+
+    interface FoundFlightResult {
+      flightNumber: string;
+      carrierIata: string;
+      carrierName: string;
+      originIata: string;
+      originName: string;
+      destinationIata: string;
+      destinationName: string;
+      departureTime: string;
+      arrivalTime: string;
+      status: string;
+    }
+
+    const extractFlightNumber = (f: any): string => {
+      const raw = (f?.number || f?.iata || "").toString().replace(/\s+/g, "").toUpperCase();
+      return raw;
+    };
+
+    const deriveCarrierIata = (flightNumber: string, airline: any): string => {
+      const fromAirline = (airline?.iata || "").toString().toUpperCase();
+      if (fromAirline.length >= 2 && fromAirline.length <= 3) return fromAirline;
+      const letters = flightNumber.replace(/[^A-Z]/g, "").slice(0, 2);
+      return letters || flightNumber.slice(0, 2);
+    };
+
+    const mapAdbFlight = (f: any): FoundFlightResult | null => {
+      const flightNumber = extractFlightNumber(f);
+      if (!flightNumber) return null;
+      const departure = f?.departure || {};
+      const arrival = f?.arrival || {};
+      const depTime: string =
+        departure?.scheduledTime?.local ||
+        departure?.scheduledTime?.utc ||
+        "";
+      const arrTime: string =
+        arrival?.scheduledTime?.local ||
+        arrival?.scheduledTime?.utc ||
+        "";
+      const originIata: string = (departure?.airport?.iata || "").toString().toUpperCase();
+      const destinationIata: string = (arrival?.airport?.iata || "").toString().toUpperCase();
+      if (!depTime || !originIata || !destinationIata) return null;
+      return {
+        flightNumber,
+        carrierIata: deriveCarrierIata(flightNumber, f?.airline),
+        carrierName: f?.airline?.name || "",
+        originIata,
+        originName: departure?.airport?.name || "",
+        destinationIata,
+        destinationName: arrival?.airport?.name || "",
+        departureTime: depTime,
+        arrivalTime: arrTime,
+        status: f?.status || "Unknown",
+      };
+    };
+
+    app.post("/api/agency/flights/search", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const parsed = flightSearchSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return res
+            .status(400)
+            .json({ flights: [], message: parsed.error.errors[0]?.message || "Invalid input" });
+        }
+        const { mode, date } = parsed.data;
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (date < todayStr) {
+          return res.status(400).json({ flights: [], message: "Date must be today or later" });
+        }
+
+        if (mode === "route") {
+          const origin = (parsed.data.origin || "").trim().toUpperCase();
+          const destination = (parsed.data.destination || "").trim().toUpperCase();
+          if (!origin || !destination) {
+            return res.status(400).json({ flights: [], message: "Origin and destination are required" });
+          }
+          const apiKey = process.env.AERODATABOX_API_KEY;
+          if (!apiKey) {
+            console.warn("[flightSearch] AERODATABOX_API_KEY not set");
+            return res.json({ flights: [], message: "Flight search unavailable — API key not configured." });
+          }
+          const url =
+            `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(origin)}` +
+            `/${encodeURIComponent(date)}T00:00/${encodeURIComponent(date)}T23:59` +
+            `?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withCargo=false&withPrivate=false`;
+          console.log(`[flightSearch] route ${origin}->${destination} ${date}`);
+          try {
+            const resp = await fetch(url, {
+              headers: {
+                "x-rapidapi-key": apiKey,
+                "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
+              },
+            });
+            if (!resp.ok) {
+              console.warn(`[flightSearch] HTTP ${resp.status} for route ${origin}->${destination}`);
+              return res.json({ flights: [], message: "No flights found on this route for the selected date." });
+            }
+            const raw: any = await resp.json();
+            const departures: any[] = Array.isArray(raw)
+              ? raw
+              : Array.isArray(raw?.departures)
+              ? raw.departures
+              : [];
+            const matched = departures
+              .filter((f: any) => {
+                const arrIata = (f?.arrival?.airport?.iata || "").toString().toUpperCase();
+                const hasSchedule = !!(f?.departure?.scheduledTime?.local || f?.departure?.scheduledTime?.utc);
+                return arrIata === destination && hasSchedule;
+              })
+              .map(mapAdbFlight)
+              .filter((x): x is FoundFlightResult => x !== null);
+            console.log(`[flightSearch] route returned ${matched.length} matching flights`);
+            if (matched.length === 0) {
+              return res.json({ flights: [], message: "No flights found on this route for the selected date." });
+            }
+            return res.json({ flights: matched });
+          } catch (err: any) {
+            console.warn(`[flightSearch] route request failed:`, err?.message || err);
+            return res.json({ flights: [], message: "No flights found on this route for the selected date." });
+          }
+        }
+
+        // mode === "flightNumber"
+        const flightNumber = (parsed.data.flightNumber || "")
+          .replace(/\s+/g, "")
+          .toUpperCase();
+        if (!flightNumber) {
+          return res.status(400).json({ flights: [], message: "Flight number is required" });
+        }
+        const apiKey = process.env.AERODATABOX_API_KEY;
+        if (!apiKey) {
+          console.warn("[flightSearch] AERODATABOX_API_KEY not set");
+          return res.json({ flights: [], message: "Flight search unavailable — API key not configured." });
+        }
+        const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(flightNumber)}/${encodeURIComponent(date)}`;
+        console.log(`[flightSearch] flightNumber ${flightNumber} ${date}`);
+        try {
+          const resp = await fetch(url, {
+            headers: {
+              "x-rapidapi-key": apiKey,
+              "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
+            },
+          });
+          if (!resp.ok) {
+            console.warn(`[flightSearch] HTTP ${resp.status} for ${flightNumber} ${date}`);
+            return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
+          }
+          const raw: any = await resp.json();
+          const arr: any[] = Array.isArray(raw) ? raw : [];
+          if (arr.length === 0) {
+            return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
+          }
+          const mapped = mapAdbFlight(arr[0]);
+          if (!mapped) {
+            return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
+          }
+          console.log(`[flightSearch] flightNumber returned 1 result status=${mapped.status}`);
+          return res.json({ flights: [mapped] });
+        } catch (err: any) {
+          console.warn(`[flightSearch] flightNumber request failed:`, err?.message || err);
+          return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
+        }
+      } catch (err: any) {
+        console.error("[flightSearch] unexpected error:", err);
+        return res.json({ flights: [], message: "Flight search failed. Please try again." });
+      }
+    });
+
+    // =================================================================
     // Public traveler-facing disruption endpoints (no auth required).
     // =================================================================
     app.get("/api/disruption/flight/:travelerSelectionToken", async (req: Request, res: Response) => {
