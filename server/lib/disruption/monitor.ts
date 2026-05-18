@@ -11,11 +11,17 @@ import {
 import { scoreFlightRisk } from "./riskScorer";
 import { findLowRiskAlternatives } from "./alternativeFinder";
 import { sendTravelerAlert } from "./alertSender";
+import { getHistoricalOtp, type HistoricalOtpResult } from "./historicalOtp";
 
 const INTERVAL_MS = 30 * 60 * 1000;
 
 let intervalHandle: NodeJS.Timeout | null = null;
 let cycleRunning = false;
+
+// Historical OTP is a Tier-3 AeroDataBox call (6 units). Cache the result in
+// memory per monitored-flight so we only pay for it once over the lifetime
+// of the flight. Cleared when the flight transitions out of "active".
+const historicalOtpCache = new Map<number, HistoricalOtpResult>();
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -32,6 +38,13 @@ async function processFlight(flight: MonitoredFlight): Promise<{ alertFired: boo
     `[monitor] scoring flight_id=${flight.id} ${flight.flightNumber} ${flight.originIata}->${flight.destinationIata} ${flight.departureDate}`,
   );
 
+  // Fetch historical OTP once per flight; subsequent cycles reuse the cached value.
+  if (!historicalOtpCache.has(flight.id)) {
+    const otp = await getHistoricalOtp(flight.flightNumber, flight.departureDate).catch(() => null);
+    if (otp) historicalOtpCache.set(flight.id, otp);
+  }
+  const historicalOtpData = historicalOtpCache.get(flight.id) || null;
+
   const risk = await scoreFlightRisk({
     flightNumber: flight.flightNumber,
     carrierIata: flight.carrierIata,
@@ -39,6 +52,7 @@ async function processFlight(flight: MonitoredFlight): Promise<{ alertFired: boo
     departureTime: flight.departureTime,
     originIata: flight.originIata,
     destinationIata: flight.destinationIata,
+    historicalOtpCache: historicalOtpData,
   });
 
   await db.insert(riskScoreHistory).values({
@@ -48,6 +62,27 @@ async function processFlight(flight: MonitoredFlight): Promise<{ alertFired: boo
     signals: {
       signals: risk.signals,
       cancelled: risk.cancelled,
+      horizon: risk.signals.horizon,
+      hoursUntilDeparture: risk.signals.hoursUntilDeparture,
+      nasOrigin: {
+        hasGroundStop: risk.nasOrigin.hasGroundStop,
+        hasGroundDelay: risk.nasOrigin.hasGroundDelay,
+        avgDelayMinutes: risk.nasOrigin.avgDelayMinutes,
+        programs: risk.nasOrigin.programs,
+      },
+      nasDestination: {
+        hasGroundStop: risk.nasDestination.hasGroundStop,
+        hasGroundDelay: risk.nasDestination.hasGroundDelay,
+        avgDelayMinutes: risk.nasDestination.avgDelayMinutes,
+        programs: risk.nasDestination.programs,
+      },
+      carrierHealth: {
+        cancellationRate24h: risk.carrierHealth.cancellationRate24h,
+        avgDelay24h: risk.carrierHealth.avgDelay24h,
+        sampleSize: risk.carrierHealth.sampleSize,
+        healthScore: risk.carrierHealth.healthScore,
+        reliable: risk.carrierHealth.reliable,
+      },
       originWeather: {
         flightCategory: risk.originWeather.flightCategory,
         hasThunderstorm: risk.originWeather.hasThunderstorm,
@@ -73,6 +108,10 @@ async function processFlight(flight: MonitoredFlight): Promise<{ alertFired: boo
         : null,
     },
   });
+
+  if (flight.status !== "active") {
+    historicalOtpCache.delete(flight.id);
+  }
 
   // Pull the departure time from the live status into the row the first
   // time we see it, so future scoring cycles can apply the time-of-day
