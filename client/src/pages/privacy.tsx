@@ -1,5 +1,5 @@
 // Travnr Privacy Policy. Versioned via the "Last updated" line + the
-// `#policy-v1` anchor below; bump both when the substantive copy changes.
+// `#policy-v2` anchor below; bump both when the substantive copy changes.
 // Registered legal entity is BMA North America LLC, doing business as Travnr.
 
 import { Link } from "wouter";
@@ -38,11 +38,11 @@ export default function PrivacyPage() {
           Privacy Policy
         </h1>
         <p
-          id="policy-v1"
+          id="policy-v2"
           className="text-sm text-muted-foreground mb-10"
           data-testid="text-privacy-updated"
         >
-          Version 1.0 · Last updated: May 2, 2026
+          Version 1.1 · Last updated: May 18, 2026
         </p>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none prose-headings:font-serif prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4 prose-p:leading-relaxed prose-li:my-1">
@@ -102,7 +102,7 @@ export default function PrivacyPage() {
             We may also disclose information if required by law, to protect rights and safety, to investigate fraud or abuse, or as part of a merger, acquisition, financing, or sale of assets.
           </p>
           <p>
-            Travnr does not sell personal information in the traditional sense. We may use aggregated or de-identified travel insights that do not identify individual users. If we engage in activities that legally require opt-out rights or additional disclosures, we will provide those rights and disclosures as required by law.
+            <strong>Travnr does not sell your personal information, and we do not share your personal information — including your mobile phone number — with third parties or affiliates for marketing or promotional purposes.</strong> Information is shared only with the service providers listed above, and only as needed to operate and deliver the Services to you. We may use aggregated or de-identified travel insights that do not identify individual users. If we engage in activities that legally require opt-out rights or additional disclosures, we will provide those rights and disclosures as required by law.
           </p>
 
           <h2>5. Cookies and Analytics</h2>
@@ -118,22 +118,33 @@ export default function PrivacyPage() {
             You can opt out of marketing emails by using the unsubscribe link if available. If we send SMS messages, you may be able to opt out by replying STOP. Even if you opt out of marketing, we may still send service-related messages about your requests, bookings, account, or security.
           </p>
 
-          <h2>7. Data Retention</h2>
+          <h2>7. SMS and Mobile Messaging</h2>
+          <p>
+            If you provide a mobile phone number, Travnr may send you SMS messages related to your travel requests, bookings, account, or service updates, including alerts about flight disruptions and alternative options.
+          </p>
+          <ul>
+            <li><strong>Mobile numbers are not shared with third parties</strong> or affiliates for marketing or promotional purposes. We share mobile numbers only with the service providers that help us deliver these messages (for example, our SMS gateway), and only as needed to operate the service.</li>
+            <li><strong>Message frequency varies</strong> based on your activity, the travel requests you make, and the status of any flights or bookings we are monitoring on your behalf.</li>
+            <li><strong>Message and data rates may apply</strong>, depending on your mobile carrier and plan.</li>
+            <li>You can opt out of SMS at any time by replying <strong>STOP</strong> to any message from Travnr. You can reply <strong>HELP</strong> for help. Opting out of SMS does not affect your ability to receive service-related communications by email.</li>
+          </ul>
+
+          <h2>8. Data Retention</h2>
           <p>
             We retain information for as long as reasonably necessary to provide Travnr, complete transactions, support users, comply with legal obligations, resolve disputes, prevent fraud, and improve our services. Retention periods may vary depending on the type of information and the reason it was collected.
           </p>
 
-          <h2>8. Security</h2>
+          <h2>9. Security</h2>
           <p>
             We use reasonable administrative, technical, and organizational safeguards designed to protect information. However, no method of transmission or storage is completely secure, and we cannot guarantee absolute security.
           </p>
 
-          <h2>9. Children's Privacy</h2>
+          <h2>10. Children's Privacy</h2>
           <p>
             Travnr is not intended for children under 13. We do not knowingly collect personal information from children under 13. If you believe a child has provided us personal information, contact us and we will take appropriate steps.
           </p>
 
-          <h2>10. U.S. State Privacy Rights</h2>
+          <h2>11. U.S. State Privacy Rights</h2>
           <p>
             Depending on where you live, you may have privacy rights under applicable state laws, such as the right to access, correct, delete, or receive a copy of certain personal information, and the right to opt out of certain uses of personal information. We will respond to valid requests as required by applicable law.
           </p>
@@ -141,17 +152,17 @@ export default function PrivacyPage() {
             California residents may have additional rights under the California Consumer Privacy Act, as amended, if it applies to Travnr. These rights may include the right to know, delete, correct, and opt out of certain sales or sharing of personal information.
           </p>
 
-          <h2>11. International Users</h2>
+          <h2>12. International Users</h2>
           <p>
             Travnr is operated from the United States. If you use Travnr from outside the United States, your information may be processed and stored in the United States or other countries where our service providers operate.
           </p>
 
-          <h2>12. Changes to This Privacy Policy</h2>
+          <h2>13. Changes to This Privacy Policy</h2>
           <p>
             We may update this Privacy Policy from time to time. The updated version will be posted on this page with a new "Last updated" date. Your continued use of Travnr after an update means you acknowledge the updated policy.
           </p>
 
-          <h2>13. Contact Us</h2>
+          <h2>14. Contact Us</h2>
           <p>
             For privacy questions or requests, contact us at{" "}
             <a href="mailto:hello@travnr.com" data-testid="link-privacy-contact-hello">hello@travnr.com</a>.

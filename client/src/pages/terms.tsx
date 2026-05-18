@@ -1,5 +1,5 @@
 // Travnr Terms of Service. Versioned via the "Last updated" line + the
-// `#terms-v1` anchor below; bump both when the substantive copy changes.
+// `#terms-v2` anchor below; bump both when the substantive copy changes.
 // Registered legal entity is BMA North America LLC, doing business as Travnr.
 // Governing-law jurisdiction (Missouri, USA) is set in §19.
 
@@ -39,11 +39,11 @@ export default function TermsPage() {
           Terms of Service
         </h1>
         <p
-          id="terms-v1"
+          id="terms-v2"
           className="text-sm text-muted-foreground mb-10"
           data-testid="text-terms-updated"
         >
-          Version 1.0 · Last updated: May 2, 2026
+          Version 1.1 · Last updated: May 18, 2026
         </p>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none prose-headings:font-serif prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4 prose-p:leading-relaxed prose-li:my-1">
@@ -90,9 +90,23 @@ export default function TermsPage() {
             If booking or payment features are available, charges, refunds, cancellations, baggage fees, change fees, and travel credits may be governed by the policies of the underlying travel provider and/or our payment processor. Travnr does not guarantee refunds, fee waivers, or schedule changes unless expressly stated in writing.
           </p>
 
-          <h2>8. Communications Consent</h2>
+          <h2>8. Communications Consent and SMS Program</h2>
           <p>
-            By providing your phone number or email or by calling Travnr, you agree that Travnr and its providers may contact you about your request and the Services by telephone call, SMS message, or email, including using automated systems. Message and data rates may apply. If we send SMS messages, you may be able to opt out by replying STOP. Opting out of marketing communications does not stop service-related messages about your requests, bookings, account, or security.
+            By providing your phone number or email, or by calling Travnr, you agree that Travnr and its providers may contact you about your request and the Services by telephone call, SMS message, or email, including using automated systems.
+          </p>
+          <p><strong>Travnr Travel Alerts</strong> — our SMS program — operates under the following terms:</p>
+          <ul>
+            <li><strong>Program name:</strong> Travnr Travel Alerts.</li>
+            <li><strong>Program description:</strong> Transactional and service-related text messages from Travnr regarding your travel requests, the tailored travel options we generate for you, booking confirmations, schedule and itinerary updates, flight-disruption alerts, alternative-flight options, and customer support follow-ups. We do not send marketing or promotional SMS through this program.</li>
+            <li><strong>Message frequency:</strong> Message frequency varies based on your activity, the travel requests you submit, and the status of any flights or bookings we are monitoring on your behalf.</li>
+            <li><strong>Message and data rates:</strong> Message and data rates may apply, depending on your mobile carrier and plan. Travnr does not charge a fee for SMS, but your carrier's standard rates will apply.</li>
+            <li><strong>Opt-out:</strong> You can cancel the SMS service at any time by texting <strong>STOP</strong> to any message you receive from us. After you send <strong>STOP</strong>, we will send you a confirmation message and will not send any additional SMS messages. You can opt back in by signing up again.</li>
+            <li><strong>Help:</strong> If at any time you need help or have questions about the program, reply <strong>HELP</strong> to any message, or contact us at <a href="mailto:hello@travnr.com" data-testid="link-terms-sms-help">hello@travnr.com</a>.</li>
+            <li><strong>Carriers:</strong> Carriers are not liable for delayed or undelivered messages.</li>
+            <li><strong>Privacy:</strong> See our <Link href="/privacy" data-testid="link-terms-sms-privacy" className="underline">Privacy Policy</Link> for how we handle the mobile information you provide. Mobile numbers are not shared with third parties or affiliates for marketing or promotional purposes.</li>
+          </ul>
+          <p>
+            Opting out of marketing communications does not stop service-related messages about your requests, bookings, account, or security where permitted by law.
           </p>
 
           <h2>9. Call Recording and Transcription</h2>
