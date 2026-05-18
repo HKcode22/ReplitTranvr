@@ -9396,7 +9396,7 @@ export async function registerRoutes(
       riskScoreHistory: tRiskScoreHistory,
       disruptionAlternatives: tDisruptionAlternatives,
     } = await import("@shared/schema");
-    const { eq: dEq, and: dAnd, desc: dDesc } = await import("drizzle-orm");
+    const { eq: dEq, and: dAnd, desc: dDesc, inArray: dInArray } = await import("drizzle-orm");
     const { randomUUID: dRandomUUID } = await import("crypto");
 
     const agencyRegisterSchema = z.object({
@@ -9511,7 +9511,12 @@ export async function registerRoutes(
         const flights = await db
           .select()
           .from(tMonitoredFlights)
-          .where(dEq(tMonitoredFlights.agencyId, agency.id))
+          .where(
+            dAnd(
+              dEq(tMonitoredFlights.agencyId, agency.id),
+              dInArray(tMonitoredFlights.status, ["active", "completed"]),
+            ),
+          )
           .orderBy(dDesc(tMonitoredFlights.riskScore));
 
         const flightsWithAlts = await Promise.all(

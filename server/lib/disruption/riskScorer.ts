@@ -53,17 +53,17 @@ function parseHour(departureTime: string | null | undefined): number | null {
 function timeOfDayPoints(hour: number | null): number {
   if (hour == null) return 0;
   if (hour < 14) return 0;
-  if (hour < 18) return 2;
-  if (hour < 20) return 4;
-  return 5;
+  if (hour < 18) return 1;
+  if (hour < 20) return 2;
+  return 3; // max 3 instead of 5
 }
 
 function historicalPoints(hour: number | null): number {
-  // Static heuristic: later flights of the day inherit accumulated delays.
-  if (hour == null) return 3;
-  if (hour >= 20) return 10;
-  if (hour >= 18) return 8;
-  return 3;
+  if (hour == null) return 1;
+  if (hour >= 20) return 5;  // max 5 instead of 10
+  if (hour >= 18) return 3;
+  if (hour >= 14) return 2;
+  return 1; // baseline for morning/midday flights
 }
 
 function tierFromScore(score: number): RiskTier {

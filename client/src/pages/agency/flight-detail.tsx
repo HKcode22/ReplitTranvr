@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { formatFlightTime } from "@/lib/airportTimezone";
 import {
   Loader2, Plane, ArrowLeft, RefreshCw, Wand2, RotateCcw, AlertTriangle, CheckCircle2,
 } from "lucide-react";
@@ -264,8 +265,10 @@ export default function AgencyFlightDetailPage() {
                 {flight.flightNumber} · {flight.originIata} → {flight.destinationIata}
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {flight.departureDate}
-                {flight.departureTime ? ` at ${flight.departureTime}` : ""} · for{" "}
+                {flight.departureTime
+                  ? formatFlightTime(flight.departureTime, flight.originIata)
+                  : flight.departureDate}
+                {" "}· for{" "}
                 <span className="text-foreground">{flight.travelerName}</span>
               </p>
               <p className="text-xs text-muted-foreground mt-2">
@@ -456,7 +459,7 @@ export default function AgencyFlightDetailPage() {
                           )}
                         </div>
                         <div className="text-sm text-foreground mt-1">
-                          {alt.departureTime} → {alt.arrivalTime}
+                          {formatFlightTime(alt.departureTime, flight.originIata)} → {alt.arrivalTime}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
                           {alt.stops === 0 ? "Nonstop" : `${alt.stops} stop${alt.stops > 1 ? "s" : ""}`} ·{" "}
