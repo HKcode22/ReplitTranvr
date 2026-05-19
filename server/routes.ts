@@ -9400,6 +9400,7 @@ export async function registerRoutes(
     } = await import("@shared/schema");
     const { eq: dEq, and: dAnd, desc: dDesc, inArray: dInArray, lt: dLt, isNotNull: dIsNotNull } = await import("drizzle-orm");
     const { getFlightStatus: dGetFlightStatus } = await import("./lib/disruption/flightStatus");
+    const { aerodataboxFetch: dAdbFetch } = await import("./lib/disruption/aerodataboxLimiter");
     const { randomUUID: dRandomUUID } = await import("crypto");
 
     const agencyRegisterSchema = z.object({
@@ -9783,7 +9784,10 @@ export async function registerRoutes(
           .where(dAnd(dEq(tMonitoredFlights.id, id), dEq(tMonitoredFlights.agencyId, agency.id)))
           .limit(1);
         if (!flight) return res.status(404).json({ error: "Flight not found" });
-        await scoreFlightOnce(id);
+        // Manual rescore bypasses the NAS cache so the dashboard "Refresh"
+        // button always reflects the current FAA NAS state, not a 10-min
+        // stale snapshot.
+        await scoreFlightOnce(id, { forceRefreshNas: true });
         return res.json({ success: true });
       } catch (err: any) {
         console.error("[agency-rescore] error:", err);
@@ -10111,7 +10115,7 @@ export async function registerRoutes(
           const fn = flightNumber.trim().toUpperCase().replace(/\s+/g, "");
           const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(fn)}/${encodeURIComponent(date)}`;
           console.log(`[flightSearch] number lookup ${fn} ${date}`);
-          const resp = await fetch(url, { headers });
+          const resp = await dAdbFetch(url, { headers });
           if (!resp.ok) {
             console.warn(`[flightSearch] AeroDataBox ${resp.status} for ${fn}`);
             return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
@@ -10155,8 +10159,8 @@ export async function registerRoutes(
             `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(orig)}/${date}T${fromTime}/${date}T${toTime}?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withCargo=false&withPrivate=false`;
           console.log(`[flightSearch] route search ${orig}->${dest} ${date} URL_TEST=${date}T00:00`);
           const [respAm, respPm] = await Promise.all([
-            fetch(buildUrl("00:00", "11:59"), { headers }),
-            fetch(buildUrl("12:00", "23:59"), { headers }),
+            dAdbFetch(buildUrl("00:00", "11:59"), { headers }),
+            dAdbFetch(buildUrl("12:00", "23:59"), { headers }),
           ]);
           console.log(`[flightSearch] AeroDataBox FIDS status am=${respAm.status} pm=${respPm.status}`);
           if (!respAm.ok && !respPm.ok) {
@@ -10562,7 +10566,12 @@ export async function registerRoutes(
           const peakTier =
             peakScore >= 60 ? "red" : peakScore >= 25 ? "amber" : "green";
 
-          const status = await dGetFlightStatus(flight.flightNumber, flight.departureDate).catch(() => null);
+          const status = await dGetFlightStatus(
+            flight.flightNumber,
+            flight.departureDate,
+            flight.originIata,
+            flight.destinationIata,
+          ).catch(() => null);
           const actualCancelled = !!status?.cancelled;
           const actualDelay = status?.delayMinutes || 0;
           const disrupted = actualCancelled || actualDelay >= 30;

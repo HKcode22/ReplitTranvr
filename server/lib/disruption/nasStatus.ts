@@ -115,18 +115,23 @@ function entryAvgDelay(entry: any): number {
   return 0;
 }
 
-export async function getNasStatus(iataCode: string): Promise<NasStatusResult> {
+export async function getNasStatus(
+  iataCode: string,
+  options?: { forceRefresh?: boolean },
+): Promise<NasStatusResult> {
   const code = (iataCode || "").trim().toUpperCase();
   if (!code) return defaultResult();
 
   const cached = cache.get(code);
   const now = Date.now();
-  if (cached && now - cached.fetchedAt < CACHE_TTL_MS) {
+  if (!options?.forceRefresh && cached && now - cached.fetchedAt < CACHE_TTL_MS) {
     console.log(`[nasStatus] cache hit ${code}`);
     return cached.result;
   }
 
-  console.log(`[nasStatus] fetching ${code}`);
+  console.log(
+    `[nasStatus] fetching ${code}${options?.forceRefresh ? " (force-refresh)" : ""}`,
+  );
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -147,6 +152,23 @@ export async function getNasStatus(iataCode: string): Promise<NasStatusResult> {
     }
     const payload: unknown = await resp.json().catch(() => null);
     const entries = flattenEntries(payload);
+
+    // Diagnostic: when the FAA returns an unexpected shape we want to see
+    // the raw payload. For ORD specifically (and for force-refresh calls),
+    // log the matching entries verbatim so we can see what the upstream
+    // actually reported.
+    const matchingEntries = entries.filter((e) => entryAirportCode(e) === code);
+    if (code === "ORD" || options?.forceRefresh) {
+      const payloadStr = (() => {
+        try { return JSON.stringify(payload); } catch { return "<unserializable>"; }
+      })();
+      console.log(
+        `[nasStatus] raw payload preview for ${code} (${payloadStr.length} chars total): ${payloadStr.slice(0, 2000)}`,
+      );
+      console.log(
+        `[nasStatus] ${code} matching entries (${matchingEntries.length}): ${JSON.stringify(matchingEntries)}`,
+      );
+    }
 
     const result = defaultResult();
     for (const entry of entries) {

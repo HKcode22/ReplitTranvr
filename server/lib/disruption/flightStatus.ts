@@ -1,3 +1,5 @@
+import { aerodataboxFetch } from "./aerodataboxLimiter";
+
 export interface FlightStatusResult {
   flightNumber: string;
   status: string;
@@ -36,9 +38,183 @@ function normalizeStatus(raw: string | undefined | null): string {
   return map[s] || s;
 }
 
+function pickBestFlight(
+  results: any[],
+  originIata?: string,
+  destinationIata?: string,
+): any {
+  if (!results || results.length === 0) return {};
+
+  // Narrow to legs whose origin (and destination, if provided) match the
+  // monitored flight. AeroDataBox sometimes returns multiple unrelated legs
+  // for the same number (e.g. AA4551 = DCA→JFK regional AND ORD→LGA), and
+  // without this filter the scorer can lock onto the wrong leg.
+  let pool = results;
+  if (originIata) {
+    const origUpper = originIata.toUpperCase();
+    const destUpper = destinationIata ? destinationIata.toUpperCase() : null;
+    const filtered = results.filter((f: any) => {
+      const fOrig = String(f.departure?.airport?.iata || "").toUpperCase();
+      if (fOrig !== origUpper) return false;
+      if (destUpper) {
+        const fDest = String(f.arrival?.airport?.iata || "").toUpperCase();
+        if (fDest !== destUpper) return false;
+      }
+      return true;
+    });
+    if (filtered.length > 0) pool = filtered;
+  }
+
+  if (pool.length === 1) return pool[0];
+
+  const now = Date.now();
+  const scored = pool.map((f: any) => {
+    const dep =
+      f.departure?.scheduledTime?.utc ||
+      f.departure?.revisedTime?.utc ||
+      f.departure?.actualTime?.utc ||
+      null;
+
+    const depMs = dep ? new Date(dep).getTime() : null;
+    const status = String(f.status || "").toLowerCase();
+    const cancelled = status.includes("cancel");
+
+    let score = 0;
+
+    if (depMs !== null) {
+      const diffHours = (depMs - now) / 3_600_000;
+      if (diffHours > 0) {
+        // Future flight — strongly prefer, favour soonest
+        score = 1000 - Math.min(diffHours, 48) * 10;
+      } else if (diffHours > -3) {
+        // Departed within last 3 hours — still relevant (could be en route)
+        score = 500 + diffHours * 50;
+      } else {
+        // Departed more than 3 hours ago — likely a completed earlier leg
+        score = 100 + diffHours;
+      }
+    }
+
+    // Never prefer a cancelled leg over an active one
+    if (cancelled) score -= 200;
+
+    return { flight: f, score };
+  });
+
+  scored.sort((a: any, b: any) => b.score - a.score);
+  return scored[0].flight;
+}
+
+async function fetchFlightsByNumber(
+  flightNumberPath: string,
+  date: string,
+  apiKey: string,
+): Promise<any[] | null> {
+  const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(
+    flightNumberPath,
+  )}/${encodeURIComponent(date)}`;
+  console.log(`[flightStatus] number lookup "${flightNumberPath}" ${date}`);
+  try {
+    const resp = await aerodataboxFetch(url, {
+      headers: {
+        "x-rapidapi-key": apiKey,
+        "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
+      },
+    });
+    if (!resp.ok) {
+      console.warn(`[flightStatus] HTTP ${resp.status} for "${flightNumberPath}" ${date}`);
+      return null;
+    }
+    const raw: any = await resp.json();
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+    return raw;
+  } catch (err: any) {
+    console.warn(
+      `[flightStatus] number lookup failed for "${flightNumberPath}" ${date}:`,
+      err?.message || err,
+    );
+    return null;
+  }
+}
+
+// FIDS fallback: list all departures from the origin airport on `date` and
+// find one whose flight number matches. Useful for codeshare flights that
+// the by-number endpoint cannot resolve (e.g., AA4551).
+async function fetchFlightFromFids(
+  normalizedFlight: string,
+  originIata: string,
+  date: string,
+  apiKey: string,
+  destinationIata?: string,
+): Promise<any | null> {
+  const headers = {
+    "x-rapidapi-key": apiKey,
+    "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
+  };
+  const buildUrl = (fromTime: string, toTime: string) =>
+    `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(
+      originIata,
+    )}/${date}T${fromTime}/${date}T${toTime}?direction=Departure&withLeg=true&withCancelled=true&withCodeshared=true&withCargo=false&withPrivate=false`;
+  console.log(`[flightStatus] FIDS fallback ${originIata} ${date} for ${normalizedFlight}`);
+  try {
+    const [respAm, respPm] = await Promise.all([
+      aerodataboxFetch(buildUrl("00:00", "11:59"), { headers }),
+      aerodataboxFetch(buildUrl("12:00", "23:59"), { headers }),
+    ]);
+    const parseDepartures = async (resp: Response): Promise<any[]> => {
+      if (!resp.ok) return [];
+      try {
+        const raw: any = await resp.json();
+        if (!raw) return [];
+        if (raw.departures && Array.isArray(raw.departures)) return raw.departures;
+        if (Array.isArray(raw)) return raw;
+        return [];
+      } catch {
+        return [];
+      }
+    };
+    const [depAm, depPm] = await Promise.all([parseDepartures(respAm), parseDepartures(respPm)]);
+    const departures = [...depAm, ...depPm];
+    if (departures.length === 0) return null;
+    const matches = departures.filter((f: any) => {
+      const num = String(f.number || f.iata || f.flightNumber || "")
+        .replace(/\s+/g, "")
+        .toUpperCase();
+      if (num === normalizedFlight) return true;
+      // Also check codeshare list, where the operating number may differ
+      const codeshares = Array.isArray(f.codeshareStatus?.codeshares)
+        ? f.codeshareStatus.codeshares
+        : Array.isArray(f.codeshares)
+          ? f.codeshares
+          : [];
+      return codeshares.some(
+        (cs: any) =>
+          String(cs?.number || cs?.iata || "")
+            .replace(/\s+/g, "")
+            .toUpperCase() === normalizedFlight,
+      );
+    });
+    if (matches.length === 0) {
+      console.log(
+        `[flightStatus] FIDS fallback found no match for ${normalizedFlight} among ${departures.length} departures`,
+      );
+      return null;
+    }
+    return pickBestFlight(matches, originIata, destinationIata);
+  } catch (err: any) {
+    console.warn(
+      `[flightStatus] FIDS fallback failed for ${normalizedFlight} ${originIata} ${date}:`,
+      err?.message || err,
+    );
+    return null;
+  }
+}
+
 export async function getFlightStatus(
   flightNumber: string,
   date: string,
+  originIata?: string,
+  destinationIata?: string,
 ): Promise<FlightStatusResult | null> {
   const apiKey = process.env.AERODATABOX_API_KEY;
   if (!apiKey) {
@@ -52,115 +228,73 @@ export async function getFlightStatus(
     return null;
   }
 
-  const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(
-    normalizedFlight,
-  )}/${encodeURIComponent(date)}`;
+  // Primary: compact form e.g. "AA4551"
+  let raw = await fetchFlightsByNumber(normalizedFlight, date, apiKey);
 
-  console.log(`[flightStatus] fetching ${normalizedFlight} ${date}`);
-  console.log(`[flightStatus] url=${url} apiKeyPresent=${Boolean(apiKey)}`);
-
-  try {
-    const resp = await fetch(url, {
-      headers: {
-        "x-rapidapi-key": apiKey,
-        "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
-      },
-    });
-    if (!resp.ok) {
-      console.warn(`[flightStatus] HTTP ${resp.status} for ${normalizedFlight} ${date}`);
-      return null;
+  // Fallback 1: spaced form e.g. "AA 4551" — AeroDataBox sometimes only
+  // resolves codeshare flights when the carrier code and number are
+  // separated by a space.
+  if (!raw || raw.length === 0) {
+    const spaced = normalizedFlight.replace(/^([A-Z]{2,3})(\d+)$/, "$1 $2");
+    if (spaced !== normalizedFlight) {
+      raw = await fetchFlightsByNumber(spaced, date, apiKey);
     }
-    const raw: any = await resp.json();
-    if (!Array.isArray(raw) || raw.length === 0) {
-      console.log(`[flightStatus] empty response for ${normalizedFlight} ${date}`);
-      return null;
-    }
-    const now = Date.now();
+  }
 
-    const pickBestFlight = (results: any[]): any => {
-      if (!results || results.length === 0) return {};
-      if (results.length === 1) return results[0];
-
-      const scored = results.map((f: any) => {
-        const dep =
-          f.departure?.scheduledTime?.utc ||
-          f.departure?.revisedTime?.utc ||
-          f.departure?.actualTime?.utc ||
-          null;
-
-        const depMs = dep ? new Date(dep).getTime() : null;
-        const status = String(f.status || "").toLowerCase();
-        const cancelled = status.includes("cancel");
-
-        let score = 0;
-
-        if (depMs !== null) {
-          const diffHours = (depMs - now) / 3_600_000;
-          if (diffHours > 0) {
-            // Future flight — strongly prefer, favour soonest
-            score = 1000 - Math.min(diffHours, 48) * 10;
-          } else if (diffHours > -3) {
-            // Departed within last 3 hours — still relevant (could be en route)
-            score = 500 + diffHours * 50;
-          } else {
-            // Departed more than 3 hours ago — likely a completed earlier leg
-            score = 100 + diffHours;
-          }
-        }
-
-        // Never prefer a cancelled leg over an active one
-        if (cancelled) score -= 200;
-
-        return { flight: f, score };
-      });
-
-      scored.sort((a: any, b: any) => b.score - a.score);
-      return scored[0].flight;
-    };
-
-    const flight = pickBestFlight(raw);
-    const status = normalizeStatus(flight.status);
-    const cancelled = status === "Cancelled" || flight.isCancelled === true;
-    const departure = flight.departure || {};
-    const departureDelay = safeNumber(
-      departure?.delay?.departure ??
-        departure?.delay ??
-        departure?.runwayDelayMinutes ??
-        0,
+  let flight: any = null;
+  if (raw && raw.length > 0) {
+    flight = pickBestFlight(raw, originIata, destinationIata);
+  } else if (originIata) {
+    // Fallback 2: FIDS departures from the origin airport on this date.
+    flight = await fetchFlightFromFids(
+      normalizedFlight,
+      originIata.toUpperCase(),
+      date,
+      apiKey,
+      destinationIata,
     );
-    const arrival = flight.arrival || {};
-    const inboundDelay = safeNumber(
-      arrival?.delay?.arrival ??
-        arrival?.delay ??
-        arrival?.runwayDelayMinutes ??
-        0,
-    );
-    const departureTime: string | null =
-      departure?.actualTime?.utc ||
-      departure?.actualTime?.local ||
-      departure?.scheduledTime?.utc ||
-      departure?.scheduledTime?.local ||
-      departure?.revisedTime?.utc ||
-      null;
+  }
 
-    console.log(
-      `[flightStatus] ${normalizedFlight} ${date} status=${status} dep_delay=${departureDelay} inbound_delay=${inboundDelay} cancelled=${cancelled}`,
-    );
-
-    return {
-      flightNumber: normalizedFlight,
-      status,
-      delayMinutes: departureDelay,
-      inboundDelayMinutes: inboundDelay,
-      departureTime,
-      cancelled,
-      raw: flight,
-    };
-  } catch (err: any) {
-    console.warn(
-      `[flightStatus] request failed for ${normalizedFlight} ${date}:`,
-      err?.message || err,
-    );
+  if (!flight) {
+    console.log(`[flightStatus] no result for ${normalizedFlight} ${date}`);
     return null;
   }
+
+  const status = normalizeStatus(flight.status);
+  const cancelled = status === "Cancelled" || flight.isCancelled === true;
+  const departure = flight.departure || {};
+  const departureDelay = safeNumber(
+    departure?.delay?.departure ??
+      departure?.delay ??
+      departure?.runwayDelayMinutes ??
+      0,
+  );
+  const arrival = flight.arrival || {};
+  const inboundDelay = safeNumber(
+    arrival?.delay?.arrival ??
+      arrival?.delay ??
+      arrival?.runwayDelayMinutes ??
+      0,
+  );
+  const departureTime: string | null =
+    departure?.actualTime?.utc ||
+    departure?.actualTime?.local ||
+    departure?.scheduledTime?.utc ||
+    departure?.scheduledTime?.local ||
+    departure?.revisedTime?.utc ||
+    null;
+
+  console.log(
+    `[flightStatus] ${normalizedFlight} ${date} status=${status} dep_delay=${departureDelay} inbound_delay=${inboundDelay} cancelled=${cancelled}`,
+  );
+
+  return {
+    flightNumber: normalizedFlight,
+    status,
+    delayMinutes: departureDelay,
+    inboundDelayMinutes: inboundDelay,
+    departureTime,
+    cancelled,
+    raw: flight,
+  };
 }

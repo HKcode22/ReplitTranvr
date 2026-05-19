@@ -283,7 +283,19 @@ export default function AgencyDashboardPage() {
         : { mode: "route", origin: routeOrigin, destination: routeDestination, date: routeDate, airlineFilter: airlineFilter.trim() || undefined };
       const resp = await apiRequest("POST", "/api/agency/flights/search", body);
       const data = await resp.json();
-      setSearchResults(data.flights || []);
+      const rawFlights: FoundFlight[] = data.flights || [];
+      // Fallback: if the API didn't return an originIata, infer it from the
+      // user's search input so POST /api/agency/flights doesn't get rejected
+      // with "Origin must be a 3-letter IATA code".
+      const fallbackOrigin =
+        searchMode === "route"
+          ? routeOrigin.toUpperCase().trim()
+          : fnNumber.trim().toUpperCase().slice(0, 2);
+      const mappedFlights: FoundFlight[] = rawFlights.map((f) => ({
+        ...f,
+        originIata: (f.originIata && f.originIata.trim()) || fallbackOrigin,
+      }));
+      setSearchResults(mappedFlights);
       setSearchMessage(data.message || null);
     } catch {
       setSearchMessage("Search failed. Check your connection and try again.");
@@ -729,7 +741,12 @@ export default function AgencyDashboardPage() {
             </SheetHeader>
             {selectedFlight && (
               <div className="mt-4 p-3 bg-muted rounded-lg mb-4">
-                <div className="font-semibold text-sm">{selectedFlight.flightNumber} · {selectedFlight.originIata} → {selectedFlight.destinationIata}</div>
+                <div className="font-semibold text-sm">
+                  {selectedFlight.flightNumber}
+                </div>
+                <div className="text-base font-medium mt-1 tabular-nums">
+                  {selectedFlight.originIata || "—"} → {selectedFlight.destinationIata || "—"}
+                </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {selectedFlight.carrierName}
                   {selectedFlight.departureTime && (

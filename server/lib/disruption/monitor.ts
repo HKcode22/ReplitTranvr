@@ -35,9 +35,12 @@ function tomorrowIso(): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function processFlight(flight: MonitoredFlight): Promise<{ alertFired: boolean }> {
+async function processFlight(
+  flight: MonitoredFlight,
+  opts?: { forceRefreshNas?: boolean },
+): Promise<{ alertFired: boolean }> {
   console.log(
-    `[monitor] scoring flight_id=${flight.id} ${flight.flightNumber} ${flight.originIata}->${flight.destinationIata} ${flight.departureDate}`,
+    `[monitor] scoring flight_id=${flight.id} ${flight.flightNumber} ${flight.originIata}->${flight.destinationIata} ${flight.departureDate}${opts?.forceRefreshNas ? " (force-refresh NAS)" : ""}`,
   );
 
   // Fetch historical OTP once per flight; subsequent cycles reuse the cached value.
@@ -55,6 +58,7 @@ async function processFlight(flight: MonitoredFlight): Promise<{ alertFired: boo
     originIata: flight.originIata,
     destinationIata: flight.destinationIata,
     historicalOtpCache: historicalOtpData,
+    forceRefreshNas: opts?.forceRefreshNas,
   });
 
   await db.insert(riskScoreHistory).values({
@@ -288,7 +292,10 @@ export function startMonitoringEngine(): void {
   }, 15_000);
 }
 
-export async function scoreFlightOnce(flightId: number): Promise<void> {
+export async function scoreFlightOnce(
+  flightId: number,
+  opts?: { forceRefreshNas?: boolean },
+): Promise<void> {
   const [flight] = await db
     .select()
     .from(monitoredFlights)
@@ -296,7 +303,7 @@ export async function scoreFlightOnce(flightId: number): Promise<void> {
     .limit(1);
   if (!flight) return;
   try {
-    await processFlight(flight);
+    await processFlight(flight, opts);
   } catch (err: any) {
     console.error(`[monitor] one-off scoring failed for flight ${flightId}:`, err?.message || err);
   }

@@ -33,10 +33,29 @@ const AIRPORT_TIMEZONES: Record<string, string> = {
   ANC: "America/Anchorage",
 };
 
+// AeroDataBox sometimes omits seconds before the timezone marker, producing
+// strings like "2026-05-19T15:00-05:00" or "2026-05-19T19:36Z" that the JS
+// Date parser rejects. Inserting ":00" makes them ISO 8601 compliant.
+function parseFlightDate(input: string): Date | null {
+  let d = new Date(input);
+  if (!Number.isNaN(d.getTime())) return d;
+  const normalized = input.replace(
+    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(Z|[+-]\d{2}:?\d{2})$/,
+    "$1:00$2",
+  );
+  if (normalized !== input) {
+    d = new Date(normalized);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
 export function formatFlightTime(isoTime: string | null, originIata: string): string {
   if (!isoTime) return "—";
+  const d = parseFlightDate(isoTime);
+  if (!d) return isoTime;
   const tz = AIRPORT_TIMEZONES[originIata] || "UTC";
-  return new Date(isoTime).toLocaleString("en-US", {
+  return d.toLocaleString("en-US", {
     timeZone: tz,
     month: "short",
     day: "numeric",

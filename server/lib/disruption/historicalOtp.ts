@@ -1,3 +1,5 @@
+import { aerodataboxFetch } from "./aerodataboxLimiter";
+
 export interface HistoricalOtpResult {
   flightNumber: string;
   onTimeRate: number;
@@ -99,7 +101,7 @@ export async function getHistoricalOtp(
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   try {
-    const resp = await fetch(url, {
+    const resp = await aerodataboxFetch(url, {
       headers: {
         "x-rapidapi-key": apiKey,
         "x-rapidapi-host": "aerodatabox.p.rapidapi.com",

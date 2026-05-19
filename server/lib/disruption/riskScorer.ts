@@ -12,6 +12,7 @@ export interface MonitoredFlightInput {
   originIata: string;
   destinationIata: string;
   historicalOtpCache?: HistoricalOtpResult | null;
+  forceRefreshNas?: boolean;
 }
 
 export type RiskTier = "green" | "amber" | "red";
@@ -239,11 +240,16 @@ export async function scoreFlightRisk(flight: MonitoredFlightInput): Promise<Ris
     nasDestination,
     carrierHealth,
   ] = await Promise.all([
-    getFlightStatus(flight.flightNumber, flight.departureDate).catch(() => null),
+    getFlightStatus(
+      flight.flightNumber,
+      flight.departureDate,
+      flight.originIata,
+      flight.destinationIata,
+    ).catch(() => null),
     getAirportWeather(flight.originIata).catch(() => defaultWeather(flight.originIata)),
     getAirportWeather(flight.destinationIata).catch(() => defaultWeather(flight.destinationIata)),
-    getNasStatus(flight.originIata).catch(() => defaultNas()),
-    getNasStatus(flight.destinationIata).catch(() => defaultNas()),
+    getNasStatus(flight.originIata, { forceRefresh: flight.forceRefreshNas }).catch(() => defaultNas()),
+    getNasStatus(flight.destinationIata, { forceRefresh: flight.forceRefreshNas }).catch(() => defaultNas()),
     getCarrierHealth(flight.carrierIata).catch(() => defaultCarrierHealth(flight.carrierIata)),
   ]);
 
