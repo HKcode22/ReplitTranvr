@@ -64,3 +64,18 @@ export function formatFlightTime(isoTime: string | null, originIata: string): st
     hour12: true,
   });
 }
+
+export function formatSearchResultTime(isoTime: string | null | undefined): string {
+  if (!isoTime) return "—";
+  try {
+    const d = new Date(isoTime.replace(" ", "T"));
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return "—";
+  }
+}

@@ -138,6 +138,23 @@ function formatRelativeTime(iso: string | null): string {
   }
 }
 
+function formatUtcStamp(value: string | null | undefined): string {
+  if (!value) return "—";
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return "—";
+  }
+}
+
 function RiskBadge({ tier, score }: { tier: string; score: number }) {
   const styles = tierStyles(tier);
   return (
@@ -701,17 +718,9 @@ export default function AgencyDashboardPage() {
                           {flight.originIata} → {flight.destinationIata}
                           {flight.departureTime && (
                             <span className="ml-2">
-                              {(() => {
-                                try {
-                                  return new Date(flight.departureTime!).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-                                } catch { return flight.departureTime; }
-                              })()}
+                              {formatFlightTime(flight.departureTime, flight.originIata)}
                               {flight.arrivalTime && (
-                                <> → {(() => {
-                                  try {
-                                    return new Date(flight.arrivalTime!).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-                                  } catch { return flight.arrivalTime; }
-                                })()}</>
+                                <> → {formatFlightTime(flight.arrivalTime, flight.originIata)}</>
                               )}
                             </span>
                           )}
@@ -751,10 +760,7 @@ export default function AgencyDashboardPage() {
                   {selectedFlight.carrierName}
                   {selectedFlight.departureTime && (
                     <span className="ml-2">
-                      {(() => {
-                        try { return new Date(selectedFlight.departureTime!).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true }); }
-                        catch { return selectedFlight.departureTime; }
-                      })()}
+                      {formatFlightTime(selectedFlight.departureTime, selectedFlight.originIata)}
                     </span>
                   )}
                 </div>
@@ -933,7 +939,7 @@ export default function AgencyDashboardPage() {
                                   </span>
                                 </td>
                                 <td className="px-4 py-3"><RiskBadge tier={f.riskTier} score={f.riskScore} /></td>
-                                <td className="px-4 py-3 text-muted-foreground">{formatRelativeTime(f.lastCheckedAt)}</td>
+                                <td className="px-4 py-3 text-muted-foreground">{formatUtcStamp(f.lastCheckedAt)}</td>
                                 <td className="px-4 py-3 text-muted-foreground capitalize">
                                   {f.status}
                                   {latestAlert ? <span className="ml-1 text-xs text-amber-600">· alerted</span> : null}
@@ -969,7 +975,7 @@ export default function AgencyDashboardPage() {
                                             </div>
                                             <div className="text-xs text-muted-foreground">
                                               {t.alertSentAt
-                                                ? <span className="text-amber-600">Alert sent {formatRelativeTime(t.alertSentAt)}</span>
+                                                ? <span className="text-amber-600">Alert sent {formatUtcStamp(t.alertSentAt)}</span>
                                                 : <span>No alert yet</span>}
                                             </div>
                                           </div>
@@ -1008,7 +1014,7 @@ export default function AgencyDashboardPage() {
                               <span className="truncate">{names.join(", ") || "—"}</span>
                             </div>
                             <div className="text-xs text-muted-foreground mt-1">
-                              {formatRelativeTime(f.lastCheckedAt)} · <span className="capitalize">{f.status}</span>
+                              {formatUtcStamp(f.lastCheckedAt)} · <span className="capitalize">{f.status}</span>
                               {latestAlert ? <span className="ml-1 text-amber-600">· alerted</span> : null}
                             </div>
                           </div>
@@ -1043,7 +1049,7 @@ export default function AgencyDashboardPage() {
                                   <div className="text-muted-foreground text-xs">{t.travelerEmail}{t.travelerPhone ? ` · ${t.travelerPhone}` : ""}</div>
                                   <div className="text-xs text-muted-foreground">
                                     {t.alertSentAt
-                                      ? <span className="text-amber-600">Alert sent {formatRelativeTime(t.alertSentAt)}</span>
+                                      ? <span className="text-amber-600">Alert sent {formatUtcStamp(t.alertSentAt)}</span>
                                       : <span>No alert yet</span>}
                                   </div>
                                 </div>
@@ -1179,13 +1185,13 @@ export default function AgencyDashboardPage() {
                               </td>
                               <td className="px-4 py-3 text-foreground">{namesLabel}</td>
                               <td className="px-4 py-3 text-muted-foreground">
-                                {formatRelativeTime(latestAlert)}
+                                {formatUtcStamp(latestAlert)}
                               </td>
                               <td className="px-4 py-3 text-foreground">
                                 {selectionLabel(f)}
                               </td>
                               <td className="px-4 py-3 text-muted-foreground">
-                                {f.agencyResolvedAt ? formatRelativeTime(f.agencyResolvedAt) : "—"}
+                                {f.agencyResolvedAt ? formatUtcStamp(f.agencyResolvedAt) : "—"}
                               </td>
                             </tr>
                           );
@@ -1217,11 +1223,11 @@ export default function AgencyDashboardPage() {
                             </div>
                             <div className="text-sm text-foreground mt-1">{alertedNames || "—"}</div>
                             <div className="text-xs text-muted-foreground mt-2">
-                              Sent {formatRelativeTime(latestAlert)} · {selectionLabel(f)}
+                              Sent {formatUtcStamp(latestAlert)} · {selectionLabel(f)}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {f.agencyResolvedAt
-                                ? `Resolved ${formatRelativeTime(f.agencyResolvedAt)}`
+                                ? `Resolved ${formatUtcStamp(f.agencyResolvedAt)}`
                                 : "Not resolved"}
                             </div>
                           </div>
@@ -1268,7 +1274,7 @@ export default function AgencyDashboardPage() {
                         </p>
                         {report?.generatedAt && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            Last generated: {formatRelativeTime(report.generatedAt)}
+                            Last generated: {formatUtcStamp(report.generatedAt)}
                           </p>
                         )}
                       </div>

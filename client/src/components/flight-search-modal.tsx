@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AirportAutocomplete } from "@/components/airport-autocomplete";
 import { apiRequest } from "@/lib/queryClient";
+import { formatSearchResultTime } from "@/lib/airportTimezone";
 import { Loader2, Search, AlertCircle } from "lucide-react";
 
 export interface FoundFlight {
@@ -24,17 +25,6 @@ interface FlightSearchModalProps {
   open: boolean;
   onClose: () => void;
   onSelect: (flight: FoundFlight) => void;
-}
-
-function formatDisplayTime(iso: string): string {
-  if (!iso) return "—";
-  const m = iso.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
-  if (m) return m[2];
-  const d = new Date(iso);
-  if (!Number.isNaN(d.getTime())) {
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-  }
-  return iso;
 }
 
 export function FlightSearchModal({ open, onClose, onSelect }: FlightSearchModalProps) {
@@ -93,8 +83,22 @@ export function FlightSearchModal({ open, onClose, onSelect }: FlightSearchModal
             };
       const resp = await apiRequest("POST", "/api/agency/flights/search", body);
       const data: { flights: FoundFlight[]; message?: string } = await resp.json();
-      setResults(data.flights || []);
-      setMessage(data.message || "");
+      const now = Date.now();
+      const upcomingOnly = (data.flights || []).filter((f: FoundFlight) => {
+        if (!f.departureTime) return true;
+        try {
+          const depMs = new Date(f.departureTime.replace(" ", "T")).getTime();
+          return depMs > now - 30 * 60 * 1000; // keep flights departing within last 30min or future
+        } catch {
+          return true;
+        }
+      });
+      setResults(upcomingOnly);
+      if (upcomingOnly.length === 0 && (data.flights || []).length > 0) {
+        setMessage("All flights on this route today have already departed. Try searching tomorrow's date.");
+      } else {
+        setMessage(data.message || "");
+      }
     } catch (err: any) {
       setResults([]);
       setMessage(err?.message || "Search failed. Please try again.");
@@ -254,7 +258,7 @@ export function FlightSearchModal({ open, onClose, onSelect }: FlightSearchModal
                       </div>
                       <div className="text-sm text-foreground">
                         <div className="font-medium tabular-nums">
-                          {formatDisplayTime(f.departureTime)} → {formatDisplayTime(f.arrivalTime)}
+                          {formatSearchResultTime(f.departureTime)} → {formatSearchResultTime(f.arrivalTime)}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {f.originIata} → {f.destinationIata}

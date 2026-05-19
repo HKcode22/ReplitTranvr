@@ -105,11 +105,22 @@ function tierStyles(tier: string) {
 function fmtTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString();
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
   } catch {
     return iso;
   }
 }
+
+const displayStatus = (s: string | null | undefined) =>
+  !s || s === "Unknown" ? "Scheduled" : s;
 
 function SignalBar({ name, value }: { name: string; value: number }) {
   const meta = SIGNAL_LABELS[name] || { label: name, max: 25, explain: "" };
@@ -406,7 +417,7 @@ export default function AgencyFlightDetailPage() {
                 <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Flight status (AeroDataBox)</div>
                 {latestStatus ? (
                   <ul className="space-y-1 text-foreground">
-                    <li><span className="text-muted-foreground">Status:</span> {latestStatus.status === "Unknown" ? "Scheduled" : (latestStatus.status || "—")}</li>
+                    <li><span className="text-muted-foreground">Status:</span> {displayStatus(latestStatus.status)}</li>
                     <li><span className="text-muted-foreground">Departure delay:</span> {latestStatus.delayMinutes ?? 0} min</li>
                     <li><span className="text-muted-foreground">Inbound delay:</span> {latestStatus.inboundDelayMinutes ?? 0} min</li>
                     <li><span className="text-muted-foreground">Cancelled:</span> {latestStatus.cancelled ? "Yes" : "No"}</li>
