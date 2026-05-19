@@ -4,8 +4,10 @@ import { db } from "../../db";
 import {
   agencyAccounts,
   disruptionAlternatives,
+  flightTravelers,
   monitoredFlights,
   riskScoreHistory,
+  type FlightTraveler,
   type MonitoredFlight,
 } from "@shared/schema";
 import { scoreFlightRisk } from "./riskScorer";
@@ -133,8 +135,20 @@ async function processFlight(flight: MonitoredFlight): Promise<{ alertFired: boo
     .where(eq(monitoredFlights.id, flight.id));
 
   let alertFired = false;
+
+  // A flight should be re-alerted only for travelers who haven't been
+  // alerted yet. If every flight_traveler row for this flight has
+  // alert_sent_at set, the alert pipeline is done for this booking.
+  const travelers: FlightTraveler[] = await db
+    .select()
+    .from(flightTravelers)
+    .where(eq(flightTravelers.monitoredFlightId, flight.id));
+
+  const pendingTravelers = travelers.filter((t) => t.alertSentAt == null);
   const shouldAlert =
-    (risk.tier === "red" || risk.cancelled) && flight.alertSentAt == null;
+    (risk.tier === "red" || risk.cancelled) &&
+    travelers.length > 0 &&
+    pendingTravelers.length > 0;
 
   if (shouldAlert) {
     const [agency] = await db
@@ -155,14 +169,6 @@ async function processFlight(flight: MonitoredFlight): Promise<{ alertFired: boo
       console.warn(`[monitor] alternative search failed for flight ${flight.id}:`, err?.message || err);
       alternatives = [];
     }
-
-    const travelerSelectionToken = randomUUID();
-    const updatedFlight: MonitoredFlight = {
-      ...flight,
-      travelerSelectionToken,
-      riskScore: risk.score,
-      riskTier: risk.tier,
-    };
 
     if (alternatives.length > 0) {
       try {
@@ -188,19 +194,26 @@ async function processFlight(flight: MonitoredFlight): Promise<{ alertFired: boo
       }
     }
 
-    await db
-      .update(monitoredFlights)
-      .set({ travelerSelectionToken })
-      .where(eq(monitoredFlights.id, flight.id));
+    // Issue a fresh per-traveler selection token for each pending traveler.
+    // sendTravelerAlert needs the tokens already on the row so it can build
+    // the CTAs.
+    const tokenedPending: FlightTraveler[] = [];
+    for (const t of pendingTravelers) {
+      const token = t.selectionToken || randomUUID();
+      if (!t.selectionToken) {
+        await db
+          .update(flightTravelers)
+          .set({ selectionToken: token })
+          .where(eq(flightTravelers.id, t.id));
+      }
+      tokenedPending.push({ ...t, selectionToken: token });
+    }
 
     try {
-      await sendTravelerAlert(updatedFlight, alternatives, agency, risk);
-      await db
-        .update(monitoredFlights)
-        .set({ alertSentAt: new Date() })
-        .where(eq(monitoredFlights.id, flight.id));
+      // sendTravelerAlert sets alertSentAt on each row it successfully emails.
+      await sendTravelerAlert({ ...flight, riskScore: risk.score, riskTier: risk.tier }, tokenedPending, alternatives, agency, risk);
       alertFired = true;
-      console.log(`[monitor] alert fired for flight_id=${flight.id} tier=${risk.tier} alts=${alternatives.length}`);
+      console.log(`[monitor] alert fired for flight_id=${flight.id} tier=${risk.tier} alts=${alternatives.length} travelers=${tokenedPending.length}`);
     } catch (err: any) {
       console.error(`[monitor] alert send failed for flight ${flight.id}:`, err?.message || err);
     }

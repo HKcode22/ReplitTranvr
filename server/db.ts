@@ -22,6 +22,7 @@ export { pool };
 // small set of files that need to apply automatically.
 const BOOT_MIGRATIONS: readonly string[] = [
   "0002_agency_disruption_system.sql",
+  "0003_travelers_health.sql",
 ];
 
 let bootMigrationsApplied = false;

@@ -57,6 +57,7 @@ export async function getFlightStatus(
   )}/${encodeURIComponent(date)}`;
 
   console.log(`[flightStatus] fetching ${normalizedFlight} ${date}`);
+  console.log(`[flightStatus] url=${url} apiKeyPresent=${Boolean(apiKey)}`);
 
   try {
     const resp = await fetch(url, {
@@ -74,7 +75,50 @@ export async function getFlightStatus(
       console.log(`[flightStatus] empty response for ${normalizedFlight} ${date}`);
       return null;
     }
-    const flight = raw[0] || {};
+    const now = Date.now();
+
+    const pickBestFlight = (results: any[]): any => {
+      if (!results || results.length === 0) return {};
+      if (results.length === 1) return results[0];
+
+      const scored = results.map((f: any) => {
+        const dep =
+          f.departure?.scheduledTime?.utc ||
+          f.departure?.revisedTime?.utc ||
+          f.departure?.actualTime?.utc ||
+          null;
+
+        const depMs = dep ? new Date(dep).getTime() : null;
+        const status = String(f.status || "").toLowerCase();
+        const cancelled = status.includes("cancel");
+
+        let score = 0;
+
+        if (depMs !== null) {
+          const diffHours = (depMs - now) / 3_600_000;
+          if (diffHours > 0) {
+            // Future flight — strongly prefer, favour soonest
+            score = 1000 - Math.min(diffHours, 48) * 10;
+          } else if (diffHours > -3) {
+            // Departed within last 3 hours — still relevant (could be en route)
+            score = 500 + diffHours * 50;
+          } else {
+            // Departed more than 3 hours ago — likely a completed earlier leg
+            score = 100 + diffHours;
+          }
+        }
+
+        // Never prefer a cancelled leg over an active one
+        if (cancelled) score -= 200;
+
+        return { flight: f, score };
+      });
+
+      scored.sort((a: any, b: any) => b.score - a.score);
+      return scored[0].flight;
+    };
+
+    const flight = pickBestFlight(raw);
     const status = normalizeStatus(flight.status);
     const cancelled = status === "Cancelled" || flight.isCancelled === true;
     const departure = flight.departure || {};

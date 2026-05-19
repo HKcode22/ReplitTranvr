@@ -34,6 +34,17 @@ interface AlternativeRow {
   riskTier: string;
   selectionToken: string;
 }
+interface TravelerRow {
+  id: number;
+  travelerName: string;
+  travelerEmail: string;
+  travelerPhone: string | null;
+  selectionToken: string | null;
+  selectedOptionId: string | null;
+  selectedAt: string | null;
+  alertSentAt: string | null;
+  agencyNotifiedAt: string | null;
+}
 interface FlightDetail {
   id: number;
   flightNumber: string;
@@ -42,21 +53,14 @@ interface FlightDetail {
   departureTime: string | null;
   originIata: string;
   destinationIata: string;
-  travelerName: string;
-  travelerEmail: string;
-  travelerPhone: string | null;
   riskScore: number;
   riskTier: "green" | "amber" | "red";
   lastCheckedAt: string | null;
   status: string;
-  alertSentAt: string | null;
-  travelerSelectionToken: string | null;
-  travelerSelectedOptionId: string | null;
-  travelerSelectedAt: string | null;
-  agencyNotifiedAt: string | null;
   agencyResolvedAt: string | null;
   history: HistoryRow[];
   alternatives: AlternativeRow[];
+  travelers: TravelerRow[];
 }
 
 const SIGNAL_LABELS: Record<string, { label: string; max: number; explain: string }> = {
@@ -205,9 +209,17 @@ export default function AgencyFlightDetailPage() {
       });
       const data = await r.json();
       if (data.fired) {
+        const recipients = (flight.travelers || [])
+          .map((t) => t.travelerEmail)
+          .filter(Boolean);
+        const recipientText = recipients.length === 0
+          ? "the traveler"
+          : recipients.length === 1
+          ? recipients[0]
+          : `${recipients.length} traveler${recipients.length === 1 ? "" : "s"}`;
         toast({
           title: "Alert fired",
-          description: `Email sent to ${flight.travelerEmail} with ${data.alternativeCount} real alternatives.`,
+          description: `Email sent to ${recipientText} with ${data.alternativeCount} real alternatives.`,
         });
       } else {
         toast({
@@ -268,13 +280,23 @@ export default function AgencyFlightDetailPage() {
                 {flight.departureTime
                   ? formatFlightTime(flight.departureTime, flight.originIata)
                   : flight.departureDate}
-                {" "}· for{" "}
-                <span className="text-foreground">{flight.travelerName}</span>
               </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                {flight.travelerEmail}
-                {flight.travelerPhone ? ` · ${flight.travelerPhone}` : ""}
-              </p>
+              {(flight.travelers || []).length > 0 && (
+                <div className="mt-3 space-y-1">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Travelers ({(flight.travelers || []).length})
+                  </div>
+                  {(flight.travelers || []).map((t) => (
+                    <div key={t.id} className="text-sm text-foreground">
+                      {t.travelerName}
+                      <span className="text-muted-foreground"> · {t.travelerEmail}{t.travelerPhone ? ` · ${t.travelerPhone}` : ""}</span>
+                      {t.alertSentAt && (
+                        <span className="ml-2 text-xs text-amber-600">alerted {fmtTime(t.alertSentAt)}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium ${styles.wrap}`}>
               <span className={`h-2 w-2 rounded-full ${styles.dot}`} />
@@ -288,16 +310,29 @@ export default function AgencyFlightDetailPage() {
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Alert sent</div>
-              <div className="text-foreground">{flight.alertSentAt ? fmtTime(flight.alertSentAt) : "Not yet"}</div>
+              <div className="text-foreground">
+                {(() => {
+                  const latest = (flight.travelers || []).reduce<string | null>((acc, t) => {
+                    if (!t.alertSentAt) return acc;
+                    if (!acc || t.alertSentAt > acc) return t.alertSentAt;
+                    return acc;
+                  }, null);
+                  return latest ? fmtTime(latest) : "Not yet";
+                })()}
+              </div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">Traveler selected</div>
               <div className="text-foreground">
-                {flight.travelerSelectedOptionId
-                  ? flight.travelerSelectedOptionId === "keep_original"
-                    ? "Kept original"
-                    : `Option #${flight.travelerSelectedOptionId}`
-                  : "—"}
+                {(() => {
+                  const selected = (flight.travelers || []).filter((t) => !!t.selectedOptionId);
+                  if (selected.length === 0) return "—";
+                  if (selected.length === 1) {
+                    const opt = selected[0].selectedOptionId!;
+                    return opt === "keep_original" ? "Kept original" : `Option #${opt}`;
+                  }
+                  return `${selected.length} of ${(flight.travelers || []).length} selected`;
+                })()}
               </div>
             </div>
             <div>
@@ -305,18 +340,24 @@ export default function AgencyFlightDetailPage() {
               <div className="text-foreground capitalize">{flight.status}</div>
             </div>
           </div>
-          {flight.travelerSelectionToken && (
-            <div className="mt-4 text-xs text-muted-foreground">
-              Traveler link:{" "}
-              <a
-                className="text-primary underline"
-                target="_blank"
-                rel="noreferrer"
-                href={`${baseUrl}/disruption/${flight.travelerSelectionToken}`}
-                data-testid="link-traveler-page"
-              >
-                /disruption/{flight.travelerSelectionToken.slice(0, 8)}…
-              </a>
+          {(flight.travelers || []).some((t) => !!t.selectionToken) && (
+            <div className="mt-4 text-xs text-muted-foreground space-y-1">
+              {(flight.travelers || [])
+                .filter((t) => !!t.selectionToken)
+                .map((t) => (
+                  <div key={t.id}>
+                    Traveler link ({t.travelerName}):{" "}
+                    <a
+                      className="text-primary underline"
+                      target="_blank"
+                      rel="noreferrer"
+                      href={`${baseUrl}/disruption/${t.selectionToken}`}
+                      data-testid={`link-traveler-page-${t.id}`}
+                    >
+                      /disruption/{t.selectionToken!.slice(0, 8)}…
+                    </a>
+                  </div>
+                ))}
             </div>
           )}
         </Card>
@@ -365,11 +406,11 @@ export default function AgencyFlightDetailPage() {
                 <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Flight status (AeroDataBox)</div>
                 {latestStatus ? (
                   <ul className="space-y-1 text-foreground">
-                    <li><span className="text-muted-foreground">Status:</span> {latestStatus.status || "—"}</li>
+                    <li><span className="text-muted-foreground">Status:</span> {latestStatus.status === "Unknown" ? "Scheduled" : (latestStatus.status || "—")}</li>
                     <li><span className="text-muted-foreground">Departure delay:</span> {latestStatus.delayMinutes ?? 0} min</li>
                     <li><span className="text-muted-foreground">Inbound delay:</span> {latestStatus.inboundDelayMinutes ?? 0} min</li>
                     <li><span className="text-muted-foreground">Cancelled:</span> {latestStatus.cancelled ? "Yes" : "No"}</li>
-                    <li><span className="text-muted-foreground">Departure time:</span> {latestStatus.departureTime || "—"}</li>
+                    <li><span className="text-muted-foreground">Departure time:</span> {formatFlightTime(latestStatus.departureTime, flight.originIata)}</li>
                   </ul>
                 ) : (
                   <p className="text-muted-foreground">No status available — either AeroDataBox returned nothing for this flight number + date, or the API key is missing. If this monitored flight number is wrong, remove it and re-add.</p>
@@ -406,8 +447,11 @@ export default function AgencyFlightDetailPage() {
           </div>
           <p className="text-sm text-muted-foreground mb-4">
             Force this flight to a target score and (if ≥60) trigger the real alert pipeline:
-            real alternative search via Google Flights, real email to <strong className="text-foreground">{flight.travelerEmail}</strong>,
-            real selection flow that notifies <strong className="text-foreground">{flight.travelerName}</strong>'s agent.
+            real alternative search via Google Flights, real email to{" "}
+            <strong className="text-foreground">
+              {(flight.travelers || []).map((t) => t.travelerEmail).join(", ") || "all travelers"}
+            </strong>
+            , real selection flow that notifies the agent.
             Each run wipes the previous alert state so you can re-simulate cleanly.
           </p>
           <div className="flex flex-wrap items-end gap-3">
@@ -441,7 +485,9 @@ export default function AgencyFlightDetailPage() {
             <h2 className="text-lg font-semibold text-foreground mb-3">Alternatives offered to traveler</h2>
             <div className="space-y-3">
               {flight.alternatives.map((alt) => {
-                const isPicked = flight.travelerSelectedOptionId === String(alt.id);
+                const isPicked = (flight.travelers || []).some(
+                  (t) => t.selectedOptionId === String(alt.id),
+                );
                 return (
                   <div
                     key={alt.id}

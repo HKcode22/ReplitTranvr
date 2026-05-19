@@ -1,6 +1,6 @@
 import { sql, relations } from "drizzle-orm";
 import {
-  pgTable, text, varchar, boolean, timestamp, serial, numeric, jsonb, index, uniqueIndex, pgEnum, integer
+  pgTable, text, varchar, boolean, timestamp, serial, numeric, real, jsonb, index, uniqueIndex, pgEnum, integer
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -557,24 +557,52 @@ export const monitoredFlights = pgTable("monitored_flights", {
   departureTime: text("departure_time"),
   originIata: text("origin_iata").notNull(),
   destinationIata: text("destination_iata").notNull(),
-  travelerName: text("traveler_name").notNull(),
-  travelerEmail: text("traveler_email").notNull(),
-  travelerPhone: text("traveler_phone"),
   riskScore: integer("risk_score").default(0).notNull(),
   riskTier: text("risk_tier").default("green").notNull(),
   lastCheckedAt: timestamp("last_checked_at"),
   status: text("status").default("active").notNull(),
-  alertSentAt: timestamp("alert_sent_at"),
-  travelerSelectionToken: text("traveler_selection_token").unique(),
-  travelerSelectedOptionId: text("traveler_selected_option_id"),
-  travelerSelectedAt: timestamp("traveler_selected_at"),
-  agencyNotifiedAt: timestamp("agency_notified_at"),
   agencyResolvedAt: timestamp("agency_resolved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("monitored_flights_agency_id_idx").on(table.agencyId),
   index("monitored_flights_status_idx").on(table.status),
 ]);
+
+export const flightTravelers = pgTable("flight_travelers", {
+  id: serial("id").primaryKey(),
+  monitoredFlightId: integer("monitored_flight_id").notNull().references(() => monitoredFlights.id, { onDelete: "cascade" }),
+  agencyId: integer("agency_id").notNull().references(() => agencyAccounts.id),
+  travelerName: text("traveler_name").notNull(),
+  travelerEmail: text("traveler_email").notNull(),
+  travelerPhone: text("traveler_phone"),
+  selectionToken: text("selection_token").unique(),
+  selectedOptionId: text("selected_option_id"),
+  selectedAt: timestamp("selected_at"),
+  alertSentAt: timestamp("alert_sent_at"),
+  agencyNotifiedAt: timestamp("agency_notified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("flight_travelers_flight_id_idx").on(table.monitoredFlightId),
+  index("flight_travelers_agency_id_idx").on(table.agencyId),
+]);
+
+export const healthReports = pgTable("health_reports", {
+  id: serial("id").primaryKey(),
+  generatedAt: timestamp("generated_at").defaultNow(),
+  flightsAnalyzed: integer("flights_analyzed"),
+  flightsFlagged: integer("flights_flagged"),
+  truePositives: integer("true_positives"),
+  falsePositives: integer("false_positives"),
+  falseNegatives: integer("false_negatives"),
+  trueNegatives: integer("true_negatives"),
+  precision: real("precision"),
+  recall: real("recall"),
+  avgScoreDisrupted: real("avg_score_disrupted"),
+  avgScoreOnTime: real("avg_score_on_time"),
+  claudeSummary: text("claude_summary"),
+  rawData: jsonb("raw_data"),
+  requestedByAgencyId: integer("requested_by_agency_id").references(() => agencyAccounts.id),
+});
 
 export const riskScoreHistory = pgTable("risk_score_history", {
   id: serial("id").primaryKey(),
@@ -615,6 +643,16 @@ export const monitoredFlightsRelations = relations(monitoredFlights, ({ one, man
   agency: one(agencyAccounts, { fields: [monitoredFlights.agencyId], references: [agencyAccounts.id] }),
   riskHistory: many(riskScoreHistory),
   alternatives: many(disruptionAlternatives),
+  travelers: many(flightTravelers),
+}));
+
+export const flightTravelersRelations = relations(flightTravelers, ({ one }) => ({
+  flight: one(monitoredFlights, { fields: [flightTravelers.monitoredFlightId], references: [monitoredFlights.id] }),
+  agency: one(agencyAccounts, { fields: [flightTravelers.agencyId], references: [agencyAccounts.id] }),
+}));
+
+export const healthReportsRelations = relations(healthReports, ({ one }) => ({
+  requestedByAgency: one(agencyAccounts, { fields: [healthReports.requestedByAgencyId], references: [agencyAccounts.id] }),
 }));
 
 export const riskScoreHistoryRelations = relations(riskScoreHistory, ({ one }) => ({
@@ -630,8 +668,14 @@ export const insertAgencyAccountSchema = createInsertSchema(agencyAccounts).omit
 });
 export const insertMonitoredFlightSchema = createInsertSchema(monitoredFlights).omit({
   id: true, createdAt: true, riskScore: true, riskTier: true, lastCheckedAt: true,
-  status: true, alertSentAt: true, travelerSelectionToken: true, travelerSelectedOptionId: true,
-  travelerSelectedAt: true, agencyNotifiedAt: true, agencyResolvedAt: true, departureTime: true,
+  status: true, agencyResolvedAt: true, departureTime: true,
+});
+export const insertFlightTravelerSchema = createInsertSchema(flightTravelers).omit({
+  id: true, createdAt: true, selectionToken: true, selectedOptionId: true,
+  selectedAt: true, alertSentAt: true, agencyNotifiedAt: true,
+});
+export const insertHealthReportSchema = createInsertSchema(healthReports).omit({
+  id: true, generatedAt: true,
 });
 export const insertRiskScoreHistorySchema = createInsertSchema(riskScoreHistory).omit({
   id: true, scoredAt: true,
@@ -648,3 +692,7 @@ export type RiskScoreHistory = typeof riskScoreHistory.$inferSelect;
 export type InsertRiskScoreHistory = z.infer<typeof insertRiskScoreHistorySchema>;
 export type DisruptionAlternative = typeof disruptionAlternatives.$inferSelect;
 export type InsertDisruptionAlternative = z.infer<typeof insertDisruptionAlternativeSchema>;
+export type FlightTraveler = typeof flightTravelers.$inferSelect;
+export type InsertFlightTraveler = z.infer<typeof insertFlightTravelerSchema>;
+export type HealthReport = typeof healthReports.$inferSelect;
+export type InsertHealthReport = z.infer<typeof insertHealthReportSchema>;

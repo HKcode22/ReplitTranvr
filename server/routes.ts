@@ -9395,8 +9395,11 @@ export async function registerRoutes(
       monitoredFlights: tMonitoredFlights,
       riskScoreHistory: tRiskScoreHistory,
       disruptionAlternatives: tDisruptionAlternatives,
+      flightTravelers: tFlightTravelers,
+      healthReports: tHealthReports,
     } = await import("@shared/schema");
-    const { eq: dEq, and: dAnd, desc: dDesc, inArray: dInArray } = await import("drizzle-orm");
+    const { eq: dEq, and: dAnd, desc: dDesc, inArray: dInArray, lt: dLt, isNotNull: dIsNotNull } = await import("drizzle-orm");
+    const { getFlightStatus: dGetFlightStatus } = await import("./lib/disruption/flightStatus");
     const { randomUUID: dRandomUUID } = await import("crypto");
 
     const agencyRegisterSchema = z.object({
@@ -9415,6 +9418,7 @@ export async function registerRoutes(
       flightNumber: z.string().min(2).max(10),
       carrierIata: z.string().min(1).max(3).optional(),
       departureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
+      departureTime: z.string().optional().nullable(),
       originIata: z.string().length(3, "Origin must be a 3-letter IATA code"),
       destinationIata: z.string().length(3, "Destination must be a 3-letter IATA code"),
       travelerName: z.string().min(1),
@@ -9514,22 +9518,47 @@ export async function registerRoutes(
           .where(
             dAnd(
               dEq(tMonitoredFlights.agencyId, agency.id),
-              dInArray(tMonitoredFlights.status, ["active", "completed"]),
+              dEq(tMonitoredFlights.status, "active"),
             ),
           )
           .orderBy(dDesc(tMonitoredFlights.riskScore));
 
-        const flightsWithAlts = await Promise.all(
+        if (flights.length === 0) return res.json([]);
+
+        const flightIds = flights.map((f: any) => f.id);
+        const travelers = await db
+          .select()
+          .from(tFlightTravelers)
+          .where(dInArray(tFlightTravelers.monitoredFlightId, flightIds));
+        const travelersByFlight = new Map<number, any[]>();
+        for (const t of travelers) {
+          const arr = travelersByFlight.get(t.monitoredFlightId) || [];
+          arr.push({
+            id: t.id,
+            travelerName: t.travelerName,
+            travelerEmail: t.travelerEmail,
+            travelerPhone: t.travelerPhone,
+            alertSentAt: t.alertSentAt,
+            selectedOptionId: t.selectedOptionId,
+            selectedAt: t.selectedAt,
+          });
+          travelersByFlight.set(t.monitoredFlightId, arr);
+        }
+
+        const flightsEnriched = await Promise.all(
           flights.map(async (f: any) => {
-            if (!f.alertSentAt) return { ...f, alternatives: [] };
-            const alts = await db
-              .select()
-              .from(tDisruptionAlternatives)
-              .where(dEq(tDisruptionAlternatives.monitoredFlightId, f.id));
-            return { ...f, alternatives: alts };
+            const flightTravelersList = travelersByFlight.get(f.id) || [];
+            const anyAlerted = flightTravelersList.some((t) => !!t.alertSentAt);
+            const alts = anyAlerted
+              ? await db
+                  .select()
+                  .from(tDisruptionAlternatives)
+                  .where(dEq(tDisruptionAlternatives.monitoredFlightId, f.id))
+              : [];
+            return { ...f, travelers: flightTravelersList, alternatives: alts };
           }),
         );
-        return res.json(flightsWithAlts);
+        return res.json(flightsEnriched);
       } catch (err: any) {
         console.error("[agency-flights-list] error:", err);
         return res.status(500).json({ error: "Failed to load flights" });
@@ -9554,6 +9583,47 @@ export async function registerRoutes(
           || flightNumberCompact.replace(/[^A-Z]/g, "").slice(0, 2)
           || flightNumberCompact.slice(0, 2)).toUpperCase();
 
+        // Look for an existing monitored flight for this agency on the same
+        // flight number + date. If found, just attach the new traveler to it.
+        const [existing] = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(
+            dAnd(
+              dEq(tMonitoredFlights.agencyId, agency.id),
+              dEq(tMonitoredFlights.flightNumber, flightNumberCompact),
+              dEq(tMonitoredFlights.departureDate, parsed.data.departureDate),
+              dEq(tMonitoredFlights.status, "active"),
+            ),
+          )
+          .limit(1);
+
+        const travelerEmailNorm = parsed.data.travelerEmail.trim().toLowerCase();
+
+        if (existing) {
+          const dupes = await db
+            .select()
+            .from(tFlightTravelers)
+            .where(
+              dAnd(
+                dEq(tFlightTravelers.monitoredFlightId, existing.id),
+                dEq(tFlightTravelers.travelerEmail, travelerEmailNorm),
+              ),
+            )
+            .limit(1);
+          if (dupes.length > 0) {
+            return res.status(409).json({ error: "This traveler is already on this flight" });
+          }
+          await db.insert(tFlightTravelers).values({
+            monitoredFlightId: existing.id,
+            agencyId: agency.id,
+            travelerName: parsed.data.travelerName,
+            travelerEmail: travelerEmailNorm,
+            travelerPhone: parsed.data.travelerPhone || null,
+          });
+          return res.status(200).json({ added: true, existingFlight: true, flight: existing });
+        }
+
         const [created] = await db
           .insert(tMonitoredFlights)
           .values({
@@ -9561,13 +9631,19 @@ export async function registerRoutes(
             flightNumber: flightNumberCompact,
             carrierIata,
             departureDate: parsed.data.departureDate,
+            departureTime: parsed.data.departureTime || null,
             originIata: parsed.data.originIata.toUpperCase(),
             destinationIata: parsed.data.destinationIata.toUpperCase(),
-            travelerName: parsed.data.travelerName,
-            travelerEmail: parsed.data.travelerEmail,
-            travelerPhone: parsed.data.travelerPhone || null,
           })
           .returning();
+
+        await db.insert(tFlightTravelers).values({
+          monitoredFlightId: created.id,
+          agencyId: agency.id,
+          travelerName: parsed.data.travelerName,
+          travelerEmail: travelerEmailNorm,
+          travelerPhone: parsed.data.travelerPhone || null,
+        });
 
         // Score immediately so the dashboard reflects risk on first load,
         // not after the next 30-minute tick. Fire-and-forget so a slow
@@ -9577,7 +9653,7 @@ export async function registerRoutes(
           console.error("[agency-flights-create] initial score failed:", err?.message || err),
         );
 
-        return res.status(201).json(created);
+        return res.status(201).json({ added: true, existingFlight: false, flight: created });
       } catch (err: any) {
         console.error("[agency-flights-create] error:", err);
         return res.status(500).json({ error: "Failed to add flight" });
@@ -9605,7 +9681,11 @@ export async function registerRoutes(
           .select()
           .from(tDisruptionAlternatives)
           .where(dEq(tDisruptionAlternatives.monitoredFlightId, flight.id));
-        return res.json({ ...flight, history, alternatives });
+        const travelers = await db
+          .select()
+          .from(tFlightTravelers)
+          .where(dEq(tFlightTravelers.monitoredFlightId, flight.id));
+        return res.json({ ...flight, history, alternatives, travelers });
       } catch (err: any) {
         console.error("[agency-flights-get] error:", err);
         return res.status(500).json({ error: "Failed to load flight" });
@@ -9648,8 +9728,20 @@ export async function registerRoutes(
           .limit(1);
         if (!flight) return res.status(404).json({ error: "Flight not found" });
 
-        const tokenMatches =
-          magicToken && flight.travelerSelectionToken && flight.travelerSelectionToken === magicToken;
+        let tokenMatches = false;
+        if (magicToken) {
+          const [traveler] = await db
+            .select()
+            .from(tFlightTravelers)
+            .where(
+              dAnd(
+                dEq(tFlightTravelers.monitoredFlightId, id),
+                dEq(tFlightTravelers.selectionToken, magicToken),
+              ),
+            )
+            .limit(1);
+          tokenMatches = !!traveler;
+        }
         const sessionMatches = sessionAgencyId && sessionAgencyId === flight.agencyId;
         if (!tokenMatches && !sessionMatches) {
           if (sessionAgencyId) return res.status(403).json({ error: "Not authorized" });
@@ -9763,13 +9855,18 @@ export async function registerRoutes(
           .delete(tDisruptionAlternatives)
           .where(dEq(tDisruptionAlternatives.monitoredFlightId, id));
         await db
-          .update(tMonitoredFlights)
+          .update(tFlightTravelers)
           .set({
             alertSentAt: null,
-            travelerSelectionToken: null,
-            travelerSelectedOptionId: null,
-            travelerSelectedAt: null,
+            selectionToken: null,
+            selectedOptionId: null,
+            selectedAt: null,
             agencyNotifiedAt: null,
+          })
+          .where(dEq(tFlightTravelers.monitoredFlightId, id));
+        await db
+          .update(tMonitoredFlights)
+          .set({
             agencyResolvedAt: null,
             riskScore: targetScore,
             riskTier: tier,
@@ -9797,8 +9894,6 @@ export async function registerRoutes(
           ...flight,
           riskScore: targetScore,
           riskTier: tier,
-          alertSentAt: null,
-          travelerSelectionToken: null,
         } as typeof flight;
 
         let alternatives: Awaited<ReturnType<typeof findLowRiskAlternatives>> = [];
@@ -9832,11 +9927,23 @@ export async function registerRoutes(
           }
         }
 
-        const travelerSelectionToken = dRandomUUID();
-        await db
-          .update(tMonitoredFlights)
-          .set({ travelerSelectionToken })
-          .where(dEq(tMonitoredFlights.id, id));
+        // Issue per-traveler selection tokens for any traveler on this flight
+        // who doesn't already have one. These power the email CTAs.
+        const allTravelers = await db
+          .select()
+          .from(tFlightTravelers)
+          .where(dEq(tFlightTravelers.monitoredFlightId, id));
+        const tokenedTravelers: typeof allTravelers = [];
+        for (const t of allTravelers) {
+          const token = t.selectionToken || dRandomUUID();
+          if (!t.selectionToken) {
+            await db
+              .update(tFlightTravelers)
+              .set({ selectionToken: token })
+              .where(dEq(tFlightTravelers.id, t.id));
+          }
+          tokenedTravelers.push({ ...t, selectionToken: token });
+        }
 
         const simulatedRisk = {
           score: targetScore,
@@ -9868,17 +9975,8 @@ export async function registerRoutes(
           cancelled: false,
         };
 
-        const updatedFlight = {
-          ...refreshed,
-          travelerSelectionToken,
-        } as typeof flight;
-
         try {
-          await sendTravelerAlert(updatedFlight, alternatives, agency, simulatedRisk as any);
-          await db
-            .update(tMonitoredFlights)
-            .set({ alertSentAt: new Date() })
-            .where(dEq(tMonitoredFlights.id, id));
+          await sendTravelerAlert(refreshed, tokenedTravelers, alternatives, agency, simulatedRisk as any);
         } catch (err: any) {
           console.error("[simulate] email send failed:", err?.message || err);
         }
@@ -9887,7 +9985,7 @@ export async function registerRoutes(
           success: true,
           fired: true,
           alternativeCount: alternatives.length,
-          travelerSelectionToken,
+          travelersAlerted: tokenedTravelers.length,
         });
       } catch (err: any) {
         console.error("[agency-simulate] error:", err);
@@ -9910,15 +10008,18 @@ export async function registerRoutes(
           .delete(tDisruptionAlternatives)
           .where(dEq(tDisruptionAlternatives.monitoredFlightId, id));
         await db
-          .update(tMonitoredFlights)
+          .update(tFlightTravelers)
           .set({
             alertSentAt: null,
-            travelerSelectionToken: null,
-            travelerSelectedOptionId: null,
-            travelerSelectedAt: null,
+            selectionToken: null,
+            selectedOptionId: null,
+            selectedAt: null,
             agencyNotifiedAt: null,
-            agencyResolvedAt: null,
           })
+          .where(dEq(tFlightTravelers.monitoredFlightId, id));
+        await db
+          .update(tMonitoredFlights)
+          .set({ agencyResolvedAt: null })
           .where(dEq(tMonitoredFlights.id, id));
         return res.json({ success: true });
       } catch (err: any) {
@@ -9927,186 +10028,266 @@ export async function registerRoutes(
       }
     });
 
-    // =================================================================
-    // Flight search — used by the Add Flight UI to verify a flight exists
-    // before adding it to monitoring. Calls AeroDataBox in two modes:
-    //   - "flightNumber": single flight lookup
-    //   - "route": filtered departures from an origin to a destination
-    // Errors and missing API key are normalized into an empty result with
-    // a user-readable message so the UI never sees a thrown error.
-    // =================================================================
-    const flightSearchSchema = z.object({
-      mode: z.enum(["route", "flightNumber"]),
-      origin: z.string().optional(),
-      destination: z.string().optional(),
-      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD"),
-      flightNumber: z.string().optional(),
-    });
-
-    interface FoundFlightResult {
-      flightNumber: string;
-      carrierIata: string;
-      carrierName: string;
-      originIata: string;
-      originName: string;
-      destinationIata: string;
-      destinationName: string;
-      departureTime: string;
-      arrivalTime: string;
-      status: string;
-    }
-
-    const extractFlightNumber = (f: any): string => {
-      const raw = (f?.number || f?.iata || "").toString().replace(/\s+/g, "").toUpperCase();
-      return raw;
-    };
-
-    const deriveCarrierIata = (flightNumber: string, airline: any): string => {
-      const fromAirline = (airline?.iata || "").toString().toUpperCase();
-      if (fromAirline.length >= 2 && fromAirline.length <= 3) return fromAirline;
-      const letters = flightNumber.replace(/[^A-Z]/g, "").slice(0, 2);
-      return letters || flightNumber.slice(0, 2);
-    };
-
-    const mapAdbFlight = (f: any): FoundFlightResult | null => {
-      const flightNumber = extractFlightNumber(f);
-      if (!flightNumber) return null;
-      const departure = f?.departure || {};
-      const arrival = f?.arrival || {};
-      const depTime: string =
-        departure?.scheduledTime?.local ||
-        departure?.scheduledTime?.utc ||
-        "";
-      const arrTime: string =
-        arrival?.scheduledTime?.local ||
-        arrival?.scheduledTime?.utc ||
-        "";
-      const originIata: string = (departure?.airport?.iata || "").toString().toUpperCase();
-      const destinationIata: string = (arrival?.airport?.iata || "").toString().toUpperCase();
-      if (!depTime || !originIata || !destinationIata) return null;
-      return {
-        flightNumber,
-        carrierIata: deriveCarrierIata(flightNumber, f?.airline),
-        carrierName: f?.airline?.name || "",
-        originIata,
-        originName: departure?.airport?.name || "",
-        destinationIata,
-        destinationName: arrival?.airport?.name || "",
-        departureTime: depTime,
-        arrivalTime: arrTime,
-        status: f?.status || "Unknown",
-      };
-    };
-
     app.post("/api/agency/flights/search", isAgencyAuthenticated, async (req: Request, res: Response) => {
       try {
-        const parsed = flightSearchSchema.safeParse(req.body);
-        if (!parsed.success) {
-          return res
-            .status(400)
-            .json({ flights: [], message: parsed.error.errors[0]?.message || "Invalid input" });
-        }
-        const { mode, date } = parsed.data;
-        const todayStr = new Date().toISOString().slice(0, 10);
-        if (date < todayStr) {
-          return res.status(400).json({ flights: [], message: "Date must be today or later" });
+        const { mode, origin, destination, date, flightNumber, airlineFilter } = req.body || {};
+
+        if (!date || typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          return res.status(400).json({ flights: [], message: "A valid date (YYYY-MM-DD) is required." });
         }
 
-        if (mode === "route") {
-          const origin = (parsed.data.origin || "").trim().toUpperCase();
-          const destination = (parsed.data.destination || "").trim().toUpperCase();
-          if (!origin || !destination) {
-            return res.status(400).json({ flights: [], message: "Origin and destination are required" });
-          }
-          const apiKey = process.env.AERODATABOX_API_KEY;
-          if (!apiKey) {
-            console.warn("[flightSearch] AERODATABOX_API_KEY not set");
-            return res.json({ flights: [], message: "Flight search unavailable — API key not configured." });
-          }
-          const url =
-            `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(origin)}` +
-            `/${encodeURIComponent(date)}T00:00/${encodeURIComponent(date)}T23:59` +
-            `?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withCargo=false&withPrivate=false`;
-          console.log(`[flightSearch] route ${origin}->${destination} ${date}`);
-          try {
-            const resp = await fetch(url, {
-              headers: {
-                "x-rapidapi-key": apiKey,
-                "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
-              },
-            });
-            if (!resp.ok) {
-              console.warn(`[flightSearch] HTTP ${resp.status} for route ${origin}->${destination}`);
-              return res.json({ flights: [], message: "No flights found on this route for the selected date." });
-            }
-            const raw: any = await resp.json();
-            const departures: any[] = Array.isArray(raw)
-              ? raw
-              : Array.isArray(raw?.departures)
-              ? raw.departures
-              : [];
-            const matched = departures
-              .filter((f: any) => {
-                const arrIata = (f?.arrival?.airport?.iata || "").toString().toUpperCase();
-                const hasSchedule = !!(f?.departure?.scheduledTime?.local || f?.departure?.scheduledTime?.utc);
-                return arrIata === destination && hasSchedule;
-              })
-              .map(mapAdbFlight)
-              .filter((x): x is FoundFlightResult => x !== null);
-            console.log(`[flightSearch] route returned ${matched.length} matching flights`);
-            if (matched.length === 0) {
-              return res.json({ flights: [], message: "No flights found on this route for the selected date." });
-            }
-            return res.json({ flights: matched });
-          } catch (err: any) {
-            console.warn(`[flightSearch] route request failed:`, err?.message || err);
-            return res.json({ flights: [], message: "No flights found on this route for the selected date." });
-          }
+        const today = new Date().toISOString().slice(0, 10);
+        if (date < today) {
+          return res.status(400).json({ flights: [], message: "Date must be today or in the future." });
         }
 
-        // mode === "flightNumber"
-        const flightNumber = (parsed.data.flightNumber || "")
-          .replace(/\s+/g, "")
-          .toUpperCase();
-        if (!flightNumber) {
-          return res.status(400).json({ flights: [], message: "Flight number is required" });
-        }
         const apiKey = process.env.AERODATABOX_API_KEY;
         if (!apiKey) {
-          console.warn("[flightSearch] AERODATABOX_API_KEY not set");
           return res.json({ flights: [], message: "Flight search unavailable — API key not configured." });
         }
-        const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(flightNumber)}/${encodeURIComponent(date)}`;
-        console.log(`[flightSearch] flightNumber ${flightNumber} ${date}`);
-        try {
-          const resp = await fetch(url, {
-            headers: {
-              "x-rapidapi-key": apiKey,
-              "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
-            },
-          });
+
+        const headers = {
+          "x-rapidapi-key": apiKey,
+          "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
+          Accept: "application/json",
+        };
+
+        function mapFlight(f: any): object | null {
+          try {
+            const dep = f.departure || {};
+            const arr = f.arrival || {};
+            const airline = f.airline || {};
+
+            // AeroDataBox uses "number" field with format "DL 5135"
+            const rawNumber = f.number || f.iata || f.flightNumber || "";
+            if (!rawNumber) return null;
+
+            // Normalize: remove spaces so "DL 5135" becomes "DL5135"
+            const flightNumber = rawNumber.replace(/\s+/g, "").toUpperCase();
+
+            // Use airline.iata directly — more reliable than slicing flight number
+            const carrierIata = (airline.iata || flightNumber.slice(0, 2)).toUpperCase();
+
+            const depTime =
+              dep.scheduledTime?.local || dep.scheduledTime?.utc ||
+              dep.revisedTime?.local || dep.revisedTime?.utc || null;
+            const arrTime =
+              arr.scheduledTime?.local || arr.scheduledTime?.utc ||
+              arr.revisedTime?.local || arr.revisedTime?.utc || null;
+
+            // Get destination IATA — check multiple locations
+            const destIata = (
+              arr.airport?.iata ||
+              ""
+            ).toUpperCase();
+
+            const originIata = (
+              dep.airport?.iata ||
+              ""
+            ).toUpperCase();
+
+            return {
+              flightNumber,
+              carrierIata,
+              carrierName: airline.name || carrierIata,
+              originIata,
+              originName: dep.airport?.name || originIata,
+              destinationIata: destIata,
+              destinationName: arr.airport?.name || destIata,
+              departureTime: depTime,
+              arrivalTime: arrTime,
+              status: String(f.status || "Scheduled"),
+            };
+          } catch {
+            return null;
+          }
+        }
+
+        // MODE: flight number lookup
+        if (mode === "flightNumber") {
+          if (!flightNumber || typeof flightNumber !== "string") {
+            return res.status(400).json({ flights: [], message: "Flight number is required." });
+          }
+          const fn = flightNumber.trim().toUpperCase().replace(/\s+/g, "");
+          const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(fn)}/${encodeURIComponent(date)}`;
+          console.log(`[flightSearch] number lookup ${fn} ${date}`);
+          const resp = await fetch(url, { headers });
           if (!resp.ok) {
-            console.warn(`[flightSearch] HTTP ${resp.status} for ${flightNumber} ${date}`);
+            console.warn(`[flightSearch] AeroDataBox ${resp.status} for ${fn}`);
             return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
           }
           const raw: any = await resp.json();
-          const arr: any[] = Array.isArray(raw) ? raw : [];
-          if (arr.length === 0) {
+          if (!Array.isArray(raw) || raw.length === 0) {
             return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
           }
-          const mapped = mapAdbFlight(arr[0]);
-          if (!mapped) {
-            return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
-          }
-          console.log(`[flightSearch] flightNumber returned 1 result status=${mapped.status}`);
-          return res.json({ flights: [mapped] });
-        } catch (err: any) {
-          console.warn(`[flightSearch] flightNumber request failed:`, err?.message || err);
-          return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
+          // Use the same smart picker as flightStatus.ts
+          const now = Date.now();
+          const scored = raw.map((f: any) => {
+            const dep = f.departure?.scheduledTime?.utc || f.departure?.revisedTime?.utc || null;
+            const depMs = dep ? new Date(dep).getTime() : null;
+            const cancelled = String(f.status || "").toLowerCase().includes("cancel");
+            let score = depMs !== null
+              ? (depMs - now) / 3_600_000 > 0
+                ? 1000 - Math.min((depMs - now) / 3_600_000, 48) * 10
+                : (depMs - now) / 3_600_000 > -3
+                  ? 500 + ((depMs - now) / 3_600_000) * 50
+                  : 100 + (depMs - now) / 3_600_000
+              : 0;
+            if (cancelled) score -= 200;
+            return { f, score };
+          });
+          scored.sort((a: any, b: any) => b.score - a.score);
+          const best = mapFlight(scored[0].f);
+          return res.json({ flights: best ? [best] : [], message: best ? undefined : "Could not parse flight data." });
         }
+
+        // MODE: route search — fetch all departures from origin airport on this date
+        if (mode === "route") {
+          if (!origin || !destination) {
+            return res.status(400).json({ flights: [], message: "Origin and destination are required." });
+          }
+          const orig = (origin as string).toUpperCase().trim();
+          const dest = (destination as string).toUpperCase().trim();
+
+          // AeroDataBox FIDS caps each call at 12h, so we issue two calls
+          // (00:00→11:59 and 12:00→23:59) in parallel and merge the results.
+          const buildUrl = (fromTime: string, toTime: string) =>
+            `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(orig)}/${date}T${fromTime}/${date}T${toTime}?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withCargo=false&withPrivate=false`;
+          console.log(`[flightSearch] route search ${orig}->${dest} ${date} URL_TEST=${date}T00:00`);
+          const [respAm, respPm] = await Promise.all([
+            fetch(buildUrl("00:00", "11:59"), { headers }),
+            fetch(buildUrl("12:00", "23:59"), { headers }),
+          ]);
+          console.log(`[flightSearch] AeroDataBox FIDS status am=${respAm.status} pm=${respPm.status}`);
+          if (!respAm.ok && !respPm.ok) {
+            const [bodyAm, bodyPm] = await Promise.all([
+              respAm.text().catch(() => ""),
+              respPm.text().catch(() => ""),
+            ]);
+            console.warn(`[flightSearch] AeroDataBox FIDS AM ${respAm.status}: ${bodyAm.slice(0, 300)}`);
+            console.warn(`[flightSearch] AeroDataBox FIDS PM ${respPm.status}: ${bodyPm.slice(0, 300)}`);
+            return res.json({
+              flights: [],
+              message: `Could not fetch departures from ${orig}. Error: ${respAm.status}. Try searching by flight number instead.`
+            });
+          }
+          const parseDepartures = async (resp: Response): Promise<any[]> => {
+            if (!resp.ok) return [];
+            try {
+              const raw: any = await resp.json();
+              if (!raw) return [];
+              // AeroDataBox FIDS wraps in { departures: [...], arrivals: [...] }
+              if (raw.departures && Array.isArray(raw.departures)) return raw.departures;
+              // Fallback: bare array
+              if (Array.isArray(raw)) return raw;
+              return [];
+            } catch {
+              return [];
+            }
+          };
+          const [depAm, depPm] = await Promise.all([parseDepartures(respAm), parseDepartures(respPm)]);
+          const departures: any[] = [...depAm, ...depPm];
+          console.log(`[flightSearch] FIDS departures: am=${depAm.length} pm=${depPm.length} total=${departures.length}`);
+          if (departures.length > 0) {
+            const sample = departures[0];
+            console.log(
+              `[flightSearch] sample departure shape:`,
+              JSON.stringify({
+                number: sample.number,
+                iata: sample.iata,
+                flightNumber: sample.flightNumber,
+                hasDeparture: !!sample.departure,
+                hasArrival: !!sample.arrival,
+                arrivalIata: sample.arrival?.airport?.iata,
+                status: sample.status,
+                airline: sample.airline?.name,
+              }).slice(0, 500),
+            );
+          }
+
+          if (departures.length === 0) {
+            return res.json({ flights: [], message: "No departures found from this airport on the selected date." });
+          }
+
+          // Filter by destination — check multiple possible locations in the response
+          // AeroDataBox codeshare/leg data can have the destination in different places
+          let filtered = departures.filter((f: any) => {
+            const arrIata = (
+              f.arrival?.airport?.iata ||
+              f.leg?.arrival?.airport?.iata ||
+              ""
+            ).toUpperCase();
+
+            // Also check airport name for flights without IATA in response
+            const arrName = (f.arrival?.airport?.name || "").toUpperCase();
+
+            // Match by IATA code
+            if (arrIata && arrIata === dest) return true;
+
+            // Fallback: match destination IATA against airport name
+            // e.g. dest="IAD" and name contains "Dulles" or "Washington"
+            const iataToNameHints: Record<string, string[]> = {
+              IAD: ["DULLES", "WASHINGTON"],
+              DCA: ["REAGAN", "NATIONAL", "WASHINGTON"],
+              JFK: ["KENNEDY", "NEW YORK"],
+              LGA: ["LAGUARDIA", "NEW YORK"],
+              EWR: ["NEWARK"],
+              ORD: ["O'HARE", "OHARE", "CHICAGO"],
+              MDW: ["MIDWAY", "CHICAGO"],
+              LAX: ["LOS ANGELES"],
+              SFO: ["SAN FRANCISCO"],
+              BOS: ["BOSTON", "LOGAN"],
+              MIA: ["MIAMI"],
+              ATL: ["ATLANTA"],
+              DFW: ["DALLAS", "FORT WORTH"],
+            };
+
+            const hints = iataToNameHints[dest] || [];
+            if (hints.length > 0 && arrName && hints.some(h => arrName.includes(h))) return true;
+
+            return false;
+          });
+
+          // If strict destination filter returns nothing, show ALL departures from that airport
+          // so the agency can at least see what's flying and filter manually
+          // Label this clearly so they know the destination filter was relaxed
+          const relaxed = filtered.length === 0;
+          if (relaxed) {
+            filtered = departures.slice(0, 30);
+          }
+
+          // Optional airline filter
+          const airlineFilterStr = airlineFilter ? (airlineFilter as string).toUpperCase().trim() : null;
+          if (airlineFilterStr) {
+            const byAirline = filtered.filter((f: any) => {
+              const iata = (f.airline?.iata || "").toUpperCase();
+              const name = (f.airline?.name || "").toUpperCase();
+              return iata.includes(airlineFilterStr) || name.includes(airlineFilterStr);
+            });
+            // Only apply airline filter if it returns results
+            if (byAirline.length > 0) filtered = byAirline;
+          }
+
+          const mapped = filtered.map(mapFlight).filter(Boolean);
+          console.log(
+            `[flightSearch] route summary: departures=${departures.length} strictMatch=${relaxed ? 0 : filtered.length} relaxed=${relaxed} mapped=${mapped.length}`,
+          );
+
+          return res.json({
+            flights: mapped,
+            message: relaxed && mapped.length > 0
+              ? `No direct ${orig}→${dest} flights found. Showing all ${orig} departures — select the right one or use the flight number tab.`
+              : mapped.length === 0
+                ? "No flights found for this route on the selected date."
+                : undefined,
+            relaxed,
+          });
+        }
+
+        return res.status(400).json({ flights: [], message: "Invalid search mode." });
       } catch (err: any) {
-        console.error("[flightSearch] unexpected error:", err);
-        return res.json({ flights: [], message: "Flight search failed. Please try again." });
+        console.error("[flightSearch] error:", err?.message || err);
+        return res.json({ flights: [], message: "Search failed. Try again or use the flight number tab." });
       }
     });
 
@@ -10117,10 +10298,16 @@ export async function registerRoutes(
       try {
         const token = String(req.params.travelerSelectionToken || "");
         if (!token) return res.status(400).json({ error: "Token required" });
+        const [traveler] = await db
+          .select()
+          .from(tFlightTravelers)
+          .where(dEq(tFlightTravelers.selectionToken, token))
+          .limit(1);
+        if (!traveler) return res.status(404).json({ error: "Not found" });
         const [flight] = await db
           .select()
           .from(tMonitoredFlights)
-          .where(dEq(tMonitoredFlights.travelerSelectionToken, token))
+          .where(dEq(tMonitoredFlights.id, traveler.monitoredFlightId))
           .limit(1);
         if (!flight) return res.status(404).json({ error: "Not found" });
         const alternatives = await db
@@ -10141,12 +10328,12 @@ export async function registerRoutes(
             departureTime: flight.departureTime,
             originIata: flight.originIata,
             destinationIata: flight.destinationIata,
-            travelerName: flight.travelerName,
+            travelerName: traveler.travelerName,
             riskScore: flight.riskScore,
             riskTier: flight.riskTier,
-            travelerSelectedOptionId: flight.travelerSelectedOptionId,
-            travelerSelectedAt: flight.travelerSelectedAt,
-            travelerSelectionToken: flight.travelerSelectionToken,
+            travelerSelectedOptionId: traveler.selectedOptionId,
+            travelerSelectedAt: traveler.selectedAt,
+            travelerSelectionToken: traveler.selectionToken,
           },
           agency: agency
             ? { name: agency.name, contactEmail: agency.contactEmail }
@@ -10163,6 +10350,8 @@ export async function registerRoutes(
       try {
         const token = String(req.params.selectionToken || "");
         if (!token) return res.status(400).send("Invalid selection link");
+        const travelerToken = typeof req.query.t === "string" ? req.query.t : null;
+
         const [alt] = await db
           .select()
           .from(tDisruptionAlternatives)
@@ -10176,24 +10365,51 @@ export async function registerRoutes(
           .limit(1);
         if (!flight) return res.status(404).send("Flight not found");
 
+        // Identify which traveler clicked — look up by ?t= token, falling back
+        // to the first traveler on the booking if no token is supplied (older
+        // links). If a different traveler on the same booking has already
+        // selected, treat as "already selected".
+        let traveler: any = null;
+        if (travelerToken) {
+          const [tr] = await db
+            .select()
+            .from(tFlightTravelers)
+            .where(
+              dAnd(
+                dEq(tFlightTravelers.monitoredFlightId, flight.id),
+                dEq(tFlightTravelers.selectionToken, travelerToken),
+              ),
+            )
+            .limit(1);
+          traveler = tr || null;
+        }
+        if (!traveler) {
+          const [first] = await db
+            .select()
+            .from(tFlightTravelers)
+            .where(dEq(tFlightTravelers.monitoredFlightId, flight.id))
+            .orderBy(tFlightTravelers.id)
+            .limit(1);
+          traveler = first || null;
+        }
+        if (!traveler) return res.status(404).send("Traveler not found");
+
         const baseRedirect = (qs: string) => `/disruption/confirmed?${qs}`;
 
-        if (flight.travelerSelectedOptionId) {
+        if (traveler.selectedOptionId) {
           return res.redirect(
-            baseRedirect(
-              `already=true&flight=${encodeURIComponent(flight.flightNumber)}`,
-            ),
+            baseRedirect(`already=true&flight=${encodeURIComponent(flight.flightNumber)}`),
           );
         }
 
         await db
-          .update(tMonitoredFlights)
+          .update(tFlightTravelers)
           .set({
-            travelerSelectedOptionId: String(alt.id),
-            travelerSelectedAt: new Date(),
+            selectedOptionId: String(alt.id),
+            selectedAt: new Date(),
             agencyNotifiedAt: new Date(),
           })
-          .where(dEq(tMonitoredFlights.id, flight.id));
+          .where(dEq(tFlightTravelers.id, traveler.id));
 
         const [agency] = await db
           .select()
@@ -10204,7 +10420,8 @@ export async function registerRoutes(
         if (agency) {
           try {
             await sendAgencyNotification(
-              { ...flight, travelerSelectedOptionId: String(alt.id) },
+              flight,
+              { ...traveler, selectedOptionId: String(alt.id) },
               {
                 flightNumber: alt.flightNumber,
                 carrierIata: alt.carrierIata,
@@ -10227,9 +10444,7 @@ export async function registerRoutes(
         }
 
         return res.redirect(
-          baseRedirect(
-            `flight=${encodeURIComponent(flight.flightNumber)}&selected=${encodeURIComponent(alt.flightNumber)}`,
-          ),
+          baseRedirect(`flight=${encodeURIComponent(flight.flightNumber)}&selected=${encodeURIComponent(alt.flightNumber)}`),
         );
       } catch (err: any) {
         console.error("[disruption-select] error:", err);
@@ -10241,31 +10456,245 @@ export async function registerRoutes(
       try {
         const token = String(req.params.travelerSelectionToken || "");
         if (!token) return res.status(400).send("Invalid link");
+        const [traveler] = await db
+          .select()
+          .from(tFlightTravelers)
+          .where(dEq(tFlightTravelers.selectionToken, token))
+          .limit(1);
+        if (!traveler) return res.status(404).send("Flight not found");
         const [flight] = await db
           .select()
           .from(tMonitoredFlights)
-          .where(dEq(tMonitoredFlights.travelerSelectionToken, token))
+          .where(dEq(tMonitoredFlights.id, traveler.monitoredFlightId))
           .limit(1);
         if (!flight) return res.status(404).send("Flight not found");
-        if (flight.travelerSelectedOptionId) {
+        if (traveler.selectedOptionId) {
           return res.redirect(
             `/disruption/confirmed?already=true&flight=${encodeURIComponent(flight.flightNumber)}`,
           );
         }
         await db
-          .update(tMonitoredFlights)
+          .update(tFlightTravelers)
           .set({
-            travelerSelectedOptionId: "keep_original",
-            travelerSelectedAt: new Date(),
+            selectedOptionId: "keep_original",
+            selectedAt: new Date(),
             agencyNotifiedAt: new Date(),
           })
-          .where(dEq(tMonitoredFlights.id, flight.id));
+          .where(dEq(tFlightTravelers.id, traveler.id));
         return res.redirect(
           `/disruption/confirmed?kept=true&flight=${encodeURIComponent(flight.flightNumber)}`,
         );
       } catch (err: any) {
         console.error("[disruption-keep] error:", err);
         return res.status(500).send("Failed to record selection");
+      }
+    });
+
+    // =================================================================
+    // Health report — on-demand. Walks recently-departed monitored flights
+    // across ALL agencies, classifies each as TP/FP/FN/TN by comparing the
+    // peak recorded risk score against the actual AeroDataBox outcome, and
+    // asks Claude to write the plain-English summary.
+    // =================================================================
+
+    app.get("/api/agency/health-report/latest", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const [report] = await db
+          .select()
+          .from(tHealthReports)
+          .orderBy(dDesc(tHealthReports.generatedAt))
+          .limit(1);
+        return res.json({ report: report || null });
+      } catch (err: any) {
+        console.error("[agency-health-latest] error:", err);
+        return res.status(500).json({ error: "Failed to load report" });
+      }
+    });
+
+    app.post("/api/agency/health-report", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const agency = (req as any).agency;
+        const todayStr = new Date().toISOString().slice(0, 10);
+
+        const candidates = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(
+            dAnd(
+              dInArray(tMonitoredFlights.status, ["active", "completed"]),
+              dLt(tMonitoredFlights.departureDate, todayStr),
+              dIsNotNull(tMonitoredFlights.lastCheckedAt),
+            ),
+          )
+          .orderBy(dDesc(tMonitoredFlights.departureDate))
+          .limit(50);
+
+        const perFlight: Array<{
+          id: number;
+          flightNumber: string;
+          route: string;
+          departureDate: string;
+          peakScore: number;
+          peakTier: string;
+          actualStatus: string;
+          actualDelayMinutes: number;
+          actualCancelled: boolean;
+          disrupted: boolean;
+          classification: "true_positive" | "false_positive" | "false_negative" | "true_negative";
+        }> = [];
+
+        let truePositives = 0;
+        let falsePositives = 0;
+        let falseNegatives = 0;
+        let trueNegatives = 0;
+        let disruptedScoreSum = 0;
+        let disruptedScoreCount = 0;
+        let onTimeScoreSum = 0;
+        let onTimeScoreCount = 0;
+        let flaggedCount = 0;
+
+        for (const flight of candidates) {
+          const history = await db
+            .select()
+            .from(tRiskScoreHistory)
+            .where(dEq(tRiskScoreHistory.monitoredFlightId, flight.id));
+          const peakScore = history.reduce((max, h) => (h.score > max ? h.score : max), 0);
+          const peakTier =
+            peakScore >= 60 ? "red" : peakScore >= 25 ? "amber" : "green";
+
+          const status = await dGetFlightStatus(flight.flightNumber, flight.departureDate).catch(() => null);
+          const actualCancelled = !!status?.cancelled;
+          const actualDelay = status?.delayMinutes || 0;
+          const disrupted = actualCancelled || actualDelay >= 30;
+          const actualStatus = status?.status || "Unknown";
+
+          let classification: "true_positive" | "false_positive" | "false_negative" | "true_negative";
+          if (peakScore >= 60 && disrupted) {
+            classification = "true_positive";
+            truePositives += 1;
+          } else if (peakScore >= 60 && !disrupted) {
+            classification = "false_positive";
+            falsePositives += 1;
+          } else if (peakScore < 60 && disrupted) {
+            classification = "false_negative";
+            falseNegatives += 1;
+          } else {
+            classification = "true_negative";
+            trueNegatives += 1;
+          }
+          if (peakScore >= 60) flaggedCount += 1;
+          if (disrupted) {
+            disruptedScoreSum += peakScore;
+            disruptedScoreCount += 1;
+          } else {
+            onTimeScoreSum += peakScore;
+            onTimeScoreCount += 1;
+          }
+
+          perFlight.push({
+            id: flight.id,
+            flightNumber: flight.flightNumber,
+            route: `${flight.originIata} → ${flight.destinationIata}`,
+            departureDate: flight.departureDate,
+            peakScore,
+            peakTier,
+            actualStatus,
+            actualDelayMinutes: actualDelay,
+            actualCancelled,
+            disrupted,
+            classification,
+          });
+        }
+
+        const flightsAnalyzed = perFlight.length;
+        const precisionDenom = truePositives + falsePositives;
+        const recallDenom = truePositives + falseNegatives;
+        const precision = precisionDenom > 0 ? truePositives / precisionDenom : null;
+        const recall = recallDenom > 0 ? truePositives / recallDenom : null;
+        const avgScoreDisrupted = disruptedScoreCount > 0 ? disruptedScoreSum / disruptedScoreCount : null;
+        const avgScoreOnTime = onTimeScoreCount > 0 ? onTimeScoreSum / onTimeScoreCount : null;
+
+        const promptBody = `You are analyzing the accuracy of a flight disruption risk scoring system for a travel agency platform called Travnr.
+
+Here are the results from the last analysis period:
+
+Flights analyzed: ${flightsAnalyzed}
+Flights we flagged as high risk (red): ${flaggedCount}
+True positives (correctly flagged, were actually disrupted): ${truePositives}
+False positives (flagged red, flew fine): ${falsePositives}
+False negatives (not flagged, but were actually disrupted): ${falseNegatives}
+True negatives (not flagged, flew fine): ${trueNegatives}
+Precision: ${precision !== null ? (precision * 100).toFixed(1) + '%' : 'N/A'}
+Recall: ${recall !== null ? (recall * 100).toFixed(1) + '%' : 'N/A'}
+Average risk score for disrupted flights: ${avgScoreDisrupted !== null ? avgScoreDisrupted.toFixed(1) : 'N/A'}
+Average risk score for on-time flights: ${avgScoreOnTime !== null ? avgScoreOnTime.toFixed(1) : 'N/A'}
+
+Per-flight breakdown:
+${JSON.stringify(perFlight, null, 2)}
+
+Write a clear, direct health report in plain English. Cover:
+1. Overall system accuracy assessment (be honest — is it working?)
+2. Specific patterns you notice in the false positives or false negatives
+3. Which signals appear to be over or under-weighted based on the data
+4. Concrete recommendations to improve accuracy
+5. Any data quality issues you notice (e.g. too few flights to draw conclusions)
+
+Be specific, not generic. Reference actual flight numbers and patterns from the data. Keep it under 400 words.`;
+
+        let claudeSummary = "Summary unavailable.";
+        if (process.env.ANTHROPIC_API_KEY) {
+          try {
+            const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-api-key": process.env.ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+              },
+              body: JSON.stringify({
+                model: "claude-sonnet-4-6",
+                max_tokens: 1000,
+                messages: [{ role: "user", content: promptBody }],
+              }),
+            });
+            const claudeData: any = await claudeResponse.json();
+            if (claudeResponse.ok) {
+              claudeSummary = claudeData?.content?.[0]?.text || claudeSummary;
+            } else {
+              console.warn("[health-report] Claude HTTP", claudeResponse.status, claudeData);
+              claudeSummary = `Claude API returned ${claudeResponse.status}. See server logs.`;
+            }
+          } catch (err: any) {
+            console.error("[health-report] Claude request failed:", err?.message || err);
+            claudeSummary = "Summary unavailable — Claude request failed.";
+          }
+        } else {
+          claudeSummary = "Summary unavailable — ANTHROPIC_API_KEY is not configured.";
+        }
+
+        const [inserted] = await db
+          .insert(tHealthReports)
+          .values({
+            flightsAnalyzed,
+            flightsFlagged: flaggedCount,
+            truePositives,
+            falsePositives,
+            falseNegatives,
+            trueNegatives,
+            precision: precision as any,
+            recall: recall as any,
+            avgScoreDisrupted: avgScoreDisrupted as any,
+            avgScoreOnTime: avgScoreOnTime as any,
+            claudeSummary,
+            rawData: perFlight as any,
+            requestedByAgencyId: agency.id,
+          })
+          .returning();
+
+        return res.json({ report: inserted });
+      } catch (err: any) {
+        console.error("[agency-health-report] error:", err);
+        return res.status(500).json({ error: "Failed to generate report" });
       }
     });
   }

@@ -1,7 +1,11 @@
 import sgMail from "@sendgrid/mail";
-import type {
-  AgencyAccount,
-  MonitoredFlight,
+import { eq, inArray } from "drizzle-orm";
+import { db } from "../../db";
+import {
+  flightTravelers as tFlightTravelers,
+  type AgencyAccount,
+  type FlightTraveler,
+  type MonitoredFlight,
 } from "@shared/schema";
 import type { AlternativeOption } from "./alternativeFinder";
 import type { RiskScoreResult } from "./riskScorer";
@@ -53,15 +57,10 @@ function ctaButton(href: string, label: string, color: string = BRAND_BLUE): str
 
 function getBaseUrl(): string {
   if (process.env.APP_BASE_URL) return String(process.env.APP_BASE_URL).replace(/\/$/, "");
-  if (process.env.REPLIT_DOMAINS) {
-    const first = String(process.env.REPLIT_DOMAINS).split(",")[0].trim();
-    return `https://${first}`;
-  }
-  if (process.env.REPLIT_DEV_DOMAIN) return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  return `http://localhost:${process.env.PORT || 5000}`;
+  return "https://travnr.com";
 }
 
-function disruptionReason(risk: RiskScoreResult | null | undefined, flight: MonitoredFlight): string {
+function disruptionReason(risk: RiskScoreResult | null | undefined, _flight: MonitoredFlight): string {
   if (risk?.cancelled) return "flight cancelled";
   if (risk?.score && risk.score >= 80) return "significant delay";
   return "high delay risk";
@@ -122,10 +121,18 @@ function tierBadge(tier: string): string {
     </span>`;
 }
 
-function altCard(alt: AlternativeOption, flight: MonitoredFlight, baseUrl: string): string {
-  const selectUrl = `${baseUrl}/api/disruption/select/${encodeURIComponent(alt.selectionToken)}`;
-  const detailUrl = flight.travelerSelectionToken
-    ? `${baseUrl}/disruption/${encodeURIComponent(flight.travelerSelectionToken)}?highlight=${encodeURIComponent(alt.selectionToken)}`
+function altCard(
+  alt: AlternativeOption,
+  flight: MonitoredFlight,
+  travelerSelectionToken: string | null,
+  baseUrl: string,
+): string {
+  const travelerQs = travelerSelectionToken
+    ? `?t=${encodeURIComponent(travelerSelectionToken)}`
+    : "";
+  const selectUrl = `${baseUrl}/api/disruption/select/${encodeURIComponent(alt.selectionToken)}${travelerQs}`;
+  const detailUrl = travelerSelectionToken
+    ? `${baseUrl}/disruption/${encodeURIComponent(travelerSelectionToken)}?highlight=${encodeURIComponent(alt.selectionToken)}`
     : `${baseUrl}/disruption/confirmed?flight=${encodeURIComponent(flight.flightNumber)}`;
   const stopsLabel = alt.stops === 0 ? "Nonstop" : `${alt.stops} stop${alt.stops > 1 ? "s" : ""}`;
   const durationLabel =
@@ -152,25 +159,30 @@ function altCard(alt: AlternativeOption, flight: MonitoredFlight, baseUrl: strin
 
 function buildTravelerEmailHtml(
   flight: MonitoredFlight,
+  travelersForEmail: FlightTraveler[],
   alternatives: AlternativeOption[],
   agency: AgencyAccount,
   risk: RiskScoreResult | null | undefined,
 ): { subject: string; html: string } {
   const baseUrl = getBaseUrl();
   const reason = disruptionReason(risk, flight);
-  const subject = `Action needed: Your flight ${flight.flightNumber} on ${flight.departureDate} — ${reason}`;
-  const statusLabel = risk?.cancelled
-    ? "has been cancelled"
-    : `is at ${reason}`;
+  const subject = `Action needed: Flight ${flight.flightNumber} on ${flight.departureDate} — ${reason}`;
+  const statusLabel = risk?.cancelled ? "has been cancelled" : `is at ${reason}`;
   const why = buildWhyText(risk, flight);
-  const keepUrl = flight.travelerSelectionToken
-    ? `${baseUrl}/api/disruption/keep/${encodeURIComponent(flight.travelerSelectionToken)}`
+
+  // The shared inbox sees one email; the CTAs each carry an individual
+  // traveler's selectionToken so we know who clicked. Use the first traveler's
+  // token for the "Keep my original" link (the first one to click locks it in
+  // for everyone on the booking).
+  const primaryToken = travelersForEmail[0]?.selectionToken || null;
+  const keepUrl = primaryToken
+    ? `${baseUrl}/api/disruption/keep/${encodeURIComponent(primaryToken)}`
     : `${baseUrl}/disruption/confirmed?kept=true&flight=${encodeURIComponent(flight.flightNumber)}`;
 
   const altsBlock = alternatives.length > 0
     ? `
-      <h3 style="font-size:16px;color:${TEXT_DARK};margin:24px 0 12px;">Here are ${alternatives.length} alternative flight${alternatives.length === 1 ? "" : "s"} we found — all confirmed low disruption risk:</h3>
-      ${alternatives.map((a) => altCard(a, flight, baseUrl)).join("")}
+      <h3 style="font-size:16px;color:${TEXT_DARK};margin:24px 0 12px;">Here ${alternatives.length === 1 ? "is" : "are"} ${alternatives.length} alternative flight${alternatives.length === 1 ? "" : "s"} we found — all confirmed low disruption risk:</h3>
+      ${alternatives.map((a) => altCard(a, flight, primaryToken, baseUrl)).join("")}
     `
     : `
       <div style="border:1px dashed #d1d5db;border-radius:8px;padding:14px 16px;color:#6b7280;font-size:14px;margin:18px 0;">
@@ -178,13 +190,18 @@ function buildTravelerEmailHtml(
       </div>
     `;
 
+  const greeting = travelersForEmail.length === 1
+    ? `Hi ${escapeHtml(travelersForEmail[0].travelerName)},`
+    : `Hi ${travelersForEmail.map((t) => escapeHtml(t.travelerName)).join(", ")},`;
+
   const html = `
     <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;background:#f9fafb;">
       ${brandHeader()}
       <div style="background:${DANGER_RED};color:#ffffff;padding:18px 20px;border-radius:10px 10px 0 0;">
-        <div style="font-size:18px;font-weight:700;">Your flight ${escapeHtml(flight.flightNumber)} from ${escapeHtml(flight.originIata)} to ${escapeHtml(flight.destinationIata)} on ${escapeHtml(flight.departureDate)} ${escapeHtml(statusLabel)}.</div>
+        <div style="font-size:18px;font-weight:700;">Flight ${escapeHtml(flight.flightNumber)} from ${escapeHtml(flight.originIata)} to ${escapeHtml(flight.destinationIata)} on ${escapeHtml(flight.departureDate)} ${escapeHtml(statusLabel)}.</div>
       </div>
       <div style="background:#ffffff;border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 10px 10px;">
+        <p style="color:${TEXT_DARK};font-size:15px;margin:0 0 14px;">${greeting}</p>
         <h2 style="font-size:18px;color:${TEXT_DARK};margin:0 0 10px;">What's happening</h2>
         <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 12px;">${escapeHtml(why)}</p>
         ${altsBlock}
@@ -204,21 +221,20 @@ function buildTravelerEmailHtml(
 
 function buildAgencyEmailHtml(
   flight: MonitoredFlight,
+  traveler: FlightTraveler,
   selected: AlternativeOption,
   agency: AgencyAccount,
 ): { subject: string; html: string } {
-  const subject = `${flight.travelerName} selected an alternative for ${flight.flightNumber}`;
+  const subject = `${traveler.travelerName} selected an alternative for ${flight.flightNumber}`;
   const baseUrl = getBaseUrl();
-  const resolveUrl = flight.travelerSelectionToken
-    ? `${baseUrl}/api/agency/flights/${flight.id}/resolve?token=${encodeURIComponent(flight.travelerSelectionToken)}`
-    : `${baseUrl}/agency/dashboard`;
+  const resolveUrl = `${baseUrl}/agency/dashboard`;
 
   const html = `
     <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:620px;margin:0 auto;padding:32px 20px;">
       ${brandHeader()}
       <h2 style="font-size:20px;color:${TEXT_DARK};margin:0 0 12px;">A traveler selected an alternative flight</h2>
       <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 18px;">
-        <strong>${escapeHtml(flight.travelerName)}</strong> selected a new flight for your monitored booking. Please complete the rebooking with the airline.
+        <strong>${escapeHtml(traveler.travelerName)}</strong> selected a new flight for your monitored booking. Please complete the rebooking with the airline.
       </p>
 
       <table style="width:100%;border-collapse:collapse;font-size:14px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:18px;">
@@ -237,13 +253,13 @@ function buildAgencyEmailHtml(
         <tr>
           <td style="padding:14px 18px;background:#f9fafb;color:#6b7280;">Traveler</td>
           <td style="padding:14px 18px;color:${TEXT_DARK};">
-            ${escapeHtml(flight.travelerName)}<br/>
-            ${escapeHtml(flight.travelerEmail)}${flight.travelerPhone ? `<br/>${escapeHtml(flight.travelerPhone)}` : ""}
+            ${escapeHtml(traveler.travelerName)}<br/>
+            ${escapeHtml(traveler.travelerEmail)}${traveler.travelerPhone ? `<br/>${escapeHtml(traveler.travelerPhone)}` : ""}
           </td>
         </tr>
       </table>
 
-      ${ctaButton(resolveUrl, "Mark as resolved", BRAND_BLUE)}
+      ${ctaButton(resolveUrl, "Open dashboard", BRAND_BLUE)}
 
       <p style="color:#6b7280;font-size:13px;line-height:1.6;margin:24px 0 0;">
         The Travnr Disruption System
@@ -272,41 +288,80 @@ function ensureSendgrid(): boolean {
 
 export async function sendTravelerAlert(
   flight: MonitoredFlight,
+  travelers: FlightTraveler[],
   alternatives: AlternativeOption[],
   agency: AgencyAccount,
   risk?: RiskScoreResult | null,
 ): Promise<void> {
-  const { subject, html } = buildTravelerEmailHtml(flight, alternatives, agency, risk);
-  if (!ensureSendgrid()) {
-    console.warn(
-      `[alertSender] SENDGRID_API_KEY missing — would have sent traveler alert to ${flight.travelerEmail}`,
-    );
-  } else {
-    try {
-      await sgMail.send({
-        to: flight.travelerEmail,
-        from: { email: ADMIN_FROM, name: `Travnr for ${agency.name}` },
-        subject,
-        html,
-      });
-      console.log(`[alertSender] traveler alert sent flight_id=${flight.id} email=${flight.travelerEmail}`);
-    } catch (err: any) {
-      console.error("[alertSender] traveler email send failed:", err?.message || err);
+  if (travelers.length === 0) {
+    console.warn(`[alertSender] no travelers to alert for flight_id=${flight.id}`);
+    return;
+  }
+
+  // Group travelers by lowercased email so one inbox gets one email even if a
+  // booking lists the same address twice with different display names.
+  const byEmail = new Map<string, FlightTraveler[]>();
+  for (const t of travelers) {
+    const key = t.travelerEmail.trim().toLowerCase();
+    const list = byEmail.get(key) || [];
+    list.push(t);
+    byEmail.set(key, list);
+  }
+
+  const sgReady = ensureSendgrid();
+  const successfullyAlertedIds: number[] = [];
+
+  for (const group of Array.from(byEmail.values())) {
+    const { subject, html } = buildTravelerEmailHtml(flight, group, alternatives, agency, risk);
+    const recipient = group[0].travelerEmail;
+
+    if (!sgReady) {
+      console.warn(
+        `[alertSender] SENDGRID_API_KEY missing — would have sent traveler alert to ${recipient} (${group.length} traveler${group.length > 1 ? "s" : ""})`,
+      );
+    } else {
+      try {
+        await sgMail.send({
+          to: recipient,
+          from: { email: ADMIN_FROM, name: `Travnr for ${agency.name}` },
+          subject,
+          html,
+        });
+        console.log(
+          `[alertSender] traveler alert sent flight_id=${flight.id} email=${recipient} count=${group.length}`,
+        );
+        for (const t of group) successfullyAlertedIds.push(t.id);
+      } catch (err: any) {
+        console.error("[alertSender] traveler email send failed:", err?.message || err);
+        continue;
+      }
+    }
+
+    // SMS goes per-traveler (one phone per row) regardless of email grouping.
+    if (process.env.SMS_ENABLED === "true") {
+      for (const t of group) {
+        if (!t.travelerPhone) continue;
+        const smsBody = `Travnr alert for ${agency.name}: Your flight ${flight.flightNumber} on ${flight.departureDate} is at risk. Check your email for alternatives.`;
+        try {
+          await sendSms({ to: t.travelerPhone, body: smsBody });
+        } catch (err: any) {
+          console.warn("[alertSender] traveler SMS failed:", err?.message || err);
+        }
+      }
     }
   }
 
-  if (flight.travelerPhone && process.env.SMS_ENABLED === "true") {
-    const smsBody = `Travnr alert for ${agency.name}: Your flight ${flight.flightNumber} on ${flight.departureDate} is at risk. Check your email for alternatives and next steps.`;
-    try {
-      await sendSms({ to: flight.travelerPhone, body: smsBody });
-    } catch (err: any) {
-      console.warn("[alertSender] traveler SMS failed:", err?.message || err);
-    }
+  if (successfullyAlertedIds.length > 0) {
+    await db
+      .update(tFlightTravelers)
+      .set({ alertSentAt: new Date() })
+      .where(inArray(tFlightTravelers.id, successfullyAlertedIds));
   }
 }
 
 export async function sendAgencyNotification(
   flight: MonitoredFlight,
+  traveler: FlightTraveler,
   selectedOption: AlternativeOption,
   agency: AgencyAccount,
 ): Promise<void> {
@@ -316,7 +371,7 @@ export async function sendAgencyNotification(
     );
     return;
   }
-  const { subject, html } = buildAgencyEmailHtml(flight, selectedOption, agency);
+  const { subject, html } = buildAgencyEmailHtml(flight, traveler, selectedOption, agency);
   try {
     await sgMail.send({
       to: agency.contactEmail,
