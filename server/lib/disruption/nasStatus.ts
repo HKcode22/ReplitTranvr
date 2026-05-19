@@ -1,3 +1,12 @@
+/**
+ * nasStatus.ts
+ * Fetches active FAA ground stops and delay programs from the official
+ * NAS Status API used by nasstatus.faa.gov
+ */
+
+const NAS_API_URL = "https://nasstatus.faa.gov/api/airport-events";
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
 export interface NasStatusResult {
   hasGroundStop: boolean;
   hasGroundDelay: boolean;
@@ -10,202 +19,123 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
-const CACHE_TTL_MS = 10 * 60 * 1000;
-const FETCH_TIMEOUT_MS = 5_000;
-const NAS_URL = "https://nasstatus.faa.gov/api/airport-conditions";
+// Single shared fetch per cycle — all airports share one API call
+let sharedCache: { data: any[] | null; fetchedAt: number } = {
+  data: null,
+  fetchedAt: 0,
+};
 
-const cache = new Map<string, CacheEntry>();
+const defaultResult = (): NasStatusResult => ({
+  hasGroundStop: false,
+  hasGroundDelay: false,
+  avgDelayMinutes: 0,
+  programs: [],
+});
 
-function defaultResult(): NasStatusResult {
-  return {
-    hasGroundStop: false,
-    hasGroundDelay: false,
-    avgDelayMinutes: 0,
-    programs: [],
-  };
-}
-
-function parseDelayMinutes(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(0, Math.round(value));
+async function fetchAllAirportEvents(forceRefresh = false): Promise<any[]> {
+  const now = Date.now();
+  if (!forceRefresh && sharedCache.data && now - sharedCache.fetchedAt < CACHE_TTL_MS) {
+    return sharedCache.data;
   }
-  if (typeof value === "string") {
-    const m = value.match(/-?\d+/);
-    if (m) {
-      const n = parseInt(m[0], 10);
-      if (Number.isFinite(n)) return Math.max(0, n);
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const resp = await fetch(NAS_API_URL, {
+      signal: controller.signal,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "Travnr-DisruptionMonitor/1.0",
+      },
+    });
+    clearTimeout(timeout);
+
+    if (!resp.ok) {
+      console.warn(`[nasStatus] HTTP ${resp.status} from airport-events API`);
+      return sharedCache.data || [];
     }
+
+    const data: any[] = await resp.json();
+    sharedCache = { data, fetchedAt: now };
+    console.log(`[nasStatus] fetched airport-events: ${data.length} airports`);
+    return data;
+  } catch (err: any) {
+    console.warn(`[nasStatus] fetch failed: ${err?.message || err}`);
+    return sharedCache.data || [];
   }
-  return 0;
 }
 
-function flattenEntries(payload: unknown): any[] {
-  if (Array.isArray(payload)) return payload;
-  if (payload && typeof payload === "object") {
-    const obj = payload as Record<string, unknown>;
-    const candidateKeys = [
-      "airportConditions",
-      "airport_conditions",
-      "airports",
-      "conditions",
-      "entries",
-      "data",
-      "results",
-    ];
-    for (const key of candidateKeys) {
-      const v = obj[key];
-      if (Array.isArray(v)) return v;
-    }
-    const collected: any[] = [];
-    for (const v of Object.values(obj)) {
-      if (Array.isArray(v)) collected.push(...v);
-    }
-    if (collected.length > 0) return collected;
-  }
-  return [];
-}
-
-function entryAirportCode(entry: any): string {
-  if (!entry || typeof entry !== "object") return "";
-  const candidates = [
-    entry.airport,
-    entry.airportCode,
-    entry.iata,
-    entry.iataCode,
-    entry.code,
-    entry.location,
-    entry.facility,
-  ];
-  for (const c of candidates) {
-    if (typeof c === "string" && c.trim().length > 0) return c.trim().toUpperCase();
-  }
-  return "";
-}
-
-function entryType(entry: any): string {
-  if (!entry || typeof entry !== "object") return "";
-  const candidates = [
-    entry.type,
-    entry.programType,
-    entry.program,
-    entry.category,
-    entry.eventType,
-    entry.name,
-  ];
-  for (const c of candidates) {
-    if (typeof c === "string" && c.trim().length > 0) return c.trim();
-  }
-  return "";
-}
-
-function entryAvgDelay(entry: any): number {
-  if (!entry || typeof entry !== "object") return 0;
-  const candidates = [
-    entry.avgDelay,
-    entry.averageDelay,
-    entry.avg_delay,
-    entry.delay,
-    entry.delayMinutes,
-    entry.delay_minutes,
-  ];
-  for (const c of candidates) {
-    const n = parseDelayMinutes(c);
-    if (n > 0) return n;
-  }
-  return 0;
-}
+// Per-airport result cache to avoid re-parsing on every call
+const airportCache = new Map<string, CacheEntry>();
 
 export async function getNasStatus(
   iataCode: string,
-  options?: { forceRefresh?: boolean },
+  options?: { forceRefresh?: boolean }
 ): Promise<NasStatusResult> {
-  const code = (iataCode || "").trim().toUpperCase();
-  if (!code) return defaultResult();
-
-  const cached = cache.get(code);
+  const code = iataCode.toUpperCase().trim();
   const now = Date.now();
-  if (!options?.forceRefresh && cached && now - cached.fetchedAt < CACHE_TTL_MS) {
-    console.log(`[nasStatus] cache hit ${code}`);
-    return cached.result;
+  const forceRefresh = options?.forceRefresh ?? false;
+
+  // Check per-airport cache
+  if (!forceRefresh) {
+    const cached = airportCache.get(code);
+    if (cached && now - cached.fetchedAt < CACHE_TTL_MS) {
+      console.log(`[nasStatus] cache hit ${code}`);
+      return cached.result;
+    }
   }
 
-  console.log(
-    `[nasStatus] fetching ${code}${options?.forceRefresh ? " (force-refresh)" : ""}`,
-  );
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
   try {
-    const resp = await fetch(NAS_URL, {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "Travnr-Disruption-Monitor/1.0",
-      },
-      signal: controller.signal,
-    });
-    if (!resp.ok) {
-      console.warn(`[nasStatus] HTTP ${resp.status} for ${code}`);
-      const result = defaultResult();
-      cache.set(code, { result, fetchedAt: now });
-      return result;
-    }
-    const payload: unknown = await resp.json().catch(() => null);
-    const entries = flattenEntries(payload);
+    const data = await fetchAllAirportEvents(forceRefresh);
 
-    // Diagnostic: when the FAA returns an unexpected shape we want to see
-    // the raw payload. For ORD specifically (and for force-refresh calls),
-    // log the matching entries verbatim so we can see what the upstream
-    // actually reported.
-    const matchingEntries = entries.filter((e) => entryAirportCode(e) === code);
-    if (code === "ORD" || options?.forceRefresh) {
-      const payloadStr = (() => {
-        try { return JSON.stringify(payload); } catch { return "<unserializable>"; }
-      })();
-      console.log(
-        `[nasStatus] raw payload preview for ${code} (${payloadStr.length} chars total): ${payloadStr.slice(0, 2000)}`,
-      );
-      console.log(
-        `[nasStatus] ${code} matching entries (${matchingEntries.length}): ${JSON.stringify(matchingEntries)}`,
-      );
-    }
-
-    const result = defaultResult();
-    for (const entry of entries) {
-      const airport = entryAirportCode(entry);
-      if (airport !== code) continue;
-      const type = entryType(entry);
-      const typeUpper = type.toUpperCase();
-      const delay = entryAvgDelay(entry);
-      if (type) result.programs.push(type);
-      if (typeUpper.includes("GROUND STOP")) {
-        result.hasGroundStop = true;
-      }
-      if (
-        typeUpper.includes("GROUND DELAY") ||
-        typeUpper.includes("GDP") ||
-        typeUpper.includes("AIRSPACE FLOW") ||
-        typeUpper.includes("AFP")
-      ) {
-        result.hasGroundDelay = true;
-      }
-      if (delay > result.avgDelayMinutes) {
-        result.avgDelayMinutes = delay;
-      }
-    }
-
-    console.log(
-      `[nasStatus] ${code} groundStop=${result.hasGroundStop} groundDelay=${result.hasGroundDelay} avgDelay=${result.avgDelayMinutes} programs=${JSON.stringify(result.programs)}`,
+    // Find this airport in the response
+    const entry = data.find(
+      (e: any) => (e.airportId || "").toUpperCase() === code
     );
 
-    cache.set(code, { result, fetchedAt: now });
+    if (!entry) {
+      // No entry = no active programs for this airport
+      const result = defaultResult();
+      airportCache.set(code, { result, fetchedAt: now });
+      return result;
+    }
+
+    const hasGroundStop = entry.groundStop !== null && entry.groundStop !== undefined;
+    const hasGroundDelay =
+      (entry.groundDelay !== null && entry.groundDelay !== undefined) ||
+      (entry.arrivalDelay !== null && entry.arrivalDelay !== undefined) ||
+      (entry.departureDelay !== null && entry.departureDelay !== undefined);
+
+    const avgDelayMinutes = Number(
+      entry.groundDelay?.avgDelay ||
+      entry.arrivalDelay?.avgDelay ||
+      entry.departureDelay?.avgDelay ||
+      0
+    );
+
+    const programs: string[] = [];
+    if (hasGroundStop) programs.push("Ground Stop");
+    if (entry.groundDelay) programs.push("Ground Delay Program");
+    if (entry.arrivalDelay) programs.push("Arrival Delay");
+    if (entry.departureDelay) programs.push("Departure Delay");
+    if (entry.airportClosure) programs.push("Airport Closure");
+
+    const result: NasStatusResult = {
+      hasGroundStop,
+      hasGroundDelay,
+      avgDelayMinutes,
+      programs,
+    };
+
+    airportCache.set(code, { result, fetchedAt: now });
+
+    if (programs.length > 0) {
+      console.log(`[nasStatus] ${code} active programs: ${programs.join(", ")} avgDelay=${avgDelayMinutes}min`);
+    }
+
     return result;
   } catch (err: any) {
-    console.warn(`[nasStatus] fetch failed for ${code}:`, err?.message || err);
-    const result = defaultResult();
-    cache.set(code, { result, fetchedAt: now });
-    return result;
-  } finally {
-    clearTimeout(timer);
+    console.warn(`[nasStatus] error processing ${code}: ${err?.message || err}`);
+    return defaultResult();
   }
 }

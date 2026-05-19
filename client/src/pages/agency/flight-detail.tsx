@@ -69,6 +69,16 @@ const SIGNAL_LABELS: Record<string, { label: string; max: number; explain: strin
     max: 40,
     explain: "The aircraft assigned to operate your flight is currently delayed on its inbound leg.",
   },
+  atcGroundStop: {
+    label: "ATC ground stop",
+    max: 20,
+    explain: "FAA has halted departures into the origin or destination airport — no flights moving on the ground.",
+  },
+  atcGroundDelay: {
+    label: "ATC ground delay program",
+    max: 15,
+    explain: "FAA-issued ground delay or airspace flow program metering arrivals at origin or destination.",
+  },
   originWeather: {
     label: "Weather at origin",
     max: 25,
@@ -397,6 +407,8 @@ export default function AgencyFlightDetailPage() {
           {latest ? (
             <div className="space-y-4">
               <SignalBar name="inboundAircraftDelay" value={latestSignals.inboundAircraftDelay || 0} />
+              <SignalBar name="atcGroundStop" value={latestSignals.atcGroundStop || 0} />
+              <SignalBar name="atcGroundDelay" value={latestSignals.atcGroundDelay || 0} />
               <SignalBar name="originWeather" value={latestSignals.originWeather || 0} />
               <SignalBar name="destinationWeather" value={latestSignals.destinationWeather || 0} />
               <SignalBar name="timeOfDayRisk" value={latestSignals.timeOfDayRisk || 0} />
