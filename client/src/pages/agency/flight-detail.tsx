@@ -9,8 +9,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatFlightTime } from "@/lib/airportTimezone";
+import { liveStatusFor, liveStatusStyles } from "@/lib/liveStatus";
 import {
-  Loader2, Plane, ArrowLeft, RefreshCw, Wand2, RotateCcw, AlertTriangle, CheckCircle2,
+  Loader2, Plane, PlaneLanding, PlaneTakeoff, ArrowLeft, RefreshCw, Wand2, RotateCcw, AlertTriangle, CheckCircle2,
 } from "lucide-react";
 
 interface HistoryRow {
@@ -129,9 +130,6 @@ function fmtTime(iso: string | null | undefined): string {
   }
 }
 
-const displayStatus = (s: string | null | undefined) =>
-  !s || s === "Unknown" ? "Scheduled" : s;
-
 function SignalBar({ name, value }: { name: string; value: number }) {
   const meta = SIGNAL_LABELS[name] || { label: name, max: 25, explain: "" };
   const pct = Math.max(0, Math.min(100, (value / meta.max) * 100));
@@ -191,8 +189,6 @@ export default function AgencyFlightDetailPage() {
   const latest = flight.history?.[0];
   const latestSignals = latest?.signals?.signals || {};
   const latestStatus = latest?.signals?.flightStatus || null;
-  const latestOriginWx = latest?.signals?.originWeather || null;
-  const latestDestWx = latest?.signals?.destinationWeather || null;
   const isSimulated = !!latest?.signals?.simulated;
   const styles = tierStyles(flight.riskTier);
   const baseUrl = window.location.origin;
@@ -383,6 +379,90 @@ export default function AgencyFlightDetailPage() {
           )}
         </Card>
 
+        {/* Live status banner */}
+        {(() => {
+          const revisedDepartureLocal = formatFlightTime(latestStatus?.departureTime, flight.originIata);
+          const scheduledDepartureLocal = flight.departureTime
+            ? formatFlightTime(flight.departureTime, flight.originIata)
+            : flight.departureDate;
+          const live = liveStatusFor(latestStatus, revisedDepartureLocal);
+          const styles = live ? liveStatusStyles(live.tone) : null;
+          const gate: string | null =
+            (latestStatus as any)?.gate ||
+            (latestStatus as any)?.departureGate ||
+            null;
+
+          if (!live || !styles) {
+            return (
+              <Card className="p-6 mb-6" data-testid="card-live-status-empty">
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <Plane className="h-5 w-5" />
+                  <p className="text-sm">
+                    No live status yet — AeroDataBox hasn't returned anything for {flight.flightNumber} on {flight.departureDate}.
+                  </p>
+                </div>
+              </Card>
+            );
+          }
+
+          const ProgressIcon =
+            live.progress >= 100
+              ? PlaneLanding
+              : live.progress > 0 && live.progress < 100 && live.tone === "blue"
+                ? Plane
+                : PlaneTakeoff;
+
+          return (
+            <Card className={`p-6 mb-6 border ${styles.wrap}`} data-testid="card-live-status">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className={`text-3xl font-bold ${styles.pill}`} data-testid="text-live-status-label">
+                  {live.label}
+                </h2>
+                {live.subtitle && (
+                  <p className="text-sm text-foreground/80" data-testid="text-live-status-subtitle">
+                    {live.subtitle}
+                  </p>
+                )}
+              </div>
+              {live.detail && (
+                <p className="text-sm text-foreground/80 mt-1" data-testid="text-live-status-detail">
+                  {live.detail}
+                </p>
+              )}
+
+              <div className="mt-5 flex items-center gap-4">
+                <div className="text-left min-w-0">
+                  <div className="text-2xl font-semibold text-foreground tabular-nums">{flight.originIata}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{scheduledDepartureLocal}</div>
+                  {gate && (
+                    <div className="text-xs text-foreground/80 mt-0.5" data-testid="text-live-status-gate">
+                      Gate {gate}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 relative h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`absolute inset-y-0 left-0 ${styles.bar} transition-all`}
+                    style={{ width: `${live.progress}%` }}
+                  />
+                  <ProgressIcon
+                    className={`absolute top-1/2 -translate-y-1/2 h-4 w-4 ${styles.pill}`}
+                    style={{
+                      left: `calc(${Math.max(2, Math.min(98, live.progress))}% - 0.5rem)`,
+                    }}
+                  />
+                </div>
+
+                <div className="text-right min-w-0">
+                  <div className="text-2xl font-semibold text-foreground tabular-nums">{flight.destinationIata}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">&nbsp;</div>
+                </div>
+              </div>
+            </Card>
+          );
+        })()}
+
         {/* Score breakdown */}
         <Card className="p-6 mb-6" data-testid="card-score-breakdown">
           <div className="flex items-center justify-between mb-4">
@@ -417,49 +497,6 @@ export default function AgencyFlightDetailPage() {
           ) : (
             <p className="text-sm text-muted-foreground">Run "Rescore now" to generate the first snapshot.</p>
           )}
-        </Card>
-
-        {/* Live snapshot used to score */}
-        <Card className="p-6 mb-6" data-testid="card-live-signals">
-          <h2 className="text-lg font-semibold text-foreground mb-4">Signal details (verify this is the right flight)</h2>
-
-          <div className="space-y-4 text-sm">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="border border-border rounded-md p-4">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Flight status (AeroDataBox)</div>
-                {latestStatus ? (
-                  <ul className="space-y-1 text-foreground">
-                    <li><span className="text-muted-foreground">Status:</span> {displayStatus(latestStatus.status)}</li>
-                    <li><span className="text-muted-foreground">Departure delay:</span> {latestStatus.delayMinutes ?? 0} min</li>
-                    <li><span className="text-muted-foreground">Inbound delay:</span> {latestStatus.inboundDelayMinutes ?? 0} min</li>
-                    <li><span className="text-muted-foreground">Cancelled:</span> {latestStatus.cancelled ? "Yes" : "No"}</li>
-                    <li><span className="text-muted-foreground">Departure time:</span> {formatFlightTime(latestStatus.departureTime, flight.originIata)}</li>
-                  </ul>
-                ) : (
-                  <p className="text-muted-foreground">No status available — either AeroDataBox returned nothing for this flight number + date, or the API key is missing. If this monitored flight number is wrong, remove it and re-add.</p>
-                )}
-              </div>
-
-              <div className="border border-border rounded-md p-4">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Weather (NOAA METAR)</div>
-                {latestOriginWx ? (
-                  <ul className="space-y-1 text-foreground">
-                    <li><span className="text-muted-foreground">{flight.originIata} category:</span> {latestOriginWx.flightCategory || "—"}</li>
-                    <li><span className="text-muted-foreground">{flight.originIata} thunderstorm:</span> {latestOriginWx.hasThunderstorm ? "Yes" : "No"}</li>
-                    <li><span className="text-muted-foreground">{flight.originIata} freezing:</span> {latestOriginWx.hasFreezing ? "Yes" : "No"}</li>
-                    {latestDestWx && (
-                      <>
-                        <li className="pt-2 border-t border-border mt-2"><span className="text-muted-foreground">{flight.destinationIata} category:</span> {latestDestWx.flightCategory || "—"}</li>
-                        <li><span className="text-muted-foreground">{flight.destinationIata} thunderstorm:</span> {latestDestWx.hasThunderstorm ? "Yes" : "No"}</li>
-                      </>
-                    )}
-                  </ul>
-                ) : (
-                  <p className="text-muted-foreground">No weather snapshot yet.</p>
-                )}
-              </div>
-            </div>
-          </div>
         </Card>
 
         {/* Simulation controls */}

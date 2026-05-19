@@ -23,6 +23,7 @@ export { pool };
 const BOOT_MIGRATIONS: readonly string[] = [
   "0002_agency_disruption_system.sql",
   "0003_travelers_health.sql",
+  "0004_confirmation_alert.sql",
 ];
 
 let bootMigrationsApplied = false;

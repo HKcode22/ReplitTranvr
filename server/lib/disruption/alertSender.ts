@@ -9,11 +9,13 @@ import {
 } from "@shared/schema";
 import type { AlternativeOption } from "./alternativeFinder";
 import type { RiskScoreResult } from "./riskScorer";
+import type { FlightStatusResult } from "./flightStatus";
 import { sendSms } from "../sms";
 
 const BRAND_BLUE = "#2d7abf";
 const TEXT_DARK = "#1a1a2e";
 const DANGER_RED = "#dc2626";
+const WARNING_AMBER = "#f59e0b";
 
 function escapeHtml(s: string): string {
   return String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -356,6 +358,233 @@ export async function sendTravelerAlert(
       .update(tFlightTravelers)
       .set({ alertSentAt: new Date() })
       .where(inArray(tFlightTravelers.id, successfullyAlertedIds));
+  }
+}
+
+// ===========================================================================
+// CONFIRMATION ALERT
+// Fires AFTER AeroDataBox confirms an actual delay/cancellation. This is
+// independent of the predictive risk-score alert (sendTravelerAlert), and
+// both can fire for the same booking — the predictive one first when risk
+// crosses red, the confirmation one once the disruption is real.
+// ===========================================================================
+
+function formatRevisedDeparture(raw: string | null | undefined): string {
+  if (!raw) return "the original time";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  try {
+    return d.toLocaleString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZoneName: "short",
+    });
+  } catch {
+    return raw;
+  }
+}
+
+function buildConfirmationTravelerEmail(
+  flight: MonitoredFlight,
+  travelersForEmail: FlightTraveler[],
+  flightStatus: FlightStatusResult | null,
+  agency: AgencyAccount,
+): { subject: string; html: string } {
+  const cancelled = !!flightStatus?.cancelled;
+  const delayMins = Math.max(0, Number(flightStatus?.delayMinutes || 0));
+  const greeting = travelersForEmail.length === 1
+    ? `Hi ${escapeHtml(travelersForEmail[0].travelerName)},`
+    : `Hi ${travelersForEmail.map((t) => escapeHtml(t.travelerName)).join(", ")},`;
+
+  let subject: string;
+  let bannerColor: string;
+  let bannerText: string;
+  let body: string;
+
+  if (cancelled) {
+    subject = `Your flight ${flight.flightNumber} has been cancelled`;
+    bannerColor = DANGER_RED;
+    bannerText = `Your flight ${escapeHtml(flight.flightNumber)} from ${escapeHtml(flight.originIata)} to ${escapeHtml(flight.destinationIata)} has been cancelled by the airline.`;
+    body = `Your travel agent <strong>${escapeHtml(agency.name)}</strong> has been notified and is working on alternatives for you. You do not need to call the airline — your agent will handle the rebooking.`;
+  } else {
+    subject = `Your flight ${flight.flightNumber} is delayed — ${delayMins} minutes`;
+    bannerColor = WARNING_AMBER;
+    bannerText = `Your flight ${escapeHtml(flight.flightNumber)} is currently delayed by ${delayMins} minutes.`;
+    const revised = escapeHtml(formatRevisedDeparture(flightStatus?.departureTime || null));
+    body = `Your updated departure time is approximately <strong>${revised}</strong>. Your travel agent <strong>${escapeHtml(agency.name)}</strong> has been notified.`;
+    if (delayMins >= 60) {
+      body += `<br/><br/>If you would like to explore alternative flights, reply to this email or contact your travel agent directly.`;
+    }
+  }
+
+  const html = `
+    <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;background:#f9fafb;">
+      ${brandHeader()}
+      <div style="background:${bannerColor};color:#ffffff;padding:18px 20px;border-radius:10px 10px 0 0;">
+        <div style="font-size:18px;font-weight:700;">${bannerText}</div>
+      </div>
+      <div style="background:#ffffff;border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 10px 10px;">
+        <p style="color:${TEXT_DARK};font-size:15px;margin:0 0 14px;">${greeting}</p>
+        <p style="color:#374151;font-size:15px;line-height:1.6;margin:0;">${body}</p>
+      </div>
+      ${brandFooterFor(agency.name)}
+    </div>`;
+
+  return { subject, html };
+}
+
+function buildConfirmationAgencyEmail(
+  flight: MonitoredFlight,
+  travelers: FlightTraveler[],
+  flightStatus: FlightStatusResult | null,
+  agency: AgencyAccount,
+): { subject: string; html: string } {
+  const cancelled = !!flightStatus?.cancelled;
+  const delayMins = Math.max(0, Number(flightStatus?.delayMinutes || 0));
+  const statusLabel = cancelled ? "cancelled" : `delayed ${delayMins}min`;
+  const subject = `Confirmed disruption — ${flight.flightNumber} ${statusLabel}`;
+  const baseUrl = getBaseUrl();
+  const resolveUrl = `${baseUrl}/agency/dashboard`;
+
+  const travelerRows = travelers
+    .map((t) => `
+      <tr>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;color:${TEXT_DARK};font-size:14px;">
+          <strong>${escapeHtml(t.travelerName)}</strong><br/>
+          <span style="color:#6b7280;">${escapeHtml(t.travelerEmail)}${t.travelerPhone ? ` &middot; ${escapeHtml(t.travelerPhone)}` : ""}</span>
+        </td>
+      </tr>`)
+    .join("");
+
+  const statusBanner = cancelled
+    ? `<div style="background:${DANGER_RED};color:#ffffff;padding:14px 18px;border-radius:8px;font-weight:600;font-size:15px;margin-bottom:18px;">Cancelled by airline</div>`
+    : `<div style="background:${WARNING_AMBER};color:#ffffff;padding:14px 18px;border-radius:8px;font-weight:600;font-size:15px;margin-bottom:18px;">Delayed ${delayMins} minutes</div>`;
+
+  const html = `
+    <div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:620px;margin:0 auto;padding:32px 20px;">
+      ${brandHeader()}
+      <h2 style="font-size:20px;color:${TEXT_DARK};margin:0 0 12px;">Confirmed disruption on a monitored flight</h2>
+      <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 18px;">
+        AeroDataBox has confirmed the following disruption on flight <strong>${escapeHtml(flight.flightNumber)}</strong>.
+      </p>
+      ${statusBanner}
+      <table style="width:100%;border-collapse:collapse;font-size:14px;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:18px;">
+        <tr>
+          <td style="padding:14px 18px;background:#f9fafb;color:#6b7280;width:40%;border-bottom:1px solid #e5e7eb;">Flight</td>
+          <td style="padding:14px 18px;color:${TEXT_DARK};border-bottom:1px solid #e5e7eb;"><strong>${escapeHtml(flight.flightNumber)}</strong> · ${escapeHtml(flight.originIata)} → ${escapeHtml(flight.destinationIata)} · ${escapeHtml(flight.departureDate)}</td>
+        </tr>
+        <tr>
+          <td style="padding:14px 18px;background:#f9fafb;color:#6b7280;border-bottom:1px solid #e5e7eb;">Status</td>
+          <td style="padding:14px 18px;color:${TEXT_DARK};border-bottom:1px solid #e5e7eb;">${escapeHtml(flightStatus?.status || "Unknown")}${flightStatus?.departureTime ? `<br/><span style="color:#6b7280;">Revised dep: ${escapeHtml(formatRevisedDeparture(flightStatus.departureTime))}</span>` : ""}</td>
+        </tr>
+        <tr>
+          <td style="padding:14px 18px;background:#f9fafb;color:#6b7280;vertical-align:top;">Affected travelers</td>
+          <td style="padding:0;color:${TEXT_DARK};">
+            <table style="width:100%;border-collapse:collapse;">${travelerRows}</table>
+          </td>
+        </tr>
+      </table>
+      ${ctaButton(resolveUrl, "Mark as resolved", BRAND_BLUE)}
+      <p style="color:#6b7280;font-size:13px;line-height:1.6;margin:24px 0 0;">
+        The Travnr Disruption System
+      </p>
+    </div>`;
+
+  return { subject, html };
+}
+
+export async function sendConfirmationAlert(
+  flight: MonitoredFlight,
+  travelers: FlightTraveler[],
+  flightStatus: FlightStatusResult | null,
+  agency: AgencyAccount,
+): Promise<void> {
+  if (travelers.length === 0) {
+    console.warn(`[alertSender] confirmation: no travelers for flight_id=${flight.id}`);
+    return;
+  }
+
+  const byEmail = new Map<string, FlightTraveler[]>();
+  for (const t of travelers) {
+    const key = t.travelerEmail.trim().toLowerCase();
+    const list = byEmail.get(key) || [];
+    list.push(t);
+    byEmail.set(key, list);
+  }
+
+  const sgReady = ensureSendgrid();
+  const successfullyAlertedIds: number[] = [];
+
+  for (const group of Array.from(byEmail.values())) {
+    const { subject, html } = buildConfirmationTravelerEmail(flight, group, flightStatus, agency);
+    const recipient = group[0].travelerEmail;
+
+    if (!sgReady) {
+      console.warn(
+        `[alertSender] confirmation: SENDGRID_API_KEY missing — would have sent to ${recipient} (${group.length})`,
+      );
+    } else {
+      try {
+        await sgMail.send({
+          to: recipient,
+          from: { email: ADMIN_FROM, name: `Travnr for ${agency.name}` },
+          subject,
+          html,
+        });
+        console.log(
+          `[alertSender] confirmation traveler alert sent flight_id=${flight.id} email=${recipient} count=${group.length}`,
+        );
+        for (const t of group) successfullyAlertedIds.push(t.id);
+      } catch (err: any) {
+        console.error("[alertSender] confirmation traveler send failed:", err?.message || err);
+        continue;
+      }
+    }
+
+    if (process.env.SMS_ENABLED === "true") {
+      const status = flightStatus?.cancelled
+        ? `cancelled`
+        : `delayed ${Math.max(0, Number(flightStatus?.delayMinutes || 0))} min`;
+      for (const t of group) {
+        if (!t.travelerPhone) continue;
+        const smsBody = `Travnr: Your flight ${flight.flightNumber} on ${flight.departureDate} is ${status}. ${agency.name} has been notified.`;
+        try {
+          await sendSms({ to: t.travelerPhone, body: smsBody });
+        } catch (err: any) {
+          console.warn("[alertSender] confirmation SMS failed:", err?.message || err);
+        }
+      }
+    }
+  }
+
+  if (successfullyAlertedIds.length > 0) {
+    await db
+      .update(tFlightTravelers)
+      .set({ confirmationAlertSentAt: new Date() })
+      .where(inArray(tFlightTravelers.id, successfullyAlertedIds));
+  }
+
+  // Agency notification
+  if (sgReady) {
+    try {
+      const { subject, html } = buildConfirmationAgencyEmail(flight, travelers, flightStatus, agency);
+      await sgMail.send({
+        to: agency.contactEmail,
+        from: { email: ADMIN_FROM, name: "Travnr Disruption System" },
+        subject,
+        html,
+      });
+      console.log(
+        `[alertSender] confirmation agency alert sent flight_id=${flight.id} agency=${agency.contactEmail}`,
+      );
+    } catch (err: any) {
+      console.error("[alertSender] confirmation agency send failed:", err?.message || err);
+    }
+  } else {
+    console.warn(
+      `[alertSender] confirmation: SENDGRID_API_KEY missing — would have notified agency ${agency.contactEmail}`,
+    );
   }
 }
 

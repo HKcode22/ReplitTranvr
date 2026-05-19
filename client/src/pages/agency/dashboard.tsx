@@ -13,6 +13,7 @@ import { AirportAutocomplete } from "@/components/airport-autocomplete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatFlightTime } from "@/lib/airportTimezone";
+import { liveStatusFor, liveStatusStyles, type FlightStatusSnapshot } from "@/lib/liveStatus";
 import {
   Loader2, Plane, Plus, Trash2, LogOut, RefreshCw, Activity, AlertTriangle, BellRing, CheckCircle2, X, Search, AlertCircle, ChevronDown, ChevronRight, Sparkles, Users, Target, TrendingDown,
 } from "lucide-react";
@@ -68,7 +69,39 @@ interface MonitoredFlightRow {
   agencyResolvedAt: string | null;
   alternatives?: AlternativeMini[];
   travelers: FlightTravelerRow[];
+  flightStatus: FlightStatusSnapshot | null;
 }
+
+interface HealthPastRow {
+  id: number;
+  flightNumber: string;
+  route: string;
+  departureDate: string;
+  peakScore: number;
+  peakTier: string;
+  actualStatus: string;
+  actualDelayMinutes: number;
+  actualCancelled: boolean;
+  disrupted: boolean;
+  classification: "true_positive" | "false_positive" | "false_negative" | "true_negative";
+}
+
+interface HealthActiveRow {
+  id: number;
+  flightNumber: string;
+  route: string;
+  departureDate: string;
+  currentScore: number;
+  currentTier: string;
+  topSignals: Array<{ name: string; points: number }>;
+}
+
+// rawData is either the legacy array (older reports) or the new
+// { past, activeHighRisk } object. Both shapes are rendered.
+type HealthRawData =
+  | HealthPastRow[]
+  | { past: HealthPastRow[]; activeHighRisk: HealthActiveRow[] }
+  | null;
 
 interface HealthReport {
   id: number;
@@ -84,19 +117,42 @@ interface HealthReport {
   avgScoreDisrupted: number | null;
   avgScoreOnTime: number | null;
   claudeSummary: string | null;
-  rawData: Array<{
-    id: number;
-    flightNumber: string;
-    route: string;
-    departureDate: string;
-    peakScore: number;
-    peakTier: string;
-    actualStatus: string;
-    actualDelayMinutes: number;
-    actualCancelled: boolean;
-    disrupted: boolean;
-    classification: "true_positive" | "false_positive" | "false_negative" | "true_negative";
-  }> | null;
+  rawData: HealthRawData;
+}
+
+function getHealthSections(raw: HealthRawData): { past: HealthPastRow[]; activeHighRisk: HealthActiveRow[] } {
+  if (!raw) return { past: [], activeHighRisk: [] };
+  if (Array.isArray(raw)) return { past: raw, activeHighRisk: [] };
+  return { past: raw.past || [], activeHighRisk: raw.activeHighRisk || [] };
+}
+
+function LiveStatusPill({ flight }: { flight: MonitoredFlightRow }) {
+  const revisedLocal = formatFlightTime(flight.flightStatus?.departureTime, flight.originIata);
+  const live = liveStatusFor(flight.flightStatus, revisedLocal);
+  if (!live) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+        data-testid={`live-status-${flight.id}`}
+        title="No live status yet — AeroDataBox hasn't returned anything for this flight."
+      >
+        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+        No live data
+      </span>
+    );
+  }
+  const styles = liveStatusStyles(live.tone);
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${styles.pillBg} ${styles.pill}`}
+      data-testid={`live-status-${flight.id}`}
+      title={live.subtitle || undefined}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${styles.bar}`} />
+      {live.label}
+      {live.detail ? <span className="font-normal opacity-80"> · {live.detail}</span> : null}
+    </span>
+  );
 }
 
 function tierStyles(tier: string): { wrap: string; dot: string; label: string } {
@@ -881,6 +937,7 @@ export default function AgencyDashboardPage() {
                           <th className="text-left font-medium px-4 py-3">Departure</th>
                           <th className="text-left font-medium px-4 py-3">Travelers</th>
                           <th className="text-left font-medium px-4 py-3">Risk</th>
+                          <th className="text-left font-medium px-4 py-3">Live</th>
                           <th className="text-left font-medium px-4 py-3">Last checked</th>
                           <th className="text-left font-medium px-4 py-3">Status</th>
                           <th className="w-12" />
@@ -939,6 +996,7 @@ export default function AgencyDashboardPage() {
                                   </span>
                                 </td>
                                 <td className="px-4 py-3"><RiskBadge tier={f.riskTier} score={f.riskScore} /></td>
+                                <td className="px-4 py-3"><LiveStatusPill flight={f} /></td>
                                 <td className="px-4 py-3 text-muted-foreground">{formatUtcStamp(f.lastCheckedAt)}</td>
                                 <td className="px-4 py-3 text-muted-foreground capitalize">
                                   {f.status}
@@ -958,7 +1016,7 @@ export default function AgencyDashboardPage() {
                               </tr>
                               {expanded && (
                                 <tr className="border-t border-border bg-muted/20">
-                                  <td colSpan={9} className="px-4 py-3">
+                                  <td colSpan={10} className="px-4 py-3">
                                     {(f.travelers || []).length === 0 ? (
                                       <div className="text-sm text-muted-foreground">No travelers on this booking.</div>
                                     ) : (
@@ -1020,6 +1078,7 @@ export default function AgencyDashboardPage() {
                           </div>
                           <div className="flex flex-col items-end gap-2 shrink-0">
                             <RiskBadge tier={f.riskTier} score={f.riskScore} />
+                            <LiveStatusPill flight={f} />
                             <Button
                               variant="ghost"
                               size="icon"
@@ -1257,11 +1316,12 @@ export default function AgencyDashboardPage() {
                     return { label: "True Negative", cls: "bg-muted text-muted-foreground border-border" };
                 }
               };
-              const actualLabel = (row: NonNullable<HealthReport["rawData"]>[number]): string => {
+              const actualLabel = (row: HealthPastRow): string => {
                 if (row.actualCancelled) return "Cancelled";
                 if (row.actualDelayMinutes >= 30) return `Delayed ${row.actualDelayMinutes}min`;
                 return "On time";
               };
+              const { past: pastRows, activeHighRisk: activeRows } = getHealthSections(report?.rawData ?? null);
 
               return (
                 <div className="space-y-6" data-testid="health-tab-content">
@@ -1372,10 +1432,51 @@ export default function AgencyDashboardPage() {
                         </div>
                       </Card>
 
-                      {report.rawData && report.rawData.length > 0 && (
+                      {activeRows.length > 0 && (
+                        <Card className="overflow-hidden" data-testid="card-health-active">
+                          <div className="p-4 border-b border-border flex items-center justify-between gap-2 flex-wrap">
+                            <h3 className="text-base font-semibold text-foreground">Currently active high-risk flights</h3>
+                            <span className="text-xs text-muted-foreground" data-testid="text-active-count">
+                              {activeRows.length} flight{activeRows.length === 1 ? "" : "s"} currently flagged high risk
+                            </span>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-muted/50 text-muted-foreground">
+                                <tr>
+                                  <th className="text-left font-medium px-4 py-3">Flight</th>
+                                  <th className="text-left font-medium px-4 py-3">Route</th>
+                                  <th className="text-left font-medium px-4 py-3">Departure</th>
+                                  <th className="text-left font-medium px-4 py-3">Current score</th>
+                                  <th className="text-left font-medium px-4 py-3">Top signals</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {activeRows.map((row) => (
+                                  <tr key={row.id} className="border-t border-border" data-testid={`row-health-active-${row.id}`}>
+                                    <td className="px-4 py-3 font-medium text-foreground">{row.flightNumber}</td>
+                                    <td className="px-4 py-3 text-foreground">{row.route}</td>
+                                    <td className="px-4 py-3 text-muted-foreground">{row.departureDate}</td>
+                                    <td className="px-4 py-3">
+                                      <RiskBadge tier={row.currentTier} score={row.currentScore} />
+                                    </td>
+                                    <td className="px-4 py-3 text-muted-foreground">
+                                      {row.topSignals.length === 0
+                                        ? "—"
+                                        : row.topSignals.map((s) => `${s.name} (+${s.points})`).join(", ")}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </Card>
+                      )}
+
+                      {pastRows.length > 0 && (
                         <Card className="overflow-hidden">
                           <div className="p-4 border-b border-border">
-                            <h3 className="text-base font-semibold text-foreground">Per-flight breakdown</h3>
+                            <h3 className="text-base font-semibold text-foreground">Past flights analyzed</h3>
                           </div>
                           <div className="overflow-x-auto">
                             <table className="w-full text-sm">
@@ -1390,7 +1491,7 @@ export default function AgencyDashboardPage() {
                                 </tr>
                               </thead>
                               <tbody>
-                                {report.rawData.map((row) => {
+                                {pastRows.map((row) => {
                                   const badge = classifBadge(row.classification);
                                   return (
                                     <tr key={row.id} className="border-t border-border" data-testid={`row-health-flight-${row.id}`}>

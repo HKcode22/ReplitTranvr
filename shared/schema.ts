@@ -562,6 +562,7 @@ export const monitoredFlights = pgTable("monitored_flights", {
   lastCheckedAt: timestamp("last_checked_at"),
   status: text("status").default("active").notNull(),
   agencyResolvedAt: timestamp("agency_resolved_at"),
+  confirmationAlertSentAt: timestamp("confirmation_alert_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("monitored_flights_agency_id_idx").on(table.agencyId),
@@ -579,6 +580,7 @@ export const flightTravelers = pgTable("flight_travelers", {
   selectedOptionId: text("selected_option_id"),
   selectedAt: timestamp("selected_at"),
   alertSentAt: timestamp("alert_sent_at"),
+  confirmationAlertSentAt: timestamp("confirmation_alert_sent_at"),
   agencyNotifiedAt: timestamp("agency_notified_at"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [

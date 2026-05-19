@@ -12,7 +12,7 @@ import {
 } from "@shared/schema";
 import { scoreFlightRisk } from "./riskScorer";
 import { findLowRiskAlternatives } from "./alternativeFinder";
-import { sendTravelerAlert } from "./alertSender";
+import { sendTravelerAlert, sendConfirmationAlert } from "./alertSender";
 import { getHistoricalOtp, type HistoricalOtpResult } from "./historicalOtp";
 
 const INTERVAL_MS = 30 * 60 * 1000;
@@ -220,6 +220,44 @@ async function processFlight(
       console.log(`[monitor] alert fired for flight_id=${flight.id} tier=${risk.tier} alts=${alternatives.length} travelers=${tokenedPending.length}`);
     } catch (err: any) {
       console.error(`[monitor] alert send failed for flight ${flight.id}:`, err?.message || err);
+    }
+  }
+
+  // CONFIRMATION ALERT: fires when AeroDataBox confirms the disruption is
+  // real, independent of the predictive risk score. One per monitored flight.
+  const confirmedDelayed = (risk.flightStatus?.delayMinutes || 0) >= 30;
+  const confirmedCancelled = risk.flightStatus?.cancelled === true;
+  const needsConfirmationAlert =
+    (confirmedDelayed || confirmedCancelled) &&
+    !flight.confirmationAlertSentAt &&
+    travelers.length > 0;
+
+  if (needsConfirmationAlert) {
+    const [agencyForConfirm] = await db
+      .select()
+      .from(agencyAccounts)
+      .where(eq(agencyAccounts.id, flight.agencyId))
+      .limit(1);
+    if (!agencyForConfirm) {
+      console.warn(`[monitor] cannot send confirmation alert for flight ${flight.id}: agency missing`);
+    } else {
+      try {
+        await sendConfirmationAlert(
+          { ...flight, riskScore: risk.score, riskTier: risk.tier },
+          travelers,
+          risk.flightStatus,
+          agencyForConfirm,
+        );
+        await db
+          .update(monitoredFlights)
+          .set({ confirmationAlertSentAt: new Date() })
+          .where(eq(monitoredFlights.id, flight.id));
+        console.log(
+          `[monitor] confirmation alert fired flight_id=${flight.id} cancelled=${confirmedCancelled} delay=${risk.flightStatus?.delayMinutes || 0}min`,
+        );
+      } catch (err: any) {
+        console.error(`[monitor] confirmation alert send failed for flight ${flight.id}:`, err?.message || err);
+      }
     }
   }
 

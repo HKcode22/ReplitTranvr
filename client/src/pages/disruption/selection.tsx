@@ -99,8 +99,9 @@ export default function DisruptionSelectionPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 gap-3" data-testid="state-loading">
         <Loader2 className="h-6 w-6 animate-spin text-gray-500" />
+        <p className="text-sm text-gray-600">Loading your options...</p>
       </div>
     );
   }
@@ -108,9 +109,11 @@ export default function DisruptionSelectionPage() {
   if (error || !data) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <Card className="p-8 max-w-md w-full text-center bg-white">
+        <Card className="p-8 max-w-md w-full text-center bg-white" data-testid="state-error">
           <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto mb-4" />
-          <p className="text-gray-800 text-base">{error || "Disruption not found."}</p>
+          <p className="text-gray-800 text-base">
+            We couldn't load your options. Please contact your travel agent directly.
+          </p>
         </Card>
       </div>
     );
@@ -160,9 +163,15 @@ export default function DisruptionSelectionPage() {
           <>
             <h2 className="text-lg font-semibold text-gray-900 mb-3">
               {alternatives.length > 0
-                ? `Pick one of these ${alternatives.length} low-risk alternatives`
-                : "We couldn't find a low-risk alternative right now"}
+                ? "Here are some alternative flights we found — all confirmed lower risk:"
+                : "We weren't able to find alternative flights automatically"}
             </h2>
+
+            {alternatives.length === 0 ? (
+              <p className="text-sm text-gray-600 mb-4" data-testid="text-no-alternatives">
+                Your travel agent has been notified and will reach out to you directly with options.
+              </p>
+            ) : null}
 
             <div className="space-y-3">
               {alternatives.map((alt) => {

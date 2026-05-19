@@ -9398,7 +9398,7 @@ export async function registerRoutes(
       flightTravelers: tFlightTravelers,
       healthReports: tHealthReports,
     } = await import("@shared/schema");
-    const { eq: dEq, and: dAnd, desc: dDesc, inArray: dInArray, lt: dLt, isNotNull: dIsNotNull } = await import("drizzle-orm");
+    const { eq: dEq, and: dAnd, desc: dDesc, inArray: dInArray, lt: dLt, gte: dGte, isNotNull: dIsNotNull } = await import("drizzle-orm");
     const { getFlightStatus: dGetFlightStatus } = await import("./lib/disruption/flightStatus");
     const { aerodataboxFetch: dAdbFetch } = await import("./lib/disruption/aerodataboxLimiter");
     const { randomUUID: dRandomUUID } = await import("crypto");
@@ -9550,13 +9550,27 @@ export async function registerRoutes(
           flights.map(async (f: any) => {
             const flightTravelersList = travelersByFlight.get(f.id) || [];
             const anyAlerted = flightTravelersList.some((t) => !!t.alertSentAt);
-            const alts = anyAlerted
-              ? await db
-                  .select()
-                  .from(tDisruptionAlternatives)
-                  .where(dEq(tDisruptionAlternatives.monitoredFlightId, f.id))
-              : [];
-            return { ...f, travelers: flightTravelersList, alternatives: alts };
+            const [alts, latestHistory] = await Promise.all([
+              anyAlerted
+                ? db
+                    .select()
+                    .from(tDisruptionAlternatives)
+                    .where(dEq(tDisruptionAlternatives.monitoredFlightId, f.id))
+                : Promise.resolve([] as any[]),
+              db
+                .select()
+                .from(tRiskScoreHistory)
+                .where(dEq(tRiskScoreHistory.monitoredFlightId, f.id))
+                .orderBy(dDesc(tRiskScoreHistory.scoredAt))
+                .limit(1),
+            ]);
+            const flightStatus = (latestHistory[0]?.signals as any)?.flightStatus ?? null;
+            return {
+              ...f,
+              travelers: flightTravelersList,
+              alternatives: alts,
+              flightStatus,
+            };
           }),
         );
         return res.json(flightsEnriched);
@@ -10459,19 +10473,27 @@ export async function registerRoutes(
     app.get("/api/disruption/keep/:travelerSelectionToken", async (req: Request, res: Response) => {
       try {
         const token = String(req.params.travelerSelectionToken || "");
-        if (!token) return res.status(400).send("Invalid link");
+        if (!token) {
+          return res.redirect(`/disruption/confirmed?kept=true&error=missing_token`);
+        }
         const [traveler] = await db
           .select()
           .from(tFlightTravelers)
           .where(dEq(tFlightTravelers.selectionToken, token))
           .limit(1);
-        if (!traveler) return res.status(404).send("Flight not found");
+        if (!traveler) {
+          console.warn(`[disruption-keep] token not found, redirecting to confirmed page: ${token.slice(0, 8)}…`);
+          return res.redirect(`/disruption/confirmed?kept=true&error=token_not_found`);
+        }
         const [flight] = await db
           .select()
           .from(tMonitoredFlights)
           .where(dEq(tMonitoredFlights.id, traveler.monitoredFlightId))
           .limit(1);
-        if (!flight) return res.status(404).send("Flight not found");
+        if (!flight) {
+          console.warn(`[disruption-keep] flight missing for traveler ${traveler.id}, redirecting`);
+          return res.redirect(`/disruption/confirmed?kept=true&error=flight_not_found`);
+        }
         if (traveler.selectedOptionId) {
           return res.redirect(
             `/disruption/confirmed?already=true&flight=${encodeURIComponent(flight.flightNumber)}`,
@@ -10623,11 +10645,61 @@ export async function registerRoutes(
         const avgScoreDisrupted = disruptedScoreCount > 0 ? disruptedScoreSum / disruptedScoreCount : null;
         const avgScoreOnTime = onTimeScoreCount > 0 ? onTimeScoreSum / onTimeScoreCount : null;
 
+        // Active high-risk: today-or-future red-tier flights that haven't
+        // departed yet. Valuable signal even though we can't classify them.
+        const activeRedFlights = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(
+            dAnd(
+              dEq(tMonitoredFlights.status, "active"),
+              dGte(tMonitoredFlights.departureDate, todayStr),
+              dEq(tMonitoredFlights.riskTier, "red"),
+            ),
+          )
+          .orderBy(dDesc(tMonitoredFlights.riskScore))
+          .limit(50);
+
+        const activeHighRisk: Array<{
+          id: number;
+          flightNumber: string;
+          route: string;
+          departureDate: string;
+          currentScore: number;
+          currentTier: string;
+          topSignals: Array<{ name: string; points: number }>;
+        }> = [];
+
+        for (const f of activeRedFlights) {
+          const [latest] = await db
+            .select()
+            .from(tRiskScoreHistory)
+            .where(dEq(tRiskScoreHistory.monitoredFlightId, f.id))
+            .orderBy(dDesc(tRiskScoreHistory.scoredAt))
+            .limit(1);
+          const signalsObj: Record<string, number> =
+            (latest?.signals as any)?.signals || {};
+          const topSignals = Object.entries(signalsObj)
+            .map(([name, points]) => ({ name, points: Number(points) || 0 }))
+            .filter((s) => s.points > 0)
+            .sort((a, b) => b.points - a.points)
+            .slice(0, 3);
+          activeHighRisk.push({
+            id: f.id,
+            flightNumber: f.flightNumber,
+            route: `${f.originIata} → ${f.destinationIata}`,
+            departureDate: f.departureDate,
+            currentScore: f.riskScore,
+            currentTier: f.riskTier,
+            topSignals,
+          });
+        }
+
         const promptBody = `You are analyzing the accuracy of a flight disruption risk scoring system for a travel agency platform called Travnr.
 
 Here are the results from the last analysis period:
 
-Flights analyzed: ${flightsAnalyzed}
+Flights analyzed (past, departed): ${flightsAnalyzed}
 Flights we flagged as high risk (red): ${flaggedCount}
 True positives (correctly flagged, were actually disrupted): ${truePositives}
 False positives (flagged red, flew fine): ${falsePositives}
@@ -10638,7 +10710,10 @@ Recall: ${recall !== null ? (recall * 100).toFixed(1) + '%' : 'N/A'}
 Average risk score for disrupted flights: ${avgScoreDisrupted !== null ? avgScoreDisrupted.toFixed(1) : 'N/A'}
 Average risk score for on-time flights: ${avgScoreOnTime !== null ? avgScoreOnTime.toFixed(1) : 'N/A'}
 
-Per-flight breakdown:
+Currently active high-risk flights (red tier, not yet departed): ${activeHighRisk.length}
+${JSON.stringify(activeHighRisk, null, 2)}
+
+Per-flight breakdown of past departures:
 ${JSON.stringify(perFlight, null, 2)}
 
 Write a clear, direct health report in plain English. Cover:
@@ -10646,9 +10721,10 @@ Write a clear, direct health report in plain English. Cover:
 2. Specific patterns you notice in the false positives or false negatives
 3. Which signals appear to be over or under-weighted based on the data
 4. Concrete recommendations to improve accuracy
-5. Any data quality issues you notice (e.g. too few flights to draw conclusions)
+5. Brief commentary on the currently active high-risk flights — do the top signals look credible? Are there obvious shared causes (weather system, carrier, airport) across them?
+6. Any data quality issues you notice (e.g. too few flights to draw conclusions)
 
-Be specific, not generic. Reference actual flight numbers and patterns from the data. Keep it under 400 words.`;
+Be specific, not generic. Reference actual flight numbers and patterns from the data. Keep it under 500 words.`;
 
         let claudeSummary = "Summary unavailable.";
         if (process.env.ANTHROPIC_API_KEY) {
@@ -10695,7 +10771,10 @@ Be specific, not generic. Reference actual flight numbers and patterns from the 
             avgScoreDisrupted: avgScoreDisrupted as any,
             avgScoreOnTime: avgScoreOnTime as any,
             claudeSummary,
-            rawData: perFlight as any,
+            // Stored as an object so we can include both past-departures and
+            // currently-active high-risk flights. Older reports stored a raw
+            // array — the UI handles both shapes.
+            rawData: { past: perFlight, activeHighRisk } as any,
             requestedByAgencyId: agency.id,
           })
           .returning();
