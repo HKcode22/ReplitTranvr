@@ -10,6 +10,7 @@ import { redactJSON } from './lib/redact';
 import { initSentry, captureRequestError, sentryRequestContext } from './lib/sentry';
 import { applyBootMigrations } from './db';
 import { startMonitoringEngine } from './lib/disruption/monitor';
+import { startTestFlightSeeder } from './lib/disruption/testFlightSeeder';
 
 initSentry();
 
@@ -319,6 +320,11 @@ app.use((req, res, next) => {
         startMonitoringEngine();
       } catch (err: any) {
         console.error('Disruption monitoring engine failed to start:', err?.message || err);
+      }
+      try {
+        startTestFlightSeeder();
+      } catch (err: any) {
+        console.error('Test flight seeder failed to start:', err?.message || err);
       }
     },
   );

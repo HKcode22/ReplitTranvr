@@ -560,6 +560,9 @@ export const monitoredFlights = pgTable("monitored_flights", {
   riskScore: integer("risk_score").default(0).notNull(),
   riskTier: text("risk_tier").default("green").notNull(),
   lastCheckedAt: timestamp("last_checked_at"),
+  tailNumber: text("tail_number"),
+  equipmentType: text("equipment_type"),
+  isTest: boolean("is_test").default(false).notNull(),
   status: text("status").default("active").notNull(),
   agencyResolvedAt: timestamp("agency_resolved_at"),
   confirmationAlertSentAt: timestamp("confirmation_alert_sent_at"),
@@ -612,6 +615,8 @@ export const riskScoreHistory = pgTable("risk_score_history", {
   score: integer("score").notNull(),
   tier: text("tier").notNull(),
   signals: jsonb("signals").notNull(),
+  tailNumber: text("tail_number"),
+  equipmentType: text("equipment_type"),
   scoredAt: timestamp("scored_at").defaultNow().notNull(),
 }, (table) => [
   index("risk_score_history_flight_id_idx").on(table.monitoredFlightId),

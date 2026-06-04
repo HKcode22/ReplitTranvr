@@ -23,13 +23,6 @@ import {
 import { buildGuestProposalSms } from "./lib/smsTemplates";
 import { getUncachableStripeClient, getStripePublishableKey } from "./lib/stripeClient";
 import {
-  verifyProposalAgainstTranscript,
-  verifyProposalPicks,
-  fixAndRegenerateProposal,
-  buildProposalSnapshot,
-  type ParsedDetails as VerifierParsedDetails,
-} from "./lib/proposalVerifier";
-import {
   summarizeCall,
   pickStoredSummary,
   mergeSummaryIntoVariables,
@@ -850,29 +843,6 @@ export function summarizeCarrierMix(offers: any[]): string {
   return `total=${offers.length} nonstops=${nonstopCount} carriers=[${parts.join(",")}]`;
 }
 
-// Per-offer summary tuple consumed by the Claude pick-quality verifier
-// (see server/lib/proposalVerifier.ts > verifyProposalPicks). Kept tiny
-// and serializable so the prompt fits comfortably in one Claude turn even
-// when the offer pool is large.
-export interface OfferPoolEntry {
-  id: string;
-  carrier: string;
-  price: number;
-  currency: string;
-  duration_minutes: number;
-  stops: number;
-}
-
-export function summarizeOfferPool(offers: any[], limit = 30): OfferPoolEntry[] {
-  return (offers || []).slice(0, limit).map((o) => ({
-    id: String(o.id ?? ""),
-    carrier: offerOutboundCarrier(o),
-    price: parseFloat(o.total_amount),
-    currency: String(o.total_currency || "USD"),
-    duration_minutes: offerTotalDurationMinutes(o),
-    stops: offerStops(o),
-  }));
-}
 
 export function pickThreeOffers(offers: any[]): Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }> {
   if (!offers || offers.length === 0) return [];
@@ -1194,84 +1164,8 @@ async function buildGuestProposalDataFromOffers(args: {
   returnDate?: string | null;
   passengers: number;
   cabinClass: string;
-  // When set, run the Claude pick-quality verifier on the picks; on a
-  // should_regenerate verdict, re-run the picker once with the offending
-  // offers excluded and use the new picks. Falls back to the original
-  // picks if Claude is unavailable, throws, or flags again on the second
-  // pass — verification never blocks the email path.
-  verifyPicks?: { logTag: string };
 }): Promise<GuestProposalData> {
-  const originalPicks = pickThreeOffers(args.offers);
-  let picks = originalPicks;
-
-  if (args.verifyPicks && picks.length > 0) {
-    const tag = args.verifyPicks.logTag;
-    const pool = summarizeOfferPool(args.offers);
-    const toPickSummary = (
-      ps: Array<{ offer: any; label: "Best Price" | "Best Value" | "Fastest" }>,
-    ) =>
-      ps.map((p) => ({
-        label: p.label,
-        id: String(p.offer.id ?? ""),
-        carrier: offerOutboundCarrier(p.offer),
-        price: parseFloat(p.offer.total_amount),
-        currency: String(p.offer.total_currency || "USD"),
-        duration_minutes: offerTotalDurationMinutes(p.offer),
-        stops: offerStops(p.offer),
-      }));
-    try {
-      // Pass 1: verify the deterministic picks against the full offer pool.
-      const verdict1 = await verifyProposalPicks({
-        picks: toPickSummary(originalPicks),
-        pool,
-        logTag: tag,
-      });
-      if (verdict1 && verdict1.should_regenerate) {
-        const exclude = new Set((verdict1.exclude_offer_ids || []).map(String));
-        if (exclude.size === 0) {
-          console.log(
-            `${tag} pick-verify flagged but no exclude_offer_ids — shipping original picks. issues=${JSON.stringify(verdict1.issues)}`,
-          );
-        } else {
-          const filtered = args.offers.filter((o) => !exclude.has(String(o.id)));
-          const repicked = pickThreeOffers(filtered);
-          if (repicked.length === 0) {
-            console.log(
-              `${tag} pick-verify regen aborted reason=empty_after_filter — shipping original picks. issues=${JSON.stringify(verdict1.issues)}`,
-            );
-          } else {
-            // Pass 2: re-verify the repicked set so a still-bad picker output
-            // can be detected. On second failure we ship the ORIGINAL picks
-            // (not the repick) and log loudly — better the devil we know.
-            const verdict2 = await verifyProposalPicks({
-              picks: toPickSummary(repicked),
-              pool,
-              logTag: `${tag} pass2`,
-            });
-            if (verdict2 && verdict2.should_regenerate) {
-              console.warn(
-                `${tag} pick-verify second pass STILL flagged — shipping ORIGINAL picks. excluded=${Array.from(exclude).join(",")} issues_pass1=${JSON.stringify(verdict1.issues)} issues_pass2=${JSON.stringify(verdict2.issues)}`,
-              );
-              picks = originalPicks;
-            } else {
-              console.log(
-                `${tag} pick-verify regenerated picks excluded=${Array.from(exclude).join(",")} issues_pass1=${JSON.stringify(verdict1.issues)} pass2=${verdict2 ? "ok" : "unavailable_accepting_repick"}`,
-              );
-              picks = repicked;
-            }
-          }
-        }
-      } else if (verdict1) {
-        console.log(`${tag} pick-verify ok issues=${verdict1.issues.length}`);
-      }
-    } catch (err: any) {
-      // Never let verification failures block the email send. The
-      // deterministic picker rules (dominance guard, nonstop preference)
-      // already enforce the floor.
-      console.warn(`${tag} pick-verify threw, shipping original picks:`, err?.message || err);
-      picks = originalPicks;
-    }
-  }
+  const picks = pickThreeOffers(args.offers);
 
   const options: GuestProposalOption[] = picks.map((p) => offerToGuestOption(p.offer, p.label));
 
@@ -6419,7 +6313,6 @@ export async function registerRoutes(
       returnDate,
       passengers: details.passengers,
       cabinClass: details.cabinClass,
-      verifyPicks: { logTag: lp },
     });
     if (guestData.options.length === 0) {
       console.log(`${lp} skipping reason=no_options_built_from_offers`);
@@ -6565,7 +6458,6 @@ export async function registerRoutes(
     userId: string,
     callSummary: string | null,
     callTranscript?: string | null,
-    override?: { details: VerifierParsedDetails; skipVerification: true },
     callAnalysis?: BlandAnalysisPayload | null,
   ) {
     const callRequest = await storage.getCallRequest(callRequestId);
@@ -6579,23 +6471,21 @@ export async function registerRoutes(
       return;
     }
 
-    if (!override) {
-      const existingProposals = await storage.getProposalsByCallRequest(callRequestId);
-      if (existingProposals.length > 0) {
-        const fallbackIds: number[] = [];
-        for (const ep of existingProposals) {
-          const items = await storage.getProposalItems(ep.id);
-          const isFallback = items.length === 0 || items.every(i => !i.duffelOfferId && (parseFloat(i.priceEstimate ?? "0") === 0));
-          if (isFallback) fallbackIds.push(ep.id);
-        }
-        if (fallbackIds.length < existingProposals.length) {
-          console.log(`Real proposal already exists for call request ${callRequestId}, skipping`);
-          return;
-        }
-        console.log(`Replacing ${fallbackIds.length} fallback proposal(s) for call request ${callRequestId}`);
-        for (const id of fallbackIds) {
-          await storage.deleteProposalAndItems(id);
-        }
+    const existingProposals = await storage.getProposalsByCallRequest(callRequestId);
+    if (existingProposals.length > 0) {
+      const fallbackIds: number[] = [];
+      for (const ep of existingProposals) {
+        const items = await storage.getProposalItems(ep.id);
+        const isFallback = items.length === 0 || items.every(i => !i.duffelOfferId && (parseFloat(i.priceEstimate ?? "0") === 0));
+        if (isFallback) fallbackIds.push(ep.id);
+      }
+      if (fallbackIds.length < existingProposals.length) {
+        console.log(`Real proposal already exists for call request ${callRequestId}, skipping`);
+        return;
+      }
+      console.log(`Replacing ${fallbackIds.length} fallback proposal(s) for call request ${callRequestId}`);
+      for (const id of fallbackIds) {
+        await storage.deleteProposalAndItems(id);
       }
     }
 
@@ -6608,8 +6498,8 @@ export async function registerRoutes(
       if (transcript === null) transcript = completedCall?.transcript || null;
       if (summary === null) summary = completedCall?.summary || null;
       // Recover the Bland analysis_schema output stashed in variables.__analysis
-      // for re-trigger paths (manual regenerate, Claude verifier loop) that
-      // didn't receive analysis as an explicit argument.
+      // for re-trigger paths (manual regenerate) that didn't receive analysis
+      // as an explicit argument.
       if (analysis === null) {
         analysis = extractAnalysisFromVariables(completedCall?.variables);
       }
@@ -6620,13 +6510,8 @@ export async function registerRoutes(
       return;
     }
 
-    let details: VerifierParsedDetails;
-    if (override) {
-      details = override.details;
-      console.log(`[post-call ${callRequestId}] using Claude-corrected details:`, redactJSON(details));
-    } else {
-      details = parseTravelDetailsFromTranscript(transcript, summary, analysis);
-      console.log(`Parsed travel details from transcript for call ${callRequestId}:`, redactJSON(details));
+    const details = parseTravelDetailsFromTranscript(transcript, summary, analysis);
+    console.log(`Parsed travel details from transcript for call ${callRequestId}:`, redactJSON(details));
 
       // Surface ambiguity so we can monitor parser accuracy: only warn when
       // the destination/origin came from a regex pass (not from a confirmed
@@ -6678,7 +6563,6 @@ export async function registerRoutes(
           console.log(`generateProposalFromCall: last-resort IATA scan found "${candidate}" in transcript for call request ${callRequestId}`);
         }
       }
-    }
 
     if (!details.destination) {
       console.log(`generateProposalFromCall: no destination found in transcript for call request ${callRequestId}`);
@@ -6890,7 +6774,6 @@ export async function registerRoutes(
             returnDate,
             passengers: details.passengers,
             cabinClass: details.cabinClass,
-            verifyPicks: { logTag: `[guest-proposal callRequest=${callRequestId}]` },
           });
           if (guestData.options.length === 0) {
             console.log(`[guest-proposal] skipped — no options built for callRequest=${callRequestId}`);
@@ -7149,92 +7032,13 @@ export async function registerRoutes(
 
       console.log(`Auto-generated proposal ${proposal.id} with ${topOffers.length} offers from call request ${callRequestId}`);
 
-      // Post-generation Claude verification: silently double-check that the
-      // proposal we just wrote actually matches the call transcript. If anything
-      // is off, delete this proposal and regenerate using Claude's
-      // corrected_details. The customer-facing notification is held back until
-      // verification settles so the user only ever sees one alert pointing at
-      // the final (possibly corrected) proposal.
-      let suppressCustomerNotification = false;
-      if (!override?.skipVerification) {
-        try {
-          const flightItems = await storage.getProposalItems(proposal.id);
-          const snapshot = buildProposalSnapshot(
-            proposal.id,
-            details,
-            originCode,
-            destCode,
-            departureDate,
-            returnDate,
-            flightItems.map((it) => ({
-              description: it.description,
-              priceEstimate: it.priceEstimate,
-              duffelOfferData: it.duffelOfferData,
-            })),
-          );
-          const verification = await verifyProposalAgainstTranscript(
-            transcript,
-            details,
-            snapshot,
-          ).catch((err) => {
-            console.warn(`[claude-verify] verifyProposalAgainstTranscript threw for proposal=${proposal.id}:`, err?.message || err);
-            return null;
-          });
-          if (verification && (!verification.verified || verification.confidence < 0.85)) {
-            suppressCustomerNotification = true;
-            const userRecord = await storage.getUser(userId).catch(() => undefined);
-            const userName = userRecord
-              ? `${userRecord.firstName ?? ""} ${userRecord.lastName ?? ""}`.trim() || userRecord.email || userId
-              : userId;
-            await fixAndRegenerateProposal({
-              callRequestId,
-              userId,
-              oldProposalId: proposal.id,
-              correctedDetails: verification.corrected_details,
-              parsedDetails: details,
-              verificationResult: verification,
-              callSummary: summary,
-              callTranscript: transcript,
-              userName,
-              userEmail: userRecord?.email ?? null,
-              regenerate: async (overrideDetails) => {
-                await generateProposalFromCall(
-                  callRequestId,
-                  userId,
-                  summary,
-                  transcript,
-                  { details: overrideDetails, skipVerification: true },
-                );
-                const refetched = await storage.getProposalsByCallRequest(callRequestId);
-                return refetched[refetched.length - 1]?.id ?? null;
-              },
-              deleteOldProposal: async () => {
-                await storage.deleteProposalAndItems(proposal.id);
-              },
-              sendInternalEmail,
-            }).catch((err) => {
-              console.error(`[claude-verify] fixAndRegenerateProposal threw for callRequest=${callRequestId}:`, err?.message || err);
-            });
-          }
-        } catch (verifyErr: any) {
-          // Never let verification break the user flow — fall back to the normal
-          // notification using the proposal we already created.
-          console.warn(`[claude-verify] verification block threw for proposal=${proposal.id}:`, verifyErr?.message || verifyErr);
-        }
-      }
-
-      if (!suppressCustomerNotification) {
-        await storage.createNotification({
-          userId,
-          type: "proposal_received",
-          title: "New travel proposal ready",
-          body: `Based on your concierge call, we've prepared a flight proposal for your trip to ${destName}.`,
-          linkUrl: `/proposals/${proposal.id}`,
-        });
-
-        // Guest email send moved up — it now fires in parallel right after
-        // `allOffers.sort(...)`, before this verification gate.
-      }
+      await storage.createNotification({
+        userId,
+        type: "proposal_received",
+        title: "New travel proposal ready",
+        body: `Based on your concierge call, we've prepared a flight proposal for your trip to ${destName}.`,
+        linkUrl: `/proposals/${proposal.id}`,
+      });
     } catch (err: any) {
       console.error(
         `[post-call ${callRequestId}] Duffel search/proposal generation failed.`,
@@ -7966,7 +7770,6 @@ export async function registerRoutes(
             returnDate: row.returnDate,
             passengers: row.passengers,
             cabinClass: row.cabinClass,
-            verifyPicks: { logTag: `[guest-proposal regen token=${maskToken(token)}]` },
           });
           if (guestData.options.length === 0) return;
           const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);

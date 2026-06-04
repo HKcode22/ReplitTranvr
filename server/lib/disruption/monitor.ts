@@ -113,6 +113,8 @@ async function processFlight(
           }
         : null,
     },
+    tailNumber: risk.flightStatus?.tailNumber ?? null,
+    equipmentType: risk.flightStatus?.equipmentType ?? null,
   });
 
   if (flight.status !== "active") {
@@ -135,6 +137,8 @@ async function processFlight(
       riskTier: risk.tier,
       lastCheckedAt: new Date(),
       ...(extractedDepartureTime ? { departureTime: extractedDepartureTime } : {}),
+      ...(risk.flightStatus?.tailNumber ? { tailNumber: risk.flightStatus.tailNumber } : {}),
+      ...(risk.flightStatus?.equipmentType ? { equipmentType: risk.flightStatus.equipmentType } : {}),
     })
     .where(eq(monitoredFlights.id, flight.id));
 

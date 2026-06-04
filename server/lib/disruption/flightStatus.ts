@@ -7,6 +7,8 @@ export interface FlightStatusResult {
   inboundDelayMinutes: number;
   departureTime: string | null;
   cancelled: boolean;
+  tailNumber: string | null;
+  equipmentType: string | null;
   raw: any;
 }
 
@@ -284,6 +286,9 @@ export async function getFlightStatus(
     departure?.revisedTime?.utc ||
     null;
 
+  const tailNumber: string | null = flight.aircraft?.reg ?? null;
+  const equipmentType: string | null = flight.aircraft?.model ?? null;
+
   console.log(
     `[flightStatus] ${normalizedFlight} ${date} status=${status} dep_delay=${departureDelay} inbound_delay=${inboundDelay} cancelled=${cancelled}`,
   );
@@ -295,6 +300,8 @@ export async function getFlightStatus(
     inboundDelayMinutes: inboundDelay,
     departureTime,
     cancelled,
+    tailNumber,
+    equipmentType,
     raw: flight,
   };
 }
