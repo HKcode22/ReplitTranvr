@@ -9383,6 +9383,60 @@ export async function registerRoutes(
       }
     });
 
+    app.get("/api/agency/flights/export", isAgencyAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const agency = (req as any).agency;
+        const flights = await db
+          .select()
+          .from(tMonitoredFlights)
+          .where(dEq(tMonitoredFlights.agencyId, agency.id))
+          .orderBy(tMonitoredFlights.departureDate, tMonitoredFlights.flightNumber);
+
+        const csvCell = (v: unknown): string => {
+          const s = v == null ? "" : String(v);
+          return `"${s.replace(/"/g, '""')}"`;
+        };
+
+        const header = [
+          "Flight Number", "Carrier", "Origin", "Destination",
+          "Departure Date", "Departure Time", "Risk Score", "Risk Tier",
+          "Tail Number", "Equipment Type", "Status", "Is Test",
+          "Last Checked At", "Created At",
+        ].map(csvCell).join(",");
+
+        const rows = flights.map((f: any) =>
+          [
+            f.flightNumber,
+            f.carrierIata,
+            f.originIata,
+            f.destinationIata,
+            f.departureDate,
+            f.departureTime ?? "",
+            f.riskScore,
+            f.riskTier,
+            f.tailNumber ?? "",
+            f.equipmentType ?? "",
+            f.status,
+            f.isTest ? "yes" : "no",
+            f.lastCheckedAt ? new Date(f.lastCheckedAt).toISOString() : "",
+            f.createdAt ? new Date(f.createdAt).toISOString() : "",
+          ].map(csvCell).join(","),
+        );
+
+        const csv = [header, ...rows].join("\r\n");
+        const slug = (agency.name as string).replace(/[^a-z0-9]/gi, "-").toLowerCase();
+        const date = new Date().toISOString().slice(0, 10);
+        const filename = `flights-${slug}-${date}.csv`;
+
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        return res.send(csv);
+      } catch (err: any) {
+        console.error("[agency-flights-export] error:", err);
+        return res.status(500).json({ error: "Export failed" });
+      }
+    });
+
     app.post("/api/agency/flights", isAgencyAuthenticated, async (req: Request, res: Response) => {
       try {
         const agency = (req as any).agency;

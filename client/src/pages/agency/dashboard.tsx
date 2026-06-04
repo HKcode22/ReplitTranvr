@@ -15,7 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatFlightTime } from "@/lib/airportTimezone";
 import { liveStatusFor, liveStatusStyles, type FlightStatusSnapshot } from "@/lib/liveStatus";
 import {
-  Loader2, Plane, Plus, Trash2, LogOut, RefreshCw, Activity, AlertTriangle, BellRing, CheckCircle2, X, Search, AlertCircle, ChevronDown, ChevronRight, Sparkles, Users, Target, TrendingDown,
+  Loader2, Plane, Plus, Trash2, LogOut, RefreshCw, Activity, AlertTriangle, BellRing, CheckCircle2, X, Search, AlertCircle, ChevronDown, ChevronRight, Sparkles, Users, Target, TrendingDown, Download,
 } from "lucide-react";
 
 interface AgencyMe {
@@ -646,6 +646,15 @@ export default function AgencyDashboardPage() {
               title="Rescore all flights"
             >
               <RefreshCw className={`h-4 w-4 ${rescoring || flightsQuery.isFetching ? "animate-spin" : ""}`} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { window.location.href = "/api/agency/flights/export"; }}
+              title="Export flights to CSV"
+            >
+              <Download className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Export</span>
             </Button>
             <Button
               onClick={() => { setSearchOpen(true); setSearchResults([]); setSearchMessage(null); }}
