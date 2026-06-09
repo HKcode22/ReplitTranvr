@@ -233,5 +233,11 @@ export function startTestFlightSeeder(): void {
     console.log("[seeder] already scheduled — skipping");
     return;
   }
+  // Run immediately on startup so today's test flights are always present
+  // regardless of when the server last restarted. The dedup check inside
+  // runTestFlightSeeder prevents double-inserts.
+  runTestFlightSeeder().catch((err) => {
+    console.error("[seeder] startup run failed:", err?.message || err);
+  });
   scheduleNextRun();
 }

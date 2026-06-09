@@ -7,6 +7,8 @@ import {
   flightTravelers,
   monitoredFlights,
   riskScoreHistory,
+  userMonitoredFlights,
+  users,
   type FlightTraveler,
   type MonitoredFlight,
 } from "@shared/schema";
@@ -14,6 +16,7 @@ import { scoreFlightRisk } from "./riskScorer";
 import { findLowRiskAlternatives } from "./alternativeFinder";
 import { sendTravelerAlert, sendConfirmationAlert } from "./alertSender";
 import { getHistoricalOtp, type HistoricalOtpResult } from "./historicalOtp";
+import sgMail from "@sendgrid/mail";
 
 const INTERVAL_MS = 30 * 60 * 1000;
 
@@ -302,6 +305,8 @@ async function runCycle(): Promise<void> {
         console.error(`[monitor] flight ${flight.id} processing failed:`, err?.message || err);
       }
     }
+
+    await runUserFlightCycle();
   } catch (err: any) {
     console.error("[monitor] cycle failed:", err?.message || err);
   } finally {
@@ -310,6 +315,142 @@ async function runCycle(): Promise<void> {
     console.log(
       `[monitor] cycle end checked=${checked} alerts=${alerts} elapsed_ms=${elapsed}`,
     );
+  }
+}
+
+const TIER_ORDER: Record<string, number> = { green: 0, amber: 1, red: 2 };
+
+function tierLabel(tier: string): string {
+  return tier === "red" ? "High" : tier === "amber" ? "Moderate" : "Low";
+}
+
+async function sendUserFlightAlert(
+  userEmail: string,
+  userName: string,
+  flight: typeof userMonitoredFlights.$inferSelect,
+  newTier: string,
+  signals: Record<string, number>,
+): Promise<void> {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || "hello@travnr.com";
+  if (!apiKey) return;
+  sgMail.setApiKey(apiKey);
+
+  const topSignals = Object.entries(signals)
+    .filter(([, pts]) => pts > 0)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([name, pts]) => `<li>${name} (+${pts})</li>`)
+    .join("");
+
+  const tierColor = newTier === "red" ? "#dc2626" : newTier === "amber" ? "#d97706" : "#16a34a";
+  const subject = `Flight alert: ${flight.flightNumber} risk is now ${tierLabel(newTier)}`;
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#111">
+      <h2 style="margin-bottom:4px">Flight Risk Update</h2>
+      <p style="color:#555;margin-top:0">Hi ${userName},</p>
+      <p>Your monitored flight has a new risk level:</p>
+      <div style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin:16px 0">
+        <div style="font-size:20px;font-weight:600">${flight.flightNumber}</div>
+        <div style="color:#555;margin-top:2px">${flight.originIata} → ${flight.destinationIata} &nbsp;·&nbsp; ${flight.departureDate}${flight.departureTime ? " at " + flight.departureTime : ""}</div>
+        <div style="margin-top:12px">
+          <span style="background:${tierColor};color:#fff;padding:4px 12px;border-radius:999px;font-size:13px;font-weight:600">${tierLabel(newTier)} Risk &nbsp;·&nbsp; Score ${flight.riskScore}</span>
+        </div>
+        ${topSignals ? `<div style="margin-top:12px;font-size:13px;color:#555"><strong>Top contributing signals:</strong><ul style="margin:4px 0;padding-left:18px">${topSignals}</ul></div>` : ""}
+      </div>
+      <p style="font-size:13px;color:#888">You're receiving this because you added this flight to Monitor Flight on Travnr. Log in to view details or remove the flight.</p>
+    </div>`;
+
+  try {
+    await sgMail.send({ to: userEmail, from: { email: fromEmail, name: "Travnr" }, subject, html });
+  } catch (err: any) {
+    console.warn(`[monitor] user flight alert email failed for ${userEmail}:`, err?.message || err);
+  }
+}
+
+async function runUserFlightCycle(): Promise<void> {
+  const today = todayIso();
+  const tomorrow = tomorrowIso();
+
+  const flights = await db
+    .select()
+    .from(userMonitoredFlights)
+    .where(
+      and(
+        eq(userMonitoredFlights.status, "active"),
+        gte(userMonitoredFlights.departureDate, today),
+        lte(userMonitoredFlights.departureDate, tomorrow),
+      ),
+    );
+
+  for (const flight of flights) {
+    try {
+      const risk = await scoreFlightRisk({
+        flightNumber: flight.flightNumber,
+        carrierIata: flight.carrierIata,
+        departureDate: flight.departureDate,
+        departureTime: flight.departureTime,
+        originIata: flight.originIata,
+        destinationIata: flight.destinationIata,
+        historicalOtpCache: null,
+      });
+
+      const previousTier = flight.lastAlertedTier || flight.riskTier;
+      const tierRose = (TIER_ORDER[risk.tier] ?? 0) > (TIER_ORDER[previousTier] ?? 0);
+      const confirmedDisruption =
+        (risk.flightStatus?.cancelled === true || (risk.flightStatus?.delayMinutes || 0) >= 30) &&
+        previousTier !== "disrupted";
+
+      const flightStatusSnapshot = risk.flightStatus
+        ? {
+            status: risk.flightStatus.status,
+            delayMinutes: risk.flightStatus.delayMinutes,
+            inboundDelayMinutes: risk.flightStatus.inboundDelayMinutes,
+            cancelled: risk.flightStatus.cancelled,
+            departureTime: risk.flightStatus.departureTime,
+          }
+        : null;
+
+      await db
+        .update(userMonitoredFlights)
+        .set({
+          riskScore: risk.score,
+          riskTier: risk.tier,
+          lastCheckedAt: new Date(),
+          flightStatus: flightStatusSnapshot as any,
+          ...(risk.flightStatus?.departureTime && !flight.departureTime
+            ? { departureTime: risk.flightStatus.departureTime.match(/(\d{2}:\d{2})/)?.[1] ?? undefined }
+            : {}),
+        })
+        .where(eq(userMonitoredFlights.id, flight.id));
+
+      if (tierRose || confirmedDisruption) {
+        const [userRow] = await db
+          .select({ email: users.email, firstName: users.firstName, lastName: users.lastName })
+          .from(users)
+          .where(eq(users.id, flight.userId))
+          .limit(1);
+
+        if (userRow) {
+          const alertTier = confirmedDisruption ? "disrupted" : risk.tier;
+          await sendUserFlightAlert(
+            userRow.email,
+            userRow.firstName,
+            { ...flight, riskScore: risk.score, riskTier: risk.tier },
+            confirmedDisruption ? "red" : risk.tier,
+            risk.signals as unknown as Record<string, number>,
+          );
+          await db
+            .update(userMonitoredFlights)
+            .set({ lastAlertedTier: alertTier })
+            .where(eq(userMonitoredFlights.id, flight.id));
+          console.log(`[monitor] user flight alert sent flight_id=${flight.id} user=${userRow.email} tier=${risk.tier}`);
+        }
+      }
+    } catch (err: any) {
+      console.error(`[monitor] user flight ${flight.id} scoring failed:`, err?.message || err);
+    }
   }
 }
 

@@ -642,6 +642,27 @@ export const disruptionAlternatives = pgTable("disruption_alternatives", {
   index("disruption_alternatives_flight_id_idx").on(table.monitoredFlightId),
 ]);
 
+export const userMonitoredFlights = pgTable("user_monitored_flights", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  flightNumber: text("flight_number").notNull(),
+  carrierIata: text("carrier_iata").notNull(),
+  departureDate: text("departure_date").notNull(),
+  departureTime: text("departure_time"),
+  originIata: text("origin_iata").notNull(),
+  destinationIata: text("destination_iata").notNull(),
+  riskScore: integer("risk_score").default(0).notNull(),
+  riskTier: text("risk_tier").default("green").notNull(),
+  lastCheckedAt: timestamp("last_checked_at"),
+  lastAlertedTier: text("last_alerted_tier"),
+  flightStatus: jsonb("flight_status"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("user_monitored_flights_user_id_idx").on(table.userId),
+  index("user_monitored_flights_status_idx").on(table.status),
+]);
+
 export const agencyAccountsRelations = relations(agencyAccounts, ({ many }) => ({
   flights: many(monitoredFlights),
 }));
@@ -690,6 +711,8 @@ export const insertRiskScoreHistorySchema = createInsertSchema(riskScoreHistory)
 export const insertDisruptionAlternativeSchema = createInsertSchema(disruptionAlternatives).omit({
   id: true, createdAt: true,
 });
+
+export type UserMonitoredFlight = typeof userMonitoredFlights.$inferSelect;
 
 export type AgencyAccount = typeof agencyAccounts.$inferSelect;
 export type InsertAgencyAccount = z.infer<typeof insertAgencyAccountSchema>;

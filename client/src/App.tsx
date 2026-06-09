@@ -32,6 +32,7 @@ import BillingPage from "@/pages/billing";
 import SecurityPage from "@/pages/security";
 import TripsPage from "@/pages/trips";
 import FlightSearchPage from "@/pages/flight-search";
+import MonitorFlightPage from "@/pages/monitor-flight";
 import ResetPasswordPage from "@/pages/reset-password";
 import AdminDashboardPage from "@/pages/admin-dashboard";
 import GuestProposalPage from "@/pages/guest-proposal";
@@ -101,6 +102,7 @@ function AuthenticatedLayout() {
               </Route>
               <Route path="/trips" component={TripsPage} />
               <Route path="/flights" component={FlightSearchPage} />
+              <Route path="/monitor-flight" component={MonitorFlightPage} />
               <Route path="/manage-trip" component={ManageTripPage} />
               <Route path="/contact" component={ContactPage} />
               <Route path="/notifications" component={NotificationsPage} />

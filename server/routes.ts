@@ -2301,6 +2301,199 @@ export async function registerRoutes(
     return res.json({ message: "Marked as read" });
   });
 
+  // USER FLIGHT MONITORING
+  {
+    const { db: mDb } = await import("./db");
+    const { userMonitoredFlights: tUMF } = await import("@shared/schema");
+    const {
+      eq: mEq,
+      and: mAnd,
+      desc: mDesc,
+    } = await import("drizzle-orm");
+    const { getFlightStatus: mGetFlightStatus } = await import("./lib/disruption/flightStatus");
+
+    const userFlightSearchSchema = z.object({
+      mode: z.enum(["flightNumber", "route"]),
+      flightNumber: z.string().optional(),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      origin: z.string().optional(),
+      destination: z.string().optional(),
+      airlineFilter: z.string().optional(),
+    });
+
+    const userFlightAddSchema = z.object({
+      flightNumber: z.string().min(2).max(10),
+      carrierIata: z.string().min(2).max(3),
+      departureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      departureTime: z.string().optional(),
+      originIata: z.string().length(3),
+      destinationIata: z.string().length(3),
+    });
+
+    app.post("/api/user/flights/search", isAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const parsed = userFlightSearchSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: "Invalid input" });
+        const { mode, flightNumber, date, origin, destination, airlineFilter } = parsed.data;
+        const apiKey = process.env.AERODATABOX_API_KEY;
+        if (!apiKey) return res.json({ flights: [], message: "Flight search unavailable." });
+
+        if (mode === "flightNumber") {
+          const fn = (flightNumber || "").replace(/\s+/g, "").toUpperCase();
+          if (!fn) return res.status(400).json({ error: "Flight number required" });
+          const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(fn)}/${encodeURIComponent(date)}`;
+          const resp = await fetch(url, { headers: { "x-rapidapi-key": apiKey, "x-rapidapi-host": "aerodatabox.p.rapidapi.com" } });
+          if (!resp.ok) return res.json({ flights: [], message: "No results found." });
+          const raw: any = await resp.json();
+          const results = Array.isArray(raw) ? raw : [];
+          const flights = results.map((f: any) => ({
+            flightNumber: String(f.number || "").replace(/\s+/g, "").toUpperCase(),
+            carrierIata: String(f.airline?.iata || "").toUpperCase(),
+            carrierName: f.airline?.name || "",
+            originIata: String(f.departure?.airport?.iata || "").toUpperCase(),
+            destinationIata: String(f.arrival?.airport?.iata || "").toUpperCase(),
+            originName: f.departure?.airport?.name || "",
+            destinationName: f.arrival?.airport?.name || "",
+            departureTime: f.departure?.scheduledTime?.utc || f.departure?.scheduledTime?.local || null,
+            arrivalTime: f.arrival?.scheduledTime?.utc || f.arrival?.scheduledTime?.local || null,
+            status: f.status || "",
+          })).filter((f: any) => f.flightNumber && f.originIata && f.destinationIata);
+          return res.json({ flights });
+        } else {
+          const orig = (origin || "").toUpperCase().trim();
+          const dest = (destination || "").toUpperCase().trim();
+          if (!orig || !dest) return res.status(400).json({ error: "Origin and destination required" });
+          const buildUrl = (from: string, to: string) =>
+            `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(orig)}/${date}T${from}/${date}T${to}?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withCargo=false&withPrivate=false`;
+          const [rAm, rPm] = await Promise.all([
+            fetch(buildUrl("06:00", "12:00"), { headers: { "x-rapidapi-key": apiKey, "x-rapidapi-host": "aerodatabox.p.rapidapi.com" } }),
+            fetch(buildUrl("12:00", "23:59"), { headers: { "x-rapidapi-key": apiKey, "x-rapidapi-host": "aerodatabox.p.rapidapi.com" } }),
+          ]);
+          const parse = async (r: Response) => {
+            if (!r.ok) return [];
+            const d: any = await r.json();
+            if (d?.departures && Array.isArray(d.departures)) return d.departures;
+            if (Array.isArray(d)) return d;
+            return [];
+          };
+          const [am, pm] = await Promise.all([parse(rAm), parse(rPm)]);
+          const all = [...am, ...pm];
+          const filtered = all.filter((f: any) => {
+            const destIata = String(f.arrival?.airport?.iata || "").toUpperCase();
+            if (destIata !== dest) return false;
+            if (airlineFilter) {
+              const af = airlineFilter.toUpperCase();
+              if (!String(f.airline?.iata || "").toUpperCase().includes(af) && !String(f.airline?.name || "").toUpperCase().includes(af)) return false;
+            }
+            return true;
+          });
+          const flights = filtered.map((f: any) => ({
+            flightNumber: String(f.number || "").replace(/\s+/g, "").toUpperCase(),
+            carrierIata: String(f.airline?.iata || "").toUpperCase(),
+            carrierName: f.airline?.name || "",
+            originIata: orig,
+            destinationIata: dest,
+            departureTime: f.departure?.scheduledTime?.local || f.departure?.scheduledTime?.utc || null,
+            arrivalTime: f.arrival?.scheduledTime?.local || f.arrival?.scheduledTime?.utc || null,
+            status: f.status || "",
+          })).filter((f: any) => f.flightNumber);
+          return res.json({ flights });
+        }
+      } catch (err: any) {
+        console.error("[user-flight-search] error:", err);
+        return res.json({ flights: [], message: "Search failed." });
+      }
+    });
+
+    app.get("/api/user/monitored-flights", isAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId!;
+        const flights = await mDb
+          .select()
+          .from(tUMF)
+          .where(mEq(tUMF.userId, userId))
+          .orderBy(mDesc(tUMF.createdAt));
+        return res.json(flights);
+      } catch (err: any) {
+        console.error("[user-monitored-flights-list] error:", err);
+        return res.status(500).json({ error: "Failed to load flights" });
+      }
+    });
+
+    app.post("/api/user/monitored-flights", isAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId!;
+        const parsed = userFlightAddSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message || "Invalid input" });
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (parsed.data.departureDate < todayStr) return res.status(400).json({ error: "Departure date must be today or later" });
+
+        const flightNumber = parsed.data.flightNumber.replace(/\s+/g, "").toUpperCase();
+        const [existing] = await mDb
+          .select({ id: tUMF.id })
+          .from(tUMF)
+          .where(mAnd(mEq(tUMF.userId, userId), mEq(tUMF.flightNumber, flightNumber), mEq(tUMF.departureDate, parsed.data.departureDate)))
+          .limit(1);
+        if (existing) return res.status(409).json({ error: "You are already monitoring this flight" });
+
+        const [inserted] = await mDb
+          .insert(tUMF)
+          .values({
+            userId,
+            flightNumber,
+            carrierIata: parsed.data.carrierIata.toUpperCase(),
+            departureDate: parsed.data.departureDate,
+            departureTime: parsed.data.departureTime || null,
+            originIata: parsed.data.originIata.toUpperCase(),
+            destinationIata: parsed.data.destinationIata.toUpperCase(),
+          })
+          .returning();
+
+        // Kick off an immediate score so the card doesn't show 0/green forever
+        import("./lib/disruption/riskScorer").then(({ scoreFlightRisk }) =>
+          scoreFlightRisk({
+            flightNumber: inserted.flightNumber,
+            carrierIata: inserted.carrierIata,
+            departureDate: inserted.departureDate,
+            departureTime: inserted.departureTime,
+            originIata: inserted.originIata,
+            destinationIata: inserted.destinationIata,
+            historicalOtpCache: null,
+          }).then(async (risk) => {
+            const snap = risk.flightStatus ? {
+              status: risk.flightStatus.status,
+              delayMinutes: risk.flightStatus.delayMinutes,
+              inboundDelayMinutes: risk.flightStatus.inboundDelayMinutes,
+              cancelled: risk.flightStatus.cancelled,
+              departureTime: risk.flightStatus.departureTime,
+            } : null;
+            await mDb.update(tUMF).set({ riskScore: risk.score, riskTier: risk.tier, lastCheckedAt: new Date(), flightStatus: snap as any }).where(mEq(tUMF.id, inserted.id));
+          }).catch(() => {})
+        ).catch(() => {});
+
+        return res.status(201).json(inserted);
+      } catch (err: any) {
+        console.error("[user-monitored-flights-add] error:", err);
+        return res.status(500).json({ error: "Failed to add flight" });
+      }
+    });
+
+    app.delete("/api/user/monitored-flights/:id", isAuthenticated, async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.userId!;
+        const id = parseInt(req.params.id);
+        if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+        const [row] = await mDb.select({ id: tUMF.id, userId: tUMF.userId }).from(tUMF).where(mEq(tUMF.id, id)).limit(1);
+        if (!row || row.userId !== userId) return res.status(404).json({ error: "Not found" });
+        await mDb.delete(tUMF).where(mEq(tUMF.id, id));
+        return res.json({ ok: true });
+      } catch (err: any) {
+        console.error("[user-monitored-flights-delete] error:", err);
+        return res.status(500).json({ error: "Failed to remove flight" });
+      }
+    });
+  }
+
   // PAYMENTS
   app.get("/api/payments", isAuthenticated, async (req: Request, res: Response) => {
     const pymts = await storage.getPayments(req.session.userId!);

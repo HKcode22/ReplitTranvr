@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import {
-  LayoutDashboard, User, Phone, PhoneCall, FileText, Bell, CreditCard, LogOut, Plane, Shield, Luggage,
+  LayoutDashboard, User, Phone, PhoneCall, FileText, Bell, CreditCard, LogOut, Plane, Shield, Luggage, Radar,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -24,6 +24,7 @@ const primaryItems = [
   { title: "Proposals", url: "/proposals", icon: FileText },
   { title: "My Trips", url: "/trips", icon: Luggage },
   { title: "Search Flights", url: "/flights", icon: Plane },
+  { title: "Monitor Flight", url: "/monitor-flight", icon: Radar },
   { title: "Billing", url: "/billing", icon: CreditCard },
 ];
 
