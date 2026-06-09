@@ -9392,6 +9392,33 @@ export async function registerRoutes(
           .where(dEq(tMonitoredFlights.agencyId, agency.id))
           .orderBy(tMonitoredFlights.departureDate, tMonitoredFlights.flightNumber);
 
+        // Batch-fetch the latest risk score history per flight to get live status
+        const latestHistoryByFlight = new Map<number, any>();
+        if (flights.length > 0) {
+          const flightIds = flights.map((f: any) => f.id);
+          const allHistory = await db
+            .select()
+            .from(tRiskScoreHistory)
+            .where(dInArray(tRiskScoreHistory.monitoredFlightId, flightIds))
+            .orderBy(dDesc(tRiskScoreHistory.scoredAt));
+          for (const h of allHistory) {
+            if (!latestHistoryByFlight.has(h.monitoredFlightId)) {
+              latestHistoryByFlight.set(h.monitoredFlightId, h);
+            }
+          }
+        }
+
+        const deriveLiveStatus = (flightStatus: any): string => {
+          if (!flightStatus) return "No live data";
+          const s = flightStatus.status || null;
+          const delay = Number(flightStatus.delayMinutes || 0);
+          if (flightStatus.cancelled === true || s === "Cancelled") return "Cancelled";
+          if (s === "Arrived") return "Landed";
+          if (s === "EnRoute" || s === "Departed") return "En Route";
+          if (s === "Delayed" || delay > 0) return delay > 0 ? `Delayed ${delay}min` : "Delayed";
+          return "Scheduled";
+        };
+
         const csvCell = (v: unknown): string => {
           const s = v == null ? "" : String(v);
           return `"${s.replace(/"/g, '""')}"`;
@@ -9400,12 +9427,14 @@ export async function registerRoutes(
         const header = [
           "Flight Number", "Carrier", "Origin", "Destination",
           "Departure Date", "Departure Time", "Risk Score", "Risk Tier",
-          "Tail Number", "Equipment Type", "Status", "Is Test",
+          "Live Status", "Tail Number", "Equipment Type", "Monitoring Status", "Is Test",
           "Last Checked At", "Created At",
         ].map(csvCell).join(",");
 
-        const rows = flights.map((f: any) =>
-          [
+        const rows = flights.map((f: any) => {
+          const latest = latestHistoryByFlight.get(f.id);
+          const flightStatus = (latest?.signals as any)?.flightStatus ?? null;
+          return [
             f.flightNumber,
             f.carrierIata,
             f.originIata,
@@ -9414,14 +9443,15 @@ export async function registerRoutes(
             f.departureTime ?? "",
             f.riskScore,
             f.riskTier,
+            deriveLiveStatus(flightStatus),
             f.tailNumber ?? "",
             f.equipmentType ?? "",
             f.status,
             f.isTest ? "yes" : "no",
             f.lastCheckedAt ? new Date(f.lastCheckedAt).toISOString() : "",
             f.createdAt ? new Date(f.createdAt).toISOString() : "",
-          ].map(csvCell).join(","),
-        );
+          ].map(csvCell).join(",");
+        });
 
         const csv = [header, ...rows].join("\r\n");
         const slug = (agency.name as string).replace(/[^a-z0-9]/gi, "-").toLowerCase();
@@ -10382,9 +10412,11 @@ export async function registerRoutes(
 
     app.get("/api/agency/health-report/latest", isAgencyAuthenticated, async (req: Request, res: Response) => {
       try {
+        const agency = (req as any).agency;
         const [report] = await db
           .select()
           .from(tHealthReports)
+          .where(dEq(tHealthReports.requestedByAgencyId, agency.id))
           .orderBy(dDesc(tHealthReports.generatedAt))
           .limit(1);
         return res.json({ report: report || null });
@@ -10404,9 +10436,9 @@ export async function registerRoutes(
           .from(tMonitoredFlights)
           .where(
             dAnd(
-              dInArray(tMonitoredFlights.status, ["active", "completed"]),
+              dEq(tMonitoredFlights.agencyId, agency.id),
+              dInArray(tMonitoredFlights.status, ["active", "completed", "cancelled", "archived"]),
               dLt(tMonitoredFlights.departureDate, todayStr),
-              dIsNotNull(tMonitoredFlights.lastCheckedAt),
             ),
           )
           .orderBy(dDesc(tMonitoredFlights.departureDate))
