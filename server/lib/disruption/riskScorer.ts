@@ -42,6 +42,10 @@ export interface RiskScoreSignals {
   // Metadata
   horizon: Horizon;
   hoursUntilDeparture: number | null;
+
+  // Data coverage — used by the health report to detect fallback-only scores
+  historicalOtpSampleSize: number;
+  historicalOtpSource: string;
 }
 
 export interface RiskScoreResult {
@@ -342,6 +346,8 @@ export async function scoreFlightRisk(flight: MonitoredFlightInput): Promise<Ris
       historicalRisk: weightedSignals.historicalOtp,
       horizon,
       hoursUntilDeparture,
+      historicalOtpSampleSize: historicalOtp.sampleSize,
+      historicalOtpSource: historicalOtp.source,
     },
     flightStatus: statusResult,
     originWeather: safeOriginWeather,

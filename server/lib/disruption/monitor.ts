@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { db } from "../../db";
 import {
   agencyAccounts,
@@ -16,6 +16,7 @@ import { scoreFlightRisk } from "./riskScorer";
 import { findLowRiskAlternatives } from "./alternativeFinder";
 import { sendTravelerAlert, sendConfirmationAlert } from "./alertSender";
 import { getHistoricalOtp, type HistoricalOtpResult } from "./historicalOtp";
+import { getFlightStatus } from "./flightStatus";
 import sgMail from "@sendgrid/mail";
 
 const INTERVAL_MS = 30 * 60 * 1000;
@@ -454,6 +455,109 @@ async function runUserFlightCycle(): Promise<void> {
   }
 }
 
+// Statuses that AeroDataBox considers a terminal resolved state — we stop
+// retrying once we see one of these for a past flight.
+const RESOLVED_STATUSES = new Set(["Arrived", "Cancelled", "Delayed", "Diverted"]);
+
+// Statuses that mean the flight departed but we haven't seen the final
+// Arrived state yet — treat as "in progress, will retry".
+const IN_PROGRESS_STATUSES = new Set(["EnRoute", "Departed"]);
+
+async function runResolutionCycle(): Promise<void> {
+  const todayStr = todayIso();
+  // Cutoff: if departure_date is earlier than this, we've waited 24h+ for a
+  // resolution and should give up.
+  const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  // Target: past flights whose resolved_status is NULL, Unknown, or Scheduled.
+  // In-progress statuses (EnRoute/Departed) are left alone — they left the
+  // gate, which is enough to know they weren't cancelled at departure.
+  const targets = await db
+    .select()
+    .from(monitoredFlights)
+    .where(
+      and(
+        lt(monitoredFlights.departureDate, todayStr),
+        inArray(monitoredFlights.status, ["active", "completed", "cancelled", "archived"]),
+        or(
+          isNull(monitoredFlights.resolvedStatus),
+          inArray(monitoredFlights.resolvedStatus, ["Unknown", "Scheduled"]),
+        ),
+      ),
+    )
+    .orderBy(monitoredFlights.departureDate)
+    .limit(200);
+
+  if (targets.length === 0) return;
+
+  console.log(`[resolution] cycle start targets=${targets.length} date=${todayStr}`);
+
+  let resolved = 0;
+  let unresolvable = 0;
+  let stillPending = 0;
+
+  for (const flight of targets) {
+    try {
+      const result = await getFlightStatus(
+        flight.flightNumber,
+        flight.departureDate,
+        flight.originIata,
+        flight.destinationIata,
+      ).catch(() => null);
+
+      const rawStatus = result?.status ?? "Unknown";
+
+      if (RESOLVED_STATUSES.has(rawStatus)) {
+        await db
+          .update(monitoredFlights)
+          .set({
+            resolvedStatus: rawStatus,
+            resolvedDelayMinutes: result?.delayMinutes ?? null,
+            resolvedAt: new Date(),
+          })
+          .where(eq(monitoredFlights.id, flight.id));
+        resolved++;
+      } else if (IN_PROGRESS_STATUSES.has(rawStatus)) {
+        // Flight departed — not disrupted at departure. Store it so the
+        // health report doesn't keep re-fetching, and don't mark unresolvable.
+        await db
+          .update(monitoredFlights)
+          .set({
+            resolvedStatus: rawStatus,
+            resolvedDelayMinutes: result?.delayMinutes ?? null,
+            resolvedAt: new Date(),
+          })
+          .where(eq(monitoredFlights.id, flight.id));
+        resolved++;
+      } else if (flight.departureDate <= cutoff24h) {
+        // 24h+ have passed and we still have no useful status — give up.
+        await db
+          .update(monitoredFlights)
+          .set({ resolvedStatus: "status_unresolvable", resolvedAt: new Date() })
+          .where(eq(monitoredFlights.id, flight.id));
+        unresolvable++;
+      } else {
+        // Departure was < 24h ago and status is still Unknown/Scheduled.
+        // AeroDataBox data lag is normal here — retry next cycle.
+        stillPending++;
+      }
+    } catch (err: any) {
+      console.warn(
+        `[resolution] flight ${flight.id} ${flight.flightNumber} ${flight.departureDate} failed:`,
+        err?.message || err,
+      );
+    }
+  }
+
+  console.log(
+    `[resolution] cycle end resolved=${resolved} unresolvable=${unresolvable} pending=${stillPending} date=${todayStr}`,
+  );
+}
+
+const RESOLUTION_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
 export function startMonitoringEngine(): void {
   if (intervalHandle) {
     console.log("[monitor] already running — skipping start");
@@ -473,6 +577,20 @@ export function startMonitoringEngine(): void {
       console.error("[monitor] initial cycle error:", err?.message || err);
     });
   }, 15_000);
+
+  // Resolution job: every 6 hours, resolve past flights still showing
+  // Unknown/Scheduled and mark those that can't be resolved after 24h.
+  setInterval(() => {
+    runResolutionCycle().catch((err) => {
+      console.error("[resolution] unhandled error:", err?.message || err);
+    });
+  }, RESOLUTION_INTERVAL_MS);
+  // Also run shortly after boot to pick up any backlog from a restart.
+  setTimeout(() => {
+    runResolutionCycle().catch((err) => {
+      console.error("[resolution] initial run error:", err?.message || err);
+    });
+  }, 60_000);
 }
 
 export async function scoreFlightOnce(

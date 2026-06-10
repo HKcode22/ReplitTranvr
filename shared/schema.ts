@@ -566,6 +566,9 @@ export const monitoredFlights = pgTable("monitored_flights", {
   status: text("status").default("active").notNull(),
   agencyResolvedAt: timestamp("agency_resolved_at"),
   confirmationAlertSentAt: timestamp("confirmation_alert_sent_at"),
+  resolvedStatus: text("resolved_status"),
+  resolvedDelayMinutes: integer("resolved_delay_minutes"),
+  resolvedAt: timestamp("resolved_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("monitored_flights_agency_id_idx").on(table.agencyId),

@@ -84,6 +84,9 @@ interface HealthPastRow {
   actualCancelled: boolean;
   disrupted: boolean;
   classification: "true_positive" | "false_positive" | "false_negative" | "true_negative";
+  dataCoverage?: { carrierHealth: boolean; historicalOtp: boolean; inboundAircraftDelay: boolean };
+  dataInsufficient?: boolean;
+  statusUnresolvable?: boolean;
 }
 
 interface HealthActiveRow {
@@ -100,7 +103,7 @@ interface HealthActiveRow {
 // { past, activeHighRisk } object. Both shapes are rendered.
 type HealthRawData =
   | HealthPastRow[]
-  | { past: HealthPastRow[]; activeHighRisk: HealthActiveRow[] }
+  | { past: HealthPastRow[]; activeHighRisk: HealthActiveRow[]; dataInsufficientCount?: number; statusUnresolvableCount?: number }
   | null;
 
 interface HealthReport {
@@ -120,10 +123,15 @@ interface HealthReport {
   rawData: HealthRawData;
 }
 
-function getHealthSections(raw: HealthRawData): { past: HealthPastRow[]; activeHighRisk: HealthActiveRow[] } {
-  if (!raw) return { past: [], activeHighRisk: [] };
-  if (Array.isArray(raw)) return { past: raw, activeHighRisk: [] };
-  return { past: raw.past || [], activeHighRisk: raw.activeHighRisk || [] };
+function getHealthSections(raw: HealthRawData): { past: HealthPastRow[]; activeHighRisk: HealthActiveRow[]; dataInsufficientCount: number; statusUnresolvableCount: number } {
+  if (!raw) return { past: [], activeHighRisk: [], dataInsufficientCount: 0, statusUnresolvableCount: 0 };
+  if (Array.isArray(raw)) return { past: raw, activeHighRisk: [], dataInsufficientCount: 0, statusUnresolvableCount: 0 };
+  return {
+    past: raw.past || [],
+    activeHighRisk: raw.activeHighRisk || [],
+    dataInsufficientCount: raw.dataInsufficientCount ?? 0,
+    statusUnresolvableCount: raw.statusUnresolvableCount ?? 0,
+  };
 }
 
 function LiveStatusPill({ flight }: { flight: MonitoredFlightRow }) {
@@ -1330,7 +1338,7 @@ export default function AgencyDashboardPage() {
                 if (row.actualDelayMinutes >= 30) return `Delayed ${row.actualDelayMinutes}min`;
                 return "On time";
               };
-              const { past: pastRows, activeHighRisk: activeRows } = getHealthSections(report?.rawData ?? null);
+              const { past: pastRows, activeHighRisk: activeRows, dataInsufficientCount, statusUnresolvableCount } = getHealthSections(report?.rawData ?? null);
 
               return (
                 <div className="space-y-6" data-testid="health-tab-content">
@@ -1388,6 +1396,25 @@ export default function AgencyDashboardPage() {
                           tone="default"
                           testId="stat-health-analyzed"
                         />
+                        {(dataInsufficientCount > 0 || statusUnresolvableCount > 0) && (
+                          <Card className="p-4 col-span-2 md:col-span-4" data-testid="stat-health-exclusions">
+                            <div className="flex items-start gap-3 text-sm text-muted-foreground">
+                              <AlertCircle className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
+                              <div className="space-y-1">
+                                {dataInsufficientCount > 0 && (
+                                  <div>
+                                    <span className="font-medium text-foreground">{dataInsufficientCount}</span> flight{dataInsufficientCount === 1 ? "" : "s"} excluded — <span className="font-medium">data_insufficient</span>: carrier health, historical OTP, and inbound delay were all fallback values.
+                                  </div>
+                                )}
+                                {statusUnresolvableCount > 0 && (
+                                  <div>
+                                    <span className="font-medium text-foreground">{statusUnresolvableCount}</span> flight{statusUnresolvableCount === 1 ? "" : "s"} excluded — <span className="font-medium">status_unresolvable</span>: AeroDataBox returned no final status after 24 hours of retries.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </Card>
+                        )}
                         <Card className="p-4" data-testid="stat-health-precision" title="Of flights we flagged high risk, how many were actually disrupted">
                           <div className="flex items-start gap-3">
                             <div className="h-9 w-9 rounded-md flex items-center justify-center shrink-0 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40">
@@ -1497,13 +1524,18 @@ export default function AgencyDashboardPage() {
                                   <th className="text-left font-medium px-4 py-3">Peak score</th>
                                   <th className="text-left font-medium px-4 py-3">Actual</th>
                                   <th className="text-left font-medium px-4 py-3">Classification</th>
+                                  <th className="text-left font-medium px-4 py-3">Data</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {pastRows.map((row) => {
                                   const badge = classifBadge(row.classification);
+                                  const cov = row.dataCoverage;
+                                  const covTitle = cov
+                                    ? `Carrier health: ${cov.carrierHealth ? "real" : "fallback"} · Historical OTP: ${cov.historicalOtp ? "real" : "fallback"} · Inbound delay: ${cov.inboundAircraftDelay ? "real" : "no live data"}`
+                                    : undefined;
                                   return (
-                                    <tr key={row.id} className="border-t border-border" data-testid={`row-health-flight-${row.id}`}>
+                                    <tr key={row.id} className={`border-t border-border ${(row.dataInsufficient || row.statusUnresolvable) ? "opacity-50" : ""}`} data-testid={`row-health-flight-${row.id}`}>
                                       <td className="px-4 py-3 font-medium text-foreground">{row.flightNumber}</td>
                                       <td className="px-4 py-3 text-foreground">{row.route}</td>
                                       <td className="px-4 py-3 text-muted-foreground">{row.departureDate}</td>
@@ -1512,9 +1544,28 @@ export default function AgencyDashboardPage() {
                                       </td>
                                       <td className="px-4 py-3 text-foreground">{actualLabel(row)}</td>
                                       <td className="px-4 py-3">
-                                        <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${badge.cls}`}>
-                                          {badge.label}
-                                        </span>
+                                        {row.statusUnresolvable ? (
+                                          <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium bg-muted text-muted-foreground border-border" title="AeroDataBox returned no final status after 24h of retries">
+                                            Unresolvable
+                                          </span>
+                                        ) : row.dataInsufficient ? (
+                                          <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium bg-muted text-muted-foreground border-border" title="Excluded — all three key signals returned fallback data">
+                                            No signal data
+                                          </span>
+                                        ) : (
+                                          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${badge.cls}`}>
+                                            {badge.label}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-3" title={covTitle}>
+                                        {cov ? (
+                                          <span className="flex items-center gap-1">
+                                            <span title="Carrier health" className={`h-2 w-2 rounded-full ${cov.carrierHealth ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                                            <span title="Historical OTP" className={`h-2 w-2 rounded-full ${cov.historicalOtp ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                                            <span title="Inbound delay" className={`h-2 w-2 rounded-full ${cov.inboundAircraftDelay ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                                          </span>
+                                        ) : <span className="text-muted-foreground text-xs">—</span>}
                                       </td>
                                     </tr>
                                   );

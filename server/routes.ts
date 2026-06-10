@@ -10649,6 +10649,9 @@ export async function registerRoutes(
           actualCancelled: boolean;
           disrupted: boolean;
           classification: "true_positive" | "false_positive" | "false_negative" | "true_negative";
+          dataCoverage: { carrierHealth: boolean; historicalOtp: boolean; inboundAircraftDelay: boolean };
+          dataInsufficient: boolean;
+          statusUnresolvable: boolean;
         }> = [];
 
         let truePositives = 0;
@@ -10660,48 +10663,111 @@ export async function registerRoutes(
         let onTimeScoreSum = 0;
         let onTimeScoreCount = 0;
         let flaggedCount = 0;
+        let dataInsufficientCount = 0;
+        let statusUnresolvableCount = 0;
 
         for (const flight of candidates) {
           const history = await db
             .select()
             .from(tRiskScoreHistory)
             .where(dEq(tRiskScoreHistory.monitoredFlightId, flight.id));
-          const peakScore = history.reduce((max, h) => (h.score > max ? h.score : max), 0);
-          const peakTier =
-            peakScore >= 60 ? "red" : peakScore >= 25 ? "amber" : "green";
 
-          const status = await dGetFlightStatus(
-            flight.flightNumber,
-            flight.departureDate,
-            flight.originIata,
-            flight.destinationIata,
-          ).catch(() => null);
-          const actualCancelled = !!status?.cancelled;
-          const actualDelay = status?.delayMinutes || 0;
+          // Find the peak entry (not just the max score) so we can read its signals
+          const peakEntry = history.reduce(
+            (best, h) => (h.score > (best?.score ?? -1) ? h : best),
+            null as typeof history[0] | null,
+          );
+          const peakScore = peakEntry?.score ?? 0;
+          const peakTier = peakScore >= 60 ? "red" : peakScore >= 25 ? "amber" : "green";
+
+          // Derive data coverage from what was stored in the peak history entry.
+          // carrierHealth: reliable + sampleSize > 0 means real API data was returned.
+          // historicalOtp: sampleSize > 0 stored in signals since scorer update; older
+          //   entries without this field default to 0 (treated as fallback).
+          // inboundAircraftDelay: null flightStatus means live status was unavailable,
+          //   so the inbound delay signal was a forced zero rather than a real reading.
+          const peakSig = (peakEntry?.signals as any) ?? {};
+          const storedCarrier = peakSig.carrierHealth ?? {};
+          const innerSig = peakSig.signals ?? {};
+          const dataCoverage = {
+            carrierHealth: storedCarrier.reliable === true || (storedCarrier.sampleSize ?? 0) > 0,
+            historicalOtp: (innerSig.historicalOtpSampleSize ?? 0) > 0,
+            inboundAircraftDelay: peakSig.flightStatus != null,
+          };
+          const dataInsufficient =
+            !dataCoverage.carrierHealth &&
+            !dataCoverage.historicalOtp &&
+            !dataCoverage.inboundAircraftDelay;
+
+          // Use the pre-resolved status from the resolution job when available.
+          // Fall back to a live AeroDataBox call only if the resolution job
+          // hasn't processed this flight yet (resolvedStatus is null or still
+          // showing Unknown/Scheduled).
+          const storedResolved = flight.resolvedStatus as string | null;
+          const needsLiveLookup =
+            !storedResolved ||
+            storedResolved === "Unknown" ||
+            storedResolved === "Scheduled";
+
+          let actualStatus: string;
+          let actualDelay: number;
+          let actualCancelled: boolean;
+          const statusUnresolvable = storedResolved === "status_unresolvable";
+
+          if (statusUnresolvable) {
+            actualStatus = "status_unresolvable";
+            actualDelay = 0;
+            actualCancelled = false;
+          } else if (!needsLiveLookup) {
+            actualStatus = storedResolved!;
+            actualDelay = (flight.resolvedDelayMinutes as number | null) ?? 0;
+            actualCancelled = actualStatus === "Cancelled";
+          } else {
+            const liveStatus = await dGetFlightStatus(
+              flight.flightNumber,
+              flight.departureDate,
+              flight.originIata,
+              flight.destinationIata,
+            ).catch(() => null);
+            actualStatus = liveStatus?.status || "Unknown";
+            actualDelay = liveStatus?.delayMinutes || 0;
+            actualCancelled = !!liveStatus?.cancelled;
+          }
+
           const disrupted = actualCancelled || actualDelay >= 30;
-          const actualStatus = status?.status || "Unknown";
 
           let classification: "true_positive" | "false_positive" | "false_negative" | "true_negative";
           if (peakScore >= 60 && disrupted) {
             classification = "true_positive";
-            truePositives += 1;
           } else if (peakScore >= 60 && !disrupted) {
             classification = "false_positive";
-            falsePositives += 1;
           } else if (peakScore < 60 && disrupted) {
             classification = "false_negative";
-            falseNegatives += 1;
           } else {
             classification = "true_negative";
-            trueNegatives += 1;
           }
-          if (peakScore >= 60) flaggedCount += 1;
-          if (disrupted) {
-            disruptedScoreSum += peakScore;
-            disruptedScoreCount += 1;
+
+          // Exclude from precision/recall if scoring data was all fallback,
+          // or if the actual outcome is still unknown after 24h of retries.
+          const excludeFromCalcs = dataInsufficient || statusUnresolvable;
+          if (!excludeFromCalcs) {
+            if (classification === "true_positive") truePositives += 1;
+            else if (classification === "false_positive") falsePositives += 1;
+            else if (classification === "false_negative") falseNegatives += 1;
+            else trueNegatives += 1;
+
+            if (peakScore >= 60) flaggedCount += 1;
+            if (disrupted) {
+              disruptedScoreSum += peakScore;
+              disruptedScoreCount += 1;
+            } else {
+              onTimeScoreSum += peakScore;
+              onTimeScoreCount += 1;
+            }
+          } else if (dataInsufficient) {
+            dataInsufficientCount += 1;
           } else {
-            onTimeScoreSum += peakScore;
-            onTimeScoreCount += 1;
+            statusUnresolvableCount += 1;
           }
 
           perFlight.push({
@@ -10716,16 +10782,26 @@ export async function registerRoutes(
             actualCancelled,
             disrupted,
             classification,
+            dataCoverage,
+            dataInsufficient,
+            statusUnresolvable,
           });
         }
 
-        const flightsAnalyzed = perFlight.length;
+        const validFlights = perFlight.filter((f) => !f.dataInsufficient && !f.statusUnresolvable);
+        const flightsAnalyzed = validFlights.length;
         const precisionDenom = truePositives + falsePositives;
         const recallDenom = truePositives + falseNegatives;
         const precision = precisionDenom > 0 ? truePositives / precisionDenom : null;
         const recall = recallDenom > 0 ? truePositives / recallDenom : null;
         const avgScoreDisrupted = disruptedScoreCount > 0 ? disruptedScoreSum / disruptedScoreCount : null;
         const avgScoreOnTime = onTimeScoreCount > 0 ? onTimeScoreSum / onTimeScoreCount : null;
+
+        if (dataInsufficientCount > 0 || statusUnresolvableCount > 0) {
+          console.log(
+            `[health-report] ${todayStr} agency=${agency.id} excluded data_insufficient=${dataInsufficientCount} status_unresolvable=${statusUnresolvableCount} of ${candidates.length} candidates`,
+          );
+        }
 
         // Active high-risk: today-or-future red-tier flights that haven't
         // departed yet. Valuable signal even though we can't classify them.
@@ -10781,7 +10857,9 @@ export async function registerRoutes(
 
 Here are the results from the last analysis period:
 
-Flights analyzed (past, departed): ${flightsAnalyzed}
+Flights analyzed (past, departed, with sufficient signal data and known outcome): ${flightsAnalyzed}
+Flights excluded — data_insufficient (all three key signals were fallback): ${dataInsufficientCount}
+Flights excluded — status_unresolvable (AeroDataBox returned no final status after 24h): ${statusUnresolvableCount}
 Flights we flagged as high risk (red): ${flaggedCount}
 True positives (correctly flagged, were actually disrupted): ${truePositives}
 False positives (flagged red, flew fine): ${falsePositives}
@@ -10795,7 +10873,7 @@ Average risk score for on-time flights: ${avgScoreOnTime !== null ? avgScoreOnTi
 Currently active high-risk flights (red tier, not yet departed): ${activeHighRisk.length}
 ${JSON.stringify(activeHighRisk, null, 2)}
 
-Per-flight breakdown of past departures:
+Per-flight breakdown of past departures (includes data_insufficient flights for transparency):
 ${JSON.stringify(perFlight, null, 2)}
 
 Write a clear, direct health report in plain English. Cover:
@@ -10804,7 +10882,7 @@ Write a clear, direct health report in plain English. Cover:
 3. Which signals appear to be over or under-weighted based on the data
 4. Concrete recommendations to improve accuracy
 5. Brief commentary on the currently active high-risk flights — do the top signals look credible? Are there obvious shared causes (weather system, carrier, airport) across them?
-6. Any data quality issues you notice (e.g. too few flights to draw conclusions)
+6. Data quality commentary — note how many flights were excluded as data_insufficient and what that means for confidence in these results
 
 Be specific, not generic. Reference actual flight numbers and patterns from the data. Keep it under 500 words.`;
 
@@ -10856,7 +10934,7 @@ Be specific, not generic. Reference actual flight numbers and patterns from the 
             // Stored as an object so we can include both past-departures and
             // currently-active high-risk flights. Older reports stored a raw
             // array — the UI handles both shapes.
-            rawData: { past: perFlight, activeHighRisk } as any,
+            rawData: { past: perFlight, activeHighRisk, dataInsufficientCount, statusUnresolvableCount } as any,
             requestedByAgencyId: agency.id,
           })
           .returning();
