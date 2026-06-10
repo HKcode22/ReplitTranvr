@@ -37,6 +37,7 @@ export interface RiskScoreSignals {
   /** @deprecated mirrors historicalOtp so legacy consumers keep compiling */
   historicalRisk: number;
   timeOfDayRisk: number;
+  dayOfWeekRisk: number;
   connectionRisk: number;
 
   // Metadata
@@ -139,6 +140,7 @@ const HORIZON_WEIGHTS: Record<Horizon, Record<string, number>> = {
     carrierHealth: 1.0,
     historicalOtp: 0.3,
     timeOfDayRisk: 1.0,
+    dayOfWeekRisk: 0.5,
     connectionRisk: 0.5,
   },
   medium: {
@@ -150,6 +152,7 @@ const HORIZON_WEIGHTS: Record<Horizon, Record<string, number>> = {
     carrierHealth: 1.0,
     historicalOtp: 0.6,
     timeOfDayRisk: 0.8,
+    dayOfWeekRisk: 0.8,
     connectionRisk: 0.8,
   },
   long: {
@@ -161,6 +164,7 @@ const HORIZON_WEIGHTS: Record<Horizon, Record<string, number>> = {
     carrierHealth: 1.0,
     historicalOtp: 1.0,
     timeOfDayRisk: 0.6,
+    dayOfWeekRisk: 1.0,
     connectionRisk: 1.0,
   },
 };
@@ -226,6 +230,13 @@ function connectionRiskRaw(
   if (hour < 14) return 1;
   if (hour < 18) return 3;
   return 5;
+}
+
+function dayOfWeekRaw(departureDate: string): number {
+  // getUTCDay(): 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+  const dow = new Date(`${departureDate}T12:00:00Z`).getUTCDay();
+  const pts: Record<number, number> = { 1: 4, 5: 4, 0: 3, 4: 2, 3: 1, 2: 0, 6: 1 };
+  return pts[dow] ?? 0;
 }
 
 export async function scoreFlightRisk(flight: MonitoredFlightInput): Promise<RiskScoreResult> {
@@ -297,6 +308,7 @@ export async function scoreFlightRisk(flight: MonitoredFlightInput): Promise<Ris
       flight.departureTime || null,
       statusResult?.departureTime || null,
     ),
+    dayOfWeekRisk: dayOfWeekRaw(flight.departureDate),
     connectionRisk: connectionRiskRaw(hoursUntilDeparture, flight.departureTime || null),
   };
 
@@ -309,6 +321,7 @@ export async function scoreFlightRisk(flight: MonitoredFlightInput): Promise<Ris
     carrierHealth: Math.round(rawSignals.carrierHealth * weights.carrierHealth),
     historicalOtp: Math.round(rawSignals.historicalOtp * weights.historicalOtp),
     timeOfDayRisk: Math.round(rawSignals.timeOfDayRisk * weights.timeOfDayRisk),
+    dayOfWeekRisk: Math.round(rawSignals.dayOfWeekRisk * weights.dayOfWeekRisk),
     connectionRisk: Math.round(rawSignals.connectionRisk * weights.connectionRisk),
   };
 
