@@ -37,6 +37,11 @@ interface UserMonitoredFlight {
   riskScore: number;
   riskTier: string;
   lastCheckedAt: string | null;
+  redTierFirstAt: string | null;
+  cancelledAt: string | null;
+  resolvedStatus: string | null;
+  resolvedDelayMinutes: number | null;
+  resolvedAt: string | null;
   lastAlertedTier: string | null;
   flightStatus: FlightStatusSnapshot | null;
   status: string;
@@ -107,6 +112,69 @@ function formatChecked(iso: string | null): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return d.toLocaleDateString();
+}
+
+function fmtDuration(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  return `${m}m`;
+}
+
+function formatRedTierMeta(redTierFirstAt: string, cancelledAt: string | null): string {
+  const redMs = new Date(redTierFirstAt).getTime();
+  const diffMins = Math.round((Date.now() - redMs) / 60_000);
+  const since = diffMins < 1 ? "just now" : diffMins < 60 ? `${diffMins}m ago` : fmtDuration(diffMins) + " ago";
+
+  if (!cancelledAt) return `Flagged high risk ${since}`;
+
+  const leadMins = Math.round((new Date(cancelledAt).getTime() - redMs) / 60_000);
+  if (leadMins > 0) return `Flagged high risk ${since} · ${fmtDuration(leadMins)} before cancellation confirmed`;
+  if (leadMins < 0) return `Flagged high risk ${since} · Cancellation confirmed ${fmtDuration(Math.abs(leadMins))} earlier`;
+  return `Flagged high risk ${since}`;
+}
+
+function outcomeInfo(resolvedStatus: string | null, delayMinutes: number | null): { label: string; color: "green" | "amber" | "red" | "blue" } | null {
+  switch (resolvedStatus) {
+    case "Arrived":
+      return delayMinutes && delayMinutes >= 15
+        ? { label: `+${delayMinutes}m late`, color: "amber" }
+        : { label: "On time", color: "green" };
+    case "Delayed":
+      return { label: delayMinutes ? `Delayed ${delayMinutes}m` : "Delayed", color: "amber" };
+    case "Cancelled":
+      return { label: "Cancelled", color: "red" };
+    case "Diverted":
+      return { label: "Diverted", color: "red" };
+    case "EnRoute":
+    case "Departed":
+      return { label: "In flight", color: "blue" };
+    default:
+      return null;
+  }
+}
+
+function OutcomeBadge({ resolvedStatus, delayMinutes }: { resolvedStatus: string | null; delayMinutes: number | null }) {
+  const info = outcomeInfo(resolvedStatus, delayMinutes);
+  if (!info) return null;
+  const colorMap: Record<string, string> = {
+    green: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900",
+    amber: "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900",
+    red: "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900",
+    blue: "bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900",
+  };
+  const dotMap: Record<string, string> = {
+    green: "bg-emerald-500",
+    amber: "bg-amber-500",
+    red: "bg-red-500",
+    blue: "bg-blue-500",
+  };
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${colorMap[info.color]}`}>
+      <span className={`h-2 w-2 rounded-full ${dotMap[info.color]}`} />
+      {info.label}
+    </span>
+  );
 }
 
 export default function MonitorFlightPage() {
@@ -407,11 +475,29 @@ function FlightCard({ flight, onDelete, deleting }: { flight: UserMonitoredFligh
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             <RiskBadge tier={flight.riskTier} score={flight.riskScore} />
             <LivePill snapshot={flight.flightStatus} originIata={flight.originIata} />
+            {isPast && (
+              <OutcomeBadge resolvedStatus={flight.resolvedStatus} delayMinutes={flight.resolvedDelayMinutes} />
+            )}
           </div>
-          <div className="text-xs text-muted-foreground mt-2">
-            Last checked {formatChecked(flight.lastCheckedAt)}
-            {flight.lastAlertedTier && (
-              <span className="ml-2 text-amber-600">· Alert sent ({tierStyles(flight.lastAlertedTier === "disrupted" ? "red" : flight.lastAlertedTier).label.toLowerCase()} risk)</span>
+          <div className="text-xs text-muted-foreground mt-2 space-y-0.5">
+            {!isPast && (
+              <div>
+                Last checked {formatChecked(flight.lastCheckedAt)}
+                {flight.lastAlertedTier && (
+                  <span className="ml-2 text-amber-600">· Alert sent ({tierStyles(flight.lastAlertedTier === "disrupted" ? "red" : flight.lastAlertedTier).label.toLowerCase()} risk)</span>
+                )}
+              </div>
+            )}
+            {!isPast && flight.redTierFirstAt && (
+              <div className="text-red-600 dark:text-red-400">
+                {formatRedTierMeta(flight.redTierFirstAt, flight.cancelledAt)}
+              </div>
+            )}
+            {isPast && flight.resolvedAt && (
+              <div>Resolved {formatChecked(flight.resolvedAt)}</div>
+            )}
+            {isPast && !flight.resolvedAt && (
+              <div>Departed {flight.departureDate}</div>
             )}
           </div>
         </div>

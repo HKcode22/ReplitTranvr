@@ -74,28 +74,42 @@ export async function getHistoricalOtp(
   _departureDate: string,
 ): Promise<HistoricalOtpResult> {
   const normalized = (flightNumber || "").replace(/\s+/g, "").toUpperCase();
-  if (!normalized) return fallbackResult(flightNumber);
+  if (!normalized) {
+    console.warn(`[historicalOtp] empty flight number — fallback fired sampleSize=0 onTimeRate=0.750`);
+    return fallbackResult(flightNumber);
+  }
 
   const now = Date.now();
   const cached = cache.get(normalized);
   if (cached && now - cached.fetchedAt < CACHE_TTL_MS) {
-    console.log(`[historicalOtp] cache hit ${normalized}`);
+    const { source, sampleSize, onTimeRate } = cached.result;
+    console.log(
+      `[historicalOtp] ${normalized} cache hit — source=${source} sampleSize=${sampleSize} onTimeRate=${onTimeRate.toFixed(3)}`,
+    );
     return cached.result;
   }
 
   const apiKey = process.env.AERODATABOX_API_KEY;
   if (!apiKey) {
-    console.warn(`[historicalOtp] AERODATABOX_API_KEY not set — using fallback for ${normalized}`);
+    console.warn(
+      `[historicalOtp] ${normalized} no API key — fallback fired sampleSize=0 onTimeRate=0.750`,
+    );
     const result = fallbackResult(normalized);
     cache.set(normalized, { result, fetchedAt: now });
     return result;
   }
 
+  // AeroDataBox expects IATA flight number, no spaces, uppercase (e.g. "AA123").
+  // Carrier code must be IATA (e.g. "AA"), NOT ICAO (e.g. "AAL") — ICAO codes
+  // silently return empty results. The /history/recent endpoint covers the past
+  // ~14 days; consistently empty responses usually mean wrong carrier-code
+  // format, a flight number that AeroDataBox doesn't cover, or the response
+  // shape not matching the fields we inspect (flights / data / bare array).
   const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(
     normalized,
   )}/history/recent`;
 
-  console.log(`[historicalOtp] fetching ${normalized}`);
+  console.log(`[historicalOtp] ${normalized} fetching url=${url}`);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -108,13 +122,35 @@ export async function getHistoricalOtp(
       },
       signal: controller.signal,
     });
+
+    console.log(`[historicalOtp] ${normalized} HTTP ${resp.status} ${resp.statusText}`);
+
+    const rawText = await resp.text().catch(() => "");
+    console.log(
+      `[historicalOtp] ${normalized} raw response (first 500 chars): ${rawText.slice(0, 500)}`,
+    );
+
     if (!resp.ok) {
-      console.warn(`[historicalOtp] HTTP ${resp.status} for ${normalized}`);
+      console.warn(
+        `[historicalOtp] ${normalized} HTTP ${resp.status} error — fallback fired sampleSize=0 onTimeRate=0.750`,
+      );
       const result = fallbackResult(normalized);
       cache.set(normalized, { result, fetchedAt: now });
       return result;
     }
-    const payload: unknown = await resp.json().catch(() => null);
+
+    let payload: unknown = null;
+    try {
+      if (rawText) payload = JSON.parse(rawText);
+    } catch {
+      console.warn(
+        `[historicalOtp] ${normalized} JSON parse failed — fallback fired sampleSize=0 onTimeRate=0.750`,
+      );
+      const result = fallbackResult(normalized);
+      cache.set(normalized, { result, fetchedAt: now });
+      return result;
+    }
+
     let entries: any[] = [];
     if (Array.isArray(payload)) {
       entries = payload;
@@ -124,8 +160,21 @@ export async function getHistoricalOtp(
       else if (Array.isArray(obj.data)) entries = obj.data as any[];
     }
 
+    const payloadKeys =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? Object.keys(payload as object).join(",")
+        : Array.isArray(payload)
+          ? "(array)"
+          : typeof payload;
+    console.log(
+      `[historicalOtp] ${normalized} parsed entries=${entries.length} payload_shape=${payloadKeys}`,
+    );
+
     if (entries.length === 0) {
-      console.log(`[historicalOtp] empty history for ${normalized} — using fallback`);
+      console.warn(
+        `[historicalOtp] ${normalized} empty history — fallback fired sampleSize=0 onTimeRate=0.750` +
+          ` (check: IATA vs ICAO carrier code, AeroDataBox coverage, response shape above)`,
+      );
       const result = fallbackResult(normalized);
       cache.set(normalized, { result, fetchedAt: now });
       return result;
@@ -164,13 +213,15 @@ export async function getHistoricalOtp(
     };
 
     console.log(
-      `[historicalOtp] ${normalized} sample=${sampleSize} onTimeRate=${onTimeRate.toFixed(3)} avgDelay=${avgDelayMinutes} riskPoints=${riskPoints}`,
+      `[historicalOtp] ${normalized} real API response — sampleSize=${sampleSize} onTimeRate=${onTimeRate.toFixed(3)} avgDelay=${avgDelayMinutes} riskPoints=${riskPoints}`,
     );
 
     cache.set(normalized, { result, fetchedAt: now });
     return result;
   } catch (err: any) {
-    console.warn(`[historicalOtp] fetch failed for ${normalized}:`, err?.message || err);
+    console.warn(
+      `[historicalOtp] ${normalized} fetch error — fallback fired sampleSize=0 onTimeRate=0.750 error=${err?.message ?? err}`,
+    );
     const result = fallbackResult(normalized);
     cache.set(normalized, { result, fetchedAt: now });
     return result;

@@ -134,15 +134,38 @@ async function processFlight(
     if (m) extractedDepartureTime = m[1];
   }
 
+  const now = new Date();
+  const agencyStamp: Partial<typeof monitoredFlights.$inferInsert> = {};
+
+  if (risk.tier === "red" && !flight.redTierFirstAt) {
+    agencyStamp.redTierFirstAt = now;
+    console.log(`[monitor] flight_id=${flight.id} ${flight.flightNumber} first red tier stamped at ${now.toISOString()}`);
+  }
+  if (risk.cancelled && !flight.cancelledAt) {
+    agencyStamp.cancelledAt = now;
+    const redFirst = agencyStamp.redTierFirstAt ?? flight.redTierFirstAt;
+    if (redFirst) {
+      const diffMin = Math.round((now.getTime() - new Date(redFirst).getTime()) / 60_000);
+      console.log(
+        diffMin >= 0
+          ? `[monitor] flight_id=${flight.id} ${flight.flightNumber} cancellation confirmed ${diffMin}min after first red tier`
+          : `[monitor] flight_id=${flight.id} ${flight.flightNumber} cancellation confirmed ${Math.abs(diffMin)}min BEFORE first red tier`,
+      );
+    } else {
+      console.log(`[monitor] flight_id=${flight.id} ${flight.flightNumber} cancellation confirmed with no prior red tier`);
+    }
+  }
+
   await db
     .update(monitoredFlights)
     .set({
       riskScore: risk.score,
       riskTier: risk.tier,
-      lastCheckedAt: new Date(),
+      lastCheckedAt: now,
       ...(extractedDepartureTime ? { departureTime: extractedDepartureTime } : {}),
       ...(risk.flightStatus?.tailNumber ? { tailNumber: risk.flightStatus.tailNumber } : {}),
       ...(risk.flightStatus?.equipmentType ? { equipmentType: risk.flightStatus.equipmentType } : {}),
+      ...agencyStamp,
     })
     .where(eq(monitoredFlights.id, flight.id));
 
@@ -413,6 +436,26 @@ async function runUserFlightCycle(): Promise<void> {
           }
         : null;
 
+      const userStamp: Partial<typeof userMonitoredFlights.$inferInsert> = {};
+      if (risk.tier === "red" && !flight.redTierFirstAt) {
+        userStamp.redTierFirstAt = new Date();
+        console.log(`[monitor] user flight_id=${flight.id} ${flight.flightNumber} first red tier stamped`);
+      }
+      if (risk.cancelled && !flight.cancelledAt) {
+        userStamp.cancelledAt = new Date();
+        const redFirst = userStamp.redTierFirstAt ?? flight.redTierFirstAt;
+        if (redFirst) {
+          const diffMin = Math.round((userStamp.cancelledAt.getTime() - new Date(redFirst).getTime()) / 60_000);
+          console.log(
+            diffMin >= 0
+              ? `[monitor] user flight_id=${flight.id} ${flight.flightNumber} cancellation confirmed ${diffMin}min after first red tier`
+              : `[monitor] user flight_id=${flight.id} ${flight.flightNumber} cancellation confirmed ${Math.abs(diffMin)}min BEFORE first red tier`,
+          );
+        } else {
+          console.log(`[monitor] user flight_id=${flight.id} ${flight.flightNumber} cancellation confirmed with no prior red tier`);
+        }
+      }
+
       await db
         .update(userMonitoredFlights)
         .set({
@@ -423,6 +466,7 @@ async function runUserFlightCycle(): Promise<void> {
           ...(risk.flightStatus?.departureTime && !flight.departureTime
             ? { departureTime: risk.flightStatus.departureTime.match(/(\d{2}:\d{2})/)?.[1] ?? undefined }
             : {}),
+          ...userStamp,
         })
         .where(eq(userMonitoredFlights.id, flight.id));
 
@@ -556,6 +600,74 @@ async function runResolutionCycle(): Promise<void> {
   );
 }
 
+async function runUserFlightResolutionCycle(): Promise<void> {
+  const todayStr = todayIso();
+  const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  const targets = await db
+    .select()
+    .from(userMonitoredFlights)
+    .where(
+      and(
+        lt(userMonitoredFlights.departureDate, todayStr),
+        eq(userMonitoredFlights.status, "active"),
+        or(
+          isNull(userMonitoredFlights.resolvedStatus),
+          inArray(userMonitoredFlights.resolvedStatus, ["Unknown", "Scheduled"]),
+        ),
+      ),
+    )
+    .limit(100);
+
+  if (targets.length === 0) return;
+
+  console.log(`[resolution] user cycle start targets=${targets.length}`);
+  let resolved = 0;
+
+  for (const flight of targets) {
+    try {
+      const result = await getFlightStatus(
+        flight.flightNumber,
+        flight.departureDate,
+        flight.originIata,
+        flight.destinationIata,
+      ).catch(() => null);
+
+      const rawStatus = result?.status ?? "Unknown";
+
+      if (RESOLVED_STATUSES.has(rawStatus) || IN_PROGRESS_STATUSES.has(rawStatus)) {
+        await db
+          .update(userMonitoredFlights)
+          .set({
+            resolvedStatus: rawStatus,
+            resolvedDelayMinutes: result?.delayMinutes ?? null,
+            resolvedAt: new Date(),
+            status: "completed",
+          })
+          .where(eq(userMonitoredFlights.id, flight.id));
+        resolved++;
+      } else if (flight.departureDate <= cutoff24h) {
+        await db
+          .update(userMonitoredFlights)
+          .set({
+            resolvedStatus: "status_unresolvable",
+            resolvedAt: new Date(),
+            status: "completed",
+          })
+          .where(eq(userMonitoredFlights.id, flight.id));
+        resolved++;
+      }
+    } catch (err: any) {
+      console.warn(
+        `[resolution] user flight ${flight.id} ${flight.flightNumber} ${flight.departureDate} failed:`,
+        err?.message || err,
+      );
+    }
+  }
+
+  console.log(`[resolution] user cycle end resolved=${resolved}`);
+}
+
 const RESOLUTION_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export function startMonitoringEngine(): void {
@@ -584,11 +696,17 @@ export function startMonitoringEngine(): void {
     runResolutionCycle().catch((err) => {
       console.error("[resolution] unhandled error:", err?.message || err);
     });
+    runUserFlightResolutionCycle().catch((err) => {
+      console.error("[resolution] user cycle unhandled error:", err?.message || err);
+    });
   }, RESOLUTION_INTERVAL_MS);
   // Also run shortly after boot to pick up any backlog from a restart.
   setTimeout(() => {
     runResolutionCycle().catch((err) => {
       console.error("[resolution] initial run error:", err?.message || err);
+    });
+    runUserFlightResolutionCycle().catch((err) => {
+      console.error("[resolution] user initial run error:", err?.message || err);
     });
   }, 60_000);
 }
