@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -293,6 +293,9 @@ export default function AgencyDashboardPage() {
   const [expandedFlights, setExpandedFlights] = useState<Set<number>>(new Set());
   const [rescoring, setRescoring] = useState(false);
   const [healthGenerating, setHealthGenerating] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState<number>(0);
+  const tickRef = useRef<NodeJS.Timeout | null>(null);
 
   const meQuery = useQuery<AgencyMe | null>({
     queryKey: ["/api/agency/auth/me"],
@@ -314,8 +317,24 @@ export default function AgencyDashboardPage() {
   const flightsQuery = useQuery<MonitoredFlightRow[]>({
     queryKey: ["/api/agency/flights"],
     enabled: !!meQuery.data,
-    refetchInterval: 2 * 60 * 1000,
+    refetchInterval: 30 * 1000,
+    refetchIntervalInBackground: true,
   });
+
+  useEffect(() => {
+    if (!flightsQuery.isFetching && flightsQuery.dataUpdatedAt) {
+      setLastUpdatedAt(new Date(flightsQuery.dataUpdatedAt));
+      setSecondsAgo(0);
+    }
+  }, [flightsQuery.isFetching, flightsQuery.dataUpdatedAt]);
+
+  useEffect(() => {
+    if (tickRef.current) clearInterval(tickRef.current);
+    tickRef.current = setInterval(() => {
+      setSecondsAgo((s) => s + 1);
+    }, 1000);
+    return () => { if (tickRef.current) clearInterval(tickRef.current); };
+  }, [lastUpdatedAt]);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -645,6 +664,15 @@ export default function AgencyDashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {lastUpdatedAt && (
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {flightsQuery.isFetching
+                  ? "Refreshing…"
+                  : secondsAgo < 60
+                  ? `Updated ${secondsAgo}s ago`
+                  : `Updated ${Math.floor(secondsAgo / 60)}m ago`}
+              </span>
+            )}
             <Button
               variant="outline"
               size="sm"

@@ -2,6 +2,7 @@ import { and, eq, lte, ne } from "drizzle-orm";
 import { db } from "../../db";
 import { agencyAccounts, monitoredFlights } from "@shared/schema";
 import { aerodataboxFetch } from "./aerodataboxLimiter";
+import { hashAgencyPassword } from "../agencyAuth";
 
 const SEED_AIRPORTS = ["DFW", "ORD", "ATL", "JFK", "LAX", "BOS"] as const;
 
@@ -102,13 +103,15 @@ async function getOrCreateTestAgency(): Promise<number> {
 
   if (rows.length > 0) return rows[0].id;
 
+  const testPassword = process.env.TEST_AGENCY_PASSWORD || "travnr-test-2024";
+  const hashed = await hashAgencyPassword(testPassword);
   const [created] = await db
     .insert(agencyAccounts)
     .values({
       name: "Travnr Test",
       contactEmail: "test-seeder@travnr.internal",
       contactName: "Test Seeder",
-      password: "not-a-real-password-seeder-only",
+      password: hashed,
     })
     .returning({ id: agencyAccounts.id });
 
