@@ -265,17 +265,35 @@ export async function getFlightStatus(
   const status = normalizeStatus(flight.status);
   const cancelled = status === "Cancelled" || flight.isCancelled === true;
   const departure = flight.departure || {};
+  // ORIGINAL (buggy — checked object before scalar):
+  // const departureDelay = safeNumber(
+  //   departure?.delay?.departure ??
+  //     departure?.delay ??
+  //     departure?.runwayDelayMinutes ??
+  //     0,
+  // );
   const departureDelay = safeNumber(
-    departure?.delay?.departure ??
-      departure?.delay ??
+    departure?.delayMinutes ??
+      departure?.delay?.minutes ??
+      departure?.delay?.departure ??
       departure?.runwayDelayMinutes ??
+      departure?.delay ??
       0,
   );
   const arrival = flight.arrival || {};
+  // ORIGINAL (buggy — checked object before scalar):
+  // const inboundDelay = safeNumber(
+  //   arrival?.delay?.arrival ??
+  //     arrival?.delay ??
+  //     arrival?.runwayDelayMinutes ??
+  //     0,
+  // );
   const inboundDelay = safeNumber(
-    arrival?.delay?.arrival ??
-      arrival?.delay ??
+    arrival?.delayMinutes ??
+      arrival?.delay?.minutes ??
+      arrival?.delay?.arrival ??
       arrival?.runwayDelayMinutes ??
+      arrival?.delay ??
       0,
   );
   const departureTime: string | null =

@@ -49,10 +49,19 @@ function safeNumber(v: unknown): number {
 function extractDelayMinutes(entry: any): number {
   if (!entry || typeof entry !== "object") return 0;
   const dep = entry.departure || {};
+  // ORIGINAL (buggy — checked dep?.delay (object) before scalar fields):
+  // const candidates = [
+  //   dep?.delay?.departure,
+  //   dep?.delay,
+  //   dep?.runwayDelayMinutes,
+  //   entry?.delayMinutes,
+  // ];
   const candidates = [
+    dep?.delayMinutes,
+    dep?.delay?.minutes,
     dep?.delay?.departure,
-    dep?.delay,
     dep?.runwayDelayMinutes,
+    dep?.delay,
     entry?.delayMinutes,
   ];
   for (const c of candidates) {

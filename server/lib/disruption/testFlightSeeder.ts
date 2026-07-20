@@ -21,6 +21,12 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// ORIGINAL (no retry — kept as comment for reference):
+// async function fetchWindow(...): Promise<any[]> {
+//   ... makes 1 API call, returns [] on any failure ...
+// }
+// REPLACED WITH: single-call + specific error logging (zero extra API cost).
+// No retry loop — if a bucket fails, it fails once to avoid burning quota.
 async function fetchWindow(
   airport: string,
   date: string,
@@ -40,7 +46,13 @@ async function fetchWindow(
       },
     });
     if (!resp.ok) {
-      console.warn(`[seeder] HTTP ${resp.status} for ${airport} ${fromTime}-${toTime}`);
+      if (resp.status === 429) {
+        console.warn(`[seeder] HTTP 429 (rate limited) for ${airport} ${fromTime}-${toTime} — skipped to save quota`);
+      } else if (resp.status === 401 || resp.status === 403) {
+        console.warn(`[seeder] HTTP ${resp.status} (auth error) for ${airport} ${fromTime}-${toTime} — API key may be invalid`);
+      } else {
+        console.warn(`[seeder] HTTP ${resp.status} for ${airport} ${fromTime}-${toTime}`);
+      }
       return [];
     }
     const raw: any = await resp.json();

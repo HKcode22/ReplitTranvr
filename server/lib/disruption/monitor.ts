@@ -102,10 +102,20 @@ async function processFlight(
         visibilityMiles: risk.originWeather.visibilityMiles,
         ceilingFt: risk.originWeather.ceilingFt,
       },
+      // ORIGINAL (missing 4 weather fields):
+      // destinationWeather: {
+      //   flightCategory: risk.destinationWeather.flightCategory,
+      //   hasThunderstorm: risk.destinationWeather.hasThunderstorm,
+      //   hasFreezing: risk.destinationWeather.hasFreezing,
+      // },
       destinationWeather: {
         flightCategory: risk.destinationWeather.flightCategory,
         hasThunderstorm: risk.destinationWeather.hasThunderstorm,
         hasFreezing: risk.destinationWeather.hasFreezing,
+        windSpeedKt: risk.destinationWeather.windSpeedKt ?? 0,
+        gustSpeedKt: risk.destinationWeather.gustSpeedKt ?? 0,
+        visibilityMiles: risk.destinationWeather.visibilityMiles ?? 10,
+        ceilingFt: risk.destinationWeather.ceilingFt ?? 99999,
       },
       flightStatus: risk.flightStatus
         ? {
@@ -120,6 +130,10 @@ async function processFlight(
     tailNumber: risk.flightStatus?.tailNumber ?? null,
     equipmentType: risk.flightStatus?.equipmentType ?? null,
   });
+
+  console.log(
+    `[monitor] stored flight_id=${flight.id} score=${risk.score} tier=${risk.tier} cancelled=${risk.cancelled} delay_min=${risk.flightStatus?.delayMinutes ?? "null"} inbound_delay=${risk.flightStatus?.inboundDelayMinutes ?? "null"}`,
+  );
 
   if (flight.status !== "active") {
     historicalOtpCache.delete(flight.id);
@@ -319,6 +333,10 @@ async function runCycle(): Promise<void> {
           lte(monitoredFlights.departureDate, tomorrow),
         ),
       );
+
+    if (flights.length === 0) {
+      console.log(`[monitor] no active flights found for ${today}..${tomorrow} — nothing to score (seeder may have failed or API key may be invalid)`);
+    }
 
     for (const flight of flights) {
       try {
