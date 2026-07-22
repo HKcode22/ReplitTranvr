@@ -1,0 +1,4 @@
+id,name,contact_email,contact_name,password,plan,active,created_at
+1,Bma Travel,mahid@travnr.com,Mahid Abdulkarim,$2b$12$dG7UBGdxMHfGfRRtJPYdouOyH2r9gY9jcjDgNGd/yiESpo91r9IhC,trial,t,2026-05-17 21:33:00.020367
+2,R&M,almabdella@gmail.com,Almurtada,$2b$12$Q7qQtd0hh0.B37R5NRcTyOzlzHIRn2nc66P5pYp/B8Ji3jMxgPDaG,trial,t,2026-06-04 01:37:12.820808
+3,Travnr Test,almurtada.abdella2@gmail.com,test,$2b$12$CMG5jFQ80PF8U7jxKohSX.4faFpIP0LRAyTvDZZQsryzcZ6k7w//G,trial,t,2026-06-04 02:23:54.289689

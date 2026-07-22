@@ -1,0 +1,222 @@
+id,user_id,type,title,body,link_url,read_at,created_at
+1,41121918-8e3d-48a4-9100-0c2beefed9c1,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-23 17:46:45.27443
+2,11ff8e22-02c8-4549-b46d-5203c8c1c918,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-02-25 04:15:45.558979
+3,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 04:19:40.405926
+4,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-02-25 04:21:08.9019
+5,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Miami.",/proposals/1,,2026-02-25 04:21:38.407686
+6,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_approved,Proposal approved,"You approved ""Trip to Miami"".",/proposals/1,,2026-02-25 04:23:55.244692
+7,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-02-25 07:42:01.044951
+8,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/2,,2026-02-25 07:42:04.449697
+9,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 07:43:31.198703
+10,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 07:45:46.70446
+11,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 07:46:05.182318
+12,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 07:46:59.964137
+13,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 13:44:29.305095
+14,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-02-25 13:46:14.103159
+15,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/3,,2026-02-25 13:46:15.087347
+16,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_approved,Proposal approved,"You approved ""Travel Concierge Proposal"".",/proposals/3,,2026-02-25 13:47:41.612603
+17,11ff8e22-02c8-4549-b46d-5203c8c1c918,payment_confirmed,Payment confirmed,"Payment of $0 for ""Travel Concierge Proposal"" was successful.",/proposals/3,,2026-02-25 13:47:44.521896
+18,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 17:12:38.399112
+19,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 17:13:11.532308
+20,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 18:56:07.725648
+21,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-02-25 18:56:52.428357
+22,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/4,,2026-02-25 18:56:52.555935
+23,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 20:02:26.107178
+24,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-25 21:07:11.888188
+25,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-02-25 21:09:15.348628
+26,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/5,,2026-02-25 21:09:18.660768
+27,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-26 02:11:11.754504
+28,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-02-26 02:12:27.409989
+29,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/6,,2026-02-26 02:12:30.19059
+30,77b4340e-4898-4305-ba29-483db7d302d4,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-02-26 02:18:56.517878
+31,77b4340e-4898-4305-ba29-483db7d302d4,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Los Angeles.",/proposals/7,,2026-02-26 02:19:08.835906
+32,77b4340e-4898-4305-ba29-483db7d302d4,proposal_approved,Proposal approved,"You approved ""Trip to Los Angeles"".",/proposals/7,,2026-02-26 02:19:41.203395
+33,41121918-8e3d-48a4-9100-0c2beefed9c1,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-26 02:44:32.2586
+34,41121918-8e3d-48a4-9100-0c2beefed9c1,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-02-26 02:45:46.723447
+35,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Miami.",/proposals/8,,2026-02-26 02:46:00.715217
+36,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_approved,Proposal approved,"You approved ""Trip to Miami"".",/proposals/8,,2026-02-26 02:46:20.858897
+37,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-26 03:28:45.263755
+38,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-02-26 03:30:35.510174
+39,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/9,,2026-02-26 03:30:38.470135
+40,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_approved,Proposal approved,"You approved ""Travel Concierge Proposal"".",/proposals/9,,2026-02-26 03:32:59.678322
+53,41121918-8e3d-48a4-9100-0c2beefed9c1,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-26 05:13:36.868473
+54,41121918-8e3d-48a4-9100-0c2beefed9c1,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-02-26 05:15:19.572957
+55,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/13,,2026-02-26 05:15:21.885882
+56,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-26 05:22:15.487446
+57,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-26 05:24:15.427725
+58,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-02-26 05:26:12.602096
+59,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/14,,2026-02-26 05:26:15.402762
+60,41121918-8e3d-48a4-9100-0c2beefed9c1,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-26 05:50:35.526485
+61,41121918-8e3d-48a4-9100-0c2beefed9c1,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-02-26 05:51:49.032004
+62,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_received,No flights found for your trip,We couldn't find Economy flights for MDW → DCA on 2026-02-28 to 2026-03-09. Try different dates or preferences.,/proposals/15,,2026-02-26 05:51:52.34532
+63,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-26 05:53:03.05705
+64,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-02-26 05:54:36.180656
+65,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,No flights found for your trip,We couldn't find Economy flights for XLS → IAD on 2026-03-12. Try different dates or preferences.,/proposals/16,,2026-02-26 05:54:38.74712
+66,41121918-8e3d-48a4-9100-0c2beefed9c1,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-28 20:01:13.349306
+67,41121918-8e3d-48a4-9100-0c2beefed9c1,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-02-28 20:03:12.39536
+68,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_received,No flights found for your trip,We couldn't find Economy flights for STN → LOS on 2026-03-02 to 2026-03-09. Try different dates or preferences.,/proposals/17,,2026-02-28 20:03:16.238076
+69,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_received,No flights found for your trip,We couldn't find Economy flights for STN → LOS on 2026-03-02 to 2026-03-09. Try different dates or preferences.,/proposals/18,,2026-02-28 20:03:41.649744
+70,41121918-8e3d-48a4-9100-0c2beefed9c1,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-02-28 20:20:18.67052
+71,41121918-8e3d-48a4-9100-0c2beefed9c1,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-02-28 20:22:26.27138
+72,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/19,,2026-02-28 20:22:27.530757
+73,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/20,,2026-02-28 20:22:43.332921
+74,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-01 06:14:50.824246
+75,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-03-01 06:17:21.062744
+76,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Miami.",/proposals/21,,2026-03-01 06:17:36.559703
+77,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_approved,Proposal approved,"You approved ""Trip to Miami"".",/proposals/21,,2026-03-01 06:18:12.424811
+78,41121918-8e3d-48a4-9100-0c2beefed9c1,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-01 17:31:34.136109
+79,41121918-8e3d-48a4-9100-0c2beefed9c1,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-03-01 17:33:43.239273
+80,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Miami.",/proposals/22,,2026-03-01 17:33:52.162273
+81,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_approved,Proposal approved,"You approved ""Trip to Miami"".",/proposals/22,,2026-03-01 17:34:44.618374
+82,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-02 04:54:09.256413
+83,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_received,No flights found for your trip,We couldn't find Economy flights for JFK → STN on 2026-03-16 to 2026-03-23. Try different dates or preferences.,/proposals/23,,2026-03-02 04:56:02.999503
+84,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-03-02 04:56:07.128501
+85,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Cairo.",/proposals/24,,2026-03-02 04:56:35.116297
+86,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_approved,Proposal approved,"You approved ""Trip to Cairo"".",/proposals/24,,2026-03-02 04:56:53.115636
+87,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-03 01:39:10.109255
+88,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-03 04:49:07.692567
+89,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-03 04:49:51.098786
+90,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-03-03 04:52:12.338833
+91,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/25,,2026-03-03 04:52:13.148078
+92,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/26,,2026-03-03 04:53:57.742805
+93,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/27,,2026-03-03 04:54:13.739178
+94,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-03 08:24:25.435988
+95,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-03 08:25:10.317499
+96,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-03-03 08:26:17.36983
+97,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/28,,2026-03-03 08:26:17.510245
+98,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-03-03 08:27:28.43212
+99,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Orlando.",/proposals/29,,2026-03-03 08:27:36.645842
+100,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_approved,Proposal approved,"You approved ""Trip to Orlando"".",/proposals/29,,2026-03-03 08:28:23.44065
+101,41121918-8e3d-48a4-9100-0c2beefed9c1,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-05 04:41:56.352038
+102,41121918-8e3d-48a4-9100-0c2beefed9c1,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-03-05 04:43:49.960652
+103,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Miami.",/proposals/30,,2026-03-05 04:43:54.417169
+104,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_approved,Proposal approved,"You approved ""Trip to Miami"".",/proposals/30,,2026-03-05 05:49:06.69919
+105,41121918-8e3d-48a4-9100-0c2beefed9c1,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-05 06:34:49.43563
+106,41121918-8e3d-48a4-9100-0c2beefed9c1,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-03-05 06:36:48.514687
+107,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to New York.",/proposals/31,,2026-03-05 06:36:53.106707
+108,41121918-8e3d-48a4-9100-0c2beefed9c1,proposal_approved,Proposal approved,"You approved ""Trip to New York"".",/proposals/31,,2026-03-05 06:37:12.874646
+109,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-07 21:42:47.643244
+110,11ff8e22-02c8-4549-b46d-5203c8c1c918,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-03-07 21:44:35.396217
+111,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Miami.",/proposals/32,,2026-03-07 21:44:38.233842
+112,11ff8e22-02c8-4549-b46d-5203c8c1c918,proposal_approved,Proposal approved,"You approved ""Trip to Miami"".",/proposals/32,,2026-03-07 21:46:00.789084
+113,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-14 07:35:02.906689
+114,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-03-14 07:38:03.274609
+115,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/33,,2026-03-14 07:38:03.958877
+116,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/34,,2026-03-14 07:38:18.385346
+117,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/35,,2026-03-14 07:38:58.15797
+118,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/36,,2026-03-14 07:40:18.605787
+119,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/37,,2026-03-14 07:43:34.935853
+120,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-15 00:50:52.384377
+121,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-15 01:10:28.172314
+122,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-03-15 01:17:15.539182
+123,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-03-15 01:20:39.721534
+124,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Raleigh/Durham.",/proposals/38,,2026-03-15 01:20:45.171559
+125,759fd803-9a0a-47e1-b64b-5e33585e7769,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-04-01 17:05:43.296044
+126,759fd803-9a0a-47e1-b64b-5e33585e7769,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-01 17:27:41.857453
+127,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-21 17:24:57.838528
+41,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,2026-04-22 03:14:37.896,2026-02-26 03:39:34.619658
+42,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,2026-04-22 03:14:37.896,2026-02-26 03:40:01.020286
+43,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/10,2026-04-22 03:14:37.896,2026-02-26 03:40:01.165502
+44,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,2026-04-22 03:14:37.896,2026-02-26 03:40:01.244257
+45,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,2026-04-22 03:14:37.896,2026-02-26 03:40:43.487421
+46,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,2026-04-22 03:14:37.896,2026-02-26 03:40:46.156013
+47,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/11,2026-04-22 03:14:37.896,2026-02-26 03:40:46.304098
+48,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,2026-04-22 03:14:37.896,2026-02-26 03:41:29.773919
+49,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,2026-04-22 03:14:37.896,2026-02-26 03:42:25.663037
+50,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,2026-04-22 03:14:37.896,2026-02-26 03:43:28.54628
+51,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,2026-04-22 03:14:37.896,2026-02-26 03:44:53.516529
+52,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/12,2026-04-22 03:14:37.896,2026-02-26 03:44:53.686582
+128,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,2026-04-22 03:14:37.896,2026-04-22 01:09:17.705338
+129,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,2026-04-22 03:14:37.896,2026-04-22 01:11:25.244248
+130,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/39,2026-04-22 03:14:37.896,2026-04-22 01:11:26.352418
+131,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,2026-04-22 03:14:37.896,2026-04-22 02:23:07.007324
+132,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,2026-04-22 03:14:37.896,2026-04-22 02:25:15.852844
+133,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Denver.",/proposals/40,2026-04-22 03:14:37.896,2026-04-22 02:25:22.759718
+134,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_approved,Proposal approved,"You approved ""Trip to Denver"".",/proposals/40,2026-04-22 03:14:37.896,2026-04-22 02:25:52.061817
+135,8e2c034f-8441-4355-ba6a-40e61a804cb8,payment_confirmed,Flight booked!,"Your flight for ""Trip to Denver"" has been booked. Reference: YDMI4S",/proposals/40,2026-04-22 03:14:37.896,2026-04-22 02:27:16.194208
+136,8e2c034f-8441-4355-ba6a-40e61a804cb8,refund_requested,Refund request received,Your refund request for booking YDMI4S was submitted. We'll be in touch shortly.,/billing,2026-04-22 03:14:37.896,2026-04-22 03:09:24.885882
+137,759fd803-9a0a-47e1-b64b-5e33585e7769,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-22 19:16:38.176741
+138,759fd803-9a0a-47e1-b64b-5e33585e7769,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-04-22 19:20:36.785353
+139,759fd803-9a0a-47e1-b64b-5e33585e7769,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to New York.",/proposals/43,,2026-04-22 19:20:40.454587
+140,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-23 19:42:56.176113
+141,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-04-23 19:46:04.897596
+142,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Los Angeles.",/proposals/44,,2026-04-23 19:46:15.236864
+143,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_approved,Proposal approved,"You approved ""Trip to Los Angeles"".",/proposals/44,,2026-04-23 19:46:32.66757
+144,8e2c034f-8441-4355-ba6a-40e61a804cb8,manual_booking_pending,Booking received — being processed,Your payment was received. Our concierge team is finalizing your booking and will email you shortly with your confirmation.,/billing,,2026-04-23 21:17:43.47089
+145,8e2c034f-8441-4355-ba6a-40e61a804cb8,payment_confirmed,Booking confirmed!,Your flight has been booked. Booking reference: 72632,/billing,,2026-04-23 21:18:55.683289
+146,1d28fdc8-c1a1-4500-ae5e-62b6a4ab2749,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-04-24 00:23:23.008482
+147,1d28fdc8-c1a1-4500-ae5e-62b6a4ab2749,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/45,,2026-04-24 00:23:25.015024
+148,e9acb9e6-9681-4b29-bb9f-5c768da02291,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-04-24 01:04:36.513272
+149,e9acb9e6-9681-4b29-bb9f-5c768da02291,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Portland.",/proposals/46,,2026-04-24 01:04:57.443142
+150,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-24 01:27:46.021704
+151,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-04-24 01:30:38.855626
+152,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/47,,2026-04-24 01:30:39.64967
+153,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/48,,2026-04-24 01:31:44.989029
+154,6c6b5642-340d-4653-a238-b6c90bcc294d,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-04-24 01:59:13.637184
+155,6c6b5642-340d-4653-a238-b6c90bcc294d,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Denver.",/proposals/49,,2026-04-24 01:59:22.264754
+156,6c6b5642-340d-4653-a238-b6c90bcc294d,proposal_approved,Proposal approved,"You approved ""Trip to Denver"".",/proposals/49,,2026-04-24 02:00:26.70944
+157,9d44b97a-20f3-4e74-a40c-cc2370969e8f,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-04-24 02:04:17.282711
+158,9d44b97a-20f3-4e74-a40c-cc2370969e8f,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/50,,2026-04-24 02:04:17.465554
+159,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-24 02:40:46.764492
+160,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-24 02:41:01.295777
+161,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-04-24 02:41:11.793502
+162,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/51,,2026-04-24 02:41:12.095035
+163,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-04-24 02:42:41.101982
+164,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Denver.",/proposals/52,,2026-04-24 02:42:46.048365
+165,9d44b97a-20f3-4e74-a40c-cc2370969e8f,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-24 02:48:14.226091
+166,9d44b97a-20f3-4e74-a40c-cc2370969e8f,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/53,,2026-04-24 02:48:21.912539
+167,9d44b97a-20f3-4e74-a40c-cc2370969e8f,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-04-24 02:49:11.054597
+168,9d44b97a-20f3-4e74-a40c-cc2370969e8f,proposal_received,No flights found for your trip,We couldn't find Economy flights for MHT → MDW on 2026-06-18. Try different dates or preferences.,/proposals/54,,2026-04-24 02:49:13.095488
+169,9d44b97a-20f3-4e74-a40c-cc2370969e8f,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-24 02:49:15.039802
+170,9d44b97a-20f3-4e74-a40c-cc2370969e8f,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-04-24 02:51:52.624992
+171,9d44b97a-20f3-4e74-a40c-cc2370969e8f,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Chicago.",/proposals/55,,2026-04-24 02:51:57.903927
+172,9d44b97a-20f3-4e74-a40c-cc2370969e8f,proposal_approved,Proposal approved,"You approved ""Trip to Chicago"".",/proposals/55,,2026-04-24 03:02:30.4024
+173,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-24 18:08:42.389808
+174,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-04-24 18:11:44.373074
+175,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Los Angeles.",/proposals/57,,2026-04-24 18:12:08.275341
+176,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-24 22:15:01.636495
+177,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-04-24 22:15:20.348585
+178,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/58,,2026-04-24 22:15:20.62442
+179,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-24 22:21:11.722553
+180,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-04-24 22:21:30.41983
+181,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/59,,2026-04-24 22:21:30.68515
+182,ccf621a9-6b2a-46d3-9290-fc7b9f7ac6ef,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-04-24 22:48:44.602994
+183,ccf621a9-6b2a-46d3-9290-fc7b9f7ac6ef,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/60,,2026-04-24 22:48:44.764192
+184,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-27 14:08:54.661425
+185,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-04-27 14:10:50.279883
+186,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Denver.",/proposals/62,,2026-04-27 14:11:12.788918
+187,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-27 15:02:28.081293
+188,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-27 15:03:49.689191
+189,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-04-27 15:05:28.383246
+190,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/63,,2026-04-27 15:05:28.611454
+191,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-04-27 15:06:02.643629
+192,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Boston.",/proposals/64,,2026-04-27 15:07:15.186342
+193,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-04-27 16:44:48.122975
+194,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-04-27 16:48:38.131097
+195,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Boston.",/proposals/65,,2026-04-27 16:49:37.818181
+196,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-05-01 20:21:53.207611
+197,8e2c034f-8441-4355-ba6a-40e61a804cb8,call_completed,Concierge call completed,Your concierge call has been completed (1 min).,/call-history,,2026-05-01 20:24:01.144747
+198,8e2c034f-8441-4355-ba6a-40e61a804cb8,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Chicago.",/proposals/66,,2026-05-01 20:24:15.299244
+199,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-05-03 10:23:03.636007
+200,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-05-03 10:24:37.411841
+201,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Boston.",/proposals/67,,2026-05-03 10:24:57.352837
+202,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,manual_booking_pending,Booking received — being processed,Your payment was received. Our concierge team is finalizing your booking and will email you shortly with your confirmation.,/billing,,2026-05-03 10:28:19.200699
+203,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,payment_confirmed,Booking confirmed!,Your flight has been booked. Booking reference: ABC123,/billing,,2026-05-03 10:30:48.594229
+204,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,trip_cancel_requested,Cancellation request received,Your cancel request for booking ABC123 was submitted. We'll be in touch shortly.,/trips,,2026-05-03 10:34:09.568782
+205,9de388f0-8734-41f8-9a89-cb85c6c6ffd2,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-05-08 15:24:17.942339
+206,9de388f0-8734-41f8-9a89-cb85c6c6ffd2,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Miami.",/proposals/69,,2026-05-08 15:24:53.278307
+207,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-05-09 00:36:24.739628
+208,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-05-09 00:37:30.471665
+209,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Boston.",/proposals/71,,2026-05-09 00:37:57.360581
+210,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-05-09 18:18:17.913751
+211,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-05-09 18:26:17.507157
+212,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Boston.",/proposals/72,,2026-05-09 18:26:41.748814
+213,ae3924e1-cd8f-4ba7-bb02-9d9ea3a9b743,proposal_received,Travel proposal in progress,We're working on your travel proposal. You'll receive flight options soon.,/proposals/73,2026-06-04 01:28:19.459,2026-06-04 01:27:49.472789
+214,ae3924e1-cd8f-4ba7-bb02-9d9ea3a9b743,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,2026-06-04 01:28:19.459,2026-06-04 01:27:49.482692
+216,fde38de5-67e5-43eb-9910-010c3b63313e,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to San Francisco.",/proposals/74,2026-06-15 22:17:43.122,2026-06-15 22:17:29.680136
+215,fde38de5-67e5-43eb-9910-010c3b63313e,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,2026-06-15 22:17:44.183,2026-06-15 22:17:21.323219
+217,fde38de5-67e5-43eb-9910-010c3b63313e,call_request,Call request submitted,Your call request has been submitted.,/call-history,,2026-06-16 03:43:13.171529
+218,fde38de5-67e5-43eb-9910-010c3b63313e,call_completed,Concierge call completed,Your concierge call has been completed.,/call-history,,2026-06-16 03:44:28.042588
+219,fde38de5-67e5-43eb-9910-010c3b63313e,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Toronto.",/proposals/75,,2026-06-16 03:44:59.137067
+220,ae3094c4-1345-4f7d-ad64-132378511d1a,welcome,Welcome to Travnr!,Your concierge call results have been linked to your account. Check your call history and proposals.,/call-history,,2026-06-22 00:59:27.319848
+221,ae3094c4-1345-4f7d-ad64-132378511d1a,proposal_received,New travel proposal ready,"Based on your concierge call, we've prepared a flight proposal for your trip to Panama City.",/proposals/76,,2026-06-22 00:59:41.970509

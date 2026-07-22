@@ -1,0 +1,1289 @@
+id,call_request_id,user_id,bland_call_id,phone_number,status,duration,transcript,transcript_json,recording_url,summary,variables,error_message,started_at,ended_at,created_at
+1,1,41121918-8e3d-48a4-9100-0c2beefed9c1,,+12019188083,queued,,,,,,,,,,2026-02-23 17:46:45.323739
+2,2,11ff8e22-02c8-4549-b46d-5203c8c1c918,eae40805-e4c9-4565-83c1-c5e5dd2406ee,+1 2019188083,completed,,"user: Hello. 
+ assistant: Hi Al, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm booking a flight from New York City to London on February twenty seventh. 
+ assistant: Great, London is a fantastic destination. Where in New York City will you be departing from? 
+ user: From JFK. 
+ assistant: Got it, flying out of JFK. What date would you like to return? 
+ user: March 7th. 
+ assistant: Understood, returning March seventh. How many travelers will be going on this trip? 
+ user: Two passengers and I have no preferences and a max budget of 650 per passenger. 
+ assistant: Thanks for that. What cabin class would you prefer, economy, premium economy, busine- 
+ user: Economy. 
+ assistant: Perfect. Just to recap, you're looking for two economy class tickets from JFK to London, departing February twenty seventh and returning March seventh, with a maximum budget of six hundred and fifty dollars per passenger. I'll prepare a personalized travel proposal for you now. 
+ user: All right, thank you. 
+ assistant: You're welcome, Al. We'll be in touch soon with your options. Have a great night! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/eae40805-e4c9-4565-83c1-c5e5dd2406ee,"The user, Al, contacted Travnr to book a flight from New York City (JFK) to London, departing on February 27th and returning on March 7th. The user is traveling with one other passenger and has a maximum budget of $650 per passenger for economy class tickets. The assistant collected the necessary information and will prepare a personalized travel proposal for Al, to be shared soon.",,,,,2026-02-25 04:15:45.534698
+73,73,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,68c43c9b-c1e3-4c96-9825-226eaf65d62f,+13475305034,completed,0,"user: No.  
+ assistant: Hi Mahid, this is Travnr. Where would you like to fly today? 
+ user: I like to go from Indiana to Boston. 
+ assistant: Got it, Boston it is. And where in Indiana are you depa- 
+ user: On June 3rd, coming back June 12th. 
+ user: And I would like, um, it to be like Delta or something like that. That's my number one preference. 
+ assistant: Got it. So that's Indiana to Boston, departing June third, returning June twelfth. Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ ",,https://api.bland.ai/v1/recordings/68c43c9b-c1e3-4c96-9825-226eaf65d62f,"The user, Mahid, inquired about flying from Indiana to Boston with a preferred airline of Delta. The travel dates are set for June 3rd as the departure date and June 12th as the return date. The assistant, Travnr, confirmed the details and assured Mahid that flight options would be sent to their inbox within a minute.","{""to"": ""+13475305034"", ""now"": ""Friday, May 8, 2026 8:36 PM"", ""zip"": ""10013"", ""city"": ""NEW YORK"", ""from"": ""+14159148074"", ""state"": ""NY"", ""call_id"": ""68c43c9b-c1e3-4c96-9825-226eaf65d62f"", ""country"": ""US"", ""now_utc"": ""Saturday, May 9, 2026 12:36 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e"", ""blandCallDbId"": 73, ""callRequestId"": 73}, ""short_to"": ""3475305034"", ""timezone"": ""America/New_York"", ""aiSummary"": {""model"": ""claude-sonnet-4-5"", ""oneLiner"": ""1 traveler, Indiana→BOS, Jun 3-12, economy, Delta preferred"", ""confidence"": 0.9, ""structured"": {""pax"": 1, ""cabin"": ""economy"", ""dates"": ""Jun 3-12"", ""route"": ""Indiana→BOS"", ""budget"": null, ""preferences"": ""Delta preferred""}, ""generatedAt"": ""2026-05-09T00:37:33.442Z""}, ""timestamp"": ""2026-05-08T20:36:38-04:00"", ""__analysis"": {""email"": ""mahid@travnr.com"", ""notes"": ""Delta preferred"", ""budget_usd"": null, ""passengers"": 1, ""cabin_class"": ""economy"", ""origin_iata"": null, ""return_date"": ""2026-06-12"", ""departure_date"": ""2026-06-03"", ""time_preference"": null, ""destination_iata"": ""BOS"", ""origin_airport_name"": null, ""destination_airport_name"": null}, ""email_info"": ""Email on file: mahid@travnr.com"", ""short_from"": ""4159148074"", ""booking_info"": ""Booking ABC123 - USD 1.00 (paid)"", ""phone_number"": ""+13475305034"", ""proposal_info"": ""\""Trip to Boston\"" - $210.94 (sent)"", ""traveler_info"": ""Name: Mahid Abdulkarim"", ""BlandStatusCode"": 200, ""previous_proposal_info"": ""No prior options to revisit""}",,,2026-05-09 00:37:30.431,2026-05-09 00:36:24.785258
+3,3,11ff8e22-02c8-4549-b46d-5203c8c1c918,0a418df8-f941-45cf-8c49-a2db2f728ad7,+12019188083,completed,1,"user: Oh. 
+ assistant: Hello Al Abd, thank you for calling Travnr. How can I help you with your travel plans today? 
+ user: I'm flying from New York City to Miami on February 27th and returning March 8th. 
+ assistant: Wonderful, New York City to Miami sounds like a great trip. How many travelers will be going? 
+ user: Two travelers with a max budget of six hundred and fifty each per ticket with no other preferences. 
+ assistant: Got it, two travelers with a budget of six hundred and fifty dollars each. What cabin class would you prefer - economy, premium economy, business, or first class? 
+ user: Economy. 
+ assistant: Perfect. Let me summarize your travel details to confirm everything. You're flying from New York City to Miami for two travelers, departing February twenty seventh and returning March eighth, in economy class with a budget of six hundred and fifty dollars per ticket. Does that all sound correct? 
+ user: Yes. 
+ assistant: Excellent. I'll prepare a personalized travel proposal for you based on these details. Thank you for choosing Travnr, Al Abd. 
+ user: You too. 
+ assistant: Goodbye! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/0a418df8-f941-45cf-8c49-a2db2f728ad7,"The caller, Al Abd, inquired about travel plans from New York City to Miami for two travelers, departing on February 27th and returning on March 8th. They specified a budget of $650 per ticket for economy class and confirmed the details with the assistant. The assistant agreed to prepare a personalized travel proposal based on the provided information, ending the call after confirmation.","{""to"": ""+12019188083"", ""now"": ""Tuesday, February 24, 2026 11:19 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+17753493259"", ""state"": ""NJ"", ""call_id"": ""0a418df8-f941-45cf-8c49-a2db2f728ad7"", ""country"": ""US"", ""now_utc"": ""Wednesday, February 25, 2026 4:19 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""11ff8e22-02c8-4549-b46d-5203c8c1c918"", ""blandCallDbId"": 3, ""callRequestId"": 3}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-24T23:19:48-05:00"", ""short_from"": ""7753493259"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-25 04:21:08.862,2026-02-25 04:19:40.453457
+4,4,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,3547ebcb-fddf-470e-b6b5-cd7d08918795,+1 3475305034,completed,,"assistant: Hello Mahid, this is Travnr. How can I help you with your travel plans today? 
+ user: So I'd like to book a flight from Saint Louis to Washington, DC, and I'd like to leave on March 7. 
+ assistant: Great, I can help you with that. When would you like to return? 
+ user: Just the one way. 
+ assistant: Understood, it's a one-way trip. How many travelers will be going? 
+ user: Just myself. 
+ assistant: Got it. What's your preferred cabin class - economy, premium economy, business, or first class? 
+ user: Economy. 
+ assistant: Perfect. What's your budget range for this flight? 
+ user: I want... 
+ assistant: Go ahead, what's your budget range? 
+ user: I love the I uh just the cheapest possible thing, I guess. 
+ assistant: Understood, you're looking for the most affordable option. Do you have any seat preferences or a preferred airline? 
+ user: No. 
+ assistant: Alright. Let me summarize your travel details: You're booking a one-way economy flight from Saint Louis to Washington, DC, departing March seventh, for one traveler, looking for the lowest fare with no specific airline or seat preferences. I'll prepare a personalized travel proposal for you now. Is there anything else you'd like to add? 
+ user: No. 
+ assistant: Perfect. Thank you for choosing Travnr, Mahid. We'll be in touch shortly with your travel proposal. 
+ user: Thanks 
+ assistant: Goodbye! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/3547ebcb-fddf-470e-b6b5-cd7d08918795,"The user, Mahid, contacted Travnr to book a one-way economy flight from Saint Louis to Washington, DC, departing on March 7. Mahid is traveling alone and is looking for the cheapest possible option with no specific airline or seat preferences. The assistant has taken the user's travel details and will prepare a personalized travel proposal to be sent shortly.",,,,,2026-02-25 07:42:00.874528
+5,5,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,808c5263-2a9c-4a8e-8fc3-c61188c3d013,+13475305034,queued,,,,,,,,,,2026-02-25 07:43:31.248199
+6,6,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,5effda3b-b311-4e83-8363-7b4f6b5cefde,+13475305034,queued,,,,,,,,,,2026-02-25 07:45:46.754722
+7,7,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,d964de2f-c9a9-49fb-98bb-fee4c175aa1c,+13475305034,queued,,,,,,,,,,2026-02-25 07:46:05.228453
+8,8,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,6b6d3a62-f297-4c7a-b041-3c29399ad082,+13475305034,queued,,,,,,,,,,2026-02-25 07:47:00.009607
+9,9,11ff8e22-02c8-4549-b46d-5203c8c1c918,28228dd8-9931-42ca-99df-57def1230cb8,+12019188083,completed,1,"user: Hello? 
+ assistant: Hello Al Abd, this is Travnr. How can I help you with your travel plans today? 
+ user: Hi, I'm looking to book a flight from New York to California, leaving out of JSK. 
+ assistant: Great, I can help you with that. Where in California would you like to travel to? 
+ user: LAX. 
+ assistant: Perfect, Los Angeles. What are your travel dates? 
+ user: My travel dates are I'm leaving February 27th and coming back 
+ assistant: And what date would you l- 
+ user: Back March 9th in economies. 
+ assistant: Got it, February 27th to March 9th in economy. How many travelers will be going? 
+ user: Just one. 
+ assistant: Understood, just one traveler. Do you have a budget range in mind for this trip? 
+ user: Uh, maximum of like $500. 
+ user: hundred dollars. <Block interruptions enabled. This message was ignored> 
+ assistant: Okay, a maximum of five hundred dollars. Do you have any seat preferences or airline preferences? 
+ user: No, no, no no other preferences at all. 
+ assistant: Perfect. Let me summarize your travel details. You're flying from JFK to Los Angeles, departing February 27th and returning March 9th, for one traveler in economy class, with a budget of up to five hundred dollars. I'll prepare a personalized travel proposal for you now. Thank you for choosing Travnr! 
+ user: Thank you. 
+ user: Thank you. <Block interruptions enabled. This message was ignored> 
+ assistant: You're welcome! Have a wonderful day. 
+ agent-action: Ended call 
+ user: Thank you. 
+ ",,https://api.bland.ai/v1/recordings/28228dd8-9931-42ca-99df-57def1230cb8,"The user, Al Abd, contacted Travnr to book a flight from New York (JSK, assumed to be a typo and corrected to JFK by the assistant) to Los Angeles (LAX) in economy class. The travel dates are February 27th to March 9th for one traveler, with a budget of up to $500. The user has no seat or airline preferences. The assistant agreed to prepare a personalized travel proposal based on these details.","{""to"": ""+12019188083"", ""now"": ""Wednesday, February 25, 2026 8:44 AM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+16616053088"", ""state"": ""NJ"", ""call_id"": ""28228dd8-9931-42ca-99df-57def1230cb8"", ""country"": ""US"", ""now_utc"": ""Wednesday, February 25, 2026 1:44 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""11ff8e22-02c8-4549-b46d-5203c8c1c918"", ""blandCallDbId"": 9, ""callRequestId"": 9}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-25T08:44:41-05:00"", ""short_from"": ""6616053088"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-25 13:46:14.066,2026-02-25 13:44:29.351985
+10,10,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,1338e67a-e469-497a-9ef8-3c075a48b5d2,+13475305034,queued,,,,,,,,,,2026-02-25 17:12:38.451786
+11,11,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,21858f29-5aa7-42ab-b860-b288811e374a,+13475305034,queued,,,,,,,,,,2026-02-25 17:13:11.579653
+12,12,11ff8e22-02c8-4549-b46d-5203c8c1c918,40601918-e7fa-48fe-95f6-3822237cf4d1,+12019188083,completed,0,"user: Hello. 
+ assistant: Hello Al Abd, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm here to 
+ assistant: I'm listening. Please go ahead. 
+ user: I'm sorry. 
+ assistant: No need to apologize at all. How can I assist you with your travel needs? 
+ ",,https://api.bland.ai/v1/recordings/40601918-e7fa-48fe-95f6-3822237cf4d1,"The user initiated a call with Travnr, a travel assistance service, but struggled to articulate their needs, apologizing for an unspecified reason. The assistant, attempting to provide support, encouraged the user to share their travel plans, but the call was cut off before the user could elaborate on their requirements.","{""to"": ""+12019188083"", ""now"": ""Wednesday, February 25, 2026 1:56 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+19789512374"", ""state"": ""NJ"", ""call_id"": ""40601918-e7fa-48fe-95f6-3822237cf4d1"", ""country"": ""US"", ""now_utc"": ""Wednesday, February 25, 2026 6:56 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""11ff8e22-02c8-4549-b46d-5203c8c1c918"", ""blandCallDbId"": 12, ""callRequestId"": 12}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-25T13:56:17-05:00"", ""short_from"": ""9789512374"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-25 18:56:52.393,2026-02-25 18:56:07.771121
+13,13,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,51e5b66d-dfb8-4602-8a70-5e1e3def4ba9,+13475305034,queued,,,,,,,,,,2026-02-25 20:02:26.156404
+14,14,11ff8e22-02c8-4549-b46d-5203c8c1c918,f67728a7-756c-4e63-a4d1-c6d614f1b80b,+12019188083,completed,1,"user: Hello? 
+ assistant: Hello Al Abd, this is Travnr. How can I help you today? 
+ user: Hi, I'm looking for a flight from New York City to London. 
+ assistant: Great choice. Where in New York City will you be departing from? 
+ user: Departing from JFK. 
+ assistant: Understood. What are your travel dates? 
+ user: From February 27th to March 9th. 
+ assistant: Got it. How many travelers will be going? 
+ user: One traveler. 
+ assistant: Perfect. What cabin class would you prefer? 
+ user: Economy. 
+ assistant: Understood. What is your budget range for this trip? 
+ assistant: Hello? Are you still there? 
+ user: $600. 
+ assistant: Got it. Do you have any seat preferences or airline preferences? 
+ user: No problems at all. 
+ assistant: Wonderful.- 
+ user: Yeah. 
+ assistant: Let me summarize your trip details. You're flying from JFK to London, departing February twenty sev- 
+ user: Thank you. 
+ assistant: You're we- 
+ user: Yes, that's correct. 
+ assistant: Let me summarize your trip details. You're flying from JFK to London, departing February twenty seventh and returning March ninth, for one traveler in economy class with a budget of six hundred dollars. I'll prepare a personalized travel proposal for you shortly. Is there anything else I can help- 
+ user: All right. 
+ assistant: Thank you for choosing Tr- 
+ user: All right. Thank you so much. 
+ assistant: Thank you for choosing Travnr. Have a wonderful day. Goodbye. 
+ ",,https://api.bland.ai/v1/recordings/f67728a7-756c-4e63-a4d1-c6d614f1b80b,"The user, Al Abd, contacted Travnr to book a flight from New York City's JFK airport to London, traveling from February 27th to March 9th. The user preferred economy class for one traveler and had a budget of $600. The assistant collected the user's trip details and confirmed that a personalized travel proposal would be prepared shortly. The call ended with the assistant thanking the user for choosing Travnr.","{""to"": ""+12019188083"", ""now"": ""Wednesday, February 25, 2026 4:07 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+15087197261"", ""state"": ""NJ"", ""call_id"": ""f67728a7-756c-4e63-a4d1-c6d614f1b80b"", ""country"": ""US"", ""now_utc"": ""Wednesday, February 25, 2026 9:07 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""11ff8e22-02c8-4549-b46d-5203c8c1c918"", ""blandCallDbId"": 14, ""callRequestId"": 14}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-25T16:07:22-05:00"", ""short_from"": ""5087197261"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-25 21:09:15.313,2026-02-25 21:07:11.936497
+15,15,11ff8e22-02c8-4549-b46d-5203c8c1c918,726521ea-4f64-4758-b280-cd31b07fb145,+12019188083,completed,0,"user: Hello? Hi, Amy.  
+ assistant: Hello Al Abd, this is Travnr. How can I help you today? 
+ user: I'm flying from New York City to London from February 27th to March 6th. 
+ assistant: Wonderful. How many travelers will be going on this trip? 
+ user: One traveler with a max budget of $650 and no other preferences. 
+ assistant: Understood. What is your preferred cabin class for this flight? 
+ user: Economy. 
+ assistant: Perfect. Let me summarize the details for you. You're traveling from New York City to London, departing February twenty seventh and returning March sixth, for one traveler in economy class with a maximum budget of six hundred and fifty dollars. I'll prepare a personaliz- 
+ user: Yes. 
+ assistant: Excellent. I'll prepare a personalized travel proposal for you and get back to you shortly. Thank you for choosing Travnr, have a wonderful evening. 
+ user: Thank you. 
+ assistant: Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/726521ea-4f64-4758-b280-cd31b07fb145,"The user, Al Abd, contacted Travnr to inquire about a flight from New York City to London, departing on February 27th and returning on March 6th. The user specified a maximum budget of $650 for a single economy-class traveler. The assistant confirmed the details and agreed to prepare a personalized travel proposal, which would be sent to the user shortly.","{""to"": ""+12019188083"", ""now"": ""Wednesday, February 25, 2026 9:11 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+13502231980"", ""state"": ""NJ"", ""call_id"": ""726521ea-4f64-4758-b280-cd31b07fb145"", ""country"": ""US"", ""now_utc"": ""Thursday, February 26, 2026 2:11 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""11ff8e22-02c8-4549-b46d-5203c8c1c918"", ""blandCallDbId"": 15, ""callRequestId"": 15}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-25T21:11:22-05:00"", ""short_from"": ""3502231980"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-26 02:12:27.372,2026-02-26 02:11:11.802326
+16,16,77b4340e-4898-4305-ba29-483db7d302d4,02b703d9-4261-43f5-8cc0-fee4b98bab71,+1 2019188083,completed,,"user: Hello. 
+ assistant: Hello Almurtada, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm booking a flight from New York City to Los Angeles from February 27 to March 7. 
+ assistant: Great, New York City to Los Angeles from February twenty-seventh to March seventh. How many travelers will be going on this trip? 
+ user: One traveler, max budget of $650, economy, cabin class, and no other preferences. 
+ user: no other preferences. 
+ assistant: Understood, one traveler, economy class, with a max budget of six hundred and fifty dollars. Just to confirm, you'll be departing from New York City on February twenty-seventh and returning on March seventh, correct? 
+ user: Yes. 
+ assistant: Perfect. Let me summarize your travel details: one traveler, economy class, departing New York City to Los Angeles, February twenty-seventh to March seventh, with a max budget of six hundred and fifty dollars. I'll prepare a personalized travel proposal for you now. Thank you for choosing Travnr, have a wonderful evening. 
+ user: Thank you, you too. 
+ assistant: Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/02b703d9-4261-43f5-8cc0-fee4b98bab71,"The user, Almurtada, contacted Travnr to book a flight from New York City to Los Angeles for one traveler, with a maximum budget of $650 for an economy class ticket. The travel dates are from February 27 to March 7. The assistant confirmed the details and agreed to prepare a personalized travel proposal for the user.",,,,,2026-02-26 02:18:56.331372
+17,17,41121918-8e3d-48a4-9100-0c2beefed9c1,1e4733e1-a6a5-4558-953e-c4d68b15466f,+12019188083,completed,0,"user: Hello. 
+ assistant: Hello Almurtada, thank you for calling Travnr. How can I help you with your travel plans today? 
+ user: I'm looking to book a flight from New York City to Miami. 
+ assistant: Excellent choice, Miami is a wo- 
+ user: From February 27th to March 10th. 
+ assistant: Wonderful. And how many travelers will be going on this trip? 
+ user: One traveler with a max budget of five hundred dollars and no preferences and economy. 
+ assistant: Thank you. Just to summarize, you're looking for a flight for one traveler from New York City to Miami, departing February twenty seventh and returning March tenth, in economy class with a budget of five hundred dollars. Is that correct? 
+ user: Yes. 
+ assistant: Perfect. I'll prepare a personalized travel proposal for you and get back to you shortly. Thank you for choosing Travnr, have a wonderful evening. 
+ user: Thank you. 
+ user: Bye. <Block interruptions enabled. This message was ignored> 
+ assistant: You're welcome. Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/1e4733e1-a6a5-4558-953e-c4d68b15466f,"The user, Almurtada, contacted Travnr to book a flight from New York City to Miami for one traveler, with a departure date of February 27th and a return date of March 10th. The user specified a maximum budget of $500 and preferred an economy class flight with no other specific preferences. The assistant confirmed the details, offered to prepare a personalized travel proposal, and ended the call, promising to follow up shortly.","{""to"": ""+12019188083"", ""now"": ""Wednesday, February 25, 2026 9:44 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+17154024370"", ""state"": ""NJ"", ""call_id"": ""1e4733e1-a6a5-4558-953e-c4d68b15466f"", ""country"": ""US"", ""now_utc"": ""Thursday, February 26, 2026 2:44 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""41121918-8e3d-48a4-9100-0c2beefed9c1"", ""blandCallDbId"": 17, ""callRequestId"": 17}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-25T21:44:42-05:00"", ""short_from"": ""7154024370"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-26 02:45:46.686,2026-02-26 02:44:32.314767
+18,18,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,6327d62f-1afa-492f-a1d7-3e8cb08169e6,+13475305034,completed,1,"user: But Washington Low Park. 
+ assistant: Hello Mahid, this is Travnr. How can I help you today? 
+ user: Everybody knows that it's not blocking the road. Hello, okay, look, can you just get me a flight from Saint Louis to DC on March seventh? Um, just like economy and um I don't really have any other preferences. 
+ assistant: Got it. I can help you with a flight f- 
+ user: I don't know why people are here. 
+ user: Yeah, go ahead. I'm not talking. That's my girl knows. 
+ user: Provide like the best care or like people expect us to be able to do more than we actually can. Hello, go ahead. Go ahead. Go ahead. 
+ assistant: I'm having a bit of trouble hearing you clearly. Could you please confirm if you need a return flight, or is this just a one-way trip on March seventh? 
+ user: No, I don't need a return flight. 
+ assistant: Understood, one-way it is. How many travelers will be going on this trip? 
+ user: It's just one traveler. 
+ assistant: Perfect. And what's your budget range for this flight? 
+ user: I don't have a budget just give me a flight. 
+ assistant: Alright, no problem. Just to summarize, I'll prepare a proposal for a one-way economy flight for one traveler from Saint Louis to DC on March seventh. Is there anything else you'd like me to know before I put this together? 
+ user: All good, thank you. 
+ assistant: You're welcome, Mahid. I'll get that travel proposal ready for you right away. Have a great day! 
+ user: Thanks, you too. 
+ assistant: Goodbye! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/6327d62f-1afa-492f-a1d7-3e8cb08169e6,"The user, Mahid, contacted the assistant to book a one-way economy flight from Saint Louis to DC on March 7th. Despite some initial background noise and distracted conversation, the assistant was able to clarify the user's needs and confirm the flight details. The user did not specify a budget and had no other preferences, so the assistant prepared a proposal for the flight. The call ended with the assistant agreeing to send the travel proposal and wishing the user a great day.","{""to"": ""+13475305034"", ""now"": ""Wednesday, February 25, 2026 10:28 PM"", ""zip"": ""10013"", ""city"": ""NEW YORK"", ""from"": ""+19134212657"", ""state"": ""NY"", ""call_id"": ""6327d62f-1afa-492f-a1d7-3e8cb08169e6"", ""country"": ""US"", ""now_utc"": ""Thursday, February 26, 2026 3:28 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""b8f2f797-b7bb-4201-ad5a-92bcaac43ed6"", ""blandCallDbId"": 18, ""callRequestId"": 18}, ""short_to"": ""3475305034"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-25T22:28:54-05:00"", ""short_from"": ""9134212657"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13475305034"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-26 03:30:35.472,2026-02-26 03:28:45.312738
+19,19,8e2c034f-8441-4355-ba6a-40e61a804cb8,0cb71cd2-103c-4d28-b942-bd375579d84d,+13475305034,completed,0,"user: Bye. 
+ user: Oh, thank you.  
+ assistant: Goodbye, have a wonderful day. 
+ agent-action: Ended call 
+ user: Oh, thank you. 
+ ",,https://api.bland.ai/v1/recordings/0cb71cd2-103c-4d28-b942-bd375579d84d,Not enough information to generate summary.,"{""to"": ""+13475305034"", ""now"": ""Wednesday, February 25, 2026 10:39 PM"", ""zip"": ""10013"", ""city"": ""NEW YORK"", ""from"": ""+13343784825"", ""state"": ""NY"", ""call_id"": ""0cb71cd2-103c-4d28-b942-bd375579d84d"", ""country"": ""US"", ""now_utc"": ""Thursday, February 26, 2026 3:39 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 19, ""callRequestId"": 19}, ""short_to"": ""3475305034"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-25T22:39:43-05:00"", ""short_from"": ""3343784825"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13475305034"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-26 03:40:00.986,2026-02-26 03:39:34.666004
+21,21,8e2c034f-8441-4355-ba6a-40e61a804cb8,b316b11c-250e-4861-a745-dd5a35f71d3a,+13475305034,queued,,,,,,,,,,2026-02-26 03:40:43.533348
+20,20,8e2c034f-8441-4355-ba6a-40e61a804cb8,2e452a02-62a1-4bfe-9ae0-ffc38e2718a2,+13475305034,completed,0,"user: Hello? 
+ assistant: Hello Mahid, this is Travnr. How can I help you today? 
+ user: I need a flight from St. Louis to D.C. on March 7th. Economy, one way, no other preferences for one person. 
+ user: Bye. 
+ assistant: Goodbye, Mahid. Have a great day. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/2e452a02-62a1-4bfe-9ae0-ffc38e2718a2,"The caller, Mahid, inquired about booking a one-way economy flight from St. Louis to D.C. on March 7th for one person, but ended the call abruptly without receiving any further assistance or booking confirmation.","{""to"": ""+13475305034"", ""now"": ""Wednesday, February 25, 2026 10:40 PM"", ""zip"": ""10013"", ""city"": ""NEW YORK"", ""from"": ""+16513601778"", ""state"": ""NY"", ""call_id"": ""2e452a02-62a1-4bfe-9ae0-ffc38e2718a2"", ""country"": ""US"", ""now_utc"": ""Thursday, February 26, 2026 3:40 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 20, ""callRequestId"": 20}, ""short_to"": ""3475305034"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-25T22:40:11-05:00"", ""short_from"": ""6513601778"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13475305034"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-26 03:40:46.121,2026-02-26 03:40:01.288845
+22,22,8e2c034f-8441-4355-ba6a-40e61a804cb8,8d8db12e-2801-4a2d-83fe-64b8bb8f7bdf,+13475305034,queued,,,,,,,,,,2026-02-26 03:41:29.815394
+23,23,8e2c034f-8441-4355-ba6a-40e61a804cb8,ce924dc5-3f30-458e-92c3-4dcce00b79c8,+13475305034,queued,,,,,,,,,,2026-02-26 03:42:25.705317
+24,24,8e2c034f-8441-4355-ba6a-40e61a804cb8,6eadc8a9-663a-49a5-ae0b-82522ae66cfb,+13172675624,completed,1,"user: Hello. 
+ assistant: Hello Mahid, this is Travnr. How can I help you today? 
+ user: I need a one way flight for one person from St. Louis to DC, no budget, uh, economy and, um, no other preferences. 
+ assistant: Understood. You need a one way economy flight for one person from St. Louis to DC. What are your travel dates? 
+ user: Ya, continue. 
+ assistant: Could you please provide your departure date? 
+ user: Probably. 
+ user: March 7th. 
+ assistant: Great, March seventh. Just to confirm, you're looking for a one way economy flight for one person from St. Louis to DC departing March seventh. Is that correct? 
+ user: Yes. 
+ assistant: Perfect. I'll prepare a personalized travel proposal for your trip. Thank you for choosing Travnr, Mahid. 
+ user: Thank you. 
+ assistant: Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/6eadc8a9-663a-49a5-ae0b-82522ae66cfb,"The user, Mahid, contacted Travnr to book a one-way economy flight from St. Louis to DC for one person, with no budget constraints. The user specified March 7th as the departure date and confirmed the details with the assistant. The assistant then agreed to prepare a personalized travel proposal for the trip, marking the end of the call.","{""to"": ""+13172675624"", ""now"": ""Wednesday, February 25, 2026 10:43 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14722468646"", ""state"": ""IN"", ""call_id"": ""6eadc8a9-663a-49a5-ae0b-82522ae66cfb"", ""country"": ""US"", ""now_utc"": ""Thursday, February 26, 2026 3:43 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 24, ""callRequestId"": 24}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-02-25T22:43:44-05:00"", ""short_from"": ""4722468646"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-26 03:44:53.48,2026-02-26 03:43:28.592346
+25,25,41121918-8e3d-48a4-9100-0c2beefed9c1,d5588b39-22b3-4ef8-8dbd-03cb863d3ba4,+12019188083,completed,1,"user: Hello? 
+ assistant: Hello Almurtada, this is Travnr. How can I help you today? 
+ user: I'm looking for a flight from Saint Louis, Missouri to Wa to Washington D C. 
+ assistant: Great, I can help you w- 
+ user: March 7th. 
+ assistant: Got it, March seventh. And what date would you like to return? 
+ user: This is the one way. 
+ assistant: Understood, it's a one way trip. How many travelers will be going? 
+ user: One traveler. 
+ assistant: Perfect. And what cabin class would you prefer? Economy, premium economy, business, or first class? 
+ user: Uh, economy and I don't have any other preferences. 
+ assistant: Got it, economy class. What is your budget range for this trip? 
+ user: Uh I'd like to get it for under two hundred and fifty dollars. 
+ assistant: Under two hundred and fifty dollars. Let me summarize the details for you. You're looking for a one way flight for one traveler from Saint Louis, Missouri to Washington D C on March seventh in economy class with a budget under two hundred and fifty dollars. Is that correct? 
+ user: Yes. 
+ assistant: Excellent. I'll prepare a personalized travel proposal for you based on these details. Thank you for choosing Travnr, have a wonderful day. 
+ user: You too, bye. 
+ assistant: Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/d5588b39-22b3-4ef8-8dbd-03cb863d3ba4,"The user, Almurtada, contacted Travnr to inquire about a one-way flight from Saint Louis, Missouri to Washington D.C. on March 7th. The user specified a preference for economy class and a budget of under $250. The assistant confirmed the details and agreed to prepare a personalized travel proposal based on the user's requirements. The call ended with the assistant thanking the user for choosing Travnr.","{""to"": ""+12019188083"", ""now"": ""Thursday, February 26, 2026 12:13 AM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+19413701613"", ""state"": ""NJ"", ""call_id"": ""d5588b39-22b3-4ef8-8dbd-03cb863d3ba4"", ""country"": ""US"", ""now_utc"": ""Thursday, February 26, 2026 5:13 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""41121918-8e3d-48a4-9100-0c2beefed9c1"", ""blandCallDbId"": 25, ""callRequestId"": 25}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-26T00:13:48-05:00"", ""short_from"": ""9413701613"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-26 05:15:19.536,2026-02-26 05:13:36.92476
+26,26,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,22c9081d-fac3-406e-9d3f-4f9197f8eddc,+13475305034,queued,,,,,,,,,,2026-02-26 05:22:15.5366
+27,27,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,6c73fdb6-7e2b-49b4-8d9b-90b66ea380c6,+13172675624,completed,1,"user: Hello. 
+ assistant: Hello Mahid, this is Travnr. How can I help you today? 
+ user: How are you doing?  
+ user: I would like to book a flight. 
+ assistant: Wonder- 
+ user: From 
+ assistant: Wonderful. Whe- 
+ user: Chicago to Memphis, Tennessee. 
+ assistant: Got it. What are your travel dates? 
+ user: My travel dates are March seventh. 
+ assistant: And what is your return date? 
+ user: And returning on March 19th. 
+ assistant: How many travelers will be going? 
+ user: One traveler will be going. 
+ assistant: What is your cabin class preference? 
+ user: No preference. Ah, economy, economy. 
+ assistant: Understood. What is your budget range for this trip? 
+ user: No budget, just the most affordable. 
+ assistant: Do you have any seat preferences or airline preferences? 
+ user: No seat preferences or airline preferences. 
+ assistant: Perfect. Let me summarize your trip details. You're flying from Chicago to Memphis, departing March seventh and returning March nineteenth, for one traveler in economy class, looking- 
+ user: Ops. 
+ assistant: I'm sorry, 
+ user: Ya. 
+ assistant: I'm sorry, did you need to make a change? 
+ user: No. 
+ assistant: Okay. As I was saying, you're looking for the most affordable option with no specific airline or seat preferences. I'll prepare a personalized travel proposal for you now. Thank you for choosing Travnr, Mahid. 
+ user: Thank you. 
+ assistant: You're welcome. Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/6c73fdb6-7e2b-49b4-8d9b-90b66ea380c6,"The user, Mahid, contacted Travnr to book a flight from Chicago to Memphis, Tennessee, with travel dates of March 7th to March 19th. Mahid is a solo traveler with no preference for cabin class, initially, but then specified economy class, and has no specific airline or seat preferences. The primary goal is to find the most affordable option. The assistant gathered all necessary information and offered to prepare a personalized travel proposal before ending the call.","{""to"": ""+13172675624"", ""now"": ""Thursday, February 26, 2026 12:24 AM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+15078244985"", ""state"": ""IN"", ""call_id"": ""6c73fdb6-7e2b-49b4-8d9b-90b66ea380c6"", ""country"": ""US"", ""now_utc"": ""Thursday, February 26, 2026 5:24 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""b8f2f797-b7bb-4201-ad5a-92bcaac43ed6"", ""blandCallDbId"": 27, ""callRequestId"": 27}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-02-26T00:24:27-05:00"", ""short_from"": ""5078244985"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-26 05:26:12.566,2026-02-26 05:24:15.472659
+28,28,41121918-8e3d-48a4-9100-0c2beefed9c1,01c9e62b-c167-4755-b5be-addd42bc5b6b,+12019188083,completed,0,"user: Hello. 
+ assistant: Hello Almurtada, thank you for calling Travnr. How can I help you with your travel plans today? 
+ user: I'm flying from Chicago to DC 
+ assistant: Great, Chicago to- 
+ user: From february twenty eighth. 
+ assistant: Got it, departing F- 
+ user: To march ninth. 
+ assistant: Understood, February twenty eighth to March ninth. How many travelers will be going on this trip? 
+ user: One traveler, max budget of $500, no preferences and economy. 
+ assistant: Perfect. So to summarize, you're traveling from Chicago to DC, departing February twenty eighth and returning March ninth, for one traveler in economy class with a budget of five hundred dollars. I'll prepare a personalized travel proposal for you now. 
+ user: All right, thank you. 
+ assistant: You're welcome, Almurtada. Have a wonderful day and safe travels! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/01c9e62b-c167-4755-b5be-addd42bc5b6b,"The caller, Almurtada, contacted Travnr to inquire about travel plans from Chicago to DC, from February 28th to March 9th. The trip is for one traveler, with a maximum budget of $500, and the preferred class is economy. The assistant gathered the necessary information and offered to prepare a personalized travel proposal before ending the call.","{""to"": ""+12019188083"", ""now"": ""Thursday, February 26, 2026 12:50 AM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+19852431639"", ""state"": ""NJ"", ""call_id"": ""01c9e62b-c167-4755-b5be-addd42bc5b6b"", ""country"": ""US"", ""now_utc"": ""Thursday, February 26, 2026 5:50 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""41121918-8e3d-48a4-9100-0c2beefed9c1"", ""blandCallDbId"": 28, ""callRequestId"": 28}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-26T00:50:45-05:00"", ""short_from"": ""9852431639"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-26 05:51:48.999,2026-02-26 05:50:35.574731
+29,29,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,e1132128-75dd-42d9-886a-d88a9aa89fed,+13172675624,completed,1,"user: Hello.  
+ assistant: Hello Mahid, this is Travnr. How can I help you with your travel plans today? 
+ user: Okay, quite simply, I would just like a flight that is one way from Saint Louis to Washington, DC. I want economy. I don't have any other preferences. I don't have a budget and I just want one ticket. 
+ assistant: Got it. One way flight from Saint Louis to Washington, DC in economy class for one traveler. What date would you like to depart? 
+ user: Much. 
+ assistant: I'm sorry, I didn't quite catch that. Could you please repeat the departure date? 
+ user: March 7th. 
+ assistant: March seventh. Just to confirm, you want a one way flight from Saint Louis to Washington, DC on March seventh, in economy class for one traveler. Is that correct? 
+ user: Yes. 
+ assistant: Perfect. I'll prepare a personalized travel proposal for your one way flight from Saint Louis to Washington, DC on March seventh in economy class for one traveler. Thank you for choosing Travnr, have a wonderful day. 
+ user: Thank you. 
+ assistant: You're welcome. Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/e1132128-75dd-42d9-886a-d88a9aa89fed,"The user, Mahid, contacted Travnr to book a one-way economy flight from Saint Louis to Washington, DC for one traveler. The departure date was confirmed as March 7th, and the assistant prepared a personalized travel proposal to meet Mahid's requirements. The call ended with the assistant thanking Mahid for choosing Travnr and wishing them a wonderful day.","{""to"": ""+13172675624"", ""now"": ""Thursday, February 26, 2026 12:53 AM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+19133496892"", ""state"": ""IN"", ""call_id"": ""e1132128-75dd-42d9-886a-d88a9aa89fed"", ""country"": ""US"", ""now_utc"": ""Thursday, February 26, 2026 5:53 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""b8f2f797-b7bb-4201-ad5a-92bcaac43ed6"", ""blandCallDbId"": 29, ""callRequestId"": 29}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-02-26T00:53:18-05:00"", ""short_from"": ""9133496892"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-26 05:54:36.147,2026-02-26 05:53:03.104587
+30,30,41121918-8e3d-48a4-9100-0c2beefed9c1,2f0235a5-4722-40e5-965f-bf253b382f90,+12019188083,completed,1,"user: Hello. 
+ assistant: Hello Almurtada, thank you for calling Travnr. How can I help you with your travel plans today? 
+ user: I'm looking for a flight from St. Louis, Missouri to Los Angeles, California. 
+ assistant: Wonderful. Which airport in Los Angeles would you prefer to fly into? 
+ user: LAX. 
+ assistant: Great, LAX in Los Angeles. And which airport will you be departing from in St. Louis? 
+ user: The main airport. 
+ assistant: Would that be Lambert International, STL? 
+ user: Yeah. 
+ assistant: Perfect. What are your travel dates? 
+ user: I'm looking to leave March 2nd and come back March 9th. 
+ assistant: Excellent. How many travelers will be going on this trip? 
+ user: One traveler. 
+ assistant: Got it. What is your preferred cabin class? 
+ user: Uh economy 
+ assistant: Understood. What is your budget range for this trip? 
+ user: Um probably under five hundred dollars. 
+ assistant: Okay. Do you have any seat preferences or airline preferences? 
+ user: No, no preferences. 
+ assistant: Perfect. Let me summarize your travel request. You're looking for a flight for one traveler from St. Louis Lambert International, STL to Los Angeles International, LAX. Departing March second and returning March ninth in economy class with a budget under five hundred dollars. I'll prepare a personalized travel proposal for you now. 
+ user: All right. Thank you. 
+ assistant: You're welcome, Almurtada. We'll be in touch soon with your travel proposal. Have a wonderful day! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/2f0235a5-4722-40e5-965f-bf253b382f90,"The user, Almurtada, contacted Travnr to inquire about a flight from St. Louis, Missouri (STL) to Los Angeles, California (LAX) for a solo trip from March 2nd to March 9th. They preferred economy class and had a budget of under $500, with no specific seat or airline preferences. The assistant gathered all necessary information and offered to prepare a personalized travel proposal, which will be sent to the user shortly.","{""to"": ""+12019188083"", ""now"": ""Saturday, February 28, 2026 3:01 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+16292191940"", ""state"": ""NJ"", ""call_id"": ""2f0235a5-4722-40e5-965f-bf253b382f90"", ""country"": ""US"", ""now_utc"": ""Saturday, February 28, 2026 8:01 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""41121918-8e3d-48a4-9100-0c2beefed9c1"", ""blandCallDbId"": 30, ""callRequestId"": 30}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-28T15:01:25-05:00"", ""short_from"": ""6292191940"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-28 20:03:12.359,2026-02-28 20:01:13.39876
+31,31,41121918-8e3d-48a4-9100-0c2beefed9c1,a558340a-c81c-498a-8fa3-06bdfcb27879,+12019188083,completed,1,"user: Hello. 
+ assistant: Hello Almurtada, thank you for calling Travnr. How can I help you with your travel plans today? 
+ user: I'm looking to foc to book a flight from Dallas, Texas to 
+ user: New Jersey. 
+ assistant: Great, New Jersey. Which airport would you prefer to fly into? For example, Newark Liberty International, or perhaps another airport in the area? 
+ user: Newark or JFK? 
+ assistant: Newark is actually in New Jersey, while JFK is in New York. 
+ user: Newark. 
+ assistant: Perfect, Newark Liberty International. Now, which airport in Dallas will you be departing from? Dallas Fort Worth International or Love Field? 
+ user: Uh, Dallas Fort Worth International. 
+ assistant: Excellent. What are your travel dates? When would you like to depart and when would you like to return? 
+ user: Depart march second and come back march tenth. 
+ assistant: Got it, departing March second and returning March tenth. How many travelers will be going on this trip? 
+ user: One traveler 
+ assistant: Understood, just one traveler. What is your cabin class preference? Economy, premium economy, business, or fi- 
+ user: Uh economy and no other preferences for this flight at all. 
+ assistant: Great, economy it is. And what is your budget range for this trip? 
+ user: $500. 
+ assistant: Understood, five hundred dollars. Let me summarize your travel plans. You'll be flying from Dallas Fort Worth International, DFW, to Newark Liberty International, EWR. Departing March second, returning March tenth, for one traveler in economy class, with a budget of five hundred dollars. I'll prepare a personalized travel proposal for you now. Thank you for choosing Travnr! 
+ user: Thank you. 
+ assistant: You're very welcome. Have a wonderful day, Almurtada! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/a558340a-c81c-498a-8fa3-06bdfcb27879,"The user, Almurtada, contacted Travnr to book a flight from Dallas, Texas to New Jersey. The user specified Newark Liberty International as their preferred destination airport and Dallas Fort Worth International as their departure airport. They are traveling solo in economy class from March 2nd to March 10th, with a budget of $500. The assistant took down the user's travel plans and offered to prepare a personalized travel proposal.","{""to"": ""+12019188083"", ""now"": ""Saturday, February 28, 2026 3:20 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+15155752137"", ""state"": ""NJ"", ""call_id"": ""a558340a-c81c-498a-8fa3-06bdfcb27879"", ""country"": ""US"", ""now_utc"": ""Saturday, February 28, 2026 8:20 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""41121918-8e3d-48a4-9100-0c2beefed9c1"", ""blandCallDbId"": 31, ""callRequestId"": 31}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-02-28T15:20:27-05:00"", ""short_from"": ""5155752137"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-02-28 20:22:26.234,2026-02-28 20:20:18.717075
+32,32,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,a104df2f-19d4-4112-9dd6-9f93f0c2d182,+13172675624,completed,2,"user: Hello. 
+ assistant: Hello Mahid, this is Travnr. How can I help you with your travel plans today? 
+ user: Like to get a flight from St. Louis to Miami. 
+ assistant: Great choice. Which airport in St. Louis would you like to depart from? 
+ user: Saint Louis, the the airport, which the airport in San Luis called 
+ assistant: Are you referring to Lambert International, also known as STL? 
+ user: Yes. 
+ assistant: Perfect. An- 
+ user: Yes. 
+ assistant: And which airport in Miami would you like to fly into? 
+ user: Miami 
+ assistant: Miami has a few airports. Are you looking to fly into Miami International, also known as MIA? 
+ user: Yeah. 
+ assistant: Excellent. What are your travel dates? 
+ user: Um travel dates, let's do the the second of April and then coming back on the seventh of April. 
+ assistant: Got it. Departing April second and returning April seventh. How many travelers will be going? 
+ user: One. 
+ assistant: Understood. What is your cabin class preference? 
+ user: Just economy. 
+ user: economy? Yeah. <Block interruptions enabled. This message was ignored> 
+ assistant: Okay. Wha- 
+ user: Yeah, it is. 
+ assistant: What is your budget range for this trip? 
+ user: Nobody 
+ assistant: Do you have a budget range in mind for the flights? 
+ user: No, just uh uh just affordable option. 
+ assistant: Understood. Do you have any seat preferences or airline preferences? 
+ user: No hay explica no 
+ assistant: Alright. Let me summarize your travel details. You're flying from Saint Louis Lambert International, STL, to Miami International, MIA. Departing April second, returning Apri- 
+ user: You don't have the 
+ assistant: I'm sorry, I didn't catch that. 
+ user: Mm-hmm. 
+ assistant: Let me summarize your travel details. You're flying from Saint Louis Lambert Inter- 
+ user: Okay, yes, yes, just halas, that's it, that's it, just book that. 
+ assistant: Perfect. I'll prepare a personalized travel proposal for your trip from Saint Louis Lambert International, STL, to Miami Inte- 
+ user: Okay, thank you. 
+ assistant: You're welcome, Mahid. Have a wonderful day! 
+ agent-action: Ended call 
+ user: But you know, it's a real thing. 
+ ",,https://api.bland.ai/v1/recordings/a104df2f-19d4-4112-9dd6-9f93f0c2d182,"The user, Mahid, contacted Travnr to book a flight from St. Louis to Miami. The travel details were specified as departing from Lambert International Airport (STL) on April 2nd and returning to Miami International Airport (MIA) on April 7th. Mahid preferred an economy class ticket for one traveler, with no specific airline or seat preferences, and was looking for an affordable option. The assistant prepared a personalized travel proposal based on these details, and the call ended with the booking presumably in progress.","{""to"": ""+13172675624"", ""now"": ""Sunday, March 1, 2026 1:15 AM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14845596481"", ""state"": ""IN"", ""call_id"": ""a104df2f-19d4-4112-9dd6-9f93f0c2d182"", ""country"": ""US"", ""now_utc"": ""Sunday, March 1, 2026 6:15 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""b8f2f797-b7bb-4201-ad5a-92bcaac43ed6"", ""blandCallDbId"": 32, ""callRequestId"": 32}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-03-01T01:15:09-05:00"", ""short_from"": ""4845596481"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-01 06:17:21.027,2026-03-01 06:14:50.873369
+33,33,41121918-8e3d-48a4-9100-0c2beefed9c1,e299538e-fa15-4675-81b7-af3a03b5ab11,+12019188083,completed,1,"user: Hello? 
+ assistant: Hello Almurtada, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm looking to book a flight from Newark, New Jersey to Miami. 
+ assistant: Wonderful. For your departure from Newark, would you be flying out of Newark Liberty International Airport, EWR? 
+ user: Livers. 
+ assistant: I'm sorry, I didn't quite catch that. Did you say you'd like to fly out of Ne- 
+ user: Yeah. 
+ assistant: Great. And for your destination in Miami, which airport would you prefer? Miami International Airport, MIA, or Fort Lauderdale-Hollywood International Airport, FLL? 
+ user: MIA. 
+ assistant: Perfect. What are your travel dates? I'll need your departure date and your return date. 
+ user: I'm leaving March fourth and I'm coming back March twenty first. 
+ assistant: Excellent. How many travelers will be going on this trip? 
+ user: Uh one traveler in economy with no other preferences. 
+ assistant: Understood. What is your budget range for this trip? 
+ user: Six hundred fifty dollars. 
+ assistant: Thank you. Just to summarize, you're looking for a flight for one traveler in economy class, departing from Newark Liberty International Airport, EWR, to Miami International Airport, MIA, leaving March fourth and returning March twenty first, with a budget of six hundred fifty dollars. Is that correct? 
+ user: Yes. 
+ assistant: Wonderful. I'll prepare a personalized travel proposal for you based on these details. Thank you for choosing Travnr, Almurtada. Have a great day! 
+ user: Thank you. You too. Bye. 
+ assistant: Goodbye! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/e299538e-fa15-4675-81b7-af3a03b5ab11,"The user, Almurtada, contacted Travnr to book a flight from Newark, New Jersey to Miami. The user specified a departure from Newark Liberty International Airport (EWR) and arrival at Miami International Airport (MIA), with travel dates of March 4th to March 21st. The user is traveling alone in economy class and has a budget of $650. The assistant confirmed the details and offered to prepare a personalized travel proposal based on the user's preferences.","{""to"": ""+12019188083"", ""now"": ""Sunday, March 1, 2026 12:31 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+18312727301"", ""state"": ""NJ"", ""call_id"": ""e299538e-fa15-4675-81b7-af3a03b5ab11"", ""country"": ""US"", ""now_utc"": ""Sunday, March 1, 2026 5:31 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""41121918-8e3d-48a4-9100-0c2beefed9c1"", ""blandCallDbId"": 33, ""callRequestId"": 33}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-03-01T12:31:42-05:00"", ""short_from"": ""8312727301"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-01 17:33:43.203,2026-03-01 17:31:34.190892
+34,34,11ff8e22-02c8-4549-b46d-5203c8c1c918,33bab88c-66f2-412c-b69d-662a28b675f3,+12019188083,completed,1,"user: Hello? 
+ assistant: Hello Al Abd, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm looking to book a flight from New York to Cairo on march third to March twenty-first. 
+ assistant: I'd be happy to help you with that. Which airport in New York would you like to depart from? 
+ user: Yes, sir. 
+ assistant: I need to know which specific airport in New York you prefer. Would you like to fly out of JFK, LaGuardia, or Newark? 
+ user: J.R.K. 
+ assistant: Great, JFK it is. And for your destination in Cairo, which airport would you like to fly into? 
+ user: Cairo interviewed. 
+ user: Airport. 
+ assistant: I understand you're going to Cairo International Airport. How many travelers will be going on this trip? 
+ user: One 
+ assistant: And what is your preferred cabin class for this flight? 
+ user: Economy. 
+ assistant: What is your budget range for this trip? 
+ user: $2,000. 
+ assistant: Do you have any seat preferences or airline preferences for this flight? 
+ user: No. 
+ assistant: Perfect. Let me summarize your travel details. You're flying from JFK, John F. Kennedy International Airport in New York to Cairo International Airport in Cairo. Your departure date is March third, and your return date is March twenty-first. You're traveling solo in economy class with a budget of two thousand dollars, and you have no specific airline or seat preferences. I'll prepare a personalized travel proposal for you now. Is there anything else you'd like to add? 
+ user: No, that'll be all, thank you. 
+ assistant: You're very welcome, Al Abd. I'll get started on your travel proposal right away. Have a wonderful day and thank you for choosing Travnr. Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/33bab88c-66f2-412c-b69d-662a28b675f3,"The user, Al Abd, contacted Travnr to book a flight from New York to Cairo, departing on March 3rd and returning on March 21st. The user preferred to fly out of JFK Airport and into Cairo International Airport, solo, in economy class, with a budget of $2,000 and no specific airline or seat preferences. The assistant collected all necessary information and will prepare a personalized travel proposal for the user.","{""to"": ""+12019188083"", ""now"": ""Sunday, March 1, 2026 11:54 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+14783957557"", ""state"": ""NJ"", ""call_id"": ""33bab88c-66f2-412c-b69d-662a28b675f3"", ""country"": ""US"", ""now_utc"": ""Monday, March 2, 2026 4:54 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""11ff8e22-02c8-4549-b46d-5203c8c1c918"", ""blandCallDbId"": 34, ""callRequestId"": 34}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-03-01T23:54:18-05:00"", ""short_from"": ""4783957557"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-02 04:56:07.095,2026-03-02 04:54:09.299799
+35,35,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,c848ff3e-a30e-48dd-956f-9fe97b25881d,+13475305034,queued,,,,,,,,,,2026-03-03 01:39:10.161068
+36,36,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,5b9c8fc2-53cb-455a-8a99-ba987200426a,+13475305034,queued,,,,,,,,,,2026-03-03 04:49:07.741926
+38,38,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,ad7d141b-a718-48af-add2-7adc5f06ab97,+13142675624,completed,0,"user: Your call has been forwarded to an automated voice messaging system. 
+ assistant: Goodbye. 
+ agent-action: Ended call 
+ user: Three, one 
+ ",,https://api.bland.ai/v1/recordings/ad7d141b-a718-48af-add2-7adc5f06ab97,Not enough information to generate summary.,"{""to"": ""+13142675624"", ""now"": ""Tuesday, March 3, 2026 2:25 AM"", ""zip"": ""63135"", ""city"": ""SAINT LOUIS"", ""from"": ""+14474272312"", ""state"": ""MO"", ""call_id"": ""ad7d141b-a718-48af-add2-7adc5f06ab97"", ""country"": ""US"", ""now_utc"": ""Tuesday, March 3, 2026 8:25 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""b8f2f797-b7bb-4201-ad5a-92bcaac43ed6"", ""blandCallDbId"": 38, ""callRequestId"": 38}, ""short_to"": ""3142675624"", ""timezone"": ""America/Chicago"", ""timestamp"": ""2026-03-03T02:25:04-06:00"", ""short_from"": ""4474272312"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13142675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-03 08:26:17.339,2026-03-03 08:24:25.480345
+37,37,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,4b0c17d0-5f49-4303-8be8-853bce04f8d7,+13147497369,completed,2,"user: Oh 
+ assistant: Hello Mahid, this is Travnr. How can I help you with your travel plans today? 
+ user: As-salamu alaykum.  
+ user: Hello, so I would like to book a flight going from Sai St. Louis to Orlando, leaving from St. Louis on let's sa I twenty-seventh and coming back I Um, from Orlando on On April 7th. And I would like economy. I don't have a budget. I don't have a preference for airline. I'd like it to be preferably in the morning and direct flight. 
+ user: flight. One passenger. 
+ user: passenger. <Block interruptions enabled. This message was ignored> 
+ assistant: Thanks for that. Just to confirm the airports, for St. Louis, are you looking to depart from Lambert International, STL? And for Orlando, wo- 
+ user: Yes. 
+ assistant: And for Orlando, would you prefer Orlando International, MCO? 
+ user: Orlando International Yup and Lambert. 
+ assistant: Perfect. So to summarize, you're looking for a flight for one passenger, departin- 
+ user: Yeah, I think. 
+ user: Okay. 
+ assistant: Great. So to summarize, 
+ user: Yes. 
+ assistant: So to summarize, 
+ user: Yeah, she's only been gay in the last ten. 
+ assistant: So to summarize, 
+ user: Go ahead. 
+ assistant: So to summarize, you're looking for a flight for one passenger, departing from St. Louis L- 
+ user: Oh yeah. 
+ assistant: So to summarize, you're looking for a- 
+ user: They're gonna add like... 
+ assistant: So to summarize, you're looking for a flight for one passenger, departing from St. Louis Lambert International, STL, to Orlando International, MCO. Departing March twenty-seventh and returning April seventh, in economy class, with a preference for morning direct flights. Is that correct? 
+ user: That is correct. 
+ assistant: Excellent. I'll prepare a personalized travel proposal for you based on these details. Thank you for choosing Travnr, Mahid. Have a wonderful day! 
+ user: Thank you. 
+ assistant: Goodbye! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/4b0c17d0-5f49-4303-8be8-853bce04f8d7,"The user, Mahid, contacted Travnr to book a flight from St. Louis to Orlando. The desired travel dates are March 27th for departure and April 7th for return, with a preference for a morning, direct economy flight. The user has no budget constraints or airline preferences. The assistant confirmed the travel details, including the airports (St. Louis Lambert International and Orlando International), and offered to prepare a personalized travel proposal based on the provided information.","{""to"": ""+13147497369"", ""now"": ""Monday, March 2, 2026 10:50 PM"", ""zip"": ""63105"", ""city"": ""SAINT LOUIS"", ""from"": ""+17752641763"", ""state"": ""MO"", ""call_id"": ""4b0c17d0-5f49-4303-8be8-853bce04f8d7"", ""country"": ""US"", ""now_utc"": ""Tuesday, March 3, 2026 4:50 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""b8f2f797-b7bb-4201-ad5a-92bcaac43ed6"", ""blandCallDbId"": 37, ""callRequestId"": 37}, ""short_to"": ""3147497369"", ""timezone"": ""America/Chicago"", ""timestamp"": ""2026-03-02T22:50:03-06:00"", ""short_from"": ""7752641763"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13147497369"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-03 04:52:12.307,2026-03-03 04:49:51.140925
+39,39,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,310aecdd-da4d-4173-b571-238030c5e944,+13172675624,completed,2,"assistant: Hello Mahid, this is Travnr. How can I help you today? 
+ user: As salamu alaikum 
+ assistant: Wa alaikum assalaam. How can I help you with your travel plans today? 
+ user: Do you speak Arabic? 
+ assistant: I apologize, but I only speak English. However, I'd be happy to assist you with your travel plans in English if that works for you. 
+ user: Okay. So I want to go from Saint Louis to Orlando. That's going to be St. Louis Lambert Airport to the Orla I um, airport And I want to Leave on March 27 and return on April 7. That's a round trip and that is for one passenger, no budget, economy, no preference for the airline. 
+ assistant: Thank you for those details. Just to confirm, you'll be departing from St. Louis Lambert International Airport, STL, and flying into Orlando International Airport, MCO, correct? 
+ user: Yeah. 
+ assistant: Perfect. Let me summarize your travel plans to make sure everything is correct. You're traveling from St. Louis Lambert International, STL, to Orlando International, MCO. Departing March t- 
+ user: Yeah 
+ assistant: Perfect. Let me summarize your travel plans to make sure everything is correct. You're traveling from St. Louis Lambert International, STL, to Orlando International, MCO. Departing March twenty seventh, returning April seventh. One passenger in economy class with no specific airline preference. Does that all sound accurate? 
+ user: Yes. 
+ assistant: Excellent. I'll prepare a personalized travel proposal for you based on these details. Thank you for choosing Travnr, Mahid. Have a wonderful day. 
+ user: Thank you. 
+ assistant: You're welcome. Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/310aecdd-da4d-4173-b571-238030c5e944,"The user, Mahid, contacted Travnr to inquire about a round-trip flight from St. Louis Lambert International Airport (STL) to Orlando International Airport (MCO) for one passenger in economy class. The preferred travel dates are March 27th for departure and April 7th for return, with no specific airline preference or budget constraints. The assistant confirmed the details and offered to prepare a personalized travel proposal based on the provided information.","{""to"": ""+13172675624"", ""now"": ""Tuesday, March 3, 2026 3:25 AM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+18508091519"", ""state"": ""IN"", ""call_id"": ""310aecdd-da4d-4173-b571-238030c5e944"", ""country"": ""US"", ""now_utc"": ""Tuesday, March 3, 2026 8:25 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""b8f2f797-b7bb-4201-ad5a-92bcaac43ed6"", ""blandCallDbId"": 39, ""callRequestId"": 39}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-03-03T03:25:21-05:00"", ""short_from"": ""8508091519"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-03 08:27:28.397,2026-03-03 08:25:10.360721
+40,40,41121918-8e3d-48a4-9100-0c2beefed9c1,a5342369-6d9c-4cd8-9f5a-a2ae3652af94,+12019188083,completed,1,"user: Hello? 
+ assistant: Hello Almurtada, this is Travnr. How can I help you with your travel plans today? 
+ user: Find me a one-way flight from New York to Miami on april seventh. 
+ assistant: I'd be happy to help you with that. Which airport in New York would you like to depart from? 
+ user: JFK. 
+ assistant: Great, JFK in New York. And which airport in Miami would you like to fly into? 
+ user: Any airport. 
+ assistant: Miami has two main airports - Miami International (MIA) and Fort Lauderdale-Hollywood (FLL). Which would you prefer? 
+ user: M.I.A. 
+ assistant: Perfect, Miami International. How many travelers will be going? 
+ user: One traveler, no preferences, max budget of three hundred dollars. 
+ assistant: Got it. What's your preferred cabin class - economy, premium economy, business, or first class? 
+ user: Economy. 
+ assistant: Excellent. Let me summarize your travel request: You're looking for a one-way flight for one traveler from JFK in New York to Miami International (MIA) on April seventh, in economy class, with a maximum budget of three hundred dollars and no specific airline or seat preferences. I'll prepare a personalized travel proposal for you now. Is there anything else you'd like to add? 
+ user: That should be all. Thank you. 
+ assistant: You're welcome, Almurtada. I'll work on your travel proposal and get back to you shortly. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/a5342369-6d9c-4cd8-9f5a-a2ae3652af94,"The user, Almurtada, contacted Travnr to book a one-way flight from New York to Miami on April 7th. The user specified JFK as the departure airport and Miami International (MIA) as the arrival airport, with a maximum budget of $300 and a preference for economy class. The assistant confirmed the travel request and offered to prepare a personalized travel proposal, which will be provided to the user shortly.","{""to"": ""+12019188083"", ""now"": ""Wednesday, March 4, 2026 11:42 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+12727882392"", ""state"": ""NJ"", ""call_id"": ""a5342369-6d9c-4cd8-9f5a-a2ae3652af94"", ""country"": ""US"", ""now_utc"": ""Thursday, March 5, 2026 4:42 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""41121918-8e3d-48a4-9100-0c2beefed9c1"", ""blandCallDbId"": 40, ""callRequestId"": 40}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-03-04T23:42:05-05:00"", ""short_from"": ""2727882392"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-05 04:43:49.921,2026-03-05 04:41:56.401257
+41,41,41121918-8e3d-48a4-9100-0c2beefed9c1,a656e414-af47-4b0a-9011-618167ff3aa0,+12019188083,completed,1,"user: Hello? 
+ assistant: Hello Almurtada, thank you for calling Travnr. How can I help you with your travel plans today? 
+ user: Please find me a flight from St. Louis to New York City one way. 
+ assistant: I'd be happy to help you find a one-way flight from St. Louis to New York City. Which airport in New York would you prefer to fly into - JFK, LaGuardia, or Newark? 
+ user: JFK. 
+ assistant: Great, JFK it is. And which airport will you be departing from in St. Louis? 
+ user: The International Air Force. 
+ assistant: Do you mean Lambert-St. Louis International Airport, also known as STL? 
+ user: Yes. 
+ assistant: Perfect. What date would you like to depart? 
+ user: I would like to depart April 6th. 
+ assistant: Got it, April sixth. How many travelers will be flying? 
+ user: One traveler, no preferences, and the budget of $350. 
+ assistant: Understood. What is your preferred cabin class - economy, premium e- 
+ user: You got it. 
+ assistant: Just to co- 
+ user: Economy. 
+ assistant: Thank you. Let me summarize your travel request: You're looking for a one-way economy flight for one traveler, departing April sixth from Lambert-St. Louis International Airport, STL, to John F. Kennedy International Airport, JFK, with a budget of three hundred and fifty dollars. I'll prepare a personalized travel proposal for you now. 
+ user: All right, perfect. Thank you so much. 
+ assistant: You're very welcome, Almurtada. We'll be in touch shortly with your travel proposal. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/a656e414-af47-4b0a-9011-618167ff3aa0,"The user, Almurtada, contacted Travnr to book a one-way flight from St. Louis to New York City. The preferred flight details are: departing from Lambert-St. Louis International Airport (STL) on April 6th, arriving at John F. Kennedy International Airport (JFK), with a budget of $350 for an economy ticket for one traveler. The assistant has taken the user's request and will prepare a personalized travel proposal to be sent shortly.","{""to"": ""+12019188083"", ""now"": ""Thursday, March 5, 2026 1:35 AM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+12694304241"", ""state"": ""NJ"", ""call_id"": ""a656e414-af47-4b0a-9011-618167ff3aa0"", ""country"": ""US"", ""now_utc"": ""Thursday, March 5, 2026 6:35 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""41121918-8e3d-48a4-9100-0c2beefed9c1"", ""blandCallDbId"": 41, ""callRequestId"": 41}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-03-05T01:35:00-05:00"", ""short_from"": ""2694304241"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-05 06:36:48.483,2026-03-05 06:34:49.483566
+42,42,11ff8e22-02c8-4549-b46d-5203c8c1c918,4210be9e-3738-4ea0-b6e8-81277d048875,+12019188083,completed,1,"user: Hello? 
+ assistant: Hello Al Abd, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm booking a flight from 
+ assistant: Great, I'd be happy t- 
+ user: New York to Miami one way on March 11. 
+ assistant: Got it. Which airport in New York would you like to depart from? JFK, LaGuardia, or Newark? 
+ user: Newark. 
+ assistant: And which airport in Miami would you like to fly into? 
+ user: MIA. 
+ assistant: Perfect. How many travelers will be going? 
+ user: One trouble run. 
+ assistant: Got it. What's your cabin class preference? Economy, premium economy, business, or first class? 
+ user: Economy. 
+ assistant: Understood. What's your budget range for this trip? 
+ user: $400. 
+ assistant: Do you have any seat preferences or airline preferences? 
+ user: No. 
+ assistant: Great. Let me summarize your travel details. You're booking a one-way flight for one traveler from Newark Liberty International, EWR to Miami International, MIA on March eleventh in economy class with a budget of four hundred dollars. I'll prepare a personalized travel proposal for you now. Is there anything else you'd like to add? 
+ user: That'll be all. Thank you so much. 
+ assistant: You're welcome, Al Abd. I'll get that proposal ready for you right away. Have a wonderful day and safe travels! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/4210be9e-3738-4ea0-b6e8-81277d048875,"The user, Al Abd, contacted Travnr to book a one-way flight from Newark (EWR) to Miami (MIA) on March 11th. The user specified economy class and a budget of $400 for one traveler, with no seat or airline preferences. The assistant confirmed the details and offered to prepare a personalized travel proposal, which the user accepted before ending the call.","{""to"": ""+12019188083"", ""now"": ""Saturday, March 7, 2026 4:42 PM"", ""zip"": ""07304"", ""city"": ""JERSEY CITY"", ""from"": ""+16562351784"", ""state"": ""NJ"", ""call_id"": ""4210be9e-3738-4ea0-b6e8-81277d048875"", ""country"": ""US"", ""now_utc"": ""Saturday, March 7, 2026 9:42 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""11ff8e22-02c8-4549-b46d-5203c8c1c918"", ""blandCallDbId"": 42, ""callRequestId"": 42}, ""short_to"": ""2019188083"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-03-07T16:42:57-05:00"", ""short_from"": ""6562351784"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12019188083"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-07 21:44:35.357,2026-03-07 21:42:47.689839
+43,43,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,a0d3ccd5-0b16-4ccf-90ab-27e5bba99327,+13475305034,completed,2,"user: Hello. 
+ assistant: Hello Mahid, this is Travnr. How can I help you with your travel plans today? 
+ user: I want to book to go to, um, from St. Louis 
+ assistant: Great, I can help with that. 
+ user: Louis to, um— 
+ agent-action: [Waiting] 
+ user: St. Louis— from St. Louis. I want to go from St. Louis Boston? No, no, no. 
+ agent-action: [Waiting] 
+ user: St. Louis to, um, Raleigh. 
+ assistant: Got it, St. Louis to Raleigh. Which airport in St. Louis would you like to depart from? 
+ user: Lambert— 
+ agent-action: [Waiting] 
+ user: Lambert— St. Louis Lambert. 
+ assistant: Perfect, St. Louis Lambert. And which airport in Raleigh would you like to fly into? 
+ user: The main Raleigh Airport. 
+ assistant: Got it, Raleigh-Durham International. What are your travel dates? 
+ assistant: What are your travel dates? 
+ user: Um, I would like to depart on the 15th of April and, uh— the 15th of April. 
+ agent-action: [Waiting] 
+ user: 15th of April. 
+ assistant: April fifteenth. And what's your return date? 
+ user: Um, 23rd of April. 
+ assistant: April twenty-third. How many travelers will be going? 
+ user: 1. 
+ assistant: Just one traveler. What's your cabin class preference? 
+ user: Just like regular— 
+ agent-action: [Waiting] 
+ user: I said regular. 
+ assistant: Got it, economy class. What's your budget range for this trip? 
+ user: Just, um, affordable. 
+ assistant: Understood, looking for affordable options. Do you have any seat preferences or airline preferences? 
+ user: No. 
+ assistant: Perfect. Let me summarize your trip details. You're flying from St. Louis Lambert International, STL, to Raleigh-Durham International, RDU, departing April fifteenth and returning April twenty-third, for one traveler in economy class, looking for affordable options with no specific airline or seat preferences. I'll prepare a personalized travel proposal for you now. 
+ user: Okay, thank you. 
+ assistant: You're welcome, Mahid. Have a wonderful day! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/a0d3ccd5-0b16-4ccf-90ab-27e5bba99327,"The user, Mahid, contacted Travnr to book a flight from St. Louis to Raleigh. After some initial uncertainty about the destination, Mahid confirmed the travel details as follows: departing from St. Louis Lambert International Airport on April 15th and returning from Raleigh-Durham International Airport on April 23rd. The user is traveling alone in economy class and is looking for affordable options with no specific airline or seat preferences. The assistant prepared a personalized travel proposal based on these details.","{""to"": ""+13475305034"", ""now"": ""Saturday, March 14, 2026 3:35 AM"", ""zip"": ""10013"", ""city"": ""NEW YORK"", ""from"": ""+13074606296"", ""state"": ""NY"", ""call_id"": ""a0d3ccd5-0b16-4ccf-90ab-27e5bba99327"", ""country"": ""US"", ""now_utc"": ""Saturday, March 14, 2026 7:35 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""b8f2f797-b7bb-4201-ad5a-92bcaac43ed6"", ""blandCallDbId"": 43, ""callRequestId"": 43}, ""short_to"": ""3475305034"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-03-14T03:35:14-04:00"", ""short_from"": ""3074606296"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13475305034"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-14 07:38:03.227,2026-03-14 07:35:02.950031
+44,44,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,e659e8c6-7462-41a6-9050-65f79afcfb85,+13475305034,queued,,,,,,,,,,2026-03-15 00:50:52.432898
+45,45,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,9d8dd82c-aa80-40c8-a44c-126a03c51c66,+13475305034,queued,,,,,,,,,,2026-03-15 01:10:28.220778
+46,46,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,d71fe830-47f7-4b79-83d7-3fd6b41da2bd,+13475305034,completed,2,"user: Salam. 
+ user: Oh, hello?  
+ assistant: Salam Mahid Abdulkarim, this is Travnr. How can I help you today? 
+ user: I would like to book a flight to Khartoum, Sudan. 
+ assistant: Wonderful. Which airport in Khartoum would you like to fly into? 
+ user: Um, Khartoum International Airport. 
+ assistant: Got it. And where will you be departing from? 
+ user: Raleigh, North Carolina. 
+ assistant: Which airport in Raleigh would you like to fly out of? 
+ user: ardio— 
+ agent-action: [Waiting] 
+ assistant: I'm sorry, I didn't quite catch that. Which airport in Raleigh would you like to fly out of? 
+ user: Are— are the you— 
+ agent-action: [Waiting] 
+ user: Raleigh-Durham International Airport. 
+ assistant: Perfect. What are your travel dates? 
+ user: Um— 
+ user: Um, May 22nd. <Block interruptions enabled. This message was ignored> 
+ agent-action: [Waiting] 
+ user: 2026 returning— 
+ agent-action: [Waiting] 
+ user: 2026, returning, um, June 15th, 2026. 
+ assistant: And what is your departure date? 
+ user: May 22nd, 2006. 
+ assistant: Did you mean May twenty second, twenty twenty six? 
+ user: Yes. 
+ assistant: Great. How many travelers will be going? 
+ user: 2— 
+ agent-action: [Waiting] 
+ assistant: So that's two travelers? 
+ user: That's correct. 
+ assistant: What is your cabin class preference? 
+ user: — I want the, the cheaper tickets, economy. 
+ assistant: Understood. What is your budget range for the trip? 
+ user: Um, the cheapest possible. 
+ user: with, uh, reasonable connection? 
+ assistant: Noted. Let me summarize your travel details. You're flying from Raleigh-Durham International Airport, RDU, to Khartoum International Airport, departing May twenty second, twenty twenty six, and returning June fifteenth, twenty twenty six, for two travelers in economy class, looking for the lowest price with reasonable connections. Is that correct? 
+ user: Correct. 
+ assistant: Excellent. I'll prepare a personalized travel proposal for you and get back to you shortly. Thank you for choosing Travnr, Mahid. Have a wonderful day. 
+ user: Okay, bye. 
+ assistant: Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/d71fe830-47f7-4b79-83d7-3fd6b41da2bd,"The user, Mahid Abdulkarim, contacted Travnr to book a flight to Khartoum, Sudan. The user requested a flight from Raleigh-Durham International Airport (RDU) to Khartoum International Airport, departing on May 22nd, 2026, and returning on June 15th, 2026, for two travelers in economy class. The user's primary preference is to find the cheapest possible tickets with reasonable connections. The assistant confirmed the travel details and agreed to prepare a personalized travel proposal to be sent back to the user shortly.","{""to"": ""+13475305034"", ""now"": ""Saturday, March 14, 2026 9:17 PM"", ""zip"": ""10013"", ""city"": ""NEW YORK"", ""from"": ""+15513680766"", ""state"": ""NY"", ""call_id"": ""d71fe830-47f7-4b79-83d7-3fd6b41da2bd"", ""country"": ""US"", ""now_utc"": ""Sunday, March 15, 2026 1:17 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""b8f2f797-b7bb-4201-ad5a-92bcaac43ed6"", ""blandCallDbId"": 46, ""callRequestId"": 46}, ""short_to"": ""3475305034"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-03-14T21:17:35-04:00"", ""short_from"": ""5513680766"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13475305034"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-03-15 01:20:39.556,2026-03-15 01:17:15.586716
+47,47,759fd803-9a0a-47e1-b64b-5e33585e7769,,+12017803209,queued,,,,,,,,,,2026-04-01 17:27:41.903195
+48,48,b8f2f797-b7bb-4201-ad5a-92bcaac43ed6,6a3093ae-63ae-406a-963e-d16a01948871,+13475305034,queued,,,,,,,,,,2026-04-21 17:24:57.889136
+49,49,8e2c034f-8441-4355-ba6a-40e61a804cb8,098da434-4acb-47c9-b5f6-b7936ea5370e,+13172675624,completed,1,"user: Hello. 
+ assistant: Hello Mahid, this is Travnr. How can I help you with your travel plans today? 
+ user: Okay, I'm gonna tell you what I want. Don't take too long, don't repeat everything back to me, and don't ask me too many questions. All I want is a flight from Chicago to Denver one way, just me. I don't care about the cabin class, I just want the cheap this flight possible. 
+ assistant: Understoo- 
+ user: using Frontier, um, Denver to Chicago— uh, no, no, no, no, no, Chicago to Denver. 
+ assistant: Got it. Which airport in Chicago would y- 
+ user: Chicago O'Hare Airport. 
+ assistant: And wh- 
+ user: Denver International, uh, they— 
+ assistant: What date - 
+ user: Just send me the details to my email. Ask me questions. 
+ assistant: What date do you want to depart? 
+ user: No, I told you the 27th of May. 
+ assistant: What is your email address? 
+ user: How do you not have my email address? 
+ assistant: I don't have your profile on file. Could you please provide it? 
+ user: How do you not have my profile if I requested a call? 
+ assistant: I ap- 
+ user: I requested this call from my account. 
+ assistant: I apologize for the technical issue. Could you please provide your email address so I can send you the details? 
+ user: A— a— m-a-h-i-d. 
+ agent-action: [Waiting] 
+ user: @wustl.edu. 
+ assistant: Thank you. I'll prepare a proposal for a one-way Frontier flight from Chicago O'Hare to Denver International on May twenty-seventh for one traveler in economy class and send it to you. 
+ user: Okay, thanks, but— 
+ assistant: Is there anything else I can help you with? 
+ user: No. 
+ agent-action: Ended call 
+ assistant: Great, have a wonderful day. 
+ ",,https://api.bland.ai/v1/recordings/098da434-4acb-47c9-b5f6-b7936ea5370e,"The user, Mahid, contacted Travnr to book a one-way flight from Chicago to Denver. They specified Chicago O'Hare Airport as the departure point and Denver International as the arrival point, and requested the cheapest option possible on Frontier. Despite some technical issues and frustration with the assistant not having their profile on file, the assistant was able to gather the necessary information, including Mahid's email address, to send a proposal for the flight on May 27th. The call ended with the assistant agreeing to send the flight details to Mahid's email address, a@wustl.edu.","{""to"": ""+13172675624"", ""now"": ""Tuesday, April 21, 2026 9:09 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+18205021349"", ""state"": ""IN"", ""call_id"": ""098da434-4acb-47c9-b5f6-b7936ea5370e"", ""country"": ""US"", ""now_utc"": ""Wednesday, April 22, 2026 1:09 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 49, ""callRequestId"": 49}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-21T21:09:27-04:00"", ""short_from"": ""8205021349"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-22 01:11:25.209,2026-04-22 01:09:17.757543
+75,75,ae3924e1-cd8f-4ba7-bb02-9d9ea3a9b743,da21984c-c093-420c-87a2-68dfc614e80a,+1 2019188083,completed,,"user: Your call has been forwarded to an automated voice messaging system. 
+ assistant: Goodbye 
+ assistant: <Call ended due to voicemail detection> 
+ user: 2-0-1-9-1-8— 
+ ",,https://api.bland.ai/v1/recordings/da21984c-c093-420c-87a2-68dfc614e80a,,,,,,2026-06-04 01:27:49.234987
+50,50,8e2c034f-8441-4355-ba6a-40e61a804cb8,93736170-0834-4ea3-b11a-016e76fbdf34,+13172675624,completed,1,"user: Hello. 
+ assistant: Hello Mahid, this is Travnr. How can I help you with your travel plans today? 
+ user: I need a flight from Denver to Chicago on May 20th. Ah, no, no, no. 
+ assistant: I see you're looking to fly f- 
+ user: — a flight from Chicago to Denver on May 27th. 
+ assistant: Got it, 
+ user: for one person, one way, with Frontier. 
+ assistant: Understood. To confirm, you're looking for a one-way flight for one person from Chicago to Denver on May twenty-seventh with Frontier. Which specific airpor- 
+ user: Yeah. 
+ assistant: Which specific airport in Chicago would you like to depart from, - 
+ user: Um, Chicago— Chicago O'Hare. 
+ assistant: O'H- 
+ user: And Denver International. 
+ assistant: Got it, O'Hare to Denver International. And what is your preferred cabin class for this trip? 
+ user: Economy. 
+ assistant: Economy it is. And do you have a budget range in mind for this flight? 
+ user: No. 
+ assistant: No problem. And do you have any specific seat preferences? 
+ user: No. 
+ assistant: Alright, let me summarize everything for you. You're looking for a one-way flight for one person, departing from Chicago O'Hare, ORD, to Denver International, DEN, on May twenty-seventh, twenty twenty-six, in economy class with Frontier. Is that correct? 
+ user: Yes. 
+ assistant: <TRAVEL_DETAILS>n{   ""origin_iata"": ""ORD"",   ""origin_airport_name"": ""Chicago O'Hare International"",   ""destination_iata"": ""DEN"",   ""destination_airport_name"": ""Denver International"",   ""departure_date"": ""2026-05-27"",   ""return_date"": null,   ""passengers"": 1,   ""cabin_class"": ""economy"",   ""budget_usd"": null } </TRAVEL_DETAILS>  Perfect. I'll prepare a personalized travel proposal for you right away. Thank you for choosing Travnr, and have a wonderful day. 
+ user: Thank you. 
+ assistant: You're very welcome. Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/93736170-0834-4ea3-b11a-016e76fbdf34,"The user, Mahid, contacted Travnr to inquire about a one-way flight from Chicago to Denver on May 27th, 2026, with Frontier Airlines. The user specified economy class, departing from Chicago O'Hare (ORD) and arriving at Denver International (DEN), with no specific budget or seat preferences. The assistant confirmed the details and offered to prepare a personalized travel proposal. The call ended with the assistant thanking the user for choosing Travnr.","{""to"": ""+13172675624"", ""now"": ""Tuesday, April 21, 2026 10:23 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+15079673929"", ""state"": ""IN"", ""call_id"": ""93736170-0834-4ea3-b11a-016e76fbdf34"", ""country"": ""US"", ""now_utc"": ""Wednesday, April 22, 2026 2:23 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 50, ""callRequestId"": 50}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-21T22:23:15-04:00"", ""short_from"": ""5079673929"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-22 02:25:15.812,2026-04-22 02:23:07.057954
+51,51,759fd803-9a0a-47e1-b64b-5e33585e7769,59e430e1-c621-446a-9f5d-bf7eeba0405b,+12017803209,completed,3,"user: Hello. 
+ assistant: Hello Manel, this is Travnr. How can I help you with your travel plans today? 
+ user: Hi, yes, I would like to plan a trip between May 29th and June 12th. I'm flexible within those two weeks, and I'd like to go to Spain and Paris. 
+ assistant: That sounds like a wonderful trip. I see you're looking to travel between May 29th and June 12th, visiting Spain and Paris. To get started, which spec- 
+ user: Yes. 
+ assistant: Great. To help you find the best flights, could you tell me which specific airport you'd like to depart from? 
+ user: preferably Newark Airport, but I'm open to JFK or LaGuardia, whichever one is cheapest. 
+ assistant: Got it, so you're open to Newark, JFK, or LaGuardia. Where would you like to fly into first for your trip to Spain and Paris? 
+ user: I'd like to go to Spain first. Um, I'd like to go to maybe 3 cities. 
+ assistant: Okay, - 
+ user: Barcelona, um, and then maybe two coastal cities. I'm not sure which ones. I'm thinking maybe Malaga and Sevilla. 
+ assistant: That - 
+ user: But I'm again flexible based on price. 
+ assistant: Understood, you're flexible on the specific cities in Spain based on price. 
+ user: I just want to experience both, um, the city of Spain— a city in Spain as well as a coastal city. 
+ assistant: Got it, so you'd like to experience both a city and a coastal area in Spain. To help me search for the best flight options, could you tell me which specific airport in Spain you'd prefer to fly into? 
+ user: I have no preference. 
+ assistant: No problem. Since you're flexible, I'll look for the best options into the major airports like Barcelona or Madrid. How many travelers will be going on this trip? 
+ user: Just me. 
+ assistant: Okay, so it's just one traveler. What is your preferred cabin class for the flights? 
+ user: economy. I'm looking to, to save as much money as possible. 
+ assistant: Understood, economy class i- 
+ user: Um, 
+ assistant: Understood, economy class it is. Do you have a specific budget range in mind for the entire trip? 
+ user: Um, including accommodation, car rental, and everything, I'd like to not spend more than $800 if possible, but I'm a bit flexible. 
+ assistant: I appreciate you sharing that, though I should mention that an eight hundred dollar budget for a two-week trip including flights, accommodation, and car rental will be quite challenging to find. For the flight booking specifically, do you have a separate budget in mind for just the airfare? 
+ user: Uh, not really, but keep in mind that in France, um, accommodation will be taken care of because I'll be staying with my family. So how about we just focus on the week in Spain for now? 
+ assistant: That's very helpful to know. 
+ user: So $800 for the week in Spain, including car rental, flight, and accommodation. 
+ assistant: Got it, so eight hundred dollars total for the week in Spain. Do you have any specific airline or seat preferences for your flights? 
+ user: No. 
+ assistant: Alright, no specific preferences. Just to confirm the details for your proposal: You're looking to fly economy class for one traveler, departing from the New York area with a preference for Newark, flying into Spain between May 29th and June 12th, with a total budget of eight hundred dollars for the week in Spain. Is that correct? 
+ user: Yes. 
+ assistant: Perfect. I'll prepare a personalized travel proposal for you based on these details. Thank you for choosing Travnr, Manel. Have a wonderful day. 
+ user: Thank you. 
+ ",,https://api.bland.ai/v1/recordings/59e430e1-c621-446a-9f5d-bf7eeba0405b,"The user, Manel, is planning a two-week trip to Spain and Paris between May 29th and June 12th. The trip will start in Spain, where Manel would like to visit 3 cities, including Barcelona and potentially two coastal cities such as Malaga and Sevilla, with flexibility based on price. Manel will then travel to Paris, where accommodation will be taken care of as they will be staying with family. The focus of the call was on planning the week in Spain, with a total budget of $800, including flights, accommodation, and car rental. Manel is open to flying from Newark, JFK, or LaGuardia airports and has no specific airline or seat preferences, with economy class being the preferred cabin choice. The assistant will prepare a personalized travel proposal based on these details.","{""to"": ""+12017803209"", ""now"": ""Wednesday, April 22, 2026 3:16 PM"", ""zip"": ""07608"", ""city"": ""TETERBORO"", ""from"": ""+12545032040"", ""state"": ""NJ"", ""call_id"": ""59e430e1-c621-446a-9f5d-bf7eeba0405b"", ""country"": ""US"", ""now_utc"": ""Wednesday, April 22, 2026 7:16 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""759fd803-9a0a-47e1-b64b-5e33585e7769"", ""blandCallDbId"": 51, ""callRequestId"": 51}, ""short_to"": ""2017803209"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-04-22T15:16:52-04:00"", ""short_from"": ""2545032040"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+12017803209"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-22 19:20:36.734,2026-04-22 19:16:38.248594
+52,52,8e2c034f-8441-4355-ba6a-40e61a804cb8,1b2943b5-e867-477f-8f01-87a27664a8c9,+13172675624,completed,2,"user: Hello. 
+ assistant: Hello Mahid, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm looking for a flight that is first class and is going from, you know, Boston to Los Angeles. And it must be first class. 
+ assistant: Understood, first class from Boston to - 
+ user: My budget is like $1,000. 
+ assistant: Got it, a budge- 
+ user: And, um, it's just for one person. 
+ assistant: Okay, one person. Now, which airport in Boston would you like to depart from, Logan International or Manchester-Boston Regional? 
+ user: Logan International. 
+ assistant: Great, Logan International. And for Los Angeles, which airport would you prefer, LAX, Burbank, or Long Beach? 
+ user: LAX. 
+ assistant: Perfect, LAX. What are your travel dates? 
+ user: Okay. 
+ assistant: When wou- 
+ user: Also, I want this to be a round trip, so it would be, let's say, um, leaving May 20th and coming back on May 27th. 
+ assistant: Got it, departing May twentieth and returning May twenty-seventh. Do you have any specific airline or seat preferences? 
+ user: No. 
+ assistant: Alright. Let me summarize your trip details. 
+ user: Yeah, go ahead. 
+ assistant: You're looking for a round trip flight for one person in first class. 
+ user: And, uh, 
+ assistant: Departing from Boston Logan International, B O S, to Los Angeles International, L A X. 
+ user: Okay. 
+ assistant: Leaving May twentieth, twenty twenty six, and returning May twenty seventh,- 
+ user: Yeah, I agree with all this. Just, uh, send in the proposal, please. 
+ user: I'm— 
+ user: Hello. 
+ assistant: ""passengers"": 1,   ""cabin_class"": ""first"",   ""budget_- 
+ user: Mm-hmm. 
+ assistant: usd"": 1000 } 
+ user: Yes, yes, yes, just send in the proposal, send in the proposal, yes. 
+ assistant: </TRAVEL_DETAILS> 
+ assistant: Perfect, I'll prepare that personalized travel proposal for you right away. Thank you for choosing Travnr, have a wonderful day. 
+ agent-action: Ended call 
+ assistant: Goodbye. 
+ user: Thank you. 
+ ",,https://api.bland.ai/v1/recordings/1b2943b5-e867-477f-8f01-87a27664a8c9,"The user, Mahid, contacted Travnr to book a first-class round-trip flight from Boston Logan International Airport to Los Angeles International Airport for one person, with a budget of $1,000. The preferred travel dates are May 20th to May 27th, with no specific airline or seat preferences. The assistant gathered all the necessary details and agreed to prepare a personalized travel proposal for the user.","{""to"": ""+13172675624"", ""now"": ""Thursday, April 23, 2026 3:43 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""1b2943b5-e867-477f-8f01-87a27664a8c9"", ""country"": ""US"", ""now_utc"": ""Thursday, April 23, 2026 7:43 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 52, ""callRequestId"": 52}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-23T15:43:11-04:00"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-23 19:46:04.864,2026-04-23 19:42:56.242938
+53,53,1d28fdc8-c1a1-4500-ae5e-62b6a4ab2749,28389f7f-affd-446b-abc2-7f82e255cd6b,+1 2078359953,completed,,"user: Hello.  
+ assistant: Hi Waeil, this is Travnr. I see you requested a callback about your ideal destination. How can I help you today? 
+ user: Hello, I'd like to book a trip to Portland, Maine. 
+ assistant: Portland, Maine so- 
+ user: From Indianapolis. 
+ assistant: Got it, flying from Indianapolis to Portland, Maine. Which airport in Indianapolis would you like to depart from? 
+ user: I would like to depart from Indianapolis International Airport. 
+ assistant: Great, Indianapolis International. And for Portland, Maine, which airport would you prefer to fly into? 
+ user: I'd like to fly into the Portland Jetport. 
+ assistant: Perfect,- 
+ user: PWM— 
+ assistant: PWM, got it. What are your travel dates? 
+ user: I would like to travel on May 12th. 
+ assistant: May twelfth, 
+ user: And then I'd like to come back, uh, I would like to come back August 18th. 
+ assistant: And returning August eighteenth. How many travelers will be going? 
+ user: 13— 
+ assistant: Thirtee- 
+ user: Yes. 
+ assistant: Thirteen travelers. What is your preferred cabin class? 
+ user: I'd like to be economy. 
+ assistant: Economy class. What is your budget range for this trip? 
+ user: I don't want to spend no more than $250. 
+ assistant: Two hundred and fifty dollars total. Do you have any seat or airline preferences? 
+ user: Uh, I don't have an airline preference, but I do not want to fly Frontier. 
+ assistant: Understood, no Frontier. Let me summarize everything for you. You're looking to book a trip for thirteen travelers, departing Indianapolis International Airport, IND, on May twelfth, twenty twenty-six, and returning from Portland Jetport, PWM, on August eighteenth, twenty twenty-six, in economy class, with a budget of two hundred and fifty dollars, and you prefer not to fly Frontier. I'll prepare a personalized travel proposal for you now. 
+ user: Actually, I did not want to fly with 13 travelers. I wanted to fly 1 traveler on May 13th. 
+ assistant: My apologies for the confusion. So it's one traveler, departing May thirteenth. Is the return date still August eighteenth? 
+ user: Yes. 
+ assistant: Got it. Let me summarize the corrected details. 
+ user: Yes. 
+ assistant: You're looking t- 
+ user: Still the same. 
+ assistant: You're looking to book a trip for one traveler, departing Indianapolis International Airport, IND, on May thirteenth, twenty twenty-six, and returning from Portland Jetport, PWM, on August eighteenth, twenty twenty-six, in economy class, with a budget of two hundred and fifty dollars, and you prefer not to fly Frontier. 
+ user: Yes. 
+ user: Yes. 
+ user: Everything is correct. 
+ user: Hello? 
+ user: Thank you. 
+ assistant: Thank you, Waeil. I'll get that proposal ready for you. Have a great evening. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/28389f7f-affd-446b-abc2-7f82e255cd6b,"The caller, Waeil, requested to book a trip from Indianapolis International Airport to Portland Jetport, with a departure date of May 13th and a return date of August 18th. The traveler will be flying solo in economy class, with a budget of $250, and prefers not to fly with Frontier. After clarifying initial mistakes regarding travel dates and number of travelers, the assistant confirmed the corrected details and will prepare a personalized travel proposal for Waeil.",,,,,2026-04-24 00:23:22.835894
+54,54,e9acb9e6-9681-4b29-bb9f-5c768da02291,b6ba1c1d-1973-4326-8d9b-79beb13413c4,+1 2078359953,completed,,"user: Hello.  
+ assistant: Hi, this is Travnr. I'm calling for Waeil Ahmed. How can I help you with your travel plans today? 
+ user: Hello, I'd like to book a flight from Indianapolis to Portland, Maine. 
+ assistant: Great, I can help you with that. For your departure from Indianapolis, would you be flying out of Indianapolis International Airport? 
+ user: Uh, yes. 
+ assistant: Perfect. And for your arrival in Portland, Maine, 
+ user: I will— 
+ assistant: I will be flying into Portland International Jetport. 
+ user: Yes. 
+ assistant: Excellent. What are your travel dates? When would you like to depart and when would you like to return? 
+ user: I would like to depart on May 13th, and I'd like to have my return flight on August 20th. 
+ assistant: Okay, so departing May thirteenth and returning August twentieth. How many travelers will be going on this trip? 
+ user: Just one. 
+ assistant: Got it, just one traveler. What is your preferred cabin class? Would you like economy, premium economy, business, or first class? 
+ user: I'm open to economy or premium economy. 
+ assistant: Understood, you're open to either economy or premium economy. What is your budget range for this trip? 
+ user: Around $250. 
+ assistant: Okay, around two hundred and fifty dollars. Do you have any specific seat preferences or airline preferences? 
+ user: I would— I'm open to flying with any airline besides Frontier. 
+ assistant: Got it, any airline except Frontier. To summarize, you're looking for a flight for one traveler from Indianapolis International to Portland International Jetport, departing May thirteenth and returning August twentieth, in economy or premium economy, with a budget of two hundred and fifty dollars, avoiding Frontier Airlines. I'll prepare a personalized travel proposal for you now. Have a great evening. 
+ user: Thank you. 
+ user: Thank you. 
+ user: Thank you. 
+ user: Have a good one. 
+ user: Thank you. 
+ user: Thank you. 
+ user: Thank you. 
+ user: Okay, thank you. Sounds good. 
+ user: Sounds good. Thank you. 
+ user: Thank you. 
+ user: Okay, sounds good. 
+ user: Okay, good looks. 
+ user: Thank you. 
+ user: Can you repeat my flight information one more time? 
+ assistant: Absolutely. You're flying from Indianapolis International to Portland International Jetport, departing May thirteenth and returning August twentieth, for one passenger, in economy or- 
+ user: Okay, that's perfect. 
+ user: That's perfect. 
+ user: Can you repeat it again? 
+ assistant: Sure. You're flying from Indianapolis International to Portland International Jetport, departing May thirteenth and returning August twentieth, for one passenger, in economy - 
+ user: Okay, that works. 
+ user: Can you repeat it one more time? 
+ assistant: Certainly. You're flying from Indianapolis International to Portland International Jetport, departing May thirteenth and returning August twentieth, for one passenger, in economy or premium economy, with a budget of two hundred and fifty dollars, avoiding Frontier Airlines. 
+ user: Okay, that's perfect. Thank you. 
+ user: Thank you. 
+ user: Perfect. 
+ user: I bet— 
+ assistant: Is there anything else I can help you with? 
+ user: No, that'll be it. 
+ user: That'll be it. Thank you. I have nothing else. 
+ user: I bet— 
+ assistant: Alright, have a wonderful evening. 
+ user: Thank you. You too. 
+ ",,https://api.bland.ai/v1/recordings/b6ba1c1d-1973-4326-8d9b-79beb13413c4,"The user contacted Travnr to book a flight from Indianapolis to Portland, Maine. The user specified their travel dates as departing on May 13th and returning on August 20th, with a preferred cabin class of either economy or premium economy. They have a budget of $250 and are open to flying with any airline except Frontier. The assistant confirmed the user's travel plans, which include a single traveler flying from Indianapolis International Airport to Portland International Jetport, and offered to prepare a personalized travel proposal. The user requested the flight information to be repeated multiple times to confirm the details before ending the call.",,,,,2026-04-24 01:04:36.321042
+55,55,8e2c034f-8441-4355-ba6a-40e61a804cb8,291da046-1c1d-4726-b982-1faab863a576,+13172675624,completed,2,"user: Hello. 
+ assistant: Hello Mahid, this is Travnr. How can I help you today? 
+ user: I'd like to book a flight from Chicago to Denver. 
+ assistant: Great, I can help with that. Which airport in Chicago would you like to depart from, O'Hare or Midway? 
+ user: Oh, here. 
+ assistant: I see you're looking to book a flight. Which airport in Chicago would you like to depart from, O'Hare or Midway? 
+ assistant: Hello? Are you there? 
+ user: Hello. 
+ assistant: Hi there. I'm with Travnr. I'd like to help you book a flight from Chicago to Denver. Which airport in Chicago would you prefer to depart from, O'Hare or Midway? 
+ user: O'Hare, Chicago. 
+ assistant: Got it, O'Hare. And which airport in Denver would you like to fly into? 
+ user: Denver. 
+ assistant: Denver has Denver International Airport. Is that the one you'd like to fly into? 
+ user: Yeah, Denver International. 
+ assistant: Perfect. What are your travel dates? When would you like to depart and when would you like to return? 
+ user: Let's say the, um, 27th of May. 
+ assistant: Got it, May twenty-seventh. 
+ user: and returning on the 3rd of June. 
+ assistant: Great, returning June third. How many travelers will be going on this trip? 
+ user: Just one. 
+ assistant: Okay, just one traveler. What is your cabin class preference? Economy, premium eco- 
+ user: I don't, I don't have any preferences. 
+ assistant: No problem, I'll note that. What is your budget range for this trip? 
+ user: No budget. 
+ assistant: Understood. Do you have any seat preferences or airline preferences? 
+ user: No preferences. 
+ assistant: Alright, let me summarize the details for you. You're flying from Chicago O'Hare, ORD, to Denver International, DEN. Departing May twenty-seventh, twenty twenty-six, and returning June third, twenty twenty-six. Traveling solo with no specific cabin class, budget, or airline preferences. Does that all sound right? 
+ user: Y ya. 
+ assistant: Perfect, we'll get that proposal over to you shortly. 
+ user: Thank you. 
+ user: Thank you. 
+ ",,https://api.bland.ai/v1/recordings/291da046-1c1d-4726-b982-1faab863a576,"The user, Mahid, contacted Travnr to book a flight from Chicago to Denver. The user selected O'Hare as the departure airport and Denver International as the arrival airport. The travel dates are May 27th for departure and June 3rd for return, with one traveler. The user did not specify any preferences for cabin class, budget, airline, or seat selection. The assistant confirmed the details and will be sending over a proposal shortly.","{""to"": ""+13172675624"", ""now"": ""Thursday, April 23, 2026 9:27 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""291da046-1c1d-4726-b982-1faab863a576"", ""country"": ""US"", ""now_utc"": ""Friday, April 24, 2026 1:27 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 55, ""callRequestId"": 55}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-23T21:27:59-04:00"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-24 01:30:38.815,2026-04-24 01:27:46.071867
+56,56,6c6b5642-340d-4653-a238-b6c90bcc294d,ee6eba7c-de7c-44c0-b972-2ed39a556291,+1 3475560205,completed,,"user: Hello. 
+ assistant: Hi A M, thanks for calling Travnr. How can I help you with your travel plans today? 
+ user: Okay. 
+ assistant: I see you- 
+ user: a flight on July 19th. 
+ assistant: Great, I c- 
+ user: From New York to Denver. 
+ assistant: Got it. Which airport - 
+ user: round trip for 2 people. 
+ assistant: Understood. Which airport in New York would you like to depart from? 
+ user: La guardia. 
+ assistant: Okay, LaGuardia. And which airport in Denver would you like to fly into? 
+ user: Bene. 
+ assistant: I'm sorry, did you say Denver International? 
+ user: Yes. 
+ assistant: Great. And what is your return date? 
+ user: July 21st. 
+ assistant: Perfect. What cabin class would you prefer for this trip? 
+ user: Economy. 
+ assistant: Understood. What is your budget range for this trip? 
+ user: cheapest. 
+ assistant: Okay, looking for the best value. Do you have any specific airline or seat preferences? 
+ user: Window. 
+ assistant: Alright, window seats it is. So just to confirm, you're looking for a round trip economy flight for two passengers, departing July nineteenth, twenty twenty six from LaGuardia, L G A, to Denver International, D E N, returning July twenty first, twenty twenty six, with window seats and a focus on the best price. Does that all sound - 
+ user: Yes. 
+ assistant: Perfect, we'll get that proposal over to you shortly. 
+ user: You know— 
+ assistant: Safe travels! 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/ee6eba7c-de7c-44c0-b972-2ed39a556291,"The user contacted Travnr to book a round-trip flight for two people from LaGuardia (LGA) to Denver International (DEN) on July 19th, returning on July 21st. They preferred economy class with window seats and were looking for the cheapest option. The assistant confirmed the details and agreed to send over a proposal shortly before ending the call.",,,,,2026-04-24 01:59:13.467375
+57,57,9d44b97a-20f3-4e74-a40c-cc2370969e8f,4e3cd90e-4eb9-494d-bf6f-8f1215730be6,+1 6175288501,completed,,"user: Nope.  
+ assistant: Hi Salman, this is the Travnr concierge team. How can I help you with your travel plans today? 
+ user: So I need to book a flight from Boston to Chicago. 
+ assistant: Great, I can help with that. 
+ user: Uh, I wanna— I'm looking to get into Chicago, uh, around the afternoon or evening of, uh, June 18th, which is a Thursday, and I'm looking to return back to Boston on, uh, Saturday morning, so June 20th. 
+ assistant: Got it. Which specific airport in Chicago would you like to fly into, O'Hare or Midway? 
+ user: Uh, I think I'll do O'Hare. 
+ assistant: Okay, O'Hare it is. And which airport in Boston will you be departing from? 
+ user: Logan. 
+ assistant: Perfect, Logan International. How many travelers will be going on this trip? 
+ user: Uh, just one. 
+ assistant: Just one traveler. And what is your preferred cabin class, economy, premium economy, business, or first class? 
+ user: Uh, just the economy is fun. 
+ assistant: Alright, economy class. And do you have a budget range in mind for this trip? 
+ user: I'm really looking to get the cheapest as possible— as cheap as possible for a nonstop flight. 
+ assistant: Understood, you're looking for the cheapest nonstop- 
+ user: Pimienta, vamos con pimienta. 
+ assistant: Understood, you're looking for the cheapest nonstop flight available. Do you have any specific airline or seat preferences? 
+ user: No. 
+ assistant: Okay, so to summarize: you're flying one traveler from Boston Logan International, BOS, to Chicago O'Hare, ORD, departing June eighteenth, returning June twentieth, in economy class, looking for the cheapest nonstop option. Does that all sound right? 
+ user: That does sound correct, yes. 
+ assistant: Perfect, we'll get that proposal over to you shortly. 
+ user: Thank you. 
+ ",,https://api.bland.ai/v1/recordings/4e3cd90e-4eb9-494d-bf6f-8f1215730be6,"The user, Salman, contacted the Travnr concierge team to book a flight from Boston Logan International to Chicago O'Hare. He is looking for a nonstop economy flight, departing on June 18th and returning on June 20th, with the goal of finding the cheapest option available. The assistant has confirmed the details and will be sending over a proposal shortly.",,,,,2026-04-24 02:04:17.117866
+58,58,8e2c034f-8441-4355-ba6a-40e61a804cb8,f48b3230-8d54-415b-b86f-93fa17f1171f,+13172675624,completed,0,"assistant: <Call ended due to voicemail detection> 
+ user: Please leave your— 
+ ",,https://api.bland.ai/v1/recordings/f48b3230-8d54-415b-b86f-93fa17f1171f,,"{""to"": ""+13172675624"", ""now"": ""Thursday, April 23, 2026 10:40 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""f48b3230-8d54-415b-b86f-93fa17f1171f"", ""country"": ""US"", ""now_utc"": ""Friday, April 24, 2026 2:40 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 58, ""callRequestId"": 58}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-23T22:40:56-04:00"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-24 02:41:11.75,2026-04-24 02:40:46.810283
+59,59,8e2c034f-8441-4355-ba6a-40e61a804cb8,aaa67334-0f4b-4200-ab15-ee198a819a54,+13172675624,completed,1,"user: Hello. 
+ assistant: Hello Mahid, this is Travnr. How can I help you today? 
+ user: Um, I'd like to book a flight 
+ assistant: Great, I'd be happy to help with that. 
+ user: From, um, Chicago to Denver. 
+ assistant: Got it. Which airport in Chicago would you like to depart from, O'Hare or Midway? 
+ user: It's going to be 2-way. I mean, it's going to be like May 15th to May 21st. 
+ assistant: Understood. Which airport in Chicago would you like to depart from- 
+ user: Um, Chicago O'Hare Airport. 
+ assistant: Perfect. And which airport in Denver would you like to fly into? 
+ user: And Denver International. 
+ assistant: Got it. How many tr- 
+ user: And let's do just like one person. 
+ user: And, uh, like, it's just me. No, no preferences for cabin class or airline. 
+ assistant: Okay, s- 
+ user: or, um, a budget. 
+ assistant: Alr- 
+ user: Or anything like that. 
+ assistant: Alright- 
+ user: Um, okay. 
+ assistant: Alright, let me summarize your trip details. You're flying round-trip from Chicago O'Hare, ORD, to Denver International, DEN, departing May fifteenth and returning May twenty-first, for one passenger, with no specific cabin class, airline, or budget preferences. Does that all sound right? 
+ user: Yeah. 
+ assistant: Perfect, we have everything we need — you're all set to hang up. We'll send your proposal over shortly. Safe travels! GOODBYE 
+ user: Thanks. 
+ ",,https://api.bland.ai/v1/recordings/aaa67334-0f4b-4200-ab15-ee198a819a54,"The user, Mahid, contacted Travnr to book a round-trip flight from Chicago O'Hare Airport to Denver International Airport, departing on May 15th and returning on May 21st for one passenger. Mahid had no specific preferences for cabin class, airline, or budget. The assistant confirmed the trip details and stated that a proposal would be sent over shortly, concluding the call.","{""to"": ""+13172675624"", ""now"": ""Thursday, April 23, 2026 10:41 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""aaa67334-0f4b-4200-ab15-ee198a819a54"", ""country"": ""US"", ""now_utc"": ""Friday, April 24, 2026 2:41 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 59, ""callRequestId"": 59}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-23T22:41:11-04:00"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-24 02:42:41.057,2026-04-24 02:41:01.362001
+60,60,9d44b97a-20f3-4e74-a40c-cc2370969e8f,5945b7aa-1be9-473c-be7f-6ed423ebad9b,+16175288501,completed,0,"user: Comment— 
+ assistant: Hi Salman, this is Travnr. How can I help you today? 
+ user: I need a flight from Boston to Chicago. 
+ assistant: Great, I can help with that. Which airport in Chicago would you prefer to- 
+ user: Um, it'll be arriving in Chicago on June 18th, preferably around the late afternoon, early evening, and then we'll go back to Boston, um, 
+ assistant: Got it. Just to confirm, which airport in Chicago would you like to fly into? 
+ user: Uh, go back to Boston. Actually, wait, hold up. 
+ agent-action: [Waiting] 
+ ",,https://api.bland.ai/v1/recordings/5945b7aa-1be9-473c-be7f-6ed423ebad9b,"The user, Salman, contacted Travnr to book a flight from Boston to Chicago, arriving on June 18th in the late afternoon or early evening. However, before the assistant could finalize the details, Salman became uncertain and paused the conversation, asking to ""hold up"" after initially starting to discuss the return trip to Boston, indicating a need for clarification or reconsideration of their travel plans.","{""to"": ""+16175288501"", ""now"": ""Thursday, April 23, 2026 10:48 PM"", ""zip"": ""02481"", ""city"": ""CAMBRIDGE"", ""from"": ""+14159148074"", ""state"": ""MA"", ""call_id"": ""5945b7aa-1be9-473c-be7f-6ed423ebad9b"", ""country"": ""US"", ""now_utc"": ""Friday, April 24, 2026 2:48 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""9d44b97a-20f3-4e74-a40c-cc2370969e8f"", ""blandCallDbId"": 60, ""callRequestId"": 60}, ""short_to"": ""6175288501"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-04-23T22:48:30-04:00"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+16175288501"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-24 02:49:11.011,2026-04-24 02:48:14.295327
+61,61,9d44b97a-20f3-4e74-a40c-cc2370969e8f,4dc9375d-4573-41b4-91f2-8f1afead9c10,+16175288501,completed,2,"user: Hello. 
+ assistant: Hi Salman, this is Travnr. How can I help you with your travel plans today? 
+ user: Governor, um, I need a flight from Boston to Chicago. 
+ assistant: Great, I c- 
+ user: Uh, it's a round trip— looking for a round trip flight that will arrive in Chicago on January 18th. 
+ assistant: Got it. Which airport in Chicago would you prefer to fly into, O'Hare or Midway? 
+ user: Excuse me, on June 18th. 
+ assistant: Unde- 
+ user: 2026. 
+ assistant: Understood, June eighteenth, 
+ user: Um, arriving late afternoon, early evening preferably, and then returning to Boston on June 20th. 
+ assistant: Got it. Which airport in Chicago would you prefer to- 
+ user: I'm looking for a— I'm looking for a nonstop flight, the cheapest option available. 
+ assistant: Understood. Which airport in Chicago would you prefer to fly into, O'Hare or Midway? 
+ user: Looking to fly into Chicago O'Hare and depart from Boston Logan International. 
+ assistant: Perfect. How many travelers will be going on this trip? 
+ assistant: Hello? How many travelers will be going on this trip? 
+ assistant: Are you there? I just need to know how many travelers will be going. 
+ user: An adult traveler. 
+ assistant: Got it, one traveler. 
+ user: Hello. 
+ assistant: Yes, I'm h- 
+ user: Yeah. 
+ assistant: What is your preferred cabin class for this flight? 
+ user: Um, economy is fine. 
+ assistant: Understood. What is your budget range for this trip? 
+ user: cheap as— cheap as possible. 
+ assistant: Got it. Do you have any specific seat preferences or airline preferences? 
+ user: No. 
+ assistant: Alright, let me summarize everything for you. You're looking for a round trip flight for one traveler, departing from Boston Logan International, B O S, to Chicago O'Hare, O R D. Departing June eighteenth, twenty twenty six, and returning June twentieth, twenty twenty six, in economy class, with a preference for nonstop flights and the lowest possible fare. Does that all sound right? 
+ user: Yeah. 
+ assistant: Perfect, we have everything we need — you're all set to hang up. We'll send your proposal over shortly. Saf- 
+ user: Oh, goodness. 
+ assistant: GOODBYE 
+ ",,https://api.bland.ai/v1/recordings/4dc9375d-4573-41b4-91f2-8f1afead9c10,"The user, Salman, contacted Travnr to book a round-trip flight from Boston Logan International to Chicago O'Hare for one adult traveler. The preferred travel dates are June 18th, 2026, to June 20th, 2026, with a nonstop flight arriving at Chicago O'Hare in the late afternoon or early evening. The user is looking for the cheapest option available in economy class, with no specific seat or airline preferences. The assistant confirmed the details and will send a proposal shortly.","{""to"": ""+16175288501"", ""now"": ""Thursday, April 23, 2026 10:49 PM"", ""zip"": ""02481"", ""city"": ""CAMBRIDGE"", ""from"": ""+14159148074"", ""state"": ""MA"", ""call_id"": ""4dc9375d-4573-41b4-91f2-8f1afead9c10"", ""country"": ""US"", ""now_utc"": ""Friday, April 24, 2026 2:49 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""9d44b97a-20f3-4e74-a40c-cc2370969e8f"", ""blandCallDbId"": 61, ""callRequestId"": 61}, ""short_to"": ""6175288501"", ""timezone"": ""America/New_York"", ""timestamp"": ""2026-04-23T22:49:26-04:00"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+16175288501"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-24 02:51:52.573,2026-04-24 02:49:15.103091
+62,62,8e2c034f-8441-4355-ba6a-40e61a804cb8,20e22a6c-e961-4868-8a41-346ac9203685,+13172675624,completed,2,"assistant: Hello Mahid, this is Travnr. How can I help you with your travel plans today? 
+ user: Uh, so I want to go from, um, like, let's say from New York to Los Angeles. 
+ assistant: Great, I can help you with that. Which airport in New York would you like to depart from? 
+ user: I'd like to depart from— 
+ agent-action: [Waiting] 
+ user: New York Airport. 
+ assistant: I see. Could you- 
+ user: Actually, let's do a guardia. 
+ assistant: Got i- 
+ user: And then to LAX. 
+ assistant: Perfect, so you're flying out of LaGuardia, LGA, into Los Angeles International, LAX. What are your travel dates? 
+ user: Uh, it's our— May 27th and coming back on June 3rd. 
+ assistant: Got it, departing May twenty-seventh and returning June third. How many travelers will be going? 
+ user: Um, travelers— I want travelers. 
+ agent-action: [Waiting] 
+ user: One traveler— 
+ agent-action: [Waiting] 
+ user: Hello? <Block interruptions enabled. This message was ignored> 
+ assistant: Okay, so just one traveler. What cabin class would you prefer? 
+ user: I would prefer, uh, let any cabin class work. Just anything works. I don't have any other preferences. 
+ assistant: Alright, I'll note that down. Do you have a budget range in mind for this trip? 
+ user: Um, no. 
+ assistant: Understood. So to summarize, you're flying from LaGuardia, LGA, to Los Angeles International, LAX, departing May twenty-seventh and returning June third, for one traveler, with no specific cabin class or budget preferences. Does that all sound right? 
+ user: Yeah. 
+ assistant: Perfect, we have everything we need — you're all set to hang up. We'll send your proposal over shortly. Safe travels! GOODBYE 
+ user: Thank you. Bye. 
+ ",,https://api.bland.ai/v1/recordings/20e22a6c-e961-4868-8a41-346ac9203685,"The user, Mahid, inquired about travel plans from New York to Los Angeles. The assistant helped Mahid book a flight from LaGuardia (LGA) to Los Angeles International (LAX) for one traveler, departing on May 27th and returning on June 3rd, with no specific cabin class or budget preferences. The assistant confirmed the details and stated that a proposal would be sent over shortly. The call ended with the assistant wishing Mahid safe travels.","{""to"": ""+13172675624"", ""now"": ""Friday, April 24, 2026 2:09 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""20e22a6c-e961-4868-8a41-346ac9203685"", ""country"": ""US"", ""now_utc"": ""Friday, April 24, 2026 6:09 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 62, ""callRequestId"": 62}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-24T14:09:15-04:00"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-24 18:11:44.327,2026-04-24 18:08:42.47369
+63,63,8e2c034f-8441-4355-ba6a-40e61a804cb8,83aade4f-aa3c-4c91-b39e-a6f36b3bd927,+13172675624,completed,0,"assistant: <Call ended due to voicemail detection> 
+ user: Please leave your— 
+ ",,https://api.bland.ai/v1/recordings/83aade4f-aa3c-4c91-b39e-a6f36b3bd927,,"{""to"": ""+13172675624"", ""now"": ""Friday, April 24, 2026 6:15 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""83aade4f-aa3c-4c91-b39e-a6f36b3bd927"", ""country"": ""US"", ""now_utc"": ""Friday, April 24, 2026 10:15 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 63, ""callRequestId"": 63}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-24T18:15:05-04:00"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-24 22:15:20.302,2026-04-24 22:15:01.709564
+64,64,8e2c034f-8441-4355-ba6a-40e61a804cb8,1d36badd-6f96-4276-867e-290623bbe8cc,+13172675624,completed,0,"assistant: <Call ended due to voicemail detection> 
+ user: Please leave your— 
+ ",,https://api.bland.ai/v1/recordings/1d36badd-6f96-4276-867e-290623bbe8cc,,"{""to"": ""+13172675624"", ""now"": ""Friday, April 24, 2026 6:21 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""1d36badd-6f96-4276-867e-290623bbe8cc"", ""country"": ""US"", ""now_utc"": ""Friday, April 24, 2026 10:21 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 64, ""callRequestId"": 64}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-24T18:21:15-04:00"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-24 22:21:30.377,2026-04-24 22:21:11.786695
+65,65,ccf621a9-6b2a-46d3-9290-fc7b9f7ac6ef,4316dd05-5ac2-41c3-85b5-cdbdf50e9662,+1 6185316167,completed,,"user: Close this time. 
+ assistant: Hi Doug, this is Travnr. How can I help you with your travel plans today? 
+ user: Yes, can you, um, show me some airline flights to New York City? 
+ assistant: Absolutely. Wh- 
+ user: Next weekend. 
+ assistant: Got it, for next weekend. Which airport in New York City would you prefer to fly into? JFK, LaGuardia, or Newark? 
+ user: La Guardia. 
+ assistant: Great, LaGuardia it is. Where will you be departing from? 
+ user: St. Louis. 
+ assistant: St. Louis. Which airport would you like to fly out of? 
+ user: Lambert? 
+ assistant: Perfect, St. Louis Lambert. What are your specific departure and return dates for next weekend? 
+ user: Um, Friday morning and Sunday evening. 
+ assistant: Understood. Could you provide the specific dates for Friday and Sunday? 
+ user: One second. 
+ agent-action: [Waiting] 
+ assistant: Take your time. 
+ user: May, May 1st. 
+ assistant: Okay, Ma- 
+ user: May 3rd. 
+ assistant: Okay, May first and May third. How many travelers will be going? 
+ user: One. 
+ assistant: Just one traveler. What is your preferred cabin class? Economy, premium economy, business, or first class? 
+ user: Economy. 
+ assistant: Economy. What is your budget range for this trip? 
+ user: It doesn't matter. 
+ assistant: Understood. Do you have any seat preferences or specific airline preferences? 
+ user: No. 
+ assistant: Alright, to summarize: You're flying from St. Louis Lambert International, STL, to LaGuardia, LGA, departing May first and returning May third, for one passenger in economy class. Does that all sound right? 
+ user: Yes. 
+ assistant: Perfect, we have everything we need — you're all set to hang up. 
+ ",,https://api.bland.ai/v1/recordings/4316dd05-5ac2-41c3-85b5-cdbdf50e9662,"The user, Doug, contacted the travel assistant to inquire about flights to New York City's LaGuardia airport from St. Louis Lambert International airport for next weekend. The user specified the travel dates as May 1st to May 3rd, and preferred economy class for one passenger. The assistant gathered all necessary information, confirmed the details, and indicated that they had everything needed to proceed, allowing the user to end the call.",,,,,2026-04-24 22:48:44.368322
+66,66,8e2c034f-8441-4355-ba6a-40e61a804cb8,1a6bb38a-04eb-48d9-af3b-fd3ebb34eecb,+13172675624,completed,1,"user: Hello. 
+ agent: Hello Mahid! It's great to speak with you. 
+ agent:  Where would you like to fly today? 
+ assistant: Hello Mahid! It's great to speak with you. Where would you like to fly today? 
+ user: I'd like to go to Denver. <Block interruptions enabled. This message was ignored> 
+ user: I'd like to go to Denver. 
+ agent: Got it, Denver International. 
+ agent:  Where will you be departing from? 
+ assistant: Got it, Denver International. Where will you be departing from? 
+ user: New York. 
+ agent: Got it, I'll plan on JFK unless you'd prefer LaGuardia or Newark. 
+ assistant: Got it, I'll plan on JFK unless you'd prefer LaGuardia or Newark. 
+ user: Yep, JFK is fine. 
+ agent: Great. What are your travel dates — departure and return? 
+ assistant: Great. What are your travel dates — departure and return? 
+ user: Uh, I would like to travel on June 17th and come back on June 21st. 
+ agent: So that's JFK to Denver, 
+ agent:  departing June seventeenth, returning June twenty-first. 
+ agent:  Perfect — you'll have your options in your inbox within a minute. 
+ agent:  Talk soon. 
+ agent:  GOODBYE  <TRAVEL_DETAILS> {   ""origin_iata"": ""JFK"",   ""origin_airport_name"": 
+ agent:  ""John F. Kennedy International"",   ""destination_iata"": 
+ assistant: So that's JFK to Denver, departing June seventeenth, returning June twenty-first. Perfect — you'll have your options in your inbox within a minute. Talk soon. GOODBYE  <TRAVEL_DETAILS> {   ""origin_iata"": ""JFK"",   ""origin_airport_name"": ""John F. Kennedy International"",   ""destination_iata"": ""DEN"",   ""destination_airport_name"": ""Denver International"",   ""departure_date"": ""2026-06-17"",   ""return_date"": ""2026-06-21"",   ""passengers"": 1,   ""cabin_class"": ""economy"",   ""budget_usd"": null,   ""email"": ""a.mahid@wustl.edu"" } </TRAVEL_DETAILS> ... Thank you for calling. Goodbye. 
+ agent:  ""DEN"",   ""destination_airport_name"": ""Denver International"",   ""departure_date"": ""2026-06-17"",   ""return_date"": ""2026-06-21"",   ""passengers"": 1,   ""cabin_class"": ""economy"",   ""budget_usd"": 
+ agent:  null,   ""email"": ""a.mahid@wustl.edu"" } </TRAVEL_DETAILS> 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/1a6bb38a-04eb-48d9-af3b-fd3ebb34eecb,"The user, Mahid, contacted the agent to book a flight. Mahid requested to fly from New York (specifically JFK airport) to Denver, with travel dates set for June 17th to June 21st. The agent confirmed the details and stated that flight options would be sent to Mahid's email within a minute. The travel details were also captured, including the origin and destination airports, travel dates, and passenger information. The call ended with the agent thanking Mahid and confirming the next steps.","{""to"": ""+13172675624"", ""now"": ""Monday, April 27, 2026 10:09 AM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""1a6bb38a-04eb-48d9-af3b-fd3ebb34eecb"", ""country"": ""US"", ""now_utc"": ""Monday, April 27, 2026 2:09 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 66, ""callRequestId"": 66}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-27T10:09:20-04:00"", ""email_info"": ""No email on file — ask at the end of the call."", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-27 14:10:50.238,2026-04-27 14:08:54.71285
+68,68,8e2c034f-8441-4355-ba6a-40e61a804cb8,fd90e6fa-255d-4bfe-bf09-f8e178e8428e,+13172675624,completed,0,"assistant: <Call ended due to voicemail detection> 
+ user: Please leave your message for— 
+ ",,https://api.bland.ai/v1/recordings/fd90e6fa-255d-4bfe-bf09-f8e178e8428e,,"{""to"": ""+13172675624"", ""now"": ""Monday, April 27, 2026 11:05 AM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""fd90e6fa-255d-4bfe-bf09-f8e178e8428e"", ""country"": ""US"", ""now_utc"": ""Monday, April 27, 2026 3:05 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 68, ""callRequestId"": 68}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-27T11:05:12-04:00"", ""email_info"": ""No email on file — ask at the end of the call."", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-27 15:05:28.344,2026-04-27 15:03:49.732676
+67,67,8e2c034f-8441-4355-ba6a-40e61a804cb8,dcb5bcc5-cac3-4422-8c4d-1ccfc1df1331,+13172675624,completed,1,"agent: Hi Mahid! Thanks for calling Travnr. 
+ agent:  Where would you like to fly today? 
+ assistant: Hi Mahid! Thanks for calling Travnr. Where would you like to fly today? 
+ user: On a flight to Boston. <Block interruptions enabled. This message was ignored> 
+ user: On a flight to Boston. 
+ agent: Got it, Boston Logan. 
+ agent:  Where will you be departing from? 
+ assistant: Got it, Boston Logan. Where will you be departing from? 
+ user: Los Angeles. 
+ agent: Got it, LAX it is — let me know if you'd prefer Burbank or Long Beach. 
+ agent:  What are your travel dates? 
+ assistant: Got it, LAX it is — let me know if you'd prefer Burbank or Long Beach. What are your travel dates? 
+ user: My travel dates are June 3rd to June 9th. 
+ agent: So that's Los Angeles to Boston, 
+ agent:  departing June third, returning June ninth. 
+ agent:  Perfect — you'll have your options in your inbox within a minute. 
+ agent:  Talk soon. 
+ agent:  GOODBYE  <TRAVEL_DETAILS> {   ""origin_iata"": ""LAX"",   ""origin_airport_name"": ""Los Angeles International"",   ""destination_iata"": ""BOS"",   ""destination_airport_name"": ""Boston Logan International"",   ""departure_date"": ""2026-06-03"",   ""return_date"": ""2026-06-09"",   ""passengers"": 1,   ""cabin_class"": ""economy"",   ""budget_usd"": 
+ agent:  null,   ""email"": ""a.mahid@wustl.edu"" } </TRAVEL_DETAILS> 
+ assistant: So that's Los Angeles to Boston, departing June third, returning June ninth. Perfect — you'll have your options in your inbox within a minute. Talk soon. GOODBYE  <TRAVEL_DETAILS> {   ""origin_iata"": ""LAX"",   ""origin_airport_name"": ""Los Angeles International"",   ""destination_iata"": ""BOS"",   ""destination_airport_name"": ""Boston Logan International"",   ""departure_date"": ""2026-06-03"",   ""return_date"": ""2026-06-09"",   ""passengers"": 1,   ""cabin_class"": ""economy"",   ""budget_usd"": null,   ""email"": ""a.mahid@wustl.edu"" } </TRAVEL_DETAILS> ... Thank you for calling. Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/dcb5bcc5-cac3-4422-8c4d-1ccfc1df1331,"The user, Mahid, contacted Travnr to book a flight from Los Angeles (LAX) to Boston (BOS) for the travel dates of June 3rd to June 9th, 2026. The agent collected the necessary information, including departure and return dates, and informed Mahid that flight options would be sent to their email (a.mahid@wustl.edu) within a minute. The call ended with the agent confirming the details and bidding farewell.","{""to"": ""+13172675624"", ""now"": ""Monday, April 27, 2026 11:04 AM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""dcb5bcc5-cac3-4422-8c4d-1ccfc1df1331"", ""country"": ""US"", ""now_utc"": ""Monday, April 27, 2026 3:04 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 67, ""callRequestId"": 67}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-27T11:04:24-04:00"", ""email_info"": ""No email on file — ask at the end of the call."", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-27 15:06:02.612,2026-04-27 15:02:28.128229
+69,69,8e2c034f-8441-4355-ba6a-40e61a804cb8,50ee720d-1362-4ac9-ad8e-a585b3dafd9f,+13172675624,completed,0,"user: Hello. 
+ assistant: Hi Mahid, it's Travnr here. Where would you like to fly today? 
+ user: I'd like to fly to Boston. 
+ assistant: Got it, - 
+ user: From Las Vegas. 
+ assistant: Got it, Logan International it is. And what are your travel dates? 
+ user: June the 3rd. 
+ assistant: And when would you like to return? 
+ user: To, um, June the 9th. 
+ assistant: So that's Las Vegas to Boston, departing June third, returning June ninth. Perfect — you'll have your options in your inbox within a minute. Talk soon. GOODBYE 
+ ",,https://api.bland.ai/v1/recordings/50ee720d-1362-4ac9-ad8e-a585b3dafd9f,"The user, Mahid, inquired about flying from Las Vegas to Boston, specifically to Logan International Airport, with travel dates set for June 3rd to June 9th. The assistant, Travnr, confirmed the details and assured Mahid that flight options would be sent to their inbox within a minute.","{""to"": ""+13172675624"", ""now"": ""Monday, April 27, 2026 12:47 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""50ee720d-1362-4ac9-ad8e-a585b3dafd9f"", ""country"": ""US"", ""now_utc"": ""Monday, April 27, 2026 4:47 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 69, ""callRequestId"": 69}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-04-27T12:47:39-04:00"", ""__analysis"": {""email"": null, ""budget_usd"": null, ""passengers"": 1, ""cabin_class"": ""economy"", ""origin_iata"": ""LAS"", ""return_date"": ""2026-06-09"", ""departure_date"": ""2026-06-03"", ""destination_iata"": ""BOS"", ""origin_airport_name"": ""Las Vegas"", ""destination_airport_name"": ""Logan International""}, ""email_info"": ""No email on file — ask at the end of the call."", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-04-27 16:48:38.09,2026-04-27 16:44:48.18754
+72,72,9de388f0-8734-41f8-9a89-cb85c6c6ffd2,fb99401f-c2bd-4324-a3bd-2fb2d8a93156,+1 3475560205,completed,,"user: You know, we— you know— 
+ assistant: Hi Musamih, it's Travnr here. Where would you like to fly today? 
+ user: I want to go to— um, sometime in June. 
+ assistant: Got it, June sounds great. Where would you like to fly to? 
+ user: Uh, Miami Airport. 
+ user: And then you have to get out of— 
+ assistant: Sorry, I missed that. Where are you flying out of? 
+ user: Miami Airport. 
+ assistant: Okay, so you're flying to M- 
+ user: 7— 
+ user: The sum of the data, it doesn't try to— probably hearing background noise. 
+ user: You're right. 
+ user: Eh, tu vois. 
+ assistant: I'm sorry, I'm not catching that. Could you please tell me your departure city? 
+ user: I'd like to fly from Newark, New Jersey to Miami, Florida. 
+ assistant: Got it, Newark to Miami. What dates are you looking to travel? 
+ user: June 5th, uh, and return on June 9th. 
+ assistant: Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: Yeah, I'd like to, uh, travel— I prefer to fly in the mornings, um, and on the return I'd like to fly in the evening. 
+ user: Um, I have a dietary restriction of strictly vegan diet. 
+ assistant: Got it, I've noted the vegan preference. So that's Newark to Miami, departing June fifth, returning June ninth. Perfect — you'll h- 
+ user: Um, and, uh, I generally like to stay in hotels that are rated 4 stars or higher. 
+ user: Um, 
+ agent-action: Ended call 
+ assistant: Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ ",,https://api.bland.ai/v1/recordings/fb99401f-c2bd-4324-a3bd-2fb2d8a93156,"The user, Musamih, spoke with the assistant, Travnr, to book a flight from Newark, New Jersey to Miami, Florida, with a departure date of June 5th and a return date of June 9th. The user preferred morning flights for the departure and evening flights for the return. Additionally, they have a strict vegan dietary restriction and prefer to stay in 4-star or higher rated hotels. The assistant noted these preferences and informed the user that they would receive their options via email shortly.",,,,,2026-05-08 15:24:17.763709
+70,70,8e2c034f-8441-4355-ba6a-40e61a804cb8,039b9370-19dd-4ec8-86b5-e62a4b9fe3e7,+13172675624,completed,1,"agent: Hi Mahid! Thanks for calling Travnr. 
+ agent:  Where would you like to fly? 
+ assistant: Hi Mahid! Thanks for calling Travnr. Where would you like to fly? 
+ user: Um, I need you to say something specific to me. <Block interruptions enabled. This message was ignored> 
+ user: Hello. 
+ agent: Hi Mahid! Thanks for calling Travnr. 
+ agent:  Where would you like to fly? 
+ assistant: Hi Mahid! Thanks for calling Travnr. Where would you like to fly? 
+ user: I'd like to fly to Chicago. 
+ agent: Got it, I'll plan on O'Hare unless you'd prefer Midway. 
+ agent:  Where are you departing from? 
+ assistant: Got it, I'll plan on O'Hare unless you'd prefer Midway. Where are you departing from? 
+ user: Denver. 
+ agent: Got it. What are your travel dates — departure and return? 
+ assistant: Got it. What are your travel dates — departure and return? 
+ user: Let's say the 17th of June. 
+ agent: And what's your return date? 
+ assistant: And what's your return date? 
+ user: Um, return date, let's say the 23rd of June. 
+ agent: Before I put this together — do you have any preferences I should know about? 
+ agent:  Things like a rough budget, preferred times of day, or anything else? 
+ assistant: Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: Um, not necessarily, but I'd like you to tell me, like, before you end the call, um, like the following. Like, I'd like you to say, your flight is ready for you. 
+ agent: Got it. So that's Denver to Chicago O'Hare, 
+ agent:  departing June seventeenth, returning June twenty-third. 
+ agent:  Perfect — you'll have your options in your inbox within a minute. 
+ agent:  Talk soon. 
+ agent:  GOODBYE 
+ assistant: Got it. So that's Denver to Chicago O'Hare, departing June seventeenth, returning June twenty-third. Perfect — you'll have your options in your inbox within a minute. Talk soon. GOODBYE ... Thank you for calling. Goodbye. 
+ agent-action: Ended call 
+ user: Yeah. 
+ agent: Got it. So that's Denver to Chicago O'Hare, 
+ agent:  departing June seventeenth, returning June twenty-third. 
+ assistant: Got it. So that's Denver to Chicago O'Hare, 
+ ",,https://api.bland.ai/v1/recordings/039b9370-19dd-4ec8-86b5-e62a4b9fe3e7,"The user, Mahid, contacted Travnr to book a flight from Denver to Chicago. The user specified the travel dates as June 17th for departure and June 23rd for return, with a preference for O'Hare airport. The agent confirmed the details and stated that flight options would be sent to the user's inbox within a minute. However, the user had also requested a specific phrase (""your flight is ready for you"") to be said before ending the call, which was not fulfilled. The call ended with the agent repeating the confirmed details and bidding farewell.","{""to"": ""+13172675624"", ""now"": ""Friday, May 1, 2026 4:22 PM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""039b9370-19dd-4ec8-86b5-e62a4b9fe3e7"", ""country"": ""US"", ""now_utc"": ""Friday, May 1, 2026 8:22 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""8e2c034f-8441-4355-ba6a-40e61a804cb8"", ""blandCallDbId"": 70, ""callRequestId"": 70}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""timestamp"": ""2026-05-01T16:22:08-04:00"", ""__analysis"": {""email"": null, ""notes"": null, ""budget_usd"": null, ""passengers"": 1, ""cabin_class"": ""economy"", ""origin_iata"": ""DEN"", ""return_date"": ""2026-06-23"", ""departure_date"": ""2026-06-17"", ""time_preference"": null, ""destination_iata"": ""ORD"", ""origin_airport_name"": ""Denver"", ""destination_airport_name"": ""Chicago O'Hare""}, ""email_info"": ""No email on file — ask at the end of the call."", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""No traveler profile found."", ""BlandStatusCode"": 200}",,,2026-05-01 20:24:01.102,2026-05-01 20:21:53.274953
+74,74,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,a082436f-9542-4d78-81b0-c65642cc5a4a,+13475305034,completed,0,"user: Hello. 
+ assistant: Hi Mahid, it's Travnr here. I see we sent you some options for Indianapolis to Boston earlier today — did you want to revisit those or plan something new? 
+ user: Uh, oh, okay. Actually, I want to plan something new. 
+ assistant: Got it. Where would you like to fly? 
+ user: I'd like to go— actually, let's just revisit those. Let's revisit those Boston or Indianapolis to Boston. 
+ user: Um, I just like need the new options sent to me. Um, there's not necessarily anything wrong with the previous options, but I just want it to be updated, I guess. 
+ assistant: Got it, I'll refresh those options for Indianapolis to Boston and send them over to you. Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ user: That looks fine. 
+ assistant: Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/a082436f-9542-4d78-81b0-c65642cc5a4a,"The caller, Mahid, initially expressed interest in planning a new trip but then decided to revisit previous options for flights from Indianapolis to Boston. They requested that the options be updated and resent, not due to any issues with the previous options, but rather for the sake of having the most current information. The assistant agreed to refresh and resend the options, which would be delivered to the caller's inbox within a minute, and the call was subsequently ended.","{""to"": ""+13475305034"", ""now"": ""Saturday, May 9, 2026 2:25 PM"", ""zip"": ""10013"", ""city"": ""NEW YORK"", ""from"": ""+14159148074"", ""state"": ""NY"", ""call_id"": ""a082436f-9542-4d78-81b0-c65642cc5a4a"", ""country"": ""US"", ""now_utc"": ""Saturday, May 9, 2026 6:25 PM"", ""language"": ""English"", ""metadata"": {""userId"": ""f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e"", ""blandCallDbId"": 74, ""callRequestId"": 74}, ""short_to"": ""3475305034"", ""timezone"": ""America/New_York"", ""aiSummary"": {""model"": ""claude-sonnet-4-5"", ""oneLiner"": ""1 traveler, IND→BOS, economy, requested refresh of previously sent options"", ""confidence"": 0.92, ""structured"": {""pax"": 1, ""cabin"": ""economy"", ""dates"": null, ""route"": ""IND→BOS"", ""budget"": null, ""preferences"": ""requested refresh of previously sent options""}, ""generatedAt"": ""2026-05-09T18:26:21.238Z""}, ""timestamp"": ""2026-05-09T14:25:10-04:00"", ""__analysis"": {""email"": ""mahid@travnr.com"", ""notes"": null, ""budget_usd"": null, ""passengers"": 1, ""cabin_class"": ""economy"", ""origin_iata"": ""IND"", ""return_date"": null, ""departure_date"": null, ""time_preference"": null, ""destination_iata"": ""BOS"", ""origin_airport_name"": null, ""destination_airport_name"": null}, ""email_info"": ""Email on file: mahid@travnr.com"", ""short_from"": ""4159148074"", ""booking_info"": ""Booking ABC123 - USD 1.00 (paid)"", ""phone_number"": ""+13475305034"", ""proposal_info"": ""\""Trip to Boston\"" - $331.00 (sent); \""Trip to Boston\"" - $210.94 (sent)"", ""traveler_info"": ""Name: Mahid Abdulkarim"", ""BlandStatusCode"": 200, ""previous_proposal_info"": ""Sent flight options for IND → BOS earlier today, status pending""}",,,2026-05-09 18:26:17.462,2026-05-09 18:18:17.964809
+71,71,f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e,4252af87-e70f-400b-983f-acdb1c767380,+13172675624,completed,0,"user: Hello.  
+ agent: Hi Mahid! Where would you like to fly? 
+ assistant: Hi Mahid! Where would you like to fly? 
+ user: Um, you said what? <Block interruptions enabled. This message was ignored> 
+ user: So I would like to fly from Denver to Boston. 
+ agent: Got it — Denver to Boston. Where will you be departing from? 
+ user: And I would like to fly on, um, May 27th. 
+ agent: Got it — Denver to Boston on May twenty-seventh. When would you like to return? 
+ assistant: Got it — Denver to Boston on - 
+ user: and return on June 3rd. 
+ agent: Got it — May twenty-seventh to June third. When would you like to depart? 
+ user: I'd like to fly alone. 
+ agent: Got it. Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: Um, I don't have any other preferences. 
+ agent: Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ user: And that's it. 
+ agent: Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ assistant: Perfect — you'll have your options in your inbox within a minute. Talk soon. ... Thank you for calling. Goodbye. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/4252af87-e70f-400b-983f-acdb1c767380,"The user, Mahid, inquired about flying from Denver to Boston on May 27th and returning on June 3rd. The agent gathered the necessary information, including the user's preference to fly alone, but noted that Mahid did not have any specific budget or time-of-day preferences. The agent concluded the call by stating that flight options would be sent to Mahid's inbox within a minute.","{""to"": ""+13172675624"", ""now"": ""Sunday, May 3, 2026 6:23 AM"", ""zip"": ""46255"", ""city"": ""INDIANAPOLIS"", ""from"": ""+14159148074"", ""state"": ""IN"", ""call_id"": ""4252af87-e70f-400b-983f-acdb1c767380"", ""country"": ""US"", ""now_utc"": ""Sunday, May 3, 2026 10:23 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""f704ef3e-5a2d-48fa-bfa6-dcec2b4e8e4e"", ""blandCallDbId"": 71, ""callRequestId"": 71}, ""short_to"": ""3172675624"", ""timezone"": ""America/Indiana/Indianapolis"", ""aiSummary"": {""model"": ""claude-sonnet-4-5"", ""oneLiner"": ""1 traveler, DEN→BOS, May 27-Jun 3, economy, no special preferences"", ""confidence"": 0.95, ""structured"": {""pax"": 1, ""cabin"": ""economy"", ""dates"": ""May 27-Jun 3"", ""route"": ""DEN→BOS"", ""budget"": null, ""preferences"": null}, ""generatedAt"": ""2026-05-03T10:35:00.540Z""}, ""timestamp"": ""2026-05-03T06:23:35-04:00"", ""__analysis"": {""email"": ""mahid@travnr.com"", ""notes"": null, ""budget_usd"": null, ""passengers"": 1, ""cabin_class"": ""economy"", ""origin_iata"": ""DEN"", ""return_date"": ""2026-06-03"", ""departure_date"": ""2026-05-27"", ""time_preference"": null, ""destination_iata"": ""BOS"", ""origin_airport_name"": null, ""destination_airport_name"": null}, ""email_info"": ""Email on file: mahid@travnr.com"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+13172675624"", ""proposal_info"": ""No active proposals."", ""traveler_info"": ""Name: Mahid Abdulkarim"", ""BlandStatusCode"": 200, ""previous_proposal_info"": ""No prior options to revisit""}",,,2026-05-03 10:24:37.375,2026-05-03 10:23:03.684838
+76,76,fde38de5-67e5-43eb-9910-010c3b63313e,1351f819-2e30-46e6-a653-98dcf7d1dcf0,+1 7809644589,completed,,"user: Hello? 
+ assistant: Hi Zakariya, this is Travnr. Where would you like to fly today? 
+ user: To San Francisco. 
+ assistant: Got it, SFO unless you'd prefer Oakland or San Jose. And where are you departing from? 
+ user: Oakland. And I wanna depart from Edmonton. 
+ assistant: Got it, Edmonton. What- 
+ user: Alberta. 
+ assistant: Got it, Edmonton. When are you looking to depart? 
+ user: I'm looking to depart June twentieth. 
+ assistant: And when would you like to return? 
+ user: June twenty six. 
+ assistant: Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: No preferred times of day and economy class. 
+ user: Cheapest fare possible. 
+ assistant: Got it. So that's Edmonton to San Francisco, departing June twentieth, returning June twenty sixth. Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ user: Sounds good. Thank you very much. 
+ assistant: Talk soon. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/1351f819-2e30-46e6-a653-98dcf7d1dcf0,"The user, Zakariya, inquired about a flight from Edmonton, Alberta to San Francisco, specifically to SFO, with a departure date of June 20th and a return date of June 26th. The user preferred the cheapest economy class fare possible, with no specific time of day preferences. The assistant agreed to send the user flight options via email within a minute.",,,,,2026-06-15 22:17:21.15065
+77,77,fde38de5-67e5-43eb-9910-010c3b63313e,4200b24b-09f4-4ced-9af0-e333573cc349,+17809644589,completed,0,"assistant: Hi Zakariya, this is Travnr. I see we sent you some options for Edmonton to San Francisco earlier today — did you want to revisit those or plan something new? 
+ user: No. I would like to book, have a new request. 
+ assistant: Got it. Where would you like to fly? 
+ user: Edmonton to Toronto. 
+ user: Canada. 
+ assistant: Got it. What are your travel dates? 
+ user: June twentieth to June twenty six. 
+ assistant: Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: I don't have any preferred time of day. I would like the economy class and the cheapest fare possible. On those days. 
+ assistant: So that's Edmonton to Toronto, departing June twentieth, returning June twenty sixth. Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ user: Okay. Sounds good. Thank you very much. 
+ assistant: Talk soon. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/4200b24b-09f4-4ced-9af0-e333573cc349,"The user, Zakariya, contacted Travnr to book a new flight from Edmonton to Toronto, Canada, with travel dates from June 20th to June 26th. Zakariya preferred economy class and requested the cheapest fare possible, with no specific time of day preference. The assistant agreed to send flight options to Zakariya's inbox, which would be received within a minute.","{""to"": ""+17809644589"", ""now"": ""Monday, June 15, 2026 8:43 PM"", ""city"": ""EDMONTON"", ""from"": ""+14159148074"", ""state"": ""AB"", ""call_id"": ""4200b24b-09f4-4ced-9af0-e333573cc349"", ""country"": ""CA"", ""now_utc"": ""Tuesday, June 16, 2026 3:43 AM"", ""language"": ""English"", ""metadata"": {""userId"": ""fde38de5-67e5-43eb-9910-010c3b63313e"", ""blandCallDbId"": 77, ""callRequestId"": 77}, ""short_to"": ""7809644589"", ""timezone"": ""America/Los_Angeles"", ""aiSummary"": {""model"": ""claude-sonnet-4-5"", ""oneLiner"": ""1 traveler, YEG→YYZ, Jun 20-26, economy, cheapest fare possible"", ""confidence"": 0.95, ""structured"": {""pax"": 1, ""cabin"": ""economy"", ""dates"": ""Jun 20-26"", ""route"": ""YEG→YYZ"", ""budget"": null, ""preferences"": ""cheapest fare possible""}, ""generatedAt"": ""2026-06-16T03:44:31.595Z""}, ""timestamp"": ""2026-06-15T20:43:23-07:00"", ""__analysis"": {""email"": ""zmulahussain@gmail.com"", ""notes"": null, ""budget_usd"": null, ""passengers"": 1, ""cabin_class"": ""economy"", ""origin_iata"": ""YEG"", ""return_date"": ""2026-06-26"", ""departure_date"": ""2026-06-20"", ""time_preference"": null, ""destination_iata"": ""YYZ"", ""origin_airport_name"": ""Edmonton International Airport"", ""destination_airport_name"": ""Toronto Pearson International Airport""}, ""email_info"": ""Email on file: zmulahussain@gmail.com"", ""short_from"": ""4159148074"", ""booking_info"": ""No recent bookings."", ""phone_number"": ""+17809644589"", ""proposal_info"": ""\""Trip to San Francisco\"" - $318.36 (sent)"", ""traveler_info"": ""Name: Zakariya Mula-Hussain"", ""BlandStatusCode"": 200, ""previous_proposal_info"": ""Sent flight options for YEG → SFO earlier today, status pending""}",,,2026-06-16 03:44:28.007,2026-06-16 03:43:13.219318
+78,78,ae3094c4-1345-4f7d-ad64-132378511d1a,fd3ecaaf-a958-49c8-b5e6-73b85082ddd8,+1 9786756071,completed,,"user: Hello? 
+ assistant: Hi Josh, this is Travnr. Where would you like to fly? 
+ user: I would like to go to e c p 
+ assistant: Got it, Panama City Beach. Where are you departing from? 
+ user: Boston Boston Logan. 
+ assistant: Got it, Boston Logan. What are your travel dates? 
+ user: I would like to travel I would like to fly in a week from Wednesday. 
+ user: And fly out a week from 
+ user: Saturday 
+ user: next Saturday. 
+ assistant: Got it, returning Saturday, July eleventh. Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: Yes. I would like to would like to sit in an aisle seat 
+ user: and I would like to have as little of as little of a layover as possible, if at all none. 
+ assistant: Got it. So that's Boston Logan to Panama City Beach, departing Wednesday, July first, returning Saturday, July eleventh. Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ user: Perfect. Thank you. 
+ assistant: Talk soon. 
+ agent-action: Ended call 
+ ",,https://api.bland.ai/v1/recordings/fd3ecaaf-a958-49c8-b5e6-73b85082ddd8,"The user, Josh, booked a flight with Travnr from Boston Logan to Panama City Beach, departing on July 1st and returning on July 11th. He specified preferences for an aisle seat and minimal or no layovers. The assistant confirmed the details and will send flight options to Josh's inbox within a minute.",,,,,2026-06-22 00:59:27.126774

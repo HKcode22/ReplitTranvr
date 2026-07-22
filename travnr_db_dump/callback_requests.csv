@@ -1,0 +1,483 @@
+id,name,phone,email,status,bland_call_id,transcript,summary,recording_url,created_at
+1,Mahid abdulkarim,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-02-22 21:11:15.382805
+2,Mahid,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-02-22 21:11:59.917751
+3,mahid,+1 3172675624,mahidbma@gmail.com,pending,,,,,2026-02-22 21:15:14.533617
+4,mahid,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-02-23 01:27:07.92668
+5,Al,+1 2019188083,almabdella@gmail.com,pending,,,,,2026-02-23 17:48:01.791742
+6,Mahid,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-02-23 17:49:38.753942
+7,Almurtada Abdella,+1 2019188083,almabdella@gmail.com,completed,9dc7a51b-e9b9-48a6-a7ac-f62f61460e96,"user: Hello. 
+ assistant: Hello Almurtada, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm looking to book a flight from New York City to London. 
+ assistant: Excellent choice. Where in New York City will you be departing from? 
+ user: From J FK. Oh 
+ assistant: Got it, JFK. And what are your travel dates? 
+ user: Leaving February 28th and coming back March 8th. 
+ assistant: Great, departing February twenty eighth and returning March eighth. How many travelers will be going? 
+ user: Two travelers. 
+ assistant: Perfect. And what is your preferred cabi- 
+ user: Okay. 
+ assistant: What is your preferred cabin class for this trip? 
+ user: Economy and no other preferences. 
+ assistant: Understood. And what is your budget range for this trip? 
+ user: 650 per ticket. 
+ assistant: Understood. To summarize, you're looking to book two economy tickets from JFK to London, departing February twenty eighth and returning March eighth, with a budget of six hundred and fifty dollars per ticket. I'll prepare a personalized travel proposal- 
+ user: Sure. 
+ assistant: I'll prepare - 
+ user: Court. All right. Thank you so much. 
+ assistant: You're very welcome. Have a wonderful day, goodbye. 
+ agent-action: Ended call 
+ ","The user, Almurtada, contacted Travnr to book a flight from New York City (JFK) to London for two travelers. The travel dates are February 28th to March 8th, with a preferred cabin class of economy and a budget of $650 per ticket. The assistant prepared to provide a personalized travel proposal based on these specifications before the call ended.",https://api.bland.ai/v1/recordings/9dc7a51b-e9b9-48a6-a7ac-f62f61460e96,2026-02-25 02:16:07.166175
+8,Al,+1 2019188083,aoa28@njit.edu,completed,eae40805-e4c9-4565-83c1-c5e5dd2406ee,"user: Hello. 
+ assistant: Hi Al, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm booking a flight from New York City to London on February twenty seventh. 
+ assistant: Great, London is a fantastic destination. Where in New York City will you be departing from? 
+ user: From JFK. 
+ assistant: Got it, flying out of JFK. What date would you like to return? 
+ user: March 7th. 
+ assistant: Understood, returning March seventh. How many travelers will be going on this trip? 
+ user: Two passengers and I have no preferences and a max budget of 650 per passenger. 
+ assistant: Thanks for that. What cabin class would you prefer, economy, premium economy, busine- 
+ user: Economy. 
+ assistant: Perfect. Just to recap, you're looking for two economy class tickets from JFK to London, departing February twenty seventh and returning March seventh, with a maximum budget of six hundred and fifty dollars per passenger. I'll prepare a personalized travel proposal for you now. 
+ user: All right, thank you. 
+ assistant: You're welcome, Al. We'll be in touch soon with your options. Have a great night! 
+ agent-action: Ended call 
+ ","The user, Al, contacted Travnr to book a flight from New York City (JFK) to London, departing on February 27th and returning on March 7th. The user is traveling with one other passenger and has a maximum budget of $650 per passenger for economy class tickets. The assistant collected the necessary information and will prepare a personalized travel proposal for Al, to be shared soon.",https://api.bland.ai/v1/recordings/eae40805-e4c9-4565-83c1-c5e5dd2406ee,2026-02-25 04:13:46.712362
+9,Mahid Abdulkarim,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-02-25 07:36:54.272807
+10,Mahid ,+1 3475305034,mahidbma@gmail.com,completed,3547ebcb-fddf-470e-b6b5-cd7d08918795,"assistant: Hello Mahid, this is Travnr. How can I help you with your travel plans today? 
+ user: So I'd like to book a flight from Saint Louis to Washington, DC, and I'd like to leave on March 7. 
+ assistant: Great, I can help you with that. When would you like to return? 
+ user: Just the one way. 
+ assistant: Understood, it's a one-way trip. How many travelers will be going? 
+ user: Just myself. 
+ assistant: Got it. What's your preferred cabin class - economy, premium economy, business, or first class? 
+ user: Economy. 
+ assistant: Perfect. What's your budget range for this flight? 
+ user: I want... 
+ assistant: Go ahead, what's your budget range? 
+ user: I love the I uh just the cheapest possible thing, I guess. 
+ assistant: Understood, you're looking for the most affordable option. Do you have any seat preferences or a preferred airline? 
+ user: No. 
+ assistant: Alright. Let me summarize your travel details: You're booking a one-way economy flight from Saint Louis to Washington, DC, departing March seventh, for one traveler, looking for the lowest fare with no specific airline or seat preferences. I'll prepare a personalized travel proposal for you now. Is there anything else you'd like to add? 
+ user: No. 
+ assistant: Perfect. Thank you for choosing Travnr, Mahid. We'll be in touch shortly with your travel proposal. 
+ user: Thanks 
+ assistant: Goodbye! 
+ agent-action: Ended call 
+ ","The user, Mahid, contacted Travnr to book a one-way economy flight from Saint Louis to Washington, DC, departing on March 7. Mahid is traveling alone and is looking for the cheapest possible option with no specific airline or seat preferences. The assistant has taken the user's travel details and will prepare a personalized travel proposal to be sent shortly.",https://api.bland.ai/v1/recordings/3547ebcb-fddf-470e-b6b5-cd7d08918795,2026-02-25 07:38:04.643163
+11,Big,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-02-25 20:12:38.506542
+12,Mark,+1 2019188083,wording-options-1p@icloud.com,completed,4c3b090b-4b58-4976-9926-88554056bafc,"user: Hello. 
+ assistant: Hi Mark, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm flying from Miami to New York from February twenty eighth to March ninth. 
+ assistant: Great, Miami to New York from February twenty eighth to March ninth. How many travelers will be going on this trip? 
+ user: Two travelers. 
+ assistant: Got it, two travelers. What is your preferred cabin class for this flight? 
+ user: Economy, no other preferences and a budget of $450 per ticket. 
+ assistant: Understood. So to summarize, you're flying from Miami to New York for two travelers, departing February twenty eighth and returning March ninth, in economy class with a budget of four hundred and fifty dollars per ticket. I'll prepare a personalized travel proposal for you now. Is there anything else you'd like to add? 
+ user: That'll be all. Thank you. 
+ assistant: You're welcome, Mark. I'll get that proposal ready for you right away. 
+ agent-action: Ended call 
+ ","The user, Mark, contacted Travnr to book a flight from Miami to New York for two travelers, departing on February 28th and returning on March 9th. He specified a preference for economy class and a budget of $450 per ticket. The assistant confirmed the details and offered to prepare a personalized travel proposal, which Mark accepted, ending the call without adding any further requests.",https://api.bland.ai/v1/recordings/4c3b090b-4b58-4976-9926-88554056bafc,2026-02-25 21:12:30.90094
+13,Almurtada Abdella,+1 2019188083,rawdam03@gmail.com,completed,02b703d9-4261-43f5-8cc0-fee4b98bab71,"user: Hello. 
+ assistant: Hello Almurtada, this is Travnr. How can I help you with your travel plans today? 
+ user: I'm booking a flight from New York City to Los Angeles from February 27 to March 7. 
+ assistant: Great, New York City to Los Angeles from February twenty-seventh to March seventh. How many travelers will be going on this trip? 
+ user: One traveler, max budget of $650, economy, cabin class, and no other preferences. 
+ user: no other preferences. 
+ assistant: Understood, one traveler, economy class, with a max budget of six hundred and fifty dollars. Just to confirm, you'll be departing from New York City on February twenty-seventh and returning on March seventh, correct? 
+ user: Yes. 
+ assistant: Perfect. Let me summarize your travel details: one traveler, economy class, departing New York City to Los Angeles, February twenty-seventh to March seventh, with a max budget of six hundred and fifty dollars. I'll prepare a personalized travel proposal for you now. Thank you for choosing Travnr, have a wonderful evening. 
+ user: Thank you, you too. 
+ assistant: Goodbye. 
+ agent-action: Ended call 
+ ","The user, Almurtada, contacted Travnr to book a flight from New York City to Los Angeles for one traveler, with a maximum budget of $650 for an economy class ticket. The travel dates are from February 27 to March 7. The assistant confirmed the details and agreed to prepare a personalized travel proposal for the user.",https://api.bland.ai/v1/recordings/02b703d9-4261-43f5-8cc0-fee4b98bab71,2026-02-26 02:15:23.34063
+14,Mahid,+1 3475305034,mahidbma@gmail.com,completed,3e157592-1388-4a35-89a9-f50a195c11f2,"assistant: <Call ended due to voicemail detection> 
+ user: Please leave your message for 347-530-500. 
+ ",Not enough information to generate summary,https://api.bland.ai/v1/recordings/3e157592-1388-4a35-89a9-f50a195c11f2,2026-02-26 03:28:10.580835
+15,Manel Jaballah,+1 2017803209,mjaballah22@gmail.com,pending,,,,,2026-04-01 16:51:40.437548
+16,Mahid,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-04-19 12:44:50.991263
+17,Mahid Abdulkarim,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-04-20 17:56:04.572328
+18,Minna,+1 7202750529,Mahidbma@gmail.com,pending,,,,,2026-04-20 17:57:09.206172
+19,Mahid,+1 7202750529,mahidbma@gmail.com,pending,,,,,2026-04-20 18:03:07.215312
+20,mahid,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-04-20 18:03:29.055552
+21,Mahid Abdulkarim,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-04-21 17:23:21.620305
+22,Omar Soltan,+1 4193924771,soltinecracker93@gmail.com,completed,073cd075-c287-46a2-83cc-2a4ded31017e,"user: Hello? 
+ assistant: Hi Omar, this is Travnr. How can I help you with your travel plans today? 
+ user: I want to go to Bali. 
+ assistant: Bali sounds amazing. Which a- 
+ user: Mm-hmm. 
+ assistant: Which airport in Bali would you like to fly into? There's Ngurah Rai International Airport, also known as DPS. 
+ user: Uh, find me the cheapest one. 
+ assistant: Got it. Where will you be departing from? 
+ user: Uh, St. Louis. 
+ assistant: Which airport in St. Louis would you like to fly out of? There's Lambert International, also known as STL. 
+ user: Find me the cheapest one. 
+ assistant: Understood. What are your travel dates? I'll need your departure and return dates. 
+ user: Sometime in May. Anytime works. 
+ assistant: Do you have a preference for how many travelers will be going? 
+ user: Um, 
+ assistant: Just yourself, 
+ ","The user, Omar, is planning a trip to Bali and has contacted Travnr for assistance. He is looking for the cheapest options and is flexible with his travel dates in May. He will be departing from St. Louis and wants to find the most affordable flights, without specifying a particular airport in Bali or St. Louis. Omar will be traveling alone. The conversation was cut off before further details, such as specific travel dates or flight preferences, could be discussed.",https://api.bland.ai/v1/recordings/073cd075-c287-46a2-83cc-2a4ded31017e,2026-04-21 17:31:39.135266
+23,Mahid,+1 3475305034,mahidbma@gmail.com,pending,,,,,2026-04-21 18:06:42.168214
+24,Mahid Abdulkarim,+1 3172675624,a.mahid@wustl.edu,completed,f5494fa0-d2e8-4a15-88ce-8aa6ae3577f0,"user: Hello. 
+ assistant: Hi Mahid, this is Travnr. How can I help you today? 
+ user: Um, so I'd like to book a flight. 
+ assistant: Great, I'd be ha- 
+ user: from Chicago to Denver. 
+ assistant: Great, I'd be - 
+ user: May 27th. I'd like it to be one-way, and I'd like to use, um, Frontier. 
+ assistant: Okay, so you're looking for a one-way flight from Chica- 
+ user: Um, and I do have a budget, um, of max like $40, and I don't care about any of the other things, just like follow the budget and stuff. 
+ assistant: Okay, so you're looking for a one-way flight from Chicago to Denver on May twenty-seventh with Frontier, with a max budget of forty dollars. Just to confirm, which airport in Chicago would you like to depart from, O'Hare or Midway? 
+ user: Oh, hey. 
+ assistant: Hi there. So, which airport in Chicago would you prefer, O'Hare or Midway? 
+ user: Okay. 
+ assistant: Great. And which airport in Denver would you like to fly into, Denver International or another? 
+ user: Oh, hair. 
+ assistant: Okay, O'Hare it is. And which airport in Denver would you like to fly into, Denver International? 
+ user: Yep, then when they're international— 
+ assistant: Got it. And how many travelers will be going on this trip? 
+ user: Just me. 
+ assistant: Okay, just one traveler. And what is your preferred cabin class, economy, premium economy, business, or first class? 
+ user: Economy— 
+ assistant: Okay, economy class. Just to recap, you're looking for a one-way flight for one traveler from Chicago O'Hare to Denver International on May twenty-seventh with Frontier, in economy class, with a max budget of forty dollars. Is that all correct? 
+ user: Yep. 
+ assistant: Perfect. I'll prepare a personalized travel proposal for you based on these details and get back to you shortly. Thanks for choosing Travnr, have a great day! 
+ user: Thank you. 
+ agent-action: Ended call 
+ assistant: You're welcome. Goodbye! 
+ ","The user, Mahid, contacted Travnr to book a one-way flight from Chicago to Denver on May 27th with Frontier Airlines, with a strict budget of $40. The user preferred to depart from Chicago O'Hare and arrive at Denver International, traveling solo in economy class. The assistant confirmed the details and agreed to prepare a personalized travel proposal based on the user's requirements, which will be provided shortly.",https://api.bland.ai/v1/recordings/f5494fa0-d2e8-4a15-88ce-8aa6ae3577f0,2026-04-22 00:58:54.694748
+25,Waeil Ahmed,+1 2078359953,waeilahmed24a@gmail.com,completed,28389f7f-affd-446b-abc2-7f82e255cd6b,"user: Hello.  
+ assistant: Hi Waeil, this is Travnr. I see you requested a callback about your ideal destination. How can I help you today? 
+ user: Hello, I'd like to book a trip to Portland, Maine. 
+ assistant: Portland, Maine so- 
+ user: From Indianapolis. 
+ assistant: Got it, flying from Indianapolis to Portland, Maine. Which airport in Indianapolis would you like to depart from? 
+ user: I would like to depart from Indianapolis International Airport. 
+ assistant: Great, Indianapolis International. And for Portland, Maine, which airport would you prefer to fly into? 
+ user: I'd like to fly into the Portland Jetport. 
+ assistant: Perfect,- 
+ user: PWM— 
+ assistant: PWM, got it. What are your travel dates? 
+ user: I would like to travel on May 12th. 
+ assistant: May twelfth, 
+ user: And then I'd like to come back, uh, I would like to come back August 18th. 
+ assistant: And returning August eighteenth. How many travelers will be going? 
+ user: 13— 
+ assistant: Thirtee- 
+ user: Yes. 
+ assistant: Thirteen travelers. What is your preferred cabin class? 
+ user: I'd like to be economy. 
+ assistant: Economy class. What is your budget range for this trip? 
+ user: I don't want to spend no more than $250. 
+ assistant: Two hundred and fifty dollars total. Do you have any seat or airline preferences? 
+ user: Uh, I don't have an airline preference, but I do not want to fly Frontier. 
+ assistant: Understood, no Frontier. Let me summarize everything for you. You're looking to book a trip for thirteen travelers, departing Indianapolis International Airport, IND, on May twelfth, twenty twenty-six, and returning from Portland Jetport, PWM, on August eighteenth, twenty twenty-six, in economy class, with a budget of two hundred and fifty dollars, and you prefer not to fly Frontier. I'll prepare a personalized travel proposal for you now. 
+ user: Actually, I did not want to fly with 13 travelers. I wanted to fly 1 traveler on May 13th. 
+ assistant: My apologies for the confusion. So it's one traveler, departing May thirteenth. Is the return date still August eighteenth? 
+ user: Yes. 
+ assistant: Got it. Let me summarize the corrected details. 
+ user: Yes. 
+ assistant: You're looking t- 
+ user: Still the same. 
+ assistant: You're looking to book a trip for one traveler, departing Indianapolis International Airport, IND, on May thirteenth, twenty twenty-six, and returning from Portland Jetport, PWM, on August eighteenth, twenty twenty-six, in economy class, with a budget of two hundred and fifty dollars, and you prefer not to fly Frontier. 
+ user: Yes. 
+ user: Yes. 
+ user: Everything is correct. 
+ user: Hello? 
+ user: Thank you. 
+ assistant: Thank you, Waeil. I'll get that proposal ready for you. Have a great evening. 
+ agent-action: Ended call 
+ ","The caller, Waeil, requested to book a trip from Indianapolis International Airport to Portland Jetport, with a departure date of May 13th and a return date of August 18th. The traveler will be flying solo in economy class, with a budget of $250, and prefers not to fly with Frontier. After clarifying initial mistakes regarding travel dates and number of travelers, the assistant confirmed the corrected details and will prepare a personalized travel proposal for Waeil.",https://api.bland.ai/v1/recordings/28389f7f-affd-446b-abc2-7f82e255cd6b,2026-04-24 00:14:35.556834
+26,Waeil Ahmed,+1 2078359953,waahmed@iu.edu,completed,b6ba1c1d-1973-4326-8d9b-79beb13413c4,"user: Hello.  
+ assistant: Hi, this is Travnr. I'm calling for Waeil Ahmed. How can I help you with your travel plans today? 
+ user: Hello, I'd like to book a flight from Indianapolis to Portland, Maine. 
+ assistant: Great, I can help you with that. For your departure from Indianapolis, would you be flying out of Indianapolis International Airport? 
+ user: Uh, yes. 
+ assistant: Perfect. And for your arrival in Portland, Maine, 
+ user: I will— 
+ assistant: I will be flying into Portland International Jetport. 
+ user: Yes. 
+ assistant: Excellent. What are your travel dates? When would you like to depart and when would you like to return? 
+ user: I would like to depart on May 13th, and I'd like to have my return flight on August 20th. 
+ assistant: Okay, so departing May thirteenth and returning August twentieth. How many travelers will be going on this trip? 
+ user: Just one. 
+ assistant: Got it, just one traveler. What is your preferred cabin class? Would you like economy, premium economy, business, or first class? 
+ user: I'm open to economy or premium economy. 
+ assistant: Understood, you're open to either economy or premium economy. What is your budget range for this trip? 
+ user: Around $250. 
+ assistant: Okay, around two hundred and fifty dollars. Do you have any specific seat preferences or airline preferences? 
+ user: I would— I'm open to flying with any airline besides Frontier. 
+ assistant: Got it, any airline except Frontier. To summarize, you're looking for a flight for one traveler from Indianapolis International to Portland International Jetport, departing May thirteenth and returning August twentieth, in economy or premium economy, with a budget of two hundred and fifty dollars, avoiding Frontier Airlines. I'll prepare a personalized travel proposal for you now. Have a great evening. 
+ user: Thank you. 
+ user: Thank you. 
+ user: Thank you. 
+ user: Have a good one. 
+ user: Thank you. 
+ user: Thank you. 
+ user: Thank you. 
+ user: Okay, thank you. Sounds good. 
+ user: Sounds good. Thank you. 
+ user: Thank you. 
+ user: Okay, sounds good. 
+ user: Okay, good looks. 
+ user: Thank you. 
+ user: Can you repeat my flight information one more time? 
+ assistant: Absolutely. You're flying from Indianapolis International to Portland International Jetport, departing May thirteenth and returning August twentieth, for one passenger, in economy or- 
+ user: Okay, that's perfect. 
+ user: That's perfect. 
+ user: Can you repeat it again? 
+ assistant: Sure. You're flying from Indianapolis International to Portland International Jetport, departing May thirteenth and returning August twentieth, for one passenger, in economy - 
+ user: Okay, that works. 
+ user: Can you repeat it one more time? 
+ assistant: Certainly. You're flying from Indianapolis International to Portland International Jetport, departing May thirteenth and returning August twentieth, for one passenger, in economy or premium economy, with a budget of two hundred and fifty dollars, avoiding Frontier Airlines. 
+ user: Okay, that's perfect. Thank you. 
+ user: Thank you. 
+ user: Perfect. 
+ user: I bet— 
+ assistant: Is there anything else I can help you with? 
+ user: No, that'll be it. 
+ user: That'll be it. Thank you. I have nothing else. 
+ user: I bet— 
+ assistant: Alright, have a wonderful evening. 
+ user: Thank you. You too. 
+ ","The user contacted Travnr to book a flight from Indianapolis to Portland, Maine. The user specified their travel dates as departing on May 13th and returning on August 20th, with a preferred cabin class of either economy or premium economy. They have a budget of $250 and are open to flying with any airline except Frontier. The assistant confirmed the user's travel plans, which include a single traveler flying from Indianapolis International Airport to Portland International Jetport, and offered to prepare a personalized travel proposal. The user requested the flight information to be repeated multiple times to confirm the details before ending the call.",https://api.bland.ai/v1/recordings/b6ba1c1d-1973-4326-8d9b-79beb13413c4,2026-04-24 00:53:22.868428
+27,MA,+1 3475560205,dev@sinja.co,completed,1bb48522-26c8-462d-88be-627485fe6b58,"user: Hi, if you record your name and reason for calling, I'll see if this person is available. 
+ assistant: Goodbye. 
+ agent-action: Ended call 
+ ","The call was brief and ended immediately after the user requested the caller to leave a message with their name and reason for calling, but instead of complying, the assistant abruptly said ""Goodbye"" and ended the call.",https://api.bland.ai/v1/recordings/1bb48522-26c8-462d-88be-627485fe6b58,2026-04-24 01:54:39.077569
+28,AM,+1 3475560205,dev@sinja.co,completed,d018f13f-3818-4fcf-8ef2-6b57417e6d55,"user: Hi, if you record your name and reason for calling— 
+ user: Hello?  
+ assistant: Goodbye. 
+ agent-action: Ended call 
+ user: Hello? 
+ ","The call was disconnected immediately after the user started to provide their introduction, and the assistant abruptly ended the call without engaging in any conversation or providing assistance.",https://api.bland.ai/v1/recordings/d018f13f-3818-4fcf-8ef2-6b57417e6d55,2026-04-24 01:56:16.316057
+29,AM,+1 3475560205,dev@sinja.co,completed,ee6eba7c-de7c-44c0-b972-2ed39a556291,"user: Hello. 
+ assistant: Hi A M, thanks for calling Travnr. How can I help you with your travel plans today? 
+ user: Okay. 
+ assistant: I see you- 
+ user: a flight on July 19th. 
+ assistant: Great, I c- 
+ user: From New York to Denver. 
+ assistant: Got it. Which airport - 
+ user: round trip for 2 people. 
+ assistant: Understood. Which airport in New York would you like to depart from? 
+ user: La guardia. 
+ assistant: Okay, LaGuardia. And which airport in Denver would you like to fly into? 
+ user: Bene. 
+ assistant: I'm sorry, did you say Denver International? 
+ user: Yes. 
+ assistant: Great. And what is your return date? 
+ user: July 21st. 
+ assistant: Perfect. What cabin class would you prefer for this trip? 
+ user: Economy. 
+ assistant: Understood. What is your budget range for this trip? 
+ user: cheapest. 
+ assistant: Okay, looking for the best value. Do you have any specific airline or seat preferences? 
+ user: Window. 
+ assistant: Alright, window seats it is. So just to confirm, you're looking for a round trip economy flight for two passengers, departing July nineteenth, twenty twenty six from LaGuardia, L G A, to Denver International, D E N, returning July twenty first, twenty twenty six, with window seats and a focus on the best price. Does that all sound - 
+ user: Yes. 
+ assistant: Perfect, we'll get that proposal over to you shortly. 
+ user: You know— 
+ assistant: Safe travels! 
+ agent-action: Ended call 
+ ","The user contacted Travnr to book a round-trip flight for two people from LaGuardia (LGA) to Denver International (DEN) on July 19th, returning on July 21st. They preferred economy class with window seats and were looking for the cheapest option. The assistant confirmed the details and agreed to send over a proposal shortly before ending the call.",https://api.bland.ai/v1/recordings/ee6eba7c-de7c-44c0-b972-2ed39a556291,2026-04-24 01:56:54.688273
+30,Salman Yonis,+1 6175288501,salmanyonis2@gmail.com,completed,4e3cd90e-4eb9-494d-bf6f-8f1215730be6,"user: Nope.  
+ assistant: Hi Salman, this is the Travnr concierge team. How can I help you with your travel plans today? 
+ user: So I need to book a flight from Boston to Chicago. 
+ assistant: Great, I can help with that. 
+ user: Uh, I wanna— I'm looking to get into Chicago, uh, around the afternoon or evening of, uh, June 18th, which is a Thursday, and I'm looking to return back to Boston on, uh, Saturday morning, so June 20th. 
+ assistant: Got it. Which specific airport in Chicago would you like to fly into, O'Hare or Midway? 
+ user: Uh, I think I'll do O'Hare. 
+ assistant: Okay, O'Hare it is. And which airport in Boston will you be departing from? 
+ user: Logan. 
+ assistant: Perfect, Logan International. How many travelers will be going on this trip? 
+ user: Uh, just one. 
+ assistant: Just one traveler. And what is your preferred cabin class, economy, premium economy, business, or first class? 
+ user: Uh, just the economy is fun. 
+ assistant: Alright, economy class. And do you have a budget range in mind for this trip? 
+ user: I'm really looking to get the cheapest as possible— as cheap as possible for a nonstop flight. 
+ assistant: Understood, you're looking for the cheapest nonstop- 
+ user: Pimienta, vamos con pimienta. 
+ assistant: Understood, you're looking for the cheapest nonstop flight available. Do you have any specific airline or seat preferences? 
+ user: No. 
+ assistant: Okay, so to summarize: you're flying one traveler from Boston Logan International, BOS, to Chicago O'Hare, ORD, departing June eighteenth, returning June twentieth, in economy class, looking for the cheapest nonstop option. Does that all sound right? 
+ user: That does sound correct, yes. 
+ assistant: Perfect, we'll get that proposal over to you shortly. 
+ user: Thank you. 
+ ","The user, Salman, contacted the Travnr concierge team to book a flight from Boston Logan International to Chicago O'Hare. He is looking for a nonstop economy flight, departing on June 18th and returning on June 20th, with the goal of finding the cheapest option available. The assistant has confirmed the details and will be sending over a proposal shortly.",https://api.bland.ai/v1/recordings/4e3cd90e-4eb9-494d-bf6f-8f1215730be6,2026-04-24 02:00:49.01911
+31,Doug Villhard,+1 6185316167,dvillhard@wustl.edu,completed,4316dd05-5ac2-41c3-85b5-cdbdf50e9662,"user: Close this time. 
+ assistant: Hi Doug, this is Travnr. How can I help you with your travel plans today? 
+ user: Yes, can you, um, show me some airline flights to New York City? 
+ assistant: Absolutely. Wh- 
+ user: Next weekend. 
+ assistant: Got it, for next weekend. Which airport in New York City would you prefer to fly into? JFK, LaGuardia, or Newark? 
+ user: La Guardia. 
+ assistant: Great, LaGuardia it is. Where will you be departing from? 
+ user: St. Louis. 
+ assistant: St. Louis. Which airport would you like to fly out of? 
+ user: Lambert? 
+ assistant: Perfect, St. Louis Lambert. What are your specific departure and return dates for next weekend? 
+ user: Um, Friday morning and Sunday evening. 
+ assistant: Understood. Could you provide the specific dates for Friday and Sunday? 
+ user: One second. 
+ agent-action: [Waiting] 
+ assistant: Take your time. 
+ user: May, May 1st. 
+ assistant: Okay, Ma- 
+ user: May 3rd. 
+ assistant: Okay, May first and May third. How many travelers will be going? 
+ user: One. 
+ assistant: Just one traveler. What is your preferred cabin class? Economy, premium economy, business, or first class? 
+ user: Economy. 
+ assistant: Economy. What is your budget range for this trip? 
+ user: It doesn't matter. 
+ assistant: Understood. Do you have any seat preferences or specific airline preferences? 
+ user: No. 
+ assistant: Alright, to summarize: You're flying from St. Louis Lambert International, STL, to LaGuardia, LGA, departing May first and returning May third, for one passenger in economy class. Does that all sound right? 
+ user: Yes. 
+ assistant: Perfect, we have everything we need — you're all set to hang up. 
+ ","The user, Doug, contacted the travel assistant to inquire about flights to New York City's LaGuardia airport from St. Louis Lambert International airport for next weekend. The user specified the travel dates as May 1st to May 3rd, and preferred economy class for one passenger. The assistant gathered all necessary information, confirmed the details, and indicated that they had everything needed to proceed, allowing the user to end the call.",https://api.bland.ai/v1/recordings/4316dd05-5ac2-41c3-85b5-cdbdf50e9662,2026-04-24 22:43:48.183151
+32,Almurtada Abdella,+1 2019188083,almurtada.abdella2@gmail.com,completed,da21984c-c093-420c-87a2-68dfc614e80a,"user: Your call has been forwarded to an automated voice messaging system. 
+ assistant: Goodbye 
+ assistant: <Call ended due to voicemail detection> 
+ user: 2-0-1-9-1-8— 
+ ",,https://api.bland.ai/v1/recordings/da21984c-c093-420c-87a2-68dfc614e80a,2026-04-28 11:03:13.161343
+33,Manel Jaballah,+1 2017803209,mjaballah22@gmail.com,completed,7e5dffef-e95f-4209-8497-8c5e00bce846,"user: Hello.  
+ assistant: Hi Manel, this is Travnr. Where would you like to fly today? 
+ user: Um, this is strange.  
+ user: Tara, I'd like to fly to Paris, France, please. 
+ assistant: Got it, Paris it is. Where are you departing from? 
+ user: Uh, New York. 
+ assistant: Got it, I'll plan on JFK unless you'd prefer LaGuardia or Newark. 
+ user: Oh, actually, I'm gonna change my destination. I want to fly to Tunis. 
+ assistant: Got it, Tunis. Where are you departing from? 
+ user: New York. 
+ assistant: Got it, I'll plan on JFK unless you'd prefer LaGuardia or Newark. 
+ user: Um, I have no preference. 
+ assistant: And when are you looking to travel? 
+ user: July 30th, please. 
+ assistant: And when would you like to return? 
+ user: August— well, 2 weeks later, whatever that is. 
+ assistant: Got it, so returning August thirteenth. Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: Um, I just want it to be as cheap as possible, please. 
+ assistant: Got it. So that's New York JFK to Tunis, departing July thirtieth, returning August thirteenth. Perfect — you'll have your options in your inbox within a minute. Talk soon. GOODBYE 
+ user: Bye. Thank you. 
+ ","The caller, initially intending to fly to Paris, changed their destination to Tunis and requested a flight from New York (with no airport preference) to Tunis, departing on July 30th and returning on August 13th. Their primary concern was to find the cheapest option possible, and the assistant agreed to provide them with available options via email.",https://api.bland.ai/v1/recordings/7e5dffef-e95f-4209-8497-8c5e00bce846,2026-04-30 17:16:03.896787
+34,Test,+1 2017803209,test@gmail.com,completed,f7997b90-b8d1-45f8-861f-4befb9568a4c,"user: Hello. 
+ assistant: Hi Test, this is Travnr. Where would you like to fly? 
+ user: I actually want to know what voice you are. 
+ assistant: I'm an AI assistant helping with your travel plans. Where would you like to fly? 
+ user: What's the name of your voice, by chance? 
+ assistant: I don't have a specific name, but I'm here to help you book your trip. Where would you like to fly? 
+ user: How can I find— like, what's the closest description of your voice? 
+ assistant: I'm just a standard AI voice. Now, where would you like to fly? 
+ user: Mm-hmm. 
+ assistant: So, wh- 
+ user: Um, thank— 
+ ","The user initiated a call with Travnr, but instead of inquiring about travel plans, they expressed curiosity about the AI assistant's voice, asking for its name and description. The assistant, although unable to provide a specific name or detailed description, consistently attempted to steer the conversation back to the user's travel plans, which the user never pursued, ultimately ending the call without discussing any travel-related topics.",https://api.bland.ai/v1/recordings/f7997b90-b8d1-45f8-861f-4befb9568a4c,2026-04-30 17:26:31.07854
+35,Musamih,+1 3475560205,musamiha@outlook.com,completed,fb99401f-c2bd-4324-a3bd-2fb2d8a93156,"user: You know, we— you know— 
+ assistant: Hi Musamih, it's Travnr here. Where would you like to fly today? 
+ user: I want to go to— um, sometime in June. 
+ assistant: Got it, June sounds great. Where would you like to fly to? 
+ user: Uh, Miami Airport. 
+ user: And then you have to get out of— 
+ assistant: Sorry, I missed that. Where are you flying out of? 
+ user: Miami Airport. 
+ assistant: Okay, so you're flying to M- 
+ user: 7— 
+ user: The sum of the data, it doesn't try to— probably hearing background noise. 
+ user: You're right. 
+ user: Eh, tu vois. 
+ assistant: I'm sorry, I'm not catching that. Could you please tell me your departure city? 
+ user: I'd like to fly from Newark, New Jersey to Miami, Florida. 
+ assistant: Got it, Newark to Miami. What dates are you looking to travel? 
+ user: June 5th, uh, and return on June 9th. 
+ assistant: Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: Yeah, I'd like to, uh, travel— I prefer to fly in the mornings, um, and on the return I'd like to fly in the evening. 
+ user: Um, I have a dietary restriction of strictly vegan diet. 
+ assistant: Got it, I've noted the vegan preference. So that's Newark to Miami, departing June fifth, returning June ninth. Perfect — you'll h- 
+ user: Um, and, uh, I generally like to stay in hotels that are rated 4 stars or higher. 
+ user: Um, 
+ agent-action: Ended call 
+ assistant: Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ ","The user, Musamih, spoke with the assistant, Travnr, to book a flight from Newark, New Jersey to Miami, Florida, with a departure date of June 5th and a return date of June 9th. The user preferred morning flights for the departure and evening flights for the return. Additionally, they have a strict vegan dietary restriction and prefer to stay in 4-star or higher rated hotels. The assistant noted these preferences and informed the user that they would receive their options via email shortly.",https://api.bland.ai/v1/recordings/fb99401f-c2bd-4324-a3bd-2fb2d8a93156,2026-05-08 15:17:43.793872
+36,Mohriz Abdulkarim,+1 3175312094,m.abdulkarim@live.com,completed,e8fda1ce-2b11-4cd8-8220-259f46d9bfd3,"user: Hello? 
+ assistant: Hi Mohriz, thanks for calling Travnr. Where would you like to fly? 
+ user: Didn't work for a router. 
+ assistant: Oh, I think there might be some confusion. This is Travnr, a travel concierge service. I'm calling to help you book a flight. Where were you hoping to go? 
+ user: Denver, Colorado. 
+ assistant: Got it, Denver. And where will you be departing from? 
+ user: Indianapolis. 
+ assistant: Got it, Indianapolis. What are your travel dates — departure and return? 
+ user: July seventeen to July nineteen. 
+ assistant: Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: Since we're nonstop flight 
+ user: and 
+ user: not <Block interruptions enabled. This message was ignored> 
+ assistant: Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ agent-action: Ended call 
+ user: not 
+ ","The user, Mohriz, contacted Travnr, a travel concierge service, to book a flight from Indianapolis to Denver, Colorado, with travel dates set for July 17 to July 19. The user preferred a nonstop flight but was cut off before providing further preferences. The assistant informed Mohriz that flight options would be sent to their inbox shortly after the call.",https://api.bland.ai/v1/recordings/e8fda1ce-2b11-4cd8-8220-259f46d9bfd3,2026-06-09 23:49:28.504286
+37,Max Liberman,+1 9789304823,maxim878878@yahoo.com,completed,0c5013a8-2a23-4a2e-bf27-ef61260c96fd,"user: Hi. If you record your name and reason for calling, I'll see if this person is available. 
+ assistant: Sorry to bother you, I must have the wrong number. Goodbye. 
+ agent-action: Ended call 
+ ","The caller, identifying themselves as an assistant, realized they had dialed the incorrect number and promptly apologized before ending the call. No interaction or discussion occurred as the call was terminated immediately after the realization.",https://api.bland.ai/v1/recordings/0c5013a8-2a23-4a2e-bf27-ef61260c96fd,2026-06-15 13:31:51.288065
+38,Zakariya Mula-Hussain,+1 7809644589,zmulahussain@gmail.com,completed,1351f819-2e30-46e6-a653-98dcf7d1dcf0,"user: Hello? 
+ assistant: Hi Zakariya, this is Travnr. Where would you like to fly today? 
+ user: To San Francisco. 
+ assistant: Got it, SFO unless you'd prefer Oakland or San Jose. And where are you departing from? 
+ user: Oakland. And I wanna depart from Edmonton. 
+ assistant: Got it, Edmonton. What- 
+ user: Alberta. 
+ assistant: Got it, Edmonton. When are you looking to depart? 
+ user: I'm looking to depart June twentieth. 
+ assistant: And when would you like to return? 
+ user: June twenty six. 
+ assistant: Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: No preferred times of day and economy class. 
+ user: Cheapest fare possible. 
+ assistant: Got it. So that's Edmonton to San Francisco, departing June twentieth, returning June twenty sixth. Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ user: Sounds good. Thank you very much. 
+ assistant: Talk soon. 
+ agent-action: Ended call 
+ ","The user, Zakariya, inquired about a flight from Edmonton, Alberta to San Francisco, specifically to SFO, with a departure date of June 20th and a return date of June 26th. The user preferred the cheapest economy class fare possible, with no specific time of day preferences. The assistant agreed to send the user flight options via email within a minute.",https://api.bland.ai/v1/recordings/1351f819-2e30-46e6-a653-98dcf7d1dcf0,2026-06-15 22:15:21.968844
+39,josh liberman,+1 9786756071,joshpliberman0811@gmail.com,completed,a62a8151-0916-4ab3-954c-0a70dc1868a1,"user: Hello? 
+ assistant: Hi Josh! This is Travnr. Where would you like to fly? 
+ user: I would like to go to San Francisco. 
+ assistant: Got it, SFO unless you'd prefer Oakland or San Jose. Where are you departing from? 
+ user: Logan. 
+ assistant: Got it, Boston. When are you looking to depart? 
+ user: I'm looking to go for a week from now. 
+ assistant: Got it, so departing June twenty-fifth. And when would you like to return? 
+ user: I would like to return five days after. 
+ assistant: Got it, returning June thirtieth. Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: No. 
+ assistant: So that's Boston to San Francisco, departing June twenty-fifth, returning June thirtieth. Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ user: Alright. Thank you. 
+ ","The caller, Josh, inquired about flight options with Travnr, seeking to travel from Boston (Logan airport) to San Francisco (with SFO as the default destination airport) for a 5-day trip. The planned departure date is June 25th, with a return on June 30th. Josh did not express any specific preferences such as budget constraints or preferred flight times. The assistant confirmed the details and will be sending flight options to Josh's inbox shortly.",https://api.bland.ai/v1/recordings/a62a8151-0916-4ab3-954c-0a70dc1868a1,2026-06-18 19:27:37.579124
+40,Josh,+1 9786756071,joshpliberman0811@gmail.com,completed,d9045410-9d3c-4e6d-8319-43a1d4b137a5,"user: Your call has been forwarded to voice mail. 
+ user: The person you're trying to reach is not available.  
+ user: At the tone, please record your message. <Block interruptions enabled. This message was ignored> 
+ assistant: <Call ended due to voicemail detection> 
+ user: At the tone, please record your message. 
+ assistant: Goodbye. 
+ ",,https://api.bland.ai/v1/recordings/d9045410-9d3c-4e6d-8319-43a1d4b137a5,2026-06-18 22:04:34.89832
+41,Josh Liberman,+1 9786756071,joshpliberman0811@gmail.com,completed,fd3ecaaf-a958-49c8-b5e6-73b85082ddd8,"user: Hello? 
+ assistant: Hi Josh, this is Travnr. Where would you like to fly? 
+ user: I would like to go to e c p 
+ assistant: Got it, Panama City Beach. Where are you departing from? 
+ user: Boston Boston Logan. 
+ assistant: Got it, Boston Logan. What are your travel dates? 
+ user: I would like to travel I would like to fly in a week from Wednesday. 
+ user: And fly out a week from 
+ user: Saturday 
+ user: next Saturday. 
+ assistant: Got it, returning Saturday, July eleventh. Before I put this together — do you have any preferences I should know about? Things like a rough budget, preferred times of day, or anything else? 
+ user: Yes. I would like to would like to sit in an aisle seat 
+ user: and I would like to have as little of as little of a layover as possible, if at all none. 
+ assistant: Got it. So that's Boston Logan to Panama City Beach, departing Wednesday, July first, returning Saturday, July eleventh. Perfect — you'll have your options in your inbox within a minute. Talk soon. 
+ user: Perfect. Thank you. 
+ assistant: Talk soon. 
+ agent-action: Ended call 
+ ","The user, Josh, booked a flight with Travnr from Boston Logan to Panama City Beach, departing on July 1st and returning on July 11th. He specified preferences for an aisle seat and minimal or no layovers. The assistant confirmed the details and will send flight options to Josh's inbox within a minute.",https://api.bland.ai/v1/recordings/fd3ecaaf-a958-49c8-b5e6-73b85082ddd8,2026-06-21 23:17:31.876274

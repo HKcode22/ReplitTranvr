@@ -1,0 +1,16 @@
+id,monitored_flight_id,agency_id,traveler_name,traveler_email,traveler_phone,selection_token,selected_option_id,selected_at,alert_sent_at,agency_notified_at,created_at,confirmation_alert_sent_at
+1,6,1,Mahid Abdulkarim,mahidbma@gmail.com,,,,,,,2026-05-19 19:54:48.559431,
+2,7,1,MAhid,mahidbma@gmail.com,,,,,,,2026-05-19 19:56:08.983179,
+3,8,1,Mahid,mahidbma@gmail.com,,,,,,,2026-05-19 19:57:19.705591,
+4,9,1,Mahid,mahidbma@gmail.com,,,,,,,2026-05-19 19:58:51.005906,
+5,10,1,Maid,mahidbma@gmail.com,,,,,,,2026-05-19 19:59:38.202913,
+6,11,1,Mahd,mahidbma@gmail.com,,,,,,,2026-05-19 21:02:01.510859,
+9,14,1,Mahid,mahidbma@gmail.com,,,,,,,2026-05-19 21:12:46.776484,
+12,17,1,3475305034,mahidbma@gmail.com,,,,,,,2026-05-19 21:16:12.487175,
+13,18,1,Test,mahidbma@gmail.com,,,,,,,2026-05-19 21:16:29.419695,
+14,19,1,he,mahidbma@gmail.com,,,,,,,2026-05-19 21:17:05.215292,
+8,13,1,mahid,mahidbma@gmail.com,,7e133e46-f605-4692-830b-8fc9645e6666,,,2026-05-19 22:59:02.403,,2026-05-19 21:09:38.0218,
+7,12,1,Mahid,mahidbma@gmail.com,,d54c3be8-2d30-431e-bf16-324890326ad6,,,2026-05-19 22:59:04.325,,2026-05-19 21:09:00.438819,
+10,15,1,Mahid,mahidbma@gmail.com,,2fb2a8eb-4763-4885-924c-2db95203808d,,,2026-05-19 22:59:07.332,,2026-05-19 21:13:33.398544,
+11,16,1,Mahid,mahidbma@gmail.com,,f8cec19c-7986-49dc-a279-a49089ecfa2c,,,2026-05-19 22:59:09.853,,2026-05-19 21:14:11.604429,2026-05-23 16:38:11.313
+15,20,1,Mahid Abdulkarim,mahidbma@gmail.com,,,,,,,2026-05-30 08:46:29.351702,

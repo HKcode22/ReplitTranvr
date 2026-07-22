@@ -1,0 +1,1 @@
+id,user_id,call_request_id,proposal_id,provider,request,status,error_message,raw_provider_payload_truncated,created_at,completed_at

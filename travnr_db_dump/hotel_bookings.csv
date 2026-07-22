@@ -1,0 +1,1 @@
+id,user_id,hotel_option_id,payment_id,provider,provider_booking_id,confirmation_number,status,traveler_details,total_charged,currency,error_message,created_at,updated_at
