@@ -1,6 +1,5 @@
-import { and, gte, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "../../db";
-import { monitoredFlights, riskScoreHistory } from "@shared/schema";
 
 export interface CarrierHealthResult {
   carrierIata: string;
@@ -63,41 +62,24 @@ export async function getCarrierHealth(carrierIata: string): Promise<CarrierHeal
 
   try {
     const since = new Date(now - 24 * 60 * 60 * 1000);
-    // Pull recent scoring rows for this carrier. The `signals` JSONB has
-    // shape `{ flightStatus: { delayMinutes, cancelled, ... }, cancelled, ... }`,
-    // so we project the two fields we need on the database side.
-    const rows = await db
-      .select({
-        cancelled: sql<boolean | null>`
-          CASE
-            WHEN ${riskScoreHistory.signals} -> 'flightStatus' ->> 'cancelled' = 'true' THEN true
-            WHEN ${riskScoreHistory.signals} ->> 'cancelled' = 'true' THEN true
-            ELSE false
-          END
-        `,
-        delayMinutes: sql<number | null>`
-          NULLIF(${riskScoreHistory.signals} -> 'flightStatus' ->> 'delayMinutes', '')::int
-        `,
-      })
-      .from(riskScoreHistory)
-      .innerJoin(
-        monitoredFlights,
-        sql`${riskScoreHistory.monitoredFlightId} = ${monitoredFlights.id}`,
-      )
-      .where(
-        and(
-          sql`upper(${monitoredFlights.carrierIata}) = ${code}`,
-          gte(riskScoreHistory.scoredAt, since),
-        ),
-      );
+    const rows = await db.execute<{
+      actual_cancelled: boolean | null;
+      actual_delay_minutes: number | null;
+    }[]>(sql`
+      SELECT rsh.actual_cancelled, rsh.actual_delay_minutes
+      FROM clean.risk_score_history_v2 rsh
+      JOIN clean.monitored_flights_v2 mf ON mf.id = rsh.monitored_flight_id
+      WHERE UPPER(mf.carrier_iata) = ${code}
+        AND rsh.scored_at >= ${since}
+    `);
 
-    const sampleSize = rows.length;
+    const sampleSize = rows.rows.length;
     let cancelledCount = 0;
     let delaySum = 0;
     let delayCount = 0;
-    for (const row of rows) {
-      if (row.cancelled) cancelledCount += 1;
-      const d = typeof row.delayMinutes === "number" ? row.delayMinutes : null;
+    for (const row of rows.rows) {
+      if (row.actual_cancelled) cancelledCount += 1;
+      const d = typeof row.actual_delay_minutes === "number" ? row.actual_delay_minutes : null;
       if (d != null && d > 0) {
         delaySum += d;
         delayCount += 1;

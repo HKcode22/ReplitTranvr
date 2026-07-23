@@ -70,7 +70,7 @@ async function fetchWindow(
 function extractFlight(
   raw: any,
   originIata: string,
-): { flightNumber: string; carrierIata: string; destinationIata: string; departureTime: string | null } | null {
+): { flightNumber: string; carrierIata: string; originName: string; destinationName: string; destinationIata: string; departureTime: string | null } | null {
   const rawNum = String(raw.number || raw.iata || raw.flightNumber || "")
     .replace(/\s+/g, "")
     .toUpperCase();
@@ -93,7 +93,10 @@ function extractFlight(
     if (m) departureTime = m[1];
   }
 
-  return { flightNumber: rawNum, carrierIata, destinationIata: destIata, departureTime };
+  const originName = String(raw.departure?.airport?.name || "").trim() || originIata;
+  const destinationName = String(raw.arrival?.airport?.name || "").trim() || destIata;
+
+  return { flightNumber: rawNum, carrierIata, originName, destinationName, destinationIata: destIata, departureTime };
 }
 
 // Pick `n` items evenly spaced across `arr` rather than just the first `n`.
@@ -160,7 +163,9 @@ async function seedAirport(
         departureDate: date,
         departureTime: flight.departureTime,
         originIata: airport,
+        originName: flight.originName,
         destinationIata: flight.destinationIata,
+        destinationName: flight.destinationName,
         isTest: true,
         agencyId: testAgencyId,
       }).catch((err: any) => {

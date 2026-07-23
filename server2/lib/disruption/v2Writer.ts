@@ -141,6 +141,8 @@ export async function insertFlightToV2(
     departureTime: string | null;
     originIata: string;
     destinationIata: string;
+    originName?: string | null;
+    destinationName?: string | null;
     isTest: boolean;
     agencyId: number;
     equipmentType?: string | null;
@@ -155,12 +157,14 @@ export async function insertFlightToV2(
     INSERT INTO clean.monitored_flights_v2 (
       flight_number, carrier_iata, departure_date, departure_time,
       departure_time_utc,
-      origin_iata, destination_iata, is_test, agency_id,
+      origin_iata, origin_name, destination_iata, destination_name,
+      is_test, agency_id,
       equipment_type, equipment_group
     ) VALUES (
       ${values.flightNumber}, ${values.carrierIata}, ${values.departureDate},
       ${values.departureTime}, ${departureTimeUtc},
-      ${values.originIata}, ${values.destinationIata},
+      ${values.originIata}, ${values.originName ?? null},
+      ${values.destinationIata}, ${values.destinationName ?? null},
       ${values.isTest}, ${values.agencyId},
       ${values.equipmentType ?? null}, ${equipmentGroup}
     )

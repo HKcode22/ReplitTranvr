@@ -622,3 +622,174 @@ psql "$DATABASE_URL" -c "
   ORDER BY carrier_health_score;
 "
 ```
+
+---
+
+## 11. Phase 2 Implementation: origin_name / destination_name Fix
+
+### 11.1 The Problem
+
+`origin_name` and `destination_name` were NULL in the runtime pipeline. The backfill correctly populated them from the old table's `originName`/`destinationName` columns, but new flights added by the seeder had NULL.
+
+### 11.2 What Was Wrong
+
+`insertFlightToV2()` in `v2Writer.ts` did not include `origin_name` or `destination_name` in its INSERT statement. The seeder's `extractFlight()` function had access to `raw.departure?.airport?.name` and `raw.arrival?.airport?.name` (both returned by AeroDataBox departure board API) but never extracted them.
+
+### 11.3 What Was Fixed
+
+**`server2/lib/disruption/v2Writer.ts`:**
+- Added `originName?: string | null` and `destinationName?: string | null` to the `insertFlightToV2` values type
+- Added `origin_name` and `destination_name` to the INSERT column list and VALUES
+
+**`server2/lib/disruption/testFlightSeeder.ts`:**
+- `extractFlight()` now extracts `originName` from `raw.departure?.airport?.name` and `destinationName` from `raw.arrival?.airport?.name`
+- Falls back to IATA code if airport name is empty
+- `seedAirport()` passes both values to `insertFlightToV2`
+
+### 11.4 Verification
+
+- Backfill: ✅ Already correct (reads old table's `originName`/`destinationName`)
+- Seeder (new flights): ✅ Now populated from AeroDataBox response
+- Monitor (scoring updates): ⏳ Not yet added — flight status API also returns airport names but `updateFlightInV2` has no mechanism for name updates yet. Low priority since names don't change.
+
+---
+
+## 12. Phase 2 Implementation: carrierHealth.ts v2 Rewrite (Task 2d)
+
+### 12.1 The Problem
+
+`carrierHealth.ts` in `server2/` was reading from old tables (`public.risk_score_history` + `public.monitored_flights`) using drizzle ORM with JSONB extraction. This meant:
+1. It read from the wrong tables (old, corrupt system)
+2. It depended on drizzle schema imports from `@shared/schema` designed for old tables
+3. It extracted `cancelled` and `delayMinutes` from JSONB `signals` column with complex `CASE` expressions
+
+### 12.2 What Was Fixed
+
+Rewrote `server2/lib/disruption/carrierHealth.ts` to query v2 tables directly using raw SQL:
+- Old: `SELECT FROM riskScoreHistory JOIN monitoredFlights` with JSONB extraction
+- New: `SELECT actual_cancelled, actual_delay_minutes FROM clean.risk_score_history_v2 rsh JOIN clean.monitored_flights_v2 mf ON mf.id = rsh.monitored_flight_id`
+
+### 12.3 What Stayed the Same
+
+All other logic preserved unchanged:
+- `computeHealthScore()` function (thresholds for healthScore 1/3/4/7/10)
+- Caching with 15-minute TTL
+- `unknownResult()` fallback on query failure
+- `CarrierHealthResult` interface
+
+### 12.4 Data Quality Note
+
+The v2 tables contain the **same corrupt data** as the old tables (backfill copies as-is). Carrier health scores will still show `healthScore = 1` or `3` (never 7 or 10) until Phase 4 re-scoring replaces old corrupt delay values with real ones. The rewrite is about **table correctness** (reading from v2 instead of old), not **data quality improvement**.
+
+### 12.5 All Carrier Health Columns PRESERVED in v2 Table
+
+| Column | Present in DDL | Populated by backfill | Populated by runtime | Removed? |
+|--------|---------------|----------------------|---------------------|----------|
+| `carrier_cancellation_rate_24h` | ✅ | ✅ | ✅ | **NO — kept** |
+| `carrier_avg_delay_24h` | ✅ | ✅ | ✅ | **NO — kept** |
+| `carrier_health_score` | ✅ (CHECK 1,3,4,7,10) | ✅ | ✅ | **NO — kept** |
+| `carrier_reliable` | ✅ | ✅ | ✅ | **NO — kept** |
+| `carrier_health_sample_size` | ✅ | ✅ | ✅ | **NO — kept** |
+
+No carrier health columns have been removed or are planned for removal. They remain in the v2 table for future ML use once rescoring fixes the underlying data quality.
+
+---
+
+## 13. Phase 2 Implementation: apiCallTracker (Task 2a)
+
+### 13.1 What Was Built
+
+Integrated API call tracking directly into `server2/lib/disruption/aerodataboxLimiter.ts`. No separate file needed — every AeroDataBox call already goes through this single entry point.
+
+### 13.2 How It Works
+
+1. Every `aerodataboxFetch()` call is wrapped to record the URL, HTTP status, timestamp, and estimated units consumed
+2. URL is categorized automatically into endpoint types by pattern matching:
+   - `/history/recent` → `historical-otp` (6 units)
+   - `/flights/number/` → `flight-by-number` (3 units)
+   - `/flights/airports/iata/` → `airport-departures` (3 units)
+3. Calls are stored in an in-memory ring buffer (max 100,000 entries)
+4. `getApiStats()` function exposed for consumption by `/api/v2/api-stats` endpoint (Task 2f)
+
+### 13.3 Unit Cost Reference
+
+Based on AeroDataBox RapidAPI tier pricing:
+| Endpoint | Units per call | Used by |
+|----------|---------------|---------|
+| `/flights/number/{number}/{date}` | 3 (Tier 2) | `flightStatus.ts` |
+| `/flights/airports/iata/{airport}/{from}/{to}` | 3 (Tier 2) | `flightStatus.ts` (FIDS), `testFlightSeeder.ts` |
+| `/flights/number/{number}/history/recent` | 6 (Tier 3) | `historicalOtp.ts` |
+
+### 13.4 Usage
+
+```typescript
+import { getApiStats } from "./aerodataboxLimiter";
+
+const stats = getApiStats();
+console.log(`Total units used: ${stats.total}`);
+console.log(`By endpoint:`, stats.byEndpoint);
+console.log(`Recent calls:`, stats.recent);
+```
+
+### 13.5 Not Yet Implemented
+
+- `/api/v2/api-stats` REST endpoint (Task 2f) — depends on this tracker being in place
+- Persistent storage of call log (in-memory only, resets on server restart)
+
+---
+
+## 14. Important Clarifications
+
+### 14.1 Did Phase 1 Backfill Clean the Data?
+
+**No.** The backfill (`scripts/backfill_v2.sql`) copies old data into the new v2 tables **as-is**, including:
+- Corrupt `delayMinutes` values (95.8% zeros from the old `flightStatus.ts` bug)
+- "Unknown" flight statuses
+- NULL tail numbers and equipment types
+- Missing ICAO codes (old data doesn't have them)
+
+The backfill preserves old row IDs and only restructures the data from JSONB into flat columns. **Cleaning** (re-scoring historical flights with the fixed `flightStatus.ts` to get real delay values) is a separate Phase 4 task.
+
+### 14.2 Is Any Column Being Removed from the v2 Tables?
+
+**No.** All 28 columns in `monitored_flights_v2` and all 69 columns in `risk_score_history_v2` are intact. This includes:
+- `origin_name`, `destination_name` — now also populated by runtime (Fix above)
+- All 5 carrier health columns — preserved, data quality will improve after rescoring
+- `historical_otp_score`, `historical_otp_source`, `historical_risk` — kept for reference even if not used by ML
+- `has_freezing` (both origin and destination) — kept even if it's always false
+- `raw_api_data` — kept for debugging
+
+The ML roadmap mentions removing some features from the **ML training table** (a separate read-only extract), not from the v2 storage tables.
+
+### 14.3 Are Old Public Schema Tables Still Being Written To?
+
+Yes. Verified line-by-line for both monitors:
+
+| Old Table | server/ (frozen) | server2/ (active) |
+|-----------|-----------------|-------------------|
+| `public.risk_score_history` | ❌ Stopped | ❌ Stopped |
+| `public.monitored_flights` (scoring fields) | ❌ Stopped | ❌ Stopped |
+| `public.monitored_flights` (confirmation/resolution) | ✅ Still writes | ✅ Still writes |
+| `public.disruption_alternatives` | ✅ Still writes | ✅ Still writes |
+| `public.flight_travelers` | ✅ Still writes | ✅ Still writes |
+| `public.user_monitored_flights` | ✅ Still writes | ✅ Still writes |
+
+Only scoring writes (risk scores, tiers, last_checked_at) were moved to v2. All operational writes (alerts, alternatives, travelers, resolution, confirmation) remain in the old public tables.
+
+---
+
+## 15. Current File Status Summary
+
+| File | Status | Notes |
+|------|--------|-------|
+| `migrations/001_create_v2_tables.sql` | ✅ Canonical | 28 + 69 columns, 13 CHECK constraints, 11 indexes |
+| `server2/db/migrations/001_create_v2_tables.sql` | ✅ Synced | Identical to canonical |
+| `scripts/backfill_v2.sql` | ✅ Ready | Column counts match, all JSONB paths correct, IDs preserved |
+| `server2/lib/disruption/v2Writer.ts` | ✅ Updated | origin_name/destination_name added, all Part 7 columns populated |
+| `server2/lib/disruption/monitor.ts` | ✅ Active | v2-only scoring writes, 60-min, 41 limit |
+| `server/lib/disruption/monitor.ts` | ✅ Frozen | No scoring writes, 60-min, 41 limit |
+| `server2/lib/disruption/testFlightSeeder.ts` | ✅ Updated | origin_name/destination_name extracted from API response |
+| `server2/lib/disruption/carrierHealth.ts` | ✅ Rewritten | Queries v2 tables, same health scoring logic |
+| `server2/lib/disruption/aerodataboxLimiter.ts` | ✅ Updated | apiCallTracker integrated, getApiStats() exposed |
+| `server/lib/disruption/carrierHealth.ts` | ⏳ Unchanged | Still reads old tables (server/ is frozen, will be updated during cutover) |
+| `DATABASE_QUALITY_AND_ML_ROADMAP_2.md` | ✅ Comprehensive | 15 sections, full audit, NaN analysis, Phase 2/3 plan |
