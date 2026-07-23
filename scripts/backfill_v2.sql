@@ -17,11 +17,13 @@ BEGIN;
 -- ============================================================
 INSERT INTO clean.monitored_flights_v2 (
   id, flight_number, carrier_iata, departure_date, departure_time,
+  departure_time_utc,
   origin_iata, destination_iata,
   status, risk_score, risk_tier, last_checked_at,
   red_tier_first_at, cancelled_at, confirmation_alert_sent_at,
   resolved_status, resolved_delay_minutes, resolved_at,
   agency_resolved_at, tail_number, equipment_type,
+  equipment_group,
   is_test, agency_id, created_at
 )
 SELECT

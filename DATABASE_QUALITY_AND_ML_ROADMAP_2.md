@@ -1,111 +1,87 @@
-# DATABASE QUALITY & ML ROADMAP — PART 2
+# DATABASE QUALITY & ML ROADMAP — PART 2: AUDIT REPORT
 
 **Continuation of** `DATABASE_QUALITY_AND_ML_ROADMAP.md` (Parts 1–13)
 
-This file covers execution status, remaining work, and the ML pipeline. See Part 1 for the original database analysis, v2 table design, API budget, and the complete detailed plan.
+This file documents the comprehensive re-audit of ALL v2 code, migration DDL, backfill SQL, and runtime code against the documented specs. Every finding is categorized, fixed, or tracked.
 
-**Latest commit:** `759e609` — Part 2 MD, stray fence fix, renumber section 13
+**Latest commit:** `34fe019` — Fix migration Part 7 columns + backfill bugs (table names, JSONB col, IDs, ON CONFLICT)
 
 ---
 
-## Part 1: Phase 1 Execution Status — What's Been Done & What Needs To Be Done
+## How This Audit Was Performed
 
-### 1.1 Phase 1 — Foundation (Code Complete, Needs Replit Migration)
+- Read every relevant file: migration DDL (both canonical + server2/), backfill SQL, v2Writer.ts, monitor.ts (both server/ and server2/), testFlightSeeder.ts (both), carrierHealth.ts (both), riskScorer.ts
+- Compared field-by-field against the Part 7 table design (lines 1242-1410), the Part 12 column specs (lines 2647-3146), and the Part 11.4 extraction rules (lines 1886-2049)
+- Verified against the Part 11.6 backfill plan (lines 2378-2526) and the Final JSONB Re-Audit (lines 2054-2150)
+- Inspected the old FEATURE_REPORT.md for the 4 original bug descriptions
+- Database (Helium) could not be reached from local machine — audit is code-only
 
-All code changes are pushed to GitHub (`main`, commit `5e07d3a`). The migration and backfill need to run on Replit.
+---
 
-| # | Task | Status | Notes |
-|---|------|--------|-------|
-| 1a | Create `clean` schema | ✅ Done | In `migrations/001_create_v2_tables.sql`, `CREATE SCHEMA IF NOT EXISTS clean` |
-| 1b | Create `clean.monitored_flights_v2` | ✅ Done | SERIAL PK, 22 flat columns, all indexes. Part 7 columns: `departure_time_utc`, `equipment_group` |
-| 1c | Create `clean.risk_score_history_v2` | ✅ Done | SERIAL PK, ~55 flat columns, all indexes. Part 7 columns: `origin_icao`, `destination_icao` |
-| 1d | Add all indexes | ✅ Done | 5 indexes on flights_v2, 5 on risk_score_v2 + UNIQUE on (flight_number, departure_date) |
-| 1e | Backfill flights: old `monitored_flights` → v2 | ✅ Script ready | `scripts/backfill_v2.sql` copies all columns, computes `departure_time_utc` + `equipment_group` |
-| 1f | Backfill scores: old JSONB → v2 | ✅ Script ready | Extracts all 55+ fields from JSONB into typed columns; extracts `equipment_group` from `equipment_type` |
-| 1g | Verify row counts match | 🔲 **Needs Replit** | Run `psql "$DATABASE_URL" -f scripts/backfill_v2.sql` then check counts |
-| 1h | Push to GitHub | 🔲 **Needs push** | Bug fixes not yet committed (see bugs below) |
+## 1. Critical Bugs Found & Fixed
 
-### 1.2 Additional Phase 1 Work (Beyond Original Roadmap 11.7)
+| # | Bug | File | Severity | Found | Fixed |
+|---|-----|------|----------|-------|-------|
+| 1 | **Backfill Step 1 column count mismatch**: 25 SELECT expressions vs 23 INSERT columns. `departure_time_utc` and `equipment_group` computed in SELECT but missing from INSERT list | `scripts/backfill_v2.sql` | 🔴 **CRITICAL — would fail at runtime** | This audit | ✅ Added both to INSERT column list |
+| 2 | **server2/db migration out of sync**: 5 columns/indexes missing compared to canonical `migrations/` version: `departure_time_utc`, `equipment_group`, unique index on flights_v2; `origin_icao`, `destination_icao` on scores_v2 | `server2/db/migrations/001_create_v2_tables.sql` | 🔴 **CRITICAL — server2/ boot migration creates incomplete tables** | This audit | ✅ Overwritten with canonical version |
+| 3 | **insertFlightToV2 missing Part 7 columns**: Doesn't compute `departure_time_utc` from date+time; doesn't compute `equipment_group` from equipment_type | `server2/lib/disruption/v2Writer.ts` | 🟡 HIGH — v2 flights get NULL for these columns | This audit | ✅ Added both computations |
+| 4 | **updateFlightInV2 doesn't recompute equipment_group**: When equipment_type is updated (monitor sets it on first scoring cycle), equipment_group stays stale | `server2/lib/disruption/v2Writer.ts` | 🟡 HIGH — equipment_group falls out of sync | This audit | ✅ Added CASE expression to recompute |
+| 5 | **writeScoreToV2 missing origin_icao + destination_icao**: These Part 7 columns exist in DDL but are never populated by the runtime writer (risk.originWeather.icaoCode is available) | `server2/lib/disruption/v2Writer.ts` | 🟡 HIGH — ICAO codes always NULL in scores | This audit | ✅ Added both to INSERT |
+| 6 | **Zero CHECK constraints on both v2 tables**: Part 12 mandates 13 CHECK constraints (status, risk_tier, heuristic_tier, time_of_day_risk BETWEEN 0-5, day_of_week_risk BETWEEN 0-4, connection_risk BETWEEN 0-4, departure_hour BETWEEN 0-23, departure_day_of_week BETWEEN 0-6, flight_category IN (VFR/MVFR/IFR/LIFR/UNKNOWN) × 2, carrier_health_score IN (1,3,4,7,10), horizon IN (short/medium/long)) | `migrations/001_create_v2_tables.sql` | 🟡 HIGH — no data integrity guards | This audit | ✅ Added all 13 CHECK constraints |
 
-These tasks were not in the original 11.7 roadmap but were necessary during implementation:
+---
 
-| # | Task | Status | Notes |
-|---|------|--------|-------|
-| — | **server/ frozen** — stop ALL writes to old `public` schema | ✅ Done | `monitor.ts`: removed `riskScoreHistory` inserts + `monitoredFlights` score updates. `testFlightSeeder.ts`: reduced to no-op. `v2Writer.ts` deleted from server/ |
-| — | **server2/ v2-only writes** (not dual-write) | ✅ Done | `monitor.ts`: removed old table writes, keeps only `writeScoreToV2` + `updateFlightInV2`. `testFlightSeeder.ts`: removed old `monitoredFlights` insert, uses `insertFlightToV2` only |
-| — | **60-min scoring interval** (was 30) | ✅ Done | All `INTERVAL_MS` changed from `30 * 60 * 1000` to `60 * 60 * 1000` |
-| — | **41-flight max** per cycle (Ultra budget) | ✅ Done | `.limit(41)` added to `runCycle` flight queries in both server/ and server2/ |
-| — | **v2Writer.ts helper** created | ✅ Done | `server2/lib/disruption/v2Writer.ts` — `writeScoreToV2`, `updateFlightInV2`, `insertFlightToV2` |
-| — | **Unique index** for idempotent inserts | ✅ Done | `CREATE UNIQUE INDEX idx_mf_v2_flight_date ON clean.monitored_flights_v2(flight_number, departure_date)` |
-| — | **ON CONFLICT fix** in v2Writer | ✅ Done | Changed from `ON CONFLICT (id)` (never fires) to `ON CONFLICT (flight_number, departure_date)` |
-| — | **Seeder dedup queries v2** (not old table) | ✅ Done | `server2/testFlightSeeder.ts` dedup checks `clean.monitored_flights_v2` |
-| — | **MD formatting fixes** | ✅ Done | Removed stray ``` at line 2346 that broke all subsequent code block syntax highlighting. Renumbered section 14 → Part 13 |
-| — | **DATABASE_QUALITY_AND_ML_ROADMAP_2.md** created | ✅ Done | This file — continuation with execution status and ML plan |
-| — | **Bug fix:backfill table names** (PascalCase→snake_case) | ✅ Done | `scripts/backfill_v2.sql`: `"MonitoredFlight"`→`"monitored_flights"`, `"RiskScoreHistory"`→`"risk_score_history"` |
-| — | **Bug fix:backfill JSONB column** (`data`→`"signals"`) | ✅ Done | `scripts/backfill_v2.sql`: old column is `rsh."signals"`, not `rsh.data` |
-| — | **Bug fix:backfill ON CONFLICT** (`(id)`→ never fires) | ✅ Done | Flights use `ON CONFLICT (flight_number, departure_date)`, scores use `ON CONFLICT (id)` (correct for explicit ids) |
-| — | **Bug fix:backfill preserve IDs** | ✅ Done | Added `id` to INSERT column list + sequence reset via `setval` |
-| — | **Bug fix:migration missing Part 7 columns** | ✅ Done | Added `departure_time_utc`, `equipment_group` to flights_v2; `origin_icao`, `destination_icao` to scores_v2 |
-| — | **Bug fix:backfill date cast** (`departure_date::date`) | ✅ Done | Old `departure_date` is TEXT, v2 expects DATE — added explicit `::date` cast |
+## 2. Non-Critical Findings (Documented, Not Fixed)
 
-### 1.3 Phase 2 — Pipeline Rewrite (Partially Done)
+| # | Finding | Details |
+|---|---------|---------|
+| 7 | **Both monitors still write to old alert/traveler/resolution tables** | server/ and server2/ both write to `disruptionAlternatives`, `flightTravelers`, `userMonitoredFlights`, and `monitoredFlights` (confirmationAlertSentAt, resolution fields). This is **intentional** — v2 equivalents don't exist yet for these operational tables. The scoring pipeline (risk scores + flight updates) is correctly v2-only in server2/ and frozen in server/. |
+| 8 | **origin_icao / destination_icao not backfilled** | Old JSONB data doesn't contain ICAO codes. These will be NULL after backfill. Runtime writes via v2Writer now populate them (Fix #5). |
+| 9 | **origin_name / destination_name never populated** | Both DDLs have these columns but neither backfill nor v2Writer populates them. They're display-only fields. |
+| 10 | **raw_api_data never populated** | Column exists in DDL for debugging but neither backfill nor v2Writer stores raw API responses. |
+| 11 | **equipment_group values mismatch with Part 12 spec** | Part 12 spec says `('Boeing', 'Airbus', 'Embraer', 'Bombardier', 'Other')`. Implementation uses `('narrowbody', 'widebody', 'regional', 'unknown')`. The implementation is correct for ML (size-based grouping), the spec is wrong. No CHECK constraint added for equipment_group. |
+| 12 | **departure_hour / departure_day_of_week computed from stored JSONB values** | Part 11.4 says to compute via `EXTRACT(HOUR FROM ...)` but backfill uses stored JSONB values `{departureHour}` and `{departureDayOfWeek}`. Functionally equivalent since these were computed at score time. |
+| 13 | **Missing COALESCE defaults on backfill** | Part 11.4 specifies defaults (0, FALSE, 10, 99999, etc.) but backfill lets NULLs pass through. Runtime v2Writer also omits most defaults. This means ML training data may have NULLs where it could have sensible defaults. |
+
+---
+
+## 3. Updated Phase 1 Execution Status
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 2a | Add `apiCallTracker` to all API calls in server2/ | 🔲 **Not started** | Need to integrate from `server2/lib/disruption/apiCallTracker.ts` into monitor.ts, flightStatus.ts, weatherSignal.ts, nasStatus.ts, historicalOtp.ts |
-| 2b | Update `monitor.ts` to write to v2 tables | ✅ Done | `server2/monitor.ts` writes scores to `clean.risk_score_history_v2` and updates `clean.monitored_flights_v2` |
-| 2c | Update `testFlightSeeder.ts` to write to v2 tables | ✅ Done | `server2/testFlightSeeder.ts` inserts flights into `clean.monitored_flights_v2` only |
-| 2d | Update `carrierHealth.ts` to read from v2 tables | 🔲 **Not started** | `server2/carrierHealth.ts` still reads from old `riskScoreHistory` + `monitoredFlights` JSONB. Need to rewrite to query `clean.risk_score_history_v2` using flat columns |
-| 2e | Add data quality validation checks | 🔲 **Not started** | Need automated checks for: null rates, zero-delay rates, missing weather, score distribution |
-| 2f | Add `/api/v2/api-stats` endpoint | 🔲 **Not started** | Need route to expose API call counts, costs, cache hits |
+| 1a | Create `clean` schema | ✅ Done | `CREATE SCHEMA IF NOT EXISTS clean` |
+| 1b | Create `clean.monitored_flights_v2` | ✅ Done | 28 columns, all indexes, CHECK constraints, unique index on (flight_number, departure_date) |
+| 1c | Create `clean.risk_score_history_v2` | ✅ Done | 69 columns, all indexes, 11 CHECK constraints |
+| 1d | Add all indexes | ✅ Done | 5 on flights_v2, 5 on scores_v2 + unique index |
+| 1e | Backfill flights | ✅ Script ready | Column count bug FIXED. Computes departure_time_utc, equipment_group, departure_Date::date cast |
+| 1f | Backfill scores | ✅ Script ready | All 55+ JSONB fields extracted into typed columns. Uses correct table names and `signals` column |
+| 1g | Verify row counts match | 🔲 **Needs Replit** | `psql "$DATABASE_URL" -f scripts/backfill_v2.sql` then check counts |
+| 1h | Push to GitHub | 🔲 **Needs push** | Audit fixes not yet committed |
 
-### 1.4 Phase 3 to Phase 5 — Not Started
+### Additional Fixes (Beyond Original 11.7 Roadmap)
 
-| Phase | Task | Status | Notes |
-|-------|------|--------|-------|
-| **3a** | Run server2/ alongside server/ | 🔲 | Needs Replit deployment |
-| **3b** | Verify seeder adds flights to v2 | 🔲 | Check `clean.monitored_flights_v2` row count grows |
-| **3c** | Verify monitor scores and writes to v2 | 🔲 | Check `clean.risk_score_history_v2` row count grows each cycle |
-| **3d** | Check API costs via api call tracker | 🔲 | Blocked on 2a (apiCallTracker) |
-| **3e** | Compare old vs new scores side by side | 🔲 | Run SQL query: `SELECT rsh.score, rsh_v2.heuristic_score FROM ... JOIN ...` |
-| **4a** | Re-score historical data (optional) | 🔲 | Write script to re-fetch AeroDataBox for past flights |
-| **5a** | Point server/ to use v2 tables | 🔲 | After validation — update server/ routes to read from v2 |
-| **5c** | Archive old tables | 🔲 | `ALTER TABLE ... RENAME TO ..._legacy` |
+| # | Task | Status |
+|---|------|--------|
+| — | server/ frozen (no scoring writes) | ✅ Done |
+| — | server2/ v2-only scoring writes | ✅ Done |
+| — | 60-min interval + 41-flight limit | ✅ Done |
+| — | v2Writer.ts with ON CONFLICT (flight_number, departure_date) | ✅ Done |
+| — | Seeder dedup queries v2 | ✅ Done |
+| — | MD formatting fixes (stray fence, renumbering) | ✅ Done |
+| — | Backfill: fixed table names (PascalCase→snake_case) | ✅ Done |
+| — | Backfill: fixed JSONB column (data→"signals") | ✅ Done |
+| — | Backfill: fixed ON CONFLICT + preserve IDs + sequence reset | ✅ Done |
+| — | Migration: added depature_time_utc, equipment_group, origin_icao, destination_icao | ✅ Done |
+| — | **AUDIT: fixed backfill column count mismatch** | ✅ Done |
+| — | **AUDIT: synced server2/db migration** | ✅ Done |
+| — | **AUDIT: added departure_time_utc/equipment_group to insertFlightToV2** | ✅ Done |
+| — | **AUDIT: added equipment_group recompute to updateFlightInV2** | ✅ Done |
+| — | **AUDIT: added origin_icao/destination_icao to writeScoreToV2** | ✅ Done |
+| — | **AUDIT: added 13 CHECK constraints to migration** | ✅ Done |
 
-### 1.5 Critical Path Analysis
+---
 
-The fastest path to a working v2 system:
-
-1. **On Replit**: `git pull` (includes backfill bug fixes) → run migration → run backfill → restart server2/
-2. **After restart**: server2/ monitor writes scores to v2, seeder inserts flights to v2
-3. **Then**: Fix `carrierHealth.ts` to read from v2 (task 2d) — takes ~30 min
-4. **Then**: Add `apiCallTracker` integration (task 2a) — takes ~1-2 hours
-5. **Then**: Run Phase 3 verification — takes 24 hours to accumulate data
-
-### 1.6 Code Architecture Summary
-
-```
-server/ (frozen — reads only, no writes to public schema)
-  ├── lib/disruption/monitor.ts       → scores flights but writes nothing
-  ├── lib/disruption/testFlightSeeder.ts  → no-op (returns 0)
-  ├── lib/disruption/carrierHealth.ts  → reads old tables (stale)
-  ├── lib/disruption/flightStatus.ts   → API call, returns data (no store)
-  └── lib/disruption/riskScorer.ts     → computation only (no store)
-
-server2/ (active — writes to clean schema)
-  ├── lib/disruption/monitor.ts        → v2-only: writeScoreToV2 + updateFlightInV2
-  ├── lib/disruption/testFlightSeeder.ts → v2-only: insertFlightToV2
-  ├── lib/disruption/carrierHealth.ts  → 🔲 NEEDS FIX: reads old tables
-  ├── lib/disruption/v2Writer.ts       → writeScoreToV2, updateFlightInV2, insertFlightToV2
-  ├── lib/disruption/flightStatus.ts   → same as server/ (stateless API call)
-  └── lib/disruption/riskScorer.ts     → same as server/ (stateless computation)
-
-Database schema (clean):
-  ├── clean.monitored_flights_v2       → populated by: backfill + testFlightSeeder + user inserts
-  └── clean.risk_score_history_v2      → populated by: backfill + monitor (each cycle)
-```
-
-### 1.7 Verification Checklist (for Replit)
+## 4. Verification Checklist (for Replit)
 
 After deploying, run these to confirm everything works:
 
@@ -113,24 +89,95 @@ After deploying, run these to confirm everything works:
 -- Check v2 tables exist
 SELECT table_name FROM information_schema.tables WHERE table_schema = 'clean';
 
--- After backfill: row counts
+-- After backfill: row counts match
 SELECT 'old monitored_flights' AS tbl, COUNT(*) FROM public.monitored_flights
 UNION ALL
 SELECT 'new monitored_flights_v2', COUNT(*) FROM clean.monitored_flights_v2;
 
--- After backfill: score counts
+-- After backfill: score counts match
 SELECT 'old risk_score_history' AS tbl, COUNT(*) FROM public.risk_score_history
 UNION ALL
 SELECT 'new risk_score_history_v2', COUNT(*) FROM clean.risk_score_history_v2;
 
--- After one monitor cycle: scores appearing
+-- Verify CHECK constraints are in place
+SELECT constraint_name, constraint_type
+FROM information_schema.table_constraints
+WHERE table_schema = 'clean';
+
+-- After one monitor cycle: new scores appearing
 SELECT COUNT(*) FROM clean.risk_score_history_v2
 WHERE scored_at > NOW() - INTERVAL '2 hours';
 
 -- After one seeder run: new flights appearing
 SELECT departure_date, COUNT(*) FROM clean.monitored_flights_v2
 GROUP BY departure_date ORDER BY departure_date DESC;
+
+-- Check origin_icao + destination_icao are populated in new scores
+SELECT COUNT(*) FILTER (WHERE origin_icao IS NOT NULL) AS origin_icao_filled,
+       COUNT(*) FILTER (WHERE destination_icao IS NOT NULL) AS dest_icao_filled
+FROM clean.risk_score_history_v2
+WHERE scored_at > NOW() - INTERVAL '2 hours';
+
+-- Check equipment_group is populated in flights
+SELECT equipment_group, COUNT(*)
+FROM clean.monitored_flights_v2
+WHERE equipment_group IS NOT NULL
+GROUP BY equipment_group;
 ```
+
+---
+
+## 5. Complete Column Coverage Matrix
+
+### `monitored_flights_v2` (28 columns)
+
+| Column | Type | In DDL | Populated by backfill | Populated by insertFlightToV2 | Populated by updateFlightInV2 |
+|--------|------|--------|----------------------|-------------------------------|-------------------------------|
+| id | SERIAL PK | ✅ | ✅ (preserved) | ✅ (auto) | N/A |
+| flight_number | TEXT NOT NULL | ✅ | ✅ | ✅ | N/A |
+| carrier_iata | TEXT NOT NULL | ✅ | ✅ | ✅ | N/A |
+| departure_date | DATE NOT NULL | ✅ | ✅ (::date cast) | ✅ | N/A |
+| departure_time | TEXT | ✅ | ✅ | ✅ | ✅ |
+| departure_time_utc | TIMESTAMP | ✅ | ✅ (computed from date+time) | ✅ (computed from date+time) | ❌ Not set |
+| origin_iata | TEXT NOT NULL | ✅ | ✅ | ✅ | N/A |
+| origin_name | TEXT | ✅ | ❌ | ❌ | ❌ |
+| destination_iata | TEXT NOT NULL | ✅ | ✅ | ✅ | N/A |
+| destination_name | TEXT | ✅ | ❌ | ❌ | ❌ |
+| status | TEXT | ✅ (CHECK) | ✅ | ✅ (default 'active') | N/A |
+| risk_score | INTEGER | ✅ | ✅ | N/A | ✅ |
+| risk_tier | TEXT | ✅ (CHECK) | ✅ | N/A | ✅ |
+| last_checked_at | TIMESTAMP | ✅ | ✅ | N/A | ✅ |
+| red_tier_first_at | TIMESTAMP | ✅ | ✅ | N/A | ✅ |
+| cancelled_at | TIMESTAMP | ✅ | ✅ | N/A | ✅ |
+| confirmation_alert_sent_at | TIMESTAMP | ✅ | ✅ | N/A | N/A |
+| resolved_status | TEXT | ✅ | ✅ | N/A | N/A |
+| resolved_delay_minutes | INTEGER | ✅ | ✅ | N/A | N/A |
+| resolved_at | TIMESTAMP | ✅ | ✅ | N/A | N/A |
+| agency_resolved_at | TIMESTAMP | ✅ | ✅ | N/A | N/A |
+| tail_number | TEXT | ✅ | ✅ | N/A | ✅ |
+| equipment_type | TEXT | ✅ | ✅ | ✅ | ✅ |
+| equipment_group | TEXT | ✅ | ✅ (CASE expression) | ✅ (deriveEquipmentGroup) | ✅ (CASE recompute) |
+| is_test | BOOLEAN | ✅ | ✅ | ✅ | N/A |
+| agency_id | INTEGER | ✅ | ✅ | ✅ | N/A |
+| created_at | TIMESTAMP | ✅ | ✅ | N/A | N/A |
+| raw_api_data | JSONB | ✅ | ❌ | ❌ | ❌ |
+
+### `risk_score_history_v2` (69 columns)
+
+All 69 columns are in DDL, all are populated by backfill Step 2, all are populated by `writeScoreToV2`. Origin_icao and destination_icao are populated by `writeScoreToV2` (Fix #5) but will be NULL in backfill (old data doesn't have ICAO codes). See the migration DDL for the full 69-column list.
+
+---
+
+## 6. Known Remaining Gaps (Phase 2+ Work)
+
+| Gap | Impact | Target Phase |
+|-----|--------|-------------|
+| origin_name / destination_name never set | Display-only, low impact | Phase 5 |
+| raw_api_data never stored | No debug data for re-processing | Phase 4 |
+| carrierHealth.ts reads old tables (not v2) | Carrier health uses old corrupt data | Phase 2 (task 2d) |
+| apiCallTracker not integrated into API calls | No API cost monitoring | Phase 2 (task 2a) |
+| No data quality validation checks | Bugs go undetected | Phase 2 (task 2e) |
+| No /api/v2/api-stats endpoint | No visibility into API costs | Phase 2 (task 2f) |
 
 ---
 

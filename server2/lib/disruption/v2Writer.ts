@@ -46,9 +46,11 @@ export async function writeScoreToV2(
       hours_until_departure, time_of_day_risk, day_of_week_risk,
       connection_risk, horizon,
       departure_hour, departure_day_of_week,
+      origin_icao,
       origin_flight_category, origin_wind_speed_kt, origin_gust_speed_kt,
       origin_visibility_miles, origin_ceiling_ft,
       origin_has_thunderstorm, origin_has_freezing,
+      destination_icao,
       destination_flight_category, destination_wind_speed_kt, destination_gust_speed_kt,
       destination_visibility_miles, destination_ceiling_ft,
       destination_has_thunderstorm, destination_has_freezing,
@@ -75,10 +77,10 @@ export async function writeScoreToV2(
       ${risk.signals.hoursUntilDeparture}, ${risk.signals.timeOfDayRisk}, ${risk.signals.dayOfWeekRisk},
       ${risk.signals.connectionRisk}, ${risk.signals.horizon},
       ${departureHour}, ${departureDayOfWeek},
-      ${risk.originWeather.flightCategory}, ${risk.originWeather.windSpeedKt}, ${risk.originWeather.gustSpeedKt},
+      ${risk.originWeather.icaoCode ?? null}, ${risk.originWeather.flightCategory}, ${risk.originWeather.windSpeedKt}, ${risk.originWeather.gustSpeedKt},
       ${risk.originWeather.visibilityMiles}, ${risk.originWeather.ceilingFt},
       ${risk.originWeather.hasThunderstorm}, ${risk.originWeather.hasFreezing},
-      ${risk.destinationWeather.flightCategory}, ${risk.destinationWeather.windSpeedKt}, ${risk.destinationWeather.gustSpeedKt},
+      ${risk.destinationWeather.icaoCode ?? null}, ${risk.destinationWeather.flightCategory}, ${risk.destinationWeather.windSpeedKt}, ${risk.destinationWeather.gustSpeedKt},
       ${risk.destinationWeather.visibilityMiles}, ${risk.destinationWeather.ceilingFt},
       ${risk.destinationWeather.hasThunderstorm}, ${risk.destinationWeather.hasFreezing},
       ${risk.nasOrigin.hasGroundStop}, ${risk.nasOrigin.hasGroundDelay}, ${risk.nasOrigin.avgDelayMinutes},
@@ -121,6 +123,10 @@ export async function updateFlightInV2(
       departure_time = COALESCE(${updates.departureTime ?? null}, departure_time),
       tail_number = COALESCE(${updates.tailNumber ?? null}, tail_number),
       equipment_type = COALESCE(${updates.equipmentType ?? null}, equipment_type),
+      equipment_group = CASE
+        WHEN ${updates.equipmentType ?? null} IS NOT NULL
+        THEN ${deriveEquipmentGroup(updates.equipmentType ?? null)}
+        ELSE equipment_group END,
       red_tier_first_at = COALESCE(${updates.redTierFirstAt ?? null}, red_tier_first_at),
       cancelled_at = COALESCE(${updates.cancelledAt ?? null}, cancelled_at)
     WHERE id = ${flight.id}
@@ -137,16 +143,26 @@ export async function insertFlightToV2(
     destinationIata: string;
     isTest: boolean;
     agencyId: number;
+    equipmentType?: string | null;
   },
 ): Promise<void> {
+  const departureTimeUtc = values.departureDate && values.departureTime
+    ? new Date(`${values.departureDate}T${values.departureTime}:00Z`)
+    : null;
+  const equipmentGroup = deriveEquipmentGroup(values.equipmentType ?? null);
+
   await db.execute(sql`
     INSERT INTO clean.monitored_flights_v2 (
       flight_number, carrier_iata, departure_date, departure_time,
-      origin_iata, destination_iata, is_test, agency_id
+      departure_time_utc,
+      origin_iata, destination_iata, is_test, agency_id,
+      equipment_type, equipment_group
     ) VALUES (
       ${values.flightNumber}, ${values.carrierIata}, ${values.departureDate},
-      ${values.departureTime}, ${values.originIata}, ${values.destinationIata},
-      ${values.isTest}, ${values.agencyId}
+      ${values.departureTime}, ${departureTimeUtc},
+      ${values.originIata}, ${values.destinationIata},
+      ${values.isTest}, ${values.agencyId},
+      ${values.equipmentType ?? null}, ${equipmentGroup}
     )
     ON CONFLICT (flight_number, departure_date) DO NOTHING
   `);
