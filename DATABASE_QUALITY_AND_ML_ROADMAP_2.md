@@ -4,6 +4,8 @@
 
 This file covers execution status, remaining work, and the ML pipeline. See Part 1 for the original database analysis, v2 table design, API budget, and the complete detailed plan.
 
+**Latest commit:** `759e609` — Part 2 MD, stray fence fix, renumber section 13
+
 ---
 
 ## Part 1: Phase 1 Execution Status — What's Been Done & What Needs To Be Done
@@ -15,13 +17,13 @@ All code changes are pushed to GitHub (`main`, commit `5e07d3a`). The migration 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 1a | Create `clean` schema | ✅ Done | In `migrations/001_create_v2_tables.sql`, `CREATE SCHEMA IF NOT EXISTS clean` |
-| 1b | Create `clean.monitored_flights_v2` | ✅ Done | SERIAL PK, 18 flat columns, all indexes |
-| 1c | Create `clean.risk_score_history_v2` | ✅ Done | SERIAL PK, ~50 flat columns, all indexes |
+| 1b | Create `clean.monitored_flights_v2` | ✅ Done | SERIAL PK, 22 flat columns, all indexes. Part 7 columns: `departure_time_utc`, `equipment_group` |
+| 1c | Create `clean.risk_score_history_v2` | ✅ Done | SERIAL PK, ~55 flat columns, all indexes. Part 7 columns: `origin_icao`, `destination_icao` |
 | 1d | Add all indexes | ✅ Done | 5 indexes on flights_v2, 5 on risk_score_v2 + UNIQUE on (flight_number, departure_date) |
-| 1e | Backfill flights: old `monitored_flights` → v2 | ✅ Script ready | `scripts/backfill_v2.sql` copies all columns |
-| 1f | Backfill scores: old JSONB → v2 | ✅ Script ready | Extracts all 50+ fields from JSONB into typed columns |
+| 1e | Backfill flights: old `monitored_flights` → v2 | ✅ Script ready | `scripts/backfill_v2.sql` copies all columns, computes `departure_time_utc` + `equipment_group` |
+| 1f | Backfill scores: old JSONB → v2 | ✅ Script ready | Extracts all 55+ fields from JSONB into typed columns; extracts `equipment_group` from `equipment_type` |
 | 1g | Verify row counts match | 🔲 **Needs Replit** | Run `psql "$DATABASE_URL" -f scripts/backfill_v2.sql` then check counts |
-| 1h | Push to GitHub | ✅ Done | `5e07d3a` — includes all server/ + server2/ changes |
+| 1h | Push to GitHub | 🔲 **Needs push** | Bug fixes not yet committed (see bugs below) |
 
 ### 1.2 Additional Phase 1 Work (Beyond Original Roadmap 11.7)
 
@@ -39,6 +41,12 @@ These tasks were not in the original 11.7 roadmap but were necessary during impl
 | — | **Seeder dedup queries v2** (not old table) | ✅ Done | `server2/testFlightSeeder.ts` dedup checks `clean.monitored_flights_v2` |
 | — | **MD formatting fixes** | ✅ Done | Removed stray ``` at line 2346 that broke all subsequent code block syntax highlighting. Renumbered section 14 → Part 13 |
 | — | **DATABASE_QUALITY_AND_ML_ROADMAP_2.md** created | ✅ Done | This file — continuation with execution status and ML plan |
+| — | **Bug fix:backfill table names** (PascalCase→snake_case) | ✅ Done | `scripts/backfill_v2.sql`: `"MonitoredFlight"`→`"monitored_flights"`, `"RiskScoreHistory"`→`"risk_score_history"` |
+| — | **Bug fix:backfill JSONB column** (`data`→`"signals"`) | ✅ Done | `scripts/backfill_v2.sql`: old column is `rsh."signals"`, not `rsh.data` |
+| — | **Bug fix:backfill ON CONFLICT** (`(id)`→ never fires) | ✅ Done | Flights use `ON CONFLICT (flight_number, departure_date)`, scores use `ON CONFLICT (id)` (correct for explicit ids) |
+| — | **Bug fix:backfill preserve IDs** | ✅ Done | Added `id` to INSERT column list + sequence reset via `setval` |
+| — | **Bug fix:migration missing Part 7 columns** | ✅ Done | Added `departure_time_utc`, `equipment_group` to flights_v2; `origin_icao`, `destination_icao` to scores_v2 |
+| — | **Bug fix:backfill date cast** (`departure_date::date`) | ✅ Done | Old `departure_date` is TEXT, v2 expects DATE — added explicit `::date` cast |
 
 ### 1.3 Phase 2 — Pipeline Rewrite (Partially Done)
 
@@ -68,7 +76,7 @@ These tasks were not in the original 11.7 roadmap but were necessary during impl
 
 The fastest path to a working v2 system:
 
-1. **On Replit**: `git pull` → run migration → run backfill → restart server2/
+1. **On Replit**: `git pull` (includes backfill bug fixes) → run migration → run backfill → restart server2/
 2. **After restart**: server2/ monitor writes scores to v2, seeder inserts flights to v2
 3. **Then**: Fix `carrierHealth.ts` to read from v2 (task 2d) — takes ~30 min
 4. **Then**: Add `apiCallTracker` integration (task 2a) — takes ~1-2 hours

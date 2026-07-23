@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS clean.monitored_flights_v2 (
   carrier_iata TEXT NOT NULL,
   departure_date DATE NOT NULL,
   departure_time TEXT,
+  departure_time_utc TIMESTAMP,
   origin_iata TEXT NOT NULL,
   destination_iata TEXT NOT NULL,
   origin_name TEXT,
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS clean.monitored_flights_v2 (
   -- Aircraft (from AeroDataBox)
   tail_number TEXT,
   equipment_type TEXT,
+  equipment_group TEXT,
 
   -- Metadata
   is_test BOOLEAN DEFAULT FALSE,
@@ -109,6 +111,7 @@ CREATE TABLE IF NOT EXISTS clean.risk_score_history_v2 (
   departure_day_of_week INTEGER,
 
   -- ===== WEATHER: ORIGIN (from aviationweather.gov METAR) =====
+  origin_icao TEXT,
   origin_flight_category TEXT,
   origin_wind_speed_kt NUMERIC(5,1),
   origin_gust_speed_kt NUMERIC(5,1),
@@ -118,6 +121,7 @@ CREATE TABLE IF NOT EXISTS clean.risk_score_history_v2 (
   origin_has_freezing BOOLEAN DEFAULT FALSE,
 
   -- ===== WEATHER: DESTINATION (from aviationweather.gov METAR) =====
+  destination_icao TEXT,
   destination_flight_category TEXT,
   destination_wind_speed_kt NUMERIC(5,1),
   destination_gust_speed_kt NUMERIC(5,1),
