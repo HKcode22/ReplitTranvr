@@ -1,6 +1,7 @@
-import { and, eq, lte, ne } from "drizzle-orm";
+import { and, eq, lte, ne, sql } from "drizzle-orm";
 import { db } from "../../db";
-import { agencyAccounts, monitoredFlights } from "@shared/schema";
+import { agencyAccounts } from "@shared/schema";
+import { insertFlightToV2 } from "./v2Writer";
 import { aerodataboxFetch } from "./aerodataboxLimiter";
 import { hashAgencyPassword } from "../agencyAuth";
 
@@ -147,21 +148,13 @@ async function seedAirport(
       const flight = extractFlight(raw, airport);
       if (!flight) continue;
 
-      const existing = await db
-        .select({ id: monitoredFlights.id })
-        .from(monitoredFlights)
-        .where(
-          and(
-            eq(monitoredFlights.flightNumber, flight.flightNumber),
-            eq(monitoredFlights.departureDate, date),
-          ),
-        )
-        .limit(1);
+      const existing = await db.execute<{id: number}[]>(
+        sql`SELECT id FROM clean.monitored_flights_v2 WHERE flight_number = ${flight.flightNumber} AND departure_date = ${date}::date LIMIT 1`,
+      );
 
-      if (existing.length > 0) continue;
+      if (existing.rows.length > 0) continue;
 
-      await db.insert(monitoredFlights).values({
-        agencyId: testAgencyId,
+      insertFlightToV2({
         flightNumber: flight.flightNumber,
         carrierIata: flight.carrierIata,
         departureDate: date,
@@ -169,7 +162,11 @@ async function seedAirport(
         originIata: airport,
         destinationIata: flight.destinationIata,
         isTest: true,
+        agencyId: testAgencyId,
+      }).catch((err: any) => {
+        console.error(`[seeder] v2 insert failed for ${flight.flightNumber}:`, err?.message || err);
       });
+
       inserted++;
     }
   }
@@ -179,18 +176,12 @@ async function seedAirport(
 
 async function archiveOldTestFlights(): Promise<number> {
   const cutoff = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const archived = await db
-    .update(monitoredFlights)
-    .set({ status: "archived" })
-    .where(
-      and(
-        eq(monitoredFlights.isTest, true),
-        lte(monitoredFlights.departureDate, cutoff),
-        ne(monitoredFlights.status, "archived"),
-      ),
-    )
-    .returning({ id: monitoredFlights.id });
-  return archived.length;
+  const archived = await db.execute<{id: number}[]>(
+    sql`UPDATE clean.monitored_flights_v2 SET status = 'archived'
+        WHERE is_test = true AND departure_date <= ${cutoff}::date AND status != 'archived'
+        RETURNING id`,
+  );
+  return archived.rows.length;
 }
 
 export async function runTestFlightSeeder(): Promise<void> {

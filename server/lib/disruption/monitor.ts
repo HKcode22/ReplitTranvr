@@ -6,21 +6,19 @@ import {
   disruptionAlternatives,
   flightTravelers,
   monitoredFlights,
-  riskScoreHistory,
   userMonitoredFlights,
   users,
   type FlightTraveler,
   type MonitoredFlight,
 } from "@shared/schema";
 import { scoreFlightRisk } from "./riskScorer";
-import { writeScoreToV2, updateFlightInV2 } from "./v2Writer";
 import { findLowRiskAlternatives } from "./alternativeFinder";
 import { sendTravelerAlert, sendConfirmationAlert } from "./alertSender";
 import { getHistoricalOtp, type HistoricalOtpResult } from "./historicalOtp";
 import { getFlightStatus } from "./flightStatus";
 import sgMail from "@sendgrid/mail";
 
-const INTERVAL_MS = 30 * 60 * 1000;
+const INTERVAL_MS = 60 * 60 * 1000;
 
 let intervalHandle: NodeJS.Timeout | null = null;
 let cycleRunning = false;
@@ -66,69 +64,11 @@ async function processFlight(
     forceRefreshNas: opts?.forceRefreshNas,
   });
 
-  await db.insert(riskScoreHistory).values({
-    monitoredFlightId: flight.id,
-    score: risk.score,
-    tier: risk.tier,
-    signals: {
-      signals: risk.signals,
-      cancelled: risk.cancelled,
-      horizon: risk.signals.horizon,
-      hoursUntilDeparture: risk.signals.hoursUntilDeparture,
-      nasOrigin: {
-        hasGroundStop: risk.nasOrigin.hasGroundStop,
-        hasGroundDelay: risk.nasOrigin.hasGroundDelay,
-        avgDelayMinutes: risk.nasOrigin.avgDelayMinutes,
-        programs: risk.nasOrigin.programs,
-      },
-      nasDestination: {
-        hasGroundStop: risk.nasDestination.hasGroundStop,
-        hasGroundDelay: risk.nasDestination.hasGroundDelay,
-        avgDelayMinutes: risk.nasDestination.avgDelayMinutes,
-        programs: risk.nasDestination.programs,
-      },
-      carrierHealth: {
-        cancellationRate24h: risk.carrierHealth.cancellationRate24h,
-        avgDelay24h: risk.carrierHealth.avgDelay24h,
-        sampleSize: risk.carrierHealth.sampleSize,
-        healthScore: risk.carrierHealth.healthScore,
-        reliable: risk.carrierHealth.reliable,
-      },
-      originWeather: {
-        flightCategory: risk.originWeather.flightCategory,
-        hasThunderstorm: risk.originWeather.hasThunderstorm,
-        hasFreezing: risk.originWeather.hasFreezing,
-        windSpeedKt: risk.originWeather.windSpeedKt,
-        gustSpeedKt: risk.originWeather.gustSpeedKt,
-        visibilityMiles: risk.originWeather.visibilityMiles,
-        ceilingFt: risk.originWeather.ceilingFt,
-      },
-      destinationWeather: {
-        flightCategory: risk.destinationWeather.flightCategory,
-        hasThunderstorm: risk.destinationWeather.hasThunderstorm,
-        hasFreezing: risk.destinationWeather.hasFreezing,
-        windSpeedKt: risk.destinationWeather.windSpeedKt ?? 0,
-        gustSpeedKt: risk.destinationWeather.gustSpeedKt ?? 0,
-        visibilityMiles: risk.destinationWeather.visibilityMiles ?? 10,
-        ceilingFt: risk.destinationWeather.ceilingFt ?? 99999,
-      },
-      flightStatus: risk.flightStatus
-        ? {
-            status: risk.flightStatus.status,
-            delayMinutes: risk.flightStatus.delayMinutes,
-            inboundDelayMinutes: risk.flightStatus.inboundDelayMinutes,
-            cancelled: risk.flightStatus.cancelled,
-            departureTime: risk.flightStatus.departureTime,
-          }
-        : null,
-    },
-    tailNumber: risk.flightStatus?.tailNumber ?? null,
-    equipmentType: risk.flightStatus?.equipmentType ?? null,
-  });
+  // [server frozen] riskScoreHistory writes stopped — server2/ owns v2 writes
 
-  writeScoreToV2(flight, risk, new Date()).catch((err: any) => {
-    console.error(`[monitor] v2 write failed for flight ${flight.id}:`, err?.message || err);
-  });
+  console.log(
+    `[monitor] stored flight_id=${flight.id} score=${risk.score} tier=${risk.tier} cancelled=${risk.cancelled} delay_min=${risk.flightStatus?.delayMinutes ?? "null"} inbound_delay=${risk.flightStatus?.inboundDelayMinutes ?? "null"}`,
+  );
 
   if (flight.status !== "active") {
     historicalOtpCache.delete(flight.id);
@@ -165,31 +105,7 @@ async function processFlight(
     }
   }
 
-  await db
-    .update(monitoredFlights)
-    .set({
-      riskScore: risk.score,
-      riskTier: risk.tier,
-      lastCheckedAt: now,
-      ...(extractedDepartureTime ? { departureTime: extractedDepartureTime } : {}),
-      ...(risk.flightStatus?.tailNumber ? { tailNumber: risk.flightStatus.tailNumber } : {}),
-      ...(risk.flightStatus?.equipmentType ? { equipmentType: risk.flightStatus.equipmentType } : {}),
-      ...agencyStamp,
-    })
-    .where(eq(monitoredFlights.id, flight.id));
-
-  updateFlightInV2(flight, {
-    riskScore: risk.score,
-    riskTier: risk.tier,
-    lastCheckedAt: now,
-    ...(extractedDepartureTime ? { departureTime: extractedDepartureTime } : {}),
-    ...(risk.flightStatus?.tailNumber ? { tailNumber: risk.flightStatus.tailNumber } : {}),
-    ...(risk.flightStatus?.equipmentType ? { equipmentType: risk.flightStatus.equipmentType } : {}),
-    ...(agencyStamp.redTierFirstAt ? { redTierFirstAt: agencyStamp.redTierFirstAt } : {}),
-    ...(agencyStamp.cancelledAt ? { cancelledAt: agencyStamp.cancelledAt } : {}),
-  }).catch((err: any) => {
-    console.error(`[monitor] v2 flight update failed for ${flight.id}:`, err?.message || err);
-  });
+  // [server frozen] monitoredFlights risk-score updates stopped — server2/ owns v2 writes
 
   let alertFired = false;
 
@@ -340,12 +256,11 @@ async function runCycle(): Promise<void> {
           gte(monitoredFlights.departureDate, today),
           lte(monitoredFlights.departureDate, tomorrow),
         ),
-      );
+      )
+      .limit(41);
 
     if (flights.length === 0) {
-      console.log(`[monitor] no active flights found for ${today}..${tomorrow} — check testFlightSeeder and AERODATABOX_API_KEY`);
-    } else {
-      console.log(`[monitor] found ${flights.length} active flights for ${today}..${tomorrow}`);
+      console.log(`[monitor] no active flights found for ${today}..${tomorrow} — nothing to score (seeder may have failed or API key may be invalid)`);
     }
 
     for (const flight of flights) {
@@ -710,7 +625,7 @@ export function startMonitoringEngine(): void {
     });
   }, INTERVAL_MS);
   // Fire one cycle shortly after boot so freshly-added flights get a
-  // first risk score without waiting 30 minutes. Slight delay lets the
+  // first risk score without waiting 60 minutes. Slight delay lets the
   // HTTP server settle in before we start blasting outbound API calls.
   setTimeout(() => {
     runCycle().catch((err) => {

@@ -28,6 +28,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0006_test_flight_seeder.sql",
   "0007_user_monitored_flights.sql",
   "0008_resolved_flight_status.sql",
+  "001_create_v2_tables.sql",
 ];
 
 let bootMigrationsApplied = false;

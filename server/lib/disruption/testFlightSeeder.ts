@@ -1,112 +1,11 @@
-import { and, eq, lte, ne } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../../db";
-import { agencyAccounts, monitoredFlights } from "@shared/schema";
-import { insertFlightToV2 } from "./v2Writer";
-import { aerodataboxFetch } from "./aerodataboxLimiter";
-import { hashAgencyPassword } from "../agencyAuth";
-
-const SEED_AIRPORTS = ["DFW", "ORD", "ATL", "JFK", "LAX", "BOS"] as const;
-
-// Four time-of-day buckets so the scoring engine sees flights across all
-// hour-of-day ranges, exercising every time-of-day signal bucket.
-const TIME_BUCKETS = [
-  { label: "morning",   from: "06:00", to: "10:59", take: 3 },
-  { label: "midday",    from: "11:00", to: "14:59", take: 3 },
-  { label: "afternoon", from: "15:00", to: "18:59", take: 3 },
-  { label: "evening",   from: "19:00", to: "23:59", take: 3 },
-] as const;
+import { agencyAccounts } from "@shared/schema";
 
 let seederHandle: NodeJS.Timeout | null = null;
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-async function fetchWindow(
-  airport: string,
-  date: string,
-  fromTime: string,
-  toTime: string,
-  apiKey: string,
-): Promise<any[]> {
-  const url =
-    `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(airport)}` +
-    `/${date}T${fromTime}/${date}T${toTime}` +
-    `?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withCargo=false&withPrivate=false`;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const resp = await aerodataboxFetch(url, {
-        headers: {
-          "x-rapidapi-key": apiKey,
-          "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
-        },
-      });
-      if (!resp.ok) {
-        if (resp.status === 429 && attempt < 3) {
-          const backoff = Math.min(1000 * Math.pow(2, attempt), 8000);
-          console.warn(`[seeder] HTTP 429 for ${airport} ${fromTime}-${toTime} — retry ${attempt}/3 in ${backoff}ms`);
-          await new Promise(r => setTimeout(r, backoff));
-          continue;
-        }
-        console.warn(`[seeder] HTTP ${resp.status} for ${airport} ${fromTime}-${toTime} attempt ${attempt}/3`);
-        return [];
-      }
-      const raw: any = await resp.json();
-      if (!raw) return [];
-      if (raw.departures && Array.isArray(raw.departures)) return raw.departures;
-      if (Array.isArray(raw)) return raw;
-      return [];
-    } catch (err: any) {
-      if (attempt < 3) {
-        const backoff = Math.min(1000 * Math.pow(2, attempt), 8000);
-        console.warn(`[seeder] fetch failed ${airport} ${fromTime}-${toTime} — retry ${attempt}/3 in ${backoff}ms: ${err?.message || err}`);
-        await new Promise(r => setTimeout(r, backoff));
-      } else {
-        console.warn(`[seeder] fetch failed ${airport} ${fromTime}-${toTime} after ${attempt} attempts: ${err?.message || err}`);
-      }
-    }
-  }
-  return [];
-}
-
-function extractFlight(
-  raw: any,
-  originIata: string,
-): { flightNumber: string; carrierIata: string; destinationIata: string; departureTime: string | null } | null {
-  const rawNum = String(raw.number || raw.iata || raw.flightNumber || "")
-    .replace(/\s+/g, "")
-    .toUpperCase();
-  if (!rawNum) return null;
-
-  const carrierMatch = rawNum.match(/^([A-Z]{2,3})\d/);
-  if (!carrierMatch) return null;
-  const carrierIata = carrierMatch[1];
-
-  const destIata = String(raw.arrival?.airport?.iata || "").toUpperCase();
-  if (!destIata || destIata === originIata) return null;
-
-  const rawTime =
-    raw.departure?.scheduledTime?.local ||
-    raw.departure?.scheduledTime?.utc ||
-    null;
-  let departureTime: string | null = null;
-  if (rawTime) {
-    const m = String(rawTime).match(/(\d{2}:\d{2})/);
-    if (m) departureTime = m[1];
-  }
-
-  return { flightNumber: rawNum, carrierIata, destinationIata: destIata, departureTime };
-}
-
-// Pick `n` items evenly spaced across `arr` rather than just the first `n`.
-function selectSpread<T>(arr: T[], n: number): T[] {
-  if (arr.length <= n) return arr;
-  const step = arr.length / n;
-  const out: T[] = [];
-  for (let i = 0; i < n; i++) {
-    out.push(arr[Math.floor(i * step + step / 2)]);
-  }
-  return out;
 }
 
 async function getOrCreateTestAgency(): Promise<number> {
@@ -119,7 +18,8 @@ async function getOrCreateTestAgency(): Promise<number> {
   if (rows.length > 0) return rows[0].id;
 
   const testPassword = process.env.TEST_AGENCY_PASSWORD || "travnr-test-2024";
-  const hashed = await hashAgencyPassword(testPassword);
+  const bcrypt = await import("bcryptjs");
+  const hashed = await bcrypt.hash(testPassword, 10);
   const [created] = await db
     .insert(agencyAccounts)
     .values({
@@ -140,74 +40,12 @@ async function seedAirport(
   testAgencyId: number,
   apiKey: string,
 ): Promise<number> {
-  let inserted = 0;
-
-  for (const bucket of TIME_BUCKETS) {
-    const departures = await fetchWindow(airport, date, bucket.from, bucket.to, apiKey);
-    const selected = selectSpread(departures, bucket.take);
-
-    for (const raw of selected) {
-      const flight = extractFlight(raw, airport);
-      if (!flight) continue;
-
-      const existing = await db
-        .select({ id: monitoredFlights.id })
-        .from(monitoredFlights)
-        .where(
-          and(
-            eq(monitoredFlights.flightNumber, flight.flightNumber),
-            eq(monitoredFlights.departureDate, date),
-          ),
-        )
-        .limit(1);
-
-      if (existing.length > 0) continue;
-
-      await db.insert(monitoredFlights).values({
-        agencyId: testAgencyId,
-        flightNumber: flight.flightNumber,
-        carrierIata: flight.carrierIata,
-        departureDate: date,
-        departureTime: flight.departureTime,
-        originIata: airport,
-        destinationIata: flight.destinationIata,
-        isTest: true,
-      });
-
-      insertFlightToV2({
-        flightNumber: flight.flightNumber,
-        carrierIata: flight.carrierIata,
-        departureDate: date,
-        departureTime: flight.departureTime,
-        originIata: airport,
-        destinationIata: flight.destinationIata,
-        isTest: true,
-        agencyId: testAgencyId,
-      }).catch((err: any) => {
-        console.error(`[seeder] v2 insert failed for ${flight.flightNumber}:`, err?.message || err);
-      });
-
-      inserted++;
-    }
-  }
-
-  return inserted;
+  // [server frozen] test flight seeder disabled — server2/ owns v2 writes
+  return 0;
 }
 
 async function archiveOldTestFlights(): Promise<number> {
-  const cutoff = new Date(Date.now() - 36 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const archived = await db
-    .update(monitoredFlights)
-    .set({ status: "archived" })
-    .where(
-      and(
-        eq(monitoredFlights.isTest, true),
-        lte(monitoredFlights.departureDate, cutoff),
-        ne(monitoredFlights.status, "archived"),
-      ),
-    )
-    .returning({ id: monitoredFlights.id });
-  return archived.length;
+  return 0;
 }
 
 export async function runTestFlightSeeder(): Promise<void> {
@@ -226,24 +64,13 @@ export async function runTestFlightSeeder(): Promise<void> {
     const counts = await Promise.all(
       SEED_AIRPORTS.map(async (airport) => {
         const n = await seedAirport(airport, date, testAgencyId, apiKey);
-        if (n === 0) {
-          console.warn(`[seeder] ${airport}: 0 flights inserted — API may be down, out of credits, or response format changed`);
-        } else {
-          console.log(`[seeder] ${airport}: inserted ${n} flights`);
-        }
+        console.log(`[seeder] ${airport}: inserted ${n} flights`);
         return n;
       }),
     );
 
     const total = counts.reduce((a, b) => a + b, 0);
-    if (total === 0) {
-      console.warn(`[seeder] WARNING: 0 total flights inserted across all airports. Check:`);
-      console.warn(`[seeder]   - AERODATABOX_API_KEY valid and has credits`);
-      console.warn(`[seeder]   - AeroDataBox API response format hasn't changed`);
-      console.warn(`[seeder]   - Network connectivity to aerodatabox.p.rapidapi.com`);
-    } else {
-      console.log(`[seeder] total inserted: ${total}`);
-    }
+    console.log(`[seeder] total inserted: ${total}`);
 
     const archived = await archiveOldTestFlights();
     console.log(`[seeder] archived ${archived} old test flights`);

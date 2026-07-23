@@ -61,8 +61,10 @@ CREATE TABLE IF NOT EXISTS clean.monitored_flights_v2 (
   raw_api_data JSONB
 );
 
--- Indexes for monitored_flights_v2
-CREATE UNIQUE INDEX IF NOT EXISTS uq_mf_v2_flight_date ON clean.monitored_flights_v2(flight_number, departure_date);
+-- Unique index for idempotent inserts (same flight+date = same row)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_mf_v2_flight_date ON clean.monitored_flights_v2(flight_number, departure_date);
+
+-- Other indexes
 CREATE INDEX IF NOT EXISTS idx_mf_v2_status ON clean.monitored_flights_v2(status);
 CREATE INDEX IF NOT EXISTS idx_mf_v2_date ON clean.monitored_flights_v2(departure_date);
 CREATE INDEX IF NOT EXISTS idx_mf_v2_carrier ON clean.monitored_flights_v2(carrier_iata);

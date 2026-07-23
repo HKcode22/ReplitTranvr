@@ -148,5 +148,6 @@ export async function insertFlightToV2(
       ${values.departureTime}, ${values.originIata}, ${values.destinationIata},
       ${values.isTest}, ${values.agencyId}
     )
+    ON CONFLICT (flight_number, departure_date) DO NOTHING
   `);
 }

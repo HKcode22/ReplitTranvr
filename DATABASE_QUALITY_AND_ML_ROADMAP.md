@@ -131,7 +131,7 @@ Negative (< 0):   5,159 rows (47.9%)
 Distinct values: 404
 ```
 
-**What's wrong**: **47.9% of rows have negative hoursUntilDeparture** — meaning the flight already departed when it was scored. This is because the monitor re-scores flights every 30 minutes even after departure, and the scoring logic uses current time vs planned departure. Also, **0 rows have > 24 hours** horizon — the monitor only scores flights departing today or tomorrow, which is at most 47 hours away.
+**What's wrong**: **47.9% of rows have negative hoursUntilDeparture** — meaning the flight already departed when it was scored. This is because the monitor re-scores flights every 60 minutes even after departure, and the scoring logic uses current time vs planned departure. Also, **0 rows have > 24 hours** horizon — the monitor only scores flights departing today or tomorrow, which is at most 47 hours away.
 
 **Root cause**: The monitor cycle re-scores all active flights regardless of whether they've departed. After departure, hoursUntilDeparture becomes negative. This is by design (to track actual outcomes) but means nearly half the data is "post-diction" not "prediction."
 
@@ -1865,7 +1865,7 @@ CREATE SCHEMA IF NOT EXISTS clean;
 ```
 monitored_flights_v2 (parent, 1)
   │
-  ├── risk_score_history_v2 (child, many) — scores every 30 min
+  ├── risk_score_history_v2 (child, many) — scores every 60 min
   ├── flight_travelers (old table still references old monitored_flights)
   └── disruption_alternatives (old table still references old monitored_flights)
 ```
@@ -2706,7 +2706,7 @@ CREATE TABLE monitored_flights_v2 (
   risk_score INTEGER,
   -- The LATEST heuristic risk score (0-100).
   -- Source: computed by riskScorer.ts every cycle.
-  -- Updated every 30 minutes. NULL if never scored.
+  -- Updated every 60 minutes. NULL if never scored.
 
   risk_tier TEXT,
   -- 'green', 'amber', or 'red'. The LATEST tier.
@@ -2800,7 +2800,7 @@ CREATE INDEX idx_mf_v2_test ON monitored_flights_v2(is_test);
 
 #### `risk_score_v2` — The Score Table
 
-One row per scoring event. Every 30 minutes, each active flight gets a new row. Over time, this table grows fast — one flight scored for 48 hours generates ~96 rows.
+One row per scoring event. Every 60 minutes, each active flight gets a new row. Over time, this table grows fast — one flight scored for 48 hours generates ~48 rows.
 
 ```sql
 CREATE TABLE risk_score_v2 (
@@ -3184,10 +3184,10 @@ CREATE INDEX idx_rs_v2_carrier ON risk_score_v2(carrier_iata);
 
 ### 12.4 The Full Data Pipeline — How Data Flows from API to Table
 
-Every 30 minutes, the monitor cycle runs. Here's exactly what happens:
+Every 60 minutes, the monitor cycle runs. Here's exactly what happens:
 
 ```
-MONITOR CYCLE (every 30 minutes)
+MONITOR CYCLE (every 60 minutes)
 │
 ├─ 1. QUERY monitored_flights_v2
 │     SELECT * FROM monitored_flights_v2
@@ -3449,8 +3449,8 @@ STEP 6 — START server2/:
 
 STEP 7 — WAIT 24 HOURS:
   ~72 new test flights added by seeder
-  Each flight scored ~48 times (every 30 min)
-  ~3,456 scores in risk_score_v2
+  Each flight scored ~24 times (every 60 min)
+  ~1,728 scores in risk_score_v2
 
 STEP 8 — RUN VERIFICATION QUERIES (section 12.8):
   Check delays are real
@@ -3485,6 +3485,38 @@ The old tables are never deleted. They're your safety net and historical record.
 ALTER TABLE risk_score_history RENAME TO risk_score_history_archive;
 ALTER TABLE risk_score_v2 RENAME TO risk_score_history;
 ```
+
+---
+
+## 14. Phase 1 Status — What's Been Done & What Needs To Be Done
+
+### Done
+
+- **v2 tables created** (`clean.monitored_flights_v2`, `clean.risk_score_history_v2`) with all columns from the ERD + ML-ready features (weather, NAS, carrier health, signals)
+- **Backfill SQL ready** (`scripts/backfill_v2.sql`) — copies old data into v2 preserving IDs
+- **Migration auto-applied** on server2/ boot (via `server2/db.ts` BOOT_MIGRATIONS)
+- **server/ frozen** — all writes to old `public` schema removed:
+  - No more `riskScoreHistory` JSONB inserts
+  - No more `monitoredFlights` risk-score updates
+  - No more test flight inserts into old table
+  - Resolution & confirmation alert writes kept (small column updates, critical for system function)
+- **server2/ active** — v2-only writes:
+  - `v2Writer.ts` handles score inserts, flight updates, flight inserts
+  - `monitor.ts` writes scores to `clean.risk_score_history_v2` only
+  - `testFlightSeeder.ts` writes flights to `clean.monitored_flights_v2` only
+- **Scoring interval reduced to 60 min** (from 30) — ~24 scores per flight over 48h instead of ~96
+- **Max flights capped at 41** per cycle via `.limit(41)` — fits inside AeroDataBox Ultra budget (59,040 units / $32/mo)
+- **MD file updated** — all "30 min" references changed to "60 min"
+
+### Needs To Be Done On Replit
+
+1. **Pull + migrate:**
+   - `git pull`
+   - `psql "$DATABASE_URL" -f migrations/001_create_v2_tables.sql`
+   - `psql "$DATABASE_URL" -f scripts/backfill_v2.sql`
+2. **Restart server2/** — it auto-applies migration on boot and begins v2 writes
+3. **Verify** — check `clean.monitored_flights_v2` and `clean.risk_score_history_v2` have data after one cycle
+4. **Update API reads** — dashboard, carrier health, and other read paths need to point at v2 tables instead of old public tables
 
 
 
