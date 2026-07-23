@@ -2339,14 +2339,6 @@ app.post('/api/v2/api-stats/reset', (req, res) => {
 });
 ```
 
-
-
-
-
-```
-
-
-
 ### 11.6 Backfill Plan — Moving Old Data Into v2 Tables
 
 **The boss wants old historical data brought into the new tables.** Here's the plan:
@@ -3488,7 +3480,7 @@ ALTER TABLE risk_score_v2 RENAME TO risk_score_history;
 
 ---
 
-## 14. Phase 1 Status — What's Been Done & What Needs To Be Done
+## Part 13: Phase 1 Status — What's Been Done & What Needs To Be Done
 
 ### Done
 
@@ -3517,6 +3509,10 @@ ALTER TABLE risk_score_v2 RENAME TO risk_score_history;
 2. **Restart server2/** — it auto-applies migration on boot and begins v2 writes
 3. **Verify** — check `clean.monitored_flights_v2` and `clean.risk_score_history_v2` have data after one cycle
 4. **Update API reads** — dashboard, carrier health, and other read paths need to point at v2 tables instead of old public tables
+
+---
+
+**For the detailed execution status with checkboxes and code architecture, see**: [`DATABASE_QUALITY_AND_ML_ROADMAP_2.md`](./DATABASE_QUALITY_AND_ML_ROADMAP_2.md)
 
 
 
