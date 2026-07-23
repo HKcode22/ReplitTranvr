@@ -568,9 +568,28 @@ atcGroundDelay:   avg=3.2, max=15, 19 rows NULL
 
 ---
 
-### 1.28 isTest — Test Flight Flag
+### 1.28 isTest — Test Flight Flag (⚠️ CORRECTION: These ARE Real Flights)
 
-**Why it matters**: 97.5% of flights are system-generated test flights from the seeder. Only 20 flights (2.5%) are from real users.
+**Why it matters**: 97.5% of monitored flights have `isTest=true`. The question is whether these are fake/synthetic data or real flights.
+
+**Correction from earlier analysis**: These are **REAL flights** from AeroDataBox's API. The seeder (`testFlightSeeder.ts`) calls the same AeroDataBox departure board endpoint that any user would hit — it returns actual scheduled flights from real airlines operating at real airports. The `isTest` flag means "added by the system seeder, not by a user" — it does NOT mean the flight data is fake.
+
+**Proof (from testFlightSeeder.ts)**:
+```typescript
+// testFlightSeeder.ts line 37-39 — calls AeroDataBox LIVE departure board:
+const url =
+  `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(airport)}` +
+  `/${date}T${fromTime}/${date}T${toTime}` +
+  `?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withCargo=false&withPrivate=false`;
+```
+
+This returns the same data as the Replit dashboard would show — real flight numbers, real carriers, real schedules.
+
+**What IS biased** (not fake):
+- The seeder only queries **6 airports** (DFW, ORD, ATL, JFK, LAX, BOS) — no regional or international-only routes
+- It queries **4 specific time buckets** (morning/midday/afternoon/evening) — no red-eye flights
+- It takes **only 3 flights per bucket** — limited sampling of available departures
+- All flights are **US domestic departing from major hubs** — no international, no regional jets to small airports
 
 **Current data**:
 ```
@@ -578,15 +597,9 @@ monitored_flights: 776 test (97.5%), 20 real (2.5%)
 user_monitored_flights: 1 user
 ```
 
-**What's wrong**: The entire ML dataset is dominated by synthetic data. The seeder picks from 6 specific airports (ATL, DFW, ORD, DEN, LAX, JFK) at consistent times of day. This creates a biased sample that doesn't represent:
-- Regional/small airports
-- International operations
-- Non-peak hour flights
-- Leisure travel vs business travel patterns
+**What's actually wrong**: The dataset is **geographically and temporally biased** (major US hubs only, no international, no red-eyes), but the flight data itself is **100% real** from AeroDataBox. The delay VALUES in the risk scores are corrupt (Bug #1), but the flight identity (carrier, number, schedule) is genuine.
 
-**Root cause**: The product hasn't launched to real users. The seeder was designed to populate the system for testing.
-
-**Fix**: Either (a) expand the seeder to cover more airports and time ranges, (b) launch the product to get real user data, or (c) accept the bias and document it as a known limitation.
+**Fix**: Expand the seeder airports to include more diversity, or wait for real user data.
 
 ---
 
@@ -1461,3 +1474,361 @@ In priority order:
 3. **Use `server2/scripts/` for one-off scripts** (backfill, validation, export).
 4. **Only copy working code from `server2/` back to `server/`** when it's been tested.
 5. **The `risk_score_history` and `monitored_flights` tables are untouched.** The new pipeline writes to `risk_score_history_v2` and `monitored_flights_v2`.
+
+---
+
+## Part 11: Finalized Column Mapping & Execution Plan
+
+### 11.1 The Database Question — New DB or Same DB?
+
+**Short answer: Same database, separate schema (`clean`).**
+
+| Option | Pros | Cons | Verdict |
+|--------|------|------|---------|
+| **Same DB, same schema** (`public`) | Simple, no connection changes | Table name collisions (`v2` everywhere), messy | ❌ |
+| **Same DB, new schema** (`clean`) | Clean separation, cross-schema JOINs possible, no new connection string, simple deployment | Slightly verbose queries (`clean.monitored_flights`) | ✅ **RECOMMENDED** |
+| **New separate database** | Total isolation | Need new connection string, new migrations, no cross-DB queries, deployment complexity | ❌ Overkill at this stage |
+
+**Recommendation**: Create a `clean` schema in the existing PostgreSQL database. Tables become:
+- `clean.monitored_flights` (instead of `public.monitored_flights`)
+- `clean.risk_score_history` (instead of `public.risk_score_history`)
+
+The `clean.` prefix keeps old and new separated while allowing comparison queries:
+```sql
+SELECT old.score AS old_score, new.score AS new_score
+FROM public.risk_score_history old
+JOIN clean.risk_score_history new ON old.monitored_flight_id = new.monitored_flight_id
+WHERE old.scored_at = new.scored_at
+LIMIT 10;
+```
+
+**How to create the schema**:
+```sql
+CREATE SCHEMA IF NOT EXISTS clean;
+-- Then create tables with: CREATE TABLE clean.monitored_flights (...)
+```
+
+In the Drizzle schema file, reference the schema:
+```typescript
+import { pgSchema } from "drizzle-orm/pg-core";
+export const cleanSchema = pgSchema("clean");
+export const monitoredFlights = cleanSchema.table("monitored_flights", { ... });
+```
+
+### 11.2 Comprehensive Old → New Column Mapping
+
+This maps every single field from the old JSONB structure and the old `risk_score_history` / `monitored_flights` tables into the new flat schema.
+
+Legend:
+- **Source**: What API/service provides this data
+- **In Old JSONB?**: Where it lives in the current structure
+- **Quality**: Current data quality (Good / Bugged / Missing / Dead)
+- **Keep?**: Include in new clean schema? (Y/N)
+- **Why**: Justification
+
+#### TARGET VARIABLES (What the ML model learns to predict)
+
+| # | New Column | Old JSONB Path | Old Table Column | Source | Quality | Keep? | Why |
+|---|-----------|---------------|-----------------|--------|---------|-------|-----|
+| 1 | `actual_delay_minutes` | `signals.flightStatus.delayMinutes` | — | AeroDataBox | ❌ 99.98% zero (Bug #1) | ✅ Y | **ML target variable** — after backfill |
+| 2 | `actual_cancelled` | `signals.cancelled` | — | AeroDataBox | ✅ 99.4% good | ✅ Y | **ML target** — class imbalance expected |
+| 3 | `actual_status` | `signals.flightStatus.status` | — | AeroDataBox | ✅ 99.4% good | ✅ Y | Useful category feature |
+
+#### FLIGHT IDENTITY (from monitored_flights)
+
+| # | New Column | Old JSONB Path | Old Table Column | Source | Quality | Keep? | Why |
+|---|-----------|---------------|-----------------|--------|---------|-------|-----|
+| 4 | `flight_number` | — | `monitored_flights.flight_number` | AeroDataBox | ✅ Good | ✅ Y | Primary identifier |
+| 5 | `carrier_iata` | — | `monitored_flights.carrier_iata` | AeroDataBox | ✅ Good | ✅ Y | Carrier code (AA, UA, DL...) |
+| 6 | `departure_date` | — | `monitored_flights.departure_date` | AeroDataBox | ✅ Good | ✅ Y | Date of flight |
+| 7 | `departure_time` | `signals.flightStatus.departureTime` | `monitored_flights.departure_time` | AeroDataBox | ✅ 99.35% good | ✅ Y | Time of departure |
+| 8 | `origin_iata` | — | `monitored_flights.origin_iata` | AeroDataBox | ✅ Good | ✅ Y | Origin airport code |
+| 9 | `destination_iata` | — | `monitored_flights.destination_iata` | AeroDataBox | ✅ Good | ✅ Y | Destination airport code |
+
+#### TIMING FEATURES (computed from flight data)
+
+| # | New Column | Old JSONB Path | Old Table Column | Source | Quality | Keep? | Why |
+|---|-----------|---------------|-----------------|--------|---------|-------|-----|
+| 10 | `hours_until_departure` | `signals.signals.hoursUntilDeparture` | — | Computed | ⚠️ 47.9% negative | ✅ Y | Filter to >=0 for prediction |
+| 11 | `time_of_day_risk` | `signals.signals.timeOfDayRisk` | — | Computed | ✅ 100% good | ✅ Y | Strong signal |
+| 12 | `day_of_week_risk` | `signals.signals.dayOfWeekRisk` | — | Computed | ❌ 51.8% NULL (schema evolution) | ✅ Y | Fixable by backfill |
+| 13 | `connection_risk` | `signals.signals.connectionRisk` | — | Computed | ✅ 99.8% good | ✅ Y | Good variation |
+| 14 | `departure_hour` | `signals.flightStatus.departureTime` (extract hour) | — | Computed | ✅ 99.35% | ✅ Y | Better as standalone feature |
+| 15 | `departure_day_of_week` | `monitored_flights.departure_date` | — | Computed | ✅ 100% | ✅ Y | Better as standalone feature |
+| 16 | `horizon` | `signals.signals.horizon` | — | Computed | ⚠️ No long-horizon | ✅ Y | But know limitation |
+
+#### WEATHER FEATURES — ORIGIN (from aviationweather.gov METAR)
+
+| # | New Column | Old JSONB Path | Source | Quality | Keep? | Why |
+|---|-----------|---------------|--------|---------|-------|-----|
+| 17 | `origin_icao` | `signals.originWeather` (extract) | METAR | ✅ Good | ✅ Y | Links to raw METAR data |
+| 18 | `origin_flight_category` | `signals.originWeather.flightCategory` | METAR | ✅ 99.3% good | ✅ Y | VFR/MVFR/IFR/LIFR |
+| 19 | `origin_wind_speed_kt` | `signals.originWeather.windSpeedKt` | METAR | ✅ 99.98% | ✅ Y | |
+| 20 | `origin_gust_speed_kt` | `signals.originWeather.gustSpeedKt` | METAR | ✅ 99.98% | ✅ Y | |
+| 21 | `origin_visibility_miles` | `signals.originWeather.visibilityMiles` | METAR | ✅ 99.98% | ✅ Y | |
+| 22 | `origin_ceiling_ft` | `signals.originWeather.ceilingFt` | METAR | ✅ 99.98%, cap at 30000 | ✅ Y | Cap unlimited ceiling |
+| 23 | `origin_has_thunderstorm` | `signals.originWeather.hasThunderstorm` | METAR | ✅ 2.7% true, rare | ✅ Y | Keep, rare is expected |
+| 24 | `origin_has_freezing` | `signals.originWeather.hasFreezing` | METAR | ❌ **0% true, dead** | ❌ N | **REMOVE** — never occurs in summer |
+
+#### WEATHER FEATURES — DESTINATION (from aviationweather.gov METAR)
+
+| # | New Column | Old JSONB Path | Source | Quality | Keep? | Why |
+|---|-----------|---------------|--------|---------|-------|-----|
+| 25 | `destination_icao` | `signals.destinationWeather` (extract) | METAR | ✅ Good | ✅ Y | Links to raw METAR |
+| 26 | `destination_flight_category` | `signals.destinationWeather.flightCategory` | METAR | ✅ Good | ✅ Y | |
+| 27 | `destination_wind_speed_kt` | `signals.destinationWeather.windSpeedKt` | METAR | ❌ **0% present (Bug #3)** | ✅ Y | Fixable by backfill |
+| 28 | `destination_gust_speed_kt` | `signals.destinationWeather.gustSpeedKt` | METAR | ❌ **0% present (Bug #3)** | ✅ Y | Fixable by backfill |
+| 29 | `destination_visibility_miles` | `signals.destinationWeather.visibilityMiles` | METAR | ❌ **0% present (Bug #3)** | ✅ Y | Fixable by backfill |
+| 30 | `destination_ceiling_ft` | `signals.destinationWeather.ceilingFt` | METAR | ❌ **0% present (Bug #3)** | ✅ Y | Fixable by backfill, cap at 30000 |
+| 31 | `destination_has_thunderstorm` | `signals.destinationWeather.hasThunderstorm` | METAR | ✅ Good | ✅ Y | |
+| 32 | `destination_has_freezing` | `signals.destinationWeather.hasFreezing` | METAR | ❌ **0% true, dead** | ❌ N | **REMOVE** — same as origin |
+
+#### NAS FEATURES (from FAA NAS Status API)
+
+| # | New Column | Old JSONB Path | Source | Quality | Keep? | Why |
+|---|-----------|---------------|--------|---------|-------|-----|
+| 33 | `origin_has_ground_stop` | `signals.nasOrigin.hasGroundStop` | FAA NAS | ✅ 99.8% good | ✅ Y | Strong signal |
+| 34 | `origin_has_ground_delay` | `signals.nasOrigin.hasGroundDelay` | FAA NAS | ✅ 99.8% good | ✅ Y | |
+| 35 | `origin_nas_avg_delay_minutes` | `signals.nasOrigin.avgDelayMinutes` | FAA NAS | ✅ 99.8% good | ✅ Y | 10.3% non-zero |
+| 36 | `destination_has_ground_stop` | `signals.nasDestination.hasGroundStop` | FAA NAS | ✅ 99.8% good | ✅ Y | |
+| 37 | `destination_has_ground_delay` | `signals.nasDestination.hasGroundDelay` | FAA NAS | ✅ 99.8% good | ✅ Y | |
+| 38 | `destination_nas_avg_delay_minutes` | `signals.nasDestination.avgDelayMinutes` | FAA NAS | ✅ 99.8% good | ✅ Y | |
+
+#### CARRIER FEATURES (computed from internal DB)
+
+| # | New Column | Old JSONB Path | Source | Quality | Keep? | Why |
+|---|-----------|---------------|--------|---------|-------|-----|
+| 39 | `carrier_iata` | `signals.carrierHealth` | AeroDataBox | ✅ Good | ✅ Y | Already in flight table |
+| 40 | `carrier_cancellation_rate_24h` | `signals.carrierHealth.cancellationRate24h` | Internal DB | ✅ 13% non-zero | ✅ Y | Already working |
+| 41 | `carrier_avg_delay_24h` | `signals.carrierHealth.avgDelay24h` | Internal DB | ❌ 99.89% zero (feedback loop) | ✅ Y | Fixes automatically after backfill |
+| 42 | `carrier_health_score` | `signals.carrierHealth.healthScore` | Internal DB | ❌ 95.8% = 1 (feedback loop) | ✅ Y | Fixes after backfill |
+| 43 | `carrier_reliable` | `signals.carrierHealth.reliable` | Internal DB | ❌ Mostly invariant | ✅ Y | Fixes after backfill |
+
+#### AIRCRAFT FEATURES (from AeroDataBox)
+
+| # | New Column | Old JSONB Path | Old Table Column | Source | Quality | Keep? | Why |
+|---|-----------|---------------|-----------------|--------|---------|-------|-----|
+| 44 | `tail_number` | `signals.flightStatus` (extract) | `risk_score_history.tail_number` | AeroDataBox | ❌ 68% NULL | ⚠️ Optional | High cardinality, hard to use |
+| 45 | `equipment_type` | `signals.flightStatus` (extract) | `risk_score_history.equipment_type` | AeroDataBox | ✅ 94% present | ✅ Y | Group by manufacturer |
+| 46 | `equipment_group` | Computed from equipment_type | — | Computed | ✅ | ✅ Y | Boeing/Airbus/Embraer/Other |
+
+#### HEURISTIC SCORE (current system baseline)
+
+| # | New Column | Old JSONB Path | Old Table Column | Source | Quality | Keep? | Why |
+|---|-----------|---------------|-----------------|--------|---------|-------|-----|
+| 47 | `heuristic_score` | — | `risk_score_history.score` | Heuristic | ✅ 100% | ✅ Y | Baseline for ML comparison |
+| 48 | `heuristic_tier` | — | `risk_score_history.tier` | Heuristic | ✅ 100% | ✅ Y | Baseline for ML comparison |
+| 49 | `heuristic_horizon` | `signals.signals.horizon` | — | Heuristic | ⚠️ No long | ✅ Y | Know limitation |
+
+#### SIGNAL SUB-SCORES (for model interpretability)
+
+| # | New Column | Old JSONB Path | Source | Quality | Keep? | Why |
+|---|-----------|---------------|--------|---------|-------|-----|
+| 50 | `signal_inbound_aircraft_delay` | `signals.signals.inboundAircraftDelay` | Heuristic | ❌ 99.55% zero (Bug #1) | ✅ Y | Fixable by backfill |
+| 51 | `signal_atc_ground_stop` | `signals.signals.atcGroundStop` | Heuristic | ✅ 99.8% good | ✅ Y | |
+| 52 | `signal_atc_ground_delay` | `signals.signals.atcGroundDelay` | Heuristic | ✅ 99.8% good | ✅ Y | |
+| 53 | `signal_origin_weather` | `signals.signals.originWeather` | Heuristic | ✅ Good | ✅ Y | |
+| 54 | `signal_destination_weather` | `signals.signals.destinationWeather` | Heuristic | ✅ Good | ✅ Y | |
+| 55 | `signal_carrier_health` | `signals.signals.carrierHealth` | Heuristic | ❌ Invariant | ✅ Y | Fixes after backfill |
+| 56 | `signal_time_of_day` | `signals.signals.timeOfDayRisk` | Heuristic | ✅ 100% | ✅ Y | |
+| 57 | `signal_day_of_week` | `signals.signals.dayOfWeekRisk` | Heuristic | ❌ 51.8% NULL | ✅ Y | Fixable by backfill |
+| 58 | `signal_connection_risk` | `signals.signals.connectionRisk` | Heuristic | ✅ 99.8% | ✅ Y | |
+
+#### METADATA & FLAGS
+
+| # | New Column | Old JSONB Path | Old Table Column | Source | Keep? | Why |
+|---|-----------|---------------|-----------------|--------|-------|-----|
+| 59 | `is_test_flight` | — | `monitored_flights.is_test` | Internal | ✅ Y | Document seeder bias |
+| 60 | `scored_at` | — | `risk_score_history.scored_at` | Internal | ✅ Y | Timestamp for time-series |
+| 61 | `agency_id` | — | `monitored_flights.agency_id` | Internal | ✅ Y | Multi-tenant support |
+
+#### DEAD FEATURES (REMOVED from new schema)
+
+| # | Old Field | Old JSONB Path | Why Removed |
+|---|----------|---------------|-------------|
+| D1 | `historicalOtp` | `signals.signals.historicalOtp` | 100% fallback — API plan doesn't support this endpoint |
+| D2 | `historicalOtpSampleSize` | `signals.signals.historicalOtpSampleSize` | 100% zero — same reason |
+| D3 | `historicalOtpSource` | `signals.signals.historicalOtpSource` | 100% fallback — same reason |
+| D4 | `historicalRisk` | `signals.signals.historicalRisk` | Deprecated alias for historicalOtp |
+| D5 | `originWeather.hasFreezing` | `signals.originWeather.hasFreezing` | 0% true — never occurs in summer data |
+| D6 | `destinationWeather.hasFreezing` | `signals.destinationWeather.hasFreezing` | 0% true — never occurs in summer data |
+| D7 | `nasOrigin.programs` | `signals.nasOrigin.programs` | Array of program names — not useful as ML feature |
+| D8 | `nasDestination.programs` | `signals.nasDestination.programs` | Same — not useful as ML feature |
+| D9 | `inbound_aircraft_delay` (as separate) | `signals.signals.inboundAircraftDelay` | Encodes same info as delayMinutes, keep only as signal sub-score |
+
+### 11.3 Final Summary of New Clean Schema
+
+**Total old fields in JSONB**: ~50+  
+**Total removed (dead)**: 9  
+**Total kept in new schema**: 61 columns across 2 tables  
+**New tables**: 2 (`clean.monitored_flights`, `clean.risk_score_history`)  
+**Schema**: `clean` in the same PostgreSQL database  
+**JSONB remaining**: Only for `raw_api_data` in `clean.monitored_flights` (storing raw API response for debugging, NOT for querying)
+
+### 11.4 Finalized Execution Plan (Step-by-Step, Approvable)
+
+This is the actionable plan. Once you approve, I can start building it in `server2/`.
+
+```
+Phase A — Foundation (server2/ setup)
+  A1  ✅ DONE: server/ → server2/ copied
+  A2  ☐ Create clean schema migration (server2/db/schema_v2.ts)
+  A3  ☐ Add apiCallTracker.ts to monitor all external API calls
+  A4  ☐ Create server2/scripts/ directory structure
+
+Phase B — New Tables (schema design)
+  B1  ☐ Write CREATE SCHEMA clean migration
+  B2  ☐ Write clean.monitored_flights DDL (18 columns)
+  B3  ☐ Write clean.risk_score_history DDL (43 columns)
+  B4  ☐ Add proper indexes, CHECK constraints, foreign keys
+  B5  ☐ Test: psql "$DATABASE_URL" -f migrations/create_clean_schema.sql
+
+Phase C — Data Pipeline (extract data correctly from APIs)
+  C1  ☐ Rewrite pipeline entry: extract flight status from AeroDataBox → store raw + parsed
+  C2  ☐ Rewrite weather extraction: separate origin/destination with all 7 fields
+  C3  ☐ Rewrite NAS extraction: store flat columns
+  C4  ☐ Rewrite carrier health: break feedback loop (use external data or time-delayed)
+  C5  ☐ Add data quality assertions (reject invalid scores)
+  C6  ☐ Add apiCallTracker.record() calls to every pipeline step
+  C7  ☐ Test: run a single flight through the new pipeline, verify ALL columns populated
+
+Phase D — Backfill Historical Data
+  D1  ☐ Write backfill script: iterate all 796 monitored_flights
+  D2  ☐ For each flight, re-score with FIXED code (code already deployed in server2/)
+  D3  ☐ Store results in clean.risk_score_history
+  D4  ☐ Verify: delay values are non-zero, weather has all fields, dayOfWeekRisk populated
+  D5  ☐ Compare old vs new scores side-by-side
+
+Phase E — Validation & Export
+  E1  ☐ Run data quality checks on clean.risk_score_history (no NULLs on critical fields)
+  E2  ☐ Export clean.risk_score_history → CSV for ML training
+  E3  ☐ Run feature importance analysis on real data
+  E4  ☐ Build ML baseline (Random Forest / XGBoost)
+
+Phase F — Gradual Cutover
+  F1  ☐ Point server2/ to use clean schema tables
+  F2  ☐ Run shadow mode (score to both old and new tables, compare)
+  F3  ☐ When confident, copy v2 pipeline back to server/
+  F4  ☐ Archive old tables (rename to public.risk_score_history_legacy)
+  F5  ☐ Drop the `clean` schema — promote to `public`
+```
+
+### 11.5 API Call Counting — The Algorithm
+
+A dedicated module has been created at `server2/lib/disruption/apiCallTracker.ts`. Here's how it works:
+
+**What it tracks per API call:**
+- Service name (aerodatabox, aviationweather, faa_nas, sendgrid, etc.)
+- Endpoint URL (without query params)
+- HTTP status code
+- Duration (ms)
+- Flight ID (optional — links to the flight being scored)
+- Timestamp
+
+**What it reports (accessible via a route):**
+```bash
+# Summary — total calls, per-service breakdown, error rates, cost estimate
+GET /api/v2/api-stats
+
+# Per-flight breakdown — how many API calls per flight
+GET /api/v2/api-stats/flight/:id
+
+# AeroDataBox specific — which endpoints used, error rate, rate limit hits
+GET /api/v2/api-stats/aerodatabox
+
+# Reset counters (for cycle-level measurement)
+POST /api/v2/api-stats/reset
+```
+
+**Example output:**
+```json
+{
+  "sessionStart": "2026-07-22T...",
+  "uptimeHours": "48.3",
+  "totalCalls": 2847,
+  "byService": {
+    "aerodatabox": { "count": 1242, "errors": 3, "avgDurationMs": 892 },
+    "aviationweather": { "count": 2418, "errors": 12, "avgDurationMs": 345 },
+    "faa_nas": { "count": 96, "errors": 0, "avgDurationMs": 1200 },
+    "sendgrid": { "count": 14, "errors": 1, "avgDurationMs": 450 }
+  },
+  "estimatedCostUSD": {
+    "aerodatabox": "$1.86",
+    "sendgrid": "$0.04",
+    "total": "$1.90"
+  }
+}
+```
+
+**How to integrate it:**
+```typescript
+// In any API-calling function:
+import { apiTracker } from "./apiCallTracker";
+
+const start = Date.now();
+const response = await fetch(url, options);
+apiTracker.record("aerodatabox", url.split("?")[0], response.status, Date.now() - start, flightId);
+
+// Or wrap the whole function:
+const trackedFunction = wrapWithTracking(myFunction, "aerodatabox", "flights/number");
+```
+
+**Cost estimation logic** (built into the tracker):
+```
+aerodatabox:  ~$0.0015/call (RapidAPI estimate, depends on plan tier)
+sendgrid:     ~$0.0025/email (free tier: 100/day, paid: ~$0.0025)
+aviationweather: FREE (no API key needed)
+faa_nas:        FREE (public government API)
+```
+
+### 11.6 What We Know vs What We Need to Verify
+
+| Claim | Status | How to Verify |
+|-------|--------|---------------|
+| delay=0 in 99.98% of rows | ✅ Proven | Run Part 5.1 SQL |
+| Dest weather missing 4 fields | ✅ Proven | Run Part 5.2 SQL |
+| Historical OTP 100% fallback | ✅ Proven | Run Part 5.4 SQL |
+| Carrier health feedback loop | ✅ Proven | Run Part 5.5 SQL |
+| dayOfWeekRisk 51.8% NULL | ✅ Proven | Run Part 5.6 SQL |
+| Schema evolution (4 versions) | ✅ Proven | Run Part 5.7 SQL |
+| 47.9% negative hoursUntilDeparture | ✅ Proven | Run Part 5.8 SQL |
+| 0 long-horizon scores | ✅ Proven | Run Part 5.9 SQL |
+| 88% green tier class imbalance | ✅ Proven | Run Part 5.10 SQL |
+| 97.5% isTest (but real flights) | ✅ Proven | Run Part 5.11 SQL |
+| Test flights ARE real AeroDataBox data | ✅ Verified | Read testFlightSeeder.ts code |
+| Historical OTP endpoint not on plan | ⚠️ Assumed | Verify AeroDataBox plan billing page |
+| Bug #1 fix produces real delay values | ⚠️ To Verify | Run backfill + compare old vs new |
+| Carrier health feedback loop breaks | ⚠️ To Verify | Backfill data, check avgDelay24h > 0 |
+| API call costs within budget | ⚠️ To Verify | Run apiCallTracker for 24 hours |
+
+### 11.7 Open Questions
+
+1. **AeroDataBox plan**: What tier is the current plan? Does it include the historical endpoint? (Check the billing page)
+2. **Replit Production DB**: Where is the third database and why was it created?
+3. **Backfill script performance**: 796 flights × ~2 API calls each = ~1,600 AeroDataBox calls. At 500ms spacing, that's ~13 minutes. Is this acceptable?
+4. **Carrier health redesign**: Should we break the feedback loop by (a) using a 6-hour time delay, (b) querying AeroDataBox directly for carrier stats, or (c) accepting the loop since backfill breaks it once?
+5. **Historical OTP replacement**: Without the AeroDataBox historical endpoint, what alternative source? (FlightAware? FAA ASQP? Or drop the feature entirely?)
+
+### 11.8 Ready-to-Execute Command Cheat Sheet
+
+Run these in order to kick off the work:
+
+```bash
+# 1. Verify the current database is reachable
+psql "$DATABASE_URL" -c "SELECT current_database(), current_schema;"
+
+# 2. Create the clean schema
+psql "$DATABASE_URL" -c "CREATE SCHEMA IF NOT EXISTS clean;"
+
+# 3. Verify server2/ is in place
+ls server2/lib/disruption/apiCallTracker.ts
+
+# 4. Start the API call tracker by adding records to each API call
+#    (manual for now — will automate in Phase C)
+
+# 5. Run the proof queries to verify baseline
+psql "$DATABASE_URL" -f server2/scripts/proof_queries.sql
+
+# 6. After schema is approved, run the migration
+psql "$DATABASE_URL" -f server2/db/migrations/create_clean_schema.sql
+```
