@@ -13,6 +13,7 @@ import {
   type MonitoredFlight,
 } from "@shared/schema";
 import { scoreFlightRisk } from "./riskScorer";
+import { writeScoreToV2, updateFlightInV2 } from "./v2Writer";
 import { findLowRiskAlternatives } from "./alternativeFinder";
 import { sendTravelerAlert, sendConfirmationAlert } from "./alertSender";
 import { getHistoricalOtp, type HistoricalOtpResult } from "./historicalOtp";
@@ -102,12 +103,6 @@ async function processFlight(
         visibilityMiles: risk.originWeather.visibilityMiles,
         ceilingFt: risk.originWeather.ceilingFt,
       },
-      // ORIGINAL (missing 4 weather fields):
-      // destinationWeather: {
-      //   flightCategory: risk.destinationWeather.flightCategory,
-      //   hasThunderstorm: risk.destinationWeather.hasThunderstorm,
-      //   hasFreezing: risk.destinationWeather.hasFreezing,
-      // },
       destinationWeather: {
         flightCategory: risk.destinationWeather.flightCategory,
         hasThunderstorm: risk.destinationWeather.hasThunderstorm,
@@ -131,9 +126,9 @@ async function processFlight(
     equipmentType: risk.flightStatus?.equipmentType ?? null,
   });
 
-  console.log(
-    `[monitor] stored flight_id=${flight.id} score=${risk.score} tier=${risk.tier} cancelled=${risk.cancelled} delay_min=${risk.flightStatus?.delayMinutes ?? "null"} inbound_delay=${risk.flightStatus?.inboundDelayMinutes ?? "null"}`,
-  );
+  writeScoreToV2(flight, risk, new Date()).catch((err: any) => {
+    console.error(`[monitor] v2 write failed for flight ${flight.id}:`, err?.message || err);
+  });
 
   if (flight.status !== "active") {
     historicalOtpCache.delete(flight.id);
@@ -182,6 +177,19 @@ async function processFlight(
       ...agencyStamp,
     })
     .where(eq(monitoredFlights.id, flight.id));
+
+  updateFlightInV2(flight, {
+    riskScore: risk.score,
+    riskTier: risk.tier,
+    lastCheckedAt: now,
+    ...(extractedDepartureTime ? { departureTime: extractedDepartureTime } : {}),
+    ...(risk.flightStatus?.tailNumber ? { tailNumber: risk.flightStatus.tailNumber } : {}),
+    ...(risk.flightStatus?.equipmentType ? { equipmentType: risk.flightStatus.equipmentType } : {}),
+    ...(agencyStamp.redTierFirstAt ? { redTierFirstAt: agencyStamp.redTierFirstAt } : {}),
+    ...(agencyStamp.cancelledAt ? { cancelledAt: agencyStamp.cancelledAt } : {}),
+  }).catch((err: any) => {
+    console.error(`[monitor] v2 flight update failed for ${flight.id}:`, err?.message || err);
+  });
 
   let alertFired = false;
 
@@ -335,7 +343,9 @@ async function runCycle(): Promise<void> {
       );
 
     if (flights.length === 0) {
-      console.log(`[monitor] no active flights found for ${today}..${tomorrow} — nothing to score (seeder may have failed or API key may be invalid)`);
+      console.log(`[monitor] no active flights found for ${today}..${tomorrow} — check testFlightSeeder and AERODATABOX_API_KEY`);
+    } else {
+      console.log(`[monitor] found ${flights.length} active flights for ${today}..${tomorrow}`);
     }
 
     for (const flight of flights) {

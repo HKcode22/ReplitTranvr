@@ -1,6 +1,7 @@
 import { and, eq, lte, ne } from "drizzle-orm";
 import { db } from "../../db";
 import { agencyAccounts, monitoredFlights } from "@shared/schema";
+import { insertFlightToV2 } from "./v2Writer";
 import { aerodataboxFetch } from "./aerodataboxLimiter";
 import { hashAgencyPassword } from "../agencyAuth";
 
@@ -21,12 +22,6 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// ORIGINAL (no retry — kept as comment for reference):
-// async function fetchWindow(...): Promise<any[]> {
-//   ... makes 1 API call, returns [] on any failure ...
-// }
-// REPLACED WITH: single-call + specific error logging (zero extra API cost).
-// No retry loop — if a bucket fails, it fails once to avoid burning quota.
 async function fetchWindow(
   airport: string,
   date: string,
@@ -38,32 +33,40 @@ async function fetchWindow(
     `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(airport)}` +
     `/${date}T${fromTime}/${date}T${toTime}` +
     `?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withCargo=false&withPrivate=false`;
-  try {
-    const resp = await aerodataboxFetch(url, {
-      headers: {
-        "x-rapidapi-key": apiKey,
-        "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
-      },
-    });
-    if (!resp.ok) {
-      if (resp.status === 429) {
-        console.warn(`[seeder] HTTP 429 (rate limited) for ${airport} ${fromTime}-${toTime} — skipped to save quota`);
-      } else if (resp.status === 401 || resp.status === 403) {
-        console.warn(`[seeder] HTTP ${resp.status} (auth error) for ${airport} ${fromTime}-${toTime} — API key may be invalid`);
-      } else {
-        console.warn(`[seeder] HTTP ${resp.status} for ${airport} ${fromTime}-${toTime}`);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const resp = await aerodataboxFetch(url, {
+        headers: {
+          "x-rapidapi-key": apiKey,
+          "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
+        },
+      });
+      if (!resp.ok) {
+        if (resp.status === 429 && attempt < 3) {
+          const backoff = Math.min(1000 * Math.pow(2, attempt), 8000);
+          console.warn(`[seeder] HTTP 429 for ${airport} ${fromTime}-${toTime} — retry ${attempt}/3 in ${backoff}ms`);
+          await new Promise(r => setTimeout(r, backoff));
+          continue;
+        }
+        console.warn(`[seeder] HTTP ${resp.status} for ${airport} ${fromTime}-${toTime} attempt ${attempt}/3`);
+        return [];
       }
+      const raw: any = await resp.json();
+      if (!raw) return [];
+      if (raw.departures && Array.isArray(raw.departures)) return raw.departures;
+      if (Array.isArray(raw)) return raw;
       return [];
+    } catch (err: any) {
+      if (attempt < 3) {
+        const backoff = Math.min(1000 * Math.pow(2, attempt), 8000);
+        console.warn(`[seeder] fetch failed ${airport} ${fromTime}-${toTime} — retry ${attempt}/3 in ${backoff}ms: ${err?.message || err}`);
+        await new Promise(r => setTimeout(r, backoff));
+      } else {
+        console.warn(`[seeder] fetch failed ${airport} ${fromTime}-${toTime} after ${attempt} attempts: ${err?.message || err}`);
+      }
     }
-    const raw: any = await resp.json();
-    if (!raw) return [];
-    if (raw.departures && Array.isArray(raw.departures)) return raw.departures;
-    if (Array.isArray(raw)) return raw;
-    return [];
-  } catch (err: any) {
-    console.warn(`[seeder] fetch failed ${airport} ${fromTime}-${toTime}: ${err?.message || err}`);
-    return [];
   }
+  return [];
 }
 
 function extractFlight(
@@ -170,6 +173,20 @@ async function seedAirport(
         destinationIata: flight.destinationIata,
         isTest: true,
       });
+
+      insertFlightToV2({
+        flightNumber: flight.flightNumber,
+        carrierIata: flight.carrierIata,
+        departureDate: date,
+        departureTime: flight.departureTime,
+        originIata: airport,
+        destinationIata: flight.destinationIata,
+        isTest: true,
+        agencyId: testAgencyId,
+      }).catch((err: any) => {
+        console.error(`[seeder] v2 insert failed for ${flight.flightNumber}:`, err?.message || err);
+      });
+
       inserted++;
     }
   }
@@ -209,13 +226,24 @@ export async function runTestFlightSeeder(): Promise<void> {
     const counts = await Promise.all(
       SEED_AIRPORTS.map(async (airport) => {
         const n = await seedAirport(airport, date, testAgencyId, apiKey);
-        console.log(`[seeder] ${airport}: inserted ${n} flights`);
+        if (n === 0) {
+          console.warn(`[seeder] ${airport}: 0 flights inserted — API may be down, out of credits, or response format changed`);
+        } else {
+          console.log(`[seeder] ${airport}: inserted ${n} flights`);
+        }
         return n;
       }),
     );
 
     const total = counts.reduce((a, b) => a + b, 0);
-    console.log(`[seeder] total inserted: ${total}`);
+    if (total === 0) {
+      console.warn(`[seeder] WARNING: 0 total flights inserted across all airports. Check:`);
+      console.warn(`[seeder]   - AERODATABOX_API_KEY valid and has credits`);
+      console.warn(`[seeder]   - AeroDataBox API response format hasn't changed`);
+      console.warn(`[seeder]   - Network connectivity to aerodatabox.p.rapidapi.com`);
+    } else {
+      console.log(`[seeder] total inserted: ${total}`);
+    }
 
     const archived = await archiveOldTestFlights();
     console.log(`[seeder] archived ${archived} old test flights`);
