@@ -784,7 +784,7 @@ Only scoring writes (risk scores, tiers, last_checked_at) were moved to v2. All 
 |------|--------|-------|
 | `migrations/001_create_v2_tables.sql` | ✅ Canonical | 28 + 69 columns, 13 CHECK constraints, 11 indexes |
 | `server2/db/migrations/001_create_v2_tables.sql` | ✅ Synced | Identical to canonical |
-| `scripts/backfill_v2.sql` | ✅ Ready | Column counts match, all JSONB paths correct, IDs preserved |
+| `scripts/backfill_v2.sql` | ✅ Fixed (Section 16) | Column counts match, 8 buggy JSONB paths replaced with mf.* join, IDs preserved |
 | `server2/lib/disruption/v2Writer.ts` | ✅ Updated | origin_name/destination_name added, all Part 7 columns populated |
 | `server2/lib/disruption/monitor.ts` | ✅ Active | v2-only scoring writes, 60-min, 41 limit |
 | `server/lib/disruption/monitor.ts` | ✅ Frozen | No scoring writes, 60-min, 41 limit |
@@ -792,4 +792,202 @@ Only scoring writes (risk scores, tiers, last_checked_at) were moved to v2. All 
 | `server2/lib/disruption/carrierHealth.ts` | ✅ Rewritten | Queries v2 tables, same health scoring logic |
 | `server2/lib/disruption/aerodataboxLimiter.ts` | ✅ Updated | apiCallTracker integrated, getApiStats() exposed |
 | `server/lib/disruption/carrierHealth.ts` | ⏳ Unchanged | Still reads old tables (server/ is frozen, will be updated during cutover) |
-| `DATABASE_QUALITY_AND_ML_ROADMAP_2.md` | ✅ Comprehensive | 15 sections, full audit, NaN analysis, Phase 2/3 plan |
+| `DATABASE_QUALITY_AND_ML_ROADMAP_2.md` | ✅ Comprehensive | 16 sections, full audit, NaN analysis, Phase 2/3 plan, CSV NULL analysis |
+
+---
+
+## 16. Complete Data Quality Investigation: Why So Many NULLs?
+
+### 16.1 The Core Question
+
+> "Why are most columns NULL even for recent dates (July 23+)? Is it the code, the APIs, or something else? What needs to be fixed for ML training?"
+
+To answer this, I performed an end-to-end investigation:
+1. **CSV comparison**: Old `risk_score_history.csv` vs v2 `risk_score_history_v2.csv` — column-by-column NULL rate comparison
+2. **Code path trace**: Traced every one of the 69 v2 columns through `writeScoreToV2()` → `riskScorer.ts` → each API call (AeroDataBox, aviationweather.gov, faa.gov, carrier health DB query)
+3. **Runtime analysis**: Verified every default value, fallback, and nullable path in the runtime code
+
+### 16.2 Finding #1: The v2 CSV Is a Faithful Copy of Old Data (Not Runtime Data)
+
+Every column's NULL rate in the v2 CSV **matches the old CSV exactly** (verified programmatically across all 13,469 rows):
+
+| Evidence | Detail |
+|----------|--------|
+| Row count | Both: 13,469 ✅ |
+| scored_at date distribution | Both: identical per-date counts (May 19 → Jul 23) ✅ |
+| NULL rates for 1:1 columns | `tail_number` 66% both, `equipment_type` 3.8% both, `heuristic_score` 0% both ✅ |
+| NULL rates for JSONB-extracted columns | `origin_wind_speed_kt` 0% both, `destination_wind_speed_kt` 8.1% both, `carrier_health_score` 0% both ✅ |
+
+**The v2 CSV contains ONLY backfilled data — no runtime writes are present.** The latest `scored_at` is July 23 (yesterday), but those rows were scored by the OLD code and backfilled into v2 with preserved timestamps. The runtime monitor (`writeScoreToV2`) was started after the backfill and may not have added rows yet, or the CSV export was taken before runtime cycles completed.
+
+### 16.3 Finding #2: Only 8 Columns Had a Backfill Bug — Now Fixed
+
+Programmatic comparison of every JSONB path used in the backfill (Step 2 SELECT) against the actual JSONB structure in all 13,469 old rows:
+
+| V2 Column | Old JSONB null rate | V2 null rate | Root cause |
+|-----------|-------------------|-------------|-----------|
+| `flight_number` | **100%** (path `{flightNumber}` never existed) | **100%** | ❌ **BACKFILL BUG** — NOW FIXED via `mf.flight_number` join |
+| `carrier_iata` | **100%** (path `{carrierIata}` never existed) | **100%** | ❌ **BACKFILL BUG** — NOW FIXED |
+| `departure_date` | **100%** (path `{departureDate}` never existed) | **100%** | ❌ **BACKFILL BUG** — NOW FIXED |
+| `departure_time` | **100%** (path `{departureTime}` never existed) | **100%** | ❌ **BACKFILL BUG** — NOW FIXED |
+| `origin_iata` | **100%** (path `{originIata}` never existed) | **100%** | ❌ **BACKFILL BUG** — NOW FIXED |
+| `destination_iata` | **100%** (path `{destinationIata}` never existed) | **100%** | ❌ **BACKFILL BUG** — NOW FIXED |
+| `departure_hour` | **100%** (path `{departureHour}` never existed) | **100%** | ❌ **BACKFILL BUG** — NOW FIXED |
+| `departure_day_of_week` | **100%** (path `{departureDayOfWeek}` never existed) | **100%** | ❌ **BACKFILL BUG** — NOW FIXED |
+| `origin_icao` | 100% (no ICAO data in old JSONB) | 100% | ✅ Expected — old data doesn't have ICAO |
+| `destination_icao` | 100% (no ICAO data in old JSONB) | 100% | ✅ Expected — old data doesn't have ICAO |
+
+**All other columns** (57 of 67) have identical NULL rates between old and v2 CSVs. The backfill faithfully extracted everything else correctly.
+
+### 16.4 Finding #3: Runtime Code Is Correct — All Columns Get Defaults
+
+I traced every column through the runtime code path (`writeScoreToV2` → `scoreFlightRisk` → each API/data source):
+
+#### Weather Fields (origin + destination, 16 columns)
+
+Every weather field falls back to `defaultWeather()`:
+```typescript
+function defaultWeather(iataCode: string): WeatherSignal {
+  return {
+    icaoCode: "", flightCategory: "UNKNOWN",
+    windSpeedKt: 0, gustSpeedKt: 0,
+    visibilityMiles: 10, ceilingFt: 99999,
+    hasThunderstorm: false, hasFreezing: false,
+  };
+}
+```
+**NEVER null at runtime.** The `originWeather` and `destinationWeather` objects are always set via `|| defaultWeather(...)`.
+
+#### NAS Fields (8 columns)
+
+Every NAS field falls back to `defaultNas()`:
+```typescript
+function defaultNas(): NasStatusResult {
+  return { hasGroundStop: false, hasGroundDelay: false, avgDelayMinutes: 0, programs: [] };
+}
+```
+**NEVER null at runtime.**
+
+#### Carrier Health Fields (5 columns)
+
+Every carrier health field falls back to `unknownResult()` / `defaultCarrierHealth()`:
+```typescript
+function unknownResult(carrierIata: string): CarrierHealthResult {
+  return { carrierIata, cancellationRate24h: 0, avgDelay24h: 0, sampleSize: 0, healthScore: 3, reliable: false };
+}
+```
+**NEVER null at runtime.**
+
+#### Signal Sub-Scores (10 columns)
+
+All computed by `riskScorer.ts` with minimum value 0. The `RiskScoreSignals` interface has all `number` types (except `hoursUntilDeparture: number | null`). **Only 1 of 10 can be null.**
+
+#### Historical OTP (4 columns)
+
+Falls back to `{ riskPoints: 5, sampleSize: 0, source: "fallback" }`. **NEVER null at runtime.**
+
+#### The ONLY Columns That Can Be NULL at Runtime
+
+| Column | When NULL | Expected frequency |
+|--------|-----------|-------------------|
+| `actual_delay_minutes` | AeroDataBox flight status API fails | ~29% (based on old data) |
+| `actual_status` | AeroDataBox flight status API fails | ~29% |
+| `tail_number` | AeroDataBox flight status returns no tail number | ~66% (API limitation) |
+| `equipment_type` | AeroDataBox flight status returns no equipment | ~4% |
+| `equipment_group` | Derived from equipment_type | ~4% (same as equipment_type) |
+| `signal_inbound_delay_raw_minutes` | AeroDataBox flight status fails | ~29% |
+| `hours_until_departure` | Date parsing fails | Very rare |
+| `departure_hour` | No departure time available | Variable |
+| `departure_day_of_week` | Departure date unparseable | Very rare |
+
+**Columns that are NEVER null at runtime:**
+- All 6 flight info columns (`flight_number`, `carrier_iata`, `departure_date`, `departure_time`, `origin_iata`, `destination_iata`) — from DB record
+- All 16 weather field columns — from `defaultWeather()`
+- All 8 NAS columns — from `defaultNas()`
+- All 5 carrier health columns — from `unknownResult()`
+- All 4 historical OTP columns — from fallback
+- All 10 signal sub-scores (except `hours_until_departure` and `signal_inbound_delay_raw_minutes`) — computed, min 0
+- `heuristic_score`, `heuristic_tier` — computed, always set
+- `actual_cancelled` — `!!statusResult?.cancelled` → always `true` or `false`, NEVER null
+- `is_test_flight`, `agency_id` — from DB record
+- `scored_at`, `monitored_flight_id` — always set
+
+**Total: ~52 of 69 columns (75%) are NEVER NULL at runtime.**
+**~9 columns (13%) can be NULL only when AeroDataBox fails.**
+**~3 columns (4%) are NULL in rare edge cases.**
+
+### 16.5 Finding #4: Backfill vs Runtime — The Real Data Quality Comparison
+
+| Aspect | Backfill data (13,469 rows) | Runtime data (new scores) |
+|--------|---------------------------|--------------------------|
+| Flight info | ❌ 8 columns were 100% NULL (NOW FIXED) | ✅ ALL populated from DB record |
+| Weather (origin) | ✅ 0% NULL (faithful copy) | ✅ 0% NULL (defaultWeather) |
+| Weather (dest wind/gust/vis/ceil) | ⚠️ 8.1% NULL (old code limitation) | ✅ 0% NULL (defaultWeather) |
+| NAS | ✅ 0% NULL (faithful copy — old code populated as 0/false) | ✅ 0% NULL (defaultNas) |
+| Carrier health | ✅ 0% NULL | ✅ 0% NULL (unknownResult fallback) |
+| Signal sub-scores | ✅ 0% NULL | ✅ 0% NULL (computed, min 0) |
+| Historical OTP | ⚠️ 2.9% NULL (schema evolution) | ✅ 0% NULL (fallback) |
+| tail_number | ⚠️ 66% NULL (API limitation) | ⚠️ 66% NULL (same API limitation) |
+| equipment_type | ⚠️ 4% NULL (API limitation) | ⚠️ 4% NULL (same) |
+| actual_delay_minutes | ⚠️ 29% NULL (old AeroDataBox failures) | ⚠️ ~29% NULL (same API) |
+
+**Note:** The earlier analysis that reported 22.5% NULL for NAS fields was incorrect. Programmatic comparison of all 13,469 rows shows NAS fields have 0% NULL in both old JSONB and v2 CSV. The old code always populated NAS fields (as `false`/`0`/`[]`) even when the FAA API wasn't queried.
+
+### 16.6 Root Cause: Why "Most Data" Appears NULL
+
+The user reports "most columns being NULL." Here is why that perception is misleading:
+
+**The 8 flight info columns** (`flight_number`, `carrier_iata`, `departure_date`, `departure_time`, `origin_iata`, `destination_iata`, `departure_hour`, `departure_day_of_week`) are **8 of the first ~19 columns** in the v2 table. They were 100% NULL due to the backfill bug. Since these are the most visible columns (flight ID, carrier, dates, airports), they give the impression that "most" data is NULL. But these are **now fixed** — re-run backfill.
+
+Every other column group (weather, NAS, carrier health, signals, historical OTP, heuristic) has **near-0% NULL** in both backfill and runtime.
+
+### 16.7 What Needs to Be Fixed for ML Training
+
+#### Fixes Already Applied (No Action Needed)
+
+| Fix | File | Status |
+|-----|------|--------|
+| 8 flight info columns → read from `mf.*` join | `scripts/backfill_v2.sql` | ✅ **DONE** |
+| origin_icao/destination_icao populated by runtime | `server2/lib/disruption/v2Writer.ts` | ✅ Already correct (`?? null` on `icaoCode`) |
+| Weather defaults for all fields | `server2/lib/disruption/riskScorer.ts` | ✅ Already correct |
+| NAS defaults for all fields | `server2/lib/disruption/riskScorer.ts` | ✅ Already correct |
+| Carrier health fallback on failure | `server2/lib/disruption/carrierHealth.ts` | ✅ Already correct |
+| Historical OTP fallback on failure | `server2/lib/disruption/riskScorer.ts` | ✅ Already correct |
+
+#### Improvements for ML Training Data Quality
+
+| Issue | Impact | Proposed fix | Priority |
+|-------|--------|-------------|----------|
+| `tail_number` 66% NULL | High-value ML feature | Can't fix — AeroDataBox doesn't always return it. Impute "unknown" during ML training. | ML pipeline |
+| `actual_delay_minutes` 29% NULL | Target variable for delay prediction | Can't fully fix — AeroDataBox sometimes fails. Consider retrying failed lookups. | LOW |
+| `destination_wind/gust/vis/ceil` 8.1% NULL in backfill | Wind/vis/ceiling features missing | Runtime code populates these via `defaultWeather()`. Backfilled rows will still be NULL for these 1,090 rows. ML pipeline should impute from origin weather or ignore. | ML pipeline |
+| `day_of_week_risk` 6.2% NULL in backfill | Day-of-week feature missing | Only in old schema versions. Runtime populates correctly. ML: impute as 0 or median. | ML pipeline |
+| `historical_otp_sample_size` 2.9% NULL | Sample size missing | Only in old schema versions. Runtime populates correctly. ML: impute as 0. | ML pipeline |
+| `origin_icao`/`destination_icao` NULL in backfill | ICAO codes missing | Runtime populates as `""` (empty string). ML: treat as unknown airport. | ML pipeline |
+
+**Bottom line: No code changes are needed for v2Writer.ts, riskScorer.ts, carrierHealth.ts, or monitor.ts.** The runtime code already handles all 69 columns correctly with sensible defaults. The only bug was in the backfill SQL (8 JSONB paths) — now fixed.
+
+### 16.8 Recommended Actions
+
+1. **Re-run backfill on Replit** now that the SQL is fixed:
+   ```bash
+   psql "$DATABASE_URL" -f scripts/backfill_v2.sql
+   ```
+   This will populate the 8 flight info columns in all 13,469 backfilled rows. Idempotent — safe to run.
+
+2. **Let the monitor cycle** — after restart on Replit, `startMonitoringEngine()` runs every 60 minutes. New scores will have all 69 columns populated (except the 9 API-dependent nullable fields).
+
+3. **For ML training data extraction**, exclude or impute the remaining NULLs:
+   - `tail_number` → `COALESCE(tail_number, 'unknown')`
+   - `actual_delay_minutes` → `COALESCE(actual_delay_minutes, NULL)` (keep as NULL — this is the target)
+   - `destination_wind_speed_kt` etc. → `COALESCE(..., 0)` or `COALESCE(..., origin_wind_speed_kt)`
+   - `day_of_week_risk` → `COALESCE(day_of_week_risk, 0)`
+   - `historical_otp_sample_size` → `COALESCE(historical_otp_sample_size, 0)`
+   - `origin_icao` → treat empty string as "unknown"
+
+4. **Verify runtime writes are actually happening** on Replit after restart:
+   ```sql
+   SELECT COUNT(*) FROM clean.risk_score_history_v2
+   WHERE scored_at > NOW() - INTERVAL '2 hours';
+   ```
+   If this returns 0, the monitor is not calling `writeScoreToV2()` — check the Replit logs for `[monitor] v2 write failed` messages.

@@ -111,13 +111,13 @@ SELECT
   (rsh."signals"#>>'{flightStatus,cancelled}')::BOOLEAN AS actual_cancelled,
   rsh."signals"#>>'{flightStatus,status}' AS actual_status,
 
-  -- Flight info (from JSONB)
-  rsh."signals"#>>'{flightNumber}' AS flight_number,
-  rsh."signals"#>>'{carrierIata}' AS carrier_iata,
-  (rsh."signals"#>>'{departureDate}')::DATE AS departure_date,
-  rsh."signals"#>>'{departureTime}' AS departure_time,
-  rsh."signals"#>>'{originIata}' AS origin_iata,
-  rsh."signals"#>>'{destinationIata}' AS destination_iata,
+  -- Flight info (from joined monitored_flights — NOT stored in JSONB)
+  mf."flight_number" AS flight_number,
+  mf."carrier_iata" AS carrier_iata,
+  mf."departure_date"::DATE AS departure_date,
+  mf."departure_time" AS departure_time,
+  mf."origin_iata" AS origin_iata,
+  mf."destination_iata" AS destination_iata,
 
   -- Timing features (from nested signals.signals)
   (rsh."signals"#>>'{signals,hoursUntilDeparture}')::NUMERIC(6,1) AS hours_until_departure,
@@ -126,9 +126,9 @@ SELECT
   (rsh."signals"#>>'{signals,connectionRisk}')::INTEGER AS connection_risk,
   rsh."signals"#>>'{signals,horizon}' AS horizon,
 
-  -- Derived timing
-  (rsh."signals"#>>'{departureHour}')::INTEGER AS departure_hour,
-  (rsh."signals"#>>'{departureDayOfWeek}')::INTEGER AS departure_day_of_week,
+  -- Derived timing (computed from monitored_flights columns)
+  EXTRACT(HOUR FROM (mf."departure_date" || 'T' || COALESCE(mf."departure_time", '12:00') || ':00Z')::TIMESTAMP)::INTEGER AS departure_hour,
+  EXTRACT(DOW FROM mf."departure_date"::DATE)::INTEGER AS departure_day_of_week,
 
   -- Origin weather (from signals.originWeather)
   rsh."signals"#>>'{originWeather,flightCategory}' AS origin_flight_category,
