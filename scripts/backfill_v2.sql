@@ -51,9 +51,9 @@ SELECT
   mf."tail_number" AS tail_number,
   mf."equipment_type" AS equipment_type,
   CASE
-    WHEN mf."equipment_type" ~* '^(B?737|B?73[0-9]|A320|A32[0-9]|A21[0-9]|B?757|B?767)' THEN 'narrowbody'
-    WHEN mf."equipment_type" ~* '^(B?777|B?787|A330|A33[0-9]|A340|A34[0-9]|A350|A35[0-9])' THEN 'widebody'
-    WHEN mf."equipment_type" ~* '^CRJ|E17[0-9]|E19[0-9]|AT[45]|DH[CD]' THEN 'regional'
+    WHEN mf."equipment_type" ~* '777|787|A330|A340|A350|747|A380' THEN 'widebody'
+    WHEN mf."equipment_type" ~* '737|757|767|A220|A318|A319|A320|A321|717|MAX' THEN 'narrowbody'
+    WHEN mf."equipment_type" ~* 'CRJ|E170|E175|E190|E195|E145|E295|ATR|DHC|DASH|EMBRAER|BOMBARDIER|CANADAIR|PILATUS|CESSNA|CHALLENGER' THEN 'regional'
     ELSE 'unknown'
   END AS equipment_group,
   mf."is_test" AS is_test,
@@ -169,9 +169,9 @@ SELECT
   rsh."tail_number" AS tail_number,
   rsh."equipment_type" AS equipment_type,
   CASE
-    WHEN rsh."equipment_type" ~* '^(B?737|B?73[0-9]|A320|A32[0-9]|A21[0-9]|B?757|B?767)' THEN 'narrowbody'
-    WHEN rsh."equipment_type" ~* '^(B?777|B?787|A330|A33[0-9]|A340|A34[0-9]|A350|A35[0-9])' THEN 'widebody'
-    WHEN rsh."equipment_type" ~* '^CRJ|E17[0-9]|E19[0-9]|AT[45]|DH[CD]' THEN 'regional'
+    WHEN rsh."equipment_type" ~* '777|787|A330|A340|A350|747|A380' THEN 'widebody'
+    WHEN rsh."equipment_type" ~* '737|757|767|A220|A318|A319|A320|A321|717|MAX' THEN 'narrowbody'
+    WHEN rsh."equipment_type" ~* 'CRJ|E170|E175|E190|E195|E145|E295|ATR|DHC|DASH|EMBRAER|BOMBARDIER|CANADAIR|PILATUS|CESSNA|CHALLENGER' THEN 'regional'
     ELSE 'unknown'
   END AS equipment_group,
 

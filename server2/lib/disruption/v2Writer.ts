@@ -6,10 +6,9 @@ import type { MonitoredFlight } from "@shared/schema";
 function deriveEquipmentGroup(equipmentType: string | null | undefined): string | null {
   if (!equipmentType) return null;
   const t = equipmentType.toUpperCase().replace(/\s/g, "");
-  if (/^(B?737|B?73[0-9]|A320|A32[0-9]|A21[0-9])/.test(t)) return "narrowbody";
-  if (/^(B?757|B?767)/.test(t)) return "narrowbody";
-  if (/^(B?777|B?787|A330|A33[0-9]|A340|A34[0-9]|A350|A35[0-9])/.test(t)) return "widebody";
-  if (/^CRJ|E17[0-9]|E19[0-9]|AT[45]|DH[CD]/.test(t)) return "regional";
+  if (/777|787|A330|A340|A350|747|A380/.test(t)) return "widebody";
+  if (/737|757|767|A220|A318|A319|A320|A321|717|MAX/.test(t)) return "narrowbody";
+  if (/CRJ|E170|E175|E190|E195|E145|E295|ATR|DHC|DASH|EMBRAER|BOMBARDIER|CANADAIR|PILATUS|CESSNA|CHALLENGER/.test(t)) return "regional";
   return "unknown";
 }
 

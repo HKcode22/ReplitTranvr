@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { and, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "../../db";
 import {
   agencyAccounts,
@@ -18,6 +18,34 @@ import { sendTravelerAlert, sendConfirmationAlert } from "./alertSender";
 import { getHistoricalOtp, type HistoricalOtpResult } from "./historicalOtp";
 import { getFlightStatus } from "./flightStatus";
 import sgMail from "@sendgrid/mail";
+
+function v2RowToMonitoredFlight(row: any): MonitoredFlight {
+  return {
+    id: row.id,
+    agencyId: row.agency_id,
+    flightNumber: row.flight_number,
+    carrierIata: row.carrier_iata,
+    departureDate: row.departure_date,
+    departureTime: row.departure_time,
+    originIata: row.origin_iata,
+    destinationIata: row.destination_iata,
+    status: row.status,
+    redTierFirstAt: row.red_tier_first_at,
+    cancelledAt: row.cancelled_at,
+    confirmationAlertSentAt: row.confirmation_alert_sent_at,
+    tailNumber: row.tail_number,
+    equipmentType: row.equipment_type,
+    isTest: row.is_test,
+    riskScore: row.risk_score,
+    riskTier: row.risk_tier,
+    lastCheckedAt: row.last_checked_at,
+    agencyResolvedAt: row.agency_resolved_at,
+    resolvedStatus: row.resolved_status,
+    resolvedDelayMinutes: row.resolved_delay_minutes,
+    resolvedAt: row.resolved_at,
+    createdAt: row.created_at,
+  } as MonitoredFlight;
+}
 
 const INTERVAL_MS = 60 * 60 * 1000;
 
@@ -261,17 +289,14 @@ async function runCycle(): Promise<void> {
   try {
     const today = todayIso();
     const tomorrow = tomorrowIso();
-    const flights = await db
-      .select()
-      .from(monitoredFlights)
-      .where(
-        and(
-          eq(monitoredFlights.status, "active"),
-          gte(monitoredFlights.departureDate, today),
-          lte(monitoredFlights.departureDate, tomorrow),
-        ),
-      )
-      .limit(41);
+    const result = await db.execute(sql`
+      SELECT * FROM clean.monitored_flights_v2
+      WHERE status = 'active'
+        AND departure_date >= ${today}::date
+        AND departure_date <= ${tomorrow}::date
+      LIMIT 41
+    `);
+    const flights = result.rows.map(v2RowToMonitoredFlight);
 
     for (const flight of flights) {
       try {
@@ -471,21 +496,15 @@ async function runResolutionCycle(): Promise<void> {
   // Target: past flights whose resolved_status is NULL, Unknown, or Scheduled.
   // In-progress statuses (EnRoute/Departed) are left alone — they left the
   // gate, which is enough to know they weren't cancelled at departure.
-  const targets = await db
-    .select()
-    .from(monitoredFlights)
-    .where(
-      and(
-        lt(monitoredFlights.departureDate, todayStr),
-        inArray(monitoredFlights.status, ["active", "completed", "cancelled", "archived"]),
-        or(
-          isNull(monitoredFlights.resolvedStatus),
-          inArray(monitoredFlights.resolvedStatus, ["Unknown", "Scheduled"]),
-        ),
-      ),
-    )
-    .orderBy(monitoredFlights.departureDate)
-    .limit(200);
+  const targetResult = await db.execute(sql`
+    SELECT * FROM clean.monitored_flights_v2
+    WHERE departure_date < ${todayStr}::date
+      AND status IN ('active', 'resolved', 'archived')
+      AND (resolved_status IS NULL OR resolved_status IN ('Unknown', 'Scheduled'))
+    ORDER BY departure_date
+    LIMIT 200
+  `);
+  const targets = targetResult.rows.map(v2RowToMonitoredFlight);
 
   if (targets.length === 0) return;
 
@@ -515,6 +534,13 @@ async function runResolutionCycle(): Promise<void> {
             resolvedAt: new Date(),
           })
           .where(eq(monitoredFlights.id, flight.id));
+        await db.execute(sql`
+          UPDATE clean.monitored_flights_v2 SET
+            resolved_status = ${rawStatus},
+            resolved_delay_minutes = ${result?.delayMinutes ?? null},
+            resolved_at = ${new Date()}
+          WHERE id = ${flight.id}
+        `);
         resolved++;
       } else if (IN_PROGRESS_STATUSES.has(rawStatus)) {
         // Flight departed — not disrupted at departure. Store it so the
@@ -527,6 +553,13 @@ async function runResolutionCycle(): Promise<void> {
             resolvedAt: new Date(),
           })
           .where(eq(monitoredFlights.id, flight.id));
+        await db.execute(sql`
+          UPDATE clean.monitored_flights_v2 SET
+            resolved_status = ${rawStatus},
+            resolved_delay_minutes = ${result?.delayMinutes ?? null},
+            resolved_at = ${new Date()}
+          WHERE id = ${flight.id}
+        `);
         resolved++;
       } else if (flight.departureDate <= cutoff24h) {
         // 24h+ have passed and we still have no useful status — give up.
@@ -534,6 +567,12 @@ async function runResolutionCycle(): Promise<void> {
           .update(monitoredFlights)
           .set({ resolvedStatus: "status_unresolvable", resolvedAt: new Date() })
           .where(eq(monitoredFlights.id, flight.id));
+        await db.execute(sql`
+          UPDATE clean.monitored_flights_v2 SET
+            resolved_status = 'status_unresolvable',
+            resolved_at = ${new Date()}
+          WHERE id = ${flight.id}
+        `);
         unresolvable++;
       } else {
         // Departure was < 24h ago and status is still Unknown/Scheduled.
@@ -668,12 +707,11 @@ export async function scoreFlightOnce(
   flightId: number,
   opts?: { forceRefreshNas?: boolean },
 ): Promise<void> {
-  const [flight] = await db
-    .select()
-    .from(monitoredFlights)
-    .where(eq(monitoredFlights.id, flightId))
-    .limit(1);
-  if (!flight) return;
+  const result = await db.execute(sql`
+    SELECT * FROM clean.monitored_flights_v2 WHERE id = ${flightId} LIMIT 1
+  `);
+  if (!result.rows || result.rows.length === 0) return;
+  const flight = v2RowToMonitoredFlight(result.rows[0]);
   try {
     await processFlight(flight, opts);
   } catch (err: any) {
