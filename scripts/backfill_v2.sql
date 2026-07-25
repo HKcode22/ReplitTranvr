@@ -205,7 +205,34 @@ JOIN "monitored_flights" mf ON mf."id" = rsh."monitored_flight_id"
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
--- STEP 3: Reset SERIAL sequences to max id + 1
+-- STEP 3: Fix equipment_group on existing rows
+-- The INSERT above uses ON CONFLICT DO NOTHING, so rows
+-- inserted by a previous backfill (with the broken CASE
+-- expression) keep their bad equipment_group. This UPDATE
+-- fixes them using the corrected CASE logic.
+-- ============================================================
+UPDATE clean.monitored_flights_v2
+SET equipment_group = CASE
+  WHEN equipment_type ~* '777|787|A330|A340|A350|747|A380' THEN 'widebody'
+  WHEN equipment_type ~* '737|757|767|A220|A318|A319|A320|A321|717|MAX' THEN 'narrowbody'
+  WHEN equipment_type ~* 'CRJ|E170|E175|E190|E195|E145|E295|ATR|DHC|DASH|EMBRAER|BOMBARDIER|CANADAIR|PILATUS|CESSNA|CHALLENGER' THEN 'regional'
+  ELSE 'unknown'
+END
+WHERE equipment_type IS NOT NULL
+  AND equipment_group = 'unknown';
+
+UPDATE clean.risk_score_history_v2
+SET equipment_group = CASE
+  WHEN equipment_type ~* '777|787|A330|A340|A350|747|A380' THEN 'widebody'
+  WHEN equipment_type ~* '737|757|767|A220|A318|A319|A320|A321|717|MAX' THEN 'narrowbody'
+  WHEN equipment_type ~* 'CRJ|E170|E175|E190|E195|E145|E295|ATR|DHC|DASH|EMBRAER|BOMBARDIER|CANADAIR|PILATUS|CESSNA|CHALLENGER' THEN 'regional'
+  ELSE 'unknown'
+END
+WHERE equipment_type IS NOT NULL
+  AND equipment_group = 'unknown';
+
+-- ============================================================
+-- STEP 4: Reset SERIAL sequences to max id + 1
 -- ============================================================
 -- Since we inserted with explicit ids, the SERIAL counter is
 -- still at whatever value it had before the backfill. Future
@@ -215,7 +242,7 @@ SELECT setval('clean.monitored_flights_v2_id_seq', COALESCE((SELECT MAX(id) FROM
 SELECT setval('clean.risk_score_history_v2_id_seq', COALESCE((SELECT MAX(id) FROM clean.risk_score_history_v2), 0) + 1, false);
 
 -- ============================================================
--- STEP 4: Report progress
+-- STEP 5: Report progress
 -- ============================================================
 SELECT 'Backfill complete' AS status,
        (SELECT COUNT(*) FROM clean.monitored_flights_v2) AS flights_in_v2,
