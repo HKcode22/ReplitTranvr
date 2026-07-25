@@ -114,6 +114,7 @@ export async function updateFlightInV2(
     cancelledAt?: Date | null;
   },
 ): Promise<void> {
+  const newEquipmentGroup = deriveEquipmentGroup(updates.equipmentType);
   await db.execute(sql`
     UPDATE clean.monitored_flights_v2 SET
       risk_score = ${updates.riskScore},
@@ -122,10 +123,7 @@ export async function updateFlightInV2(
       departure_time = COALESCE(${updates.departureTime ?? null}, departure_time),
       tail_number = COALESCE(${updates.tailNumber ?? null}, tail_number),
       equipment_type = COALESCE(${updates.equipmentType ?? null}, equipment_type),
-      equipment_group = CASE
-        WHEN ${updates.equipmentType ?? null} IS NOT NULL
-        THEN ${deriveEquipmentGroup(updates.equipmentType ?? null)}
-        ELSE equipment_group END,
+      equipment_group = COALESCE(${newEquipmentGroup}, equipment_group),
       red_tier_first_at = COALESCE(${updates.redTierFirstAt ?? null}, red_tier_first_at),
       cancelled_at = COALESCE(${updates.cancelledAt ?? null}, cancelled_at)
     WHERE id = ${flight.id}
