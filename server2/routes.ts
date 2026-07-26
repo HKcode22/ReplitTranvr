@@ -10947,5 +10947,14 @@ Be specific, not generic. Reference actual flight numbers and patterns from the 
     });
   }
 
+  app.get("/api/v2/api-stats", async (_req: Request, res: Response) => {
+    try {
+      const { getApiStats } = await import("./lib/disruption/aerodataboxLimiter");
+      res.json(getApiStats());
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to get API stats" });
+    }
+  });
+
   return httpServer;
 }
