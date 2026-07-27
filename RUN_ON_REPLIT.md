@@ -1,95 +1,98 @@
-# Run These Commands on Replit — In Order
+# Run These Commands on Replit — In Order (Updated July 27)
 
-## Step 1: Pull Latest Code
+## Step 0: Deploy the Fix
+
+From your LOCAL machine, commit and push:
+```bash
+git add -A && git commit -m "Faster rescore: concurrent + no extra delay + rate limiter fix" && git push
+```
+
+## Step 1: Pull Latest Code on Replit
 
 ```bash
 git pull
 ```
 
-## Step 2: Restart Both Servers
-
-Stop both servers in the Replit UI, then start them again.
-
-Or if using Shell:
+## Step 2: Stop the Old Rescore (if still running)
 
 ```bash
-# Kill any running server processes
-pkill -f "tsx.*server/" 2>/dev/null; pkill -f "tsx.*server2/" 2>/dev/null
-
-# Start both (if your package.json has a dev script that does both)
-npm run dev
+pkill -f "rescore_historical" 2>/dev/null
 ```
 
-## Step 3: Wait 10 Minutes
+## Step 3: Run the Faster Rescore on Archived/Resolved Flights
 
-Let the monitor run one full cycle with the new code so new scores start using the computed-delay fix.
-
-## Step 4: Rescore Archived/Resolved Flights
-
-This re-scores flights that have already departed/arrived so they get real delay values:
+The new version runs 5 flights concurrently (weather/NAS calls overlap). No extra 2s delay — the rate limiter handles spacing.
 
 ```bash
 cd server2 && npx tsx scripts/rescore_historical_v2.ts archived-only
 ```
 
-## Step 5: Check If Delays Appeared
+Progress is logged every 50 flights. Expect ~45 min for 1400 flights.
 
-```bash
-psql "$DATABASE_URL" -c "
-SELECT actual_status, actual_delay_minutes, heuristic_score, heuristic_tier, carrier_iata, flight_number
-FROM clean.risk_score_history_v2
-WHERE actual_delay_minutes IS NOT NULL AND actual_delay_minutes > 0
-ORDER BY scored_at DESC
-LIMIT 20;
-"
-```
-
-If this shows non-zero delays (like 15, 30, 45, 90 etc.), the fix worked!
-
-## Step 6: Rescore ALL Flights
-
-Only if Step 5 showed non-zero delays:
+## Step 4: After Archived Pass Finishes — Run on ALL Flights
 
 ```bash
 cd server2 && npx tsx scripts/rescore_historical_v2.ts all
 ```
 
-## Step 7: Verify Carrier Health Sees Real Delays
+This catches flights with status != 'archived' that still have zero delay.
+
+## Step 5: Restart Servers + Second Pass (for correct carrier health)
+
+After both rescore passes complete, restart (clears the 15-min carrier health cache) and run again:
+
+```bash
+pkill -f "tsx" 2>/dev/null; sleep 1
+npm run dev
+# Then in a new terminal:
+cd server2 && RESCORE_CONCURRENCY=10 npx tsx scripts/rescore_historical_v2.ts archived-only
+```
+
+The second pass will query `getCarrierHealth` AFTER the table has real delays → carrier health columns will be correct.
+
+## Step 6: Check Delays
 
 ```bash
 psql "$DATABASE_URL" -c "
-SELECT carrier_iata, COUNT(*) as scores, AVG(actual_delay_minutes) as avg_delay
+SELECT actual_delay_minutes, carrier_iata, flight_number, scored_at
 FROM clean.risk_score_history_v2
 WHERE actual_delay_minutes > 0
-  AND scored_at > NOW() - INTERVAL '24 hours'
+ORDER BY scored_at DESC
+LIMIT 30;
+"
+```
+
+## Step 7: Check Carrier Health (after second pass)
+
+```bash
+psql "$DATABASE_URL" -c "
+SELECT carrier_iata,
+  COUNT(*) as scores_24h,
+  AVG(carrier_avg_delay_24h) as avg_delay,
+  AVG(carrier_cancellation_rate_24h) as cancel_rate,
+  AVG(carrier_health_score) as health
+FROM clean.risk_score_history_v2
+WHERE scored_at > NOW() - INTERVAL '24 hours'
 GROUP BY carrier_iata
 ORDER BY avg_delay DESC;
 "
 ```
 
-## Step 8: Check API Stats Endpoint
+## Troubleshooting
 
+**"archived-only" not processing my June 10 flights:**
+The `archived-only` mode only processes flights where `mf.status = 'archived' OR mf.resolved_status IS NOT NULL`. If flights have a different status, use:
 ```bash
-curl http://localhost:5001/api/v2/api-stats
+cd server2 && npx tsx scripts/rescore_historical_v2.ts all
 ```
 
-## Step 9: Final Data Quality Check
-
+**Too many 429 rate limit errors:**
+The rate limiter is now 1000ms (was 500ms). If still getting 429s:
 ```bash
-psql "$DATABASE_URL" -c "
--- Total rows
-SELECT COUNT(*) FROM clean.risk_score_history_v2;
+AERO_MIN_INTERVAL_MS=2000 npx tsx scripts/rescore_historical_v2.ts archived-only
+```
 
--- Non-zero delays
-SELECT COUNT(*) FROM clean.risk_score_history_v2 WHERE actual_delay_minutes > 0;
-
--- Cancelled flights
-SELECT COUNT(*) FROM clean.risk_score_history_v2 WHERE actual_cancelled = true;
-
--- Carrier health avg delay (should now show non-zero)
-SELECT carrier_iata, AVG(carrier_avg_delay_24h) FROM clean.risk_score_history_v2 WHERE carrier_avg_delay_24h > 0 GROUP BY carrier_iata;
-
--- Score tiers
-SELECT heuristic_tier, COUNT(*) FROM clean.risk_score_history_v2 GROUP BY heuristic_tier;
-"
+**Want it faster (risks 429s):**
+```bash
+RESCORE_CONCURRENCY=10 AERO_MIN_INTERVAL_MS=500 npx tsx scripts/rescore_historical_v2.ts archived-only
 ```

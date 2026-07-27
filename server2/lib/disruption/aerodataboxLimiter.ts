@@ -7,7 +7,7 @@
 // Also acts as apiCallTracker: every call is logged with endpoint, units,
 // and status so we have visibility into AeroDataBox API costs.
 
-const MIN_INTERVAL_MS = 500;
+const MIN_INTERVAL_MS = parseInt(process.env.AERO_MIN_INTERVAL_MS || "1000", 10);
 
 let lastStartedAt = 0;
 let chain: Promise<void> = Promise.resolve();

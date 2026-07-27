@@ -61,8 +61,6 @@ async function getFlightsWithActualStatus(): Promise<FlightToRescore[]> {
 }
 
 async function rescoreFlight(flight: FlightToRescore): Promise<void> {
-  console.log(`[rescore] ${flight.flight_number} ${flight.departure_date} ${flight.origin_iata}->${flight.destination_iata}`);
-
   const flightInput = {
     flightNumber: flight.flight_number,
     carrierIata: flight.carrier_iata,
@@ -103,35 +101,50 @@ async function rescoreFlight(flight: FlightToRescore): Promise<void> {
         },
       );
     }
-
-    console.log(`[rescore] OK ${flight.flight_number} score=${risk.score} tier=${risk.tier} delay=${risk.flightStatus?.delayMinutes ?? "null"}`);
   } catch (err: any) {
     console.warn(`[rescore] FAILED ${flight.flight_number}: ${err?.message || err}`);
   }
 }
 
+// Simple inline concurrency limiter — no external deps needed
+async function mapConcurrent<T, R>(
+  items: T[],
+  fn: (item: T, index: number) => Promise<R>,
+  concurrency: number,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const i = nextIndex++;
+      const item = items[i];
+      if (i % 50 === 0 || i === items.length - 1) {
+        console.log(`[rescore] progress: ${i + 1}/${items.length}`);
+      }
+      results[i] = await fn(item, i);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 async function main() {
   const mode = process.argv[2] || "archived-only";
+  const concurrency = parseInt(process.env.RESCORE_CONCURRENCY || "5", 10);
 
   let flights: FlightToRescore[];
   if (mode === "all") {
     flights = await getFlightsWithoutRealDelay();
-    console.log(`[rescore] Found ${flights.length} flights to rescore (all-zero-delay)`);
+    console.log(`[rescore] Found ${flights.length} flights to rescore (all-zero-delay, concurrency=${concurrency})`);
   } else {
     flights = await getFlightsWithActualStatus();
-    console.log(`[rescore] Found ${flights.length} archived/resolved flights to rescore`);
+    console.log(`[rescore] Found ${flights.length} archived/resolved flights to rescore (concurrency=${concurrency})`);
   }
 
-  const delay = parseInt(process.env.RESCORE_DELAY_MS || "2000", 10);
-
-  for (let i = 0; i < flights.length; i++) {
-    const f = flights[i];
-    console.log(`[rescore] [${i + 1}/${flights.length}] ${f.flight_number} ${f.departure_date}`);
-    await rescoreFlight(f);
-    if (i < flights.length - 1 && delay > 0) {
-      await new Promise((r) => setTimeout(r, delay));
-    }
-  }
+  await mapConcurrent(flights, (f) => rescoreFlight(f), concurrency);
 
   console.log("[rescore] Done");
   process.exit(0);
