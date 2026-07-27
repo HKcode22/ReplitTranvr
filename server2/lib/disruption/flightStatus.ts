@@ -21,6 +21,13 @@ function safeNumber(v: any): number {
   return 0;
 }
 
+function extractTime(val: any): string | undefined {
+  if (!val) return undefined;
+  if (typeof val === "string") return val;
+  if (typeof val === "object") return val.utc || val.local || undefined;
+  return undefined;
+}
+
 function normalizeStatus(raw: string | undefined | null): string {
   if (!raw || typeof raw !== "string") return "Unknown";
   const s = raw.trim();
@@ -266,13 +273,9 @@ export async function getFlightStatus(
   const cancelled = status === "Cancelled" || flight.isCancelled === true;
   const departure = flight.departure || {};
   console.log(`[flightStatus] ${normalizedFlight} dep keys:`, Object.keys(departure).join(","));
-  console.log(`[flightStatus] ${normalizedFlight} raw delay fields:`, JSON.stringify({
-    delayMinutes: departure.delayMinutes,
-    delay: departure.delay,
-    runwayDelayMinutes: departure.runwayDelayMinutes,
-    actualTime: departure.actualTime?.utc,
-    scheduledTime: departure.scheduledTime?.utc,
-  }));
+  try { console.log(`[flightStatus] ${normalizedFlight} dep RAW:`, JSON.stringify(departure, (_k, v) => typeof v === "object" ? v : v)); } catch {}
+  const depRaw = {...departure, actualTime: extractTime(departure?.actualTime), revisedTime: extractTime(departure?.revisedTime), runwayTime: extractTime(departure?.runwayTime), scheduledTime: extractTime(departure?.scheduledTime)};
+  console.log(`[flightStatus] ${normalizedFlight} dep extracted:`, JSON.stringify(depRaw));
   let departureDelay = safeNumber(
     departure?.delayMinutes ??
       departure?.delay?.minutes ??
@@ -281,14 +284,25 @@ export async function getFlightStatus(
       departure?.delay ??
       null,
   );
-  if (departureDelay === 0 && departure?.actualTime?.utc && departure?.scheduledTime?.utc) {
-    const actual = new Date(departure.actualTime.utc).getTime();
-    const scheduled = new Date(departure.scheduledTime.utc).getTime();
-    if (!isNaN(actual) && !isNaN(scheduled)) {
-      const computed = Math.round((actual - scheduled) / 60000);
-      if (computed > 0) {
-        console.log(`[flightStatus] computed delay from times: ${computed}min for ${normalizedFlight}`);
-        departureDelay = computed;
+  const depSched = extractTime(departure?.scheduledTime);
+  if ((!departureDelay || departureDelay === 0) && depSched) {
+    const scheduled = new Date(depSched).getTime();
+    if (!isNaN(scheduled)) {
+      const timeFields: { key: string; val: string | undefined }[] = [
+        { key: "actualTime", val: extractTime(departure?.actualTime) },
+        { key: "revisedTime", val: extractTime(departure?.revisedTime) },
+        { key: "runwayTime", val: extractTime(departure?.runwayTime) },
+      ];
+      for (const { key, val } of timeFields) {
+        if (!val) continue;
+        const t = new Date(val).getTime();
+        if (isNaN(t)) continue;
+        const computed = Math.round((t - scheduled) / 60000);
+        if (computed > 0) {
+          console.log(`[flightStatus] computed delay from ${key}: ${computed}min for ${normalizedFlight}`);
+          departureDelay = computed;
+          break;
+        }
       }
     }
   }
@@ -309,24 +323,33 @@ export async function getFlightStatus(
       arrival?.delay ??
       null,
   );
-  if (inboundDelay === 0 && arrival?.actualTime?.utc && arrival?.scheduledTime?.utc) {
-    const actual = new Date(arrival.actualTime.utc).getTime();
-    const scheduled = new Date(arrival.scheduledTime.utc).getTime();
-    if (!isNaN(actual) && !isNaN(scheduled)) {
-      const computed = Math.round((actual - scheduled) / 60000);
-      if (computed > 0) {
-        console.log(`[flightStatus] computed inbound delay from times: ${computed}min for ${normalizedFlight}`);
-        inboundDelay = computed;
+  const arrSched = extractTime(arrival?.scheduledTime);
+  if ((!inboundDelay || inboundDelay === 0) && arrSched) {
+    const scheduled = new Date(arrSched).getTime();
+    if (!isNaN(scheduled)) {
+      const timeFields: { key: string; val: string | undefined }[] = [
+        { key: "actualTime", val: extractTime(arrival?.actualTime) },
+        { key: "revisedTime", val: extractTime(arrival?.revisedTime) },
+        { key: "runwayTime", val: extractTime(arrival?.runwayTime) },
+      ];
+      for (const { key, val } of timeFields) {
+        if (!val) continue;
+        const t = new Date(val).getTime();
+        if (isNaN(t)) continue;
+        const computed = Math.round((t - scheduled) / 60000);
+        if (computed > 0) {
+          console.log(`[flightStatus] computed inbound delay from ${key}: ${computed}min for ${normalizedFlight}`);
+          inboundDelay = computed;
+          break;
+        }
       }
     }
   }
   inboundDelay = safeNumber(inboundDelay);
   const departureTime: string | null =
-    departure?.actualTime?.utc ||
-    departure?.actualTime?.local ||
-    departure?.scheduledTime?.utc ||
-    departure?.scheduledTime?.local ||
-    departure?.revisedTime?.utc ||
+    extractTime(departure?.actualTime) ||
+    extractTime(departure?.scheduledTime) ||
+    extractTime(departure?.revisedTime) ||
     null;
 
   const tailNumber: string | null = flight.aircraft?.reg ?? null;

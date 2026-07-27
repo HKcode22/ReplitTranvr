@@ -1244,6 +1244,103 @@ The `departure_hour` column already provides the ML-friendly integer (0-23). The
 | Add data quality validation checks (Phase 2e) | New file | 🟡 MED |
 | Verify `carrier_avg_delay_24h` > 0 after rescoring | Carrier health logs | 🔴 HIGH |
 
+### 19.4 July 26 Fix: extractTime Helper + AeroDataBox Structure Investigation
+
+**What was wrong with the July 25 fix:**
+
+The original computed-delay fallback (Section 19.1) accessed time fields as `departure?.actualTime?.utc`. This assumed all AeroDataBox time fields are objects `{ utc: "...", local: "..." }`. Debug logging from production showed:
+
+```
+[flightStatus] UA2267 dep keys: airport,scheduledTime,revisedTime,runwayTime,terminal,runway,quality
+[flightStatus] UA2267 raw delay fields: {"scheduledTime":"2026-05-20 17:00Z"}
+```
+
+`revisedTime` and `runwayTime` exist as keys but `?.utc` access returned `undefined` — indicating these fields are **plain strings** (not objects). The fix silently did nothing for flights where only `revisedTime` was available.
+
+**Root cause: AeroDataBox returns time fields in two formats:**
+- **Object format**: `{ utc: "2026-05-20 17:00Z", local: "..." }` — used for `scheduledTime`, `actualTime`
+- **String format**: `"2026-05-20T17:30:00Z"` — may be used for `revisedTime`, `runwayTime`
+
+**Fix applied (July 26):**
+
+Added `extractTime()` helper function:
+```typescript
+function extractTime(val: any): string | undefined {
+  if (!val) return undefined;
+  if (typeof val === "string") return val;
+  if (typeof val === "object") return val.utc || val.local || undefined;
+  return undefined;
+}
+```
+
+Now all time field access goes through `extractTime()` — handles both string and object formats transparently.
+
+Also added `dep RAW` debug logging that dumps the entire departure object:
+```
+[flightStatus] UA2267 dep RAW: { ... full object ... }
+```
+
+This will show us the EXACT structure AeroDataBox returns so we can adjust access patterns.
+
+**Why carrier data is still all 0 even after the fix:**
+
+Three independent reasons:
+
+1. **The rescore script hasn't been re-run** — the fix was applied to the code, but no one has deployed and re-run the rescore. The `risk_score_history_v2` table still has the old data (all zeros).
+
+2. **Even with the fix, some flights have no time fields at all** — very old flights (weeks/months ago) return only `scheduledTime` and `status`. No `revisedTime`, no `runwayTime`, no `actualTime`. Example from debug log:
+   ```
+   AA4551 dep keys: airport,scheduledTime,terminal,quality
+   ```
+   For these flights, delay will stay 0 even with the fix.
+
+3. **The carrier health query uses a 24-hour window** — `getCarrierHealth()` at `carrierHealth.ts` line 64-74:
+   ```typescript
+   SELECT rsh.actual_cancelled, rsh.actual_delay_minutes
+   FROM clean.risk_score_history_v2 rsh
+   JOIN clean.monitored_flights_v2 mf ON mf.id = rsh.monitored_flight_id
+   WHERE UPPER(mf.carrier_iata) = ${code}
+     AND rsh.scored_at >= ${since}   // last 24 hours
+   ```
+   Even after the rescore populates delays for old flights, the carrier health only looks at the **last 24 hours** of scored data. It needs fresh rescored rows or new monitor runs to see non-zero delays in its time window.
+
+**Why new monitor data also has 0 delays:**
+
+The monitor calls `getFlightStatus` for current-day flights. The AeroDataBox endpoint `flights/number/{num}/{date}` returns **current flight status**, not **historical delay data**:
+
+| Flight State | What AeroDataBox Returns | Expected delayMinutes | Has actualTime? |
+|---|---|---|---|
+| Scheduled (future) | Flight plan only | 0 (no delay yet) | ❌ No |
+| EnRoute (departed) | Last known position + times | Current operational delay | ✅ Sometimes |
+| Arrived (completed) | Final times + status | 0 (no current delay) | ❌ Usually not |
+| Weeks old | Minimal data (scheduledTime only) | N/A | ❌ No |
+
+For flights that have already arrived, `delayMinutes = 0` because there is no **current** delay — the delay was a historical event. The API endpoint is designed for real-time flight tracking, not historical performance analysis.
+
+The computed-delay fix (from `revisedTime`/`runwayTime`) is the **workaround** — but it only works when those fields are populated, which depends on:
+- Whether ATC issued a revised departure time (`revisedTime`)
+- Whether the flight has actually departed (`runwayTime`)
+- How much data AeroDataBox retains for past flights
+
+**Bottom line for carrier health:**
+
+The fix is necessary but not sufficient. After deployment:
+1. Run rescore → populates `actual_delay_minutes` for flights with `revisedTime`/`runwayTime`
+2. The carrier health 24h window will eventually see non-zero values AS NEW monitor runs accumulate
+3. Some carriers will still show 0 because their flights had no `revisedTime` data
+4. The debug `dep RAW` log will tell us exactly what AeroDataBox returns per flight
+
+**Changes in this session (July 26):**
+
+| File | Change | Why |
+|------|--------|-----|
+| `server2/lib/disruption/flightStatus.ts` | Added `extractTime()` helper | Handle string AND object time fields |
+| `server/lib/disruption/flightStatus.ts` | Same `extractTime()` helper | Keep both in sync |
+| `server2/lib/disruption/flightStatus.ts` | Replaced all `?.utc` with `extractTime()` | Fix computed delay for flights with string time fields |
+| `server/lib/disruption/flightStatus.ts` | Same replacement | Keep both in sync |
+| `server2/lib/disruption/flightStatus.ts` | Added `dep RAW` full-object dump logging | Diagnose AeroDataBox response structure |
+| `server/lib/disruption/flightStatus.ts` | Same dump logging | Keep both in sync |
+
 ---
 
 ## 20. Section 11.7 Phase Progress
@@ -1503,6 +1600,9 @@ For ML training, the features and targets would be identical whether the flight 
 | July 25 | `server2/routes.ts` | Added `GET /api/v2/api-stats` endpoint (Phase 2f) |
 | July 25 | `server2/scripts/rescore_historical_v2.ts` | New — historical rescoring script (Phase 4) |
 | July 25 | `DATABASE_QUALITY_AND_ML_ROADMAP_4.md` | Full update with analysis, fixes, Q&A |
+| July 26 | `server2/lib/disruption/flightStatus.ts` | Added `extractTime()` helper — handles string AND object time fields; replaced all `?.utc`; added `dep RAW` full-object dump |
+| July 26 | `server/lib/disruption/flightStatus.ts` | Same changes (keep both in sync) |
+| July 26 | `DATABASE_QUALITY_AND_ML_ROADMAP_4.md` | Added Section 19.4: AeroDataBox structure analysis + fix explanation |
 
 ### Q15: Should signal_* columns be used as ML features? You listed them as "KEEP" in the appendix.
 
@@ -1625,7 +1725,7 @@ This section compares the **original tables** (pre-v2, still running on server/)
 
 | Issue | Original | V2 | Why |
 |-------|----------|----|-----|
-| `actual_delay_minutes` ≈ 0 | 99.99% zero | 99.99% zero | Same AeroDataBox API — `delayMinutes` field not returned for past flights |
+| `actual_delay_minutes` ≈ 0 | 99.99% zero | 99.99% zero | AeroDataBox doesn't return delay for past flights — fix uses `revisedTime`/`runwayTime` (Section 19.4) but needs rescore run |
 | `carrier_avg_delay_24h` = 0.0 | Always 0.0 | Always 0.0 | Same root cause — all delays are 0 |
 | `historical_otp_*` all fallback | Always fallback | Always fallback | Same OTP API always returns 404 |
 | `tail_number` ~65% null | 58.9% | 50.1% | Same API limitation |
