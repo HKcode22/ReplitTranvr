@@ -758,26 +758,67 @@ The 1,090 rows from May-June with null destination weather will ALWAYS have null
 
 ---
 
-## 19. API Budget: $32/month for 60,000 Units
+## 19. API Budget: What Actually Costs Money
 
-### 19.1 Your Budget Calculation (Correct)
+### 19.1 What the 2 Units Actually Pay For
 
-You calculated it exactly right:
+Each 60-min cycle, the monitor runs `scoreFlightRisk()` for each flight. That function does many things. Only ONE of them costs money:
+
+| Step | What It Does | Cost |
+|------|-------------|------|
+| `getFlightStatus()` | Calls **AeroDataBox API** for live flight data | **2 units** |
+| `getAirportWeather()` | Calls aviationweather.gov (free US gov API) | $0 |
+| `getNasStatus()` | Calls nasstatus.faa.gov (free FAA API) | $0 |
+| `getCarrierHealth()` | Queries our own database | $0 |
+| Heuristic scoring | Math on our own server (CPU only) | $0 |
+
+**So the 2 units per flight per cycle is ONLY for the AeroDataBox flight status lookup.** The heuristic "scoring" itself (computing signals, adding up risk, etc.) is free.
+
+### 19.2 Flight Lifecycle — Each Flight Costs ~72 Units Total
+
+A flight is NOT monitored for 30 days straight. Here's the real lifecycle:
 
 ```
-1 flight monitored for 1 month:
-  24 cycles/day × 30 days × 2 units per API call = 1,440 units per flight per month
-
-Maximum flights we can afford:
-  60,000 budget ÷ 1,440 units per flight = 41.67 flights
-  Floor = 41 flights
+Day -1: Flight added to monitor → starts getting scored every 60 min
+Day 0: Flight departs → monitor scores it one more time (now has real delay)
+Day +1: Resolution cycle detects flight has departed → sets status = 'archived'
+        → monitor STOPS scoring this flight
 ```
 
-**This means we can only afford to have 41 flights in the database being monitored.** Each of those 41 flights gets scored every 60 min (720 times per month), costing 2 units each time. Total: 41 × 720 × 2 = 59,040 units/month.
+A flight is active (being scored) for only **~1.5 days = ~36 cycles on average**. Each cycle costs 2 units for the AeroDataBox call.
 
-### 19.2 How the Code Enforces This
+**Cost per flight: ~36 cycles × 2 units = ~72 units TOTAL**
 
-The monitor has `LIMIT 41` in its SQL query (`server2/lib/disruption/monitor.ts:297`):
+This is much less than 1,440 units (which assumed 30 days × 24 cycles).
+
+### 19.3 How Many Unique Flights Per Month?
+
+Budget: 60,000 units ÷ 72 units per flight = **~833 unique flights per month**
+
+But: at any given moment, only **~41 flights are active** (LIMIT 41 in the code). As flights depart and get archived, new flights are added. Over a month, ~833 unique flights cycle through the system.
+
+```
+Budget:        60,000 units/month
+Per flight:    ~72 units (36 cycles × 2 units)
+Flights/month: ~833 unique
+
+At any moment: ~41 active (LIMIT 41)
+Flights rotate: depart → archived → new added
+```
+
+### 19.4 Your Original Calculation
+
+You calculated: `24 × 30 × 2 = 1,440 units per flight. 60,000 ÷ 1,440 = 41.67 flights.`
+
+This assumed each flight is monitored for 30 days. But in reality: **a flight is only monitored until it departs (~1.5 days).** So the correct calculation is:
+
+`~36 cycles × 2 units = ~72 units per flight. 60,000 ÷ 72 = ~833 flights per month.`
+
+The `LIMIT 41` controls how many flights are **active at the same time** (41 flights alive right now), not how many per month.
+
+### 19.5 How the Code Enforces This
+
+The monitor has `LIMIT 41` (`server2/lib/disruption/monitor.ts:297`):
 
 ```sql
 SELECT * FROM clean.monitored_flights_v2
@@ -787,41 +828,30 @@ WHERE status = 'active'
 LIMIT 41
 ```
 
-This `LIMIT 41` means: **score at most 41 flights per 60-min cycle.** If there are exactly 41 flights in the database, all 41 get scored every cycle. If there are more than 41 (e.g., 100 active flights), only 41 get scored per cycle and the rest are skipped — they may never get scored unless others are removed.
+This means: at most 41 flights are scored per 60-min cycle. If 300 flights are in the DB, only 41 get scored — the other 259 are skipped. This protects the budget regardless of how many flights exist.
 
-**To stay exactly under budget:** You should have at most 41 active flights in `monitored_flights_v2` at any time. Currently you have ~300+ active flights. If all 300 were scored every cycle, you'd use 300 × 720 × 2 = **432,000 units/month** — 7× over budget. The LIMIT 41 prevents this by capping at 41 per cycle, but it means ~260 flights never get scored.
-
-**Fix:** Reduce the number of `status = 'active'` flights in the database to 41 or fewer. The rest should be set to `archived`.
-
-### 19.3 Monthly Cost Breakdown (At 41 Flights)
+### 19.6 Monthly Cost Summary
 
 | Item | Calculation | Units/Month |
 |------|------------|-------------|
-| Monitor (41 flights × 720 cycles × 2 units) | 41 × 720 × 2 | **59,040** |
-| Historical OTP (~10 new flights/month × 6 units, one-time) | 10 × 6 | **60** |
-| Weather + NAS API | free | **0** |
+| Monitor (max 41 active × ~720 cycles/month × 2 units) | 41 × 720 × 2 | **59,040** |
+| Historical OTP (one-time, ~10 new flights × 6 units) | 10 × 6 | **60** |
+| Weather + NAS | free | **0** |
 | **Total** | | **~59,100** |
 | **Budget** | | **60,000** ✅ |
-| **Headroom** | | **~900 units** |
 
-### 19.4 What Happens If You Have More Than 41 Flights?
+### 19.7 The Rescore Is a One-Time Cost
 
-The `LIMIT 41` protects the budget — only 41 flights per cycle are scored, costing 82 units per cycle (41 × 2). Over a month, that's 59,040 units regardless of how many total flights exist in the database. The extra flights just never get scored.
+The final rescore run (1,166 flights × 2 units = **2,332 units**) is ~3.9% of your monthly budget. Run it once, never again.
 
-But this means you're paying $32/month and only actually monitoring 41 flights. If you want to monitor more, you'd need a bigger plan.
-
-### 19.5 The Rescore Is a One-Time Cost
-
-The final rescore run (1,166 flights × 2 units = **2,332 units**) is ~3.9% of your monthly budget. This is a one-time cost to fix historical data. After this, you never run it again.
-
-### 19.6 Confirmed: LIMIT 41 Is Already in the Code
+### 19.8 Confirmed: LIMIT 41 Already in Code
 
 | File | Line | Limit |
 |------|------|-------|
 | `server2/lib/disruption/monitor.ts` | 297 | `LIMIT 41` |
 | `server/lib/disruption/monitor.ts` | 260 | `LIMIT 41` |
 
-The server (v1) monitor is effectively idle (writes stopped). Only server2's monitor is active. Both have the 41-flight cap.
+Both monitors have the cap. The server (v1) monitor is idle (writes stopped). Only server2's monitor is active.
 
 ---
 
