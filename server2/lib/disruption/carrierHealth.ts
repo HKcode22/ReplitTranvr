@@ -67,10 +67,16 @@ export async function getCarrierHealth(carrierIata: string): Promise<CarrierHeal
       actual_delay_minutes: number | null;
     }[]>(sql`
       SELECT rsh.actual_cancelled, rsh.actual_delay_minutes
-      FROM clean.risk_score_history_v2 rsh
-      JOIN clean.monitored_flights_v2 mf ON mf.id = rsh.monitored_flight_id
-      WHERE UPPER(mf.carrier_iata) = ${code}
-        AND rsh.scored_at >= ${since}
+      FROM (
+        SELECT DISTINCT ON (rsh.monitored_flight_id)
+          rsh.actual_cancelled, rsh.actual_delay_minutes,
+          mf.carrier_iata
+        FROM clean.risk_score_history_v2 rsh
+        JOIN clean.monitored_flights_v2 mf ON mf.id = rsh.monitored_flight_id
+        WHERE rsh.scored_at >= ${since}
+        ORDER BY rsh.monitored_flight_id, rsh.scored_at DESC
+      ) rsh
+      WHERE UPPER(rsh.carrier_iata) = ${code}
     `);
 
     const sampleSize = rows.rows.length;

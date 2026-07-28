@@ -120,7 +120,25 @@ export async function getAirportWeather(iataCode: string): Promise<WeatherSignal
     const hasFreezing = /\bFZ\b|FZRA|FZDZ|FZFG|\bSN\b|\bPL\b/.test(wxString);
     const windSpeedKt = Number(row.wspd ?? row.wind_speed_kt ?? 0) || 0;
     const gustSpeedKt = Number(row.wgst ?? row.wind_gust_kt ?? 0) || 0;
-    const visMiles = Number(row.visib ?? row.visibility_statute_mi ?? 10);
+    const rawVis = row.visib ?? row.visibility_statute_mi;
+    let visMiles: number;
+    if (rawVis == null) {
+      visMiles = 10;
+    } else if (typeof rawVis === "string") {
+      const cleaned = rawVis.trim().replace(/\+$/, "");
+      const fracParts = cleaned.split(/\s+/);
+      if (fracParts.length === 2 && fracParts[1].includes("/")) {
+        const [n, d] = fracParts[1].split("/");
+        visMiles = parseFloat(fracParts[0]) + (parseFloat(n) / parseFloat(d));
+      } else if (cleaned.includes("/")) {
+        const [n, d] = cleaned.split("/");
+        visMiles = parseFloat(n) / parseFloat(d);
+      } else {
+        visMiles = parseFloat(cleaned);
+      }
+    } else {
+      visMiles = Number(rawVis);
+    }
     const visibilityMiles = Number.isFinite(visMiles) ? visMiles : 10;
 
     let ceilingFt = 99999;
