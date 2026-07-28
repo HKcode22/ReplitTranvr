@@ -758,100 +758,122 @@ The 1,090 rows from May-June with null destination weather will ALWAYS have null
 
 ---
 
-## 19. API Budget: What Actually Costs Money
+## 19. API Budget: $32/month for 60,000 Units — How It Really Works
 
-### 19.1 What the 2 Units Actually Pay For
+### 19.1 What Costs Money vs What Is Free
 
-Each 60-min cycle, the monitor runs `scoreFlightRisk()` for each flight. That function does many things. Only ONE of them costs money:
+Only ONE thing costs money: the **AeroDataBox API call** (`getFlightStatus()` in `server2/lib/disruption/flightStatus.ts`). Each call costs 2 units.
 
-| Step | What It Does | Cost |
-|------|-------------|------|
-| `getFlightStatus()` | Calls **AeroDataBox API** for live flight data | **2 units** |
-| `getAirportWeather()` | Calls aviationweather.gov (free US gov API) | $0 |
-| `getNasStatus()` | Calls nasstatus.faa.gov (free FAA API) | $0 |
-| `getCarrierHealth()` | Queries our own database | $0 |
-| Heuristic scoring | Math on our own server (CPU only) | $0 |
+Everything else is free:
+- Heuristic risk scoring (math on our server)
+- Weather from aviationweather.gov (free US gov API)
+- NAS delays from nasstatus.faa.gov (free FAA API)
+- Carrier health from our own database
+- Writing rows to our own database
 
-**So the 2 units per flight per cycle is ONLY for the AeroDataBox flight status lookup.** The heuristic "scoring" itself (computing signals, adding up risk, etc.) is free.
+**When I say "scoring" in the code, it includes the AeroDataBox call + free math. Both happen together in `processFlight()`. But only the AeroDataBox call costs money.**
 
-### 19.2 Flight Lifecycle — Each Flight Costs ~72 Units Total
-
-A flight is NOT monitored for 30 days straight. Here's the real lifecycle:
+### 19.2 The Flight Lifecycle — What Happens to Each Flight
 
 ```
-Day -1: Flight added to monitor → starts getting scored every 60 min
-Day 0: Flight departs → monitor scores it one more time (now has real delay)
-Day +1: Resolution cycle detects flight has departed → sets status = 'archived'
-        → monitor STOPS scoring this flight
+          Day -2             Day -1 (today)        Day 0 (tomorrow)      Day +1
+          |                  |                      |                    |
+Flight ──►  added to DB ──►  monitor picks it ──►  monitor picks ──►   resolution
+added     status=active      up (departure_date    it up again          picks it up
+                             >= today, <=          (still within        (departure_date
+                             tomorrow)             date range)          < today)
+                              ┌─────────────┐       ┌─────────────┐      ┌──────────────┐
+                              │ AeroDataBox  │       │ AeroDataBox  │      │ AeroDataBox  │
+                              │ call = 2u    │       │ call = 2u    │      │ call = 2u    │
+                              │ (every 60min)│       │ (every 60min) │      │ (one last    │
+                              └─────────────┘       └─────────────┘      │ time, then   │
+                                                                          │ STOP)        │
+                                                                          └──────────────┘
 ```
 
-A flight is active (being scored) for only **~1.5 days = ~36 cycles on average**. Each cycle costs 2 units for the AeroDataBox call.
+**A flight gets AeroDataBox calls every 60 min for ~1.5 days (36 cycles), then ONE final call from the resolution cycle.** Total: ~37 AeroDataBox calls per flight × 2 units = **~74 units per flight**.
 
-**Cost per flight: ~36 cycles × 2 units = ~72 units TOTAL**
+After resolution, the flight is never called again. The monitor's query filters by `departure_date >= today`, so past flights are excluded forever.
 
-This is much less than 1,440 units (which assumed 30 days × 24 cycles).
+### 19.3 How the SQL Query Controls This
 
-### 19.3 How Many Unique Flights Per Month?
-
-Budget: 60,000 units ÷ 72 units per flight = **~833 unique flights per month**
-
-But: at any given moment, only **~41 flights are active** (LIMIT 41 in the code). As flights depart and get archived, new flights are added. Over a month, ~833 unique flights cycle through the system.
-
-```
-Budget:        60,000 units/month
-Per flight:    ~72 units (36 cycles × 2 units)
-Flights/month: ~833 unique
-
-At any moment: ~41 active (LIMIT 41)
-Flights rotate: depart → archived → new added
-```
-
-### 19.4 Your Original Calculation
-
-You calculated: `24 × 30 × 2 = 1,440 units per flight. 60,000 ÷ 1,440 = 41.67 flights.`
-
-This assumed each flight is monitored for 30 days. But in reality: **a flight is only monitored until it departs (~1.5 days).** So the correct calculation is:
-
-`~36 cycles × 2 units = ~72 units per flight. 60,000 ÷ 72 = ~833 flights per month.`
-
-The `LIMIT 41` controls how many flights are **active at the same time** (41 flights alive right now), not how many per month.
-
-### 19.5 How the Code Enforces This
-
-The monitor has `LIMIT 41` (`server2/lib/disruption/monitor.ts:297`):
+Every 60 min, the monitor runs this query (`monitor.ts:292-298`):
 
 ```sql
 SELECT * FROM clean.monitored_flights_v2
 WHERE status = 'active'
-  AND departure_date >= today
-  AND departure_date <= tomorrow
-LIMIT 41
+  AND departure_date >= today     -- only flights that haven't left yet
+  AND departure_date <= tomorrow  -- or are leaving tomorrow
+LIMIT 41                          -- at most 41 per cycle
 ```
 
-This means: at most 41 flights are scored per 60-min cycle. If 300 flights are in the DB, only 41 get scored — the other 259 are skipped. This protects the budget regardless of how many flights exist.
+This means:
+- A flight departing **today** gets scored every 60 min all day (~24 cycles)
+- A flight departing **tomorrow** also gets scored tomorrow (~24 more cycles)
+- After departure day passes (`departure_date < today`), it drops out — never scored again by the main cycle
+- `LIMIT 41` means **at most 41 flights per 60-min cycle**, regardless of how many are in the DB
 
-### 19.6 Monthly Cost Summary
+### 19.4 Direct Answer: 41 per Cycle, NOT 41 per Month
+
+**You asked: "there cant be an extraction of more than 100 flights per month because it should only be up to 41"**
+
+No — 41 is **per cycle** (per 60 min), not per month. Here's the real monthly math:
+
+| What | Number |
+|------|--------|
+| Flights scored each 60-min cycle | **41** (LIMIT 41) |
+| Cycles per month | **720** (24 × 30) |
+| AeroDataBox calls per month | **29,520** (41 × 720) |
+| Units per month | **59,040** (29,520 × 2) |
+| Average calls per flight before it departs | **~36** (~1.5 days × 24 cycles) |
+| Unique flights per month | **~820** (29,520 ÷ 36) |
+
+**You pay ~74 units per flight.** Not 1,440 (which assumed 30 days). Each flight is only monitored until it departs (~1.5 days), then archived. New flights replace them.
+
+### 19.5 What If There Are 300+ Active Flights?
+
+Right now you have ~300 active flights in the DB. The `LIMIT 41` means only 41 get scored per cycle — the other 259 are skipped. Over a month:
+- 41 × 720 = 29,520 calls (same 41 flights each cycle, plus whatever new ones rotate in)
+- Cost stays at 59,040 units/month
+- But 259 flights **never get scored at all**
+
+**Fix:** Reduce active flights to 41 or fewer. Archive the rest. That way all 41 get scored every cycle, and new flights can be added as old ones depart.
+
+### 19.6 The Resolution Cycle — One Final API Call
+
+Every 6 hours, the resolution cycle (`monitor.ts:488-593`) picks up flights that have already departed but haven't been resolved yet:
+
+```sql
+WHERE departure_date < today
+  AND status IN ('active', 'resolved', 'archived')
+  AND (resolved_status IS NULL OR resolved_status IN ('Unknown', 'Scheduled'))
+```
+
+It calls AeroDataBox **one last time** per flight to get the final status (Arrived, Cancelled, etc.). After that, the flight is never called again. This costs an extra 2 units per flight, one time.
+
+### 19.7 Monthly Cost Summary
 
 | Item | Calculation | Units/Month |
 |------|------------|-------------|
-| Monitor (max 41 active × ~720 cycles/month × 2 units) | 41 × 720 × 2 | **59,040** |
+| Main cycle (41 flights × 720 cycles × 2 units) | 41 × 720 × 2 | **59,040** |
+| Resolution (one final call per departing flight) | included above (the 36th+1st call) | **0 extra** |
 | Historical OTP (one-time, ~10 new flights × 6 units) | 10 × 6 | **60** |
 | Weather + NAS | free | **0** |
 | **Total** | | **~59,100** |
 | **Budget** | | **60,000** ✅ |
 
-### 19.7 The Rescore Is a One-Time Cost
+### 19.8 The Rescore Is a One-Time Cost
 
-The final rescore run (1,166 flights × 2 units = **2,332 units**) is ~3.9% of your monthly budget. Run it once, never again.
+The final rescore (1,166 flights × 2 units = 2,332 units) is ~3.9% of your monthly budget. Run it once, never again.
 
-### 19.8 Confirmed: LIMIT 41 Already in Code
+### 19.9 Confirmed: LIMIT 41 Is in Both Monitors
 
 | File | Line | Limit |
 |------|------|-------|
 | `server2/lib/disruption/monitor.ts` | 297 | `LIMIT 41` |
 | `server/lib/disruption/monitor.ts` | 260 | `LIMIT 41` |
 
-Both monitors have the cap. The server (v1) monitor is idle (writes stopped). Only server2's monitor is active.
+Server (v1) monitor is idle (writes stopped). Only server2's monitor is active. Both have the cap.
 
 ---
 
