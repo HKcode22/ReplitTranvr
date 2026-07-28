@@ -760,13 +760,24 @@ The 1,090 rows from May-June with null destination weather will ALWAYS have null
 
 ## 19. API Budget: $32/month for 60,000 Units
 
-### 19.1 The Budget Calculation
+### 19.1 Your Budget Calculation (Correct)
 
-You pay **$32/month for 60,000 AeroDataBox API units.** Each flight status call costs 2 units (Tier 1).
+You calculated it exactly right:
 
-### 19.2 The Monitor Already Respects This Budget
+```
+1 flight monitored for 1 month:
+  24 cycles/day × 30 days × 2 units per API call = 1,440 units per flight per month
 
-The monitor already has a hard-coded **LIMIT 41** in its query (`server2/lib/disruption/monitor.ts:297`):
+Maximum flights we can afford:
+  60,000 budget ÷ 1,440 units per flight = 41.67 flights
+  Floor = 41 flights
+```
+
+**This means we can only afford to have 41 flights in the database being monitored.** Each of those 41 flights gets scored every 60 min (720 times per month), costing 2 units each time. Total: 41 × 720 × 2 = 59,040 units/month.
+
+### 19.2 How the Code Enforces This
+
+The monitor has `LIMIT 41` in its SQL query (`server2/lib/disruption/monitor.ts:297`):
 
 ```sql
 SELECT * FROM clean.monitored_flights_v2
@@ -776,35 +787,41 @@ WHERE status = 'active'
 LIMIT 41
 ```
 
-This means the monitor will never process more than 41 flights per cycle, regardless of how many active flights exist in the database.
+This `LIMIT 41` means: **score at most 41 flights per 60-min cycle.** If there are exactly 41 flights in the database, all 41 get scored every cycle. If there are more than 41 (e.g., 100 active flights), only 41 get scored per cycle and the rest are skipped — they may never get scored unless others are removed.
 
-### 19.3 Monthly Cost Breakdown
+**To stay exactly under budget:** You should have at most 41 active flights in `monitored_flights_v2` at any time. Currently you have ~300+ active flights. If all 300 were scored every cycle, you'd use 300 × 720 × 2 = **432,000 units/month** — 7× over budget. The LIMIT 41 prevents this by capping at 41 per cycle, but it means ~260 flights never get scored.
 
-| Item | Flights | Calls/Month | Units/Call | Total Units |
-|------|---------|-------------|------------|-------------|
-| Monitor (41 flights × 24 cycles × 30 days) | 41 | 720 | 2 (Tier 1) | **59,040** |
-| Historical OTP (per new flight, one-time) | ~10 | 10 | 6 (Tier 3) | **60** |
-| Weather + NAS | — | — | $0 | **0** |
-| **Total monthly** | | | | **~59,100** |
-| **Budget** | | | | **60,000** ✅ |
-| **Headroom** | | | | **~900 units** |
+**Fix:** Reduce the number of `status = 'active'` flights in the database to 41 or fewer. The rest should be set to `archived`.
 
-### 19.4 What Happens If There Are More Than 41 Active Flights?
+### 19.3 Monthly Cost Breakdown (At 41 Flights)
 
-Only 41 are scored per cycle. The rest are skipped. They'll be scored in the NEXT cycle (or the one after that, etc.). This means some flights may go unscored for multiple cycles, but it guarantees you never exceed the API budget.
+| Item | Calculation | Units/Month |
+|------|------------|-------------|
+| Monitor (41 flights × 720 cycles × 2 units) | 41 × 720 × 2 | **59,040** |
+| Historical OTP (~10 new flights/month × 6 units, one-time) | 10 × 6 | **60** |
+| Weather + NAS API | free | **0** |
+| **Total** | | **~59,100** |
+| **Budget** | | **60,000** ✅ |
+| **Headroom** | | **~900 units** |
+
+### 19.4 What Happens If You Have More Than 41 Flights?
+
+The `LIMIT 41` protects the budget — only 41 flights per cycle are scored, costing 82 units per cycle (41 × 2). Over a month, that's 59,040 units regardless of how many total flights exist in the database. The extra flights just never get scored.
+
+But this means you're paying $32/month and only actually monitoring 41 flights. If you want to monitor more, you'd need a bigger plan.
 
 ### 19.5 The Rescore Is a One-Time Cost
 
-The final rescore run (1,166 flights × 2 units = **2,332 units**) will consume ~3.9% of your monthly budget. Run it once, then never again.
+The final rescore run (1,166 flights × 2 units = **2,332 units**) is ~3.9% of your monthly budget. This is a one-time cost to fix historical data. After this, you never run it again.
 
-### 19.6 Confirmed: Limit 41 in Both Monitors
+### 19.6 Confirmed: LIMIT 41 Is Already in the Code
 
 | File | Line | Limit |
 |------|------|-------|
 | `server2/lib/disruption/monitor.ts` | 297 | `LIMIT 41` |
 | `server/lib/disruption/monitor.ts` | 260 | `LIMIT 41` |
 
-The server (v1) monitor no longer writes to v1 tables (`// [server frozen] riskScoreHistory writes stopped`), so it's effectively idle. Only the server2 monitor is active.
+The server (v1) monitor is effectively idle (writes stopped). Only server2's monitor is active. Both have the 41-flight cap.
 
 ---
 
@@ -824,10 +841,12 @@ These 80 rows are all **future flights** scored at 1:04 AM UTC. They correctly s
 ### 20.2 Going Forward (After Monitor Starts)
 
 Once you start server2 with `npm run dev`:
-1. Every 60 min, the monitor scores up to 41 active flights
-2. Each flight gets a new row with real-time data
+1. Every 60 min, the monitor scores active flights (max 41 to stay within budget)
+2. Each scored flight gets a new row with real-time data
 3. After a flight departs, the NEXT scoring cycle will compute the real delay using `revisedTime`
 4. Carrier health improves over time as more real data accumulates
+
+**Important:** You should keep at most 41 active flights in the database. The `LIMIT 41` in the code protects the budget even if you have more, but extra flights will be skipped and never scored. To add a new flight, archive an old one first.
 
 **The data quality for new rows is excellent:**
 - ✅ Real delays from AeroDataBox
