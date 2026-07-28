@@ -875,6 +875,90 @@ The final rescore (1,166 flights × 2 units = 2,332 units) is ~3.9% of your mont
 
 Server (v1) monitor is idle (writes stopped). Only server2's monitor is active. Both have the cap.
 
+### 19.10 Your Questions Answered Directly
+
+You asked multiple things. Here is each one answered clearly:
+
+---
+
+**Q1: "We are getting 300 flight data from AeroDataBox API how and why? Is that not going above 60k units?"**
+
+Not all 300 get API calls. The SQL says `LIMIT 41`, so only **41 flights per cycle** get an AeroDataBox call. The other 259 are skipped. The monthly cost stays at 41 × 720 × 2 = **59,040 units** regardless of how many flights exist in the DB.
+
+Also: most of the 300 flights already departed (their `departure_date < today`). The monitor's query filters by `departure_date >= today`, so those past flights are excluded. Only flights departing today or tomorrow are picked up. You probably only have ~10-20 flights with departure_date = today or tomorrow.
+
+---
+
+**Q2: "Is it because each flight costs 2 units so 30,000 flights can enter our DB since 30,000 × 2 = 60k units?"**
+
+**That would be correct ONLY if we called AeroDataBox once per flight and never again.** If you do one-time lookups (no time series), then yes: 30,000 flights × 2 units = 60,000 units.
+
+But we are doing time series. Each flight gets called ~36 times over 1.5 days. So the actual cost per flight is ~72 units, not 2 units.
+
+Formula:
+| Approach | Calls/Flight | Cost/Flight | Flights Within Budget |
+|----------|-------------|-------------|----------------------|
+| One-time lookup (no monitoring) | 1 | 2 units | 30,000 |
+| Time series (1 day) | 24 | 48 units | 1,250 |
+| Time series (~1.5 days) | ~36 | ~72 units | ~833 |
+| Time series (30 days — WRONG assumption) | 720 | 1,440 units | 41 |
+
+**We are doing ~1.5 days of time series per flight.** So ~833 unique flights per month, not 41.
+
+---
+
+**Q3: "Our monitoring model is time series — calling AeroDataBox 24 times for the same flight. 24 × 2 = 48 units per flight. Is that right?"**
+
+**Yes, that's right for ONE day of monitoring.** But a flight is active for ~1.5 days (added the day before departure, scored all day, then one more resolution call the next day). So it's more like **~36 calls × 2 = ~72 units per flight**, not 48.
+
+But your thinking is correct: time series means multiple API calls per flight, and each call costs 2 units. The budget limits how many calls we can make, which limits how many flights we can monitor.
+
+---
+
+**Q4: "If we werent doing time series, we could get 30,000 flights' data but only monitored one time. Is my thinking correct?"**
+
+**Yes, exactly right.** Without time series, each flight costs 2 units (one call, one snapshot). With time series, each flight costs ~72 units (36 calls over 1.5 days). The trade-off is:
+
+- **One-time snapshot (30,000 flights):** You know the status at one moment, but can't predict disruptions, track trends, or alert travelers in real time.
+- **Time series (~833 flights):** You monitor each flight every 60 min, can detect developing disruptions, predict delays, and alert travelers. But you can only afford ~833 flights per month.
+
+---
+
+**Q5: "Is the LIMIT 41 meaning we can only monitor 41 flights per month since monitoring is 24 times a day, calling AeroDataBox 24 times per flight, and that's the only way to be under 60k?"**
+
+**This is where the confusion is.** Let me be very precise:
+
+- **LIMIT 41 = 41 flights per CYCLE**, not per month. Every 60 min, 41 flights get an API call.
+- Over one month: 41 × 720 cycles = 29,420 calls = 59,040 units. **This is the correct budget math.**
+- But each flight is only active for ~1.5 days (~36 cycles). So in the time it takes one flight to depart, ~36 new cycles have run, each scoring the same 41 flights.
+- **You don't have the same 41 flights all month.** You have 41 active at any moment, but they rotate as flights depart and new ones are added.
+- Over a month, ~820 unique flights cycle through the 41 slots.
+
+**Think of it like a parking lot with 41 spots:**
+- 41 cars can park at any time
+- Cars leave after ~1.5 days (flight departs)
+- New cars pull in (new flights added)
+- Over a month, ~820 different cars have used the lot
+- But only 41 are ever in the lot at once
+
+**The LIMIT 41 controls how many spots are in the lot**, not how many cars use it per month.
+
+---
+
+**Q6: "Can you confirm whether I'm thinking correctly or incorrectly?"**
+
+Your thinking is **partially correct**:
+- ✅ Time series means multiple API calls per flight (24 per day)
+- ✅ Each call costs 2 units
+- ✅ One-time lookup would allow 30,000 flights
+- ✅ 24 calls × 2 units = 48 units per day per flight (correct math)
+
+Where you went wrong:
+- ❌ A flight is monitored for 30 days (it's ~1.5 days)
+- ❌ LIMIT 41 = 41 per month (it's 41 per cycle)
+- ❌ The same 41 flights are monitored all month (they rotate out after departure)
+- ❌ 300 flights in DB means 300 get API calls (only 41 per cycle, and most already departed)
+
 ---
 
 ## 20. New Data Quality — Is It Good Now?
