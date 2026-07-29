@@ -312,20 +312,20 @@ app.use((req, res, next) => {
       initStripe().catch((err) => {
         console.warn('Stripe initialization failed:', err?.message || err);
       });
-      // Start the Travnr Agency Disruption Monitoring engine. Wrapped in
-      // try/catch so a startup failure (e.g. missing AERODATABOX_API_KEY)
-      // never crashes the server — the engine logs its own warnings and
-      // degrades gracefully when downstream APIs are unavailable.
-      try {
-        startMonitoringEngine();
-      } catch (err: any) {
-        console.error('Disruption monitoring engine failed to start:', err?.message || err);
-      }
-      try {
-        startTestFlightSeeder();
-      } catch (err: any) {
-        console.error('Test flight seeder failed to start:', err?.message || err);
-      }
+      // [disabled 2026-07-28] v1 disruption monitoring and test flight seeder
+      // are disabled. server2/ owns all risk scoring and monitoring (v2 schema).
+      // v1 server handles everything else (auth, bookings, etc.).
+      // See EMAIL_ALERT_INVESTIGATION.md for details.
+      // try {
+      //   startMonitoringEngine();
+      // } catch (err: any) {
+      //   console.error('Disruption monitoring engine failed to start:', err?.message || err);
+      // }
+      // try {
+      //   startTestFlightSeeder();
+      // } catch (err: any) {
+      //   console.error('Test flight seeder failed to start:', err?.message || err);
+      // }
     },
   );
 })();

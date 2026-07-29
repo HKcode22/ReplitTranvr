@@ -1159,9 +1159,13 @@ ORDER BY month;
 | Visibility parsing fixed | ✅ | `"10+"` parsed correctly, fractions handled |
 | Carrier health query fixed | ✅ | `DISTINCT ON` per flight — no duplicate skew |
 | API budget capped | ✅ | `LIMIT 41` already in code — 59,040 units/month |
-| Rescore vs Monitor explained | ✅ | Section 18 above |
+| Test flight seeder disabled | ✅ | Commented out — stops auto-emails (see `EMAIL_ALERT_INVESTIGATION.md`) |
+| v1 monitoring disabled | ✅ | Commented out — only server2/ runs monitoring |
+| CSV quality analyzed (19,717 rows) | ✅ | Section 23 — ICAO nulls (68%), weather nulls (5.5%), tail nulls (59%) |
+| Rescore fixes ICAO nulls + old delays | ✅ | New rows will have ICAO from `iataToIcao()` + real delays |
+| 294 active flights exceeds budget | 🔲 | Need to archive test flights down to 41 max |
 | Old data weather unfixable | 🔲 | Always will be null — skip or impute for ML |
-| Final rescore (carrier health) | 🔲 | ONE last run after `git pull` |
+| Final rescore (carrier health + ICAO fix) | 🔲 | ONE last run — see `RESCORE_COMMANDS.md` |
 | Monitor running | 🔲 | Start with `cd server2 && npm run dev` |
 | ML training ready | 🔲 | Wait 3-5 days after monitor starts |
 
@@ -1183,3 +1187,87 @@ ORDER BY month;
 2. **After flights depart:** The next cycle after departure captures the real delay from `revisedTime`.
 3. **After 3-5 days:** Sufficient delayed flight data accumulated for ML training.
 4. **Monthly:** ~41 flights × 720 cycles = ~29,520 rows per month at 60,000 API units.
+
+---
+
+## 23. CSV Data Quality Analysis (risk_score_history_v2.csv — 19,717 rows, up to Jul 29)
+
+### 23.1 Overview
+
+Analyzed `risk_score_history_v2.csv` (19,717 rows, 67 columns). The data covers flights from May 19 2026 through Jul 29 2026. Below is the full quality breakdown.
+
+### 23.2 Row Count by Date
+
+| Date | Rows | Notes |
+|------|------|-------|
+| May 19 | 45 | Old backfill |
+| May 20 | 48 | Old backfill |
+| Jun 09 | 592 | Old backfill |
+| Jun 10 | 1,023 | Old backfill |
+| Jun 11 | 516 | Old backfill |
+| Jul 20 | 2,355 | First rescore batch |
+| Jul 21 | 6,098 | First rescore batch |
+| Jul 22 | 2,965 | First rescore batch |
+| Jul 23 | 2,492 | First rescore batch |
+| Jul 25 | 712 | Monitor cycles |
+| Jul 26 | 991 | Monitor cycles |
+| Jul 27 | 1,067 | Monitor cycles |
+| Jul 28 | 613 | Monitor cycles |
+| Jul 29 | 200 | Monitor cycles (most haven't departed yet) |
+
+### 23.3 Null Columns — Severity Breakdown
+
+| Severity | Column | Null % | Null Count | Root Cause | Fixable? |
+|----------|--------|--------|------------|------------|----------|
+| 🔴 CRITICAL | `origin_icao` | **68.3%** | 13,469 | v1 code never stored ICAO; v2 writer now populates it from `iataToIcao()` | ✅ **Rescore will fix** (new rows get ICAO) |
+| 🔴 CRITICAL | `destination_icao` | **68.3%** | 13,469 | Same as above | ✅ **Rescore will fix** |
+| 🔴 CRITICAL | `tail_number` | **58.8%** | 11,593 | AeroDataBox didn't return tail for some flights | ⚠️ Partial — depends on API response |
+| 🟡 MODERATE | `destination_weather` | **5.5%** | 1,090 | May-June flights: aviationweather.gov has no historical METAR data | ❌ **Unfixable** (historical weather not available) |
+| 🟡 MODERATE | `day_of_week_risk` | **4.2%** | 832 | Old backfill from May-June — v1 code bug | ✅ **Rescore will fix** |
+| 🟡 MODERATE | `equipment_type` | **3.4%** | 663 | AeroDataBox missing equipment for some flights | ⚠️ Partial |
+| 🟢 LOW | `actual_delay_minutes` | **0.5%** | 97 | 71 of these are Jul 29 future flights (hasn't departed yet); 26 are old May-Jun | ✅ **Rescore will fix all** |
+| 🟢 LOW | `actual_cancelled` | **0.1%** | 25 | Same as above — Jul 29 future flights | ✅ **Rescore will fix** |
+| 🟢 LOW | `actual_status` | **0.5%** | 97 | Same future flights | ✅ **Rescore will fix** |
+| 🟢 LOW | `hours_until_departure` | **<0.1%** | 1 | Single bad row | ⚠️ Negligible |
+| 🟢 LOW | `equipment_group` | **0.8%** | 157 | Derived from null equipment_type | ⚠️ Negligible |
+| 🟢 LOW | `historical_otp_*` | **2.0%** | 397 | AeroDataBox OTP lookup failed for some | ⚠️ Partial |
+| 🟢 LOW | `signal_day_of_week` | **4.2%** | 832 | Same as day_of_week_risk — old data | ✅ **Rescore will fix** |
+
+### 23.4 ICAO Null — Root Cause
+
+All 13,469 ICAO-null rows come from **May-June + Jul 20-23** data, written by the v1 code path or the first rescore run. The IATA codes are present (ORD, ATL, DFW, LAX, JFK, BOS — all US hub airports). The v2 `weatherSignal.ts` function `iataToIcao()` correctly converts IATA to ICAO (e.g., ORD → KORD, DFW → KDFW) by prepending "K" for 3-letter US airport codes. The writer now stores these in the DB. A rescore run will create new rows with ICAO populated.
+
+### 23.5 Non-Zero Delays
+
+| Metric | Count |
+|--------|-------|
+| Total rows | 19,717 |
+| Non-zero delay | 2,360 (12.0%) |
+| Null delay (future flights + old) | 97 (0.5%) |
+| Zero delay | 17,260 (87.5%) |
+
+The 12% non-zero rate is healthy for ML training — enough positive examples to train a classifier, with room to improve as more real data comes in.
+
+### 23.6 What the Rescore Will Fix vs What It Won't
+
+| Issue | Rescore Fixes? | Why |
+|-------|---------------|-----|
+| `origin_icao` / `destination_icao` null | ✅ **Yes** | New INSERT rows will have `icaoCode` from `iataToIcao()` |
+| `actual_delay_minutes` null (past flights) | ✅ **Yes** | Calls AeroDataBox with past date to get final status |
+| `actual_delay_minutes` null (Jul 29 future) | ❌ **No** | Future flights haven't departed yet — rescore won't change this |
+| `day_of_week_risk` null (old data) | ✅ **Yes** | New rows compute this correctly |
+| `tail_number` null | ⚠️ **Partial** | Only if AeroDataBox returns it |
+| `destination_weather` null (May-Jun) | ❌ **No** | Historical weather API not available |
+| Duplicate rows per flight | ✅ **By design** | New rescore row + old row both exist; ML picks latest `scored_at` |
+
+### 23.7 Current State of monitored_flights_v2.csv
+
+| Metric | Value |
+|--------|-------|
+| Total flights | 1,956 |
+| Archived | 1,662 (85%) |
+| **Active** | **294 (15%)** — way over the LIMIT 41 budget! |
+| Test flights | 1,952 (99.8%) |
+| Real (non-test) flights | 4 (0.2%) |
+
+**Problem:** 294 active flights is 7× over the 41-flight budget. The LIMIT 41 prevents API overuse, but only 41 get scored per cycle; 253 flights are skipped. **You need to archive most of these.** The vast majority (99.8%) are test flights from the seeder that was auto-running.

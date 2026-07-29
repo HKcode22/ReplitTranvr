@@ -321,11 +321,14 @@ app.use((req, res, next) => {
       } catch (err: any) {
         console.error('Disruption monitoring engine failed to start:', err?.message || err);
       }
-      try {
-        startTestFlightSeeder();
-      } catch (err: any) {
-        console.error('Test flight seeder failed to start:', err?.message || err);
-      }
+      // [disabled 2026-07-28] Test flight seeder was auto-seeding real flights
+      // from AeroDataBox and sending alert emails to team mates via SendGrid.
+      // See EMAIL_ALERT_INVESTIGATION.md for details.
+      // try {
+      //   startTestFlightSeeder();
+      // } catch (err: any) {
+      //   console.error('Test flight seeder failed to start:', err?.message || err);
+      // }
     },
   );
 })();
