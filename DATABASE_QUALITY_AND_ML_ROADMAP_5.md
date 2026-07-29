@@ -1340,60 +1340,90 @@ The heuristic uses real-time signals that often don't materialize until close to
 
 **Bottom line:** The heuristic is a good **confirmation tool** (83.5% red precision post-departure) but a poor **prediction tool** (12.5% pre-departure recall). This is expected for a real-time monitor that wasn't designed to look into the future. The ML model should significantly improve on this.
 
-### 23.9 ML Training Dataset — Which Rows to Use and Which to Remove
+**Bottom line:** The heuristic is a good **confirmation tool** (83.5% red precision post-departure) but a poor **prediction tool** (12.5% pre-departure recall). This is expected for a real-time monitor that wasn't designed to look into the future. The ML model should significantly improve on this.
 
-#### 23.9.1 How Many Rows to Remove
+### 23.9 ML Training Dataset — What to Use and What to Remove
 
-Starting from 19,717 total rows, here are the filtering strategies:
+#### 23.9.1 Do NOT Feed the Heuristic Score to ML
 
-| Strategy | Rows | Delayed+ Cancelled | What's Removed |
-|----------|------|-------------------|----------------|
-| 1. All rows | 19,717 | 2,360 | Nothing |
-| 2. Remove null delay | 19,620 | 2,360 | **97 rows** — future flights that haven't departed (mostly Jul 29) |
-| 3. Also remove null weather | 18,555 | 2,112 | **1,065 rows** — May-Jun flights with no historical weather |
-| 4. **Latest row per flight** | **1,277** | **866** | **18,343 duplicate rows** — keeps 1 row per flight (latest scored_at) |
-| 5. **Latest + complete (RECOMMENDED)** | **1,277** | **866** | Same as 4 — all latest rows have complete data |
+The heuristic score and tier (`heuristic_score`, `heuristic_tier`, and all `signal_*` columns) are **manual human-crafted math**, not real metrics. Feeding them to the ML model would train it to replicate the heuristic — which we already know has only 12.5% pre-departure recall.
 
-#### 23.9.2 Recommended: Strategy 5 — Latest Row Per Flight, Complete Data Only
+**Instead, use only RAW signals as ML features:**
 
-**1,277 rows (866 delayed/cancelled + 411 on-time).** This is the safest, most valuable dataset.
+| Use as ML Features | Do NOT Use |
+|-------------------|------------|
+| `origin_wind_speed_kt` | `heuristic_score` |
+| `destination_visibility_miles` | `heuristic_tier` |
+| `carrier_avg_delay_24h` | `signal_inbound_aircraft_delay` |
+| `carrier_cancellation_rate_24h` | `signal_origin_weather` |
+| `origin_nas_avg_delay_minutes` | `signal_carrier_health` |
+| `destination_nas_avg_delay_minutes` | `signal_time_of_day` |
+| `inbound_delay_raw_minutes` | (all signal_* columns) |
+| `hours_until_departure` | |
+| `departure_hour` | |
+| `departure_day_of_week` | |
+| `historical_otp_score` | |
+| `equipment_group` | |
 
-**Why remove duplicates?**
-- Each flight is scored ~36 times (every 60 min for 1.5 days)
-- Using all 19,717 rows means the model trains on near-identical copies of the same flight
-- This causes **data leakage**: the model memorizes flight-specific patterns instead of learning general rules
-- The model would appear 95% accurate in testing but fail on new flights
+The raw values ARE the real data. The `signal_*` columns are just the heuristic's weighting of those same values. The ML should learn its own weights, not inherit the heuristic's.
 
-**Why this is safe:**
-- Each flight appears exactly once
-- The latest `scored_at` row has the most complete data (closest to departure, best signals)
-- All 1,277 rows have complete weather, ICAO, and carrier health data
-- 866 delayed/cancelled + 411 on-time = 68% positive class — balanced enough for training
+#### 23.9.2 Do NOT Remove "Duplicate" Rows — Keep ALL Monitor Cycles
 
-**Why remove null delay (97 rows):**
-- These are future flights (Jul 29) that haven't departed yet
-- `actual_delay_minutes` = null means we don't know the outcome
-- Can't train a supervised model without labels
+Each flight is scored ~36 times (every 60 min). These are NOT duplicates — they are **time series data**. Each row captures the state at a specific point in time. The ML needs to see how signals change as departure approaches:
 
-#### 23.9.3 Breakdown of Recommended Dataset
+```
+Flight AA123:
+  T-24h: inbound_delay=0, weather=VFR,  carrier_health=85  → label=on-time
+  T-18h: inbound_delay=5, weather=VFR,  carrier_health=85  → label=on-time
+  T-12h: inbound_delay=20, weather=MVFR, carrier_health=80  → label=on-time
+  T-6h:  inbound_delay=45, weather=IFR,  carrier_health=75  → label=delayed
+  T-2h:  inbound_delay=60, weather=IFR,  carrier_health=75  → label=delayed
+  T+1h:  actual_delay=75  ← FINAL LABEL (post-departure)
+```
 
-| Date | Rows | Delayed/Cancelled | Notes |
-|------|------|-------------------|-------|
-| May 19-20 | 4 | 3 | Very few — old backfill |
-| Jun 09-11 | 310 | 214 | Old backfill, but good delay examples |
-| Jul 20-23 | 673 | 520 | First rescore batch — best quality old data |
-| Jul 25-28 | 241 | 129 | Monitor cycles with real delays |
-| Jul 29 | 49 | 0 | Future flights, on-time so far |
+The pattern of signals **escalating** over time is exactly what the ML should learn. Removing rows breaks that pattern.
 
-#### 23.9.4 Heuristic Performance on the Recommended Dataset
+#### 23.9.3 The Correct Approach for Time-Series ML
 
-On the 1,277 latest-per-flight rows (pre-departure predictions only):
+| Step | What | Why |
+|------|------|-----|
+| 1 | Group rows by `monitored_flight_id` | Each flight is one sequence |
+| 2 | Sort each group by `scored_at` | Chronological order |
+| 3 | Remove flights where ALL rows have null delay | Can't train without a label |
+| 4 | Label EVERY row in the sequence with the flight's final outcome | The final `actual_delay_minutes` from the last scored row |
+| 5 | Train/test split by flight (not by row) | All rows of one flight go to train OR test, never both |
+| 6 | Only use pre-departure rows as model input (`hours_until_departure > 0`) | Can't use post-departure data to predict pre-departure |
 
-| Metric | Performance |
-|--------|-------------|
-| Red precision | 80.0% (4/5) — very few red predictions pre-departure |
-| Amber precision | 55.5% (76/137) — moderate |
-| Green-missed rate | 87.5% — 559/639 delayed flights predicted as green |
-| **ML baseline to beat** | **12.5% pre-departure recall** |
+#### 23.9.4 How Many Rows to Remove
 
-**The ML model's goal:** Beat 12.5% recall. A reasonable target is 60-70% recall at 50% precision using all raw signals (weather, NAS, carrier health, inbound delay, time features, historical OTP) as features.
+| Filter | Rows Removed | Remaining | Why |
+|--------|-------------|-----------|-----|
+| Total rows | — | 19,717 | |
+| Remove rows with null `actual_delay_minutes` | 97 | 19,620 | Future flights with no label |
+| Remove rows with null weather data | 1,065 | 18,555 | May-Jun, no historical weather available |
+| Remove `signal_*` and `heuristic_*` columns from feature set | 0 (columns only) | 18,555 | Don't feed manual math to ML |
+| **Final dataset** | **1,162 rows removed** | **18,555 rows** | **All monitor cycles with complete data** |
+
+#### 23.9.5 Final Dataset Breakdown (18,555 rows)
+
+| Date | Rows | Unique Flights | Delayed/Cancelled | Notes |
+|------|------|----------------|-------------------|-------|
+| May 19-20 | 41 | 4 | 3 | Very little old data |
+| Jun 09-11 | 2,109 | 310 | 1,275 | Old backfill — usable |
+| Jul 20-23 | 13,295 | 673 | 7,603 | First rescore — best quality |
+| Jul 25-28 | 3,110 | 241 | 2,146 | Monitor cycles — real data |
+| Jul 29 | 0 | 0 | 0 | All removed (null delay — future flights) |
+
+**18,555 rows. 1,228 unique flights. Labeled by final outcome per flight.**
+
+#### 23.9.6 ML Baseline — Don't Use Heuristic Score
+
+The heuristic's 12.5% pre-departure recall is NOT a valid ML baseline because the ML won't use the same features. Instead:
+
+| Approach | Expected Recall | Features |
+|----------|----------------|----------|
+| Heuristic (manual math) | 12.5% | Uses signal_* weights |
+| **ML baseline** (simple logistic regression) | **~30-40%** | Raw signals only |
+| **ML target** (LSTM / gradient boosting) | **~60-70%** | Raw signals + time series patterns |
+
+The ML doesn't need to "beat the heuristic." It's a completely different approach using different features.
