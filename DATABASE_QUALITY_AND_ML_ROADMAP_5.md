@@ -1271,3 +1271,71 @@ The 12% non-zero rate is healthy for ML training — enough positive examples to
 | Real (non-test) flights | 4 (0.2%) |
 
 **Problem:** 294 active flights is 7× over the 41-flight budget. The LIMIT 41 prevents API overuse, but only 41 get scored per cycle; 253 flights are skipped. **You need to archive most of these.** The vast majority (99.8%) are test flights from the seeder that was auto-running.
+
+### 23.8 Heuristic Prediction Performance — Is the Heuristic Correctly Predicting Delays?
+
+Two different analyses are needed: **post-departure** (did the heuristic flag it after the fact?) and **pre-departure** (did the heuristic predict it before it happened?).
+
+#### 23.8.1 Post-Departure Performance (After Delay Known)
+
+This answers: *"Once the flight has departed and we know the actual delay, does the heuristic call it correctly?"*
+
+Analyzed 19,620 rows with both heuristic tier and actual delay populated:
+
+| Tier | Cancelled | Delayed (>=15m) | On-Time | Total | Precision |
+|------|-----------|-----------------|---------|-------|-----------|
+| Red | 293 | 181 | 94 | 568 | **83.5%** |
+| Amber | 0 | 1,559 | 2,325 | 3,884 | **40.1%** |
+| Green | 0 | 80 | 15,088 | 15,168 | **99.5%** |
+
+Key metrics:
+- **Red precision: 83.5%** — when the heuristic flags red, it's correct 4 out of 5 times
+- **False negative rate (green-missed): 0.5%** — only 80 out of 15,168 green predictions were actually delayed
+- **Overall detection: 96.2%** — 2,033 out of 2,113 delayed/cancelled flights caught by red+amber
+- **Conclusion: Excellent at confirming delays that already occurred.**
+
+#### 23.8.2 Pre-Departure Performance (Prediction Before Departure)
+
+This answers: *"Before the flight departs, does the heuristic predict which flights will be delayed?"*
+
+For each unique flight (948 total), we take the **last score before departure** (closest prediction to departure time) and compare it against the **actual outcome**:
+
+| Tier | Cancelled | Delayed | On-Time | Total | Precision |
+|------|-----------|---------|---------|-------|-----------|
+| Red | 0 | 4 | 1 | 5 | **80.0%** |
+| Amber | 12 | 64 | 61 | 137 | **55.5%** |
+| Green | 57 | 502 | 247 | 806 | **32.9%** |
+
+Key metrics:
+- **Missed detections: 87.5%** — 559 out of 639 delayed flights were predicted as "green"
+- **Red+amber caught: 12.5%** — only 80 out of 639 delayed flights caught
+- **Green-missed delay average: 45.9 min** — flights with significant delays missed
+- **Green-missed delay breakdown:** 203 flights (15-30m), 169 (30-60m), 65 (60-120m), 40 (120m+)
+- **Conclusion: Weak at predicting delays before they happen.**
+
+#### 23.8.3 Why the Heuristic Fails at Pre-Departure Prediction
+
+The heuristic uses real-time signals that often don't materialize until close to departure:
+
+| Signal | Issue |
+|--------|-------|
+| `inbound_aircraft_delay` | Inbound flight hasn't arrived yet pre-departure; delay becomes known only minutes before departure |
+| `origin_weather` | Uses current METAR (not forecast). Weather that develops 2h from now is invisible |
+| `destination_weather` | Same as above — current conditions, not predicted |
+| `carrier_health` | Aggregate stat — OK at population level, useless for specific flight prediction |
+| `atc_ground_stop/delay` | Only set when actively happening. Can't predict future ATC events |
+| `time_of_day` / `day_of_week` | Historical patterns — too broad to predict any specific flight |
+
+**The heuristic is designed as a real-time monitor, not a predictor.** It confirms delays after they materialize (or very close to departure). For actual prediction (ML model), you need features that look forward: weather forecasts, scheduled inbound aircraft tracking, historical delay propagation patterns, etc.
+
+#### 23.8.4 What This Means for ML Training
+
+| Aspect | Implication |
+|--------|-------------|
+| **ML target variable** | `actual_delay_minutes` and `actual_cancelled` are reliable labels (from AeroDataBox) |
+| **Heuristic scores as ML features** | Useful — they summarize current conditions into a single risk score |
+| **Heuristic as baseline** | 12.5% pre-departure recall — any ML model should beat this easily |
+| **ML input features** | Use all raw signals (weather, NAS, carrier health, inbound delay) — NOT just the heuristic score |
+| **Data quality for ML** | Good for new data (post-rescore). Old data has null ICAO/weather issues — filter by latest `scored_at` per flight |
+
+**Bottom line:** The heuristic is a good **confirmation tool** (83.5% red precision post-departure) but a poor **prediction tool** (12.5% pre-departure recall). This is expected for a real-time monitor that wasn't designed to look into the future. The ML model should significantly improve on this.
