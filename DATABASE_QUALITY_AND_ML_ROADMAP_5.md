@@ -1339,3 +1339,61 @@ The heuristic uses real-time signals that often don't materialize until close to
 | **Data quality for ML** | Good for new data (post-rescore). Old data has null ICAO/weather issues — filter by latest `scored_at` per flight |
 
 **Bottom line:** The heuristic is a good **confirmation tool** (83.5% red precision post-departure) but a poor **prediction tool** (12.5% pre-departure recall). This is expected for a real-time monitor that wasn't designed to look into the future. The ML model should significantly improve on this.
+
+### 23.9 ML Training Dataset — Which Rows to Use and Which to Remove
+
+#### 23.9.1 How Many Rows to Remove
+
+Starting from 19,717 total rows, here are the filtering strategies:
+
+| Strategy | Rows | Delayed+ Cancelled | What's Removed |
+|----------|------|-------------------|----------------|
+| 1. All rows | 19,717 | 2,360 | Nothing |
+| 2. Remove null delay | 19,620 | 2,360 | **97 rows** — future flights that haven't departed (mostly Jul 29) |
+| 3. Also remove null weather | 18,555 | 2,112 | **1,065 rows** — May-Jun flights with no historical weather |
+| 4. **Latest row per flight** | **1,277** | **866** | **18,343 duplicate rows** — keeps 1 row per flight (latest scored_at) |
+| 5. **Latest + complete (RECOMMENDED)** | **1,277** | **866** | Same as 4 — all latest rows have complete data |
+
+#### 23.9.2 Recommended: Strategy 5 — Latest Row Per Flight, Complete Data Only
+
+**1,277 rows (866 delayed/cancelled + 411 on-time).** This is the safest, most valuable dataset.
+
+**Why remove duplicates?**
+- Each flight is scored ~36 times (every 60 min for 1.5 days)
+- Using all 19,717 rows means the model trains on near-identical copies of the same flight
+- This causes **data leakage**: the model memorizes flight-specific patterns instead of learning general rules
+- The model would appear 95% accurate in testing but fail on new flights
+
+**Why this is safe:**
+- Each flight appears exactly once
+- The latest `scored_at` row has the most complete data (closest to departure, best signals)
+- All 1,277 rows have complete weather, ICAO, and carrier health data
+- 866 delayed/cancelled + 411 on-time = 68% positive class — balanced enough for training
+
+**Why remove null delay (97 rows):**
+- These are future flights (Jul 29) that haven't departed yet
+- `actual_delay_minutes` = null means we don't know the outcome
+- Can't train a supervised model without labels
+
+#### 23.9.3 Breakdown of Recommended Dataset
+
+| Date | Rows | Delayed/Cancelled | Notes |
+|------|------|-------------------|-------|
+| May 19-20 | 4 | 3 | Very few — old backfill |
+| Jun 09-11 | 310 | 214 | Old backfill, but good delay examples |
+| Jul 20-23 | 673 | 520 | First rescore batch — best quality old data |
+| Jul 25-28 | 241 | 129 | Monitor cycles with real delays |
+| Jul 29 | 49 | 0 | Future flights, on-time so far |
+
+#### 23.9.4 Heuristic Performance on the Recommended Dataset
+
+On the 1,277 latest-per-flight rows (pre-departure predictions only):
+
+| Metric | Performance |
+|--------|-------------|
+| Red precision | 80.0% (4/5) — very few red predictions pre-departure |
+| Amber precision | 55.5% (76/137) — moderate |
+| Green-missed rate | 87.5% — 559/639 delayed flights predicted as green |
+| **ML baseline to beat** | **12.5% pre-departure recall** |
+
+**The ML model's goal:** Beat 12.5% recall. A reasonable target is 60-70% recall at 50% precision using all raw signals (weather, NAS, carrier health, inbound delay, time features, historical OTP) as features.
