@@ -4,33 +4,51 @@
 
 Runs `server2/scripts/rescore_historical_v2.ts` — calls AeroDataBox API for each past flight to get real delay values, carrier health (with `DISTINCT ON` fix), ICAO codes from `iataToIcao()`, and all weather/signal data. Creates NEW rows in `clean.risk_score_history_v2` alongside old rows.
 
-**Cost:** 2 units per flight at AeroDataBox Tier 1. For ~1,166 flights = ~2,332 units (~3.9% of monthly budget).
+**Cost per flight:** 2 units for the primary call + 3 units for each retry/fallback. The code retries up to 3 times per flight (primary, spaced format, FIDS airport endpoint). For ~1,166 flights, worst case = ~8,400 units (14% of monthly budget).
+
+**⚠️ IMPORTANT: HTTP 429 Rate Limiting**
+
+Previous rescore runs are hitting **HTTP 429 (Too Many Requests)** on every API call. The AeroDataBox monthly quota may be exhausted. See section below for diagnosis and fix.
 
 ---
 
 ## Commands
 
-### 1. Pull Latest Code (includes visib fix + DISTINCT ON fix + disabled seeder)
+### 1. Diagnose API Quota Status First
+
+Run a single test call to see if the API is responding:
+
+```bash
+cd ~/project/server2 && npx tsx -e "
+import { getFlightStatus } from './lib/disruption/flightStatus';
+const result = await getFlightStatus('AA100', '2026-07-28', 'ORD', 'LAX');
+console.log('API result:', result ? 'OK - delay=' + result.delayMinutes : 'NULL - API quota likely exhausted');
+"
+```
+
+If result is NULL or shows HTTP 429: **the monthly quota is exhausted.** Wait until the next billing cycle.
+
+### 2. Pull Latest Code
 
 ```bash
 cd ~/project && git pull origin main
 ```
 
-### 2. Run Rescore (parallel, default concurrency = 5)
+### 3. Run Rescore With Rate Limit Protection (concurrency=1, slow)
 
 ```bash
-cd ~/project/server2 && npx tsx scripts/rescore_historical_v2.ts archived-only
+cd ~/project/server2 && RESCORE_CONCURRENCY=1 AERO_MIN_INTERVAL_MS=2000 npx tsx scripts/rescore_historical_v2.ts archived-only
 ```
 
-This processes flights where `status = 'archived'` or `resolved_status IS NOT NULL`. Uses **5 concurrent workers** by default (no extra dependencies needed — uses built-in `mapConcurrent`).
+Uses **1 worker** (no concurrency) with **2 seconds** between API calls. This is the safest setting to avoid 429 errors. For ~1,166 flights at 2 sec each = ~39 minutes.
 
-### 3. (Optional) Run With Higher Concurrency to Finish Faster
+### 4. (Only if API quota allows) Run With Faster Settings
 
 ```bash
-cd ~/project/server2 && RESCORE_CONCURRENCY=10 npx tsx scripts/rescore_historical_v2.ts archived-only
+cd ~/project/server2 && RESCORE_CONCURRENCY=3 AERO_MIN_INTERVAL_MS=1500 npx tsx scripts/rescore_historical_v2.ts archived-only
 ```
 
-Uses 10 concurrent workers. Each worker independently calls AeroDataBox + aviationweather.gov + nasstatus.faa.gov + carrier health DB query.
+Uses 3 workers with 1.5 second spacing. For ~1,166 flights = ~10 minutes.
 
 ### 4. Verify Results
 

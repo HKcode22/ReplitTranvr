@@ -74,6 +74,11 @@ async function rescoreFlight(flight: FlightToRescore): Promise<void> {
   try {
     const risk = await scoreFlightRisk(flightInput);
 
+    if (!risk.flightStatus) {
+      console.warn(`[rescore] SKIP ${flight.flight_number} ${flight.departure_date} — no flight status from API (likely rate limited)`);
+      return;
+    }
+
     const flightForWriter = {
       id: flight.id,
       flightNumber: flight.flight_number,
