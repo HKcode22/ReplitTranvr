@@ -196,12 +196,17 @@ has_label = [r for r in has_weather
 print(f"  Rows with both origin+dest weather: {len(has_weather)}")
 print(f"  Rows with weather AND delay label: {len(has_label)}")
 
-# Back-propagate label
+# Back-propagate label (BUG FIX v4->v5: on-time/negative REQUIRES terminal evidence)
 flight_outcome = {}
+terminal_status = {}
 for r in rows:
     fid = r["monitored_flight_id"]
     if fid not in flight_outcome:
         flight_outcome[fid] = {"max_delay": 0.0, "cancelled": False}
+        terminal_status[fid] = False
+    st = (r["actual_status"] or "").strip()
+    if st in ("Arrived", "Delayed", "Cancelled"):
+        terminal_status[fid] = True
     if r["actual_delay_minutes"]:
         try:
             d = float(r["actual_delay_minutes"])
@@ -214,12 +219,19 @@ for r in rows:
 
 for r in has_label:
     fo = flight_outcome.get(r["monitored_flight_id"], {"max_delay": 0, "cancelled": False})
-    r["_label"] = 1 if (fo["cancelled"] or fo["max_delay"] >= 15) else 0
+    if fo["cancelled"] or fo["max_delay"] >= 15:
+        r["_label"] = 1
+    elif terminal_status.get(r["monitored_flight_id"], False):
+        r["_label"] = 0     # landed on time: real negative
+    else:
+        r["_label"] = None  # never reached terminal status: NOT on-time -> exclude
 
-pos = sum(1 for r in has_label if r["_label"] == 1)
-neg = len(has_label) - pos
-print(f"  After back-propagation: {pos} positive, {neg} negative ({pos/len(has_label)*100:.1f}% positive)")
-print(f"  Unique flights in clean set: {len(set(r['monitored_flight_id'] for r in has_label))}")
+labeled = [r for r in has_label if r["_label"] is not None]
+pos = sum(1 for r in labeled if r["_label"] == 1)
+neg = len(labeled) - pos
+print(f"  After back-propagation (terminal-evidence only): {pos} positive, {neg} negative ({pos/len(labeled)*100:.1f}% positive)")
+print(f"  Rows excluded (flight never reached terminal status): {len(has_label)-len(labeled)}")
+print(f"  Unique flights in clean set: {len(set(r['monitored_flight_id'] for r in labeled))}")
 print()
 
 # ------------------------------------------------------------------
@@ -267,8 +279,15 @@ def flight_label(rs):
               if (r["actual_delay_minutes"] or "").strip()]
     if delays and max(delays) >= 15:
         return "arrived_late"
+    # BUG FIX (v4 -> v5): "arrived_ontime" REQUIRES terminal evidence (the flight
+    # actually landed: status Arrived/Delayed). The old `or delays` marked a
+    # flight on-time just for having ANY delay value (even 0 on a pre-departure
+    # row) even when it never reached a terminal status -- this mislabeled 151
+    # July flights, concentrated in the tail (Jul 27-29) whose flights had not
+    # finished flying when the export was cut. Unknown = never got terminal
+    # evidence => NOT on-time, must be dropped (E.7 / Addendum C.4).
     statuses = set((r["actual_status"] or "").strip() for r, g in rs)
-    if (statuses & {"Arrived", "Delayed"}) or delays:
+    if statuses & {"Arrived", "Delayed"}:
         return "arrived_ontime"
     return "unknown"
 

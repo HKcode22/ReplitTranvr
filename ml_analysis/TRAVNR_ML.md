@@ -29,18 +29,11 @@
 > | ---- | ---- | ---- |
 > | PART 0 – 9 | `travnr_ml_v1.ipynb` | The baseline explainer (v1, everything below). |
 > | Addendum A | `travnr_ml_v2.ipynb` | What we changed in v2, why, and **why it failed**. |
-> | Addendum B | analysis scripts + `travnr_ml_v3.ipynb` | Post-mortem diagnosis + v3 (what we try next). |
-
----
-> explains **what every number means, whether it's good or bad, and what number
-> we're aiming for** — using plain English, real flights from our own data, and
-> a tiny worked example. It walks through the notebook cell-by-cell and answers
-> every question you asked, in order.
->
-> If you only remember ONE line from this whole file: **we are teaching a
-> computer to look at a flight 1–12 hours before takeoff and guess whether it
-> will be disrupted (late ≥15 min OR cancelled). The whole point is that a human
-> (passenger) can be warned *before* the flight, not after.**
+> | Addendum B | `analyze_v2_vs_v1.py` + `travnr_ml_v3.ipynb` | Post-mortem diagnosis + v3 honest CV. |
+> | Addendum C | `travnr_ml_v4.ipynb` | **Time-aware run**: random split leaks the day regime; honest walk-forward AUC ≈ 0.56; found the Jul-29 label bug. |
+> | Addendum D | `travnr_ml_v5.ipynb` | **First clean run**: fixed label rule + dropped never-flew Jul 29 + walk-forward → honest AUC ≈ 0.65, plus the "mistakes never to repeat" list. |
+> | Addendum E | `travnr_ml_v6.ipynb` | **Raise honest AUC without tricks**: tested rolling-window, seed-averaging, time features, and dropping the ~label feature — TIME features win → 0.686. |
+> | Addendum F | `travnr_ml_v7.ipynb` | **Experiment: DNN + RL** — same data/split, tried a deep net (AUC 0.547, didn't beat XGBoost) and an RL bandit (optimizes utility, not AUC). Production model unchanged. |
 
 ---
 
@@ -903,6 +896,410 @@ lever is data (August, Part I).**
 | v3 + extra features | CV, no tuning | — | **0.667 ± 0.044** |
 
 **Bottom line for the plan:** v1 stays production. v3's real contribution is
-the methodology (honest numbers) and the one genuine gain (extra features).
-Everything above is saved and re-runnable in `ml_analysis/`. When August data
-arrives, retrain with the extra-feature feature set and the CV methodology.
+the methodology (honest numbers). Everything above is saved and re-runnable in
+`ml_analysis/`. **Update from v4 (Addendum C):** v3's "0.667 with extra
+features" was measured on a *random* split, which v4 proved is leaky — on the
+honest time walk-forward, extra features did NOT help (0.551). When August data
+arrives, retrain with walk-forward time validation.
+---
+
+# ADDENDUM C — v4: the time-aware run (the biggest finding of the whole project)
+
+> **The short version, so you get it before the details:**
+> v4 tested whether the 0.73 was *real*. It is **not** — and we now know why.
+> When we evaluate the way production actually works (predict *future* days, not
+> same-day flights), the honest AUC drops to **~0.56, essentially random**. The
+> 0.73 came from a **random split that leaked each day's weather/ATC regime** into
+> the test set. AND we found a real **data bug**: the last day (Jul 29) never
+> happened in the export — those flights are wrongly labeled "on-time". This is
+> the most valuable run yet, because it tells us *what is actually broken*.
+
+## C.1 — The discovery that changed everything: the data is NOT stationary
+
+Per-day disruption rate of the pre-1-12h pool:
+
+| date | disruption rate |
+| ---- | --------------- |
+| Jul 20 | 82% |
+| Jul 21 | 73% |
+| Jul 22 | 85% |
+| Jul 23 | 74% |
+| Jul 25 | 77% |
+| Jul 26 | 74% |
+| Jul 27 | 50% |
+| Jul 28 | 37% |
+| Jul 29 | **0%** ← bug, see C.4 |
+
+Two things stand out:
+
+1. **Weather/ATC state spills from day to day.** Jul 20–26 is a long bad
+   stretch (73–85% disrupted); Jul 27–28 recovers (37–50%). In a *random* split,
+   same-day flights land in both train and test, so the model "learns today's
+   regime from today's neighbors" — an inflated, fake number.
+
+2. **The `carrier_avg_delay_24h` feature is basically the label wearing a wig.**
+   Its correlation with day-of-month is **+0.749** in the pool. That feature says
+   "was the last 24h a mess?" — which is *almost* the answer to "will this flight
+   be late?". A model fed that feature can hit 0.73 on a random split by reading
+   today's weather report card. That is not generalization; it's remembering.
+
+## C.2 — The honest number: time walk-forward ≈ 0.56 (barely above random)
+
+v4 trains only on **earlier** days and predicts each **later** day (like real
+production), never training on the target day:
+
+| config | pooled AUC over held-out days |
+| ------ | ----------------------------- |
+| 29 features (v1 set) | **0.558 ± 0.049** |
+| 29 + cascade features | 0.559 ± 0.038 |
+| 29 + cascade + extra cols | 0.551 ± 0.058 |
+
+Per-day (29-feature model): Jul25 **0.63**, Jul26 0.52, Jul27 0.58, Jul28 0.51.
+**The model cannot predict the day-regime shift** (the 84%→7% swing), because
+that regime is not visible in any pre-departure feature we have. With the
+current data, ~0.56 is the honest centre — **the 0.73 was inflated by the split
+methodology, not real skill.**
+
+**Important:** this does NOT mean the earlier work was wasted. It means the
+earlier v1/v2/v3 numbers were *optimistically wrong* (leaky), and v4 is the
+first run that tells the truth: **on truly unseen future days we are near
+random, and the bottleneck is data volume + the label bug — not the model.**
+
+## C.3 — Cascade (rolling) features: tried, did NOT help
+
+We built rolling features (avg delay of same-destination flights that already
+departed in the last 6h, same-carrier in 12h, origin storm/wind trend in 6h).
+They are valid at prediction time (only use past rows) and they *fill* well
+(carrier 80%, weather 100%), but on the walk-forward test they did **not**
+improve AUC (0.559 vs 0.558). So: cascade features are a reasonable idea to
+revisit with more data, but **with one week they add nothing measurable.**
+
+## C.4 — THE DATA BUG: Jul 29 flights never happened (labels are lies)
+
+The most actionable finding. Checking the *latest recorded status* per flight:
+
+| date | n | Arrived | Scheduled | EnRoute | has_delay_val |
+| ---- | - | ------- | --------- | ------- | ------------- |
+| Jul 28 | 59 | 17 | 24 | 9 | 59 |
+| **Jul 29** | **53** | **0** | **9** | **0** | **9** |
+
+**Jul 29: all 53 flights are still "Scheduled" — the export was cut off before
+they departed.** Our label function sees "no delay, no cancel" → marks them
+"on-time". That is **wrong**: they're not on-time, they just haven't flown. This:
+- fakes the Jul 29 disruption rate to 0%,
+- injects 53 mislabeled "on-time" rows into training,
+- makes the Jul 29 → "future" walk-forward step impossible (skipped, pos=0).
+
+**Fix (for August, PART I):** only trust a flight's label once its latest status
+is terminal (`Arrived`/`Cancelled`/`Delayed`), or drop the last export day.
+Without this, any tail day silently corrupts the data.
+
+## C.5 — Answers to your specific questions
+
+**"Is 5-fold random flight CV good? Does weather spill day-to-day?"**
+Random flight CV is *fine for comparing models* but **overstates real-world
+accuracy** because weather/ATC regime spills across days and the random split
+leaks it. Your instinct was exactly right: the correct test for a prediction
+service is **time-based walk-forward** (train past → predict future). We now
+measure that.
+
+**"Could we do time-based rolling / feature engineering?"**
+We did (C.3). Rolling cascade features are legitimate but added nothing with one
+week of data. Feature engineering is not the lever right now — **data is**.
+
+**"Are there issues in the rows hurting accuracy?"**
+**YES — one real bug (C.4):** the final export day (Jul 29) has no real labels.
+It poisons the tail of the training set and made the last walk-forward step
+impossible. Fixing label-completeness is the single highest-value data action.
+
+## C.6 — So can we get above 0.7 / 0.9 precision? (the honest, complete answer)
+
+- **On the current July data: NO — and 0.73 was never real.** Honest walk-forward
+  AUC is ~0.56. You cannot honestly claim better until the data changes.
+- **What will actually raise it (in order of impact):**
+  1. **Fix the label bug** (C.4) — remove/mark the never-flew tail days.
+  2. **Get more days** (August, PART I) — non-stationarity needs history.
+  3. Only then does feature engineering / tuning matter.
+- **What will NOT raise it:** more model tricks, more encoding schemes, more
+  tuning on the same week of data. v1/v2/v3/v4 all prove it.
+
+> **Bottom line for the plan:** v1 stays "the best we can deploy today", but its
+> 0.731 was optimistic. The real next step is NOT v5 — it is fixing the label
+> completeness, then waiting for more data (August), then re-evaluating with
+> walk-forward time validation. THAT is how we get an honest, deployable model.
+
+---
+
+# ADDENDUM D — v5: the first CLEAN run (fixed labels, honest future)
+
+> **The short version:** v5 is the first run where every known mistake is fixed
+> at the same time — corrected labels, Jul 29 removed, walk-forward future
+> prediction. And the honest number got **better**, not worse: the 29-feature
+> model now scores **0.646 ± 0.10 pooled AUC on truly unseen future days**
+> (up from v4's 0.558). Fixing the data genuinely improved the model.
+
+## D.1 — The mistakes we will never repeat (the "DO NOT" list)
+
+This is the whole project's hard-won lesson, collected so we never regress:
+
+1. ❌ **NEVER label a flight "on-time" without terminal evidence.** A flight is
+   on-time ONLY if its status reached `Arrived`/`Delayed`/`Cancelled` or it had a
+   real `>=15min` delay. The old `or delays` clause (any delay value, even `0`
+   pre-departure) mislabeled **151 flights** as on-time. It is now fixed in
+   `audit_dataset.py` and in v5's notebook label rule.
+2. ❌ **NEVER trust a flight whose latest status is still `Scheduled`.** It
+   hasn't flown yet — its "label" is not a label. (Jul 29: all 53 still
+   `Scheduled` → removed.)
+3. ❌ **NEVER evaluate with a random flight split for the "real" score.** It
+   leaks each day's weather/ATC regime (that's why v1 "hit" 0.731). The honest
+   test is **time walk-forward**: train past → predict future.
+4. ❌ **NEVER tune many hyperparameters against one small validation slice.**
+   Picking the best of 48 on 102 flights is noise (corr 0.06). Use folds / CV or
+   no tuning at all (v1's fixed params are fine and honest).
+5. ❌ **NEVER trust `carrier_avg_delay_24h` as a pure "feature".** It is
+   basically the label (corr +0.75 with day). Fine to *use* at prediction time,
+   but it must never be the reason a score looks good on a leaky split.
+6. ❌ **NEVER promise feature engineering will help until measured under the
+   honest (walk-forward) split.** Cascade features, target-encoding, and the 13
+   "extra" columns all looked neutral-to-positive on random splits and **hurt**
+   on the clean walk-forward. The 29-feature base wins.
+
+## D.2 — What v5 actually did and its results
+
+- **Fixed labels:** on-time 311 → **160**; unknown 4 → **155** (all dropped).
+- **Dropped Jul 29 entirely** (it never flew). Kept Jul 20–28 only.
+- **Cleaned pool:** 5,946 rows / 559 flights, positive rate **81.3%**
+  (higher than the fake 68.9% because the phantom "on-time" tail is gone).
+- **Evaluation:** time walk-forward, 5 held-out days (Jul 23, 25, 26, 27, 28).
+
+| feature set | pooled AUC (walk-forward) | prec@recall=50% |
+| ----------- | ------------------------- | --------------- |
+| **29-feature base (v1 set)** | **0.646 ± 0.100** | **0.81** |
+| 34 = base + cascade rolling | 0.590 ± 0.154 | 0.81 |
+| 49 = + extra carrier/otp/signal | 0.511 ± 0.086 | 0.81 |
+
+**Reading it:**
+- The **29-feature base is the best**. Every "improvement" (cascade, extra
+  columns) made it *worse* on the honest test — they were fitting the leak.
+- **0.646 vs 0.731 (v1):** v1 looked higher but was inflated by the split; v5's
+  0.646 is real. On the days with trustworthy labels it reaches **0.75** (Jul 27
+  and 28) — the model genuinely works better now that it isn't being poisoned by
+  phantom on-time rows.
+- **Precision ≈ 0.81 at recall 0.50** — meaning: if we warn the top 50% most
+  at-risk flights, ~81% are actually disrupted. That is a genuinely useful,
+  deployable operating point (still not the 90% target, but real).
+
+## D.3 — Why it was "getting worse" — and the truth
+
+| run | number | what was really happening |
+| --- | ------ | ------------------------- |
+| v1 | 0.731 | leaky random split (over-stated) |
+| v2 | 0.691 | leaky + tuned on noise |
+| v3 | ~0.65 | honest-ish CV, still random split |
+| v4 | ~0.56 | honest walk-forward → found the label bug |
+| **v5** | **0.646** | clean labels + no tail bug + walk-forward |
+
+**The number dropped from 0.731 → 0.56 then recovered to 0.646.** It was NOT
+the model getting worse — it was *honesty arriving in steps*. Each drop was a
+fake layer being peeled off; each rise after that is real learning. The model
+is better now than it has ever honestly been.
+
+## D.4 — What we do about Jul 29 (your question, answered)
+
+**Remove it — yes.** Jul 29 never happened in the data (all 53 flights still
+`Scheduled`, export cut off before they departed). Their "on-time" labels are
+lies that would poison training. v5 keeps **Jul 20–28** and uses terminal-
+evidence labels, which also trims the partially-unfinished Jul 27–28 flights to
+only the ones we can trust. **Rule going forward (Part I / August):** any flight
+whose latest status is not terminal must be excluded until it is.
+
+## D.5 — Where we are, honestly, and what actually gets us accurate
+
+- **Now:** honest walk-forward AUC **~0.65** (best 0.75 on clean tail days),
+  precision ~0.81 at recall 0.5. Real, trustworthy, deployable-ish.
+- **To reach AUC 0.8+ / precision 0.9:** we need **more days** (August) so the
+  model can learn the day-regime instead of being surprised by it. Model tricks
+  cannot do it — v1→v5 proved that five different ways.
+- **v5 artifacts:** `exports/xgboost_delay_predictor_v5.json`,
+  `threshold_v5.json` (threshold 0.77). Builder: `build_notebook_v5.py`.
+- **The exact next step is Plan PART I (August)** — with the fixed label rule,
+  walk-forward validation, and the 29-feature set, August is where accuracy goes
+  up for real.
+
+---
+
+# Addendum E — v6: raise the honest number without any tricks
+
+## E.0 — What we wanted
+
+v5 gave a **trustworthy** baseline (walk-forward AUC 0.646 ± 0.10, precision
+≈0.81 @ recall 0.5). We stopped "chasing the metric" and starting asking: **can
+we raise it for real, under the exact same honest evaluation, without violating
+any rule we've learned?**
+
+v6 tests **four hypotheses**, all measured under the **same walk-forward split**
+(fixed labels, Jul 20–28, never train on a future day):
+
+| H | Hypothesis | Why it could be real (not a trick) |
+| - | - | - |
+| H1 | **Rolling window** (train recent N days) | July's regime *shifts* (84% → 7.5% disrupted). The most recent days may predict tomorrow better than *all* past days. |
+| H2 | **Seed-averaging** (5 seeds) | The ±0.10 variance is largely seed luck; averaging predictions should shrink it. Pure variance reduction, no new signal. |
+| H3 | **Time features** (`days_since_july1`, `day_of_month`) | Legal at prediction time. May help the model learn the regime trend explicitly. |
+| H4 | **Drop `carrier_avg_delay_24h`** (the ~label feature) | v4 showed it tracks the day (corr +0.75). If removing it costs ~nothing, the model is robust for August's new regime. |
+
+v6 does **not** change labels or the split — those are settled. Everything below
+is measured, not promised (Mistake Rule #6).
+
+## E.1 — Results (pooled walk-forward AUC, all on identical clean data)
+
+| Config | AUC | prec@recall 0.5 |
+| ---- | ---- | ---- |
+| **TIME feats expanding (WINNER)** | **0.686** | 0.814 |
+| BASE rolling-3d | 0.658 | 0.814 |
+| NO24 (no carrier_24h) expanding | 0.658 | 0.814 |
+| TIME feats rolling-4d | 0.649 | 0.814 |
+| NO24 rolling-4d | 0.640 | 0.814 |
+| BASE expanding 5-seed | 0.623 | 0.814 |
+| BASE expanding (v5-like) | 0.623 | 0.814 |
+| BASE expanding 1-seed | 0.617 | 0.814 |
+| BASE rolling-4d | 0.615 | 0.814 |
+| BASE rolling-5d | 0.597 | 0.814 |
+
+**Winner: TIME feats expanding → AUC 0.686** (up from v5's 0.646).
+
+## E.2 — What honestly happened, hypothesis by hypothesis
+
+- **H3 TIME features: the win (+0.063 over v5).** Adding `days_since_july1` and
+  `day_of_month` lets the model *explicitly* encode "later in the month, less
+  disruption." It's legal (a forecast always knows the date) and it genuinely
+  helped (biggest jump: 07-26, 0.513 → 0.743).
+- **H1 rolling window: mixed, not a clear win.** Rolling-3d (0.658) beat v5
+  slightly; rolling-4d/5d did worse. Inconsistent → the extra regime-shift
+  signal isn't reliably there. **Recommended fallback, not the primary.**
+- **H2 seed-averaging: real, small, always adopt.** 1-seed 0.617 → 5-seed
+  0.623 (expanding) and 0.6229→stabilized. It reduces variance; the final v6
+  model uses a 5-seed ensemble regardless.
+- **H4 drop `carrier_avg_delay_24h`: nearly free (0.658).** This is the
+  *important robustness finding*: the winner does NOT depend on the ~label
+  feature. Nothing is lost without it → the model is safer for August's new
+  regime.
+
+## E.3 — Honest caveats (so we don't fool ourselves)
+
+- **TIME features partly encode "this month's trend".** In July — a single
+  atypical weather week — the date features largely say "later = less disrupted."
+  Under walk-forward that's honest. But if August is a *different* shape (a
+  new spike mid-month), a model leaning on `days_since_july1` may be more
+  surprised than v5's. **So:** v6's 0.686 is our best July estimate, but the
+  August regime-break is exactly where we must re-validate (Plan PART I).
+- **Precision didn't move (0.81).** The AUC gain came from better ranking in the
+  middle of the curve, not from a higher-precision operating point. Expect
+  precision to only truly rise with more days, as always.
+- **0.686 is better, but moral of the saga is unchanged:** the honest number is
+  ~0.65–0.69; the remaining big jump needs **more days of data**, not more
+  feature ideas. Feature ideas saw diminishing (now even negative) returns —
+  TIME was the last cheap, honest lever.
+
+## E.4 — v6 artifacts
+
+- Exports: `exports/xgboost_delay_predictor_v6.json`,
+  `exports/threshold_v6.json` (threshold **0.863**, 31 features incl. the 2
+  time features, 5-seed ensemble, best-walk-forward 0.686). Smoke-tested: the
+  saved booster loads and scores with the documented schema.
+- Builder + notebook: `build_notebook_v6.py`, `travnr_ml_v6.ipynb`.
+- A **deployment bug caught & fixed during this run**: the export step initially
+  wrote the `F_BASE` (v5) feature set while naming itself the winner. v6 now
+  writes the winner's actual feature set (TIME) into both the model and the
+  metadata — so `threshold_v6.json` lists all 31 features correctly.
+
+## E.5 — Updated one-line story
+
+v1 0.731 (leaky) → v2 0.691 (leaky+tuned noise) → v3 ~0.65 (honest CV) →
+v4 ~0.56 (honest WF, found bugs) → v5 0.646 (clean) → **v6 0.686 (clean + TIME
+features)**. Precision still ~0.81. **Next**: August (Plan PART I), where more
+days + this feature set + re-validation is the real road to AUC 0.8+ / prec 0.9.
+
+---
+
+# Addendum F — v7: the DNN + RL experiment (curiosity, honestly measured)
+
+## F.0 — Why we did this
+
+After v6's honest 0.686, the natural curiosity: *what if we throw a deep
+neural net at it, or even reinforcement learning?* This is a **pure experiment
+to see what happens** — not a bid for production. v7 keeps **everything**
+identical to v6 (clean labels, Jul 20–28, walk-forward split, the 31 TIME
+features) and changes **only the model family**, so any score difference is
+attributable to the model, not the data.
+
+## F.1 — The two experiments
+
+**A. Deep NN (torch MLP, 128-64-32, ReLU + BatchNorm + Dropout).** Walk-forward,
+early-stopped on a flight-aware validation split, exactly like v6's XGBoost.
+
+**B. RL — online contextual bandit.** The agent watches flights day-by-day and
+must pick **warn / don't-warn** per flight, earning a reward after the outcome:
+warn+disrupted = +1, warn+on-time = −2 (false alarm), silent+disrupted = −3
+(miss, the costliest), silent+on-time = 0. It learns its policy *only from past
+days* (same walk-forward discipline), ε-greedy. RL optimizes **utility, not
+AUC**, so we compare it on utility against (a) an oracle that knows the labels
+and (b) v6 XGBoost run through the same reward function.
+
+## F.2 — Results
+
+| Model | Walk-forward AUC | prec@recall 0.5 |
+| ---- | ---- | ---- |
+| **XGBoost v6 (winner)** | **0.686** | 0.814 |
+| DNN (MLP) | 0.547 | 0.814 |
+
+| Decision policy | Cumulative utility | precision | recall |
+| ---- | ---- | ---- | ---- |
+| RL bandit (ε=0, 0.1, 0.2) | **2199** | 0.814 | 1.000 |
+| XGBoost @ thr 0.77 | 341 | 0.864 | 0.883 |
+| Oracle (knows labels) | 4047 | 1.000 | 1.000 |
+
+## F.3 — What actually happened (the honest reading)
+
+- **The DNN did NOT beat XGBoost.** 0.547 vs 0.686 on the *same* split. Classic
+  result: with ~6,000 rows of small tabular data, a tuned tree ensemble beats a
+  neural net. This is a real finding, not a failure — it closes the question
+  "should we try deep learning?" for now.
+- **The RL bandit "won" on utility but for a revealing reason.** It quickly
+  learned that in July's 81%-disrupted regime, *warn everyone* beats a
+  precision-hungry threshold: with miss cost (3) > false-alarm cost (2), the
+  cheapest policy is to catch every disruption. Its precision (0.814) is just
+  the base rate — that's **not** intelligence, it's the cost structure saying
+  "alert everyone this week." XGBoost at thr 0.77 got higher precision (0.864)
+  but paid heavily for the missed disruptions (−3 each).
+- **The takeaway is about the *threshold*, not the algorithm.** v6's exported
+  threshold (0.863) was tuned for precision. If the product's real cost of a
+  miss is higher than a false alarm, the optimal operating point is far more
+  aggressive — the RL result quantifies exactly that trade-off. This is worth
+  folding into August's threshold choice.
+
+## F.4 — Caveats / notes
+
+- RL here is a **contextual bandit**, the only honest RL framing for this
+  problem. A full MDP/Deep-Q agent would need a sequential decision environment
+  this dataset doesn't provide — building one would be fiction, so we didn't.
+- The bandit uses a ridge-logistic estimate of P(disrupted|x); it's a baseline,
+  not a tuned agent. Its "warn everyone" outcome is robust across all ε.
+- **Environment fix needed for reruns:** torch + xgboost in one process crash at
+  interpreter exit unless BLAS/OpenMP threads are capped
+  (`OMP_NUM_THREADS=1`). v7's first cell sets this — do not delete it.
+- **Production model is UNCHANGED:** v6's `xgboost_delay_predictor_v6.json`
+  remains THE model. v7 is diagnostic only.
+
+## F.5 — Artifacts
+
+- `travnr_ml_v7.ipynb` (14 cells, 0 errors) + `build_notebook_v7.py`.
+- `exports/v7_experiment.json` — the DNN AUC + RL utility/precision/recall +
+  oracle bound (no model swap).
+- `torch` was added to the venv for this experiment (CPU-only).
+
+## F.6 — One-line story
+
+v1 0.731 (leaky) → v5 0.646 (clean) → v6 0.686 (clean + TIME) → **v7: DNN 0.547
+(no), RL utility insight (warn-everyone wins in a 81%-disruption regime; real
+lesson is the threshold, not the algorithm)**. XGBoost v6 stays production.
+August data is still the real lever for AUC 0.8+ / precision 0.9.

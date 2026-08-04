@@ -1,0 +1,29 @@
+{
+  "experiment": "v7 DNN vs RL vs XGBoost (same data/split/features as v6)",
+  "dnn_walkforward_auc": 0.5467,
+  "dnn_prec_at_rec0_5": 0.8141,
+  "xgb_v6_reference_auc": 0.686,
+  "rl_bandit_utility": {
+    "eps_0.0": 2199,
+    "eps_0.1": 2199,
+    "eps_0.2": 2199
+  },
+  "rl_prec_rec": {
+    "eps_0.0": [
+      0.814,
+      1.0
+    ],
+    "eps_0.1": [
+      0.814,
+      1.0
+    ],
+    "eps_0.2": [
+      0.814,
+      1.0
+    ]
+  },
+  "xgb_utility_at_thr0_77": 341,
+  "oracle_utility": 4047,
+  "production_model_unchanged": "v6 xgboost_delay_predictor_v6.json remains THE model",
+  "created_utc": "2026-08-04T11:24:04Z"
+}

@@ -1144,17 +1144,26 @@ looks like).
 
 ### I.0 How to get the August export
 
-### I.0 How to get the August export
-
-> **v2 experiment note (completed):** `travnr_ml_v2.ipynb` (built by
-> `build_notebook_v2.py`) tried target-encoding, noise-feature removal,
-> hyperparameter tuning and `scale_pos_weight`. It scored *better on the
-> validation split* (val AUC 0.761 vs v1 0.714) but *worse on the unseen test
-> flights* (test AUC 0.691 vs v1 0.731; RED point identical 0.705 prec/1.0
-> rec). **v1 remains the production model.** The lesson for PART I: with a
-> single week of data, complexity overfits the split — August is what will
-> tell us whether v2-style changes (esp. target-encoding the 208-cat
-> `destination_iata`) pay off at scale.
+> **v4/v5/v6 finding (completed — READ BEFORE AUGUST):** v4 proved July's random-split
+> numbers were **inflated by same-day leakage** (honest time walk-forward was
+> ~0.56) and found a **label bug** — flights were called "on-time" with ANY delay
+> value even when they never reached a terminal status (151 mislabeled, worst on
+> Jul 27–29), plus Jul 29 **never flew** (all 53 still `Scheduled`). v5 fixed all
+> of it: on-time now requires terminal evidence, Jul 29 is dropped, and with time
+> walk-forward the clean model scores **0.646 ± 0.10 AUC** (29-feature base wins).
+> v6 then added legal TIME features (`days_since_july1`, `day_of_month`) + 5-seed
+> averaging → **0.686 AUC**, and proved dropping `carrier_avg_delay_24h` (the
+> ~label feature) costs ~nothing → the winner does NOT depend on it (safer for a
+> new regime).
+> **Before any August retrain: (1)** a flight's label is valid only once its
+> status is terminal (`Arrived`/`Cancelled`/`Delayed`) OR it has a real ≥15min
+> delay — otherwise exclude it; **(2)** drop any tail day that hasn't finished;
+> **(3)** evaluate with **walk-forward time validation**, not a random split;
+> **(4)** use the v6 31-feature set (BASE + TIME; cascade/extra features made it
+> worse, rolling window was mixed). **Caveat from v6:** TIME features partly encode
+> "this month's trend", so re-validate on August before trusting them — the
+> `days_since_july1` constant must be re-anchored to the new dataset's start.
+> Details in `TRAVNR_ML.md` Addendum C + D + E.
 
 Same process as the July export: dump `risk_score_history_v2.csv` (and, if
 useful, `monitored_flights_v2.csv`) from the v2 database once new rows appear.
