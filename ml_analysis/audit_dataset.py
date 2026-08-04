@@ -220,3 +220,82 @@ pos = sum(1 for r in has_label if r["_label"] == 1)
 neg = len(has_label) - pos
 print(f"  After back-propagation: {pos} positive, {neg} negative ({pos/len(has_label)*100:.1f}% positive)")
 print(f"  Unique flights in clean set: {len(set(r['monitored_flight_id'] for r in has_label))}")
+print()
+
+# ------------------------------------------------------------------
+print("=== 11. ARRIVED vs CANCELLED vs UNKNOWN (label coverage, E.7) ===")
+# Final outcome per flight is read from ANY row of that flight (incl. rows that
+# are excluded as feature rows, e.g. the >72h rescore pass), because the
+# flight-status API only reports the real outcome in those late rescore rows.
+# A flight with no row that ever shows a real outcome is UNKNOWN -> drop.
+from collections import defaultdict
+
+def dep_dt(r):
+    dep_date = (r["departure_date"] or "")[:10]
+    dep_time = (r["departure_time"] or "").strip()
+    try:
+        if ":" in dep_time and "T" not in dep_time and len(dep_time) <= 5:
+            return datetime.fromisoformat(f"{dep_date}T{dep_time}:00Z".replace("Z", ""))
+        if dep_time.endswith("Z"):
+            return datetime.fromisoformat(dep_time.replace("Z", ""))
+    except Exception:
+        pass
+    return datetime.fromisoformat(dep_date)
+
+def gap_hours(r):
+    try:
+        stt = datetime.fromisoformat((r["scored_at"] or "")[:19].replace("Z", ""))
+        return (stt - dep_dt(r)).total_seconds() / 3600
+    except Exception:
+        return None
+
+by_flight = defaultdict(list)
+for r in rows:
+    g = gap_hours(r)
+    if g is None:
+        continue
+    by_flight[r["monitored_flight_id"]].append((r, g))
+
+july_flights = [fid for fid, rs in by_flight.items()
+                if (rs[0][0]["departure_date"] or "")[:7] == "2026-07"]
+
+def flight_label(rs):
+    cancelled = any((r["actual_cancelled"] or "").strip().lower() == "true" for r, g in rs)
+    if cancelled:
+        return "cancelled"
+    delays = [float(r["actual_delay_minutes"]) for r, g in rs
+              if (r["actual_delay_minutes"] or "").strip()]
+    if delays and max(delays) >= 15:
+        return "arrived_late"
+    statuses = set((r["actual_status"] or "").strip() for r, g in rs)
+    if (statuses & {"Arrived", "Delayed"}) or delays:
+        return "arrived_ontime"
+    return "unknown"
+
+lab = Counter(flight_label(by_flight[f]) for f in july_flights)
+tot = len(july_flights)
+for k in ["cancelled", "arrived_late", "arrived_ontime", "unknown"]:
+    print(f"  {k:<15}: {lab[k]:>4} ({lab[k]/tot*100:.1f}%)")
+print(f"  {'disrupted':<15}: {lab['cancelled']+lab['arrived_late']:>4} ({(lab['cancelled']+lab['arrived_late'])/tot*100:.1f}%)  <- cancelled + late")
+print(f"  {'clean':<15}: {lab['arrived_ontime']:>4} ({lab['arrived_ontime']/tot*100:.1f}%)")
+print(f"  {'unknown (DROP)':<15}: {lab['unknown']:>4} ({lab['unknown']/tot*100:.1f}%)")
+
+# Where does the >=15min / cancelled label first become visible? For most
+# positive flights it only appears in the >72h rescore rows -> labels must be
+# read from ALL rows of the flight, never deleted with the stale features (E.7).
+resolved_gap = []
+for fid in july_flights:
+    rs = sorted(by_flight[fid], key=lambda x: x[1])
+    for r, g in rs:
+        st = (r["actual_status"] or "").strip()
+        dl = (r["actual_delay_minutes"] or "").strip()
+        canc = (r["actual_cancelled"] or "").strip().lower() == "true"
+        if canc or (dl and float(dl) >= 15):
+            resolved_gap.append(g)
+            break
+le24 = sum(1 for g in resolved_gap if g <= 24)
+le72 = sum(1 for g in resolved_gap if 24 < g <= 72)
+gt72 = sum(1 for g in resolved_gap if g > 72)
+print(f"  Positive flights ({len(resolved_gap)}): >=15min/cancel label FIRST appears <=24h {le24}, 24-72h {le72}, >72h (rescore) {gt72}")
+print(f"  => {gt72}/{len(resolved_gap)} positive flights' labels ONLY exist in the >72h rescore rows we keep for labels, not features (E.7)")
+print()

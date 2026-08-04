@@ -13,6 +13,7 @@ Usage: python3 ml_analysis/deepdive_periods.py
 """
 import csv
 from collections import defaultdict, Counter
+from datetime import datetime
 
 CSV = "risk_score_history_v2.csv"
 
@@ -111,7 +112,122 @@ print("  => this is RAW data from the flight-status API (inbound aircraft delay 
 print("     NOT heuristic math. It should be re-added as a feature.")
 print()
 
-print("=== 6. CONSTANT/NULL AUDIT WITHIN THE KEPT JULY FEATURES ===")
+print("=== 8. PRE/POST CONFOUNDS + SPLIT OPTIONS (Part E) ===")
+# Rebuild the final usable set (July, weather+label, equipment, not stale)
+def dep_dt(r):
+    dep_date = (r["departure_date"] or "")[:10]
+    dep_time = (r["departure_time"] or "").strip()
+    try:
+        if ":" in dep_time and "T" not in dep_time and len(dep_time) <= 5:
+            return datetime.fromisoformat(f"{dep_date}T{dep_time}:00Z".replace("Z", ""))
+        if dep_time.endswith("Z"):
+            return datetime.fromisoformat(dep_time.replace("Z", ""))
+    except Exception:
+        pass
+    return datetime.fromisoformat(dep_date)
+
+def gap_hours(r):
+    try:
+        stt = datetime.fromisoformat(r["scored_at"][:19].replace("Z", ""))
+        dt = dep_dt(r)
+        return (stt - dt).total_seconds() / 3600
+    except Exception:
+        return None
+
+usable = [r for r in rows if (r["departure_date"] or "")[:7] == "2026-07"
+          and r["destination_visibility_miles"] and r["destination_visibility_miles"].strip()
+          and r["origin_visibility_miles"] and r["origin_visibility_miles"].strip()
+          and r["actual_delay_minutes"] and r["actual_delay_minutes"].strip() != ""
+          and r["equipment_group"] and r["equipment_group"].strip()
+          and (g := gap_hours(r)) is not None and g <= 72]
+print(f"Final usable: {len(usable)} rows, {len(set(r['monitored_flight_id'] for r in usable))} flights")
+
+pre = [r for r in usable if float(r["hours_until_departure"]) > 0]
+post = [r for r in usable if float(r["hours_until_departure"]) <= 0]
+print(f"  pre rows: {len(pre)} ({len(pre)/len(usable)*100:.0f}%), post rows: {len(post)} ({len(post)/len(usable)*100:.0f}%)")
+
+# Confound: post% by departure hour
+print("  post-departure share by departure hour:")
+tot = defaultdict(lambda: [0, 0])
+for r in usable:
+    h = int(r["departure_hour"])
+    tot[h][1] += 1
+    if float(r["hours_until_departure"]) <= 0:
+        tot[h][0] += 1
+for h in sorted(tot):
+    p, t = tot[h]
+    if t >= 50:
+        print(f"    hour {h:>2}: {p/t*100:>4.0f}% post")
+
+# Lead-time: train pre vs test pre
+train = [r for r in usable if (r["departure_date"] or "")[:10] in ("2026-07-20", "2026-07-21", "2026-07-22")]
+test = [r for r in usable if (r["departure_date"] or "")[:10] >= "2026-07-25"]
+tp = sorted(float(r["hours_until_departure"]) for r in train if float(r["hours_until_departure"]) > 0)
+ep = sorted(float(r["hours_until_departure"]) for r in test if float(r["hours_until_departure"]) > 0)
+print(f"  train pre median lead: {tp[len(tp)//2]:.1f}h   test pre median lead: {ep[len(ep)//2]:.1f}h")
+
+# Pre rows at production lead times (1-12h) by date
+from collections import Counter as _C
+preprod = [r for r in usable if 1 <= float(r["hours_until_departure"]) <= 12]
+print(f"  pre rows at lead 1-12h (production-like): {len(preprod)}")
+print("    by date:", dict(sorted(_C((r['departure_date'] or '')[:10] for r in preprod).items())))
+print()
+
+
+# v1 risk_score_history.csv stores weather inside the 'signals' JSON column.
+# Verify what it contains per flight-departure month, and whether v1 can fix
+# v2's May/June weather (origin YES, destination NO).
+import json
+
+V1_HIST = "risk_score_history.csv"
+V1_FLIGHTS = "monitored_flights.csv"
+
+v1_mf = {}
+try:
+    with open(V1_FLIGHTS) as f:
+        for r in csv.DictReader(f):
+            v1_mf[r["id"]] = r
+except FileNotFoundError:
+    v1_mf = None
+
+if v1_mf is not None:
+    v1_by_month = {}
+    with open(V1_HIST) as f:
+        for r in csv.DictReader(f):
+            dep = (v1_mf.get(r["monitored_flight_id"], {}).get("departure_date") or "")[:7]
+            v1_by_month.setdefault(dep, []).append(r)
+
+    print("v1 weather coverage by flight-departure month (from signals JSON):")
+    for m in sorted(v1_by_month):
+        sub = v1_by_month[m]
+        n = len(sub)
+        o_full = d_full = d_cat = 0
+        for r in sub:
+            try:
+                s = json.loads(r["signals"])
+                ow = s.get("originWeather") or {}
+                dw = s.get("destinationWeather") or {}
+                if ow.get("visibilityMiles") is not None and ow.get("ceilingFt") is not None:
+                    o_full += 1
+                if dw.get("visibilityMiles") is not None and dw.get("ceilingFt") is not None:
+                    d_full += 1
+                if dw.get("flightCategory") is not None:
+                    d_cat += 1
+            except Exception:
+                pass
+        print(f"  {m}: rows={n} origin_full={o_full}/{n} "
+              f"dest_full={d_full}/{n} dest_cat_only={d_cat}/{n}")
+
+    print()
+    print("=> v1 May/June has ORIGIN weather (99-100%) but NO destination weather")
+    print("   (only flightCategory). v1 July has full origin AND destination weather.")
+    print("=> So v1 can fix the ORIGIN weather of v2's rescored May/June rows,")
+    print("   but destination weather for May/June is permanently unavailable.")
+else:
+    print("(v1 tables not found; run from repo root)")
+
+print()
+
 keep = [
     "carrier_iata", "origin_iata", "destination_iata",
     "hours_until_departure", "departure_hour", "departure_day_of_week",
