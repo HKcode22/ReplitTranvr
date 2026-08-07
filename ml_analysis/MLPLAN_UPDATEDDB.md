@@ -82,21 +82,35 @@ v1 **can** fix their ORIGIN weather: all 1,134 rows (100%) have a v1 real-time
 origin-weather reading for the same flight. But v1 **cannot** fix their
 destination weather — v1 never stored it for May/June (0%).
 
-### A.3 Why we EXCLUDE May/June — even after the v1 fix
+### A.3 Why we EXCLUDE May/June — now CONFIRMED by v8 experiment (2026-08-04)
 
 Even applying your idea (copy v1's correct weather into the mismatched v2
 rows), May/June remains unusable for the full 29-feature model:
 
 - **Origin weather:** fixable from v1 (100% of rescored rows).
 - **Destination weather:** **unfixable everywhere.** v1 never captured it for
-May/June (only flightCategory). The aviationweather.gov API only serves the
-**previous 15 days** of data (verified in their docs), and May/June is 45+
-days old — so historical dest weather **cannot be re-fetched today**.
+  May/June (only flightCategory). The aviationweather.gov API only serves the
+  **previous 15 days** of data (verified in their docs), and May/June is 45+
+  days old — so historical dest weather **cannot be re-fetched today**.
 - **Labels:** the original rows have no labels; the rescored rows do, but they
-sit on July weather that we cannot correct on the dest side.
+  sit on July weather that we cannot correct on the dest side.
 
 So dest weather is the hard blocker for May/June, not origin weather. A model
 cannot train 6 dest-weather features on rows where those features never existed.
+
+**v8 EMPIRICAL CONFIRMATION (Addendum G, `travnr_ml_v8.ipynb`):** we challenged
+this verdict using the same label back-propagation v5/v6 use for July — and it
+turned out June *is* technically label-able (310/310 flights have both
+real-time feature rows and rescore label rows → 354 pre-window rows / 104
+flights, 67.5% positive). But under the identical walk-forward split, mixing
+June into the July train pool **lowers** honest July AUC (0.654 vs v6's 0.686).
+Why: June has a different disruption regime (67.5% vs 81.3% positive) plus 0%
+dest weather, so the model spends capacity on a regime it isn't asked to
+predict. "June-only" pooled 0.696 is regime luck (per-day 0.385–0.907). May is
+dead (2 label-able flights). **Conclusion: exclusion stands, now with
+evidence.** Rule for August: if August looks like July (full dest weather, same
+monitoring), train **July-only**; use June only as a weak auxiliary if August
+is a brand-new regime — never the primary.
 
 **This is NOT about** `is_test_flight` (those are real AeroDataBox flights).
 It's about dest weather being permanently unavailable for May/June.

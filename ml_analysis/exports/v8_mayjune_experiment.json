@@ -1,0 +1,27 @@
+{
+  "experiment": "v8 May/June salvage test (same walk-forward July test days as v6)",
+  "results": {
+    "JULY only (v6 ~0.686)": 0.6858,
+    "JUNE+JULY": 0.654,
+    "JUNE only (transfer)": 0.6963,
+    "MAY+JUN+JULY": 0.6601
+  },
+  "prec_at_rec0_5": {
+    "JULY only (v6 ~0.686)": 0.8141,
+    "JUNE+JULY": 0.8141,
+    "JUNE only (transfer)": 0.8141,
+    "MAY+JUN+JULY": 0.8141
+  },
+  "v6_reference_auc": 0.686,
+  "june_pool": {
+    "rows": 354,
+    "flights": 104,
+    "pos_rate": 0.6751
+  },
+  "may_pool": {
+    "rows": 21,
+    "flights": 2
+  },
+  "verdict": "see notebook Step 6 text; v6 xgboost_delay_predictor_v6.json remains production unless H1b clearly beat it",
+  "created_utc": "2026-08-05T00:25:52Z"
+}

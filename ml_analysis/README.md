@@ -14,8 +14,9 @@
 | `travnr_ml_v5.ipynb` | **First CLEAN run** — fixes the label rule (on-time requires terminal status), drops the never-flew Jul 29, keeps Jul 20–28, evaluates with time walk-forward. Honest pooled AUC **0.646 ± 0.10** (29-feature base wins; cascade/extra features actually hurt), precision ~0.81 at recall 0.5. **This is the trustworthy baseline.** |
 | `travnr_ml_v6.ipynb` | **Raise the honest baseline, no tricks** — same clean data, tests rolling-window (H1), seed-averaging (H2), **TIME features (H3)**, and dropping `carrier_avg_delay_24h` (H4). **TIME feats win: AUC 0.686** (up from v5's 0.646); dropping the ~label feature costs ~nothing (0.658) = safer for August. Exports `*_v6` (31 features, 5-seed ensemble, threshold 0.863). |
 | `travnr_ml_v7.ipynb` | **DNN + RL experiment** (same data/split/features as v6, pure curiosity) — deep net got walk-forward AUC **0.547** (did NOT beat XGBoost); an RL contextual bandit optimizing warn/miss utility returned "warn everyone" (utility 2199 vs oracle 4047), revealing that v6's precision-tuned threshold may be too timid given miss cost > false-alarm cost. Production model unchanged. Requires `OMP_NUM_THREADS=1` (torch+xgboost). |
+| `travnr_ml_v8.ipynb` | **Re-test of the May/June exclusion** — June turns out to be *label-able* (back-propagation works: 354 rows/104 flights with real labels), but mixing it into the July train pool **hurts** honest walk-forward AUC (0.654 vs v6's 0.686). "June only" pooled 0.696 is regime luck (per-day 0.385–0.907). May is dead (2 flights). Verdict: **the plan's exclusion holds, now with evidence**; July-only stays. |
 | `analyze_v2_vs_v1.py` | **Post-mortem** — proves why v2 lost (val-selection is noise: corr(val,test)=0.06) and estimates honest expected AUC. Run: `.venv/bin/python ml_analysis/analyze_v2_vs_v1.py`. |
-| `exports/` | Output of the notebooks: `xgboost_delay_predictor.json` (booster) + `threshold.json` (features, category maps, threshold) for the server2 Python sidecar. v2-v6 write separate `*_v2`–`*_v6` files; v7 writes only `v7_experiment.json` (no model swap). |
+| `exports/` | Output of the notebooks: `xgboost_delay_predictor.json` (booster) + `threshold.json` (features, category maps, threshold) for the server2 Python sidecar. v2-v6 write separate `*_v2`–`*_v6` files; v7 writes `v7_experiment.json`, v8 writes `v8_mayjune_experiment.json` (no model swaps). |
 
 ## The hard truth (v4 → v6) — read before the next experiment
 
@@ -43,11 +44,18 @@
    disruption regime and miss-cost > false-alarm-cost, *warn everyone* is
    optimal — so v6's precision-tuned threshold may be too timid; pick August's
    threshold on the product's actual miss/false-alarm costs.
-7. **The lever is data, not the model.** To reach 0.8+/0.9 precision we need more
+7. **v8 (re-test of the exclusion): June is label-able but not helpful.** June
+   has 310 flights with both real-time feature rows AND rescore label rows, so
+   back-propagation works (354 pre-window rows / 104 flights). But mixing June
+   into July training **hurts** (0.654 vs 0.686) — different regime (67.5% vs
+   81.3% positive) + 0% dest weather costs more than the extra rows gain. The
+   "June-only 0.696" pooled number is regime luck (per-day 0.385–0.907). May is
+   dead (2 flights). **Plan PART A's exclusion stands, now with evidence.**
+8. **The lever is data, not the model.** To reach 0.8+/0.9 precision we need more
    days (August, PART I). Model tricks were tried five ways and always lost once
    measured honestly.
 
-See `ml_analysis/TRAVNR_ML.md` **Addendum C + D + E + F** (including the
+See `ml_analysis/TRAVNR_ML.md` **Addendum C + D + E + F + G** (including the
 "mistakes never to repeat" list).
 
 ## How to run
@@ -64,6 +72,7 @@ python3 ml_analysis/build_notebook_v4.py     # v4 time-aware run
 python3 ml_analysis/build_notebook_v5.py     # v5 CLEAN run (fixed labels + walk-forward)
 python3 ml_analysis/build_notebook_v6.py     # v6 TIME-features winner (AUC 0.686)
 python3 ml_analysis/build_notebook_v7.py     # v7 DNN+RL experiment (no model swap)
+python3 ml_analysis/build_notebook_v8.py     # v8 May/June salvage re-test (no model swap)
 
 # post-mortem analysis (why did v2 lose? what's the honest expected AUC?)
 ml_analysis/.venv/bin/python ml_analysis/analyze_v2_vs_v1.py

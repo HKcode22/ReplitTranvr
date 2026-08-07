@@ -34,6 +34,7 @@
 > | Addendum D | `travnr_ml_v5.ipynb` | **First clean run**: fixed label rule + dropped never-flew Jul 29 + walk-forward → honest AUC ≈ 0.65, plus the "mistakes never to repeat" list. |
 > | Addendum E | `travnr_ml_v6.ipynb` | **Raise honest AUC without tricks**: tested rolling-window, seed-averaging, time features, and dropping the ~label feature — TIME features win → 0.686. |
 > | Addendum F | `travnr_ml_v7.ipynb` | **Experiment: DNN + RL** — same data/split, tried a deep net (AUC 0.547, didn't beat XGBoost) and an RL bandit (optimizes utility, not AUC). Production model unchanged. |
+> | Addendum G | `travnr_ml_v8.ipynb` | **Re-test of the May/June exclusion** — June *is* label-able (back-propagation works, 104 flights), but mixing it into July training HURTS (0.654 vs 0.686). The plan's verdict holds, now with evidence. |
 
 ---
 
@@ -1303,3 +1304,70 @@ v1 0.731 (leaky) → v5 0.646 (clean) → v6 0.686 (clean + TIME) → **v7: DNN 
 (no), RL utility insight (warn-everyone wins in a 81%-disruption regime; real
 lesson is the threshold, not the algorithm)**. XGBoost v6 stays production.
 August data is still the real lever for AUC 0.8+ / precision 0.9.
+
+---
+
+# Addendum G — v8: re-testing the "May/June is unusable" verdict (it was right, now with evidence)
+
+## G.0 — Why we re-tested
+
+PART A of the plan says May/June is unusable because destination weather is 0%
+on real-time rows and mismatched on rescore rows. The v8 challenge: v5/v6
+already use **label back-propagation** (rescore rows → real-time feature rows)
+for July. June has the exact same structure — **every one of June's 310 flights
+has BOTH real-time feature rows (real origin weather, 0% dest weather) AND
+rescore label rows (real terminal status)**. So by the same methodology, June
+*should* be label-able. Is the exclusion actually right? We measured it.
+
+## G.1 — What's actually in May / June / July
+
+| Month | Rows | Flights | Real-time rows (≤72h) | Rescore rows (>7d) | Dest weather on real-time | Label-able flights |
+| ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+| May | 92 | 4 | 72 | 38 | 0% | 2 (dead) |
+| June | 2,131 | 310 | 1,013 | 1,245 | 0% | **104 in pre-window** |
+| July | 17,985 | 967 | 16,461 | 4,157 | 100% | 559 (v6 pool) |
+
+June's pre-departure pool (1–12h window): **354 rows / 104 flights, 67.5%
+positive** — a real, label-able dataset with 0% dest weather. XGBoost handles
+NaN natively, so June rows can train beside full July rows without fabricating
+the missing 6 dest-weather features.
+
+## G.2 — The walk-forward test (identical discipline to v6; same July test days)
+
+| Config | Pooled AUC | note |
+| ---- | ---- | ---- |
+| **JULY only (v6 baseline)** | **0.686** | reproduced exactly (0.6858) |
+| JUNE only → predict July | 0.696 | **misleading** — see below |
+| MAY+JUN+JULY | 0.660 | below baseline |
+| JUNE+JULY (mixed train) | 0.654 | **below baseline** |
+
+## G.3 — The honest reading
+
+- **Mixing June into July training HURTS** (0.654 vs 0.686). The model spends
+  capacity learning June's regime (67.5% positive, different days, 0% dest
+  weather) instead of July's — so on the *July* days it's asked to predict, it
+  is worse. **The plan's exclusion verdict is confirmed, now with evidence.**
+- **"June only" 0.696 is a trap.** The pooled number looks great, but per-day
+  it is 0.385 / 0.823 / 0.853 / 0.907 — wild swings that are regime luck, not
+  skill. Never trust the pooled AUC alone (this is exactly the lesson from
+  v2's corr=0.06).
+- **May is dead** (2 label-able flights / 21 rows) — noise, changes nothing.
+- **What IS salvageable from this exercise:** the finding that June's labels
+  *can* be back-propagated at all (the technical mechanism works), plus a
+  clear rule for August: if August looks like July (same monitoring, full dest
+  weather), keep **July-only**; June only as a *weak auxiliary* if August turns
+  out to be a brand-new regime — never the primary training data.
+
+## G.4 — Artifacts
+
+- `travnr_ml_v8.ipynb` (14 cells, 0 errors) + `build_notebook_v8.py`.
+- `exports/v8_mayjune_experiment.json` — the four AUCs + pool sizes + verdict.
+- No production model change. v6 XGBoost remains THE model.
+
+## G.5 — One-line story
+
+**May/June exclusion re-verified with data:** June is label-able (back-prop
+works) but adding it lowers honest July AUC (0.654 < 0.686); the plan was right
+all along — and now we know *why*: a different regime + 0% dest weather costs
+more than extra rows gain. **v6 (July-only, TIME features) stays the model;**
+August data is still the only real lever.
