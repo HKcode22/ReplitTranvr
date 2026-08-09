@@ -149,6 +149,96 @@ credit math.
 
 ---
 
+## DATA CAPTURE STRATEGY — ALL AIRPORTS / ALL FLIGHTS (confirmed 2026-08-09)
+
+> User question: "Is airport subscription the correct way to capture all or as many
+> flights as we can (domestic + international)?" **Answer: yes — it is the ONLY bulk
+> mechanism AeroDataBox exposes, and it is the correct one.** There is no "subscribe
+> to the whole world" option. You approximate global coverage by subscribing to
+> **every major airport**, which captures every flight that touches those airports.
+
+### Why airport subscriptions capture "all flights"
+
+- Every commercial flight has an **origin** and a **destination** airport. A
+  `FlightByAirportIcao` subscription (e.g. `KJFK`) covers **all** departures AND
+  arrivals at that airport — so any flight is captured by subscribing to *either* of
+  its two endpoints.
+- Subscribing to the ~100–200 busiest airports (domestic US + international hubs)
+  therefore captures the overwhelming majority of the world's scheduled traffic.
+  The tiny-airport long tail adds negligible training value.
+- One flight's lifecycle (CheckIn → Boarding → GateClosed → Departed → EnRoute ×N →
+  Approaching → Arrived) produces **10–30 rows**; each leg of an aircraft is a
+  separate flight, so the table naturally accumulates a broad, dense dataset.
+- `FlightByNumber` is **complementary only** — use it to follow ONE flight number or
+  verify delivery. It is NOT the volume source.
+
+### Coverage caveat (important — don't subscribe blindly)
+
+- AeroDataBox ADS-B / live coverage is **not uniform** (see aerodatabox.com/data-coverage).
+- **Before adding any airport, check its live feed:** `GET /health/services/airports/{icao}/feeds`
+  (free). Skip airports with weak/absent feeds — you'd pay nothing, but get no alerts.
+- Prefer major airports first (best coverage), then expand to mid-size airports for
+  **route diversity** (see below).
+
+### The aircraft rotation / tail-number chain-reaction (your insight — and why it's a GNN problem, not a capture problem)
+
+One aircraft (tail number) flies **multiple legs per day**, often crossing the globe
+over several days. A late arrival on leg 1 (or a late turn) **cascades** into late
+departures on legs 2, 3, … — delay propagates through the aircraft's rotation (plus
+connections, crew, and codeshare partners). This is real, and it is exactly what the
+GNN should learn.
+
+Why our current plan already supports it:
+
+- Every row stores **`aircraft_reg`** (the tail number) plus the full PRE/POST time
+  set: `dep/arr_scheduled_utc`, `_revised_utc`, `_predicted_utc`, `_runway_utc`.
+  That gives us each leg's **delay signal** (e.g. `dep_runway_utc − dep_scheduled_utc`,
+  `arr_runway_utc − arr_scheduled_utc`) and the aircraft identity to chain legs.
+- Consecutive legs of one aircraft therefore share `aircraft_reg` and carry each
+  other's delay → the **GNN edge set** (tail-number chaining) can be built directly
+  from the stored rows. This matches the research papers in `researchPapers/`
+  (Edge-Based GNN / FlightConnectivity, and QUEUE_UP_FOR_TAKEOFF transferable
+  framework).
+- **Capture needs no change for the chain-reaction idea.** Airport subscriptions at
+  the airports an aircraft visits naturally capture every leg. (Optional extra: add a
+  `FlightByNumber` sub for a specific flight number to follow one rotation explicitly
+  — only for verification/targeting, not breadth.)
+
+**So: capture = all airports; chain-reaction logic = GNN feature/edge engineering on
+`flightDataPrePost`.** We are planning it correctly.
+
+### Cost & overlap reality (be honest with the numbers)
+
+- 1 credit per **flight item** per notification. ~50k rows ≈ ~50k credits.
+- **Overlap:** a flight between two subscribed airports (e.g. JFK–LHR with both KJFK
+  and EGLL subscribed) can appear in notifications from *both* subscriptions — the
+  same flight item may be charged twice even though dedup stores one row.
+- Budget math: Ultra = 60,000 units/mo = 60,000 credits. At 1–2 credits per unique
+  row (depending on overlap + position-update frequency) you get **~30k–60k rows per
+  month**. That reaches the 50k goal. Credits do NOT expire — refill across billing
+  cycles if you want more volume per month.
+- **Mitigation / measurement:** after the first airport is live, measure
+  `credits_remaining` vs rows written (a few simple `SELECT count(*)` checks) to learn
+  the real cost-per-row, then tune the airport set.
+
+### Route diversity (avoid ML bias)
+
+If we only collect hub→hub routes, the GNN won't generalize to regional/leisure
+flights. Mix in **mid-size airports** (e.g. `KDEN KIAH KCLT KBOS KPHL KSEA KSLC KMSP
+KDCA KBNA KTPA KPHX KLAS KFLL YVR CYYZ`) alongside the mega-hubs, and rotate the set
+over time. Coverage check applies to every airport before subscribing.
+
+### Concrete starting set (see `V3_WEBHOOK_VERIFY.md` §7 for commands)
+
+US hubs: `KJFK KLGA KEWR KLAX KSFO KSEA KORD KATL KDFW KMIA KIAD`
+International: `EGLL LFPG EHAM EDDF EDDM LEMD LIRF LSZH OMDB WSSS RJTT RJAA RKSI VHHH YSSY ZBAA ZGGG`
+Mid-size / diversity: `KDEN KIAH KCLT KBOS KPHL KDCA KTPA KPHX KFLL KMSP KSLC KBNA YVR CYYZ`
+
+Start small (KJFK + one international), verify notifications land + rows write, then
+run the loop. Watch `credits_remaining`; refill before 0.
+
+---
+
 ## 0. Why we must do this carefully (the lesson from v1–v8)
 
 We already learned, the hard way, what sloppy data collection does:
