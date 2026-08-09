@@ -66,41 +66,124 @@ hasn't written anything yet; only the webhook writes to it).
 
 ## 5. Check the alert credit balance (free)
 
+> **Run this DIRECTLY against AeroDataBox** (not through our app) and use `-i` so you
+> can see the raw HTTP status + body. Before, this command "gave no output" — that
+> was our app's wrapper hiding the real response. Directly you always see something.
+
+```bash
+curl -i -s -X GET "https://aerodatabox.p.rapidapi.com/subscriptions/balance" \
+  -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+  -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com"
+```
+
+Expected:
+- **`HTTP/2 200` + EMPTY body** → normal the **first time** (no balance record yet; key works). Go to Step 6 and refill.
+- **`HTTP/2 200` + body** `{"creditsRemaining":N,"lastRefilledUtc":"...","lastDeductedUtc":"..."}` → balance exists. `N` is your alert credit balance.
+- Anything with `401/403` → key problem.
+
+The same check through our app (returns `{"balance":...}` or a helpful message now):
+
 ```bash
 curl -s "$APP_URL/api/v1/subscriptions/balance"
 ```
 
-Expected: `{"balance":{"creditsRemaining":N,"lastRefilledUtc":"...","lastDeductedUtc":"..."}}`
+⚠️ If `AERODATABOX_WEBHOOK_SECRET` is set, add `-H "x-webhook-secret: $AERODATABOX_WEBHOOK_SECRET"` to the app call.
 
-⚠️ If `AERODATABOX_WEBHOOK_SECRET` is set, add `-H "x-webhook-secret: $AERODATABOX_WEBHOOK_SECRET"`.
+## 6. Refill credits (REQUIRED first time — this creates the balance)
 
-## 6. Refill credits (only if balance is 0 / low)
+> Same lesson: run it **directly** with `-i`. The refill you ran before went through
+> our app and printed nothing — you'll now see the real AeroDataBox response.
+
+```bash
+curl -i -s -X POST "https://aerodatabox.p.rapidapi.com/subscriptions/balance/refill" \
+  -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+  -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com" \
+  -H "Content-Type: application/json" \
+  -d '{"credits":5000}'
+```
+
+Expected: **`HTTP/2 200`** + body `{"creditsRemaining":5000,"lastRefilledUtc":"...","lastDeductedUtc":null}`.
+
+- **1 credit = 1 API unit** from your RapidAPI quota (Ultra plan = 60,000 units/mo).
+- 1 credit is spent per **flight item** per notification, so ~50k credits ≈ your whole
+  50k-row dataset. 5,000 is a safe first fill.
+- After this, Step 5 returns a real balance.
+
+Or through our app:
 
 ```bash
 curl -s -X POST "$APP_URL/api/v1/subscriptions/balance/refill" \
   -H "Content-Type: application/json" \
-  -d '{"credits":1000}'
+  -d '{"credits":5000}'
 ```
 
 ⚠️ + `-H "x-webhook-secret: $AERODATABOX_WEBHOOK_SECRET"` if the secret is set.
 
-## 7. Create a webhook subscription (free, credit-based)
+## 7. Create airport subscriptions — CAPTURE ALL FLIGHTS, not one (this IS the right way)
 
-Pick a real, currently-operating flight so you get notifications quickly:
+**Yes — we want all/as many flights as we can.** An **airport** subscription is how you
+get that. A `FlightByNumber` subscription is ONLY a single-flight test; it is NOT what
+we use for the dataset.
+
+| `subjectType` | `subjectId` | What it captures |
+| ---- | ---- | ---- |
+| `FlightByAirportIcao` | e.g. `KJFK` | **ALL flights** departing + arriving that airport — continuously, as their status changes. Cost = **1 credit per flight item** per notification. ← **THE one we use** |
+| `FlightByNumber` | e.g. `AA100` | **ONE specific flight only** until it lands. 1 credit/notification. For single-flight testing only. |
+
+More airports = more flights. Subscribe to a mix of busy domestic + international hubs
+(they never expire; add/rotate over time to sample different routes).
+
+**Step 7a — subscribe to your first airport (through our app, it sets the webhook URL automatically):**
 
 ```bash
 curl -s -X POST "$APP_URL/api/v1/subscriptions/webhook" \
   -H "Content-Type: application/json" \
-  -d '{"subjectType":"FlightByNumber","subjectId":"AA100","maxDeliveryRetries":2}'
+  -d '{"subjectType":"FlightByAirportIcao","subjectId":"KJFK","maxDeliveryRetries":2}'
 ```
 
 ⚠️ + `-H "x-webhook-secret: $AERODATABOX_WEBHOOK_SECRET"` if the secret is set.
 
 Expected: `{"subscription":{"id":"<uuid>","isActive":true,"billingType":"CreditBased",...}}`
-Check the `url` in the response — it must equal
-`$APP_URL/api/v1/webhooks/aerodatabox` (or `.../aerodatabox/<secret>` if set).
-If it points at `localhost` or the wrong domain, stop and fix
-`WEBHOOK_BASE_URL` / `REPLIT_DOMAINS` before going further.
+Check the `url` in the response — it must equal `$APP_URL/api/v1/webhooks/aerodatabox`
+(or `.../aerodatabox/<secret>` if set). If it points at `localhost`/wrong domain, stop
+and fix `WEBHOOK_BASE_URL` / `REPLIT_DOMAINS`.
+
+> If the app call prints nothing/errors, run the SAME create directly so you see the
+> raw AeroDataBox error:
+> ```bash
+> curl -i -s -X POST "https://aerodatabox.p.rapidapi.com/subscriptions/webhook/FlightByAirportIcao/KJFK" \
+>   -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+>   -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com" \
+>   -H "Content-Type: application/json" \
+>   -d "{\"url\":\"$APP_URL/api/v1/webhooks/aerodatabox\",\"maxDeliveryRetries\":2}"
+> ```
+
+**Step 7b — confirm KJFK has live coverage before scaling (free):**
+
+```bash
+curl -s "https://aerodatabox.p.rapidapi.com/health/services/airports/KJFK/feeds" \
+  -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+  -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com"
+```
+
+**Step 7c — once KJFK works, add the rest in one go (domestic + international mix):**
+
+```bash
+for icao in KJFK KLGA KLAX KORD KATL KDFW KSFO KSEA KMIA KIAD EGLL LFPG EHAM EDDF EDDM OMDB WSSS RJTT RJAA; do
+  echo "== $icao =="
+  curl -s -X POST "$APP_URL/api/v1/subscriptions/webhook" \
+    -H "Content-Type: application/json" \
+    -d "{\"subjectType\":\"FlightByAirportIcao\",\"subjectId\":\"$icao\",\"maxDeliveryRetries\":2}"
+  echo
+done
+```
+
+**Credit math to sanity-check:** every flight produces ~10–30 rows over its lifecycle
+(each status/position change = one row = one flight item = ~1 credit). ~19 airports ×
+1–2k flights/day reaches tens of thousands of rows in a few days at roughly
+1 unit/row — well inside the 60k-unit Ultra quota. Watch the `balance` block inside
+each notification and `GET .../subscriptions/balance`; refill before it hits 0 (all
+subscriptions pause at 0).
 
 ## 8. List / inspect / delete subscriptions (free)
 
@@ -186,11 +269,13 @@ expected cost (1 credit / flight / alert).
 
 | Symptom | Check |
 | ---- | ---- |
+| balance call returns empty / no body (HTTP 200) | **Expected the first time** — no balance record yet. Run Step 6 refill once to create it. The empty 200 means the key works. |
 | balance call fails / 401 | `AERODATABOX_API_KEY` secret; the key must belong to the RapidAPI plan that includes the Flight Alert API (newest pricing plan). |
-| create subscription returns an error | plan must be on the latest pricing (webhook endpoints are new); confirm subjectId is a valid flight number. |
+| create subscription returns an error | plan must be on the latest pricing (webhook endpoints are new); confirm `subjectId` is a valid ICAO (airport) or flight number. |
 | webhook URL points at localhost | set `WEBHOOK_BASE_URL` secret, or confirm `REPLIT_DOMAINS` / custom domain. |
-| 0 alerts after subscribing | flight outside ADS-B/live coverage — check `/health/services/airports/{icao}/feeds` (see §below), or the flight isn't operating. |
+| 0 alerts after subscribing | airport/flight outside ADS-B/live coverage — check `/health/services/airports/{icao}/feeds` (free), or the flight isn't operating. |
 | `x-webhook-secret` 403 | the management endpoints require the header matching `AERODATABOX_WEBHOOK_SECRET`. |
+| "Why is my unit quota dropping?" | Units are the monthly REST quota, spent ONLY by on-demand UI actions (search / rescore / simulate / dashboard "Rescore all") — nothing runs in the background. The webhook spends **credits**, not units. See `V3_WebhookExtractionPlan.md` RUNTIME VERIFICATION Finding 2. |
 
 Coverage check (free):
 
@@ -202,9 +287,20 @@ curl -s "https://aerodatabox.p.rapidapi.com/health/services/airports/KORD/feeds"
 
 ---
 
-## Cost reminder
+## Cost reminder — two separate billing systems
 
 - Create / list / get / delete subscription, get balance: **free**.
-- Refill: **1 API unit per credit**.
+- Refill: **1 API unit per credit** (converts your RapidAPI quota into alert credits).
 - Notification delivered: **1 credit per flight item** (retry = same again).
 - Balance is shared across all subscriptions; at 0, all pause until refilled.
+
+**Units vs credits (why the quota shows ~24k used already):**
+- **Units** = your monthly REST quota on RapidAPI (`x-ratelimit-api-units-remaining`
+  in any response; Ultra plan = 60,000/mo). Spent by the on-demand endpoints
+  (`/api/user/flights/search`, `/api/agency/flights/search`, rescore, simulate,
+  dashboard **"Rescore all"**) and by refills. **Nothing runs in the background** —
+  the polling engine is dead and no cron exists.
+- **Credits** = the Flight Alert balance (separate system, doesn't expire). The
+  webhook only ever spends credits.
+- Monitor units at **RapidAPI dashboard → AeroDataBox → Usage** (per-endpoint
+  breakdown). The webhook dataset (~1 unit/row) fits easily in the 60k-unit quota.

@@ -79,7 +79,14 @@ export function registerV3Routes(app: Express): void {
   // ---------------------------------------------------------------------
   app.get("/api/v1/subscriptions/balance", managementGuard, async (_req: Request, res: Response) => {
     const balance = await getBalance();
-    if (!balance) return res.status(502).json({ error: "Failed to fetch AeroDataBox balance" });
+    if (!balance) {
+      return res.status(200).json({
+        balance: null,
+        message:
+          "No alert-credit balance record yet (AeroDataBox answered an empty 200). " +
+          "Initialize it with POST /api/v1/subscriptions/balance/refill { credits: N } — 1 credit = 1 API unit.",
+      });
+    }
     res.json({ balance });
   });
 

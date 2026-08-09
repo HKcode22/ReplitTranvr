@@ -1,7 +1,8 @@
 # V3 — Webhook Data Extraction Plan (AeroDataBox Flight Alerts → `flightDataPrePost`)
 
-> Created 2026-08-06. **Updated 2026-08-08** (status banner, corrected API facts from
-> the official credit-based-billing guide, exhaustive column map, step-by-step setup).
+> Created 2026-08-06. **Updated 2026-08-09** (runtime verification results from the
+> Replit terminal, units-vs-credits investigation, subscription subject-type model
+> for capturing 50k+ rows, code robustness fix).
 >
 > Goal: ingest the **entire** AeroDataBox `FlightNotificationContract` webhook payload
 > (every field copied into `AugMLtest/PrePosFeat.md` from the docs) into ONE clean
@@ -15,9 +16,9 @@
 | Phase | Status | Notes |
 | ---- | ---- | ---- |
 | **0. Shut down old polling + v1 tables** | ✅ **DONE** (2026-08-08) | All live AeroDataBox poll calls + `monitored_flights` / `risk_score_history` writes commented out in `routes.ts` + `monitor.ts`. Engine was already dead. Only remaining live AeroDataBox call: **manual** `simulate → findLowRiskAlternatives` debug action (left on purpose — see §1c). |
-| **1. Subscription manager (create/refill/list/get/delete)** | ⛔ **NOT STARTED** | No code exists yet. Detailed step-by-step below (§8). |
-| **2. Webhook ingress** (`POST /api/v1/webhooks/aerodatabox`) | ⛔ **NOT STARTED** | No code exists yet. |
-| **3. Extractor + store** (`flightDataPrePost`) | ⛔ **NOT STARTED** | No migration / table exists yet. `flightDataPrePost` is **not** in `shared/schema.ts`. |
+| **1. Subscription manager (create/refill/list/get/delete)** | ✅ **BUILT** (2026-08-08) | `aerodataboxLimiter_v3.ts` + `routes_v3.ts`, wired into `server/index.ts`. Runtime-verified on Replit (2026-08-09) — see RUNTIME VERIFICATION below. |
+| **2. Webhook ingress** (`POST /api/v1/webhooks/aerodatabox/:secret`) | ⏳ **STUB** (acks + logs only) | Endpoint exists and returns 2xx fast. Phase 2 full validator (`flightStatus_v3.ts`) + Phase 3 extractor/store not built yet — rows are NOT written yet. |
+| **3. Extractor + store** (`flightDataPrePost`) | ⏳ **TABLE DONE, PIPELINE NOT** | `0010_flight_data_pre_post.sql` applied at boot (verified `\dt clean.*` on Replit), table in `shared/schema.ts` via `pgSchema("clean")`. Extractor/store functions not built. |
 | **4. Heuristic** | ⏸️ **DEFERRED** | User decision 2026-08-08: **focus GNN / deep-learning first.** Do not build until the GNN has data. Notes only (`AugMLtest/HeuristicModelNotes.md`). |
 | **5. Cutover / retire** | ⛔ Not started | After data flows. |
 
@@ -28,8 +29,123 @@
   `INSERT risk_score_history` (L9965-9980); search endpoint `dAdbFetch` calls (both
   modes, return 503); outcomes `dGetFlightStatus` live fallback (reports Unknown).
 - `server/lib/disruption/monitor.ts` — confirmation-alert `UPDATE monitoredFlights` (L220).
-- The 30-min engine (`startMonitoringEngine`) was already commented in `server/index.ts:320`.
-- `npm run check` = 57 errors (baseline 60; no new errors introduced; all pre-existing).
+- The 30-min engine (`startMonitoringEngine`) was already commented in `server/index.ts:324`
+  AND `server/index_v2.ts:326` (re-confirmed 2026-08-09 — the engine is dead; no
+  `setInterval`/cron anywhere calls AeroDataBox).
+- `npm run check` = 57 errors (baseline; no new errors; all pre-existing).
+
+---
+
+## RUNTIME VERIFICATION & INVESTIGATION (2026-08-09 — from the Replit terminal)
+
+The user ran `MDplan/V3_WEBHOOK_VERIFY.md` on Replit and shared the output. Here is
+what it proved, what it revealed, and the resulting decision. **Nothing is secretly
+burning credits/units — confirmed below.**
+
+### What the terminal output confirmed ✅
+
+| Check | Result |
+| ---- | ---- |
+| `git pull origin main` | Merge conflict in `server/db.ts` resolved by keeping remote (`--theirs`) → clean tree, already up to date. |
+| Boot migrations | `0010_flight_data_pre_post.sql` applied (plus 0002–0008). |
+| `\dt clean.*` | `clean.flight_data_pre_post` (0 rows), plus the v2 tables. Table exists. |
+| Secrets | `AERODATABOX_API_KEY=YES`, `DATABASE_URL=YES`; `AERODATABOX_WEBHOOK_SECRET` unset (secret-less dev mode active). |
+| APP_URL | Resolves to `https://95ac2e69-....kirk.replit.dev` — webhook URL will be `<that>/api/v1/webhooks/aerodatabox`. |
+| App | `serving on port 5000`, Stripe + v3 modules load. |
+
+### Finding 1 — `GET /subscriptions/balance` returns HTTP 200 with an EMPTY body
+
+The direct RapidAPI call succeeded at the transport level (200, `content-length: 0`).
+That is **not** a key problem and **not** a units drain — it means the Flight Alert
+**credit balance record does not exist yet** because it has never been refilled.
+`balance` is created/returned the first time you call refill.
+
+- The response headers also answer the plan question:
+  - `x-ratelimit-api-units-limit: 60000`, `x-ratelimit-requests-limit: 240000` →
+    this is the **Ultra plan** (60,000 units / 240,000 requests per month).
+  - `x-ratelimit-api-units-remaining: 35927` → **24,073 units used this billing month.**
+  - `x-tier: Free Tier` refers to the balance **endpoint** being a free-tier call
+    (0 units) — it is not the name of your plan.
+- Our app now handles the empty 200 gracefully (see `aerodataboxLimiter_v3.ts`
+  `readJsonOrNull` + the balance route): instead of a 502 it returns
+  `{"balance":null,"message":"...Initialize it with POST .../balance/refill..."}`.
+
+**Fix:** call refill once to initialize the balance (1 credit = 1 API unit):
+`POST .../subscriptions/balance/refill` with `{"credits": 5000}`.
+
+### Finding 2 — Units vs Credits: why ~24k units are gone (investigation result)
+
+These are **two separate billing systems** (see AeroDataBox's credit-billing guide):
+
+| | Units (API quota) | Credits (Flight Alert balance) |
+| ---- | ---- | ---- |
+| Managed by | RapidAPI (your plan) | AeroDataBox directly |
+| Renewal | monthly billing cycle | do not expire; paused at 0 |
+| Spent by | REST endpoint calls (Tier 1/2/3/4) | 1 credit per flight item per webhook notification |
+| Conversion | 1 unit = 1 credit when you **refill** | — |
+
+The webhook has **never fired** (no subscription was ever created), so **0 credits**
+were spent. The polling engine is **confirmed dead** — `startMonitoringEngine()` is
+commented in BOTH `server/index.ts:324` and `server/index_v2.ts:326`, and a
+repo-wide search found **no `setInterval`/cron/scheduler that calls AeroDataBox**.
+`apiCallTracker.ts` is also disabled (it's a reference copy), so there is no DB audit
+trail of per-call units.
+
+What STILL calls AeroDataBox (only when a human uses the UI — each is Tier 1/2):
+
+| Path | Code | Cost per action |
+| ---- | ---- | ---- |
+| `/api/user/flights/search` (flight number) | `routes.ts:2344` | ~1 unit |
+| `/api/user/flights/search` (airport FIDS) | `routes.ts:2367` | 2 × ~1 unit |
+| `/api/agency/flights/search` | `routes.ts:10158` | ~1–2 units |
+| `/api/agency/flights/:id/rescore` | `routes.ts:9399` → `getFlightStatus` + `getHistoricalOtp` | ~2–4 units |
+| `/api/agency/flights/:id/simulate` | `routes.ts:10006` → `findLowRiskAlternatives` → `scoreFlightRisk` × ~3 | ~6–12 units |
+| Agency dashboard **"Rescore all"** | `client/src/pages/agency/dashboard.tsx:464` loops `rescore` over **all** flights | ~2–4 units × N flights ← biggest manual burner |
+
+**Verdict:** the 24,073 units were spent by manual UI actions this month (search /
+rescore / simulate / "Rescore all" — a few "Rescore all" runs over dozens of flights
+explains thousands of units), or by legacy polling before the 2026-08-08 shutdown.
+There is **no background job** running. To see the exact per-endpoint breakdown, log
+in to the **RapidAPI dashboard → AeroDataBox → Usage**.
+
+**Cost plan going forward:** your Ultra quota converts cleanly to alert credits
+(60k units → 60k credits → ~50k webhook rows, 1 credit each). So the plan is fully
+adequate for the 50k-row dataset. Just **stop clicking "Rescore all" / simulate**
+on the agency dashboard while the webhook dataset is being built, and use the
+RapidAPI usage page to monitor.
+
+### Finding 3 — Subscription model: how to capture MANY flights (answers the "step 7" confusion)
+
+A subscription is **not** "one subscription = all flights everywhere". There are two
+subject types, and they behave very differently:
+
+| `subjectType` | `subjectId` | What you get | Cost per notification |
+| ---- | ---- | ---- | ---- |
+| `FlightByNumber` | a flight number, e.g. `AA100` | **ONE specific flight** — its status changes until it lands. That's it. | 1 credit (1 flight item) |
+| `FlightByAirportIcao` | an airport ICAO, e.g. `KJFK` | **ALL flights** departing + arriving that airport (each notification carries a list of updated flights) | **1 credit per flight item** in the notification (e.g. 5 flights = 5 credits) |
+
+**To build the 50k-row training set you want `FlightByAirportIcao` subscriptions,
+not `FlightByNumber`.** One airport subscription already captures hundreds of
+different flights per day, domestic + international, automatically.
+
+How it works in practice:
+- Alerts fire when flight **status changes** (CheckIn → Boarding → GateClosed →
+  Departed → EnRoute [multiple live position updates] → Approaching → Arrived).
+- Each `flights[i]` in a notification becomes **one row** (different
+  `lastUpdatedUtc` → new dedup key → new row). One flight journey typically
+  produces **10–30 rows** across its lifecycle.
+- `GET /subscriptions/balance` + the `balance` block inside every notification show
+  remaining credits so you can refill before hitting 0 (all subs pause at 0).
+- Subscriptions never expire; you can add/remove airports over time to sample
+  different routes (rotate airports weekly for variety).
+
+**Recommended start:** subscribe to a mix of busy domestic + international hubs,
+e.g. `KJFK, KLGA, KLAX, KORD, KATL, KDFW, KSFO, KSEA, KMIA, KIAD, EGLL, LFPG, EHAM,
+EDDF, EDDM, OMDB, WSSS, RJTT, RJAA` (ICAO). Verify a couple of notifications land,
+then scale up. ~19 airports × ~1–2k flights/day easily reaches the row target over a
+few days — at a cost of roughly 1 credit per row, well inside the 60k-unit budget.
+See `MDplan/V3_WEBHOOK_VERIFY.md` §7 for the copy-paste commands and the expected
+credit math.
 
 ---
 
@@ -394,31 +510,41 @@ curl -s -X GET "https://aerodatabox.p.rapidapi.com/subscriptions/balance" \
   -H "x-rapidapi-key: $AERODATABOX_API_KEY" \
   -H "x-rapidapi-host: aerodatabox.p.rapidapi.com"
 ```
-Expected: `{ "balance": { "creditsRemaining": N, "lastRefilledUtc": "...", "lastDeductedUtc": "..." } }`
+> **Verified 2026-08-09:** this returns **HTTP 200 with an EMPTY body** until you have
+> refilled at least once (no balance record exists yet). That is expected — it does
+> NOT mean the key is wrong (200 proves the key works). Initialize the balance with
+> Step 1.3, then this returns `{ "creditsRemaining": N, "lastRefilledUtc": "...", "lastDeductedUtc": "..." }`.
 
-**Step 1.3 — Refill credits (only if balance is 0 / low).**
+**Step 1.3 — Refill credits (REQUIRED first time — this creates the balance).**
 ```
 curl -s -X POST "https://aerodatabox.p.rapidapi.com/subscriptions/balance/refill" \
   -H "x-rapidapi-key: $AERODATABOX_API_KEY" \
   -H "x-rapidapi-host: aerodatabox.p.rapidapi.com" \
   -H "Content-Type: application/json" \
-  -d '{ "credits": 1000 }'
+  -d '{ "credits": 5000 }'
 ```
 > ⚠️ **Correction vs the older plan:** the body key is **`credits`** (not `amount`).
-> 1 credit = 1 API unit; 1 credit per flight item per notification.
+> 1 credit = 1 API unit (converted from your RapidAPI quota at refill time);
+> 1 credit per flight item per notification.
 
 **Step 1.4 — Create a subscription (free, credit-based).**
 > ⚠️ The credit-based transition ended **2026-04-04** — `?useCredits=true` is now the
 > default and the parameter is being removed. Do **not** include it.
+>
+> ⚠️ **Decision (2026-08-09):** use **`FlightByAirportIcao`** for bulk data — a
+> `FlightByNumber` subscription covers **one flight only** (see RUNTIME VERIFICATION
+> Finding 3). One airport subscription captures hundreds of domestic + international
+> flights per day. Command for an airport:
 ```
-curl -s -X POST "https://aerodatabox.p.rapidapi.com/subscriptions/webhook/FlightByNumber/AA100" \
+curl -s -X POST "https://aerodatabox.p.rapidapi.com/subscriptions/webhook/FlightByAirportIcao/KJFK" \
   -H "x-rapidapi-key: $AERODATABOX_API_KEY" \
   -H "x-rapidapi-host: aerodatabox.p.rapidapi.com" \
   -H "Content-Type: application/json" \
   -d '{ "url": "https://travnr.com/api/v1/webhooks/aerodatabox/<SECRET>", "maxDeliveryRetries": 2 }'
 ```
-- `subjectType` = `FlightByNumber` (preferred — 1 credit/flight, controlled cost) or
-  `FlightByAirportIcao` (⚠️ busy airports = many flights per notification = fast drain).
+- `subjectType` = `FlightByAirportIcao` (volume — cost scales with how many flight
+  items each notification carries) **or** `FlightByNumber` (a single specific flight,
+  1 credit/flight — for verification only, not volume).
 - `maxDeliveryRetries`: 0–2. **Recommend 2** — retries only fire on delivery failure
   (our endpoint down / >10s / non-2xx), each costs 1 credit/flight. Reliable endpoint
   → retries never fire.
@@ -519,12 +645,18 @@ specialized ML approach — before any heuristic.
 3. ~~utc + local~~ ✅ Resolved: utc primary (`timestamptz`), local optional text.
 4. ~~payload_json retention~~ ✅ Resolved: keep for audit.
 5. **`maxDeliveryRetries`** — 2 recommended (only costs on delivery failure).
-6. **First real subscriptions** — pick 2–4 real flights (e.g. `AA100`, a busy hub
-   route) for Phase 3.4 verification. Airport subscriptions only after we're
-   comfortable with cost.
-7. **Server2 leftovers** — `package.json` `dev` still runs `tsx --watch server2/index.ts`
-   but `server2/` was removed from main. The dev script is broken. Fix it
-   (remove the `server2` part) when we next touch `package.json`.
+6. **Subscription strategy for the 50k-row dataset (RESOLVED 2026-08-09)** — use
+   `FlightByAirportIcao` across a mix of domestic + international hubs (see RUNTIME
+   VERIFICATION Finding 3). Start with a few airports, verify delivery, then scale to
+   ~20 airports. `FlightByNumber` only for single-flight verification.
+7. **Server2 leftovers** ✅ RESOLVED 2026-08-08 — `package.json` `dev` now runs
+   `tsx --watch server/index.ts`.
+8. **Unit usage audit** — `apiCallTracker.ts` is disabled (reference copy). If we want
+   per-call unit accounting again, re-wire a lightweight tracker. Until then, monitor
+   via the RapidAPI dashboard → AeroDataBox → Usage.
+9. **"Rescore all" / simulate on the agency dashboard** — leave the code, but avoid
+   clicking them while building the webhook dataset (each run burns units on the live
+   REST endpoints).
 
 ---
 

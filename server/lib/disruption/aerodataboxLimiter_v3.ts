@@ -43,6 +43,21 @@ function apiKey(): string | null {
   return process.env.AERODATABOX_API_KEY || null;
 }
 
+/**
+ * AeroDataBox sometimes answers 200 with an EMPTY body (e.g. the balance endpoint
+ * before a first refill creates the balance record). `resp.json()` would throw on
+ * that; return null instead so callers can explain the state.
+ */
+async function readJsonOrNull(resp: Response): Promise<any | null> {
+  const text = await resp.text().catch(() => "");
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function headers(json = false): Record<string, string> {
   const key = apiKey();
   const h: Record<string, string> = {
@@ -94,7 +109,11 @@ export async function getBalance(): Promise<SubscriptionBalance | null> {
       console.warn(`[adb-v3] getBalance ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 300)}`);
       return null;
     }
-    const raw: any = await resp.json();
+    const raw: any = await readJsonOrNull(resp);
+    if (raw === null) {
+      console.warn("[adb-v3] getBalance: AeroDataBox returned an empty 200 (no balance record yet?)");
+      return null;
+    }
     // Normalize: response may be the balance object directly or wrapped.
     return normalizeBalance(raw?.balance ?? raw);
   } catch (err: any) {
@@ -115,7 +134,7 @@ export async function refillBalance(credits: number): Promise<SubscriptionBalanc
       console.warn(`[adb-v3] refillBalance ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 300)}`);
       return null;
     }
-    const raw: any = await resp.json();
+    const raw: any = await readJsonOrNull(resp);
     return normalizeBalance(raw?.balance ?? raw);
   } catch (err: any) {
     console.error("[adb-v3] refillBalance error:", err?.message || err);
@@ -184,7 +203,7 @@ export async function listSubscriptions(): Promise<WebhookSubscription[]> {
       console.warn(`[adb-v3] listSubscriptions ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 300)}`);
       return [];
     }
-    const raw: any = await resp.json();
+    const raw: any = await readJsonOrNull(resp);
     const list = Array.isArray(raw) ? raw : raw?.subscriptions ?? raw?.items ?? [];
     if (!Array.isArray(list)) return [];
     return list
@@ -207,7 +226,7 @@ export async function getSubscription(subscriptionId: string): Promise<WebhookSu
       console.warn(`[adb-v3] getSubscription ${subscriptionId} ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 300)}`);
       return null;
     }
-    const raw: any = await resp.json();
+    const raw: any = await readJsonOrNull(resp);
     return normalizeSubscription(raw?.subscription ?? raw);
   } catch (err: any) {
     console.error("[adb-v3] getSubscription error:", err?.message || err);
@@ -246,7 +265,7 @@ export async function checkAirportFeeds(icao: string): Promise<AirportFeedsHealt
       { headers: headers() },
     );
     if (!resp.ok) return null;
-    return await resp.json();
+    return await readJsonOrNull(resp);
   } catch (err: any) {
     console.error("[adb-v3] checkAirportFeeds error:", err?.message || err);
     return null;
