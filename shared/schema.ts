@@ -1,6 +1,6 @@
 import { sql, relations } from "drizzle-orm";
 import {
-  pgTable, text, varchar, boolean, timestamp, serial, numeric, real, jsonb, index, uniqueIndex, pgEnum, integer
+  pgTable, pgSchema, text, varchar, boolean, timestamp, serial, numeric, real, jsonb, index, uniqueIndex, pgEnum, integer, bigint, doublePrecision, uuid, smallint
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -736,3 +736,148 @@ export type FlightTraveler = typeof flightTravelers.$inferSelect;
 export type InsertFlightTraveler = z.infer<typeof insertFlightTravelerSchema>;
 export type HealthReport = typeof healthReports.$inferSelect;
 export type InsertHealthReport = z.infer<typeof insertHealthReportSchema>;
+
+// ============================================================
+// v3 — Flight Data PRE/POST (AeroDataBox webhook raw collection)
+// Schema: clean (same home as the v2 tables). Written ONLY by
+// the webhook path (flightDataPrePostStore_v3). See
+// MDplan/V3_WebhookExtractionPlan.md + AugMLtest/PrePosFeat.md.
+// ============================================================
+const cleanSchema = pgSchema("clean");
+
+export const flightDataPrePost = cleanSchema.table(
+  "flight_data_pre_post",
+  {
+    id: serial("id").primaryKey(),
+
+    // Identity
+    flightNumber: text("flight_number").notNull(),
+    carrierIata: text("carrier_iata"),
+    carrierIcao: text("carrier_icao"),
+    carrierName: text("carrier_name"),
+    callSign: text("call_sign"),
+    isCargo: boolean("is_cargo"),
+    status: text("status"),
+    statusCode: smallint("status_code"),
+    codeshareStatus: text("codeshare_status"),
+    notificationSummary: text("notification_summary"),
+    notificationRemark: text("notification_remark"),
+    lastUpdatedUtc: timestamp("last_updated_utc", { withTimezone: true }),
+
+    // Great-circle distance
+    gcdM: doublePrecision("gcd_m"),
+    gcdKm: doublePrecision("gcd_km"),
+    gcdMile: doublePrecision("gcd_mile"),
+    gcdNm: doublePrecision("gcd_nm"),
+    gcdFt: doublePrecision("gcd_ft"),
+
+    // Departure (PRE)
+    depAirportIcao: text("dep_airport_icao"),
+    depAirportIata: text("dep_airport_iata"),
+    depAirportLocalCode: text("dep_airport_local_code"),
+    depAirportName: text("dep_airport_name"),
+    depAirportShortName: text("dep_airport_short_name"),
+    depAirportMunicipality: text("dep_airport_municipality"),
+    depAirportCountryCode: text("dep_airport_country_code"),
+    depAirportLat: doublePrecision("dep_airport_lat"),
+    depAirportLon: doublePrecision("dep_airport_lon"),
+    depAirportTimezone: text("dep_airport_timezone"),
+    depScheduledUtc: timestamp("dep_scheduled_utc", { withTimezone: true }),
+    depScheduledLocal: text("dep_scheduled_local"),
+    depRevisedUtc: timestamp("dep_revised_utc", { withTimezone: true }),
+    depPredictedUtc: timestamp("dep_predicted_utc", { withTimezone: true }),
+    depRunwayUtc: timestamp("dep_runway_utc", { withTimezone: true }),
+    depTerminal: text("dep_terminal"),
+    depCheckinDesk: text("dep_checkin_desk"),
+    depGate: text("dep_gate"),
+    depBaggageBelt: text("dep_baggage_belt"),
+    depRunway: text("dep_runway"),
+    depQuality: jsonb("dep_quality"),
+
+    // Arrival (PRE baseline)
+    arrAirportIcao: text("arr_airport_icao"),
+    arrAirportIata: text("arr_airport_iata"),
+    arrAirportLocalCode: text("arr_airport_local_code"),
+    arrAirportName: text("arr_airport_name"),
+    arrAirportShortName: text("arr_airport_short_name"),
+    arrAirportMunicipality: text("arr_airport_municipality"),
+    arrAirportCountryCode: text("arr_airport_country_code"),
+    arrAirportLat: doublePrecision("arr_airport_lat"),
+    arrAirportLon: doublePrecision("arr_airport_lon"),
+    arrAirportTimezone: text("arr_airport_timezone"),
+    arrScheduledUtc: timestamp("arr_scheduled_utc", { withTimezone: true }),
+    arrScheduledLocal: text("arr_scheduled_local"),
+    arrRevisedUtc: timestamp("arr_revised_utc", { withTimezone: true }),
+    arrPredictedUtc: timestamp("arr_predicted_utc", { withTimezone: true }),
+    arrRunwayUtc: timestamp("arr_runway_utc", { withTimezone: true }),
+    arrTerminal: text("arr_terminal"),
+    arrGate: text("arr_gate"),
+    arrBaggageBelt: text("arr_baggage_belt"),
+    arrRunway: text("arr_runway"),
+    arrQuality: jsonb("arr_quality"),
+
+    // Flight plan (PRE)
+    flightPlanFlightRules: text("flight_plan_flight_rules"),
+    flightPlanFlightType: text("flight_plan_flight_type"),
+    flightPlanRevisionNo: integer("flight_plan_revision_no"),
+    flightPlanStatus: text("flight_plan_status"),
+    flightPlanRoute: text("flight_plan_route"),
+    fpAltRequestedFt: doublePrecision("fp_alt_requested_ft"),
+    fpAltAssignedFt: doublePrecision("fp_alt_assigned_ft"),
+    fpAirspeedRequestedKt: doublePrecision("fp_airspeed_requested_kt"),
+    fpAirspeedAssignedKt: doublePrecision("fp_airspeed_assigned_kt"),
+    flightPlanLastUpdatedUtc: timestamp("flight_plan_last_updated_utc", { withTimezone: true }),
+
+    // Aircraft (tail-number join key)
+    aircraftReg: text("aircraft_reg"),
+    aircraftModeS: text("aircraft_mode_s"),
+    aircraftModel: text("aircraft_model"),
+    aircraftImageUrl: text("aircraft_image_url"),
+    aircraftImageWebUrl: text("aircraft_image_web_url"),
+    aircraftImageAuthor: text("aircraft_image_author"),
+    aircraftImageTitle: text("aircraft_image_title"),
+    aircraftImageDescription: text("aircraft_image_description"),
+    aircraftImageLicense: text("aircraft_image_license"),
+
+    // Live position (POST, ADS-B)
+    locLat: doublePrecision("loc_lat"),
+    locLon: doublePrecision("loc_lon"),
+    locAltitudeFt: doublePrecision("loc_altitude_ft"),
+    locPressureAltitudeFt: doublePrecision("loc_pressure_altitude_ft"),
+    locPressureHpa: doublePrecision("loc_pressure_hpa"),
+    locGroundSpeedKt: doublePrecision("loc_ground_speed_kt"),
+    locTrueTrackDeg: doublePrecision("loc_true_track_deg"),
+    locVsiFpm: integer("loc_vsi_fpm"),
+    locReportedUtc: timestamp("loc_reported_utc", { withTimezone: true }),
+
+    // Stage + meta
+    dataStage: text("data_stage").notNull(),
+    hasLiveLocation: boolean("has_live_location").notNull().default(false),
+    subscriptionId: uuid("subscription_id"),
+    subscriptionIsActive: boolean("subscription_is_active"),
+    subscriptionBillingType: text("subscription_billing_type"),
+    subscriptionActivateBeforeUtc: timestamp("subscription_activate_before_utc", { withTimezone: true }),
+    subscriptionExpiresOnUtc: timestamp("subscription_expires_on_utc", { withTimezone: true }),
+    subscriptionCreatedOnUtc: timestamp("subscription_created_on_utc", { withTimezone: true }),
+    subjectType: text("subject_type"),
+    subjectId: text("subject_id"),
+    subscriberType: text("subscriber_type"),
+    subscriberId: text("subscriber_id"),
+    subscriptionNotices: jsonb("subscription_notices"),
+    creditsRemaining: bigint("credits_remaining", { mode: "number" }),
+    balanceLastRefilledUtc: timestamp("balance_last_refilled_utc", { withTimezone: true }),
+    balanceLastDeductedUtc: timestamp("balance_last_deducted_utc", { withTimezone: true }),
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    payloadJson: jsonb("payload_json").notNull(),
+    dedupKey: text("dedup_key").notNull(),
+  },
+  (table) => [
+    uniqueIndex("flight_data_pre_post_dedup_key_unique").on(table.dedupKey),
+    index("idx_fdp_flight_date").on(table.flightNumber, table.depScheduledUtc),
+    index("idx_fdp_aircraft_reg").on(table.aircraftReg),
+    index("idx_fdp_status").on(table.status),
+  ],
+);
+
+export type FlightDataPrePost = typeof flightDataPrePost.$inferSelect;
+export type InsertFlightDataPrePost = typeof flightDataPrePost.$inferInsert;

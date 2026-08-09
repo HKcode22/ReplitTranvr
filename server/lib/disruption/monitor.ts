@@ -217,10 +217,12 @@ async function processFlight(
           risk.flightStatus,
           agencyForConfirm,
         );
-        await db
-          .update(monitoredFlights)
-          .set({ confirmationAlertSentAt: new Date() })
-          .where(eq(monitoredFlights.id, flight.id));
+        // [disabled 2026-08-06] v1 monitored_flights write SHUT DOWN — moving
+        // to webhooks. Confirmation alert no longer persists a sent marker.
+        // await db
+        //   .update(monitoredFlights)
+        //   .set({ confirmationAlertSentAt: new Date() })
+        //   .where(eq(monitoredFlights.id, flight.id));
         console.log(
           `[monitor] confirmation alert fired flight_id=${flight.id} cancelled=${confirmedCancelled} delay=${risk.flightStatus?.delayMinutes || 0}min`,
         );

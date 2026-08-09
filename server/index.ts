@@ -265,6 +265,10 @@ app.use((req, res, next) => {
   }
 
   await registerRoutes(httpServer, app);
+  // v3 — AeroDataBox Flight Alert webhook + subscription management
+  // (travnr.com). See MDplan/V3_WebhookExtractionPlan.md.
+  const { registerV3Routes } = await import("./routes_v3");
+  registerV3Routes(app);
 
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
