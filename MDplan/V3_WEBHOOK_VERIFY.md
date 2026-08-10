@@ -16,6 +16,41 @@ git pull origin main
 The `[postMerge]` hook auto-runs `npm install` + `npm run db:push`. Watch the output —
 it should end without errors.
 
+> ⚠️ **2026-08-10 fixes you MUST pull first:** two bugs were found and fixed —
+> (1) the webhook 403'd on the CSRF middleware (fixed by registering v3 routes before
+> CSRF), and (2) AeroDataBox rejects webhook URLs without an explicit port (now forced
+> `:443`). The ingress also accepts the secret-less path now. **Pull before doing
+> anything below.**
+
+## 0.5 STOP CREDIT BLEED — list & delete any existing subscriptions first
+
+> **Why:** your balance was being drained (deducted ~4,250 credits between Aug 9–10).
+> Existing subscription(s) were delivering to `/api/v1/webhooks/aerodatabox`, which
+> 403'd (CSRF) → every delivery counted as failed → charged credits (+ up to 2 retries
+> each). Do this NOW, directly against AeroDataBox, before recreating:
+
+```bash
+curl -s "https://aerodatabox.p.rapidapi.com/subscriptions/webhook" \
+  -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+  -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com"
+```
+
+For every `id` it returns, delete it (repeat for each id):
+
+```bash
+curl -i -s -X DELETE "https://aerodatabox.p.rapidapi.com/subscriptions/webhook/<ID>" \
+  -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+  -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com"
+```
+
+Re-check balance after — it should stop dropping:
+
+```bash
+curl -s "https://aerodatabox.p.rapidapi.com/subscriptions/balance" \
+  -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+  -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com"
+```
+
 ## 1. Confirm the secrets are present (no value printed, just yes/no)
 
 ```bash
@@ -34,10 +69,12 @@ echo "DATABASE_URL set: ${DATABASE_URL:+YES}"
 ```bash
 APP_URL="https://$(echo $REPLIT_DOMAINS | cut -d, -f1)"
 echo "APP_URL=$APP_URL"
-echo "expected webhook URL = $APP_URL/api/v1/webhooks/aerodatabox"
+echo "expected webhook URL = $APP_URL:443/api/v1/webhooks/aerodatabox"
 ```
 
 This is the URL the server auto-builds for subscriptions (same logic as Stripe).
+> Note the **`:443`** — AeroDataBox rejects webhook URLs without an explicit port
+> (`Web-hook URL port is not allowed: -1`), so the server now appends `:443`.
 
 ## 3. Start the app
 
@@ -144,18 +181,19 @@ curl -s -X POST "$APP_URL/api/v1/subscriptions/webhook" \
 ⚠️ + `-H "x-webhook-secret: $AERODATABOX_WEBHOOK_SECRET"` if the secret is set.
 
 Expected: `{"subscription":{"id":"<uuid>","isActive":true,"billingType":"CreditBased",...}}`
-Check the `url` in the response — it must equal `$APP_URL/api/v1/webhooks/aerodatabox`
-(or `.../aerodatabox/<secret>` if set). If it points at `localhost`/wrong domain, stop
-and fix `WEBHOOK_BASE_URL` / `REPLIT_DOMAINS`.
+Check the `url` in the response — it must equal
+`$APP_URL:443/api/v1/webhooks/aerodatabox` (or `.../aerodatabox/<secret>` if set).
+If it's missing `:443`, points at `localhost`, or the wrong domain, stop and fix
+`WEBHOOK_BASE_URL` / `REPLIT_DOMAINS`.
 
 > If the app call prints nothing/errors, run the SAME create directly so you see the
-> raw AeroDataBox error:
+> raw AeroDataBox error (note the explicit `:443` in the URL — REQUIRED):
 > ```bash
 > curl -i -s -X POST "https://aerodatabox.p.rapidapi.com/subscriptions/webhook/FlightByAirportIcao/KJFK" \
 >   -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
 >   -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com" \
 >   -H "Content-Type: application/json" \
->   -d "{\"url\":\"$APP_URL/api/v1/webhooks/aerodatabox\",\"maxDeliveryRetries\":2}"
+>   -d "{\"url\":\"$APP_URL:443/api/v1/webhooks/aerodatabox\",\"maxDeliveryRetries\":2}"
 > ```
 
 **Step 7b — confirm KJFK has live coverage before scaling (free):**
@@ -255,15 +293,17 @@ Expected: `{"received":true,"flights":1}` and a log line like
 
 ## 10. Watch a real notification land
 
-Keep the app running. When AeroDataBox detects a status change on your subscribed
-flight, it POSTs to your endpoint. Watch the log:
+Keep the app running. When AeroDataBox detects a status change on a subscribed
+airport's flights, it POSTs to your endpoint. Watch the log — you want to see
+**2xx acknowledgements, NOT 403s**:
 
 ```
-[adb-v3-webhook] received flights=1 subscription=<uuid> credits=<n> firstFlight=AA100
+[adb-v3-webhook] received flights=N subscription=<uuid> credits=<n> firstFlight=XXXX
 ```
 
-The `credits` count should decrease by 1 per flight per notification — that is the
-expected cost (1 credit / flight / alert).
+The `credits` count should decrease by 1 per flight item per notification — that is
+the expected cost (1 credit / flight / alert). If you instead see
+`POST /api/v1/webhooks/aerodatabox 403`, the app is running OLD code — pull + restart.
 
 ## If something fails
 
@@ -275,6 +315,8 @@ expected cost (1 credit / flight / alert).
 | webhook URL points at localhost | set `WEBHOOK_BASE_URL` secret, or confirm `REPLIT_DOMAINS` / custom domain. |
 | 0 alerts after subscribing | airport/flight outside ADS-B/live coverage — check `/health/services/airports/{icao}/feeds` (free), or the flight isn't operating. |
 | `x-webhook-secret` 403 | the management endpoints require the header matching `AERODATABOX_WEBHOOK_SECRET`. |
+| webhook deliveries 403 in app log (`Invalid CSRF token`) | old bug — **fixed 2026-08-10** (v3 routes now registered before the CSRF middleware). Pull the latest code and restart the app. |
+| create subscription → `Web-hook URL port is not allowed: -1` | webhook URL has no explicit port — **fixed 2026-08-10** (server now appends `:443`). Use the app's create endpoint (it builds the URL automatically), or add `:443` manually in the direct curl. |
 | "Why is my unit quota dropping?" | Units are the monthly REST quota, spent ONLY by on-demand UI actions (search / rescore / simulate / dashboard "Rescore all") — nothing runs in the background. The webhook spends **credits**, not units. See `V3_WebhookExtractionPlan.md` RUNTIME VERIFICATION Finding 2. |
 
 Coverage check (free):
@@ -304,3 +346,292 @@ curl -s "https://aerodatabox.p.rapidapi.com/health/services/airports/KORD/feeds"
   webhook only ever spends credits.
 - Monitor units at **RapidAPI dashboard → AeroDataBox → Usage** (per-endpoint
   breakdown). The webhook dataset (~1 unit/row) fits easily in the 60k-unit quota.
+
+
+Results out put:
+~/workspace$ echo "AERODATABOX_API_KEY set: ${AERODATABOX_API_KEY:+YES}"
+echo "AERODATABOX_WEBHOOK_SECRET set: ${AERODATABOX_WEBHOOK_SECRET:+YES}"   # optional
+echo "DATABASE_URL set: ${DATABASE_URL:+YES}"
+AERODATABOX_API_KEY set: YES
+AERODATABOX_WEBHOOK_SECRET set: 
+DATABASE_URL set: YES
+~/workspace$ APP_URL="https://$(echo $REPLIT_DOMAINS | cut -d, -f1)"
+echo "APP_URL=$APP_URL"
+echo "expected webhook URL = $APP_URL/api/v1/webhooks/aerodatabox"
+APP_URL=https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev
+expected webhook URL = https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev/api/v1/webhooks/aerodatabox
+~/workspace$ npm run dev 
+
+> rest-express@1.0.1 dev
+> NODE_ENV=development tsx --watch server/index.ts
+
+[migrations] applied 0002_agency_disruption_system.sql
+[migrations] applied 0003_travelers_health.sql
+[migrations] applied 0004_confirmation_alert.sql
+[migrations] applied 0005_aircraft_data.sql
+[migrations] applied 0006_test_flight_seeder.sql
+[migrations] applied 0007_user_monitored_flights.sql
+[migrations] applied 0008_resolved_flight_status.sql
+[migrations] applied 0010_flight_data_pre_post.sql
+[Duffel] Initialized (testMode=false)
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:5000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at doListen (node:net:2139:7)
+    at process.processTicksAndRejections (node:internal/process/task_queues:83:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 5000
+}
+
+Node.js v20.20.0
+Failed running 'server/index.ts'
+~/workspace$ pkill -9 -f "server/index.ts" || kill -9 $(lsof -t -i:5000)
+~/workspace$ npm run dev
+
+> rest-express@1.0.1 dev
+> NODE_ENV=development tsx --watch server/index.ts
+
+[migrations] applied 0002_agency_disruption_system.sql
+[migrations] applied 0003_travelers_health.sql
+[migrations] applied 0004_confirmation_alert.sql
+[migrations] applied 0005_aircraft_data.sql
+[migrations] applied 0006_test_flight_seeder.sql
+[migrations] applied 0007_user_monitored_flights.sql
+[migrations] applied 0008_resolved_flight_status.sql
+[migrations] applied 0010_flight_data_pre_post.sql
+[Duffel] Initialized (testMode=false)
+12:59:20 AM [express] serving on port 5000
+Initializing Stripe schema...
+Stripe schema ready
+{ autoExpandLists: undefined, stripeApiVersion: undefined } StripeSync initialized
+Stripe webhook configured: https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev
+Stripe data synced
+12:59:29 AM [express] POST /api/v1/webhooks/aerodatabox 403 in 13ms body=32b
+
+~/workspace$ psql "$DATABASE_URL" -c "\dt clean.*"
+psql "$DATABASE_URL" -c "SELECT count(*) AS rows FROM clean.flight_data_pre_post;"
+                 List of relations
+ Schema |         Name          | Type  |  Owner   
+--------+-----------------------+-------+----------
+ clean  | flight_data_pre_post  | table | postgres
+ clean  | monitored_flights_v2  | table | postgres
+ clean  | risk_score_history_v2 | table | postgres
+(3 rows)
+
+ rows 
+------
+    0
+(1 row)
+
+~/workspace$ curl -i -s -X GET "https://aerodatabox.p.rapidapi.com/subscriptions/balance" \
+  -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+  -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com"
+HTTP/2 200 
+date: Mon, 10 Aug 2026 01:00:13 GMT
+content-type: application/json; charset=utf-8
+vary: Accept-Encoding
+cache-control: no-store
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=KqwQUtCraoIj1xbdIaKSbRkPbnZfDT2XVqzzQCUthnh2mNBthxDwYHurlKQHbC2DY%2FmG6%2BA8VSEfOc2LUxt1EZ%2BFRhniXr%2FgxlNpn87BtAoJVP%2FGy05uu5MV%2BMofzbZyFwjrEGyy"}]}
+cf-cache-status: BYPASS
+server-timing: total;dur=9.3
+x-robots-tag: none
+x-tier: Free Tier
+vary: Accept-Encoding
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+alt-svc: h3=":443"; ma=86400
+cf-ray: a28b0ff9fac323a3-PDX
+x-ratelimit-api-units-limit: 60000
+x-ratelimit-api-units-remaining: 25926
+x-ratelimit-api-units-reset: 2164868
+x-ratelimit-requests-limit: 240000
+x-ratelimit-requests-remaining: 215690
+x-ratelimit-requests-reset: 2164868
+server: RapidAPI-0.0.45
+x-rapidapi-version: 0.0.45
+x-rapidapi-region: AWS - us-west-2
+x-rapidapi-request-id: 379ac4b5615823e089b0f0bd16fe07a2065b8bfd9b2d5286ed6ffb782e66938f
+x-content-type-options: nosniff
+x-frame-options: DENY
+referrer-policy: strict-origin-when-cross-origin
+
+{"creditsRemaining":747,"lastRefilledUtc":"2026-08-09 10:55","lastDeductedUtc":"2026-08-10 00:59"}~/workspace$ curl -s "$APP_URL/api/v1/scurl -s "$APP_URL/api/v1/subscriptions/balance"
+~/workspace$ curl -s "$APP_URL/api/v1/subscriptions/balance"
+~/workspace$ curl -i -s -X POST "https://aerodatabox.p.rapidapi.com/subscriptions/balance/refill" \
+  -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+  -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com" \
+  -H "Content-Type: application/json" \
+  -d '{"credits":5000}'
+HTTP/2 200 
+date: Mon, 10 Aug 2026 01:01:12 GMT
+content-type: application/json; charset=utf-8
+vary: Accept-Encoding
+cache-control: no-store
+x-robots-tag: none
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=mRNyshk2ZWRhTBWBcKP0nlGa6M3f%2BRxImGNCkyLAhP%2BnhFCpFE8KhFvJX5RRHDzkMAzMTFBA4V7876vqvAjkhBQrk0zGioI258tEWfRw5s0PEwlsjH4gkDtbidVpR6AdaQFHS4Ln"}]}
+server-timing: total;dur=23.5
+cf-ray: a28b1166fc08c54c-PDX
+vary: Accept-Encoding
+alt-svc: h3=":443"; ma=86400
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+cf-cache-status: DYNAMIC
+x-tier: Tier 1
+x-ratelimit-api-units-limit: 60000
+x-ratelimit-api-units-remaining: 20922
+x-ratelimit-api-units-reset: 2164809
+x-ratelimit-requests-limit: 240000
+x-ratelimit-requests-remaining: 210690
+x-ratelimit-requests-reset: 2164809
+server: RapidAPI-0.0.45
+x-rapidapi-version: 0.0.45
+x-rapidapi-region: AWS - us-west-2
+x-rapidapi-request-id: 47c77d244d45cfa8733dd83c9fe9cd3802f665ebc495f99f8bac1c4e7c1bcb76
+x-content-type-options: nosniff
+x-frame-options: DENY
+referrer-policy: strict-origin-when-cross-origin
+
+{"creditsRemaining":5744,"lastRefilledUtc":"2026-08-10 01:01Z","lastDeductedUtc":"2026-08-10 01:00"}~/workspace$ curl -s -X POST "$APP_URcurl -s -X POST "$APP_URL/api/v1/subscriptions/balance/refill" \
+  -H "Content-Type: application/json" \
+  -d '{"credits":5000}'
+~/workspace$ curl -s -X POST "$APP_URL/api/v1/subscriptions/webhook" \
+  -H "Content-Type: application/json" \
+  -d '{"subjectType":"FlightByAirportIcao","subjectId":"KJFK","maxDeliveryRetries":2}'
+~/workspace$ curl -i -s -X POST "https://aerodatabox.p.rapidapi.com/subscriptions/webhook/FlightByAirportIcao/KJFK" \
+  -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+  -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com" \
+  -H "Content-Type: application/json" \
+  -d "{\"url\":\"$APP_URL/api/v1/webhooks/aerodatabox\",\"maxDeliveryRetries\":2}"
+HTTP/2 400 
+date: Mon, 10 Aug 2026 01:02:03 GMT
+content-type: application/json; charset=utf-8
+cache-control: no-store
+nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+server-timing: total;dur=2.1
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=TQeixRROX4mzwpgdyGA77F0lsk23MtuQyUtg1NStaflhnE9bNR8Pun5fp9I09iifJgYRUys4kySZvnA5AjtLcP1e9kS8qBLdWSfe%2FV4iAHwLQzeXgBW8xCu8t%2F5LbmaanUZFB%2BEk"}]}
+x-robots-tag: none
+alt-svc: h3=":443"; ma=86400
+cf-cache-status: DYNAMIC
+vary: Accept-Encoding
+cf-ray: a28b12a6eb68ef73-PDX
+x-tier: Free Tier
+x-ratelimit-requests-limit: 240000
+x-ratelimit-requests-remaining: 210687
+x-ratelimit-requests-reset: 2164758
+x-ratelimit-api-units-limit: 60000
+x-ratelimit-api-units-remaining: 20922
+x-ratelimit-api-units-reset: 2164758
+server: RapidAPI-0.0.45
+x-rapidapi-version: 0.0.45
+x-rapidapi-region: AWS - us-west-2
+x-rapidapi-request-id: 63a3ed50c9a7f4fb33da029990759a52c22021e4fa839827847b14d96dc7b995
+x-content-type-options: nosniff
+x-frame-options: DENY
+referrer-policy: strict-origin-when-cross-origin
+
+{"message":"Web-hook URL port is not allowed: -1"}~/workspace$ curl -s "https://aerodatabox.p.rapidapi.com/health/services/airports/KJFK/curl -s "https://aerodatabox.p.rapidapi.com/health/services/airports/KJFK/feeds" \
+  -H "X-RapidAPI-Key: $AERODATABOX_API_KEY" \
+  -H "X-RapidAPI-Host: aerodatabox.p.rapidapi.com"
+{"flightSchedulesFeed":{"service":"FlightSchedules","status":"OK","minAvailableLocalDate":"2025-08-08","maxAvailableLocalDate":"2027-08-07"},"liveFlightUpdatesFeed":{"service":"FlightLiveUpdates","status":"OK"},"adsbUpdatesFeed":{"service":"AdsbUpdates","status":"OKPartial"},"generalAvailability":{"minAvailableLocalDate":"2025-08-08","maxAvailableLocalDate":"2027-08-07"}}~/workspace$ for icao in KJFK KLGA KLAX KORD KATL KDFW KSFO KSEA KMIA KIAD EGLL LFPG EHAM EDDF EDDM OMDB WSSS RJTT RJAA; d~/workspace$ for icao in KJFK KLGA KLAX KORD KATL KDFW KSFO KSEA KMIA KIAD EGLL LFPG EHAM EDDF EDDM OMDB WSSS RJTT RJAA; do
+  echo "== $icao =="
+  curl -s -X POST "$APP_URL/api/v1/subscriptions/webhook" \
+    -H "Content-Type: application/json" \
+    -d "{\"subjectType\":\"FlightByAirportIcao\",\"subjectId\":\"$icao\",\"maxDeliveryRetries\":2}"
+  echo
+done
+== KJFK ==
+
+== KLGA ==
+
+== KLAX ==
+
+== KORD ==
+
+== KATL ==
+
+== KDFW ==
+
+== KSFO ==
+
+== KSEA ==
+
+== KMIA ==
+
+== KIAD ==
+
+== EGLL ==
+
+== LFPG ==
+
+== EHAM ==
+
+== EDDF ==
+
+== EDDM ==
+
+== OMDB ==
+
+== WSSS ==
+
+== RJTT ==
+
+== RJAA ==
+
+~/workspace$ curl -s "$APP_URL/api/v1/subscriptions/webhook"
+curl -s "$APP_URL/api/v1/subscriptions/webhook/<SUBSCRIPTION_ID>"
+curl -s -X DELETE "$APP_URL/api/v1/subscriptions/webhook/<SUBSCRIPTION_ID>"
+~/workspace$ curl -s "$APP_URL/api/v1/subscriptions/webhook"
+curl -s "$APP_URL/api/v1/subscriptions/webhook/<SUBSCRIPTION_ID>"
+curl -s -X DELETE "$APP_URL/api/v1/subscriptions/webhook/<SUBSCRIPTION_ID>"^C
+~/workspace$ curl -s -X POST "$APP_URL/api/v1/webhooks/aerodatabox" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "flights": [
+      {
+        "notificationSummary": "AA100 departed",
+        "greatCircleDistance": { "meter": 120000, "km": 120, "mile": 74.5, "nm": 64.8, "feet": 393700 },
+        "departure": {
+          "airport": { "icao": "KORD", "iata": "ORD", "name": "Chicago O'\''Hare", "location": { "lat": 41.9742, "lon": -87.9073 }, "countryCode": "US", "timeZone": "America/Chicago" },
+          "scheduledTime": { "utc": "2026-08-08T14:15:00Z", "local": "2026-08-08T09:15:00-05:00" },
+          "revisedTime": { "utc": "2026-08-08T14:30:00Z", "local": "2026-08-08T09:30:00-05:00" },
+          "terminal": "1", "gate": "C16", "quality": ["Basic"]
+        },
+        "arrival": {
+          "airport": { "icao": "KJFK", "iata": "JFK", "name": "John F. Kennedy", "location": { "lat": 40.6413, "lon": -73.7781 }, "countryCode": "US", "timeZone": "America/New_York" },
+          "scheduledTime": { "utc": "2026-08-08T17:50:00Z", "local": "2026-08-08T13:50:00-04:00" },
+          "quality": ["Basic"]
+        },
+        "lastUpdatedUtc": "2026-08-08T14:31:00Z",
+        "number": "AA100",
+        "callSign": "AAL100",
+        "status": "Departed",
+        "codeshareStatus": "IsOperator",
+        "isCargo": false,
+        "aircraft": { "reg": "N101NN", "modeS": "A1B2C3", "model": "A321" },
+        "airline": { "name": "American Airlines", "iata": "AA", "icao": "AAL" },
+        "location": {
+          "altitude": { "feet": 10000 }, "groundSpeed": { "kt": 280 },
+          "trueTrack": { "deg": 90 }, "vsiFpm": 1500,
+          "reportedAtUtc": "2026-08-08T14:31:00Z", "lat": 41.8, "lon": -87.5
+        }
+      }
+    ],
+    "subscription": { "id": "00000000-0000-0000-0000-000000000000", "isActive": true, "billingType": "CreditBased", "subject": { "type": "FlightByNumber", "id": "AA100" }, "subscriber": { "type": "web-hook", "id": "https://travnr.com" } },
+    "balance": { "creditsRemaining": 1000, "lastRefilledUtc": "2026-08-08T00:00:00Z", "lastDeductedUtc": null }
+  }'
+~/workspace$ SELECT flight_number, status, data_stage, dep_scheduled_utc, aircraft_reg, credits_remaining, received_at
+FROM clean.flight_data_pre_post ORDER BY received_at DESC LIMIT 10;
+bash: SELECT: command not found
+bash: FROM: command not found
+~/workspace$ curl -s "https://aerodatabox.p.rapidapi.com/health/services/airports/KORD/feeds" \
+  -H "x-rapidapi-key: $AERODATABOX_API_KEY" \
+  -H "x-rapidapi-host: aerodatabox.p.rapidapi.com"
+{"flightSchedulesFeed":{"service":"FlightSchedules","status":"OK","minAvailableLocalDate":"2025-08-08","maxAvailableLocalDate":"2027-08-07"},"liveFlightUpdatesFeed":{"service":"FlightLiveUpdates","status":"OK"},"adsbUpdatesFeed":{"service":"AdsbUpdates","status":"OKPartial"},"generalAvailability":{"minAvailableLocalDate":"2025-08-08","maxAvailableLocalDate":"2027-08-07"}}~/workspace$ 

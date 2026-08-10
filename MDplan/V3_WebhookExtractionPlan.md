@@ -147,6 +147,40 @@ few days — at a cost of roughly 1 credit per row, well inside the 60k-unit bud
 See `MDplan/V3_WEBHOOK_VERIFY.md` §7 for the copy-paste commands and the expected
 credit math.
 
+### Finding 4 — Round 2 (2026-08-10): the webhook WAS firing and burning credits on 403s; two code bugs fixed
+
+The second verify run revealed the pipeline was half-alive and **losing credits**:
+
+1. **Credit deductions were happening even though we never saw a successful
+   subscription.** Balance showed `lastDeductedUtc: 2026-08-10 00:59`, and the app log
+   showed `[express] POST /api/v1/webhooks/aerodatabox 403 in 13ms body=32b`. So
+   subscription(s) DID exist and AeroDataBox was delivering notifications to
+   `/api/v1/webhooks/aerodatabox` — every delivery 403'd, which counts as a **failed
+   delivery** (and with `maxDeliveryRetries: 2`, up to 3 sends per flight item, each
+   charged). That is where the credits went (~4,250 between Aug 9 10:55 and Aug 10 00:59).
+2. **The 403 was the CSRF middleware.** `routes_v3` was registered in `server/index.ts`
+   AFTER `registerRoutes()`, which `app.use(csrfMiddleware)` (routes.ts:1716). Any
+   POST without our CSRF token → `403 {"message":"Invalid CSRF token"}` (exactly 32
+   bytes = the logged `body=32b`). AeroDataBox has no CSRF cookie, so every webhook
+   delivery was rejected. **Fix: register `registerV3Routes(app)` BEFORE
+   `registerRoutes(...)` in `server/index.ts`** so v3 routes bypass CSRF + the generic
+   `/api` limiter. (v3 auth is self-contained: URL secret for the webhook,
+   `x-webhook-secret` header for management endpoints.)
+3. **Direct subscription create failed with
+   `{"message":"Web-hook URL port is not allowed: -1"}`.** AeroDataBox's URL validator
+   chokes on a URL without an explicit port. **Fix: `defaultWebhookUrl()` now forces
+   `:443`** (`https://host:443/api/v1/webhooks/aerodatabox[<secret>]`).
+4. **The ingress only matched `/api/v1/webhooks/aerodatabox/:secret`.** With
+   `AERODATABOX_WEBHOOK_SECRET` unset, subscriptions point at the bare path
+   `/api/v1/webhooks/aerodatabox`, which never matched the `/:secret` route. **Fix:
+   the ingress is now registered on BOTH paths** (secret-less path allowed in dev mode;
+   when a secret IS set, only the `/<secret>` path is valid).
+
+**Resulting runbook:** FIRST list + delete any stray subscriptions to stop credit burn
+(see `V3_WEBHOOK_VERIFY.md` §0.5), THEN recreate after the fixes are deployed. Verify
+the created subscription's `url` now contains `:443` and watch the app log for a
+`[adb-v3-webhook] received ...` line (2xx, no 403).
+
 ---
 
 ## DATA CAPTURE STRATEGY — ALL AIRPORTS / ALL FLIGHTS (confirmed 2026-08-09)

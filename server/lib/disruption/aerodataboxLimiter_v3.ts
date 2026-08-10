@@ -284,6 +284,10 @@ export async function checkAirportFeeds(icao: string): Promise<AirportFeedsHealt
  *   3. fallback https://travnr.com
  * Secret comes from AERODATABOX_WEBHOOK_SECRET (a long random string). If unset,
  * falls back to the secret-less path so local smoke tests still work.
+ *
+ * IMPORTANT (verified 2026-08-10): AeroDataBox REJECTS webhook URLs without an
+ * explicit port — `{"message":"Web-hook URL port is not allowed: -1"}`. We must
+ * include `:443` so their URL validator parses a real port.
  */
 export function defaultWebhookUrl(): string {
   const secret = process.env.AERODATABOX_WEBHOOK_SECRET;
@@ -291,6 +295,14 @@ export function defaultWebhookUrl(): string {
   if (!base) {
     const replitDomains = process.env.REPLIT_DOMAINS;
     base = replitDomains ? `https://${replitDomains.split(",")[0]}` : "https://travnr.com";
+  }
+  try {
+    const u = new URL(base);
+    if (!u.port) {
+      base = base.replace(/\/?$/, `:443`);
+    }
+  } catch {
+    // keep base as-is if unparseable
   }
   const path = `/api/v1/webhooks/aerodatabox${secret ? `/${secret}` : ""}`;
   return `${base}${path}`;

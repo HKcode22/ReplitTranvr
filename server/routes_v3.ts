@@ -51,11 +51,14 @@ export function registerV3Routes(app: Express): void {
   // WEBHOOK INGRESS — always answer 2xx within 10s or AeroDataBox retries
   // and each retry costs credits. Full extraction lands in Phase 3; for now
   // we acknowledge + log so subscriptions never burn credits on a 4xx/5xx.
+  // Registered on BOTH the bare path and the /:secret path:
+  //   - secret unset  → subscriptions point at /api/v1/webhooks/aerodatabox
+  //   - secret set    → they point at /api/v1/webhooks/aerodatabox/<secret>
   // ---------------------------------------------------------------------
-  app.post("/api/v1/webhooks/aerodatabox/:secret", async (req: Request, res: Response) => {
+  const webhookIngress = async (req: Request, res: Response) => {
     try {
       const secret = webhookSecret();
-      if (secret && req.params.secret !== secret) {
+      if (secret && (!req.params.secret || req.params.secret !== secret)) {
         res.status(404).json({ error: "Not found" });
         return;
       }
@@ -72,7 +75,9 @@ export function registerV3Routes(app: Express): void {
       console.error("[adb-v3-webhook] error:", err?.message || err);
       res.status(200).json({ received: true, error: err?.message || "error" });
     }
-  });
+  };
+  app.post("/api/v1/webhooks/aerodatabox", webhookIngress);
+  app.post("/api/v1/webhooks/aerodatabox/:secret", webhookIngress);
 
   // ---------------------------------------------------------------------
   // SUBSCRIPTION MANAGEMENT

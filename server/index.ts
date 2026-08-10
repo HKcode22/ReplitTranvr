@@ -264,11 +264,17 @@ app.use((req, res, next) => {
     console.error("Boot migrations failed:", err?.message || err);
   }
 
-  await registerRoutes(httpServer, app);
   // v3 — AeroDataBox Flight Alert webhook + subscription management
   // (travnr.com). See MDplan/V3_WebhookExtractionPlan.md.
+  // NOTE: registered BEFORE registerRoutes() on purpose — registerRoutes mounts
+  // the CSRF middleware + generic /api limiter via app.use(), which would 403
+  // AeroDataBox's webhook POSTs (no CSRF token) and burn credits on retries.
+  // v3 routes authenticate themselves: the webhook via the URL secret and the
+  // management endpoints via the x-webhook-secret header.
   const { registerV3Routes } = await import("./routes_v3");
   registerV3Routes(app);
+
+  await registerRoutes(httpServer, app);
 
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
