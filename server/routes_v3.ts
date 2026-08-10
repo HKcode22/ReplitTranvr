@@ -14,10 +14,11 @@
 // (header `x-webhook-secret`). If the secret env var is unset (local dev) the
 // guard is bypassed.
 //
-// See MDplan/V3_WebhookExtractionPlan.md §8 Phase 1-2.
+// See MDplan/V3_WebhookExtractionPlan.md §8 Phase 1-3.
 // ============================================================
 
 import type { Express, Request, Response, NextFunction } from "express";
+import type { InsertFlightDataPrePost } from "@shared/schema";
 import {
   getBalance,
   refillBalance,
@@ -28,6 +29,9 @@ import {
   defaultWebhookUrl,
   type SubscriptionSubjectType,
 } from "./lib/disruption/aerodataboxLimiter_v3";
+import { flightNotificationContractSchema } from "./lib/disruption/flightStatus_v3";
+import { extractFlightNotification } from "./lib/disruption/flightNotificationExtractor_v3";
+import { upsertFlightNotifications } from "./lib/disruption/flightDataPrePostStore_v3";
 
 function webhookSecret(): string | null {
   return process.env.AERODATABOX_WEBHOOK_SECRET || null;
@@ -49,13 +53,14 @@ function managementGuard(req: Request, res: Response, next: NextFunction): void 
 export function registerV3Routes(app: Express): void {
   // ---------------------------------------------------------------------
   // WEBHOOK INGRESS — always answer 2xx within 10s or AeroDataBox retries
-  // and each retry costs credits. Full extraction lands in Phase 3; for now
-  // we acknowledge + log so subscriptions never burn credits on a 4xx/5xx.
+  // and each retry costs credits. On validation failure we still ack 2xx
+  // (4xx/5xx triggers a costly retry).
   // Registered on BOTH the bare path and the /:secret path:
   //   - secret unset  → subscriptions point at /api/v1/webhooks/aerodatabox
   //   - secret set    → they point at /api/v1/webhooks/aerodatabox/<secret>
   // ---------------------------------------------------------------------
   const webhookIngress = async (req: Request, res: Response) => {
+    const startedAt = Date.now();
     try {
       const secret = webhookSecret();
       if (secret && (!req.params.secret || req.params.secret !== secret)) {
@@ -63,13 +68,53 @@ export function registerV3Routes(app: Express): void {
         return;
       }
       const body: any = req.body || {};
-      const flights = Array.isArray(body?.flights) ? body.flights : [];
-      const subscriptionId = body?.subscription?.id ?? null;
-      const creditsRemaining = body?.balance?.creditsRemaining ?? null;
+      const flights: any[] = Array.isArray(body)
+        ? body
+        : Array.isArray(body?.flights)
+          ? body.flights
+          : [];
+
+      // Validation gate (plan §5): mirror PrePosFeat.md exactly. Never
+      // hard-fail on it — the extractor is null-safe, so log the issues and
+      // store what we can. The 2xx is what stops AeroDataBox burning credits.
+      const parsed = flightNotificationContractSchema.safeParse(body);
+      if (!parsed.success) {
+        const issues = parsed.error.issues
+          .slice(0, 5)
+          .map((i) => `${i.path.join(".") || "$"}: ${i.message}`);
+        console.warn(
+          `[adb-v3-webhook] payload validation issues (${parsed.error.issues.length}) — extracting defensively: ${issues.join("; ")}`,
+        );
+      }
+
+      const subscription = body?.subscription ?? null;
+      const balance = body?.balance ?? null;
+      const receivedAt = new Date();
+
+      const rows: InsertFlightDataPrePost[] = [];
+      let skipped = 0;
+      flights.forEach((flight: any, i: number) => {
+        const row = extractFlightNotification(flight, {
+          subscription,
+          balance,
+          receivedAt,
+          index: i,
+        });
+        if (row) rows.push(row);
+        else skipped++;
+      });
+
+      const stats = await upsertFlightNotifications(rows);
+
       console.log(
-        `[adb-v3-webhook] received flights=${flights.length} subscription=${subscriptionId ?? "-"} credits=${creditsRemaining ?? "-"} firstFlight=${flights[0]?.number ?? "-"}`,
+        `[adb-v3-webhook] received flights=${flights.length} stored=${stats.stored} (new=${stats.inserted} updated=${stats.updated}) skipped=${skipped} subscription=${subscription?.id ?? "-"} credits=${balance?.creditsRemaining ?? "-"} ms=${Date.now() - startedAt}`,
       );
-      res.status(200).json({ received: true, flights: flights.length });
+      res.status(200).json({
+        received: true,
+        flights: flights.length,
+        stored: stats.stored,
+        skipped,
+      });
     } catch (err: any) {
       // NEVER 5xx here — a 5xx triggers a paid retry. Log and 2xx anyway.
       console.error("[adb-v3-webhook] error:", err?.message || err);

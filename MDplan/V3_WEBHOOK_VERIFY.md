@@ -325,9 +325,10 @@ curl -s -X POST "$APP_URL/api/v1/webhooks/aerodatabox" \
 Expected: `{"received":true,"flights":1}` and a log line like
 `[adb-v3-webhook] received flights=1 subscription=000... credits=1000 firstFlight=AA100`.
 
-> ⚠️ **Phase 2/3 not built yet:** this endpoint currently acks + logs only. It does
-> NOT write rows yet. To confirm real extraction into `clean.flight_data_pre_post`,
-> wait until the extractor + store are deployed, then:
+> ✅ **Phase 3 built (2026-08-10):** this endpoint now VALIDATES + EXTRACTS + WRITES
+> rows to `clean.flight_data_pre_post` (dedup upsert on `dedup_key`). The log line is now:
+> `[adb-v3-webhook] received flights=N stored=M (new=X updated=Y) skipped=Z ...`.
+> To confirm rows landed:
 >
 > ```sql
 > SELECT flight_number, status, data_stage, dep_scheduled_utc, aircraft_reg, credits_remaining, received_at
