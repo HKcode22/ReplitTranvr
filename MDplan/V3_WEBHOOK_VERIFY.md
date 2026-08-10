@@ -366,7 +366,7 @@ the expected cost (1 credit / flight / alert). If you instead see
 **Start a batch** (needs balance ≥ budget 4000 + reserve 5000 = 9000 credits):
 
 ```bash
-curl -s -X POST "$APP_URL/api/v1/subscriptions/collection/start" -H "Content-Type: application/json" -d '{}'
+curl -s -X POST "$APP_URL/api/v1/collection/start" -H "Content-Type: application/json" -d '{}'
 ```
 
 Expected: `{"batch":{"batch_id":"B0001",...,"airports":["KJFK",...],"window_start":...,"window_end":...},"created":[...],"skipped":[]}`
@@ -376,7 +376,7 @@ Expected: `{"batch":{"batch_id":"B0001",...,"airports":["KJFK",...],"window_star
 **See how much of the world we can touch (NEW — free covered-airports list):**
 
 ```bash
-curl -s "$APP_URL/api/v1/subscriptions/collection/coverage"
+curl -s "$APP_URL/api/v1/collection/coverage"
 ```
 
 Expected: `{"fetchedAt":"...","universeCount":<N>,"catalogCount":276,"catalogInUniverse":<M>,"byTier":[...],"universeNotInCatalog":[...],"worldScheduledCommercial":4072}`.
@@ -391,9 +391,9 @@ private strips with no flight data). `universeNotInCatalog` is your "could-add" 
 **Check status / stop / diagnostics:**
 
 ```bash
-curl -s "$APP_URL/api/v1/subscriptions/collection/status"
-curl -s -X POST "$APP_URL/api/v1/subscriptions/collection/stop" -H "Content-Type: application/json" -d '{"reason":"manual_verify"}'
-curl -s "$APP_URL/api/v1/subscriptions/collection/diagnostics"
+curl -s "$APP_URL/api/v1/collection/status"
+curl -s -X POST "$APP_URL/api/v1/collection/stop" -H "Content-Type: application/json" -d '{"reason":"manual_verify"}'
+curl -s "$APP_URL/api/v1/collection/diagnostics"
 ```
 
 `diagnostics` shows rows by tier / departure hour / delay bucket / status + per-batch

@@ -13,6 +13,10 @@
 
 import { z } from "zod";
 
+// AeroDataBox sends enums sometimes as the numeric code (status: 2, quality: [0,1])
+// and sometimes as the string name ("EnRoute", ["Basic"]). Accept both.
+const enumCodeOrName = z.union([z.number().int(), z.string()]);
+
 // ---------------------------------------------------------------------------
 // Reusable leaf types
 // ---------------------------------------------------------------------------
@@ -58,19 +62,27 @@ const flightEndpoint = z
     gate: z.string().optional().nullable(),
     baggageBelt: z.string().optional().nullable(),
     runway: z.string().optional().nullable(),
-    quality: z.array(z.string()).optional().nullable(),
+    quality: z.array(enumCodeOrName).optional().nullable(),
   })
   .optional()
   .nullable();
 
+// Real deliveries use CAPITALIZED keys ({Km, Nm, Feet, Mile, Meter}); the docs
+// use lowercase. Accept both by making all keys optional.
 const distance = z
   .object({
-    meter: z.number(),
-    km: z.number(),
-    mile: z.number(),
-    nm: z.number(),
-    feet: z.number(),
+    meter: z.number().optional(),
+    km: z.number().optional(),
+    mile: z.number().optional(),
+    nm: z.number().optional(),
+    feet: z.number().optional(),
+    Meter: z.number().optional(),
+    Km: z.number().optional(),
+    Mile: z.number().optional(),
+    Nm: z.number().optional(),
+    Feet: z.number().optional(),
   })
+  .passthrough()
   .optional()
   .nullable();
 
@@ -183,8 +195,8 @@ export const flightStatusV3Schema = z.object({
   lastUpdatedUtc: isoUtc.optional().nullable(),
   number: z.string(),
   callSign: z.string().optional().nullable(),
-  status: z.string().optional().nullable(),
-  codeshareStatus: z.string().optional().nullable(),
+  status: enumCodeOrName.optional().nullable(),
+  codeshareStatus: enumCodeOrName.optional().nullable(),
   isCargo: z.boolean().optional().nullable(),
   aircraft: aircraft,
   airline: airline,

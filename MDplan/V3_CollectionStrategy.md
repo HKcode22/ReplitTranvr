@@ -128,7 +128,7 @@ distribution while keeping per-batch cost bounded.
 A **batch** is a bounded, seeded, short-lived collection run. Lifecycle:
 
 ```
-POST /api/v1/subscriptions/collection/start
+POST /api/v1/collection/start
   1. Guard: no other batch may be ACTIVE (else 400).
   2. Guard: balance ≥ budget + reserve (else 400, "refill first").
   3. Pick airports: seeded shuffle, rotate AWAY from the airports used in the
@@ -144,7 +144,7 @@ POST /api/v1/subscriptions/collection/start
 
 [webhook notifications flow in — see §4]
 
-POST /api/v1/subscriptions/collection/stop   (or the watchdog auto-stops)
+POST /api/v1/collection/stop   (or the watchdog auto-stops)
   - Delete every subscription of the batch  (DELETE ... — FREE; failure doesn't block).
   - Mark each adb_collection_subs.ended_at = now.
   - Close the batch: status = 'CLOSED', ended_at = now, stop_reason.
@@ -355,7 +355,7 @@ feed service:
 We added `listFeedAirports()` (limiter) + `getAirportCoverage()` (controller), so:
 
 ```
-GET /api/v1/subscriptions/collection/coverage
+GET /api/v1/collection/coverage
 {
   "fetchedAt": "...",
   "universe":      { "FlightSchedules": [...], "FlightLiveUpdates": [...], "AdsbUpdates": [...] },

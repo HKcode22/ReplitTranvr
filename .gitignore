@@ -6,3 +6,4 @@ vite.config.ts.*
 *.tar.gz
 .claude/
 *.csv
+flight_data_pre_post.json

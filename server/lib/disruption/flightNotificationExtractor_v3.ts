@@ -19,6 +19,34 @@ import { createHash } from "crypto";
 import type { InsertFlightDataPrePost } from "@shared/schema";
 import { POST_STATUSES, STATUS_CODE } from "./flightStatus_v3";
 
+// ---------------------------------------------------------------------------
+// AeroDataBox real-payload quirks (verified from live deliveries 2026-08-10):
+//   - `status` is a NUMERIC enum code (0-12), NOT the string name.
+//   - `codeshareStatus` is a NUMERIC enum code (0-2), NOT the string name.
+//   - `greatCircleDistance` keys are CAPITALIZED {Km, Nm, Feet, Mile, Meter}.
+//   - `quality[]` holds NUMERIC codes, NOT "Basic"/"Live"/"Approximate".
+// The validator + extractor handle BOTH forms so we never drop fields again.
+// ---------------------------------------------------------------------------
+
+/** numeric status code -> string name (reverse of STATUS_CODE). */
+export const STATUS_CODE_BY_NUMBER: Record<number, string> = Object.fromEntries(
+  Object.entries(STATUS_CODE).map(([name, code]) => [code, name]),
+);
+
+/** numeric codeshare code -> string name (PrePosFeat.md §codeshareStatus). */
+export const CODESHARE_CODE: Record<number, string> = {
+  0: "Unknown",
+  1: "IsOperator",
+  2: "IsCodeshared",
+};
+
+/** numeric quality code -> string name (PrePosFeat.md §quality). */
+export const QUALITY_CODE: Record<number, string> = {
+  0: "Basic",
+  1: "Live",
+  2: "Approximate",
+};
+
 export interface SamplingMeta {
   batchId: string | null;
   tier: string | null;
@@ -91,8 +119,40 @@ function timeLocal(timeObj: unknown): string | null {
 
 function strArr(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
-  const cleaned = value.filter((v): v is string => typeof v === "string");
+  const cleaned = value
+    .map((v): string | null => {
+      if (typeof v === "string" && v.length > 0) return v;
+      if (typeof v === "number" && Number.isFinite(v)) {
+        const mapped = QUALITY_CODE[v];
+        return mapped ?? String(v);
+      }
+      return null;
+    })
+    .filter((v): v is string => v !== null && v.length > 0);
   return cleaned.length > 0 ? cleaned : null;
+}
+
+/**
+ * AeroDataBox sends enums sometimes as the numeric code and sometimes as the
+ * string name. Accept both: number -> name lookup, string -> as-is.
+ */
+function enumName(value: unknown, codeMap: Record<number, string>): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return codeMap[value] ?? null;
+  }
+  if (typeof value === "string" && value.length > 0) return value;
+  return null;
+}
+
+/** Read a key from an object case-insensitively (gcd uses `Km`/`meter`). */
+function pickKey(obj: Record<string, any>, key: string): unknown {
+  if (obj == null) return undefined;
+  if (key in obj) return obj[key];
+  const lower = key.toLowerCase();
+  for (const k of Object.keys(obj)) {
+    if (k.toLowerCase() === lower) return obj[k];
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,7 +164,7 @@ function determineStage(flight: Record<string, any>): { stage: "PRE" | "POST"; h
   const loc = flight.location;
   const hasLiveLocation = !!loc && typeof loc === "object" && !Array.isArray(loc);
   if (hasLiveLocation) return { stage: "POST", hasLiveLocation: true };
-  const status = str(flight.status);
+  const status = enumName(flight.status, STATUS_CODE_BY_NUMBER);
   if (status && POST_STATUSES.has(status)) return { stage: "POST", hasLiveLocation: false };
   return { stage: "PRE", hasLiveLocation: false };
 }
@@ -143,7 +203,7 @@ export function extractFlightNotification(
   const flightNumber = str(flight.number);
   if (!flightNumber) return null;
 
-  const statusStr = str(flight.status);
+  const statusStr = enumName(flight.status, STATUS_CODE_BY_NUMBER);
 
   const dep = block(flight.departure);
   const depAirport = block(dep.airport);
@@ -186,17 +246,22 @@ export function extractFlightNotification(
     callSign: str(flight.callSign),
     isCargo: bool(flight.isCargo),
     status: statusStr,
-    statusCode: statusStr ? (STATUS_CODE[statusStr] ?? null) : null,
-    codeshareStatus: str(flight.codeshareStatus),
+    statusCode:
+      typeof flight.status === "number" && Number.isFinite(flight.status)
+        ? Math.trunc(flight.status)
+        : statusStr
+          ? (STATUS_CODE[statusStr] ?? null)
+          : null,
+    codeshareStatus: enumName(flight.codeshareStatus, CODESHARE_CODE),
     notificationSummary: str(flight.notificationSummary),
     notificationRemark: str(flight.notificationRemark),
     lastUpdatedUtc,
 
-    gcdM: num(gcd.meter),
-    gcdKm: num(gcd.km),
-    gcdMile: num(gcd.mile),
-    gcdNm: num(gcd.nm),
-    gcdFt: num(gcd.feet),
+    gcdM: num(pickKey(gcd, "meter")),
+    gcdKm: num(pickKey(gcd, "km")),
+    gcdMile: num(pickKey(gcd, "mile")),
+    gcdNm: num(pickKey(gcd, "nm")),
+    gcdFt: num(pickKey(gcd, "feet")),
 
     depAirportIcao: str(depAirport.icao),
     depAirportIata: str(depAirport.iata),

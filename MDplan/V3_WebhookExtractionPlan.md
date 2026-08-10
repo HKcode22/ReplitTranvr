@@ -4,7 +4,9 @@
 > Replit terminal, units-vs-credits investigation, subscription subject-type model
 > for capturing 50k+ rows, code robustness fix, **tier-rotating collection strategy**,
 > **world-airport reality-check + research-paper comparison + coverage report** —
-> see `V3_CollectionStrategy.md`).
+> see `V3_CollectionStrategy.md`). **Updated 2026-08-10** (added §8.0 "How to start
+> populating the table" — the exact runbook for the FIRST live collection batch;
+> corrected endpoint paths to the real code routes `/api/v1/collection/*`).
 >
 > Goal: ingest the **entire** AeroDataBox `FlightNotificationContract` webhook payload
 > (every field copied into `AugMLtest/PrePosFeat.md` from the docs) into ONE clean
@@ -21,7 +23,7 @@
 | **1. Subscription manager (create/refill/list/get/delete)** | ✅ **BUILT + RUNTIME-VERIFIED** (2026-08-10) | `aerodataboxLimiter_v3.ts` + `routes_v3.ts`, wired into `server/index.ts`. **Verified live on Replit 2026-08-10 01:23** — stray KJFK sub deleted (bleed stopped), app restarted on fixed code, new KJFK sub created with the correct `:443` webhook URL, `isActive:true` `CreditBased`. App endpoints respond (HTTP 200). |
 | **2. Webhook ingress + validator** (`POST /api/v1/webhooks/aerodatabox/:secret`) | ✅ **BUILT** (2026-08-10) | Ingress registers before CSRF (no 403s), always 2xx, now validates with `flightStatus_v3.ts` (zod mirror of `PrePosFeat.md`) then extracts + stores (Phase 3). 2mb JSON body limit set (big airport batches would otherwise 413 → paid retries). |
 | **3. Extractor + store** (`flightDataPrePost`) | ✅ **BUILT** (2026-08-10) | `flightNotificationExtractor_v3.ts` (null-safe field-by-field → flat row, `data_stage` PRE/POST, SHA-256 dedup key) + `flightDataPrePostStore_v3.ts` (batch upsert `ON CONFLICT (dedup_key) DO UPDATE` via `excluded.*`). `0010` + new `0011` (quality columns → jsonb) applied at boot. Extractor smoke-tested (33 asserts) + validator + SQL generation verified; `npm run check` still baseline errors, **0 in v3 files**. **Live DB write still to be verified on Replit.** |
-| **3b. Tier-rotating collection** (`adb_collection*`) | ✅ **BUILT** (2026-08-09) | `adbAirportCatalog_v3.ts` (HUB/MID/REGIONAL tiers, **276 airports** after 2026-08-09 expansion) + `adbCollectionController_v3.ts` (seeded rotation, budget guards, auto-stop watchdog, diagnostics, **`getAirportCoverage()`**) + migration `0012` (sampling columns + batch/sub tables). Webhook now stamps every row with batch/tier/probability/weight/seed/window. Endpoints: `GET|POST /api/v1/subscriptions/collection/start|stop|status|diagnostics|coverage`. See `V3_CollectionStrategy.md`. **Runtime verification pending on Replit.** |
+| **3b. Tier-rotating collection** (`adb_collection*`) | ✅ **BUILT** (2026-08-09) | `adbAirportCatalog_v3.ts` (HUB/MID/REGIONAL tiers, **276 airports** after 2026-08-09 expansion) + `adbCollectionController_v3.ts` (seeded rotation, budget guards, auto-stop watchdog, diagnostics, **`getAirportCoverage()`**) + migration `0012` (sampling columns + batch/sub tables). Webhook now stamps every row with batch/tier/probability/weight/seed/window. Endpoints: `GET/POST /api/v1/collection/catalog|start|stop`, `GET /api/v1/collection/status|diagnostics|coverage`. See `V3_CollectionStrategy.md`. **Runtime verification pending on Replit — run §8.0.** |
 | **4. Heuristic** | ⏸️ **DEFERRED** | User decision 2026-08-08: **focus GNN / deep-learning first.** Do not build until the GNN has data. Notes only (`AugMLtest/HeuristicModelNotes.md`). |
 | **5. Cutover / retire** | ⛔ Not started | After data flows. |
 
@@ -617,6 +619,98 @@ We ALSO store `has_live_location` so the GNN phase can filter cleanly.
 ---
 
 ## 8. THE STEP-BY-STEP SETUP (what we actually do next)
+
+### 8.0 — HOW TO START POPULATING THE TABLE (THE FIRST LIVE COLLECTION RUN)
+
+> Status: Phase 0–3b are all **built**. Nothing has collected rows yet. This runbook
+> is the **first live end-to-end test** of the whole pipeline — and it is also the
+> regular cadence you repeat daily/weekly from now on. Run it in the **Replit Shell**
+> (`$APP_URL` is your Replit deploy URL, e.g. `https://95ac2e69-....kirk.replit.dev`).
+
+**Step 0 — Pull + confirm the app is the latest build.**
+```bash
+git pull origin main          # app auto-restarts on Replit
+```
+Watch the boot log for:
+- `[migrations] applied 0012_collection_sampling.sql` (new tables/columns exist)
+- `[adb-collector] watchdog started (window=4h, budget=4000, reserve=5000, tierMix={"HUB":1,"MID":2,"REGIONAL":2})`
+
+**Step 1 — Check collection status (what the controller thinks).**
+```bash
+curl -s "$APP_URL/api/v1/collection/status"
+```
+You want to see `"canStart": true`. If `canStart` is `false`, read `reason`:
+- `"No balance yet — refill first"` → Step 2.
+- `"Insufficient credits (N < 9000)"` → Step 2 (top up).
+- `"A batch is active — stop it first"` → someone left one running; `POST /api/v1/collection/stop`.
+
+**Step 2 — Refill the alert-credit balance (only if `balance < 9000`).**
+```bash
+curl -s -X POST "$APP_URL/api/v1/subscriptions/balance/refill" \
+  -H "Content-Type: application/json" -d '{"credits":5000}'
+```
+Check: `curl -s "$APP_URL/api/v1/collection/status"` now shows `balance >= 9000`.
+
+**Step 3 — (Free sanity check) Coverage report — how much of the world we can touch.**
+```bash
+curl -s "$APP_URL/api/v1/collection/coverage"
+```
+Look at `catalogInUniverse` / `catalogCount`. If most of our 276 airports are covered,
+the batches can run. This is FREE and does not subscribe to anything.
+
+**Step 4 — START THE FIRST BATCH.**
+```bash
+curl -s -X POST "$APP_URL/api/v1/collection/start"
+```
+Response = the batch: `batch_id` (e.g. `B0001`), chosen `airports`, `created[]`
+(subscriptions), `skipped[]`. **This is the moment subscriptions get created** —
+AeroDataBox will begin pushing flight notifications to
+`https://<your-app>:443/api/v1/webhooks/aerodatabox`.
+
+**Step 5 — WATCH THE WEBHOOK LAND (the moment of truth).**
+In the app log, wait for lines like:
+```
+[adb-v3-webhook] received flights=12 stored=12 new=9 updated=3 skipped=0
+```
+> If you see `403` instead: the v3 routes are registered BEFORE CSRF in
+> `server/index.ts` (that was fixed 2026-08-10). If you see nothing at all, the
+> subscription's `url` may be wrong or the airport has no live feed — check the
+> `created[].subscriptionId` and re-verify via `GET /api/v1/subscriptions/webhook`.
+
+**Step 6 — Verify rows are actually in the table (the real test).**
+```bash
+psql "$DATABASE_URL" -c "SELECT flight_number, data_stage, status, dep_scheduled_utc, aircraft_reg, airport_tier, sampling_probability, sampling_weight FROM clean.flight_data_pre_post ORDER BY received_at DESC LIMIT 20;"
+```
+Rows must show `airport_tier` + `sampling_probability`/`sampling_weight` non-null
+(the batch stamping works) and `flight_number` populated.
+
+**Step 7 — Let it run / auto-stop.**
+The watchdog closes the batch at `window_end` (default 4h) or when rows ≈ budget
+(4,000). You can also stop early:
+```bash
+curl -s -X POST "$APP_URL/api/v1/collection/stop" -H "Content-Type: application/json" -d '{"reason":"manual"}'
+```
+
+**Step 8 — Read the diagnostics (the bias dashboard).**
+```bash
+curl -s "$APP_URL/api/v1/collection/diagnostics"
+```
+- `totals.rows` — how many rows batch 1 produced.
+- `byTier` — tier share spread (don't expect balance on one batch; it accumulates).
+- `byDepartureHour` — should spread over the day; if lopsided, stagger future batch
+  start times (`ADB_WINDOW_HOURS` up to 6–8h helps).
+- `totalEstimatedCredits` — rows stamped with `sampling_batch_id` (≈ credits spent).
+
+**Step 9 — Repeat.**
+`POST /api/v1/collection/start` again → the rotation **automatically picks different
+airports** (it avoids the last 2 batches). Daily/weekly repeats accumulate the
+tens-of-thousands of rows the GNN needs. Keep balance ≥ 9,000; refill when lower.
+
+> **Cost reminders:** subscription CRUD + coverage + balance are FREE. Only
+> notifications cost 1 credit per flight item. A typical 4h batch costs a few
+> hundred to ~2,000 credits — the watchdog stops it at 4,000 max. Do NOT click the
+> agency dashboard "Rescore all" / simulate while collecting (burns units on the
+> live REST endpoints).
 
 ### Phase 0 — ✅ done (this session). Nothing to redo. Do NOT touch.
 

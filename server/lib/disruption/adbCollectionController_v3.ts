@@ -228,7 +228,7 @@ export interface StartBatchResult {
 export async function startBatch(): Promise<StartBatchResult> {
   const active = await getActiveBatch();
   if (active) {
-    throw new Error(`Batch ${active.batchId} is still active — stop it first (POST /api/v1/subscriptions/collection/stop).`);
+    throw new Error(`Batch ${active.batchId} is still active — stop it first (POST /api/v1/collection/stop).`);
   }
 
   const balance = await getBalance();

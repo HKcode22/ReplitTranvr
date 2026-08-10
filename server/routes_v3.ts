@@ -117,18 +117,28 @@ export function registerV3Routes(app: Express): void {
           sampling = null;
         }
       }
-      if (!sampling?.batchId && subscription?.subject?.type === "FlightByAirportIcao") {
-        const tier = tierForIcao(subscription?.subject?.id);
-        if (tier) {
-          sampling = {
-            batchId: null,
-            tier,
-            samplingProbability: null,
-            samplingWeight: null,
-            randomSeed: null,
-            windowStart: null,
-            windowEnd: null,
-          };
+      if (!sampling?.batchId) {
+        // Real deliveries sometimes omit subject.type (it arrives null), so
+        // derive the tier from the subject id (a 4-letter ICAO airport code).
+        const subjType = subscription?.subject?.type;
+        const subjId = subscription?.subject?.id;
+        const looksLikeAirport =
+          typeof subjId === "string" &&
+          /^[A-Za-z]{4}$/.test(subjId) &&
+          (subjType === "FlightByAirportIcao" || !subjType);
+        if (looksLikeAirport) {
+          const tier = tierForIcao(subjId);
+          if (tier) {
+            sampling = {
+              batchId: null,
+              tier,
+              samplingProbability: null,
+              samplingWeight: null,
+              randomSeed: null,
+              windowStart: null,
+              windowEnd: null,
+            };
+          }
         }
       }
 
