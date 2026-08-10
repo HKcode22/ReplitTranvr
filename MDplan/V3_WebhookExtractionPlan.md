@@ -2,7 +2,8 @@
 
 > Created 2026-08-06. **Updated 2026-08-09** (runtime verification results from the
 > Replit terminal, units-vs-credits investigation, subscription subject-type model
-> for capturing 50k+ rows, code robustness fix, **tier-rotating collection strategy** —
+> for capturing 50k+ rows, code robustness fix, **tier-rotating collection strategy**,
+> **world-airport reality-check + research-paper comparison + coverage report** —
 > see `V3_CollectionStrategy.md`).
 >
 > Goal: ingest the **entire** AeroDataBox `FlightNotificationContract` webhook payload
@@ -20,7 +21,7 @@
 | **1. Subscription manager (create/refill/list/get/delete)** | ✅ **BUILT + RUNTIME-VERIFIED** (2026-08-10) | `aerodataboxLimiter_v3.ts` + `routes_v3.ts`, wired into `server/index.ts`. **Verified live on Replit 2026-08-10 01:23** — stray KJFK sub deleted (bleed stopped), app restarted on fixed code, new KJFK sub created with the correct `:443` webhook URL, `isActive:true` `CreditBased`. App endpoints respond (HTTP 200). |
 | **2. Webhook ingress + validator** (`POST /api/v1/webhooks/aerodatabox/:secret`) | ✅ **BUILT** (2026-08-10) | Ingress registers before CSRF (no 403s), always 2xx, now validates with `flightStatus_v3.ts` (zod mirror of `PrePosFeat.md`) then extracts + stores (Phase 3). 2mb JSON body limit set (big airport batches would otherwise 413 → paid retries). |
 | **3. Extractor + store** (`flightDataPrePost`) | ✅ **BUILT** (2026-08-10) | `flightNotificationExtractor_v3.ts` (null-safe field-by-field → flat row, `data_stage` PRE/POST, SHA-256 dedup key) + `flightDataPrePostStore_v3.ts` (batch upsert `ON CONFLICT (dedup_key) DO UPDATE` via `excluded.*`). `0010` + new `0011` (quality columns → jsonb) applied at boot. Extractor smoke-tested (33 asserts) + validator + SQL generation verified; `npm run check` still baseline errors, **0 in v3 files**. **Live DB write still to be verified on Replit.** |
-| **3b. Tier-rotating collection** (`adb_collection*`) | ✅ **BUILT** (2026-08-09) | `adbAirportCatalog_v3.ts` (HUB/MID/REGIONAL tiers) + `adbCollectionController_v3.ts` (seeded rotation, budget guards, auto-stop watchdog, diagnostics) + migration `0012` (sampling columns + batch/sub tables). Webhook now stamps every row with batch/tier/probability/weight/seed/window. Endpoints: `GET|POST /api/v1/subscriptions/collection/start|stop|status|diagnostics`. See `V3_CollectionStrategy.md`. **Runtime verification pending on Replit.** |
+| **3b. Tier-rotating collection** (`adb_collection*`) | ✅ **BUILT** (2026-08-09) | `adbAirportCatalog_v3.ts` (HUB/MID/REGIONAL tiers, **276 airports** after 2026-08-09 expansion) + `adbCollectionController_v3.ts` (seeded rotation, budget guards, auto-stop watchdog, diagnostics, **`getAirportCoverage()`**) + migration `0012` (sampling columns + batch/sub tables). Webhook now stamps every row with batch/tier/probability/weight/seed/window. Endpoints: `GET|POST /api/v1/subscriptions/collection/start|stop|status|diagnostics|coverage`. See `V3_CollectionStrategy.md`. **Runtime verification pending on Replit.** |
 | **4. Heuristic** | ⏸️ **DEFERRED** | User decision 2026-08-08: **focus GNN / deep-learning first.** Do not build until the GNN has data. Notes only (`AugMLtest/HeuristicModelNotes.md`). |
 | **5. Cutover / retire** | ⛔ Not started | After data flows. |
 
@@ -779,6 +780,13 @@ specialized ML approach — before any heuristic.
    **tier-rotating batches** (`V3_CollectionStrategy.md`) — small rotating airport
    sets, short windows, budget-capped, auto-stopped, every row stamped with sampling
    metadata. This avoids wasting the 60k units and avoids hub/time-of-day bias.
+   **Update 2 (2026-08-09):** catalog grown to **276 airports** (30 HUB / 89 MID /
+   157 REGIONAL) after researching the real world-airport numbers (~4,072 scheduled-
+   commercial airports, ~500 carry >90% of traffic) and comparing with the research
+   papers (largest study used all 236 mainland-China airports). A FREE
+   `GET /health/services/feeds/{service}/airports` endpoint now lets us enumerate
+   AeroDataBox's covered airports and report coverage (`/collection/coverage`) —
+   see `V3_CollectionStrategy.md` §2a/§2b/§10.
 7. **Server2 leftovers** ✅ RESOLVED 2026-08-08 — `package.json` `dev` now runs
    `tsx --watch server/index.ts`.
 8. **Unit usage audit** — `apiCallTracker.ts` is disabled (reference copy). If we want

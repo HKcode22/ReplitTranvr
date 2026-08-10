@@ -29,12 +29,15 @@ import {
   createSubscription,
   deleteSubscription,
   checkAirportFeeds,
+  listFeedAirports,
+  type FeedService,
   type SubscriptionSubjectType,
 } from "./aerodataboxLimiter_v3";
 import {
   AIRPORT_CATALOG,
   AIRPORT_TIERS,
   tierForIcao,
+  allCatalogAirports,
   type AirportTier,
 } from "./adbAirportCatalog_v3";
 
@@ -431,6 +434,16 @@ export interface Diagnostics {
     rows: number;
   }>;
   totalEstimatedCredits: number;
+  /** Optional airport-coverage summary (may be null if the free call fails). */
+  coverage?: Pick<AirportCoverage,
+    | "fetchedAt"
+    | "universeCount"
+    | "catalogCount"
+    | "catalogInUniverse"
+    | "catalogMissingFromUniverse"
+    | "byTier"
+    | "worldScheduledCommercial"
+    | "error"> | null;
 }
 
 export async function getDiagnostics(): Promise<Diagnostics> {
@@ -509,6 +522,26 @@ export async function getDiagnostics(): Promise<Diagnostics> {
     }),
   );
 
+  // Best-effort coverage summary (free call, cached 12h — never fails the report).
+  let coverageSummary: Diagnostics["coverage"] = null;
+  try {
+    const cov = await getAirportCoverage();
+    if (cov) {
+      coverageSummary = {
+        fetchedAt: cov.fetchedAt,
+        universeCount: cov.universeCount,
+        catalogCount: cov.catalogCount,
+        catalogInUniverse: cov.catalogInUniverse,
+        catalogMissingFromUniverse: cov.catalogMissingFromUniverse,
+        byTier: cov.byTier,
+        worldScheduledCommercial: cov.worldScheduledCommercial,
+        error: cov.error,
+      };
+    }
+  } catch {
+    coverageSummary = null;
+  }
+
   return {
     totals,
     byTier,
@@ -517,6 +550,7 @@ export async function getDiagnostics(): Promise<Diagnostics> {
     byStatus,
     batches,
     totalEstimatedCredits: creditsRes.rowCount ? creditsRes.rows[0].n : 0,
+    coverage: coverageSummary,
   };
 }
 
@@ -553,4 +587,111 @@ export function startCollectionWatchdog(): void {
   console.log(
     `[adb-collector] watchdog started (window=${COLLECTOR_CONFIG.windowHours}h, budget=${COLLECTOR_CONFIG.batchBudget} credits/batch, reserve=${COLLECTOR_CONFIG.reserveCredits}, tierMix=${JSON.stringify(COLLECTOR_CONFIG.tierMix)})`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Airport coverage analysis — "how much of the world can we touch?"
+//
+// AeroDataBox's FREE `GET /health/services/feeds/{service}/airports` returns
+// the ICAO of every airport it supports per feed. Comparing that universe
+// against our catalog tells us (a) how many airports are even collectable,
+// and (b) how much of it our tier-rotating samples can draw from. All calls
+// are free; results are cached in memory for COVERAGE_CACHE_MS to avoid
+// hammering the API. See MDplan/V3_CollectionStrategy.md §10.
+// ---------------------------------------------------------------------------
+
+const COVERAGE_CACHE_MS = 12 * 60 * 60 * 1000; // 12h
+let coverageCache: { at: number; data: AirportCoverage } | null = null;
+
+export interface AirportCoverage {
+  fetchedAt: string | null;
+  /** Airports AeroDataBox supports per feed service (free enumeration). */
+  universe: Record<FeedService, string[]>;
+  /** Union of all three feeds (the true collectable universe). */
+  universeUnion: string[];
+  universeCount: number;
+  /** Our catalog: how many unique airports, and how many are in the universe. */
+  catalogCount: number;
+  catalogInUniverse: number;
+  catalogMissingFromUniverse: string[];
+  /** Sanity: how many universe airports are NOT in our catalog (we could add). */
+  universeNotInCatalog: string[];
+  /** Per-tier breakdown of our catalog against the universe. */
+  byTier: Array<{ tier: AirportTier; total: number; inUniverse: number }>;
+  /** ~500 airports carry >90% of world passenger traffic (ATAG). */
+  worldScheduledCommercial: number;
+  error: string | null;
+}
+
+/** Exported for tests: build a coverage report from given data (no API calls). */
+export function computeAirportCoverage(
+  feeds: Partial<Record<FeedService, string[]>>,
+): Omit<AirportCoverage, "fetchedAt" | "error" | "worldScheduledCommercial"> {
+  const services: FeedService[] = ["FlightSchedules", "FlightLiveUpdates", "AdsbUpdates"];
+  const universe: Record<FeedService, string[]> = {
+    FlightSchedules: [],
+    FlightLiveUpdates: [],
+    AdsbUpdates: [],
+  };
+  const unionSet = new Set<string>();
+  for (const s of services) {
+    const list = (feeds[s] ?? []).map((c) => c.toUpperCase()).filter(Boolean);
+    universe[s] = Array.from(new Set(list));
+    for (const c of list) unionSet.add(c);
+  }
+  const universeUnion = Array.from(unionSet).sort();
+
+  const catalog = allCatalogAirports().map((c) => c.toUpperCase());
+  const catalogSet = new Set(catalog);
+  const catalogInUniverse = Array.from(catalogSet).filter((c) => unionSet.has(c));
+  const catalogMissingFromUniverse = Array.from(catalogSet).filter((c) => !unionSet.has(c)).sort();
+  const universeNotInCatalog = universeUnion.filter((c) => !catalogSet.has(c));
+
+  const byTier: Array<{ tier: AirportTier; total: number; inUniverse: number }> =
+    AIRPORT_TIERS.map((t) => {
+      const tierList = AIRPORT_CATALOG[t].map((c) => c.toUpperCase());
+      return {
+        tier: t,
+        total: tierList.length,
+        inUniverse: tierList.filter((c) => unionSet.has(c)).length,
+      };
+    });
+
+  return {
+    universe,
+    universeUnion,
+    universeCount: universeUnion.length,
+    catalogCount: catalogSet.size,
+    catalogInUniverse: catalogInUniverse.length,
+    catalogMissingFromUniverse,
+    universeNotInCatalog,
+    byTier,
+  };
+}
+
+/** Fresh coverage report — free API calls, cached 12h. Null on error. */
+export async function getAirportCoverage(force = false): Promise<AirportCoverage | null> {
+  if (!force && coverageCache && Date.now() - coverageCache.at < COVERAGE_CACHE_MS) {
+    return coverageCache.data;
+  }
+  try {
+    const services: FeedService[] = ["FlightSchedules", "FlightLiveUpdates", "AdsbUpdates"];
+    const feeds: Partial<Record<FeedService, string[]>> = {};
+    for (const s of services) {
+      const list = await listFeedAirports(s);
+      if (list) feeds[s] = list;
+    }
+    const base = computeAirportCoverage(feeds);
+    const data: AirportCoverage = {
+      ...base,
+      fetchedAt: new Date().toISOString(),
+      worldScheduledCommercial: 4072, // ATAG 2023
+      error: Object.values(feeds).length === 0 ? "All feed enumerations failed — check AERODATABOX_API_KEY" : null,
+    };
+    coverageCache = { at: Date.now(), data };
+    return data;
+  } catch (err: any) {
+    console.error("[adb-collector] getAirportCoverage error:", err?.message || err);
+    return null;
+  }
 }

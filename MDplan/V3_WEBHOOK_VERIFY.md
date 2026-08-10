@@ -373,6 +373,18 @@ Expected: `{"batch":{"batch_id":"B0001",...,"airports":["KJFK",...],"window_star
 
 ⚠️ + `-H "x-webhook-secret: $AERODATABOX_WEBHOOK_SECRET"` if the secret is set.
 
+**See how much of the world we can touch (NEW — free covered-airports list):**
+
+```bash
+curl -s "$APP_URL/api/v1/subscriptions/collection/coverage"
+```
+
+Expected: `{"fetchedAt":"...","universeCount":<N>,"catalogCount":276,"catalogInUniverse":<M>,"byTier":[...],"universeNotInCatalog":[...],"worldScheduledCommercial":4072}`.
+`universeCount` = how many airports AeroDataBox actually covers (the true ceiling —
+the world has ~4,072 scheduled-commercial airports, NOT 50k; most of the 50k are
+private strips with no flight data). `universeNotInCatalog` is your "could-add" list.
+`?force=1` refreshes the 12h cache.
+
 **Watch it collect** — the app log shows:
 `[adb-v3-webhook] received flights=N stored=M (new=X updated=Y) skipped=Z ...`
 

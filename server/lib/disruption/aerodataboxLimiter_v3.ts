@@ -97,6 +97,8 @@ export interface AirportFeedsHealth {
   [key: string]: unknown;
 }
 
+export type FeedService = "FlightSchedules" | "FlightLiveUpdates" | "AdsbUpdates";
+
 // ---------------------------------------------------------------------------
 // Balance
 // ---------------------------------------------------------------------------
@@ -268,6 +270,30 @@ export async function checkAirportFeeds(icao: string): Promise<AirportFeedsHealt
     return await readJsonOrNull(resp);
   } catch (err: any) {
     console.error("[adb-v3] checkAirportFeeds error:", err?.message || err);
+    return null;
+  }
+}
+
+/**
+ * GET /health/services/feeds/{service}/airports — FREE.
+ * Returns EVERY airport ICAO code that AeroDataBox supports for a given feed
+ * service (FlightSchedules / FlightLiveUpdates / AdsbUpdates), as
+ * `{ count, items: string[] }`. This is how we enumerate the true collectable
+ * universe (the "how many airports can we actually touch" question).
+ */
+export async function listFeedAirports(service: FeedService): Promise<string[] | null> {
+  try {
+    const resp = await throttledFetch(
+      `${BASE_URL}/health/services/feeds/${encodeURIComponent(service)}/airports`,
+      { headers: headers() },
+    );
+    if (!resp.ok) return null;
+    const raw: any = await readJsonOrNull(resp);
+    if (!raw || !Array.isArray(raw?.items)) return null;
+    const items: string[] = raw.items.filter((x: unknown): x is string => typeof x === "string");
+    return items.length > 0 ? items : null;
+  } catch (err: any) {
+    console.error("[adb-v3] listFeedAirports error:", err?.message || err);
     return null;
   }
 }

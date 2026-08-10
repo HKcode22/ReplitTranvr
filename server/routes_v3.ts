@@ -40,6 +40,7 @@ import {
   stopBatch,
   getCollectionStatus,
   getDiagnostics,
+  getAirportCoverage,
   lookupSubscriptionMeta,
   startCollectionWatchdog,
   COLLECTOR_CONFIG,
@@ -271,6 +272,17 @@ export function registerV3Routes(app: Express): void {
       res.json(await getDiagnostics());
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "failed to run diagnostics" });
+    }
+  });
+
+  app.get("/api/v1/collection/coverage", managementGuard, async (req: Request, res: Response) => {
+    try {
+      const force = req.query?.force === "1" || req.query?.force === "true";
+      const cov = await getAirportCoverage(force);
+      if (!cov) return res.status(502).json({ error: "Coverage enumeration failed — check AERODATABOX_API_KEY" });
+      res.json(cov);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "failed to fetch coverage" });
     }
   });
 
