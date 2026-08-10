@@ -30,8 +30,21 @@ import {
   type SubscriptionSubjectType,
 } from "./lib/disruption/aerodataboxLimiter_v3";
 import { flightNotificationContractSchema } from "./lib/disruption/flightStatus_v3";
-import { extractFlightNotification } from "./lib/disruption/flightNotificationExtractor_v3";
+import {
+  extractFlightNotification,
+  type SamplingMeta,
+} from "./lib/disruption/flightNotificationExtractor_v3";
 import { upsertFlightNotifications } from "./lib/disruption/flightDataPrePostStore_v3";
+import {
+  startBatch,
+  stopBatch,
+  getCollectionStatus,
+  getDiagnostics,
+  lookupSubscriptionMeta,
+  startCollectionWatchdog,
+  COLLECTOR_CONFIG,
+} from "./lib/disruption/adbCollectionController_v3";
+import { AIRPORT_CATALOG, AIRPORT_TIERS, tierForIcao } from "./lib/disruption/adbAirportCatalog_v3";
 
 function webhookSecret(): string | null {
   return process.env.AERODATABOX_WEBHOOK_SECRET || null;
@@ -91,6 +104,33 @@ export function registerV3Routes(app: Express): void {
       const balance = body?.balance ?? null;
       const receivedAt = new Date();
 
+      // Sampling metadata: if this subscription belongs to a managed batch,
+      // stamp every row with batch/tier/probability/weight. If not, fall back
+      // to the catalog tier derived from the airport ICAO.
+      let sampling: SamplingMeta | null = null;
+      const subId = subscription?.id;
+      if (subId) {
+        try {
+          sampling = await lookupSubscriptionMeta(String(subId));
+        } catch {
+          sampling = null;
+        }
+      }
+      if (!sampling?.batchId && subscription?.subject?.type === "FlightByAirportIcao") {
+        const tier = tierForIcao(subscription?.subject?.id);
+        if (tier) {
+          sampling = {
+            batchId: null,
+            tier,
+            samplingProbability: null,
+            samplingWeight: null,
+            randomSeed: null,
+            windowStart: null,
+            windowEnd: null,
+          };
+        }
+      }
+
       const rows: InsertFlightDataPrePost[] = [];
       let skipped = 0;
       flights.forEach((flight: any, i: number) => {
@@ -99,6 +139,7 @@ export function registerV3Routes(app: Express): void {
           balance,
           receivedAt,
           index: i,
+          sampling,
         });
         if (row) rows.push(row);
         else skipped++;
@@ -184,4 +225,56 @@ export function registerV3Routes(app: Express): void {
     if (!ok) return res.status(502).json({ error: "Failed to delete subscription" });
     res.json({ success: true });
   });
+
+  // ---------------------------------------------------------------------
+  // TIER-ROTATING COLLECTION (MDplan/V3_CollectionStrategy.md)
+  // Subscribe to a small rotating set of airports for a short window,
+  // collect, unsubscribe, move to the next batch. Budget-guarded.
+  // ---------------------------------------------------------------------
+  app.get("/api/v1/collection/catalog", managementGuard, (_req: Request, res: Response) => {
+    const byTier = Object.fromEntries(
+      AIRPORT_TIERS.map((t) => [t, [...AIRPORT_CATALOG[t]]]),
+    );
+    res.json({ tiers: AIRPORT_TIERS, byTier, tierMix: COLLECTOR_CONFIG.tierMix });
+  });
+
+  app.get("/api/v1/collection/status", managementGuard, async (_req: Request, res: Response) => {
+    try {
+      res.json(await getCollectionStatus());
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "failed to read collection status" });
+    }
+  });
+
+  app.post("/api/v1/collection/start", managementGuard, async (_req: Request, res: Response) => {
+    try {
+      const result = await startBatch();
+      res.status(201).json(result);
+    } catch (err: any) {
+      res.status(400).json({ error: err?.message || "failed to start batch" });
+    }
+  });
+
+  app.post("/api/v1/collection/stop", managementGuard, async (req: Request, res: Response) => {
+    try {
+      const reason = String(req.body?.reason || "manual");
+      const closed = await stopBatch(reason);
+      if (!closed) return res.status(404).json({ error: "No active batch to stop" });
+      res.json({ stopped: closed });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "failed to stop batch" });
+    }
+  });
+
+  app.get("/api/v1/collection/diagnostics", managementGuard, async (_req: Request, res: Response) => {
+    try {
+      res.json(await getDiagnostics());
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "failed to run diagnostics" });
+    }
+  });
+
+  // Auto-stop watchdog: closes a batch when its window elapses or its credit
+  // budget is reached. DB reads + free delete calls only — cannot burn credits.
+  startCollectionWatchdog();
 }

@@ -4,6 +4,10 @@
 > works after pulling the v3 code. Companion to `MDplan/V3_WebhookExtractionPlan.md`.
 >
 > All commands run in the Replit **Shell** (`~/workspace`). The app runs on port 5000.
+>
+> **NEW (2026-08-09): §10.5 Tier-rotating collection** — instead of subscribing to 20
+> airports forever, run short budget-capped batches that rotate airports and stamp
+> sampling metadata on every row. See `MDplan/V3_CollectionStrategy.md`.
 
 ---
 
@@ -350,6 +354,52 @@ airport's flights, it POSTs to your endpoint. Watch the log — you want to see
 The `credits` count should decrease by 1 per flight item per notification — that is
 the expected cost (1 credit / flight / alert). If you instead see
 `POST /api/v1/webhooks/aerodatabox 403`, the app is running OLD code — pull + restart.
+
+## 10.5 Tier-rotating collection — run a batch (NEW 2026-08-09)
+
+> Instead of "subscribe to 20 airports forever", run **short batches** that rotate
+> airports across HUB / MID / REGIONAL tiers, budget-capped and auto-stopped. Every
+> captured row is stamped with `sampling_batch_id` / `airport_tier` /
+> `sampling_probability` / `sampling_weight` / `random_seed` / window. Full
+> rationale: `MDplan/V3_CollectionStrategy.md`.
+
+**Start a batch** (needs balance ≥ budget 4000 + reserve 5000 = 9000 credits):
+
+```bash
+curl -s -X POST "$APP_URL/api/v1/subscriptions/collection/start" -H "Content-Type: application/json" -d '{}'
+```
+
+Expected: `{"batch":{"batch_id":"B0001",...,"airports":["KJFK",...],"window_start":...,"window_end":...},"created":[...],"skipped":[]}`
+
+⚠️ + `-H "x-webhook-secret: $AERODATABOX_WEBHOOK_SECRET"` if the secret is set.
+
+**Watch it collect** — the app log shows:
+`[adb-v3-webhook] received flights=N stored=M (new=X updated=Y) skipped=Z ...`
+
+**Check status / stop / diagnostics:**
+
+```bash
+curl -s "$APP_URL/api/v1/subscriptions/collection/status"
+curl -s -X POST "$APP_URL/api/v1/subscriptions/collection/stop" -H "Content-Type: application/json" -d '{"reason":"manual_verify"}'
+curl -s "$APP_URL/api/v1/subscriptions/collection/diagnostics"
+```
+
+`diagnostics` shows rows by tier / departure hour / delay bucket / status + per-batch
+rows + total estimated credits — use it as the **bias dashboard** (tier shares should
+spread, hours should spread, budget should be under control).
+
+**Verify rows landed + are stamped:**
+
+```bash
+psql "$DATABASE_URL" -c "SELECT flight_number, airport_tier, sampling_batch_id, sampling_probability, sampling_weight, random_seed, data_stage FROM clean.flight_data_pre_post WHERE sampling_batch_id IS NOT NULL ORDER BY received_at DESC LIMIT 20;"
+```
+
+**Run another batch** — rotation automatically picks different airports (it avoids
+the airports used in the last 2 batches). Budget math: ~4k credits/batch → ~12–15
+batches/month inside the 60k units; auto-stop on `window_elapsed` / `budget_reached`.
+
+Env knobs if you want to tune: `ADB_WINDOW_HOURS` (4), `ADB_BATCH_BUDGET` (4000),
+`ADB_RESERVE_CREDITS` (5000), `ADB_TIER_MIX` (`{"HUB":1,"MID":2,"REGIONAL":2}`).
 
 ## If something fails
 

@@ -867,6 +867,16 @@ export const flightDataPrePost = cleanSchema.table(
     creditsRemaining: bigint("credits_remaining", { mode: "number" }),
     balanceLastRefilledUtc: timestamp("balance_last_refilled_utc", { withTimezone: true }),
     balanceLastDeductedUtc: timestamp("balance_last_deducted_utc", { withTimezone: true }),
+
+    // Sampling metadata (tier-rotating collection, migration 0012)
+    samplingBatchId: text("sampling_batch_id"),
+    airportTier: text("airport_tier"),
+    samplingProbability: doublePrecision("sampling_probability"),
+    samplingWeight: doublePrecision("sampling_weight"),
+    randomSeed: text("random_seed"),
+    collectionWindowStart: timestamp("collection_window_start", { withTimezone: true }),
+    collectionWindowEnd: timestamp("collection_window_end", { withTimezone: true }),
+
     receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
     payloadJson: jsonb("payload_json").notNull(),
     dedupKey: text("dedup_key").notNull(),
@@ -876,6 +886,7 @@ export const flightDataPrePost = cleanSchema.table(
     index("idx_fdp_flight_date").on(table.flightNumber, table.depScheduledUtc),
     index("idx_fdp_aircraft_reg").on(table.aircraftReg),
     index("idx_fdp_status").on(table.status),
+    index("idx_fdp_batch").on(table.samplingBatchId),
   ],
 );
 

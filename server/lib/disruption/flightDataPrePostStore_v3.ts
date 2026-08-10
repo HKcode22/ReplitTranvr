@@ -138,6 +138,13 @@ export const EXCLUDED_SET = {
   creditsRemaining: sql`excluded.credits_remaining`,
   balanceLastRefilledUtc: sql`excluded.balance_last_refilled_utc`,
   balanceLastDeductedUtc: sql`excluded.balance_last_deducted_utc`,
+  samplingBatchId: sql`excluded.sampling_batch_id`,
+  airportTier: sql`excluded.airport_tier`,
+  samplingProbability: sql`excluded.sampling_probability`,
+  samplingWeight: sql`excluded.sampling_weight`,
+  randomSeed: sql`excluded.random_seed`,
+  collectionWindowStart: sql`excluded.collection_window_start`,
+  collectionWindowEnd: sql`excluded.collection_window_end`,
   receivedAt: sql`now()`,
   payloadJson: sql`excluded.payload_json`,
 } as const;

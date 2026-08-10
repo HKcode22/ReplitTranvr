@@ -2,7 +2,8 @@
 
 > Created 2026-08-06. **Updated 2026-08-09** (runtime verification results from the
 > Replit terminal, units-vs-credits investigation, subscription subject-type model
-> for capturing 50k+ rows, code robustness fix).
+> for capturing 50k+ rows, code robustness fix, **tier-rotating collection strategy** —
+> see `V3_CollectionStrategy.md`).
 >
 > Goal: ingest the **entire** AeroDataBox `FlightNotificationContract` webhook payload
 > (every field copied into `AugMLtest/PrePosFeat.md` from the docs) into ONE clean
@@ -18,7 +19,8 @@
 | **0. Shut down old polling + v1 tables** | ✅ **DONE** (2026-08-08) | All live AeroDataBox poll calls + `monitored_flights` / `risk_score_history` writes commented out in `routes.ts` + `monitor.ts`. Engine was already dead. Only remaining live AeroDataBox call: **manual** `simulate → findLowRiskAlternatives` debug action (left on purpose — see §1c). |
 | **1. Subscription manager (create/refill/list/get/delete)** | ✅ **BUILT + RUNTIME-VERIFIED** (2026-08-10) | `aerodataboxLimiter_v3.ts` + `routes_v3.ts`, wired into `server/index.ts`. **Verified live on Replit 2026-08-10 01:23** — stray KJFK sub deleted (bleed stopped), app restarted on fixed code, new KJFK sub created with the correct `:443` webhook URL, `isActive:true` `CreditBased`. App endpoints respond (HTTP 200). |
 | **2. Webhook ingress + validator** (`POST /api/v1/webhooks/aerodatabox/:secret`) | ✅ **BUILT** (2026-08-10) | Ingress registers before CSRF (no 403s), always 2xx, now validates with `flightStatus_v3.ts` (zod mirror of `PrePosFeat.md`) then extracts + stores (Phase 3). 2mb JSON body limit set (big airport batches would otherwise 413 → paid retries). |
-| **3. Extractor + store** (`flightDataPrePost`) | ✅ **BUILT** (2026-08-10) | `flightNotificationExtractor_v3.ts` (null-safe field-by-field → flat row, `data_stage` PRE/POST, SHA-256 dedup key) + `flightDataPrePostStore_v3.ts` (batch upsert `ON CONFLICT (dedup_key) DO UPDATE` via `excluded.*`). `0010` + new `0011` (quality columns → jsonb) applied at boot. Extractor smoke-tested (33 asserts) + validator + SQL generation verified; `npm run check` still 57 baseline errors, **0 in v3 files**. **Live DB write still to be verified on Replit.** |
+| **3. Extractor + store** (`flightDataPrePost`) | ✅ **BUILT** (2026-08-10) | `flightNotificationExtractor_v3.ts` (null-safe field-by-field → flat row, `data_stage` PRE/POST, SHA-256 dedup key) + `flightDataPrePostStore_v3.ts` (batch upsert `ON CONFLICT (dedup_key) DO UPDATE` via `excluded.*`). `0010` + new `0011` (quality columns → jsonb) applied at boot. Extractor smoke-tested (33 asserts) + validator + SQL generation verified; `npm run check` still baseline errors, **0 in v3 files**. **Live DB write still to be verified on Replit.** |
+| **3b. Tier-rotating collection** (`adb_collection*`) | ✅ **BUILT** (2026-08-09) | `adbAirportCatalog_v3.ts` (HUB/MID/REGIONAL tiers) + `adbCollectionController_v3.ts` (seeded rotation, budget guards, auto-stop watchdog, diagnostics) + migration `0012` (sampling columns + batch/sub tables). Webhook now stamps every row with batch/tier/probability/weight/seed/window. Endpoints: `GET|POST /api/v1/subscriptions/collection/start|stop|status|diagnostics`. See `V3_CollectionStrategy.md`. **Runtime verification pending on Replit.** |
 | **4. Heuristic** | ⏸️ **DEFERRED** | User decision 2026-08-08: **focus GNN / deep-learning first.** Do not build until the GNN has data. Notes only (`AugMLtest/HeuristicModelNotes.md`). |
 | **5. Cutover / retire** | ⛔ Not started | After data flows. |
 
@@ -772,7 +774,11 @@ specialized ML approach — before any heuristic.
 6. **Subscription strategy for the 50k-row dataset (RESOLVED 2026-08-09)** — use
    `FlightByAirportIcao` across a mix of domestic + international hubs (see RUNTIME
    VERIFICATION Finding 3). Start with a few airports, verify delivery, then scale to
-   ~20 airports. `FlightByNumber` only for single-flight verification.
+   ~20 airports. `FlightByNumber` only for single-flight verification. **Update
+   2026-08-09:** rather than "subscribe to 20 airports forever", we now run
+   **tier-rotating batches** (`V3_CollectionStrategy.md`) — small rotating airport
+   sets, short windows, budget-capped, auto-stopped, every row stamped with sampling
+   metadata. This avoids wasting the 60k units and avoids hub/time-of-day bias.
 7. **Server2 leftovers** ✅ RESOLVED 2026-08-08 — `package.json` `dev` now runs
    `tsx --watch server/index.ts`.
 8. **Unit usage audit** — `apiCallTracker.ts` is disabled (reference copy). If we want

@@ -19,6 +19,16 @@ import { createHash } from "crypto";
 import type { InsertFlightDataPrePost } from "@shared/schema";
 import { POST_STATUSES, STATUS_CODE } from "./flightStatus_v3";
 
+export interface SamplingMeta {
+  batchId: string | null;
+  tier: string | null;
+  samplingProbability: number | null;
+  samplingWeight: number | null;
+  randomSeed: string | null;
+  windowStart: Date | null;
+  windowEnd: Date | null;
+}
+
 export interface ExtractionContext {
   /** The subscription block from the notification (may be null). */
   subscription?: Record<string, any> | null;
@@ -28,6 +38,8 @@ export interface ExtractionContext {
   receivedAt: Date;
   /** Index of this flight within the notification (dedup fallback only). */
   index?: number;
+  /** Sampling metadata stamped by the tier-rotating collector (may be null). */
+  sampling?: SamplingMeta | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,6 +290,14 @@ export function extractFlightNotification(
     creditsRemaining: num(balance.creditsRemaining) ?? null,
     balanceLastRefilledUtc: date(balance.lastRefilledUtc),
     balanceLastDeductedUtc: date(balance.lastDeductedUtc),
+
+    samplingBatchId: ctx.sampling?.batchId ?? null,
+    airportTier: ctx.sampling?.tier ?? null,
+    samplingProbability: ctx.sampling?.samplingProbability ?? null,
+    samplingWeight: ctx.sampling?.samplingWeight ?? null,
+    randomSeed: ctx.sampling?.randomSeed ?? null,
+    collectionWindowStart: ctx.sampling?.windowStart ?? null,
+    collectionWindowEnd: ctx.sampling?.windowEnd ?? null,
 
     receivedAt: ctx.receivedAt,
     payloadJson: raw,
