@@ -84,7 +84,8 @@ async function main() {
          gcd_m = $5, gcd_km = $6, gcd_mile = $7, gcd_nm = $8, gcd_ft = $9,
          dep_quality = $10, arr_quality = $11,
          data_stage = $12, has_live_location = $13,
-         airport_tier = COALESCE(airport_tier, $14)
+         airport_tier = COALESCE(airport_tier, $14),
+         payload_json_flat = $15
        WHERE id = $1`,
       [
         row.id,
@@ -101,6 +102,7 @@ async function main() {
         out.dataStage,
         out.hasLiveLocation,
         sampling.tier,
+        out.payloadJsonFlat ? JSON.stringify(out.payloadJsonFlat) : null,
       ],
     );
     fixed++;

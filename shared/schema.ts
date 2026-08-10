@@ -879,6 +879,7 @@ export const flightDataPrePost = cleanSchema.table(
 
     receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
     payloadJson: jsonb("payload_json").notNull(),
+    payloadJsonFlat: jsonb("payload_json_flat"),
     dedupKey: text("dedup_key").notNull(),
   },
   (table) => [

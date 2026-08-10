@@ -14,6 +14,7 @@
 
 import { readFileSync } from "fs";
 import { extractFlightNotification } from "../server/lib/disruption/flightNotificationExtractor_v3";
+import { flattenPayload } from "../server/lib/disruption/flattenPayload_v3";
 
 const PATH = process.argv[2] ?? "flight_data_pre_post.csv";
 
@@ -105,6 +106,21 @@ for (const r of rows) {
   const POST_CODES = new Set([2, 6, 8, 9]);
   if (POST_CODES.has(Number(raw.status)) && out.dataStage !== "POST")
     failures.push(`id=${r.id}: status ${raw.status} (${out.status}) should be POST but is ${out.dataStage}`);
+
+  // Flattened mirror must be present, single-level, and enum-decoded.
+  const flat = out.payloadJsonFlat;
+  if (!flat || typeof flat !== "object") {
+    failures.push(`id=${r.id}: payloadJsonFlat missing`);
+  } else {
+    const keys = Object.keys(flat);
+    const nested = keys.filter((k) => k.includes("."));
+    if (keys.length === 0) failures.push(`id=${r.id}: payloadJsonFlat is empty`);
+    if (flat.status !== undefined && typeof flat.status !== "string")
+      failures.push(`id=${r.id}: payloadJsonFlat.status not decoded (${JSON.stringify(flat.status)})`);
+    if (flat["departure.quality"] && Array.isArray(flat["departure.quality"]) &&
+        flat["departure.quality"].some((q) => typeof q !== "string"))
+      failures.push(`id=${r.id}: payloadJsonFlat departure.quality not decoded`);
+  }
 }
 
 console.log(`\nReplayed ${checked} real payloads through the FIXED extractor.\n`);

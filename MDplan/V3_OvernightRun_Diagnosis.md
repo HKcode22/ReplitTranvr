@@ -203,6 +203,7 @@ tier fallback (KJFK→HUB); the rest fill only with a real batch.
 | Column | What it holds | After backfill |
 | ---- | ---- | ---- |
 | `payload_json` | raw flight item (10 keys: aircraft, airline, arrival, callSign, codeshareStatus, departure, greatCircleDistance, isCargo, lastUpdatedUtc, number, status) | unchanged (audit) |
+| `payload_json_flat` (JSONB, **new migration 0013**) | **readable single-level mirror** of `payload_json` with dot-notation keys (`arrival.airport.iata`, `departure.runwayTime.utc`, …). Numeric enums decoded to names (`status`→"EnRoute", `codeshareStatus`→"IsOperator", `departure.quality`→["Basic","Live"]). | populated by extractor (new rows) + backfill (existing rows) |
 | `dep_quality` / `arr_quality` (JSONB) | `''` now | `["Basic","Live"]` / `["Basic"]` |
 | `subscription_notices` (JSONB) | `[]` | `[]` (correct) |
 
@@ -252,8 +253,8 @@ replays all 1,662 payloads **pass**.
 
 `scripts/backfill_flight_data_pre_post.ts` re-runs the FIXED extractor over each stored
 `payload_json` and `UPDATE`s status/status_code/codeshare_status/gcd_*/dep_quality/
-arr_quality/data_stage/has_live_location + derives `airport_tier`. Idempotent, no
-re-pay. **Run on Replit after pulling.**
+arr_quality/data_stage/has_live_location + derives `airport_tier` + writes the new
+`payload_json_flat` mirror. Idempotent, no re-pay. **Run on Replit after pulling.**
 
 ---
 
@@ -345,15 +346,20 @@ The correct ML feature is a JSONB array of names, which our fix produces:
 ## 12. What to run on Replit (fix the table)
 
 ```bash
-# 1. Pull the fixed code
+# 1. Pull the fixed code (migration 0013 auto-applies on server boot:
+#    adds payload_json_flat JSONB — the readable flattened payload mirror)
 cd /path/to/repo && git pull origin main
 
-# 2. Backfill: repair the 1,662 existing rows in place (idempotent, no re-pay)
+# 2. Backfill: repair the 1,662 existing rows in place (idempotent, no re-pay).
+#    Re-runs the fixed extractor; also writes payload_json_flat + derives airport_tier.
 npx tsx scripts/backfill_flight_data_pre_post.ts
 
-# 3. Verify the fix
-npx tsx -e "const{pool}=require('./server/db');(async()=>{const r=await pool.query('SELECT count(*) FILTER (WHERE status IS NULL) AS s_null, count(*) FILTER (WHERE gcd_km IS NULL) AS g_null, count(*) FILTER (WHERE data_stage=\'POST\') AS post, count(*) FILTER (WHERE data_stage=\'PRE\') AS pre FROM clean.flight_data_pre_post');console.log(r.rows[0]);await pool.end()})()"
-#   Expect: s_null=0 g_null≈8 (the 1 NaN-gcd row + 8 payloads with no gcd key) post≈1080 pre≈580
+# 3. Verify the fix (status/gcd/quality nulls gone, PRE/POST split, flat populated)
+npx tsx -e "const{pool}=require('./server/db');(async()=>{const r=await pool.query('SELECT count(*) FILTER (WHERE status IS NULL) AS s_null, count(*) FILTER (WHERE gcd_km IS NULL) AS g_null, count(*) FILTER (WHERE dep_quality IS NULL) AS dq_null, count(*) FILTER (WHERE payload_json_flat IS NULL) AS flat_null, count(*) FILTER (WHERE data_stage=\'POST\') AS post, count(*) FILTER (WHERE data_stage=\'PRE\') AS pre FROM clean.flight_data_pre_post');console.log(r.rows[0]);await pool.end()})()"
+#   Expect: s_null=0 g_null≈8 (the 1 NaN-gcd row + 8 payloads with no gcd key) dq_null=0 flat_null=0 post≈1080 pre≈580
+
+# 3b. Read one flattened payload (readability check)
+npx tsx -e "const{pool}=require('./server/db');(async()=>{const r=await pool.query('SELECT payload_json_flat FROM clean.flight_data_pre_post WHERE payload_json_flat IS NOT NULL LIMIT 1');console.log(JSON.stringify(r.rows[0].payload_json_flat,null,1));await pool.end()})()"
 
 # 4. Stop the stray KJFK sub so it stops collecting hub-only data outside rotation
 curl -s -X GET  -H "x-webhook-secret: $AERODATABOX_WEBHOOK_SECRET" https://travnr.com/api/v1/subscriptions/webhook
@@ -375,12 +381,15 @@ python3 scripts/analyze_flight_data_pre_post.py flight_data_pre_post.csv
 
 | File | Change |
 | ---- | ---- |
-| `server/lib/disruption/flightNotificationExtractor_v3.ts` | Fixed status/codeshare/gcd/quality/data_stage |
+| `server/lib/disruption/flightNotificationExtractor_v3.ts` | Fixed status/codeshare/gcd/quality/data_stage; emits `payload_json_flat` |
+| `server/lib/disruption/flattenPayload_v3.ts` | **NEW** — single-level dot-notation mirror (enums decoded) |
 | `server/lib/disruption/flightStatus_v3.ts` | Validator accepts real payload shapes |
 | `server/routes_v3.ts` | Tier fallback when `subject.type` is null |
-| `scripts/analyze_flight_data_pre_post.py` | Column-by-column analyzer (CSV or JSON) |
-| `scripts/test-extractor-real-payload.ts` | Replays 1,662 payloads through fixed extractor |
-| `scripts/backfill_flight_data_pre_post.ts` | Repairs existing rows in place (Replit) |
+| `server/lib/disruption/flightDataPrePostStore_v3.ts` | Upsert refreshes `payload_json_flat` |
+| `shared/schema.ts` + `migrations/0013_*.sql` + `server/db.ts` | New `payload_json_flat` JSONB column (boot migration) |
+| `scripts/analyze_flight_data_pre_post.py` | Column-by-column analyzer (CSV or JSON), incl. JSON-column stats |
+| `scripts/test-extractor-real-payload.ts` | Replays 1,662 payloads through fixed extractor + flatten checks |
+| `scripts/backfill_flight_data_pre_post.ts` | Repairs existing rows in place, writes `payload_json_flat` (Replit) |
 | `MDplan/V3_CollectionStrategy.md` | Endpoint paths corrected to `/api/v1/collection/*` |
 | `MDplan/V3_WEBHOOK_VERIFY.md` | Endpoint paths corrected |
 | `MDplan/V3_WebhookExtractionPlan.md` | Endpoint paths + §8.0 first-run runbook |

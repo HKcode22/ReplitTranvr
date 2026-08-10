@@ -151,6 +151,23 @@ def main():
         ("received_at", "received"),
     ], rows, n)
 
+    # JSON columns (payload_json raw, payload_json_flat readable mirror)
+    print("\n## 11. JSON payload columns")
+    for col, label in [("payload_json", "raw payload"), ("payload_json_flat", "flat payload"),
+                       ("subscription_notices", "subscription notices")]:
+        n_json = sum(1 for r in rows if nonnull(r.get(col)))
+        print(f"  {col} ({label}): {n_json}/{n} populated")
+        if n_json:
+            v = next(r.get(col) for r in rows if nonnull(r.get(col)))
+            if isinstance(v, str):
+                try:
+                    v = json.loads(v)
+                except Exception:
+                    pass
+            keys = list(v.keys()) if isinstance(v, dict) else (v if isinstance(v, list) else [])
+            sample = ", ".join(str(k) for k in keys[:12])
+            print(f"    e.g. keys: {sample}")
+
     # runway - scheduled delay signal
     deltas = []
     for r in rows:

@@ -18,6 +18,7 @@
 import { createHash } from "crypto";
 import type { InsertFlightDataPrePost } from "@shared/schema";
 import { POST_STATUSES, STATUS_CODE } from "./flightStatus_v3";
+import { flattenPayload } from "./flattenPayload_v3";
 
 // ---------------------------------------------------------------------------
 // AeroDataBox real-payload quirks (verified from live deliveries 2026-08-10):
@@ -366,6 +367,7 @@ export function extractFlightNotification(
 
     receivedAt: ctx.receivedAt,
     payloadJson: raw,
+    payloadJsonFlat: flattenPayload(raw),
     dedupKey: dedupKey({
       flightNumber,
       carrierIata,

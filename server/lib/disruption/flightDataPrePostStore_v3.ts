@@ -147,6 +147,7 @@ export const EXCLUDED_SET = {
   collectionWindowEnd: sql`excluded.collection_window_end`,
   receivedAt: sql`now()`,
   payloadJson: sql`excluded.payload_json`,
+  payloadJsonFlat: sql`excluded.payload_json_flat`,
 } as const;
 
 /**
