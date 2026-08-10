@@ -3,13 +3,66 @@
 // the fixed extractor and prove the previously-null columns now
 // come out populated.
 //
-// Run: npx tsx scripts/test-extractor-real-payload.ts
+// Reads the payloads from the CSV export (the DB table ground truth):
+//   flight_data_pre_post.csv   (payload_json column)
+// or the JSON export:
+//   flight_data_pre_post.json
+// Auto-detects by extension. Defaults to the CSV.
+//
+// Run: npx tsx scripts/test-extractor-real-payload.ts [file.csv|file.json]
 // ============================================================
 
 import { readFileSync } from "fs";
 import { extractFlightNotification } from "../server/lib/disruption/flightNotificationExtractor_v3";
 
-const rows = JSON.parse(readFileSync("flight_data_pre_post.json", "utf-8")) as any[];
+const PATH = process.argv[2] ?? "flight_data_pre_post.csv";
+
+function loadRows(): any[] {
+  if (PATH.endsWith(".json")) {
+    return JSON.parse(readFileSync(PATH, "utf-8")) as any[];
+  }
+  // CSV: reparse into rows, pull out the payload_json + meta columns.
+  const text = readFileSync(PATH, "utf-8");
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const header = lines[0].split(",").map((h) => h.replace(/"/g, "").trim());
+  const col = (name: string) => header.indexOf(name);
+  const iId = col("id"), iPayload = col("payload_json"), iRecv = col("received_at"),
+    iSched = col("sampling_batch_id"), iTier = col("airport_tier"),
+    iProb = col("sampling_probability"), iWeight = col("sampling_weight"),
+    iSeed = col("random_seed"), iWinS = col("collection_window_start"),
+    iWinE = col("collection_window_end");
+
+  const parseCell = (c: string | undefined): string =>
+    (c ?? "").replace(/^"|"$/g, "").replace(/""/g, '"').trim();
+
+  return lines.slice(1).map((line) => {
+    // minimal CSV split (this file has no escaped commas except inside payload_json)
+    const cells: string[] = [];
+    let cur = "", inQ = false;
+    for (const ch of line) {
+      if (ch === '"') inQ = !inQ;
+      if (ch === "," && !inQ) { cells.push(cur); cur = ""; }
+      else cur += ch;
+    }
+    cells.push(cur);
+    const cell = (i: number) => (i >= 0 ? parseCell(cells[i]) : "");
+    return {
+      id: cell(iId),
+      payload_json: cell(iPayload),
+      received_at: cell(iRecv),
+      sampling_batch_id: cell(iSched) || null,
+      airport_tier: cell(iTier) || null,
+      sampling_probability: cell(iProb) || null,
+      sampling_weight: cell(iWeight) || null,
+      random_seed: cell(iSeed) || null,
+      collection_window_start: cell(iWinS) || null,
+      collection_window_end: cell(iWinE) || null,
+    };
+  });
+}
+
+const rows = loadRows();
+console.log(`Loaded ${rows.length} rows from ${PATH}`);
 
 let checked = 0;
 const failures: string[] = [];

@@ -2,13 +2,14 @@
 """
 Analyze flight_data_pre_post export for data-quality issues.
 
-The export is the JSON dump of the clean.flight_data_pre_post table
-(flight_data_pre_post.json) — JSON preserves NULL vs '' vs 'null' correctly,
-so it is the ground truth (a CSV re-export can double-quote values and
-hide the real picture).
+Accepts EITHER the JSON dump (flight_data_pre_post.json) or the CSV export
+(flight_data_pre_post.csv). JSON preserves NULL vs '' vs 'null' correctly;
+for a CSV the analyzer strips CSV quoting/artifacts so the numbers match the
+DB table (note: CSV re-exports can double-quote timestamp cells — see
+MDplan/V3_OvernightRun_Diagnosis.md §2; the analyzer handles both).
 
 Usage:
-    python3 scripts/analyze_flight_data_pre_post.py [path/to/flight_data_pre_post.json]
+    python3 scripts/analyze_flight_data_pre_post.py [path/to/flight_data_pre_post.json|.csv]
 
 What it checks, column group by column group:
   1. Identity + carrier + times      (should be ~always filled)
@@ -27,15 +28,28 @@ values, and the top values — so you can see exactly where data is being
 lost.
 """
 
+import csv
 import json
 import sys
 from collections import Counter
 from datetime import datetime
 
-PATH = sys.argv[1] if len(sys.argv) > 1 else "flight_data_pre_post.json"
+PATH = sys.argv[1] if len(sys.argv) > 1 else "flight_data_pre_post.csv"
+
+
+def _clean(v):
+    """Strip CSV double-quote artifacts (e.g. '"2026-...Z"' -> '2026-...Z')."""
+    if isinstance(v, str):
+        v = v.strip()
+        if len(v) >= 2 and v.startswith('"') and v.endswith('"'):
+            v = v[1:-1].replace('""', '"').strip()
+    return v
 
 
 def load(path: str) -> list[dict]:
+    if path.endswith(".csv"):
+        with open(path, newline="", encoding="utf-8") as f:
+            return [{k: _clean(v) for k, v in row.items()} for row in csv.DictReader(f)]
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
