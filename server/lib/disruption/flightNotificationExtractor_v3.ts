@@ -79,6 +79,17 @@ function str(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/**
+ * String, OR a numeric enum code (AeroDataBox sends subscription.billingType
+ * and subject/subscriber.type as numbers). Preserve the code as a string so we
+ * never drop it; unknown codes stay as their number so nothing is fabricated.
+ */
+function strOrCode(value: unknown): string | null {
+  if (typeof value === "string" && value.length > 0) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
 function num(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))) {
@@ -342,13 +353,13 @@ export function extractFlightNotification(
     hasLiveLocation,
     subscriptionId: str(subscription.id) ?? null,
     subscriptionIsActive: bool(subscription.isActive),
-    subscriptionBillingType: str(subscription.billingType),
+    subscriptionBillingType: strOrCode(subscription.billingType),
     subscriptionActivateBeforeUtc: date(subscription.activateBeforeUtc),
     subscriptionExpiresOnUtc: date(subscription.expiresOnUtc),
     subscriptionCreatedOnUtc: date(subscription.createdOnUtc),
-    subjectType: str(subj.type),
+    subjectType: strOrCode(subj.type),
     subjectId: str(subj.id),
-    subscriberType: str(subs.type),
+    subscriberType: strOrCode(subs.type),
     subscriberId: str(subs.id),
     subscriptionNotices: Array.isArray(subscription.notices)
       ? (subscription.notices as string[])

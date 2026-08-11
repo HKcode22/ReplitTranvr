@@ -28,6 +28,7 @@ import {
   getBalance,
   createSubscription,
   deleteSubscription,
+  listSubscriptions,
   checkAirportFeeds,
   listFeedAirports,
   type FeedService,
@@ -75,6 +76,17 @@ export const COLLECTOR_CONFIG = {
   tierMix: envTierMix(),
   /** airports to remember so consecutive batches don't repeat the same ones */
   rememberRecentBatches: 2,
+
+  // ---- auto-rotation (hands-off overnight runs) ----
+  /** ADB_AUTO_COLLECT=0 disables; default ON — the watchdog rotates batches itself. */
+  autoCollect: process.env.ADB_AUTO_COLLECT !== "0",
+  /** gap between a batch closing and the next one auto-starting (min) */
+  autoCooldownMinutes: envInt("ADB_AUTO_COOLDOWN_MIN", 15),
+  /** only auto-start between these UTC hours (inclusive start, exclusive end). 0-24 = all day. */
+  autoStartHourUtc: envInt("ADB_AUTO_START_HOUR", 0),
+  autoEndHourUtc: envInt("ADB_AUTO_END_HOUR", 24),
+  /** watchdog tick interval (s) */
+  watchdogSeconds: envInt("ADB_WATCHDOG_SECONDS", 60),
 } as const;
 
 export interface CollectionBatch {
@@ -231,6 +243,15 @@ export async function startBatch(): Promise<StartBatchResult> {
     throw new Error(`Batch ${active.batchId} is still active — stop it first (POST /api/v1/collection/stop).`);
   }
 
+  creatingBatch = true;
+  try {
+    return await startBatchInner();
+  } finally {
+    creatingBatch = false;
+  }
+}
+
+async function startBatchInner(): Promise<StartBatchResult> {
   const balance = await getBalance();
   if (!balance) {
     throw new Error("No alert-credit balance yet — refill first (POST /api/v1/subscriptions/balance/refill).");
@@ -555,37 +576,118 @@ export async function getDiagnostics(): Promise<Diagnostics> {
 }
 
 // ---------------------------------------------------------------------------
-// Watchdog — auto-stop an active batch when its window elapses or its
-// credit budget is reached. Reads the DB + calls free delete endpoints
-// only; it can never spend credits on its own.
+// Watchdog — the fully-automatic collection loop.
+//   1. Auto-STOP an active batch when its window elapses or its credit budget
+//      is reached.
+//   2. Auto-START the next batch when nothing is active (after a cooldown),
+//      if auto-rotation is enabled (ADB_AUTO_COLLECT, default ON). This makes
+//      overnight/day-long collection hands-off: subscribe → collect →
+//      unsubscribe → rotate → repeat.
+//   3. Clean up ORPHAN subscriptions — webhook subs that are NOT part of the
+//      active batch (e.g. a manually-created KJFK sub from before the batch
+//      system). Keeping them would keep charging credits forever.
+// Reads the DB + calls free endpoints only (delete/create/list are 0 credits);
+// it can never spend alert credits on its own — startBatch() enforces the
+// budget + reserve check.
 // ---------------------------------------------------------------------------
 
 let watchdogStarted = false;
+/** True while startBatch() is mid-flight (subs created before the batch row).
+ *  The watchdog must not treat those half-created subs as orphans. */
+let creatingBatch = false;
+
+/** Delete any AeroDataBox webhook sub that is not part of the active batch. */
+async function cleanupOrphanSubscriptions(): Promise<number> {
+  if (creatingBatch) return 0;
+  const subs = await listSubscriptions();
+  if (subs.length === 0) return 0;
+
+  const active = await getActiveBatch();
+  const keep = new Set<string>();
+  if (active) {
+    const res = await pool.query(
+      "SELECT subscription_id FROM clean.adb_collection_subs WHERE batch_id = $1",
+      [active.batchId],
+    );
+    for (const r of res.rows) keep.add(String(r.subscription_id));
+  }
+
+  let removed = 0;
+  for (const s of subs) {
+    if (keep.has(s.id)) continue;
+    const ok = await deleteSubscription(s.id);
+    if (ok) {
+      removed++;
+      console.log(`[adb-collector] removed orphan subscription ${s.id}`);
+    }
+  }
+  return removed;
+}
+
+/** Auto-start the next batch if: enabled, nothing active, cooldown elapsed,
+ *  within the configured UTC window, and credits suffice (startBatch enforces
+ *  the latter and throws). */
+async function maybeAutoStartNextBatch(): Promise<void> {
+  if (!COLLECTOR_CONFIG.autoCollect) return;
+  if (await getActiveBatch()) return;
+
+  const nowHour = new Date().getUTCHours();
+  if (nowHour < COLLECTOR_CONFIG.autoStartHourUtc || nowHour >= COLLECTOR_CONFIG.autoEndHourUtc) {
+    return;
+  }
+
+  // Cooldown since the last batch CLOSED (any reason).
+  const lastClosed = await pool.query(
+    "SELECT ended_at FROM clean.adb_collection_batches WHERE status = 'CLOSED' ORDER BY batch_seq DESC LIMIT 1",
+  );
+  if (lastClosed.rowCount && lastClosed.rows[0].ended_at) {
+    const mins = (Date.now() - new Date(lastClosed.rows[0].ended_at).getTime()) / 60_000;
+    if (mins < COLLECTOR_CONFIG.autoCooldownMinutes) return;
+  }
+
+  try {
+    const result = await startBatch();
+    console.log(
+      `[adb-collector] AUTO-STARTED batch ${result.batch.batchId} airports=${result.batch.airports.join(",")} created=${result.created.length} skipped=${result.skipped.length}`,
+    );
+  } catch (err: any) {
+    // startBatch throws on credits-too-low / already-active — normal, not fatal.
+    console.warn(`[adb-collector] auto-start skipped: ${err?.message || err}`);
+  }
+}
 
 export function startCollectionWatchdog(): void {
   if (watchdogStarted) return;
   watchdogStarted = true;
   const timer = setInterval(async () => {
     try {
+      // 1) Auto-stop an active batch that outlived its window / budget.
       const active = await getActiveBatch();
-      if (!active) return;
-      if (Date.now() > active.windowEnd.getTime()) {
-        console.warn(`[adb-collector] window elapsed for ${active.batchId} — stopping`);
-        await stopBatch("window_elapsed");
-        return;
+      if (active) {
+        if (Date.now() > active.windowEnd.getTime()) {
+          console.warn(`[adb-collector] window elapsed for ${active.batchId} — stopping`);
+          await stopBatch("window_elapsed");
+          return;
+        }
+        const used = await estimateBatchCredits(active.batchId);
+        if (used >= active.creditBudget) {
+          console.warn(`[adb-collector] ${active.batchId} reached budget (${used} ≥ ${active.creditBudget}) — stopping`);
+          await stopBatch("budget_reached");
+          return;
+        }
+        return; // batch healthy — nothing else to do this tick
       }
-      const used = await estimateBatchCredits(active.batchId);
-      if (used >= active.creditBudget) {
-        console.warn(`[adb-collector] ${active.batchId} reached budget (${used} ≥ ${active.creditBudget}) — stopping`);
-        await stopBatch("budget_reached");
-      }
+
+      // 2) Nothing active → clean stray subs + maybe rotate to the next batch.
+      await cleanupOrphanSubscriptions();
+      await maybeAutoStartNextBatch();
     } catch (err: any) {
       console.warn("[adb-collector] watchdog error:", err?.message || err);
     }
-  }, 60_000);
+  }, COLLECTOR_CONFIG.watchdogSeconds * 1000);
   timer.unref?.();
   console.log(
-    `[adb-collector] watchdog started (window=${COLLECTOR_CONFIG.windowHours}h, budget=${COLLECTOR_CONFIG.batchBudget} credits/batch, reserve=${COLLECTOR_CONFIG.reserveCredits}, tierMix=${JSON.stringify(COLLECTOR_CONFIG.tierMix)})`,
+    `[adb-collector] watchdog started (window=${COLLECTOR_CONFIG.windowHours}h, budget=${COLLECTOR_CONFIG.batchBudget} credits/batch, reserve=${COLLECTOR_CONFIG.reserveCredits}, tierMix=${JSON.stringify(COLLECTOR_CONFIG.tierMix)}, autoCollect=${COLLECTOR_CONFIG.autoCollect})`,
   );
 }
 

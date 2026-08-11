@@ -211,16 +211,23 @@ const subscriptionBlock = z
   .object({
     id: z.string().optional().nullable(),
     isActive: z.boolean().optional(),
-    billingType: z.string().optional().nullable(),
+    // Real deliveries send billingType as a NUMERIC code (not the string name).
+    billingType: enumCodeOrName.optional().nullable(),
     activateBeforeUtc: isoUtc.optional().nullable(),
     expiresOnUtc: isoUtc.optional().nullable(),
     createdOnUtc: isoUtc.optional().nullable(),
     subject: z
-      .object({ type: z.string().optional().nullable(), id: z.string().optional().nullable() })
+      .object({
+        type: enumCodeOrName.optional().nullable(),
+        id: z.string().optional().nullable(),
+      })
       .optional()
       .nullable(),
     subscriber: z
-      .object({ type: z.string().optional().nullable(), id: z.string().optional().nullable() })
+      .object({
+        type: enumCodeOrName.optional().nullable(),
+        id: z.string().optional().nullable(),
+      })
       .optional()
       .nullable(),
     notices: z.array(z.string()).optional().nullable(),
