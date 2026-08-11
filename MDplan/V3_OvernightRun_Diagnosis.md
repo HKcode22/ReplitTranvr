@@ -15,7 +15,8 @@
 > are **true absences** (feed never sends them). §14 = the credit/resource accounting the
 > user asked for; §15 = the 28 dead/duplicate columns removed (incl. `payload_json_flat`);
 > §12 now uses an **adaptive credit budget** so auto-collection can start with ~3,100
-> credits (no more 9,000 gate).
+> credits (no more 9,000 gate). **§16 = the full 60k-credit de-biasing campaign; §17 =
+> credit monitoring + data-gap prevention** (the "time matters" plan).
 >
 > All conclusions are reproducible:
 > ```bash
@@ -524,7 +525,7 @@ python3 scripts/analyze_flight_data_pre_post.py flight_data_pre_post3.csv
 
 | File | Change |
 | ---- | ---- |
-| `server/lib/disruption/adbCollectionController_v3.ts` | **AUTO-ROTATION** — watchdog auto-stops expired batches, auto-deletes orphan subs, auto-starts the next batch; **adaptive credit budget** (`min(batchBudget, balance−reserve)`, `minBatchCredits` floor) so low balances still start a batch |
+| `server/lib/disruption/adbCollectionController_v3.ts` | **AUTO-ROTATION** — watchdog auto-stops expired batches, auto-deletes orphan subs, auto-starts the next batch; **adaptive credit budget** (`min(batchBudget, balance−reserve)`, `minBatchCredits` floor) so low balances still start a batch; **heartbeat log + `lastReceivedAt`/`gapMinutes` in status & diagnostics** (§17) |
 | `server/lib/disruption/flightNotificationExtractor_v3.ts` | Fixed status/codeshare/gcd/quality/data_stage; **stops emitting `payload_json_flat` + 27 dead columns**; preserves numeric subscription codes (`strOrCode`) |
 | `server/lib/disruption/flattenPayload_v3.ts` | **DELETED** — `payload_json_flat` column removed (§15) |
 | `server/lib/disruption/flightStatus_v3.ts` | Validator accepts real payload shapes (incl. numeric `billingType`/`subject.type`) |
@@ -619,3 +620,181 @@ Migration: `migrations/0014_flight_data_pre_post_drop_dead_columns.sql`
 (`DROP COLUMN IF EXISTS`, idempotent, auto-applies on boot). Table goes
 **114 → 86 columns**, roughly halving exported size (`payload_json_flat` was the
 ~5 MB duplicate in the 10 MB CSV).
+
+---
+
+## 16. When credits return to 60,000 — collecting *correctly* (no bias)
+
+The user asked: **once the balance is back to the full 60k units, how do we
+collect so the dataset is unbiased and we actually get what we need?** Short
+answer: the machinery is already bias-aware — you just need to (a) set the right
+tier mix, (b) spend the 60k in **planned phases**, not one giant batch, and
+(c) verify with `diagnostics` after every phase. Details below.
+
+### 16.1 The four levers (what we can actually control)
+We cannot subscribe to "a few flights" — an airport subscription captures the
+**whole airport** (`MDplan/V3_CollectionStrategy.md` §1). The only levers are:
+
+1. **Which airports** (from the 276-airport tier catalog).
+2. **The tier mix** per batch — `ADB_TIER_MIX` = `{HUB, MID, REGIONAL}` slots.
+3. **The window length** — `ADB_WINDOW_HOURS` (default 4 h).
+4. **The credit budget** — `ADB_BATCH_BUDGET` (now adaptive, §14).
+
+Every captured row is stamped with `sampling_batch_id`, `airport_tier`,
+`sampling_probability`, `sampling_weight`, `random_seed`, and the window — so the
+GNN can do **Inverse-Probability Weighting** later and undo any residual
+selection bias (strategy doc §4).
+
+### 16.2 Recommended 60k-credit campaign (phased, de-biasing first)
+
+| Phase | Credits | Tier mix (`ADB_TIER_MIX`) | Why |
+| ---- | ---- | ---- | ---- |
+| **0 — debias sweep** | ~6,000 (3 × 2,000) | `{"HUB":0,"MID":2,"REGIONAL":3}` | Kills the 99%-hub bias. Small adaptive batches across MID/REGIONAL only. This is the **first thing to do** when refilled. |
+| **1 — balance** | ~30,000 (10 × 3,000) | `{"HUB":1,"MID":2,"REGIONAL":2}` (default) | The steady-state stratified mix. Rotates automatically away from recent airports. |
+| **2 — regional depth** | ~12,000 (4 × 3,000) | `{"HUB":0,"MID":1,"REGIONAL":4}` | Deliberately grow the long tail the GNN must generalize over. |
+| **3 — hub density** | ~10,000 (2 × 5,000) | `{"HUB":2,"MID":2,"REGIONAL":0}` | Only after phases 0–2 have breadth; hub congestion-cascade features. |
+| **Hold** | ~2,000 | — | Reserve for refill rounding + never let balance hit the 1,300 floor. |
+
+**Total ≈ 60,000.** Because batches are budget-capped and auto-stopped, each
+phase is just "set env, let the watchdog run" — you do **not** need to babysit
+`start`/`stop`. The rotation avoids the last 2 batches' airports automatically.
+
+### 16.3 "Am I getting what I need?" — the acceptance checks
+
+After each phase, run `GET /api/v1/collection/diagnostics` and read **five** numbers:
+
+1. **`byTier.share`** — HUB / MID / REGIONAL row shares. Bias target (from the
+   world mix): roughly **HUB ~60%, MID ~25%, REGIONAL ~15%** of *scheduled
+   commercial flights* (big hubs carry most traffic). If REGIONAL < 5%, you are
+   still hub-blind → run Phase 0/2 again.
+2. **`byDepartureHour`** — rows should spread across the **day, not one UTC band.**
+   If everything is 14:00–18:00 UTC, your batch windows keep landing in the same
+   timezone's evening → stagger `ADB_AUTO_START_HOUR` or lengthen
+   `ADB_WINDOW_HOURS` occasionally (strategy doc §8).
+3. **`totalEstimatedCredits`** — credits consumed so far (≈ rows with a
+   `sampling_batch_id`). Compare to the phase budget.
+4. **`batches`** — the batch list with per-batch `rows`. 0 rows on a batch = that
+   airport had no flights in the window or the sub failed → check
+   `created`/`skipped` in the start log.
+5. **`byDelayBucket` / `byStatus`** — sanity: you should see `Canceled`,
+   `<15min`, `15-60min`, `>180min` all present. A dataset with zero cancellations
+   is missing a whole class the model must learn.
+
+Also verify the stamping (one-line SQL, run on Replit):
+```sql
+SELECT sampling_batch_id, airport_tier, sampling_probability, sampling_weight,
+       random_seed, count(*) AS rows
+FROM clean.flight_data_pre_post
+WHERE sampling_batch_id IS NOT NULL
+GROUP BY 1,2,3,4,5 ORDER BY rows DESC LIMIT 15;
+```
+Every row here should carry a real batch id + tier + weight. Rows **without** a
+batch id (the old KJFK 2,199) should stay **excluded from training** — filter
+`WHERE sampling_batch_id IS NOT NULL` (§12 note).
+
+### 16.4 Time-of-day / season spread (the subtle bias)
+The China GNN used a full 3-month population; we can't, but we *can* deliberately
+spread across time:
+- Vary `ADB_AUTO_START_HOUR` / `ADB_AUTO_END_HOUR` so batches land at different
+  UTC hours across the day.
+- Occasionally set `ADB_WINDOW_HOURS=6–8` so one window spans more of the day.
+- Over a month, aim to have **multiple batches per weekday** and some weekend
+  coverage — `byDepartureHour` + `received_at` span will tell you if you did.
+- Record the batch `started_at` (already in `adb_collection_batches`) so any
+  downstream model can condition on time-of-day / day-of-week.
+
+### 16.5 What "enough data" looks like
+| Goal | Target rows (with batch id) | Source benchmark |
+| ---- | ---- | ---- |
+| Pre-departure delay model | ≥ 10,000 clean rows | Purdue top-N studies used 1 year; we scale down |
+| Post-departure milestone ETA | ≥ 3,000 **arrived** flights (label = real `arr_runway_utc`) | current: 194 in 2,199 rows → need ~15× |
+| GNN airport-network | ≥ 20,000 rows spanning ≥ 50 airports, all 3 tiers | China GNN: 1.06M/236 airports |
+| Trajectory model (Phase 6b+) | N/A on this feed | needs OpenSky/AdsbUpdates (§10) |
+
+At ~1 credit/row, 60k credits ≈ **~50–60k rows/month** — a solid GNN training
+set. The bottleneck is **arrived labels**, so prioritize batches on routes/airports
+that complete flights (hubs do; that's why Phase 3 hub density matters).
+
+---
+
+## 17. Credit monitoring + data-gap management (time matters)
+
+The user asked: **how do I keep checking the credits, because if there's a gap in
+data collection it hurts the ML?** Two separate things to watch: (a) the credit
+balance, and (b) **continuity** of incoming data. Both now have built-in tooling.
+
+### 17.1 What a gap actually breaks
+The PRE/POST model is built from **versioned snapshots per flight**
+(`dedup_key = flight|carrier|lastUpdatedUtc`, §8). A gap = a stretch of time where
+NO flights got captured. Consequences:
+- **Broken lifecycle sequences** — flights that started before the gap and
+  finished during it are missing their `EnRoute→Arrived` chain → their rows become
+  one-off snapshots instead of usable POST labels.
+- **Temporal bias** — if the gap is "always the same hours" (e.g. every night the
+  balance hits 0 at 21:00), the model learns a distorted day.
+- **Credit exhaustion = a hard gap.** Balance hits the 1,300 floor → the watchdog
+  cannot auto-start → zero new rows until you refill. That's the #1 cause of the
+  gaps you're worried about.
+
+### 17.2 Monitoring credits (three ways, all free)
+1. **Heartbeat log (NEW).** The watchdog now logs every ~10 minutes:
+   ```
+   [adb-collector] heartbeat balance=3105 gap=42min canStart=true ...
+   ```
+   `gap` = minutes since the last stored row. If `gap` keeps climbing, data has
+   stopped — look at `reason`.
+2. **`GET /api/v1/collection/status` (NEW fields)** — returns `balance`,
+   `effectiveBudget`, `canStart`, `reason`, plus **`lastReceivedAt`** and
+   **`gapMinutes`** so a script/cron can alert you.
+3. **The webhook log line** — every delivery prints
+   `[adb-v3-webhook] received flights=N stored=M ... credits=…`; watching it is the
+   real-time check.
+
+**Alert rule of thumb (set a reminder / cron):** if `gapMinutes > 60` **or**
+`balance < 2000`, refill or investigate. That keeps you far above the 1,300 floor
+and gives an hour of buffer to react before ML data continuity is at risk.
+
+### 17.3 SQL to check balance + gap from the DB (run on Replit)
+```sql
+-- balance is on every row (the wrapper sends it): latest value
+SELECT credits_remaining, balance_last_refilled_utc, balance_last_deducted_utc
+FROM clean.flight_data_pre_post ORDER BY received_at DESC LIMIT 1;
+
+-- data continuity: largest gap between consecutive rows (minutes)
+SELECT max(gap_min) AS max_gap_min
+FROM (
+  SELECT EXTRACT(EPOCH FROM (received_at - lag(received_at) OVER (ORDER BY received_at)))/60 AS gap_min
+  FROM clean.flight_data_pre_post
+) t;
+
+-- per-hour volume for the last 24h — a flat/zero row = a gap
+SELECT date_trunc('hour', received_at) AS hr, count(*) AS rows
+FROM clean.flight_data_pre_post
+WHERE received_at > now() - interval '24 hours'
+GROUP BY 1 ORDER BY 1;
+```
+
+### 17.4 The gap-prevention playbook
+| Scenario | What happens now | What you do |
+| ---- | ---- | ---- |
+| Balance drops below floor (1,300) | Watchdog logs `auto-start skipped: Credits too low…`; no new batches | **Refill before it hits the floor.** The adaptive budget already spends only what's above the 1,000 reserve, so refilling **any amount** resumes collection immediately (no 9,000 gate). |
+| Batch window elapses | Watchdog auto-stops (`window_elapsed`), cooldown 15 min, auto-starts next | Nothing — rotation resumes by itself. |
+| Budget reached mid-window | Watchdog auto-stops (`budget_reached`), same auto-restart | Nothing. |
+| No delivery for > 60 min | Heartbeat shows `gap=NNmin` climbing | Check `reason`; if `canStart=false` → refill. If `canStart=true` but still dry → the batch's airports had no flights (small regionals); the next batch rotates anyway. |
+| Server restarted | Watchdog re-arms on boot; auto-start continues | `npm run dev` and confirm the `watchdog started` log. |
+| Refill arrives | Next watchdog tick (≤ 60 s) sees `canStart=true` and starts a batch | Nothing — automatic. |
+
+### 17.5 One-time setup to never miss a gap (recommended)
+- **Replit cron / scheduler** (or any free cron hitting the URL): every hour call
+  `GET /api/v1/collection/status` (with the management secret) and email/Slack you
+  if `gapMinutes > 60 || balance < 2000`. The endpoint now returns both values
+  precisely so this check is a 2-line script.
+- **Check the heartbeat** in the Replit log once a day — it's printed every
+  ~10 min already, so a scroll shows the whole day's continuity.
+- **Keep `ADB_AUTO_COLLECT=1`** (default) — never run collection by hand again;
+  gaps then only come from an empty balance, which the heartbeat surfaces.
+
+> **TL;DR for the 60k plan + monitoring:** when refilled, run the 4-phase campaign
+> in §16.2 (start with a REGIONAL-only debias sweep), verify each phase with the 5
+> `diagnostics` checks (§16.3), keep the hourly status check (§17.2) so a credit
+> dry-run becomes a 1-line alert instead of a silent multi-hour data gap (§17.4).

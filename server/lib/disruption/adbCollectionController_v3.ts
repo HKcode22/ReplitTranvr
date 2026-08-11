@@ -415,6 +415,10 @@ export interface CollectionStatus {
   activeBatchCredits: number | null;
   canStart: boolean;
   reason: string | null;
+  /** when the last flight_data_pre_post row was stored (data-flow health) */
+  lastReceivedAt: Date | null;
+  /** minutes since lastReceivedAt (null when no rows yet) — a large value = data gap */
+  gapMinutes: number | null;
 }
 export async function getCollectionStatus(): Promise<CollectionStatus> {
   const balance = await getBalance();
@@ -424,6 +428,16 @@ export async function getCollectionStatus(): Promise<CollectionStatus> {
   const available = Math.max(0, remaining - COLLECTOR_CONFIG.reserveCredits);
   const effectiveBudget = Math.min(COLLECTOR_CONFIG.batchBudget, available);
   const canStart = !active && effectiveBudget >= COLLECTOR_CONFIG.minBatchCredits;
+
+  // Data-flow health: how long since the last row landed.
+  let lastReceivedAt: Date | null = null;
+  try {
+    const r = await pool.query("SELECT max(received_at)::timestamptz AS last FROM clean.flight_data_pre_post");
+    if (r.rowCount && r.rows[0].last) lastReceivedAt = new Date(r.rows[0].last);
+  } catch {
+    // status must not fail on a stats query
+  }
+
   return {
     balance: balance?.creditsRemaining ?? null,
     reserveCredits: COLLECTOR_CONFIG.reserveCredits,
@@ -441,6 +455,8 @@ export async function getCollectionStatus(): Promise<CollectionStatus> {
         : balance === null
           ? "No balance yet — refill first."
           : `Insufficient credits (${remaining} < reserve ${COLLECTOR_CONFIG.reserveCredits} + min batch ${COLLECTOR_CONFIG.minBatchCredits}).`,
+    lastReceivedAt,
+    gapMinutes: lastReceivedAt ? Math.max(0, Math.round((Date.now() - lastReceivedAt.getTime()) / 60_000)) : null,
   };
 }
 
@@ -464,6 +480,9 @@ export interface Diagnostics {
     rows: number;
   }>;
   totalEstimatedCredits: number;
+  /** data-flow health: last row received + gap (minutes) since it */
+  lastReceivedAt: Date | null;
+  gapMinutes: number | null;
   /** Optional airport-coverage summary (may be null if the free call fails). */
   coverage?: Pick<AirportCoverage,
     | "fetchedAt"
@@ -572,6 +591,15 @@ export async function getDiagnostics(): Promise<Diagnostics> {
     coverageSummary = null;
   }
 
+  // Data-flow health: last row + gap minutes (also surfaces in /status).
+  let lastReceivedAt: Date | null = null;
+  try {
+    const r = await pool.query("SELECT max(received_at)::timestamptz AS last FROM clean.flight_data_pre_post");
+    if (r.rowCount && r.rows[0].last) lastReceivedAt = new Date(r.rows[0].last);
+  } catch {
+    // diagnostics must not fail on a stats query
+  }
+
   return {
     totals,
     byTier,
@@ -580,6 +608,8 @@ export async function getDiagnostics(): Promise<Diagnostics> {
     byStatus,
     batches,
     totalEstimatedCredits: creditsRes.rowCount ? creditsRes.rows[0].n : 0,
+    lastReceivedAt,
+    gapMinutes: lastReceivedAt ? Math.max(0, Math.round((Date.now() - lastReceivedAt.getTime()) / 60_000)) : null,
     coverage: coverageSummary,
   };
 }
@@ -668,8 +698,22 @@ async function maybeAutoStartNextBatch(): Promise<void> {
 export function startCollectionWatchdog(): void {
   if (watchdogStarted) return;
   watchdogStarted = true;
+  let tickCount = 0;
   const timer = setInterval(async () => {
     try {
+      tickCount++;
+
+      // 0) Low-frequency heartbeat: balance + data-flow gap so a stalled
+      //    collection (or a credit dry-run) is visible in the logs without
+      //    polling the API. Logs once per HEARTBEAT_TICKS (default every 10
+      //    ticks ≈ 10 min at the default 60 s watchdog).
+      if (tickCount % 10 === 0) {
+        const status = await getCollectionStatus();
+        console.log(
+          `[adb-collector] heartbeat balance=${status.balance} gap=${status.gapMinutes}min canStart=${status.canStart}${status.activeBatch ? ` active=${status.activeBatch.batchId} rows=${status.activeBatchCredits}` : ""}${status.reason ? ` reason=${status.reason}` : ""}`,
+        );
+      }
+
       // 1) Auto-stop an active batch that outlived its window / budget.
       const active = await getActiveBatch();
       if (active) {
