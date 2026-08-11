@@ -88,6 +88,16 @@ export const COLLECTOR_CONFIG = {
   autoEndHourUtc: envInt("ADB_AUTO_END_HOUR", 24),
   /** watchdog tick interval (s) */
   watchdogSeconds: envInt("ADB_WATCHDOG_SECONDS", 60),
+
+  // ---- self-monitoring alerts (no manual checking needed) ----
+  /** alert if no row has been stored for this many minutes */
+  alertGapMinutes: envInt("ADB_ALERT_GAP_MIN", 90),
+  /** alert if the balance drops below this (e.g. refill soon) */
+  alertMinBalance: envInt("ADB_ALERT_MIN_BALANCE", 2000),
+  /** minimum minutes between repeated ALERT lines for the same problem */
+  alertCooldownMinutes: envInt("ADB_ALERT_COOLDOWN_MIN", 30),
+  /** optional Slack incoming-webhook URL — POSTs a message on problems */
+  alertWebhookUrl: process.env.ADB_ALERT_WEBHOOK_URL || null,
 } as const;
 
 export interface CollectionBatch {
@@ -752,6 +762,8 @@ export function startCollectionWatchdog(): void {
   if (watchdogStarted) return;
   watchdogStarted = true;
   let tickCount = 0;
+  let lastAlertAt = 0;
+  let lastAlertReason = "";
   const timer = setInterval(async () => {
     try {
       tickCount++;
@@ -794,6 +806,37 @@ export function startCollectionWatchdog(): void {
         console.log(
           `[adb-collector] heartbeat balance=${status.balance} rowsToday=${rowsToday} gap=${status.gapMinutes}min canStart=${status.canStart}${status.refillRecommended > 0 ? ` refillToFullBudget=${status.refillRecommended}` : ""}${status.activeBatch ? ` active=${status.activeBatch.batchId} rows=${status.activeBatchCredits}${batchTiers}` : ""}${status.reason ? ` reason=${status.reason}` : ""}`,
         );
+
+        // ---- self-monitoring alert (no manual checking needed) ----
+        // Raise an ALERT line (+ optional Slack POST) when data has stalled
+        // or credits are about to run out. Cooldown prevents spam; it fires
+        // again every alertCooldownMinutes until the problem clears.
+        let alertReason: string | null = null;
+        if (status.gapMinutes !== null && status.gapMinutes > COLLECTOR_CONFIG.alertGapMinutes) {
+          alertReason = `data gap: no row for ${status.gapMinutes}min (> ${COLLECTOR_CONFIG.alertGapMinutes}min)`;
+        } else if (status.balance !== null && status.balance < COLLECTOR_CONFIG.alertMinBalance) {
+          alertReason = `balance low (${status.balance} < ${COLLECTOR_CONFIG.alertMinBalance})`;
+        }
+        if (alertReason && Date.now() - lastAlertAt > COLLECTOR_CONFIG.alertCooldownMinutes * 60_000) {
+          lastAlertAt = Date.now();
+          lastAlertReason = alertReason;
+          const msg = `[adb-collector] ⚠ ALERT ${alertReason}${status.refillRecommended > 0 ? ` — refill ${status.refillRecommended}+ credits` : ""}${status.activeBatch ? ` (active=${status.activeBatch.batchId})` : ""}. Check logs/collector.log or run: npm run health`;
+          console.warn(msg);
+          if (COLLECTOR_CONFIG.alertWebhookUrl) {
+            try {
+              await fetch(COLLECTOR_CONFIG.alertWebhookUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text: `Travnr ⚠ ${alertReason}${status.refillRecommended > 0 ? ` — refill ${status.refillRecommended}+ credits` : ""}` }),
+              });
+            } catch (e: any) {
+              console.error("[adb-collector] alert webhook failed:", e?.message || e);
+            }
+          }
+        } else if (!alertReason && lastAlertReason) {
+          lastAlertReason = "";
+          console.log(`[adb-collector] ALERT CLEARED — collection healthy again`);
+        }
       }
 
       // 1) Auto-stop an active batch that outlived its window / budget.

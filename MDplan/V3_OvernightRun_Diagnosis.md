@@ -19,7 +19,8 @@
 > credit monitoring + data-gap prevention** (the "time matters" plan) **+ §17.6 = the
 > credit math explained step by step**; **§18 = how to read the collection logs**
 > (CREDIT-PLAN, SUBSCRIBED/SKIP, tiers, heartbeat) **+ §18.7 = how to keep logs
-> across Shell refreshes (`logs/collector.log`)**. The
+> across Shell refreshes (`logs/collector.log`)**; **§19 = fully automated monitoring —
+> in-server ALERTs, Slack push, `npm run health`, `npm run export` (received_at first)**. The
 > batch starter now **fills each HUB/MID/REGIONAL slot with same-tier fallbacks** and
 > the API throttle **retries 429s** — so a rate-limit or no-coverage airport can no
 > longer silently turn a mixed batch into a hub-only (or regional-only) one.
@@ -534,6 +535,8 @@ python3 scripts/analyze_flight_data_pre_post.py flight_data_pre_post3.csv
 | `server/lib/disruption/adbCollectionController_v3.ts` | **AUTO-ROTATION** — watchdog auto-stops expired batches, auto-deletes orphan subs, auto-starts the next batch; **adaptive credit budget** (`min(batchBudget, balance−reserve)`, `minBatchCredits` floor) so low balances still start a batch; **heartbeat log + `lastReceivedAt`/`gapMinutes`/`refillRecommended` in status & diagnostics** (§17); **per-tier slot filling with same-tier fallback** so HUB/MID/REGIONAL mixture survives 429/no-coverage, `CREDIT-PLAN` + per-airport `SUBSCRIBED/SKIP` logs + `tiers={…}` on auto-start (§18) |
 | `server/lib/disruption/aerodataboxLimiter_v3.ts` | **429-aware throttle** — serial queue now `ADB_API_MIN_INTERVAL_MS` (default 1000 ms) + exponential-backoff retry (3×) on HTTP 429 so batch creates don't silently drop airports |
 | `server/lib/disruption/logFile.ts` | **Persistent log file** — tees every console line to `logs/collector.log` (gitignored, 20 MB rotation) so collection logs survive Shell refreshes/restarts; `npm run logs` / `npm run logs:last` / `npm run logs:count` (§18.7) |
+| `scripts/export_flight_data.ts` | **`npm run export`** — writes `flight_data_pre_post<N>.csv` with **`received_at` FIRST** (DB insert time — the liveness column), newest rows at the bottom (§19.3) |
+| `scripts/check_collection_health.ts` | **`npm run health`** — one-command DB-level PASS/FAIL report (gap, balance, rows today, active batch tier mix), exit 0/1; wire into Replit Scheduler for fully automated checks (§19.4) |
 | `server/lib/disruption/flightNotificationExtractor_v3.ts` | Fixed status/codeshare/gcd/quality/data_stage; **stops emitting `payload_json_flat` + 27 dead columns**; preserves numeric subscription codes (`strOrCode`) |
 | `server/lib/disruption/flattenPayload_v3.ts` | **DELETED** — `payload_json_flat` column removed (§15) |
 | `server/lib/disruption/flightStatus_v3.ts` | Validator accepts real payload shapes (incl. numeric `billingType`/`subject.type`) |
@@ -962,3 +965,72 @@ it appends, so history from before a restart is still there.
 **To paste logs back to me:** `npm run logs:last` (or the grep above) and copy the output
 into your message — even if the Shell refreshed in between, the file still has it all.
 The file rotates at 20 MB (`ADB_LOG_MAX_MB`) so it can't grow forever.
+
+---
+
+## 19. Fully automated monitoring — you do NOT have to check daily
+
+The user asked: *"do I have to manually check every day that nothing broke?"* **No.**
+Everything below is automatic. The only manual action that ever exists is **refilling
+credits when an ALERT says so** — and even the ALERT can be pushed to Slack.
+
+### 19.1 The column that tells you data is landing: `received_at`
+- `received_at` = the moment the webhook row was **written to the DB**. This is the
+  column to trust: if `max(received_at)` keeps moving forward, data is flowing.
+- `last_updated_utc` = the **flight's** last change from AeroDataBox. It can sit at an
+  old time for hours (a stable flight) while rows are still being written — that's why
+  it *looked* like nothing was being added. Don't use it as a liveness signal.
+- **Exports now put `received_at` FIRST** (`npm run export`, §19.3) so you see the
+  newest row immediately without sliding right.
+
+### 19.2 What is ALREADY automated (in the server, no cron needed)
+| Guard | How it runs | What you see |
+| ---- | ---- | ---- |
+| Data-flow heartbeat | every ~10 min | `heartbeat balance=… rowsToday=… gap=…min` |
+| **ALERT on stall** | heartbeat tick | `⚠ ALERT data gap: no row for 90min` |
+| **ALERT on low balance** | heartbeat tick | `⚠ ALERT balance low (1900 < 2000) — refill 2100+` |
+| ALERT cooldown | 30 min | fires again until the problem clears |
+| ALERT cleared | automatic | `ALERT CLEARED — collection healthy again` |
+| Slack push (optional) | `ADB_ALERT_WEBHOOK_URL` set | POSTs `Travnr ⚠ …` to Slack on every new alert |
+| Orphan-subscription cleanup | watchdog | auto-deletes stale subs each batch |
+| Batch rotation | watchdog | auto-stop on window/budget, cooldown, auto-start |
+
+**The alert triggers are configurable:** `ADB_ALERT_GAP_MIN` (default 90),
+`ADB_ALERT_MIN_BALANCE` (default 2000), `ADB_ALERT_COOLDOWN_MIN` (default 30).
+
+### 19.3 The three commands you'll ever need (all in the repo)
+| Command | What it does | When |
+| ---- | ---- | ---- |
+| `npm run logs:last` | last 200 log lines (paste back to Claude) | any time |
+| `npm run health` | one-line PASS/FAIL report from the DB; exit 0/1 | any time, or automated below |
+| `npm run export` | writes `flight_data_pre_post<N>.csv` with **`received_at` first**, newest at the bottom | when you want a snapshot for ML |
+
+### 19.4 Fully-automated daily checking (2-minute setup, then zero manual work)
+1. **Wire Slack (optional but recommended):**
+   - Create a Slack Incoming Webhook (workspace → apps → incoming webhooks).
+   - On Replit add the Secret: `ADB_ALERT_WEBHOOK_URL = https://hooks.slack.com/services/…`
+   - Restart. Now a stall or low balance POSTs to Slack automatically.
+2. **Schedule the health check** (so even a dead server is caught):
+   - Replit → **Tools → Scheduler** → New job → every 6 hours →
+     command: `npm run health`
+   - If the check fails, Replit notifies you / you can point it at a webhook too.
+   - The script prints `PASS` lines and exits 0 when healthy, `FAIL` + exit 1 when not.
+3. **That's it.** You now get: Slack push on problems + scheduled DB-level checks.
+   Nothing else requires attention.
+
+### 19.5 "What do I actually need to do?" — the whole answer
+- **Nothing daily.** If the Slack/cron setup is done, you're alerted before data is at
+  risk (90 min of silence or balance < 2,000).
+- **The ONLY recurring action:** when you get `⚠ ALERT balance low … — refill NN+`,
+  top up that many credits (any amount ≥ 300 works; the batch sizes itself).
+- **Once a week (optional):** `npm run health` and a glance at
+  `npm run logs:last | grep heartbeat` to see `rowsToday` climbing.
+- **If you see `⚠ ALERT data gap` with a healthy balance:** the batch's airports had no
+  flights or a subscription silently died — paste `npm run logs:last` to Claude with
+  the alert line; the next batch rotation usually fixes it automatically.
+
+> **TL;DR for §19:** trust `received_at`, not `last_updated_utc`. `npm run export`
+> writes CSVs with `received_at` first. The server self-monitors and screams
+> (`⚠ ALERT`) when data stalls or credits run low, can push to Slack, and
+> `npm run health` is a one-command PASS/FAIL you can schedule on Replit. The only
+> manual thing left is refilling credits when alerted.

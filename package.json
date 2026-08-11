@@ -9,6 +9,8 @@
     "logs": "tail -f logs/collector.log",
     "logs:last": "tail -200 logs/collector.log",
     "logs:count": "wc -l logs/collector.log",
+    "health": "tsx scripts/check_collection_health.ts",
+    "export": "tsx scripts/export_flight_data.ts",
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
