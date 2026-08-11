@@ -904,20 +904,27 @@ Read it like this:
 
 ### 18.3 Webhook deliveries (proves data is flowing)
 ```
-[adb-v3-webhook] received flights=2 stored=2 (new=2 updated=0) skipped=0 subscription=… credits=3105 ms=44
+[adb-v3-webhook] received flights=2 stored=2 (new=2 updated=0) skipped=0 subscription=… credits=3105 ms=44 | KJFK->KATL:EnRoute[B0002/HUB] KMSP->ORD:Expected
 ```
 - `flights=N` = notifications delivered · `stored=N` = rows written ·
   `new=` fresh rows / `updated=` refreshed rows (upsert) ·
   `skipped=0` = all had a flight number (0 is the healthy number) ·
   `credits=` balance AFTER this delivery (1 credit per flight item).
+- **NEW detail tail (after the `|`):** the actual flights that landed, as
+  `dep->arr:Status[batch/tier]` (up to 8, then `+N more`). This is your instant
+  "is data really coming in?" check — you see real routes and statuses, plus which
+  batch/tier they belong to.
 - If `stored=0` for many lines → nothing new is landing → check §17.
 
 ### 18.4 Heartbeat (every ~10 min)
 ```
-[adb-collector] heartbeat balance=3105 gap=42min canStart=true active=B0001 rows=1900
-[adb-collector] heartbeat balance=1200 gap=5min canStart=false refillToFullBudget=3100 reason=Insufficient credits (1200 < reserve 1000 + min batch 300)
+[adb-collector] heartbeat balance=3105 rowsToday=1520 gap=42min canStart=true active=B0002 rows=1200 tiers=HUB:400,MID:550,REGIONAL:250
+[adb-collector] heartbeat balance=1200 rowsToday=1650 gap=5min canStart=false refillToFullBudget=3100 reason=Insufficient credits (1200 < reserve 1000 + min batch 300)
 ```
 - `gap=NNmin` = minutes since the last row — if it climbs past ~60, data stopped.
+- **`rowsToday=N`** = total rows stored since midnight UTC — watch this climb day over day.
+- **`tiers=HUB:n,MID:n,REGIONAL:n`** (active batch only) = the live mixture of the
+  current batch — all three > 0 means the daily-mixture guarantee is holding.
 - `canStart=false` + `reason=…` = why it can't auto-start; **`refillToFullBudget=3100`**
   tells you exactly how many credits to add to run a full 3,000-credit batch.
 

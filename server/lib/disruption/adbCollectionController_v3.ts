@@ -762,8 +762,37 @@ export function startCollectionWatchdog(): void {
       //    ticks ≈ 10 min at the default 60 s watchdog).
       if (tickCount % 10 === 0) {
         const status = await getCollectionStatus();
+        // Today's row count (UTC day) + per-tier breakdown of the active batch,
+        // so a glance shows collection is growing and the mixture is holding.
+        let rowsToday = "?";
+        let batchTiers = "";
+        try {
+          const t = await pool.query(
+            "SELECT count(*)::int AS n FROM clean.flight_data_pre_post WHERE received_at >= date_trunc('day', now())",
+          );
+          rowsToday = String(t.rowCount ? t.rows[0].n : 0);
+        } catch {
+          // non-fatal
+        }
+        if (status.activeBatch) {
+          try {
+            const tr = await pool.query(
+              "SELECT airport_tier AS tier, count(*)::int AS n FROM clean.flight_data_pre_post WHERE sampling_batch_id = $1 GROUP BY airport_tier",
+              [status.activeBatch.batchId],
+            );
+            batchTiers =
+              " tiers=" +
+              Object.entries(
+                Object.fromEntries(tr.rows.map((r) => [r.tier, r.n])),
+              )
+                .map(([k, v]) => `${k}:${v}`)
+                .join(",");
+          } catch {
+            // non-fatal
+          }
+        }
         console.log(
-          `[adb-collector] heartbeat balance=${status.balance} gap=${status.gapMinutes}min canStart=${status.canStart}${status.refillRecommended > 0 ? ` refillToFullBudget=${status.refillRecommended}` : ""}${status.activeBatch ? ` active=${status.activeBatch.batchId} rows=${status.activeBatchCredits}` : ""}${status.reason ? ` reason=${status.reason}` : ""}`,
+          `[adb-collector] heartbeat balance=${status.balance} rowsToday=${rowsToday} gap=${status.gapMinutes}min canStart=${status.canStart}${status.refillRecommended > 0 ? ` refillToFullBudget=${status.refillRecommended}` : ""}${status.activeBatch ? ` active=${status.activeBatch.batchId} rows=${status.activeBatchCredits}${batchTiers}` : ""}${status.reason ? ` reason=${status.reason}` : ""}`,
         );
       }
 

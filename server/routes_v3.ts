@@ -158,8 +158,24 @@ export function registerV3Routes(app: Express): void {
 
       const stats = await upsertFlightNotifications(rows);
 
+      // Compact per-delivery detail so the log shows WHICH flights landed:
+      //   dep→arr status (repeat N times if the same flight already exists)
+      const detail = rows
+        .slice(0, 8)
+        .map(
+          (r) =>
+            `${r.depAirportIcao}->${r.arrAirportIcao}:${r.status ?? "?"}${r.samplingBatchId ? `[${r.samplingBatchId}/${r.airportTier ?? "?"}]` : ""}`,
+        )
+        .join(" ");
+      const more = rows.length > 8 ? ` +${rows.length - 8} more` : "";
+      const batchTier = rows[0]?.samplingBatchId
+        ? ` batch=${rows[0].samplingBatchId} tier=${rows[0].airportTier ?? "-"}`
+        : rows[0]?.airportTier
+          ? ` tier=${rows[0].airportTier}`
+          : "";
+
       console.log(
-        `[adb-v3-webhook] received flights=${flights.length} stored=${stats.stored} (new=${stats.inserted} updated=${stats.updated}) skipped=${skipped} subscription=${subscription?.id ?? "-"} credits=${balance?.creditsRemaining ?? "-"} ms=${Date.now() - startedAt}`,
+        `[adb-v3-webhook] received flights=${flights.length} stored=${stats.stored} (new=${stats.inserted} updated=${stats.updated}) skipped=${skipped} subscription=${subscription?.id ?? "-"} credits=${balance?.creditsRemaining ?? "-"} ms=${Date.now() - startedAt}${batchTier} | ${detail || "-"}${more}`,
       );
       res.status(200).json({
         received: true,
