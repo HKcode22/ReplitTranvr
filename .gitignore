@@ -7,3 +7,4 @@ vite.config.ts.*
 .claude/
 *.csv
 flight_data_pre_post.json
+logs/

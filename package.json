@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "NODE_ENV=development tsx --watch server/index.ts",
     "dev:server": "NODE_ENV=development tsx --watch server/index.ts",
+    "logs": "tail -f logs/collector.log",
+    "logs:last": "tail -200 logs/collector.log",
+    "logs:count": "wc -l logs/collector.log",
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",

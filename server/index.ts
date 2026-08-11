@@ -11,6 +11,11 @@ import { initSentry, captureRequestError, sentryRequestContext } from './lib/sen
 import { applyBootMigrations } from './db';
 import { startMonitoringEngine } from './lib/disruption/monitor';
 import { startTestFlightSeeder } from './lib/disruption/testFlightSeeder';
+import { installConsoleTee } from './lib/disruption/logFile';
+
+// Persist every console line to logs/collector.log so collection logs
+// survive Shell refreshes / restarts (tail -f logs/collector.log).
+installConsoleTee();
 
 initSentry();
 

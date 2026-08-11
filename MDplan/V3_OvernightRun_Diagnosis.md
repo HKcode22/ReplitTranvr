@@ -16,8 +16,10 @@
 > user asked for; §15 = the 28 dead/duplicate columns removed (incl. `payload_json_flat`);
 > §12 now uses an **adaptive credit budget** so auto-collection can start with ~3,100
 > credits (no more 9,000 gate). **§16 = the full 60k-credit de-biasing campaign; §17 =
-> credit monitoring + data-gap prevention** (the "time matters" plan); **§18 = how to
-> read the collection logs** (CREDIT-PLAN, SUBSCRIBED/SKIP, tiers, heartbeat). The
+> credit monitoring + data-gap prevention** (the "time matters" plan) **+ §17.6 = the
+> credit math explained step by step**; **§18 = how to read the collection logs**
+> (CREDIT-PLAN, SUBSCRIBED/SKIP, tiers, heartbeat) **+ §18.7 = how to keep logs
+> across Shell refreshes (`logs/collector.log`)**. The
 > batch starter now **fills each HUB/MID/REGIONAL slot with same-tier fallbacks** and
 > the API throttle **retries 429s** — so a rate-limit or no-coverage airport can no
 > longer silently turn a mixed batch into a hub-only (or regional-only) one.
@@ -531,6 +533,7 @@ python3 scripts/analyze_flight_data_pre_post.py flight_data_pre_post3.csv
 | ---- | ---- |
 | `server/lib/disruption/adbCollectionController_v3.ts` | **AUTO-ROTATION** — watchdog auto-stops expired batches, auto-deletes orphan subs, auto-starts the next batch; **adaptive credit budget** (`min(batchBudget, balance−reserve)`, `minBatchCredits` floor) so low balances still start a batch; **heartbeat log + `lastReceivedAt`/`gapMinutes`/`refillRecommended` in status & diagnostics** (§17); **per-tier slot filling with same-tier fallback** so HUB/MID/REGIONAL mixture survives 429/no-coverage, `CREDIT-PLAN` + per-airport `SUBSCRIBED/SKIP` logs + `tiers={…}` on auto-start (§18) |
 | `server/lib/disruption/aerodataboxLimiter_v3.ts` | **429-aware throttle** — serial queue now `ADB_API_MIN_INTERVAL_MS` (default 1000 ms) + exponential-backoff retry (3×) on HTTP 429 so batch creates don't silently drop airports |
+| `server/lib/disruption/logFile.ts` | **Persistent log file** — tees every console line to `logs/collector.log` (gitignored, 20 MB rotation) so collection logs survive Shell refreshes/restarts; `npm run logs` / `npm run logs:last` / `npm run logs:count` (§18.7) |
 | `server/lib/disruption/flightNotificationExtractor_v3.ts` | Fixed status/codeshare/gcd/quality/data_stage; **stops emitting `payload_json_flat` + 27 dead columns**; preserves numeric subscription codes (`strOrCode`) |
 | `server/lib/disruption/flattenPayload_v3.ts` | **DELETED** — `payload_json_flat` column removed (§15) |
 | `server/lib/disruption/flightStatus_v3.ts` | Validator accepts real payload shapes (incl. numeric `billingType`/`subject.type`) |
@@ -804,6 +807,67 @@ GROUP BY 1 ORDER BY 1;
 > `diagnostics` checks (§16.3), keep the hourly status check (§17.2) so a credit
 > dry-run becomes a 1-line alert instead of a silent multi-hour data gap (§17.4).
 
+### 17.6 The credit math, step by step (explain it to your teammate)
+
+**The three knobs (all in `COLLECTOR_CONFIG`, default):**
+| Knob | Default | Meaning |
+| ---- | ---- | ---- |
+| `batchBudget` | **3,000** | the most credits a single batch is allowed to *try* to spend |
+| `reserveCredits` | **1,000** | credits we refuse to touch — the emergency floor for existing subscriptions |
+| `minBatchCredits` | **300** | a batch must be able to spend at least this many credits, or it won't start at all |
+
+**The rule (one line):**
+```
+effectiveBudget = min( 3000,  balance − 1000 )
+canStart        = effectiveBudget ≥ 300   AND   no batch is already active
+```
+
+**Worked examples with a 60,000-credit balance:**
+| Balance | `balance − reserve` | `effectiveBudget` | What happens |
+| ---- | ---- | ---- | ---- |
+| 60,000 | 59,000 | **3,000** (capped) | Full-size batch: 3,000 credits of flights per batch. |
+| 12,000 | 11,000 | **3,000** | Still full-size — anything above 4,000 gives the full 3,000. |
+| 4,000 | 3,000 | **3,000** | Full-size again (exactly at the cap). |
+| 3,105 (today) | 2,105 | **2,105** | Batch shrinks to what's affordable. |
+| 1,300 | 300 | **300** | Minimum-size batch — the floor; starts, but tiny. |
+| 1,299 | 299 | **299** | **Blocked.** `minBatchCredits` guard → no batch, `reason=Insufficient credits`. |
+
+**What one credit buys:** ~1 flight item per webhook notification. 3,000 credits ≈
+3,000 flight rows per batch (each row = a pre or post snapshot of one flight).
+
+**A full 60k burn-down schedule (worst case, non-stop):**
+```
+Day 1  balance 60,000 → batches of 3,000 → ~10 full batches before refill
+       (each batch lasts until budget spent or the 4-hour window ends)
+       + 1,000 reserve never touched → you can auto-start down to balance 4,000
+Day 2  at 4,000 → batches shrink below 3,000 (3,000, 2,000, 1,000, 700…)
+       at 1,300 → 300-credit batches, still running
+       at 1,299 → STOP. reason="Insufficient credits". refillRecommended tells you
+                  exactly how much: e.g. balance 1,200 → refill 2,800 → 4,000
+                  (3,000 budget + 1,000 reserve) for a full batch again
+```
+**What "goes down" means and what auto-recovers:**
+- **Balance too low** → watchdog logs `auto-start skipped: Insufficient credits`,
+  no data flows → this is a real gap → refill any amount > 300 and it resumes on
+  the next tick (≤ 60 s). Nothing else to do.
+- **Batch window elapsed (4 h)** → watchdog auto-stops that batch, waits 15 min
+  cooldown, auto-starts a NEW batch with fresh airports. No action.
+- **Budget spent mid-window** → same: auto-stop, cooldown, auto-start. No action.
+- **One airport rate-limits / has no coverage** → the batch fills that tier slot
+  with the next airport in the same tier (§18.2). No action.
+
+**How long each collection cycle lasts (all defaults):**
+| Event | When | Duration |
+| ---- | ---- | ---- |
+| Batch runs | auto-start → stop | up to **4 h** (`windowHours`) unless budget runs out first |
+| Cooldown | between batches | **15 min** (`autoCooldownMinutes`) |
+| Auto-start allowed | each day | `autoStartHourUtc`–`autoEndHourUtc` (default the whole day) |
+| Watchdog tick | checks everything | every **60 s**; heartbeat line every 10 ticks (~10 min) |
+
+So in a 24 h day the theoretical max is ~ (24 h / (4 h + 15 min)) ≈ **5–6 batches/day**,
+but the real limiter is credits: 3,000/batch × 5–6 = 15,000–18,000 credits/day of
+collection at full pace.
+
 ---
 
 ## 18. Reading the collection logs (what each line means)
@@ -872,3 +936,22 @@ Every morning, scroll the log and confirm you saw in the last 24 h:
 2. `tiers={"HUB":…,"MID":…,"REGIONAL":…}` with **all three > 0** (mixture held),
 3. `received flights=N stored=N` lines (data is landing),
 4. heartbeats with `gap` in single digits and `canStart=true`.
+
+### 18.7 The persistent log file — logs that survive a Shell refresh
+**Problem solved:** the Replit Shell scrollback is wiped when the tab refreshes or the
+workspace restarts. Now every console line (migrations, heartbeat, deliveries, errors)
+is **tee'd to `logs/collector.log`** on disk (gitignored, not in the DB). Restart-safe:
+it appends, so history from before a restart is still there.
+
+| Where | Command | What it does |
+| ---- | ---- | ---- |
+| Replit Shell **or** Mac terminal (in the repo root) | `tail -f logs/collector.log` | **live stream** — leave it open and you watch collection in real time |
+| | `npm run logs` | same as above (shorthand) |
+| | `tail -200 logs/collector.log` / `npm run logs:last` | last 200 lines — enough to paste back to Claude |
+| | `npm run logs:count` | how many lines you've accumulated |
+| Mac (outside Replit) | `npm run dev` in the local repo | you'll get the same file locally — open a **second terminal** and `tail -f logs/collector.log` |
+| Both | `grep "heartbeat\\|AUTO-STARTED" logs/collector.log` | just the important lines |
+
+**To paste logs back to me:** `npm run logs:last` (or the grep above) and copy the output
+into your message — even if the Shell refreshed in between, the file still has it all.
+The file rotates at 20 MB (`ADB_LOG_MAX_MB`) so it can't grow forever.
