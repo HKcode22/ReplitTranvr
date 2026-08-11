@@ -16,7 +16,11 @@
 > user asked for; §15 = the 28 dead/duplicate columns removed (incl. `payload_json_flat`);
 > §12 now uses an **adaptive credit budget** so auto-collection can start with ~3,100
 > credits (no more 9,000 gate). **§16 = the full 60k-credit de-biasing campaign; §17 =
-> credit monitoring + data-gap prevention** (the "time matters" plan).
+> credit monitoring + data-gap prevention** (the "time matters" plan); **§18 = how to
+> read the collection logs** (CREDIT-PLAN, SUBSCRIBED/SKIP, tiers, heartbeat). The
+> batch starter now **fills each HUB/MID/REGIONAL slot with same-tier fallbacks** and
+> the API throttle **retries 429s** — so a rate-limit or no-coverage airport can no
+> longer silently turn a mixed batch into a hub-only (or regional-only) one.
 >
 > All conclusions are reproducible:
 > ```bash
@@ -525,7 +529,8 @@ python3 scripts/analyze_flight_data_pre_post.py flight_data_pre_post3.csv
 
 | File | Change |
 | ---- | ---- |
-| `server/lib/disruption/adbCollectionController_v3.ts` | **AUTO-ROTATION** — watchdog auto-stops expired batches, auto-deletes orphan subs, auto-starts the next batch; **adaptive credit budget** (`min(batchBudget, balance−reserve)`, `minBatchCredits` floor) so low balances still start a batch; **heartbeat log + `lastReceivedAt`/`gapMinutes` in status & diagnostics** (§17) |
+| `server/lib/disruption/adbCollectionController_v3.ts` | **AUTO-ROTATION** — watchdog auto-stops expired batches, auto-deletes orphan subs, auto-starts the next batch; **adaptive credit budget** (`min(batchBudget, balance−reserve)`, `minBatchCredits` floor) so low balances still start a batch; **heartbeat log + `lastReceivedAt`/`gapMinutes`/`refillRecommended` in status & diagnostics** (§17); **per-tier slot filling with same-tier fallback** so HUB/MID/REGIONAL mixture survives 429/no-coverage, `CREDIT-PLAN` + per-airport `SUBSCRIBED/SKIP` logs + `tiers={…}` on auto-start (§18) |
+| `server/lib/disruption/aerodataboxLimiter_v3.ts` | **429-aware throttle** — serial queue now `ADB_API_MIN_INTERVAL_MS` (default 1000 ms) + exponential-backoff retry (3×) on HTTP 429 so batch creates don't silently drop airports |
 | `server/lib/disruption/flightNotificationExtractor_v3.ts` | Fixed status/codeshare/gcd/quality/data_stage; **stops emitting `payload_json_flat` + 27 dead columns**; preserves numeric subscription codes (`strOrCode`) |
 | `server/lib/disruption/flattenPayload_v3.ts` | **DELETED** — `payload_json_flat` column removed (§15) |
 | `server/lib/disruption/flightStatus_v3.ts` | Validator accepts real payload shapes (incl. numeric `billingType`/`subject.type`) |
@@ -798,3 +803,72 @@ GROUP BY 1 ORDER BY 1;
 > in §16.2 (start with a REGIONAL-only debias sweep), verify each phase with the 5
 > `diagnostics` checks (§16.3), keep the hourly status check (§17.2) so a credit
 > dry-run becomes a 1-line alert instead of a silent multi-hour data gap (§17.4).
+
+---
+
+## 18. Reading the collection logs (what each line means)
+
+The user asked for **detailed logs so it's obvious whether collection is working**.
+Here is exactly what you'll see in the Replit terminal and how to read it:
+
+### 18.1 Startup (once per boot)
+```
+[migrations] applied 0014_flight_data_pre_post_drop_dead_columns.sql
+[adb-collector] watchdog started (window=4h, budget=3000 credits/batch, reserve=1000, minBatch=300, tierMix={"HUB":1,"MID":2,"REGIONAL":2}, autoCollect=true)
+```
+`watchdog started` = auto-rotation is armed. `autoCollect=true` means batches
+start/stop themselves. If you ever see `autoCollect=false`, set `ADB_AUTO_COLLECT=1`.
+
+### 18.2 Batch start (this is where the mixture is decided)
+```
+[adb-collector] CREDIT-PLAN batch=B0001 balance=3105 reserve=1000 → effectiveBudget=2105 tierMix={"HUB":1,"MID":2,"REGIONAL":2}
+[adb-collector] batch B0001 HUB SAEZ SUBSCRIBED (1/1 slots) sub=00c59665-…
+[adb-collector] batch B0001 MID KMSP SKIP create_failed — trying next MID airport
+[adb-collector] batch B0001 MID KSAN SUBSCRIBED (1/2 slots) sub=…
+[adb-collector] AUTO-STARTED batch B0001 airports=SAEZ,KSAN,… tiers={"HUB":1,"MID":2,"REGIONAL":2} created=5 skipped=1 budget=2105
+```
+Read it like this:
+- **`CREDIT-PLAN`** → "with 3,105 credits we can afford a 2,105-credit batch". This is the
+  credit-based decision you asked for — the batch size is computed from the balance.
+- **`SUBSCRIBED (n/slots)`** → an airport is live and will push flight notifications.
+- **`SKIP …`** → that airport was rejected (no coverage / create failed / rate limit);
+  the code now **tries another airport in the same tier** so the mixture survives.
+- **`tiers={…}`** → the actual HUB/MID/REGIONAL split of this batch. This is your
+  **daily-mixture check**: you want all three tiers > 0 **every batch** (one day HUB-heavy,
+  next day REGIONAL-only is exactly the temporal bias we're avoiding). If a tier shows 0,
+  scroll up to see which `SKIP` lines caused it.
+
+### 18.3 Webhook deliveries (proves data is flowing)
+```
+[adb-v3-webhook] received flights=2 stored=2 (new=2 updated=0) skipped=0 subscription=… credits=3105 ms=44
+```
+- `flights=N` = notifications delivered · `stored=N` = rows written ·
+  `new=` fresh rows / `updated=` refreshed rows (upsert) ·
+  `skipped=0` = all had a flight number (0 is the healthy number) ·
+  `credits=` balance AFTER this delivery (1 credit per flight item).
+- If `stored=0` for many lines → nothing new is landing → check §17.
+
+### 18.4 Heartbeat (every ~10 min)
+```
+[adb-collector] heartbeat balance=3105 gap=42min canStart=true active=B0001 rows=1900
+[adb-collector] heartbeat balance=1200 gap=5min canStart=false refillToFullBudget=3100 reason=Insufficient credits (1200 < reserve 1000 + min batch 300)
+```
+- `gap=NNmin` = minutes since the last row — if it climbs past ~60, data stopped.
+- `canStart=false` + `reason=…` = why it can't auto-start; **`refillToFullBudget=3100`**
+  tells you exactly how many credits to add to run a full 3,000-credit batch.
+
+### 18.5 Errors you might see
+| Log line | Meaning | Action |
+| ---- | ---- | ---- |
+| `rate-limited (429) — retrying in 1500ms` | RapidAPI per-second cap | **Fixed automatically** — it retries (up to 3×) with backoff instead of dropping the airport |
+| `createSubscription … 429` (still, after retries) | sustained rate limit | Check `AERODATABOX_API_KEY` plan; raise `ADB_API_MIN_INTERVAL_MS` (default 1000) to slow the queue |
+| `only filled 2/3 REGIONAL slots` | not enough candidates had coverage/created | Usually fine — the next batch rotates to fresh airports |
+| `watchdog error: …` | non-fatal tick error | Note it; the next 60s tick retries |
+| `EADDRINUSE port 5000` | another server instance is running | Stop the old one (`Ctrl-C`) and restart |
+
+### 18.6 The one-line "is it working?" check
+Every morning, scroll the log and confirm you saw in the last 24 h:
+1. `CREDIT-PLAN` + `AUTO-STARTED` lines (batches are running),
+2. `tiers={"HUB":…,"MID":…,"REGIONAL":…}` with **all three > 0** (mixture held),
+3. `received flights=N stored=N` lines (data is landing),
+4. heartbeats with `gap` in single digits and `canStart=true`.

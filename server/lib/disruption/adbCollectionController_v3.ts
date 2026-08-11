@@ -37,7 +37,6 @@ import {
 import {
   AIRPORT_CATALOG,
   AIRPORT_TIERS,
-  tierForIcao,
   allCatalogAirports,
   type AirportTier,
 } from "./adbAirportCatalog_v3";
@@ -161,6 +160,20 @@ function toStr(x: unknown): string | null {
   return typeof x === "string" ? x : x === null || x === undefined ? null : String(x);
 }
 
+/** Count airports per tier for a batch's airport list (log/status clarity). */
+function countTiers(icaos: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const c of icaos) {
+    for (const tier of AIRPORT_TIERS) {
+      if (AIRPORT_CATALOG[tier].includes(c)) {
+        out[tier] = (out[tier] ?? 0) + 1;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Meta key/value (rotation state)
 // ---------------------------------------------------------------------------
@@ -208,29 +221,32 @@ function mapBatch(r: any): CollectionBatch {
 }
 
 /**
- * Pick the next batch's airports: one seeded shuffle per tier, rotating so
- * recent batches don't repeat airports, interleaving tiers every window.
+ * Pick this batch's airport candidates: one seeded shuffle per tier. The
+ * returned list is ordered FRESH-first (airports not used in the last N
+ * batches), then recently-used ones as fallback. startBatchInner walks this
+ * list per tier and keeps trying until it has filled the tier's slots — so a
+ * rate-limited / no-coverage airport is replaced by another airport IN THE
+ * SAME TIER, and the daily HUB/MID/REGIONAL mixture survives individual
+ * failures (no "hub one day, regional another" drift).
  */
-async function pickAirports(seq: number, seed: number): Promise<Record<AirportTier, string[]>> {
+async function pickAirportCandidates(seed: number): Promise<Record<AirportTier, string[]>> {
   const recentRaw = await readMeta("recent_batches");
   const recent: string[][] = recentRaw ? JSON.parse(recentRaw) : [];
   const recentlyUsed = new Set<string>(recent.flat());
 
-  const chosen = {} as Record<AirportTier, string[]>;
+  const candidates = {} as Record<AirportTier, string[]>;
   for (const tier of AIRPORT_TIERS) {
     const slots = COLLECTOR_CONFIG.tierMix[tier] ?? 0;
-    if (slots <= 0) continue;
+    if (slots <= 0) {
+      candidates[tier] = [];
+      continue;
+    }
     const poolList = seededShuffle(AIRPORT_CATALOG[tier], seed);
     const fresh = poolList.filter((a) => !recentlyUsed.has(a));
-    const source = fresh.length >= slots ? fresh : poolList;
-    chosen[tier] = source.slice(0, slots);
+    const fallback = poolList.filter((a) => recentlyUsed.has(a));
+    candidates[tier] = [...fresh, ...fallback];
   }
-
-  // Remember the last N batches so the next one rotates to fresh airports.
-  const batchAirports = Object.values(chosen).flat();
-  const nextRecent = [...recent, batchAirports].slice(-COLLECTOR_CONFIG.rememberRecentBatches);
-  await writeMeta("recent_batches", JSON.stringify(nextRecent));
-  return chosen;
+  return candidates;
 }
 
 export interface StartBatchResult {
@@ -275,37 +291,60 @@ async function startBatchInner(): Promise<StartBatchResult> {
   const seed = randomInt(1, 2 ** 31 - 1);
   const batchId = `B${String(seq).padStart(4, "0")}`;
 
-  const chosen = await pickAirports(seq, seed);
-  const airports = Object.values(chosen).flat();
+  const tierMix = { ...COLLECTOR_CONFIG.tierMix };
+  const candidates = await pickAirportCandidates(seed);
+  console.log(
+    `[adb-collector] CREDIT-PLAN batch=${batchId} balance=${balance.creditsRemaining} reserve=${COLLECTOR_CONFIG.reserveCredits} → effectiveBudget=${effectiveBudget} tierMix=${JSON.stringify(tierMix)}`,
+  );
 
   const now = new Date();
   const windowEnd = new Date(now.getTime() + COLLECTOR_CONFIG.windowHours * 3600_000);
-  const tierMix = { ...COLLECTOR_CONFIG.tierMix };
 
   const created: CreatedSub[] = [];
   const skipped: SkippedAirport[] = [];
+  const airports: string[] = [];
 
-  for (const icao of airports) {
-    const tier = tierForIcao(icao);
-    try {
-      const feed = await checkAirportFeeds(icao);
+  // Fill each tier's slots, trying fallback airports in the SAME tier until the
+  // slot is filled or candidates are exhausted. This keeps the per-batch
+  // HUB/MID/REGIONAL mixture even when individual creates are rate-limited
+  // (429) or the airport has no coverage.
+  for (const tier of AIRPORT_TIERS) {
+    const slots = tierMix[tier] ?? 0;
+    if (slots <= 0) continue;
+    const pool = candidates[tier] ?? [];
+    let filled = 0;
+    for (const icao of pool) {
+      if (filled >= slots) break;
+
+      let feed: Awaited<ReturnType<typeof checkAirportFeeds>> = null;
+      try {
+        feed = await checkAirportFeeds(icao);
+      } catch {
+        feed = null;
+      }
       if (!feed) {
         skipped.push({ icao, reason: "no_coverage" });
+        console.log(`[adb-collector] batch ${batchId} ${tier} ${icao} SKIP no_coverage`);
         continue;
       }
-    } catch {
-      skipped.push({ icao, reason: "no_coverage" });
-      continue;
-    }
 
-    const sub = await createSubscription("FlightByAirportIcao" as SubscriptionSubjectType, icao, {
-      maxDeliveryRetries: 2,
-    });
-    if (!sub?.id) {
-      skipped.push({ icao, reason: "create_failed" });
-      continue;
+      const sub = await createSubscription("FlightByAirportIcao" as SubscriptionSubjectType, icao, {
+        maxDeliveryRetries: 2,
+      });
+      if (!sub?.id) {
+        skipped.push({ icao, reason: "create_failed" });
+        console.warn(`[adb-collector] batch ${batchId} ${tier} ${icao} SKIP create_failed — trying next ${tier} airport`);
+        continue;
+      }
+
+      created.push({ icao, tier, subscriptionId: sub.id });
+      airports.push(icao);
+      filled++;
+      console.log(`[adb-collector] batch ${batchId} ${tier} ${icao} SUBSCRIBED (${filled}/${slots} slots) sub=${sub.id}`);
     }
-    created.push({ icao, tier, subscriptionId: sub.id });
+    if (filled < slots) {
+      console.warn(`[adb-collector] batch ${batchId} only filled ${filled}/${slots} ${tier} slots (skipped=${skipped.length})`);
+    }
   }
 
   await pool.query(
@@ -331,6 +370,13 @@ async function startBatchInner(): Promise<StartBatchResult> {
       [c.subscriptionId, batchId, c.icao, c.tier, p, p > 0 ? 1 / p : 1],
     );
   }
+
+  // Remember ONLY the airports actually subscribed (not the skipped ones), so
+  // the next batch rotates to genuinely-fresh airports.
+  const recentRaw = await readMeta("recent_batches");
+  const recent: string[][] = recentRaw ? JSON.parse(recentRaw) : [];
+  const nextRecent = [...recent, airports].slice(-COLLECTOR_CONFIG.rememberRecentBatches);
+  await writeMeta("recent_batches", JSON.stringify(nextRecent));
 
   await writeMeta("batch_seq", String(seq));
 
@@ -415,6 +461,9 @@ export interface CollectionStatus {
   activeBatchCredits: number | null;
   canStart: boolean;
   reason: string | null;
+  /** how many credits to refill to be able to run a FULL-budget batch
+   *  (batchBudget + reserve). 0 when balance already covers it. */
+  refillRecommended: number;
   /** when the last flight_data_pre_post row was stored (data-flow health) */
   lastReceivedAt: Date | null;
   /** minutes since lastReceivedAt (null when no rows yet) — a large value = data gap */
@@ -428,6 +477,7 @@ export async function getCollectionStatus(): Promise<CollectionStatus> {
   const available = Math.max(0, remaining - COLLECTOR_CONFIG.reserveCredits);
   const effectiveBudget = Math.min(COLLECTOR_CONFIG.batchBudget, available);
   const canStart = !active && effectiveBudget >= COLLECTOR_CONFIG.minBatchCredits;
+  const refillRecommended = Math.max(0, COLLECTOR_CONFIG.batchBudget + COLLECTOR_CONFIG.reserveCredits - remaining);
 
   // Data-flow health: how long since the last row landed.
   let lastReceivedAt: Date | null = null;
@@ -455,6 +505,7 @@ export async function getCollectionStatus(): Promise<CollectionStatus> {
         : balance === null
           ? "No balance yet — refill first."
           : `Insufficient credits (${remaining} < reserve ${COLLECTOR_CONFIG.reserveCredits} + min batch ${COLLECTOR_CONFIG.minBatchCredits}).`,
+    refillRecommended,
     lastReceivedAt,
     gapMinutes: lastReceivedAt ? Math.max(0, Math.round((Date.now() - lastReceivedAt.getTime()) / 60_000)) : null,
   };
@@ -686,8 +737,10 @@ async function maybeAutoStartNextBatch(): Promise<void> {
 
   try {
     const result = await startBatch();
+    const tierCounts = countTiers(result.batch.airports);
     console.log(
-      `[adb-collector] AUTO-STARTED batch ${result.batch.batchId} airports=${result.batch.airports.join(",")} created=${result.created.length} skipped=${result.skipped.length}`,
+      `[adb-collector] AUTO-STARTED batch ${result.batch.batchId} airports=${result.batch.airports.join(",")} ` +
+        `tiers=${JSON.stringify(tierCounts)} created=${result.created.length} skipped=${result.skipped.length} budget=${result.batch.creditBudget}`,
     );
   } catch (err: any) {
     // startBatch throws on credits-too-low / already-active — normal, not fatal.
@@ -710,7 +763,7 @@ export function startCollectionWatchdog(): void {
       if (tickCount % 10 === 0) {
         const status = await getCollectionStatus();
         console.log(
-          `[adb-collector] heartbeat balance=${status.balance} gap=${status.gapMinutes}min canStart=${status.canStart}${status.activeBatch ? ` active=${status.activeBatch.batchId} rows=${status.activeBatchCredits}` : ""}${status.reason ? ` reason=${status.reason}` : ""}`,
+          `[adb-collector] heartbeat balance=${status.balance} gap=${status.gapMinutes}min canStart=${status.canStart}${status.refillRecommended > 0 ? ` refillToFullBudget=${status.refillRecommended}` : ""}${status.activeBatch ? ` active=${status.activeBatch.batchId} rows=${status.activeBatchCredits}` : ""}${status.reason ? ` reason=${status.reason}` : ""}`,
         );
       }
 

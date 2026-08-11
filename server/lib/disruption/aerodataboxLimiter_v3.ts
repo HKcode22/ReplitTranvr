@@ -14,13 +14,20 @@
 //   - delivery retry (maxDeliveryRetries, 0-2)   : 1 credit per flight item
 //
 // All calls go through a serial queue (MIN_INTERVAL_MS) so RapidAPI
-// never sees concurrent bursts (HTTP 429).
+// never sees concurrent bursts (HTTP 429). To be safe against
+// per-second limits (ULTRA), every call also RE-TRIES on 429 with
+// exponential backoff (RATE_LIMIT_BACKOFF_MS × attempt) so a burst of
+// batch creates doesn't silently drop airports.
 //
 // See MDplan/V3_WebhookExtractionPlan.md §8 Phase 1.
 // ============================================================
 
 const BASE_URL = "https://aerodatabox.p.rapidapi.com";
-const MIN_INTERVAL_MS = 500;
+const MIN_INTERVAL_MS = Number(process.env.ADB_API_MIN_INTERVAL_MS) > 0
+  ? Number(process.env.ADB_API_MIN_INTERVAL_MS)
+  : 1000;
+const RATE_LIMIT_BACKOFF_MS = 1500;
+const RATE_LIMIT_MAX_RETRIES = 3;
 
 let lastStartedAt = 0;
 let chain: Promise<void> = Promise.resolve();
@@ -36,7 +43,19 @@ function throttledFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
     lastStartedAt = Date.now();
   });
   chain = slot.catch(() => {});
-  return slot.then(() => fetch(input, init));
+  return slot.then(async () => {
+    let resp = await fetch(input, init);
+    let attempt = 0;
+    while (resp.status === 429 && attempt < RATE_LIMIT_MAX_RETRIES) {
+      const backoff = RATE_LIMIT_BACKOFF_MS * (attempt + 1);
+      console.warn(`[adb-v3] rate-limited (429) — retrying in ${backoff}ms (attempt ${attempt + 1}/${RATE_LIMIT_MAX_RETRIES})`);
+      await sleep(backoff);
+      lastStartedAt = Date.now();
+      resp = await fetch(input, init);
+      attempt++;
+    }
+    return resp;
+  });
 }
 
 function apiKey(): string | null {
