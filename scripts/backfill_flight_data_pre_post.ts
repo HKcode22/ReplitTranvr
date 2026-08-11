@@ -81,28 +81,22 @@ async function main() {
     await pool.query(
       `UPDATE clean.flight_data_pre_post SET
          status = $2, status_code = $3, codeshare_status = $4,
-         gcd_m = $5, gcd_km = $6, gcd_mile = $7, gcd_nm = $8, gcd_ft = $9,
-         dep_quality = $10, arr_quality = $11,
-         data_stage = $12, has_live_location = $13,
-         airport_tier = COALESCE(airport_tier, $14),
-         payload_json_flat = $15
+         gcd_km = $5,
+         dep_quality = $6, arr_quality = $7,
+         data_stage = $8, has_live_location = $9,
+         airport_tier = COALESCE(airport_tier, $10)
        WHERE id = $1`,
       [
         row.id,
         out.status,
         out.statusCode,
         out.codeshareStatus,
-        out.gcdM,
         out.gcdKm,
-        out.gcdMile,
-        out.gcdNm,
-        out.gcdFt,
         out.depQuality ? JSON.stringify(out.depQuality) : null,
         out.arrQuality ? JSON.stringify(out.arrQuality) : null,
         out.dataStage,
         out.hasLiveLocation,
         sampling.tier,
-        out.payloadJsonFlat ? JSON.stringify(out.payloadJsonFlat) : null,
       ],
     );
     fixed++;

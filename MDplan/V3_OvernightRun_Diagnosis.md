@@ -9,10 +9,18 @@
 > repaired); the v2 export proves every previously-null group is now populated:
 > status 100%, gcd 99.5%, quality 99.5%, `data_stage` 100% (1,268 POST / 681 PRE).
 >
+> **UPDATED — v3 export `flight_data_pre_post3.csv` (2,199 rows, ~19:24 UTC)** confirmed
+> the fixes hold at scale (§1C): status/codeshare 100%, gcd 99.6%, quality 99.5/98.6%,
+> `data_stage` 100% (1,465 POST / 734 PRE), 0 dup dedup keys. The only remaining nulls
+> are **true absences** (feed never sends them). §14 = the credit/resource accounting the
+> user asked for; §15 = the 28 dead/duplicate columns removed (incl. `payload_json_flat`);
+> §12 now uses an **adaptive credit budget** so auto-collection can start with ~3,100
+> credits (no more 9,000 gate).
+>
 > All conclusions are reproducible:
 > ```bash
-> python3 scripts/analyze_flight_data_pre_post.py flight_data_pre_post2.csv
-> npx tsx scripts/test-extractor-real-payload.py
+> python3 scripts/analyze_flight_data_pre_post.py flight_data_pre_post3.csv
+> npx tsx scripts/test-extractor-real-payload.py flight_data_pre_post3.csv
 > npx tsx scripts/backfill_flight_data_pre_post.ts   # repair DB rows (run on Replit)
 > ```
 
@@ -25,11 +33,12 @@
 | Is the webhook → extractor → DB pipeline working? | **YES** — 1,949 real rows in the v2 export, 0 duplicate dedup keys, real flight data. |
 | Is the DATA wrong? | **No.** The raw payloads are correct. The 4 field groups dropped to NULL (status/codeshare/gcd/quality) are **now repaired** — v2 shows 100%/100%/99.5%/99.5% populated. |
 | Is `data_stage` set by us or the webhook? | **By US** — derived from the payload's real status code (`2`EnRoute→POST, `1`Expected→PRE…). See §1A. |
-| Does `payload_json` hold valuable data? | **YES** — it is the complete raw flight item (times, airports, gcd, quality, aircraft) for both pre- and post-departure snapshots; `payload_json_flat` is its readable mirror. |
+| Does `payload_json` hold valuable data? | **YES** — it is the complete raw flight item (times, airports, gcd, quality, aircraft) for both pre- and post-departure snapshots. `payload_json_flat` was its readable mirror but is **REMOVED** (§15) to halve table size — the raw JSON stays. |
 | Are the "weird constants" a bug? | **Some are, some aren't.** `has_live_location=false`, `is_cargo=false`, `subscription_notices=[]` are correct; `data_stage=PRE`-everywhere was the extractor bug (now fixed). |
 | Are the quoted timestamps a bug? | **CSV-export artifact, not a DB bug.** Every `TIMESTAMPTZ` cell parses as `"2026-08-10T08:09:00.000Z"` (with literal quotes) while TEXT cells are clean — see §2. |
-| Are we collecting wrong / wasting credits? | **No.** ~1 credit per flight item; CRUD/balance free. See §9. |
+| Are we collecting wrong / wasting credits? | **No.** ~1 credit per flight item; CRUD/balance free. §9 + §14. |
 | Is there bias? | **Yes, historically:** all rows came from ONE stray KJFK subscription → hub-only. **Fixed:** the watchdog now auto-rotates HUB/MID/REGIONAL airports and deletes the stray sub automatically (§12). |
+| Why couldn't auto-start collect with 3,105 credits? | The old gate demanded `budget 4,000 + reserve 5,000 = 9,000`. **Fixed:** the budget is now **adaptive** — with 3,105 credits it spends `min(3,000, 3,105−1,000) = 2,105` on a batch instead of refusing (§12/§14). |
 | Do I have to do this manually every day? | **NO anymore.** `ADB_AUTO_COLLECT` defaults ON — subscribe → collect → unsubscribe → rotate runs itself. |
 | Is the post-departure data enough for ML? | **Milestone data YES, trajectory NO.** See §10 (the big strategic answer). |
 
@@ -103,7 +112,7 @@ repaired **1,937** rows in place. Every previously-null group is now populated:
 | `data_stage` | `PRE` × all | **100%** — POST 1,268 / PRE 681 (65% POST) | ✅ ours, accurate |
 | `airport_tier` | 0% | **99.4%** HUB (1,937/1,949) | ✅ ours (derived) |
 | `payload_json` | 100% | **100%** (1,949/1,949) | ✅ audit |
-| `payload_json_flat` | — | **0/1,949 in this CSV export** | ⚠️ the export tool lists 113 fixed columns and predates migration 0013 — column exists in DB, just not in this CSV dump (see §13/§12 step 3b) |
+| `payload_json_flat` | — | **0/1,949 in this CSV export** | ⚠️ historical note: the v2 export predates migration 0013. The column WAS later populated (v3: 2,199/2,199) but is **now removed** (§15) — the raw `payload_json` remains the source of truth. |
 | `sampling_batch_id` + `sampling_*` | 0% | **0%** | ⚠️ still null — the table is dominated by the stray KJFK sub, NOT a rotation batch. Fixed by the new auto-rotator (see §12). |
 | `subject_type` | 0% | **0%** | ✅ real — the feed sends `subject.type` as a numeric code; extractor now preserves it as a string (`strOrCode`) instead of nulling it. |
 | `dep_airport` | 100% | 100%, 148 distinct | ✅ real (KJFK 830 + arrivals from KLAX/KSFO/KBOS/EGLL…) |
@@ -118,6 +127,35 @@ dropped field:
 - `dep_baggage_belt` 0% — departure block has no `baggageBelt` (arrival-only).
 - `dep_airport_local_code` 0% — airport object has no `localCode`.
 - `subject_type` 0% → will fill as a numeric-code string on the NEXT delivery.
+
+---
+
+## 1C. v3 export (`flight_data_pre_post3.csv`, 2,199 rows) — the fixes hold at scale
+
+The v3 export (2026-08-10 ~19:24 UTC) is **2,199 rows × 114 cols** (v2 had 113 —
+the extra column is `payload_json_flat`, which §15 now removes). This is the
+biggest, cleanest export yet and it **confirms everything works**:
+
+| Group | v2 | v3 | Verdict |
+| ---- | ---- | ---- | ---- |
+| rows | 1,949 | **2,199** | growing through the day |
+| `status` / `status_code` | 100% | **100%** (8 distinct) | ✅ |
+| `codeshare_status` | 100% | **100%** (IsOperator 2,193 / IsCodeshared 6) | ✅ |
+| `gcd_km` | 99.5% | **99.6%** (2,190/2,199; the 9 nulls are real absences) | ✅ |
+| `dep_quality` / `arr_quality` | 99.5/98.5% | **99.5% / 98.6%** | ✅ |
+| `data_stage` | 65% POST | **66.6% POST (1,465) / PRE (734)** | ✅ |
+| `airport_tier` | 99.4% HUB | **98.8% HUB (2,172/2,199)** | ✅ ours, derived |
+| `payload_json` | 100% | **100%** | ✅ audit |
+| `payload_json_flat` | 0% in CSV | **100% (2,199/2,199) populated** | ⚠️ now fully populated — but **removed anyway** to halve table size (§15) |
+| `sampling_batch_id` + `sampling_*` | 0% | **0%** | ⚠️ still null — all rows came from the stray KJFK sub, not a rotation batch. The adaptive budget (§12) lets a real batch start with the ~3,105 remaining credits. |
+| `subject_type` | 0% | **1% (27 rows = "1")** | ✅ `strOrCode` preserves the numeric code now |
+| dedup | 1,949 unique | **2,199 unique, 0 dups** | ✅ |
+| dep airports | 148 | **153 distinct (KJFK 945, then KLAX 72, KSFO 50, KBOS 40…)** | still hub-biased until a rotation batch runs |
+
+**Bottom line: the pipeline works end-to-end.** Every field the feed actually
+sends lands in the table at ~100%; the only nulls are true absences. The dataset
+is still hub-only because no rotation batch has run yet — the 3,105-credit
+balance blocked the old 9,000 gate. That gate is now adaptive (§12/§14).
 
 ---
 
@@ -245,7 +283,7 @@ all 99.9–100%. `dep_airport_local_code` = 0% — the airport object in this fe
 `flight_plan_flight_rules/type/revision_no/status/route`, `fp_alt_requested_ft`,
 `fp_alt_assigned_ft`, `fp_airspeed_requested_kt`, `fp_airspeed_assigned_kt`,
 `flight_plan_last_updated_utc` — **0%**. The feed never sends a `flightPlan` block.
-Keep columns (harmless) but **drop from ML features**.
+**Now REMOVED** from the table (§15) — nothing was being lost.
 
 ### 3.12 Aircraft (3) — **OK**
 | Column | Fill | Note |
@@ -285,7 +323,7 @@ tier fallback (KJFK→HUB); the rest fill only with a real batch.
 | Column | What it holds | After backfill |
 | ---- | ---- | ---- |
 | `payload_json` | raw flight item (10 keys: aircraft, airline, arrival, callSign, codeshareStatus, departure, greatCircleDistance, isCargo, lastUpdatedUtc, number, status) | unchanged (audit) |
-| `payload_json_flat` (JSONB, **new migration 0013**) | **readable single-level mirror** of `payload_json` with dot-notation keys (`arrival.airport.iata`, `departure.runwayTime.utc`, …). Numeric enums decoded to names (`status`→"EnRoute", `codeshareStatus`→"IsOperator", `departure.quality`→["Basic","Live"]). | populated by extractor (new rows) + backfill (existing rows) |
+| ~~`payload_json_flat`~~ (JSONB, was migration 0013) | ~~readable single-level mirror of `payload_json`~~ | **REMOVED in migration 0014** (§15) — was a full duplicate doubling table size |
 | `dep_quality` / `arr_quality` (JSONB) | `''` now | `["Basic","Live"]` / `["Basic"]` |
 | `subscription_notices` (JSONB) | `[]` | `[]` (correct) |
 
@@ -334,9 +372,10 @@ replays all 1,662 payloads **pass**.
 ## 6. Backfill (repairs the existing table on Replit)
 
 `scripts/backfill_flight_data_pre_post.ts` re-runs the FIXED extractor over each stored
-`payload_json` and `UPDATE`s status/status_code/codeshare_status/gcd_*/dep_quality/
-arr_quality/data_stage/has_live_location + derives `airport_tier` + writes the new
-`payload_json_flat` mirror. Idempotent, no re-pay. **Run on Replit after pulling.**
+`payload_json` and `UPDATE`s status/status_code/codeshare_status/gcd_km/dep_quality/
+arr_quality/data_stage/has_live_location + derives `airport_tier`. Idempotent, no
+re-pay. **Run on Replit after pulling.** (The old `payload_json_flat` write is gone —
+the column was removed in §15.)
 
 ---
 
@@ -433,23 +472,20 @@ orphan subscriptions (like the stray KJFK sub that was charging forever). You on
 pull, backfill once, and let it run. `ADB_AUTO_COLLECT` defaults to ON.
 
 ```bash
-# 1. Pull the fixed code (migration 0013 auto-applies on server boot:
-#    adds payload_json_flat JSONB — the readable flattened payload mirror)
+# 1. Pull the fixed code (migration 0014 auto-applies on server boot:
+#    drops payload_json_flat + 27 dead/duplicate columns — §15)
 cd /path/to/repo && git pull origin main
 
 # 2. Backfill: repair the existing rows in place (idempotent, no re-pay).
-#    Re-runs the fixed extractor; also writes payload_json_flat + derives airport_tier.
+#    Re-runs the fixed extractor + derives airport_tier.
 npx tsx scripts/backfill_flight_data_pre_post.ts
 
-# 3. Verify the fix (status/gcd/quality nulls gone, PRE/POST split, flat populated)
-npx tsx -e "const{pool}=require('./server/db');(async()=>{const r=await pool.query('SELECT count(*) FILTER (WHERE status IS NULL) AS s_null, count(*) FILTER (WHERE gcd_km IS NULL) AS g_null, count(*) FILTER (WHERE dep_quality IS NULL) AS dq_null, count(*) FILTER (WHERE payload_json_flat IS NULL) AS flat_null, count(*) FILTER (WHERE data_stage=\'POST\') AS post, count(*) FILTER (WHERE data_stage=\'PRE\') AS pre FROM clean.flight_data_pre_post');console.log(r.rows[0]);await pool.end()})()"
-#   Expect: s_null=0 g_null≈9 (1 NaN-gcd row + 8 payloads with no gcd key) dq_null=0 flat_null=0 post≈1268 pre≈681
-
-# 3b. Read one flattened payload (readability check)
-npx tsx -e "const{pool}=require('./server/db');(async()=>{const r=await pool.query('SELECT payload_json_flat FROM clean.flight_data_pre_post WHERE payload_json_flat IS NOT NULL LIMIT 1');console.log(JSON.stringify(r.rows[0].payload_json_flat,null,1));await pool.end()})()"
+# 3. Verify the fix (status/gcd/quality nulls gone, PRE/POST split)
+npx tsx -e "const{pool}=require('./server/db');(async()=>{const r=await pool.query('SELECT count(*) FILTER (WHERE status IS NULL) AS s_null, count(*) FILTER (WHERE gcd_km IS NULL) AS g_null, count(*) FILTER (WHERE dep_quality IS NULL) AS dq_null, count(*) FILTER (WHERE data_stage=\'POST\') AS post, count(*) FILTER (WHERE data_stage=\'PRE\') AS pre FROM clean.flight_data_pre_post');console.log(r.rows[0]);await pool.end()})()"
+#   Expect: s_null=0 g_null≈9 (real absences) dq_null=0 post≈1465 pre≈734
 
 # 4. START THE SERVER. The watchdog takes over from here automatically:
-#    - stops a batch when its window (default 4h) elapses or budget (4000 credits) is hit
+#    - stops a batch when its window (default 4h) elapses or budget is hit
 #    - deletes ORPHAN subscriptions (any webhook sub not in the active batch —
 #      the stray KJFK sub 0731056c-… gets removed automatically on the next tick)
 #    - AUTO-STARTS the next batch (different airports) after a 15-min cooldown
@@ -461,7 +497,9 @@ npm run dev
 #    ADB_WINDOW_HOURS=4         # how long each batch collects
 #    ADB_AUTO_COOLDOWN_MIN=15   # gap between batches
 #    ADB_AUTO_START_HOUR=0 / ADB_AUTO_END_HOUR=24  # UTC window to collect (e.g. 4..23)
-#    ADB_BATCH_BUDGET=4000 / ADB_RESERVE_CREDITS=5000
+#    ADB_BATCH_BUDGET=3000 / ADB_RESERVE_CREDITS=1000 / ADB_MIN_BATCH_CREDITS=300
+#    # ADAPTIVE budget: with 3,105 credits the batch runs on min(3000, 3105-1000)=2105
+#    # credits instead of refusing to start (the old 4000+5000=9000 gate is gone).
 
 # 6. Watch the log — you should see rotation happening with NO manual calls:
 #    [adb-collector] watchdog started (window=4h, ... autoCollect=true)
@@ -471,7 +509,7 @@ npm run dev
 
 # 7. Re-analyze after a real batch (sampling_batch_id should now be populated)
 curl -s -X GET -H "x-webhook-secret: $AERODATABOX_WEBHOOK_SECRET" http://localhost:5000/api/v1/collection/diagnostics
-python3 scripts/analyze_flight_data_pre_post.py flight_data_pre_post2.csv
+python3 scripts/analyze_flight_data_pre_post.py flight_data_pre_post3.csv
 ```
 
 > **Note about the earlier curl failures:** `https://travnr.com/…` serves the SPA
@@ -486,16 +524,98 @@ python3 scripts/analyze_flight_data_pre_post.py flight_data_pre_post2.csv
 
 | File | Change |
 | ---- | ---- |
-| `server/lib/disruption/adbCollectionController_v3.ts` | **AUTO-ROTATION** — watchdog auto-stops expired batches, auto-deletes orphan subs, auto-starts the next batch (env-gated, default ON) |
-| `server/lib/disruption/flightNotificationExtractor_v3.ts` | Fixed status/codeshare/gcd/quality/data_stage; emits `payload_json_flat`; preserves numeric subscription codes (`strOrCode`) |
-| `server/lib/disruption/flattenPayload_v3.ts` | **NEW** — single-level dot-notation mirror (enums decoded) |
+| `server/lib/disruption/adbCollectionController_v3.ts` | **AUTO-ROTATION** — watchdog auto-stops expired batches, auto-deletes orphan subs, auto-starts the next batch; **adaptive credit budget** (`min(batchBudget, balance−reserve)`, `minBatchCredits` floor) so low balances still start a batch |
+| `server/lib/disruption/flightNotificationExtractor_v3.ts` | Fixed status/codeshare/gcd/quality/data_stage; **stops emitting `payload_json_flat` + 27 dead columns**; preserves numeric subscription codes (`strOrCode`) |
+| `server/lib/disruption/flattenPayload_v3.ts` | **DELETED** — `payload_json_flat` column removed (§15) |
 | `server/lib/disruption/flightStatus_v3.ts` | Validator accepts real payload shapes (incl. numeric `billingType`/`subject.type`) |
 | `server/routes_v3.ts` | Tier fallback when `subject.type` is null |
-| `server/lib/disruption/flightDataPrePostStore_v3.ts` | Upsert refreshes `payload_json_flat` |
-| `shared/schema.ts` + `migrations/0013_*.sql` + `server/db.ts` | New `payload_json_flat` JSONB column (boot migration) |
-| `scripts/analyze_flight_data_pre_post.py` | Column-by-column analyzer (CSV or JSON), incl. JSON-column stats |
-| `scripts/test-extractor-real-payload.ts` | Replays 1,662+ payloads through fixed extractor + flatten checks |
-| `scripts/backfill_flight_data_pre_post.ts` | Repairs existing rows in place, writes `payload_json_flat` (Replit) |
+| `server/lib/disruption/flightDataPrePostStore_v3.ts` | Upsert refreshes all kept columns; removed the 28 dropped from `EXCLUDED_SET` |
+| `shared/schema.ts` + `migrations/0014_*.sql` + `server/db.ts` | **28 columns dropped** from `flight_data_pre_post` (dead + duplicates, §15) via boot migration 0014 |
+| `scripts/analyze_flight_data_pre_post.py` | Column-by-column analyzer (CSV or JSON), reflects the reduced column set |
+| `scripts/test-extractor-real-payload.ts` | Replays 2,199 payloads through fixed extractor (flatten checks removed) |
+| `scripts/backfill_flight_data_pre_post.ts` | Repairs existing rows in place (no longer writes `payload_json_flat`) |
 | `MDplan/V3_CollectionStrategy.md` | Endpoint paths corrected to `/api/v1/collection/*` |
 | `MDplan/V3_WEBHOOK_VERIFY.md` | Endpoint paths corrected |
 | `MDplan/V3_WebhookExtractionPlan.md` | Endpoint paths + §8.0 first-run runbook |
+
+---
+
+## 14. Resources / credit accounting (what we actually spend)
+
+**The user asked to go over how many resources we're using.** Measured from the
+v3 export + balance blocks:
+
+### 14.1 Cost model (AeroDataBox)
+| Operation | Cost | Frequency |
+| ---- | ---- | ---- |
+| create / get / list / delete subscription | **0 credits** | per batch start/stop |
+| checkAirportFeeds (coverage) | 0 credits | per airport per batch |
+| get balance | 0 credits | every webhook + watchdog tick |
+| **notification deliveries** | **1 credit per flight item** | every webhook |
+| HTTP polling (the old credit-burner) | 0 — engine **dead since 2026-08-08** | never |
+
+So **≈1 credit per stored row**. No hidden burn.
+
+### 14.2 Observed usage (this dataset)
+- v3 balance `last_deducted_utc` spans 2026-08-10 → 08-11, credits drifting
+  7,920 → 3,105 (with refills at 01:15 and 20:07 on 08-10).
+- The stray KJFK sub collected ~90 credits over ~45 min earlier (5,762 → 5,672);
+  at ~1 credit/flight that matches the delivery rate.
+
+### 14.3 Batch budgeting (NEW — adaptive, no more 9,000 gate)
+The old rule demanded `budget 4,000 + reserve 5,000 = 9,000` before ANY batch
+could start. With only 3,105 remaining the watchdog was permanently blocked
+(`auto-start skipped: Credits too low … need 9000`). **Fixed:**
+
+```
+effectiveBudget = min(ADB_BATCH_BUDGET, creditsRemaining − ADB_RESERVE_CREDITS)
+canStart        = effectiveBudget ≥ ADB_MIN_BATCH_CREDITS
+```
+
+Defaults now: `ADB_BATCH_BUDGET=3000`, `ADB_RESERVE_CREDITS=1000`,
+`ADB_MIN_BATCH_CREDITS=300`. With 3,105 credits a batch starts **immediately** on
+`min(3000, 3105−1000) = 2105` credits, leaves 1,000 in reserve, and stops when
+it hits 2,105 deliveries — then rotates to fresh airports. Refill is only needed
+when the balance is below `reserve + min = 1,300`.
+
+### 14.4 What a budget buys (tuning table)
+| Budget | ≈ flight items | ≈ 4h-window coverage | Notes |
+| ---- | ---- | ---- | ---- |
+| 500 | 500 | ~1 mid airport | quick debias sweep |
+| 2,000 | 2,000 | 2–3 airports | good per-batch default |
+| 3,000 | 3,000 | 3–5 airports | current default cap |
+| 4,000+ | 4,000+ | a full hub | the old default — needs a big refill |
+
+For **de-biasing** the dataset (the real goal), run 2–3 smaller adaptive batches
+(2,000–2,100 each) across MID/REGIONAL airports — that's ~6,300 credits ≈ the
+remaining balance, and it produces non-KJFK rows so the table stops being 99% hub.
+
+---
+
+## 15. Column removal (28 columns dropped — dead / duplicate)
+
+**The user asked to remove `payload_json_flat` (keep raw `payload_json`) and
+unnecessary/duplicate columns.** Every drop is justified by the v3 measured fill
+rate (2,199 rows):
+
+| Column(s) | v3 fill | Why removed |
+| ---- | ---- | ---- |
+| `payload_json_flat` | 100% | full duplicate of `payload_json` — was **doubling** table size; the raw JSON stays as source of truth |
+| `gcd_m`, `gcd_mile`, `gcd_nm`, `gcd_ft` | 100% | the **same distance** in 4 extra units — `gcd_km` is canonical |
+| `flight_plan_*` (10 cols) | **0%** | feed never sends a `flightPlan` block |
+| `dep_predicted_utc`, `arr_predicted_utc` | **0%** | feed never sends `predictedTime` |
+| `dep_airport_local_code`, `arr_airport_local_code` | **0%** | airport object has no `localCode` |
+| `dep_baggage_belt` | **0%** | departure block has no `baggageBelt` (arrival-only — keep `arr_baggage_belt`) |
+| `notification_summary`, `notification_remark` | **0%** | wrapper never sends them |
+| `aircraft_image_*` (6 cols) | **0%** | no `aircraft.image` block |
+
+**Kept on purpose** (real data, not duplicates): `subscriber_id` (the webhook URL)
+vs `subscription_id` (the sub UUID) are **different things**; `subscriber_type` =
+`WebHook` (constant but real); `subject_type` now fills as a numeric-code string;
+all `loc_*` stay because they are the **designed home for future ADS-B trajectory**
+(§10) — re-adding them later would be churn.
+
+Migration: `migrations/0014_flight_data_pre_post_drop_dead_columns.sql`
+(`DROP COLUMN IF EXISTS`, idempotent, auto-applies on boot). Table goes
+**114 → 86 columns**, roughly halving exported size (`payload_json_flat` was the
+~5 MB duplicate in the 10 MB CSV).

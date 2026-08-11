@@ -71,8 +71,10 @@ function envTierMix(): Record<AirportTier, number> {
 
 export const COLLECTOR_CONFIG = {
   windowHours: envInt("ADB_WINDOW_HOURS", 4),
-  batchBudget: envInt("ADB_BATCH_BUDGET", 4000),
-  reserveCredits: envInt("ADB_RESERVE_CREDITS", 5000),
+  batchBudget: envInt("ADB_BATCH_BUDGET", 3000),
+  reserveCredits: envInt("ADB_RESERVE_CREDITS", 1000),
+  /** don't start a batch unless it can run at least this many credits */
+  minBatchCredits: envInt("ADB_MIN_BATCH_CREDITS", 300),
   tierMix: envTierMix(),
   /** airports to remember so consecutive batches don't repeat the same ones */
   rememberRecentBatches: 2,
@@ -256,10 +258,15 @@ async function startBatchInner(): Promise<StartBatchResult> {
   if (!balance) {
     throw new Error("No alert-credit balance yet — refill first (POST /api/v1/subscriptions/balance/refill).");
   }
-  const needed = COLLECTOR_CONFIG.batchBudget + COLLECTOR_CONFIG.reserveCredits;
-  if (balance.creditsRemaining < needed) {
+  // Adaptive budget: spend whatever is above the reserve, capped by the batch
+  // budget. With e.g. 3,105 credits, reserve 1,000 and budget 3,000 this runs
+  // a 2,105-credit batch right now instead of demanding 4,000+5,000 and
+  // never collecting. minBatchCredits keeps the batch worth starting.
+  const available = Math.max(0, balance.creditsRemaining - COLLECTOR_CONFIG.reserveCredits);
+  const effectiveBudget = Math.min(COLLECTOR_CONFIG.batchBudget, available);
+  if (effectiveBudget < COLLECTOR_CONFIG.minBatchCredits) {
     throw new Error(
-      `Credits too low for a batch: ${balance.creditsRemaining} remaining, need ${needed} (budget ${COLLECTOR_CONFIG.batchBudget} + reserve ${COLLECTOR_CONFIG.reserveCredits}). Refill first.`,
+      `Credits too low for a batch: ${balance.creditsRemaining} remaining, need reserve ${COLLECTOR_CONFIG.reserveCredits} + min batch ${COLLECTOR_CONFIG.minBatchCredits} (budget cap ${COLLECTOR_CONFIG.batchBudget}). Refill first.`,
     );
   }
 
@@ -306,7 +313,7 @@ async function startBatchInner(): Promise<StartBatchResult> {
        (batch_id, batch_seq, random_seed, status, window_start, window_end,
         credit_budget, tier_mix, airports)
      VALUES ($1, $2, $3, 'ACTIVE', $4, $5, $6, $7::jsonb, $8::text[])`,
-    [batchId, seq, seed, now, windowEnd, COLLECTOR_CONFIG.batchBudget, JSON.stringify(tierMix), airports],
+    [batchId, seq, seed, now, windowEnd, effectiveBudget, JSON.stringify(tierMix), airports],
   );
 
   for (const c of created) {
@@ -401,6 +408,7 @@ export interface CollectionStatus {
   balance: number | null;
   reserveCredits: number;
   batchBudget: number;
+  minBatchCredits: number;
   windowHours: number;
   tierMix: Record<string, number>;
   activeBatch: CollectionBatch | null;
@@ -408,18 +416,19 @@ export interface CollectionStatus {
   canStart: boolean;
   reason: string | null;
 }
-
 export async function getCollectionStatus(): Promise<CollectionStatus> {
   const balance = await getBalance();
   const active = await getActiveBatch();
   const activeBatchCredits = active ? await estimateBatchCredits(active.batchId) : null;
   const remaining = balance?.creditsRemaining ?? 0;
-  const needed = COLLECTOR_CONFIG.batchBudget + COLLECTOR_CONFIG.reserveCredits;
-  const canStart = !active && remaining >= needed;
+  const available = Math.max(0, remaining - COLLECTOR_CONFIG.reserveCredits);
+  const effectiveBudget = Math.min(COLLECTOR_CONFIG.batchBudget, available);
+  const canStart = !active && effectiveBudget >= COLLECTOR_CONFIG.minBatchCredits;
   return {
     balance: balance?.creditsRemaining ?? null,
     reserveCredits: COLLECTOR_CONFIG.reserveCredits,
-    batchBudget: COLLECTOR_CONFIG.batchBudget,
+    batchBudget: effectiveBudget,
+    minBatchCredits: COLLECTOR_CONFIG.minBatchCredits,
     windowHours: COLLECTOR_CONFIG.windowHours,
     tierMix: COLLECTOR_CONFIG.tierMix,
     activeBatch: active,
@@ -431,7 +440,7 @@ export async function getCollectionStatus(): Promise<CollectionStatus> {
         ? null
         : balance === null
           ? "No balance yet — refill first."
-          : `Insufficient credits (${remaining} < ${needed}).`,
+          : `Insufficient credits (${remaining} < reserve ${COLLECTOR_CONFIG.reserveCredits} + min batch ${COLLECTOR_CONFIG.minBatchCredits}).`,
   };
 }
 
@@ -687,7 +696,7 @@ export function startCollectionWatchdog(): void {
   }, COLLECTOR_CONFIG.watchdogSeconds * 1000);
   timer.unref?.();
   console.log(
-    `[adb-collector] watchdog started (window=${COLLECTOR_CONFIG.windowHours}h, budget=${COLLECTOR_CONFIG.batchBudget} credits/batch, reserve=${COLLECTOR_CONFIG.reserveCredits}, tierMix=${JSON.stringify(COLLECTOR_CONFIG.tierMix)}, autoCollect=${COLLECTOR_CONFIG.autoCollect})`,
+    `[adb-collector] watchdog started (window=${COLLECTOR_CONFIG.windowHours}h, budget=${COLLECTOR_CONFIG.batchBudget} credits/batch, reserve=${COLLECTOR_CONFIG.reserveCredits}, minBatch=${COLLECTOR_CONFIG.minBatchCredits}, tierMix=${JSON.stringify(COLLECTOR_CONFIG.tierMix)}, autoCollect=${COLLECTOR_CONFIG.autoCollect})`,
   );
 }
 

@@ -31,7 +31,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0010_flight_data_pre_post.sql",
   "0011_flight_data_pre_post_quality_jsonb.sql",
   "0012_collection_sampling.sql",
-  "0013_flight_data_pre_post_payload_flat.sql",
+  "0014_flight_data_pre_post_drop_dead_columns.sql",
 ];
 
 let bootMigrationsApplied = false;

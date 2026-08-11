@@ -18,7 +18,6 @@
 import { createHash } from "crypto";
 import type { InsertFlightDataPrePost } from "@shared/schema";
 import { POST_STATUSES, STATUS_CODE } from "./flightStatus_v3";
-import { flattenPayload } from "./flattenPayload_v3";
 
 // ---------------------------------------------------------------------------
 // AeroDataBox real-payload quirks (verified from live deliveries 2026-08-10):
@@ -225,12 +224,7 @@ export function extractFlightNotification(
   const arrAirport = block(arr.airport);
   const arrAirportLoc = block(arrAirport.location);
 
-  const fp = block(flight.flightPlan);
-  const fpAlt = block(fp.altitude);
-  const fpSpeed = block(fp.airspeed);
-
   const ac = block(flight.aircraft);
-  const acImage = block(ac.image);
 
   const loc = block(flight.location);
   const locPressureAlt = block(loc.pressureAltitude);
@@ -265,19 +259,12 @@ export function extractFlightNotification(
           ? (STATUS_CODE[statusStr] ?? null)
           : null,
     codeshareStatus: enumName(flight.codeshareStatus, CODESHARE_CODE),
-    notificationSummary: str(flight.notificationSummary),
-    notificationRemark: str(flight.notificationRemark),
     lastUpdatedUtc,
 
-    gcdM: num(pickKey(gcd, "meter")),
     gcdKm: num(pickKey(gcd, "km")),
-    gcdMile: num(pickKey(gcd, "mile")),
-    gcdNm: num(pickKey(gcd, "nm")),
-    gcdFt: num(pickKey(gcd, "feet")),
 
     depAirportIcao: str(depAirport.icao),
     depAirportIata: str(depAirport.iata),
-    depAirportLocalCode: str(depAirport.localCode),
     depAirportName: str(depAirport.name),
     depAirportShortName: str(depAirport.shortName),
     depAirportMunicipality: str(depAirport.municipalityName),
@@ -288,18 +275,15 @@ export function extractFlightNotification(
     depScheduledUtc: timeUtc(dep.scheduledTime),
     depScheduledLocal: timeLocal(dep.scheduledTime),
     depRevisedUtc: timeUtc(dep.revisedTime),
-    depPredictedUtc: timeUtc(dep.predictedTime),
     depRunwayUtc: timeUtc(dep.runwayTime),
     depTerminal: str(dep.terminal),
     depCheckinDesk: str(dep.checkInDesk),
     depGate: str(dep.gate),
-    depBaggageBelt: str(dep.baggageBelt),
     depRunway: str(dep.runway),
     depQuality: strArr(dep.quality),
 
     arrAirportIcao: str(arrAirport.icao),
     arrAirportIata: str(arrAirport.iata),
-    arrAirportLocalCode: str(arrAirport.localCode),
     arrAirportName: str(arrAirport.name),
     arrAirportShortName: str(arrAirport.shortName),
     arrAirportMunicipality: str(arrAirport.municipalityName),
@@ -310,7 +294,6 @@ export function extractFlightNotification(
     arrScheduledUtc: timeUtc(arr.scheduledTime),
     arrScheduledLocal: timeLocal(arr.scheduledTime),
     arrRevisedUtc: timeUtc(arr.revisedTime),
-    arrPredictedUtc: timeUtc(arr.predictedTime),
     arrRunwayUtc: timeUtc(arr.runwayTime),
     arrTerminal: str(arr.terminal),
     arrGate: str(arr.gate),
@@ -318,26 +301,9 @@ export function extractFlightNotification(
     arrRunway: str(arr.runway),
     arrQuality: strArr(arr.quality),
 
-    flightPlanFlightRules: str(fp.flightRules),
-    flightPlanFlightType: str(fp.flightType),
-    flightPlanRevisionNo: int(fp.revisionNo),
-    flightPlanStatus: str(fp.status),
-    flightPlanRoute: str(fp.route),
-    fpAltRequestedFt: num(block(fpAlt.requested).feet),
-    fpAltAssignedFt: num(block(fpAlt.assigned).feet),
-    fpAirspeedRequestedKt: num(block(fpSpeed.requested).kt),
-    fpAirspeedAssignedKt: num(block(fpSpeed.assigned).kt),
-    flightPlanLastUpdatedUtc: date(fp.lastUpdatedUtc),
-
     aircraftReg: str(ac.reg),
     aircraftModeS: str(ac.modeS),
     aircraftModel: str(ac.model),
-    aircraftImageUrl: str(acImage.url),
-    aircraftImageWebUrl: str(acImage.webUrl),
-    aircraftImageAuthor: str(acImage.author),
-    aircraftImageTitle: str(acImage.title),
-    aircraftImageDescription: str(acImage.description),
-    aircraftImageLicense: str(acImage.license),
 
     locLat: num(loc.lat),
     locLon: num(loc.lon),
@@ -378,7 +344,6 @@ export function extractFlightNotification(
 
     receivedAt: ctx.receivedAt,
     payloadJson: raw,
-    payloadJsonFlat: flattenPayload(raw),
     dedupKey: dedupKey({
       flightNumber,
       carrierIata,

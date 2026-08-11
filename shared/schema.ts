@@ -760,21 +760,14 @@ export const flightDataPrePost = cleanSchema.table(
     status: text("status"),
     statusCode: smallint("status_code"),
     codeshareStatus: text("codeshare_status"),
-    notificationSummary: text("notification_summary"),
-    notificationRemark: text("notification_remark"),
     lastUpdatedUtc: timestamp("last_updated_utc", { withTimezone: true }),
 
-    // Great-circle distance
-    gcdM: doublePrecision("gcd_m"),
+    // Great-circle distance (gcd_km canonical — the other units are derivable)
     gcdKm: doublePrecision("gcd_km"),
-    gcdMile: doublePrecision("gcd_mile"),
-    gcdNm: doublePrecision("gcd_nm"),
-    gcdFt: doublePrecision("gcd_ft"),
 
     // Departure (PRE)
     depAirportIcao: text("dep_airport_icao"),
     depAirportIata: text("dep_airport_iata"),
-    depAirportLocalCode: text("dep_airport_local_code"),
     depAirportName: text("dep_airport_name"),
     depAirportShortName: text("dep_airport_short_name"),
     depAirportMunicipality: text("dep_airport_municipality"),
@@ -785,19 +778,16 @@ export const flightDataPrePost = cleanSchema.table(
     depScheduledUtc: timestamp("dep_scheduled_utc", { withTimezone: true }),
     depScheduledLocal: text("dep_scheduled_local"),
     depRevisedUtc: timestamp("dep_revised_utc", { withTimezone: true }),
-    depPredictedUtc: timestamp("dep_predicted_utc", { withTimezone: true }),
     depRunwayUtc: timestamp("dep_runway_utc", { withTimezone: true }),
     depTerminal: text("dep_terminal"),
     depCheckinDesk: text("dep_checkin_desk"),
     depGate: text("dep_gate"),
-    depBaggageBelt: text("dep_baggage_belt"),
     depRunway: text("dep_runway"),
     depQuality: jsonb("dep_quality"),
 
     // Arrival (PRE baseline)
     arrAirportIcao: text("arr_airport_icao"),
     arrAirportIata: text("arr_airport_iata"),
-    arrAirportLocalCode: text("arr_airport_local_code"),
     arrAirportName: text("arr_airport_name"),
     arrAirportShortName: text("arr_airport_short_name"),
     arrAirportMunicipality: text("arr_airport_municipality"),
@@ -808,7 +798,6 @@ export const flightDataPrePost = cleanSchema.table(
     arrScheduledUtc: timestamp("arr_scheduled_utc", { withTimezone: true }),
     arrScheduledLocal: text("arr_scheduled_local"),
     arrRevisedUtc: timestamp("arr_revised_utc", { withTimezone: true }),
-    arrPredictedUtc: timestamp("arr_predicted_utc", { withTimezone: true }),
     arrRunwayUtc: timestamp("arr_runway_utc", { withTimezone: true }),
     arrTerminal: text("arr_terminal"),
     arrGate: text("arr_gate"),
@@ -816,28 +805,10 @@ export const flightDataPrePost = cleanSchema.table(
     arrRunway: text("arr_runway"),
     arrQuality: jsonb("arr_quality"),
 
-    // Flight plan (PRE)
-    flightPlanFlightRules: text("flight_plan_flight_rules"),
-    flightPlanFlightType: text("flight_plan_flight_type"),
-    flightPlanRevisionNo: integer("flight_plan_revision_no"),
-    flightPlanStatus: text("flight_plan_status"),
-    flightPlanRoute: text("flight_plan_route"),
-    fpAltRequestedFt: doublePrecision("fp_alt_requested_ft"),
-    fpAltAssignedFt: doublePrecision("fp_alt_assigned_ft"),
-    fpAirspeedRequestedKt: doublePrecision("fp_airspeed_requested_kt"),
-    fpAirspeedAssignedKt: doublePrecision("fp_airspeed_assigned_kt"),
-    flightPlanLastUpdatedUtc: timestamp("flight_plan_last_updated_utc", { withTimezone: true }),
-
     // Aircraft (tail-number join key)
     aircraftReg: text("aircraft_reg"),
     aircraftModeS: text("aircraft_mode_s"),
     aircraftModel: text("aircraft_model"),
-    aircraftImageUrl: text("aircraft_image_url"),
-    aircraftImageWebUrl: text("aircraft_image_web_url"),
-    aircraftImageAuthor: text("aircraft_image_author"),
-    aircraftImageTitle: text("aircraft_image_title"),
-    aircraftImageDescription: text("aircraft_image_description"),
-    aircraftImageLicense: text("aircraft_image_license"),
 
     // Live position (POST, ADS-B)
     locLat: doublePrecision("loc_lat"),
@@ -879,7 +850,6 @@ export const flightDataPrePost = cleanSchema.table(
 
     receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
     payloadJson: jsonb("payload_json").notNull(),
-    payloadJsonFlat: jsonb("payload_json_flat"),
     dedupKey: text("dedup_key").notNull(),
   },
   (table) => [

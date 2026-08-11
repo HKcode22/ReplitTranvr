@@ -97,22 +97,14 @@ def main():
 
     print("\n## 4. greatCircleDistance (gcd_*)")
     report([
-        ("gcd_m", "meters"), ("gcd_km", "km"), ("gcd_mile", "miles"),
-        ("gcd_nm", "nm"), ("gcd_ft", "feet"),
+        ("gcd_km", "km"),
     ], rows, n)
 
     print("\n## 5. departure quality[] (numeric codes in payload)")
     report([("dep_quality", "dep quality")], rows, n)
     report([("arr_quality", "arr quality")], rows, n)
 
-    print("\n## 6. flightPlan (fp_*) — often absent in real payloads")
-    report([
-        ("flight_plan_flight_rules", "rules"), ("flight_plan_route", "route"),
-        ("flight_plan_status", "plan status"),
-        ("fp_alt_requested_ft", "alt req ft"), ("fp_airspeed_requested_kt", "spd req kt"),
-    ], rows, n)
-
-    print("\n## 7. Live ADS-B location (loc_*) — null = not airborne / no position")
+    print("\n## 6. Live ADS-B location (loc_*) — null = not airborne / no position")
     report([
         ("loc_lat", "lat"), ("loc_lon", "lon"), ("loc_altitude_ft", "alt ft"),
         ("loc_ground_speed_kt", "gs kt"), ("loc_vsi_fpm", "vsi"),
@@ -144,16 +136,15 @@ def main():
         ("dep_scheduled_utc", "dep sched"),
         ("dep_revised_utc", "dep revised"),
         ("dep_runway_utc", "dep runway"),
-        ("dep_predicted_utc", "dep predicted"),
         ("arr_scheduled_utc", "arr sched"),
         ("arr_runway_utc", "arr runway"),
         ("last_updated_utc", "last updated"),
         ("received_at", "received"),
     ], rows, n)
 
-    # JSON columns (payload_json raw, payload_json_flat readable mirror)
+    # JSON columns (payload_json raw — source of truth; flat mirror removed §15)
     print("\n## 11. JSON payload columns")
-    for col, label in [("payload_json", "raw payload"), ("payload_json_flat", "flat payload"),
+    for col, label in [("payload_json", "raw payload"),
                        ("subscription_notices", "subscription notices")]:
         n_json = sum(1 for r in rows if nonnull(r.get(col)))
         print(f"  {col} ({label}): {n_json}/{n} populated")
