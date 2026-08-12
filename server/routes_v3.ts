@@ -35,6 +35,7 @@ import {
   type SamplingMeta,
 } from "./lib/disruption/flightNotificationExtractor_v3";
 import { upsertFlightNotifications } from "./lib/disruption/flightDataPrePostStore_v3";
+import { pool } from "./db";
 import {
   startBatch,
   stopBatch,
@@ -158,6 +159,33 @@ export function registerV3Routes(app: Express): void {
 
       const stats = await upsertFlightNotifications(rows);
 
+      // V3.9 three-quantity credit ledger (§13, §44-A): one row per delivery so
+      // the controller can reconcile C_external (balance delta) vs C_internal
+      // (notification_items) per batch — even across a restart. Single-writer
+      // (only this ingress writes adb_ingest_events).
+      try {
+        await pool.query(
+          `INSERT INTO clean.adb_ingest_events
+             (subscription_id, batch_id, notification_items, rows_stored,
+              rows_inserted, rows_updated, rows_skipped, credits_remaining)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            subId ?? null,
+            sampling?.batchId ?? null,
+            flights.length,
+            stats.stored,
+            stats.inserted,
+            stats.updated,
+            skipped,
+            balance?.creditsRemaining ?? null,
+          ],
+        );
+      } catch (ingestErr: any) {
+        // Accounting must NEVER fail the webhook 2xx — the delivery already
+        // landed; log loudly so the reconciliation finds the gap.
+        console.error("[adb-v3-webhook] ingest-event write failed:", ingestErr?.message || ingestErr);
+      }
+
       // Compact per-delivery detail so the log shows WHICH flights landed:
       //   dep→arr status (repeat N times if the same flight already exists)
       const detail = rows
@@ -186,6 +214,19 @@ export function registerV3Routes(app: Express): void {
     } catch (err: any) {
       // NEVER 5xx here — a 5xx triggers a paid retry. Log and 2xx anyway.
       console.error("[adb-v3-webhook] error:", err?.message || err);
+      // V3.9 delivery-failure ledger (§44-C): count the failed delivery so the
+      // failure-rate gate can PAUSE collection (it never throws back a 5xx).
+      try {
+        const subIdRaw = req.body?.subscription?.id ?? null;
+        await pool.query(
+          `INSERT INTO clean.adb_ingest_events
+             (subscription_id, notification_items, delivery_failure, error)
+           VALUES ($1, 0, true, $2)`,
+          [typeof subIdRaw === "string" ? subIdRaw : null, String(err?.message || "error").slice(0, 500)],
+        );
+      } catch (ledgerErr: any) {
+        console.error("[adb-v3-webhook] failure-ledger write failed:", ledgerErr?.message || ledgerErr);
+      }
       res.status(200).json({ received: true, error: err?.message || "error" });
     }
   };

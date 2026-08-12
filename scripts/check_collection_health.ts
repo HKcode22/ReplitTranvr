@@ -37,15 +37,18 @@ async function main(): Promise<void> {
     healthy = flag(true, "data flow", `last row ${gapMin} min ago (${last.toISOString()})`);
   }
 
-  // 2. Balance (latest snapshot on any row)
+  // 2. Balance (latest snapshot on any row) — must cover reserve + min batch.
+  const reserve = Number(process.env.ADB_RESERVE_CREDITS ?? 1000);
+  const minBatch = Number(process.env.ADB_MIN_BATCH_CREDITS ?? 300);
+  const lowBal = reserve + minBatch;
   const balRes = await pool.query(
     "SELECT credits_remaining FROM clean.flight_data_pre_post ORDER BY received_at DESC LIMIT 1",
   );
   const bal = balRes.rows[0]?.credits_remaining ?? null;
   if (bal === null) {
     healthy = flag(false, "balance", "unknown (no rows)");
-  } else if (bal < 2000) {
-    healthy = flag(false, "balance", `${bal} — low, refill soon`);
+  } else if (bal < lowBal) {
+    healthy = flag(false, "balance", `${bal} — below reserve+min (${lowBal}), refill soon`);
   } else {
     healthy = flag(true, "balance", `${bal} credits`);
   }
@@ -60,23 +63,41 @@ async function main(): Promise<void> {
   flag(true, "rows today", String(rowsToday));
   flag(true, "rows total", String(rowsTotal));
 
-  // 4. Active batch + its tier mixture
+  // 4. Active batch + its tier mixture.
+  //    Gated on SUBSCRIPTIONS, not rows: a REGIONAL-tier airport legitimately
+  //    emits ~1–2 rows, so counting rows would false-FAIL a healthy batch.
+  //    Rows per tier are shown as an informational second line instead.
   const batchRes = await pool.query(
-    "SELECT batch_id, status, started_at FROM clean.adb_collection_batches WHERE status = 'ACTIVE' ORDER BY started_at DESC LIMIT 1",
+    "SELECT batch_id, status, started_at, tier_mix FROM clean.adb_collection_batches WHERE status = 'ACTIVE' ORDER BY started_at DESC LIMIT 1",
   );
   if (batchRes.rowCount) {
     const b = batchRes.rows[0];
+    const planned = b.tier_mix || {};
+    const expected = ["HUB", "MID", "REGIONAL"].filter((t) => (planned[t] ?? 0) > 0);
+
+    const subRes = await pool.query(
+      "SELECT tier, count(*)::int AS n FROM clean.adb_collection_subs WHERE batch_id = $1 AND ended_at IS NULL GROUP BY tier",
+      [b.batch_id],
+    );
+    const subs = subRes.rows.map((r) => `${r.tier}:${r.n}`).join(", ") || "none";
+    const hasExpected = expected.every((t) => subRes.rows.some((r) => r.tier === t));
+    if (!hasExpected) {
+      healthy = flag(
+        false,
+        `active ${b.batch_id}`,
+        `subscription mix incomplete — planned ${JSON.stringify(planned)} got ${subs}`,
+      );
+    } else {
+      healthy = flag(true, `active ${b.batch_id}`, `subscriptions ${subs}`);
+    }
+
+    // Informational: rows per tier (not a pass/fail signal for REGIONAL).
     const mixRes = await pool.query(
       "SELECT airport_tier AS tier, count(*)::int AS n FROM clean.flight_data_pre_post WHERE sampling_batch_id = $1 GROUP BY airport_tier",
       [b.batch_id],
     );
     const mix = mixRes.rows.map((r) => `${r.tier}:${r.n}`).join(", ") || "no rows yet";
-    const hasAllTiers = ["HUB", "MID", "REGIONAL"].every((t) => mixRes.rows.some((r) => r.tier === t));
-    if (!hasAllTiers) {
-      healthy = flag(false, `active ${b.batch_id}`, `tier mix incomplete — ${mix}`);
-    } else {
-      healthy = flag(true, `active ${b.batch_id}`, `tiers ${mix}`);
-    }
+    flag(true, "batch rows (info)", mix);
   } else {
     healthy = flag(false, "active batch", "none running right now (idle)");
   }

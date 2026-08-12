@@ -52,7 +52,7 @@ function envInt(name: string, fallback: number): number {
 }
 
 function envTierMix(): Record<AirportTier, number> {
-  const fallback: Record<AirportTier, number> = { HUB: 1, MID: 2, REGIONAL: 2 };
+  const fallback: Record<AirportTier, number> = { HUB: 1, MID: 2, REGIONAL: 1 };
   const raw = process.env.ADB_TIER_MIX;
   if (!raw) return fallback;
   try {
@@ -68,13 +68,48 @@ function envTierMix(): Record<AirportTier, number> {
   }
 }
 
+function envList(name: string, fallback: string): string[] {
+  const raw = process.env[name];
+  return (raw ?? fallback)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export const COLLECTOR_CONFIG = {
   windowHours: envInt("ADB_WINDOW_HOURS", 4),
   batchBudget: envInt("ADB_BATCH_BUDGET", 3000),
   reserveCredits: envInt("ADB_RESERVE_CREDITS", 1000),
   /** don't start a batch unless it can run at least this many credits */
   minBatchCredits: envInt("ADB_MIN_BATCH_CREDITS", 300),
+  /** V3.9: max |balance_delta − notification_items| a batch may show before
+   *  its reconciliation is marked MISMATCH (§44-B). Non-zero because a
+   *  delivery can still be in-flight at stop() and race the balance read. */
+  reconcileTolerance: envInt("ADB_RECONCILE_TOLERANCE", 3),
   tierMix: envTierMix(),
+
+  // ---- V3.3 daily credit cap (60,000 / 31 ≈ 1,900/day; 0 disables) ----
+  /** hard cap on credits spent per UTC day. 1,900/day ≈ one full 4 h batch,
+   *  pacing the 60k over a month. Enforced in startBatchInner (hard floor)
+   *  and checked in the watchdog before it even attempts a start. */
+  dailyCreditCap: process.env.ADB_DAILY_CREDIT_CAP === "0" ? 0 : envInt("ADB_DAILY_CREDIT_CAP", 1900),
+
+  // ---- V3.3 rotating anchor pool + one-rotating-window-per-day ----
+  /** rotating anchors (one/day, no-repeat-until-all, drives the HUB slot).
+   *  Disable with ADB_ANCHOR_ENABLED=0 or an empty ADB_ANCHOR_POOL. */
+  anchorEnabled: process.env.ADB_ANCHOR_ENABLED !== "0",
+  anchorPool: envList("ADB_ANCHOR_POOL", "KLAX,EGLL,WSSS,SBGR,OMDB").map((s) => s.toUpperCase()),
+  /** rotate the daily window's UTC start hour through a cycle (default
+   *  00/04/08/12/16/20). Disable with ADB_ROTATING_UTC_START=0 → the watchdog
+   *  auto-starts whenever it wakes up (legacy behavior). */
+  rotatingUtcStart: process.env.ADB_ROTATING_UTC_START !== "0",
+  utcStartCycle: ((): number[] => {
+    const hours = envList("ADB_UTC_START_CYCLE", "0,4,8,12,16,20")
+      .map((h) => Number(h))
+      .filter((h) => Number.isInteger(h) && h >= 0 && h < 24)
+      .sort((a, b) => a - b);
+    return hours.length ? hours : [0];
+  })(),
   /** airports to remember so consecutive batches don't repeat the same ones */
   rememberRecentBatches: 2,
 
@@ -201,6 +236,93 @@ async function writeMeta(key: string, value: string): Promise<void> {
   );
 }
 
+// --------------------------- V3.3 daily-cap helpers ---------------------------
+
+/** Credits consumed since the start of the UTC day = notification items
+ *  delivered today (V3.9 three-quantity accounting, §13/§44-A/B). With
+ *  maxDeliveryRetries=0 every notification item costs exactly 1 credit, so the
+ *  adb_ingest_events ledger is the per-day internal basis (C_internal). The
+ *  authoritative external number is the balance delta at batch stop / canary. */
+export async function creditsUsedTodayUtc(): Promise<number> {
+  const res = await pool.query(
+    `SELECT COALESCE(sum(notification_items), 0)::int AS n
+       FROM clean.adb_ingest_events
+      WHERE received_at >= date_trunc('day', now())`,
+  );
+  return res.rowCount ? res.rows[0].n : 0;
+}
+
+/** V3.9: credits the active batch has actually consumed so far = notification
+ *  items attributed to it (internal basis). Falls back to the row count for
+ *  legacy batches created before the events ledger existed. */
+export async function actualBatchSpend(batchId: string): Promise<number> {
+  const res = await pool.query(
+    `SELECT COALESCE(sum(notification_items), 0)::int AS n
+       FROM clean.adb_ingest_events
+      WHERE batch_id = $1`,
+    [batchId],
+  );
+  const items = res.rowCount ? res.rows[0].n : 0;
+  return items > 0 ? items : estimateBatchCredits(batchId);
+}
+
+/** V3.9: delivery failures for a batch (webhook handler errors → §44-C gate). */
+export async function deliveryFailuresForBatch(batchId: string): Promise<number> {
+  const res = await pool.query(
+    `SELECT count(*)::int AS n FROM clean.adb_ingest_events
+      WHERE batch_id = $1 AND delivery_failure`,
+    [batchId],
+  );
+  return res.rowCount ? res.rows[0].n : 0;
+}
+
+/** V3.9: delivery failures today (any subscription) — fired into the watchdog
+ *  heartbeat alert + the hard-pause gate (§27.1 gate 10). */
+export async function deliveryFailuresToday(): Promise<number> {
+  const res = await pool.query(
+    `SELECT count(*)::int AS n FROM clean.adb_ingest_events
+      WHERE received_at >= date_trunc('day', now()) AND delivery_failure`,
+  );
+  return res.rowCount ? res.rows[0].n : 0;
+}
+
+/** Scheduled UTC start of the daily window for batch `seq`: cycle[seq % len].
+ *  Returns the NEXT occurrence (today if still ahead, else tomorrow). Null
+ *  when the rotating-start schedule is disabled. */
+function plannedWindowStartUtc(seq: number): Date | null {
+  const cycle = COLLECTOR_CONFIG.utcStartCycle;
+  if (!COLLECTOR_CONFIG.rotatingUtcStart || cycle.length === 0) return null;
+  const hour = cycle[seq % cycle.length];
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hour, 0, 0, 0));
+  if (start.getTime() <= now.getTime()) start.setUTCDate(start.getUTCDate() + 1);
+  return start;
+}
+
+// ------------------------- V3.3 rotating-anchor pool -------------------------
+
+async function readAnchorState(): Promise<{ pool: string[]; next: number }> {
+  const raw = await readMeta("anchor_rotation");
+  const parsed: { pool?: string[]; next?: number } | null = raw ? JSON.parse(raw) : null;
+  const pool = Array.isArray(parsed?.pool) && parsed!.pool!.length ? parsed!.pool! : [...COLLECTOR_CONFIG.anchorPool];
+  return { pool, next: Number.isInteger(parsed?.next) ? parsed!.next! : 0 };
+}
+
+/** Current anchor pick (no state change) — used to bias the HUB slot. */
+async function peekAnchorIcao(): Promise<string | null> {
+  if (!COLLECTOR_CONFIG.anchorEnabled || COLLECTOR_CONFIG.anchorPool.length === 0) return null;
+  const s = await readAnchorState();
+  return s.pool.length ? s.pool[s.next % s.pool.length] : null;
+}
+
+/** Advance the rotation pointer — call only after the anchor was actually
+ *  subscribed, so a transient coverage/create failure doesn't consume a slot. */
+async function advanceAnchor(): Promise<void> {
+  const s = await readAnchorState();
+  s.next = (s.next + 1) % s.pool.length;
+  await writeMeta("anchor_rotation", JSON.stringify(s));
+}
+
 // ---------------------------------------------------------------------------
 // Batch lifecycle
 // ---------------------------------------------------------------------------
@@ -289,10 +411,21 @@ async function startBatchInner(): Promise<StartBatchResult> {
   // a 2,105-credit batch right now instead of demanding 4,000+5,000 and
   // never collecting. minBatchCredits keeps the batch worth starting.
   const available = Math.max(0, balance.creditsRemaining - COLLECTOR_CONFIG.reserveCredits);
-  const effectiveBudget = Math.min(COLLECTOR_CONFIG.batchBudget, available);
+  let effectiveBudget = Math.min(COLLECTOR_CONFIG.batchBudget, available);
+  // V3.3 daily cap: a batch may never push today's UTC spend past the cap.
+  let dailyRemaining = effectiveBudget;
+  if (COLLECTOR_CONFIG.dailyCreditCap > 0) {
+    const usedToday = await creditsUsedTodayUtc();
+    dailyRemaining = Math.max(0, COLLECTOR_CONFIG.dailyCreditCap - usedToday);
+    effectiveBudget = Math.min(effectiveBudget, dailyRemaining);
+  }
   if (effectiveBudget < COLLECTOR_CONFIG.minBatchCredits) {
+    const capActive = COLLECTOR_CONFIG.dailyCreditCap > 0;
+    const why = capActive && dailyRemaining < COLLECTOR_CONFIG.minBatchCredits
+      ? `daily cap ${COLLECTOR_CONFIG.dailyCreditCap} reached — only ${dailyRemaining} credits left today`
+      : `${balance.creditsRemaining} remaining, need reserve ${COLLECTOR_CONFIG.reserveCredits} + min batch ${COLLECTOR_CONFIG.minBatchCredits} (budget cap ${COLLECTOR_CONFIG.batchBudget})`;
     throw new Error(
-      `Credits too low for a batch: ${balance.creditsRemaining} remaining, need reserve ${COLLECTOR_CONFIG.reserveCredits} + min batch ${COLLECTOR_CONFIG.minBatchCredits} (budget cap ${COLLECTOR_CONFIG.batchBudget}). Refill first.`,
+      `Credits too low for a batch: ${why}.${capActive && dailyRemaining < COLLECTOR_CONFIG.minBatchCredits ? " Wait for the next UTC day." : " Refill first."}`,
     );
   }
 
@@ -302,13 +435,24 @@ async function startBatchInner(): Promise<StartBatchResult> {
   const batchId = `B${String(seq).padStart(4, "0")}`;
 
   const tierMix = { ...COLLECTOR_CONFIG.tierMix };
+  // V3.3 anchor: the day's anchor airport is forced into the HUB slot (first
+  // candidate tried). If it fails coverage/create, the regular HUB fallback
+  // still fills the slot; the anchor pointer only advances on success.
+  const anchor = await peekAnchorIcao();
   const candidates = await pickAirportCandidates(seed);
+  if (anchor && candidates.HUB.includes(anchor)) {
+    candidates.HUB = [anchor, ...candidates.HUB.filter((a) => a !== anchor)];
+  }
   console.log(
-    `[adb-collector] CREDIT-PLAN batch=${batchId} balance=${balance.creditsRemaining} reserve=${COLLECTOR_CONFIG.reserveCredits} → effectiveBudget=${effectiveBudget} tierMix=${JSON.stringify(tierMix)}`,
+    `[adb-collector] CREDIT-PLAN batch=${batchId} balance=${balance.creditsRemaining} reserve=${COLLECTOR_CONFIG.reserveCredits} → effectiveBudget=${effectiveBudget} dailyRemaining=${dailyRemaining} tierMix=${JSON.stringify(tierMix)}${anchor ? ` anchor=${anchor}` : ""}`,
   );
 
   const now = new Date();
-  const windowEnd = new Date(now.getTime() + COLLECTOR_CONFIG.windowHours * 3600_000);
+  // V3.3 rotating UTC start: use the scheduled slot when the watchdog is in it
+  // (≤5 min early), otherwise (manual start) the window begins now.
+  const planned = plannedWindowStartUtc(seq);
+  const windowStart = planned && planned.getTime() - now.getTime() <= 5 * 60_000 ? planned : now;
+  const windowEnd = new Date(windowStart.getTime() + COLLECTOR_CONFIG.windowHours * 3600_000);
 
   const created: CreatedSub[] = [];
   const skipped: SkippedAirport[] = [];
@@ -339,7 +483,11 @@ async function startBatchInner(): Promise<StartBatchResult> {
       }
 
       const sub = await createSubscription("FlightByAirportIcao" as SubscriptionSubjectType, icao, {
-        maxDeliveryRetries: 2,
+        // V3.9 (§13, §44-C): zero retries so row↔credit identity is exact, the
+        // balance delta reconciles against notification_items, and a transient
+        // delivery failure PAUSES the run (gate 10) instead of silently
+        // spending credits twice on the same item without a new row.
+        maxDeliveryRetries: 0,
       });
       if (!sub?.id) {
         skipped.push({ icao, reason: "create_failed" });
@@ -360,10 +508,32 @@ async function startBatchInner(): Promise<StartBatchResult> {
   await pool.query(
     `INSERT INTO clean.adb_collection_batches
        (batch_id, batch_seq, random_seed, status, window_start, window_end,
-        credit_budget, tier_mix, airports)
-     VALUES ($1, $2, $3, 'ACTIVE', $4, $5, $6, $7::jsonb, $8::text[])`,
-    [batchId, seq, seed, now, windowEnd, effectiveBudget, JSON.stringify(tierMix), airports],
+        credit_budget, tier_mix, airports, stop_reason, window_shape, anchor_icao,
+        sampling_strategy, balance_before)
+     VALUES ($1, $2, $3, 'ACTIVE', $4, $5, $6, $7::jsonb, $8::text[], NULL, $9, $10,
+        $11, $12)`,
+    [
+      batchId,
+      seq,
+      seed,
+      windowStart,
+      windowEnd,
+      effectiveBudget,
+      JSON.stringify(tierMix),
+      airports,
+      `${COLLECTOR_CONFIG.windowHours}h`,
+      anchor ?? null,
+      anchor ? "anchor" : "rotating",
+      // V3.9: authoritative balance at batch start (source of truth for the
+      // stop-time reconciliation credits_consumed_actual = before − after).
+      balance.creditsRemaining,
+    ],
   );
+
+  if (anchor && created.some((c) => c.icao === anchor)) {
+    await advanceAnchor();
+    await writeMeta("last_anchor", anchor);
+  }
 
   for (const c of created) {
     const tierKey = (c.tier ?? "") as AirportTier;
@@ -414,9 +584,70 @@ export async function stopBatch(reason: string): Promise<CollectionBatch | null>
     );
   }
 
+  // ---- V3.9 three-quantity reconciliation (§13, §44-A/B) ----
+  // C_external = balance_before − balance_after (authoritative);
+  // C_internal = notification_items ledger. |C_external − C_internal| ≤ tol → PASS.
+  const beforeRes = await pool.query(
+    "SELECT balance_before FROM clean.adb_collection_batches WHERE batch_id = $1",
+    [active.batchId],
+  );
+  const balanceBefore: number | null =
+    beforeRes.rowCount && beforeRes.rows[0].balance_before != null ? Number(beforeRes.rows[0].balance_before) : null;
+  const balanceAfter = await getBalance();
+  const aggRes = await pool.query(
+    `SELECT COALESCE(sum(notification_items), 0)::int AS items,
+            COALESCE(sum(rows_stored), 0)::int AS stored,
+            COALESCE(sum(rows_inserted), 0)::int AS inserted,
+            COALESCE(sum(rows_updated), 0)::int AS updated,
+            COALESCE(count(*) FILTER (WHERE delivery_failure), 0)::int AS failures
+       FROM clean.adb_ingest_events WHERE batch_id = $1`,
+    [active.batchId],
+  );
+  const agg = aggRes.rows[0] ?? { items: 0, stored: 0, inserted: 0, updated: 0, failures: 0 };
+  const internal = Number(agg.items) ?? 0;
+  const actual =
+    balanceBefore !== null && balanceAfter?.creditsRemaining != null
+      ? balanceBefore - balanceAfter.creditsRemaining
+      : null;
+  const mismatch =
+    actual !== null && internal !== null ? Math.abs(actual - internal) > COLLECTOR_CONFIG.reconcileTolerance : false;
+  const reconcileStatus =
+    actual === null ? null : mismatch ? "MISMATCH" : "PASS";
+  if (mismatch) {
+    console.error(
+      `[adb-collector] ⚠ RECONCILE MISMATCH batch=${active.batchId} ` +
+        `C_external=${actual} C_internal=${internal} tolerance=${COLLECTOR_CONFIG.reconcileTolerance} ` +
+        `(stored=${agg.stored} inserted=${agg.inserted} updated=${agg.updated} failures=${agg.failures})`,
+    );
+  } else {
+    console.log(
+      `[adb-collector] batch ${active.batchId} CLOSED reconcile=${reconcileStatus} ` +
+        `C_external=${actual} C_internal=${internal} items=${agg.items} stored=${agg.stored} ` +
+        `inserted=${agg.inserted} updated=${agg.updated} failures=${agg.failures}`,
+    );
+  }
+
   await pool.query(
-    "UPDATE clean.adb_collection_batches SET status = 'CLOSED', ended_at = now(), stop_reason = $1 WHERE batch_id = $2",
-    [reason, active.batchId],
+    `UPDATE clean.adb_collection_batches
+        SET status = 'CLOSED', ended_at = now(), stop_reason = $1,
+            balance_after = $3, credits_consumed_actual = $4,
+            credits_consumed_internal = $5, notification_items_received = $6,
+            rows_stored = $7, rows_inserted = $8, rows_updated = $9,
+            delivery_failures = $10, reconciliation_status = $11
+      WHERE batch_id = $2`,
+    [
+      reason,
+      active.batchId,
+      balanceAfter?.creditsRemaining ?? null,
+      actual,
+      internal,
+      Number(agg.items) ?? 0,
+      Number(agg.stored) ?? 0,
+      Number(agg.inserted) ?? 0,
+      Number(agg.updated) ?? 0,
+      Number(agg.failures) ?? 0,
+      reconcileStatus,
+    ],
   );
 
   const after = await getActiveBatch();
@@ -451,7 +682,8 @@ export async function lookupSubscriptionMeta(subscriptionId: string): Promise<Sa
   };
 }
 
-/** Approximate credits used by a batch = rows stored (1 flight item ≈ 1 credit). */
+/** Rows attributed to a batch (NOT credits — V3.9: credits are notification
+ *  items via actualBatchSpend, rows are a legacy/best-effort fallback). */
 export async function estimateBatchCredits(batchId: string): Promise<number> {
   const res = await pool.query(
     "SELECT count(*)::int AS n FROM clean.flight_data_pre_post WHERE sampling_batch_id = $1",
@@ -467,6 +699,16 @@ export interface CollectionStatus {
   minBatchCredits: number;
   windowHours: number;
   tierMix: Record<string, number>;
+  /** V3.3: hard cap on credits per UTC day (0 = disabled). */
+  dailyCreditCap: number;
+  /** notification items delivered today (V3.9 C_internal basis; maxDeliveryRetries=0 ⇒ each item = 1 credit) — null when the query fails */
+  creditsUsedToday: number | null;
+  /** dailyCreditCap − creditsUsedToday (≥0; null when cap disabled) */
+  dailyRemaining: number | null;
+  /** V3.9: webhook delivery failures today — must stay 0 (gate 10: >0 → pause) */
+  deliveryFailuresToday: number | null;
+  /** V3.3 current anchor pick for this batch (or null when disabled) */
+  currentAnchor: string | null;
   activeBatch: CollectionBatch | null;
   activeBatchCredits: number | null;
   canStart: boolean;
@@ -489,6 +731,26 @@ export async function getCollectionStatus(): Promise<CollectionStatus> {
   const canStart = !active && effectiveBudget >= COLLECTOR_CONFIG.minBatchCredits;
   const refillRecommended = Math.max(0, COLLECTOR_CONFIG.batchBudget + COLLECTOR_CONFIG.reserveCredits - remaining);
 
+  // V3.3 daily cap + current anchor (best-effort; status never fails on these).
+  let creditsUsedToday: number | null = null;
+  let currentAnchor: string | null = null;
+  let deliveryFailuresTodayCount: number | null = null;
+  try {
+    creditsUsedToday = await creditsUsedTodayUtc();
+  } catch {
+    creditsUsedToday = null;
+  }
+  try {
+    currentAnchor = await peekAnchorIcao();
+  } catch {
+    currentAnchor = null;
+  }
+  try {
+    deliveryFailuresTodayCount = await deliveryFailuresToday();
+  } catch {
+    deliveryFailuresTodayCount = null;
+  }
+
   // Data-flow health: how long since the last row landed.
   let lastReceivedAt: Date | null = null;
   try {
@@ -505,6 +767,14 @@ export async function getCollectionStatus(): Promise<CollectionStatus> {
     minBatchCredits: COLLECTOR_CONFIG.minBatchCredits,
     windowHours: COLLECTOR_CONFIG.windowHours,
     tierMix: COLLECTOR_CONFIG.tierMix,
+    dailyCreditCap: COLLECTOR_CONFIG.dailyCreditCap,
+    creditsUsedToday,
+    dailyRemaining:
+      creditsUsedToday !== null && COLLECTOR_CONFIG.dailyCreditCap > 0
+        ? Math.max(0, COLLECTOR_CONFIG.dailyCreditCap - creditsUsedToday)
+        : null,
+    currentAnchor,
+    deliveryFailuresToday: deliveryFailuresTodayCount,
     activeBatch: active,
     activeBatchCredits,
     canStart,
@@ -539,6 +809,9 @@ export interface Diagnostics {
     credit_budget: number;
     airports: string[];
     rows: number;
+    window_shape: string | null;
+    anchor_icao: string | null;
+    sampling_strategy: string | null;
   }>;
   totalEstimatedCredits: number;
   /** data-flow health: last row received + gap (minutes) since it */
@@ -594,7 +867,8 @@ export async function getDiagnostics(): Promise<Diagnostics> {
       `SELECT status, count(*)::int AS rows FROM clean.flight_data_pre_post GROUP BY status ORDER BY 2 DESC`,
     ),
     pool.query(
-      `SELECT b.batch_id, b.status, b.started_at, b.ended_at, b.credit_budget, b.airports
+      `SELECT b.batch_id, b.status, b.started_at, b.ended_at, b.credit_budget, b.airports,
+              b.window_shape, b.anchor_icao, b.sampling_strategy
        FROM clean.adb_collection_batches b ORDER BY b.batch_seq`,
     ),
     pool.query(
@@ -628,6 +902,9 @@ export async function getDiagnostics(): Promise<Diagnostics> {
         credit_budget: Number(b.credit_budget),
         airports: b.airports ?? [],
         rows: rowsRes.rowCount ? rowsRes.rows[0].n : 0,
+        window_shape: b.window_shape ?? null,
+        anchor_icao: b.anchor_icao ?? null,
+        sampling_strategy: b.sampling_strategy ?? null,
       };
     }),
   );
@@ -724,9 +1001,12 @@ async function cleanupOrphanSubscriptions(): Promise<number> {
   return removed;
 }
 
-/** Auto-start the next batch if: enabled, nothing active, cooldown elapsed,
- *  within the configured UTC window, and credits suffice (startBatch enforces
- *  the latter and throws). */
+/** Auto-start the next batch if: enabled, nothing active, we're inside the
+ *  batch's scheduled rotating UTC slot, today's daily cap isn't spent, the
+ *  cooldown has elapsed, and credits suffice (startBatch enforces the latter
+ *  and throws). V3.3: with ADB_ROTATING_UTC_START the watchdog auto-starts
+ *  only within the one 4 h window scheduled at cycle[seq % len], so we get
+ *  exactly one window per day at a rotating UTC hour. */
 async function maybeAutoStartNextBatch(): Promise<void> {
   if (!COLLECTOR_CONFIG.autoCollect) return;
   if (await getActiveBatch()) return;
@@ -734,6 +1014,40 @@ async function maybeAutoStartNextBatch(): Promise<void> {
   const nowHour = new Date().getUTCHours();
   if (nowHour < COLLECTOR_CONFIG.autoStartHourUtc || nowHour >= COLLECTOR_CONFIG.autoEndHourUtc) {
     return;
+  }
+
+  // Rotating UTC slot: only auto-start inside the NEXT batch's scheduled
+  // window. A missed slot means waiting for the next cycle hour (one/day).
+  const seqRaw = await readMeta("batch_seq");
+  const nextSeq = (seqRaw ? parseInt(seqRaw, 10) : 0) + 1;
+  const planned = plannedWindowStartUtc(nextSeq);
+  if (planned) {
+    const nowMs = Date.now();
+    const plannedMs = planned.getTime();
+    const windowMs = COLLECTOR_CONFIG.windowHours * 3600_000;
+    if (nowMs < plannedMs || nowMs - plannedMs > windowMs) return;
+  }
+
+  // One auto-started batch per UTC day (manual starts unaffected) — keeps the
+  // "1 × 4 h/day" cadence even on low-yield days that don't spend the cap.
+  const lastStartDay = await readMeta("auto_start_day");
+  const todayKey = new Date().toISOString().slice(0, 10);
+  if (lastStartDay === todayKey) return;
+
+  // Daily credit cap: don't even call startBatch when today's quota is gone.
+  if (COLLECTOR_CONFIG.dailyCreditCap > 0) {
+    try {
+      const used = await creditsUsedTodayUtc();
+      const remaining = COLLECTOR_CONFIG.dailyCreditCap - used;
+      if (remaining < COLLECTOR_CONFIG.minBatchCredits) {
+        console.log(
+          `[adb-collector] daily cap reached (${used}/${COLLECTOR_CONFIG.dailyCreditCap} credits today, ${remaining} left) — waiting for the next UTC day`,
+        );
+        return;
+      }
+    } catch {
+      // non-fatal — startBatch enforces the cap anyway (hard floor)
+    }
   }
 
   // Cooldown since the last batch CLOSED (any reason).
@@ -747,6 +1061,7 @@ async function maybeAutoStartNextBatch(): Promise<void> {
 
   try {
     const result = await startBatch();
+    await writeMeta("auto_start_day", todayKey);
     const tierCounts = countTiers(result.batch.airports);
     console.log(
       `[adb-collector] AUTO-STARTED batch ${result.batch.batchId} airports=${result.batch.airports.join(",")} ` +
@@ -812,7 +1127,10 @@ export function startCollectionWatchdog(): void {
         // or credits are about to run out. Cooldown prevents spam; it fires
         // again every alertCooldownMinutes until the problem clears.
         let alertReason: string | null = null;
-        if (status.gapMinutes !== null && status.gapMinutes > COLLECTOR_CONFIG.alertGapMinutes) {
+        if (status.deliveryFailuresToday !== null && status.deliveryFailuresToday > 0) {
+          // V3.9 gate 10: failures = lost deliveries (retries=0). Highest priority.
+          alertReason = `delivery failures today (${status.deliveryFailuresToday}) — run should be paused`;
+        } else if (status.gapMinutes !== null && status.gapMinutes > COLLECTOR_CONFIG.alertGapMinutes) {
           alertReason = `data gap: no row for ${status.gapMinutes}min (> ${COLLECTOR_CONFIG.alertGapMinutes}min)`;
         } else if (status.balance !== null && status.balance < COLLECTOR_CONFIG.alertMinBalance) {
           alertReason = `balance low (${status.balance} < ${COLLECTOR_CONFIG.alertMinBalance})`;
@@ -847,10 +1165,22 @@ export function startCollectionWatchdog(): void {
           await stopBatch("window_elapsed");
           return;
         }
-        const used = await estimateBatchCredits(active.batchId);
+        const used = await actualBatchSpend(active.batchId);
         if (used >= active.creditBudget) {
           console.warn(`[adb-collector] ${active.batchId} reached budget (${used} ≥ ${active.creditBudget}) — stopping`);
           await stopBatch("budget_reached");
+          return;
+        }
+        // V3.9 gate 10 (§27.1, §44-C): any delivery failure in the batch →
+        // PAUSE the run. maxDeliveryRetries=0 means a failed delivery is LOST,
+        // so continuing would silently bias the data toward whatever delivered.
+        const batchFailures = await deliveryFailuresForBatch(active.batchId);
+        if (batchFailures > 0) {
+          console.error(
+            `[adb-collector] ⚠ delivery failures (${batchFailures}) in ${active.batchId} — PAUSING run (gate 10). ` +
+              `Inspect logs before restarting: a maxDeliveryRetries=0 delivery that fails is lost.`,
+          );
+          await stopBatch("delivery_failure");
           return;
         }
         return; // batch healthy — nothing else to do this tick
@@ -865,7 +1195,7 @@ export function startCollectionWatchdog(): void {
   }, COLLECTOR_CONFIG.watchdogSeconds * 1000);
   timer.unref?.();
   console.log(
-    `[adb-collector] watchdog started (window=${COLLECTOR_CONFIG.windowHours}h, budget=${COLLECTOR_CONFIG.batchBudget} credits/batch, reserve=${COLLECTOR_CONFIG.reserveCredits}, minBatch=${COLLECTOR_CONFIG.minBatchCredits}, tierMix=${JSON.stringify(COLLECTOR_CONFIG.tierMix)}, autoCollect=${COLLECTOR_CONFIG.autoCollect})`,
+    `[adb-collector] watchdog started (window=${COLLECTOR_CONFIG.windowHours}h, budget=${COLLECTOR_CONFIG.batchBudget} credits/batch, dailyCap=${COLLECTOR_CONFIG.dailyCreditCap}, reserve=${COLLECTOR_CONFIG.reserveCredits}, minBatch=${COLLECTOR_CONFIG.minBatchCredits}, tierMix=${JSON.stringify(COLLECTOR_CONFIG.tierMix)}, anchor=${COLLECTOR_CONFIG.anchorEnabled ? COLLECTOR_CONFIG.anchorPool.join("|") : "off"}, utcCycle=${COLLECTOR_CONFIG.rotatingUtcStart ? COLLECTOR_CONFIG.utcStartCycle.join(",") : "off"}, autoCollect=${COLLECTOR_CONFIG.autoCollect})`,
   );
 }
 
