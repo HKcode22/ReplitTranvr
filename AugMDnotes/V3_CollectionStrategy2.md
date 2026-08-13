@@ -2746,6 +2746,138 @@ regime, staleness, XGBoost vs persistence, and marginal value of a credit — is
 precisely what the 60k run is designed to measure. **We stop revising the
 architecture here and begin execution.**
 
+---
+
+## 47. External research adjudication + contradiction resolution (the FINAL section — V3.9-f.1)
+
+**This section is the last word on the plan and on every contradiction that
+exists anywhere above it.** It does three things: (A) adjudicates a fresh
+external methodological review that grounded itself in San José State
+University and San Diego State University flight-delay research plus current
+AeroDataBox pricing; (B) resolves every internal contradiction that still
+exists in this 46-section, multiply-revised document; (C) records the five
+small pre-run fixes that follow from (A)+(B). **Nothing in sections 1–46 is
+deleted; where a statement below conflicts with any earlier statement, the
+statement in this §47 (and the rebuilt `AugMDnotes/V3.9_FINAL_PLAN.md`)
+governs.**
+
+### 47.1 The review we adjudicate
+
+A review of the final plan (the "V3.9-f package") was performed using current
+AeroDataBox documentation and SJSU/SDSU research. Its verdict: **"the final
+architecture is on the right scientific path … I would not redesign it …
+8.5–9/10 … but not yet fully methodologically closed."** Its demanded fixes
+before the 60k are: (1) reconcile the API-unit vs Flight-Alert-credit budget
+(FIDS is a paid Tier-2 operation); (2) call FIDS the **provider-defined
+prediction population**, not a true census; (3) remove "null = censored" from
+the architecture diagram (use the §20 five-state outcomes); (4) make the
+population-defined snapshot rule the sole normative rule; (5) add route/OD
+holdout evaluation and first-class calibration. We adjudicate every claim
+against our own document and code below.
+
+### 47.2 Claim-by-claim adjudication (external review)
+
+| Review claim | Checked against | Verdict | Decision |
+| ---- | ---- | ---- | ---- |
+| "Pre/post separation (raw → event log → population → cutoff snapshot → outcome → ML) is fundamentally correct; 'post-cutoff events supply the label, not snapshot existence' is the strongest part" | §11, §20, §44-H, V3.9_FINAL_PLAN §6 | **Correct** | Locked, no change |
+| "Aircraft rotation / previous-leg / late-arriving-aircraft delay is the most strongly supported direction; SDSU Jun Chen 2019 and SJSU Zheng & Wei 2021 delay-propagation studies directly support it" | §19 ladder, §39 aircraft-chain edge type, §12 chain metrics | **Correct — verified** (see 47.4 sources) | Keep chain features first-class; add the citations |
+| "GNN is a hypothesis to test, not a default; 'because aviation is a network → GNN must win' is NOT supported" | §19/§39 ladder wording | **Correct** | Locked, no change |
+| "XGBoost-first + persistence (Model −1) gate is correct; aviation delay is heavily autocorrelated" | §19 model ladder, §41.2-E, §42.2-B | **Correct** | Locked, no change |
+| "Weather architecture correct (obs_time/issue_time ≤ cutoff) BUT make weather availability a measured data gate; never silently fill missing history from a later/revised source" | §18, §40 | **Correct — adopt** | New: weather-availability gate (47.3-fix #6) + §40 coverage check already exists |
+| "Population layer is the single biggest improvement" | V3.9_FINAL_PLAN §5 | **Correct** | Locked, no change |
+| "Calling FIDS a 'census' overstates it; it is a provider-observable prediction population. G5 should validate provider → reference source → observed" | V3.9_FINAL_PLAN §5 (used "census"), §6 Gate 5 | **Correct — real wording fix** | Rename to "provider-observable prediction population" (47.3-fix #2); G5 wording updated |
+| "Internal contradiction: old doc still says 'snapshot only if we hold an event after cutoff' (that's §11 line 667 of THIS file) vs the corrected rule" | This file §11 | **Correct — genuine contradiction** | §11's old rule is SUPERSEDED by §47.4 rule below; the final plan is the only normative spec |
+| "Internal contradiction: 'null = censored' (diagram) vs the five-state §20 outcome model" | V3.9_FINAL_PLAN §2 diagram vs §20 | **Correct — real contradiction** | Diagram fixed (47.3-fix #3); outcomes are observed / active_censored / canceled / diverted / missing_outcome |
+| "Missing edge ≠ zero edge (known-absent vs unknown/unobserved)" | §39 edge taxonomy, V3.9_FINAL_PLAN §7.5 | **Correct** | Locked, no change |
+| "Collection-mechanism ablation is a major scientific result, not a side diagnostic" | V3.9_FINAL_PLAN §7.4 | **Correct** | Promoted to a month-1 headline deliverable |
+| "1×4h default, constrained randomized UTC allocation, 31 days ≠ seasonality, 2×2h/6h = pilot" | §9, §25, §31, §42.2-A/C | **Correct** | Locked, no change |
+| "airport-layer probability ≠ flight inclusion probability; 1/p not a valid flight weight" | §8, §10, §30, §37 | **Correct** | Locked, no change |
+| "**The budget problem:** 60,000 API units → refill → 58,900 credits assumes the same 60k pays for FIDS census too. AeroDataBox bills FIDS as Tier-2 = 2 API units; API quota and alert credits are two separate pools fed from the same 60k. Need an explicit two-budget partition; make it Gate 0" | §13 (already had units-vs-credits table), V3.9_FINAL_PLAN §3 | **Correct — the most important fix.** We documented the dual system but did NOT partition the 60k between refill and REST/census spend | New Gate 0 + explicit partition (47.3-fix #1); budget table in final plan §3 |
+| "1,900/day is an experimental resource constraint, not a scientific truth; the useful quantity is Δprediction-quality/Δcredits" | §13, §38 | **Correct** | Wording adopted |
+| "Marginal value per credit: describe as 'estimated under randomized/paired intervention', not universal causal value" | §38 | **Correct** | Wording adopted in final plan §16/§38 |
+| "Five-engine suite strong; Engine A allows known tails, Engine D hard-blocks them" | §32, §41.4, V3.9_FINAL_PLAN §7.3 | **Correct** | Locked, no change |
+| "**Add route/OD holdout** (e.g., train LAX→ORD/SEA, test SEA→JFK) to separate airport-identity memorization from general dynamics" | §32 (no OD engine) | **Correct — adopt** | New Engine R (route/OD holdout), 47.3-fix #5 |
+| "**Make calibration first-class:** calibration error, Brier score, interval coverage, interval width, tail performance — especially at T-90m" | §19/§32 (calibration mentioned, not required) | **Correct — adopt** | New calibration metric block in final plan §14 |
+| "SJSU trajectory-focused work (Zheng, Zou et al.) supports 'don't collect everything; collect what has measurable incremental value' → your info-per-credit framing" | §12, §38 | **Correct** | Locked, supports info-per-credit |
+| "Staleness as feature (days_since_last_obs) + staleness curve" | §17.3, §23 | **Correct** | Locked, no change |
+| "Do NOT change: XGBoost-first, persistence, rotation, weather timestamps, graph hypothesis, missing-edge distinction, population layer, immutable raw log, constrained UTC randomization, 4h default, pilot framing, no 1/p, ablation, engines, test protection, info-per-credit" | All | **Correct** | All locked — matches our §35/§45.4 |
+| Overall: "don't press the 60k button yet until the two-budget fix + 3 cleanups; then ready for controlled collection subject to your gates" | — | **Correct** | We add Gate 0; gates 1–5 unchanged |
+
+**Where the review is wrong or overstated:** none of the substantive claims are
+wrong. Two points deserve scale-notes: (a) the FIDS census is *cheap* — on the
+order of 2 API units per airport-window, so the partition is an accounting
+discipline (Gate 0), not a budget threat; (b) the review calls the census
+"essential, but FIDS itself needs validation" — we agree and encode that as
+G5, not as a reason to stop.
+
+### 47.3 The five pre-run fixes (V3.9-f.1)
+
+| # | Fix | Where it lands |
+| ---- | ---- | ---- |
+| 1 | **Two-budget accounting + Gate 0**: partition the 60,000 monthly API units explicitly between (a) Flight-Alert refill → credits, (b) FIDS/census + other REST calls, (c) probes, (d) diagnostics; track API-quota remaining on the RapidAPI usage page in parallel with the credit balance; **Gate 0 (new, before Gate 1):** verify plan entitlement, refill rate (1 unit = 1 credit), per-refill/balance caps (they depend on the pricing plan per AeroDataBox), and that FIDS spend is budgeted — all confirmed before any census call | final plan §3.1 + Gate 0 in §15 |
+| 2 | **Rename census → provider-observable prediction population**; G5 validates provider-population → reference operational source (e.g., FAA/BTS for US, where available) → observed; global claim is "population relative to the validated AeroDataBox-supported operational frame" | final plan §5, §15 Gate 5 |
+| 3 | **Outcome model everywhere**: remove "null = censored" from the architecture diagram; use `observed / active_censored / canceled / diverted / missing_outcome` (§20) | final plan §2, §5 |
+| 4 | **Single normative snapshot rule**: the only rule is "snapshot exists iff flight ∈ provider-observable prediction population at cutoff ∧ features available ≤ cutoff ∧ eligible; post-cutoff events supply the LABEL only." **§11's line-667 rule is obsolete.** | final plan §6 |
+| 5 | **Route/OD holdout engine (R) + first-class calibration metrics** | final plan §7.3, §14 |
+| 6 | **Weather-availability gate**: weather feature availability is itself measured and reported; missing historical weather is never silently filled from a later/revised source | final plan §10 |
+
+### 47.4 Contradiction-resolution map for THIS document (read top-to-bottom)
+
+Because this file is 46 layered revisions, older text sometimes contradicts the
+final position. **Where any of the following conflicts, the right-hand column
+governs:**
+
+| Contradiction found in sections 1–46 | Binding resolution |
+| ---- | ---- |
+| §5 "44% right-censored" vs §20 outcome taxonomy | §20 five-state model governs; "right-censored" is only `active_censored` + `missing_outcome` |
+| §11 "snapshot only if we hold an event after cutoff" (line 667) | **SUPERSEDED.** Snapshot existence is population-defined (47.3-fix #4) |
+| §13 "60k → 58,900 credits" without REST/FIDS partition | Gate 0 two-budget partition governs (47.3-fix #1) |
+| "null = censored" (architecture diagram) vs §20 | Five-state outcome model governs (47.3-fix #3) |
+| "FIDS census" / "true census" wording | "provider-observable prediction population" governs (47.3-fix #2) |
+| §25/§43 "80/10/10" vs §25 84%/10%/6% | 26 × 4h + 3 × 2×2h + 2 × 6h = 31 days, ≈84/10/6 governs |
+| §16 "balanced at weekday×UTC" vs §42 "constrained randomized allocation" | Σ(n_c − n̄)² minimization governs (V3.7 Change A) |
+| §23 anchor "20% observed yield" with station capacity vs §44-G | `yield_score = f(unique_flights/credit, chain-links/credit, stability)`, capacity = separate feasibility gate |
+| "persistent core" (old) vs "rotating anchor pool" | rotating anchor pool governs (§7, §16, §23) |
+| "sampling_weight = 1/p" (old §10) vs §30/§37 | Retracted; `sampling_weight` stays NULL; no auto 1/p |
+| "1 row ≈ 1 credit" (old) vs §13/V3.9 | Retracted; three-quantity accounting + balance-delta source of truth |
+| Reserve numbers "1,100" vs "1,000" vs "100" | 58,900 experimental / 1,000 emergency reserve / 100 unallocated = 60,000 (§13) |
+| Engine-A name "future-representative" | "future/deployment-representative **under the collection regime**" (CGTAnalaysis11) |
+| Weather "free" | "no AeroDataBox credit cost; retrieval/storage/archive are separate engineering constraints" |
+
+### 47.5 External research foundation (the sources the plan is built on)
+
+The final plan's central scientific bets — **aircraft rotation / delay
+propagation, persistence baseline, weather timing, network modeling as a
+hypothesis, and info-per-credit frugality** — are grounded in peer-reviewed
+aviation research, not invented convention:
+
+| Idea in our plan | Source (verified 2026-08-12) |
+| ---- | ---- |
+| Previous-leg / late-arriving-aircraft delay is among the most predictive features; delay propagates along the same aircraft's itinerary | Chen, J. & Li, M., "Chained Predictions of Flight Delay Using Machine Learning," AIAA SciTech 2019 (San Diego State University). Verified via junchen.sdsu.edu — states departure delay and late-arriving aircraft delay are the most important features and the chain model predicts delay along the aircraft's itinerary |
+| Delay-propagation differs by aircraft utilization; previous delays, turnaround/buffer, weather, and utilization influence later flights; stronger propagation later in an aircraft's day | Zheng, Z., Wei, W., et al., "A Comparative Analysis of Delay Propagation on Departure and Arrival Flights," SJSU ScholarWorks #2410 / Aerospace (MDPI) 8(8):212, 2021 (Wenbin Wei, SJSU) |
+| Aircraft-chain continuity as a first-class modeling element; focused information-rich features beat feature-stuffing | Zheng, Zou, et al., "A Data-Light and Trajectory-Based Machine Learning Approach…," SJSU ScholarWorks #4774 (SJSU-affiliated) |
+| GNN for delay propagation is defensible as a hypothesis but not a guaranteed winner | Wu, Chen, et al., "Delay Prediction of Flight Operation Network Based on Deep Learning," SJSU ScholarWorks #4935 (GCN-GRU); and ERAU 2025 AIAA GNN-for-weather-delay work |
+| Persistence / autoregressive baselines are the right first gate for aviation delay (highly autocorrelated) | Chen & Li (2019) demonstrates previous departure delay value; operational persistence is standard practice in the literature (Sternberg et al., 2017 review, arXiv) |
+| Airport capacity/demand, wind/visibility, en-route weather combined with ops | "Airport Delay Prediction with Temporal Fusion Transformers," arXiv 2405.08293 (2024) |
+| Delay as a network/propagation problem with dominant-airport effects; data & methods taxonomy | "Flight Delay Propagation Modeling: Data, Methods, and Future Opportunities," Transportation Research Part E (2024), ScienceDirect S1366554524001169 |
+| Credit/API accounting model: API quota vs Flight-Alert credit balance, 1 credit per flight item deducted on SEND, retries cost extra, refill 1 unit = 1 credit, per-plan refill/balance caps | AeroDataBox, "Flight Alert API: Guide to the New System" (Jan 31, 2026 update); aerodatabox.com/flight-alert-api-2026 and /doc/rapidapi.html#/operations/RefillBalance |
+
+### 47.6 Final status (V3.9-f.1 — truly the last section)
+
+**Architecture: GO. Sampling: GO. Evaluation: GO. Leakage: GO. Credit model:
+GO after Gate 0 + canary. 60k: NOT YET — wait for Gate 0 (budget partition),
+gates 1–5, and the canary's `C_external = C_internal`.** The review scored the
+architecture 8.5–9/10 and said "I would not redesign it"; we agree and have
+made only the six small fixes in §47.3. The rebuilt, complete, single-source
+executable contract — with the step-by-step runbook, sources, and no
+contradictions — is **`AugMDnotes/V3.9_FINAL_PLAN.md`** (renamed from
+`V3_CollectionStrategy2_FINAL_PLAN.md`). Read §47 of this file and that file
+together; both are the final spec.
+
+>> Subsequent V3.9 revisions (V3.9-f.2 airborne pass and any later) live in
+>> `AugMDnotes/V3.9_FINAL_PLAN.md` (§22 onward). This file is closed as a spec;
+>> it only documents the adjudication history up to V3.9-f.1.
+
 
 
 

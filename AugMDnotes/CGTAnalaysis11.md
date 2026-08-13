@@ -1321,4 +1321,5 @@ Month-1 deliverables: validated pipeline + snapshot pipeline + XGBoost > persist
 ```
 
 The full detailed plan (single source of truth, finalizing V3_CollectionStrategy2.md
-§1–§46) is in `AugMDnotes/V3_CollectionStrategy2_FINAL_PLAN.md`.
+§1–§47) is in `AugMDnotes/V3.9_FINAL_PLAN.md` (renamed from
+`V3_CollectionStrategy2_FINAL_PLAN.md`).
