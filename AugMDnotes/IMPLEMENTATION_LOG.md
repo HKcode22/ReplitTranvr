@@ -208,7 +208,100 @@ The log should contain lines like:
 
 ---
 
-## 5. Audit snapshot (what existed before Phase 0 — for the record)
+## 5. RUN REPORT — what actually happened (from `replitLogs1.md`, 2026-08-16)
+
+This section is the "results" section. It shows, line by line, what worked on
+the first real run, what broke, why, the fix, and what is blocking progress.
+Read it alongside the raw file `AugMDnotes/replitLogs1.md`.
+
+### 5.1 What you ran (the commands)
+
+You ran exactly the safe-start command from §4:
+
+```
+ADB_AUTO_COLLECT=0 npm run dev
+```
+
+...then watched the log with `npm run logs`, and ran `npm run health` +
+`npm run gate0`. The output is all in `replitLogs1.md`. **Good — this is
+exactly the right verification workflow.**
+
+### 5.2 ✅ What worked (PASS)
+
+| What | Evidence in log | Meaning |
+| ---- | ---- | ---- |
+| Server booted & served | `[express] serving on port 5000` | The app started fine. |
+| Migrations **0002 → 0019** applied | `[migrations] applied 0018...` / `applied 0019...` | 0018 (delivery-failure flag) and 0019 (population + event log) **created successfully**. |
+| **Phase 0 R-delta config is LIVE** | `[adb-collector] watchdog started (window=4h, budget=1900 credits/batch, dailyCap=1900, softStop=50 margin, reserve=1000, minBatch=300, ... autoCollect=false)` | This line proves the code changes are active: **budget=1900** (was 3000), **dailyCap=1900**, **softStop=50** (R2), **autoCollect=false** (your safety flag worked). |
+| Health check ran | `FAIL balance 866 — below reserve+min (1300)` | Health script works; it is correctly reporting the real blocker (below). |
+| Gate-0 report ran | `Alert-credit refill 58,900 units → 58,900 credits`, `Spendable experimental envelope 57,900 credits`, `Realized spend ... 0 credits`, `Remaining spendable 57,900 credits` | `npm run gate0` works and shows the full §3.2 budget partition. |
+| No accidental spending | Every heartbeat: `canStart=false` | Because balance < reserve, the watchdog refused to spend anything. Zero credits consumed. |
+
+### 5.3 ❌ What failed (the bug you spotted)
+
+```
+[migrations] failed to apply 0020_collection_v39_airborne_time_series.sql:
+        column "loc_reported_utc" does not exist
+Boot migrations failed: column "loc_reported_utc" does not exist
+```
+
+**Why it happened (plain English):** migration 0020 creates 4 new "airborne"
+tables (`raw_airborne_events`, `clean_airborne_points`, `flight_trajectory`,
+`flight_airborne_snapshots`). In the `raw_airborne_events` table, one of the
+"speed lookup" indexes (line 95 of the migration) asked PostgreSQL to index a
+column named `loc_reported_utc` — **but I had not actually added that column to
+the table definition.** PostgreSQL correctly refused. Because the whole file
+runs as one transaction, the **entire 0020 migration rolled back** — so NONE of
+the 4 airborne tables exist in the database yet.
+
+**Impact:** not fatal. The server still booted and ran (0018/0019 are applied;
+the webhook path silently skips the airborne-log write if the table is absent).
+But the S5 airborne time-series layer (the part that stops trajectories being
+overwritten) is **not installed yet**.
+
+**Where the fix is:** `migrations/0020_collection_v39_airborne_time_series.sql`
+(added the missing `loc_reported_utc` column) and
+`server/lib/disruption/flightDataPrePostStore_v3.ts` (the airborne insert now
+also writes `loc_reported_utc`, so the column is populated). Verified: the
+migration's index columns all exist now, and the code typechecks clean.
+
+### 5.4 ⚠️ What is blocking progress (the real next step)
+
+Every heartbeat in the log says:
+
+```
+heartbeat balance=862 rowsToday=0 gap=7420min canStart=false
+    refillToFullBudget=2038 reason=Insufficient credits
+    (862 < reserve 1000 + min batch 300)
+```
+
+And `npm run health` confirms: `FAIL balance 866 — below reserve+min (1300)`.
+
+**Meaning:** your Flight-Alert credit balance is **~862 credits**, but the
+controller refuses to start a batch unless balance ≥ **1,000 (reserve) + 300
+(min batch) = 1,300**. So collection is correctly paused and nothing is
+spending. This is **not a bug** — it is the reserve-floor safety working.
+
+**This is exactly what Gate 0 (Phase 1) is for:** log into RapidAPI and
+**refill credits** (plan §17 Phase 1 step 6–8: check the balance, make a
+1-credit refill to confirm 1 unit = 1 credit, then refill up to a healthy
+level). The log even tells you how many to add: `refillToFullBudget=2038`.
+
+### 5.5 Status summary + what happens next
+
+| Item | Status |
+| ---- | ---- |
+| Migrations 0018, 0019 | ✅ applied |
+| Migration 0020 | ❌ failed → **FIXED** → needs a redeploy/restart to apply |
+| Watchdog config (budget=1900, softStop=50, dailyCap=1900, autoCollect=false) | ✅ verified live |
+| `npm run gate0` | ✅ works |
+| `npm run health` | ✅ works (reports the real blocker) |
+| Credit balance | ⚠️ 862 → **below reserve+min (1,300)** → collection paused by design |
+| **Next action** | ① redeploy so fixed migration 0020 applies ② Gate 0: refill credits ③ re-run health/gate0 |
+
+---
+
+## 6. Audit snapshot (what existed before Phase 0 — for the record)
 
 | Item | Plan delta | Code state at audit | Verified |
 | ---- | ---- | ---- | ---- |
@@ -227,7 +320,7 @@ The log should contain lines like:
 
 ---
 
-## 6. Verification commands (quick reference)
+## 7. Verification commands (quick reference)
 
 | Check | Command |
 | ---- | ---- |
@@ -246,7 +339,29 @@ The log should contain lines like:
 
 ---
 
-## 7. Change log (append-only)
+## 8. Change log (append-only)
+
+### 2026-08-16 — First live run + migration 0020 fix (from replitLogs1.md)
+- **User ran** `ADB_AUTO_COLLECT=0 npm run dev` on Replit and pasted the log
+  (`AugMDnotes/replitLogs1.md`). Analysis in §5 above.
+- **Failure found:** migration 0020 aborted with
+  `column "loc_reported_utc" does not exist` — the `raw_airborne_events` index
+  referenced a column missing from the table. Whole 0020 rolled back; the 4
+  airborne tables (S5) are not in the DB.
+- **Fix applied:**
+  - `migrations/0020_collection_v39_airborne_time_series.sql` — added the
+    missing `loc_reported_utc TIMESTAMPTZ` column to `raw_airborne_events`
+    (with a comment explaining the four-timestamps rule, §6.1).
+  - `server/lib/disruption/flightDataPrePostStore_v3.ts` — airborne insert now
+    writes `loc_reported_utc` (column list + values updated 32→33 params).
+  - Verified: every index column in 0019/0020 now exists in its table;
+    `npm run check` → 0 errors in edited files (57 pre-existing untouched).
+- **Confirmed working (PASS):** migrations 0018/0019 applied; watchdog live
+  with budget=1900, dailyCap=1900, softStop=50, autoCollect=false; `npm run
+  health` + `npm run gate0` both run; zero credits spent.
+- **Blocking (by design):** balance ≈862 < reserve+min (1,300) → collection
+  paused. Next: redeploy (applies fixed 0020) then Gate 0 refill
+  (`refillToFullBudget=2038`).
 
 ### 2026-08-15 — Audit + this file created
 - Audited code vs `V3.9_DataCollectPlan.md` §15/§17 (see audit snapshot above).

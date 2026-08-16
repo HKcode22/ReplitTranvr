@@ -305,6 +305,7 @@ export async function appendResearchEvents(
       aircraft_mode_s: r.aircraftModeS,
       aircraft_model: r.aircraftModel,
       event_timestamp: r.eventTimestamp,
+      loc_reported_utc: r.locReportedUtc,
       provider_published_utc: r.providerPublishedUtc,
       available_at: r.availableAt,
       received_timestamp_utc: r.receivedTimestampUtc,
@@ -375,7 +376,7 @@ export async function appendResearchEvents(
         `INSERT INTO clean.raw_airborne_events
            (event_key, flight_number, carrier_iata, carrier_icao, call_sign,
             aircraft_reg, aircraft_mode_s, aircraft_model,
-            event_timestamp, provider_published_utc, available_at,
+            event_timestamp, loc_reported_utc, provider_published_utc, available_at,
             received_timestamp_utc, source_latency_seconds,
             scheduled_gate_out, actual_gate_out, scheduled_wheels_off,
             actual_wheels_off, scheduled_wheels_on, actual_wheels_on,
@@ -385,18 +386,18 @@ export async function appendResearchEvents(
             payload_sha256, batch_id, subscription_id, ingest_event_id)
          VALUES ${airborne.map(
            (_, i) =>
-             `($${i * 32 + 1}, $${i * 32 + 2}, $${i * 32 + 3}, $${i * 32 + 4}, $${i * 32 + 5}, ` +
-             `$${i * 32 + 6}, $${i * 32 + 7}, $${i * 32 + 8}, $${i * 32 + 9}, $${i * 32 + 10}, $${i * 32 + 11}, ` +
-             `$${i * 32 + 12}, $${i * 32 + 13}, $${i * 32 + 14}, $${i * 32 + 15}, $${i * 32 + 16}, $${i * 32 + 17}, ` +
-             `$${i * 32 + 18}, $${i * 32 + 19}, $${i * 32 + 20}, $${i * 32 + 21}, $${i * 32 + 22}, $${i * 32 + 23}, ` +
-             `$${i * 32 + 24}, $${i * 32 + 25}, $${i * 32 + 26}, $${i * 32 + 27}, $${i * 32 + 28}, $${i * 32 + 29}, ` +
-             `$${i * 32 + 30}, $${i * 32 + 31}, $${i * 32 + 32})`,
+             `($${i * 33 + 1}, $${i * 33 + 2}, $${i * 33 + 3}, $${i * 33 + 4}, $${i * 33 + 5}, ` +
+             `$${i * 33 + 6}, $${i * 33 + 7}, $${i * 33 + 8}, $${i * 33 + 9}, $${i * 33 + 10}, $${i * 33 + 11}, ` +
+             `$${i * 33 + 12}, $${i * 33 + 13}, $${i * 33 + 14}, $${i * 33 + 15}, $${i * 33 + 16}, $${i * 33 + 17}, ` +
+             `$${i * 33 + 18}, $${i * 33 + 19}, $${i * 33 + 20}, $${i * 33 + 21}, $${i * 33 + 22}, $${i * 33 + 23}, ` +
+             `$${i * 33 + 24}, $${i * 33 + 25}, $${i * 33 + 26}, $${i * 33 + 27}, $${i * 33 + 28}, $${i * 33 + 29}, ` +
+             `$${i * 33 + 30}, $${i * 33 + 31}, $${i * 33 + 32}, $${i * 33 + 33})`,
          ).join(", ")}
          ON CONFLICT (event_key) DO NOTHING`,
         airborne.flatMap((e) => [
           e.event_key, e.flight_number, e.carrier_iata, e.carrier_icao, e.call_sign,
           e.aircraft_reg, e.aircraft_mode_s, e.aircraft_model,
-          e.event_timestamp, e.provider_published_utc, e.available_at,
+          e.event_timestamp, e.loc_reported_utc, e.provider_published_utc, e.available_at,
           e.received_timestamp_utc, e.source_latency_seconds,
           e.scheduled_gate_out, e.actual_gate_out, e.scheduled_wheels_off,
           e.actual_wheels_off, e.scheduled_wheels_on, e.actual_wheels_on,

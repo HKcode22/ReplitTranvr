@@ -47,7 +47,12 @@ CREATE TABLE IF NOT EXISTS clean.raw_airborne_events (
   -- Research event-log key: (flight, carrier, loc_reported_utc) + fallback.
   event_key TEXT NOT NULL UNIQUE,
 
+  -- Four distinct availability-rule timestamps (§6.1) — never conflated.
+  -- loc_reported_utc is the provider's per-observation location timestamp
+  -- (the S5 research-log key basis); event_timestamp mirrors it (reportedAtUtc)
+  -- for query convenience.
   event_timestamp TIMESTAMPTZ,
+  loc_reported_utc TIMESTAMPTZ,
   provider_published_utc TIMESTAMPTZ,
   available_at TIMESTAMPTZ,
   received_timestamp_utc TIMESTAMPTZ NOT NULL DEFAULT now(),
