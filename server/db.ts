@@ -34,6 +34,9 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0014_flight_data_pre_post_drop_dead_columns.sql",
   "0015_collection_v33_sampling_meta.sql",
   "0017_collection_v39_credit_accounting.sql",
+  "0018_collection_v39_delivery_failure_flag.sql",
+  "0019_collection_v39_population_and_events.sql",
+  "0020_collection_v39_airborne_time_series.sql",
 ];
 
 let bootMigrationsApplied = false;

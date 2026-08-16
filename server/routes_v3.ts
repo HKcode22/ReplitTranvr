@@ -34,7 +34,11 @@ import {
   extractFlightNotification,
   type SamplingMeta,
 } from "./lib/disruption/flightNotificationExtractor_v3";
-import { upsertFlightNotifications } from "./lib/disruption/flightDataPrePostStore_v3";
+import {
+  upsertFlightNotifications,
+  appendResearchEvents,
+  researchEventKey,
+} from "./lib/disruption/flightDataPrePostStore_v3";
 import { pool } from "./db";
 import {
   startBatch,
@@ -158,6 +162,67 @@ export function registerV3Routes(app: Express): void {
       });
 
       const stats = await upsertFlightNotifications(rows);
+
+      // V3.9 S3/S4/S5 (§6, §6.2): append the research event log — one row per
+      // observation, keyed on (flight, carrier, locReportedUtc) so every
+      // airborne point survives. Never overwrites. Ignores errors (2xx first).
+      try {
+        await appendResearchEvents(
+          rows.map((r, i) => ({
+            eventKey: researchEventKey({
+              flightNumber: r.flightNumber,
+              carrierIata: r.carrierIata,
+              locReportedUtc: r.locReportedUtc,
+              lastUpdatedUtc: r.lastUpdatedUtc,
+              receivedAt: r.receivedAt ?? new Date(),
+              index: i,
+            }),
+            flightNumber: r.flightNumber,
+            carrierIata: r.carrierIata,
+            carrierIcao: r.carrierIcao,
+            callSign: r.callSign,
+            aircraftReg: r.aircraftReg,
+            aircraftModeS: r.aircraftModeS,
+            aircraftModel: r.aircraftModel,
+            eventTimestamp: r.locReportedUtc ?? r.lastUpdatedUtc,
+            providerPublishedUtc: r.lastUpdatedUtc,
+            availableAt: null,
+            receivedTimestampUtc: r.receivedAt ?? new Date(),
+            dataStage: r.dataStage as "PRE" | "POST",
+            status: r.status,
+            hasLiveLocation: r.hasLiveLocation === true,
+            locLat: r.locLat,
+            locLon: r.locLon,
+            locAltitudeFt: r.locAltitudeFt,
+            locPressureAltitudeFt: r.locPressureAltitudeFt,
+            locGroundSpeedKt: r.locGroundSpeedKt,
+            locTrueTrackDeg: r.locTrueTrackDeg,
+            locVsiFpm: r.locVsiFpm,
+            locReportedUtc: r.locReportedUtc,
+            scheduledGateOut: r.depScheduledUtc,
+            actualGateOut: null,
+            scheduledWheelsOff: r.depRevisedUtc,
+            actualWheelsOff: r.depRunwayUtc,
+            scheduledWheelsOn: r.arrRunwayUtc,
+            actualWheelsOn: null,
+            scheduledGateIn: r.arrScheduledUtc,
+            actualGateIn: null,
+            sourceLatencySeconds:
+              r.lastUpdatedUtc && r.receivedAt
+                ? Math.max(0, (r.receivedAt.getTime() - r.lastUpdatedUtc.getTime()) / 1000)
+                : null,
+            payloadSha256: null,
+            batchId: sampling?.batchId ?? null,
+            subscriptionId: subId ?? null,
+            ingestEventId: null,
+          })),
+        );
+      } catch (researchErr: any) {
+        console.error(
+          "[adb-v3-webhook] research event log write failed:",
+          researchErr?.message || researchErr,
+        );
+      }
 
       // V3.9 three-quantity credit ledger (§13, §44-A): one row per delivery so
       // the controller can reconcile C_external (balance delta) vs C_internal

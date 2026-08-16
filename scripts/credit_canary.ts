@@ -23,6 +23,7 @@ import {
   getBalance,
   createSubscription,
   deleteSubscription,
+  listSubscriptions,
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
 
 const ICAO = (process.env.ADB_CANARY_ICAO || "KLAX").toUpperCase();
@@ -43,6 +44,26 @@ async function main(): Promise<void> {
   }
   const balanceBefore = b1.creditsRemaining;
   console.log(`balance_before          : ${balanceBefore}`);
+
+  // ---- R1 exclusivity (plan §11.2 step 1, §15 R1): before the canary's own
+  // subscription is created, assert the account has NO foreign ACTIVE
+  // subscription capable of billable delivery. The canary's own sub is the
+  // only billable one allowed to exist during the run. Inactive/historical
+  // records cannot bill → not contamination. ----
+  const existing = await listSubscriptions();
+  const foreignActive = existing.filter(
+    (s) => s.isActive && s.id !== sub?.id && s.billingType !== "LifetimeBased",
+  );
+  console.log(`existing subscriptions : ${existing.length} (foreign ACTIVE billable: ${foreignActive.length})`);
+  if (foreignActive.length > 0) {
+    console.error(
+      `FAIL — ${foreignActive.length} foreign ACTIVE billable subscription(s) present: ` +
+        foreignActive.map((s) => `${s.id} (${s.subject?.type ?? "?"}:${s.subject?.id ?? "?"})`).join(", ") +
+        `. Delete/disable them (or the batch-start orphan cleanup) before the canary. Exclusivity is a hard gate 3 requirement (§11.2, §15 R1).`,
+    );
+    await pool.end();
+    process.exit(1);
+  }
 
   const sub = await createSubscription("FlightByAirportIcao", ICAO, { maxDeliveryRetries: 0 });
   if (!sub?.id) {

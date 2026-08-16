@@ -198,6 +198,32 @@ function dedupKey(input: {
 }
 
 // ---------------------------------------------------------------------------
+// V3.9 S5 research event-log key (§6.2): (flight, carrier, locReportedUtc).
+// Unlike the dedup table (SHA-256(flight|carrier|lastUpdatedUtc)), a provider
+// location update under the SAME lastUpdatedUtc must NOT overwrite an earlier
+// point — the research log keys each observation on its own loc_reported_utc
+// so every airborne point survives and trajectories are reconstructable.
+// Fallback (no live location): lastUpdatedUtc, then receivedAt|index.
+// ---------------------------------------------------------------------------
+export function eventKey(input: {
+  flightNumber: string;
+  carrierIata: string | null;
+  locReportedUtc: Date | null;
+  lastUpdatedUtc: Date | null;
+  receivedAt: Date;
+  index: number;
+}): string {
+  const flight = input.flightNumber.toLowerCase();
+  const carrier = (input.carrierIata ?? "").toLowerCase();
+  const point = input.locReportedUtc
+    ? input.locReportedUtc.toISOString()
+    : input.lastUpdatedUtc
+      ? input.lastUpdatedUtc.toISOString()
+      : `${input.receivedAt.toISOString()}|${input.index}`;
+  return createHash("sha256").update(`evt|${flight}|${carrier}|${point}`).digest("hex");
+}
+
+// ---------------------------------------------------------------------------
 // Main extractor
 // ---------------------------------------------------------------------------
 

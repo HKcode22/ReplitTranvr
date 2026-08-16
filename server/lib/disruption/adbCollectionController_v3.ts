@@ -78,7 +78,7 @@ function envList(name: string, fallback: string): string[] {
 
 export const COLLECTOR_CONFIG = {
   windowHours: envInt("ADB_WINDOW_HOURS", 4),
-  batchBudget: envInt("ADB_BATCH_BUDGET", 3000),
+  batchBudget: envInt("ADB_BATCH_BUDGET", 1900),
   reserveCredits: envInt("ADB_RESERVE_CREDITS", 1000),
   /** don't start a batch unless it can run at least this many credits */
   minBatchCredits: envInt("ADB_MIN_BATCH_CREDITS", 300),
@@ -93,6 +93,13 @@ export const COLLECTOR_CONFIG = {
    *  pacing the 60k over a month. Enforced in startBatchInner (hard floor)
    *  and checked in the watchdog before it even attempts a start. */
   dailyCreditCap: process.env.ADB_DAILY_CREDIT_CAP === "0" ? 0 : envInt("ADB_DAILY_CREDIT_CAP", 1900),
+
+  // ---- V3.9 R2: SOFT_STOP margin (plan §3.3, §45.5-R2) ----
+  /** The watchdog stops the ACTIVE batch when today's actual spend reaches
+   *  `dailyCreditCap − softStopMargin`, BEFORE the async accounting race can
+   *  overshoot the hard cap. Tuned from the canary's worst un-settled burst
+   *  (default 50 → batch stops when today's spend ≥ 1,850). */
+  softStopMargin: envInt("ADB_DAILY_SOFT_STOP_MARGIN", 50),
 
   // ---- V3.3 rotating anchor pool + one-rotating-window-per-day ----
   /** rotating anchors (one/day, no-repeat-until-all, drives the HUB slot).
@@ -234,6 +241,132 @@ async function writeMeta(key: string, value: string): Promise<void> {
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
     [key, value],
   );
+}
+
+// ---------------------------------------------------------------------------
+// V3.9 R6 — crossover template freeze (§8, §8.1, §24/§31)
+// The run's template/crossover design is frozen BEFORE treatment: an admin
+// writes `run_template` (JSON) into adb_collection_meta at freeze time. The
+// scheduler then REFUSES to start a batch that violates it. Treatment never
+// depends on any post-freeze observation. Declared shape:
+//   { "crossover": [
+//       { "block": 1, "day": "2026-08-20", "window_shape": "2x2h", "tier_mix": {"HUB":1,"MID":2,"REGIONAL":1} },
+//       { "block": 2, "day": "2026-08-21", "window_shape": "6h",  "tier_mix": {"HUB":1,"MID":2,"REGIONAL":1} }
+//   ]}
+// ---------------------------------------------------------------------------
+
+interface RunTemplateEntry {
+  block: number;
+  day?: string;
+  window_shape?: string;
+  tier_mix?: Record<string, number>;
+}
+
+async function readRunTemplate(): Promise<{ crossover: RunTemplateEntry[] } | null> {
+  const raw = await readMeta("run_template");
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && Array.isArray(parsed.crossover) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// V3.9 R7 — versioned run manifest (plan §15 R7, §17 Phase 5, §45.5-R7)
+// Written into adb_collection_meta at batch start and re-readable by
+// `npm run health` / diagnostics. Frozen at freeze time; each run records its
+// frame, scheduler seed, anchor seed, catalog version, config, and account
+// state so the run is reproducible and auditable.
+// ---------------------------------------------------------------------------
+
+export async function writeManifest(): Promise<void> {
+  const manifest = {
+    written_at_utc: new Date().toISOString(),
+    frame_version: "V3.9-f.6",
+    config: {
+      window_hours: COLLECTOR_CONFIG.windowHours,
+      batch_budget: COLLECTOR_CONFIG.batchBudget,
+      daily_credit_cap: COLLECTOR_CONFIG.dailyCreditCap,
+      soft_stop_margin: COLLECTOR_CONFIG.softStopMargin,
+      reserve_credits: COLLECTOR_CONFIG.reserveCredits,
+      min_batch_credits: COLLECTOR_CONFIG.minBatchCredits,
+      reconcile_tolerance: COLLECTOR_CONFIG.reconcileTolerance,
+      tier_mix: COLLECTOR_CONFIG.tierMix,
+      anchor_enabled: COLLECTOR_CONFIG.anchorEnabled,
+      anchor_pool: COLLECTOR_CONFIG.anchorPool,
+      utc_start_cycle: COLLECTOR_CONFIG.utcStartCycle,
+      // V3.9-f.6 (§3.2): spendable envelope 57,900 = 58,900 refill − 1,000 floor
+      spendable_experimental_envelope: 57_900,
+      max_delivery_retries: 0,
+    },
+    scheduler: {
+      batch_seq: (await readMeta("batch_seq")) ?? "0",
+      last_anchor: (await readMeta("last_anchor")) ?? null,
+      crossover_block_done: (await readMeta("crossover_block_done")) ?? null,
+      run_template: (await readMeta("run_template")) ?? null,
+    },
+    account: {
+      plan: process.env.ADB_PLAN ?? "VERIFY_AT_GATE_0",
+      monthly_units: process.env.ADB_MONTHLY_UNITS ?? "VERIFY_AT_GATE_0",
+      refill_conversion: "1 API unit = 1 credit",
+    },
+  };
+  await writeMeta("manifest", JSON.stringify(manifest, null, 2));
+}
+
+export async function readManifest(): Promise<Record<string, unknown> | null> {
+  const raw = await readMeta("manifest");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/** R6 guard — returns an error string when the batch must be REFUSED, else null.
+ *  Enforces the §8.1 scheduler REFUSE contracts for experiment days. */
+async function checkTemplateFreeze(
+  seq: number,
+  windowShape: string,
+  tierMix: Record<AirportTier, number>,
+): Promise<string | null> {
+  const tmpl = await readRunTemplate();
+  if (!tmpl || tmpl.crossover.length === 0) return null; // no crossover declared → not an experiment day
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const entries = tmpl.crossover;
+  const blockForToday = entries.find((e) => !e.day || e.day === todayKey);
+  if (!blockForToday) {
+    // Every crossover-capable day must declare its block. Days without a
+    // declared block are not experiment days → run the normal shape is fine.
+    return null;
+  }
+  const declaredShape = blockForToday.window_shape ?? `${COLLECTOR_CONFIG.windowHours}h`;
+  if (windowShape !== declaredShape) {
+    return `template/experiment mismatch on ${todayKey}: batch shape ${windowShape} ≠ declared ${declaredShape} (block ${blockForToday.block}) — REFUSED (§8.1)`;
+  }
+  if (blockForToday.tier_mix) {
+    for (const tier of AIRPORT_TIERS) {
+      const declared = Number(blockForToday.tier_mix[tier] ?? 0);
+      if ((tierMix[tier] ?? 0) !== declared) {
+        return `template/experiment mismatch on ${todayKey}: tier ${tier}=${tierMix[tier]} ≠ declared ${declared} (block ${blockForToday.block}) — REFUSED (§8.1)`;
+      }
+    }
+  }
+  // Crossover period-2 without its period-1 → REFUSED (no half-completed
+  // crossover analyzed as if complete). Period-1 is the first block that names
+  // a shape other than the default, or explicitly block 1.
+  const period1 = entries.find((e) => e.block === 1);
+  if (blockForToday.block > 1 && period1) {
+    const p1Done = await readMeta("crossover_block_done");
+    if (p1Done !== String(period1.block)) {
+      return `crossover period-${blockForToday.block} without completed period-1 (block ${period1.block}) — REFUSED (§8.1)`;
+    }
+  }
+  return null;
 }
 
 // --------------------------- V3.3 daily-cap helpers ---------------------------
@@ -454,6 +587,14 @@ async function startBatchInner(): Promise<StartBatchResult> {
   const windowStart = planned && planned.getTime() - now.getTime() <= 5 * 60_000 ? planned : now;
   const windowEnd = new Date(windowStart.getTime() + COLLECTOR_CONFIG.windowHours * 3600_000);
 
+  // V3.9 R6 (§8.1): REFUSE a batch that violates the frozen crossover
+  // template (declared window_shape / tier_mix / period ordering).
+  const windowShape = `${COLLECTOR_CONFIG.windowHours}h`;
+  const freezeErr = await checkTemplateFreeze(seq, windowShape, tierMix);
+  if (freezeErr) {
+    throw new Error(`[adb-collector] R6 REFUSED: ${freezeErr}`);
+  }
+
   const created: CreatedSub[] = [];
   const skipped: SkippedAirport[] = [];
   const airports: string[] = [];
@@ -521,7 +662,7 @@ async function startBatchInner(): Promise<StartBatchResult> {
       effectiveBudget,
       JSON.stringify(tierMix),
       airports,
-      `${COLLECTOR_CONFIG.windowHours}h`,
+      windowShape,
       anchor ?? null,
       anchor ? "anchor" : "rotating",
       // V3.9: authoritative balance at batch start (source of truth for the
@@ -543,11 +684,14 @@ async function startBatchInner(): Promise<StartBatchResult> {
     // Within a selected airport it's a census (all flights), so the flight's
     // selection probability == the airport's selection probability.
     const p = slots > 0 && catalogLen > 0 ? Math.min(1, slots / catalogLen) : 1;
+    // Plan §8/§20: sampling_weight is NULL by default — NO auto 1/p (1/p ≠
+    // valid flight-level inclusion probability). The design probability p is
+    // recorded for diagnostics only; it is never converted into a weight.
     await pool.query(
       `INSERT INTO clean.adb_collection_subs
          (subscription_id, batch_id, icao, tier, sampling_probability, sampling_weight)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [c.subscriptionId, batchId, c.icao, c.tier, p, p > 0 ? 1 / p : 1],
+       VALUES ($1, $2, $3, $4, $5, NULL)`,
+      [c.subscriptionId, batchId, c.icao, c.tier, p],
     );
   }
 
@@ -559,6 +703,10 @@ async function startBatchInner(): Promise<StartBatchResult> {
   await writeMeta("recent_batches", JSON.stringify(nextRecent));
 
   await writeMeta("batch_seq", String(seq));
+
+  // V3.9 R7 (§15, §17 Phase 5): stamp the versioned manifest so the run is
+  // reproducible and `npm run health` can show it.
+  await writeManifest();
 
   const batch = (await getActiveBatch())!;
   return { batch, created, skipped };
@@ -625,6 +773,18 @@ export async function stopBatch(reason: string): Promise<CollectionBatch | null>
         `C_external=${actual} C_internal=${internal} items=${agg.items} stored=${agg.stored} ` +
         `inserted=${agg.inserted} updated=${agg.updated} failures=${agg.failures}`,
     );
+  }
+
+  // V3.9 R6 (§8.1): record which crossover block (if any) this batch belonged
+  // to, so a period-2 without its period-1 is refused on the next start.
+  const tmpl = await readRunTemplate();
+  if (tmpl && tmpl.crossover.length > 0) {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const blockToday = tmpl.crossover.find((e) => !e.day || e.day === todayKey);
+    if (blockToday && reason !== "delivery_failure" && reason !== "soft_stop") {
+      await writeMeta("crossover_block_done", String(blockToday.block));
+      console.log(`[adb-collector] crossover block ${blockToday.block} recorded done (batch ${active.batchId})`);
+    }
   }
 
   await pool.query(
@@ -1001,6 +1161,33 @@ async function cleanupOrphanSubscriptions(): Promise<number> {
   return removed;
 }
 
+/** V3.9 R5 (§45.5-R5, migration 0018): mark every row captured by a
+ *  delivery-failure-stopped batch as flagged (audit column) so affected
+ *  observations are queryable after a forced stop. */
+export async function flagBatchRows(batchId: string, reason: string): Promise<number> {
+  const res = await pool.query(
+    `UPDATE clean.flight_data_pre_post
+        SET flagged_at = now(), flag_reason = $2
+      WHERE sampling_batch_id = $1 AND flagged_at IS NULL`,
+    [batchId, reason],
+  );
+  return res.rowCount ?? 0;
+}
+
+/** V3.9 R5: a batch stopped for delivery_failure / budget overshoot must be
+ *  acknowledged reconciled (`reconcile_acked`) before the watchdog may
+ *  auto-start the next batch. Set via startBatch() callers or a manual
+ *  reconcile step; auto-resume refuses while the flag is unset. */
+async function lastStopRequiresReconcile(): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM clean.adb_collection_batches
+      WHERE stop_reason IN ('delivery_failure', 'soft_stop')
+        AND reconcile_acked = false
+      ORDER BY started_at DESC LIMIT 1`,
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
 /** Auto-start the next batch if: enabled, nothing active, we're inside the
  *  batch's scheduled rotating UTC slot, today's daily cap isn't spent, the
  *  cooldown has elapsed, and credits suffice (startBatch enforces the latter
@@ -1010,6 +1197,17 @@ async function cleanupOrphanSubscriptions(): Promise<number> {
 async function maybeAutoStartNextBatch(): Promise<void> {
   if (!COLLECTOR_CONFIG.autoCollect) return;
   if (await getActiveBatch()) return;
+
+  // V3.9 R5 (§45.5-R5): never silently resume after a delivery-failure or
+  // soft-stop batch — require an explicit reconcile acknowledgement first.
+  if (await lastStopRequiresReconcile()) {
+    console.warn(
+      `[adb-collector] auto-start BLOCKED — a prior batch was stopped by ` +
+        `delivery_failure / soft_stop and is not reconcile_acked yet. ` +
+        `Reconcile it (flag rows, inspect logs) before the run may continue (§45.5-R5).`,
+    );
+    return;
+  }
 
   const nowHour = new Date().getUTCHours();
   if (nowHour < COLLECTOR_CONFIG.autoStartHourUtc || nowHour >= COLLECTOR_CONFIG.autoEndHourUtc) {
@@ -1171,6 +1369,22 @@ export function startCollectionWatchdog(): void {
           await stopBatch("budget_reached");
           return;
         }
+        // V3.9 R2 (§3.3, §45.5-R2): SOFT_STOP margin — stop the active batch
+        // when today's ACTUAL spend reaches `dailyCreditCap − softStopMargin`,
+        // so an asynchronous accounting burst cannot overshoot the hard cap.
+        // HARD_CAP remains dailyCreditCap; any overshoot is flagged MISMATCH
+        // in the batch reconciliation.
+        if (COLLECTOR_CONFIG.dailyCreditCap > 0) {
+          const usedToday = await creditsUsedTodayUtc();
+          const softStop = COLLECTOR_CONFIG.dailyCreditCap - COLLECTOR_CONFIG.softStopMargin;
+          if (usedToday >= softStop) {
+            console.warn(
+              `[adb-collector] ${active.batchId} SOFT_STOP — today's actual spend ${usedToday} ≥ ${softStop} (cap ${COLLECTOR_CONFIG.dailyCreditCap} − margin ${COLLECTOR_CONFIG.softStopMargin}) — stopping`,
+            );
+            await stopBatch("soft_stop");
+            return;
+          }
+        }
         // V3.9 gate 10 (§27.1, §44-C): any delivery failure in the batch →
         // PAUSE the run. maxDeliveryRetries=0 means a failed delivery is LOST,
         // so continuing would silently bias the data toward whatever delivered.
@@ -1180,6 +1394,10 @@ export function startCollectionWatchdog(): void {
             `[adb-collector] ⚠ delivery failures (${batchFailures}) in ${active.batchId} — PAUSING run (gate 10). ` +
               `Inspect logs before restarting: a maxDeliveryRetries=0 delivery that fails is lost.`,
           );
+          // R5 (§45.5-R5, migration 0018): flag the affected rows so they are
+          // queryable, and require an explicit reconcile_ack before the
+          // watchdog may auto-resume a batch.
+          await flagBatchRows(active.batchId, "delivery_failure");
           await stopBatch("delivery_failure");
           return;
         }
@@ -1195,7 +1413,7 @@ export function startCollectionWatchdog(): void {
   }, COLLECTOR_CONFIG.watchdogSeconds * 1000);
   timer.unref?.();
   console.log(
-    `[adb-collector] watchdog started (window=${COLLECTOR_CONFIG.windowHours}h, budget=${COLLECTOR_CONFIG.batchBudget} credits/batch, dailyCap=${COLLECTOR_CONFIG.dailyCreditCap}, reserve=${COLLECTOR_CONFIG.reserveCredits}, minBatch=${COLLECTOR_CONFIG.minBatchCredits}, tierMix=${JSON.stringify(COLLECTOR_CONFIG.tierMix)}, anchor=${COLLECTOR_CONFIG.anchorEnabled ? COLLECTOR_CONFIG.anchorPool.join("|") : "off"}, utcCycle=${COLLECTOR_CONFIG.rotatingUtcStart ? COLLECTOR_CONFIG.utcStartCycle.join(",") : "off"}, autoCollect=${COLLECTOR_CONFIG.autoCollect})`,
+    `[adb-collector] watchdog started (window=${COLLECTOR_CONFIG.windowHours}h, budget=${COLLECTOR_CONFIG.batchBudget} credits/batch, dailyCap=${COLLECTOR_CONFIG.dailyCreditCap}, softStop=${COLLECTOR_CONFIG.softStopMargin} margin, reserve=${COLLECTOR_CONFIG.reserveCredits}, minBatch=${COLLECTOR_CONFIG.minBatchCredits}, tierMix=${JSON.stringify(COLLECTOR_CONFIG.tierMix)}, anchor=${COLLECTOR_CONFIG.anchorEnabled ? COLLECTOR_CONFIG.anchorPool.join("|") : "off"}, utcCycle=${COLLECTOR_CONFIG.rotatingUtcStart ? COLLECTOR_CONFIG.utcStartCycle.join(",") : "off"}, autoCollect=${COLLECTOR_CONFIG.autoCollect})`,
   );
 }
 

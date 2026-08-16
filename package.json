@@ -12,6 +12,7 @@
     "health": "tsx scripts/check_collection_health.ts",
     "coverage": "tsx scripts/measure_coverage.ts",
     "canary": "tsx scripts/credit_canary.ts",
+    "gate0": "tsx scripts/gate0_budget_report.ts",
     "export": "tsx scripts/export_flight_data.ts",
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
