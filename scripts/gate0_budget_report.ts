@@ -19,6 +19,7 @@
 // ============================================================
 
 import { pool } from "../server/db";
+import { getBalance } from "../server/lib/disruption/aerodataboxLimiter_v3";
 
 const SPENDABLE_ENVELOPE = 57_900; // 58,900 refill − 1,000 permanent floor (§3.2)
 const REFILL_SIZE = 58_900;
@@ -86,15 +87,25 @@ async function main(): Promise<void> {
   row("Run-total invariant (≤ 57,900)", over ? `VIOLATED (+${(realized - SPENDABLE_ENVELOPE).toLocaleString()})` : "HOLDING");
   divider();
 
-  // Latest balance snapshot — is the floor intact?
+  // Latest Flight-Alert balance — LIVE from AeroDataBox first (authoritative,
+  // e.g. right after a refill), fall back to the DB snapshot only if the live
+  // call fails. Is the permanent floor intact?
   try {
-    const balRes = await pool.query(
-      "SELECT credits_remaining FROM clean.flight_data_pre_post ORDER BY received_at DESC LIMIT 1",
-    );
-    const bal = balRes.rows[0]?.credits_remaining ?? null;
+    let bal: number | null = null;
+    let src = "db-snapshot";
+    const live = await getBalance();
+    if (live && Number.isFinite(live.creditsRemaining)) {
+      bal = live.creditsRemaining;
+      src = "live-api";
+    } else {
+      const balRes = await pool.query(
+        "SELECT credits_remaining FROM clean.flight_data_pre_post ORDER BY received_at DESC LIMIT 1",
+      );
+      bal = balRes.rows[0]?.credits_remaining ?? null;
+    }
     if (bal !== null) {
       const floorIntact = Number(bal) >= RESERVE_CREDITS;
-      row("Latest Flight-Alert balance", `${Number(bal).toLocaleString()} credits`);
+      row("Latest Flight-Alert balance", `${Number(bal).toLocaleString()} credits (${src})`);
       row(`Permanent floor (${RESERVE_CREDITS}) intact`, floorIntact ? "YES" : "NO — controller must refuse further spend");
     }
   } catch (err: any) {

@@ -14,6 +14,7 @@
 // ============================================================
 
 import { pool } from "../server/db";
+import { getBalance } from "../server/lib/disruption/aerodataboxLimiter_v3";
 
 function flag(ok: boolean, label: string, detail: string): boolean {
   console.log(`${ok ? "PASS" : "FAIL"}  ${label.padEnd(28)} ${detail}`);
@@ -37,20 +38,30 @@ async function main(): Promise<void> {
     healthy = flag(true, "data flow", `last row ${gapMin} min ago (${last.toISOString()})`);
   }
 
-  // 2. Balance (latest snapshot on any row) — must cover reserve + min batch.
+  // 2. Balance — LIVE from AeroDataBox first (authoritative), fall back to the
+  //    latest DB snapshot only if the live call fails (e.g. no API key locally).
+  //    reserve + min batch must be covered.
   const reserve = Number(process.env.ADB_RESERVE_CREDITS ?? 1000);
   const minBatch = Number(process.env.ADB_MIN_BATCH_CREDITS ?? 300);
   const lowBal = reserve + minBatch;
-  const balRes = await pool.query(
-    "SELECT credits_remaining FROM clean.flight_data_pre_post ORDER BY received_at DESC LIMIT 1",
-  );
-  const bal = balRes.rows[0]?.credits_remaining ?? null;
-  if (bal === null) {
-    healthy = flag(false, "balance", "unknown (no rows)");
-  } else if (bal < lowBal) {
-    healthy = flag(false, "balance", `${bal} — below reserve+min (${lowBal}), refill soon`);
+  let bal: number | null = null;
+  let balSource = "db-snapshot";
+  const live = await getBalance();
+  if (live && Number.isFinite(live.creditsRemaining)) {
+    bal = live.creditsRemaining;
+    balSource = "live-api";
   } else {
-    healthy = flag(true, "balance", `${bal} credits`);
+    const balRes = await pool.query(
+      "SELECT credits_remaining FROM clean.flight_data_pre_post ORDER BY received_at DESC LIMIT 1",
+    );
+    bal = balRes.rows[0]?.credits_remaining ?? null;
+  }
+  if (bal === null) {
+    healthy = flag(false, "balance", "unknown (no rows, live call failed)");
+  } else if (bal < lowBal) {
+    healthy = flag(false, "balance", `${bal} (${balSource}) — below reserve+min (${lowBal}), refill soon`);
+  } else {
+    healthy = flag(true, "balance", `${bal} credits (${balSource})`);
   }
 
   // 3. Rows today + total
