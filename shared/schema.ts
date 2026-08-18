@@ -839,10 +839,14 @@ export const flightDataPrePost = cleanSchema.table(
     balanceLastRefilledUtc: timestamp("balance_last_refilled_utc", { withTimezone: true }),
     balanceLastDeductedUtc: timestamp("balance_last_deducted_utc", { withTimezone: true }),
 
-    // Sampling metadata (tier-rotating collection, migration 0012)
+    // Sampling metadata (tier-rotating collection, migration 0012; V3.9 §30
+    // renames sampling_probability → airport_layer_design_probability and adds
+    // is_randomized / planned_share via migration 0022).
     samplingBatchId: text("sampling_batch_id"),
     airportTier: text("airport_tier"),
-    samplingProbability: doublePrecision("sampling_probability"),
+    isRandomized: boolean("is_randomized").default(false),
+    airportLayerDesignProbability: doublePrecision("airport_layer_design_probability"),
+    plannedShare: doublePrecision("planned_share"),
     samplingWeight: doublePrecision("sampling_weight"),
     randomSeed: text("random_seed"),
     collectionWindowStart: timestamp("collection_window_start", { withTimezone: true }),

@@ -297,8 +297,11 @@ export async function checkAirportFeeds(icao: string): Promise<AirportFeedsHealt
  * GET /health/services/feeds/{service}/airports — FREE.
  * Returns EVERY airport ICAO code that AeroDataBox supports for a given feed
  * service (FlightSchedules / FlightLiveUpdates / AdsbUpdates), as
- * `{ count, items: string[] }`. This is how we enumerate the true collectable
- * universe (the "how many airports can we actually touch" question).
+ * `{ count, items: string[] }`. This is how we enumerate the provider's
+ * feed universe per service (the "which airports can we touch" question).
+ * NOTE: an airport in one feed is NOT automatically in the others — feed
+ * eligibility is recorded per airport in clean.adb_sampling_frame
+ * (pre_eligible / post_eligible), never conflated into one union population.
  */
 export async function listFeedAirports(service: FeedService): Promise<string[] | null> {
   try {

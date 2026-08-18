@@ -115,7 +115,9 @@ def main():
     report([
         ("sampling_batch_id", "batch"),
         ("airport_tier", "tier"),
-        ("sampling_probability", "prob"),
+        ("is_randomized", "randomized"),
+        ("airport_layer_design_probability", "design prob"),
+        ("planned_share", "planned share"),
         ("sampling_weight", "weight"),
         ("random_seed", "seed"),
     ], rows, n)

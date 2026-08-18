@@ -25,7 +25,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`fetchedAt                 : ${cov.fetchedAt}`);
-  console.log(`universeCount (union)     : ${cov.universeCount}`);
+  console.log(`universeCount (union)     : ${cov.universeCount}  (provider-supported feed universe)`);
   console.log(`worldScheduledCommercial  : ${cov.worldScheduledCommercial} (ATAG 2023)`);
   console.log(`catalogCount (ours)       : ${cov.catalogCount}`);
   console.log(`catalogInUniverse         : ${cov.catalogInUniverse}`);
@@ -35,7 +35,9 @@ async function main(): Promise<void> {
   for (const t of cov.byTier) console.log(`  ${t.tier.padEnd(9)} ${t.total}/${t.inUniverse}`);
   if (cov.error) console.log(`\nnote: ${cov.error}`);
 
-  console.log("\nFrame note: frame = measured universe; directly-collectable = catalog ∩ universe.");
+  console.log("\nFeed eligibility per layer is recorded in adb_sampling_frame (npm run build-catalog):");
+  console.log("  pre_eligible = has FlightSchedules feed; post_eligible = has LiveUpdates OR ADS-B.");
+  console.log("  The union is the provider feed universe, NOT one homogeneous population.");
   await pool.end();
 }
 

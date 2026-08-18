@@ -28,7 +28,9 @@ function loadRows(): any[] {
   const col = (name: string) => header.indexOf(name);
   const iId = col("id"), iPayload = col("payload_json"), iRecv = col("received_at"),
     iSched = col("sampling_batch_id"), iTier = col("airport_tier"),
-    iProb = col("sampling_probability"), iWeight = col("sampling_weight"),
+    iRand = col("is_randomized"),
+    iProb = col("airport_layer_design_probability"), iShare = col("planned_share"),
+    iWeight = col("sampling_weight"),
     iSeed = col("random_seed"), iWinS = col("collection_window_start"),
     iWinE = col("collection_window_end");
 
@@ -52,7 +54,9 @@ function loadRows(): any[] {
       received_at: cell(iRecv),
       sampling_batch_id: cell(iSched) || null,
       airport_tier: cell(iTier) || null,
-      sampling_probability: cell(iProb) || null,
+      is_randomized: cell(iRand) ? cell(iRand) === "true" : null,
+      airport_layer_design_probability: cell(iProb) || null,
+      planned_share: cell(iShare) || null,
       sampling_weight: cell(iWeight) || null,
       random_seed: cell(iSeed) || null,
       collection_window_start: cell(iWinS) || null,
@@ -76,7 +80,9 @@ for (const r of rows) {
     sampling: {
       batchId: r.sampling_batch_id ?? null,
       tier: r.airport_tier ?? null,
-      samplingProbability: r.sampling_probability ?? null,
+      isRandomized: r.is_randomized ?? null,
+      airportLayerDesignProbability: r.airport_layer_design_probability ?? null,
+      plannedShare: r.planned_share ?? null,
       samplingWeight: r.sampling_weight ?? null,
       randomSeed: r.random_seed ?? null,
       windowStart: r.collection_window_start ?? null,

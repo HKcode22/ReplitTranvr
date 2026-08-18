@@ -50,7 +50,14 @@ export const QUALITY_CODE: Record<number, string> = {
 export interface SamplingMeta {
   batchId: string | null;
   tier: string | null;
-  samplingProbability: number | null;
+  /** True = airport was drawn from a normalized probability distribution
+   *  (REGIONAL). False = deterministic slot-fill (HUB/MID), which records
+   *  planned_share instead (plan §30 V3.8). */
+  isRandomized: boolean | null;
+  /** The realized draw's conditional design probability (randomized only). */
+  airportLayerDesignProbability: number | null;
+  /** Allocation share for HUB/MID slot-fill (planned, NOT a probability). */
+  plannedShare: number | null;
   samplingWeight: number | null;
   randomSeed: string | null;
   windowStart: Date | null;
@@ -362,7 +369,9 @@ export function extractFlightNotification(
 
     samplingBatchId: ctx.sampling?.batchId ?? null,
     airportTier: ctx.sampling?.tier ?? null,
-    samplingProbability: ctx.sampling?.samplingProbability ?? null,
+    isRandomized: ctx.sampling?.isRandomized ?? null,
+    airportLayerDesignProbability: ctx.sampling?.airportLayerDesignProbability ?? null,
+    plannedShare: ctx.sampling?.plannedShare ?? null,
     samplingWeight: ctx.sampling?.samplingWeight ?? null,
     randomSeed: ctx.sampling?.randomSeed ?? null,
     collectionWindowStart: ctx.sampling?.windowStart ?? null,

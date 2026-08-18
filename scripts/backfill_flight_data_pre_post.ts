@@ -61,7 +61,9 @@ async function main() {
     const sampling: SamplingMeta = {
       batchId: null,
       tier,
-      samplingProbability: null,
+      isRandomized: null,
+      airportLayerDesignProbability: null,
+      plannedShare: null,
       samplingWeight: null,
       randomSeed: null,
       windowStart: null,

@@ -38,6 +38,7 @@ import {
   AIRPORT_CATALOG,
   AIRPORT_TIERS,
   allCatalogAirports,
+  tierForIcao,
   type AirportTier,
 } from "./adbAirportCatalog_v3";
 
@@ -172,7 +173,12 @@ export interface SkippedAirport {
 export interface SamplingMeta {
   batchId: string | null;
   tier: string | null;
-  samplingProbability: number | null;
+  /** True = drawn from the normalized distribution (REGIONAL). */
+  isRandomized: boolean | null;
+  /** Realized conditional design probability (randomized only, §8/§30). */
+  airportLayerDesignProbability: number | null;
+  /** HUB/MID deterministic slot-fill share (planned, not a probability). */
+  plannedShare: number | null;
   samplingWeight: number | null;
   randomSeed: string | null;
   windowStart: Date | null;
@@ -205,7 +211,10 @@ function seededShuffle<T>(list: readonly T[], seed: number): T[] {
   return a;
 }
 
-function toInt(x: unknown): number | null {
+/** Number coercion (NO truncation — floats like design probabilities survive
+ *  unchanged). Named `toNum`, not `toInt`, to avoid the false impression that
+ *  probabilities get rounded to integers. */
+function toNum(x: unknown): number | null {
   return typeof x === "number" ? x : x === null || x === undefined ? null : Number(x);
 }
 function toStr(x: unknown): string | null {
@@ -216,12 +225,10 @@ function toStr(x: unknown): string | null {
 function countTiers(icaos: string[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const c of icaos) {
-    for (const tier of AIRPORT_TIERS) {
-      if (AIRPORT_CATALOG[tier].includes(c)) {
-        out[tier] = (out[tier] ?? 0) + 1;
-        break;
-      }
-    }
+    // tierForIcao covers our curated catalog; frame-only airports fall back
+    // to REGIONAL (the §8 long-tail stratum they actually belong to).
+    const tier = tierForIcao(c) ?? "REGIONAL";
+    out[tier] = (out[tier] ?? 0) + 1;
   }
   return out;
 }
@@ -485,33 +492,142 @@ function mapBatch(r: any): CollectionBatch {
   };
 }
 
+export interface CandidatePools {
+  candidates: Record<AirportTier, string[]>;
+  /** Frame pool size per tier (clean.adb_sampling_frame, in_frame=true AND
+   *  post_eligible=true — the webhook layer needs live/ADS-B coverage). */
+  poolSizes: Record<AirportTier, number>;
+  /** REGIONAL: conditional design probability at draw time, keyed by icao
+   *  (plan §8 "p_i = probability of selecting airport i given the frame and
+   *  the adaptive state immediately BEFORE the draw"). Only REGIONAL entries
+   *  are populated — HUB/MID are deterministic slot-fill (planned_share). */
+  regionalP: Map<string, number>;
+}
+
 /**
- * Pick this batch's airport candidates: one seeded shuffle per tier. The
- * returned list is ordered FRESH-first (airports not used in the last N
- * batches), then recently-used ones as fallback. startBatchInner walks this
- * list per tier and keeps trying until it has filled the tier's slots — so a
- * rate-limited / no-coverage airport is replaced by another airport IN THE
- * SAME TIER, and the daily HUB/MID/REGIONAL mixture survives individual
- * failures (no "hub one day, regional another" drift).
+ * Weighted categorical draw WITHOUT replacement (seeded, reproducible). Each
+ * pick's `p` is the CONDITIONAL probability of that draw given the remaining
+ * pool at that moment (score_i / Σ remaining scores) — exactly what plan §8
+ * asks to record ("given the frame and adaptive state immediately BEFORE the
+ * draw"). Pre-probe all scores are equal (traffic_prior = 1.0) so the draw is
+ * uniform 1/|eligible|; after §23 probe data exists the adaptive m_i enters
+ * here (raw_score × m_i, m_i ∈ [0.25, 1.5], hard cap ×1.5, §8).
  */
-async function pickAirportCandidates(seed: number): Promise<Record<AirportTier, string[]>> {
+function drawWithoutReplacement(
+  pool: { icao: string; score: number }[],
+  seed: number,
+): { icao: string; p: number }[] {
+  const rng = mulberry32(seed);
+  const remaining = pool.map((r) => ({ ...r }));
+  const out: { icao: string; p: number }[] = [];
+  while (remaining.length > 0) {
+    const total = remaining.reduce((s, r) => s + r.score, 0);
+    const u = rng() * total;
+    let cum = 0;
+    let idx = remaining.length - 1;
+    for (let i = 0; i < remaining.length; i++) {
+      cum += remaining[i].score;
+      if (u <= cum) {
+        idx = i;
+        break;
+      }
+    }
+    const pick = remaining.splice(idx, 1)[0];
+    out.push({ icao: pick.icao, p: total > 0 ? pick.score / total : 0 });
+  }
+  return out;
+}
+
+/**
+ * Pick this batch's airport candidates, sourced from the DB-backed MEASURED
+ * frame (clean.adb_sampling_frame, migration 0021/0022, written by
+ * `npm run build-catalog` — plan §6 "DB-backed frame"). NOT from the static
+ * 276 catalog: §6 moved the frame from "276 hard-coded" to the "measured
+ * universe", so the candidate pool is the measured frame.
+ *
+ * CANDIDATE ELIGIBILITY (reviewer fix): only airports with post_eligible=true
+ * enter the webhook pool. The webhook layer supplies POST/AIRBORNE
+ * observations, and AeroDataBox says airport subscriptions depend on
+ * live/ADS-B coverage — an airport can be in the provider union yet useless
+ * for the webhook layer. PRE eligibility stays recorded in the frame and is
+ * reported at build time; the intersection (pre AND post) is tracked there.
+ *
+ * If the frame table is empty the batch is REFUSED (clear error) — the
+ * collector never silently falls back to the old 276, because doing so would
+ * silently invert the frozen §6 decision.
+ *
+ * Per-tier mechanism (plan §30 V3.8):
+ *   HUB/MID → deterministic seeded slot-fill (fresh-first, then recent as
+ *             fallback). Recorded as planned_share, is_randomized=false,
+ *             airport_layer_design_probability=NULL.
+ *   REGIONAL → GENUINE normalized probability draw (drawWithoutReplacement)
+ *             over the eligible REGIONAL pool. Every eligible airport has
+ *             nonzero probability (nonzero floor, §8); the realized draw's
+ *             conditional p_i is returned in regionalP. Fresh-first does NOT
+ *             apply here — a true draw, not "shuffle and take first".
+ */
+async function pickAirportCandidates(seed: number): Promise<CandidatePools> {
   const recentRaw = await readMeta("recent_batches");
   const recent: string[][] = recentRaw ? JSON.parse(recentRaw) : [];
   const recentlyUsed = new Set<string>(recent.flat());
 
+  const res = await pool.query(
+    `SELECT icao, tier, traffic_prior
+     FROM clean.adb_sampling_frame
+     WHERE in_frame = true AND post_eligible = true`,
+  );
+  if (!res.rowCount || res.rowCount === 0) {
+    throw new Error(
+      "adb_sampling_frame is empty (no post-eligible airports) — run " +
+        "`npm run build-catalog` (step 11) first. The collector refuses to " +
+        "sample from the old 276 catalog.",
+    );
+  }
+
+  const frameByTier: Record<AirportTier, { icao: string; score: number }[]> = {
+    HUB: [],
+    MID: [],
+    REGIONAL: [],
+  };
+  for (const row of res.rows) {
+    const t = row.tier as AirportTier;
+    if (!frameByTier[t]) continue;
+    // Pre-probe: raw_score = traffic_prior (1.0 for unclassified, §8). The
+    // adaptive m_i (yield) enters here once probe data exists.
+    const score = Number(row.traffic_prior) > 0 ? Number(row.traffic_prior) : 1;
+    frameByTier[t].push({ icao: row.icao, score });
+  }
+
   const candidates = {} as Record<AirportTier, string[]>;
+  const poolSizes = {} as Record<AirportTier, number>;
+  const regionalP = new Map<string, number>();
   for (const tier of AIRPORT_TIERS) {
     const slots = COLLECTOR_CONFIG.tierMix[tier] ?? 0;
+    poolSizes[tier] = frameByTier[tier].length;
     if (slots <= 0) {
       candidates[tier] = [];
       continue;
     }
-    const poolList = seededShuffle(AIRPORT_CATALOG[tier], seed);
+    if (tier === "REGIONAL") {
+      // Genuine normalized probability draw (§8): uniform pre-probe, adaptive
+      // m_i after probe. drawWithoutReplacement already yields the conditional
+      // p_i per pick, so candidates[tier] is the DRAW ORDER and regionalP has
+      // each airport's conditional design probability.
+      const drawn = drawWithoutReplacement(frameByTier[tier], seed);
+      candidates[tier] = drawn.map((d) => d.icao);
+      for (const d of drawn) regionalP.set(d.icao, d.p);
+      continue;
+    }
+    // HUB/MID: deterministic seeded slot-fill (planned share, §30).
+    const poolList = seededShuffle(
+      frameByTier[tier].map((x) => x.icao),
+      seed,
+    );
     const fresh = poolList.filter((a) => !recentlyUsed.has(a));
     const fallback = poolList.filter((a) => recentlyUsed.has(a));
     candidates[tier] = [...fresh, ...fallback];
   }
-  return candidates;
+  return { candidates, poolSizes, regionalP };
 }
 
 export interface StartBatchResult {
@@ -572,7 +688,7 @@ async function startBatchInner(): Promise<StartBatchResult> {
   // candidate tried). If it fails coverage/create, the regular HUB fallback
   // still fills the slot; the anchor pointer only advances on success.
   const anchor = await peekAnchorIcao();
-  const candidates = await pickAirportCandidates(seed);
+  const { candidates, poolSizes, regionalP } = await pickAirportCandidates(seed);
   if (anchor && candidates.HUB.includes(anchor)) {
     candidates.HUB = [anchor, ...candidates.HUB.filter((a) => a !== anchor)];
   }
@@ -679,19 +795,31 @@ async function startBatchInner(): Promise<StartBatchResult> {
   for (const c of created) {
     const tierKey = (c.tier ?? "") as AirportTier;
     const slots = tierKey ? tierMix[tierKey] ?? 0 : 0;
-    const catalogLen = c.tier ? AIRPORT_CATALOG[c.tier].length : 1;
-    // Selection probability for an airport of this tier in this batch.
-    // Within a selected airport it's a census (all flights), so the flight's
-    // selection probability == the airport's selection probability.
-    const p = slots > 0 && catalogLen > 0 ? Math.min(1, slots / catalogLen) : 1;
-    // Plan §8/§20: sampling_weight is NULL by default — NO auto 1/p (1/p ≠
-    // valid flight-level inclusion probability). The design probability p is
-    // recorded for diagnostics only; it is never converted into a weight.
+    // Plan §30 V3.8: randomized vs planned is enforced in the DB (migration
+    // 0022). HUB/MID = deterministic slot-fill → is_randomized=false and
+    // airport_layer_design_probability=NULL; planned_share = slots / frame
+    // pool (an allocation share, labeled planned, never a probability).
+    // REGIONAL = genuine normalized draw → the realized draw's CONDITIONAL
+    // design probability p_i (from regionalP), is_randomized=true,
+    // planned_share=NULL. §20: sampling_weight stays NULL — NO auto 1/p
+    // (1/p ≠ valid flight-level inclusion probability); this metadata is
+    // diagnostics only and never converted into a weight.
+    let isRandomized = false;
+    let designProb: number | null = null;
+    let plannedShare: number | null = null;
+    if (tierKey === "REGIONAL") {
+      isRandomized = true;
+      designProb = regionalP.get(c.icao) ?? null;
+    } else {
+      const framePoolSize = tierKey ? poolSizes[tierKey] ?? 0 : 0;
+      plannedShare = slots > 0 && framePoolSize > 0 ? Math.min(1, slots / framePoolSize) : null;
+    }
     await pool.query(
       `INSERT INTO clean.adb_collection_subs
-         (subscription_id, batch_id, icao, tier, sampling_probability, sampling_weight)
-       VALUES ($1, $2, $3, $4, $5, NULL)`,
-      [c.subscriptionId, batchId, c.icao, c.tier, p],
+         (subscription_id, batch_id, icao, tier, is_randomized,
+          airport_layer_design_probability, planned_share, sampling_weight)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+      [c.subscriptionId, batchId, c.icao, c.tier, isRandomized, designProb, plannedShare],
     );
   }
 
@@ -821,7 +949,8 @@ export async function stopBatch(reason: string): Promise<CollectionBatch | null>
 
 export async function lookupSubscriptionMeta(subscriptionId: string): Promise<SamplingMeta | null> {
   const res = await pool.query(
-    `SELECT s.batch_id, s.icao, s.tier, s.sampling_probability, s.sampling_weight,
+    `SELECT s.batch_id, s.icao, s.tier, s.is_randomized,
+            s.airport_layer_design_probability, s.planned_share, s.sampling_weight,
             b.random_seed, b.window_start, b.window_end
      FROM clean.adb_collection_subs s
      JOIN clean.adb_collection_batches b ON b.batch_id = s.batch_id
@@ -830,12 +959,13 @@ export async function lookupSubscriptionMeta(subscriptionId: string): Promise<Sa
   );
   if (!res.rowCount) return null;
   const r = res.rows[0];
-  const p = toInt(r.sampling_probability);
   return {
     batchId: toStr(r.batch_id),
     tier: toStr(r.tier),
-    samplingProbability: p,
-    samplingWeight: toInt(r.sampling_weight),
+    isRandomized: r.is_randomized === true,
+    airportLayerDesignProbability: toNum(r.airport_layer_design_probability),
+    plannedShare: toNum(r.planned_share),
+    samplingWeight: toNum(r.sampling_weight),
     randomSeed: toStr(r.random_seed),
     windowStart: r.window_start ? new Date(r.window_start) : null,
     windowEnd: r.window_end ? new Date(r.window_end) : null,
@@ -1435,7 +1565,9 @@ export interface AirportCoverage {
   fetchedAt: string | null;
   /** Airports AeroDataBox supports per feed service (free enumeration). */
   universe: Record<FeedService, string[]>;
-  /** Union of all three feeds (the true collectable universe). */
+  /** Union of the three feeds — the provider-supported feed universe
+   *  (NOT one homogeneous population: each feed serves different layers,
+   *  see adb_sampling_frame pre_eligible/post_eligible). */
   universeUnion: string[];
   universeCount: number;
   /** Our catalog: how many unique airports, and how many are in the universe. */

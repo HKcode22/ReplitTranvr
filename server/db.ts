@@ -37,6 +37,8 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0018_collection_v39_delivery_failure_flag.sql",
   "0019_collection_v39_population_and_events.sql",
   "0020_collection_v39_airborne_time_series.sql",
+  "0021_collection_v39_sampling_frame.sql",
+  "0022_collection_v39_design_probability.sql",
 ];
 
 let bootMigrationsApplied = false;

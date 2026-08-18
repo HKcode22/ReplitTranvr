@@ -137,7 +137,9 @@ export function registerV3Routes(app: Express): void {
             sampling = {
               batchId: null,
               tier,
-              samplingProbability: null,
+              isRandomized: null,
+              airportLayerDesignProbability: null,
+              plannedShare: null,
               samplingWeight: null,
               randomSeed: null,
               windowStart: null,
