@@ -1,4 +1,4 @@
-# V3.9 Implementation Log — Phase 0 tracker (explained, plain-English)
+# V3.9 Implementation Log — tracker (explained, plain-English)
 
 > Connected to: `AugMDnotes/V3.9_DataCollectPlan.md` (the binding spec, PART 1).
 > This file records **what has been implemented, what is being implemented, what
@@ -6,811 +6,879 @@
 > re-checked if something goes wrong.
 >
 > Status legend: `[x]` done · `[~]` in progress · `[ ]` pending · `[!]` blocked
+> **Newest info is at the TOP of this file.** Scroll up for latest, down for history.
 
 ---
 
-## 1. What is this whole project, in plain English?
+## 📍 0. WHERE WE ARE RIGHT NOW (read this first)
 
-Travnr collects **flight data** so it can train machine-learning models that
-predict flight delays, cancellations, diversions, and arrival times.
-
-The data comes from a provider called **AeroDataBox**, two ways:
-
-1. **Webhook (Flight Alert)** — the provider *pushes* a notification to our
-  server whenever a flight's status changes (new departure time, live GPS
-   location while airborne, arrival, etc.).
-2. **REST calls (FIDS/schedule)** — we *ask* the provider for "all flights at
-  this airport right now".
-
-**Every single API call costs credits.** The plan grants us **60,000 API units
-per month**. If we overspend, our account gets locked and the whole project
-stops. So almost everything in the plan is about being **parsimonious with
-credits** and **scientifically honest with the data** (no "leakage" — never
-letting the model see information that wouldn't have existed at prediction
-time).
-
-### The two "money" numbers you will keep hearing about
+**We are at Phase 1 (Gate 0) — DONE ✅. Phase 2 (Gates 1–2) has STARTED: the
+coverage frame is measured and sane. No money has been spent on collection yet, by design.**
 
 
-| Number          | Meaning                                                                                                                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| **60,000**      | Total monthly API units (the real entitlement — VERIFY at Gate 0)                                                                          |
-| **57,900**      | The *spendable* experimental envelope in credits = 58,900 refill − 1,000 permanent floor. **This is the binding limit for the whole run.** |
-| **1,900/day**   | Daily credit ceiling (~60,000 ÷ 31 days). The watchdog never lets one day spend more than this.                                            |
-| **1,000 floor** | `ADB_RESERVE_CREDITS` — the controller refuses to spend the balance below 1,000 (emergency reserve).                                       |
-| **1,000 REST**  | A *separate* line of API units for census/FIDS/probes — never taken out of the 57,900 credit envelope.                                     |
+| Item                           | Status                                                                                                   |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Balance                        | ✅ **2,901 credits** (was 862) — above the 1,300 reserve+min floor                                        |
+| Refill conversion              | ✅ **CONFIRMED**: `npm run refill -- 1` → 862→863 (1 unit = 1 credit)                                     |
+| Migrations 0017/0018/0019/0020 | ✅ all applied (fresh boot)                                                                               |
+| Watchdog config                | ✅ `budget=1900, dailyCap=1900, softStop=50, autoCollect=false`                                           |
+| `npm run health`               | ✅ `PASS balance 2901 credits (live-api)` — balance bug fixed                                             |
+| `npm run gate0`                | ✅ runs; `floor intact YES`, `invariant HOLDING`                                                          |
+| **`npm run coverage` (Gate 1)**| ✅ **step 10 DONE**: `universeCount 4332`, `catalogCount 276`, `catalogInUniverse 267` (sane: 4332 ≥ 276) |
+| Credits spent on collection    | ✅ **0** — watchdog is in safe mode, nothing started                                                      |
+| ⚠️ Known hazard                | one old boot (02:07) had `autoCollect=true` (Run-button start); set the Replit Secret to prevent forever |
 
 
-Arithmetic check: `57,900 + 1,000 floor + 1,000 REST + 100 unallocated = 60,000 ✓`
+**What is NOT done yet (next actions, in order — full detail in §3):**
+
+1. [ ] Verify `ADB_AUTO_COLLECT=0` took effect (`npm run logs:last | grep "watchdog started" | tail -1` → ends `autoCollect=false`).
+2. [ ] (Optional) Set `ADB_MONTHLY_UNITS=60000` + `ADB_PLAN=Ultra` Secrets (values from the plan §3.2/§13).
+3. [ ] **Confirm "use the plan's 6 macro-regions" (yes/no)** ← the only decision needed. **The script is already built** (`npm run build-catalog`, step 11) — waiting on your yes.
+4. [ ] **Run `npm run build-catalog`** (step 11) on Replit → record the tier × region frame.
+5. [ ] **Run the two-stage anchor probe** (step 12) → lock the 5-airport pool + scores.
+6. [ ] Then Phase 3 gates (canary, SOFT_STOP, foreign subscriptions) → Phase 4 census → **only then** the 31-day run.
+
+> ⚠️ **Do NOT start the 31-day run.** `ADB_AUTO_COLLECT` stays `0` until all
+> gates (1–5) pass.
 
 ---
 
+## 1. 🧭 PLAIN-ENGLISH GUIDE — WHAT WE'RE DOING + WHAT ALL THIS OUTPUT MEANS
 
+> If you're confused, read THIS section. It explains the whole project in simple
+> words, what `rl5.md` showed, and what every line of that output means. It also
+> answers the questions you asked me.
 
-## 2. What are "the phases"? (the whole journey)
+### 1.1 The one-sentence goal
 
-The plan's runbook (§17) divides everything into phases. Think of the earlier
-phases as **safety checks before we spend real money**, and the later phases as
-**the actual data collection run**.
+**We are building a scientifically valid dataset of flight-delay events** so that,
+later, we can build/predict delays. To do that, we pay a data provider called
+**AeroDataBox** for flight data. We get **60,000 API credits per month**, and we
+must collect data for **31 days without wasting money or breaking the math**. The
+whole plan is the checklist of "gates" we pass before we're allowed to start.
 
+**We are NOT collecting data yet.** Everything so far has been *safety checks*
+to make sure: (a) the money system works, (b) the code won't overspend, and (c)
+we know which airports we can actually collect from.
 
-| Phase | Name            | What it is, in plain English                                                                                                                                                   | Status  |
-| ----- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| **0** | Code deltas     | Change the code so the run is safe, budget-protected, and scientifically valid. **No money spent, no data collected.** Everything below that's marked `[x]` is Phase 0.        | ✅ DONE  |
-| **1** | Gate 0          | Record the real plan / monthly units / credit balance, make one 1-credit refill, confirm "1 unit = 1 credit", print the budget report, commit the manifest. | ⏳ NEARLY DONE (refill + conversion ✅; report/manifest ⏳) |
-| **2** | Gates 1–2       | Run `npm run coverage` (which airports the provider covers), build the stratified airport catalog, run the anchor probe to pick the best 5 airports.                           | pending |
-| **3** | Gates 3–4 + 0.5 | Delete every foreign subscription (exclusivity), run the credit canary, confirm SOFT_STOP, inspect real webhook payloads for correctness.                                      | pending |
-| **4** | Gate 5          | Validate the census: compare FIDS population vs webhook events, quantify what's missing.                                                                                       | pending |
-| **5** | FREEZE          | Write the versioned manifest, materialize + hash the test row set. From here the config cannot change.                                                                         | pending |
-| **6** | 31-day run      | The real run: 1,900 credits/day × 31 days with the crossover templates (4h / 2×2h / 6h windows).                                                                               | pending |
+### 1.2 The 3 commands you ran in `rl5.md`, in plain English
 
+Your `rl5.md` file shows you ran three commands, in this order:
 
-**Key rule:** the 31-day run (Phase 6) waits for **all gates to pass** (Phases
-1–5). Phase 0's job is just to make the code ready.
+| Command             | What it does (plain English)                                                                       | Verdict |
+| ------------------- | -------------------------------------------------------------------------------------------------- | ------ |
+| `npm run health`    | The "doctor's checkup" — is the server alive, is money OK, is data flowing?                        | ✅ balance OK, 2 things "FAIL" (explained below) |
+| `npm run gate0`     | The "money report" — prints the whole monthly budget, and checks the two safety rules.              | ✅ clean |
+| `npm run coverage`  | The "airport map" — asks AeroDataBox which airports it actually covers, and checks how many of OUR chosen airports are on it. | ✅ clean |
 
----
+You also ran `gate0` and `coverage` a second time each — that's fine, they're
+free to run and just print the same report again.
 
-
-
-## 3. What Phase 0 did — the full explanation
-
-Phase 0 = "code deltas". It has **4 steps**. Each step is described with
-*why it matters* (not just what was changed).
-
-### Step 1 — R-deltas (the "R" = safety Rules for budget + exclusivity)
-
-
-| #   | What changed                                                                                                                | File                                                                    | Why it matters (plain English)                                                                                                                                                                                                                         |
-| --- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1.1 | Default daily batch budget **3000 → 1900**                                                                                  | `adbCollectionController_v3.ts:81`                                      | The controller's default was 3,000 credits/batch, but the plan caps us at **1,900/day**. A batch that thought it had 3,000 could blow through a day's quota. Now the default matches the plan.                                                         |
-| 1.2 | **R1 exclusivity** — canary refuses to run if any foreign billable subscription exists                                      | `scripts/credit_canary.ts`                                              | To know exactly how many credits a batch spends, we must be the *only* subscriber. If some other subscription is active, the balance moves for reasons we don't control and our accounting breaks. The canary now **fails loudly** if that's the case. |
-| 1.3 | **R2 SOFT_STOP** — watchdog stops the batch when today's spend reaches `1900 − margin` (default margin 50 → stops at 1,850) | `adbCollectionController_v3.ts` (config + watchdog)                     | Credit accounting has a small delay ("async race"). If we waited until exactly 1,900 to stop, in-flight deliveries could push us over. Stopping at 1,850 leaves a safety buffer so we never exceed the hard 1,900 cap.                                 |
-| 1.4 | **R3 canary** conditions finalized                                                                                          | `scripts/credit_canary.ts`                                              | The canary is a tiny, controlled batch that proves the credit math is exact: settlement balance stable (`B_after == B_after_2`), external spend == internal spend, zero failures.                                                                      |
-| 1.5 | **R5 failure flag** — delivery-failure batch is flagged and auto-resume is blocked                                          | `migrations/0018_collection_v39_delivery_failure_flag.sql` + controller | `maxDeliveryRetries=0` means a failed delivery is **lost forever**. If a batch stopped because of a delivery failure, the watchdog must NOT silently start the next batch — it flags the rows and waits for a human to reconcile.                      |
-| 1.6 | **R6 crossover template freeze** — scheduler refuses to run a batch that violates the frozen experiment template            | `adbCollectionController_v3.ts` (`checkTemplateFreeze`)                 | The experiment design (window shape, tier mix, crossover period) must be frozen *before* treatment. The scheduler now **refuses** to start a batch with the wrong shape, wrong tier mix, or a crossover period-2 without its period-1.                 |
-| 1.7 | **R7 versioned manifest** — stamps the run's full config at batch start                                                     | `adbCollectionController_v3.ts` (`writeManifest`)                       | Records frame version, config, scheduler state, account plan/units/refill into the DB so the run is reproducible and auditable.                                                                                                                        |
-
-
-**Bonus fix:** removed a plan violation — the controller was stamping
-`sampling_weight = 1/p`; the plan requires **NULL** (1/p is not a valid
-flight-level inclusion probability). Now NULL. (`adbCollectionController_v3.ts`)
-
-### Step 2 — S-deltas (the "S" = Schema/Data science layers)
-
-
-| #          | What changed                                                                                        | File                                                                           | Why it matters (plain English)                                                                                                                                                                                                                                                                                                                      |
-| ---------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2.1 **S1** | New `flight_population` table — the "census" layer                                                  | `migrations/0019_...population_and_events.sql`                                 | The webhook only shows us *flights that sent an update*. To know the true population ("which flights EXISTED at this airport at this time"), we add a layer built from FIDS/schedule. Every coverage metric (population → captured → snapshots → outcomes) comes from joining this against events.                                                  |
-| 2.2 **S2** | Raw immutable envelope on `adb_ingest_events` (payload + SHA-256 + parser/schema version + outcome) | `migrations/0019`                                                              | Every webhook delivery keeps its raw bytes + a hash, forever, never edited. This is the "source of truth" so we can audit or replay anything.                                                                                                                                                                                                       |
-| 2.3 **S3** | New `flight_events` table — **one row per observation** (event log before state)                    | `migrations/0019`                                                              | Before, we only kept the "latest state" of each flight. Research needs *every* observation. This log is append-only — never overwritten.                                                                                                                                                                                                            |
-| 2.4 **S4** | Provenance invariant                                                                                | `migrations/0019`                                                              | Because every event keeps its payload hash + ingest reference, we can always **rebuild any state from the raw log**. Never destructively overwrite research data.                                                                                                                                                                                   |
-| 2.5 **S5** | New airborne time-series tables + **dedup-key fix**                                                 | `migrations/0020_...airborne_time_series.sql` + `flightDataPrePostStore_v3.ts` | **This fixes a silent data-loss bug.** The old code keyed rows on `(flight, carrier, lastUpdatedUtc)`. If the provider sent a new location *under the same* `lastUpdatedUtc`, the older point got **overwritten** — the trajectory lost points. The research log now keys on `(flight, carrier, locReportedUtc)`, so every airborne point survives. |
-| 2.6 **S5** | Airborne pipeline tables                                                                            | `migrations/0020`                                                              | `raw_airborne_events → clean_airborne_points → flight_trajectory → flight_airborne_snapshots`. Raw points are never modified; cleaning happens in a separate layer.                                                                                                                                                                                 |
-| 2.7 **S5** | `prediction_state` stamped **only on snapshot rows** (PRE/AIRBORNE)                                 | `migrations/0020`                                                              | A raw event is just facts (`event_phase`, `event_timestamp`, `data_stage`). The derived "this is a PRE snapshot" / "this is an AIRBORNE snapshot" label belongs on the derived snapshot tables only — never burned into a raw event.                                                                                                                |
-| —          | `appendResearchEvents()` writer wired into the webhook                                              | `routes_v3.ts`                                                                 | Every webhook delivery now also writes the research event log (one row per observation). Never throws — the webhook 2xx reply always happens first.                                                                                                                                                                                                 |
-
-
-
-
-### Step 3 — Gate-0 budget-partition report
-
-- Created `scripts/gate0_budget_report.ts`, run with `npm run gate0`.
-- Prints the full 60,000-unit partition (§3.2), the arithmetic check, the
-per-day cap (HARD 1,900 / SOFT_STOP 1,900−margin), realized spend from the
-ledger vs the **57,900 invariant**, and whether the 1,000 floor is intact.
-- Registered as `gate0` in `package.json`.
-
-
-
-### Step 4 — grep-verify (safety sweep)
-
-- **4.1** No `sampling_weight = 1/p` stamping anywhere (only the NULL default remains).
-- **4.2** `maxDeliveryRetries = 0` on every collection subscription (controller,
-limiter, canary) — guarantees each notification item = exactly 1 credit.
-
----
-
-
-
-## 4. ⚠️ MOST IMPORTANT — how to run it on Replit and watch the logs
-
-
-
-### BEFORE you press Run — the one thing that prevents accidental spending
-
-The watchdog **auto-starts batches by default** (`ADB_AUTO_COLLECT` defaults to
-ON). That means simply starting the app can **begin spending real credits**
-before the gates have passed.
-
-**Rule:** while we are still in Phase 0/1 verification, ALWAYS start the server
-with auto-collect disabled:
+### 1.3 `npm run health` — every line explained
 
 ```
-~/workspace$ ADB_AUTO_COLLECT=0 npm run dev
-
-> rest-express@1.0.1 dev
-> NODE_ENV=development tsx --watch server/index.ts
-
-[migrations] applied 0002_agency_disruption_system.sql
-[migrations] applied 0003_travelers_health.sql
-[migrations] applied 0004_confirmation_alert.sql
-[migrations] applied 0005_aircraft_data.sql
-[migrations] applied 0006_test_flight_seeder.sql
-[migrations] applied 0007_user_monitored_flights.sql
-[migrations] applied 0008_resolved_flight_status.sql
-[migrations] applied 0010_flight_data_pre_post.sql
-[migrations] applied 0011_flight_data_pre_post_quality_jsonb.sql
-[migrations] applied 0012_collection_sampling.sql
-[migrations] applied 0014_flight_data_pre_post_drop_dead_columns.sql
-[migrations] applied 0015_collection_v33_sampling_meta.sql
-[migrations] applied 0017_collection_v39_credit_accounting.sql
-[migrations] applied 0018_collection_v39_delivery_failure_flag.sql
-[migrations] applied 0019_collection_v39_population_and_events.sql
-[migrations] applied 0020_collection_v39_airborne_time_series.sql
-[adb-collector] watchdog started (window=4h, budget=1900 credits/batch, dailyCap=1900, softStop=50 margin, reserve=1000, minBatch=300, tierMix={"HUB":1,"MID":2,"REGIONAL":1}, anchor=KLAX|EGLL|WSSS|SBGR|OMDB, utcCycle=0,4,8,12,16,20, autoCollect=false)
-[Duffel] Initialized (testMode=false)
-3:44:59 AM [express] serving on port 5000
-Initializing Stripe schema...
-Stripe schema ready
-{ autoExpandLists: undefined, stripeApiVersion: undefined } StripeSync initialized
-Stripe webhook configured: https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev
-Stripe data synced
-
+FAIL  data flow     last row 8695 min ago — data has stalled
+PASS  balance       2901 credits (live-api)
+PASS  rows today    0
+PASS  rows total    4316
+FAIL  active batch  none running right now (idle)
 ```
 
-You can also permanently set this by adding it to Replit's **Secrets**
-(Tools → Secrets): key `ADB_AUTO_COLLECT`, value `0`. Only turn it back on
-(remove the secret / set value `1`) when the gates say the 31-day run may
-begin.
+| Line | Meaning | Good or bad? |
+| ---- | ------- | ------------ |
+| `balance 2901 (live-api)` | You have 2,901 credits on the account right now (read live from the API, not a stale copy). | ✅ **The important one — PASS.** We needed ≥ 1,300. |
+| `rows today 0` | No new data collected today. | ✅ Expected — we haven't started collecting yet. |
+| `rows total 4316` | 4,316 rows already stored (from earlier testing). | ✅ |
+| `data flow FAIL` | No new row has arrived in a long time (8,695 min ≈ 6 days). | ⚠️ **Expected, not a bug** — nothing has been started, so of course nothing flows. Turns green only after we begin the real run. |
+| `active batch FAIL` | No collection batch is running right now. | ⚠️ **Same reason** — we haven't started anything. |
 
-> In Replit, the **Run button** executes `npm run dev` (see `.replit`).
-> If you press Run without the env var, collection may auto-start — so set the
-> secret first, or start from the Shell with the command above.
+So: the "FAIL" lines are the *status "paused on purpose"*, not errors. The line
+that actually matters — **balance** — is GREEN.
 
+### 1.4 `npm run gate0` — the money report, explained
 
-
-### Exact shell commands (paste into the Replit Shell)
-
-**A. Start the server (with auto-collect OFF — safe for verification):**
-
-```
-ADB_AUTO_COLLECT=0 npm run dev
-```
-
-The server boots, **applies the new database migrations (0018/0019/0020)
-automatically** (this is where the new tables appear), starts the watchdog
-(logs `[adb-collector] watchdog started ...`), and prints a full startup log.
-
-**B. In a SECOND Shell tab, watch the live log stream:**
+This prints the monthly budget and two safety checks. The two lines people ask
+about are:
 
 ```
-npm run logs
+Latest Flight-Alert balance    2,901 credits (live-api)
+Permanent floor (1000) intact  YES
+Run-total invariant (≤ 57,900) HOLDING
 ```
 
-This follows `logs/collector.log` in real time (`tail -f`). Every console line
-from the server is appended there (that's `installConsoleTee()`), so you see
-webhook deliveries, watchdog ticks, batch opens/closes, reconciliation — and it
-**survives tab refreshes / restarts**.
+| Line | Meaning |
+| ---- | ------- |
+| `Permanent floor (1000) intact YES` | The plan says we must **never** spend below 1,000 credits (that's the emergency cushion). Your balance is 2,901, which is above 1,000 → the floor is "intact" (safe). |
+| `Run-total invariant (≤ 57,900) HOLDING` | The plan says the whole 31-day run must spend **no more than 57,900 credits**. We've spent **0** so far → 0 ≤ 57,900 → the limit "holds". "HOLDING" just means *still true / still in range*. |
 
-**C. See the last 200 lines (for pasting back to me):**
+Think of it like a bank account with two rules: "never go below the $1,000
+cushion" (floor intact) and "never spend more than $57,900 total" (invariant
+holding). Both are checked every time you run `npm run gate0`.
 
-```
-npm run logs:last
-```
+### 1.5 `npm run coverage` — what it did and why it matters
 
-This is the command to run when you want to grab the recent activity and paste
-it into the chat for me to analyze.
+**Why we ran it:** before collecting data, we must prove we can actually get
+data from the airports we want. AeroDataBox doesn't cover every airport in the
+world, so we ask it: "which of OUR 276 chosen airports are you able to give us?"
 
-**D. See the whole log file (largest view):**
-
-```
-tail -n 1000 logs/collector.log
-```
-
-**E. One-command health check (DB direct, no server needed):**
+**The output, line by line:**
 
 ```
-npm run health
+universeCount (union)     : 4332    ← AeroDataBox covers 4,332 airports worldwide
+catalogCount (ours)       : 276     ← we chose 276 airports for our dataset
+catalogInUniverse         : 267     ← 267 of our 276 are collectable ✅
+catalogMissingFromUniverse: 9       ← 9 of ours are NOT covered (excluded, fine)
+universeNotInCatalog      : 4065    ← the other 4,065 ADB airports we don't want (fine)
+byTier (ours, in universe):
+  HUB       30/30                  ← all 30 big hubs collectable ✅
+  MID       89/87                  ← 87 of 89 mid airports collectable
+  REGIONAL  157/150                ← 150 of 157 regional airports collectable
 ```
 
-Prints PASS/FAIL for data freshness, balance vs reserve, rows today, active
-batch tier mix. Exit code 0 = healthy.
+**What it means:** of our 276 target airports, 267 are confirmed collectable.
+The 9 missing ones (2 mid + 7 regional = 9 ✓) are simply airports AeroDataBox
+doesn't cover, so we remove them from the "sampling frame" — that's a normal,
+expected step, not a failure. The sanity rule from the plan is
+`universe ≥ catalog` → `4332 ≥ 276` ✅.
 
-**F. Gate-0 budget report:**
+**This is the first Phase-2 check, and it PASSED.** It's the number we record so
+that later we can honestly say "our sample was drawn from a measured, known
+universe."
 
-```
-npm run gate0
-```
+### 1.6 Your questions, answered
 
-Prints the full budget partition (§3.2) with the live ledger numbers.
+**Q1. What does "floor intact YES, invariant HOLDING" mean?**
+→ Explained above in §1.4. Short version: "we still have way more than the
+1,000-credit safety cushion" (floor intact) and "we've spent 0 out of the
+57,900-credit total budget, so the spending limit still holds" (invariant
+holding). Both are GREEN.
 
-### What you should SEE and send back to me
+**Q2. I set `ADB_AUTO_COLLECT=0` in Replit config, not Secrets — is that OK?**
+→ Yes. Either way works as long as the value actually reaches the server. The
+proof is in the log line:
+`[adb-collector] watchdog started (... autoCollect=false)`.
+If a fresh boot prints `autoCollect=false`, the config setting is working. The
+only risk is if Replit ever starts the app *without* reading that config value —
+which is why the secret is the more robust spot, but config is fine.
 
-After starting with `ADB_AUTO_COLLECT=0 npm run dev`, paste me the output of:
+**Q3. Which files did you edit?**
+→ Full list with line numbers in **§7** below ("THE CODE CHANGES"). The short
+version: the controller (watchdog), the research-store file, the webhook
+routes, the database migration list, plus 4 scripts you run on Replit
+(`health`, `gate0`, `refill`, `coverage`) and `package.json` wiring them up.
 
-```
-npm run health
-npm run gate0
-npm run logs:last
-```
+**Q4. How do `npm run coverage` / `npm run gate0` / `npm run health` work? Are
+they scripts?**
+→ Yes, exactly. In `package.json` there is a `"scripts"` block. Each entry maps
+a short name to a TypeScript file run with `tsx`:
+`npm run health` → `tsx scripts/check_collection_health.ts`
+`npm run gate0` → `tsx scripts/gate0_budget_report.ts`
+`npm run coverage` → `tsx scripts/measure_coverage.ts`
+`npm run refill` → `tsx scripts/refill_credits.ts`
+They run directly from the Replit shell — no server needed.
 
-The log should contain lines like:
-
-- `[migrations] applied 0018...` / `0019...` / `0020...`  → migrations worked
-- `[adb-collector] watchdog started (window=4h, budget=1900 ... softStop=50 margin ...)` → watchdog config is correct
-- `[adb-collector] auto-start BLOCKED` **or** `[adb-collector] auto-start SKIPPED ...` → auto-collect is off / nothing starting, as intended
-- any `error` / `⚠ ALERT` lines → things for me to diagnose
-
-
-
-### When the gates pass and the real run may begin
-
-1. Remove the `ADB_AUTO_COLLECT=0` secret (or set it to `1`).
-2. Restart the server.
-3. Watch with `npm run logs`.
-4. The watchdog will auto-start one 4h batch per day, cap spend at 1,900/day,
-  stop at SOFT_STOP, and pause on delivery failures — all visible in the log.
+**Q5. So... are we done? What next?**
+→ We finished Phase 0 + most of Phase 1, and just did the FIRST check of Phase 2
+(coverage ✅). Not done yet — next is building the stratified catalog (deciding
+the exact airport mix), then the anchor probe, then more gates. **Nothing has
+spent any money, and the 31-day run has NOT started.** Full roadmap in §8.
 
 ---
 
 
 
-## 5. RUN REPORT — what actually happened (from `replitLogs1.md`, 2026-08-16)
+## 2. LATEST — RUN REPORT #4 (from `rl4.md`, 2026-08-17) — ✅ IT ALL WORKED
 
-This section is the "results" section. It shows, line by line, what worked on
-the first real run, what broke, why, the fix, and what is blocking progress.
-Read it alongside the raw file `AugMDnotes/replitLogs1.md`.
+You pulled the code, booted, and verified. Here is the line-by-line verdict.
 
-### 5.1 What you ran (the commands)
+### 2.1 What you did and the results
 
-You ran exactly the safe-start command from §4:
+
+| Step                                          | What the log shows                                                                                                                 | Verdict                          |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `git pull origin main`                        | `AugMDnotes/... IMPLEMENTATION_LOG.md, replitLogs3.md, scripts/check_collection_health.ts, scripts/gate0_budget_report.ts` updated | ✅ got all my fixes onto Replit   |
+| Fresh boot (`ADB_AUTO_COLLECT=0 npm run dev`) | migrations `0017/0018/0019/0020` all `applied`                                                                                     | ✅ full S-layer stack live        |
+| Watchdog                                      | `budget=1900, dailyCap=1900, softStop=50, reserve=1000, minBatch=300, autoCollect=false`                                           | ✅ safe mode                      |
+| `npm run health`                              | `PASS balance 2901 credits (live-api)` + `PASS rows today 0` + `PASS rows total 4316`                                              | ✅ **the live-balance fix works** |
+| `npm run gate0`                               | `Latest Flight-Alert balance 2,901 credits (live-api)`, `Permanent floor (1000) intact YES`, `Run-total invariant HOLDING`         | ✅ full budget report clean       |
+| Heartbeats                                    | `balance=2901 rowsToday=0 canStart=true` (after refill)                                                                            | ✅ watchdog now *sees* the refill |
+
+
+
+
+### 2.2 The heart of it — the balance went LIVE
+
+Compare these two heartbeat lines from your own log:
 
 ```
-ADB_AUTO_COLLECT=0 npm run dev
+03:54:59  heartbeat balance=862  rowsToday=0 canStart=false  ← before refill, below floor
+04:04:59  heartbeat balance=2901 rowsToday=0 canStart=true   ← after refill, above floor ✅
 ```
 
-...then watched the log with `npm run logs`, and ran `npm run health` +
-`npm run gate0`. The output is all in `replitLogs1.md`. **Good — this is
-exactly the right verification workflow.**
+`canStart=false → canStart=true` is exactly the Gate-0 result we wanted: the
+controller is now **allowed** to start a batch. It will not start one on its own
+because `autoCollect=false` — that is the correct safe state.
 
-### 5.2 ✅ What worked (PASS)
+### 2.3 NEW in this log: `npm run coverage` — Phase 2 Gate 1, step 10 ✅
+
+You ran the coverage measurement (I'd planned it as the very next step — you
+beat me to it, and it works):
+
+```
+universeCount (union)     : 4332
+worldScheduledCommercial  : 4072 (ATAG 2023)
+catalogCount (ours)       : 276
+catalogInUniverse         : 267
+catalogMissingFromUniverse: 9
+universeNotInCatalog      : 4065
+byTier (ours, in universe):
+  HUB       30/30
+  MID       89/87
+  REGIONAL  157/150
+```
+
+What each line means:
+
+| Line                          | Meaning                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| `universeCount 4332`          | AeroDataBox's airport list (the "universe" we can sample from) — 4,332 airports               |
+| `catalogCount 276`            | Our own target catalog — 276 airports                                                        |
+| `catalogInUniverse 267`       | 267 of our 276 airports are actually collectable (in the universe)                           |
+| `catalogMissingFromUniverse 9`| 9 of ours (2 MID + 7 REGIONAL) aren't in ADB's feed — correctly excluded from the frame      |
+| `universeNotInCatalog 4065`   | ADB has 4,065 airports we don't target — fine, we only sample our catalog                    |
+| `byTier`                      | Coverage per tier: HUB 30/30 ✓, MID 89/87, REGIONAL 157/150 (totals = 276 ✓, missing = 9 ✓) |
+
+Sanity check from the plan (`universe ≥ catalog`): `4332 ≥ 276` ✅ **Gate 1 step 10 PASSED.**
+The frame is now measured and sane — this is the number we record before trusting
+any sampling claim.
+
+### 2.4 The 2 remaining `FAIL` lines — both expected (not bugs)
+
+```
+FAIL  data flow     last row 8344 min ago — data has stalled
+FAIL  active batch  none running right now (idle)
+```
+
+- `data flow` **FAIL** — no batch has been started yet (pre-gates), so no new
+rows. It will flip to PASS only after the first real batch after the gates.
+- `active batch` **FAIL** — nothing is running because nothing was started.
+Same reason.
+- These are **status, not errors**. The important line — balance — now PASSES.
 
 
-| What                               | Evidence in log                                                                                                                                                             | Meaning                                                                                                                                                             |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Server booted & served             | `[express] serving on port 5000`                                                                                                                                            | The app started fine.                                                                                                                                               |
-| Migrations **0002 → 0019** applied | `[migrations] applied 0018...` / `applied 0019...`                                                                                                                          | 0018 (delivery-failure flag) and 0019 (population + event log) **created successfully**.                                                                            |
-| **Phase 0 R-delta config is LIVE** | `[adb-collector] watchdog started (window=4h, budget=1900 credits/batch, dailyCap=1900, softStop=50 margin, reserve=1000, minBatch=300, ... autoCollect=false)`             | This line proves the code changes are active: **budget=1900** (was 3000), **dailyCap=1900**, **softStop=50** (R2), **autoCollect=false** (your safety flag worked). |
-| Health check ran                   | `FAIL balance 866 — below reserve+min (1300)`                                                                                                                               | Health script works; it is correctly reporting the real blocker (below).                                                                                            |
-| Gate-0 report ran                  | `Alert-credit refill 58,900 units → 58,900 credits`, `Spendable experimental envelope 57,900 credits`, `Realized spend ... 0 credits`, `Remaining spendable 57,900 credits` | `npm run gate0` works and shows the full §3.2 budget partition.                                                                                                     |
-| No accidental spending             | Every heartbeat: `canStart=false`                                                                                                                                           | Because balance < reserve, the watchdog refused to spend anything. Zero credits consumed.                                                                           |
+
+### 2.5 ⚠️ One thing to note: the 02:07 boot had `autoCollect=true` again
+
+In your `logs:last` history there is a boot at `02:07:06` with
+`autoCollect=true`. This is the **same Run-button / auto-restart** issue from
+Run #2: Replit started the server with bare `npm run dev` (no env prefix). It
+did **no damage** — balance was still 862 < 1,300, so `canStart` stayed
+`false` the whole time — but it is the reason you must add the Replit Secret
+(step 2 below) so this can never happen again.
+
+---
 
 
 
+## 3. 📋 WHAT TO DO NEXT — the exact steps from the plan (read when back in Replit)
 
-### 5.3 ❌ What failed (the bug you spotted)
+> Source: `V3.9_DataCollectPlan.md` §17 runbook. We are here: **Phase 2 (Gates
+> 1–2), step 10 done ✅, steps 11–12 next.** We are still **Phase 1 done**, no
+> money spent on collection, auto-collect still OFF.
+
+### The order, at a glance
+
+| # | Step (from plan §17)                     | Who does it         | Status |
+| - | ---------------------------------------- | ------------------- | ------ |
+| 10 | `npm run coverage` → record universeCount | you (done)          | ✅ |
+| 11 | **Stratified catalog build**             | **I write the script, you run it** | ⏳ next |
+| 12 | **Two-stage anchor probe** → lock 5 airports | **I write the script, you run it** | ⏳ after |
+| 13–15 | Phase 3: canary, SOFT_STOP test, foreign-subscription check | you + me | pending |
+| 16 | Gate 0.5: inspect real payloads          | you + me            | pending |
+| 17+ | Phase 4: census validation               | you + me            | pending |
+| —   | FREEZE + the 31-day run                  | you + me            | **NOT YET** |
+
+> ✅ YES — §17 ("Step-by-step runbook") is a real section of
+> `V3.9_DataCollectPlan.md` (the file in the `AugMDnotes` folder). Everything
+> below is taken from that file, section by section.
+
+---
+
+### Step A — housekeeping: how to actually check the two things
+
+**A1. Verify `ADB_AUTO_COLLECT=0` is working (your config).**
+
+You already put it in Replit config — good. To PROVE it took effect, run this
+in the Replit shell:
+
+```bash
+npm run logs:last | grep "watchdog started" | tail -1
+```
+
+Look at the end of that line. If it ends with `autoCollect=false`, ✅ it works.
+If it shows `autoCollect=true`, the config value didn't reach the server yet —
+**trigger a fresh boot** (press the Run ▶ button, or save any file, which
+restarts `tsx --watch`) and re-check. The value is read once at server start,
+so the check only matters after a boot.
+
+**A2. `ADB_PLAN` and `ADB_MONTHLY_UNITS` — I found the answers IN the plan.**
+
+- `ADB_MONTHLY_UNITS = 60000` — the plan says this over and over: **"60,000 API
+  units (monthly entitlement)"** (§3.2 line 146) and "Refill: **60,000 —
+  monthly Ultra quota**" (§13).
+- `ADB_PLAN = Ultra` — the plan's own words (§13): the refill is the **"monthly
+  Ultra quota"**. So the RapidAPI plan is called **Ultra**.
+
+So set these two Replit Secrets:
+
+```text
+ADB_MONTHLY_UNITS = 60000
+ADB_PLAN = Ultra
+```
+
+> ⚠️ One honest caveat: §3.2 says "VERIFY the actual plan at Gate 0" — the plan
+> *documents* Ultra/60,000, but only your teammate's RapidAPI login can 100%
+> confirm what the account is actually billed as. Setting `Ultra`/`60000` from
+> the plan is correct; if your teammate ever reads the RapidAPI dashboard and
+> it says something else, update the value. Setting these two vars just stops
+> `npm run gate0` from printing `VERIFY_AT_GATE_0`.
+
+---
+
+### Step B — the stratified catalog build (plan §17 step 11; §4, §6, §27.1)
+
+**First, the main idea — this is the part that was confusing. Read slowly:**
+
+The plan talks about THREE different lists. Do not mix them up:
+
+| List | What it is | Size (measured) |
+| ---- | ---------- | --------------- |
+| **Universe** | Every airport AeroDataBox can give us (the whole "world" of available airports) | **4,332** |
+| **Catalog** | The 276 airports WE chose to study (our curated list, in `adbAirportCatalog_v3.ts`) | **276** |
+| **Frame** | The airports we can ACTUALLY collect from = **our catalog ∩ AeroDataBox's universe** | **267** |
+
+**So YES — the 267 IS part of the plan.** It's not a new number I invented:
+the plan §4 says the universe is measured by coverage →
+`universeCount / catalogInUniverse / universeNotInCatalog`, and step 10 of the
+runbook says *"Run `npm run coverage`; record universeCount / catalogInUniverse."*
+`catalogInUniverse = 267` is literally the number the plan tells us to record.
+Our 9 missing airports (2 MID + 7 REGIONAL) are NOT in AeroDataBox's universe,
+so they can't be in the frame.
+
+**Are we "sampling the universe" (all 4,332)?** No. The plan's own structure
+(§7) collects from the **frame** (~267) using a rotating selection — 1 HUB + 2
+MID + 1 REGIONAL per day. We can't sample 4,332 airports on 1,900 credits/day;
+we sample **within** the frame, stratified so the sample is representative.
+
+**What step 11 actually does — "build the stratified catalog":**
+
+The frame (267 airports) gets organized into **cells** by
+**primary strata = traffic tier × macro-region** (plan §4, §6). A "cell" is
+a group like:
+
+```text
+HUB × North America   →  KJFK, KLAX, KORD, KATL, ...   (which hubs, how many)
+MID × Europe          →  EDDM, LIRF, LEBL, ...         (which mids, how many)
+REGIONAL × Asia       →  VVDN, WADD, ...                (which regionals, how many)
+```
+
+The plan's requirements for step 11 (§27.1 #2), verbatim:
+1. Frame stratified by **traffic tier × macro-region**.
+2. **No tier-empty cells** (every tier must appear in every region — this is
+   the guardrail that stops the "frame is accidentally one geography" trap).
+3. **Balancing variables** (international share, carrier diversity, timezone,
+   network degree) **reported WITHIN each stratum, never crossed** into the
+   primary strata (crossing more would explode the cell count — §4, §6).
+4. `catalogInUniverse` fraction reported; **zero-yield airports stay in the
+   frame**, only coverage-failed airports leave.
+
+**The macro-regions — confirmed from the plan itself.** §23 lists the priority
+regions (verbatim):
+
+> "Priority anchor regions (bases the shortlist): North America (KLAX, KORD,
+> KJFK, KATL), Europe (EGLL, EDDF, LFPG, EHAM, LEMD), Asia-Pacific (WSSS,
+> RJTT/HND, VHHH/RKSI), Gulf/Africa (OMDB, OMAA), South America (SBGR, SAEZ),
+> Oceania (YSSY, NZAA)."
+
+That is **6 regions**: North America · Europe · Asia-Pacific · Gulf/Africa ·
+South America · Oceania. Since they're in the plan, **we use all 6** — I will
+not merge Oceania. (The 5-airport anchor pool in §13 picks one from 5 of these
+6 — KLAX/EGLL/WSSS/SBGR/OMDB — but the catalog strata uses all 6.)
+
+**Your only confirmation (yes/no):** "Use the plan's 6 macro-regions."
+Once you say yes, I build the script.
+
+**What the script will output:**
+
+```text
+Frame: 267 airports (our 276 catalog ∩ AeroDataBox universe)
+Stratum (tier × region)            airports   in-universe
+HUB × North America                      x           x
+HUB × Europe                             x           x
+... (every tier × every region)          ...         ...
+REGIONAL × Oceania                       x           x
+→ no tier-empty cells: ✓
+Balancing within strata: intl share, carrier diversity, tz, degree — reported
+```
+
+---
+
+### Step C — the two-stage anchor probe (plan §17 step 12; §9, §23)
+
+**Why it exists (the main idea):** every day, the collection runs 4 slots — 1
+HUB ("anchor") + 2 MID + 1 REGIONAL (§7, §8). The **anchor slot** is the
+backbone of the sample. The plan currently uses a *provisional* anchor pool:
+`KLAX · EGLL · WSSS · SBGR · OMDB` (§13). But §23 has a hard rule:
+
+> "Never use the current sample's observed degree as the only basis ... is a
+> feedback loop that self-justifies its own selection." And: "anchors are
+> chosen by measured yield + network properties (§23), never by fame."
+
+So we must **prove** those 5 are the right anchors with a *standardized
+measurement* — not just assume famous airports are good. That measurement is
+the two-stage anchor probe.
+
+**Step C, numbers 1–3, explained in plain English:**
+
+1. **Stage 1 — shortlist & measure (the "interview round").** We pick ~10–12
+   candidate airports across regions (from §23's list). Each is probed with the
+   SAME **2-hour** collection, at the SAME time-of-day and SAME weekday-class
+   (so the comparison is apples-to-apples — no "peak for A, off-peak for B").
+   We record three numbers per airport:
+   - `rows/credit` — how much data we get per credit spent,
+   - `chain-links/credit` — how many flight-to-flight connections (the
+     aircraft-rotation chains) per credit,
+   - `stability` — is this consistent, or one lucky day?
+   We also **re-probe WSSS and OMAA** the same way as calibration (the plan
+   says WSSS ≈ 331 rows/h, OMAA ≈ 127 rows/h — those become our baselines).
+
+2. **Stage 2 — the "finalist round".** The top ~5–6 from stage 1 get a longer
+   confirmation probe (more data → more confidence).
+
+3. **Score & lock — the math.** Every candidate gets one number:
+
+   ```text
+   anchor_score =
+       40%  exogenous traffic        (published schedules — NOT our data)
+     + 20%  geographic / network diversity
+     + 20%  carrier / international diversity
+     + 20%  standardized observed yield (from the probe)
+   ```
+
+   The probe is only **20%** — a single great probe day can't override years of
+   scheduled traffic (§23). **Station/API capacity is a separate PASS/FAIL gate**
+   (an airport that can't physically serve enough data is disqualified) — it is
+   NOT part of the score, so we never choose "easiest to collect" over "most
+   useful information." The final **pool of 5 is locked with its scores** before
+   the run.
+
+**Budget:** all probing is hard-capped **inside the 1,900/day budget** (§9 "Total
+probe spend hard-capped within the 1,900/day budget").
+
+**What you will do (after I build it):** `npm run anchor-probe -- --stage 1` →
+paste output → `npm run anchor-probe -- --stage 2` → paste output → we lock the
+pool. **This is the first command that actually spends a few credits** — small
+and capped, but it's real spend, which is exactly what the plan wants us to
+verify before the full run.
+
+---
+
+### Step D — do NOT do these yet (the gates are there for a reason)
+
+- ❌ Do **not** start `npm run dev` without `ADB_AUTO_COLLECT=0`.
+- ❌ Do **not** delete any AeroDataBox subscriptions (that's Phase 3 step 13).
+- ❌ Do **not** start the 31-day run. It waits for ALL gates 1–5 (§17).
+
+---
+
+### What I need from you right now (so I can build step 11)
+
+1. Confirm **"use the plan's 6 macro-regions"** (yes/no). ← the only decision needed.
+2. (Optional) Set the two Secrets from Step A2: `ADB_MONTHLY_UNITS=60000`,
+   `ADB_PLAN=Ultra`, and run the A1 check command.
+3. Then I build `npm run build-catalog` and hand you the exact command to run.
+
+---
+
+
+
+## 4. RUN REPORT #3 (from `replitLogs3.md`, 2026-08-16) — ✅ REFILL WORKED
+
+**This is the log where we closed Gate 0's refill + conversion checks.**
+
+
+| What you ran             | What the log shows                                        | Verdict                           |
+| ------------------------ | --------------------------------------------------------- | --------------------------------- |
+| `npm run refill`         | `creditsRemaining: 862`                                   | ✅ read-only check works           |
+| `npm run refill -- 1`    | `Refilling 1 credit(s) ... Success. New balance: 863`     | ✅ **1 unit = 1 credit CONFIRMED** |
+| `npm run refill -- 2038` | `Refilling 2038 credit(s) ... Success. New balance: 2901` | ✅ **full refill SUCCESS**         |
+| Fresh boot               | migrations `0017/0018/0019/0020` all `applied`            | ✅ S-layer stack live              |
+| Watchdog                 | `budget=1900 ... autoCollect=false`                       | ✅ safe mode                       |
+
+
+**Balance math (from the log):** 862 → +1 → 863 → +2,038 → **2,901**. Now
+`2,901 ≥ 1,300` so collection is *allowed* — but `autoCollect=false` keeps it
+stopped. Exactly right for Gate 0.
+
+**The 3 "FAIL" lines you were scared about — explained:**
+
+1. `FAIL balance 866` — **a stale-read bug in the health tool, now FIXED.** It
+  read the DB column (last webhook row = 866) instead of the live API
+   (2,901). `check_collection_health.ts` + `gate0_budget_report.ts` now call
+   `getBalance()` live first and print `(live-api)` / `(db-snapshot)`.
+2. `FAIL data flow` — expected: no batch started yet (pre-gates).
+3. `FAIL active batch` — expected: nothing started yet.
+
+---
+
+
+
+## 5. RUN REPORT #2 (from `replitLogs2.md`, 2026-08-16) — ✅ 0020 FIXED
+
+
+
+### 5.1 What worked
+
+- **Migration 0020 APPLIED** on the fresh 23:58 boot — the `loc_reported_utc`
+fix is confirmed. All 4 airborne tables exist. **Bug closed.**
+- All 4 Phase-0 migrations (`0017/0018/0019/0020`) applied.
+- Watchdog config correct (`budget=1900, softStop=50, autoCollect=false`).
+- **Zero credits spent** (reserve floor held everything).
+
+
+
+### 5.2 The 3 suspicious things, explained
+
+1. `0020 failed` **still appears (14:47, 20:06)** — those are OLD boots
+  *before* your redeploy. `collector.log` is append-only, so past failures
+   stay visible. The final 23:58 boot **succeeded** — that is the proof.
+2. `refillToFullBudget` **changed 3138 → 2038** — expected. The number is
+  `budget + reserve − balance`: old code budget 3000 → 3138; new Phase-0 code
+   budget 1900 → 2038. Confirms the 1900 budget delta went live.
+3. **⚠️ The real anomaly: one boot at 20:06 ran** `autoCollect=true`**.**
+  Root cause: Replit's **Run ▶ button** runs bare `npm run dev` from `.replit`
+   (no `ADB_AUTO_COLLECT=0`). Your shell command was correct. Nothing spent
+   because balance < 1,300. **Fix:** Replit Secrets `ADB_AUTO_COLLECT=0`.
+
+
+
+### 5.3 Refill question answered
+
+YES — you can refill without the RapidAPI dashboard because your teammate
+added billing. `refillBalance()` (`aerodataboxLimiter_v3.ts:147`) sends only
+`x-rapidapi-key`; RapidAPI honors it because the *account* carries the payment
+method. Use `npm run refill -- N`.
+
+---
+
+
+
+## 6. RUN REPORT #1 (from `replitLogs1.md`, 2026-08-16) — 0020 bug found + fixed
+
+
+
+### 6.1 What worked
+
+- Server booted (`[express] serving on port 5000`).
+- Migrations `0018/0019` applied.
+- **Phase 0 R-delta config LIVE**: `budget=1900, dailyCap=1900, softStop=50, autoCollect=false` — the code changes were active on first real run.
+- `npm run health` + `npm run gate0` both ran.
+- Zero credits spent.
+
+
+
+### 6.2 What failed — the 0020 bug you spotted
 
 ```
 [migrations] failed to apply 0020_collection_v39_airborne_time_series.sql:
         column "loc_reported_utc" does not exist
-Boot migrations failed: column "loc_reported_utc" does not exist
 ```
 
-**Why it happened (plain English):** migration 0020 creates 4 new "airborne"
-tables (`raw_airborne_events`, `clean_airborne_points`, `flight_trajectory`,
-`flight_airborne_snapshots`). In the `raw_airborne_events` table, one of the
-"speed lookup" indexes (line 95 of the migration) asked PostgreSQL to index a
-column named `loc_reported_utc` — **but I had not actually added that column to
-the table definition.** PostgreSQL correctly refused. Because the whole file
-runs as one transaction, the **entire 0020 migration rolled back** — so NONE of
-the 4 airborne tables exist in the database yet.
+**Why:** migration 0020's index referenced `loc_reported_utc`, but that column
+was missing from the table definition. PostgreSQL refused, and because the file
+is one transaction, **all 4 airborne tables rolled back**.
 
-**Impact:** not fatal. The server still booted and ran (0018/0019 are applied;
-the webhook path silently skips the airborne-log write if the table is absent).
-But the S5 airborne time-series layer (the part that stops trajectories being
-overwritten) is **not installed yet**.
+**Fix (already applied):**
 
-**Where the fix is:** `migrations/0020_collection_v39_airborne_time_series.sql`
-(added the missing `loc_reported_utc` column) and
-`server/lib/disruption/flightDataPrePostStore_v3.ts` (the airborne insert now
-also writes `loc_reported_utc`, so the column is populated). Verified: the
-migration's index columns all exist now, and the code typechecks clean.
-
-### 5.4 ⚠️ What is blocking progress (the real next step)
-
-Every heartbeat in the log says:
-
-```
-heartbeat balance=862 rowsToday=0 gap=7420min canStart=false
-    refillToFullBudget=2038 reason=Insufficient credits
-    (862 < reserve 1000 + min batch 300)
-```
-
-And `npm run health` confirms: `FAIL balance 866 — below reserve+min (1300)`.
-
-**Meaning:** your Flight-Alert credit balance is **~862 credits**, but the
-controller refuses to start a batch unless balance ≥ **1,000 (reserve) + 300
-(min batch) = 1,300**. So collection is correctly paused and nothing is
-spending. This is **not a bug** — it is the reserve-floor safety working.
-
-**This is exactly what Gate 0 (Phase 1) is for:** **refill credits** (plan
-§17 Phase 1 step 6–8: check the balance, make a 1-credit refill to confirm
-1 unit = 1 credit, then refill up to a healthy level). **UPDATE (run #2+):**
-you no longer need the RapidAPI dashboard — your teammate added billing, so
-`npm run refill -- N` refills with just the API key (see §6.4). The log even
-tells you how many to add: `refillToFullBudget=2038`.
-
-### 5.5 Status summary + what happens next
+- `migrations/0020_collection_v39_airborne_time_series.sql` — added
+`loc_reported_utc TIMESTAMPTZ` to `raw_airborne_events`.
+- `server/lib/disruption/flightDataPrePostStore_v3.ts` — airborne insert now
+writes `loc_reported_utc` (column list + values updated 32→33 params).
+- Verified: every index column exists; typecheck clean.
 
 
-| Item                                                                         | Status                                                                                    |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Migrations 0018, 0019                                                        | ✅ applied                                                                                 |
-| Migration 0020                                                               | ❌ failed → **FIXED** → needs a redeploy/restart to apply                                  |
-| Watchdog config (budget=1900, softStop=50, dailyCap=1900, autoCollect=false) | ✅ verified live                                                                           |
-| `npm run gate0`                                                              | ✅ works                                                                                   |
-| `npm run health`                                                             | ✅ works (reports the real blocker)                                                        |
-| Credit balance                                                               | ⚠️ 862 → **below reserve+min (1,300)** → collection paused by design                      |
-| **Next action**                                                              | ① redeploy so fixed migration 0020 applies ② Gate 0: refill credits ③ re-run health/gate0 |
+
+### 6.3 The blocker then
+
+Balance 862 < reserve+min (1,300) → collection paused by design. This is what
+Gate 0 fixed (refill → 2,901).
+
+---
+
+
+
+## 7. 🔍 THE CODE CHANGES AND WHERE — for your curiosity
+
+Everything below is Phase 0 work already in the repo. Read the files to see it.
+
+### 7.1 `server/lib/disruption/adbCollectionController_v3.ts` (the "watchdog")
+
+
+| Change                                                                            | Where                                                                                      |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Budget default 3000 → **1900**                                                    | `:81` (`batchBudget`)                                                                      |
+| Reserve floor 1000                                                                | `:82` (`reserveCredits`)                                                                   |
+| Min batch 300                                                                     | `:84` (`minBatchCredits`)                                                                  |
+| Daily cap 1900                                                                    | `:95` (`dailyCreditCap`)                                                                   |
+| SOFT_STOP margin 50 (stops at 1900−50=1850)                                       | `:102` (`softStopMargin`)                                                                  |
+| `ADB_AUTO_COLLECT=0` disables auto-start                                          | `:124-125` (`autoCollect`)                                                                 |
+| `maxDeliveryRetries = 0` (1 item = 1 credit)                                      | around `:376` + batch creation                                                             |
+| R6 template freeze: refuses wrong window shape / tier mix / crossover-2-without-1 | `readRunTemplate` `:265`, `checkTemplateFreeze` `:331`, called in `startBatchInner` `:593` |
+| R7 versioned manifest stamped at batch start                                      | `writeManifest` `:284`, `readManifest` `:319`, called `:709`                               |
+| Crossover block completion recorded                                               | `stopBatch` writes `crossover_block_done` `:785`                                           |
+| `sampling_weight` stays NULL (removed illegal `1/p`)                              | batch-create SQL                                                                           |
+
+
+
+
+### 7.2 `server/lib/disruption/flightDataPrePostStore_v3.ts` (the "research store")
+
+
+| Change                                                                                  | Where                                  |
+| --------------------------------------------------------------------------------------- | -------------------------------------- |
+| `researchEventKey()` — SHA-256 key `evt                                                 | flight                                 |
+| `appendResearchEvents()` — writes `flight_events` + `raw_airborne_events`, never throws | `:252`                                 |
+| Airborne insert writes `loc_reported_utc` (the 0020 fix)                                | `:280`, `:308`, `:343`, `:365`, `:376` |
+
+
+
+
+### 7.3 `server/routes_v3.ts` (the webhook ingress)
+
+
+| Change                                                         | Where      |
+| -------------------------------------------------------------- | ---------- |
+| Imports `appendResearchEvents`, `researchEventKey`             | `:39-40`   |
+| Webhook handler calls `appendResearchEvents(...)` after upsert | `:170-172` |
+
+
+
+
+### 7.4 Migrations (schema)
+
+
+| File                                                       | What                                                                                                                                |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `migrations/0018_collection_v39_delivery_failure_flag.sql` | R5: delivery-failure flag + pause                                                                                                   |
+| `migrations/0019_collection_v39_population_and_events.sql` | S1 `flight_population`; S2 raw envelope on `adb_ingest_events`; S3/S4 `flight_events` (event_key, 4 timestamps, 8 ASPM milestones)  |
+| `migrations/0020_collection_v39_airborne_time_series.sql`  | S5: `raw_airborne_events`, `clean_airborne_points`, `flight_trajectory`, `flight_airborne_snapshots` (+ the `loc_reported_utc` fix) |
+| `server/db.ts`                                             | `BOOT_MIGRATIONS` now lists `0018/0019/0020` (`:37-39`)                                                                             |
+
+
+
+
+### 7.5 Scripts (run from the Replit Shell)
+
+
+| File                                 | Command                 | What                                                    |
+| ------------------------------------ | ----------------------- | ------------------------------------------------------- |
+| `scripts/gate0_budget_report.ts`     | `npm run gate0`         | Budget-partition report (§3.2) — now reads live balance |
+| `scripts/check_collection_health.ts` | `npm run health`        | PASS/FAIL health — now reads live balance               |
+| `scripts/refill_credits.ts`          | `npm run refill [-- N]` | Read balance / refill N credits (1 unit = 1 credit)     |
+| `scripts/credit_canary.ts`           | `npm run canary`        | R1 exclusivity assert + R3 credit math (Phase 3)        |
+| `scripts/measure_coverage.ts`        | `npm run coverage`      | Phase 2: airport coverage (universe/catalog)            |
+| `scripts/build_stratified_catalog.ts`| `npm run build-catalog` | Phase 2 step 11: stratified frame (tier × macro-region) |
+| `package.json`                       | —                       | `refill`, `gate0`, `coverage`, `build-catalog` scripts  |
 
 
 ---
 
 
 
-## 6. RUN REPORT #2 — from `replitLogs2.md` (the follow-up run)
-
-This is the report for the second log you pasted. **The migration 0020 fix
-WORKED.** Read this section with `AugMDnotes/replitLogs2.md` open.
-
-### 6.1 What you ran (the commands)
-
-```
-ADB_AUTO_COLLECT=0 npm run dev     ← fresh boot (23:58 UTC)
-npm run logs                       ← tail -f
-npm run logs:last                  ← last 200 log lines
-```
+## 8. THE PHASES (the whole journey, from the plan §17)
 
 
-
-### 6.2 ✅ What worked (PASS)
-
-
-| What                             | Evidence                                                                                                                     | Meaning                                                                                                            |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **Migration 0020 APPLIED**       | `[migrations] applied 0020_collection_v39_airborne_time_series.sql` (23:58:59.993Z, and terminal line 21)                    | The `loc_reported_utc` fix is confirmed. All 4 airborne tables now exist. **The 0020 bug is closed.**              |
-| All 4 Phase-0 migrations applied | `0017`, `0018`, `0019`, `0020` all show `applied` on the fresh boot                                                          | Full S-layer stack (credit accounting → delivery-failure flag → population/events → airborne time-series) is live. |
-| Watchdog config correct          | `budget=1900 credits/batch, dailyCap=1900, softStop=50 margin, reserve=1000, minBatch=300, ... autoCollect=false` (23:59:00) | All R-delta safety knobs are live and the run was in **safe mode**.                                                |
-| Server healthy                   | `[express] serving on port 5000`, Duffel/Stripe all initialized                                                              | App boots cleanly.                                                                                                 |
-| **Zero credits spent**           | every heartbeat `canStart=false`, `balance=862`                                                                              | The reserve floor is doing its job — nothing spent during the whole window.                                        |
+| Phase | Name            | What it is, in plain English                                                                                     | Status                                                   |
+| ----- | --------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **0** | Code deltas     | Make the code safe, budget-protected, scientifically valid. No money spent.                                      | ✅ DONE                                                   |
+| **1** | Gate 0          | Record plan/units/balance, one 1-credit refill, confirm 1 unit = 1 credit, print budget report, commit manifest. | ⏳ NEARLY DONE (refill + conversion ✅; report ✅; manifest ⏳) |
+| **2** | Gates 1–2       | `npm run coverage` (✅ step 10 done), stratified catalog (✅ script built, ⏳ run after user confirms 6 regions), anchor probe (step 12 ⏳) → lock 5 airports. | ▶️ IN PROGRESS (step 10 ✅, 11 almost, 12 next) |
+| **3** | Gates 3–4 + 0.5 | Delete foreign subscriptions, credit canary, SOFT_STOP test, inspect real payloads.                              | pending                                                  |
+| **4** | Gate 5          | Census validation (FIDS population vs webhook events).                                                           | pending                                                  |
+| **5** | FREEZE          | Write versioned manifest, hash test rows. Config cannot change after.                                            | pending                                                  |
+| **6** | 31-day run      | Real run: 1,900 credits/day × 31 days.                                                                           | pending                                                  |
 
 
-
-
-### 6.3 ❌ / ⚠️ What did NOT work — the 3 things you saw and were suspicious about
-
-**(1)** `0020 failed` **still appears TWICE in the log (14:47 and 20:06 UTC).**
-
-Those two lines are from **OLDER boots before your redeploy** — you can tell
-because they sit in the middle of the `tail -200` history while the **last boot
-at 23:58 succeeded**. Look at the pattern:
-
-```
-14:47:14  [error] failed to apply 0020 ... loc_reported_utc does not exist   ← old server, old file
-20:06:59  [error] failed to apply 0020 ... loc_reported_utc does not exist   ← old server, old file
-23:58:59  [log]    applied 0020 ...                                          ← NEW server, fixed file ✅
-```
-
-**Explanation:** `logs/collector.log` is append-only across every boot — the
-file remembers the old failures. On Replit, `tsx --watch` keeps one server
-running until you **Stop + Run again**, so the 14:47 and 20:06 failures were
-the previous, still-buggy process. The fresh 23:58 boot is the first one with
-the fix. **Not a problem anymore — ignore the old lines.** The proof is the
-23:58 success + `applied` line.
-
-**(2)** `refillToFullBudget` **changed from** `3138` **to** `2038` **mid-log.**
-
-That is **expected** and actually confirms your Phase-0 config. The number is
-`budget + reserve − balance`:
-
-- old code (budget 3000): `3000 + 1000 − 862 = 3138` ✅
-- new code (budget 1900): `1900 + 1000 − 862 = 2038` ✅
-
-So the log is showing you the moment the **1900 budget delta went live** —
-before that boot it was still the old 3000. Same story as the 0020 failures:
-older boots ran old code, the latest boots run Phase-0 code. **This is a good
-sign, not a bug.**
-
-**(3) ⚠️ The REAL anomaly — one boot at 20:06 shows** `autoCollect=true`**.**
-
-```
-20:06:59  watchdog started (..., autoCollect=true)
-23:59:00  watchdog started (..., autoCollect=false)
-```
-
-Line 508 of `replitLogs2.md`. **Root cause found — it was NOT your shell
-command.** Look at `.replit` (the Replit config file):
-
-```
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npm run dev"              ← NO ADB_AUTO_COLLECT=0 prefix
-waitForPort = 5000
-```
-
-**Two different ways to start the server:**
-
-
-| Way to start                                             | Command that runs                | `ADB_AUTO_COLLECT` | Result                |
-| -------------------------------------------------------- | -------------------------------- | ------------------ | --------------------- |
-| You type in Shell                                        | `ADB_AUTO_COLLECT=0 npm run dev` | set to `0`         | `autoCollect=false` ✅ |
-| You press the **Run ▶** button (or Replit auto-restarts) | `npm run dev` (from `.replit`)   | **unset**          | `autoCollect=true` ⚠️ |
-
-
-So the 20:06 boot was a **Run-button / auto-restart**, which ignores your
-shell env var. Your command was right — the .replit workflow just never gets
-it. This is also why **every reboot that Replit starts on its own** will have
-`autoCollect=true`.
-
-**Why nothing bad happened:** balance was still 862 < 1,300, so every
-`canStart` check returned `false` and **no batch ever started — 0 credits
-spent.** The reserve floor (R-delta) literally saved this window.
-
-**But this is a real hazard for the future:** once you refill past 1,300, a
-server started WITHOUT `ADB_AUTO_COLLECT=0` WILL begin spending on its own.
-
-**THE FIX (do this now):** add `ADB_AUTO_COLLECT=0` to the **Replit Secrets**
-(also called Environment Variables) instead of relying on the shell prefix.
-Then EVERY start — Run button, auto-restart, shell — is safe by default.
-Steps: Replit → your app → **Secrets** (left menu, 🔒) → "New secret" →
-Key `ADB_AUTO_COLLECT`, Value `0` → Save. That makes the 20:06-style anomaly
-impossible. You can ALSO update `.replit` to bake the prefix in, but Secrets
-is the cleaner single place.
-
-### 6.4 ❓ Your question — can you refill credits WITHOUT the RapidAPI account login?
-
-**UPDATE (run #2 analysis): YES, you CAN — because your teammate already
-added a payment method.** The billing authorization now lives on the account,
-so the API-key-only refill works. I added a command for it.
-
-**How it works under the hood:** your code already wraps AeroDataBox's
-`POST /subscriptions/balance/refill` in `refillBalance()` at
-`server/lib/disruption/aerodataboxLimiter_v3.ts:147`. It sends only the
-`x-rapidapi-key` header. RapidAPI honors it because the **account** (not the
-key) carries the payment method. Since your teammate added billing, **you do
-not need the dashboard login anymore.**
-
-**The exact commands (paste into the Replit Shell):**
-
-```bash
-# 1) Check current balance (read-only, free, no spend):
-npm run refill
-
-# 2) Gate 0 rule §17 Phase 1 step 7 — ONE 1-credit test refill first,
-#    confirm the log shows "New balance: 863" (862 + 1), proving 1 unit = 1 credit:
-npm run refill -- 1
-
-# 3) Then refill up to full budget (watchdog said refillToFullBudget=2038):
-npm run refill -- 2038
-```
-
-Each `npm run refill -- N` calls AeroDataBox, spends exactly N API units, and
-prints the new balance + `lastRefilledUtc`. After step 3 your balance will be
-**2,901** (862 → +1 test = 863 → +2,038 = 2,901) — comfortably above
-the 1,300 reserve+min floor, so collection becomes possible.
-
-**Still works without any login — no** `x-webhook-secret` **needed**, because the
-script talks directly to AeroDataBox (it does not go through your server).
-
-**Watch the spend:** 1 unit = 1 credit, so `npm run refill -- 2038` uses 2,038
-of your monthly 58,900-unit envelope. That's the whole point of Gate 0 —
-confirm the conversion before the real run. After refilling, re-check with
-`npm run gate0` and `npm run health`.
-
-### 6.5 Status summary (end of run #2)
-
-
-| Item                                                                 | Status                                                                                                                                                                                         |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Migration 0020                                                       | ✅ **APPLIED on the fresh boot — bug closed**                                                                                                                                                   |
-| Migrations 0017/0018/0019/0020                                       | ✅ all applied                                                                                                                                                                                  |
-| Watchdog safety config (budget=1900, softStop=50, autoCollect=false) | ✅ verified live on latest boot                                                                                                                                                                 |
-| Credits spent                                                        | ✅ **0** (reserve floor held even during the accidental autoCollect=true boot)                                                                                                                  |
-| ⚠️ Risk noted                                                        | `autoCollect=true` on one 20:06 boot — restart happened without `ADB_AUTO_COLLECT=0`; safe only because balance was low                                                                        |
-| Balance                                                              | ⚠️ still 862 → **below reserve+min (1,300)** → collection paused                                                                                                                               |
-| Data gap                                                             | ⚠️ growing (~7,839 min by end of log) — expected, no spend available                                                                                                                           |
-| Refill ability                                                       | ✅ **SOLVED** — teammate added billing → `npm run refill -- N` refills with just the API key (no dashboard login)                                                                               |
-| autoCollect risk                                                     | ✅ **Explained + fix given** — Run-button/auto-restarts run `.replit`'s `npm run dev` (no env prefix); fix = put `ADB_AUTO_COLLECT=0` in Replit Secrets                                         |
-| **Next action**                                                      | ① put `ADB_AUTO_COLLECT=0` in Replit Secrets ② `npm run refill` (check) → `npm run refill -- 1` (test) → `npm run refill -- 2038` ③ restart ④ `npm run health` + `npm run gate0` → report back |
-
-
-
-
-### 6.6 📋 YOUR NEXT STEPS — read this when you're back in Replit
-
-Follow these **in order**. Each step says what to type and what to expect.
-
-**Step A — make every future boot safe (2 min).**
-
-1. In Replit, open your app → left menu → **Secrets** (the 🔒 icon).
-2. Click **New secret** → Key: `ADB_AUTO_COLLECT` → Value: `0` → Save.
-3. (Optional but nice:) also add `Key: ADB_API_MIN_INTERVAL_MS` → `Value: 1000` if not already there.
-4. Why: the Run ▶ button and Replit auto-restarts run `npm run dev` from
-  `.replit` WITHOUT your shell env var. Secrets make `autoCollect=false` apply
-   to every start, forever. This closes the 20:06 anomaly for good.
-
-**Step B — refill the credits (this is Gate 0, plan §17 Phase 1 steps 6–8).**
-
-```bash
-npm run refill          # read-only check → should print balance 862
-npm run refill -- 1     # test refill → expect "New balance: 863" (1 unit = 1 credit ✓)
-npm run refill -- 2038  # full refill → expect "New balance: 2901"
-```
-
-Each command prints the new balance and `lastRefilledUtc`. If a command prints
-`FAILED` + a `[adb-v3] refillBalance` error line, paste that error back to me.
-
-**Step C — verify.**
-
-```bash
-npm run gate0           # budget-partition report → confirm 57,900 envelope intact
-npm run health          # should now show PASS on balance (2,900 ≥ 1,300)
-```
-
-Then paste me the output of `npm run health` + `npm run gate0`, and the last
-boot's `[adb-collector] watchdog started (...)` line after a fresh restart.
-
-**Step D — what comes after refill (Gates, per the plan).**
-The plan's order (§17): after Gate 0 (refill + conversion + caps) comes
-**Phase 2 — Gates 1–2** (`npm run coverage`, build the stratified catalog,
-run the anchor probe → lock the 5-airport pool), then **Phase 3 — Gates 3–4**
-(subscription cleanup + `npm run canary` + SOFT_STOP/delivery-failure tests +
-Gate 0.5 payload inspection), then **Phase 4 — Gate 5** (population/census
-validation), then **Phase 5 FREEZE**, then the 31-day run. **Do NOT start a
-60k run yet** — we're at Gate 0, and `ADB_AUTO_COLLECT=0` stays ON until the
-gates pass.
+**Key rule:** the 31-day run (Phase 6) waits for all gates (1–5) to pass.
 
 ---
 
-## 7. RUN REPORT #3 — from `replitLogs3.md` (the refill run) — ✅ IT WORKED
-
-This is the report for your third log. **Everything you did in this run
-worked.** This is the log where we close Gate 0's refill + conversion checks.
-
-### 7.1 ✅ What worked (PASS)
-
-| What you ran | What the log shows | Verdict |
-| --- | --- | --- |
-| `npm run refill` (read-only) | `creditsRemaining: 862` | ✅ check works |
-| `npm run refill -- 1` | `Refilling 1 credit(s) ... Success. New balance: 863` | ✅ **Gate 0 step 7: 1 unit = 1 credit CONFIRMED** |
-| `npm run refill -- 2038` | `Refilling 2038 credit(s) ... Success. New balance: 2901` | ✅ **Full refill SUCCESS — 2,901 credits** |
-| Fresh boot | migrations `0017/0018/0019/0020` all `applied` | ✅ full S-layer stack live |
-| Watchdog | `budget=1900, dailyCap=1900, softStop=50, reserve=1000, minBatch=300, autoCollect=false` | ✅ safe mode, correct config |
-| `pkill` + restart | clean restart, same healthy boot | ✅ |
-
-**Balance math check (from the log itself):** 862 → +1 → 863 → +2,038 → **2,901**.
-Now `2,901 ≥ 1,300` (reserve 1,000 + min batch 300), so the controller is
-**allowed** to start a batch — but `autoCollect=false` means it will NOT start
-one on its own. That is exactly the correct state for Gate 0.
-
-### 7.2 ⚠️ The 3 "FAIL" lines you were scared about — all explained (no bugs)
-
-Your `npm run health` printed:
-```
-FAIL  data flow   last row 8189 min ago — data has stalled
-FAIL  balance     866 — below reserve+min (1300), refill soon
-PASS  rows today  0
-PASS  rows total  4316
-FAIL  active batch  none running right now (idle)
-```
-
-**(1) `FAIL balance 866` — this was a STALE-READ bug in the health tool, not
-a real failure.** The health script was reading the DB column
-`credits_remaining` from the **last webhook row** (old data → 866), not the
-**live AeroDataBox balance**. Your refill command proved the real balance is
-**2,901**. **Fixed:** `scripts/check_collection_health.ts` and
-`scripts/gate0_budget_report.ts` now call AeroDataBox live first and only fall
-back to the DB snapshot if the live call fails. Re-run `npm run health` and it
-should print `PASS balance 2901 credits (live-api)`.
-
-**(2) `FAIL data flow` — expected, not a bug.** No batch has been started yet
-(we're at Gate 0, `autoCollect=false`), so no new rows have arrived in days.
-That line will stay FAIL until we run the first real batch after the gates.
-
-**(3) `FAIL active batch — none running` — expected, not a bug.** No batch is
-active because none has been started. Same reason as (2).
-
-**Everything else PASSES.** Nothing is broken; the "fails" were one stale-read
-tool bug (fixed) + two "we haven't started yet" states (by design).
-
-### 7.3 📍 Where you are now (Gate 0 — nearly done)
-
-Plan §17 Phase 1 steps 5–9:
-- 5. Record plan / monthly units — ✅ (60,000 units / 58,900 refill, §3.2)
-- 6. Get balance — ✅ 862 (then 2,901 after refill)
-- 7. One 1-credit refill → 1 unit = 1 credit — ✅ **confirmed**
-- 8. Per-refill + balance caps, FIDS within REST line — ✅ no cap blocked a
-  2,038 refill
-- 9. Print the budget-partition report + commit manifest — ⏳ **NEXT** → run
-  `npm run gate0` (balance should now read 2,901 live)
-
-### 7.4 📋 What to do next (when you're back in Replit)
-
-**Step 1 — verify the live balance now that health reads the API:**
-```bash
-npm run health
-npm run gate0
-```
-Expect: `PASS balance 2901 credits (live-api)` and the gate0 report showing
-2,901. Paste me the output.
-
-**Step 2 — confirm autoCollect is safe on EVERY start.** If you have not yet,
-add to Replit **Secrets**: Key `ADB_AUTO_COLLECT`, Value `0` (see §6.3).
-Then a Run-button boot can never auto-spend once we raise the balance.
-
-**Step 3 — we move to Phase 2 (Gates 1–2).** Per the plan §17:
-- `npm run coverage` → universe/catalog coverage
-- build the stratified airport catalog (traffic tier × macro-region)
-- run the two-stage anchor probe → lock the 5-airport pool (KLAX/EGLL/WSSS/SBGR/OMDB)
-
-I will give you the exact commands for Gate 1–2 in the next message. Do NOT
-start the 31-day run yet.
-
----
-
-## 8. Audit snapshot (what existed before Phase 0 — for the record)
 
 
-| Item                                               | Plan delta                   | Code state at audit                                                                                               | Verified  |
-| -------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------- |
-| Credit accounting (ledger + balance delta)         | V3.9 §11, migration 0017     | `migrations/0017_collection_v39_credit_accounting.sql` exists; `adb_ingest_events`, `adb_collection_meta` present | `git log` |
-| `maxDeliveryRetries = 0`                           | §15 R-delta / §45.5          | controller `adbCollectionController_v3.ts:490` + canary `credit_canary.ts` set `maxDeliveryRetries: 0`            | grep      |
-| Daily credit cap 1,900                             | §3.3 / DD-R                  | `dailyCreditCap` default 1900 (`adbCollectionController_v3.ts:95`)                                                | read      |
-| `ADB_BATCH_BUDGET` default                         | §22 fix 3 (must be **1900**) | ❌ code still defaults **3000** (`adbCollectionController_v3.ts:81`) — FIXED in 1.1                                | read      |
-| R1 subscription exclusivity / orphan cleanup       | §15                          | partial — orphan removal exists near `:979–998`; canary exclusivity assert not present — FIXED in 1.2             | read      |
-| R3 credit canary                                   | §15                          | `scripts/credit_canary.ts` reconciles C_external/C_internal/rows, settles `B_after==B_after_2`                    | read      |
-| R7 versioned manifest                              | §15                          | `adb_collection_meta` get/set exists (`:227–233`); full manifest write not present — FIXED in 1.7                 | read      |
-| R2 SOFT_STOP margin                                | §15                          | ❌ not found in controller — FIXED in 1.3                                                                          | grep      |
-| R5 delivery-failure flag + reconcile-before-resume | §15, migration 0018          | ❌ migration 0018 not present; failure-pause text only — FIXED in 1.5                                              | ls        |
-| R6 crossover template freeze                       | §15                          | ❌ not found — FIXED in 1.6                                                                                        | grep      |
-| S1–S5 population/airborne layers                   | §15, migrations 0019–0020    | ❌ migrations 0019–0020 not present — FIXED in Step 2                                                              | ls        |
-| Gate-0 budget-partition report                     | §17 step 3                   | ❌ not present — FIXED in Step 3                                                                                   | grep      |
+## 9. THE MONEY NUMBERS (why the budget matters)
 
+
+| Number          | Meaning                                                                                               |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| **60,000**      | Total monthly API units (real entitlement — VERIFY at Gate 0)                                         |
+| **57,900**      | *Spendable* experimental envelope = 58,900 refill − 1,000 floor. **Binding limit for the whole run.** |
+| **1,900/day**   | Daily credit ceiling (~60,000 ÷ 31). Watchdog never exceeds it.                                       |
+| **1,000 floor** | `ADB_RESERVE_CREDITS` — controller refuses to spend below this.                                       |
+| **1,000 REST**  | Separate line for census/FIDS/probes — never from the 57,900 envelope.                                |
+
+
+Arithmetic: `57,900 + 1,000 floor + 1,000 REST + 100 unallocated = 60,000 ✓`
 
 ---
 
 
 
-## 9. Verification commands (quick reference)
+## 10. HOW TO RUN ON REPLIT (commands)
 
 
-| Check                                          | Command                           |
+| Purpose                                        | Command                           |
 | ---------------------------------------------- | --------------------------------- |
-| Typecheck (does the code compile?)             | `npm run check`                   |
 | Start server, NO auto-collect (safe)           | `ADB_AUTO_COLLECT=0 npm run dev`  |
 | Start server, auto-collect ON (run phase only) | `npm run dev`                     |
 | Live log stream                                | `npm run logs`                    |
-| Last 200 log lines (paste back to me)          | `npm run logs:last`               |
+| Last 200 log lines (paste back)                | `npm run logs:last`               |
 | Full recent log                                | `tail -n 1000 logs/collector.log` |
-| Health / ledger                                | `npm run health`                  |
-| Gate-0 budget report                           | `npm run gate0`                   |
-| Canary (needs live env + exclusivity)          | `npm run canary`                  |
-| Coverage                                       | `npm run coverage`                |
-| Export                                         | `npm run export`                  |
-| Migration files on disk                        | `ls migrations/`                  |
+| Health check                                   | `npm run health`                  |
+| Budget report                                  | `npm run gate0`                   |
+| Refill / check balance                         | `npm run refill [-- N]`           |
+| Canary (Phase 3)                               | `npm run canary`                  |
+| Coverage (Phase 2, step 10)                    | `npm run coverage`                |
+| Stratified catalog (Phase 2, step 11)           | `npm run build-catalog`           |
+| Typecheck                                      | `npm run check`                   |
+
+
+**To see after a fresh safe boot (the "good" log):**
+
+- `[migrations] applied 0018/0019/0020...` → migrations worked
+- `[adb-collector] watchdog started (window=4h, budget=1900 ... autoCollect=false)` → config correct
+- `canStart=true` → balance OK (after refill)
+- any `error` / `⚠ ALERT` lines → paste back to me
+
+---
+
+
+
+## 11. AUDIT SNAPSHOT (what existed before Phase 0 — for the record)
+
+
+| Item                                       | Plan delta                | Code state at audit              | Verified  |
+| ------------------------------------------ | ------------------------- | -------------------------------- | --------- |
+| Credit accounting (ledger + balance delta) | V3.9 §11, migration 0017  | exists                           | `git log` |
+| `maxDeliveryRetries = 0`                   | §15 R-delta / §45.5       | controller + canary              | grep      |
+| Daily credit cap 1,900                     | §3.3 / DD-R               | `:95`                            | read      |
+| `ADB_BATCH_BUDGET` default                 | §22 fix 3 (must be 1900)  | ❌ was 3000 → FIXED (§7.1)        | read      |
+| R1 subscription exclusivity                | §15                       | canary assert — FIXED            | read      |
+| R3 credit canary                           | §15                       | `credit_canary.ts` — present     | read      |
+| R7 versioned manifest                      | §15                       | `writeManifest` — FIXED          | read      |
+| R2 SOFT_STOP margin                        | §15                       | `:102` — FIXED                   | grep      |
+| R5 delivery-failure flag                   | §15, migration 0018       | — FIXED                          | ls        |
+| R6 crossover template freeze               | §15                       | — FIXED                          | grep      |
+| S1–S5 population/airborne layers           | §15, migrations 0019–0020 | — FIXED                          | ls        |
+| Gate-0 budget-partition report             | §17 step 3                | `gate0_budget_report.ts` — FIXED | grep      |
 
 
 ---
 
 
 
-## 10. Change log (append-only)
+## 12. CHANGE LOG (append-only, newest first)
 
 
 
-### 2026-08-16/17 — Run #3 analyzed (replitLogs3.md) + health/gate0 live-balance fix
-- **Run #3 = SUCCESS.** User ran the refill steps: balance 862 → `-- 1` test
-  → 863 (Gate 0 step 7: 1 unit = 1 credit CONFIRMED) → `-- 2038` → **2,901**.
-  Migrations all applied, watchdog config correct, `autoCollect=false`.
-- **"FAIL balance 866" was a stale-read bug in the health tool** (it read the
-  DB column from the last webhook row, not the live AeroDataBox balance). The
-  real balance after refill is 2,901. `FAIL data flow` + `FAIL active batch`
-  are expected (no batch started yet — we're pre-gates).
-- **Fixed:** `scripts/check_collection_health.ts` + `scripts/gate0_budget_report.ts`
-  now read balance LIVE from AeroDataBox first (`getBalance()`), falling back
-  to the DB snapshot only if the live call fails. Output shows `(live-api)` or
-  `(db-snapshot)` so there is no more confusion.
-- Report added as §7; renumbered old §7/8/9 → §8/9/10.
+### 2026-08-17 — `npm run build-catalog` implemented (Phase 2 step 11)
 
-### 2026-08-16 — Run #2 follow-up: autoCollect mystery SOLVED + refill command added
+- **New script `scripts/build_stratified_catalog.ts`** + `build-catalog` in
+  `package.json`. Builds the stratified sampling frame: our 276 catalog ∩
+  AeroDataBox universe → **primary strata = traffic tier × macro-region**
+  (plan §4/§6/§27.1). Uses the plan's own 6 macro-regions (§23).
+- Verifies plan requirements: **no tier-empty cells**, `catalogInUniverse`
+  fraction, missing-from-universe list, zero-yield stays in frame.
+- **Tested locally** (mocked coverage): 18 cells (3 tiers × 6 regions), all 276
+  ICAOs mapped, no empty cells. **0 new TS errors** (typecheck clean for the new
+  file; the 57 pre-existing errors in `server/routes.ts` + client are untouched).
+- Needs user yes/no on "use the plan's 6 macro-regions" then run on Replit.
 
-- **autoCollect=true mystery solved.** It was NOT the user's shell command —
-`.replit`'s Run-button workflow executes bare `npm run dev` with no
-`ADB_AUTO_COLLECT=0` prefix, so Run ▶ / auto-restarts boot with
-`autoCollect=true`. Nothing spent because balance was below reserve+min.
-**Fix:** add `ADB_AUTO_COLLECT=0` to Replit Secrets so every start is safe.
-- **Refill now possible without the RapidAPI login** because the teammate
-added billing to the account. The existing `refillBalance()`
-(aerodataboxLimiter_v3.ts:147) works with just `AERODATABOX_API_KEY`.
-- **New script:** `scripts/refill_credits.ts` + `npm run refill` command.
-Usage: `npm run refill` (read-only balance) → `npm run refill -- 1`
-(Gate-0 conversion test, expect balance 862→863) → `npm run refill -- 2038`
-(full refill, expect balance 2,900).
-- Added §6.6 step-by-step instructions (Secrets fix → refill → verify → what
-Gates come next) so the user always knows the next action.
+### 2026-08-17 — Step-by-step detail added for Steps A–C (from the plan)
 
+- **Step A answered from the plan:** verification command for `ADB_AUTO_COLLECT`
+  (`npm run logs:last | grep "watchdog started" | tail -1` → must end
+  `autoCollect=false`); `ADB_MONTHLY_UNITS = 60000` and `ADB_PLAN = Ultra`
+  (both documented in the plan §3.2/§13 — no need to ask the teammate).
+- **Step B clarified the three lists** (universe 4,332 / catalog 276 / frame
+  267 = catalog ∩ universe). Confirmed **267 is the plan's own recorded number**
+  (§4, step 10). **We do NOT sample the whole universe** — we sample the frame.
+- **Macro-regions confirmed from the plan §23 (verbatim): 6 regions** — North
+  America, Europe, Asia-Pacific, Gulf/Africa, South America, Oceania. No merge.
+- **Step C anchor probe explained in plain English** — why (prove anchors by
+  measured yield, not fame §23), the interview/finalist rounds, the fixed
+  scoring formula, capacity as a separate gate, and that probing is the first
+  real (small, capped) spend.
+- Updated §0 next-actions + §8 phases to reflect the 6-region choice pending
+  user yes/no.
 
+### 2026-08-17 — Next-steps section rewritten from the plan (§3)
 
-### 2026-08-16 — Run #2 analyzed (from `replitLogs2.md`)
+- Rewrote **§3 WHAT TO DO NEXT** into the full plan-ordered steps: Step A
+  (housekeeping: Secret + VERIFY placeholders), Step B (stratified catalog
+  build = plan §17 step 11 + §4: primary strata tier × macro-region, balancing
+  variables within), Step C (two-stage anchor probe = step 12 + §9/§23:
+  standardized probes, fixed scoring formula, capacity as feasibility gate),
+  Step D (what NOT to do yet). Added the plan's priority macro-regions and the
+  exact "what I need from you" list.
+- Updated the §0 dashboard next-actions and §8 phases table to match.
+- Awaiting user decision on the 5 macro-regions before building
+  `npm run build-catalog`.
 
-- **Migration 0020 CONFIRMED APPLIED** on the fresh 23:58 boot — the
-`loc_reported_utc` fix works. Old `0020 failed` lines at 14:47/20:06 are
-pre-redeploy history in the append-only log; not a current problem.
-- **Discrepancy** `3138 → 2038` **explained:** `refillToFullBudget` =
-`budget + reserve − balance`; it dropped because the old code ran budget 3000
-and the new Phase-0 code runs budget 1900. Confirms the delta went live.
-- **Anomaly found:** the 20:06 boot ran with `autoCollect=true` (started
-without `ADB_AUTO_COLLECT=0`). No spend happened because balance (862) was
-below reserve+min (1,300) — the reserve floor saved it. **Action:** always
-start with `ADB_AUTO_COLLECT=0 npm run dev`; optionally set the var in Replit
-Secrets so every boot is safe.
-- **Refill answer (user's question):** refilling requires the RapidAPI account
-owner — the `x-rapidapi-key` can read balance and even *call* the refill
-endpoint (`refillBalance()`, aerodataboxLimiter_v3.ts:147), but RapidAPI will
-not charge the account without dashboard/billing authorization. Teammate
-must refill (~2,038+ credits) or add the user to the RapidAPI org.
-- Report added as §6 in this file.
+### 2026-08-17 — Plain-English guide added + coverage recorded + renumber
 
-
-
-### 2026-08-16 — First live run + migration 0020 fix (from replitLogs1.md)
-
-- **User ran** `ADB_AUTO_COLLECT=0 npm run dev` on Replit and pasted the log
-(`AugMDnotes/replitLogs1.md`). Analysis in §5 above.
-- **Failure found:** migration 0020 aborted with
-`column "loc_reported_utc" does not exist` — the `raw_airborne_events` index
-referenced a column missing from the table. Whole 0020 rolled back; the 4
-airborne tables (S5) are not in the DB.
-- **Fix applied:**
-  - `migrations/0020_collection_v39_airborne_time_series.sql` — added the
-  missing `loc_reported_utc TIMESTAMPTZ` column to `raw_airborne_events`
-  (with a comment explaining the four-timestamps rule, §6.1).
-  - `server/lib/disruption/flightDataPrePostStore_v3.ts` — airborne insert now
-  writes `loc_reported_utc` (column list + values updated 32→33 params).
-  - Verified: every index column in 0019/0020 now exists in its table;
-  `npm run check` → 0 errors in edited files (57 pre-existing untouched).
-- **Confirmed working (PASS):** migrations 0018/0019 applied; watchdog live
-with budget=1900, dailyCap=1900, softStop=50, autoCollect=false; `npm run health` + `npm run gate0` both run; zero credits spent.
-- **Blocking (by design):** balance ≈862 < reserve+min (1,300) → collection
-paused. Next: redeploy (applies fixed 0020) then Gate 0 refill
-(`refillToFullBudget=2038`).
+- Added **§1 PLAIN-ENGLISH GUIDE**: what we're doing, what `rl5.md` shows, and
+  every line of `health` / `gate0` / `coverage` explained in simple words.
+- Answered the user's questions in the log itself (§1.6): "floor intact /
+  invariant HOLDING" meaning, `ADB_AUTO_COLLECT=0` in Replit config vs Secrets,
+  which files were edited, and how `npm run <x>` scripts work.
+- Recorded the **`npm run coverage` result (Phase 2 step 10 ✅)**:
+  `universeCount 4332`, `catalogCount 276`, `catalogInUniverse 267`
+  (sanity: 4332 ≥ 276 ✓).
+- Renumbered all sections (old §1→§2 … §11→§12) to fit the new §1 guide.
+- `rl5.md` = the same run as `rl4.md` plus the coverage output (health/gate0
+  duplicated). No new failure; the 2 `FAIL` lines remain expected (pre-gates).
 
 
 
-### 2026-08-15 — Audit + this file created
+### 2026-08-17 — Run #4 analyzed (`rl4.md`); log reorganized
 
-- Audited code vs `V3.9_DataCollectPlan.md` §15/§17 (see audit snapshot above).
-- Found: `ADB_BATCH_BUDGET` default 3000 must become 1900; R2/R5/R6/R7(S1–S5),
-migrations 0018–0020, and Gate-0 report are unimplemented.
-- This tracking file created so every phase step is auditable.
+- **Run #4 = SUCCESS.** User pulled the code, booted, ran `npm run health`
+(now `PASS balance 2901 credits (live-api)`) and `npm run gate0` (balance
+2,901, floor intact, invariant HOLDING). Heartbeats: `balance=2901 canStart=true` after refill; `autoCollect=false`; zero credits spent.
+- **Note:** an old 02:07 boot again showed `autoCollect=true` (Run-button
+start). No damage (balance was low). Action: Replit Secrets
+`ADB_AUTO_COLLECT=0`.
+- **gate0 placeholders** `VERIFY_AT_GATE_0` come from env vars `ADB_PLAN` /
+`ADB_MONTHLY_UNITS` (`gate0_budget_report.ts:43-44`) — fill from teammate.
+- **Reorganized this log:** newest-on-top layout, added a "WHERE WE ARE NOW"
+dashboard, added a code-changes reference (§7), moved run reports newest-first.
+
+
+
+### 2026-08-16 — Run #3 analyzed (`replitLogs3.md`) + live-balance fix
+
+- Refill SUCCESS: 862 → `-- 1` → 863 (conversion confirmed) → `-- 2038` → 2901.
+- **Fixed stale-read bug:** `check_collection_health.ts` + `gate0_budget_report.ts`
+now read balance LIVE from AeroDataBox (`getBalance()`), print `(live-api)` /
+`(db-snapshot)`.
+- Report added (§3 here).
+
+
+
+### 2026-08-16 — Run #2 analyzed (`replitLogs2.md`)
+
+- Migration 0020 CONFIRMED APPLIED; `3138→2038` explained (budget 3000→1900).
+- autoCollect mystery solved (`.replit` Run button has no env prefix).
+- Refill now possible via API key (teammate added billing); added
+`scripts/refill_credits.ts` + `npm run refill`.
 

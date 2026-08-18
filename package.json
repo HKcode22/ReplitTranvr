@@ -11,6 +11,7 @@
     "logs:count": "wc -l logs/collector.log",
     "health": "tsx scripts/check_collection_health.ts",
     "coverage": "tsx scripts/measure_coverage.ts",
+    "build-catalog": "tsx scripts/build_stratified_catalog.ts",
     "canary": "tsx scripts/credit_canary.ts",
     "gate0": "tsx scripts/gate0_budget_report.ts",
     "refill": "tsx scripts/refill_credits.ts",
