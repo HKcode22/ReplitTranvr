@@ -26,15 +26,37 @@
 BEGIN;
 
 -- --- 1. rename sampling_probability → airport_layer_design_probability ---
+-- Order-dependent with 0012: 0012's `ADD COLUMN IF NOT EXISTS sampling_probability`
+-- re-creates the stale column on a later boot (after a previous 0022 rename
+-- removed it), so on re-runs BOTH columns exist. Handle all three states:
+--   a) only sampling_probability  → rename it
+--   b) both exist                 → drop the stale empty re-add (0012 made it;
+--                                    nothing writes it anymore)
+--   c) only airport_layer_design_probability → already done, do nothing
 DO $$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'clean' AND table_name = 'adb_collection_subs'
       AND column_name = 'sampling_probability'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'clean' AND table_name = 'adb_collection_subs'
+      AND column_name = 'airport_layer_design_probability'
   ) THEN
     ALTER TABLE clean.adb_collection_subs
       RENAME COLUMN sampling_probability TO airport_layer_design_probability;
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'clean' AND table_name = 'adb_collection_subs'
+      AND column_name = 'sampling_probability'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'clean' AND table_name = 'adb_collection_subs'
+      AND column_name = 'airport_layer_design_probability'
+  ) THEN
+    ALTER TABLE clean.adb_collection_subs
+      DROP COLUMN sampling_probability;
   END IF;
 END $$;
 
@@ -44,9 +66,24 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'clean' AND table_name = 'flight_data_pre_post'
       AND column_name = 'sampling_probability'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'clean' AND table_name = 'flight_data_pre_post'
+      AND column_name = 'airport_layer_design_probability'
   ) THEN
     ALTER TABLE clean.flight_data_pre_post
       RENAME COLUMN sampling_probability TO airport_layer_design_probability;
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'clean' AND table_name = 'flight_data_pre_post'
+      AND column_name = 'sampling_probability'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'clean' AND table_name = 'flight_data_pre_post'
+      AND column_name = 'airport_layer_design_probability'
+  ) THEN
+    ALTER TABLE clean.flight_data_pre_post
+      DROP COLUMN sampling_probability;
   END IF;
 END $$;
 

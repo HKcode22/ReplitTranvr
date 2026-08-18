@@ -42,7 +42,7 @@ coverage frame is measured and sane. No money has been spent on collection yet, 
 4. [x] 🔴 **THE FRAME DECISION — MADE: Option 1** (added 2026-08-17): the plan §6 says build the frame from the **measured universe**, not our pre-plan static 276. **Chose Option 1** — frame = universe, 276 kept as flagged curated/reference subset, frozen tier rule v1 in the script.
 5. [x] 🔴 **COLLECTOR REWIRED TO THE FRAME** (added 2026-08-18): a review found the watchdog still sampled from the old 276; `pickAirportCandidates` now reads `clean.adb_sampling_frame`, **refuses to start if the frame is empty**, filters the webhook pool to **post_eligible=true**, and draws REGIONAL via a **normalized probability draw**.
 6. [x] 🔴 **DESIGN-PROBABILITY NAMING + DB RULE (2026-08-18)**: migration 0022 renames `sampling_probability` → `airport_layer_design_probability`; adds `is_randomized` + `planned_share`; enforces in the DB that randomized rows carry a design probability and planned-share rows don't (plan §30 V3.6/V3.8). Also adds frame CHECK constraints (unclassified⇒REGIONAL; pre_eligible = feed_schedule; post_eligible = feed_live OR feed_adsb).
-7. [ ] **Run** `npm run build-catalog` (step 11) on Replit per the frame decision → record the tier × region strata + pre/post/both eligible counts.
+7. [~] **Run** `npm run build-catalog` (step 11) on Replit per the frame decision → **first attempt FAILED on a migration 0022 re-run bug** (0012 re-added the old `sampling_probability` column, 0022 then collided). **Fixed in 0022**; re-run after pulling.
 8. [ ] **Run the two-stage anchor probe** (step 12) → lock the 5-airport pool + scores.
 9. [ ] **Pre-freeze gates** (from the 2026-08-18 review): traffic-reference re-tiering for unclassified airports + frozen region validation before the frame is declared final.
 10. [ ] Then Phase 3 gates (canary, SOFT_STOP, foreign subscriptions) → Phase 4 census → **only then** the 31-day run.
@@ -674,6 +674,30 @@ honest:
 ## 3. 🔄 RECENT CHANGES — the two latest review rounds (2026-08-18)
 
 
+
+### 2026-08-18 — 🛠️ FIXED: step-11 run failed on migration 0022 re-run (0012 ↔ 0022 order bug)
+
+**What happened (from `rl6.md`):** `npm run build-catalog` aborted:
+`[migrations] failed to apply 0022 ... column "airport_layer_design_probability" of relation "flight_data_pre_post" already exists`.
+
+**Why:** every boot re-runs ALL migrations. On the FIRST boot 0022 renamed
+`sampling_probability` → `airport_layer_design_probability` on
+`flight_data_pre_post`. On the NEXT process (build-catalog) migration **0012**
+ran first and its `ADD COLUMN IF NOT EXISTS sampling_probability` **re-created
+the old column** (it no longer existed, so IF NOT EXISTS re-added it empty).
+Then 0022's guarded rename saw `sampling_probability` present again and tried
+to rename it onto the already-existing new column → error. (`adb_collection_subs`
+was safe because 0012 creates it with `CREATE TABLE IF NOT EXISTS`, so the
+column def is skipped on re-run.)
+
+**Fix (migration 0022, re-runnable):** the rename now handles all three states —
+only-old-column → rename; both → drop the stale empty re-add (0012 created it,
+nothing writes it anymore); only-new → no-op. `adb_collection_subs` +
+`flight_data_pre_post` both covered. Typecheck still 57 (pre-existing, none
+new).
+
+**Next step for you:** commit + push, `git pull` on Replit, re-run
+`npm run build-catalog`, paste output.
 
 ### 2026-08-18 — 🗂️ LOG REORGANIZED + `toInt` renamed to `toNum`
 
