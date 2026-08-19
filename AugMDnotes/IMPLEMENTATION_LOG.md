@@ -12,26 +12,30 @@
 
 ## 📍 0. WHERE WE ARE RIGHT NOW (read this first)
 
-**We are at Phase 1 (Gate 0) — DONE ✅. Phase 2 (Gates 1–2) has STARTED: the
-coverage frame is measured and sane. No money has been spent on collection yet, by design.**
+**We are at Phase 1 (Gate 0) — DONE ✅. Phase 2 (Gates 1–2): step 10 DONE ✅,
+step 11 DONE ✅ (frame built from the measured universe + persisted to the DB).
+Step 12 script READY ✅ (two-stage anchor probe built — needs a live run on
+Replit to lock the pool). No money has been spent on collection yet, by design.**
 
 
-| Item                            | Status                                                                                                   |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Balance                         | ✅ **2,901 credits** (was 862) — above the 1,300 reserve+min floor                                        |
-| Refill conversion               | ✅ **CONFIRMED**: `npm run refill -- 1` → 862→863 (1 unit = 1 credit)                                     |
-| Migrations 0017/0018/0019/0020  | ✅ all applied (fresh boot)                                                                               |
-| Migration 0021 (sampling frame) | ✅ added + registered — `clean.adb_sampling_frame` (written by `npm run build-catalog`)                   |
-| Migration 0022 (design prob)    | ✅ added + registered — rename to `airport_layer_design_probability`, `is_randomized`/`planned_share`, DB-enforced V3.8 rule + frame invariants |
-| Watchdog config                 | ✅ `budget=1900, dailyCap=1900, softStop=50, autoCollect=false`                                           |
-| `npm run health`                | ✅ `PASS balance 2901 credits (live-api)` — balance bug fixed                                             |
-| `npm run gate0`                 | ✅ runs; `floor intact YES`, `invariant HOLDING`                                                          |
-| `npm run coverage` **(Gate 1)** | ✅ **step 10 DONE**: `universeCount 4332`, `catalogCount 276`, `catalogInUniverse 267` (sane: 4332 ≥ 276) |
-| Frame build (step 11)           | ✅ **script rebuilt (Option 1) + persisted to DB** — pending the live `npm run build-catalog` on Replit    |
-| Collector uses the frame        | ✅ **REWIRED** (2026-08-18): reads `clean.adb_sampling_frame`, refuses if empty; **post_eligible=true** gate for webhook pool; **REGIONAL = genuine normalized probability draw** |
-| Design-probability naming       | ✅ **V3.6/V3.8 enforced (2026-08-18)**: `airport_layer_design_probability` + `is_randomized`/`planned_share` + DB CHECK (migration 0022) |
-| Credits spent on collection     | ✅ **0** — watchdog is in safe mode, nothing started                                                      |
-| ⚠️ Known hazard                 | one old boot (02:07) had `autoCollect=true` (Run-button start); set the Replit Secret to prevent forever |
+| Item                            | Status                                                                                                                                                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Balance                         | ✅ **2,901 credits** (was 862) — above the 1,300 reserve+min floor                                                                                                                                         |
+| Refill conversion               | ✅ **CONFIRMED**: `npm run refill -- 1` → 862→863 (1 unit = 1 credit)                                                                                                                                      |
+| Migrations 0017/0018/0019/0020  | ✅ all applied (fresh boot)                                                                                                                                                                                |
+| Migration 0021 (sampling frame) | ✅ added + registered — `clean.adb_sampling_frame` (written by `npm run build-catalog`)                                                                                                                    |
+| Migration 0022 (design prob)    | ✅ added + registered — rename to `airport_layer_design_probability`, `is_randomized`/`planned_share`, DB-enforced V3.8 rule + frame invariants                                                            |
+| Watchdog config                 | ✅ `budget=1900, dailyCap=1900, softStop=50, autoCollect=false`                                                                                                                                            |
+| `npm run health`                | ✅ `PASS balance 2901 credits (live-api)` — balance bug fixed                                                                                                                                              |
+| `npm run gate0`                 | ✅ runs; `floor intact YES`, `invariant HOLDING`                                                                                                                                                           |
+| `npm run coverage` **(Gate 1)** | ✅ **step 10 DONE**: `universeCount 4332`, `catalogCount 276`, `catalogInUniverse 267` (sane: 4332 ≥ 276)                                                                                                  |
+| Frame build (step 11)           | ✅ **DONE 2026-08-18 (rl7)**: `frameCount 4320` (267 curated + 4053 unclassified), written to `clean.adb_sampling_frame` — collector now samples from THIS measured frame                                  |
+| Collector uses the frame        | ✅ **REWIRED** (2026-08-18): reads `clean.adb_sampling_frame`, refuses if empty; **post_eligible=true** gate for webhook pool; **REGIONAL = genuine normalized probability draw**                          |
+| Design-probability naming       | ✅ **V3.6/V3.8 enforced (2026-08-18)**: `airport_layer_design_probability` + `is_randomized`/`planned_share` + DB CHECK (migration 0022)                                                                   |
+| Credits spent on collection     | ✅ **0** — watchdog is in safe mode, nothing started                                                                                                                                                       |
+| Anchor probe (step 12)          | ✅ **SCRIPT READY (2026-08-18)**: `npm run anchor-probe` (`scripts/anchor_probe.ts` + migration 0023) — frozen formulas + 12-airport shortlist + capacity gate, budget-capped; **needs a live Replit run** |
+| Code walkthrough doc            | ✅ **NEW** `AugMDnotes/CODE_WALKTHROUGH.md` (2026-08-18) — plain-English deep-dive of every file (how + why)                                                                                               |
+| ⚠️ Known hazard                 | one old boot (02:07) had `autoCollect=true` (Run-button start); set the Replit Secret to prevent forever                                                                                                  |
 
 
 **What is NOT done yet (next actions, in order — full detail in §1):**
@@ -42,8 +46,8 @@ coverage frame is measured and sane. No money has been spent on collection yet, 
 4. [x] 🔴 **THE FRAME DECISION — MADE: Option 1** (added 2026-08-17): the plan §6 says build the frame from the **measured universe**, not our pre-plan static 276. **Chose Option 1** — frame = universe, 276 kept as flagged curated/reference subset, frozen tier rule v1 in the script.
 5. [x] 🔴 **COLLECTOR REWIRED TO THE FRAME** (added 2026-08-18): a review found the watchdog still sampled from the old 276; `pickAirportCandidates` now reads `clean.adb_sampling_frame`, **refuses to start if the frame is empty**, filters the webhook pool to **post_eligible=true**, and draws REGIONAL via a **normalized probability draw**.
 6. [x] 🔴 **DESIGN-PROBABILITY NAMING + DB RULE (2026-08-18)**: migration 0022 renames `sampling_probability` → `airport_layer_design_probability`; adds `is_randomized` + `planned_share`; enforces in the DB that randomized rows carry a design probability and planned-share rows don't (plan §30 V3.6/V3.8). Also adds frame CHECK constraints (unclassified⇒REGIONAL; pre_eligible = feed_schedule; post_eligible = feed_live OR feed_adsb).
-7. [~] **Run** `npm run build-catalog` (step 11) on Replit per the frame decision → **first attempt FAILED on a migration 0022 re-run bug** (0012 re-added the old `sampling_probability` column, 0022 then collided). **Fixed in 0022**; re-run after pulling.
-8. [ ] **Run the two-stage anchor probe** (step 12) → lock the 5-airport pool + scores.
+7. [x] **Run** `npm run build-catalog` (step 11) on Replit per the frame decision → **DONE 2026-08-18**: `frameCount 4320` (267 curated + 4053 unclassified), 18/18 strata cells non-empty, persisted to `clean.adb_sampling_frame`. (First attempt hit a migration 0022 re-run bug — fixed — second attempt clean.)
+8. [~] **Two-stage anchor probe** (step 12): **script READY** (`scripts/anchor_probe.ts`, `npm run anchor-probe`, migration 0023) — **needs a live run on Replit** to lock the 5-airport pool + scores.
 9. [ ] **Pre-freeze gates** (from the 2026-08-18 review): traffic-reference re-tiering for unclassified airports + frozen region validation before the frame is declared final.
 10. [ ] Then Phase 3 gates (canary, SOFT_STOP, foreign subscriptions) → Phase 4 census → **only then** the 31-day run.
 
@@ -65,15 +69,15 @@ coverage frame is measured and sane. No money has been spent on collection yet, 
 ### The order, at a glance
 
 
-| #     | Step (from plan §17)                                        | Who does it                        | Status      |
-| ----- | ----------------------------------------------------------- | ---------------------------------- | ----------- |
-| 10    | `npm run coverage` → record universeCount                   | you (done)                         | ✅           |
-| 11    | **Stratified catalog build**                                | **I write the script, you run it** | ⏳ next      |
-| 12    | **Two-stage anchor probe** → lock 5 airports                | **I write the script, you run it** | ⏳ after     |
-| 13–15 | Phase 3: canary, SOFT_STOP test, foreign-subscription check | you + me                           | pending     |
-| 16    | Gate 0.5: inspect real payloads                             | you + me                           | pending     |
-| 17+   | Phase 4: census validation                                  | you + me                           | pending     |
-| —     | FREEZE + the 31-day run                                     | you + me                           | **NOT YET** |
+| #     | Step (from plan §17)                                        | Who does it                        | Status                                   |
+| ----- | ----------------------------------------------------------- | ---------------------------------- | ---------------------------------------- |
+| 10    | `npm run coverage` → record universeCount                   | you (done)                         | ✅                                        |
+| 11    | **Stratified catalog build**                                | **I write the script, you run it** | ✅ **DONE (rl7)**                         |
+| 12    | **Two-stage anchor probe** → lock 5 airports                | **I write the script, you run it** | ✅ **SCRIPT READY (2026-08-18) — run it** |
+| 13–15 | Phase 3: canary, SOFT_STOP test, foreign-subscription check | you + me                           | pending                                  |
+| 16    | Gate 0.5: inspect real payloads                             | you + me                           | pending                                  |
+| 17+   | Phase 4: census validation                                  | you + me                           | pending                                  |
+| —     | FREEZE + the 31-day run                                     | you + me                           | **NOT YET**                              |
 
 
 > ✅ YES — §17 ("Step-by-step runbook") is a real section of
@@ -88,7 +92,7 @@ coverage frame is measured and sane. No money has been spent on collection yet, 
 
 **A1. Verify** `ADB_AUTO_COLLECT=0` **is working (your config).**
 
-You already put it in Replit config — good. To PROVE it took effect, run this
+You aleady put it in Replit config — good. To PROVE it took effect, run this
 in the Replit shell:
 
 ```bash
@@ -213,8 +217,8 @@ coverage-failed airports leave.
 human-classified tiers (30 HUB + 89 MID + 157 REGIONAL) are kept; each frame
 row records `tierSource: "curated" | "unclassified"`.
 - **Frozen traffic-tier rule v1** (auditable, changeable only before the run):
-curated 276 → their tier; **every other universe airport → REGIONAL, labelled
-`tierSource: "unclassified"`** (NOT "default" and NOT a measured traffic class).
+curated 276 → their tier; **every other universe airport → REGIONAL, labelled**
+`tierSource: "unclassified"` (NOT "default" and NOT a measured traffic class).
 No HUB/MID label invented without traffic evidence; matches §8 REGIONAL
 ("frame = universe ∩ feed-covered", traffic_prior starts at 1.0, uniform
 1/|eligible| before probe data). A traffic reference snapshot can re-tier
@@ -245,20 +249,20 @@ the **collector (watchdog) still sampled from the old 276** — the frame was
 never actually used. Three concrete bugs, all fixed now:
 
 1. **Collector ignored the frame (the big one).** `pickAirportCandidates()` in
-   `adbCollectionController_v3.ts` still picked airports from `AIRPORT_CATALOG`
+  `adbCollectionController_v3.ts` still picked airports from `AIRPORT_CATALOG`
    (our static 276), not from the measured universe. **Fixed:** it now reads
    `clean.adb_sampling_frame` (the DB table, `in_frame = true`) and **refuses
    to start with a clear error if the frame is empty** — it will never silently
    fall back to the 276. The tier mix (1 HUB + 2 MID + 1 REGIONAL) now draws
    from the measured frame.
-2. **`sampling_probability` was computed against the wrong denominator.** It
-   used `slots / AIRPORT_CATALOG[tier].length` (the old 276). **Fixed:** it now
+2. `sampling_probability` **was computed against the wrong denominator.** It
+  used `slots / AIRPORT_CATALOG[tier].length` (the old 276). **Fixed:** it now
    uses `slots / frame tier pool size`, and is labelled a **planned share**
    (HUB/MID are deterministic seeded slot-fill, so this is NOT a true
    "realized inclusion probability" — plan §8/§20). It's diagnostics-only;
    weights stay NULL.
 3. **Unclassified airports were invisible to tier counting.** `countTiers()`
-   only knew about the 276. **Fixed:** frame-only airports now fall back to
+  only knew about the 276. **Fixed:** frame-only airports now fall back to
    REGIONAL (the §8 long-tail stratum they actually belong to).
 
 Also fixed the misleading wording: the union of AeroDataBox's 3 feeds is the
@@ -273,15 +277,14 @@ now on the right path, but flagged two MUST-fix items before any real paid
 collection, plus a naming rule the plan already demanded. All are now done:
 
 1. **Webhook candidates must be POST-eligible.** The webhook layer supplies
-   live/ADS-B (POST/AIRBORNE) observations, and AeroDataBox itself says
+  live/ADS-B (POST/AIRBORNE) observations, and AeroDataBox itself says
    airport subscriptions depend on live/ADS-B coverage. An airport can be in
    the provider union but useless for webhooks. **Fixed:**
-   `pickAirportCandidates()` now queries `WHERE in_frame = true AND
-   post_eligible = true`. PRE eligibility is still recorded per airport and
+   `pickAirportCandidates()` now queries `WHERE in_frame = true AND  post_eligible = true`. PRE eligibility is still recorded per airport and
    reported at build time (`pre_eligible`, `post_eligible`, `both`), so the
    intersection is visible — but the webhook pool is POST-gated.
 2. **REGIONAL is now a genuine normalized probability draw, not "shuffle and
-   take first".** The plan §8 defines `p_i = score_i / Σ score`, a true
+  take first".** The plan §8 defines `p_i = score_i / Σ score`, a true
    distribution with a nonzero floor for EVERY eligible airport. Before probe
    data: uniform `p_i = 1/|eligible|`. **Fixed:** `drawWithoutReplacement()`
    (seeded, reproducible) draws REGIONAL candidates with their conditional
@@ -290,11 +293,10 @@ collection, plus a naming rule the plan already demanded. All are now done:
    `m_i` multiplier hooks in AFTER probe data exists (uniform until then, per
    §8).
 3. **`sampling_probability` is gone — the plan's naming + DB rule is now
-   enforced (migration 0022).** The plan §30 V3.6/V3.8 says the column must be
+  enforced (migration 0022).** The plan §30 V3.6/V3.8 says the column must be
    `airport_layer_design_probability` (`_layer_` = can't be misread as
    flight-level), and the DB itself must forbid randomized/planned confusion:
-   `is_randomized=true → design probability NOT NULL; is_randomized=false →
-   design probability NULL (planned_share may be set)`. **Fixed:**
+   `is_randomized=true → design probability NOT NULL; is_randomized=false →  design probability NULL (planned_share may be set)`. **Fixed:**
    migration 0022 renames the columns, adds `is_randomized` + `planned_share`,
    and adds the CHECK constraint to both `adb_collection_subs` and
    `flight_data_pre_post`. HUB/MID rows → `is_randomized=false, planned_share`;
@@ -302,26 +304,26 @@ collection, plus a naming rule the plan already demanded. All are now done:
    `sampling_weight` stays NULL always (no auto 1/p, §20). All code, exports,
    and the analysis script were updated to the new names.
 4. **Frame CHECK constraints (auditability).** Migration 0022 also enforces:
-   `unclassified ⇒ tier=REGIONAL`; `pre_eligible = feed_schedule`;
+  `unclassified ⇒ tier=REGIONAL`; `pre_eligible = feed_schedule`;
    `post_eligible = (feed_live OR feed_adsb)` — so the invariant can't
    silently drift.
 
 **Still open (documented as pre-freeze gates, NOT code fixes yet):**
 
 - **Traffic classification of the ~4,000 unclassified airports** is
-  *provisionally allowed* as `REGIONAL + traffic_prior=1.0` (plan §8 supports
-  a uniform prior before adaptive data), but the plan requires the
-  traffic/reference variables to come from a **fixed reference snapshot**, not
-  recursively from the collected sample. Before the final freeze we must either
-  re-tier from a reference source or explicitly freeze the documented
-  "provisional long-tail" claim.
+*provisionally allowed* as `REGIONAL + traffic_prior=1.0` (plan §8 supports
+a uniform prior before adaptive data), but the plan requires the
+traffic/reference variables to come from a **fixed reference snapshot**, not
+recursively from the collected sample. Before the final freeze we must either
+re-tier from a reference source or explicitly freeze the documented
+"provisional long-tail" claim.
 - **Geographic mapping validation.** ICAO first-letter → 6 macro-regions is a
-  reasonable project taxonomy but is not a "scientifically validated continent
-  classification". Before final freeze: validate every frame airport maps to
-  exactly one region (the script already reports `unmapped`, currently 0) and
-  freeze the mapping as a reference table.
-- **The REGIONAL adaptive `m_i`** (yield-aware multiplier) boots only after
-  §23 probe data exists — currently uniform, which is correct pre-probe.
+reasonable project taxonomy but is not a "scientifically validated continent
+classification". Before final freeze: validate every frame airport maps to
+exactly one region (the script already reports `unmapped`, currently 0) and
+freeze the mapping as a reference table.
+- **The REGIONAL adaptive** `m_i` (yield-aware multiplier) boots only after
+§23 probe data exists — currently uniform, which is correct pre-probe.
 
 **What step 11 actually does — "build the stratified catalog":**
 
@@ -379,6 +381,8 @@ Then: persists the frame to clean.adb_sampling_frame (migration 0021), which is
       the table the collector reads for its daily 1 HUB + 2 MID + 1 REGIONAL mix.
 ```
 
+
+
 ---
 
 
@@ -423,13 +427,42 @@ with a standardized measurement before the run. (The anchor score formula is
    before the run.
 
 **Budget:** all probing is hard-capped **inside the 1,900/day budget** (PART 1
-§9: "Total probe spend hard-capped within the 1,900/day budget").
+§9: "Total probe spend hard-capped within the 1,900/day budget"). The script
+refuses to probe when balance < reserve (1,000) or the daily cap would be exceeded.
 
-**What you will do (after I build it):** `npm run anchor-probe -- --stage 1` →
-paste output → `npm run anchor-probe -- --stage 2` → paste output → we lock the
-pool. **This is the first command that actually spends a few credits** — small
-and capped, but it's real spend, which is exactly what the plan wants us to
-verify before the full run.
+**Frozen in code pre-probe (the math is decided BEFORE measuring, §9 step 4):**
+
+```text
+yield_score = ⅓·std(unique_flights/credit) + ⅓·std(chain_links/credit) + ⅓·std(stability)
+              each standardized to [0,1] against the WSSS baseline (measured the
+              SAME way, 2h probe); stability = 1/(1+CV) across 15-min buckets.
+
+anchor_score = 0.40·exogenous_traffic + 0.20·geo/network diversity
+             + 0.20·carrier/international diversity + 0.20·standardized yield
+
+capacity gate = rows/h ≥ 60 → PASS/FAIL feasibility (NOT a score component)
+```
+
+The frozen shortlist (12 airports across the 6 regions) + exogenous reference
+values (published scheduled flights/yr + geo + carrier indices) live at the top
+of `scripts/anchor_probe.ts`. Our own collection NEVER feeds the exogenous 80% —
+that kills the "sampled → chosen → sampled more" feedback loop (§23a).
+
+**What you will do (script is built):**
+
+1. `git pull` on Replit → fresh boot applies migration 0023.
+2. `npm run anchor-probe -- --status` → shows recorded probes (empty first time).
+3. `npm run anchor-probe -- --stage 1` → probes each shortlisted airport with a
+  2 h live window (WSSS/OMAA included as calibration), pastes output.
+4. `npm run anchor-probe -- --stage 2` → longer confirmation probe for top picks.
+5. `npm run anchor-probe -- --score` → prints the frozen-score ranking + the
+  proposed 5-airport lock. **This is the first command that actually spends a few
+   credits** — small, capped at 500/day, and exactly what the plan wants us to
+   verify before the full run.
+
+> 📖 New in 2026-08-18: a **full code walkthrough** lives in
+> `AugMDnotes/CODE_WALKTHROUGH.md` (what each file does, how, and why — including
+> the new `scripts/anchor_probe.ts`).
 
 > ⚠️ Correction note: an earlier draft of this section quoted a "never by fame /
 > feedback loop" rule from §23. **§23 is in PART 2 (old plan) — that quote is
@@ -452,6 +485,49 @@ verify before the full run.
 
 
 
+### ✅ STEP B — DONE (2026-08-18, from `rl7.md`) — the frame is built and persisted
+
+`npm run build-catalog` **succeeded on the second attempt** (the first attempt
+hit a migration 0022 re-run bug — see "FIXED: step-11 run failed…" in §3). Here
+is what the output means:
+
+
+| Output line                                          | What it means                                                                                                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `universeCount 4333`                                 | AeroDataBox's measured airport universe (union of the 3 feeds). One more than step 10's 4,332 — the feed list can grow between runs; that's fine. |
+| `frameCount 4320`                                    | **The frame** = every universe airport with a region mapping (4,333 − 13 unmapped). This is what the collector samples from now.                  |
+| `curated (our 276 ∩ frame) 267`                      | Of our 276 catalog airports, 267 are in the frame (the 9 others aren't in ADB's universe).                                                        |
+| `unclassified 4053`                                  | The other 4,053 frame airports are "unclassified" → REGIONAL with `traffic_prior=1.0` (provisional, §8).                                          |
+| `unmapped 13`                                        | 13 codes (e.g. `0CO2`, `4A2`, `7WA5` — US FAA private/airstrip codes, not ICAO) got no region. They were **excluded** from the frame.             |
+| `pre_eligible 3337 / post_eligible 2264 / both 1281` | PRE layer (needs FlightSchedules) covers 3,337; POST layer (needs Live/ADS-B) covers 2,264; both = 1,281.                                         |
+| Strata table (18 rows, no ⚠ EMPTY)                   | Every tier × region cell has universe airports — no stratum is empty. That is the "balanced strata" property §4 wants.                            |
+| `Missing from universe` (9 codes)                    | Our 9 catalog airports ADB doesn't serve — they stay cataloged but can't be collected.                                                            |
+| `wrote 4320 rows`                                    | Frame persisted to `clean.adb_sampling_frame`. **The collector now samples from THIS, not the 276.**                                              |
+
+
+**Three honest flags to record (not bugs, but tracked):**
+
+1. **13 unmapped codes excluded.** They are US FAA-style identifiers (not ICAO),
+  so our first-letter region map returns null and they're skipped. Impact:
+   those 13 aren't sampleable. Before the frame is **frozen** we should either
+   map them (e.g. `4A2` → North America) or document why they're out — this is
+   part of the pre-freeze "frozen region validation" gate (item 9 in §0).
+2. **Universe grew 4,332 → 4,333.** The frame is a *measured snapshot*; it will
+  be re-measured at freeze time, so drift is expected and tracked.
+3. `unclassified ⇒ REGIONAL` **is provisional** (tier rule v1). A traffic
+  reference snapshot or probe data re-tiers them before freeze — never treated
+   as a measured traffic class.
+
+**This is exactly what the plan (PART 1 §4/§6) + the 2026-08-18 review asked
+for**: a DB-backed frame from the measured universe, feed eligibility explicit
+per layer, balanced non-empty strata, REGIONAL prior = 1.0 until probe data.
+
+**Next:** step 12 — the two-stage anchor probe (see Step C below).
+
+---
+
+
+
 ### What I need from you right now (so we can finish step 11 correctly)
 
 1. ✅ **THE FRAME DECISION — MADE (2026-08-17): Option 1.** Rebuild the frame
@@ -466,13 +542,12 @@ verify before the full run.
   check command. Do **NOT** set `ADB_PLAN` — PART 1 doesn't name the plan;
    that value must be verified from the RapidAPI account at Gate 0.
 4. ✅ (2026-08-18) **Collector rewired to the frame** — a review found the
-   watchdog still sampled from the old 276; it now reads `clean.adb_sampling_frame`
+  watchdog still sampled from the old 276; it now reads `clean.adb_sampling_frame`
    and refuses to start if the frame is empty. See "🔴 FIXES applied 2026-08-18"
    in §3 Step B.
-5. Then run `npm run build-catalog` on Replit (step 11) and paste the output —
-  the frame is built, frozen tier rule v1 is in the script, the frame is
-  persisted to `clean.adb_sampling_frame`, and the 276 is preserved as a
-  flagged curated/reference subset.
+5. ✅ (2026-08-18) `npm run build-catalog` **(step 11) DONE** — `frameCount 4320`,
+  18/18 strata non-empty, persisted to `clean.adb_sampling_frame` (see "✅ STEP B
+   — DONE" above). Step 11 is complete; next is step 12 (the anchor probe, Step C).
 
 ---
 
@@ -671,13 +746,107 @@ honest:
 
 
 
-## 3. 🔄 RECENT CHANGES — the two latest review rounds (2026-08-18)
+## 3. 🔄 RECENT CHANGES — newest first (2026-08-18, all three rounds + step-11 result + step-12 script)
 
 
+
+### 2026-08-18 — 🧪 STEP 12 SCRIPT READY: two-stage anchor probe built (ready to run on Replit)
+
+**What I built (per the plan §9 / §17 step 12 — the pool** `KLAX·EGLL·WSSS·SBGR·OMDB`
+**is *provisional until measured*, so we now have the script that measures + scores it):**
+
+1. `migrations/0023_anchor_probe_results.sql` (NEW, registered in `server/db.ts`)
+  — `clean.adb_anchor_probe`: one row per probe observation (stage, icao, region,
+   live window, `credits_spent`, rows, unique flights, chain links, rows/h,
+   uf/credit, chain/credit, stability). Idempotent, unique on `(icao, stage,  window_start)` so re-runs never duplicate.
+2. `scripts/anchor_probe.ts` (NEW, `npm run anchor-probe`) — the probe runner:
+  - **Frozen pre-probe math** (decided in code BEFORE measuring, §9 step 4):
+   `yield_score = ⅓·std(uf/credit) + ⅓·std(chain/credit) + ⅓·std(stability)`
+   standardized to [0,1] against the **WSSS baseline measured the same way**;
+   `anchor_score = 40% exogenous + 20% geo + 20% carrier + 20% yield`;
+   **capacity gate = rows/h ≥ 60** as a PASS/FAIL feasibility gate (NOT a score
+   component).
+  - **Frozen shortlist** (12 airports across the 6 regions, from the plan's
+  priority anchor regions) with exogenous reference values (published
+  scheduled flights/yr + geo + carrier indices). Our own collection never
+  feeds the exogenous 80% (kills the §23a feedback loop).
+  - Modes: `--stage 1` (2 h probe per candidate, WSSS/OMAA calibration included),
+  `--stage 2` (longer confirmation for top picks), `--score` (fills the frozen
+  formulas, applies the capacity gate, prints the ranked pool + proposed
+  5-airport lock), `--status` (list recorded probes), `--icao`, `--hours`.
+  - **Budget-capped inside the 1,900/day budget**: refuses to probe when balance
+  < reserve (1,000) or the daily probe spend (cap 500) would push past the cap.
+  - Probe mechanics: free feed check → `createSubscription` (maxDeliveryRetries=0)
+  → live 2 h window (deliveries hit the webhook) → delete sub → settle →
+  `credits_spent = balance_before − balance_after` → SQL counts → INSERT.
+3. `package.json` — added `"anchor-probe": "tsx scripts/anchor_probe.ts"`.
+4. `AugMDnotes/CODE_WALKTHROUGH.md` (NEW) — a **full plain-English code
+  walkthrough** of the V3.9 codebase (what each file does, how, and why) —
+   including the new probe script and migration 0023. This is the "explain the
+   code in detail" document.
+
+**Typecheck:** still **57** pre-existing errors (baseline — no new ones). New
+files are clean.
+
+**What you do next (on Replit):** `git pull` → fresh boot applies 0023 →
+`npm run anchor-probe -- --status` (empty first time) →
+`npm run anchor-probe -- --stage 1` (2 h windows; paste output) →
+`--stage 2` → `--score`. First real credit spend (small, capped at 500/day).
+
+### 2026-08-18 — ✅ STEP 11 DONE: frame built from the measured universe (rl7) + full code walkthrough
+
+**Result (from** `rl7.md`**):** `npm run build-catalog` ran clean after the 0022
+fix. `frameCount 4320` = 267 curated + 4,053 unclassified; 18/18 tier×region
+strata non-empty; persisted to `clean.adb_sampling_frame`; `post_eligible 2264`.
+Full plain-English reading in §1 "✅ STEP B — DONE". Step 11 is **complete** —
+next is step 12 (the two-stage anchor probe).
+
+**Which files changed and what they do (plain English — the "what did we edit"
+question):**
+
+1. `scripts/build_stratified_catalog.ts` (NEW logic, run by `npm run
+  build-catalog`) — the step-11 script. It:
+  - calls AeroDataBox coverage (`getAirportCoverage`) to get the measured universe,
+  - gives every universe airport a tier (curated 276 keep their human tier;
+  everything else → REGIONAL "unclassified", `traffic_prior=1.0`), a
+  macro-region (ICAO first letter → 1 of 6 regions), and per-layer feed
+  flags (`feed_schedule`/`feed_live`/`feed_adsb` → `pre_eligible`/`post_eligible`),
+  - builds the tier × region strata table, prints it, then writes all 4,320
+  rows into `clean.adb_sampling_frame` (`persistFrameToDb`).
+2. `server/lib/disruption/adbCollectionController_v3.ts` (the "watchdog") —
+  `pickAirportCandidates()` now reads candidates from `clean.adb_sampling_frame`
+   (the DB frame), **refuses to start if it's empty**, filters the webhook pool
+   to `post_eligible=true`, and for REGIONAL runs a **genuine normalized
+   probability draw** (`drawWithoutReplacement`, seeded/reproducible) instead of
+   "shuffle and take first". HUB/MID stay deterministic slot-fill (planned
+   share). The batch-insert stamps `is_randomized` + `airport_layer_design_probability`
+   (REGIONAL) or `planned_share` (HUB/MID) — the DB CHECK enforces the rule.
+3. `migrations/0021_collection_v39_sampling_frame.sql` (NEW) — creates
+  `clean.adb_sampling_frame` (the DB-backed frame table §6 allows).
+4. `migrations/0022_collection_v39_design_probability.sql` (NEW) — renames
+  `sampling_probability` → `airport_layer_design_probability`, adds
+   `is_randomized` + `planned_share`, adds the DB CHECK rule (randomized rows
+   must carry a design probability; planned rows must not), and frame-invariant
+   CHECKs (unclassified⇒REGIONAL; pre_eligible=feed_schedule; post_eligible=
+   feed_live OR feed_adsb). Also fixed (today) to survive re-runs alongside 0012.
+5. `server/db.ts` — registers 0021/0022 in `BOOT_MIGRATIONS` (the list of
+  migrations re-applied every boot; that's why every boot prints them).
+6. `shared/schema.ts` — TS/Drizzle types for the renamed columns
+  (`airportLayerDesignProbability`, `isRandomized`, `plannedShare`).
+7. **`server/lib/disruption/flightDataPrePostStore_v3.ts` + `flightNotificationExtractor_v3.ts`
+  - `server/routes_v3.ts` + `server/lib/disruption/aerodataboxLimiter_v3.ts` +
+   `scripts/export_flight_data.ts` + `scripts/analyze_flight_data_pre_post.py`
+  - `scripts/backfill_flight_data_pre_post.ts` + `scripts/test-extractor-real-payload.ts`**
+   — consumers updated to the new column/interface names so nothing references
+   the old `sampling_probability` field anymore.
+8. `server/lib/disruption/adbCollectionController_v3.ts` — also renamed the
+  `toInt` helper to `toNum` (it never truncated; the name just implied it).
+
+**Typecheck:** still 57 pre-existing errors, none in the touched files.
 
 ### 2026-08-18 — 🛠️ FIXED: step-11 run failed on migration 0022 re-run (0012 ↔ 0022 order bug)
 
-**What happened (from `rl6.md`):** `npm run build-catalog` aborted:
+**What happened (from** `rl6.md`**):** `npm run build-catalog` aborted:
 `[migrations] failed to apply 0022 ... column "airport_layer_design_probability" of relation "flight_data_pre_post" already exists`.
 
 **Why:** every boot re-runs ALL migrations. On the FIRST boot 0022 renamed
@@ -702,14 +871,14 @@ new).
 ### 2026-08-18 — 🗂️ LOG REORGANIZED + `toInt` renamed to `toNum`
 
 - **Log restructured** so current info is at the TOP and old stuff lives in a
-  dedicated `## 8. 📦 ARCHIVE` section at the bottom. New order: §0 where-we-are
-  → §1 what-to-do-next → §2 plain-English guide → §3 recent changes → §4–§7
-  reference (code, phases, money, commands) → §8 archive (old run reports #1–#4,
-  audit snapshot, older change log). No content was deleted — just moved.
-- **`toInt` → `toNum`** in `adbCollectionController_v3.ts` (the two latest
-  review entries below mentioned a `toInt` name; it never truncated — it
-  returns numbers as-is — but the name implied integer rounding of the
-  design probabilities, so it was renamed to remove that confusion).
+dedicated `## 8. 📦 ARCHIVE` section at the bottom. New order: §0 where-we-are
+→ §1 what-to-do-next → §2 plain-English guide → §3 recent changes → §4–§7
+reference (code, phases, money, commands) → §8 archive (old run reports #1–#4,
+audit snapshot, older change log). No content was deleted — just moved.
+- `toInt` **→** `toNum` in `adbCollectionController_v3.ts` (the two latest
+review entries below mentioned a `toInt` name; it never truncated — it
+returns numbers as-is — but the name implied integer rounding of the
+design probabilities, so it was renamed to remove that confusion).
 
 
 
@@ -722,21 +891,21 @@ demanded. All are implemented, type-checked (still 57 pre-existing errors,
 none new), and the dashboard / Step B / this log are updated.
 
 1. **Webhook candidates are now POST-eligible only.** `pickAirportCandidates()`
-   filters `post_eligible = true` (live/ADS-B), because the webhook layer
+  filters `post_eligible = true` (live/ADS-B), because the webhook layer
    supplies POST/AIRBORNE observations and AeroDataBox says subscriptions
    depend on live/ADS-B coverage. PRE eligibility stays recorded and reported
    (pre/post/both counts at build time).
 2. **REGIONAL selection is now a genuine normalized probability draw** (plan
-   §8), not "shuffle and take first fresh": seeded `drawWithoutReplacement()`
+  §8), not "shuffle and take first fresh": seeded `drawWithoutReplacement()`
    over the eligible REGIONAL pool, uniform `p_i = 1/|eligible|` pre-probe; the
    realized draw's conditional p_i is recorded. HUB/MID remain deterministic
    seeded slot-fill (planned share, §30).
-3. **`sampling_probability` → `airport_layer_design_probability`** with
-   `is_randomized` + `planned_share`, enforced in the DB (migration 0022):
+3. `sampling_probability` **→** `airport_layer_design_probability` with
+  `is_randomized` + `planned_share`, enforced in the DB (migration 0022):
    randomized rows must carry the design probability; planned-share rows must
    not. This is the plan §30 V3.6/V3.8 rule, no longer only in docs.
 4. **Frame CHECK constraints** (unclassified⇒REGIONAL; pre_eligible = feed_schedule;
-   post_eligible = feed_live OR feed_adsb) so the frame invariants can't drift.
+  post_eligible = feed_live OR feed_adsb) so the frame invariants can't drift.
 
 Still open, documented as pre-freeze gates: (a) traffic-reference re-tiering of
 the ~4,000 unclassified airports from a fixed reference snapshot (plan
@@ -748,8 +917,6 @@ boots only after probe data.
 the output. Then step 12 anchor probe. Nothing has been spent; the 31-day run
 still has NOT started (`autoCollect=false`).
 
-
-
 ### 2026-08-18 — 🔴 REVIEW-DRIVEN FIXES: collector wired to the frame, honest tiering, explicit feed eligibility
 
 **What happened in plain English:** a code review of the Option-1 frame build
@@ -759,19 +926,19 @@ sampling from the old 276 list. All three are fixed, type-checked (still 57
 pre-existing errors, none new), and the log's Step B / dashboard updated.
 
 1. **The collector ignored the measured frame.** `pickAirportCandidates()` in
-   `adbCollectionController_v3.ts` still picked candidates from
+  `adbCollectionController_v3.ts` still picked candidates from
    `AIRPORT_CATALOG` (our static 276). Now it reads `clean.adb_sampling_frame`
    (migration 0021, `in_frame = true`) and **throws a clear error if the frame
    is empty** — it can never silently fall back to the 276. The daily
    1 HUB + 2 MID + 1 REGIONAL mix now draws from the measured universe.
-2. **`sampling_probability` had the wrong denominator.** It divided by the old
-   catalog length instead of the frame tier pool. Now it uses the frame pool
+2. `sampling_probability` **had the wrong denominator.** It divided by the old
+  catalog length instead of the frame tier pool. Now it uses the frame pool
    and is labelled a **planned share** (§8/§20) — diagnostics only, weights stay
    NULL.
 3. **Unclassified airports were invisible to tier counting.** `countTiers()`
-   now falls back to REGIONAL (their real §8 stratum) for frame-only airports.
+  now falls back to REGIONAL (their real §8 stratum) for frame-only airports.
 
-Also: `tierSource` renamed `"default"` → **`"unclassified"`** (the plan never
+Also: `tierSource` renamed `"default"` → `"unclassified"` (the plan never
 calls unknown traffic a "default class"); feed eligibility is now explicit
 **per layer** (`pre_eligible` = has FlightSchedules; `post_eligible` = has
 LiveUpdates OR ADS-B) instead of one union population; `build-catalog` runs
@@ -781,8 +948,6 @@ persists. The frame is persisted to the DB per plan §6 ("DB-backed frame").
 **Next step for you:** run `npm run build-catalog` on Replit (step 11), paste
 the output. Then step 12 anchor probe. Nothing has been spent; the 31-day run
 still has NOT started (`autoCollect=false`).
-
-
 
 ## 4. 🔍 THE CODE CHANGES AND WHERE — for your curiosity
 
@@ -937,6 +1102,8 @@ Arithmetic: `57,900 + 1,000 floor + 1,000 REST + 100 unallocated = 60,000 ✓`
 
 ---
 
+
+
 ### RUN REPORT #4 (from `rl4.md`, 2026-08-17) — ✅ IT ALL WORKED
 
 You pulled the code, booted, and verified. Here is the line-by-line verdict.
@@ -1030,9 +1197,9 @@ did **no damage** — balance was still 862 < 1,300, so `canStart` stayed
 
 ---
 
-
-
 ---
+
+
 
 ### RUN REPORT #3 (from `replitLogs3.md`, 2026-08-16) — ✅ REFILL WORKED
 
@@ -1063,9 +1230,9 @@ stopped. Exactly right for Gate 0.
 
 ---
 
-
-
 ---
+
+
 
 ### RUN REPORT #2 (from `replitLogs2.md`, 2026-08-16) — ✅ 0020 FIXED
 
@@ -1105,9 +1272,9 @@ method. Use `npm run refill -- N`.
 
 ---
 
-
-
 ---
+
+
 
 ### RUN REPORT #1 (from `replitLogs1.md`, 2026-08-16) — 0020 bug found + fixed
 
@@ -1151,9 +1318,9 @@ Gate 0 fixed (refill → 2,901).
 
 ---
 
-
-
 ---
+
+
 
 ### AUDIT SNAPSHOT (what existed before Phase 0 — for the record)
 
@@ -1176,11 +1343,14 @@ Gate 0 fixed (refill → 2,901).
 
 ---
 
-
-
 ---
 
+
+
 ### OLDER CHANGE LOG (2026-08-17 and earlier — full history)
+
+
+
 ### 2026-08-17 — ✅ FRAME DECISION MADE (Option 1) + script rebuilt from the measured universe
 
 The team chose **Option 1**: follow plan §6 literally — build the frame from the
@@ -1378,52 +1548,3 @@ list.
 - Awaiting user decision on the macro-regions before running
 `npm run build-catalog`.
 
-
-
-### 2026-08-17 — Plain-English guide added + coverage recorded + renumber
-
-- Added **§1 PLAIN-ENGLISH GUIDE**: what we're doing, what `rl5.md` shows, and
-every line of `health` / `gate0` / `coverage` explained in simple words.
-- Answered the user's questions in the log itself (§1.6): "floor intact /
-invariant HOLDING" meaning, `ADB_AUTO_COLLECT=0` in Replit config vs Secrets,
-which files were edited, and how `npm run <x>` scripts work.
-- Recorded the `npm run coverage` **result (Phase 2 step 10 ✅)**:
-`universeCount 4332`, `catalogCount 276`, `catalogInUniverse 267`
-(sanity: 4332 ≥ 276 ✓).
-- Renumbered all sections (old §1→§2 … §11→§12) to fit the new §1 guide.
-- `rl5.md` = the same run as `rl4.md` plus the coverage output (health/gate0
-duplicated). No new failure; the 2 `FAIL` lines remain expected (pre-gates).
-
-
-
-### 2026-08-17 — Run #4 analyzed (`rl4.md`); log reorganized
-
-- **Run #4 = SUCCESS.** User pulled the code, booted, ran `npm run health`
-(now `PASS balance 2901 credits (live-api)`) and `npm run gate0` (balance
-2,901, floor intact, invariant HOLDING). Heartbeats: `balance=2901 canStart=true` after refill; `autoCollect=false`; zero credits spent.
-- **Note:** an old 02:07 boot again showed `autoCollect=true` (Run-button
-start). No damage (balance was low). Action: Replit Secrets
-`ADB_AUTO_COLLECT=0`.
-- **gate0 placeholders** `VERIFY_AT_GATE_0` come from env vars `ADB_PLAN` /
-`ADB_MONTHLY_UNITS` (`gate0_budget_report.ts:43-44`) — fill from teammate.
-- **Reorganized this log:** newest-on-top layout, added a "WHERE WE ARE NOW"
-dashboard, added a code-changes reference (§7), moved run reports newest-first.
-
-
-
-### 2026-08-16 — Run #3 analyzed (`replitLogs3.md`) + live-balance fix
-
-- Refill SUCCESS: 862 → `-- 1` → 863 (conversion confirmed) → `-- 2038` → 2901.
-- **Fixed stale-read bug:** `check_collection_health.ts` + `gate0_budget_report.ts`
-now read balance LIVE from AeroDataBox (`getBalance()`), print `(live-api)` /
-`(db-snapshot)`.
-- Report added (§3 here).
-
-
-
-### 2026-08-16 — Run #2 analyzed (`replitLogs2.md`)
-
-- Migration 0020 CONFIRMED APPLIED; `3138→2038` explained (budget 3000→1900).
-- autoCollect mystery solved (`.replit` Run button has no env prefix).
-- Refill now possible via API key (teammate added billing); added
-`scripts/refill_credits.ts` + `npm run refill`.

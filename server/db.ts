@@ -39,6 +39,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0020_collection_v39_airborne_time_series.sql",
   "0021_collection_v39_sampling_frame.sql",
   "0022_collection_v39_design_probability.sql",
+  "0023_anchor_probe_results.sql",
 ];
 
 let bootMigrationsApplied = false;
