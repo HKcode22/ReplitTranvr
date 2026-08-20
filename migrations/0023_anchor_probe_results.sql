@@ -28,7 +28,9 @@
 --   stability             probe consistency within the window (1/(1+CV) of
 --                         15-min bucket counts; probe-to-probe SE added once
 --                         2+ probes exist, per §9 yield definition)
---   status                'completed' | 'failed'
+--   status                'probing' (window live, sub active) |
+--                         'completed' | 'failed' | 'abandoned' (interrupted,
+--                         subscription deleted by --cleanup)
 --   UNIQUE(icao, stage, window_start)  idempotent re-runs
 --
 -- Idempotent, additive — safe to re-run every boot.
@@ -55,10 +57,20 @@ CREATE TABLE IF NOT EXISTS clean.adb_anchor_probe (
   unique_flights_per_credit DOUBLE PRECISION,
   tail_chain_links_per_credit DOUBLE PRECISION,
   stability               DOUBLE PRECISION,
-  status                  TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'failed')),
+  status                  TEXT NOT NULL DEFAULT 'completed'
+    CONSTRAINT adb_anchor_probe_status_check
+    CHECK (status IN ('completed', 'failed', 'probing', 'abandoned')),
   recorded_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT adb_anchor_probe_unique_run UNIQUE (icao, stage, window_start)
 );
+
+-- Re-runs against an existing (older) table keep the OLD inline check that only
+-- allowed 'completed' | 'failed' — widen it so 'probing'/'abandoned' are legal.
+ALTER TABLE clean.adb_anchor_probe
+  DROP CONSTRAINT IF EXISTS adb_anchor_probe_status_check;
+ALTER TABLE clean.adb_anchor_probe
+  ADD CONSTRAINT adb_anchor_probe_status_check
+  CHECK (status IN ('completed', 'failed', 'probing', 'abandoned'));
 
 CREATE INDEX IF NOT EXISTS idx_adb_anchor_probe_icao
   ON clean.adb_anchor_probe (icao, stage);

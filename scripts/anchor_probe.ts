@@ -35,6 +35,9 @@
 //   npm run anchor-probe -- --stage 2 [--hours 4]
 //   npm run anchor-probe -- --score
 //   npm run anchor-probe -- --status
+//   npm run anchor-probe -- --cleanup            delete orphaned probe subs (R1)
+//   npm run anchor-probe -- --cleanup --force    also delete untracked ACTIVE credit subs
+//   npm run anchor-probe -- --check-webhook      print webhook URL + reachability probe
 // ============================================================
 
 import { pool } from "../server/db";
@@ -42,6 +45,8 @@ import {
   getBalance,
   createSubscription,
   deleteSubscription,
+  listSubscriptions,
+  defaultWebhookUrl,
   checkAirportFeeds,
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import { creditsUsedTodayUtc } from "../server/lib/disruption/adbCollectionController_v3";
@@ -196,6 +201,41 @@ async function checkBudget(): Promise<{ ok: boolean; reason?: string }> {
 }
 
 // ---------------------------------------------------------------------------
+// R1 exclusivity (plan §11.2 step 1, §15 R1) — before ANY probe subscription
+// is created, the account must have no foreign ACTIVE billable subscription.
+// An orphaned probe sub left over from an interrupted run is exactly such a
+// foreign billable sub and would break balance-delta accounting. Lifetime-based
+// subscriptions cannot bill per delivery → not contamination.
+// ---------------------------------------------------------------------------
+
+async function foreignActiveBillable(): Promise<
+  { id: string; subject?: string; billingType?: string }[]
+> {
+  const subs = await listSubscriptions();
+  return subs
+    .filter((s) => s.isActive && s.billingType !== "LifetimeBased")
+    .map((s) => ({
+      id: s.id,
+      subject: s.subject?.type ? `${s.subject.type}:${s.subject.id ?? "?"}` : "?",
+      billingType: s.billingType,
+    }));
+}
+
+async function assertExclusivity(): Promise<{ ok: boolean; reason?: string }> {
+  const foreign = await foreignActiveBillable();
+  if (foreign.length > 0) {
+    return {
+      ok: false,
+      reason:
+        `${foreign.length} foreign ACTIVE billable subscription(s) present: ` +
+        foreign.map((f) => `${f.id} (${f.subject})`).join(", ") +
+        `. Run: npm run anchor-probe -- --cleanup  (R1 exclusivity, §11.2/§15).`,
+    };
+  }
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 // The probe itself (one airport, one window)
 // ---------------------------------------------------------------------------
 
@@ -214,6 +254,14 @@ async function runSingleProbe(candidate: Candidate, stage: number, hours: number
     return;
   }
 
+  // R1 exclusivity: no foreign ACTIVE billable subscription may exist while we
+  // probe (plan §11.2/§15). Also catches orphaned subs from interrupted runs.
+  const exclusivity = await assertExclusivity();
+  if (!exclusivity.ok) {
+    console.log(`  SKIPPED — ${exclusivity.reason}`);
+    return;
+  }
+
   // Free feed check (plan §9 step 3): confirm the airport is in the feeds.
   const feeds = await checkAirportFeeds(icao);
   console.log(`  feed membership check: ${feeds ? "covered" : "no feed data returned (may still work, proceeding)"}`);
@@ -227,8 +275,22 @@ async function runSingleProbe(candidate: Candidate, stage: number, hours: number
     console.log(`  FAILED — could not subscribe to ${icao}.`);
     return;
   }
-  console.log(`  subscription: ${sub.id}`);
+  console.log(`  subscription: ${sub.id}  isActive=${sub.isActive ?? "?"}  activateBeforeUtc=${sub.activateBeforeUtc ?? "n/a"}`);
   const windowStart = new Date();
+
+  // Mark this probe 'probing' NOW so an interrupted run leaves a visible,
+  // cleanable record (status 'probing' → --cleanup deletes the sub and marks it
+  // 'abandoned'). The UNIQUE(icao, stage, window_start) row is the same row the
+  // final INSERT flips to 'completed'.
+  await pool.query(
+    `INSERT INTO clean.adb_anchor_probe
+       (stage, icao, region, window_start, window_end, window_hours,
+        subscription_id, balance_before, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'probing')
+     ON CONFLICT (icao, stage, window_start) DO NOTHING`,
+    [stage, icao, candidate.region, windowStart, windowStart, 0, sub.id, balanceBefore],
+  );
+
   console.log(`  probing ${hours}h — deliveries must reach the live webhook...`);
 
   // Poll every 60s so the process stays responsive; hard-stop at window end.
@@ -310,7 +372,19 @@ async function runSingleProbe(candidate: Candidate, stage: number, hours: number
         rows_per_hour, unique_flights_per_credit, tail_chain_links_per_credit,
         stability, status)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'completed')
-     ON CONFLICT (icao, stage, window_start) DO NOTHING`,
+     ON CONFLICT (icao, stage, window_start) DO UPDATE SET
+       window_end = EXCLUDED.window_end,
+       window_hours = EXCLUDED.window_hours,
+       balance_after = EXCLUDED.balance_after,
+       credits_spent = EXCLUDED.credits_spent,
+       rows_delivered = EXCLUDED.rows_delivered,
+       unique_flights = EXCLUDED.unique_flights,
+       tail_chain_links = EXCLUDED.tail_chain_links,
+       rows_per_hour = EXCLUDED.rows_per_hour,
+       unique_flights_per_credit = EXCLUDED.unique_flights_per_credit,
+       tail_chain_links_per_credit = EXCLUDED.tail_chain_links_per_credit,
+       stability = EXCLUDED.stability,
+       status = 'completed'`,
     [
       stage,
       icao,
@@ -413,18 +487,121 @@ function computeScores(probes: ProbeRow[]): Scored[] {
 // CLI modes
 // ---------------------------------------------------------------------------
 
+/**
+ * --cleanup  (plan §11.2 step 1, §15 R1)
+ * Deletes probe-owned ORPHAN subscriptions (rows still status='probing' from an
+ * interrupted run) and marks them 'abandoned'. With --force, also deletes any
+ * other ACTIVE credit-based subscription on the account (only safe pre-run,
+ * when autoCollect=false means nothing legitimate is running).
+ */
+async function runCleanup(force: boolean): Promise<void> {
+  console.log("R1 orphan cleanup — searching for probe subscriptions left 'probing'...");
+
+  const probing = await pool.query(
+    `SELECT probe_id, icao, stage, subscription_id, window_start
+       FROM clean.adb_anchor_probe
+      WHERE status = 'probing' ORDER BY window_start`,
+  );
+
+  let deleted = 0;
+  for (const row of probing.rows) {
+    const subId = row.subscription_id as string | null;
+    if (!subId) {
+      await pool.query(`UPDATE clean.adb_anchor_probe SET status='abandoned' WHERE probe_id=$1`, [row.probe_id]);
+      continue;
+    }
+    const ok = await deleteSubscription(subId);
+    console.log(`  ${ok ? "deleted  " : "DELETE FAILED "} sub ${subId} (${row.icao} stage ${row.stage})`);
+    if (ok) deleted++;
+    await pool.query(
+      `UPDATE clean.adb_anchor_probe SET status='abandoned', window_end=now() WHERE probe_id=$1`,
+      [row.probe_id],
+    );
+  }
+  console.log(`  probe-owned orphan subs deleted: ${deleted} of ${probing.rows.length}`);
+
+  const foreign = await foreignActiveBillable();
+  const untracked = foreign.filter((f) => !probing.rows.some((r: any) => r.subscription_id === f.id));
+  if (untracked.length > 0) {
+    if (force) {
+      let n = 0;
+      for (const f of untracked) {
+        const ok = await deleteSubscription(f.id);
+        console.log(`  ${ok ? "deleted  " : "DELETE FAILED "} untracked ACTIVE credit sub ${f.id} (${f.subject})`);
+        if (ok) n++;
+      }
+      console.log(`  untracked ACTIVE credit subs deleted: ${n} of ${untracked.length}`);
+    } else {
+      console.log(
+        `  ${untracked.length} untracked ACTIVE credit sub(s) NOT touched: ` +
+          untracked.map((f) => `${f.id} (${f.subject})`).join(", ") +
+          `. Re-run with --force to delete them too.`,
+      );
+    }
+  } else {
+    console.log("  no other ACTIVE credit-based subscriptions on the account.");
+  }
+  console.log("cleanup done.");
+}
+
+/** --check-webhook — prints the URL AeroDataBox posts to and probes reachability. */
+async function runCheckWebhook(): Promise<void> {
+  const url = defaultWebhookUrl();
+  console.log("Webhook reachability check (Gate 3/0.5 pre-requisite):\n");
+  console.log(`  defaultWebhookUrl() : ${url}`);
+  console.log(
+    `  REPLIT_DOMAINS       : ${process.env.REPLIT_DOMAINS ? "set" : "NOT set"}  ` +
+      `(WEBHOOK_BASE_URL override: ${process.env.WEBHOOK_BASE_URL ? "set" : "no"})`,
+  );
+  console.log(
+    `  AERODATABOX_WEBHOOK_SECRET : ${process.env.AERODATABOX_WEBHOOK_SECRET ? "set (path-suffix active)" : "not set"}`,
+  );
+  console.log(
+    `  live server running  : check a boot line 'serving on port 5000' — the webhook route ` +
+      `POST /api/v1/webhooks/aerodatabox(:secret) must be up for deliveries.`,
+  );
+  console.log("\n  probing URL from the Replit box (GET — the route expects POST, so any");
+  console.log("  HTTP status like 404/405 still PROVES the URL is reachable; a network");
+  console.log("  error means AeroDataBox cannot reach us either):");
+  try {
+    const resp = await fetch(url, { method: "GET" });
+    console.log(`  → HTTP ${resp.status} — ${resp.ok ? "OK" : "reachable (non-2xx is fine for a POST-only route)"}`);
+  } catch (err: any) {
+    console.log(`  → NETWORK ERROR: ${err?.message || err} — the URL is NOT reachable.`);
+    console.log(`    Fix REPLIT_DOMAINS / WEBHOOK_BASE_URL to a public HTTPS URL first.`);
+  }
+  console.log(
+    "\nNote: the 2026-08-18 rl8 probe created subscriptions but zero deliveries arrived",
+    "(balance stayed 2901, rowsToday=0 for hours). Verify this URL is publicly reachable",
+    "before re-running stage 1, otherwise probes are wasted windows.",
+  );
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const stage1 = args.includes("--stage") && args[args.indexOf("--stage") + 1] === "1";
   const stage2 = args.includes("--stage") && args[args.indexOf("--stage") + 1] === "2";
   const doScore = args.includes("--score");
   const doStatus = args.includes("--status");
+  const doCleanup = args.includes("--cleanup");
+  const doCheckWebhook = args.includes("--check-webhook");
+  const force = args.includes("--force");
   const icaoIdx = args.indexOf("--icao");
   const onlyIcao = icaoIdx >= 0 && args[icaoIdx + 1] ? args[icaoIdx + 1].toUpperCase() : null;
   const hoursIdx = args.indexOf("--hours");
   const hoursOverride = hoursIdx >= 0 && args[hoursIdx + 1] ? Number(args[hoursIdx + 1]) : null;
 
   console.log("V3.9 two-stage anchor probe (§9, §17 step 12) — pool is provisional until measured.\n");
+
+  if (doCheckWebhook) {
+    await runCheckWebhook();
+    return;
+  }
+
+  if (doCleanup) {
+    await runCleanup(force);
+    return;
+  }
 
   if (doStatus || (!stage1 && !stage2 && !doScore)) {
     const probes = await readProbes();
@@ -479,7 +656,40 @@ async function main(): Promise<void> {
         console.error(`Unknown shortlist ICAO ${onlyIcao}. Shortlist: ${SHORTLIST.map((c) => c.icao).join(", ")}`);
         return;
       }
+      if (stage === 2 && !(await hasStageProbe(cand.icao, 1))) {
+        console.error(
+          `Stage 2 guard: ${cand.icao} has no COMPLETED stage-1 probe yet — run ` +
+            `npm run anchor-probe -- --stage 1 --icao ${cand.icao} first (§9: stage 2 confirms stage-1 picks).`,
+        );
+        return;
+      }
       await runSingleProbe(cand, stage, hours);
+      return;
+    }
+
+    if (stage === 2) {
+      const eligibleForStage2: Candidate[] = [];
+      for (const cand of SHORTLIST) {
+        if (await hasStageProbe(cand.icao, 1)) eligibleForStage2.push(cand);
+      }
+      if (eligibleForStage2.length === 0) {
+        console.error(
+          `Stage 2 guard: no candidate has a COMPLETED stage-1 probe yet. ` +
+            `Run stage 1 first (npm run anchor-probe -- --stage 1), then re-run stage 2.`,
+        );
+        return;
+      }
+      if (eligibleForStage2.length < SHORTLIST.length) {
+        console.log(`  stage-2 candidates (have completed stage-1): ${eligibleForStage2.map((c) => c.icao).join(", ")}`);
+      }
+      for (const cand of eligibleForStage2) {
+        if (await hasStageProbe(cand.icao, 2)) {
+          console.log(`  ${cand.icao}: stage 2 already probed — skip`);
+          continue;
+        }
+        await runSingleProbe(cand, stage, hours);
+      }
+      console.log("\nStage 2 complete. Next: npm run anchor-probe -- --score");
       return;
     }
 
@@ -495,7 +705,7 @@ async function main(): Promise<void> {
       }
       await runSingleProbe(cand, stage, hours);
     }
-    console.log("\nStage complete. Next: npm run anchor-probe -- --stage 2 (or --score).");
+    console.log("\nStage 1 complete. Next: npm run anchor-probe -- --stage 2 (or --score).");
   }
 }
 
