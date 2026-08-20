@@ -369,7 +369,15 @@ export function extractFlightNotification(
 
     samplingBatchId: ctx.sampling?.batchId ?? null,
     airportTier: ctx.sampling?.tier ?? null,
-    isRandomized: ctx.sampling?.isRandomized ?? null,
+    // Migration 0022 created is_randomized as NOT NULL DEFAULT false and the
+    // V3.8 DB rule requires it to be a boolean (never NULL): a randomized draw
+    // must carry a design probability, a non-randomized row must not. Probe /
+    // canary / unmanaged deliveries have no batch, so sampling is null or has
+    // isRandomized=null — inserting NULL would violate the NOT NULL constraint,
+    // make the webhook handler throw, and burn a credit per failed delivery
+    // (the rl9 canary FAIL: 0 items stored, delivery_failure=1, 1 credit). We
+    // therefore default to false: unmanaged rows are never randomized.
+    isRandomized: ctx.sampling?.isRandomized ?? false,
     airportLayerDesignProbability: ctx.sampling?.airportLayerDesignProbability ?? null,
     plannedShare: ctx.sampling?.plannedShare ?? null,
     samplingWeight: ctx.sampling?.samplingWeight ?? null,

@@ -271,6 +271,14 @@ Key concepts:
   column, never a crash. The webhook contract validation (zod) logs issues but
   the extractor still extracts what it can — because the 2xx (and thus the credit)
   must not be wasted.
+- **`is_randomized` is NEVER NULL (2026-08-19 fix).** Migration 0022 created
+  `is_randomized` as `NOT NULL DEFAULT false` (the V3.8 DB rule requires it to be a
+  real boolean). The extractor used to set `isRandomized: ctx.sampling?.isRandomized
+  ?? null`, and for any delivery with no managed batch (probe/canary subscription)
+  that sent NULL → Postgres NOT NULL violation → the whole webhook handler threw →
+  0 rows stored + `delivery_failure=1`. That was the rl9 canary FAIL (charged 1
+  credit, stored nothing). It now defaults to `false` (unmanaged rows are never
+  randomized), satisfying the NOT NULL column and the V3.8 boolean rule.
 - `eventKey()` — the key for the research-event log: `(flight, carrier,
   locReportedUtc)` hashed, so every airborne point survives (the dedup table
   would otherwise overwrite repeated observations).
@@ -442,21 +450,36 @@ sampled more" feedback loop the plan warns about (§23a).
 - `--stage 1` — probe every shortlisted candidate not yet probed: 2 h live window
   each, one at a time (probes never cross in real time), recording
   rows/credit, chain-links/credit, stability, and capacity. WSSS and OMAA are
-  re-probed the same way as calibration baselines.
-- `--stage 2` — the top candidates get a longer confirmation probe.
+  re-probed the same way as calibration baselines. `--icao KLAX` probes just one.
+- `--stage 2` — the top candidates get a longer (4 h) confirmation probe; the
+  script **refuses** any airport without a COMPLETED stage-1 probe (the rl8
+  out-of-order mistake is now impossible).
 - `--score` — fills the frozen formulas: yield is standardized against the WSSS
   (or OMAA) baseline measured the same way; capacity gate disqualifies airports
   that can't physically serve enough data; prints the ranked pool and the
   proposed 5-airport lock.
-- `--status` — list recorded probes.
-- `--icao KLAX`, `--hours N` — probe a single airport / override the window.
+- `--status` — list recorded probes from `clean.adb_anchor_probe`.
+- `--cleanup [--force]` — deletes probe-owned ORPHAN subscriptions (rows still
+  `status='probing'` from an interrupted run) and marks them `abandoned`;
+  `--force` also deletes any other untracked ACTIVE credit-based subscription
+  (safe pre-run because `autoCollect=false`). This is the R1 recovery tool.
+- `--check-webhook` — prints the public webhook URL (from `defaultWebhookUrl()`),
+  whether `REPLIT_DOMAINS`/`WEBHOOK_BASE_URL` are set, and probes the URL with a
+  GET (any HTTP status proves reachability; a network error means AeroDataBox
+  cannot reach us).
+- `--hours N` — override the window length.
 
-**How a probe works mechanically:** check budget → free feed check →
-`createSubscription` (maxDeliveryRetries=0) → wait the window (deliveries hit the
-live webhook and land in `flight_data_pre_post` with our `subscription_id`) →
-delete the sub → settle → `credits_spent = balance_before - balance_after` →
-SQL counts rows / unique flights / tail-chain links / 15-min bucket stability →
-INSERT into `clean.adb_anchor_probe` (idempotent on `(icao, stage, window_start)`).
+**How a probe works mechanically:** budget guard (balance ≥ reserve, probe spend
+won't breach the 1,900/day cap) → **R1 exclusivity guard** (refuse to start if any
+foreign ACTIVE billable subscription exists — this is what stops parallel probes)
+→ free feed check → `createSubscription` (maxDeliveryRetries=0) → INSERT a
+`probing` row into `clean.adb_anchor_probe` → **wait the window in-process** (the
+command blocks for the full 2 h; deliveries hit the live webhook and land in
+`flight_data_pre_post` with our `subscription_id`) → delete the sub → settle →
+`credits_spent = balance_before - balance_after` → SQL counts rows / unique
+flights / tail-chain links / 15-min bucket stability → flip the row to
+`completed` (idempotent `ON CONFLICT` on `(icao, stage, window_start)`). The
+`probing` row is what lets `--cleanup` find and recover interrupted runs.
 
 **Why the probe is only 20% of the score:** a single good probe day must not
 override years of published schedules (§9 step 5). The exogenous 80% is frozen,
@@ -477,6 +500,14 @@ PASS when `|C_external − C_internal| ≤ tolerance` AND delivery failures = 0.
 It also asserts **R1 exclusivity** — no foreign ACTIVE billable subscription may
 exist during the test. This is the proof that our credit math is honest before we
 spend thousands of credits.
+
+**Real result from rl9 (2026-08-19):** the canary FAILED —
+`C_external=1, C_internal=0, rows 0, delivery_failures=1`. That is the signature
+of "webhook reachable but the handler threw before storing": AeroDataBox charged 1
+credit for the delivery, our route caught the error, and recorded a delivery
+failure. The cause was the `is_randomized` NOT NULL bug (see §7). After the fix
+the same canary must print `PASS` with `>0` items — if it still FAILs, stop and
+diagnose the webhook path; do not start probes.
 
 ---
 
