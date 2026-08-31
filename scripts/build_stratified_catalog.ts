@@ -20,18 +20,20 @@
 //      diversity*, time zone) reported WITHIN strata — never crossed — from
 //      a FIXED reference snapshot at frame-build time.
 //
-// Frozen traffic-tier rule (v1, auditable & changeable before the run):
+// Frozen traffic-tier rule (v1 provisional — V3.9-f.7 §4.1 SUPERSEDES as binding):
 //   - Airports in our curated catalog (`adbAirportCatalog_v3.ts`, 276) keep
 //     their human-classified tier: 30 HUB + 89 MID + 157 REGIONAL
 //     (`tier_source = "curated"`).
 //   - EVERY other universe airport is `tier_source = "unclassified"` and
-//     enters the REGIONAL stratum with `traffic_prior = 1.0` (§8). This is
-//     the plan's own design: §8 defines the REGIONAL stratum as "frame =
-//     universe ∩ feed-covered" and starts traffic_prior at 1.0, uniform
-//     1/|eligible| before probe data. It is NOT a measured traffic class —
-//     unclassified airports are explicitly provisional, and a traffic
-//     reference snapshot (or probe data) can re-tier them before the run
-//     is frozen. We never invent HUB/MID labels without traffic evidence.
+//     enters the REGIONAL stratum with `traffic_prior = 1.0` (§8). This v1
+//     is PROVISIONAL — V3.9-f.7 §4.1 requires a measured external traffic
+//     reference (OAG/Cirium or ACI/FAA 12-month scheduled departures) with
+//     frozen HUB/MID/REGIONAL thresholds + version/hash + rebuild of
+//     clean.adb_sampling_frame BEFORE Gate 1/2. Until rebuild, `tier_source='unclassified'`
+//     must be treated as `traffic_unverified` and 18-cell counts are provisional.
+//   - Macro-region mapping in this file is also PROVISIONAL (ICAO first-letter
+//     heuristic) — V3.9-f.7 §4.2 requires country→macro-region lookup with
+//     validated 6-region table + version/hash. See MUSE_A30_ASSESSMENT.md.
 //   - The daily slot mix is still {HUB:1, MID:2, REGIONAL:1} (§4) — the
 //     frame size does not change what we collect per day, only the eligible
 //     pool and its recorded design probabilities.
@@ -365,13 +367,15 @@ async function main(): Promise<void> {
   console.log(`  → wrote ${rows} rows — the collector now samples from THIS measured frame, not the 276.`);
 
   console.log(`
-Frozen traffic-tier rule v1:
+Frozen traffic-tier rule v1 (PROVISIONAL — V3.9-f.7 §4.1 requires rebuild with external traffic reference):
   curated catalog airports → their human-classified tier (HUB/MID/REGIONAL).
   all other universe airports → REGIONAL as "unclassified" (tier_source =
   "unclassified"), traffic_prior starts at 1.0 (§8). This is the plan's own
   §8 long-tail design — NOT a measured traffic class. It is provisional: a
-  traffic reference snapshot (or probe data) re-tiers them before the run is
-  frozen. No HUB/MID label is invented without traffic evidence.
+  traffic reference snapshot (OAG/Cirium or ACI/FAA 12-month departures) +
+  frozen thresholds + region country→macro-region lookup (§4.2) must re-tier
+  them before FREEZE (see V3.9-f.7 §4.1/4.2). No HUB/MID label is invented without traffic evidence.
+  ⚠ If unclassified >0, frame is NOT YET FINAL per A30 — rebuild required before Gate 1/2 + FREEZE.`);
 
 Feed eligibility: PRE needs FlightSchedules; POST needs FlightLiveUpdates or
   AdsbUpdates — recorded per airport (pre_eligible / post_eligible) so the

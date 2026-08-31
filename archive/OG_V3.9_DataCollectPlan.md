@@ -36,10 +36,11 @@ in PART 2 or PART 3.
 > Its internal numbering (§1–§22) is the canonical one. Supersedes every prior
 > revision.
 
-**Status: V3.9-f.8 PRE-FREEZE PATCH — architecture LOCKED, manifest values MEASURE→FREEZE pending. Collection WAIT until Gate 0 + gates 1–5 + FREEZE pass. DO NOT start Phase 6.**
+**Status: LOCKED — architecture GO, collection WAIT until Gate 0 + gates 1–5 pass.**
 Built from reviews 1–12 (ChatGPT1–4, CGTAnalaysis5–9, -9 follow-up, 11, and the
-external SJSU/SDSU-grounded review adjudicated in `V3_CollectionStrategy2.md` §47)
-plus the A19/A30 deep audits (ChatGPTv3_A19_1, chatGPTv3_A30_1 #70 77-item checklist, chatGPTv3_A30_2 FINAL MASTER, cgtAnalysis13) plus A30_3 10 consistency fixes. This is the **V3.9-f.8 execution plan — deliberately NOT V3.10**. Once the gates + FREEZE pass we stop revising and let the run produce the evidence. See §22 `V3.9-f.8` adjudication for change table.
+external SJSU/SDSU-grounded review adjudicated in `V3_CollectionStrategy2.md` §47).
+This is the **V3.9-f.1 execution plan — deliberately NOT V3.10**. Once the gates
+pass we stop revising and let the run produce the evidence.
 
 **This file is the ONLY normative specification.** `V3_CollectionStrategy2.md`
 is the full revision history; where anything there conflicts with this file,
@@ -217,92 +218,8 @@ the reserved 1,000; the spendable number is always 57,900.
 | Primary strata | **traffic tier × macro-region** only (crossing more would explode cell count) |
 | Balancing variables (reported within strata, NOT crossed) | network degree*, intl/domestic, carrier diversity*, time zone — from a FIXED reference snapshot at frame-build time, never from the recursive current sample |
 | Catalog | catalog build script; regenerates when coverage refreshes (12 h cache) |
-| Tier mix | **`{HUB:1, MID:2, REGIONAL:1}`** per batch — **rotating anchor consumes the HUB slot** when anchor enabled (see §8.4) |
+| Tier mix | **`{HUB:1, MID:2, REGIONAL:1}`** per batch |
 | Unit of prediction | **a flight-leg outcome** ("departure delay of leg L at cutoff C") |
-
-### 4.1 Global traffic-tier assignment (NEW, binding — V3.9-f.7)
-
-**Problem fixed:** `§37.1` — all 4,053 universe-only airports provisionally `REGIONAL` with `traffic_prior=1.0` was not a stratification. Tier must be measured independently of Phase-6 outcomes.
-
-| Item | Candidate value (pending freeze at manifest — NOT frozen until reference data obtained) |
-| ---- | ---- |
-| Traffic measure | **CANDIDATE: Annual scheduled departures** — alternative `annual operations` / `passenger movements` listed as *pre-freeze option*, not mixed; final metric chosen **once** at freeze (see A30_3 #1) |
-| Source | **CANDIDATE sources:** **OAG/Cirium scheduled traffic** *or* **ACI/FAA/BTS annual operations** — pick **one** at freeze; fallback `AeroDataBox proxy` only if no record, documented |
-| Reference period | **Single 12-month window ending ≤30 days before frame freeze** (e.g. 2025-07-01 to 2026-06-30) — never a rolling window that moves during Phase 6 |
-| Thresholds | **CANDIDATE rules:** **HUB: top ~7% OR ≥25,000 scheduled departures/year (whichever yields ~30)**; **MID: next ~20% OR 5,000–25,000** — *pick one deterministic rule* at freeze (not both), record counts AND cut-values (`hub_cut`) |
-| HUB definition | Satisfies HUB threshold AND `feed-eligible` |
-| MID definition | Satisfies MID threshold AND not HUB |
-| REGIONAL definition | Remainder of frame |
-| Missing-reference policy | No traffic record → **REGIONAL, `tier_source='missing_reference'`, `traffic_prior=1.0`**, flagged `traffic_unverified`; never imputed as HUB |
-| Tie/boundary policy | Equality at cut → higher tier; deterministic tie-break by ICAO lexical order |
-| Versioning | **After selection:** `traffic_source_name`, `traffic_source_version`, `traffic_retrieval_date`, `traffic_period`, `tier_version`, `tier_hash` (SHA-256 sorted ICAO→tier) in `adb_collection_meta` — *not frozen until chosen* |
-| Rebuild | After freezing, **rebuild `clean.adb_sampling_frame`** (`tier`, `tier_source`, `traffic_prior`) and regenerate 18-cell counts before Gate 1/2. Do NOT derive tiers from Phase-6 delay outcomes |
-
-`traffic_prior` for frame: `HUB=3.0, MID=1.5, REGIONAL=1.0` (or normalized equivalent) — **CANDIDATE, frozen with thresholds at manifest**.
-
-### 4.2 Macro-region mapping (NEW, binding — V3.9-f.7)
-
-Replaces undocumented `ICAO-first-letter heuristic` (§37.2). Six **macro-regions** (the plan's priority anchor regions, §23):
-
-1. **North America** (NA) — US, Canada, Mexico, Caribbean, **Central America north of 7°N** (ISO: US/CA/MX/PA/CR/etc.)
-2. **Europe** (EU) — Europe + Turkey, **Russia west of 60°E (longitude override)** + Iceland/Greenland (`B`) — *east of 60°E → AP*
-3. **Asia-Pacific** (AP) — East/South/Southeast Asia, **excluding Australia/NZ/Pacific islands** (those → OC)
-4. **Gulf/Africa** (MEA) — Middle East, Africa (`O,H,F,D,G`)
-5. **South America** (SA) — `S` South America **only** (ISO SA countries, **no Central America**)
-6. **Oceania** (OC) — Australia, NZ, Pacific islands **only** (ISO AU/NZ/PG/FJ etc. or ICAO `Y,N,A` with country override) — **Every airport → exactly one region; country→region default, with explicit `airport ICAO` or `longitude>60°E` overrides for Russia/Turkey etc., recorded in `region_overrides` table**
-
-| Item | Frozen value |
-| ---- | ---- |
-| Source | **ISO 3166 country → macro-region lookup (default, 1:1)**, primary key `ISO country code`; **with explicit airport/longitude overrides** (Russia split by 60°E, Turkey EU) in `region_overrides` — ICAO prefix only as final fallback when country unknown |
-| Mapping table | `country_code → macro_region` 1:1 table, versioned (`region_mapping_version`, `region_mapping_hash`) |
-| Exceptions | **Explicit overrides table:** Turkey `LT→EU`, Russia `UU/UR west of 60°E→EU else AP`, Greenland `BG→NA`, Australia `Y→OC` (not AP) — versioned in `region_mapping` + `region_overrides` hash |
-| Unknown policy | No country after fallback → `region='UNMAPPED'`, `region_source='missing'`, excluded from strata until manually classified; never silently assigned |
-| Versioning | `region_mapping_source`, `region_mapping_version`, `region_mapping_retrieval_date`, `region_mapping_hash` in manifest |
-| Enforcement | `build_stratified_catalog.ts:macroRegionForIcao()` replaced by `country→region` default + `override` lookup (longitude check for Russia), fallback ICAO; 18-cell `tier×region` recomputed after rebuild, asserted `count(distinct regions)==1` per ICAO |
-
-### 4.3 Population scope (NEW, binding — V3.9-f.7, §37.3)
-
-Frozen for the entire pipeline `population → capture → snapshots → evaluation` (same scope unless another population is separately named):
-
-| Category | Included in core experimental population? |
-| ---- | ---- |
-| Scheduled commercial passenger (operating flights with published schedule) | **YES** — core |
-| Cargo (`withCargo`) | **NO** — excluded from core population; may be recorded as auxiliary `population_cargo` but not in primary denominator |
-| Private / general aviation (`withPrivate`) | **NO** — excluded |
-| Charter / non-scheduled | **NO** — excluded (no stable FIDS schedule) |
-| Canceled (known canceled) | **YES, counted in population** — snapshot eligible, outcome=`canceled` |
-| Diverted (actual destination ≠ scheduled) | **YES, counted** — snapshot eligible, outcome=`diverted`, `diversion_flag=true` |
-| Codeshared marketing numbers | **NO as separate population rows** — deduplicated to operating leg (see §7.1 codeshare) |
-
-FIDS query (see §5.1) uses `withCargo=false, withPrivate=false, withCodeshared=true` (to capture operating leg + marketing links for dedup), then filter to scope above.
-
-### 4.4 PRE vs POST airport eligibility (NEW, binding — V3.9-f.7, §37.4)
-
-**Decision (Option B — separate eligibility, explicit):**
-
-- **PRE (provider-observable prediction population, S1):** requires `pre_eligible=true` (`feed_schedule` available) — an airport can only contribute `flight_population` / `flight_snapshots` at T-24/T-6/T-90 if schedule feed exists for that horizon.
-- **POST/AIRBORNE:** requires `post_eligible=true` (`live` OR `adsb` feed) — an airport can only contribute `raw_airborne_events` / `flight_airborne_snapshots` if live/ADS-B feed exists.
-- **Core experimental batch slots:** the 4 daily slots are typed: `HUB` slot and the 2 `MID` slots require **both** `pre_eligible && post_eligible` (so a batch can always produce both PRE snapshots and POST trajectories); the `REGIONAL` slot requires `post_eligible=true` (and `pre_eligible` preferred but not required) — if no dual-eligible REGIONAL exists in a stratum, controller draws from `post_eligible`-only and marks `pre_eligible=false` → that flight's PRE snapshot marked `pre_ineligible`.
-- `PRE horizons never depend on an airport lacking required FIDS/schedule coverage` — controller refuses to schedule a T-24 snapshot for an airport where FIDS `withCargo/withPrivate` scope cannot be validated.
-
-Controller (`pickAirportCandidates`) now filters: `HUB/MID: WHERE pre_eligible=true AND post_eligible=true AND in_frame=true`; `REGIONAL: WHERE post_eligible=true AND in_frame=true` (with `pre_eligible` preference flag).
-
-### 4.5 Frame-balancing reference variables (NEW, binding — V3.9-f.7, §56)
-
-| Variable | Source | Formula / definition | Reference period | Missing policy | Manifest fields |
-| ---- | ---- | ---- | ---- | ---- | ---- |
-| **Network degree** | Scheduled route graph from `flight_population` reference snapshot (same 12-month traffic period as §4.1) | Directed: `out-degree = distinct destinations with ≥1 scheduled departure/week`; `in-degree` similarly; `undirected degree = distinct connected airports either direction`; report all three, primary = undirected | Same 12-month window as traffic tier | No schedule data → `degree=NULL, degree_unverified=true` | `degree_source, degree_period, degree_threshold (≥1/week), degree_version` |
-| **Carrier diversity** | Same reference schedule | `carrier_count = distinct operating carriers with ≥5% of departures at airport`; primary metric `effective carriers = 1/HHI` where `HHI=Σp_i²`; alternative `Shannon H=-Σp ln p` reported but not primary | Same 12-month | No data → NULL | `carrier_diversity_source, carrier_period, carrier_metric (1/HHI), carrier_threshold` |
-| **International/domestic mix** | Same reference | `intl_share = international scheduled departures / total scheduled departures` (route-level intl = origin country ≠ destination country) | Same | NULL | `intl_source, intl_period` |
-| **Exogenous traffic score** | Same traffic measure as §4.1 | `traffic_score = min(1, scheduled_departures / hub_cut)` normalized to [0,1] | Same | NULL | as §4.1 |
-| **Geo/network diversity score** | Derived from degree + intl_share + macro-region dispersion | `geo_score = 0.5*degree_norm + 0.3*intl_share + 0.2*region_rarity` (where `region_rarity = 1 - region_share`) — frozen formula | Same | NULL | `geo_formula_version` |
-| **Carrier/international diversity score** | Carrier diversity + intl_share | `carrier_score = 0.6*effective_carriers_norm + 0.4*intl_share` — frozen | Same | NULL | `carrier_formula_version` |
-
-All balancing variables use the **fixed reference snapshot before frame freeze**, never the recursive current sample (§4).
-
-### 4.6 Coverage-age core definition (NEW, binding — V3.9-f.7, §66)
-
-`coverage-age ≤5 d core` means: airports whose `last_direct_observation_at` (from `adb_ingest_events` or `flight_events`) is within 5 days of the current batch's `window_start`. Membership is **recomputed per batch** (not frozen globally), reported as `core_airports`, `core_share` in diagnostics. `core` is a diagnostic subset of the frame, not a separate frame.
 
 ---
 
@@ -360,88 +277,6 @@ end-to-end so the GNN never conflates "not observed" with "no edge" (§12.3).
 **Population-claims rule:** until the census layer is validated, all results
 are "under the collection regime", never population-representative.
 
-### 5.1 Complete FIDS protocol (NEW, binding — V3.9-f.7, §40)
-
-Verified against AeroDataBox current docs (2026-08, `GET /flights/schedule` / `FIDS` endpoint, Tier-2) and required to be re-verified live at Gate 0.5. Every parameter frozen in `adb_collection_meta` (`fids_protocol_version`):
-
-| Parameter | Frozen value |
-| ---- | ---- |
-| Endpoint | `GET /flights/schedule` (airport FIDS/schedule) — version recorded at Gate 0 (`fids_api_version`, `fids_docs_date`) |
-| Direction | `Both` (`withDepartures=true, withArrivals=true`) — default `Both` gives full population; arrivals+departures needed for network/chain features |
-| `withLeg` | `false` (flight-leg level, not leg-detail) |
-| `withCancelled` | `true` — canceled flights ARE population members (§4.3) |
-| `withCodeshared` | `true` — retrieve operating + marketing links; deduplicate to operating leg in ETL (see §7.1) |
-| `withCargo` | `false` |
-| `withPrivate` | `false` |
-| `withLocation` | `false` for population calls (location not needed for membership; kept for webhook) |
-| Local from/to | `fromLocal` / `toLocal` in **airport local time** (see §5.3) |
-| Maximum window | **12 hours per request** (provider limit) — longer horizons split into multiple 12h queries |
-| Edge inclusivity | `[fromLocal, toLocal)` — left-inclusive; documented in manifest |
-| Pagination | No pagination; truncation signal checked (`result truncated` flag → split window) |
-| Result limits | Hard limit ~500 per call; if hit, split window into 6h halves |
-| Retries/timeout | 3 retries, 15s timeout, `maxDeliveryRetries=0` for subscriptions (separate) |
-| Schedule revisions | Capture `scheduledTime`, `revisedTime`, `predictedTime` per movement; preserve as-of versions (see §5.2) |
-| Cancellations/diversions | Canceled → `status=canceled`; diverted → `actual destination ≠ scheduled` with `diversion_flag` |
-| Retimes | New time creates new `service_date` handling — see `flight_instance_id` (§7.1) |
-| Population membership | One row per `flight_instance_id` per `cutoff` where `scheduled departure ∈ [cutoff, cutoff+window)` — see §5.2 |
-| Raw preservation | Persist raw JSON + `SHA-256` + `response_hash` + `retrieval_utc` + `fromLocal/toLocal` + `timezone` |
-| Retrieval timestamp | `fids_retrieval_utc` distinct from `event_timestamp` |
-
-### 5.2 T−24 operational acquisition (NEW, binding — V3.9-f.7, §39)
-
-It is **forbidden** to reconstruct T−24 from a final schedule observed later. T−24 is defined as **scheduled milestone `T` minus 24h** where `T` is the frozen milestone from §6.0 (e.g. `scheduled_gate_out`). Proven in two permitted ways:
-
-**Preferred — live schedule snapshots:**
-```text
-future airport/window assignment FROZEN early enough (≥25h before earliest T-24)
-  → actual FIDS observation at T-24 (live call, §5.1)
-  → actual FIDS observation at T-6
-  → actual FIDS observation at T-90m
-  → experimental webhook window (collection)
-  → later outcomes
-```
-Scheduler obligation: no airport/window may be assigned less than 25h before its earliest T−24 snapshot, so the T−24 FIDS call can be executed live. `assignment_frozen_at` recorded per batch. If assignment is too late, T−24 for that flight is marked `t24_unavailable` and excluded from primary.
-
-**Alternative — historical versioned as-known-at-time (only if provider preserves genuine versioned history):**
-If used, must prove provider retains trustworthy versioned `as-known-at-T` state + valid `available_at` timestamps, and ETL uses `information_available_timestamp ≤ T-24` to fetch the version observable at T−24. Proof required at Gate 0.5 before approval.
-
-Code paths: `scripts/build_stratified_catalog.ts` (assignment), `server/lib/disruption/fidsCensus.ts` (new — FIDS fetcher, TBD until Gate 5), `historical_feature_store` as-of lookup.
-
-### 5.3 FIDS timezone / DST handling (NEW, binding — V3.9-f.7, §41)
-
-Provider FIDS `fromLocal/toLocal` bounds are **airport-local time**. Fixed `UTC±offset` is forbidden.
-
-```
-canonical UTC experimental interval (e.g. window_start UTC, cutoff UTC)
-  → airport IANA timezone (from airport metadata, e.g. America/Los_Angeles for KLAX)
-  → convert to local date/time with DST-aware library (e.g. `Intl` / `date-fns-tz`)
-  → correct fromLocal/toLocal strings (e.g. "2026-08-30 08:00")
-  → provider query
-  → persist original fromLocal/toLocal + IANA timezone + UTC equivalents (both)
-  → persist conversion used
-```
-
-Mandatory DST test cases (in `tests/fidsTimezone.test.ts`): spring-forward gap, fall-back repeat hour, southern hemisphere, and `UTC window crossing midnight local`. Fail → controller refuses.
-
-### 5.4 REST/FIDS worst-case budget proof (NEW, binding — V3.9-f.7, §42)
-
-Replaces `≈1,000`. Formula (frozen in manifest, re-verified at Gate 0 with actual `units_per_call`):
-
-```text
-BASE = days × airports/day × horizons × calls/horizon × units/call
-     = 31 × 4 × 3 × 1 × 2  = 744 API units   (4 airports/day, 3 cutoffs, 1 Both/call, 2u/call)
-
-VALIDATION = Gate-5 spot-check: 10 sample windows × 3 horizons × 2u = 60
-
-DIAGNOSTICS + REFERENCE = coverage refresh free + traffic/region refs ~20u
-
-PLANNED RETRY BUDGET = 75 units (10% contingency, allows 3 retries on ~12 calls) — **ENFORCEABLE CAP**
-
-WORST CASE = BASE 744 + VALIDATION 60 + DIAGNOSTICS 20 = 824; **ENFORCEABLE MAX = 824 + min(actual retries, 75) = 899 (worst 899 if all 75 used, ≤1,000)**
-```
-
-**Enforcement (A30_3 #5):** Manifest records `FIDS_RETRY_UNIT_BUDGET=75`; controller `fidsCensus_v3.ts` enforces **global retry unit counter** — once exhausted, remaining calls stop/defer, never exceed REST partition. With enforcement, **824 ≤ MAX 899 < 1,000** → remains `<1000` leaving ~101 headroom, cannot rob `57,900` envelope. Per-call `2u` verified at Gate0; if provider raises cost, re-run proof before Phase6. Without enforcement 899 was *planned* not *enforced worst-case*.
-
 ---
 
 ## 6. Data pipeline & provenance (S2–S5)
@@ -451,22 +286,6 @@ WORST CASE = BASE 744 + VALIDATION 60 + DIAGNOSTICS 20 = 824; **ENFORCEABLE MAX 
 | S2 | Raw events immutable | `adb_ingest_events` never deleted/edited; every delivery retains subscription_id, batch_id, received_at, provider notification timestamp (if any), HTTP metadata, **raw payload + SHA-256**, parser version, schema version, number of items, upsert outcome |
 | S3 | Event log before current state | `flight_events` (one row per flight-item observation) feeds `flight_state` (latest via dedup) — the dedup table is an operational convenience, never the only research dataset |
 | S4 | Provenance invariant | "Never destructively overwrite research provenance." Rebuilding state from the raw log must be possible at any time |
-
-### 6.0 Exact T milestone (NEW, binding — V3.9-f.8, §38 — CANDIDATE pending Gate-0.5 verification)
-
-`T` in `T-24 / T-6 / T-90` is **NOT generic "scheduled departure"**. **Candidate** `T` is the `scheduled_gate_out` milestone below, but it is **NOT final until Gate-0.5 verifies provider `scheduledTime` semantics** (A30_3 #3).
-
-| Item | Frozen value |
-| ---- | ---- |
-| Exact milestone | **CANDIDATE: `scheduled_gate_out` per §6.3 FAA-ASPM mapping** — traveler-facing pushback; **if Gate-0.5 finds `scheduled_gate_out` unverifiable, FALLBACK `scheduled_wheels_off`** (documented in manifest, never changed after) |
-| Provider field path | **CANDIDATE:** `flight.movement.scheduledTime[gateOut]` → `scheduled_gate_out` — **path verified at Gate-0.5** (see §6.3 milestone table); frozen only after verification (`t_milestone_provider_path` in manifest) |
-| Original vs revised | `T = original scheduled_gate_out` (first published schedule) — not `revisedTime` after retiming; retime after cutoff does not move T |
-| Service-date handling | `service_date = local date of scheduled_gate_out` in origin airport timezone (see §5.3); flights crossing midnight keep original date |
-| Retime policy | **Deterministic (A30_3 #4):** retime **<2h** before scheduled_gate_out → **same** `flight_instance_id` (retain original T, `revised_departure_utc` mutable); **≥2h or service_date shift** → **new** `flight_instance_id` with `retime_parent_id` link (see §7.1, must match) |
-| Timezone | `scheduled_gate_out` stored as UTC; derived from airport-local `scheduledTime` + IANA timezone per §5.3 |
-| Stability | T never changes after `flight_population` row created; later FIDS revisions create new `available_at` versions but not new T |
-
-`T-24` means `T minus 24h`, `T-6` minus 6h, `T-90m` minus 90 minutes, all computed from frozen `scheduled_gate_out` UTC.
 
 ### 6.1 Dual prediction-state data contract (PRE + AIRBORNE) — NEW (V3.9-f.2)
 
@@ -665,59 +484,7 @@ means. PRE-side targets are equally explicit: departure delay = `actual_gate_out
 scheduled_wheels_off` (airborne/trajectory), stored as separate columns, never
 merged into one ambiguous "dep delay".
 
-### 6.3 Eight OOOI/ASPM milestone mapping (binding — V3.9-f.7, §47)
 
-Each of the 8 milestones maps one FAA-ASPM concept to one AeroDataBox JSON path, verified before freeze and re-verified at Gate 0.5. Never invent gate time from runway time.
-
-| # | Milestone | Provider JSON path (example) | Provider description | Semantic interpretation | FAA/ASPM equivalence | Null if unverified | Availability timestamp |
-| ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| 1 | `scheduled_gate_out` | `movement.scheduledTime` where `phase=gateOut` or `departure.scheduledTime` (verify) | Scheduled pushback | Gate-out scheduled | `scheduled_gate_out` per ASPM | `milestone_unverified=true` | `available_at` of that movement |
-| 2 | `actual_gate_out` | `movement.actualTime` gateOut or `departure.actualTime` if gate source exists | Actual pushback | Gate-out actual | `actual_gate_out` | NULL if no gate source (never derive from runway) | `available_at` |
-| 3 | `scheduled_wheels_off` | `movement.scheduledTime` runway departure or `departure.scheduledTime` | Scheduled wheels-off | Runway scheduled | `scheduled_wheels_off` | NULL if unverified | `available_at` |
-| 4 | `actual_wheels_off` | `movement.runwayTime` departure | Actual wheels-off | Runway actual | `actual_wheels_off` | must be verifiable (provider confirms runwayTime = wheels-off) | `available_at` |
-| 5 | `scheduled_wheels_on` | `movement.scheduledTime` runway arrival | Scheduled wheels-on | Runway scheduled | `scheduled_wheels_on` | NULL | `available_at` |
-| 6 | `actual_wheels_on` | `movement.runwayTime` arrival | Actual wheels-on | Runway actual | `actual_wheels_on` | must be verifiable | `available_at` |
-| 7 | `scheduled_gate_in` | `movement.scheduledTime` gateIn or `arrival.scheduledTime` | Scheduled gate arrival | Gate-in scheduled | `scheduled_gate_in` | NULL | `available_at` |
-| 8 | `actual_gate_in` | `movement.actualTime` gateIn | Actual gate arrival | Gate-in actual | `actual_gate_in` | NULL if no gate source | `available_at` |
-
-For each: `provider_description` = docs quote, `caveat` = any mismatch, `verification_source` = code `flightNotificationExtractor_v3.ts:xxx` + Gate 0.5 payload evidence. If unverifiable → keep NULL + `milestone_unverified=true`, never approximate. Gate 0.5 records live JSON examples for all 8.
-
-### 6.4 Four-timestamp provenance (binding — V3.9-f.7, §50)
-
-Every observation preserves separately:
-
-| Timestamp | Source | Nullable? | Ordering vs `prediction_cutoff` | QC rule |
-| ---- | ---- | ---- | ---- | ---- |
-| `event_timestamp` | Provider `reportedAtUtc` / `locReportedUtc` — when thing happened | NO | `event_timestamp ≤ prediction_cutoff` necessary but NOT sufficient | If missing → observation ineligible |
-| `provider_published_utc` | Provider `lastUpdatedUtc` — when provider published | YES (NULL if not provided) | Must be ≤ `available_at` if both present | Negative latency (`published > received`) → quarantine |
-| `received_timestamp_utc` | Our `adb_ingest_events.received_at` | NO | Always ≤ `available_at` | Clock skew >5 min → flag |
-| `available_at` | ETL computes as `received_timestamp_utc` + processing lag (or when feature row becomes queryable) | NO (computed) | **Eligibility: `available_at ≤ prediction_cutoff`** (§6.1 universal rule) | If NULL → ineligible; duplicates keep earliest |
-
-Negative latency, `available_at < event_timestamp`, or `received < published - 5 min` → quarantine table, not silently corrected.
-
-### 6.5 Snapshot provenance (binding — V3.9-f.7, §51)
-
-Every `flight_snapshots` and `flight_airborne_snapshots` row carries deterministic provenance:
-
-`snapshot_provenance = { flight_population_row_id/hash, fids_response_hash, schedule_version, weather_snapshot_id, historical_feature_row_ids (array), feature_builder_version (git SHA), snapshot_builder_version }`
-
-A researcher can answer "why was this feature available at this cutoff?" by joining `historical_feature_store` rows with `available_at ≤ cutoff`. Provenance stored as `provenance_json` or `provenance_hash` column.
-
-### 6.6 Gate-0.5 measure→freeze items (binding — V3.9-f.7, §52)
-
-Do NOT guess these — measure in canary/Gate 0.5, then freeze in manifest before Phase 6:
-
-| Item | How measured at Gate 0.5 | Frozen in manifest |
-| ---- | ---- | ---- |
-| Censoring grace | Distribution of `arrival-notification latency` (received − wheels_on) median/P95/max + 10 min margin | `censoring_grace_minutes` (proposal ≥60) |
-| `airborne_usable` min points | `obs_per_flight` distribution | `airborne_usable_min_points` (proposal ≥2 for line, ≥5 for curve) |
-| Target cadence | `median_gap_seconds` | `target_cadence_seconds` |
-| Minimum acceptable cadence | P95 gap | `min_acceptable_cadence_seconds` |
-| Maximum gap | max | `max_gap_seconds` |
-| Minimum trajectory duration/coverage | `trajectory_duration` + `completeness_%` | `min_trajectory_duration_seconds`, `completeness_threshold_%`, `completeness_formula` |
-| Warning/fail rule | Thresholds breach → `WARN` vs `FAIL` | `cadence_warning_rule`, `cadence_fail_rule` |
-
-Gate 0.5 records sample size, all distributions, latency, and rationale paragraph before freeze.
 
 ---
 
@@ -725,74 +492,17 @@ Gate 0.5 records sample size, all distributions, latency, and rationale paragrap
 
 | State | Definition | Modeling use |
 | ---- | ---- | ---- |
-| `observed` | Target-specific label observed (see §7.3) | regression labels for that target only |
-| `active_censored` | In window, label not yet observed, not canceled, grace not yet elapsed (see §7.4) | survival/censored tasks; excluded from regression labels for that target |
+| `observed` | `dep_runway_utc` / `arr_runway_utc` present | regression labels (delay, arrival delay) |
+| `active_censored` | in window, no runway yet, status pre-departure, not canceled | survival/censored tasks; excluded from regression labels |
 | `canceled` | status/payload indicates cancellation | cancellation classifier |
-| `diverted` | `actual_destination ≠ original_scheduled_destination` AND reliable evidence (`diversion_flag`) | diversion classifier (rare, high-value) |
-| `missing_outcome` | Grace elapsed with no terminal event | explicit "unknown"; kept out of label population; tracked as data-quality |
+| `diverted` | actual destination ≠ original scheduled destination AND reliable evidence (`diversion_flag`) | diversion classifier (rare, high-value) |
+| `missing_outcome` | window ended before any outcome event arrived | explicit "unknown"; kept out of label population; tracked as data-quality |
 
 - Per-flight retained fields: `original_scheduled_destination`,
-  `current_operational_destination`, `actual_destination`, `diversion_flag`, plus `flight_instance_id` (see §7.1).
-- Per-task label populations are **target-specific** (see §7.3): e.g. `wheels_on` delay regression = only snapshots where `wheels_on_label_observed=true`.
-
-### 7.1 Canonical `flight_instance_id` (NEW, binding — V3.9-f.7, §43)
-
-One **physical operated flight leg** = one prediction unit, not one marketing number.
-
-| Component | Source | Role |
-| ---- | ---- | ---- |
-| Preferred: provider `flightId` / `id` if stable across retimes/codeshares | AeroDataBox `flight.id` field, tested at Gate 0.5 for stability (same `id` across `withCodeshared` variants = stable) | `flight_instance_id` if verified stable; fallback otherwise |
-| Fallback canonical key (frozen): `operating_carrier + operating_flight_number + origin ICAO + destination ICAO (original scheduled) + service_date + scheduled_gate_out_utc` | Derived from FIDS/webhook `operating carrier`, `flightNumber`, `origin/destination`, `scheduled_gate_out` per §6.0 | Stable identity |
-| `callsign` | Where available | Disambiguation, not primary |
-| `provider_record_key` | Original FIDS record key | Link to raw FIDS row |
-| Codeshare handling | Marketing numbers → `marketing_flight_numbers[]` array on the **operating** leg; never create separate `flight_instance_id` per marketing number (see §7.2) | Prevents population inflation |
-| Retime handling | **Deterministic (A30_3 #4, must match §6.0):** `scheduled_gate_out` change **<2h** → **same** `flight_instance_id` (mutable `revised_departure_utc`); **≥2h OR service_date shift** → **new** `flight_instance_id` with `retime_parent_id` link | Identity vs state |
-| Diversion handling | Destination change → same `flight_instance_id` retains `original_scheduled_destination`; `current_operational_destination` and `actual_destination` updated; `diversion_flag` set | See §7.4 |
-| Collision fallback | If fallback key collides (same carrier/number/origin/destination/date but distinct provider records) → append `provider_record_key` hash suffix | Uniqueness |
-| Separation | `flight_instance_id` (stable) vs mutable `flight_state` (times, destinations, status) — never conflate | ETL principle |
-
-Code: `flightDataPrePostStore_v3.ts:researchEventKey()` extended to `flight_instance_id`; `fidsCensus.ts` canonicalizer; test `flightInstanceCanonical.test.ts`.
-
-### 7.2 Codeshare deduplication (NEW, binding — V3.9-f.7, §44)
-
-- AeroDataBox `withCodeshared` can return inferred codeshares with **false results possible** (docs). Prefer enough raw information to canonicalize internally to operating leg.
-- **Marketing identifiers stored as attributes**, never as separate physical units. Counting distinct `flight_instance_id` (operating leg) gives correct `population`, `unique_flights`, `route counts`, `test partitions`.
-- Verification at Gate 0.5: compare `withCodeshared=true` vs `false` payloads for same airport-window; confirm deduplication does not over-merge distinct operating flights.
-
-### 7.3 Target-specific label observability (NEW, binding — V3.9-f.7, §48)
-
-Generic `observed` flag retired. Each milestone has its own label-observed boolean:
-
-| Column | Meaning | When true |
-| ---- | ---- | ---- |
-| `gate_out_label_observed` | `actual_gate_out` known | Gate-out actual received and `available_at ≤ grace cutoff` |
-| `wheels_off_label_observed` | `actual_wheels_off` known | Wheels-off actual received |
-| `wheels_on_label_observed` | `actual_wheels_on` known | Wheels-on actual received |
-| `gate_in_label_observed` | `actual_gate_in` known | Gate-in actual received |
-
-A flight may be `wheels_on_label_observed=true` but `gate_in_label_observed=false` (gate time missing). Each regression target uses **its own observed population**: e.g. gate-arrival delay model trains only on `gate_in_label_observed=true` rows. Never train gate-in delay on wheels-on population.
-
-### 7.4 Censoring with frozen grace (NEW, binding — V3.9-f.7, §49)
-
-Binding sequence (patches all stale "window ended = missing" wording):
-
-```text
-collection/window ends
-  → outcome NOT automatically declared missing
-  → wait frozen grace interval (from §6.6, manifest)
-  → check task-specific terminal evidence (see §7.3)
-  → if any label_observed true → label normally (observed)
-  → else if canceled/diverted evidence → canceled/diverted
-  → otherwise → active_censored (if still within provider FIDS horizon) / missing_outcome (grace elapsed)
-```
-
-Grace measured at Gate 0.5 as `arrival-notification latency (received − wheels_on) P95 + margin`; frozen before Phase 6.
-
-### 7.5 Route / OD and aircraft/tail identity (NEW, binding — V3.9-f.7, §45-46)
-
-**Route/OD identity (§45):** `directed OD = (origin ICAO, original_scheduled_destination ICAO)` — ordered pair, directed. `original_scheduled_destination` vs `operational_destination` vs `actual_destination` kept separately; diversion represented as `actual ≠ original` + `diversion_flag`. Codeshare: route uses **operating** carrier OD, not marketing. Retime: route unchanged if destination same. Never silently convert directed to undirected.
-
-**Aircraft/tail identity (§46):** Priority fallback: `aircraft_reg (registration, e.g. 9V-SKD)` > `aircraft_mode_s` > `icao24` > `provider aircraft ID`. `tail_known = (registration NOT NULL)`. `missing_tail` → chain break, not linked. `conflicting identifiers` (reg vs mode_s disagree) → `tail_conflict_flag=true`, not linked. `aircraft_swap` (tail changes mid-rotation) → chain break at swap. `tail_chain_links` counted only on consistent registration across legs within `max_turnaround=6h` and `same calendar date`.
+  `current_operational_destination`, `actual_destination`, `diversion_flag`.
+- Per-task label populations: delay regression = only `observed` outcomes with
+  runway time ≥ cutoff (never impute 0); cancellation = all snapshots;
+  arrival-delay = `observed` arrivals.
 
 **AIRBORNE / POST population denominator (NEW, blocking — the POST-side
 census, mirroring §5):** "flights with airborne events we happened to observe"
@@ -862,136 +572,18 @@ POST_labeled                 received a final terminal label (§6.2 terminalizat
   crossover integrity, no duplicate anchor in cycle) are never sacrificed for
   the soft balance objective.
 
-### 8.2 REGIONAL adaptation full specification (NEW, binding — V3.9-f.7, §53)
-
-Retain `m_i ∈ [0.25, 1.5]` and hard cap ×1.5, but freeze the recurrence:
-
-| Item | Frozen value |
-| ---- | ---- |
-| Yield measure for adaptation | `yield_score_i` from last completed observation of `i` (from §9 yield formula); if never observed → `NULL` → use uniform |
-| History window | Exponential moving average `ema_yield_i(t) = α·yield_i(t) + (1-α)·ema_yield_i(t-1)` with `α=0.5`, window ~4 most recent observations; frozen |
-| Smoothing / cap | `raw_m = ema_yield_i / median_ema_yield_frame`; then `m_i = clamp(raw_m, 0.25, 1.5)` and `score_i = traffic_prior·m_i` capped `score_i ≤ traffic_prior·1.5` (no runaway) — **`r_i` REMOVED (A30_3 #6, was undefined)** |
-| Update frequency | After each **completed** airport observation (not daily tick); `m_i` version incremented |
-| Cold start | `m_i=1.0` until `ema_yield_i` exists (≤3 observations) |
-| Missing data | No yield history → `m_i=1.0` (not penalized) |
-| Zero-yield response | See §8.3 — only `repeated/persistent` state may down-weight; `once` never down-weights |
-| Reset | `m_i` never reset except manual adjudication entry; logs `m_i_history` array |
-| Deterministic replay | `random_seed` + sorted `m_i` state makes `p_i = score_i/Σscore` replayable; state persisted in `adb_sampling_frame.m_i` + `adb_collection_batches.m_state_hash` |
-
-All parameters (`α`, caps, window) in `adb_collection_meta` (`adaptive_version`, `adaptive_hash`).
-
-### 8.3 Zero-yield state machine (NEW, binding — V3.9-f.7, §54)
-
-Resolves PART 1 contradiction where older wording swapped which state affects `m_i`:
-
-| State | Entry condition | Leaves frame? | Affects `m_i`? | Next state |
-| ---- | ---- | ---- | ---- | ---- |
-| `normal` | Last observation had ≥1 flight row | No | No (normal `m_i` path) | `zero_yield_once` on first empty |
-| `zero_yield_once` | 1 consecutive empty observation | No | **NO** — excluded from adaptive evidence (single empty could be outage) | `zero_yield_repeated` on 2nd consecutive empty; `normal` on success |
-| `zero_yield_repeated` | ≥2 consecutive empties | No | **YES, candidate for down-weight** (`m_i ×0.75` soft penalty) | `zero_yield_persistent` after ≥5 consecutive empties or 30 days of empties |
-| `zero_yield_persistent` | Persistent empties (see above) | No | **Excluded from adaptive evidence** (like `once`) — log for manual review, still selectable via coverage floor | Manual review may move to `coverage_failed` if feed error proven |
-| `coverage_failed` | Feed/probe error (not empty) | **YES** — may leave frame | N/A | — |
-| `stale` | No direct observation >60 days | No | No | — |
-
-One empty observation never removes airport; `coverage_failed` is the only exit.
-
-### 8.4 Anchor / HUB relationship (NEW, binding — V3.9-f.7, §62)
-
-When `ADB_ANCHOR_ENABLED=true`, the single rotating anchor **consumes the one HUB slot** in `{HUB:1, MID:2, REGIONAL:1}`. That is: each batch has 1 anchor-HUB (from 5-pool, `no-repeat-until-all`, `anchor_pool_seed`), 2 MID (freshest-first per §8.6), 1 REGIONAL (yield-aware draw §8.2). Code and docs must match; `pickAirportCandidates` enforces exactly 1 HUB when anchor enabled, otherwise draws HUB via freshest-first.
-
-### 8.5 HUB and MID selection mechanics (NEW, binding — V3.9-f.7, §63)
-
-| Tier | Selection | Freshness rule | Eligibility filter | Tie-break |
-| ---- | ---- | ---- | ---- | ---- |
-| HUB (anchor) | `anchor_pool` rotation per §8.4 | `no-repeat-until-all` 5-cycle, seeded `anchor_pool_seed` | `pre_eligible && post_eligible && in_frame` | Lexical ICAO if tie |
-| HUB (if anchor disabled) | Freshest-first | `ORDER BY last_direct_observation_at ASC NULLS FIRST, tier_prior DESC` | Same | Same |
-| MID | Freshest-first (deterministic) | `ORDER BY last_direct_observation_at ASC NULLS FIRST` with `recent_exclusion=7 days` (no MID re-picked within 7 days unless frame < 2× slots) | Same | Same |
-
-Eligibility: `in_frame=true` + required feeds (§4.4) + not in active batch + cooldown. No unspecified randomness for MID.
-
-### 8.6 Coverage floor (no-starvation) (NEW, binding — V3.9-f.7, §55)
-
-Mathematically: **no airport with `m_i=0.25` may have its selection probability driven to zero by adaptation**. Enforcement: `m_i ≥0.25` guarantees `p_i ≥ (traffic_prior·0.25)/Σscore >0`. Additional forced-eligibility: any `REGIONAL` airport not observed in **≥20 days** gets `coverage_floor_boost = 1.5×` for one draw (deterministic, seeded) to prevent starvation. After boost, `m_i` returns to computed value. Interaction with `m_i`: floor boost caps at `1.5` and does not overwrite `m_i` memory. Not a representation claim.
-
-### 8.7 Crossover specification (NEW, binding — V3.9-f.7, §64)
-
-| Item | Frozen value |
-| ---- | ---- |
-| `crossover_group_id` | `crossover_block_id` per 14-day block (e.g. `block_001`) |
-| Experimental unit | **Airport-day** (one airport in one window) — not flight |
-| Matching variables | Same `candidate_pool` (same ~12 airports), same `time_class` (UTC slot ±1h), same `weekday_class` (weekday/weekend) |
-| Treatment | `window_shape = 1×4h vs 2×2h vs up-to-6h` (see §8 calendar) |
-| Randomization | Seeded `crossover_seed`, randomize `window_shape` within block after freeze |
-| Template freeze | Freeze `candidate_pool + UTC slot + day/block + crossover_block` BEFORE treatment randomization; treatment never depends on post-freeze observation |
-| Incomplete pair handling | If period-1 fails (delivery_failure/budget_reached), period-2 labeled `unmatched` and excluded from primary crossover analysis |
-| Order/carryover | Balanced order within block; 24h washout between crossover days |
-| Tagging | `crossover_group`, `crossover_period (1/2)`, `window_shape`, `actual_window_hours`, `stop_reason` on `adb_collection_batches` |
-
-### 8.8 Scheduler tie-break (NEW, binding — V3.9-f.7, §65)
-
-Run-level constrained randomized allocation (see §8 UTC schedule): when multiple seeded candidate schedules have equal `Σ(n_c−n̄)²` weekday×UTC imbalance, deterministic tie-break: **lexically smallest `time_window_schedule_seed` wins**; no optional "may also include region/local_time" criteria unless frozen as binding soft objective. Scheduler failure mode: if no schedule satisfies HARD constraints, refuse to schedule (no window).
-
 ---
 
 ## 9. Two-stage anchor probe (budget-capped)
 
-1. **Stage 1:** **Exact 12** shortlisted candidates across regions (list frozen in manifest at probe start — see §9.1), **2 h** standardized probes at matched `time_class` (UTC slot ±1h) / `weekday_class` (weekday/weekend) (never crossing in real time); record unique-flights/credit, chain-links/credit, stability. **WSSS (~331 rows/h) and OMAA (~127 rows/h) re-probed the same way as yield-reference normalization** (see §9.2) — not "calibration" for model probabilities.
-2. **Stage 2:** **Top exactly 5** candidates by anchor_score (see §8) get **longer 4 h confirmation** probe.
-3. Final anchor pool of **exactly 5**; station/API capacity applied as a **feasibility gate `rows_per_hour ≥60`** before scoring (never a score component). Total probe spend hard-capped within the 1,900/day budget (probe daily cap 500).
-
-### 9.1 Anchor probe exactness (NEW, binding — V3.9-f.7, §61)
-
-| Parameter | Frozen value |
-| ---- | ---- |
-| Shortlist count | **12** candidates — list in manifest `anchor_shortlist_v1` with exogenous values, source, retrieval date, hash (see §4.1/4.2/4.5 for traffic/region/carrier sources) |
-| Stage 1 duration | **2.0 hours** exactly (watchdog 60s tick) |
-| Stage 2 promotion count | **Exactly 5** (top 5 by Stage-1 `anchor_score`) |
-| Stage 2 duration | **4.0 hours** exactly |
-| Capacity gate | `rows_per_hour ≥ 60` — frozen in PART 1 and `anchor_probe.ts:CAPACITY_GATE`, also in manifest |
-| Time-class | `UTC slot ±1 hour` (e.g. slot 08:00 allows probes 07:00-09:00) |
-| Weekday-class | `weekday (Mon-Fri) vs weekend (Sat-Sun)` matched |
-| Scheduling | `matched time-class/weekday-class`, sequential, never crossing real time; `anchor_probe.ts:runSingleProbe` enforces |
-
-### 9.2 Yield-reference normalization (NEW, binding — V3.9-f.7, §58-59, renamed)
-
-The old word **"calibration"** for anchor yield is renamed **"yield-reference normalization"** to distinguish from probabilistic model calibration (ECE/Brier in §13.1).
-
-- **Primary reference:** WSSS (Singapore Changi) — `reference_yield_wsss` measured with identical 2h protocol.
-- **Fallback reference:** OMAA (Abu Dhabi) — used only if WSSS `capacity_gate` fails or WSSS probe invalid; `reference_yield_omaa`.
-- **Diagnostic:** Both probed even when one is primary; report `wsss_vs_omaa_ratio`.
-- **Invalid-reference behavior:** If both references fail capacity gate → probe aborts, manifest records `reference_invalid`, no scoring.
-
-**Yield standardization formula (binding):**
-
-```text
-component_std = clamp(candidate_component / reference_component, 0, 1)
-where candidate_component ∈ {uf_per_credit, chain_per_credit, stability}
-      reference_component = reference_yield_wsss.component (or omaa if fallback)
-      clamp(x,0,1) = min(1, max(0, x))
-```
-
-Clipping justification: values above reference saturate at 1.0 — intentional, because anchor yield is a **minority 20% component** of `anchor_score`; saturation prevents a single lucky probe from dominating (see §8 anchor score).
-
-**Anchor score (binding, frozen):**
-```text
-anchor_score = 0.40·traffic_score + 0.20·geo_score + 0.20·carrier_score + 0.20·yield_score
-yield_score  = (uf_std + chain_std + stability_std) / 3
-traffic_score = per §4.5 exogenous traffic normalized
-geo_score, carrier_score per §4.5
-```
-Station/API capacity is a **feasibility gate** before scoring, never a score component.
-
-**Stability calculation (binding):**
-```text
-buckets = 15-minute buckets of 2h window (8 buckets)
-count_i = row count in bucket i (whatever implementation counts — rows/events)
-mean = Σcount_i / 8
-variance = Σ(count_i - mean)² / 8  (population variance across buckets; NOT sample n-1)
-SD = sqrt(variance)
-CV = SD / mean   (if mean=0 → CV=0, stability=0)
-stability = 1 / (1 + CV)     clamp to [0,1]
-```
-All buckets use same definition; formula in `anchor_probe.ts:computeStability` + manifest.
+1. **Stage 1:** ~10–12 shortlisted candidates across regions, 2 h standardized
+   probes at matched time-class/weekday-class (never crossing in real time);
+   record unique-flights/credit, chain-links/credit, stability. WSSS (~331
+   rows/h) and OMAA (~127 rows/h) re-probed the same way as calibration.
+2. **Stage 2:** top ~5–6 candidates get a longer confirmation probe.
+3. Final anchor pool of 5; station/API capacity applied as a **feasibility
+   gate** before scoring. Total probe spend hard-capped within the 1,900/day
+   budget.
 
 ---
 
@@ -1009,7 +601,7 @@ All buckets use same definition; formula in `anchor_probe.ts:computeStability` +
   Retrospective archive availability ≠ eligibility (§6.1).
 - Sources (free, no AeroDataBox credit cost — retrieval/storage/archive are
   separate engineering constraints): aviationweather.gov METAR/TAF
-  (operational, **≤30 days history** per current AviationWeather Data API docs — verify at freeze, not 15 days; cache files), NOAA GFS/NAM grids, ERA5 /
+  (operational, **≤15 days history** + cache files), NOAA GFS/NAM grids, ERA5 /
   NOAA LDM reanalysis for deep backfill.
 - Schema: `weather_observation` + `weather_forecast` tables; `source` tag
   (`live_metar` | `archive_metar` | `gfs` | `era5`) so depths never mix.
@@ -1018,22 +610,6 @@ All buckets use same definition; formula in `anchor_probe.ts:computeStability` +
   from a later/revised source. The layer is "architected" day 1, "complete"
   only after the archive coverage check passes.
 - Enters the ladder at **Model 2**; marginal value = Model2 − Model1 on Engine A.
-
-### 10.1 Weather hierarchy and joins (NEW, binding — V3.9-f.7, §68)
-
-| Item | Frozen value |
-| ---- | ---- |
-| Precedence | `live_metar` (aviationweather.gov operational) > `archive_metar` > `gfs` > `era5` (reanalysis) — first available at `available_at ≤ cutoff` wins; deeper source never overwrites shallower if shallower exists |
-| Spatial join | Nearest station within **30 km** of airport reference point; if none, fallback to grid (GFS/ERA5) cell containing airport |
-| Temporal join | Snapshot at `T` uses most recent observation with `available_at ≤ T` and `valid_from ≤ T ≤ valid_to` (for forecasts) |
-| Issue/amendment selection | For TAF, latest amendment with `issue_time ≤ cutoff` and `available_at ≤ cutoff`; never a later amendment's truth |
-| Missing behavior | No observation within 6h → `weather_missing=true`, `weather_source=NULL`; not imputed |
-| Archive/live distinction | `source` tag preserves origin; era vs retrieval time stored separately |
-| Versioning | `weather_source_version`, `weather_api_date_checked`, `weather_retrieval_date`, `weather_archive_depth_verified_at_freeze` in manifest |
-
-### 10.2 Weather retention wording (binding — V3.9-f.7, §69)
-
-AviationWeather.gov docs state **previous 30 days** (not 15) as operational retention — freeze `weather_source_version`/`docs_API_date`/`retrieval_date`/`archive_depth_verified` in manifest at freeze, do not hard-code 15 days.
 
 ---
 
@@ -1177,26 +753,6 @@ unique_flight_rows_created_or_updated (inserted / updated / duplicates, from Ups
   pre-implementation requirement, not a nicety.
 - **No `1/p` auto-weight.**
 
-### 12.2.1 Historical feature store detailed spec (NEW, binding — V3.9-f.7, §70)
-
-| Item | Frozen value |
-| ---- | ---- |
-| Store name | `historical_feature_store` (immutable, append-only) |
-| Key | `(entity_type, entity_id, feature_name, valid_from)` — entity types: `airport`, `route`, `carrier×airport`, `tail`, `OD-pair`, `weather` |
-| Columns per row | `feature_value, source, source_timestamp, information_available_timestamp, valid_from, valid_to, source_hash` |
-| Feature list | `airport_delay_1h/6h/24h, route_delay_1h/6h/24h, carrier×airport_delay, tail_previous_leg_delay, OD_delay, utilization_7d, congestion_1h, weather_snapshot_id` — full list in manifest |
-| Lookback | `airport/route: 7 days min`, `tail: previous leg within 24h`, `weather: 6h`; window frozen |
-| Minimum observations | `airport delay: ≥5 flights` in lookback else `history_incomplete`; `tail: ≥1 previous leg landed` |
-| Update frequency | Real-time on each `flight_events` arrival + daily batch recompute |
-| Availability rule | Snapshot at `T` fetches `max(valid_from) WHERE available_at ≤ T` — never future |
-| Bootstrap source | Weather archive backfill (§10) + provider FIDS history as far as retained (≥7 days) + pre-run collection if available |
-| Readiness criterion | **Operational (A30_3 #10):** `history_ready_at` = earliest timestamp such that **full required lookback (airport 7d, tail 24h, weather 6h per §12.2.1) is available as-of** that timestamp (i.e. `available_at ≤ history_ready_at` for all required history) — not just `max(bootstrap_end, cutoff-lookback)` formula; earliest evaluation cutoff must be ≥ `history_ready_at`; reported `history_ready_at` + `history_bootstrap_report` |
-| Missing behavior | `history_incomplete=true` → excluded from primary (see warm-up rule above); secondary `history_complete` subset reported |
-
-### 12.2.2 Chain completeness (NEW, binding — V3.9-f.7, §72)
-
-`chain_completeness = linked_legs / should_have_successor_legs` where `should_have_successor_legs` = legs where tail had another scheduled departure from same airport within `max_turnaround=6h` on same service date and next leg's `origin = previous destination`. Denominator excludes `missing_registration`, `canceled` next legs, and `boundary` (last leg of day). `aircraft_swap` (registration changes) breaks chain. Calculated weekly per `tail` and reported in §17.2 dashboard. `known_absent` (observed no edge) vs `unknown` (unobserved) remain distinct.
-
 ### 12.3 Graph edge taxonomy
 
 - **Static** (route/schedule, from catalog + schedule ref data)
@@ -1254,10 +810,12 @@ explicitly-labeled experiment may test future flights of known aircraft/tails
   `calendar_day` + `event_id`, NOT `tail`; refuses splits that break a relevant
   group.
 - **CI via block bootstrap** at the experimental unit (calendar day /
-  disruption event), not blanket clustered SE — frozen per §13.4: 95% CI, 1000 replicates, block unit `calendar_day` for Engine A, `disruption_event_id` for Engine E, `airport` for Engine B, `region` for Engine C, `tail` for Engine D, `route` for Engine R.
-- **Engine-A test protection (CORRECTED — V3.9-f.7, §73):** **BEFORE Phase 6**, freeze + hash the **split-assignment rule** (calendar boundaries, blocking variables, group keys, event definition, seed, chronological ordering) — `split_rule_version`, `split_rule_hash` in manifest. **AFTER Phase 6 collection but BEFORE any model tuning**, apply that frozen rule to the actual collected rows, materialize the concrete `Engine-A test row IDs`, hash them (`test_row_hash`), make them read-only. **Tuning (features, hyperparameters, policy) may only use train/validation; final test never seen before.** Old wording "materialize test rows before Phase 6" is superseded — rows don't exist yet.
+  disruption event), not blanket clustered SE.
+- **Engine-A test protection:** model/collection-policy tuning → validation
+  cut; the final untouched Engine-A test is materialized once, hashed
+  (SHA-256), versioned, read-only — read once for the deployment claim.
 - Rolling-origin on the 31 days labeled **"early rolling-origin pilot
-  evaluation"**, never "robust seasonal validation" — folds frozen per §13.4.
+  evaluation"**, never "robust seasonal validation".
 - Constructible-at-cutoff unit test in the snapshot builder (a future-dated
   feature must error).
 - **Collection-mechanism ablation (a major result, not a side diagnostic):**
@@ -1287,79 +845,6 @@ coverage**, **interval width**, **tail performance** (delay ≥60/≥120 min).
 The product outputs `expected_delay`, `P(delay>15)`, `P(delay>60)`, and a
 conformal interval. For Model POST add **ETA error vs remaining-flight-time
 curve** (precision should improve as the aircraft approaches landing).
-
-Metrics frozen: `ECE bins=15 equal-width, Brier targets P(delay>15)/P(delay>60), interval coverage 90% (simple quantile baseline for Month 1 if conformal deferred), tail thresholds 60/120 min` — see §13.5.
-
-### 13.2 Primary scientific claim (NEW, binding — V3.9-f.7, §74)
-
-Before Phase 6 freeze in manifest:
-
-| Item | Frozen value |
-| ---- | ---- |
-| Primary model comparison | **Model 1 (XGBoost tabular + schedule/route/aircraft stats) beats Model −1 (persistence) on Engine A** |
-| Primary target | **CANDIDATE: `wheels_off delay`** (`actual_wheels_off − scheduled_wheels_off`) — *most reliable per expectation, but if Gate 0.5 finds `wheels_off`/`scheduled_wheels_off` unverifiable, FALLBACK `gate_out delay` (`actual_gate_out − scheduled_gate_out`)* — predeclared before looking at outcomes (A30_3 #10) |
-| Primary horizon | `T-6h` (if multiple horizons co-primary, report all; headline is T-6) |
-| Primary Engine | Engine A (chronological future-deployment representative) |
-| Primary metric | `MAE` (mean absolute error, minutes), lower is better |
-| Practical effect threshold | **≥2 minutes MAE improvement** over Model −1 (not just statistical significance) |
-| Uncertainty rule | 95% block-bootstrap CI (see §13.4) must exclude 0 |
-| Decision | `Model 1 beats Model −1` iff `MAE_Model1 < MAE_Model−1 − 2 min` AND CI excludes 0 on Engine A T-6h wheels_off |
-
-### 13.3 Endpoint hierarchy (NEW, binding — V3.9-f.7, §75)
-
-Every endpoint labeled `PRIMARY / SECONDARY / EXPLORATORY` before inspecting outcomes:
-
-| Endpoint | Horizon | Engine | Label |
-| ---- | ---- | ---- | ---- |
-| `wheels_off delay MAE` | T-6 | A | **PRIMARY** |
-| `gate_out delay MAE`, `wheels_on delay MAE`, `gate_in delay MAE` | T-24/T-6/T-90 | A | SECONDARY |
-| `P(delay>15) Brier`, `P(delay>60) Brier`, `P(delay>120) Brier` | all | A/E | SECONDARY |
-| `cancellation AUROC`, `diversion AUROC` | T-6/T-24 | A/E | SECONDARY |
-| `ETA MAE`, `wheels_on delay MAE (POST-B1)`, `gate_in delay MAE (POST-B2)` | POST | POST | SECONDARY (POST family) |
-| `Engine B/C/D/R/P` generalization gaps | — | B/C/D/R/P | SECONDARY |
-| `calibration ECE`, `coverage` | all | A/POST | EXPLORATORY for Month 1 (unless frozen) |
-| Individual feature ablations beyond primary | — | — | EXPLORATORY |
-
-Prevents cherry-picking headline after results.
-
-### 13.4 Model-selection and chronology (NEW, binding — V3.9-f.7, §76 + §73)
-
-```text
-TRAIN (days 1-20 deterministic) → VALIDATION (days 21-25) → MODEL/HYPERPARAM SELECTION
-  → UNTOUCHED TEST (days 26-31, Engine-A test rows hashed) → ONE deployment claim read
-```
-
-- Hyperparameters (`XGBoost max_depth, learning_rate, n_estimators`, etc.) tuned only on VALIDATION.
-- `n-fold` inside train for stability, but final selection uses validation MAE.
-- Final test never influences: feature choice, missingness treatment, hyperparameters, collection policy, endpoint, threshold, model family.
-- Rolling-origin folds: 5 folds expanding train window, frozen `rolling_folds = [15,18,21,24,27]` start days.
-- Every run logs `split_rule_version`, `group_by`, `seed`, `fold boundaries`.
-
-### 13.5 Probabilistic calibration and conformal (NEW, binding — V3.9-f.7, §77)
-
-Resolves §13.1 vs §20 contradiction:
-
-- **Month 1:** Conformal interval is **DEFERRED** to Model 7 / later. Month 1 reports simple **quantile prediction intervals** (e.g. 90% coverage via `quantile regression` on validation) with `coverage` and `interval_width` — not conformal. ECE and Brier still reported (ECE 15 equal-width bins, Brier for `P>15/P>60`).
-- **Later (Model 7+):** Full conformal calibration with frozen `conformal_method` (e.g. split-conformal) and `target_coverage=90%`. Deferral documented in manifest `conformal_status=deferred_to_model7`.
-
-Prevents Month 1 claiming conformal without method.
-
-### 13.6 Secondary analysis freeze status (NEW, binding — V3.9-f.7, §78)
-
-Items formally **D=DEFERRED** (frozen before analysis, not before collection) — must be frozen before looking at validation/test outcomes, with deadline `before any test read`:
-
-| Item | Freeze deadline | Current |
-| ---- | ---- | ---- |
-| Engine-B holdout % (airport) | Before validation tuning | Proposal 15% airports, stratified by region |
-| Engine-C region holdout | Same | Proposal hold-out `South America` as test region |
-| Engine-D tail holdout | Same | 20% tails |
-| Engine-R route holdout | Same | 15% directed OD pairs |
-| Block-bootstrap replicates/confidence | Before CI compute | 1000 replicates, 95% |
-| Rolling-origin folds | Before eval | 5 folds |
-| ECE bins | Before calibration compute | 15 bins |
-| Staleness buckets | Before staleness curve | 10m/30m/1h/3h/6h/12h/24h/48h |
-| Learning-curve fit | Before curve fit | `a·n⁻ᵇ + c` |
-| Missing-feature strategy per model | Before model fit | `missing_indicator + median` for XGB |
 
 ---
 
@@ -1400,7 +885,13 @@ flights.
 | S4 | Provenance invariant | ETL |
 | S5 | Airborne time-series preservation: research event log keys on `(flight, carrier, locReportedUtc)` so every observation survives; `raw_airborne_events → clean_airborne_points → flight_trajectory → flight_airborne_snapshots` pipeline; `prediction_state` stamped on SNAPSHOT rows (PRE/AIRBORNE) only — never on raw events (§6.1/§6.2) | new ETL, flightDataPrePostStore_v3.ts dedup fix, migrations 0019–0020 |
 
-Status: R1–R7 **IMPLEMENTED** (code exists, see §16 gates for LIVE-VERIFIED status) incl. §34-Q accounting already implemented (ledger + canary v1). S1–S5 **IMPLEMENTED** (migrations 0019-0020, `flight_events`/`raw_airborne_events` etc.) but S1 FIDS population fetcher, S3/S4 provenance wiring (`available_at`, `payload_sha256`), and historical_feature_store remain **IMPLEMENTED schema / NOT YET LIVE-VERIFIED** (see audit §22 `V3.9-f.7` gaps). S1 adds a layer; S5 fixes `lastUpdatedUtc` dedup loss (see §6.2). **Gate 0 code:** budget-partition report (units + credits ledgers) — LIVE-VERIFIED at Gate 0.
+Status: R1–R7 are **planned** (doc §45.5) incl. §34-Q accounting already
+implemented (ledger + canary v1). S1–S5 are **new from CGTAnalaysis11 + V3.9-f
+(V3.9_final_plan_review.md)**; S1 is the one delta that changes the pipeline
+shape (adds a layer, does not redesign); S5 removes a silent-loss risk by
+keying the research event log on `(flight, carrier, locReportedUtc)` instead of
+the overwriting `lastUpdatedUtc` dedup key (§6.2). **Gate 0 code:**
+budget-partition report (units ledger + credits ledger side by side).
 
 ---
 
@@ -1471,11 +962,11 @@ PHASE 4 — Gate 5 (population/census validation)
 19. Label results "population relative to the validated AeroDataBox-supported
     operational frame" unless independently validated.
 
-PHASE 5 — FREEZE (pre-Phase-6)
+PHASE 5 — FREEZE
 20. Write the versioned manifest (frame, anchor_score version, scheduler seed,
     anchor seed, catalog version, feature/snapshot builder SHA, real account
-    plan/units/refill, **plus all frozen values from §4.1/4.2/4.5/5.1-5.4/6.0/6.3-6.6/7.1-7.5/8.2-8.8/9.1-9.2/10.1-10.2/12.2.1-12.2.2/13.2-13.6** — traffic thresholds, region mapping, FIDS protocol, T milestone, 8-milestone mapping, label observability, censoring grace TBD→measure, adaptation, stability, capacity gate, weather hierarchy, historical store readiness, primary claim, endpoint hierarchy, split rule hash) to `adb_collection_meta`. **Do NOT materialize Engine-A test row IDs yet — rows don't exist before Phase 6 (see corrected §13.2).**
-21. Freeze + hash the **split-assignment rule** (calendar boundaries, group_by, seed, chronological ordering) — `split_rule_version`, `split_rule_hash` — not the row IDs. After Phase 6 collection but **before any model tuning**, apply frozen rule to actual rows, materialize test row IDs, hash (`test_row_hash`), make read-only.
+    plan/units/refill) to adb_collection_meta.
+21. Materialize + hash the Engine-A test row set.
 
 PHASE 6 — The 31-day run (§8 calendar)
 22. Day 1–5: 4h templates. Day 6: 2×2h matched to day 5. Day 7–10: 4h.
@@ -1587,13 +1078,13 @@ research and the provider's own documentation (all verified 2026-08-12):
 | ---- | ---- |
 | Previous-leg / late-arriving-aircraft delay is among the most predictive features; delay propagates along the same aircraft's itinerary | Chen, J. & Li, M., "Chained Predictions of Flight Delay Using Machine Learning," AIAA SciTech 2019 (San Diego State University) — junchen.sdsu.edu/proceedings/scitech_gnc19_Chen.pdf |
 | Delay propagation differs by aircraft utilization; previous delays, turnaround/buffer, weather, and utilization influence later flights; stronger propagation in later legs | Zheng, Z., Wei, W., et al., "A Comparative Analysis of Delay Propagation on Departure and Arrival Flights," SJSU ScholarWorks #2410 / Aerospace (MDPI) 8(8):212, 2021 — scholarworks.sjsu.edu/faculty_rsca/2410 |
-| Aircraft-chain continuity as first-class modeling; focused information-rich features beat feature-stuffing — **use SDSU Chen & Li 2019 + SJSU Zheng Wei Hu 2021 for chain/propagation, NOT #4774** | Zheng, Zou, et al., "A Data-Light and Trajectory-Based Machine Learning Approach…," SJSU ScholarWorks #4774 — **correctly cited ONLY for AIRBORNE trajectory ETA, not for same-tail downstream propagation (see §22 correction)** |
+| Aircraft-chain continuity as first-class modeling; focused information-rich features beat feature-stuffing | Zheng, Zou, et al., "A Data-Light and Trajectory-Based Machine Learning Approach…," SJSU ScholarWorks #4774 |
 | GNN for delay propagation = defensible hypothesis, not guaranteed winner | Wu, Chen, et al., "Delay Prediction of Flight Operation Network Based on Deep Learning," SJSU ScholarWorks #4935 (GCN-GRU); ERAU 2025 AIAA GNN-for-weather-delay (portfolio.erau.edu) |
 | Persistence / autoregressive baselines as the first gate for aviation delay | Chen & Li (2019); Sternberg et al., "A Review on Flight Delay Prediction," arXiv (2017) |
 | Ops + capacity/demand + wind/visibility + en-route weather | "Airport Delay Prediction with Temporal Fusion Transformers," arXiv 2405.08293 (2024) |
 | Delay as a network/propagation problem; data & methods taxonomy | "Flight Delay Propagation Modeling: Data, Methods, and Future Opportunities," Transportation Research Part E (2024), ScienceDirect S1366554524001169 |
 | Two-budget accounting: API quota vs Flight-Alert credits; 1 credit per flight item on SEND; retries cost extra; refill 1 unit = 1 credit; per-plan caps | AeroDataBox, "Flight Alert API: Guide to the New System" (2026-01-31) — aerodatabox.com/flight-alert-api-2026; doc.aerodatabox.com/rapidapi.html#/operations/RefillBalance |
-| Weather data availability (METAR/TAF, **30-day operational retention per current AviationWeather Data API**, free — verify at freeze) | AviationWeather.gov Data API — aviationweather.gov/data/api — record `weather_source_version`, `docs_API_date`, `retrieval_date`, `archive_depth_verified` in manifest (§10.2) |
+| Weather data availability (METAR/TAF, 15-day window, free) | AviationWeather.gov Data API — aviationweather.gov/data/api |
 | In-flight ETA/remaining-time as a first-class prediction state with trajectory features (grounding for Model POST, §6.2/§13) | Springer 2024 in-flight ETA study (trajectory-derived ETA/remaining-time, mirrors our `raw_airborne_events → clean_airborne_points → flight_trajectory → snapshots` pipeline); SJSU airborne-ETA line (#4774) |
 | Airborne fields (lat/lon/alt/groundSpeed/track/vsi/reportedAtUtc, `data_stage PRE|POST`) are provided per notification | verified in our own code: `server/lib/disruption/flightStatus_v3.ts`, `flightNotificationExtractor_v3.ts` (2026-08-12) |
 
@@ -1631,7 +1122,22 @@ research and the provider's own documentation (all verified 2026-08-12):
 
 ## 21. Final status
 
-**Architecture: LOCKED (GO). Sampling: GO (experimental allocation) but FRAME NOT YET REBUILT — tier/region pending (§4.1/4.2). Research/eval: GO with PREREGISTRATION INCOMPLETE — split rule / primary claim / endpoint hierarchy now frozen in §13.2-13.6 but manifest not yet written. Leakage: GO + population layer + availability-time rule (see §6.1/6.4) but `available_at` wiring NOT YET LIVE-VERIFIED. Credit model: GO after Gate 0 + canary (Gate 0.5 will verify). Airborne: GO to **preserve + measure** (S5, Gate 0.5); REST-based airborne monitoring stays a decision AFTER cadence measurement (§6.2). Strat2 carry-forward: COMPLETE (all eight restored safeguards, §22). Implementation lock: ARCHITECTURE LOCKED; CODE IMPLEMENTED for R1-R7/S1-S5 schema; **MANIFEST VALUES PENDING** — all V3.9-f.7 frozen values (traffic thresholds, region mapping, FIDS protocol, T milestone, flight_instance_id, 8-milestone mapping, label observability, censoring grace measure→freeze, adaptation `m_i`, coverage floor, balancing refs, anchor formulas, stability, capacity gate, weather hierarchy, historical store readiness, split rule) must be written to `adb_collection_meta` before Phase 6. The four blocking fixes (Gate 0.5 wording, schedule-as-known-at-cutoff, ADB_BATCH_BUDGET=1900, censoring grace interval) + the five data-contract requirements (availability-time rule, milestone-explicit targets, POST population denominator, as-of historical store, forecast-as-known-at-cutoff — all in §6.1/§6.2/§7/§10/§12.2, V3.9-f.5) + the accounting/bootstrap/foundation resolutions (**spendable envelope = 57,900 credits (1,000 reserved inside the 58,900 refill, §3.2)**, `history_ready_at` (§12.2), `airborne_eligible` pinned (§7), milestone verification (§6.2 — V3.9-f.6)) + the V3.9-f.7 pre-freeze patch (37.1-37.4 through 78, see §22) are binding. 60k: WAIT on Gate 0 + gates 1–5 + FREEZE.** This document is the FINAL, binding spec — all
+**Architecture: GO. Sampling: GO (experimental allocation). Research/eval: GO.
+Leakage: GO + population layer + availability-time rule. Credit model: GO after
+Gate 0 + canary. Airborne: GO to **preserve + measure** (S5, Gate 0.5);
+REST-based airborne monitoring stays a decision AFTER cadence measurement
+(§6.2). Strat2 carry-forward: COMPLETE (all eight restored safeguards, §22).
+Implementation lock: COMPLETE after the four blocking fixes (Gate 0.5 wording,
+schedule-as-known-at-cutoff, ADB_BATCH_BUDGET=1900, censoring grace interval)
+PLUS the five pre-collection data-contract requirements (availability-time
+rule, milestone-explicit targets, POST population denominator, as-of
+historical feature store, forecast-as-known-at-cutoff — all in §6.1/§6.2/§7/
+§10/§12.2, record in §22 V3.9-f.5) PLUS the accounting/bootstrap/foundation
+resolutions: **spendable envelope = 57,900 credits (1,000 reserved inside the
+58,900 refill, §3.2)**, historical-store warm-up/bootstrap with
+`history_ready_at` (§12.2), `airborne_eligible` pinned to the FIDS/population
+layer (§7), and milestone-mapping provider verification (§6.2 — record in §22
+V3.9-f.6). 60k: WAIT on Gate 0 + gates 1–5.** This document is the FINAL, binding spec — all
 previous revision files (`V3_CollectionStrategy.md`, `V3_CollectionStrategy2.md`,
 `V3_WebhookExtractionPlan.md`, `CGTAnalaysis*.md`, `ChatGptAnalaysis*.md`) are
 history/adjudication only and are NOT needed to execute. The remaining
@@ -1746,91 +1252,6 @@ IMPLEMENTATION; 60k ONLY after Gates 0–5.** All other reviewed areas (avail-
 ability-time rule, schedule-as-known-at-cutoff, milestone-explicit labels,
 POST denominator funnel, forecast-as-known-at-cutoff, weather, evaluation)
 confirmed correct — no further redesign.
-
-**Sixth pass (V3.9-f.7 — A30 pre-freeze patch, Aug 30):** Full reconciliation of A19/A30 analyses (chatGPTv3_A19_1 30 sections, chatGPTv3_A30_1 77-item #70, chatGPTv3_A30_2 FINAL MASTER 88 sections, cgtAnalysis13 50+ sections) against PART 1 + live repo audit (migrations 0017-0023, `build_stratified_catalog.ts`, `anchor_probe.ts`, `adbCollectionController_v3.ts`, `flightDataPrePostStore_v3.ts`, `flightNotificationExtractor_v3.ts`).
-
-**Overall assessment (ours):** Architecture is fundamentally sound — PRE/POST separation, population layer, 4-timestamp availability, immutable provenance, airborne preservation, aircraft-chain, weather-as-known-at-cutoff, anti-leakage, XGBoost-first/GNN-later, Engines A-E/R/P, collection-ablation, staleness — all validated and correctly retained. **NO V3.10 needed.** The 77-item list is not 77 defects — it is 12 blocker families where PART 1 was underspecified vs code. Real blocker count = ~12 families, not 77. ChatGPT correctly flagged that `4,053 REGIONAL` blanket, `ICAO-first-letter` region, undefined `flight_instance_id`/codeshare, incomplete FIDS protocol, ambiguous `T`, and missing adaptation math were **genuine Phase-6 blockers**; correctly identified `censoring grace / cadence / completeness` as **measure→freeze** (not invented), and `conformal`/`holdout fractions` as **deferrable** with preregistered deadline. We agree with ~90% of findings; the remaining 10% is over-strict phrasing (e.g. every GNN edge formula need not block collection if raw data preserved).
-
-**All V3.9-f.7 patches applied in PART 1:**
-
-| # | Blocker family | Change | PART 1 § |
-| ---- | ---- | ---- | ---- |
-| 37.1 | Traffic tier 4053 REGIONAL blanket | Replaced with measured external traffic metric (§4.1): source/period/thresholds/HUB-MID-REGIONAL/missing policy/version/hash, rebuild frame | §4.1 |
-| 37.2 | Region ICAO heuristic | Replaced with country→macro-region lookup table, 6 regions, exceptions, unknown policy, version/hash | §4.2 |
-| 37.3 | Population scope cargo/private/canceled | Frozen table (commercial YES, cargo/private/charter NO, canceled/diverted YES, marketing deduped) | §4.3 |
-| 37.4 | PRE/POST eligibility | Frozen Option B: HUB/MID require `pre_eligible && post_eligible`, REGIONAL post_eligible preferred | §4.4 |
-| 38 | Exact T milestone | Frozen `T = scheduled_gate_out` UTC, provider path, original vs revised, service_date, retime | §6.0 |
-| 39 | T-24 acquisition | Forbidden reconstruction; live snapshots with ≥25h assignment freeze, scheduler obligation, alternative proof | §5.2 |
-| 40 | Complete FIDS protocol | Frozen endpoint/direction/withLeg/withCancelled/withCodeshared/withCargo/withPrivate/withLocation, window 12h, pagination, dedup, raw hash | §5.1 |
-| 41 | FIDS timezone DST | Frozen UTC→IANA→local DST-aware conversion, persist both, mandatory tests | §5.3 |
-| 42 | REST budget proof | Explicit worst-case 899 < 1000 formula: BASE 744 + VALIDATION 60 + DIAGNOSTICS 20 =824, +75 retry cap =899 (enforced) | §5.4 |
-| 43 | Canonical flight_instance_id | Frozen operating carrier/number/origin/destination/service_date/scheduled_gate_out + codeshare/retime/diversion/collision rules, separation stable vs mutable | §7.1 |
-| 44 | Codeshare dedup | Marketing → operating canonicalization, store marketing as attribute, Gate 0.5 verify | §7.2 |
-| 45-46 | Route OD / Tail identity | Directed OD, original vs actual, diversion, priority reg>mode_s>icao24 | §7.5 |
-| 47 | 8 OOOI milestones | Per-milestone provider path/semantics/caveat, NULL+milestone_unverified if unverified | §6.3 |
-| 48 | Target-specific labels | Generic `observed` → `gate_out/wheels_off/wheels_on/gate_in_label_observed` | §7.3 |
-| 49 | Censoring | Full sequence with frozen grace, patches stale wording | §7.4 + §6.2 |
-| 50 | Four timestamps | Separate table with nullability/order/QC, universal `available_at ≤ cutoff` | §6.4 |
-| 51 | Snapshot provenance | Provenance JSON/hash linking to raw/population/weather/history/builder | §6.5 |
-| 52 | Gate-0.5 measure→freeze | Table of 10 items (grace, N usable, cadence, max gap, duration, completeness, warning/fail) | §6.6 + §16 |
-| 53 | REGIONAL m_i | Full recurrence `ema α=0.5`, smoothing, window, cold start, reset, cap [0.25,1.5] | §8.2 |
-| 54 | Zero-yield FSM | 5-step machine, what affects m_i, what doesn't, coverage_failed only exit | §8.3 |
-| 55 | Coverage floor | No-starvation guarantee, m_i ≥0.25, forced boost if 20d unseen | §8.6 |
-| 56 | Balancing vars | Degree/carrier/intl/traffic/geo/carrier scores with source/formula/period/missing | §4.5 |
-| 57-60 | Anchor formulas | 40/20/20/20 frozen, yield_reference normalization rename, component_std clamp justification, stability 1/(1+CV) population variance | §9.2 + §4.5 |
-| 61 | Probe exactness | 12 shortlist, 2h/4h, top 5, capacity 60, time/weekday class | §9.1 |
-| 62 | Anchor=HUB slot | Explicit anchor consumes HUB slot | §8.4 |
-| 63 | HUB/MID mechanics | Freshest-first, 7-day exclusion, tie-break | §8.5 |
-| 64 | Crossover | Full spec: group, unit airport-day, matching, treatment, seed, incomplete handling | §8.7 |
-| 65 | Scheduler tie-break | Lexically smallest seed | §8.8 |
-| 66 | Coverage-age ≤5d core | Recomputed per batch, diagnostic subset | §4.6 |
-| 67 | Env context | Weather severity/ATC/storm-track captured per batch (already in §8) | §8 |
-| 68-69 | Weather hierarchy/retention | Precedence live>archive>gfs>era5, 30km/6h joins, 30-day retention | §10.1-10.2 |
-| 70 | Historical store | Full spec: key, columns, lookback, min obs, bootstrap, history_ready_at | §12.2.1 |
-| 72 | Chain completeness | Denominator with 6h turnaround, boundary, swap handling | §12.2.2 |
-| 73 | Engine-A chronology | BEFORE freeze rule hash, AFTER materialize row IDs before tuning | §13 + §17 PHASE 5 |
-| 74 | Primary claim | Model1 vs Model-1 on T-6 wheels_off MAE ≥2 min + CI | §13.2 |
-| 75 | Endpoint hierarchy | PRIMARY/SECONDARY/EXPLORATORY table | §13.3 |
-| 76 | Model selection | Train→validation→test, rolling folds [15,18,21,24,27] | §13.4 |
-| 77 | Conformal | Month1 DEFERRED to Model7, quantile 90% interim, frozen method later | §13.5 |
-| 78 | Secondaries D | Table with deadlines before analysis | §13.6 |
-
-**Repo truth vs PART 1 (audit Aug 30):** traffic tier/region provisional but now specified — needs code patch + frame rebuild; FIDS `flight_population` schema exists but fetcher not implemented — **Phase 6 blocker until coded**; historical_feature_store absent — **blocker**; weather tables absent — **blocker**; `flight_instance_id`/`codeshare` not canonicalized — **blocker**; `m_i` adaptation stub — **blocker** (currently uniform); `available_at`/`payload_sha256` not wired — **partial**; evaluation Engines not coded — **deferred to analysis but primary Engine A split rule must be frozen now**. All correctly classified `B/C/D` per A30 — unresolved B count must reach 0 before Phase 6.
-
-**Verdict (ours, reconciled):**
-
-| Question | Answer |
-| ---- | ---- |
-| PRE + AIRBORNE architecture wrong? | **No** — sound, SJSU/SDSU/FAA/Transportation Research Part E 2024 all support core bets, with citation corrections (§19: #4774 only for AIRBORNE, not chain) |
-| Need V3.10 redesign? | **No** — patch V3.9, don't redesign |
-| Every numeric constant proven by literature? | **No, and need not be** — 40/20/20/20, 60 rows/h, 1,900/day, {1,2,1}, 4h vs 2×2h are **project-specific experimental choices**, not literature constants — correctly frozen as predeclared design |
-| Anchors proven optimal by SJSU/SDSU? | No — anchors are allocation mechanism, 20% yield minority guards against feedback loop; choice justified as experimental design, not theorem |
-| Architecture GO? | **YES** |
-| Frame frozen? | **NOT YET** — needs external traffic/region sources + rebuild (§4.1/4.2) |
-| Population/FIDS validated? | **NOT YET** — fetcher missing, Gate 5 pending |
-| Evaluation preregistered? | **NOW YES** (patched §13.2-13.6) — rule frozen, row IDs deferred |
-| Phase 6 GO? | **NO-GO** — until manifest written, Gates 0/1/2/3/0.5/4/5 pass, frame rebuilt, FIDS/fetcher/history/weather coded, canary PASS after `is_randomized` fix |
-
-**Next order (see runbook §17):** code the FIDS/historical/weather/flight-id patches → rebuild frame (4.1/4.2) → Gates 0→1→2 (cover/anchor) → canary (must PASS) → Gate 0.5 measure cadence/grace → Gate 4/5 population → manifest → preflight `proposal/TBD/~` scan (cat4=0) → Phase 6.
-
-**Seventh pass (V3.9-f.8 — A30_3 10 consistency fixes, Aug 31):** Full consistency audit of V3.9-f.7 against A30_3 10 issues + repo truth (code, migrations, logs, rl9). All patches are small, deterministic cleanups that finish the f.7 specification without redesign:
-
-| # | A30_3 issue | Fix applied in PART 1 / Log | PART 1 § |
-|---|---|---|---|
-| 1 | Traffic-tiering called “Frozen” but lists OR options | Renamed table to “Candidate value (pending freeze at manifest — NOT frozen until reference data obtained)” and clarified final metric/source/period/threshold must be chosen once at freeze | §4.1 |
-| 2 | Six-region definition overlaps (NA vs SA Central America, AP vs OC Australia) + Russia country→region 1:1 conflict | Fixed regions: NA = north of 7°N, SA = S-only no Central America, AP = excluding AU/NZ/Pacific, OC = AU/NZ/Pacific only; added explicit `region_overrides` table with Russia 60°E longitude split | §4.2 |
-| 3 | T = scheduled_gate_out called frozen and unverified simultaneously | Changed §6.0 to “CANDIDATE pending Gate-0.5 verification” with fallback `scheduled_wheels_off` if unverifiable | §6.0 |
-| 4 | Retime contradiction (same id vs new id at ≥2h) | Harmonized §6.0 and §7.1: `<2h → same flight_instance_id`, `≥2h or date shift → new id with retime_parent_id` | §6.0 + §7.1 |
-| 5 | 919 “worst case” not enforced (75 retry units only planned, not capped) | Added enforceable `FIDS_RETRY_UNIT_BUDGET=75` global counter; corrected math to `824 + 75 = 899 <1,000` (was 919) | §5.4 |
-| 6 | r_i undefined in REGIONAL formula | Removed `r_i`; formula is now `score_i = traffic_prior · m_i` capped at `traffic_prior·1.5` | §8.2 |
-| 7 | Two incompatible next-action lists (Log §1 canary-before-anchor vs Plan §17 anchor-before-canary) | Made Log §1 authoritative matching Plan §17; Step 6 labeled “SMOKE canary (pre-gate, proves fix)” and added Step 10b official Gate-3 after Gate 2 | Log §1 + Plan §17 |
-| 8 | “Phase 0 DONE / all implemented” too strong vs stub audit | Changed to “Legacy R1–R7/S1–S5 foundation complete; f.7/f.8 deltas DOCUMENTED+STUB NOT LIVE-VERIFIED” | Log §3 + §15 |
-| 9 | A/B/C/D counts disagree (10 vs 15 C) | Made 77-row adjudication table the single source of truth; summaries generated from it | Log §19 |
-| 10 | Chain completeness / history_ready_at / primary target fallback vague | Fixed chain denominator to distinguish scheduled vs observable successor, `history_ready_at` to operational full-lookback criterion, primary target fallback predeclared | §12.2.1 + §12.2.2 + §13.2 |
-| Stray | Trailing backtick after §6.0 candidate-T paragraph | Removed stray ` | §6.0 |
-| Math | 919 vs 899 headroom | Corrected to 899 with 101 headroom | §5.4 |
-
-No new architecture, no new Gates, no Phase-6 start — purely a V3.9-f.7 consistency cleanup → **V3.9-f.8**. Plan header and Log §0.1 bumped to f.8; stray backtick removed; budget math unified.
 
 
 
