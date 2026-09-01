@@ -1,5 +1,5 @@
 // ============================================================
-// v3 — THE careful field-by-field extractor (plan §5).
+// v3 — THE careful field-by-field extractor (plan §5, Sep1_1 §7-8).
 // Converts ONE AeroDataBox FlightNotificationContract flight item
 // into one flat clean.flight_data_pre_post row.
 //
@@ -11,6 +11,17 @@
 //   4. quality[] preserved as-is (Basic/Live/Approximate).
 //   5. payload_json = the WHOLE raw flight item (audit/recovery).
 //   6. data_stage = PRE / POST (evidence-based, plan §5c).
+//
+// Sep1_1 §7-8 provider contract corrections:
+//   - FIDS endpoint: GET /flights/airports/icao/{code}/{fromLocal}/{toLocal}
+//     NOT /flights/schedule
+//   - direction: single parameter (Both|Arrival|Departure)
+//     NOT withDepartures/withArrivals
+//   - withLeg=true: includes opposite movement (departure+arrival)
+//     NOT "leg-detail mode"
+//   - CanceledUncertain (code 12): distinct status, NOT merged with Canceled
+//   - Codeshare: marketing numbers stored as attribute, never separate ID
+//   - Cargo/private excluded via withCargo=false, withPrivate=false
 //
 // See MDplan/V3_WebhookExtractionPlan.md §8 Phase 3.
 // ============================================================

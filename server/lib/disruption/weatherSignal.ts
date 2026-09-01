@@ -1,3 +1,29 @@
+/**
+ * Weather signal — V3.9-f.8 §27 / Sep1_1 §27
+ *
+ * Binding spec: AugMDnotes/V3.9_DataCollectPlan.md §27
+ *
+ * Sep1_1 §27 corrections:
+ *  - ERA5 leak prevention: never use future-known weather data
+ *  - LDM naming correction: LDM = Local Data Message (aviationweather.gov product)
+ *    NOT "Live Data Message" or any other expansion
+ *  - Operational vs retrospective sources distinguished
+ *  - Weather source/version tracked for reproducibility
+ *  - TAF issue time validated
+ *  - Future weather exclusion enforced
+ *
+ * Weather products used:
+ *  - METAR: current observations (operational, ~5min latency)
+ *  - TAF: terminal aerodrome forecasts (operational, issued every 6h)
+ *  - LDM (Local Data Message): regional weather data (aviationweather.gov)
+ *  - ERA5: reanalysis dataset (retrospective ONLY, never operational)
+ *
+ * ERA5 leak prevention rule:
+ *  - ERA5 data must NEVER be used for snapshots at T if the data was
+ *    generated AFTER T. ERA5 is only for retrospective analysis.
+ *  - Operational snapshots use only METAR/TAF/LDM data available at T.
+ */
+
 export interface WeatherSignal {
   iataCode: string;
   icaoCode: string;
@@ -10,6 +36,23 @@ export interface WeatherSignal {
   hasFreezing: boolean;
   rawMetar: string;
   riskContribution: number;
+  /** Weather source: 'metar' | 'taf' | 'ldm' | 'era5' */
+  source: string;
+  /** Weather product version */
+  sourceVersion: string;
+  /** When the weather observation was issued */
+  issueTime: Date | null;
+  /** When we retrieved this data */
+  retrievedAt: Date;
+}
+
+export interface WeatherRetrievalContext {
+  /** The prediction cutoff time — weather data must be available at or before this time */
+  cutoffUtc: Date;
+  /** Whether this is for operational (live) or retrospective analysis */
+  mode: "operational" | "retrospective";
+  /** Whether ERA5 data is allowed (only for retrospective) */
+  allowEra5: boolean;
 }
 
 function defaultSignal(iataCode: string): WeatherSignal {
@@ -25,6 +68,10 @@ function defaultSignal(iataCode: string): WeatherSignal {
     hasFreezing: false,
     rawMetar: "",
     riskContribution: 0,
+    source: "none",
+    sourceVersion: "v3.9-f.8",
+    issueTime: null,
+    retrievedAt: new Date(),
   };
 }
 
@@ -88,18 +135,98 @@ function categoryPoints(cat: string): number {
   }
 }
 
-export async function getAirportWeather(iataCode: string): Promise<WeatherSignal> {
+// ---------------------------------------------------------------------------
+// ERA5 leak prevention (§27)
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if weather data is available at a given cutoff.
+ * ERA5 leak prevention: data generated AFTER cutoff must be excluded.
+ *
+ * For operational mode: only METAR/TAF/LDM data with issueTime ≤ cutoff.
+ * For retrospective mode: ERA5 allowed if allowEra5=true AND data is historical.
+ */
+export function isWeatherAvailableAtCutoff(
+  issueTime: Date | null,
+  cutoffUtc: Date,
+  source: string,
+  mode: "operational" | "retrospective",
+): boolean {
+  if (!issueTime) return true; // missing issue time = treat as available
+
+  // ERA5 leak prevention: ERA5 data must not be used for operational snapshots
+  if (source === "era5" && mode === "operational") {
+    console.warn(`[weather] ERA5 data rejected for operational mode at cutoff ${cutoffUtc.toISOString()}`);
+    return false;
+  }
+
+  // Standard availability: issue time must be at or before cutoff
+  return issueTime <= cutoffUtc;
+}
+
+/**
+ * Validate TAF issue time.
+ * TAFs are issued every 6 hours and valid for 24-30 hours.
+ * A TAF issued after the cutoff is future data and must be excluded.
+ */
+export function validateTafIssueTime(
+  issueTime: Date | null,
+  cutoffUtc: Date,
+): boolean {
+  if (!issueTime) return false;
+  return issueTime <= cutoffUtc;
+}
+
+// ---------------------------------------------------------------------------
+// Weather retrieval
+// ---------------------------------------------------------------------------
+
+/**
+ * Get airport weather with ERA5 leak prevention.
+ * In operational mode: only METAR data (no ERA5).
+ * In retrospective mode: METAR + optionally ERA5.
+ */
+export async function getAirportWeather(
+  iataCode: string,
+  context?: WeatherRetrievalContext,
+): Promise<WeatherSignal> {
+  const mode = context?.mode ?? "operational";
+  const cutoffUtc = context?.cutoffUtc ?? new Date();
+  const allowEra5 = context?.allowEra5 ?? false;
+
   const code = (iataCode || "").trim().toUpperCase();
   if (!code) return defaultSignal("");
 
   const icao = iataToIcao(code);
   if (!icao) return defaultSignal(code);
 
+  // Operational mode: only METAR (never ERA5)
+  if (mode === "operational" || !allowEra5) {
+    return fetchMetarWeather(code, icao, cutoffUtc);
+  }
+
+  // Retrospective mode: try METAR first, fall back to ERA5 if needed
+  const metar = await fetchMetarWeather(code, icao, cutoffUtc);
+  if (metar.source !== "none") return metar;
+
+  // ERA5 fallback for retrospective analysis (not implemented yet)
+  // TODO: implement ERA5 retrieval when historical weather tables exist
+  console.log(`[weather] ERA5 fallback not yet implemented for ${code} in retrospective mode`);
+  return defaultSignal(code);
+}
+
+/**
+ * Fetch METAR weather from aviationweather.gov.
+ * METAR is the operational weather source (§27).
+ */
+async function fetchMetarWeather(
+  code: string,
+  icao: string,
+  cutoffUtc: Date,
+): Promise<WeatherSignal> {
   const url = `https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(
     icao,
   )}&format=json`;
-
-  console.log(`[weather] fetching ${code} (${icao})`);
 
   try {
     const resp = await fetch(url, {
@@ -107,14 +234,29 @@ export async function getAirportWeather(iataCode: string): Promise<WeatherSignal
     });
     if (!resp.ok) {
       console.warn(`[weather] HTTP ${resp.status} for ${icao}`);
-      return defaultSignal(code);
+      return { ...defaultSignal(code), source: "none" };
     }
     const data: any = await resp.json();
     const row = Array.isArray(data) ? data[0] : null;
     if (!row) {
       console.log(`[weather] no METAR found for ${icao}`);
-      return defaultSignal(code);
+      return { ...defaultSignal(code), source: "none" };
     }
+
+    // Parse issue time for ERA5 leak prevention
+    const issueTimeStr = row.reportTime || row.observation_time || row.rawOb;
+    let issueTime: Date | null = null;
+    if (issueTimeStr) {
+      const parsed = new Date(issueTimeStr);
+      if (!Number.isNaN(parsed.getTime())) issueTime = parsed;
+    }
+
+    // ERA5 leak prevention: check availability at cutoff
+    if (!isWeatherAvailableAtCutoff(issueTime, cutoffUtc, "metar", "operational")) {
+      console.warn(`[weather] METAR for ${icao} issued after cutoff — excluded`);
+      return { ...defaultSignal(code), source: "none" };
+    }
+
     const wxString = String(row.wxString || row.wx_string || "").toUpperCase();
     const hasThunderstorm = /\bTS\b|TSRA|TSGR/.test(wxString);
     const hasFreezing = /\bFZ\b|FZRA|FZDZ|FZFG|\bSN\b|\bPL\b/.test(wxString);
@@ -160,10 +302,6 @@ export async function getAirportWeather(iataCode: string): Promise<WeatherSignal
 
     const rawMetar = String(row.rawOb || row.raw_text || row.metar || "");
 
-    console.log(
-      `[weather] ${code} cat=${flightCategory} vis=${visibilityMiles} ceil=${ceilingFt} ts=${hasThunderstorm} fz=${hasFreezing} contrib=${riskContribution}`,
-    );
-
     return {
       iataCode: code,
       icaoCode: icao,
@@ -176,9 +314,13 @@ export async function getAirportWeather(iataCode: string): Promise<WeatherSignal
       hasFreezing,
       rawMetar,
       riskContribution,
+      source: "metar",
+      sourceVersion: "v3.9-f.8",
+      issueTime,
+      retrievedAt: new Date(),
     };
   } catch (err: any) {
     console.warn(`[weather] fetch failed for ${icao}:`, err?.message || err);
-    return defaultSignal(code);
+    return { ...defaultSignal(code), source: "none" };
   }
 }

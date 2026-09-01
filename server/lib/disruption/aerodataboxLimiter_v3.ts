@@ -321,6 +321,61 @@ export async function listFeedAirports(service: FeedService): Promise<string[] |
 }
 
 // ---------------------------------------------------------------------------
+// FIDS (Flight Information Display System) — schedule/population census
+// V3.9 §5.1-5.4, Sep1_1 §7-9
+//
+// Endpoint: GET /flights/airports/{codeType}/{code}/{fromLocal}/{toLocal}
+// Parameters: direction=Both, withCancelled=true, withCodeshared=true,
+//   withCargo=false, withPrivate=false, withLocation=false
+// Cost: 1 REST API unit per call (NOT an Alert credit)
+// ---------------------------------------------------------------------------
+
+export interface FidsAirportResult {
+  departures: any[];
+  arrivals: any[];
+}
+
+/**
+ * GET /flights/airports/icao/{icao}/{fromLocal}/{toLocal} — 1 REST API unit.
+ * Fetches the FIDS population for one airport over a local-time window.
+ * Returns the raw departures+arrivals arrays or null on failure.
+ */
+export async function fetchFidsAirport(
+  icao: string,
+  fromLocal: string,
+  toLocal: string,
+  opts?: { direction?: "Departure" | "Arrival" | "Both" },
+): Promise<FidsAirportResult | null> {
+  const direction = opts?.direction ?? "Both";
+  try {
+    const params = new URLSearchParams({
+      direction,
+      withCancelled: "true",
+      withCodeshared: "true",
+      withCargo: "false",
+      withPrivate: "false",
+      withLocation: "false",
+    });
+    const url = `${BASE_URL}/flights/airports/icao/${encodeURIComponent(icao)}/${encodeURIComponent(fromLocal)}/${encodeURIComponent(toLocal)}?${params}`;
+    const resp = await throttledFetch(url, { headers: headers() });
+    if (!resp.ok) {
+      const body = (await resp.text().catch(() => "")).slice(0, 300);
+      console.warn(`[adb-v3] fetchFidsAirport ${icao} ${resp.status}: ${body}`);
+      return null;
+    }
+    const raw: any = await readJsonOrNull(resp);
+    if (!raw || typeof raw !== "object") return null;
+    return {
+      departures: Array.isArray(raw.departures) ? raw.departures : [],
+      arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
+    };
+  } catch (err: any) {
+    console.error(`[adb-v3] fetchFidsAirport ${icao} error:`, err?.message || err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // URL helpers
 // ---------------------------------------------------------------------------
 

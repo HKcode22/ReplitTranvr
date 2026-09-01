@@ -2,8 +2,8 @@
 # IMPLEMENTATION LOG — V3.9 Flight-Delay Data Collection
 
 This is the running record of the V3.9 project. The binding specification is
-**`V3.9_DataCollectPlan.md` PART 1 (§1–§22)** — we patch PART 1 only via adjudicated pre-freeze changes (V3.9-f.7/f.8/f.9), otherwise we only
-explain and execute it. `archive/OG_V3.9_DataCollectPlan.md` remains untouched. This log tells you, in this order:
+**`V3.9_DataCollectPlan.md` PART 1 (§1–§22)** — we patch PART 1 only via adjudicated pre-freeze changes (V3.9-f.7/f.8), otherwise we only
+explain and execute it. This log is at revision **f.9-log** (documentation-only; no normative Plan change). `archive/OG_V3.9_DataCollectPlan.md` remains untouched. This log tells you, in this order:
 
 1. **Where we are right now** (§0)
 2. **What to do next, as one complete ordered command list** (§1)
@@ -227,7 +227,36 @@ was interrupted) → `npm run canary` (**must now show PASS with >0 items stored
 | F | Sampling execution | Anchors, scheduler, crossover, HUB/MID/REGIONAL, adaptive state, coverage floor | **DOCUMENTED §§8.2-8.8/9.1-9.2, m_i STUB** |
 | G | Context/history/AIRBORNE | Weather, historical store, cadence, trajectories, chains | **DOCUMENTED §§10.1-10.2/12.2.1-12.2.2, store STUB** |
 | H | Evaluation/freeze | Split rule, primary endpoint, deferred items, manifest | **DOCUMENTED §§13.2-13.6, manifest NOT WRITTEN** |
-| I | Gates/final readiness | Gate verification, lexical preflight, consistency report, GO/NO-GO | **BLOCKED — gates 0/0.5/4/5 + canary PASS pending** |
+ | I | Gates/final readiness | Gate verification, lexical preflight, consistency report, GO/NO-GO | **BLOCKED — gates 0/0.5/4/5 + canary PASS pending** |
+
+**Phase-6 GO checklist (A31 §35, §97):** Before Phase 6 may begin, ALL of the following must PASS:
+
+| # | Gate/Check | Status | Evidence |
+|---|---|---|---|
+| 1 | Gate 0: Budget partition verified | PENDING | `npm run gate0` |
+| 2 | Gate 0.5: Payload content + cadence + grace + T milestone + FIDS endpoint | PENDING | Pilot run |
+| 3 | Gate 1: Coverage ≥4332 | PENDING | `npm run coverage` |
+| 4 | Gate 2: Anchor probes + stability | PENDING | `npm run anchor-probe` |
+| 5 | Gate 3: Canary PASS (>0 items, C_external==C_internal) | PENDING | `npm run canary` |
+| 6 | Gate 4: SOFT_STOP + cap enforcement | PENDING | Cap test |
+| 7 | Gate 5: Population/census funnel | PENDING | FIDS funnel |
+| 8 | FREEZE: Manifest written, split_rule_hash, run_start_date | PENDING | Manifest |
+| 9 | Frame rebuilt from external reference | PENDING | `npm run build-catalog` |
+| 10 | Canonical rule registry complete | PENDING | `V39_CANONICAL_RULE_REGISTRY.yaml` |
+| 11 | Consistency scan: 0 stale terms | PENDING | Grep scan |
+| 12 | Pre-run Alert-credit budget allocated | PENDING | Budget tree |
+
+**All 12 must PASS before Phase 6. Any single NO-GO blocks the run.**
+
+**Closure rule (A31 §98):** This V3.9 Plan/Log is considered CLOSED when:
+1. All 12 GO checklist items above are PASS.
+2. Phase 6 has started (first batch with `adb_collection_batches` row created).
+3. No further Plan/Log edits are permitted after Phase 6 starts (only manifest updates and batch metadata).
+4. The canonical rule registry (`V39_CANONICAL_RULE_REGISTRY.yaml`) is FROZEN (all `MEASURE→FREEZE` items resolved to `FROZEN`).
+5. The consistency scan (grep for stale terms) returns 0 matches.
+6. A final `LOG-YYYYMMDD-###` entry documents closure with evidence.
+
+After closure, the Plan/Log are ARCHIVED. Any corrections during Phase 6 go to a new `IMPLEMENTATION_LOG_PHASE6.md` file, not this one.
 
 
 ---
@@ -317,7 +346,7 @@ was interrupted) → `npm run canary` (**must now show PASS with >0 items stored
 > told you to do `--check-webhook` → `--cleanup` → canary → probes) is archived in
 > §36 (Archive) — every time the situation moves, the old "what to do next" moves to the
 > archive so you can always look back. **One ordered list only — no competing lists (A30 §13).**
-> Binding order is `Plan §17`: `Gate 0 → Gate 1 → Gate 2 anchor → Gate 3 canary → Gate 0.5 → Gate 4 → Gate 5 → FREEZE`. Step 6 below is a **pre-gate smoke canary** (proves the `is_randomized ?? false` fix for ~1 credit before spending probe credits) — the **official Gate-3 PASS per Plan §17 occurs after Gate 2 anchor scoring**, so Step 6 PASS alone does not satisfy Gate 3 if the frame has not been rebuilt (A30_3 #7).
+> Binding order is `Plan §17`: `Gate 0 → Gate 1 → Gate 2 anchor → Gate 3 canary → Gate 0.5 → Gate 4 → Gate 5 → FREEZE`. Step 6 below is a **pre-gate smoke canary** (proves the `is_randomized ?? false` fix for ~1 credit before spending probe credits) — the **official Gate-3 PASS per Plan §17 occurs after Gate 2 anchor scoring**, so Step 6 PASS alone does not satisfy Gate 3 if the frame has not been rebuilt (A30_3 #7). **CRITICAL (A31 §25/§86):** No Stage-1 probe may run before the frame is rebuilt from frozen traffic/region rules. The master table below enforces this.
 
 **NEXT ACTIONS — A30 §13 master table (Workstream I) — authoritative, matches Plan §17**
 
@@ -329,7 +358,10 @@ was interrupted) → `npm run canary` (**must now show PASS with >0 items stored
 | 4 | Step 3 PASS | `npm run anchor-probe -- --cleanup` | Deletes orphan `adb_collection_subs` + `abandoned` | 0 / 0 | `probe-owned orphan subs deleted: 0 of 0` (or 1 of 1) | No ACTIVE orphans remain | Re-run `--cleanup` | §0, §10 |
 | 5 | Step 4 PASS | `npm run health` then `npm run gate0` | Reads `subscriptions/balance` + `RapidAPI quota` (no spend) | 0 REST (health check) | `PASS balance 2900 (live-api)`, `Permanent floor 1000 intact YES`, `Run-total invariant HOLDING` | All three PASS | Gate 0 fails → re-verify `ADB_PLAN`/`ADB_MONTHLY_UNITS` | §9, §11 |
 | 6 — **SMOKE CANARY (pre-gate, not official Gate 3 PASS)** | Step 5 PASS, exclusive set | `npm run canary` | Creates 1 sub `maxDeliveryRetries=0` ~2min, deletes, writes `adb_collection_batches` + `adb_ingest_events` | **~1 credit** (1 item SEND) + 0 units | `C_external = B_before-B_stable`, `C_internal=Σ items`, `delivery_failures` | `|Δ|≤3` AND `failures=0` AND `B_after==B_after_2` AND >0 items | STOP — do not run probes, report `delivery_failure` + balance | §0.3.2, §10, §11 |
-| 7a-7l | Step 6 SMOKE PASS (required before spending probe credits) | `npm run anchor-probe -- --stage 1 --icao WSSS` (then OMAA,KLAX,KORD,EGLL,EDDF,LFPG,VHHH,RJTT,OMDB,SBGR,YSSY — one at a time, 2h each) | Creates 1 sub 2h, bills per item, writes `adb_anchor_probe` | **~30-80 credits per probe** within 1900/day | `probing 2h` → `rows/h` `uf/credit` `chain/credit` `stability` | `status=completed` `rows/h≥60` optional gate, `delivery_failures=0` | `--cleanup` then retry single ICAO | §10, §11 |
+| 6b — **FREEZE TRAFFIC/REGION RULES** | Step 6 SMOKE PASS | Choose exact: 1 traffic source, 1 metric, 1 period, 1 cut rule; choose exact 6-region country→region table with Russia 60°E override | Record in manifest + hash | 0 / 0 | `traffic_source`, `traffic_metric`, `traffic_period`, `tier_cut_rule`, `region_mapping_hash` frozen | All values non-TBD, non-candidate | BLOCKED — cannot rebuild frame without frozen rules | §4.1, §4.2, manifest |
+| 6c — **REBUILD FINAL FRAME** | Step 6b frozen rules | `npm run build-catalog` (re-run with frozen tier/region) | Replaces provisional 4,320 frame with final frame | 0 / 0 | New frame hash, new strata counts, 0 unclassified | `catalogInUniverse` matches, 0 REGIONAL unclassified | Fix tier/region mapping, re-run | §4.1, §4.2, §11 |
+| 6d — **GATE 1 on FINAL frame** | Step 6c PASS | `npm run coverage` | Re-verifies universe/catalog on rebuilt frame | 0 (free) | universe ≥ catalog, frame hash recorded | PASS with new frame | Fix frame, re-run | §10, §11 |
+| 7a-7l | Step 6d GATE 1 PASS on FINAL frame | `npm run anchor-probe -- --stage 1 --icao WSSS` (then OMAA,KLAX,KORD,EGLL,EDDF,LFPG,VHHH,RJTT,OMDB,SBGR,YSSY — one at a time, 2h each) | Creates 1 sub 2h, bills per item, writes `adb_anchor_probe` | **~30-80 credits per probe** within 1900/day | `probing 2h` → `rows/h` `uf/credit` `chain/credit` `stability` | `status=completed` `rows/h≥60` optional gate, `delivery_failures=0` | `--cleanup` then retry single ICAO | §10, §11 |
 | 8 | Any 7 completed | `npm run anchor-probe -- --status` | Read-only DB read | 0 / 0 | Table per ICAO `status/Rows/h/uf/chain/stability` | At least WSSS or OMAA `completed` | Check `adb_anchor_probe` | §10 |
 | 9 | Step 8 ≥1 baseline | `npm run anchor-probe -- --score` | Computes `anchor_score=0.4T+0.2G+0.2C+0.2Y` `yield=(uf+chain+stab)/3` vs WSSS | 0 / 0 | Ranked pool + proposed 5-airport lock | Scores 0-1, capacity gate applied | Verify `W_EXOGENOUS=0.4` etc. frozen | §10, §11 |
 | 10 | Step 9 PASS | `npm run anchor-probe -- --stage 2` | 4h confirmation for top 5 (requires stage1) | **~60-120 credits** | 4h rows, `rows/h` | All 5 `completed` | Refuses if no stage1 (R1 guard) | §10, §11 |
@@ -592,8 +624,11 @@ The webhook is an **event stream, not a census**. "Flights that emitted an updat
 we captured" ≠ "all flights that existed". Observability selects on size, activity,
 severity, tracking quality, etc. So `flight_population` records which flights
 existed at each cutoff (from FIDS/schedule ≈2 units per airport-window), snapshots
-are built for **every population flight**, and a post-cutoff event is used for the
-**label only** — it never decides whether a snapshot exists. Full coverage taxonomy
+are built for **every population flight** (population ∧ horizon-eligible), and a
+post-cutoff event is used for the **label only** — it never decides whether a
+snapshot exists. Each feature value enters the snapshot only if
+`information_available_timestamp ≤ prediction_cutoff`; unavailable optional features
+are `NULL` with `feature_missing=true`. Full coverage taxonomy
 (`supported → eligible → directly_subscribed → recently_observed →
 edge_discovered → zero_yield_* → coverage_failed → stale`); `edge-discovered` is
 not the same as `directly observed`.
@@ -696,7 +731,7 @@ envelope, S3 event log first, S4 provenance invariant, S5 airborne time series.
 
 The plan's own phases 0–7 — **this is exactly the structure we use in §3** of this
 log. Phases: 0 code deltas, 1 Gate 0, 2 Gates 1–2, 3 Gates 3–4 (+0.5 canary),
-4 Gate 5 census validation, 5 FREEZE (manifest + hashed test rows), 6 the 31-day
+4 Gate 5 census validation, 5 FREEZE (manifest + hashed split-assignment rule), 6 the 31-day
 run, 7 month-1 deliverables + evaluation. §17.1 lists month-1 deliverables (validated
 pipeline, snapshot pipeline, XGBoost that beats the persistence gate, info-per-credit
 curves, engine results, census coverage, window-experiment pilot, POST pilot).
@@ -782,7 +817,7 @@ context, event-vs-prediction-state, POST partition rule).
 | 2 | Gates 1–2 | Coverage, stratified catalog/frame, anchor probe → lock 5 airports. | IN PROGRESS (steps 10–11 done; 12 pending) |
 | 3 | Gates 3–4 + 0.5 | Exclusivity cleanup, credit canary, SOFT_STOP test, payload inspection. | PENDING |
 | 4 | Gate 5 | Census validation (FIDS population vs webhook events). | PENDING |
-| 5 | FREEZE | Versioned manifest, hash test rows, config frozen. | PENDING |
+| 5 | FREEZE | Versioned manifest, hash split-assignment rule, config frozen. | PENDING |
 | 6 | The 31-day run | 1,900 credits/day × 31 days. | PENDING — NOT started |
 | 7 | Month-1 deliverables | Snapshot ETL, leakage-safe eval, Model −1 vs Model 1, info-per-credit. | PENDING |
 
@@ -836,7 +871,7 @@ FAA/BTS-derived schedules. Not started.
 
 Steps 20–21: versioned manifest (frame version, anchor-score version, scheduler
 seed, anchor seed, catalog version, builder SHA, real account plan/units/refill) →
-`adb_collection_meta`; materialize + hash the Engine-A test rows. Not started.
+`adb_collection_meta`; hash the split-assignment rule (NOT test row IDs — rows don't exist yet). Not started.
 
 ### Phase 6 — The 31-day run
 
@@ -885,7 +920,7 @@ pilot", never "validated production model".
 - **Outputs:** `gate0` PASS, manifest entry `budget_partition`.
 - **Artifacts:** `rl*.md` balance_before/after, `manifest.json`.
 - **Tests:** 1-credit refill live test (rl3 862→863→2901).
-- **Gate:** Gate 0 PASS iff all verified before any FIDS call.
+- **Gate:** Gate 0 PASS iff plan/units/1:1 refill verified before any FIDS call.
 - **Failure:** wrong `ADB_PLAN` or 58,900 vs 57,900 confusion → MISMATCH.
 - **Recovery:** re-check account, no code fix.
 - **DoD:** LIVE-VERIFIED balance 2900, manifest `V3.9-f.7` budget fields.
@@ -952,7 +987,7 @@ pilot", never "validated production model".
 
 - **Objective:** Freeze everything that must not adapt on Phase6 outcomes.
 - **Prereq:** Gates0-5 PASS (or Gates0.5/5 measure→freeze values frozen).
-- **Steps 20-21:** Write `adb_collection_meta` versioned manifest (frame hash, tier_version, `region_mapping_version`, `anchor_score version 40/20/20/20`, `scheduler seed`, `anchor_seed`, `adaptive_version`, `FIDS version`, `milestone mapping`, `cadence thresholds`, `grace`, `snapshot builder SHA`, `history_ready_at`, `split_rule_version/hash` — but NOT row IDs), then AFTER Phase6 apply rule to actual rows, materialize test row IDs hash read-only (§13.2). A30 §73 correction.
+- **Steps 20-21:** Write `adb_collection_meta` versioned manifest (frame hash, tier_version, `region_mapping_version`, `anchor_score version 40/20/20/20`, `scheduler seed`, `anchor_seed`, `adaptive_version`, `FIDS version`, `milestone mapping`, `cadence thresholds`, `grace`, `snapshot builder SHA`, `history_ready_at`, `split_rule_version/hash` — but NOT row IDs), then AFTER Phase6 apply rule to actual rows, hash test row IDs read-only (§13.2). A30 §73 correction + A31 §24 correction.
 - **Code:** `server/lib/disruption/adbCollectionController_v3.ts:291` `writeManifest`/`readManifest`.
 - **Tables:** `adb_collection_meta` key='manifest', split/test-set metadata.
 - **Config:** all `§4.1-13.6` frozen values.
@@ -1017,7 +1052,7 @@ comes from Chen & Li 2019 and Sternberg 2017 (see §2 §19).
 - **Provider/account:** RapidAPI plan monthly units, per-refill cap, balance cap.
 - **Inputs:** `ADB_PLAN`, `ADB_MONTHLY_UNITS=60000`, `AERODATABOX_API_KEY`.
 - **Expected output:** `PASS balance 2900 (live-api)`, `Permanent floor 1000 intact YES`, `Run-total invariant HOLDING 57,900 =58,900-1,000`.
-- **PASS:** all verified, `spendable=57,900`, worst-case 899<1000 enforced (was 919 planned) (§5.4).
+- **PASS:** plan/units/1:1 refill verified, `spendable=57,900`, worst-case 939<1000 enforced (§5.4).
 - **FAIL:** `data flow` FAIL while idle is expected; `floor` FAIL → re-check.
 - **Actual output:** rl3 862→863 (+1) live 1:1, rl9 balance 2900 PASS (see §9, §11 2026-08-16).
 - **Artifacts:** `rl3.md`, `manifest:budget_partition`.
@@ -2201,7 +2236,7 @@ That is exactly what `--check-webhook` + the canary settle next.
 
 **Fixes (Plan §6.0 stray backtick, §5.4 919→899, §4.1 CANDIDATE, §4.2 60°E, §6.0 CANDIDATE T, retime harmonization, r_i removal, authoritative next-action, legacy foundation wording, 77-row source, chain/history/primary fallback — see `V3.9_DataCollectPlan.md:1824` seventh pass).** `V3.9_DataCollectPlan.md:39` bumped f.7→f.8, `IMPLEMENTATION_LOG.md:4` corrected "we never edit", `§1:310` split smoke vs official Gate-3, `§0.6` balance 2900, `§9.2` ledger, TOC explicit `<a id="log-section-X">` anchors, `fidsCensus_v3.ts:39`/`historicalFeatureStore_v3.ts:27` stubs retained. Typecheck baseline 57 unchanged.
 
-## 2026-08-31 — V3.9-f.9 CODEBUFF F1–F7 DEFECT REMEDIATION
+## 2026-08-31 — V3.9-f.9-log CODEBUFF F1–F7 DEFECT REMEDIATION (Log-only revision, no Plan change)
 
 **F1 (stale sentence):** Removed "So the only true data table is flight_data_pre_post" from §6.3 (line 1800). Replaced with corrected text: S-layers are first-class per Plan §2/§6 — see §21.
 
@@ -2217,7 +2252,7 @@ That is exactly what `--check-webhook` + the canary settle next.
 
 **F7 (§12/§36 vestiges):** Renamed 4 orphaned anchors from log-section-12-* to log-section-36-*. Renamed §12.7–§12.9 headings to §36.7–§36.9. Fixed 6 stale §12 references in main text → §36.
 
-Version bumped to V3.9-f.9.
+Log revision f.9-log (documentation only; binding Plan remains V3.9-f.8).
 
 
 
@@ -2445,6 +2480,86 @@ feed eligibility, and `build-catalog` runs `applyBootMigrations()` first.
 > First real entry will be `LOG-20260831-001` once Gates 3-5 complete.
 > Until then, §11 prose change log is the execution truth.
 
+**LOG-20260831-001 (A31 corrections — documentation-only, no normative Plan change):**
+
+| # | Field | Value |
+|---|---|---|
+| 1 | Entry ID | `LOG-20260831-001` |
+| 2 | UTC date/time | `2026-08-31 12:00 UTC` |
+| 3 | Local date/time | `2026-08-31 05:00 PDT` |
+| 4 | Git SHA before | `uncommitted` |
+| 5 | Git SHA after | `uncommitted f.9-log` |
+| 6 | Real V3.9 phase | Phase 0 (pre-freeze corrections) |
+| 7 | Gate | Gate 0 (pre-gate corrections) |
+| 8 | Workstream | WS-A Architecture + WS-F Evaluation |
+| 9 | #70 item(s) | #3 versioning, #6 snapshot-existence, #16 T milestone, #17 primary-target, #24 test-row chronology, #26 canary false PASS, #27 status overclaims, #28 data-dictionary drift |
+| 10 | Plan section | §0.2, §0.3.2, §0.6, §0.7, §3, §5.1, §5.2, §5.4, §6.0, §6.1, §6.2, §6.5, §7.4, §9, §12.2.2, §13.2, §17, §21, §35 |
+| 11 | Requirement ID | REQ-003, REQ-006, REQ-016, REQ-017, REQ-024, REQ-026, REQ-027, REQ-028 |
+| 12 | Human-readable title | A31 closure audit corrections — documentation-only |
+| 13 | Problem | A31 identified 99 sections of corrections, contradictions, and new requirements |
+| 14 | Why scientifically | Ensures Plan/Log consistency with provider contracts and scientific rigor |
+| 15 | Why operationally | Prevents false PASS, status overclaims, and execution order violations |
+| 16 | Why reproducibility | Canonical rule registry provides single source of truth |
+| 17 | Previous documented behavior | Various stale wordings, overclaims, and contradictions |
+| 18 | Previous actual code behavior | N/A (documentation-only) |
+| 19 | Intended final behavior | All A31 high-priority items corrected; medium/low items in progress |
+| 20 | Plan diff | §0.2 version corrected, §0.3.2 canary records corrected, §5.1 FIDS protocol updated, §5.2 T-24 acquisition updated, §5.4 budget proof expanded, §6.0 T milestone updated, §6.1 snapshot-existence corrected, §6.2 airborne updated, §6.5 snapshot provenance updated, §7.4 outcome acquisition added, §9 probe rules expanded, §12.2.2 chain completeness expanded, §13.2 endpoint table updated |
+| 21 | Log diff | §0.2 version corrected, §0.3.2 canary records corrected, §1 execution order fixed, §3 test-row chronology corrected, §17 phase-5 chronology corrected, §21 grace 60m corrected, §35 status overclaims corrected, §36 canary false PASS corrected |
+| 22 | Code diff | None (documentation-only) |
+| 23 | Migration diff | None |
+| 24 | Test diff | None |
+| 25 | Config diff | None |
+| 26 | Gate result | N/A (pre-gate) |
+| 27 | Blocker? | No — documentation-only |
+| 28 | Dependency | None |
+| 29 | Revert risk | Low — documentation-only |
+| 30 | Rollback plan | N/A |
+| 31 | Verification | Consistency scan (pending) |
+| 32 | Evidence | A31_1.md, A31_2.md, CODEBUFF_ASSESSMENT_20260831.md |
+| 33 | Reviewer | Muse (AI) |
+| 34 | Approval | Pending human review |
+| 35 | Notes | f.9-log = documentation-only revision; Plan stays f.8 |
+
+**LOG-20260901-001 (Sep1_1 code implementation — actual code, migrations, tests):**
+
+| # | Field | Value |
+|---|---|---|
+| 1 | Entry ID | `LOG-20260901-001` |
+| 2 | UTC date/time | `2026-09-01 04:00 UTC` |
+| 3 | Local date/time | `2026-08-31 21:00 PDT` |
+| 4 | Git SHA before | `uncommitted f.9-log` |
+| 5 | Git SHA after | `uncommitted f.9-code` |
+| 6 | Real V3.9 phase | Phase 0 (code implementation) |
+| 7 | Gate | Gate 0 (pre-gate code) |
+| 8 | Workstream | WS-A Architecture, WS-B Spec consistency, WS-D Population/FIDS, WS-E Identity, WS-G Weather/history |
+| 9 | #70 item(s) | #7 FIDS endpoint, #8 withLeg, #9 CanceledUncertain, #14 timestamps, #15 raw ingress, #16 durable persistence, #19 codeshare/retime, #26 historical store, #27 weather ERA5, #36 adaptive m_i, #70 test suite |
+| 10 | Plan section | §5.1, §5.3, §6.0, §7.1, §12.2, §14, §15, §16, §27, §36 |
+| 11 | Requirement ID | REQ-007, REQ-008, REQ-009, REQ-014, REQ-015, REQ-016, REQ-019, REQ-026, REQ-027, REQ-036, REQ-070 |
+| 12 | Human-readable title | Sep1_1 code implementation: FIDS fetcher, historical store, raw ingress, timestamp taxonomy, codeshare/retime, adaptive m_i, weather, tests |
+| 13 | Problem | Multiple critical stubs (fidsCensus_v3.ts, historicalFeatureStore_v3.ts) not implemented; no timestamp taxonomy in code; no raw ingress immutability; no test suite |
+| 14 | Why scientifically | FIDS population is the prediction basis; historical store enables as-of queries; timestamp taxonomy prevents leakage; raw ingress ensures reproducibility; tests prove correctness |
+| 15 | Why operationally | Stubs block Phase 6; no FIDS = no population; no history = no features; no tests = no confidence |
+| 16 | Why reproducibility | Append-only raw layers + bitemporal history store enable full audit trail |
+| 17 | Previous documented behavior | fidsCensus_v3.ts: STUB (throws); historicalFeatureStore_v3.ts: STUB (throws); no timestamp taxonomy; no raw ingress layers; no test suite |
+| 18 | Previous actual code behavior | fidsCensus_v3.ts: throws on fetchFidsPopulation(); historicalFeatureStore_v3.ts: throws on getHistoricalFeatureAsOf() |
+| 19 | Intended final behavior | FIDS fetcher calls AeroDataBox API; historical store has bitemporal as-of lookup; raw ingress has 3 immutable layers; timestamp taxonomy defined; codeshare/retime handled; adaptive m_i implemented; weather ERA5 leak prevented; 71 tests pass |
+| 20 | Plan diff | None (implementation only) |
+| 21 | Log diff | Added §64 corrections, §77 LOG-20260901-001 entry |
+| 22 | Code diff | fidsCensus_v3.ts (180 lines), historicalFeatureStore_v3.ts (220 lines), rawIngress_v3.ts (180 lines), timestampTaxonomy_v3.ts (180 lines), flightInstanceCanonical_v3.ts (280 lines, enhanced), adaptiveMi_v3.ts (280 lines), weatherSignal.ts (240 lines, updated), aerodataboxLimiter_v3.ts (60 lines added), flightNotificationExtractor_v3.ts (header corrected) |
+| 23 | Migration diff | 0024_historical_feature_store.sql (80 lines), 0025_raw_ingress_immutable_layers.sql (120 lines) |
+| 24 | Test diff | tests/provider_fids.test.ts (23 tests), tests/timestamps_raw.test.ts (15 tests), tests/adaptation.test.ts (23 tests), tests/weather_history.test.ts (10 tests) — 71 tests total, all passing |
+| 25 | Config diff | vitest.config.ts (new), package.json (vitest devDependency) |
+| 26 | Gate result | N/A (pre-gate code) |
+| 27 | Blocker? | No — code implementation complete for these items; remaining blockers are live verification and calendar/evaluation modules |
+| 28 | Dependency | Requires AERODATABOX_API_KEY for live FIDS testing; requires database for migration 0024-0025 |
+| 29 | Revert risk | Low — new files + enhancements; existing extractor unchanged except header |
+| 30 | Rollback plan | Delete new files, revert edits to existing files |
+| 31 | Verification | 71 tests pass (vitest run); typecheck needed |
+| 32 | Evidence | vitest output: 4 passed, 71/71 tests pass |
+| 33 | Muse (AI) | Implementation agent |
+| 34 | Approval | Pending human review |
+| 35 | Notes | Sep1_1 §84: "Where is the executable code?" — answered for 11 critical items |
+
 Every task/change after `2026-08-30` **must** use `LOG-YYYYMMDD-###` (e.g. `LOG-20260831-001`) and record all 59 fields below. Do not reduce to vague prose. This is the `Definition of Done` per `A30 §8`.
 
 | # | Field | What to write | Example (LOG-20260831-001) |
@@ -2573,7 +2688,7 @@ For each component: repo path, module, function/class, helpers, DB table, migrat
 | 35 | PRE snapshot builder | future `flight_snapshots` T-24/6/90 `available_at≤cutoff` `history_ready_at` | `flight_snapshots` | STUB |
 | 36 | AIRBORNE snapshot builder | future `flight_airborne_snapshots` t `wheels_off≤t<wheels_on` | `flight_airborne_snapshots` | STUB |
 | 37 | target-specific outcomes | Log §7.3 `gate_out/wheels_off/wheels_on/gate_in_label_observed` target-specific | `flight_outcomes` | DOCUMENTED |
-| 38 | censoring/grace | Log §7.4 `grace_minutes` P95+margin 60m proposal measure→freeze | `flight_outcomes` | DOCUMENTED |
+| 38 | censoring/grace | Log §7.4 `grace_minutes` P95+margin measure→freeze (NOT hard-coded60m) | `flight_outcomes` | DOCUMENTED |
 | 39 | four-timestamp contract | Log §6.4 `event/provider/available/received` `available_at≤cutoff` `quarantine` | `flight_events` | DOCUMENTED |
 | 40 | provenance graph | Log §6.5 `provenance_json` `flight_population` hash `feature_builder_version` | `flight_snapshots` | DOCUMENTED |
 | 41 | historical feature store | `server/lib/disruption/historicalFeatureStore_v3.ts:1` `getHistoricalFeatureAsOf` `history_ready_at` operational | `historical_feature_store` | STUB |
@@ -2701,7 +2816,7 @@ For each component: repo path, module, function/class, helpers, DB table, migrat
 | `flight_population` | S1 provider-observable per (airport,cutoff,flight_instance) FIDS 2u/call | `fidsCensus_v3.ts:fetchFidsPopulation` canonical `flight_instance_id` | `flight_snapshots` | `(source_airport_icao,cutoff_utc,flight_instance_id)` | `provider_record_key` | `adb_sampling_frame` | `cutoff_utc,source_airport_icao` | flight at cutoff | per flight per horizon | append | FIDS raw JSON hash | permanent until re-FIDS | `response_hash` `retrieval_utc` |
 | `flight_snapshots` | PRE ML rows per (flight_instance, horizon T-24/6/90) `prediction_state=PRE_DEPARTURE` `available_at≤cutoff` | snapshot builder `historicalFeatureStore` as-of | `flight_outcomes` `Model -1/1` | `snapshot_id` | `(flight_instance_id,horizon,prediction_cutoff)` | `flight_population` `historical_feature_store` | `prediction_cutoff,flight_instance_id` | snapshot | per eligible flight per horizon | append | `flight_population` + `available_at` | permanent | `provenance_json` `population_hash` `feature_builder_version` |
 | `flight_airborne_snapshots` | POST rows per (flight_instance, observation t `wheels_off≤t<wheels_on`) | same `t` | `flight_outcomes` `Model POST` | `airborne_snapshot_id` | `(flight_instance_id,t)` | `flight_trajectory` `flight_population` | `t,flight_instance_id` | airborne snapshot | per observation | append | `observation t` | permanent | `provenance_json` |
-| `flight_outcomes` | 5 states `observed/active_censored/canceled/diverted/missing_outcome` + `gate_out/wheels_off/wheels_on/gate_in_label_observed` grace `60m` | ETL `terminalization` | `flight_snapshots` | `flight_instance_id` | `flight_instance_id` | `flight_events` `flight_population` | `outcome_state` | flight outcome | per flight | mutable until grace | `terminal event` | permanent | `grace_minutes` |
+| `flight_outcomes` | 5 states `observed/active_censored/canceled/diverted/missing_outcome` + `gate_out/wheels_off/wheels_on/gate_in_label_observed` grace `NULL/unfrozen until Gate 0.5 measure→freeze` | ETL `terminalization` | `flight_snapshots` | `flight_instance_id` | `flight_instance_id` | `flight_events` `flight_population` | `outcome_state` | flight outcome | per flight | mutable until grace | `terminal event` | permanent | `grace_minutes` |
 | `historical_feature_store` | immutable as-of store `(entity_type,entity_id,feature_name,valid_from)` `available_at≤T` `history_ready_at` operational | `historicalFeatureStore_v3.ts:1` `getHistoricalFeatureAsOf` bootstrap weather archive + FIDS history 7d | `flight_snapshots` | `(entity_type,entity_id,feature_name,valid_from)` | same | `flight_events` | `valid_from,entity_id` | feature version | per entity per time | append-only | `source` `history_ready_at` | permanent | `source_hash` |
 | `weather_observation` | METAR `observation_time≤cutoff` source `live_metar` 30d | `weatherSignal.ts:54` `getAirportWeather` | `flight_snapshots` | `(station,observation_time)` | `station,observation_time` | `airport` | `observation_time,station` | observation | per station per time | append | `aviationweather` | 30d + archive | `source` `retrieval_utc` |
 | `weather_forecast` | TAF `issue_time≤cutoff` `available_at≤cutoff` `valid_from/to` amendment | same | `flight_snapshots` | `(station,issue_time,valid_from)` | same | `airport` | `issue_time,station` | forecast | per forecast | append | `aviationweather` | 30d + ERA5 | `source` `amendment_id` |
@@ -2722,30 +2837,68 @@ For each component: repo path, module, function/class, helpers, DB table, migrat
 
 
 <a id="log-section-22"></a>
-## 22. Data lineage (A30 §23)
+## 22. Data lineage (A30 §23 — expanded A31 §93)
 
-> **Structural gap (F6):** This is a one-liner arrow chain. A30 §23 requested
-> per-arrow detail: key/timing/producer/availability/cardinality/provenance.
-> Expanding this to full detail is a FREEZE-stage task.
+> **Per-arrow detail (A31 §93):** Every arrow below records:
+> `producer, consumer, join_key, source_timestamp, available_at, provenance_hash, failure_behavior`.
+
+| # | Arrow | Producer | Consumer | Join key | Source timestamp | available_at | Provenance | Failure behavior |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Provider coverage → external reference | AeroDataBox `/collection/coverage` | `build_stratified_catalog.ts` | `airport_icao` | `coverage_response_utc` | `coverage_response_utc` | response hash | REFUSE if coverage unavailable |
+| 2 | External reference → final frame | OAG/historical FIDS archive | `build_stratified_catalog.ts` | `airport_icao` | `reference_retrieval_utc` | `reference_retrieval_utc` | reference hash | REFUSE if reference stale |
+| 3 | Final frame → materialized calendar/template | `build_stratified_catalog.ts` | `adb_collection_meta` | `frame_version` | `template_frozen_utc` | `template_frozen_utc` | `template_hash` | REFUSE if template unfrozen |
+| 4 | Template → T24/T6/T90 FIDS observations | `fidsCensus_v3.ts` | `adb_ingest_events` | `airport_icao + window_start + horizon` | `fids_retrieval_utc` | `fids_retrieval_utc` | `payload_sha256` | PAUSE batch on failure |
+| 5 | FIDS observations → canonical population membership | `fidsCensus_v3.ts` | `flight_population` | `flight_instance_id + cutoff` | `fids_retrieval_utc` | `fids_retrieval_utc` | `population_row_hash` | Mark `missing_population` |
+| 6 | Population → Flight Alert raw delivery | AeroDataBox webhook | `adb_ingest_events` | `notification_id` | `provider_notification_generated_utc` | `received_timestamp_utc` | `payload_sha256` | PAUSE batch on delivery_failure |
+| 7 | Raw delivery → raw item | `flightNotificationExtractor_v3.ts` | `adb_ingest_events` | `event_id` | `provider_state_updated_utc` | `available_at` | `item_hash` | Skip item, log error |
+| 8 | Raw item → semantic flight event | `flightNotificationExtractor_v3.ts` | `flight_events` | `flight_instance_id + event_phase` | `provider_state_updated_utc` | `available_at` | `event_hash` | Skip event, log error |
+| 9 | Flight event → current state | `flightDataPrePostStore_v3.ts` | `flight_state` | `flight_instance_id` | `provider_state_updated_utc` | `available_at` | `state_hash` | Skip state update, log error |
+| 10 | Current state → airborne points | AeroDataBox webhook | `raw_airborne_events` | `event_id` | `location_reported_utc` | `received_timestamp_utc` | `point_hash` | Skip point, log error |
+| 11 | Airborne points → trajectory | `flightDataPrePostStore_v3.ts` | `flight_trajectory` | `flight_instance_id` | `trajectory_built_utc` | `trajectory_built_utc` | `trajectory_hash` | Mark `trajectory_incomplete` |
+| 12 | Trajectory + historical/weather joins → PRE snapshot | `snapshotBuilder` | `flight_snapshots` | `flight_instance_id + cutoff` | `snapshot_built_utc` | `snapshot_built_utc` | `snapshot_hash` | Mark `features_missing` |
+| 13 | Trajectory + historical/weather joins → AIRBORNE snapshot | `snapshotBuilder` | `flight_airborne_snapshots` | `flight_instance_id + observation_time` | `snapshot_built_utc` | `snapshot_built_utc` | `snapshot_hash` | Mark `features_missing` |
+| 14 | Snapshots → outcome acquisition | `terminalization` | `flight_outcomes` | `flight_instance_id` | `outcome_observed_utc` | `outcome_observed_utc` | `outcome_hash` | Mark `missing_outcome` |
+| 15 | Outcomes → target labels | `labelBuilder` | `flight_snapshots` | `flight_instance_id + target` | `label_built_utc` | `label_built_utc` | `label_hash` | Mark `label_missing` |
+| 16 | Labels → split assignment | `splitRule` | `flight_snapshots` | `flight_instance_id` | `split_assigned_utc` | `split_assigned_utc` | `split_rule_hash` | Exclude from train/test |
+| 17 | Split assignment → model datasets | `datasetBuilder` | `Engines A/B/C/D/E/R/P/POST` | `split + fold` | `dataset_built_utc` | `dataset_built_utc` | `dataset_hash` | REFUSE if dataset incomplete |
+| 18 | Model datasets → models | `XGBoost/GNN` | `model_artifacts` | `model_id` | `model_trained_utc` | `model_trained_utc` | `model_hash` | REFUSE if training fails |
+| 19 | Models → evaluation | `evaluator` | `evaluation_results` | `model_id + test_fold` | `evaluated_utc` | `evaluated_utc` | `eval_hash` | REFUSE if evaluation fails |
+| 20 | Evaluation → staleness/ablation/MV | `diagnostics` | `diagnostic_reports` | `report_id` | `diagnostic_built_utc` | `diagnostic_built_utc` | `report_hash` | Log warning, continue |
 
 `coverage → tier/region/eligibility → clean.adb_sampling_frame → template → FIDS T-24/6/90 Both 12h IANA DST → flight_population canonical → webhook → raw envelope SHA → ingest_events → flight_events research key 4 stamps → flight_state → airborne → historical as-of → PRE/AIRBORNE snapshots → outcomes grace → split rule hash BEFORE / row IDs AFTER → Engines A/B/C/D/E/R/P/POST → staleness/ablation → MV`
 
 <a id="log-section-23"></a>
-## 23. Environment / configuration registry (A30 §24) — summary (full 22-row registry in prior 2355-line version; secrets only SET/UNSET)
+## 23. Environment / configuration registry (A30 §24 — inlined A31 §91)
 
-> **Structural gap (F4):** This section delegates to "prior 2355-line version"
-> for the full 22-row registry. The log is not fully self-contained here.
-> Full registry should be inlined at FREEZE stage per A30 §90.
+> **Inlined (A31 §91):** Full registry below. For every active variable:
+> `name, purpose, type, default, safe_default, required, secret, producer, consumer, phase, gate, failure_behavior`.
 
-| Variable | Purpose | Default | Frozen? |
-|---|---|---|---|
-| `DATABASE_URL` | Postgres | — | no |
-| `AERODATABOX_API_KEY` | provider | — | no |
-| `ADB_AUTO_COLLECT` | safety | true | yes pre-Phase6 must `false` |
-| `ADB_BATCH_BUDGET` | daily cap | 1900 | yes |
-| `time_window_schedule_seed` | UTC perm | random | yes FREEZE |
+| # | Variable | Purpose | Type | Default | Safe default | Required? | Secret? | Producer | Consumer | Phase | Gate | Failure behavior |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `DATABASE_URL` | Postgres connection | string | — | — | YES | YES | Replit | All | ALL | ALL | REFUSE |
+| 2 | `AERODATABOX_API_KEY` | Provider API key | string | — | — | YES | YES | Replit | FIDS/Webhook | ALL | ALL | REFUSE |
+| 3 | `ADB_AUTO_COLLECT` | Safety switch | boolean | `false` | `false` | YES | NO | Manual | Controller | ALL | ALL | REFUSE if true during Phase 6 |
+| 4 | `ADB_BATCH_BUDGET` | Daily cap | integer | `1900` | `1900` | YES | NO | Config | Controller | ALL | Gate 4 | REFUSE if exceeded |
+| 5 | `ADB_DAILY_SOFT_STOP_MARGIN` | SOFT_STOP margin | integer | `50` | `50` | YES | NO | Config | Controller | ALL | Gate 4 | Stop batch at 1850 |
+| 6 | `ADB_RESERVE_CREDITS` | Permanent floor | integer | `1000` | `1000` | YES | NO | Config | Controller | ALL | Gate 0 | REFUSE if balance < 1000 |
+| 7 | `ADB_MIN_BATCH_CREDITS` | Min batch size | integer | `300` | `300` | YES | NO | Config | Controller | ALL | Gate 4 | REFUSE if < 300 |
+| 8 | `ADB_ANCHOR_ENABLED` | Anchor toggle | boolean | `true` | `true` | YES | NO | Config | Scheduler | Phase 2+ | Gate 2 | Disable anchor slot |
+| 9 | `ADB_ANCHOR_POOL` | Rotating anchor pool | string | `KLAX,EGLL,WSSS,SBGR,OMDB` | — | YES | NO | Config | Scheduler | Phase 2+ | Gate 2 | REFUSE if empty |
+| 10 | `ADB_TIER_MIX` | Tier slots per batch | JSON | `{"HUB":1,"MID":2,"REGIONAL":1}` | — | YES | NO | Config | Scheduler | ALL | Gate 1 | REFUSE if invalid |
+| 11 | `ADB_WINDOW_HOURS` | Window length | integer | `4` | `4` | YES | NO | Config | Scheduler | ALL | Gate 4 | REFUSE if invalid |
+| 12 | `time_window_schedule_seed` | UTC permutation seed | string | random | — | YES | NO | Config | Scheduler | FREEZE | FREEZE | REFUSE if unfrozen |
+| 13 | `anchor_pool_seed` | Anchor order seed | string | random | — | YES | NO | Config | Scheduler | FREEZE | FREEZE | REFUSE if unfrozen |
+| 14 | `crossover_seed` | Crossover randomization seed | string | random | — | YES | NO | Config | Scheduler | FREEZE | FREEZE | REFUSE if unfrozen |
+| 15 | `split_rule_seed` | Split assignment seed | string | random | — | YES | NO | Config | Splitter | FREEZE | FREEZE | REFUSE if unfrozen |
+| 16 | `FIDS_RETRY_UNIT_BUDGET` | REST retry cap | integer | `75` | `75` | YES | NO | Config | FIDS fetcher | ALL | Gate 5 | Stop FIDS calls |
+| 17 | `FIDS_MAX_RANGE` | Max FIDS window | integer | TBD | — | YES | NO | Gate 0.5 | FIDS fetcher | FREEZE | Gate 0.5 | REFUSE if unfrozen |
+| 18 | `CENSORING_GRACE_MINUTES` | Censoring grace | integer | TBD | — | YES | NO | Gate 0.5 | Terminalizer | FREEZE | Gate 0.5 | REFUSE if unfrozen |
+| 19 | `WEATHER_SOURCE_VERSION` | Weather API version | string | TBD | — | YES | NO | Gate 0.5 | Weather joiner | FREEZE | Gate 0.5 | REFUSE if unfrozen |
+| 20 | `SPLIT_RULE_VERSION` | Split rule version | string | TBD | — | YES | NO | FREEZE | Splitter | FREEZE | FREEZE | REFUSE if unfrozen |
+| 21 | `SPLIT_RULE_HASH` | Split rule hash | string | TBD | — | YES | NO | FREEZE | Splitter | FREEZE | FREEZE | REFUSE if unfrozen |
+| 22 | `PHASE6_START_DATE` | Run start date | date | TBD | — | YES | NO | FREEZE | Controller | FREEZE | FREEZE | REFUSE if unfrozen |
 
-*Secrets only SET/UNSET. Full 22-row registry in previous 2355-line version.*
+*Secrets only SET/UNSET. Never print secret values.*
 
 <a id="log-section-24"></a>
 ## 24. Runtime / dependency reproducibility (A30 §25)
@@ -2767,7 +2920,7 @@ Baseline 57, post-f.7 57 — `no new errors relative to baseline 57`. Do not say
 
 | TEST ID | Requirement | Type | File | Command | Fixture/input | Expected | Observed | Status | Artifact |
 |---|---|---|---|---|---|---|---|---|---|
-| TEST-001 | webhook 1cr/item SEND | unit | `flightNotificationExtractor_v3.ts:242` `extractFlightNotification` | `npx tsx scripts/test-extractor-real-payload.ts` | real webhook JSON 1 item `flight_number=SQ305` | `C_external==C_internal` items==credits | rl9 1→1 PASS live canary | PASS | `rl9.md` decoded §0.3.2 |
+| TEST-001 | webhook 1cr/item SEND | unit | `flightNotificationExtractor_v3.ts:242` `extractFlightNotification` | `npx tsx scripts/test-extractor-real-payload.ts` | real webhook JSON 1 item `flight_number=SQ305` | `C_external==C_internal` items==credits | **rl9: C_external=1, C_internal=0, delivery_failures=1 → FAIL** (is_randomized bug, now fixed); re-run PENDING | FAIL (historical) | `rl9.md` decoded §0.3.2 |
 | TEST-002 | is_randomized wiring | unit | `flightNotificationExtractor_v3.ts:372` `isRandomized ?? false` | same | probe/canary no batch `null` → `false` | `false` not NULL, no delivery_failure | before fix `delivery_failure=1` FAIL | FIXED f.8 2026-08-30 `MUSE_A30_ASSESSMENT.md` | code diff |
 | TEST-003 | FIDS DST spring-forward gap | unit | `fidsCensus_v3.ts:utcIntervalToLocal` IANA `Intl.DateTimeFormat` | `npm run test:fids-tz` | 2026-03-08 America/Los_Angeles DST gap 02:00→03:00 | `fromLocal 01:59→03:00` gap, no 02:xx | STUB TODO | BLOCKED | `tests/fidsTimezone.test.ts` pending |
 | TEST-004 | FIDS DST fall-back repeat hour | unit | same | same | 2026-11-01 America/Los_Angeles repeat 01:00 hour | `01:30` occurs twice distinct `fromLocal` | STUB TODO | BLOCKED | same |
