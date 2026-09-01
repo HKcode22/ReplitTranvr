@@ -361,7 +361,7 @@ After closure, the Plan/Log are ARCHIVED. Any corrections during Phase 6 go to a
 | 6b — **FREEZE TRAFFIC/REGION RULES** | Step 6 SMOKE PASS | Choose exact: 1 traffic source, 1 metric, 1 period, 1 cut rule; choose exact 6-region country→region table with Russia 60°E override | Record in manifest + hash | 0 / 0 | `traffic_source`, `traffic_metric`, `traffic_period`, `tier_cut_rule`, `region_mapping_hash` frozen | All values non-TBD, non-candidate | BLOCKED — cannot rebuild frame without frozen rules | §4.1, §4.2, manifest |
 | 6c — **REBUILD FINAL FRAME** | Step 6b frozen rules | `npm run build-catalog` (re-run with frozen tier/region) | Replaces provisional 4,320 frame with final frame | 0 / 0 | New frame hash, new strata counts, 0 unclassified | `catalogInUniverse` matches, 0 REGIONAL unclassified | Fix tier/region mapping, re-run | §4.1, §4.2, §11 |
 | 6d — **GATE 1 on FINAL frame** | Step 6c PASS | `npm run coverage` | Re-verifies universe/catalog on rebuilt frame | 0 (free) | universe ≥ catalog, frame hash recorded | PASS with new frame | Fix frame, re-run | §10, §11 |
-| 7a-7l | Step 6d GATE 1 PASS on FINAL frame | `npm run anchor-probe -- --stage 1 --icao WSSS` (then OMAA,KLAX,KORD,EGLL,EDDF,LFPG,VHHH,RJTT,OMDB,SBGR,YSSY — one at a time, 2h each) | Creates 1 sub 2h, bills per item, writes `adb_anchor_probe` | **~30-80 credits per probe** within 1900/day | `probing 2h` → `rows/h` `uf/credit` `chain/credit` `stability` | `status=completed` `rows/h≥60` optional gate, `delivery_failures=0` | `--cleanup` then retry single ICAO | §10, §11 |
+| 7a-7l | Step 6d GATE 1 PASS on FINAL frame | `npm run anchor-probe -- --stage 1 --icao WSSS` (then OMAA,KLAX,KORD,EGLL,EDDF,LFPG,VHHH,RJTT,OMDB,SBGR,YSSY — one at a time) | Creates 1 sub, bills per item, writes `adb_anchor_probe` | **~30-80 credits per probe** (MID/REGIONAL); WSSS ~662 credits EXCEEDS 500-cap — duration CENSORED | `rows/h` `uf/credit` `chain/credit` `stability` | `status=completed` `rows/h≥60` optional gate, `delivery_failures=0`; if cap hit before 2h, `duration_censored=true` | `--cleanup` then retry single ICAO | §10, §11 |
 | 8 | Any 7 completed | `npm run anchor-probe -- --status` | Read-only DB read | 0 / 0 | Table per ICAO `status/Rows/h/uf/chain/stability` | At least WSSS or OMAA `completed` | Check `adb_anchor_probe` | §10 |
 | 9 | Step 8 ≥1 baseline | `npm run anchor-probe -- --score` | Computes `anchor_score=0.4T+0.2G+0.2C+0.2Y` `yield=(uf+chain+stab)/3` vs WSSS | 0 / 0 | Ranked pool + proposed 5-airport lock | Scores 0-1, capacity gate applied | Verify `W_EXOGENOUS=0.4` etc. frozen | §10, §11 |
 | 10 | Step 9 PASS | `npm run anchor-probe -- --stage 2` | 4h confirmation for top 5 (requires stage1) | **~60-120 credits** | 4h rows, `rows/h` | All 5 `completed` | Refuses if no stage1 (R1 guard) | §10, §11 |
@@ -463,10 +463,10 @@ First, the timing question answered, because it decides how you run this:
   so a shell timeout never leaves an orphan again" instruction — the orphan problem
   is about Replit killing a long-running shell, not about you forgetting a timer.
 
-So, in order (WSSS first — see below):
+So, in order (WSSS first — note: WSSS ~331 items/h × 2h = ~662 credits EXCEEDS 500-cap, so WSSS probe will be CENSORED — see §64.2):
 
 ```bash
-npm run anchor-probe -- --stage 1 --icao WSSS   # wait ~2h, then read the result
+npm run anchor-probe -- --stage 1 --icao WSSS   # WSSS hits 500-credit cap before 2h — duration censored
 npm run anchor-probe -- --stage 1 --icao OMAA   # wait ~2h
 npm run anchor-probe -- --stage 1 --icao KLAX
 npm run anchor-probe -- --stage 1 --icao KORD
@@ -638,8 +638,8 @@ not the same as `directly observed`.
 S2 raw events immutable (`adb_ingest_events`, with raw payload + SHA-256), S3 event
 log before current state (`flight_events` append-only feeds `flight_state` via
 dedup), S4 rebuild state from the raw log at any time. §6.1 defines the dual
-PRE/AIRBORNE data contract with the four availability timestamps
-(`event_timestamp`, `provider_published_utc`, `available_at`, `received_timestamp_utc`).
+PRE/AIRBORNE data contract with the five availability timestamps
+(`event_timestamp`, `provider_published_utc`, `ingestion_received_at`, `available_at`, `received_timestamp_utc`).
 §6.2 is the airborne foundation: preserve the time series
 (`raw_airborne_events → clean_airborne_points → flight_trajectory →
 flight_airborne_snapshots`), keyed on `(flight, carrier, locReportedUtc)` so
@@ -723,7 +723,7 @@ envelope, S3 event log first, S4 provenance invariant, S5 airborne time series.
 | 1 | Coverage | universeCount, catalogInUniverse recorded, universe ≥ catalog |
 | 2 | Anchor probe | frozen-formula scores; capacity as gate; pool not locked before measurement |
 | 3 | Credit canary | C_external = C_internal, failures = 0, exclusive set |
-| 0.5 | Webhook data content | real payloads: event fields only, 4 timestamps intact, trajectories reconstructable |
+| 0.5 | Webhook data content | real payloads: event fields only, 5 timestamps intact, trajectories reconstructable |
 | 4 | Webhook + cap | failures = 0, SOFT_STOP at ~1,850, second-start guard |
 | 5 | Population/census validation | population ≥ captured; missingness quantified |
 
@@ -783,7 +783,7 @@ context, event-vs-prediction-state, POST partition rule).
 | §3 Budget | Two pools: API units vs credits 1:1 refill; partition 57,900 spendable (58,900-1000 floor) + 1000 REST +100 unallocated=60,000; daily 1900 cap, SOFT_STOP 1850, reconciliation | Money walls | Prevents double-counting, silent overspend, manual Rescore | `server/lib/disruption/adbCollectionController_v3.ts:80` COLLECTOR_CONFIG, `migrations/0017` ledger | IMPLEMENTED, LIVE-VERIFIED at Gate 0 (balance 2900) | canary `C_external==C_internal` | `adb_reserve_credits=1000`, `daily_cap=1900`, `soft_stop_margin=50`, `spendable_envelope=57900` | Gate 0 re-verify plan units/caps |
 | §4 Sampling frame | Universe measured free, frame=universe∩feed-eligible keep zero-yield, strata tier×region 18 cells, balancing vars fixed snapshot, tier mix {HUB:1,MID:2,REGIONAL:1} | Defines eligible airports | Measured frame prevents convenience sampling | `scripts/build_stratified_catalog.ts:181`, `migrations/0021` | DOCUMENTED f.7 §§4.1-4.6 CANDIDATE 12mo metric + country lookup (NOT frozen until refs obtained, A30_3 #1-2) | `build-catalog` | `tier_version` etc. | Rebuild before FREEZE |
 | §5 Population | FIDS provider-observable population per (flight,cutoff) ≈2 units, snapshots per population flight, 5-state outcomes, coverage taxonomy 9 states + age | Denominator for census | Webhook ≠ census; post-event never defines snapshot existence | `migrations/0019` `flight_population`, stub `server/lib/disruption/fidsCensus_v3.ts:1` | DOCUMENTED §§5.1-5.4, IMPLEMENTED schema, FETCHER STUB (BLOCKED) | Gate 5 funnel `population→captured→snapshots→outcomes` | `fids_protocol_version`, `fids_units_per_call=2` | FIDS fetch + T-24 acquisition |
-| §6 Pipeline & provenance | S2 raw immutable+hash, S3 event log→state, S4 rebuild; **§6.0 CANDIDATE T=scheduled_gate_out pending Gate0.5 verify (fallback wheels_off if unverifiable, A30_3 #3)**; §6.1 dual +4 stamps `available_at≤cutoff`; §6.2 8 milestones + phase + trajectory + grace | Leakage walls | 4-timestamp strongest | `flightDataPrePostStore_v3.ts:201`, `historicalFeatureStore_v3.ts` stub | DOCUMENTED f.7 §§6.0/6.3-6.6 CANDIDATE, code PARTIAL | Gate0.5 trajectory | `t_milestone` CANDIDATE fallback | T verify |
+| §6 Pipeline & provenance | S2 raw immutable+hash, S3 event log→state, S4 rebuild; **§6.0 CANDIDATE T=scheduled_gate_out pending Gate0.5 verify (fallback wheels_off if unverifiable, A30_3 #3)**; §6.1 dual +5 stamps `available_at≤cutoff`; §6.2 8 milestones + phase + trajectory + grace | Leakage walls | 5-timestamp strongest | `flightDataPrePostStore_v3.ts:201`, `historicalFeatureStore_v3.ts` stub | DOCUMENTED f.7 §§6.0/6.3-6.6 CANDIDATE, code PARTIAL | Gate0.5 trajectory | `t_milestone` CANDIDATE fallback | T verify |
 | §7 Outcomes | 5 states + target-specific `gate_out/wheels_off/wheels_on/gate_in_label_observed` (§7.3), `flight_instance_id` canonical (§7.1), codeshare dedup (§7.2), directed OD/tail (§7.5), censoring grace (§7.4), airborne funnel | Modeling populations | Generic observed mixes targets; stable id + code-share collapse prevents N inflation | `migrations/0019` 5 states + `flight_instance_id` (new `flightInstanceCanonical_v3.ts`), `flightDataPrePostStore_v3.ts` | DOCUMENTED §§7.1-7.5, `flight_instance_id` IMPLEMENTED stub, labels DOCUMENTED | `flightInstance.test` pending | `flight_instance_version` | Wiring to ETL |
 | §8 Sampling design | 1×4h, UTC seeded balanced perm {00,04,08,12,16,20} HARD 6-day each slot once, calendar 26×4h+3×2×2h+2×6h, crossover R6 template freeze, anchor 5 provisional 40/20/20/20, yield f(), REGIONAL `m∈[0.25,1.5]` Σp=1, `sampling_weight` NULL | How to spend credits without bias | Frozen formula + minority yield guards feedback loop; efficiency not representation | `adbCollectionController_v3.ts:516` draw, `scripts/anchor_probe.ts:430` scores, `fidsCensus` | DOCUMENTED f.7 §§8.2-8.8, `m_i` STUB (uniform) | `drawWithoutReplacement` deterministic seed test | `time_window_schedule_seed`, `anchor_pool_seed`, `adaptive_version`, `crossover_seed` | Adaptive wiring |
 | §9 Anchor probe | Stage1 12×2h matched time/weekday, WSSS 331/OMAA 127 re-probed as yield-reference, Stage2 top5×4h, 5-pool capacity ≥60 gate, spend ≤1900/day (probe cap 500) | Calibrate anchors | Measured identically → apples-to-apples | `scripts/anchor_probe.ts:242` `runSingleProbe` `CAPACITY_GATE=60` | IMPLEMENTED, LIVE PENDING (canary FAIL blocked) | `--score` needs WSSS/OMAA baseline | `anchor_shortlist_hash`, `probe_cap_daily=500` | None if re-run after canary |
@@ -949,7 +949,7 @@ pilot", never "validated production model".
 
 - **Objective:** Prove whole accounting + webhook path honestly.
 - **Prereq:** Phase2 provisional, `ADB_AUTO_COLLECT=false`.
-- **Steps 13-16:** R1 list/delete orphans, `npm run canary` settle `B_after==B_after_2` `C_external==C_internal` tol3 failures0, SOFT_STOP 1850, second-start guard, Gate0.5 payload inspection `event_phase/event_timestamp/data_stage` only on snapshot + 4 timestamps distinct + airborne trajectory reconstructable + cadence.
+- **Steps 13-16:** R1 list/delete orphans, `npm run canary` settle `B_after==B_after_2` `C_external==C_internal` tol3 failures0, SOFT_STOP 1850, second-start guard, Gate0.5 payload inspection `event_phase/event_timestamp/data_stage` only on snapshot + 5 timestamps distinct + airborne trajectory reconstructable + cadence.
 - **Code:** `scripts/credit_canary.ts:36`, `server/routes_v3.ts:81` webhook, `flightDataPrePostStore_v3.ts:254` dual insert, `server/lib/disruption/adbCollectionController_v3.ts:1404` watchdog.
 - **Tables:** `adb_collection_batches` balance_before/after, `adb_ingest_events`.
 - **Config:** `ADB_DAILY_SOFT_STOP_MARGIN=50`, `maxDeliveryRetries=0`.
@@ -973,7 +973,7 @@ pilot", never "validated production model".
 - **Tables:** `flight_population` (source_type fids/schedule, observed_via_webhook), `flight_snapshots`, `flight_outcomes`.
 - **Config:** `withCancelled=true`, `withCodeshared=true` (dedup to operating), `withCargo=false`, `withPrivate=false`, 12h window, 2 units/call.
 - **Commands:** `npm run fids-census -- --sample` (stub, future).
-- **API:** `GET /flights/schedule` 2 units/call + `withCodeshared` warning.
+- **API:** `GET /flights/airports/{codeType}/{code}/{fromLocal}/{toLocal}` 2 units/call + `direction=Both` + `withCodeshared` warning.
 - **Outputs:** funnel proportions per airport/tier.
 - **Artifacts:** `flight_population` rows hash.
 - **Tests:** DST spring-forward/fall-back, duplicate handling, schedule revision preservation.
@@ -1105,7 +1105,7 @@ comes from Chen & Li 2019 and Sternberg 2017 (see §2 §19).
 - **Purpose:** Prove payload honest before spending.
 - **Prereq:** Gate3 canary sub delivered.
 - **Code:** `server/routes_v3.ts:81` webhook, `flightDataPrePostStore_v3.ts:201` research key.
-- **Expected:** raw event `event_phase/event_timestamp/data_stage` only (`prediction_state` only on snapshot), 4 timestamps distinct, `has_live_location` airborne preserved, multi-point trajectory reconstructable, cadence `obs_per_flight median/P95/max`.
+- **Expected:** raw event `event_phase/event_timestamp/data_stage` only (`prediction_state` only on snapshot), 5 timestamps distinct, `has_live_location` airborne preserved, multi-point trajectory reconstructable, cadence `obs_per_flight median/P95/max`.
 - **PASS:** ≥1 batch reconstructable, no field loss, distinct timestamps, cadence recorded.
 - **Actual:** PENDING (canary FAIL blocked).
 - **Freeze:** `grace_minutes`, `airborne_usable_min`, `cadence thresholds` (§6.6).
@@ -2006,8 +2006,8 @@ question):
 4. `flightDataPrePostStore_v3.ts` **upserts** by `dedup_key` (re-deliveries update,
    not duplicate) and appends the research event log keyed
    `(flight, carrier, locReportedUtc)`.
-5. We write the `adb_ingest_events` ledger row (this is `C_internal`) and answer
-   **2xx fast**.
+5. We write the `adb_ingest_events` ledger row (this is `C_internal`) — raw
+   persistence complete — then answer **2xx**.
 
 **The rl9 bug, and the fix (in this same file):** migration 0022 created
 `is_randomized` as `NOT NULL DEFAULT false`. But for any delivery with no managed
@@ -2667,20 +2667,20 @@ For each component: repo path, module, function/class, helpers, DB table, migrat
 | 14 | T-24 scheduling | `fidsCensus_v3.ts` + Plan §5.2 ≥25h before T-24 `assignment_frozen_at` | `T-24` | DOCUMENTED |
 | 15 | T-6 scheduling | same | 6h before T | — |
 | 16 | T-90 scheduling | same | 90m before T | — |
-| 17 | FIDS query construction | `server/lib/disruption/fidsCensus_v3.ts:fetchFidsPopulation` Both/12h/`withCancelled`/`withCodeshared`/`withCargo=false` | `GET /flights/schedule` 2u/call | STUB §5.1 |
+| 17 | FIDS query construction | `server/lib/disruption/fidsCensus_v3.ts:fetchFidsPopulation` Both/12h/`withCancelled`/`withCodeshared`/`withCargo=false` | `GET /flights/airports/{codeType}/{code}/{fromLocal}/{toLocal}` 2u/call | STUB §5.1 |
 | 18 | FIDS response preservation | same + `migrations/0019` `flight_population` raw_json+hash `response_hash` | `retrieval_utc` | SCHEMA IMPLEMENTED |
 | 19 | FIDS population membership | same | `flight_population` per (flight,cutoff) canonical `flight_instance_id` | SCHEMA STUB |
 | 20 | flight-instance canonicalization | `server/lib/disruption/flightInstanceCanonical_v3.ts:canonicalFlightInstanceId` carrier+number+origin+dest+serviceDate+scheduled_gate_out `retime_parent_id` | `flight_instance_id` | IMPLEMENTED f.7 |
 | 21 | codeshare canonicalization | same `dedupCodeshares` marketing→operating | `marketingFlightNumbers[]` | IMPLEMENTED |
 | 22 | route identity | Log §7.5 directed OD original vs actual `diversion_flag` | `OD` | DOCUMENTED |
 | 23 | tail identity | Log §7.5 priority reg>mode_s>icao24 `tail_known` `aircraft_swap` break | `tail` | DOCUMENTED |
-| 24 | webhook route | `server/routes_v3.ts:81` `webhookIngress` 2xx always | `POST /webhooks/aerodatabox` | IMPLEMENTED |
+| 24 | webhook route | `server/routes_v3.ts:81` `webhookIngress` raw persistence before 2xx | `POST /webhooks/aerodatabox` | IMPLEMENTED |
 | 25 | webhook auth | `server/lib/disruption/aerodataboxLimiter_v3.ts:26` `WEBHOOK_SECRET` `x-adb-signature` | header | IMPLEMENTED |
 | 26 | payload validation | `server/lib/disruption/flightStatus_v3.ts:188` zod `flightNotificationContractSchema` | length check | IMPLEMENTED |
 | 27 | extractor | `server/lib/disruption/flightNotificationExtractor_v3.ts:242` `extractFlightNotification` flatten null not 0 `isRandomized ?? false` | `has_live_location` | IMPLEMENTED (rl9 fix) |
 | 28 | immutable raw envelope | `migrations/0019:118` `adb_ingest_events` raw payload+SHA256 `payload_sha256` | never overwritten S4 | IMPLEMENTED |
 | 29 | ingest ledger | `migrations/0017:22` `adb_collection_batches`+`adb_ingest_events` 3 quantities `C_external` vs `C_internal` tol3 | ledger | IMPLEMENTED+LIVE |
-| 30 | flight_events | `migrations/0019:118` `flight_events` 4 timestamps 8 milestones research key `(carrier,locReportedUtc)` | `flight_events` | IMPLEMENTED |
+| 30 | flight_events | `migrations/0019:118` `flight_events` 5 timestamps 8 milestones research key `(carrier,locReportedUtc)` | `flight_events` | IMPLEMENTED |
 | 31 | current state | `server/lib/disruption/flightDataPrePostStore_v3.ts:139` dedup `SHA256(flight|carrier|lastUpdatedUtc)` vs research key | `flight_state` | IMPLEMENTED |
 | 32 | raw airborne events | `migrations/0020:32` `raw_airborne_events` every point | `raw_airborne_events` | SCHEMA STUB |
 | 33 | cleaned airborne points | same `clean_airborne_points` impossible lat/lon/alt/speed filter | `clean_airborne_points` | SCHEMA |
@@ -2689,7 +2689,7 @@ For each component: repo path, module, function/class, helpers, DB table, migrat
 | 36 | AIRBORNE snapshot builder | future `flight_airborne_snapshots` t `wheels_off≤t<wheels_on` | `flight_airborne_snapshots` | STUB |
 | 37 | target-specific outcomes | Log §7.3 `gate_out/wheels_off/wheels_on/gate_in_label_observed` target-specific | `flight_outcomes` | DOCUMENTED |
 | 38 | censoring/grace | Log §7.4 `grace_minutes` P95+margin measure→freeze (NOT hard-coded60m) | `flight_outcomes` | DOCUMENTED |
-| 39 | four-timestamp contract | Log §6.4 `event/provider/available/received` `available_at≤cutoff` `quarantine` | `flight_events` | DOCUMENTED |
+| 39 | five-timestamp contract | Log §6.4 `event/provider/ingestion_received/available/received` `available_at≤cutoff` `quarantine` | `flight_events` | DOCUMENTED |
 | 40 | provenance graph | Log §6.5 `provenance_json` `flight_population` hash `feature_builder_version` | `flight_snapshots` | DOCUMENTED |
 | 41 | historical feature store | `server/lib/disruption/historicalFeatureStore_v3.ts:1` `getHistoricalFeatureAsOf` `history_ready_at` operational | `historical_feature_store` | STUB |
 | 42 | weather observations | `server/lib/disruption/weatherSignal.ts:54` live METAR `weather_snapshot_id` | `weather_observation` | LIVE single STUB |
@@ -2751,7 +2751,7 @@ For each component: repo path, module, function/class, helpers, DB table, migrat
 | `package-lock.json` | lock | `npm ci` reproducibility | — | — | — | — | — | — | §25 | FROZEN |
 | `server/db.ts` | migrations | `applyBootMigrations, pool` | `BOOT_MIGRATIONS` | `migrations` | — | all | `DATABASE_URL` | — | §15 S2-5 | IMPLEMENTED |
 | `migrations/0017_collection_v39_credit_accounting.sql` | ledger | `adb_collection_batches, adb_ingest_events` 3 quantities `C_external` | — | ledger | — | ledger | — | — | §3 §11 | LIVE |
-| `migrations/0019_collection_v39_population_and_events.sql` | population+events | `flight_population, flight_events` 4 timestamps 8 milestones | — | `flight_events` | — | S1-3 | — | — | §5-6 | IMPLEMENTED |
+| `migrations/0019_collection_v39_population_and_events.sql` | population+events | `flight_population, flight_events` 5 timestamps 8 milestones | — | `flight_events` | — | S1-3 | — | — | §5-6 | IMPLEMENTED |
 | `migrations/0020_collection_v39_airborne_time_series.sql` | airborne | `raw_airborne_events, clean_airborne_points, flight_trajectory, flight_airborne_snapshots` S5 | — | S5 | — | S5 | — | — | §6.2 | IMPLEMENTED |
 | `migrations/0021_collection_v39_sampling_frame.sql` | frame | `clean.adb_sampling_frame` tier_source/traffic_prior/region `pre_eligible/post_eligible` | `universeUnion` | frame 4320 | — | §4 | — | §4 | LIVE provisional |
 | `migrations/0022_collection_v39_design_probability.sql` | probability | rename `airport_layer_design_probability` + `is_randomized` CHECK | — | 0022 | — | §8 §10 | — | — | §8 | LIVE |
@@ -2761,11 +2761,11 @@ For each component: repo path, module, function/class, helpers, DB table, migrat
 | `server/lib/disruption/adbCollectionController_v3.ts:80` | controller | `startBatchInner, drawWithoutReplacement, pickAirportCandidates, startCollectionWatchdog, flagBatchRows, writeManifest` | frame/subs | `adb_collection_*` | AeroDataBox subs 1cr/item | `adb_collection_*` | `ADB_BATCH_BUDGET=1900` `ADB_RESERVE=1000` | — | §8 §11 | IMPLEMENTED (m_i stub) |
 | `scripts/anchor_probe.ts:242` | probe | `runSingleProbe, computeScores, runCleanup, runCheckWebhook, CAPACITY_GATE=60` `W_EXO 0.4` | `adb_anchor_probe` | probe | webhook 1cr/item | `adb_anchor_probe` | `ADB_PROBE_*` | — | §9 | IMPLEMENTED |
 | `scripts/credit_canary.ts:36` | canary | `main` settle `B_after==B_after_2` tol3 exclusive set | subs/balance `C_external==C_internal` | ledger `adb_collection_batches` | 1cr/item SEND `maxRetries0` | ledger | `ADB_RECONCILE_TOLERANCE=3` | live | §11 | IMPLEMENTED+LIVE FAIL→fix f.8 |
-| `server/routes_v3.ts:81` | webhook | `webhookIngress` 2xx always `isRandomized ?? false` | — | `flight_events` `raw_airborne_events` | POST webhook | `flight_events` | `WEBHOOK_SECRET` | `test-extractor` | §6 | IMPLEMENTED |
+| `server/routes_v3.ts:81` | webhook | `webhookIngress` raw persistence before 2xx `isRandomized ?? false` | — | `flight_events` `raw_airborne_events` | POST webhook | `flight_events` | `WEBHOOK_SECRET` | `test-extractor` | §6 | IMPLEMENTED |
 | `server/lib/disruption/flightNotificationExtractor_v3.ts:242` | extractor | `extractFlightNotification, eventKey` flatten null not 0 | payload JSON | `flight_events` | webhook | `flight_events` | — | `test-extractor` | §6 | IMPLEMENTED (rl9 fix) |
 | `server/lib/disruption/flightDataPrePostStore_v3.ts:139` | store | `upsertFlightNotifications, researchEventKey SHA256(flight|carrier|locReportedUtc), appendResearchEvents` | `flight_events` | `flight_events`+`raw_airborne_events` dual | — | `flight_events` | — | — | §6 | IMPLEMENTED (`available_at` pending wiring) |
 | `server/lib/disruption/flightInstanceCanonical_v3.ts:1` | identity | `canonicalFlightInstanceId, dedupCodeshares` carrier+number+origin+dest+serviceDate+scheduled_gate_out `retime_parent_id` | FIDS rows | `flight_instance_id` | FIDS | `flight_population` | `flight_instance_version` | pending | §7.1 §43-44 | IMPLEMENTED f.7 |
-| `server/lib/disruption/fidsCensus_v3.ts:1` | FIDS | `fetchFidsPopulation, utcIntervalToLocal` IANA `Intl.DateTimeFormat` DST tests | FIDS `GET /flights/schedule` Both 12h 2u/call | `flight_population` raw_json+hash | `GET /flights/schedule` 2u/call | `flight_population` | `FIDS_RETRY_UNIT_BUDGET=75` | DST pending | §5.1 §40-41 | STUB |
+| `server/lib/disruption/fidsCensus_v3.ts:1` | FIDS | `fetchFidsPopulation, utcIntervalToLocal` IANA `Intl.DateTimeFormat` DST tests | FIDS `GET /flights/airports/{codeType}/{code}/{fromLocal}/{toLocal}` Both 2u/call | `flight_population` raw_json+hash | `GET /flights/airports/{codeType}/{code}/{fromLocal}/{toLocal}` 2u/call | `flight_population` | `FIDS_RETRY_UNIT_BUDGET=75` | DST pending | §5.1 §40-41 | STUB |
 | `server/lib/disruption/historicalFeatureStore_v3.ts:1` | history | `getHistoricalFeatureAsOf` `valid_from/available_at≤T` `history_ready_at` operational | `historical_feature_store` | — | — | `historical_feature_store` | `history_ready_at` | — | §12.2 §70 | STUB |
 | `server/lib/disruption/weatherSignal.ts:54` | weather | `getAirportWeather` live METAR `getAirportWeather` + `weather_snapshot_id` | aviationweather Data API 30d | — | METAR 30d free | `weather_observation` (stub) | `weather_source_version` | — | §10 | LIVE single, tables STUB |
 | `shared/schema.ts:748` | schema | `clean.flight_data_pre_post` drizzle `pgSchema("clean")` (drift: S-layers via raw pool.query) | — | `flight_data_pre_post` | — | `flight_data_pre_post` | — | — | §12 | DRIFT (raw SQL) |
@@ -2808,7 +2808,7 @@ For each component: repo path, module, function/class, helpers, DB table, migrat
 | `adb_collection_subs` | one airport subscription within batch | same `pickAirportCandidates` | `adb_ingest_events` | `(batch_id,icao)` | `subscription_id` | `batch_id` | `batch_id,icao` | airport-sub | 124 (31×4) | mutable | `is_randomized` | permanent | `subscription_id` |
 | `adb_collection_meta` | manifest `V3.9-f.7`+f.8 fields | `adbCollectionController:291` `writeManifest` | all gates | `key` | `key` | none | `key` | manifest entry | ~10 | mutable until FREEZE | `manifest hash` | permanent | `manifest hash` |
 | `adb_ingest_events` | immutable webhook delivery ledger S2 | `routes_v3.ts:81` `webhookIngress` | `flight_events` | `event_id` | `event_id` | `subscription_id,batch_id` | `received_at,subscription_id` | delivery | per item | append-only immutable | `payload_sha256` | permanent | `raw payload` |
-| `flight_events` | append-only per (flight_instance,observation) S3 4 stamps 8 milestones | `flightDataPrePostStore:254` `appendResearchEvents` research key `(carrier,locReportedUtc)` | `flight_state` dedup | `event_id` | `research_key` | `ingest_event_id` | `flight_instance_id,event_timestamp,received_at` | observation | per item | append-only | `research_key` | permanent | `payload_sha256` `ingest_event_id` |
+| `flight_events` | append-only per (flight_instance,observation) S3 5 stamps 8 milestones | `flightDataPrePostStore:254` `appendResearchEvents` research key `(carrier,locReportedUtc)` | `flight_state` dedup | `event_id` | `research_key` | `ingest_event_id` | `flight_instance_id,event_timestamp,received_at` | observation | per item | append-only | `research_key` | permanent | `payload_sha256` `ingest_event_id` |
 | `flight_state` | current latest state dedup convenience S3 | same `upsert` `dedup_key SHA256(flight|carrier|lastUpdatedUtc)` | operational | `flight_instance_id` | `flight_instance_id` | `flight_events` | `flight_instance_id` | flight latest | per flight | mutable (dedup) | `flight_events` | permanent | `dedup_key` |
 | `raw_airborne_events` | one row per provider airborne observation never deduped S5 | `flightDataPrePostStore:254` dual insert | `clean_airborne_points` | `event_id` | `event_id` | `flight_events` | `locReportedUtc` | airborne point | per point | append-only | `raw` | permanent | `flight_events` |
 | `clean_airborne_points` | cleaned S5 remove impossible lat/lon/alt/speed sort time | ETL `clean` | `flight_trajectory` | `point_id` | `point_id` | `raw_airborne_events` | `flight_instance_id,locReportedUtc` | cleaned point | per clean point | append | `raw` | permanent | `raw_airborne_events` |
@@ -2998,7 +2998,7 @@ See Log §0.7 table (A/B/C/D/E/F/G/H/I DONE/DOCUMENTED/BLOCKED).
 - **Required C frozen:** ~15 items — DOCUMENTED f.7+f.8 but `FROZEN` only after Gate 0.5 measure→freeze.
 - **Manifest:** NOT WRITTEN (f.7 fields pending).
 - **Gates:** 0 LIVE provisional, 1 LIVE provisional frame, 2 BLOCKED, 3 FAILED→FIXED (re-run pending smoke test), 0.5 BLOCKED, 4 BLOCKED, 5 BLOCKED, FREEZE BLOCKED, preflight cat4 must be 0.
-- **Code/docs/schema consistency:** Plan f.7+f.8 vs code STUBs vs Log §§13-35 now **consistent** (plan says STUB, log says STUB) — but live verification pending.
+- **Code/docs/schema consistency:** Plan f.7+f.8 vs code STUBs vs Log §§13-35 now **consistent** (plan says STUB, log says STUB) — but live verification pending. NOTE: Plan §6.4 upgraded to five-timestamp model; Log must match.
 
 **Determination: ARCHITECTURE GO / CODE+DOCS GO (with documented stubs) / GATES NOT YET GO / Phase 6 NO-GO.**
 

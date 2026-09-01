@@ -5,13 +5,17 @@
 # This file is the ONLY authoritative rule reference — no rules live only in prose.
 
 meta:
-  version: "V3.9-f.9-log"
+  binding_plan_version: "V3.9-f.8"
+  implementation_log_revision: "f.9-code"
+  registry_version: "V39_CANONICAL_RULE_REGISTRY v1"
   created: "2026-08-31"
   updated: "2026-09-01"
   description: >
     Canonical rule registry extracted from Plan §1–§23 and Log §1–§36.
     Rules listed here are the ONLY binding rules. If a rule appears in Plan
-    prose but not here, it is NOT binding until added here.
+    prose but not here, it is NOT binding until added here. However, rules
+    documented in Plan/Log but absent from this registry are TRANSITIONALLY
+    binding (carry forward from f.8 baseline) until explicitly added or removed.
     Updated with Sep1_1 §6 corrections: version fields, completeness,
     execution order, coverage-floor contradiction resolved.
 
@@ -221,19 +225,22 @@ rules:
 
   - id: COVERAGE_FLOOR
     plan_section: "§9.4"
-    status: MEASURE→FREEZE
-    value: null
-    source: "Gate 0.5"
-    notes: "Threshold TBD at Gate 0.5"
+    status: FROZEN
+    frozen_at: "2026-09-01"
+    value: "REGIONAL not observed in ≥20 days → coverage_floor_boost = 1.5× for one draw (deterministic, seeded)"
+    source: "Plan §9.4"
+    notes: >
+      Efficiency allocation, not representation. Boost is temporary (one draw),
+      does not overwrite m_i memory. Measure actual selection frequency at Gate 0.5.
 
   # ── CANARY ──
   - id: RECONCILE_TOLERANCE
     plan_section: "§11"
     status: FROZEN
-    frozen_at: "2026-08-31"
-    value: 3
-    source: "tolerance"
-    notes: "C_external vs C_internal tolerance"
+    frozen_at: "2026-09-01"
+    value: 0
+    source: "CORRECTED — integer credits, no floating-point needed"
+    notes: "C_external vs C_internal exact match for isolated canary; production tolerance separate if measured"
 
   # ── SPLIT RULE ──
   - id: SPLIT_RULE
@@ -300,12 +307,13 @@ rules:
   - id: EXECUTION_ORDER
     plan_section: "§1"
     status: FROZEN
-    frozen_at: "2026-08-31"
-    value: "freeze → rebuild frame → Gate 1 → Gate 2 → Gate 3 → Stage-1 probes"
-    source: "A31 §25/§86"
+    frozen_at: "2026-09-01"
+    value: "REFERENCE_FREEZE → rebuild frame → Gate 1 → Gate 2 → Gate 3 → FINAL_MANIFEST_FREEZE → Stage-1 probes"
+    source: "A31 §25/§86 + Sep1_1 §6.4"
     notes: >
-      Steps 6→6b→6c→6d→7a mandatory.
-      No probe may run before frame is rebuilt.
+      REFERENCE_FREEZE: external reference data (traffic, region mapping, tier rules) frozen.
+      FINAL_MANIFEST_FREEZE: all binding values written to manifest AFTER frame rebuild.
+      Steps 6→6b→6c→6d→7a mandatory. No probe may run before frame is rebuilt.
 
   # ── RAW IMMUTABILITY ──
   - id: RAW_IMMUTABLE
@@ -324,10 +332,11 @@ rules:
     value: "v3.9-f.9"
     source: "Sep1_1 §14"
     notes: >
-      15 timestamp fields defined: scheduled_gate_out_utc, scheduled_wheels_off_utc,
-      revised_gate_out_utc, predicted_gate_out_utc, actual_gate_out_utc, actual_wheels_off_utc,
-      scheduled_gate_in_utc, scheduled_wheels_on_utc, actual_gate_in_utc, actual_wheels_on_utc,
-      loc_reported_utc, last_updated_utc, received_at_utc, available_at, provider_published_utc.
+      Provider-native timestamps: departure.scheduledTime, departure.revisedTime,
+      departure.predictedTime, departure.runwayTime, arrival.scheduledTime,
+      arrival.revisedTime, arrival.predictedTime, arrival.runwayTime.
+      Plus: notification.timestampUtc, item.lastUpdatedUtc, location.reportedAtUtc,
+      http_received_at_utc, raw_persisted_at_utc, available_at, timestamp_source.
       Leakage rule: source occurrence before cutoff but availability after cutoff = EXCLUDED.
 
   # ── PROVIDER CONTRACT (Sep1_1 §7-8) ──
