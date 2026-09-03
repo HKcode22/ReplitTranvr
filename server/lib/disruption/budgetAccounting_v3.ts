@@ -97,11 +97,12 @@ export function recomputeBudget(
     // Base calls: airports × horizons × segments
     const baseCalls = config.airportsPerDay * config.preHorizons * segmentCount;
 
-    // Split calls: airports × splits (for 6h windows that need multiple FIDS calls)
+    // Split calls: airports × splits (for long windows that need multiple FIDS calls)
     let splitCalls = 0;
-    if (day.windowShape === "6h") {
-      // 6h window may need multiple FIDS calls if max FIDS range < 6h
-      const callsNeeded = Math.ceil(6 / config.maxFidsRangeHours);
+    const longWindowHours = day.windowShape === "4h" ? 4 : day.windowShape === "up-to-6h" ? 6 : 0;
+    if (longWindowHours > 0) {
+      // A long window may need multiple FIDS calls if max FIDS range < window length
+      const callsNeeded = Math.ceil(longWindowHours / config.maxFidsRangeHours);
       if (callsNeeded > 1) {
         splitCalls = config.airportsPerDay * (callsNeeded - 1) * config.longWindowSplits;
       }

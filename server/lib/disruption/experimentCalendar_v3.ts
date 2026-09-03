@@ -20,7 +20,7 @@ import { createHash } from "crypto";
 // Types
 // ---------------------------------------------------------------------------
 
-export type WindowShape = "6h" | "2x2h";
+export type WindowShape = "4h" | "2x2h" | "up-to-6h";
 
 export interface CalendarDay {
   dayIndex: number;           // 1-31
@@ -139,18 +139,27 @@ export function generateExperimentCalendar(
 
     // Generate segments
     const segments: WindowSegment[] = [];
-    if (shape === "6h") {
+    const slotIdx = day % constraints.sixUtcSlots.length;
+    if (shape === "4h") {
       segments.push({
         segmentIndex: 0,
-        startUtc: constraints.sixUtcSlots[day % constraints.sixUtcSlots.length],
-        endUtc: earliestNextStart(constraints.sixUtcSlots[day % constraints.sixUtcSlots.length], 6),
+        startUtc: constraints.sixUtcSlots[slotIdx],
+        endUtc: earliestNextStart(constraints.sixUtcSlots[slotIdx], 4),
+        durationHours: 4,
+        isGap: false,
+      });
+      segmentCount.total++;
+    } else if (shape === "up-to-6h") {
+      segments.push({
+        segmentIndex: 0,
+        startUtc: constraints.sixUtcSlots[slotIdx],
+        endUtc: earliestNextStart(constraints.sixUtcSlots[slotIdx], 6),
         durationHours: 6,
         isGap: false,
       });
       segmentCount.total++;
     } else {
       // 2x2h with gap
-      const slotIdx = day % constraints.sixUtcSlots.length;
       const start1 = constraints.sixUtcSlots[slotIdx];
       const end1 = earliestNextStart(start1, 2);
       const start2 = earliestNextStart(end1, 1); // 1h gap

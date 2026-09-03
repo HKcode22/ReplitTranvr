@@ -17,8 +17,8 @@ import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 const NORMATIVE_FILES = [
-  'V3.9_DataCollectPlan.md',
-  'IMPLEMENTATION_LOG.md',
+  'V3.9_DataCollectPlan_f.8.md',
+  'V3.9_IMPLEMENTATION_LOG.md',
   'V39_CANONICAL_RULE_REGISTRY.yaml',
 ];
 
@@ -47,7 +47,7 @@ const STALE_TERMS = [
   { term: 'true census', description: 'overclaim' },
   { term: 'same calendar date', description: 'ambiguous' },
   { term: 'conformal interval', description: 'check if deferred' },
-  { term: 'P(delay', description: 'check context' },
+  { term: 'P\\(delay', description: 'check context' },
   { term: '/flights/schedule', description: 'stale endpoint' },
   { term: 'withLeg.*false', description: 'stale semantics' },
   { term: 'result truncated', description: 'stale assumption' },
@@ -107,10 +107,16 @@ function classifyMatch(term: string, line: string, file: string): string {
 
 function scan(): MatchResult[] {
   const results: MatchResult[] = [];
-  const basePath = join(process.cwd(), 'AugMDnotes');
+  // The binding plan/log live in SEPmd/; the canonical rule registry yaml is
+  // retained under archiveOld/AugMDnotes/. Resolve each file explicitly.
+  const basePaths: Record<string, string> = {
+    'V3.9_DataCollectPlan_f.8.md': join(process.cwd(), 'SEPmd'),
+    'V3.9_IMPLEMENTATION_LOG.md': join(process.cwd(), 'SEPmd'),
+    'V39_CANONICAL_RULE_REGISTRY.yaml': join(process.cwd(), 'archiveOld', 'AugMDnotes'),
+  };
 
   for (const fileName of NORMATIVE_FILES) {
-    const filePath = join(basePath, fileName);
+    const filePath = join(basePaths[fileName], fileName);
     let content: string;
     try {
       content = readFileSync(filePath, 'utf-8');
