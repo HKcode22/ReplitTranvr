@@ -11,6 +11,11 @@ import { initSentry, captureRequestError, sentryRequestContext } from './lib/sen
 import { applyBootMigrations } from './db';
 import { startMonitoringEngine } from './lib/disruption/monitor';
 import { startTestFlightSeeder } from './lib/disruption/testFlightSeeder';
+import { installConsoleTee } from './lib/disruption/logFile';
+
+// Persist every console line to logs/collector.log so collection logs
+// survive Shell refreshes / restarts (tail -f logs/collector.log).
+installConsoleTee();
 
 initSentry();
 
@@ -177,6 +182,7 @@ app.post(
 
 app.use(
   express.json({
+    limit: "2mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -263,6 +269,16 @@ app.use((req, res, next) => {
   } catch (err: any) {
     console.error("Boot migrations failed:", err?.message || err);
   }
+
+  // v3 — AeroDataBox Flight Alert webhook + subscription management
+  // (travnr.com). See MDplan/V3_WebhookExtractionPlan.md.
+  // NOTE: registered BEFORE registerRoutes() on purpose — registerRoutes mounts
+  // the CSRF middleware + generic /api limiter via app.use(), which would 403
+  // AeroDataBox's webhook POSTs (no CSRF token) and burn credits on retries.
+  // v3 routes authenticate themselves: the webhook via the URL secret and the
+  // management endpoints via the x-webhook-secret header.
+  const { registerV3Routes } = await import("./routes_v3");
+  registerV3Routes(app);
 
   await registerRoutes(httpServer, app);
 

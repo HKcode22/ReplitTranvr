@@ -28,6 +28,20 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0006_test_flight_seeder.sql",
   "0007_user_monitored_flights.sql",
   "0008_resolved_flight_status.sql",
+  "0010_flight_data_pre_post.sql",
+  "0011_flight_data_pre_post_quality_jsonb.sql",
+  "0012_collection_sampling.sql",
+  "0014_flight_data_pre_post_drop_dead_columns.sql",
+  "0015_collection_v33_sampling_meta.sql",
+  "0017_collection_v39_credit_accounting.sql",
+  "0018_collection_v39_delivery_failure_flag.sql",
+  "0019_collection_v39_population_and_events.sql",
+  "0020_collection_v39_airborne_time_series.sql",
+  "0021_collection_v39_sampling_frame.sql",
+  "0022_collection_v39_design_probability.sql",
+  "0023_anchor_probe_results.sql",
+  "0024_historical_feature_store.sql",
+  "0025_raw_ingress_immutable_layers.sql",
 ];
 
 let bootMigrationsApplied = false;

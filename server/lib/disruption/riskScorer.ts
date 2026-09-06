@@ -75,6 +75,10 @@ function defaultWeather(iataCode: string): WeatherSignal {
     hasFreezing: false,
     rawMetar: "",
     riskContribution: 0,
+    source: "none",
+    sourceVersion: "v3.9-f.8",
+    issueTime: null,
+    retrievedAt: new Date(),
   };
 }
 

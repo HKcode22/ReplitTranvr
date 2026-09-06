@@ -23,6 +23,8 @@ An "Always On" Replit is supposed to keep this advancing.
 
 ---
 
+
+
 ## 1. Is the process even running?
 
 ```bash
@@ -34,11 +36,14 @@ echo "process count: $(ps aux | wc -l)"
 ```
 
 What to look for:
+
 - A `node`/`tsx` line for `server2/index.ts` or `dist/index.cjs` → running.
 - **Nothing returned** → nothing is running (replica sleeping / not started).
 - If you run on Replit, the process you launched in the Run panel shows here.
 
 ---
+
+
 
 ## 2. Was it ever up? (recent process start)
 
@@ -50,6 +55,8 @@ ps -eo pid,lstart,cmd | grep -iE "node|tsx" | grep -v grep
 ago and `(1)` is empty now, it crashed/exited.
 
 ---
+
+
 
 ## 3. Is the HTTP port responding?
 
@@ -67,6 +74,8 @@ curl -s http://localhost:${PORT:-3000}/api/health || echo "no /api/health"
 ```
 
 ---
+
+
 
 ## 4. Monitor log — is it cycling?
 
@@ -86,6 +95,8 @@ echo "logs found: $LOG"
 > is the DB itself (block 6).
 
 ---
+
+
 
 ## 5. Can Node talk to the DB? (connectivity)
 
@@ -111,6 +122,8 @@ node -e "...same as above..."
 
 ---
 
+
+
 ## 6. Direct DB questions (the ones that answer "why did it stop Jul 30")
 
 These use `psql` if installed, else Node. Reset env first:
@@ -118,6 +131,8 @@ These use `psql` if installed, else Node. Reset env first:
 ```bash
 set -a; source .env 2>/dev/null; set +a
 ```
+
+
 
 ### 6a. Most recent rows written to the v2 history table
 
@@ -140,6 +155,8 @@ FROM clean.monitored_flights_v2;
 " 2>&1
 ```
 
+
+
 ### 6c. Counts by day — did rows stop on a specific date?
 
 ```bash
@@ -160,7 +177,7 @@ SELECT status, COUNT(*) FROM clean.monitored_flights_v2 GROUP BY status;
 " 2>&1
 ```
 
-If there are **0 `active` flights for today/tomorrow**, the monitor query (
+If there are **0** `active` **flights for today/tomorrow**, the monitor query (
 `monitor.ts:292-298`, `WHERE status='active' AND departure_date BETWEEN today AND tomorrow`)
 returns nothing, fires no API calls, and writes nothing — even if the loop runs.
 This is a very common silent cause of "DB stopped growing."
@@ -175,6 +192,8 @@ WHERE status='active' GROUP BY departure_date ORDER BY departure_date;
 ```
 
 ---
+
+
 
 ## 7. AeroDataBox quota — is it exhausted? (429s)
 
@@ -215,6 +234,8 @@ elsewhere). HTTP 429 = quota/user at ceiling.**
 
 ---
 
+
+
 ## 8. Capture server console output (the actual smoking gun)
 
 Replit Run-panel logs aren't files, but you can capture them by starting the
@@ -237,11 +258,14 @@ pkill -f "server2" ; pkill -f "tsx"   # after confirming it's safe
 ```
 
 Then start fresh above. Within 20–60s you should see:
+
 - `[monitor] starting engine interval=3600000ms`
 - `[monitor] cycle start` → `[monitor] cycle end checked=N alerts=M`
 - Or an exception (DB/auth/quota) — that line IS the cause.
 
 ---
+
+
 
 ## 9. Free metrics to record before concluding
 
@@ -249,3 +273,4 @@ Then start fresh above. Within 20–60s you should see:
 node -e "console.log(process.version)"   # Node version expected
 df -h /tmp | tail -1                       # disk not full?
 ```
+

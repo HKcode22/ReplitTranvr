@@ -2449,27 +2449,28 @@ export async function registerRoutes(
           })
           .returning();
 
-        // Kick off an immediate score so the card doesn't show 0/green forever
-        import("./lib/disruption/riskScorer").then(({ scoreFlightRisk }) =>
-          scoreFlightRisk({
-            flightNumber: inserted.flightNumber,
-            carrierIata: inserted.carrierIata,
-            departureDate: inserted.departureDate,
-            departureTime: inserted.departureTime,
-            originIata: inserted.originIata,
-            destinationIata: inserted.destinationIata,
-            historicalOtpCache: null,
-          }).then(async (risk) => {
-            const snap = risk.flightStatus ? {
-              status: risk.flightStatus.status,
-              delayMinutes: risk.flightStatus.delayMinutes,
-              inboundDelayMinutes: risk.flightStatus.inboundDelayMinutes,
-              cancelled: risk.flightStatus.cancelled,
-              departureTime: risk.flightStatus.departureTime,
-            } : null;
-            await mDb.update(tUMF).set({ riskScore: risk.score, riskTier: risk.tier, lastCheckedAt: new Date(), flightStatus: snap as any }).where(mEq(tUMF.id, inserted.id));
-          }).catch(() => {})
-        ).catch(() => {});
+        // [disabled 2026-08-06] v1 risk scorer SHUT DOWN — moving to AeroDataBox
+        // webhooks. No more immediate AeroDataBox poll on user flight add.
+        // import("./lib/disruption/riskScorer").then(({ scoreFlightRisk }) =>
+        //   scoreFlightRisk({
+        //     flightNumber: inserted.flightNumber,
+        //     carrierIata: inserted.carrierIata,
+        //     departureDate: inserted.departureDate,
+        //     departureTime: inserted.departureTime,
+        //     originIata: inserted.originIata,
+        //     destinationIata: inserted.destinationIata,
+        //     historicalOtpCache: null,
+        //   }).then(async (risk) => {
+        //     const snap = risk.flightStatus ? {
+        //       status: risk.flightStatus.status,
+        //       delayMinutes: risk.flightStatus.delayMinutes,
+        //       inboundDelayMinutes: risk.flightStatus.inboundDelayMinutes,
+        //       cancelled: risk.flightStatus.cancelled,
+        //       departureTime: risk.flightStatus.departureTime,
+        //     } : null;
+        //     await mDb.update(tUMF).set({ riskScore: risk.score, riskTier: risk.tier, lastCheckedAt: new Date(), flightStatus: snap as any }).where(mEq(tUMF.id, inserted.id));
+        //   }).catch(() => {})
+        // ).catch(() => {});
 
         return res.status(201).json(inserted);
       } catch (err: any) {
@@ -9719,36 +9720,41 @@ export async function registerRoutes(
           return res.status(200).json({ added: true, existingFlight: true, flight: existing });
         }
 
-        const [created] = await db
-          .insert(tMonitoredFlights)
-          .values({
-            agencyId: agency.id,
-            flightNumber: flightNumberCompact,
-            carrierIata,
-            departureDate: parsed.data.departureDate,
-            departureTime: parsed.data.departureTime || null,
-            originIata: parsed.data.originIata.toUpperCase(),
-            destinationIata: parsed.data.destinationIata.toUpperCase(),
-          })
-          .returning();
-
-        await db.insert(tFlightTravelers).values({
-          monitoredFlightId: created.id,
-          agencyId: agency.id,
-          travelerName: parsed.data.travelerName,
-          travelerEmail: travelerEmailNorm,
-          travelerPhone: parsed.data.travelerPhone || null,
+        // [disabled 2026-08-06] v1 monitored_flights population SHUT DOWN —
+        // moving to AeroDataBox webhooks (flightDataPrePost). Do not re-enable.
+        // const [created] = await db
+        //   .insert(tMonitoredFlights)
+        //   .values({
+        //     agencyId: agency.id,
+        //     flightNumber: flightNumberCompact,
+        //     carrierIata,
+        //     departureDate: parsed.data.departureDate,
+        //     departureTime: parsed.data.departureTime || null,
+        //     originIata: parsed.data.originIata.toUpperCase(),
+        //     destinationIata: parsed.data.destinationIata.toUpperCase(),
+        //   })
+        //   .returning();
+        //
+        // await db.insert(tFlightTravelers).values({
+        //   monitoredFlightId: created.id,
+        //   agencyId: agency.id,
+        //   travelerName: parsed.data.travelerName,
+        //   travelerEmail: travelerEmailNorm,
+        //   travelerPhone: parsed.data.travelerPhone || null,
+        // });
+        //
+        // // Score immediately so the dashboard reflects risk on first load,
+        // // not after the next 30-minute tick. Fire-and-forget so a slow
+        // // AeroDataBox call doesn't block the create response. Errors are
+        // // logged inside scoreFlightOnce.
+        // scoreFlightOnce(created.id).catch((err) =>
+        //   console.error("[agency-flights-create] initial score failed:", err?.message || err),
+        // );
+        //
+        return res.status(503).json({
+          error:
+            "Adding monitored flights is temporarily disabled while we migrate to AeroDataBox webhooks. Existing flights remain viewable.",
         });
-
-        // Score immediately so the dashboard reflects risk on first load,
-        // not after the next 30-minute tick. Fire-and-forget so a slow
-        // AeroDataBox call doesn't block the create response. Errors are
-        // logged inside scoreFlightOnce.
-        scoreFlightOnce(created.id).catch((err) =>
-          console.error("[agency-flights-create] initial score failed:", err?.message || err),
-        );
-
-        return res.status(201).json({ added: true, existingFlight: false, flight: created });
       } catch (err: any) {
         console.error("[agency-flights-create] error:", err);
         return res.status(500).json({ error: "Failed to add flight" });
@@ -9878,11 +9884,11 @@ export async function registerRoutes(
           .where(dAnd(dEq(tMonitoredFlights.id, id), dEq(tMonitoredFlights.agencyId, agency.id)))
           .limit(1);
         if (!flight) return res.status(404).json({ error: "Flight not found" });
-        // Manual rescore bypasses the NAS cache so the dashboard "Refresh"
-        // button always reflects the current FAA NAS state, not a 10-min
-        // stale snapshot.
-        await scoreFlightOnce(id, { forceRefreshNas: true });
-        return res.json({ success: true });
+        // [disabled 2026-08-06] v1 risk scorer SHUT DOWN. Manual rescore
+        // bypasses the NAS cache so the dashboard "Refresh" button always
+        // reflects the current FAA NAS state, not a 10-min stale snapshot.
+        // await scoreFlightOnce(id, { forceRefreshNas: true });
+        return res.json({ success: false, message: "Rescoring is disabled during the webhook migration." });
       } catch (err: any) {
         console.error("[agency-rescore] error:", err);
         return res.status(500).json({ error: "Failed to rescore" });
@@ -9962,22 +9968,25 @@ export async function registerRoutes(
             agencyNotifiedAt: null,
           })
           .where(dEq(tFlightTravelers.monitoredFlightId, id));
-        await db
-          .update(tMonitoredFlights)
-          .set({
-            agencyResolvedAt: null,
-            riskScore: targetScore,
-            riskTier: tier,
-            lastCheckedAt: new Date(),
-          })
-          .where(dEq(tMonitoredFlights.id, id));
-
-        await db.insert(tRiskScoreHistory).values({
-          monitoredFlightId: id,
-          score: targetScore,
-          tier,
-          signals: signalsBlob,
-        });
+        // [disabled 2026-08-06] v1 monitored_flights / risk_score_history writes
+        // SHUT DOWN — moving to webhooks. Simulate no longer persists risk data.
+        // await db
+        //   .update(tMonitoredFlights)
+        //   .set({
+        //     agencyResolvedAt: null,
+        //     riskScore: targetScore,
+        //     riskTier: tier,
+        //     lastCheckedAt: new Date(),
+        //   })
+        //   .where(dEq(tMonitoredFlights.id, id));
+        //
+        // await db.insert(tRiskScoreHistory).values({
+        //   monitoredFlightId: id,
+        //   score: targetScore,
+        //   tier,
+        //   signals: signalsBlob,
+        // });
+        //
 
         if (tier !== "red") {
           return res.json({
@@ -10206,180 +10215,184 @@ export async function registerRoutes(
           if (!flightNumber || typeof flightNumber !== "string") {
             return res.status(400).json({ flights: [], message: "Flight number is required." });
           }
-          const fn = flightNumber.trim().toUpperCase().replace(/\s+/g, "");
-          const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(fn)}/${encodeURIComponent(date)}`;
-          console.log(`[flightSearch] number lookup ${fn} ${date}`);
-          const resp = await dAdbFetch(url, { headers });
-          if (!resp.ok) {
-            console.warn(`[flightSearch] AeroDataBox ${resp.status} for ${fn}`);
-            return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
-          }
-          const raw: any = await resp.json();
-          if (!Array.isArray(raw) || raw.length === 0) {
-            return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
-          }
-          // Use the same smart picker as flightStatus.ts
-          const now = Date.now();
-          const scored = raw.map((f: any) => {
-            const dep = f.departure?.scheduledTime?.utc || f.departure?.revisedTime?.utc || null;
-            const depMs = dep ? new Date(dep).getTime() : null;
-            const cancelled = String(f.status || "").toLowerCase().includes("cancel");
-            let score = depMs !== null
-              ? (depMs - now) / 3_600_000 > 0
-                ? 1000 - Math.min((depMs - now) / 3_600_000, 48) * 10
-                : (depMs - now) / 3_600_000 > -3
-                  ? 500 + ((depMs - now) / 3_600_000) * 50
-                  : 100 + (depMs - now) / 3_600_000
-              : 0;
-            if (cancelled) score -= 200;
-            return { f, score };
-          });
-          scored.sort((a: any, b: any) => b.score - a.score);
-          const best = mapFlight(scored[0].f);
-          return res.json({ flights: best ? [best] : [], message: best ? undefined : "Could not parse flight data." });
+          // [disabled 2026-08-06] AeroDataBox credit hold during webhook migration.
+          // const fn = flightNumber.trim().toUpperCase().replace(/\s+/g, "");
+          // const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(fn)}/${encodeURIComponent(date)}`;
+          // console.log(`[flightSearch] number lookup ${fn} ${date}`);
+          // const resp = await dAdbFetch(url, { headers });
+          // if (!resp.ok) {
+          //   console.warn(`[flightSearch] AeroDataBox ${resp.status} for ${fn}`);
+          //   return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
+          // }
+          // const raw: any = await resp.json();
+          // if (!Array.isArray(raw) || raw.length === 0) {
+          //   return res.json({ flights: [], message: "Flight not found. Check the flight number and date." });
+          // }
+          // // Use the same smart picker as flightStatus.ts
+          // const now = Date.now();
+          // const scored = raw.map((f: any) => {
+          //   const dep = f.departure?.scheduledTime?.utc || f.departure?.revisedTime?.utc || null;
+          //   const depMs = dep ? new Date(dep).getTime() : null;
+          //   const cancelled = String(f.status || "").toLowerCase().includes("cancel");
+          //   let score = depMs !== null
+          //     ? (depMs - now) / 3_600_000 > 0
+          //       ? 1000 - Math.min((depMs - now) / 3_600_000, 48) * 10
+          //       : (depMs - now) / 3_600_000 > -3
+          //         ? 500 + ((depMs - now) / 3_600_000) * 50
+          //         : 100 + (depMs - now) / 3_600_000
+          //     : 0;
+          //   if (cancelled) score -= 200;
+          //   return { f, score };
+          // });
+          // scored.sort((a: any, b: any) => b.score - a.score);
+          // const best = mapFlight(scored[0].f);
+          // return res.json({ flights: best ? [best] : [], message: best ? undefined : "Could not parse flight data." });
+          return res.status(503).json({ flights: [], message: "Flight search is temporarily disabled (AeroDataBox credit hold during webhook migration)." });
         }
 
         // MODE: route search — fetch all departures from origin airport on this date
+        // [disabled 2026-08-06] AeroDataBox credit hold during webhook migration.
         if (mode === "route") {
-          if (!origin || !destination) {
-            return res.status(400).json({ flights: [], message: "Origin and destination are required." });
-          }
-          const orig = (origin as string).toUpperCase().trim();
-          const dest = (destination as string).toUpperCase().trim();
-
-          // AeroDataBox FIDS caps each call at 12h, so we issue two calls
-          // (00:00→11:59 and 12:00→23:59) in parallel and merge the results.
-          const buildUrl = (fromTime: string, toTime: string) =>
-            `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(orig)}/${date}T${fromTime}/${date}T${toTime}?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withCargo=false&withPrivate=false`;
-          console.log(`[flightSearch] route search ${orig}->${dest} ${date} URL_TEST=${date}T00:00`);
-          const [respAm, respPm] = await Promise.all([
-            dAdbFetch(buildUrl("00:00", "11:59"), { headers }),
-            dAdbFetch(buildUrl("12:00", "23:59"), { headers }),
-          ]);
-          console.log(`[flightSearch] AeroDataBox FIDS status am=${respAm.status} pm=${respPm.status}`);
-          if (!respAm.ok && !respPm.ok) {
-            const [bodyAm, bodyPm] = await Promise.all([
-              respAm.text().catch(() => ""),
-              respPm.text().catch(() => ""),
-            ]);
-            console.warn(`[flightSearch] AeroDataBox FIDS AM ${respAm.status}: ${bodyAm.slice(0, 300)}`);
-            console.warn(`[flightSearch] AeroDataBox FIDS PM ${respPm.status}: ${bodyPm.slice(0, 300)}`);
-            return res.json({
-              flights: [],
-              message: `Could not fetch departures from ${orig}. Error: ${respAm.status}. Try searching by flight number instead.`
-            });
-          }
-          const parseDepartures = async (resp: Response): Promise<any[]> => {
-            if (!resp.ok) return [];
-            try {
-              const raw: any = await resp.json();
-              if (!raw) return [];
-              // AeroDataBox FIDS wraps in { departures: [...], arrivals: [...] }
-              if (raw.departures && Array.isArray(raw.departures)) return raw.departures;
-              // Fallback: bare array
-              if (Array.isArray(raw)) return raw;
-              return [];
-            } catch {
-              return [];
-            }
-          };
-          const [depAm, depPm] = await Promise.all([parseDepartures(respAm), parseDepartures(respPm)]);
-          const departures: any[] = [...depAm, ...depPm];
-          console.log(`[flightSearch] FIDS departures: am=${depAm.length} pm=${depPm.length} total=${departures.length}`);
-          if (departures.length > 0) {
-            const sample = departures[0];
-            console.log(
-              `[flightSearch] sample departure shape:`,
-              JSON.stringify({
-                number: sample.number,
-                iata: sample.iata,
-                flightNumber: sample.flightNumber,
-                hasDeparture: !!sample.departure,
-                hasArrival: !!sample.arrival,
-                arrivalIata: sample.arrival?.airport?.iata,
-                status: sample.status,
-                airline: sample.airline?.name,
-              }).slice(0, 500),
-            );
-          }
-
-          if (departures.length === 0) {
-            return res.json({ flights: [], message: "No departures found from this airport on the selected date." });
-          }
-
-          // Filter by destination — check multiple possible locations in the response
-          // AeroDataBox codeshare/leg data can have the destination in different places
-          let filtered = departures.filter((f: any) => {
-            const arrIata = (
-              f.arrival?.airport?.iata ||
-              f.leg?.arrival?.airport?.iata ||
-              ""
-            ).toUpperCase();
-
-            // Also check airport name for flights without IATA in response
-            const arrName = (f.arrival?.airport?.name || "").toUpperCase();
-
-            // Match by IATA code
-            if (arrIata && arrIata === dest) return true;
-
-            // Fallback: match destination IATA against airport name
-            // e.g. dest="IAD" and name contains "Dulles" or "Washington"
-            const iataToNameHints: Record<string, string[]> = {
-              IAD: ["DULLES", "WASHINGTON"],
-              DCA: ["REAGAN", "NATIONAL", "WASHINGTON"],
-              JFK: ["KENNEDY", "NEW YORK"],
-              LGA: ["LAGUARDIA", "NEW YORK"],
-              EWR: ["NEWARK"],
-              ORD: ["O'HARE", "OHARE", "CHICAGO"],
-              MDW: ["MIDWAY", "CHICAGO"],
-              LAX: ["LOS ANGELES"],
-              SFO: ["SAN FRANCISCO"],
-              BOS: ["BOSTON", "LOGAN"],
-              MIA: ["MIAMI"],
-              ATL: ["ATLANTA"],
-              DFW: ["DALLAS", "FORT WORTH"],
-            };
-
-            const hints = iataToNameHints[dest] || [];
-            if (hints.length > 0 && arrName && hints.some(h => arrName.includes(h))) return true;
-
-            return false;
-          });
-
-          // If strict destination filter returns nothing, show ALL departures from that airport
-          // so the agency can at least see what's flying and filter manually
-          // Label this clearly so they know the destination filter was relaxed
-          const relaxed = filtered.length === 0;
-          if (relaxed) {
-            filtered = departures.slice(0, 30);
-          }
-
-          // Optional airline filter
-          const airlineFilterStr = airlineFilter ? (airlineFilter as string).toUpperCase().trim() : null;
-          if (airlineFilterStr) {
-            const byAirline = filtered.filter((f: any) => {
-              const iata = (f.airline?.iata || "").toUpperCase();
-              const name = (f.airline?.name || "").toUpperCase();
-              return iata.includes(airlineFilterStr) || name.includes(airlineFilterStr);
-            });
-            // Only apply airline filter if it returns results
-            if (byAirline.length > 0) filtered = byAirline;
-          }
-
-          const mapped = filtered.map(mapFlight).filter(Boolean);
-          console.log(
-            `[flightSearch] route summary: departures=${departures.length} strictMatch=${relaxed ? 0 : filtered.length} relaxed=${relaxed} mapped=${mapped.length}`,
-          );
-
-          return res.json({
-            flights: mapped,
-            message: relaxed && mapped.length > 0
-              ? `No direct ${orig}→${dest} flights found. Showing all ${orig} departures — select the right one or use the flight number tab.`
-              : mapped.length === 0
-                ? "No flights found for this route on the selected date."
-                : undefined,
-            relaxed,
-          });
+          // if (!origin || !destination) {
+          //   return res.status(400).json({ flights: [], message: "Origin and destination are required." });
+          // }
+          // const orig = (origin as string).toUpperCase().trim();
+          // const dest = (destination as string).toUpperCase().trim();
+          //
+          // // AeroDataBox FIDS caps each call at 12h, so we issue two calls
+          // // (00:00→11:59 and 12:00→23:59) in parallel and merge the results.
+          // const buildUrl = (fromTime: string, toTime: string) =>
+          //   `https://aerodatabox.p.rapidapi.com/flights/airports/iata/${encodeURIComponent(orig)}/${date}T${fromTime}/${date}T${toTime}?direction=Departure&withLeg=true&withCancelled=false&withCodeshared=false&withCargo=false&withPrivate=false`;
+          // console.log(`[flightSearch] route search ${orig}->${dest} ${date} URL_TEST=${date}T00:00`);
+          // const [respAm, respPm] = await Promise.all([
+          //   dAdbFetch(buildUrl("00:00", "11:59"), { headers }),
+          //   dAdbFetch(buildUrl("12:00", "23:59"), { headers }),
+          // ]);
+          // console.log(`[flightSearch] AeroDataBox FIDS status am=${respAm.status} pm=${respPm.status}`);
+          // if (!respAm.ok && !respPm.ok) {
+          //   const [bodyAm, bodyPm] = await Promise.all([
+          //     respAm.text().catch(() => ""),
+          //     respPm.text().catch(() => ""),
+          //   ]);
+          //   console.warn(`[flightSearch] AeroDataBox FIDS AM ${respAm.status}: ${bodyAm.slice(0, 300)}`);
+          //   console.warn(`[flightSearch] AeroDataBox FIDS PM ${respPm.status}: ${bodyPm.slice(0, 300)}`);
+          //   return res.json({
+          //     flights: [],
+          //     message: `Could not fetch departures from ${orig}. Error: ${respAm.status}. Try searching by flight number instead.`
+          //   });
+          // }
+          // const parseDepartures = async (resp: Response): Promise<any[]> => {
+          //   if (!resp.ok) return [];
+          //   try {
+          //     const raw: any = await resp.json();
+          //     if (!raw) return [];
+          //     // AeroDataBox FIDS wraps in { departures: [...], arrivals: [...] }
+          //     if (raw.departures && Array.isArray(raw.departures)) return raw.departures;
+          //     // Fallback: bare array
+          //     if (Array.isArray(raw)) return raw;
+          //     return [];
+          //   } catch {
+          //     return [];
+          //   }
+          // };
+          // const [depAm, depPm] = await Promise.all([parseDepartures(respAm), parseDepartures(respPm)]);
+          // const departures: any[] = [...depAm, ...depPm];
+          // console.log(`[flightSearch] FIDS departures: am=${depAm.length} pm=${depPm.length} total=${departures.length}`);
+          // if (departures.length > 0) {
+          //   const sample = departures[0];
+          //   console.log(
+          //     `[flightSearch] sample departure shape:`,
+          //     JSON.stringify({
+          //       number: sample.number,
+          //       iata: sample.iata,
+          //       flightNumber: sample.flightNumber,
+          //       hasDeparture: !!sample.departure,
+          //       hasArrival: !!sample.arrival,
+          //       arrivalIata: sample.arrival?.airport?.iata,
+          //       status: sample.status,
+          //       airline: sample.airline?.name,
+          //     }).slice(0, 500),
+          //   );
+          // }
+          //
+          // if (departures.length === 0) {
+          //   return res.json({ flights: [], message: "No departures found from this airport on the selected date." });
+          // }
+          //
+          // // Filter by destination — check multiple possible locations in the response
+          // // AeroDataBox codeshare/leg data can have the destination in different places
+          // let filtered = departures.filter((f: any) => {
+          //   const arrIata = (
+          //     f.arrival?.airport?.iata ||
+          //     f.leg?.arrival?.airport?.iata ||
+          //     ""
+          //   ).toUpperCase();
+          //
+          //   // Also check airport name for flights without IATA in response
+          //   const arrName = (f.arrival?.airport?.name || "").toUpperCase();
+          //
+          //   // Match by IATA code
+          //   if (arrIata && arrIata === dest) return true;
+          //
+          //   // Fallback: match destination IATA against airport name
+          //   // e.g. dest="IAD" and name contains "Dulles" or "Washington"
+          //   const iataToNameHints: Record<string, string[]> = {
+          //     IAD: ["DULLES", "WASHINGTON"],
+          //     DCA: ["REAGAN", "NATIONAL", "WASHINGTON"],
+          //     JFK: ["KENNEDY", "NEW YORK"],
+          //     LGA: ["LAGUARDIA", "NEW YORK"],
+          //     EWR: ["NEWARK"],
+          //     ORD: ["O'HARE", "OHARE", "CHICAGO"],
+          //     MDW: ["MIDWAY", "CHICAGO"],
+          //     LAX: ["LOS ANGELES"],
+          //     SFO: ["SAN FRANCISCO"],
+          //     BOS: ["BOSTON", "LOGAN"],
+          //     MIA: ["MIAMI"],
+          //     ATL: ["ATLANTA"],
+          //     DFW: ["DALLAS", "FORT WORTH"],
+          //   };
+          //
+          //   const hints = iataToNameHints[dest] || [];
+          //   if (hints.length > 0 && arrName && hints.some(h => arrName.includes(h))) return true;
+          //
+          //   return false;
+          // });
+          //
+          // // If strict destination filter returns nothing, show ALL departures from that airport
+          // // so the agency can at least see what's flying and filter manually
+          // // Label this clearly so they know the destination filter was relaxed
+          // const relaxed = filtered.length === 0;
+          // if (relaxed) {
+          //   filtered = departures.slice(0, 30);
+          // }
+          //
+          // // Optional airline filter
+          // const airlineFilterStr = airlineFilter ? (airlineFilter as string).toUpperCase().trim() : null;
+          // if (airlineFilterStr) {
+          //   const byAirline = filtered.filter((f: any) => {
+          //     const iata = (f.airline?.iata || "").toUpperCase();
+          //     const name = (f.airline?.name || "").toUpperCase();
+          //     return iata.includes(airlineFilterStr) || name.includes(airlineFilterStr);
+          //   });
+          //   // Only apply airline filter if it returns results
+          //   if (byAirline.length > 0) filtered = byAirline;
+          // }
+          //
+          // const mapped = filtered.map(mapFlight).filter(Boolean);
+          // console.log(
+          //   `[flightSearch] route summary: departures=${departures.length} strictMatch=${relaxed ? 0 : filtered.length} relaxed=${relaxed} mapped=${mapped.length}`,
+          // );
+          //
+          // return res.json({
+          //   flights: mapped,
+          //   message: relaxed && mapped.length > 0
+          //     ? `No direct ${orig}→${dest} flights found. Showing all ${orig} departures — select the right one or use the flight number tab.`
+          //     : mapped.length === 0
+          //       ? "No flights found for this route on the selected date."
+          //       : undefined,
+          //   relaxed,
+          // });
+          return res.status(503).json({ flights: [], message: "Route search is temporarily disabled (AeroDataBox credit hold during webhook migration)." });
         }
 
         return res.status(400).json({ flights: [], message: "Invalid search mode." });
@@ -10723,15 +10736,21 @@ export async function registerRoutes(
             actualDelay = (flight.resolvedDelayMinutes as number | null) ?? 0;
             actualCancelled = actualStatus === "Cancelled";
           } else {
-            const liveStatus = await dGetFlightStatus(
-              flight.flightNumber,
-              flight.departureDate,
-              flight.originIata,
-              flight.destinationIata,
-            ).catch(() => null);
-            actualStatus = liveStatus?.status || "Unknown";
-            actualDelay = liveStatus?.delayMinutes || 0;
-            actualCancelled = !!liveStatus?.cancelled;
+            // [disabled 2026-08-06] AeroDataBox credit hold — no more live
+            // status lookups. Report Unknown for flights the resolution job
+            // hasn't resolved yet.
+            // const liveStatus = await dGetFlightStatus(
+            //   flight.flightNumber,
+            //   flight.departureDate,
+            //   flight.originIata,
+            //   flight.destinationIata,
+            // ).catch(() => null);
+            // actualStatus = liveStatus?.status || "Unknown";
+            // actualDelay = liveStatus?.delayMinutes || 0;
+            // actualCancelled = !!liveStatus?.cancelled;
+            actualStatus = "Unknown";
+            actualDelay = 0;
+            actualCancelled = false;
           }
 
           const disrupted = actualCancelled || actualDelay >= 30;
