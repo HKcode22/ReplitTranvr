@@ -8,3 +8,5 @@ vite.config.ts.*
 *.csv
 flight_data_pre_post.json
 logs/
+archiveold/
+travnr_db_dump/

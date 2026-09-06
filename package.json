@@ -24,7 +24,7 @@
     "test:watch": "vitest",
     "db:push": "drizzle-kit push",
     "v39:repo-intake": "echo 'REPO-INTAKE: Run git status, git log, and inventory production paths'",
-    "v39:migrate:check": "echo 'MIGRATE-CHECK: Verify fresh/upgrade/repeat migration passes'",
+    "v39:migrate:check": "tsx scripts/db_verify_phase0.ts",
     "v39:test:offline": "vitest run tests/",
     "v39:test:full": "vitest run",
     "v39:typecheck": "tsc --noEmit",

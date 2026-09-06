@@ -39,7 +39,7 @@ import {
   appendResearchEvents,
   researchEventKey,
 } from "./lib/disruption/flightDataPrePostStore_v3";
-import { persistRawDelivery, persistRawDeliveryItems } from "./lib/disruption/rawIngress_v3";
+import { persistRawDelivery, persistRawDeliveryItems, persistProcessingAttempt } from "./lib/disruption/rawIngress_v3";
 import { pool } from "./db";
 import {
   startBatch,
@@ -80,6 +80,11 @@ export function registerV3Routes(app: Express): void {
   // ---------------------------------------------------------------------
   const webhookIngress = async (req: Request, res: Response) => {
     const startedAt = Date.now();
+    // Scoped outside try so the catch path can still record a processing_attempt
+    // against the durable raw delivery when one exists (§1.5.2 item 6).
+    let rawDeliveryIdForCatch: string | null = null;
+    let receivedAtForCatch: Date | null = null;
+    let flightsForCatch: any[] = [];
     try {
       const secret = webhookSecret();
       if (secret && (!req.params.secret || req.params.secret !== secret)) {
@@ -109,6 +114,8 @@ export function registerV3Routes(app: Express): void {
       const subscription = body?.subscription ?? null;
       const balance = body?.balance ?? null;
       const receivedAt = new Date();
+      receivedAtForCatch = receivedAt;
+      flightsForCatch = Array.isArray(body) ? body : Array.isArray(body?.flights) ? body.flights : [];
 
       // Sampling metadata: if this subscription belongs to a managed batch,
       // stamp every row with batch/tier/probability/weight. If not, fall back
@@ -199,6 +206,8 @@ export function registerV3Routes(app: Express): void {
         res.status(500).json({ error: "Raw persistence failed; please retry" });
         return;
       }
+      // Raw envelope is durable from here on; copy the id for the catch path.
+      rawDeliveryIdForCatch = rawDeliveryId;
 
       const rows: InsertFlightDataPrePost[] = [];
       let skipped = 0;
@@ -215,6 +224,13 @@ export function registerV3Routes(app: Express): void {
       });
 
       const stats = await upsertFlightNotifications(rows);
+
+      // §1.5.2 item 6: parser/semantic failure AFTER durable raw commit is
+      // recorded as a processing_attempt (recoverable) — it never erases raw
+      // evidence and the handler may still 2xx. Track outcomes for the attempt row.
+      const attemptStartedAt = new Date();
+      let researchAppended = false;
+      let attemptError: string | null = null;
 
       // V3.9 S3/S4/S5 (§6, §6.2): append the research event log — one row per
       // observation, keyed on (flight, carrier, locReportedUtc) so every
@@ -239,7 +255,10 @@ export function registerV3Routes(app: Express): void {
             aircraftModel: r.aircraftModel,
             eventTimestamp: r.locReportedUtc ?? r.lastUpdatedUtc,
             providerPublishedUtc: r.lastUpdatedUtc,
-            availableAt: null,
+            // §1.5.2 item 5: available_at from durable commit timing. The raw
+            // envelope was committed before this point, so receivedAt is the
+            // earliest time this fact was durably available to snapshots.
+            availableAt: r.receivedAt ?? receivedAt,
             receivedTimestampUtc: r.receivedAt ?? new Date(),
             dataStage: r.dataStage as "PRE" | "POST",
             status: r.status,
@@ -270,11 +289,41 @@ export function registerV3Routes(app: Express): void {
             ingestEventId: null,
           })),
         );
+        researchAppended = true;
       } catch (researchErr: any) {
+        attemptError = String(researchErr?.message || researchErr);
         console.error(
           "[adb-v3-webhook] research event log write failed:",
-          researchErr?.message || researchErr,
+          attemptError,
         );
+      }
+
+      // Record the processing attempt for this delivery (best-effort; raw evidence already durable).
+      try {
+        await persistProcessingAttempt({
+          deliveryId: rawDeliveryId ?? "unknown",
+          attemptIndex: 0,
+          parserVersion: "flightNotificationExtractor_v3",
+          schemaVersion: null,
+          outcome: attemptError ? "partial" : "success",
+          itemsReceived: flights.length,
+          itemsParsed: rows.length,
+          itemsStored: stats.stored,
+          itemsSkipped: skipped,
+          itemsFailed: attemptError ? 1 : 0,
+          validationErrors: null,
+          parseErrors: attemptError ? [attemptError] : null,
+          storageErrors: null,
+          errorMessage: attemptError,
+          startedAtUtc: attemptStartedAt,
+          completedAtUtc: new Date(),
+          durationMs: Date.now() - attemptStartedAt.getTime(),
+          upsertResult: { stored: stats.stored, inserted: stats.inserted, updated: stats.updated },
+          researchEventsAppended: researchAppended,
+          ingestEventWritten: false,
+        });
+      } catch (attemptErr: any) {
+        console.warn("[adb-v3-webhook] processing_attempt write failed:", attemptErr?.message || attemptErr);
       }
 
       // V3.9 three-quantity credit ledger (§13, §44-A): one row per delivery so
@@ -330,7 +379,11 @@ export function registerV3Routes(app: Express): void {
         skipped,
       });
     } catch (err: any) {
-      // NEVER 5xx here — a 5xx triggers a paid retry. Log and 2xx anyway.
+      // §1.5.2 item 6/7: the ONLY failure that may still return non-2xx is a raw
+      // persistence failure — but that path returns 5xx directly above and never
+      // reaches here. Reaching this catch means raw IS durable (or the error
+      // happened before raw commit, e.g. sampling lookup), so respond 2xx and
+      // record a FAILED processing_attempt when a deliveryId exists. Never erase raw.
       console.error("[adb-v3-webhook] error:", err?.message || err);
       // V3.9 delivery-failure ledger (§44-C): count the failed delivery so the
       // failure-rate gate can PAUSE collection (it never throws back a 5xx).
@@ -344,6 +397,35 @@ export function registerV3Routes(app: Express): void {
         );
       } catch (ledgerErr: any) {
         console.error("[adb-v3-webhook] failure-ledger write failed:", ledgerErr?.message || ledgerErr);
+      }
+      // Persist the failed processing attempt (recoverable semantic failure after durable raw).
+      try {
+        if (typeof rawDeliveryIdForCatch === "string" && rawDeliveryIdForCatch) {
+          await persistProcessingAttempt({
+            deliveryId: rawDeliveryIdForCatch,
+            attemptIndex: 0,
+            parserVersion: "flightNotificationExtractor_v3",
+            schemaVersion: null,
+            outcome: "failed",
+            itemsReceived: flightsForCatch.length,
+            itemsParsed: 0,
+            itemsStored: 0,
+            itemsSkipped: 0,
+            itemsFailed: flightsForCatch.length,
+            validationErrors: null,
+            parseErrors: [String(err?.message || "error").slice(0, 500)],
+            storageErrors: null,
+            errorMessage: String(err?.message || "error").slice(0, 500),
+            startedAtUtc: receivedAtForCatch ?? new Date(startedAt),
+            completedAtUtc: new Date(),
+            durationMs: Date.now() - startedAt,
+            upsertResult: null,
+            researchEventsAppended: false,
+            ingestEventWritten: false,
+          });
+        }
+      } catch (attemptErr: any) {
+        console.error("[adb-v3-webhook] failed-attempt write failed:", attemptErr?.message || attemptErr);
       }
       res.status(200).json({ received: true, error: err?.message || "error" });
     }
@@ -396,9 +478,15 @@ export function registerV3Routes(app: Express): void {
     if (!subjectId || typeof subjectId !== "string") {
       return res.status(400).json({ error: "subjectId is required" });
     }
+    // CRIT-004 / §1.5.1 item 4: V3.9 experimental collection requires maxDeliveryRetries=0.
+    // Omitted → stored/sent 0; any requested nonzero value is refused (never silently stored).
+    const retriesRequested = maxDeliveryRetries === undefined ? 0 : Number(maxDeliveryRetries);
+    if (!Number.isInteger(retriesRequested) || retriesRequested !== 0) {
+      return res.status(400).json({ error: "maxDeliveryRetries must be 0 for V3.9 experimental subscriptions (omit or send 0)" });
+    }
     const subscription = await createSubscription(subjectType as SubscriptionSubjectType, subjectId, {
       url: url || defaultWebhookUrl(),
-      maxDeliveryRetries: maxDeliveryRetries === undefined ? 2 : Number(maxDeliveryRetries),
+      maxDeliveryRetries: 0,
     });
     if (!subscription) {
       return res.status(502).json({ error: "Failed to create subscription" });
