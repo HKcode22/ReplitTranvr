@@ -1,22 +1,19 @@
 /**
- * Canonical flight_instance_id — V3.9-f.8 §7.1 / §43-44 / §19 / Sep1_1 §19
+ * Canonical flight_instance_id — V3.9-f.8 §7.1 / Sep1_1 §19 (Identity-v2)
  *
  * One physical operated flight leg = one prediction unit.
- * Binding spec: AugMDnotes/V3.9_DataCollectPlan.md §7.1
  *
- * Preferred: provider flightId if verified stable at Gate 0.5 (same id across withCodeshared variants).
- * Fallback: operating_carrier + operating_flight_number + origin + destination(original) + service_date + selected_t_milestone
- *
- * Codeshare: marketing numbers stored as attribute array on operating leg, never separate flight_instance_id.
- * Retime ≥2h or date shift → new id with retime_parent_id link.
- * Diversion: same id retains original_scheduled_destination; actual_destination updated + diversion_flag.
- * Collision: append provider_record_key hash suffix.
- *
- * Sep1_1 §19 corrections:
- *  - Codeshare ambiguous_unknown state: codeshareStatus=0 (Unknown) treated as "may be codeshare"
- *  - Retime detection: compare scheduled times; ≥2h difference or date shift = new instance
- *  - Same-tail sequencing: not "same calendar date" — use chronology
- *  - Cross-midnight flights: service date determined by scheduled_gate_out local date
+ * Identity-v2 (CRIT-008) changes:
+ *  - Provider flight.id is NEVER canonical key material (only optional attribute).
+ *  - Canonical physical-leg key v2 =
+ *      operating_carrier + operating_flight_number + origin ICAO
+ *      + original destination ICAO + immutable initial_service_date
+ *      (+ collision discriminator for distinct retained records only).
+ *  - Retimes (≥2h or date shift) are APPEND-ONLY SCHEDULE VERSIONS under the
+ *    SAME flight_instance_id via schedule_version_id / monotonic retime_version.
+ *    They do NOT create a new physical flight ID unless positive distinct-leg
+ *    evidence exists (identity_resolution_status='ambiguous_distinct_leg' otherwise).
+ *  - Codeshare Unknown stays ambiguous_unknown; marketing numbers are attributes.
  */
 
 import crypto from "crypto";
@@ -29,11 +26,13 @@ export interface CanonicalFlightInstanceInput {
   destinationOriginal: string;     // ICAO original scheduled destination
   scheduledGateOutUtc: string;     // ISO UTC, frozen T per §6.0
   serviceDate: string;             // YYYY-MM-DD local of scheduledGateOut per §6.0/§5.3
-  providerFlightId?: string | null; // AeroDataBox flight.id if present
+  /** Immutable origin-local date of the FIRST verified schedule identity. */
+  initialServiceDate?: string;
+  providerFlightId?: string | null; // AeroDataBox flight.id — attribute only, NEVER key material (§7.1)
   providerRecordKey?: string | null;
   callsign?: string | null;
   marketingFlightNumbers?: string[]; // set after dedup
-  providerFlightIdStable?: boolean; // verified at Gate 0.5
+  providerFlightIdStable?: boolean; // verified at Gate 0.5 — informational only
 }
 
 export interface CanonicalFlightInstance {
@@ -42,6 +41,14 @@ export interface CanonicalFlightInstance {
   marketingFlightNumbers: string[];
   isFallback: boolean;
   retimeParentId?: string;
+  /** Identity-v2 append-only schedule version. */
+  scheduleVersionId?: string;
+  /** Identity-v2 monotonic retime version (0 = initial). */
+  retimeVersion?: number;
+  /** Identity-v2: unresolved distinct-leg case. */
+  identityResolutionStatus?: "resolved" | "ambiguous_distinct_leg";
+  /** Immutable origin-local date of first verified schedule identity. */
+  initialServiceDate?: string;
 }
 
 export interface RetimeDetectionResult {
@@ -87,15 +94,15 @@ export function classifyCodeshare(rawCode: number | null | undefined): Codeshare
 }
 
 // ---------------------------------------------------------------------------
-// Retime detection (Sep1_1 §19)
+// Retime detection (used for schedule-versioning, NOT for a new physical ID)
 // ---------------------------------------------------------------------------
 
-const RETIME_THRESHOLD_MINUTES = 120; // ≥2h = new instance
+const RETIME_THRESHOLD_MINUTES = 120; // ≥2h
 
 /**
- * Detect if a flight has been retimed.
- * Retime = scheduled time shifted by ≥2h OR date changed.
- * Returns the detection result with the retime magnitude.
+ * Detect if a scheduled time has been retimed (≥2h or date shift).
+ * In identity-v2 this signals a NEW SCHEDULE VERSION of the SAME physical
+ * flight — it never creates a new flight_instance_id by itself.
  */
 export function detectRetime(
   previousScheduledUtc: Date | null,
@@ -113,7 +120,6 @@ export function detectRetime(
   const curDate = currentScheduledUtc.toISOString().slice(0, 10);
   const dateShifted = prevDate !== curDate;
 
-  // Retime threshold
   const isRetime = diffMinutes >= RETIME_THRESHOLD_MINUTES || dateShifted;
 
   let reason: string | null = null;
@@ -134,53 +140,77 @@ export function detectRetime(
 }
 
 // ---------------------------------------------------------------------------
-// Canonical ID generation
+// Identity-v2 canonical ID generation (§7.1)
 // ---------------------------------------------------------------------------
 
-/** Returns deterministic canonical id. Collision suffix added if caller detects duplicate. */
+/**
+ * Schedule-version id: append-only per retime. Same physical flight gets a NEW
+ * schedule_version_id (capturing the mutable schedule time) without changing
+ * flight_instance_id.
+ */
+function scheduleVersionId(flightInstanceId: string, retimeVersion: number, scheduledGateOutUtc: string): string {
+  return `ver:${sha8(`${flightInstanceId}|${retimeVersion}|${scheduledGateOutUtc}`)}`;
+}
+
+/**
+ * Canonical physical-leg ID v2 — stable across retimes/date shifts.
+ * Key = carrier + number + origin + original destination + immutable
+ * initial_service_date (+ collision suffix for distinct retained records only).
+ * Provider flight.id is never key material.
+ */
 export function canonicalFlightInstanceId(input: CanonicalFlightInstanceInput, opts?: { collisionSuffix?: string }): CanonicalFlightInstance {
   const normalizedCarrier = input.operatingCarrier.trim().toUpperCase();
   const normalizedNumber = input.operatingFlightNumber.trim().replace(/^0+/, "");
   const origin = input.origin.trim().toUpperCase();
   const dest = input.destinationOriginal.trim().toUpperCase();
+  const initialServiceDate = input.initialServiceDate ?? input.serviceDate;
 
-  // Preferred path — only if verified stable
-  if (input.providerFlightId && input.providerFlightIdStable) {
-    const base = `pid:${input.providerFlightId}`;
-    const suffix = opts?.collisionSuffix ? `:${opts.collisionSuffix}` : "";
-    return {
-      flight_instance_id: `${base}${suffix}`,
-      stableIdentity: base,
-      marketingFlightNumbers: input.marketingFlightNumbers ?? [],
-      isFallback: false,
-    };
-  }
-
-  // Fallback canonical key — frozen per §7.1
-  const base = `${normalizedCarrier}${normalizedNumber}|${origin}|${dest}|${input.serviceDate}|${input.scheduledGateOutUtc}`;
+  // Identity-v2 key: NO provider flight.id, NO mutable scheduledGateOutUtc.
+  const base = `${normalizedCarrier}${normalizedNumber}|${origin}|${dest}|${initialServiceDate}`;
   let id = `leg:${sha8(base)}`;
   if (opts?.collisionSuffix) id += `:${opts.collisionSuffix}`;
+
   return {
     flight_instance_id: id,
     stableIdentity: base,
     marketingFlightNumbers: input.marketingFlightNumbers ?? [],
     isFallback: true,
+    scheduleVersionId: scheduleVersionId(id, 0, input.scheduledGateOutUtc),
+    retimeVersion: 0,
+    identityResolutionStatus: "resolved",
+    initialServiceDate,
   };
 }
 
 /**
- * Generate a new canonical ID for a retimed flight.
- * Links to the original via retimeParentId.
+ * Identity-v2 retime: the SAME physical flight_instance_id is retained; a NEW
+ * schedule_version_id is appended and retime_version is incremented. No new
+ * physical ID unless positive distinct-leg evidence exists.
  */
 export function retimeFlightInstanceId(
   original: CanonicalFlightInstance,
   newInput: CanonicalFlightInstanceInput,
   opts?: { collisionSuffix?: string },
 ): CanonicalFlightInstance {
-  const newId = canonicalFlightInstanceId(newInput, opts);
+  const base = canonicalFlightInstanceId(newInput, opts);
+  const retimeVersion = (original.retimeVersion ?? 0) + 1;
+  // Keep the ORIGINAL physical id (identity-v2): same carrier/number/origin/
+  // dest/initial-service-date → same leg:hash even if the schedule time shifted.
+  const physicalId = canonicalFlightInstanceId({
+    ...newInput,
+    initialServiceDate: original.initialServiceDate ?? newInput.serviceDate,
+    operatingCarrier: newInput.operatingCarrier,
+    operatingFlightNumber: newInput.operatingFlightNumber,
+    origin: newInput.origin,
+    destinationOriginal: newInput.destinationOriginal,
+  }, opts);
+
   return {
-    ...newId,
-    retimeParentId: original.flight_instance_id,
+    ...physicalId,
+    marketingFlightNumbers: newInput.marketingFlightNumbers ?? original.marketingFlightNumbers ?? [],
+    scheduleVersionId: scheduleVersionId(physicalId.flight_instance_id, retimeVersion, newInput.scheduledGateOutUtc),
+    retimeVersion,
+    identityResolutionStatus: "resolved",
   };
 }
 
@@ -196,6 +226,7 @@ export function dedupCodeshares(rows: Array<{
   destinationOriginal: string;
   scheduledGateOutUtc: string;
   serviceDate: string;
+  initialServiceDate?: string;
   marketingCarrier?: string;
   marketingNumber?: string;
   providerFlightId?: string;
@@ -210,7 +241,7 @@ export function dedupCodeshares(rows: Array<{
       destinationOriginal: r.destinationOriginal,
       scheduledGateOutUtc: r.scheduledGateOutUtc,
       serviceDate: r.serviceDate,
-      providerFlightId: r.providerFlightId ?? null,
+      initialServiceDate: r.initialServiceDate,
     });
     const key = inst.stableIdentity;
     const codeshareState = classifyCodeshare(r.codeshareStatus);

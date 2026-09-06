@@ -39,6 +39,7 @@ import {
   appendResearchEvents,
   researchEventKey,
 } from "./lib/disruption/flightDataPrePostStore_v3";
+import { persistRawDelivery, persistRawDeliveryItems } from "./lib/disruption/rawIngress_v3";
 import { pool } from "./db";
 import {
   startBatch,
@@ -71,12 +72,11 @@ function managementGuard(req: Request, res: Response, next: NextFunction): void 
 
 export function registerV3Routes(app: Express): void {
   // ---------------------------------------------------------------------
-  // WEBHOOK INGRESS — always answer 2xx within 10s or AeroDataBox retries
-  // and each retry costs credits. On validation failure we still ack 2xx
-  // (4xx/5xx triggers a costly retry).
-  // Registered on BOTH the bare path and the /:secret path:
-  //   - secret unset  → subscriptions point at /api/v1/webhooks/aerodatabox
-  //   - secret set    → they point at /api/v1/webhooks/aerodatabox/<secret>
+  // WEBHOOK INGRESS — durably persist raw delivery/items BEFORE successful
+  // 2xx (§1.5.2 / CRIT-003). If raw persistence fails, return 5xx (provider
+  // retry, not silent loss). Semantic-parse failures after durable raw commit
+  // are recorded as processing attempts and may still return 2xx.
+  // Registered on BOTH the bare path and the /:secret path.
   // ---------------------------------------------------------------------
   const webhookIngress = async (req: Request, res: Response) => {
     const startedAt = Date.now();
@@ -147,6 +147,57 @@ export function registerV3Routes(app: Express): void {
             };
           }
         }
+      }
+
+      // S2 — durable raw persistence BEFORE semantic extraction and before 2xx (CRIT-003 / §1.5.2).
+      // If the DB insert fails, return 5xx so the provider retries (never silent loss).
+      let rawDeliveryId: string | null = null;
+      try {
+        const rawRec = await persistRawDelivery({
+          subscriptionId: subId ?? null,
+          batchId: sampling?.batchId ?? null,
+          httpMethod: req.method ?? "POST",
+          httpPath: req.originalUrl ?? req.path ?? null,
+          rawBody: body,
+          providerPublishedUtc: (() => {
+            const first = flights[0] as any;
+            const raw = first?.lastUpdatedUtc ?? balance?.lastDeductedUtc ?? null;
+            return raw ? new Date(raw) : null;
+          })(),
+          receivedAtUtc: receivedAt,
+          adbDeliveryId: (req.headers as any)?.["x-delivery-id"] ?? null,
+          adbCostCredits: null,
+        });
+        rawDeliveryId = rawRec.deliveryId;
+        try {
+          await persistRawDeliveryItems(
+            flights.map((flight: any, i: number) => {
+              const carrier = flight?.airline ?? {};
+              return {
+                deliveryId: rawRec.deliveryId,
+                itemIndex: i,
+                flightNumber: (typeof flight?.number === "string" && flight.number) ? String(flight.number) : (typeof flight?.callSign === "string" ? String(flight.callSign) : null),
+                carrierIata: carrier?.iata ?? null,
+                carrierIcao: carrier?.icao ?? null,
+                status: flight?.status != null ? String(flight.status) : null,
+                statusCode: typeof flight?.status === "number" ? Math.trunc(flight.status) : null,
+                rawItem: flight,
+                lastUpdatedUtc: flight?.lastUpdatedUtc ? new Date(flight.lastUpdatedUtc) : null,
+                departureScheduledUtc: flight?.departure?.scheduledTime?.utc ? new Date(flight.departure.scheduledTime.utc) : null,
+                arrivalScheduledUtc: flight?.arrival?.scheduledTime?.utc ? new Date(flight.arrival.scheduledTime.utc) : null,
+                parsingOutcome: "pending",
+                canonicalFlightInstanceId: null,
+              };
+            }),
+          );
+        } catch (itemErr: any) {
+          // Item persistence is best-effort; envelope is already durably stored so we continue.
+          console.warn("[adb-v3-webhook] raw_delivery_item persistence failed:", itemErr?.message || itemErr);
+        }
+      } catch (rawErr: any) {
+        console.error("[adb-v3-webhook] raw delivery persistence failed — returning 5xx:", rawErr?.message || rawErr);
+        res.status(500).json({ error: "Raw persistence failed; please retry" });
+        return;
       }
 
       const rows: InsertFlightDataPrePost[] = [];

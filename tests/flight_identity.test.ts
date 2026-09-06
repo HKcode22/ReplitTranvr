@@ -1,11 +1,10 @@
 /**
- * TEST-008: Canonical flight_instance_id (V3.9 Plan §7.1)
+ * TEST-008: Canonical flight_instance_id (V3.9 Plan §7.1 / Identity-v2)
  *
  * Covers:
- *  - Stable physical flight_instance_id across retimes
- *  - <2h retime keeps same identity
- *  - ≥2h retime creates new identity with parent link
- *  - Date shift creates new identity
+ *  - Stable physical flight_instance_id across retimes (CRIT-008)
+ *  - Retime = append-only schedule version under the SAME flight_instance_id
+ *  - Provider flight.id is NEVER canonical key material (§7.1)
  *  - Codeshare classification (Unknown/IsOperator/IsCodeshared)
  *  - Codeshare dedup (marketing → operating leg)
  *  - Cross-airport duplicate detection
@@ -118,26 +117,29 @@ describe("TEST-008: Canonical flight instance identity", () => {
       expect(id1.flight_instance_id).not.toBe(id2.flight_instance_id);
     });
 
-    it("uses provider flight ID when stable and verified", () => {
-      const id = canonicalFlightInstanceId({
+    it("provider flight ID is NOT canonical key material (identity-v2 §7.1)", () => {
+      const withPid = canonicalFlightInstanceId({
         ...baseInput,
         providerFlightId: "adb_12345",
         providerFlightIdStable: true,
       });
-
-      expect(id.flight_instance_id).toBe("pid:adb_12345");
-      expect(id.isFallback).toBe(false);
-    });
-
-    it("falls back to leg hash when provider ID not stable", () => {
-      const id = canonicalFlightInstanceId({
+      const withoutPid = canonicalFlightInstanceId({
         ...baseInput,
-        providerFlightId: "adb_12345",
-        providerFlightIdStable: false,
+        providerFlightId: null,
       });
 
-      expect(id.flight_instance_id).toMatch(/^leg:[a-f0-9]{8}$/);
-      expect(id.isFallback).toBe(true);
+      // The physical ID must NOT depend on provider flight.id.
+      expect(withPid.flight_instance_id).toBe(withoutPid.flight_instance_id);
+      expect(withPid.flight_instance_id).toMatch(/^leg:[a-f0-9]{8}$/);
+    });
+
+    it("provider record key is never key material either", () => {
+      const withKey = canonicalFlightInstanceId({
+        ...baseInput,
+        providerRecordKey: "rec_abc",
+      });
+      const withoutKey = canonicalFlightInstanceId(baseInput);
+      expect(withKey.flight_instance_id).toBe(withoutKey.flight_instance_id);
     });
 
     it("normalizes carrier and strips leading zeros from number", () => {
@@ -161,17 +163,17 @@ describe("TEST-008: Canonical flight instance identity", () => {
     });
   });
 
-  describe("Retime identity linking", () => {
-    it("retimed flight gets new ID with parent link", () => {
-      const original = canonicalFlightInstanceId({
-        operatingCarrier: "UA",
-        operatingFlightNumber: "123",
-        origin: "KLAX",
-        destinationOriginal: "KSFO",
-        scheduledGateOutUtc: "2026-09-01T10:00:00Z",
-        serviceDate: "2026-09-01",
-      });
+  describe("Retime identity linking (identity-v2 §7.1 — CRIT-008)", () => {
+    const original = canonicalFlightInstanceId({
+      operatingCarrier: "UA",
+      operatingFlightNumber: "123",
+      origin: "KLAX",
+      destinationOriginal: "KSFO",
+      scheduledGateOutUtc: "2026-09-01T10:00:00Z",
+      serviceDate: "2026-09-01",
+    });
 
+    it("≥2h retime keeps the SAME flight_instance_id (append-only schedule version)", () => {
       const retimed = retimeFlightInstanceId(original, {
         operatingCarrier: "UA",
         operatingFlightNumber: "123",
@@ -181,8 +183,38 @@ describe("TEST-008: Canonical flight instance identity", () => {
         serviceDate: "2026-09-01",
       });
 
-      expect(retimed.flight_instance_id).not.toBe(original.flight_instance_id);
-      expect(retimed.retimeParentId).toBe(original.flight_instance_id);
+      expect(retimed.flight_instance_id).toBe(original.flight_instance_id);
+      expect(retimed.retimeVersion).toBe((original.retimeVersion ?? 0) + 1);
+      expect(retimed.scheduleVersionId).toBeDefined();
+      expect(retimed.scheduleVersionId).not.toBe(original.scheduleVersionId);
+    });
+
+    it("date-shift retime keeps the SAME flight_instance_id too", () => {
+      const retimed = retimeFlightInstanceId(original, {
+        operatingCarrier: "UA",
+        operatingFlightNumber: "123",
+        origin: "KLAX",
+        destinationOriginal: "KSFO",
+        scheduledGateOutUtc: "2026-09-02T10:00:00Z", // next day
+        serviceDate: "2026-09-01",
+      });
+
+      expect(retimed.flight_instance_id).toBe(original.flight_instance_id);
+      expect(retimed.retimeVersion).toBeGreaterThan((original.retimeVersion ?? 0));
+    });
+
+    it("initial_service_date is immutable across retimes", () => {
+      const retimed = retimeFlightInstanceId(original, {
+        operatingCarrier: "UA",
+        operatingFlightNumber: "123",
+        origin: "KLAX",
+        destinationOriginal: "KSFO",
+        scheduledGateOutUtc: "2026-09-02T10:00:00Z",
+        serviceDate: "2026-09-02", // later schedule claims a different date
+      });
+
+      // The physical identity keeps the ORIGINAL first-observed service date.
+      expect(retimed.initialServiceDate).toBe("2026-09-01");
     });
   });
 

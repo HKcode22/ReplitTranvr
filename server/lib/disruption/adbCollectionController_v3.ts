@@ -77,6 +77,23 @@ function envList(name: string, fallback: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Fail-closed ADB_AUTO_COLLECT parser (§1.5.1 / CRIT-001).
+ * Automatic collection is explicit opt-in ONLY:
+ *   missing / "" / "0" / "false" / "off" / "no" / invalid → OFF
+ *   "1" / "true" / "on" / "yes"                          → ON
+ * A separate authorized Phase-6 transition is the only producer of ON.
+ * Extracted as a pure function so Phase-0A tests can prove every branch.
+ */
+export function parseAutoCollect(raw: string | undefined): boolean {
+  if (raw === undefined || raw === "") return false;
+  const lower = String(raw).toLowerCase().trim();
+  if (lower === "1" || lower === "true" || lower === "on" || lower === "yes") return true;
+  if (lower === "0" || lower === "false" || lower === "off" || lower === "no") return false;
+  console.warn(`[adb-controller] ADB_AUTO_COLLECT invalid value "${raw}" — treating as OFF`);
+  return false;
+}
+
 export const COLLECTOR_CONFIG = {
   windowHours: envInt("ADB_WINDOW_HOURS", 4),
   batchBudget: envInt("ADB_BATCH_BUDGET", 1900),
@@ -122,8 +139,8 @@ export const COLLECTOR_CONFIG = {
   rememberRecentBatches: 2,
 
   // ---- auto-rotation (hands-off overnight runs) ----
-  /** ADB_AUTO_COLLECT=0 disables; default ON — the watchdog rotates batches itself. */
-  autoCollect: process.env.ADB_AUTO_COLLECT !== "0",
+  /** Fail-closed: explicit opt-in only. Missing/0/false/invalid → OFF. Only the authorized Phase-6 transition may produce ON (§1.5.1). */
+  autoCollect: parseAutoCollect(process.env.ADB_AUTO_COLLECT),
   /** gap between a batch closing and the next one auto-starting (min) */
   autoCooldownMinutes: envInt("ADB_AUTO_COOLDOWN_MIN", 15),
   /** only auto-start between these UTC hours (inclusive start, exclusive end). 0-24 = all day. */
