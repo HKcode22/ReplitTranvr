@@ -4,35 +4,18 @@ import * as schema from "@shared/schema";
 import { readFile } from "fs/promises";
 import path from "path";
 
-// Phase-0 least-privilege separation (§1.5.15 / security machinery):
-// - `pool` (exported, used by ALL runtime code) prefers DATABASE_RUNTIME_URL,
-//   a dedicated non-owner role with only raw INSERT/SELECT, identity
-//   SELECT/INSERT, expiry DELETE and tombstone INSERT.
-// - Migrations require DDL, so applyBootMigrations() uses the owner
-//   DATABASE_URL on a separate pool. Never run migrations as runtime.
 const runtimeConnectionString = process.env.DATABASE_RUNTIME_URL || process.env.DATABASE_URL;
 const ownerConnectionString = process.env.DATABASE_URL || process.env.DATABASE_RUNTIME_URL;
-
-const pool = new Pool({
-  connectionString: runtimeConnectionString,
-});
-
-const migrationPool = new Pool({
-  connectionString: ownerConnectionString,
-});
-
+const pool = new Pool({ connectionString: runtimeConnectionString });
+const migrationPool = new Pool({ connectionString: ownerConnectionString });
 export const db = drizzle(pool, { schema });
 export { pool, migrationPool };
 
-// Boot-time migration runner for additive, idempotent SQL migrations that
-// must always be present (e.g. the agency disruption system tables added
-// in 0002_agency_disruption_system.sql). Every statement in the listed
-// files uses IF NOT EXISTS, so this is safe to re-run on every startup.
-//
-// Kept separate from the Stripe sync's `runMigrations` (which only owns
-// the `stripe` schema) and from `drizzle-kit push` (which is a dev-time
-// workflow). This is the equivalent of a tiny in-process migrator for the
-// small set of files that need to apply automatically.
+/**
+ * Production boot migration registry. Phase-0 additive migrations are listed in
+ * strict order and must be safe to execute repeatedly. Runtime queries use the
+ * least-privilege pool; DDL runs only through the owner migration pool.
+ */
 const BOOT_MIGRATIONS: readonly string[] = [
   "0002_agency_disruption_system.sql",
   "0003_travelers_health.sql",
@@ -63,10 +46,11 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0031_retention_tombstone.sql",
   "0032_airborne_canonical_identity.sql",
   "0033_incident_stop.sql",
+  "0034_airborne_phase0_conformance.sql",
+  "0035_anchor_probe_identity_bounds.sql",
 ];
 
 let bootMigrationsApplied = false;
-
 export async function applyBootMigrations(): Promise<void> {
   if (bootMigrationsApplied) return;
   bootMigrationsApplied = true;
@@ -75,18 +59,13 @@ export async function applyBootMigrations(): Promise<void> {
     const full = path.join(migrationsDir, file);
     try {
       const sql = await readFile(full, "utf8");
-      // Drizzle-style migrations sometimes split statements with the
-      // "--> statement-breakpoint" marker. Our additive SQL doesn't need
-      // that, but support it so any future file pasted in here works.
-      const blocks = sql
-        .split(/-->\s*statement-breakpoint/i)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-      for (const block of blocks) {
-        await migrationPool.query(block);
-      }
+      const blocks = sql.split(/-->\s*statement-breakpoint/i).map((s) => s.trim()).filter(Boolean);
+      for (const block of blocks) await migrationPool.query(block);
       console.log(`[migrations] applied ${file}`);
     } catch (err: any) {
+      // Allow a subsequent explicit verification process to retry after a boot
+      // failure; do not permanently mark the migration registry as applied.
+      bootMigrationsApplied = false;
       console.error(`[migrations] failed to apply ${file}:`, err?.message || err);
       throw err;
     }
