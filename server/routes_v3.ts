@@ -6,11 +6,9 @@
  * raw envelope/items -> identity resolution/quarantine -> semantic events ->
  * current-state convenience upsert -> 2xx.
  *
- * Phase-6 start is intentionally NOT exposed as an HTTP mutation. The only
- * Phase-6 start authority is scripts/v39_phase6_start_owner_v39.ts, which binds
- * exact AUTH+manifest+code+schema+live-runtime heartbeat before calling the
- * collection controller. The long-lived frozen runtime owner is started from
- * server/db.ts; the retired controller watchdog is not started here.
+ * Phase-6 start/stop are intentionally NOT exposed as HTTP mutations. Start
+ * must use the exact v39:phase6:start owner; emergency stop must use
+ * v39:phase6:pause so provider DELETE + frozen settlement remain single-owner.
  */
 import type { Express, Request, Response, NextFunction } from "express";
 import { createHash } from "crypto";
@@ -36,7 +34,6 @@ import { persistProcessingAttempt, persistRawDeliveryTransaction, updateRawDeliv
 import { verifyAuthRecord, approvedArtifactHashesFromLedger, sha256HexString, type AuthRecord } from "./lib/disruption/authRecord_v39";
 import { pool } from "./db";
 import {
-  stopBatch,
   getCollectionStatus,
   getDiagnostics,
   getAirportCoverage,
@@ -184,7 +181,9 @@ export function registerV3Routes(app:Express):void{
   app.post("/api/v1/collection/start",managementGuard,async(_req,res)=>{
     res.status(409).json({error:"REFUSED_PHASE6_HTTP_START: use the exact v39:phase6:start wrapper/owner; HTTP is not a Phase-6 start authority."});
   });
-  app.post("/api/v1/collection/stop",managementGuard,async(req,res)=>{try{const closed=await stopBatch(String(req.body?.reason||"manual"));if(!closed)return res.status(404).json({error:"No active batch to stop"});res.json({stopped:closed});}catch(err:any){res.status(500).json({error:err?.message||"failed to stop batch"});}});
+  app.post("/api/v1/collection/stop",managementGuard,async(_req,res)=>{
+    res.status(409).json({error:"REFUSED_PHASE6_HTTP_STOP: use v39:phase6:pause; HTTP is not a Phase-6 stop/settlement authority."});
+  });
   app.get("/api/v1/collection/diagnostics",managementGuard,async(_req,res)=>{try{res.json(await getDiagnostics());}catch(err:any){res.status(500).json({error:err?.message||"failed to run diagnostics"});}});
   app.get("/api/v1/collection/coverage",managementGuard,async(req,res)=>{try{const cov=await getAirportCoverage(req.query?.force==="1"||req.query?.force==="true");if(!cov)return res.status(502).json({error:"Coverage enumeration failed"});res.json(cov);}catch(err:any){res.status(500).json({error:err?.message||"failed to fetch coverage"});}});
 }
