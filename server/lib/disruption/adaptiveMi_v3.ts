@@ -1,46 +1,29 @@
 /**
- * Adaptive regional m_i — V3.9-f.8 §36 / Sep1_1 §36
+ * V3.9-f.8 REGIONAL adaptive allocation owner.
  *
- * Implements:
- *   - EMA (Exponential Moving Average) for yield estimation
- *   - Zero-yield state machine (normal → zero_yield_once → zero_yield_repeated → zero_yield_persistent)
- *   - Median/reference pool for EMA normalization
- *   - Coverage floor with positive-probability guarantee
- *   - m_i bounds clamping
- *
- * Sep1_1 §36 corrections:
- *  - Exact EMA formula with alpha, first observation, cold-start, missing, zero-yield behaviors
- *  - Median/reference pool explicitly defined (REGIONAL only, non-null EMA, exclude persistent zero-yield)
- *  - Zero-yield state machine with exact states and transition rules
- *  - Provider failure ≠ zero-yield airport observation
- *  - Initial Phase-6 state frozen before collection starts
+ * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§8.2, 8.3, 8.6.
+ * This module deliberately fails closed on missing adaptive evidence. Probe
+ * results never seed Phase-6 state and true zero-yield observations never
+ * update the EMA.
  */
 
-// ---------------------------------------------------------------------------
-// EMA Configuration
-// ---------------------------------------------------------------------------
-
 export interface EmaConfig {
-  /** Smoothing factor (0 < alpha ≤ 1). alpha = 0.5 means ~4 observations to converge. */
+  /** Frozen V3.9 smoothing factor. */
   alpha: number;
-  /** Lower bound for m_i (minimum probability) */
+  /** Frozen lower bound for m_i. */
   lowerBound: number;
-  /** Upper bound for m_i (maximum probability) */
+  /** Frozen upper bound for m_i. */
   upperBound: number;
-  /** Number of observations before EMA stabilizes */
+  /** Compatibility field. V3.9 has no warmup averaging period. */
   warmupObservations: number;
 }
 
 export const DEFAULT_EMA_CONFIG: EmaConfig = {
   alpha: 0.5,
-  lowerBound: 0.001,
-  upperBound: 1.0,
-  warmupObservations: 4,
+  lowerBound: 0.25,
+  upperBound: 1.5,
+  warmupObservations: 0,
 };
-
-// ---------------------------------------------------------------------------
-// Zero-yield state machine (§36.4)
-// ---------------------------------------------------------------------------
 
 export type ZeroYieldState =
   | "normal"
@@ -49,256 +32,329 @@ export type ZeroYieldState =
   | "zero_yield_persistent";
 
 export interface ZeroYieldConfig {
-  /** How many consecutive zero-yield observations before "repeated" */
   repeatedThreshold: number;
-  /** How many consecutive zero-yield observations before "persistent" */
   persistentThreshold: number;
-  /** Days to observe before "persistent" is confirmed */
   persistentDays: number;
 }
 
 export const DEFAULT_ZERO_YIELD_CONFIG: ZeroYieldConfig = {
-  repeatedThreshold: 3,
+  repeatedThreshold: 2,
   persistentThreshold: 5,
-  persistentDays: 20,
+  persistentDays: 30,
 };
 
+export type AdaptiveObservation =
+  | "valid_nonempty"
+  | "true_zero_yield"
+  | "provider_failure"
+  | "coverage_failed"
+  | "missing";
+
 /**
- * Classify a zero-yield observation.
- * IMPORTANT: A provider error is NOT a zero-yield airport observation.
- * Only true zero-yield (flight observed but no delay) counts.
+ * Classify a completed direct Phase-6 airport observation.
+ * A true zero means a successful, complete provider observation containing
+ * zero distinct canonical flight instances. A provider/coverage/parser error
+ * is never a zero.
  */
-export function classifyZeroYieldObservation(
-  /** Was a flight actually observed at this airport? */
-  flightObserved: boolean,
-  /** Was there a delay exceeding the threshold? */
-  delayExceedsThreshold: boolean,
-  /** Was this a provider error/timeout? */
-  providerError: boolean,
-): "true_zero_yield" | "provider_failure" | "has_yield" {
-  if (providerError) return "provider_failure";
-  if (!flightObserved) return "provider_failure"; // no observation ≠ zero yield
-  if (delayExceedsThreshold) return "has_yield";
-  return "true_zero_yield";
+export function classifyCompletedObservation(input: {
+  complete: boolean;
+  distinctCanonicalFlights: number | null;
+  providerError?: boolean;
+  coverageFailed?: boolean;
+}): AdaptiveObservation {
+  if (input.coverageFailed) return "coverage_failed";
+  if (input.providerError) return "provider_failure";
+  if (!input.complete || input.distinctCanonicalFlights === null) return "missing";
+  if (input.distinctCanonicalFlights < 0 || !Number.isFinite(input.distinctCanonicalFlights)) return "missing";
+  return input.distinctCanonicalFlights === 0 ? "true_zero_yield" : "valid_nonempty";
 }
 
 /**
- * State transition for zero-yield FSM.
- * Returns the new state given the current state and observation.
+ * Deprecated compatibility adapter retained for old callers. It intentionally
+ * cannot manufacture a true-zero from a failed/no-observation call. New
+ * production code must use classifyCompletedObservation().
+ */
+export function classifyZeroYieldObservation(
+  flightObserved: boolean,
+  delayExceedsThreshold: boolean,
+  providerError: boolean,
+): "true_zero_yield" | "provider_failure" | "has_yield" {
+  if (providerError || !flightObserved) return "provider_failure";
+  return delayExceedsThreshold ? "has_yield" : "true_zero_yield";
+}
+
+function utcDayDiff(fromIso: string, toIso: string): number {
+  const from = Date.parse(fromIso);
+  const to = Date.parse(toIso);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) return 0;
+  return (to - from) / 86_400_000;
+}
+
+/**
+ * Sole V3.9 zero-yield FSM. Provider/coverage failures do not advance it.
+ * Persistent is reached after >=5 consecutive valid empty observations OR
+ * >=30 calendar days since the first unresolved valid empty observation.
  */
 export function transitionZeroYieldState(
   currentState: ZeroYieldState,
-  observation: "true_zero_yield" | "provider_failure" | "has_yield",
+  observation: "true_zero_yield" | "provider_failure" | "has_yield" | "coverage_failed" | "missing",
   config: ZeroYieldConfig = DEFAULT_ZERO_YIELD_CONFIG,
-  /** How many consecutive zero-yield observations so far (resets on has_yield) */
   consecutiveZeroYield: number,
-): { newState: ZeroYieldState; newConsecutive: number } {
-  // Provider failure does NOT advance the zero-yield state machine
-  if (observation === "provider_failure") {
-    return { newState: currentState, newConsecutive: consecutiveZeroYield };
+  firstZeroYieldDate: string | null = null,
+  observationDate: string | null = null,
+): { newState: ZeroYieldState; newConsecutive: number; firstZeroYieldDate: string | null } {
+  if (observation === "provider_failure" || observation === "coverage_failed" || observation === "missing") {
+    return { newState: currentState, newConsecutive: consecutiveZeroYield, firstZeroYieldDate };
   }
-
-  // Any yield observation resets to normal
   if (observation === "has_yield") {
-    return { newState: "normal", newConsecutive: 0 };
+    return { newState: "normal", newConsecutive: 0, firstZeroYieldDate: null };
   }
 
-  // true_zero_yield: advance the state machine
   const newConsecutive = consecutiveZeroYield + 1;
+  const firstZero = firstZeroYieldDate ?? observationDate;
+  const persistentByDays = Boolean(
+    firstZero && observationDate && utcDayDiff(firstZero, observationDate) >= config.persistentDays,
+  );
 
-  if (newConsecutive >= config.persistentThreshold) {
-    return { newState: "zero_yield_persistent", newConsecutive };
+  if (newConsecutive >= config.persistentThreshold || persistentByDays) {
+    return { newState: "zero_yield_persistent", newConsecutive, firstZeroYieldDate: firstZero };
   }
   if (newConsecutive >= config.repeatedThreshold) {
-    return { newState: "zero_yield_repeated", newConsecutive };
+    return { newState: "zero_yield_repeated", newConsecutive, firstZeroYieldDate: firstZero };
   }
-  if (newConsecutive >= 1) {
-    return { newState: "zero_yield_once", newConsecutive };
-  }
-
-  return { newState: "normal", newConsecutive: 0 };
+  return { newState: "zero_yield_once", newConsecutive, firstZeroYieldDate: firstZero };
 }
 
-// ---------------------------------------------------------------------------
-// EMA Calculation (§36.2)
-// ---------------------------------------------------------------------------
-
-/**
- * Exact EMA recurrence:
- *   ema_t = alpha * x_t + (1 - alpha) * ema_{t-1}
- *
- * First observation: ema = x_1 (no previous EMA)
- * Cold start (no observations): ema = null
- * Missing observation: ema unchanged (use previous value)
- * Zero-yield: x_t = 0, but ema still updates (don't skip)
- */
+/** Exact V3.9 EMA recurrence. Call only for valid NONEMPTY observations. */
 export function emaUpdate(
   previousEma: number | null,
   currentValue: number,
   config: EmaConfig = DEFAULT_EMA_CONFIG,
 ): number {
-  if (previousEma === null) {
-    // First observation: ema = x_1
-    return currentValue;
+  if (!Number.isFinite(currentValue) || currentValue < 0) {
+    throw new Error("adaptive yield must be a finite non-negative number");
   }
-  // Standard EMA recurrence
+  if (!(config.alpha > 0 && config.alpha <= 1)) throw new Error("invalid adaptive alpha");
+  if (previousEma === null) return currentValue;
   return config.alpha * currentValue + (1 - config.alpha) * previousEma;
 }
 
-// ---------------------------------------------------------------------------
-// m_i Calculation (§36.1)
-// ---------------------------------------------------------------------------
-
 export interface MiState {
-  /** Current m_i value */
   value: number;
-  /** EMA of yield */
   ema: number | null;
-  /** Number of observations */
   observationCount: number;
-  /** Zero-yield state */
   zeroYieldState: ZeroYieldState;
-  /** Consecutive zero-yield observations */
   consecutiveZeroYield: number;
-  /** Last observation date */
   lastObservationDate: string | null;
-  /** Whether this is in warmup phase */
+  /** Always false under V3.9; retained for source compatibility. */
   inWarmup: boolean;
+  firstZeroYieldDate?: string | null;
+  lastSuccessfulPhase6ObservationDate?: string | null;
+  version?: number;
+}
+
+export function clampMi(value: number, config: EmaConfig = DEFAULT_EMA_CONFIG): number {
+  return Math.max(config.lowerBound, Math.min(config.upperBound, value));
 }
 
 /**
- * Calculate m_i for an airport.
- * m_i = clamp(ema_yield, lowerBound, upperBound)
- *
- * During warmup (< warmupObservations), m_i is the simple average.
- * After warmup, m_i is the EMA.
+ * Compute base m_i from the frozen reference median. Missing EMA or an empty /
+ * non-positive reference median means cold-start m_i=1.0.
+ */
+export function deriveBaseMi(
+  ema: number | null,
+  medianEmaYieldFrame: number | null,
+  config: EmaConfig = DEFAULT_EMA_CONFIG,
+): number {
+  if (ema === null || medianEmaYieldFrame === null || !Number.isFinite(medianEmaYieldFrame) || medianEmaYieldFrame <= 0) {
+    return 1.0;
+  }
+  return clampMi(ema / medianEmaYieldFrame, config);
+}
+
+/** Apply only the V3.9 repeated-zero transient penalty. */
+export function deriveMi(
+  ema: number | null,
+  medianEmaYieldFrame: number | null,
+  zeroYieldState: ZeroYieldState,
+  config: EmaConfig = DEFAULT_EMA_CONFIG,
+): number {
+  const base = deriveBaseMi(ema, medianEmaYieldFrame, config);
+  return zeroYieldState === "zero_yield_repeated"
+    ? clampMi(base * 0.75, config)
+    : base;
+}
+
+/**
+ * Compatibility updater for a valid nonempty observation. No warmup average is
+ * performed. If no reference median is supplied, the correct cold-start
+ * fallback is m_i=1 rather than inventing a normalization reference.
  */
 export function calculateMi(
   state: MiState,
   newValue: number,
   config: EmaConfig = DEFAULT_EMA_CONFIG,
+  medianEmaYieldFrame: number | null = null,
+  observationDate = new Date().toISOString().slice(0, 10),
 ): MiState {
-  const observationCount = state.observationCount + 1;
-
-  let ema: number;
-  if (observationCount <= 1) {
-    // First observation
-    ema = newValue;
-  } else if (observationCount <= config.warmupObservations) {
-    // Warmup: simple average
-    const prevAvg = state.ema ?? 0;
-    ema = (prevAvg * (observationCount - 1) + newValue) / observationCount;
-  } else {
-    // Post-warmup: EMA
-    ema = emaUpdate(state.ema, newValue, config);
-  }
-
-  // Clamp to bounds
-  const clampedValue = Math.max(config.lowerBound, Math.min(config.upperBound, ema));
-
+  const ema = emaUpdate(state.ema, newValue, config);
   return {
-    value: clampedValue,
+    ...state,
+    value: deriveMi(ema, medianEmaYieldFrame, "normal", config),
     ema,
-    observationCount,
-    zeroYieldState: state.zeroYieldState,
-    consecutiveZeroYield: state.consecutiveZeroYield,
-    lastObservationDate: new Date().toISOString().slice(0, 10),
-    inWarmup: observationCount < config.warmupObservations,
+    observationCount: state.observationCount + 1,
+    zeroYieldState: "normal",
+    consecutiveZeroYield: 0,
+    firstZeroYieldDate: null,
+    lastObservationDate: observationDate,
+    lastSuccessfulPhase6ObservationDate: observationDate,
+    inWarmup: false,
+    version: (state.version ?? 0) + 1,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Median Reference Pool (§36.3)
-// ---------------------------------------------------------------------------
-
 /**
- * Define which airports enter the median_ema_yield_frame.
- *
- * Sep1_1 §36.3 decisions:
- *   - Only REGIONAL airports (not HUB/MID, which are slot-filled)
- *   - Only those with non-null EMA
- *   - Include zero-yield_once and zero_yield_repeated (not persistent)
- *   - Exclude zero_yield_persistent (they pull median down)
- *   - Include failed/provider-error observations (they don't affect median)
+ * Update adaptive state from one completed observation. True zero and failures
+ * NEVER update EMA. Only a valid nonempty observation updates EMA.
  */
+export function applyAdaptiveObservation(
+  state: MiState,
+  observation: AdaptiveObservation,
+  observationDate: string,
+  yieldScore: number | null,
+  medianEmaYieldFrame: number | null,
+  emaConfig: EmaConfig = DEFAULT_EMA_CONFIG,
+  zeroConfig: ZeroYieldConfig = DEFAULT_ZERO_YIELD_CONFIG,
+): MiState {
+  if (observation === "valid_nonempty") {
+    if (yieldScore === null) throw new Error("valid nonempty observation requires yieldScore");
+    return calculateMi(state, yieldScore, emaConfig, medianEmaYieldFrame, observationDate);
+  }
+
+  if (observation === "true_zero_yield") {
+    const transition = transitionZeroYieldState(
+      state.zeroYieldState,
+      "true_zero_yield",
+      zeroConfig,
+      state.consecutiveZeroYield,
+      state.firstZeroYieldDate ?? null,
+      observationDate,
+    );
+    return {
+      ...state,
+      value: deriveMi(state.ema, medianEmaYieldFrame, transition.newState, emaConfig),
+      zeroYieldState: transition.newState,
+      consecutiveZeroYield: transition.newConsecutive,
+      firstZeroYieldDate: transition.firstZeroYieldDate,
+      lastObservationDate: observationDate,
+      inWarmup: false,
+      version: (state.version ?? 0) + 1,
+    };
+  }
+
+  // Provider/coverage/missing observations leave EMA and zero FSM unchanged.
+  return { ...state, inWarmup: false };
+}
+
+/** V3.9 median reference-pool eligibility. */
 export function eligibilityForMedianPool(
   tier: string,
   ema: number | null,
   zeroYieldState: ZeroYieldState,
+  flags: { inFrame?: boolean; preEligible?: boolean; postEligible?: boolean; providerFailure?: boolean; coverageFailed?: boolean } = {},
 ): boolean {
-  // Only REGIONAL
-  if (tier !== "REGIONAL") return false;
-  // Must have non-null EMA
-  if (ema === null) return false;
-  // Exclude persistent zero-yield
-  if (zeroYieldState === "zero_yield_persistent") return false;
+  if (tier !== "REGIONAL" || ema === null) return false;
+  if (flags.inFrame === false || flags.preEligible === false || flags.postEligible === false) return false;
+  if (flags.providerFailure || flags.coverageFailed) return false;
+  if (zeroYieldState === "zero_yield_once" || zeroYieldState === "zero_yield_persistent") return false;
   return true;
 }
 
-/**
- * Calculate the median EMA yield across the reference pool.
- * Used for initializing new airports and normalizing m_i.
- */
 export function calculateMedianEma(emaValues: number[]): number | null {
-  if (emaValues.length === 0) return null;
-  const sorted = [...emaValues].sort((a, b) => a - b);
+  const finite = emaValues.filter((v) => Number.isFinite(v));
+  if (finite.length === 0) return null;
+  const sorted = [...finite].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 0) {
-    return (sorted[mid - 1] + sorted[mid]) / 2;
-  }
-  return sorted[mid];
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
-// ---------------------------------------------------------------------------
-// Coverage Floor (§36.5)
-// ---------------------------------------------------------------------------
-
 export interface CoverageFloorConfig {
-  /** Minimum p_i for any airport in the frame */
+  /** Kept for compatibility only. V3.9 has no forced minimum probability. */
   minimumPi: number;
-  /** Boost factor for airports below the median */
   boostFactor: number;
-  /** Duration of boost in days */
   boostDurationDays: number;
 }
 
 export const DEFAULT_COVERAGE_FLOOR_CONFIG: CoverageFloorConfig = {
-  minimumPi: 0.001,
+  minimumPi: 0,
   boostFactor: 1.5,
   boostDurationDays: 20,
 };
 
 /**
- * Apply coverage floor to design probability.
- * Ensures p_i > 0 for all airports in the frame.
- * NOTE: This does NOT guarantee selection within a finite 31-day experiment.
- * It only ensures positive probability.
+ * Compatibility function: V3.9 does not impose a minimum p floor. Positivity
+ * must come from traffic_prior>0 and m_i>=0.25 before normalization.
  */
-export function applyCoverageFloor(
-  designProbability: number,
-  config: CoverageFloorConfig = DEFAULT_COVERAGE_FLOOR_CONFIG,
-): number {
-  return Math.max(config.minimumPi, designProbability);
+export function applyCoverageFloor(designProbability: number): number {
+  if (!Number.isFinite(designProbability) || designProbability < 0) {
+    throw new Error("invalid design probability");
+  }
+  return designProbability;
 }
 
 /**
- * Check if an airport is eligible for the coverage boost.
- * Boost applies for 20 days after first inclusion in the frame.
+ * Coverage boost eligibility is based ONLY on successful qualifying Phase-6
+ * direct observations, never on frame-build/inclusion time.
  */
 export function isCoverageBoostEligible(
-  firstIncludedDate: string,
+  lastSuccessfulPhase6ObservationDate: string | null,
   currentDate: string,
   config: CoverageFloorConfig = DEFAULT_COVERAGE_FLOOR_CONFIG,
 ): boolean {
-  const first = new Date(firstIncludedDate);
-  const current = new Date(currentDate);
-  const daysSinceInclusion = (current.getTime() - first.getTime()) / (1000 * 60 * 60 * 24);
-  return daysSinceInclusion <= config.boostDurationDays;
+  if (!lastSuccessfulPhase6ObservationDate) return true;
+  const age = utcDayDiff(lastSuccessfulPhase6ObservationDate, currentDate);
+  return age >= config.boostDurationDays;
 }
 
-// ---------------------------------------------------------------------------
-// Initial Phase-6 State (§36.5)
-// ---------------------------------------------------------------------------
+export function coverageBoostFactor(
+  lastSuccessfulPhase6ObservationDate: string | null,
+  currentDate: string,
+  config: CoverageFloorConfig = DEFAULT_COVERAGE_FLOOR_CONFIG,
+): number {
+  return isCoverageBoostEligible(lastSuccessfulPhase6ObservationDate, currentDate, config)
+    ? config.boostFactor
+    : 1.0;
+}
+
+export interface RegionalProbabilityInput {
+  icao: string;
+  trafficPrior: number;
+  mi: number;
+  coverageBoost: number;
+}
+
+export interface RegionalProbabilityRow extends RegionalProbabilityInput {
+  adaptiveScore: number;
+  drawScore: number;
+  probability: number;
+}
+
+/** Exact normalized V3.9 REGIONAL probability vector. */
+export function computeRegionalProbabilityVector(inputs: RegionalProbabilityInput[]): RegionalProbabilityRow[] {
+  if (inputs.length === 0) return [];
+  const rows = [...inputs]
+    .sort((a, b) => a.icao.localeCompare(b.icao))
+    .map((row) => {
+      if (!(row.trafficPrior > 0) || !(row.mi >= 0.25 && row.mi <= 1.5) || !(row.coverageBoost > 0)) {
+        throw new Error(`invalid REGIONAL adaptive state for ${row.icao}`);
+      }
+      const adaptiveScore = Math.min(row.trafficPrior * row.mi, row.trafficPrior * 1.5);
+      return { ...row, adaptiveScore, drawScore: adaptiveScore * row.coverageBoost, probability: 0 };
+    });
+  const total = rows.reduce((sum, row) => sum + row.drawScore, 0);
+  if (!(total > 0) || !Number.isFinite(total)) throw new Error("REGIONAL probability denominator is non-positive");
+  return rows.map((row) => ({ ...row, probability: row.drawScore / total }));
+}
 
 export interface Phase6InitialState {
   m_i_initial_source: string;
@@ -306,22 +362,24 @@ export interface Phase6InitialState {
   zero_yield_initial_state: ZeroYieldState;
   coverage_floor_initial_state: string;
   probeSeeded: boolean;
+  initialMi: number;
+  initialEma: null;
+  coverageBoost: number;
 }
 
-/**
- * Freeze initial Phase-6 state.
- * Explicitly states whether probe results seed Phase-6 adaptive state.
- * No hidden initialization.
- */
+/** Binding Phase-6 initial state. Probe arguments are intentionally ignored. */
 export function freezePhase6InitialState(
-  probeResultsAvailable: boolean,
-  medianEma: number | null,
+  _probeResultsAvailable = false,
+  _medianEma: number | null = null,
 ): Phase6InitialState {
   return {
-    m_i_initial_source: probeResultsAvailable ? "probe_results" : "default_prior",
-    ema_initial_source: probeResultsAvailable ? "probe_ema" : "median_ema",
+    m_i_initial_source: "uniform",
+    ema_initial_source: "none",
     zero_yield_initial_state: "normal",
-    coverage_floor_initial_state: probeResultsAvailable ? "probe_measured" : "default_minimum",
-    probeSeeded: probeResultsAvailable,
+    coverage_floor_initial_state: "never_observed",
+    probeSeeded: false,
+    initialMi: 1.0,
+    initialEma: null,
+    coverageBoost: 1.5,
   };
 }
