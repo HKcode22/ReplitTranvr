@@ -49,6 +49,12 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0034_airborne_phase0_conformance.sql",
   "0035_anchor_probe_identity_bounds.sql",
   "0036_webhook_identity_schedule_versions.sql",
+  "0037_phase6_sampling_decision_state.sql",
+  "0038_phase6_parent_segment_lifecycle.sql",
+  "0039_phase6_authorization_and_admission.sql",
+  "0040_phase6_calendar_execution_fields.sql",
+  "0041_phase6_start_admission_tolerance.sql",
+  "0042_webhook_identity_resolution_ledger.sql",
 ];
 
 let bootMigrationsApplied = false;
