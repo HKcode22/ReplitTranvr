@@ -81,16 +81,14 @@ describe("V3.9 Stage-2 promotion", () => {
 
   it("refuses when an outsider's upper anchor-score bound can enter the top five", () => {
     const a = artifact();
+    // Give H005 a strong frozen traffic component while keeping its nominal
+    // yield deliberately weak. Nominally it remains outside the top five, but
+    // its identity-ambiguity upper bound can now cross H004's lower score.
+    a.shortlist.find((c) => c.icao === "H005")!.trafficMetricValue = 100;
     const rows = a.shortlist.map((c, i) => {
-      // Keep the nominal top five cleanly ordered. All nominal outsiders have
-      // low unique-flight yield, so H004 is genuinely the fifth member before
-      // applying ambiguity bounds.
       return i <= 4 ? ev(c.icao, 100 - i) : ev(c.icao, 1, 1);
     });
     const outsider = rows.find((x) => x.icao === "H005")!;
-    // Nominal = 1 unique / 10 credits, but unresolved identities allow up to
-    // 1000 unique. With the frozen exogenous components this makes H005's
-    // best-case anchor score overlap the fifth member's worst-case score.
     outsider.confirmedPlusAmbiguousUpper = 1000;
     expect(() => selectStage2Top5(a, rows)).toThrow(/INSUFFICIENT_IDENTITY_RESOLUTION/);
   });
