@@ -11,11 +11,6 @@ const migrationPool = new Pool({ connectionString: ownerConnectionString });
 export const db = drizzle(pool, { schema });
 export { pool, migrationPool };
 
-/**
- * Production boot migration registry. Phase-0 additive migrations are listed in
- * strict order and must be safe to execute repeatedly. Runtime queries use the
- * least-privilege pool; DDL runs only through the owner migration pool.
- */
 const BOOT_MIGRATIONS: readonly string[] = [
   "0002_agency_disruption_system.sql",
   "0003_travelers_health.sql",
@@ -57,6 +52,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0042_webhook_identity_resolution_ledger.sql",
   "0043_phase6_start_time_guard.sql",
   "0044_webhook_attempt_provenance.sql",
+  "0045_incident_stop_persistence_cause.sql",
 ];
 
 let bootMigrationsApplied = false;
