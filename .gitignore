@@ -17,3 +17,7 @@ travnr_db_dump/
 
 # v39 runtime state (pause markers, never committed)
 .v39-state/
+
+# tool artifacts (never commit)
+.agents/
+.commandcode/

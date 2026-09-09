@@ -388,7 +388,10 @@ describe("production webhook canonical identity", () => {
     const aliases = new Map<string, { flightInstanceId: string; initialServiceDate: string }>();
     return {
       async resolveOrCreate(input) {
-        const alias = input.providerFlightId ?? `${input.operatingCarrier}${input.operatingFlightNumber}|${input.originIcao}|${input.originalDestinationIcao}|${input.initialServiceDate}`;
+        // gptP0analyze4 #7: no-provider-ID alias is SCHEDULE-STABLE
+        // (carrier+number|origin|dest) so a cross-midnight retime reuses the
+        // SAME physical flight. initialServiceDate is NOT part of the alias.
+        const alias = input.providerFlightId ?? `${input.operatingCarrier}${input.operatingFlightNumber}|${input.originIcao}|${input.originalDestinationIcao}`;
         const existing = aliases.get(alias);
         if (existing) return existing;
         const created = { flightInstanceId: input.flightInstanceId, initialServiceDate: input.initialServiceDate };
@@ -397,6 +400,25 @@ describe("production webhook canonical identity", () => {
       },
     };
   }
+
+  it("no-provider-ID cross-midnight retime keeps the SAME flight_instance_id", async () => {
+    const persistence = memoryPersistence();
+    // Original schedule 23:40 LA local = 06:40Z next UTC day → origin-local 09-01.
+    const first = await resolveWebhookFlightIdentity({
+      operatingCarrier: "UA", operatingFlightNumber: "123", originIcao: "KLAX",
+      originalDestinationIcao: "KSFO", scheduledGateOutUtc: "2026-09-02T06:40:00Z",
+      originTimeZone: "America/Los_Angeles", scheduleVerified: true, providerFlightId: null,
+    }, persistence);
+    // Retimed to 00:20 LA local next origin-local date (09-02); NO provider id.
+    const retimed = await resolveWebhookFlightIdentity({
+      operatingCarrier: "UA", operatingFlightNumber: "123", originIcao: "KLAX",
+      originalDestinationIcao: "KSFO", scheduledGateOutUtc: "2026-09-02T07:20:00Z",
+      originTimeZone: "America/Los_Angeles", scheduleVerified: true, providerFlightId: null,
+    }, persistence);
+    expect(first.status).toBe("resolved");
+    expect(retimed.status).toBe("resolved");
+    expect(retimed.flightInstanceId).toBe(first.flightInstanceId);
+  });
 
   it("uses the origin-local date when UTC is across midnight", async () => {
     const result = await resolveWebhookFlightIdentity({

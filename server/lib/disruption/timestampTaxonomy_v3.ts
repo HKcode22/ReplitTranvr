@@ -81,24 +81,30 @@ export interface TimestampTaxonomy {
  *  - scheduledTime → scheduled gate/wheels (verified semantics)
  *  - revisedTime → revised gate/wheels (provider update, not necessarily actual)
  *  - predictedTime → predicted gate/wheels (ML-based, not actual)
- *  - runwayTime → actual gate/wheels (verified: "runway" in provider = actual pushback/touchdown)
- *  - actualTime is NOT used (provider contract does not have this field)
+ *  - runwayTime → actual gate/wheels: UNVERIFIED candidate. "runway" looks
+ *    like an actual movement time but its provider-native semantics are NOT
+ *    confirmed until Gate 0.5 (gptP0analyze4 finding 6 / Log §8). Until then
+ *    these stay NULL via milestone_unverified=true — NEVER copied into aliases
+ *    merely to fill columns (routes_v3.ts does the correct thing).
+ *  - actualTime is NOT used (provider contract does not have this field).
+ *
+ *  `verified` here means "provider-native semantics confirmed"; only the
+ *  scheduled gate/wheels mappings are verified pre-Gate-0.5. All actual_*
+ *  milestones are marked verified=false until Gate 0.5.
  */
 export const PROVIDER_TO_FAA_MAPPING: Record<string, { target: string; verified: boolean }> = {
-  // Departure milestones
+  // Departure milestones — scheduled only verified pre-Gate-0.5
   "departure.scheduledTime.utc":  { target: "scheduled_gate_out_utc", verified: true },
   "departure.revisedTime.utc":    { target: "revised_gate_out_utc", verified: true },
   "departure.predictedTime.utc":  { target: "predicted_gate_out_utc", verified: true },
-  "departure.runwayTime.utc":     { target: "actual_gate_out_utc", verified: true },
+  "departure.runwayTime.utc":     { target: "actual_gate_out_utc", verified: false },
   // Arrival milestones
   "arrival.scheduledTime.utc":    { target: "scheduled_gate_in_utc", verified: true },
   "arrival.revisedTime.utc":      { target: "revised_gate_in_utc", verified: true },
   "arrival.predictedTime.utc":    { target: "predicted_gate_in_utc", verified: true },
-  "arrival.runwayTime.utc":       { target: "actual_wheels_on_utc", verified: true },
-  // Wheels milestones (derived from runway when available)
-  // NOTE: provider does NOT directly expose wheels_off/wheels_on;
-  // these are derived from departure.runwayTime and arrival.runwayTime
-  // only when semantic verification confirms the mapping.
+  "arrival.runwayTime.utc":       { target: "actual_wheels_on_utc", verified: false },
+  // Wheels milestones (derived from runway when available) — only after Gate 0.5
+  // confirms the runway→actual mapping; otherwise NULL.
 };
 
 // ---------------------------------------------------------------------------
@@ -111,9 +117,13 @@ export const PROVIDER_TO_FAA_MAPPING: Record<string, { target: string; verified:
  *
  * A source occurrence before cutoff but availability after cutoff
  * must be EXCLUDED from snapshots at that cutoff.
+ *
+ * gptP0analyze4 finding 6 / §14: UNKNOWN availability (null) can never be
+ * treated as "available before cutoff" — that would leak a future-dated value
+ * into a historical snapshot. Unknown → NOT eligible (fail-closed).
  */
 export function isAvailableAtCutoff(availableAt: Date | null, cutoffUtc: Date): boolean {
-  if (availableAt === null) return true; // missing available_at = always eligible
+  if (availableAt === null) return false; // unknown availability = NOT eligible (no leakage)
   return availableAt <= cutoffUtc;
 }
 
@@ -164,12 +174,12 @@ export function buildSnapshotTimestamps(
     scheduledWheelsOffUtc: null, // derived from provider, not directly exposed
     revisedGateOutUtc: flight.depRevisedUtc ?? null,
     predictedGateOutUtc: null, // provider does not expose directly in all payloads
-    actualGateOutUtc: flight.depRunwayUtc ?? null,
-    actualWheelsOffUtc: null, // derived from departure.runwayTime when verified
+    actualGateOutUtc: null, // runway→actual UNVERIFIED until Gate 0.5 (§8, gptP0analyze4 #6)
+    actualWheelsOffUtc: null, // derived from departure.runwayTime only after Gate 0.5
     scheduledGateInUtc: flight.arrScheduledUtc ?? null,
     scheduledWheelsOnUtc: null, // derived from provider, not directly exposed
     actualGateInUtc: null, // provider does not expose directly in all payloads
-    actualWheelsOnUtc: flight.arrRunwayUtc ?? null,
+    actualWheelsOnUtc: null, // arrival.runwayTime UNVERIFIED until Gate 0.5
     locReportedUtc: flight.locReportedUtc ?? null,
     lastUpdatedUtc: flight.lastUpdatedUtc ?? null,
     receivedAtUtc,

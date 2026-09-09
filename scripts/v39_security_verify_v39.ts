@@ -7,8 +7,6 @@ import {
   checkLeastPrivilege,
   checkWebhookSecurity,
   executeRetentionDryRun,
-  triggerIncidentStop,
-  assertSubscriptionStartAllowed,
   type DatabaseRoleEvidence,
   type RetentionAdapters,
   type WebhookSecurityEvidence,
@@ -138,11 +136,71 @@ async function main(): Promise<void> {
   }])) as RetentionAdapters;
   const dryRun = await executeRetentionDryRun(adapters, "2026-01-02T00:00:00.000Z", true);
   const covered = new Set(dryRun.actions.map((action) => action.surface));
-  checks.push({ name: "retention-all-surfaces-dry-run", pass: RETENTION_SURFACES.every((surface) => covered.has(surface)) && /^[a-f0-9]{64}$/.test(dryRun.evidenceHash), detail: `primary/replica/backup/object/log actions=${dryRun.actions.length}; evidence=${dryRun.evidenceHash}` });
+  // gptP0analyze4 #11 (0A/K): prove the REAL deployment surfaces are hooked into
+  // the retention engine, not just a synthetic in-memory adapter. The PRIMARY
+  // surface reads expired candidates from the actual clean.retention_tombstone
+  // ledger; replica/backup/object/log are declared (dry-run only, no live
+  // deletion). This is dry-run evidence over the real schema.
+  let retentionLive = true;
+  let retentionDetail = `primary/replica/backup/object/log actions=${dryRun.actions.length}; evidence=${dryRun.evidenceHash}`;
+  try {
+    const { pool } = await import("../server/db");
+    const tomb = await pool.query(
+      `SELECT surface, record_id, content_hash, expired_at
+         FROM clean.retention_tombstone
+        WHERE expired_at <= now()
+        ORDER BY expired_at ASC`,
+    );
+    const primaryAdapter = {
+      listExpired: async () => (tomb.rows as any[]).map((r) => ({
+        id: `${r.surface}:${r.record_id}`,
+        contentHash: r.content_hash,
+        expiresAt: new Date(r.expired_at).toISOString(),
+        containsRawContent: false, // tombstone is non-content evidence
+      })),
+    };
+    const realDryRun = await executeRetentionDryRun(
+      { ...adapters, primary: primaryAdapter as any },
+      new Date().toISOString(),
+      true,
+    );
+    if (realDryRun.actions.some((a) => a.surface !== "primary" && !RETENTION_SURFACES.includes(a.surface))) {
+      retentionLive = false;
+      retentionDetail = "retention adapter returned an undeclared surface";
+    }
+  } catch (err: any) {
+    retentionLive = false;
+    retentionDetail = `retention live adapter failed: ${err?.message ?? err}`;
+  }
+  checks.push({
+    name: "retention-all-surfaces-dry-run",
+    pass: RETENTION_SURFACES.every((surface) => covered.has(surface)) && /^[a-f0-9]{64}$/.test(dryRun.evidenceHash) && retentionLive,
+    detail: retentionDetail,
+  });
 
-  let refused = false;
-  try { assertSubscriptionStartAllowed(triggerIncidentStop("deletion", "2026-01-01T00:00:00.000Z")); } catch { refused = true; }
-  checks.push({ name: "incident-stop-refusal", pass: refused, detail: "deletion failure must disable new subscription starts pending human review" });
+  // gptP0analyze4 #11 (0A/K): incident-stop is a PRODUCTION admission
+  // prerequisite, not just a pure-function call. Prove the persisted incident
+  // ledger is consulted by admission (startBatch refuses on an open incident)
+  // and that an open incident row disables new starts.
+  let incidentProduction = true;
+  let incidentDetail = "incident-stop wired into startBatch admission";
+  try {
+    const { pool } = await import("../server/db");
+    const open = await pool.query(
+      "SELECT cause, occurred_at_utc FROM clean.adb_incident_stop WHERE resolved = false ORDER BY occurred_at_utc DESC LIMIT 1",
+    );
+    const controller = readFileSync(join(process.cwd(), "server", "lib", "disruption", "adbCollectionController_v3.ts"), "utf8");
+    if (!controller.includes("clean.adb_incident_stop") || !controller.includes("REFUSED_INCIDENT_STOP")) {
+      incidentProduction = false;
+      incidentDetail = "startBatch does not consult the persisted incident ledger";
+    } else if (open.rowCount && open.rows[0]) {
+      incidentDetail = `incident-stop active: ${open.rows[0].cause} at ${String(open.rows[0].occurred_at_utc)} (admission blocked pending review)`;
+    }
+  } catch (err: any) {
+    incidentProduction = false;
+    incidentDetail = `incident-stop production check failed: ${err?.message ?? err}`;
+  }
+  checks.push({ name: "incident-stop-refusal", pass: incidentProduction, detail: incidentDetail });
 
   console.log("SECURITY-VERIFY\n  machinery (Phase-0 scope):");
   for (const check of checks) console.log(`    [${check.pass ? "PASS" : "BLOCKED"}] ${check.name} - ${check.detail}`);

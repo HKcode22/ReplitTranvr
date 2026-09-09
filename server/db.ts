@@ -61,6 +61,8 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0029_fids_population_production.sql",
   "0030_webhook_canonical_identity.sql",
   "0031_retention_tombstone.sql",
+  "0032_airborne_canonical_identity.sql",
+  "0033_incident_stop.sql",
 ];
 
 let bootMigrationsApplied = false;

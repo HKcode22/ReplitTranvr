@@ -302,7 +302,9 @@ export function registerV3Routes(app: Express): void {
       let attemptError: string | null = null;
 
       const identities = await Promise.all(rows.map((r, i) => {
-        if (r.hasLiveLocation === true && r.locReportedUtc) return null;
+        // 0G: live-location (AIRBORNE) rows ALSO resolve canonical identity so
+        // every airborne point is keyed by flight_instance_id, never by
+        // flight/carrier/time (same-number/codeshare/multi-leg/retime safe).
         const flight = flights[i] ?? {};
         return resolveWebhookFlightIdentity({
           operatingCarrier: r.carrierIata ?? r.carrierIcao,
@@ -354,6 +356,7 @@ export function registerV3Routes(app: Express): void {
                 });
             return [{
             eventKey,
+            flightInstanceId: canonicalIdentityId,
             flightNumber: r.flightNumber,
             carrierIata: r.carrierIata,
             carrierIcao: r.carrierIcao,
@@ -409,9 +412,16 @@ export function registerV3Routes(app: Express): void {
       } catch (researchErr: any) {
         attemptError = String(researchErr?.message || researchErr);
         console.error(
-          "[adb-v3-webhook] research event log write failed:",
+          "[adb-v3-webhook] research event log write FAILED — blocking current-state upsert (event-log-before-state):",
           attemptError,
         );
+        // 0E: an immutable research event is REQUIRED before mutable current
+        // state. On event-log failure we must NOT advance state without it;
+        // fail the semantic attempt (raw evidence remains durable, 2xx still
+        // stops provider retries but current state is not silently updated).
+        const eventFailure = new Error(`research event log write failed: ${attemptError}`);
+        eventFailure.name = "ResearchEventLogFailure";
+        throw eventFailure;
       }
 
       // §1.5.5 item 4: convenience/current-state mutation happens AFTER the

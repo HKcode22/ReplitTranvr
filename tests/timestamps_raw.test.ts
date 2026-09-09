@@ -41,18 +41,19 @@ describe("§70.4 Timestamps/leakage", () => {
       expect(mapping.verified).toBe(true);
     });
 
-    it("departure.runwayTime maps to actual_gate_out_utc", () => {
+    it("departure.runwayTime maps to actual_gate_out_utc as UNVERIFIED until Gate 0.5", () => {
       const mapping = PROVIDER_TO_FAA_MAPPING["departure.runwayTime.utc"];
       expect(mapping).toBeDefined();
       expect(mapping.target).toBe("actual_gate_out_utc");
-      expect(mapping.verified).toBe(true);
+      // gptP0analyze4 #6: runway→actual semantics are NOT confirmed pre-Gate-0.5.
+      expect(mapping.verified).toBe(false);
     });
 
-    it("arrival.runwayTime maps to actual_wheels_on_utc", () => {
+    it("arrival.runwayTime maps to actual_wheels_on_utc as UNVERIFIED until Gate 0.5", () => {
       const mapping = PROVIDER_TO_FAA_MAPPING["arrival.runwayTime.utc"];
       expect(mapping).toBeDefined();
       expect(mapping.target).toBe("actual_wheels_on_utc");
-      expect(mapping.verified).toBe(true);
+      expect(mapping.verified).toBe(false);
     });
   });
 
@@ -71,10 +72,11 @@ describe("§70.4 Timestamps/leakage", () => {
       expect(isAvailableAtCutoff(availableAt, cutoff)).toBe(false);
     });
 
-    it("null available_at is treated as available", () => {
+    it("null available_at is NOT eligible (unknown cannot mean before cutoff)", () => {
       const cutoff = new Date("2026-08-15T12:00:00Z");
-      
-      expect(isAvailableAtCutoff(null, cutoff)).toBe(true);
+      // gptP0analyze4 #6: unknown availability must not leak a future-dated
+      // value into a historical snapshot.
+      expect(isAvailableAtCutoff(null, cutoff)).toBe(false);
     });
   });
 
@@ -138,9 +140,11 @@ describe("§70.4 Timestamps/leakage", () => {
       
       expect(timestamps.scheduledGateOutUtc).toEqual(flight.depScheduledUtc);
       expect(timestamps.revisedGateOutUtc).toEqual(flight.depRevisedUtc);
-      expect(timestamps.actualGateOutUtc).toEqual(flight.depRunwayUtc);
+      // gptP0analyze4 #6: runway→actual mappings are UNVERIFIED until Gate 0.5;
+      // actual aliases must stay NULL, never filled from runway times.
+      expect(timestamps.actualGateOutUtc).toBeNull();
       expect(timestamps.scheduledGateInUtc).toEqual(flight.arrScheduledUtc);
-      expect(timestamps.actualWheelsOnUtc).toEqual(flight.arrRunwayUtc);
+      expect(timestamps.actualWheelsOnUtc).toBeNull();
       expect(timestamps.locReportedUtc).toEqual(flight.locReportedUtc);
       expect(timestamps.lastUpdatedUtc).toEqual(flight.lastUpdatedUtc);
       expect(timestamps.receivedAtUtc).toEqual(receivedAtUtc);

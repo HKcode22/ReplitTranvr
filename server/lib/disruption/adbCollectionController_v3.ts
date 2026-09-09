@@ -25,6 +25,7 @@
 import { randomInt } from "crypto";
 import { pool } from "../../db";
 import { reconcileSpend, runSettlement, type SettlementConfig } from "./settlement_v3";
+import { triggerIncidentStop } from "./retentionSecurity_v39";
 import {
   getBalance,
   createSubscription,
@@ -415,6 +416,14 @@ export async function creditsUsedTodayUtc(): Promise<number> {
 /** V3.9: credits the active batch has actually consumed so far = notification
  *  items attributed to it (internal basis). Falls back to the row count for
  *  legacy batches created before the events ledger existed. */
+/**
+ * 0K accounting (gptP0analyze4 #14): authoritative SEND/billing spend for a
+ * batch = the immutable notification_items ledger (1 item = 1 credit at
+ * maxDeliveryRetries=0). NO row-count fallback: stored-row counts are NOT the
+ * SEND/billing authority (rows are inserted once, but SEND credits are per
+ * delivery attempt). A missing/zero ledger BLOCKS the soft-stop spend check
+ * rather than authorizing continuation on an estimate.
+ */
 export async function actualBatchSpend(batchId: string): Promise<number> {
   const res = await pool.query(
     `SELECT COALESCE(sum(notification_items), 0)::int AS n
@@ -422,8 +431,7 @@ export async function actualBatchSpend(batchId: string): Promise<number> {
       WHERE batch_id = $1`,
     [batchId],
   );
-  const items = res.rowCount ? res.rows[0].n : 0;
-  return items > 0 ? items : estimateBatchCredits(batchId);
+  return res.rowCount ? Number(res.rows[0].n) : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -618,7 +626,10 @@ export function selectFrameCandidates(
   seed: number,
   tierMix: Record<AirportTier, number>,
   recentlyUsed: ReadonlySet<string> = new Set(),
+  opts: { miValue?: number; coverageBoostFor?: (icao: string) => number } = {},
 ): CandidatePools {
+  const miValue = opts.miValue ?? 1;
+  const coverageBoostFor = opts.coverageBoostFor ?? (() => 1);
   const candidates = {} as Record<AirportTier, string[]>;
   const poolSizes = {} as Record<AirportTier, number>;
   const regionalP = new Map<string, number>();
@@ -640,8 +651,18 @@ export function selectFrameCandidates(
         );
       }
       if (tier === "REGIONAL") {
+        // gptP0analyze4 #4 (0J): REGIONAL selection uses
+        //   score = traffic_prior × m_i × coverage_boost
+        // (plan §30 V3.8 / adaptiveMi_v3). Pre-collection m_i defaults to 1
+        // (frozen Phase-6 initial state = default_prior); the coverage boost
+        // factor (1.5 for recently-included airports, §36.5) multiplies in.
+        // This is the REAL probability draw weight — not trafficPrior alone.
+        const score = (row: { icao: string; trafficPrior: number }): number =>
+          Math.max(0, (row.trafficPrior > 0 ? row.trafficPrior : 1)) *
+          (miValue > 0 ? miValue : 1) *
+          (coverageBoostFor(row.icao) > 0 ? coverageBoostFor(row.icao) : 1);
         const [pick] = drawWithoutReplacement(
-          cell.map((row) => ({ icao: row.icao, score: row.trafficPrior > 0 ? row.trafficPrior : 1 })),
+          cell.map((row) => ({ icao: row.icao, score: score(row) })),
           seed + slot,
         );
         candidates[tier].push(pick.icao);
@@ -689,7 +710,7 @@ async function pickAirportCandidates(seed: number): Promise<CandidatePools> {
   const recentlyUsed = new Set<string>(recent.flat());
 
   const res = await pool.query(
-    `SELECT f.icao, f.tier, f.traffic_prior, f.region
+    `SELECT f.icao, f.tier, f.traffic_prior, f.region, f.built_at
      FROM clean.adb_sampling_frame f
      JOIN clean.adb_sampling_frame_registry r
        ON r.registry_key = 'ACTIVE' AND r.active_frame_version = f.frame_version
@@ -708,6 +729,18 @@ async function pickAirportCandidates(seed: number): Promise<CandidatePools> {
     );
   }
 
+  // gptP0analyze4 #4 (0J): REGIONAL selection = traffic_prior × m_i ×
+  // coverage_boost. m_i comes from the adaptive REGIONAL multiplier (frozen
+  // Phase-6 initial = default_prior/1 pre-collection); coverage_boost is the
+  // §36.5 factor for recently-included airports (1.5, 20-day window). We use
+  // built_at as the inclusion-date proxy; absent/older → 1 (deterministic).
+  const coverageBoostFor = (icao: string): number => {
+    const row = res.rows.find((r) => String(r.icao) === icao);
+    if (!row?.built_at) return 1;
+    const daysSince = (Date.now() - new Date(String(row.built_at)).getTime()) / (1000 * 60 * 60 * 24);
+    return Number.isFinite(daysSince) && daysSince <= 20 ? 1.5 : 1;
+  };
+
   return selectFrameCandidates(
     res.rows.map((row) => ({
       icao: String(row.icao),
@@ -718,6 +751,7 @@ async function pickAirportCandidates(seed: number): Promise<CandidatePools> {
     seed,
     COLLECTOR_CONFIG.tierMix,
     recentlyUsed,
+    { miValue: 1, coverageBoostFor },
   );
 }
 
@@ -747,6 +781,17 @@ async function startBatchInner(): Promise<StartBatchResult> {
   if (!isPhase6Ready()) {
     throw new Error(
       "REFUSED: PHASE6_READY is not true — batch starts require the separately authorized Phase-6 transition (no paid collection outside Phase 6).",
+    );
+  }
+  // 0K incident-stop admission (gptP0analyze4 #9): any open incident (provider
+  // DELETE / persistence / reconciliation failure pending human review) blocks
+  // NEW paid work. Admission consults the persisted incident ledger.
+  const openIncident = await pool.query(
+    "SELECT cause, occurred_at_utc FROM clean.adb_incident_stop WHERE resolved = false ORDER BY occurred_at_utc DESC LIMIT 1",
+  );
+  if (openIncident.rowCount && openIncident.rows[0]) {
+    throw new Error(
+      `REFUSED_INCIDENT_STOP: open incident cause=${openIncident.rows[0].cause} at ${String(openIncident.rows[0].occurred_at_utc)} — human review/cleanup required before any new paid work.`,
     );
   }
   const balance = await getBalance();
@@ -801,7 +846,13 @@ async function startBatchInner(): Promise<StartBatchResult> {
   // still fills the slot; the anchor pointer only advances on success.
   const anchor = await peekAnchorIcao();
   const { candidates, poolSizes, regionalP } = await pickAirportCandidates(seed);
-  if (anchor && candidates.HUB.includes(anchor)) {
+  // gptP0analyze4 #14 (0J): when an anchor is enabled it CONSUMES the single
+  // HUB slot — it is forced to the head of HUB regardless of whether the
+  // seeded HUB region draw already contained it. It is never dropped merely
+  // because the random target region excluded it. (Coverage/create failures
+  // still fall back to the normal HUB pool; the anchor pointer only advances
+  // on success.)
+  if (anchor) {
     candidates.HUB = [anchor, ...candidates.HUB.filter((a) => a !== anchor)];
   }
   console.log(
@@ -960,16 +1011,55 @@ export async function stopBatch(reason: string): Promise<CollectionBatch | null>
     "SELECT subscription_id FROM clean.adb_collection_subs WHERE batch_id = $1 AND ended_at IS NULL",
     [active.batchId],
   );
+  // 0K safety (gptP0analyze4 #9): provider DELETE failure MUST leave the
+  // subscription unresolved and trigger incident-stop. Marking the sub ended
+  // locally while the provider sub stays ACTIVE would let the controller think
+  // the batch closed while billing continues. Never silently swallow.
+  let deleteFailed = false;
+  const failedSubs: string[] = [];
   for (const row of res.rows) {
+    let deleted = false;
     try {
-      await deleteSubscription(row.subscription_id);
+      deleted = await deleteSubscription(row.subscription_id);
     } catch {
-      // keep going — delete is free but failure shouldn't block closing the batch
+      deleted = false;
+    }
+    if (!deleted) {
+      deleteFailed = true;
+      failedSubs.push(row.subscription_id);
+      console.error(
+        `[adb-collector] provider DELETE FAILED for ${row.subscription_id} — leaving ended_at NULL (unresolved), triggering incident-stop.`,
+      );
+      // Not marking ended_at: the DB sub stays open so reconciliation/cleanup
+      // can retry the provider delete. A foreign/owned cleanup procedure must
+      // resolve it before any new paid work starts.
+      continue;
     }
     await pool.query(
       "UPDATE clean.adb_collection_subs SET ended_at = now() WHERE subscription_id = $1",
       [row.subscription_id],
     );
+  }
+  if (deleteFailed) {
+    try {
+      triggerIncidentStop("deletion", new Date().toISOString());
+    } catch (e) {
+      // triggerIncidentStop may be a pure recorder; admission reads the state.
+    }
+    // Persist the incident so startBatch()/admission consult it.
+    try {
+      await pool.query(
+        `INSERT INTO clean.adb_incident_stop (cause, occurred_at_utc, detail, resolved)
+         VALUES ('deletion', now(), $1, false)
+         ON CONFLICT DO NOTHING`,
+        [JSON.stringify({ batchId: active.batchId, failedSubs })],
+      );
+    } catch (e) {
+      console.error("[adb-collector] incident-stop persist failed:", (e as any)?.message || e);
+    }
+    // Do not close the batch: closing implies reconciled+ended, which is false
+    // while a provider sub remains active. Leave it ACTIVE for retry/cleanup.
+    return active;
   }
 
   // ---- V3.9 three-quantity reconciliation (§13, §44-A/B) ----

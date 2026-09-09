@@ -29,6 +29,14 @@ export interface CanonicalFlightInstanceInput {
   serviceDate: string;             // YYYY-MM-DD local of scheduledGateOut per §6.0/§5.3
   /** Immutable origin-local date of the FIRST verified schedule identity. */
   initialServiceDate?: string;
+  /**
+   * Immutable first VERIFIED provider-native schedule identity (gptP0analyze4
+   * #6, Log §7.1): the first observed scheduled gate-out UTC for this physical
+   * leg. Included in key material so two distinct same-carrier same-number
+   * same-route same-day legs with DIFFERENT first-verified schedules do not
+   * collide. Immutable once set — retimes keep the original.
+   */
+  firstScheduledGateOutUtc?: string;
   providerFlightId?: string | null; // AeroDataBox flight.id — attribute only, NEVER key material (§7.1)
   providerRecordKey?: string | null;
   callsign?: string | null;
@@ -50,6 +58,8 @@ export interface CanonicalFlightInstance {
   identityResolutionStatus?: "resolved" | "ambiguous_distinct_leg";
   /** Immutable origin-local date of first verified schedule identity. */
   initialServiceDate?: string;
+  /** Immutable first verified provider-native schedule identity (gptP0analyze4 #6). */
+  firstScheduledGateOutUtc?: string;
 }
 
 export interface WebhookIdentityObservation {
@@ -132,9 +142,14 @@ const postgresWebhookIdentityPersistence: WebhookIdentityPersistence = {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      // gptP0analyze4 #7: no-provider-ID alias is SCHEDULE-STABLE
+      // (carrier+number|origin|dest) so a retime that shifts origin-local
+      // midnight (23:xx → 00:xx next local date) still finds the SAME
+      // physical flight. initialServiceDate is NOT part of the alias because
+      // it would change on a date-shifting retime and miss the original row.
       const alias = input.providerFlightId
         ? `${input.operatingCarrier}|${input.providerFlightId}`
-        : `${input.operatingCarrier}${input.operatingFlightNumber}|${input.originIcao}|${input.originalDestinationIcao}|${input.initialServiceDate}`;
+        : `${input.operatingCarrier}${input.operatingFlightNumber}|${input.originIcao}|${input.originalDestinationIcao}`;
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [alias]);
       const existing = await client.query(
         `SELECT flight_instance_id, initial_service_date::text
@@ -200,6 +215,7 @@ export async function resolveWebhookFlightIdentity(
     scheduledGateOutUtc: observation.scheduledGateOutUtc,
     serviceDate: initialServiceDate,
     initialServiceDate,
+    firstScheduledGateOutUtc: observation.scheduledGateOutUtc,
     providerFlightId: observation.providerFlightId,
   });
   const persisted = await persistence.resolveOrCreate({
@@ -309,9 +325,13 @@ export function canonicalFlightInstanceId(input: CanonicalFlightInstanceInput, o
   const origin = input.origin.trim().toUpperCase();
   const dest = input.destinationOriginal.trim().toUpperCase();
   const initialServiceDate = input.initialServiceDate ?? input.serviceDate;
+  // First verified provider-native schedule identity (gptP0analyze4 #6): a
+  // stable part of key material that disambiguates distinct same-day legs.
+  // Immutable once fixed — retimes keep the ORIGINAL first-verified value.
+  const firstScheduledGateOutUtc = input.firstScheduledGateOutUtc ?? input.scheduledGateOutUtc;
 
   // Identity-v2 key: NO provider flight.id, NO mutable scheduledGateOutUtc.
-  const base = `${normalizedCarrier}${normalizedNumber}|${origin}|${dest}|${initialServiceDate}`;
+  const base = `${normalizedCarrier}${normalizedNumber}|${origin}|${dest}|${initialServiceDate}|${firstScheduledGateOutUtc}`;
   let id = `leg:${sha8(base)}`;
   if (opts?.collisionSuffix) id += `:${opts.collisionSuffix}`;
 
@@ -324,6 +344,7 @@ export function canonicalFlightInstanceId(input: CanonicalFlightInstanceInput, o
     retimeVersion: 0,
     identityResolutionStatus: "resolved",
     initialServiceDate,
+    firstScheduledGateOutUtc,
   };
 }
 
@@ -337,13 +358,16 @@ export function retimeFlightInstanceId(
   newInput: CanonicalFlightInstanceInput,
   opts?: { collisionSuffix?: string },
 ): CanonicalFlightInstance {
-  const base = canonicalFlightInstanceId(newInput, opts);
   const retimeVersion = (original.retimeVersion ?? 0) + 1;
   // Keep the ORIGINAL physical id (identity-v2): same carrier/number/origin/
-  // dest/initial-service-date → same leg:hash even if the schedule time shifted.
+  // dest/initial-service-date AND the ORIGINAL immutable first-verified
+  // schedule identity → same leg:hash even if the schedule time shifted.
+  // gptP0analyze4 #6: the first-verified schedule is key material and NEVER
+  // updates on retime, so a ≥2h or date-shift retime cannot change the id.
   const physicalId = canonicalFlightInstanceId({
     ...newInput,
     initialServiceDate: original.initialServiceDate ?? newInput.serviceDate,
+    firstScheduledGateOutUtc: original.firstScheduledGateOutUtc ?? newInput.scheduledGateOutUtc,
     operatingCarrier: newInput.operatingCarrier,
     operatingFlightNumber: newInput.operatingFlightNumber,
     origin: newInput.origin,

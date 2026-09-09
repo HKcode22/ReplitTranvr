@@ -242,6 +242,20 @@ export interface PreMaterializeInput {
   horizons?: readonly PreHorizon[];
   frameHash: string | null;
   configHash: string | null;
+  /**
+   * Gate-0.5-frozen selected-T construct (Log §1.5.6 / gptP0analyze4 #5).
+   * Until Gate 0.5 verifies provider-native milestone semantics, the plan says
+   * T is BLOCKED: a null/absent construct means every horizon REFUSES with
+   * `t_unavailable` and NO PRE snapshot is fabricated. After Gate 0.5 this is
+   * loaded from the frozen artifact with its version + hash.
+   */
+  selectedTMilestoneConfig: {
+    /** Provider-native field used as T, e.g. "scheduled_gate_out". */
+    milestone: string;
+    /** Frozen construct version + artifact hash (Gate-0.5 MEASURE→FREEZE). */
+    version: string;
+    artifactHash: string;
+  } | null;
 }
 
 export interface PreMaterializeResult {
@@ -282,6 +296,26 @@ export async function materializePreSnapshotsForCutoff(
   const tally = (reason: string): void => {
     blocked[reason] = (blocked[reason] ?? 0) + 1;
   };
+  // gptP0analyze4 #5 / Log §1.5.6: T must remain BLOCKED until Gate 0.5 freezes
+  // the provider-native selected-T construct. With no frozen construct, EVERY
+  // eligible row blocks (t_unavailable) and nothing is fabricated. This keeps
+  // the production path real while never inventing T before it is verified.
+  if (!input.selectedTMilestoneConfig) {
+    for (const row of res.rows) {
+      if (row.population_role !== "requested_airport_primary") {
+        tally("not_primary_role");
+        continue;
+      }
+      for (const _h of horizons) tally("t_unavailable");
+    }
+    return {
+      cutoffUtc: input.cutoffUtc.toISOString(),
+      populationRows: res.rows.length,
+      built: 0,
+      blocked,
+      inserted: 0,
+    };
+  }
   let built = 0;
   let inserted = 0;
   for (const row of res.rows) {
@@ -297,9 +331,11 @@ export async function materializePreSnapshotsForCutoff(
         populationMemberAtCutoff: true,
         horizonEligible: horizonEligibleForCutoff(depScheduled, input.cutoffUtc, horizon),
         horizon,
-        // Provider-native scheduled departure; NULL → builder BLOCKED (t_unavailable).
+        // Gate-0.5-frozen T construct (verified semantics); NULL schedule → blocked.
         selectedTMilestoneUtc: depScheduled,
-        selectedTVersion: depScheduled ? "scheduled_gate_out:provider-native (milestone semantics pending Gate 0.5)" : null,
+        selectedTVersion: depScheduled
+          ? `${input.selectedTMilestoneConfig.milestone}:${input.selectedTMilestoneConfig.version}:${input.selectedTMilestoneConfig.artifactHash}`
+          : null,
         predictionCutoffUtc: input.cutoffUtc,
         features: [],
         frameHash: input.frameHash,

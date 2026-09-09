@@ -42,6 +42,7 @@
 import { pool } from "../server/db";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   getBalance,
@@ -139,6 +140,70 @@ const SHORTLIST: readonly Candidate[] = [
 
 function candidateByIcao(icao: string): Candidate | undefined {
   return SHORTLIST.find((c) => c.icao.toUpperCase() === icao.toUpperCase());
+}
+
+// ---------------------------------------------------------------------------
+// Frozen preprobe artifact (gptP0analyze4 #1/#2 / Plan §9, §17 step 12).
+// Stage 1 membership is the EXACT frozen 12 + replacement list from the
+// hash-locked preprobe freeze record (v39:preprobe:freeze), NEVER the
+// provisional SHORTLIST constant. Until that artifact exists, paid probe
+// runs are REFUSED — no probe may obtain its membership from source code.
+// ---------------------------------------------------------------------------
+
+export interface FrozenPreprobeMembership {
+  version: string;
+  artifactHash: string;
+  shortlist: Candidate[];
+  replacements: Candidate[];
+}
+
+const PREPROBE_FREEZE_PATH = join(process.cwd(), "SEPmd", "V39_PREPROBE_FREEZE.json");
+
+/** Load the frozen preprobe membership; throw a clear refusal when absent. */
+export async function loadFrozenPreprobeMembership(): Promise<FrozenPreprobeMembership> {
+  let raw: string;
+  try {
+    raw = await readFile(PREPROBE_FREEZE_PATH, "utf8");
+  } catch {
+    throw new Error(
+      "REFUSED: no frozen preprobe artifact at SEPmd/V39_PREPROBE_FREEZE.json — " +
+        "Stage-1 membership must come from the hash-locked preprobe freeze record, not source code.",
+    );
+  }
+  const artifactHash = createHash("sha256").update(raw).digest("hex");
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed.shortlist) || parsed.shortlist.length !== 12) {
+    throw new Error(`REFUSED: frozen preprobe shortlist must be EXACTLY 12 candidates, got ${parsed.shortlist?.length ?? "none"}`);
+  }
+  return {
+    version: String(parsed.version ?? "unknown"),
+    artifactHash,
+    shortlist: parsed.shortlist,
+    replacements: Array.isArray(parsed.replacements) ? parsed.replacements : [],
+  };
+}
+
+/**
+ * Exact Stage-2 top-5 promotion (Plan §9 / gptP0analyze4 #2): sort valid
+ * Stage-1 candidates by anchor_score DESC (ICAO lexical tie), keeping ONLY
+ * capacity-passing AND ambiguity-rank-invariance-passing candidates, then take
+ * EXACTLY the top 5. Frozen replacements consume slots when a member fails.
+ */
+export async function selectTop5Stage2(frozen: FrozenPreprobeMembership): Promise<Candidate[]> {
+  const probes = await readProbes();
+  const scored = computeScores(probes, null);
+  const stage1Valid = scored.filter(
+    (s) => s.capacityPass && s.anchorScore !== null && s.yieldScore !== null,
+  );
+  stage1Valid.sort((a, b) => (b.anchorScore ?? 0) - (a.anchorScore ?? 0) || a.icao.localeCompare(b.icao));
+  const top5 = stage1Valid.slice(0, 5).map((s) => s.icao);
+  const pool = new Map([...frozen.shortlist, ...frozen.replacements].map((c) => [c.icao, c]));
+  const selected: Candidate[] = [];
+  for (const icao of top5) {
+    const c = pool.get(icao);
+    if (c) selected.push(c);
+  }
+  return selected;
 }
 
 // ---------------------------------------------------------------------------
@@ -322,6 +387,42 @@ export async function probeBudgetDaySettledSpend(probeBudgetDayId: string): Prom
     [probeBudgetDayId],
   );
   return r.rowCount ? Number(r.rows[0].n) : 0;
+}
+
+/**
+ * Close an OPEN probe budget day once it is settled (gptP0analyze4 #3):
+ * OPEN → CLOSED when its spend is fully settled (credits_spent present and the
+ * day's probes are all terminal: completed/failed/abandoned — none 'probing').
+ * This makes the next probe day start cleanly and prevents dead-ending the
+ * sequence after the first budget day. Refuses to close an unsettled/active day.
+ */
+export async function closeProbeBudgetDay(probeBudgetDayId: string): Promise<void> {
+  const open = await pool.query(
+    `SELECT state FROM clean.adb_probe_budget_day WHERE probe_budget_day_id = $1`,
+    [probeBudgetDayId],
+  );
+  if (!open.rowCount || open.rows[0].state !== "OPEN") return;
+  const active = await pool.query(
+    `SELECT count(*)::int AS n FROM clean.adb_anchor_probe
+      WHERE probe_budget_day_id = $1 AND status = 'probing'`,
+    [probeBudgetDayId],
+  );
+  const unsettled = await pool.query(
+    `SELECT count(*)::int AS n FROM clean.adb_anchor_probe
+      WHERE probe_budget_day_id = $1 AND credits_spent IS NULL AND status IN ('completed','failed','abandoned')`,
+    [probeBudgetDayId],
+  );
+  if (Number(active.rows[0].n) > 0) {
+    throw new Error(`probe budget day ${probeBudgetDayId} still has active probes — cannot close`);
+  }
+  if (Number(unsettled.rows[0].n) > 0) {
+    throw new Error(`probe budget day ${probeBudgetDayId} has unsettled terminal probes — reconcile before closing`);
+  }
+  await pool.query(
+    `UPDATE clean.adb_probe_budget_day SET state='CLOSED' WHERE probe_budget_day_id = $1 AND state='OPEN'`,
+    [probeBudgetDayId],
+  );
+  console.log(`  probe budget day ${probeBudgetDayId} CLOSED (settled, ready for the next day)`);
 }
 
 async function reserveProbeAttempt(candidate: Candidate, stage: number, start: Date, targetEnd: Date, hours: number, balanceBefore: number | null, dayId: string, estimate: number): Promise<number> {
@@ -649,6 +750,13 @@ async function runSingleProbe(candidate: Candidate, stage: number, hours: number
     ],
   );
   console.log(`  recorded in clean.adb_anchor_probe (budget day ${probeBudgetDayId}).`);
+  // gptP0analyze4 #3: close the probe budget day once this probe is settled and
+  // terminal, so the sequence does not dead-end and the next day starts cleanly.
+  try {
+    await closeProbeBudgetDay(probeBudgetDayId);
+  } catch (err: any) {
+    console.error(`  probe budget day close deferred: ${err?.message ?? err}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -983,21 +1091,26 @@ async function main(): Promise<void> {
     }
 
     if (stage === 2) {
-      const eligibleForStage2: Candidate[] = [];
-      for (const cand of SHORTLIST) {
-        if (await hasStageProbe(cand.icao, 1)) eligibleForStage2.push(cand);
+      // gptP0analyze4 #2: Stage 2 probes EXACTLY the top-5 capacity-passing
+      // candidates by anchor_score (frozen replacements consume a slot when a
+      // member failed) — NOT every candidate with a completed stage-1.
+      let frozen: FrozenPreprobeMembership;
+      try {
+        frozen = await loadFrozenPreprobeMembership();
+      } catch (err: any) {
+        console.error(err?.message ?? err);
+        return;
       }
-      if (eligibleForStage2.length === 0) {
+      const top5 = await selectTop5Stage2(frozen);
+      if (top5.length === 0) {
         console.error(
-          `Stage 2 guard: no candidate has a COMPLETED stage-1 probe yet. ` +
-            `Run stage 1 first (npm run anchor-probe -- --stage 1), then re-run stage 2.`,
+          `Stage 2 guard: no capacity-passing, rank-invariant, fully-scored stage-1 candidate found. ` +
+            `Run stage 1 and --score first; top-5 promotion requires valid anchor scores.`,
         );
         return;
       }
-      if (eligibleForStage2.length < SHORTLIST.length) {
-        console.log(`  stage-2 candidates (have completed stage-1): ${eligibleForStage2.map((c) => c.icao).join(", ")}`);
-      }
-      for (const cand of eligibleForStage2) {
+      console.log(`  stage-2 top-5 (anchor_score DESC): ${top5.map((c) => c.icao).join(", ")}`);
+      for (const cand of top5) {
         if (await hasStageProbe(cand.icao, 2)) {
           console.log(`  ${cand.icao}: stage 2 already probed — skip`);
           continue;
@@ -1008,12 +1121,22 @@ async function main(): Promise<void> {
       return;
     }
 
+    // gptP0analyze4 #1: Stage 1 membership = the EXACT frozen preprobe list
+    // (12 + replacements), never the provisional SHORTLIST constant.
+    let frozen: FrozenPreprobeMembership;
+    try {
+      frozen = await loadFrozenPreprobeMembership();
+    } catch (err: any) {
+      console.error(err?.message ?? err);
+      return;
+    }
+    const stage1Candidates = frozen.shortlist;
     const budget = await checkBudget();
     if (!budget.ok) {
       console.error(`Refusing to probe: ${budget.reason}`);
       return;
     }
-    for (const cand of SHORTLIST) {
+    for (const cand of stage1Candidates) {
       if (await hasStageProbe(cand.icao, stage)) {
         console.log(`  ${cand.icao}: stage ${stage} already probed — skip`);
         continue;

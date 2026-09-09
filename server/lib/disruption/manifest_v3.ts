@@ -195,3 +195,100 @@ export function checkManifestCompleteness(
     missingImplementation,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Hash-derived manifest proof (gptP0analyze4 #17 / 0M).
+// Completeness is NOT proven by static `implemented:true` flags. It is proven
+// by hashing the CURRENT on-disk artifacts (modules, tests, migrations,
+// scripts) and the frozen rule manifest. A manifest completeness gate that
+// certifies a stale implementation is blocked: the per-artifact and aggregate
+// hashes must reflect the bytes currently in the tree.
+// ---------------------------------------------------------------------------
+
+import { readFileSync } from "fs";
+import { join } from "path";
+
+export interface ArtifactHashProof {
+  path: string;
+  /** SHA-256 of the current on-disk bytes of this artifact. */
+  sha256: string;
+  /** True when the file exists (a missing file fails the proof). */
+  exists: boolean;
+}
+
+export interface ManifestHashProof {
+  /** Every non-document/config entry's current on-disk SHA-256. */
+  artifacts: ArtifactHashProof[];
+  /** Aggregate SHA-256 over the sorted artifact bytes/hashes + the frozen rule manifest. */
+  aggregateSha256: string;
+  /** Missing on-disk files (a manifest completeness gate must fail on these). */
+  missing: string[];
+}
+
+/**
+ * Derive manifest proof from the CURRENT on-disk artifact hashes. No static
+ * booleans: `exists=false` for a missing file means the manifest cannot certify
+ * that artifact. The aggregate hash binds every artifact's current bytes and
+ * the frozen split rule so a later change to either is detectable.
+ */
+export function deriveManifestHashProof(
+  root = process.cwd(),
+  entries: ManifestEntry[] = V39_MANIFEST,
+): ManifestHashProof {
+  const artifacts: ArtifactHashProof[] = [];
+  const missing: string[] = [];
+  for (const e of entries) {
+    if (e.type === "document" || e.type === "config") continue;
+    const full = join(root, e.path);
+    let exists = false;
+    let sha256 = "";
+    try {
+      const bytes = readFileSync(full);
+      exists = true;
+      sha256 = createHash("sha256").update(bytes).digest("hex");
+    } catch {
+      exists = false;
+    }
+    if (!exists) missing.push(e.path);
+    artifacts.push({ path: e.path, sha256, exists });
+  }
+  const ruleBlock = JSON.stringify({
+    planVersion: MANIFEST_PLAN_VERSION,
+    split: splitRuleHash("frozen"),
+  });
+  const aggregateSha256 = sha(
+    artifacts
+      .slice()
+      .sort((a, b) => a.path.localeCompare(b.path))
+      .map((a) => `${a.path}:${a.sha256}`)
+      .join("|") + "|" + ruleBlock,
+  );
+  return { artifacts, aggregateSha256, missing };
+}
+
+/**
+ * Aggregate manifest completeness gate (0M): every required artifact must exist
+ * on disk AND have a hash-derived proof. A missing file or a static flag
+ * mismatch fails the gate. Returns the exact failures.
+ */
+export function checkManifestHashProof(
+  proof: ManifestHashProof,
+  entries: ManifestEntry[] = V39_MANIFEST,
+): { complete: boolean; failures: string[] } {
+  const failures: string[] = [];
+  if (proof.missing.length > 0) {
+    failures.push(`missing on-disk artifacts: ${proof.missing.join(", ")}`);
+  }
+  for (const e of entries) {
+    if (e.type === "document" || e.type === "config") continue;
+    const art = proof.artifacts.find((a) => a.path === e.path);
+    if (!art || !art.exists || !/^[a-f0-9]{64}$/.test(art.sha256)) {
+      if (!failures.some((f) => f.startsWith("missing on-disk"))) {
+        failures.push(`artifact ${e.path} has no verifiable on-disk hash`);
+      }
+      continue;
+    }
+    if (!e.implemented) failures.push(`${e.path} flagged not-implemented but exists on disk`);
+  }
+  return { complete: failures.length === 0, failures };
+}

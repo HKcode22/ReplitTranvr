@@ -248,6 +248,10 @@ export function semanticObservationKey(input: SemanticObservationInput): string 
 
 export interface ResearchEventInsert {
   eventKey: string;
+  /** Canonical physical-leg id (0G): airborne points are keyed by this, never
+   *  by flight/carrier/time, so same-number/codeshare/multi-leg/retime cannot
+   *  merge distinct physical flights. */
+  flightInstanceId: string | null;
   flightNumber: string;
   carrierIata: string | null | undefined;
   carrierIcao: string | null | undefined;
@@ -293,16 +297,20 @@ export interface ResearchEventInsert {
  * clean.raw_airborne_events so the trajectory pipeline is fed. The dedup
  * flight_data_pre_post table is never the trajectory source.
  *
- * Never throws: the webhook 2xx must not depend on research-log writes. Loud
- * error logs let reconciliation find gaps (S4 provenance).
+ * gptP0analyze4 #7 (0E event-log-before-state): this THROWS on a DB write
+ * failure so the caller can record a FAILED/partial semantic state and MUST
+ * NOT advance mutable current state without its immutable research event. It
+ * returns the number of event rows persisted. Never silently returns success
+ * when nothing was written.
  */
 export async function appendResearchEvents(
   rows: ResearchEventInsert[],
-): Promise<void> {
-  if (rows.length === 0) return;
+): Promise<number> {
+  if (rows.length === 0) return 0;
 
   const flightEvents = rows.map((r) => ({
     event_key: r.eventKey,
+    flight_instance_id: r.flightInstanceId,
     flight_number: r.flightNumber,
     carrier_iata: r.carrierIata,
     carrier_icao: r.carrierIcao,
@@ -344,6 +352,7 @@ export async function appendResearchEvents(
     .filter((r) => r.hasLiveLocation)
     .map((r) => ({
       event_key: r.eventKey,
+      flight_instance_id: r.flightInstanceId,
       flight_number: r.flightNumber,
       carrier_iata: r.carrierIata,
       carrier_icao: r.carrierIcao,
@@ -382,7 +391,7 @@ export async function appendResearchEvents(
     if (flightEvents.length > 0) {
       await pool.query(
         `INSERT INTO clean.flight_events
-           (event_key, flight_number, carrier_iata, carrier_icao, call_sign,
+           (event_key, flight_instance_id, flight_number, carrier_iata, carrier_icao, call_sign,
             aircraft_reg, aircraft_mode_s, aircraft_model,
             event_timestamp, provider_published_utc, available_at,
             received_timestamp_utc, data_stage, status, has_live_location,
@@ -394,17 +403,17 @@ export async function appendResearchEvents(
             payload_sha256, batch_id, subscription_id, ingest_event_id)
          VALUES ${flightEvents.map(
            (_, i) =>
-             `($${i * 37 + 1}, $${i * 37 + 2}, $${i * 37 + 3}, $${i * 37 + 4}, $${i * 37 + 5}, ` +
-             `$${i * 37 + 6}, $${i * 37 + 7}, $${i * 37 + 8}, $${i * 37 + 9}, $${i * 37 + 10}, $${i * 37 + 11}, ` +
-             `$${i * 37 + 12}, $${i * 37 + 13}, $${i * 37 + 14}, $${i * 37 + 15}, $${i * 37 + 16}, $${i * 37 + 17}, ` +
-             `$${i * 37 + 18}, $${i * 37 + 19}, $${i * 37 + 20}, $${i * 37 + 21}, $${i * 37 + 22}, $${i * 37 + 23}, ` +
-             `$${i * 37 + 24}, $${i * 37 + 25}, $${i * 37 + 26}, $${i * 37 + 27}, $${i * 37 + 28}, $${i * 37 + 29}, ` +
-             `$${i * 37 + 30}, $${i * 37 + 31}, $${i * 37 + 32}, $${i * 37 + 33}, $${i * 37 + 34}, $${i * 37 + 35}, ` +
-             `$${i * 37 + 36}, $${i * 37 + 37})`,
+             `($${i * 38 + 1}, $${i * 38 + 2}, $${i * 38 + 3}, $${i * 38 + 4}, $${i * 38 + 5}, ` +
+             `$${i * 38 + 6}, $${i * 38 + 7}, $${i * 38 + 8}, $${i * 38 + 9}, $${i * 38 + 10}, $${i * 38 + 11}, ` +
+             `$${i * 38 + 12}, $${i * 38 + 13}, $${i * 38 + 14}, $${i * 38 + 15}, $${i * 38 + 16}, $${i * 38 + 17}, ` +
+             `$${i * 38 + 18}, $${i * 38 + 19}, $${i * 38 + 20}, $${i * 38 + 21}, $${i * 38 + 22}, $${i * 38 + 23}, ` +
+             `$${i * 38 + 24}, $${i * 38 + 25}, $${i * 38 + 26}, $${i * 38 + 27}, $${i * 38 + 28}, $${i * 38 + 29}, ` +
+             `$${i * 38 + 30}, $${i * 38 + 31}, $${i * 38 + 32}, $${i * 38 + 33}, $${i * 38 + 34}, $${i * 38 + 35}, ` +
+             `$${i * 38 + 36}, $${i * 38 + 37}, $${i * 38 + 38})`,
          ).join(", ")}
          ON CONFLICT (event_key) DO NOTHING`,
         flightEvents.flatMap((e) => [
-          e.event_key, e.flight_number, e.carrier_iata, e.carrier_icao, e.call_sign,
+          e.event_key, e.flight_instance_id, e.flight_number, e.carrier_iata, e.carrier_icao, e.call_sign,
           e.aircraft_reg, e.aircraft_mode_s, e.aircraft_model,
           e.event_timestamp, e.provider_published_utc, e.available_at,
           e.received_timestamp_utc, e.data_stage, e.status, e.has_live_location,
@@ -421,7 +430,7 @@ export async function appendResearchEvents(
     if (airborne.length > 0) {
       await pool.query(
         `INSERT INTO clean.raw_airborne_events
-           (event_key, flight_number, carrier_iata, carrier_icao, call_sign,
+           (event_key, flight_instance_id, flight_number, carrier_iata, carrier_icao, call_sign,
             aircraft_reg, aircraft_mode_s, aircraft_model,
             event_timestamp, loc_reported_utc, provider_published_utc, available_at,
             received_timestamp_utc, source_latency_seconds,
@@ -433,16 +442,16 @@ export async function appendResearchEvents(
             payload_sha256, batch_id, subscription_id, ingest_event_id)
          VALUES ${airborne.map(
            (_, i) =>
-             `($${i * 33 + 1}, $${i * 33 + 2}, $${i * 33 + 3}, $${i * 33 + 4}, $${i * 33 + 5}, ` +
-             `$${i * 33 + 6}, $${i * 33 + 7}, $${i * 33 + 8}, $${i * 33 + 9}, $${i * 33 + 10}, $${i * 33 + 11}, ` +
-             `$${i * 33 + 12}, $${i * 33 + 13}, $${i * 33 + 14}, $${i * 33 + 15}, $${i * 33 + 16}, $${i * 33 + 17}, ` +
-             `$${i * 33 + 18}, $${i * 33 + 19}, $${i * 33 + 20}, $${i * 33 + 21}, $${i * 33 + 22}, $${i * 33 + 23}, ` +
-             `$${i * 33 + 24}, $${i * 33 + 25}, $${i * 33 + 26}, $${i * 33 + 27}, $${i * 33 + 28}, $${i * 33 + 29}, ` +
-             `$${i * 33 + 30}, $${i * 33 + 31}, $${i * 33 + 32}, $${i * 33 + 33})`,
+             `($${i * 34 + 1}, $${i * 34 + 2}, $${i * 34 + 3}, $${i * 34 + 4}, $${i * 34 + 5}, ` +
+             `$${i * 34 + 6}, $${i * 34 + 7}, $${i * 34 + 8}, $${i * 34 + 9}, $${i * 34 + 10}, $${i * 34 + 11}, ` +
+             `$${i * 34 + 12}, $${i * 34 + 13}, $${i * 34 + 14}, $${i * 34 + 15}, $${i * 34 + 16}, $${i * 34 + 17}, ` +
+             `$${i * 34 + 18}, $${i * 34 + 19}, $${i * 34 + 20}, $${i * 34 + 21}, $${i * 34 + 22}, $${i * 34 + 23}, ` +
+             `$${i * 34 + 24}, $${i * 34 + 25}, $${i * 34 + 26}, $${i * 34 + 27}, $${i * 34 + 28}, $${i * 34 + 29}, ` +
+             `$${i * 34 + 30}, $${i * 34 + 31}, $${i * 34 + 32}, $${i * 34 + 33}, $${i * 34 + 34})`,
          ).join(", ")}
          ON CONFLICT (event_key) DO NOTHING`,
         airborne.flatMap((e) => [
-          e.event_key, e.flight_number, e.carrier_iata, e.carrier_icao, e.call_sign,
+          e.event_key, e.flight_instance_id, e.flight_number, e.carrier_iata, e.carrier_icao, e.call_sign,
           e.aircraft_reg, e.aircraft_mode_s, e.aircraft_model,
           e.event_timestamp, e.loc_reported_utc, e.provider_published_utc, e.available_at,
           e.received_timestamp_utc, e.source_latency_seconds,
@@ -455,10 +464,13 @@ export async function appendResearchEvents(
         ]),
       );
     }
+
+    return rows.length;
   } catch (err: any) {
     console.error(
-      "[adb-v3] research event log write failed (webhook 2xx preserved, reconcile gap):",
+      "[adb-v3] research event log write FAILED — blocking current-state advancement (event-log-before-state):",
       err?.message || err,
     );
+    throw new Error(`Research event log write failed: ${err?.message || err}`);
   }
 }

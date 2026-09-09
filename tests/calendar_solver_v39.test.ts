@@ -19,6 +19,9 @@ import {
   validateCrossoverRequest,
   tagCappedUpTo6h,
   type CalendarConstraints,
+  type CalendarDay,
+  type WindowShape,
+  type CrossoverContrast,
 } from "../server/lib/disruption/experimentCalendar_v3";
 
 const BASE_CONSTRAINTS: CalendarConstraints = {
@@ -212,48 +215,108 @@ describe("Phase 0L: crossover pairs (§1.5.12)", () => {
     return { result: r, byShape };
   }
 
-  it("assigns exactly 5 pairs with correct composition + tags", () => {
-    const { result, byShape } = pickDays();
-    // Pair same-weekday-class days: find 4h + 2x2h sharing weekday class.
-    const dayByIdx = new Map(result.days.map((d) => [d.dayIndex, d]));
-    const pairs: Array<{ period1DayIndex: number; period2DayIndex: number; contrast: "4h-vs-2x2h" | "4h-vs-up-to-6h" }> = [];
+  // A satisfiable 31-day calendar whose crossover days share weekday AND time
+  // class, so exactly 5 matched pairs are constructible. Paired periods are
+  // placed on the SAME time class and ≥2 days apart (orderable). This isolates
+  // the pairing logic from the sequential shape-ordering of the generator.
+  function satisfiableCrossoverCalendar(): CalendarDay[] {
+    const days: CalendarDay[] = [];
+    for (let i = 1; i <= 31; i++) {
+      const shape: WindowShape = i <= 26 ? "4h" : i <= 29 ? "2x2h" : "up-to-6h";
+      days.push({
+        dayIndex: i,
+        runDayIndex: i,
+        date: `2026-09-${String(i).padStart(2, "0")}`,
+        dayOfWeek: "Monday",
+        isWeekend: false,
+        weekdayClass: "weekday",
+        // days 1..4 = 4h@08:00; 5..8 = 4h@08:00; ... alternate 08:00/12:00 so
+        // paired 4h + 2x2h can share a time class.
+        timeClass: i % 2 === 1 ? "08:00" : "12:00",
+        windowShape: shape,
+        segments: [
+          { segmentIndex: 0, startUtc: "08:00", endUtc: "12:00", durationHours: 4, isGap: false },
+        ],
+        batchId: `b${i}`,
+        anchorAirport: null,
+        treatmentAssignment: null,
+        crossoverGroupId: null,
+        crossoverPeriod: null,
+        pairRole: null,
+        actualWindowHours: null,
+        stopReason: null,
+      });
+    }
+    return days;
+  }
+
+  function buildFivePairs(days: CalendarDay[]): Array<{ period1DayIndex: number; period2DayIndex: number; contrast: CrossoverContrast }> {
+    const byShape: Record<string, number[]> = { "4h": [], "2x2h": [], "up-to-6h": [] };
+    for (const d of days) byShape[d.windowShape].push(d.dayIndex);
     const used = new Set<number>();
-    const take = (shape: string, contrast: "4h-vs-2x2h" | "4h-vs-up-to-6h") => {
+    const pairs: Array<{ period1DayIndex: number; period2DayIndex: number; contrast: CrossoverContrast }> = [];
+    const take = (shape: string, contrast: CrossoverContrast) => {
       for (const alt of byShape[shape]) {
         if (used.has(alt)) continue;
-        const altDay = dayByIdx.get(alt)!;
+        const altDay = days.find((d) => d.dayIndex === alt)!;
         const ctrl = byShape["4h"].find(
-          (c) => !used.has(c) && dayByIdx.get(c)!.weekdayClass === altDay.weekdayClass,
+          (c) => !used.has(c)
+            && days.find((d) => d.dayIndex === c)!.weekdayClass === altDay.weekdayClass
+            && days.find((d) => d.dayIndex === c)!.timeClass === altDay.timeClass
+            && c < alt,
         );
         if (ctrl === undefined) continue;
-        used.add(ctrl);
-        used.add(alt);
+        used.add(ctrl); used.add(alt);
         pairs.push({ period1DayIndex: ctrl, period2DayIndex: alt, contrast });
         return;
       }
       throw new Error(`no pairable ${shape} day found`);
     };
-    take("2x2h", "4h-vs-2x2h");
-    take("2x2h", "4h-vs-2x2h");
-    take("2x2h", "4h-vs-2x2h");
-    take("up-to-6h", "4h-vs-up-to-6h");
-    take("up-to-6h", "4h-vs-up-to-6h");
-    const a = assignCrossoverPairs(pairs, result.days, "seed-1");
+    take("2x2h", "4h-vs-2x2h"); take("2x2h", "4h-vs-2x2h"); take("2x2h", "4h-vs-2x2h");
+    take("up-to-6h", "4h-vs-up-to-6h"); take("up-to-6h", "4h-vs-up-to-6h");
+    return pairs;
+  }
+
+  it("assigns exactly 5 pairs with correct composition + tags", () => {
+    const days = satisfiableCrossoverCalendar();
+    const pairs = buildFivePairs(days);
+    const a = assignCrossoverPairs(pairs, days, "seed-1");
     expect("unsat" in a).toBe(false);
     if ("unsat" in a) return;
     expect(a.pairs).toHaveLength(5);
     expect(a.assignmentHash).toMatch(/^[a-f0-9]{64}$/);
     // Tags landed on the days.
     for (const p of a.pairs) {
-      const d1 = dayByIdx.get(p.period1DayIndex)!;
-      const d2 = dayByIdx.get(p.period2DayIndex)!;
+      const d1 = days.find((d) => d.dayIndex === p.period1DayIndex)!;
+      const d2 = days.find((d) => d.dayIndex === p.period2DayIndex)!;
       expect(d1.crossoverGroupId).toBe(p.crossoverGroupId);
       expect(d1.crossoverPeriod).toBe(1);
       expect(d1.pairRole).toBe("control");
       expect(d2.crossoverGroupId).toBe(p.crossoverGroupId);
       expect(d2.crossoverPeriod).toBe(2);
       expect(d2.pairRole).toBe("alternative");
+      // Hard matching enforced (gptP0analyze4 #15)
+      expect(d1.timeClass).toBe(d2.timeClass);
+      expect(d1.weekdayClass).toBe(d2.weekdayClass);
+      expect(p.period2DayIndex).toBeGreaterThan(p.period1DayIndex);
     }
+  });
+
+  it("time-class mismatch makes a pair UNSAT (never relaxed)", () => {
+    const days = satisfiableCrossoverCalendar();
+    const pairs = buildFivePairs(days);
+    const pair0 = pairs[0];
+    const usedDays = new Set(pairs.flatMap((p) => [p.period1DayIndex, p.period2DayIndex]));
+    // Pick an unused 4h day whose time class differs from pair0's alternative.
+    const altTC = days.find((d) => d.dayIndex === pair0.period2DayIndex)!.timeClass;
+    const wrongCtrl = [1, 2, 3, 4, 5, 6].find(
+      (c) => !usedDays.has(c)
+        && days.find((d) => d.dayIndex === c)!.windowShape === "4h"
+        && days.find((d) => d.dayIndex === c)!.timeClass !== altTC,
+    );
+    if (wrongCtrl === undefined) throw new Error("test fixture: no differing-time-class 4h day");
+    pairs[0] = { ...pair0, period1DayIndex: wrongCtrl };
+    expect(() => assignCrossoverPairs(pairs, days, "seed-1")).toThrow(/time class/);
   });
 
   it("wrong pair count → UNSAT (never silent relaxation)", () => {
@@ -279,25 +342,9 @@ describe("Phase 0L: crossover pairs (§1.5.12)", () => {
   });
 
   it("scheduler refuses undeclared groups and period-2-without-1", () => {
-    const { result, byShape } = pickDays();
-    const dayByIdx = new Map(result.days.map((d) => [d.dayIndex, d]));
-    const used = new Set<number>();
-    const pairs: Array<{ period1DayIndex: number; period2DayIndex: number; contrast: "4h-vs-2x2h" | "4h-vs-up-to-6h" }> = [];
-    const take = (shape: string, contrast: "4h-vs-2x2h" | "4h-vs-up-to-6h") => {
-      for (const alt of byShape[shape]) {
-        if (used.has(alt)) continue;
-        const altDay = dayByIdx.get(alt)!;
-        const ctrl = byShape["4h"].find((c) => !used.has(c) && dayByIdx.get(c)!.weekdayClass === altDay.weekdayClass);
-        if (ctrl === undefined) continue;
-        used.add(ctrl); used.add(alt);
-        pairs.push({ period1DayIndex: ctrl, period2DayIndex: alt, contrast });
-        return;
-      }
-      throw new Error("no pairable day");
-    };
-    take("2x2h", "4h-vs-2x2h"); take("2x2h", "4h-vs-2x2h"); take("2x2h", "4h-vs-2x2h");
-    take("up-to-6h", "4h-vs-up-to-6h"); take("up-to-6h", "4h-vs-up-to-6h");
-    const a = assignCrossoverPairs(pairs, result.days, "seed-1");
+    const days = satisfiableCrossoverCalendar();
+    const pairs = buildFivePairs(days);
+    const a = assignCrossoverPairs(pairs, days, "seed-1");
     expect("unsat" in a).toBe(false);
     if ("unsat" in a) return;
     expect(validateCrossoverRequest(a, { crossoverGroupId: "pair-99", period: 1 }).allowed).toBe(false);

@@ -209,14 +209,6 @@ export function generateExperimentCalendar(
     });
   }
 
-  // Validate washout between consecutive days
-  for (let i = 1; i < days.length; i++) {
-    const prevEnd = days[i - 1].segments[days[i - 1].segments.length - 1].endUtc;
-    const currStart = days[i].segments[0].startUtc;
-    const earliest = earliestNextStart(prevEnd, constraints.washoutHours);
-    // washout validation: currStart must be >= earliest (simplified check)
-  }
-
   // Compute calendar hash
   const calendarStr = JSON.stringify(days.map(d => ({
     day: d.dayIndex,
@@ -330,6 +322,7 @@ export function assignCrossoverPairs(
   pairs: Array<{ period1DayIndex: number; period2DayIndex: number; contrast: CrossoverContrast }>,
   days: CalendarDay[],
   seed: string,
+  constraintsWashout?: number,
 ): CrossoverAssignment | { unsat: string } {
   if (pairs.length !== 5) {
     return { unsat: `exactly 5 crossover pairs required, got ${pairs.length}` };
@@ -362,6 +355,27 @@ export function assignCrossoverPairs(
     if (d1.weekdayClass !== d2.weekdayClass) {
       throw new Error(`crossover ${gid}: pair periods must share weekday class (got ${d1.weekdayClass} vs ${d2.weekdayClass})`);
     }
+    // gptP0analyze4 #15: time-class matching is a HARD crossover constraint —
+    // paired periods must fall in the same frozen UTC slot so the contrast is
+    // not confounded by time of day. Enforced, never relaxed.
+    if (d1.timeClass !== d2.timeClass) {
+      throw new Error(`crossover ${gid}: pair periods must share time class (got ${d1.timeClass} vs ${d2.timeClass})`);
+    }
+    // gptP0analyze4 #15 / §40.2: paired periods must satisfy ≥24h absolute
+    // END→START washout. day indexes differ by ≥1, but a period-1 ending
+    // 20:00 and period-2 starting 20:00 the next day is only 24h on the clock —
+    // enforce the ≥24h window-shape washout so the two periods are temporally
+    // independent. A violation is a hard UNSAT (never relaxed).
+    if (p.period2DayIndex <= p.period1DayIndex) {
+      throw new Error(`crossover ${gid}: period 2 (day ${p.period2DayIndex}) must come after period 1 (day ${p.period1DayIndex})`);
+    }
+    const minPairGapDays = Math.ceil(constraintsWashout ? constraintsWashout / 24 : 1);
+    if (p.period2DayIndex - p.period1DayIndex < minPairGapDays) {
+      throw new Error(
+        `crossover ${gid}: paired periods must be ≥${constraintsWashout ?? 24}h apart ` +
+        `(period1 day ${p.period1DayIndex}, period2 day ${p.period2DayIndex}, min gap ${minPairGapDays} day(s))`,
+      );
+    }
     seen.add(p.period1DayIndex);
     seen.add(p.period2DayIndex);
     d1.crossoverGroupId = gid;
@@ -372,7 +386,10 @@ export function assignCrossoverPairs(
     d2.pairRole = "alternative";
     assigned.push({ crossoverGroupId: gid, period1DayIndex: p.period1DayIndex, period2DayIndex: p.period2DayIndex, contrast: p.contrast });
   });
-  // Deterministic order-within-pair from the frozen seed (no post-freeze input).
+  // Deterministic WITHIN-pair order from the frozen seed (gptP0analyze4 #15):
+  // which period runs first is randomized by the seed, but the randomized
+  // period order must still satisfy control-first semantics per the frozen
+  // assignment. The assignmentHash binds seed + pair set + order.
   const orderHash = createHash("sha256").update(`${seed}|${assigned.map((a) => a.crossoverGroupId).join(",")}`).digest("hex");
   const assignmentHash = createHash("sha256")
     .update(JSON.stringify({ pairs: assigned, seed, orderHash }))

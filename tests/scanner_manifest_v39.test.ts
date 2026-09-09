@@ -203,3 +203,34 @@ describe("Phase 0M: manifest repair + split rule + completeness gate (§1.5.13)"
     expect(r.complete).toBe(true);
   });
 });
+
+describe("0M: hash-derived manifest proof (gptP0analyze4 #17)", () => {
+  it("derives per-artifact hashes from current on-disk bytes and an aggregate", async () => {
+    const { deriveManifestHashProof, checkManifestHashProof } = await import("../server/lib/disruption/manifest_v3");
+    const proof = deriveManifestHashProof(process.cwd());
+    expect(proof.artifacts.length).toBeGreaterThan(0);
+    for (const a of proof.artifacts) {
+      expect(a.sha256).toMatch(/^[a-f0-9]{64}$/);
+    }
+    expect(proof.aggregateSha256).toMatch(/^[a-f0-9]{64}$/);
+    // No required artifact is missing from disk (all current modules/tests/migrations/scripts exist).
+    expect(proof.missing).toEqual([]);
+    // Deterministic aggregate (same tree → same hash).
+    const p2 = deriveManifestHashProof(process.cwd());
+    expect(proof.aggregateSha256).toBe(p2.aggregateSha256);
+    // The hash proof completes when every required artifact exists.
+    const gate = checkManifestHashProof(proof);
+    expect(gate.complete).toBe(true);
+    expect(gate.failures).toEqual([]);
+  });
+
+  it("a missing artifact fails the hash proof gate", async () => {
+    const { deriveManifestHashProof, checkManifestHashProof, V39_MANIFEST } = await import("../server/lib/disruption/manifest_v3");
+    const bogus = [...V39_MANIFEST, { type: "module", path: "server/lib/disruption/does_not_exist_v9.ts", description: "x", implemented: true, tested: true, evidenceId: "RUN-1", requirements: [] }];
+    const proof = deriveManifestHashProof(process.cwd(), bogus);
+    expect(proof.missing).toContain("server/lib/disruption/does_not_exist_v9.ts");
+    const gate = checkManifestHashProof(proof, bogus);
+    expect(gate.complete).toBe(false);
+    expect(gate.failures.join(" ")).toContain("does_not_exist_v9.ts");
+  });
+});

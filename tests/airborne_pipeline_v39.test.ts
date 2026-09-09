@@ -71,7 +71,8 @@ describe("TEST-012: AIRBORNE pipeline", () => {
       );
 
       expect(timestamps.scheduledGateOutUtc).toEqual(new Date("2026-09-01T10:00:00Z"));
-      expect(timestamps.actualGateOutUtc).toEqual(new Date("2026-09-01T10:05:00Z"));
+      // gptP0analyze4 #6: runway→actual UNVERIFIED until Gate 0.5 → stays NULL.
+      expect(timestamps.actualGateOutUtc).toBeNull();
       expect(timestamps.scheduledGateInUtc).toEqual(new Date("2026-09-01T11:30:00Z"));
       expect(timestamps.receivedAtUtc).toEqual(new Date("2026-09-01T10:00:05Z"));
     });
