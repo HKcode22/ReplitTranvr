@@ -1,6 +1,6 @@
 /**
- * Phase-0 DB verification for the current V3.9-f.8 schema.
- * Read-only except a rolled-back proof transaction. Never performs a paid call.
+ * Phase-0 DB verification for current V3.9-f.8 schema 0047.
+ * Read-only except a rolled-back proof transaction. Never performs a provider call.
  */
 import pg from "pg";
 
@@ -36,6 +36,9 @@ const REQUIRED_TABLES = [
   "clean.adb_adaptive_state_history",
   "clean.adb_phase6_authorization",
   "clean.adb_phase6_admission_attempt",
+  "clean.adb_phase6_safety_heartbeat",
+  "clean.adb_phase6_settlement_evidence",
+  "clean.adb_budget_day_adjustment",
   "clean.adb_anchor_probe",
   "clean.adb_probe_budget_day",
   "clean.airborne_quarantine",
@@ -69,9 +72,21 @@ const REQUIRED_COLUMNS = [
   "clean.adb_phase6_calendar_day:active_duration_minutes",
   "clean.adb_phase6_calendar_day:frame_hash",
   "clean.adb_phase6_authorization:start_admission_tolerance_seconds",
+  "clean.adb_phase6_authorization:phase6_alert_spend_ceiling",
+  "clean.adb_phase6_authorization:daily_soft_stop_margin_credits",
+  "clean.adb_phase6_authorization:production_reconcile_tolerance_credits",
+  "clean.adb_phase6_authorization:safety_watchdog_poll_ms",
+  "clean.adb_phase6_authorization:settlement_initial_wait_seconds",
+  "clean.adb_phase6_authorization:settlement_poll_interval_seconds",
+  "clean.adb_phase6_authorization:settlement_stable_read_count",
+  "clean.adb_phase6_authorization:settlement_timeout_seconds",
   "clean.adb_collection_batches:phase6_authorization_id",
   "clean.adb_collection_batches:sampling_state_hash",
   "clean.adb_collection_subs:segment_id",
+  "clean.adb_phase6_safety_heartbeat:updated_at_utc",
+  "clean.adb_phase6_settlement_evidence:evidence_status",
+  "clean.adb_phase6_settlement_evidence:reconcile_tolerance",
+  "clean.adb_budget_day_adjustment:overshoot_credits",
   "clean.adb_anchor_probe:confirmed_unique_lower",
   "clean.adb_anchor_probe:confirmed_plus_ambiguous_upper",
   "clean.adb_anchor_probe:preprobe_artifact_sha256",
@@ -86,6 +101,11 @@ const REQUIRED_TRIGGERS = [
   "trg_guard_phase6_parent_start_time",
   "trg_probe_create_uncertainty_stop",
   "trg_phase6_create_uncertainty_stop",
+  "trg_phase6_settlement_evidence_immutable",
+  "trg_require_phase6_settlement_evidence",
+  "trg_apply_phase6_budget_limits",
+  "trg_mark_phase6_hard_cap_mismatch",
+  "trg_record_phase6_hard_cap_overshoot",
 ];
 
 async function main(): Promise<void> {
@@ -104,46 +124,27 @@ async function main(): Promise<void> {
     );
     const names = new Set<string>(tables.rows.map((r: any) => r.fqn));
     record("table-inventory", true, `${names.size} tables`);
-    for (const table of REQUIRED_TABLES) {
-      record(`table:${table}`, names.has(table), names.has(table) ? "present" : "MISSING");
-    }
+    for (const table of REQUIRED_TABLES) record(`table:${table}`, names.has(table), names.has(table) ? "present" : "MISSING");
 
     const cols = await pool.query(
       "SELECT table_schema || '.' || table_name AS t,column_name FROM information_schema.columns WHERE table_schema='clean'",
     );
     const colSet = new Set(cols.rows.map((r: any) => `${r.t}:${r.column_name}`));
-    for (const need of REQUIRED_COLUMNS) {
-      record(`column:${need}`, colSet.has(need), colSet.has(need) ? "present" : "MISSING");
-    }
+    for (const need of REQUIRED_COLUMNS) record(`column:${need}`, colSet.has(need), colSet.has(need) ? "present" : "MISSING");
 
     const idx = await pool.query(
       "SELECT schemaname||'.'||tablename AS t,indexname,indexdef FROM pg_indexes WHERE schemaname='clean'",
     );
     const indexText = idx.rows.map((r: any) => `${r.indexname}:${r.indexdef}`).join(" | ");
-    record(
-      "unique:trajectory-canonical",
-      /uq_flight_trajectory_canonical.*flight_instance_id/i.test(indexText),
-      "canonical trajectory unique index",
-    );
-    record(
-      "unique:airborne-snapshot-canonical",
-      /uq_airborne_snapshot_canonical_observation.*flight_instance_id.*event_timestamp/i.test(indexText),
-      "canonical observation unique index",
-    );
-    record(
-      "unique:webhook-notification-attempt",
-      /uq_raw_delivery_notification_attempt.*notification_id.*delivery_attempt_seq_no/i.test(indexText),
-      "provider notification/attempt retry identity",
-    );
+    record("unique:trajectory-canonical", /uq_flight_trajectory_canonical.*flight_instance_id/i.test(indexText), "canonical trajectory unique index");
+    record("unique:airborne-snapshot-canonical", /uq_airborne_snapshot_canonical_observation.*flight_instance_id.*event_timestamp/i.test(indexText), "canonical observation unique index");
+    record("unique:webhook-notification-attempt", /uq_raw_delivery_notification_attempt.*notification_id.*delivery_attempt_seq_no/i.test(indexText), "provider notification/attempt retry identity");
+    record("unique:budget-adjustment-target", /uq_budget_adjustment_target.*target_run_day_index/i.test(indexText), "one compensating adjustment per target run day");
 
     const old = await pool.query(
       "SELECT conname FROM pg_constraint WHERE conname IN ('flight_trajectory_key','airborne_snapshot_key')",
     );
-    record(
-      "legacy-airborne-unique-removed",
-      old.rowCount === 0,
-      old.rowCount === 0 ? "removed" : "legacy constraints still active",
-    );
+    record("legacy-airborne-unique-removed", old.rowCount === 0, old.rowCount === 0 ? "removed" : "legacy constraints still active");
 
     const triggers = await pool.query(
       `SELECT tgname FROM pg_trigger t
@@ -152,20 +153,28 @@ async function main(): Promise<void> {
        WHERE n.nspname='clean' AND NOT t.tgisinternal`,
     );
     const triggerSet = new Set<string>(triggers.rows.map((r: any) => r.tgname));
-    for (const trigger of REQUIRED_TRIGGERS) {
-      record(`trigger:${trigger}`, triggerSet.has(trigger), triggerSet.has(trigger) ? "present" : "MISSING");
-    }
+    for (const trigger of REQUIRED_TRIGGERS) record(`trigger:${trigger}`, triggerSet.has(trigger), triggerSet.has(trigger) ? "present" : "MISSING");
 
     const cause = await pool.query(
       `SELECT pg_get_constraintdef(oid) AS def
          FROM pg_constraint
         WHERE conrelid='clean.adb_incident_stop'::regclass
-          AND conname='adb_incident_stop_cause_check_v2'`,
+          AND conname='adb_incident_stop_cause_check_v3'`,
     );
     const causeDef = String(cause.rows[0]?.def ?? "");
-    const causesOk = ["authentication","raw-persistence","persistence","reconciliation","settlement","probe_cap_overshoot","deletion"]
+    const causesOk = ["authentication","raw-persistence","persistence","reconciliation","deletion","segment_activation"]
       .every((x) => causeDef.includes(x));
-    record("incident-cause-contract", causesOk, causesOk ? "current paid-owner causes accepted" : causeDef || "constraint missing");
+    record("incident-cause-contract", causesOk, causesOk ? "all current incident classes accepted" : causeDef || "constraint missing");
+
+    const safetyConstraint = await pool.query(
+      `SELECT conname,pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conrelid='clean.adb_phase6_authorization'::regclass
+          AND conname IN ('adb_phase6_authorization_safety_values','adb_phase6_soft_margin_covers_unsettled','adb_phase6_authorization_base_cap_1900')`,
+    );
+    const safetyText = safetyConstraint.rows.map((x: any) => `${x.conname}:${x.def}`).join(" | ");
+    record("phase6-safety-constraint-set", safetyConstraint.rowCount === 3, safetyText || "missing constraints");
+    record("phase6-run-cap-max-57900", safetyText.includes("57900"), safetyText || "missing 57900 bound");
+    record("phase6-daily-base-cap-1900", safetyText.includes("1900"), safetyText || "missing 1900 bound");
 
     const client = await pool.connect();
     try {
@@ -202,21 +211,14 @@ async function main(): Promise<void> {
         client.query("SELECT 1 FROM clean.processing_attempt WHERE delivery_id=$1", [id]),
         client.query("SELECT 1 FROM clean.webhook_identity_resolution WHERE delivery_id=$1", [id]),
       ]);
-      record(
-        "raw-before-semantic-ordering",
-        a.rowCount === 1 && b.rowCount === 1 && p.rowCount === 1 && q.rowCount === 1,
-        "delivery→item→identity/attempt readable inside rolled-back proof transaction",
-      );
+      record("raw-before-semantic-ordering", a.rowCount === 1 && b.rowCount === 1 && p.rowCount === 1 && q.rowCount === 1, "delivery→item→identity/attempt readable inside rolled-back proof transaction");
+
       let immutable = false;
       try {
-        await client.query(
-          "UPDATE clean.webhook_identity_resolution SET reason='changed' WHERE delivery_id=$1 AND item_index=0",
-          [id],
-        );
-      } catch {
-        immutable = true;
-      }
+        await client.query("UPDATE clean.webhook_identity_resolution SET reason='changed' WHERE delivery_id=$1 AND item_index=0", [id]);
+      } catch { immutable = true; }
       record("identity-resolution-append-only", immutable, immutable ? "mutation rejected" : "MUTATION WAS ALLOWED");
+
       await client.query("ROLLBACK");
       record("rollback-no-junk-rows", true, "rolled back proof transaction");
     } catch (e: any) {
@@ -235,7 +237,7 @@ async function main(): Promise<void> {
     for (const x of failed) console.log(`  - ${x.name}: ${x.detail}`);
     process.exit(1);
   }
-  console.log("ALL DB CHECKS PASS for current Phase-0 schema 0046.");
+  console.log("ALL DB CHECKS PASS for current Phase-0 schema 0047.");
 }
 
 main().catch((e: any) => {
