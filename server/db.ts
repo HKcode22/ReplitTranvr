@@ -53,6 +53,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0043_phase6_start_time_guard.sql",
   "0044_webhook_attempt_provenance.sql",
   "0045_incident_stop_persistence_cause.sql",
+  "0046_subscription_create_uncertainty_stop.sql",
 ];
 
 let bootMigrationsApplied = false;
