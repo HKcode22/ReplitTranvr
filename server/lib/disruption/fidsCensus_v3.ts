@@ -514,3 +514,85 @@ export async function fetchBatchFidsPopulation(
 
   return { airports, failed, totalFlightInstances };
 }
+
+// ---------------------------------------------------------------------------
+// PRE population/capture counters (§1.5.3): persist numerator + denominator,
+// never only rates. A zero denominator yields rate=NULL + reason, never zero.
+// ---------------------------------------------------------------------------
+
+export interface PreCountersInput {
+  populationCount: number;
+  horizonEligibleCount: number;
+  snapshotCreatedCount: number;
+  webhookCapturedCount: number;
+  requiredFeaturesCompleteCount: number;
+  optionalFeatureMissingCount: number;
+  targetObservedCount: number;
+  targetApplicableCount: number;
+  confirmedOperatingLegCount: number;
+  ambiguousCodeshareRecordCount: number;
+}
+
+export interface PreCounterRate {
+  numerator: number;
+  denominator: number;
+  rate: number | null;
+  reason: string | null;
+}
+
+export interface PreCounters {
+  populationCount: number;
+  horizonEligibleCount: number;
+  snapshotExpectedCount: number;
+  snapshotCreated: PreCounterRate;
+  webhookCaptured: PreCounterRate;
+  requiredFeaturesComplete: PreCounterRate;
+  optionalFeatureMissing: PreCounterRate;
+  targetObserved: PreCounterRate;
+  confirmedOperatingLegCount: number;
+  ambiguousCodeshareRecordCount: number;
+}
+
+function rateOrNull(numerator: number, denominator: number, emptyReason: string): PreCounterRate {
+  if (denominator <= 0) return { numerator, denominator, rate: null, reason: emptyReason };
+  return { numerator, denominator, rate: numerator / denominator, reason: null };
+}
+
+/** Build the required PRE counter set from raw counts (§1.5.3). */
+export function buildPreCounters(input: PreCountersInput): PreCounters {
+  return {
+    populationCount: input.populationCount,
+    horizonEligibleCount: input.horizonEligibleCount,
+    snapshotExpectedCount: input.horizonEligibleCount,
+    snapshotCreated: rateOrNull(input.snapshotCreatedCount, input.horizonEligibleCount, "no horizon-eligible flights"),
+    webhookCaptured: rateOrNull(input.webhookCapturedCount, input.horizonEligibleCount, "no horizon-eligible flights"),
+    requiredFeaturesComplete: rateOrNull(input.requiredFeaturesCompleteCount, input.snapshotCreatedCount, "no snapshots created"),
+    optionalFeatureMissing: rateOrNull(input.optionalFeatureMissingCount, input.snapshotCreatedCount, "no snapshots created"),
+    targetObserved: rateOrNull(input.targetObservedCount, input.targetApplicableCount, "no target-applicable snapshots"),
+    confirmedOperatingLegCount: input.confirmedOperatingLegCount,
+    ambiguousCodeshareRecordCount: input.ambiguousCodeshareRecordCount,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Scope classification (§1.5.3 / Plan §4.3): cargo/private excluded only when
+// positively classifiable; otherwise 'unknown' (never guessed into the core).
+// ---------------------------------------------------------------------------
+
+export type ScopeClassification = "confirmed_core" | "unknown" | "auxiliary";
+
+/** Classify one FIDS record into the population scope taxonomy. */
+export function classifyScope(input: {
+  isCargo?: boolean | null;
+  isPrivate?: boolean | null;
+  isCharter?: boolean | null;
+  status?: string | number | null;
+}): ScopeClassification {
+  if (input.isCargo === true || input.isPrivate === true) return "auxiliary";
+  if (input.isCharter === true) return "unknown"; // excluded only when positively classifiable → stays unknown
+  if (input.isCharter === false) return "confirmed_core";
+  // Scheduled commercial passenger is the default core ONLY when the record
+  // is positively not cargo/private/charter; genuinely unknown stays unknown.
+  if (input.isCargo === false && input.isPrivate === false) return "confirmed_core";
+  return "unknown";
+}

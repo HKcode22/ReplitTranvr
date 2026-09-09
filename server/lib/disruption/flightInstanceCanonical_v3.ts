@@ -291,3 +291,86 @@ export function isCrossAirportDuplicate(
 
   return aSwapped || aSame;
 }
+
+// ---------------------------------------------------------------------------
+// Route / tail identity contract (§1.5.4 items 13–15).
+// Directed OD = (origin ICAO, original_scheduled_destination ICAO), never
+// silently undirected. Diversion = actual destination differs from original.
+// Tail fallback: verified aircraft_reg > mode-S > ICAO24 > verified provider
+// aircraft ID — but tail_known=true ONLY for a verified non-null registration.
+// midnight_crossing records UTC/local date straddles without rewriting the
+// immutable initial_service_date.
+// ---------------------------------------------------------------------------
+
+export interface TailIdentityInput {
+  aircraftReg?: string | null;
+  aircraftModeS?: string | null;
+  icao24?: string | null;
+  providerAircraftId?: string | null;
+  providerAircraftIdVerified?: boolean;
+}
+
+export interface TailIdentity {
+  tailKey: string | null;
+  tailKnown: boolean;
+  tailSource: "aircraft_reg" | "mode_s" | "icao24" | "provider_aircraft_id" | "unknown";
+}
+
+/** Resolve tail identity by the frozen fallback chain (§1.5.4 item 14). */
+export function resolveTailIdentity(input: TailIdentityInput): TailIdentity {
+  const reg = typeof input.aircraftReg === "string" && input.aircraftReg.trim() ? input.aircraftReg.trim().toUpperCase() : null;
+  if (reg) return { tailKey: reg, tailKnown: true, tailSource: "aircraft_reg" };
+  const modeS = typeof input.aircraftModeS === "string" && input.aircraftModeS.trim() ? input.aircraftModeS.trim().toUpperCase() : null;
+  if (modeS) return { tailKey: modeS, tailKnown: false, tailSource: "mode_s" };
+  const icao24 = typeof input.icao24 === "string" && input.icao24.trim() ? input.icao24.trim().toUpperCase() : null;
+  if (icao24) return { tailKey: icao24, tailKnown: false, tailSource: "icao24" };
+  if (input.providerAircraftIdVerified && typeof input.providerAircraftId === "string" && input.providerAircraftId.trim()) {
+    return { tailKey: input.providerAircraftId.trim(), tailKnown: false, tailSource: "provider_aircraft_id" };
+  }
+  return { tailKey: null, tailKnown: false, tailSource: "unknown" };
+}
+
+export interface RouteIdentity {
+  originIcao: string;
+  originalScheduledDestinationIcao: string;
+  currentOperationalDestinationIcao: string | null;
+  actualDestinationIcao: string | null;
+  diversionFlag: boolean;
+  midnightCrossing: boolean;
+}
+
+/**
+ * Build the directed route identity (§1.5.4 item 13): original scheduled,
+ * operational, and actual destinations kept separately; diversion iff actual
+ * differs from original; midnight_crossing recorded from UTC dates.
+ */
+export function resolveRouteIdentity(input: {
+  originIcao: string;
+  originalScheduledDestinationIcao: string;
+  currentOperationalDestinationIcao?: string | null;
+  actualDestinationIcao?: string | null;
+  scheduledGateOutUtc?: string | null;
+  actualWheelsOnUtc?: string | null;
+}): RouteIdentity {
+  const origin = input.originIcao.trim().toUpperCase();
+  const original = input.originalScheduledDestinationIcao.trim().toUpperCase();
+  const operational = input.currentOperationalDestinationIcao?.trim().toUpperCase() || null;
+  const actual = input.actualDestinationIcao?.trim().toUpperCase() || null;
+  const midnightCrossing = (() => {
+    if (!input.scheduledGateOutUtc || !input.actualWheelsOnUtc) return false;
+    try {
+      return new Date(input.scheduledGateOutUtc).toISOString().slice(0, 10) !==
+        new Date(input.actualWheelsOnUtc).toISOString().slice(0, 10);
+    } catch {
+      return false;
+    }
+  })();
+  return {
+    originIcao: origin,
+    originalScheduledDestinationIcao: original,
+    currentOperationalDestinationIcao: operational,
+    actualDestinationIcao: actual,
+    diversionFlag: actual !== null && actual !== original,
+    midnightCrossing,
+  };
+}

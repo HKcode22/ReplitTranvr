@@ -260,3 +260,99 @@ describe("Phase 0H: outcome terminalizer (§1.5.8)", () => {
     });
   });
 });
+describe("Phase 0F/0H: persistence wiring (builders → tables)", () => {
+  function fakePool() {
+    const queries: Array<{ text: string; params: unknown[] }> = [];
+    return {
+      queries,
+      async query(text: string, params: unknown[]) {
+        queries.push({ text, params });
+        return { rowCount: 1 };
+      },
+    };
+  }
+
+  it("persistPreSnapshot inserts with ON CONFLICT DO NOTHING (append-only)", async () => {
+    const { buildPreSnapshot } = await import("../server/lib/disruption/preSnapshotBuilder_v3");
+    const { persistPreSnapshot } = await import("../server/lib/disruption/preSnapshotBuilder_v3");
+    const r = buildPreSnapshot({
+      flightInstanceId: "leg:abcd1234",
+      populationQueryId: "pop_q_1",
+      populationMemberAtCutoff: true,
+      horizonEligible: true,
+      horizon: "T-6h",
+      selectedTMilestoneUtc: new Date("2026-09-01T10:00:00Z"),
+      selectedTVersion: "t_v1",
+      predictionCutoffUtc: new Date("2026-09-01T04:00:00Z"),
+      features: [],
+      frameHash: "f1",
+      configHash: "c1",
+      fidsResponseHash: "h1",
+      scheduleVersion: "v1",
+    });
+    expect(r.status).toBe("snapshot");
+    if (r.status !== "snapshot") return;
+    const pool = fakePool();
+    expect(await persistPreSnapshot(pool, r.snapshot)).toBe(1);
+    expect(pool.queries).toHaveLength(1);
+    expect(pool.queries[0].text).toContain("clean.flight_snapshots");
+    expect(pool.queries[0].text).toContain("ON CONFLICT (flight_instance_id, horizon, prediction_cutoff_utc) DO NOTHING");
+    // Blocked snapshots never reach the table.
+    const blocked = buildPreSnapshot({
+      flightInstanceId: "leg:abcd1234",
+      populationQueryId: null,
+      populationMemberAtCutoff: false,
+      horizonEligible: true,
+      horizon: "T-6h",
+      selectedTMilestoneUtc: new Date("2026-09-01T10:00:00Z"),
+      selectedTVersion: null,
+      predictionCutoffUtc: new Date("2026-09-01T04:00:00Z"),
+      features: [],
+      frameHash: null,
+      configHash: null,
+      fidsResponseHash: null,
+      scheduleVersion: null,
+    });
+    expect(blocked.status).toBe("blocked");
+  });
+
+  it("persistOutcome upserts per (flight, target) with terminalizer version", async () => {
+    const { persistOutcome } = await import("../server/lib/disruption/outcomeTerminalizer_v3");
+    const pool = fakePool();
+    expect(
+      await persistOutcome(pool, {
+        flightInstanceId: "leg:abcd1234",
+        operationalState: "arrived",
+        target: "wheels_on",
+        labelStatus: "observed",
+        referenceArrivalUtc: new Date("2026-09-01T11:30:00Z"),
+        recoveryDeadlineUtc: new Date("2026-09-02T11:30:00Z"),
+        opportunitiesUsed: 1,
+        evidenceJson: { by: "test" },
+      }),
+    ).toBe(1);
+    expect(pool.queries[0].text).toContain("clean.flight_outcomes");
+    expect(pool.queries[0].text).toContain("ON CONFLICT (flight_instance_id, target) DO UPDATE");
+  });
+
+  it("persist functions never throw (return 0 on DB error)", async () => {
+    const { persistOutcome } = await import("../server/lib/disruption/outcomeTerminalizer_v3");
+    const badPool = {
+      async query() {
+        throw new Error("db down");
+      },
+    };
+    expect(
+      await persistOutcome(badPool, {
+        flightInstanceId: "x",
+        operationalState: "unknown",
+        target: "gate_out",
+        labelStatus: "pending",
+        referenceArrivalUtc: null,
+        recoveryDeadlineUtc: null,
+        opportunitiesUsed: 0,
+        evidenceJson: null,
+      }),
+    ).toBe(0);
+  });
+});

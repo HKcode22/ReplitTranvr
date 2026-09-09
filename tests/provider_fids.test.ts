@@ -420,3 +420,37 @@ describe("§1.5.3 population-row builder (append-only membership)", () => {
     expect(JSON.parse(row.provenanceJson).populationRole).toBe("opposite_movement_context");
   });
 });
+
+describe("§1.5.3 PRE population/capture counters (numerator + denominator)", () => {
+  it("snapshot_expected = horizon eligible; zero denominator → rate NULL + reason", async () => {
+    const { buildPreCounters } = await import("../server/lib/disruption/fidsCensus_v3");
+    const c = buildPreCounters({
+      populationCount: 100, horizonEligibleCount: 80, snapshotCreatedCount: 80,
+      webhookCapturedCount: 60, requiredFeaturesCompleteCount: 70, optionalFeatureMissingCount: 10,
+      targetObservedCount: 50, targetApplicableCount: 75,
+      confirmedOperatingLegCount: 78, ambiguousCodeshareRecordCount: 2,
+    });
+    expect(c.snapshotExpectedCount).toBe(80);
+    expect(c.snapshotCreated.rate).toBe(1);
+    expect(c.webhookCaptured.rate).toBe(0.75);
+    const empty = buildPreCounters({
+      populationCount: 0, horizonEligibleCount: 0, snapshotCreatedCount: 0,
+      webhookCapturedCount: 0, requiredFeaturesCompleteCount: 0, optionalFeatureMissingCount: 0,
+      targetObservedCount: 0, targetApplicableCount: 0,
+      confirmedOperatingLegCount: 0, ambiguousCodeshareRecordCount: 0,
+    });
+    expect(empty.snapshotCreated.rate).toBeNull();
+    expect(empty.snapshotCreated.reason).toBe("no horizon-eligible flights");
+  });
+});
+
+describe("§1.5.3 scope classification (never guessed)", () => {
+  it("cargo/private → auxiliary; charter-positive → unknown; clean scheduled → core", async () => {
+    const { classifyScope } = await import("../server/lib/disruption/fidsCensus_v3");
+    expect(classifyScope({ isCargo: true })).toBe("auxiliary");
+    expect(classifyScope({ isPrivate: true })).toBe("auxiliary");
+    expect(classifyScope({ isCharter: true })).toBe("unknown");
+    expect(classifyScope({ isCargo: false, isPrivate: false, isCharter: false })).toBe("confirmed_core");
+    expect(classifyScope({})).toBe("unknown");
+  });
+});

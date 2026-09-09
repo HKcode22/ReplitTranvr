@@ -199,3 +199,32 @@ describe("TEST-007: Identity preservation", () => {
     });
   });
 });
+
+describe("Phase 0B: raw-before-2xx production wiring order (§1.5.2)", () => {
+  it("routes_v3.ts calls raw persist before semantic upsert before 2xx", async () => {
+    const { readFileSync } = await import("fs");
+    const { join } = await import("path");
+    const src = readFileSync(join(process.cwd(), "server/routes_v3.ts"), "utf8");
+    const iRaw = src.indexOf("await persistRawDelivery(");
+    const iItems = src.indexOf("await persistRawDeliveryItems(");
+    const iEvents = src.indexOf("await appendResearchEvents(");
+    const iUpsert = src.indexOf("await upsertFlightNotifications(rows)");
+    const iAck = src.indexOf("res.status(200).json({");
+    for (const [name, idx] of [["persistRawDelivery", iRaw], ["persistRawDeliveryItems", iItems], ["appendResearchEvents", iEvents], ["upsertFlightNotifications", iUpsert], ["2xx ack", iAck]] as const) {
+      expect(idx, `${name} must exist in routes_v3.ts`).toBeGreaterThan(-1);
+    }
+    // Required architecture order: raw envelope → raw items → events → convenience upsert → 2xx.
+    expect(iRaw).toBeLessThan(iItems);
+    expect(iItems).toBeLessThan(iEvents);
+    expect(iEvents).toBeLessThan(iUpsert);
+    expect(iUpsert).toBeLessThan(iAck);
+  });
+
+  it("raw DB failure path returns 5xx (not silent 2xx)", async () => {
+    const { readFileSync } = await import("fs");
+    const { join } = await import("path");
+    const src = readFileSync(join(process.cwd(), "server/routes_v3.ts"), "utf8");
+    expect(src).toContain('res.status(500).json({ error: "Raw persistence failed; please retry" })');
+    expect(src).toContain('res.status(500).json({ error: "Raw item persistence failed; please retry" })');
+  });
+});

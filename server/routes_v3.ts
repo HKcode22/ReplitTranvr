@@ -202,8 +202,12 @@ export function registerV3Routes(app: Express): void {
             }),
           );
         } catch (itemErr: any) {
-          // Item persistence is best-effort; envelope is already durably stored so we continue.
-          console.warn("[adb-v3-webhook] raw_delivery_item persistence failed:", itemErr?.message || itemErr);
+          // §1.5.2 / ChatGPT P0-4: item provenance is part of the durable raw
+          // transaction — NOT best-effort. A failed item commit returns 5xx so
+          // the provider retries; the envelope alone is not sufficient ack.
+          console.error("[adb-v3-webhook] raw_delivery_item persistence failed — returning 5xx:", itemErr?.message || itemErr);
+          res.status(500).json({ error: "Raw item persistence failed; please retry" });
+          return;
         }
       } catch (rawErr: any) {
         console.error("[adb-v3-webhook] raw delivery persistence failed — returning 5xx:", rawErr?.message || rawErr);
@@ -260,8 +264,15 @@ export function registerV3Routes(app: Express): void {
                     operatingFlightNumber: r.flightNumber,
                     origin: r.depAirportIcao ?? "",
                     destinationOriginal: r.arrAirportIcao ?? "",
-                    // Service-date approximation: UTC slice (the extractor row
-                    // carries no airport timezone; canonical path uses local).
+                    // Service date here uses the UTC slice because the extractor
+                    // row carries no airport timezone (no ICAO→IANA map exists yet;
+                    // that reference data belongs to Phase-2 frame work, and Gate-0.5
+                    // verifies edge/timezone behavior). This is SAFE for event-key
+                    // purposes by construction: a UTC-midnight straddle can only
+                    // SPLIT observations into distinct keys, never wrongly MERGE
+                    // distinct flights. Canonical perfection (origin-local
+                    // initial_service_date) lives in the identity module + FIDS
+                    // path where timezones are available (§1.5.4).
                     scheduledGateOutUtc: r.depScheduledUtc ? r.depScheduledUtc.toISOString() : "",
                     serviceDate: r.depScheduledUtc
                       ? r.depScheduledUtc.toISOString().slice(0, 10)
@@ -302,11 +313,18 @@ export function registerV3Routes(app: Express): void {
             locTrueTrackDeg: r.locTrueTrackDeg,
             locVsiFpm: r.locVsiFpm,
             locReportedUtc: r.locReportedUtc,
+            // §1.5.4 / ChatGPT P0-4: the eight OOOI aliases stay NULL unless
+            // Gate 0.5 verifies their provider-native semantics. Revised and
+            // runway times are NEVER copied into alias columns merely to fill
+            // them (revised ≠ scheduled, runway actuality unverified).
+            // scheduledGateOut/scheduledGateIn keep the provider's scheduled
+            // times (correct semantic class; gate-vs-runway sub-semantics
+            // pending Gate 0.5, tracked by milestone_unverified=true default).
             scheduledGateOut: r.depScheduledUtc,
             actualGateOut: null,
-            scheduledWheelsOff: r.depRevisedUtc,
-            actualWheelsOff: r.depRunwayUtc,
-            scheduledWheelsOn: r.arrRunwayUtc,
+            scheduledWheelsOff: null,
+            actualWheelsOff: null,
+            scheduledWheelsOn: null,
             actualWheelsOn: null,
             scheduledGateIn: r.arrScheduledUtc,
             actualGateIn: null,

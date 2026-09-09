@@ -347,3 +347,36 @@ describe("TEST-008: Canonical flight instance identity", () => {
     });
   });
 });
+
+describe("Phase 0D: route/tail identity contract (§1.5.4 items 13–15)", () => {
+  it("tail fallback chain: reg > modeS > icao24 > verified provider id", async () => {
+    const { resolveTailIdentity } = await import("../server/lib/disruption/flightInstanceCanonical_v3");
+    expect(resolveTailIdentity({ aircraftReg: "N123UA" })).toMatchObject({ tailKey: "N123UA", tailKnown: true, tailSource: "aircraft_reg" });
+    expect(resolveTailIdentity({ aircraftModeS: "a1b2c3" })).toMatchObject({ tailKey: "A1B2C3", tailKnown: false, tailSource: "mode_s" });
+    expect(resolveTailIdentity({ icao24: "abc123" })).toMatchObject({ tailSource: "icao24", tailKnown: false });
+    expect(resolveTailIdentity({ providerAircraftId: "p1", providerAircraftIdVerified: true }).tailSource).toBe("provider_aircraft_id");
+    // Unverified provider id never counts.
+    expect(resolveTailIdentity({ providerAircraftId: "p1" })).toMatchObject({ tailKey: null, tailKnown: false, tailSource: "unknown" });
+    expect(resolveTailIdentity({})).toMatchObject({ tailKey: null, tailKnown: false });
+  });
+
+  it("diversion flag + separate destinations; midnight crossing recorded", async () => {
+    const { resolveRouteIdentity } = await import("../server/lib/disruption/flightInstanceCanonical_v3");
+    const normal = resolveRouteIdentity({
+      originIcao: "KLAX", originalScheduledDestinationIcao: "KSFO",
+      actualDestinationIcao: "KSFO",
+      scheduledGateOutUtc: "2026-09-01T10:00:00Z", actualWheelsOnUtc: "2026-09-01T11:15:00Z",
+    });
+    expect(normal.diversionFlag).toBe(false);
+    expect(normal.midnightCrossing).toBe(false);
+    const diverted = resolveRouteIdentity({
+      originIcao: "KLAX", originalScheduledDestinationIcao: "KSFO",
+      currentOperationalDestinationIcao: "KOAK", actualDestinationIcao: "KOAK",
+      scheduledGateOutUtc: "2026-09-01T23:30:00Z", actualWheelsOnUtc: "2026-09-02T01:00:00Z",
+    });
+    expect(diverted.diversionFlag).toBe(true);
+    expect(diverted.currentOperationalDestinationIcao).toBe("KOAK");
+    expect(diverted.originalScheduledDestinationIcao).toBe("KSFO");
+    expect(diverted.midnightCrossing).toBe(true);
+  });
+});

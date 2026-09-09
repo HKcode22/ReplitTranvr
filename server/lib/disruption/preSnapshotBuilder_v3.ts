@@ -163,3 +163,47 @@ export function buildPreSnapshot(input: PrePopulationInput): PreSnapshotOutcome 
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Persistence (§1.5.6): append PRE rows to clean.flight_snapshots.
+// ON CONFLICT (flight_instance_id, horizon, prediction_cutoff_utc) DO NOTHING:
+// repeated builds never overwrite. Returns inserted count. Never throws.
+// ---------------------------------------------------------------------------
+
+export async function persistPreSnapshot(
+  pool: { query: (text: string, params: unknown[]) => Promise<{ rowCount: number | null }> },
+  snapshot: PreSnapshot,
+): Promise<number> {
+  try {
+    const res = await pool.query(
+      `INSERT INTO clean.flight_snapshots
+         (flight_instance_id, prediction_state, horizon, prediction_cutoff_utc,
+          selected_t_milestone_utc, selected_t_version, population_query_id,
+          fids_response_hash, schedule_version, frame_hash, config_hash,
+          features_json, missingness_flags, builder_version, provenance_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14,$15::jsonb)
+       ON CONFLICT (flight_instance_id, horizon, prediction_cutoff_utc) DO NOTHING`,
+      [
+        snapshot.flightInstanceId,
+        snapshot.predictionState,
+        snapshot.horizon,
+        snapshot.predictionCutoffUtc,
+        snapshot.selectedTMilestoneUtc,
+        snapshot.selectedTVersion,
+        snapshot.populationQueryId,
+        snapshot.provenance.fidsResponseHash,
+        snapshot.provenance.scheduleVersion,
+        snapshot.provenance.frameHash,
+        snapshot.provenance.configHash,
+        JSON.stringify(snapshot.features.map((f) => ({ name: f.featureName, value: f.value }))),
+        JSON.stringify(snapshot.provenance.missingnessFlags),
+        snapshot.provenance.builderVersion,
+        JSON.stringify(snapshot.provenance),
+      ],
+    );
+    return res.rowCount ?? 0;
+  } catch (err: any) {
+    console.error(`[pre-snapshot] persist failed (${snapshot.flightInstanceId}/${snapshot.horizon}):`, err?.message || err);
+    return 0;
+  }
+}

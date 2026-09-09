@@ -170,3 +170,60 @@ export function targetFlagsFromStatuses(statuses: Record<TerminalTarget, TargetL
     gateInLabelObserved: statuses.gate_in === "observed",
   };
 }
+
+// ---------------------------------------------------------------------------
+// Persistence (§1.5.8): append outcome rows to clean.flight_outcomes.
+// ON CONFLICT (flight_instance_id, target) DO UPDATE the label (outcomes
+// evolve pending→observed/missing as evidence arrives; history of the change
+// lives in evidence_json + updated_at). Returns 1 on insert/update, 0 on error.
+// ---------------------------------------------------------------------------
+
+export interface OutcomePersistRow {
+  flightInstanceId: string;
+  operationalState: FlightOperationalState;
+  target: TerminalTarget;
+  labelStatus: TargetLabelStatus;
+  referenceArrivalUtc: Date | null;
+  recoveryDeadlineUtc: Date | null;
+  opportunitiesUsed: number;
+  evidenceJson: unknown;
+}
+
+export async function persistOutcome(
+  pool: { query: (text: string, params: unknown[]) => Promise<{ rowCount: number | null }> },
+  row: OutcomePersistRow,
+): Promise<number> {
+  try {
+    const res = await pool.query(
+      `INSERT INTO clean.flight_outcomes
+         (flight_instance_id, flight_operational_state, target, label_status,
+          reference_arrival_utc, recovery_deadline_utc, opportunities_used,
+          evidence_json, terminalizer_version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)
+       ON CONFLICT (flight_instance_id, target) DO UPDATE SET
+         flight_operational_state = EXCLUDED.flight_operational_state,
+         label_status = EXCLUDED.label_status,
+         reference_arrival_utc = EXCLUDED.reference_arrival_utc,
+         recovery_deadline_utc = EXCLUDED.recovery_deadline_utc,
+         opportunities_used = EXCLUDED.opportunities_used,
+         evidence_json = EXCLUDED.evidence_json,
+         terminalizer_version = EXCLUDED.terminalizer_version,
+         updated_at = now()`,
+      [
+        row.flightInstanceId,
+        row.operationalState,
+        row.target,
+        row.labelStatus,
+        row.referenceArrivalUtc,
+        row.recoveryDeadlineUtc,
+        row.opportunitiesUsed,
+        JSON.stringify(row.evidenceJson ?? null),
+        OUTCOME_TERMINALIZER_VERSION,
+      ],
+    );
+    return res.rowCount ?? 0;
+  } catch (err: any) {
+    console.error(`[outcome] persist failed (${row.flightInstanceId}/${row.target}):`, err?.message || err);
+    return 0;
+  }
+}

@@ -24,6 +24,7 @@
 
 import { randomInt } from "crypto";
 import { pool } from "../../db";
+import { reconcileSpend } from "./settlement_v3";
 import {
   getBalance,
   createSubscription,
@@ -159,6 +160,28 @@ export const COLLECTOR_CONFIG = {
   /** optional Slack incoming-webhook URL — POSTs a message on problems */
   alertWebhookUrl: process.env.ADB_ALERT_WEBHOOK_URL || null,
 } as const;
+
+/**
+ * PHASE6 readiness gate (§1.5.1 item 2 / ChatGPT P0-3).
+ * Batch starts (and therefore subscription creation) are refused unless the
+ * separately authorized Phase-6 transition has set PHASE6_READY=true.
+ * Missing/empty/false → refused. This is independent of ADB_AUTO_COLLECT.
+ */
+export function isPhase6Ready(): boolean {
+  const raw = process.env.PHASE6_READY;
+  if (raw === undefined || raw === "") return false;
+  const lower = String(raw).toLowerCase().trim();
+  return lower === "1" || lower === "true" || lower === "on" || lower === "yes";
+}
+
+/**
+ * Budget-day identity (§1.5.11 / ChatGPT P0-3): the immutable owning
+ * parent batch-day is run_day_index, NOT a UTC calendar date. A batch that
+ * starts at 23:30 UTC keeps its own budget day after midnight.
+ */
+export function budgetDayIdForBatch(batchSeq: number): string {
+  return `run_day_${batchSeq}`;
+}
 
 export interface CollectionBatch {
   batchId: string;
@@ -306,38 +329,14 @@ async function readRunTemplate(): Promise<{ crossover: RunTemplateEntry[] } | nu
 // ---------------------------------------------------------------------------
 
 export async function writeManifest(): Promise<void> {
-  const manifest = {
-    written_at_utc: new Date().toISOString(),
-    frame_version: "V3.9-f.6",
-    config: {
-      window_hours: COLLECTOR_CONFIG.windowHours,
-      batch_budget: COLLECTOR_CONFIG.batchBudget,
-      daily_credit_cap: COLLECTOR_CONFIG.dailyCreditCap,
-      soft_stop_margin: COLLECTOR_CONFIG.softStopMargin,
-      reserve_credits: COLLECTOR_CONFIG.reserveCredits,
-      min_batch_credits: COLLECTOR_CONFIG.minBatchCredits,
-      reconcile_tolerance: COLLECTOR_CONFIG.reconcileTolerance,
-      tier_mix: COLLECTOR_CONFIG.tierMix,
-      anchor_enabled: COLLECTOR_CONFIG.anchorEnabled,
-      anchor_pool: COLLECTOR_CONFIG.anchorPool,
-      utc_start_cycle: COLLECTOR_CONFIG.utcStartCycle,
-      // V3.9-f.6 (§3.2): spendable envelope 57,900 = 58,900 refill − 1,000 floor
-      spendable_experimental_envelope: 57_900,
-      max_delivery_retries: 0,
-    },
-    scheduler: {
-      batch_seq: (await readMeta("batch_seq")) ?? "0",
-      last_anchor: (await readMeta("last_anchor")) ?? null,
-      crossover_block_done: (await readMeta("crossover_block_done")) ?? null,
-      run_template: (await readMeta("run_template")) ?? null,
-    },
-    account: {
-      plan: process.env.ADB_PLAN ?? "VERIFY_AT_GATE_0",
-      monthly_units: process.env.ADB_MONTHLY_UNITS ?? "VERIFY_AT_GATE_0",
-      refill_conversion: "1 API unit = 1 credit",
-    },
-  };
-  await writeMeta("manifest", JSON.stringify(manifest, null, 2));
+  // DISABLED per ChatGPT P0-5 / §1.5.13: this legacy writer stamps
+  // frame_version "V3.9-f.6", which conflicts with the canonical f.8
+  // manifest owner (manifest_v3.ts + checkManifestCompleteness()).
+  // Kept as a named function so existing imports fail LOUDLY instead of
+  // silently writing stale runtime authority.
+  throw new Error(
+    "REFUSED: legacy f.6 writeManifest() is disabled — use manifest_v3.ts (f.8) + checkManifestCompleteness().",
+  );
 }
 
 export async function readManifest(): Promise<Record<string, unknown> | null> {
@@ -668,6 +667,13 @@ export async function startBatch(): Promise<StartBatchResult> {
 }
 
 async function startBatchInner(): Promise<StartBatchResult> {
+  // §1.5.1 item 2: no batch (and therefore no subscription creation) without
+  // the separately authorized Phase-6 transition.
+  if (!isPhase6Ready()) {
+    throw new Error(
+      "REFUSED: PHASE6_READY is not true — batch starts require the separately authorized Phase-6 transition (no paid collection outside Phase 6).",
+    );
+  }
   const balance = await getBalance();
   if (!balance) {
     throw new Error("No alert-credit balance yet — refill first (POST /api/v1/subscriptions/balance/refill).");
@@ -849,9 +855,9 @@ async function startBatchInner(): Promise<StartBatchResult> {
 
   await writeMeta("batch_seq", String(seq));
 
-  // V3.9 R7 (§15, §17 Phase 5): stamp the versioned manifest so the run is
-  // reproducible and `npm run health` can show it.
-  await writeManifest();
+  // V3.9 R7: the legacy f.6 writeManifest() call is removed (see writeManifest —
+  // it now refuses). Canonical manifest writes go through manifest_v3.ts, which
+  // derives every entry from current evidence/hashes and refuses incompleteness.
 
   const batch = (await getActiveBatch())!;
   return { batch, created, skipped };
@@ -902,14 +908,19 @@ export async function stopBatch(reason: string): Promise<CollectionBatch | null>
     balanceBefore !== null && balanceAfter?.creditsRemaining != null
       ? balanceBefore - balanceAfter.creditsRemaining
       : null;
-  const mismatch =
-    actual !== null && internal !== null ? Math.abs(actual - internal) > COLLECTOR_CONFIG.reconcileTolerance : false;
+  // §1.5.11 / ChatGPT P0-3: shared exact reconciliation (tol=0). A nonzero
+  // discrepancy is MISMATCH until a measured/frozen PRODUCTION_RECONCILE_TOLERANCE
+  // exists. The legacy configurable tolerate-3 path is retired as authoritative closure.
+  const rec = actual !== null && internal !== null
+    ? reconcileSpend({ cExternal: actual, cInternal: internal, tolerance: 0 })
+    : { match: false, discrepancy: NaN };
+  const mismatch = actual === null || !rec.match;
   const reconcileStatus =
     actual === null ? null : mismatch ? "MISMATCH" : "PASS";
   if (mismatch) {
     console.error(
       `[adb-collector] ⚠ RECONCILE MISMATCH batch=${active.batchId} ` +
-        `C_external=${actual} C_internal=${internal} tolerance=${COLLECTOR_CONFIG.reconcileTolerance} ` +
+        `C_external=${actual} C_internal=${internal} tolerance=0 (exact) ` +
         `(stored=${agg.stored} inserted=${agg.inserted} updated=${agg.updated} failures=${agg.failures})`,
     );
   } else {

@@ -38,6 +38,7 @@ const STEPS: Step[] = [
   { name: "registry:check", cmd: "npm run v39:registry:check" },
   { name: "traceability:check", cmd: "npm run v39:traceability:check" },
   { name: "scanner", cmd: "npm run v39:scanner" },
+  { name: "security:verify", cmd: "npm run v39:security:verify" },
 ];
 
 function run(cmd: string): boolean {
