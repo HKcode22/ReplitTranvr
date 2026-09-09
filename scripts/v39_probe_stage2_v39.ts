@@ -1,15 +1,8 @@
-/**
- * v39 paid wrapper — AUTH-guarded delegate (§1.5.15 / ChatGPT P0-1).
- * Verifies exact AUTH and refuses before the legacy script can SEND/request.
- * Only after a verified AUTH record exists does it exec the underlying script.
- * Until then: REFUSE (exit 2). Never bypasses the guard.
- */
-import { spawnSync } from "child_process";
-import { enforcePaidGuard } from "./v39_paid_guard_v39";
-
-const COMMAND = "v39:probe:stage2";
-enforcePaidGuard(COMMAND, "Phase 2 / Gate 2 Stage 2");
-// If the guard ever passes (verified AUTH on file), delegate with forwarded args:
-const extra = process.argv.slice(2).filter((a, i, all) => !["--auth", "--auth-file", "--evidence-id"].includes(a) && !["--auth", "--auth-file", "--evidence-id"].includes(all[i - 1]));
-const r = spawnSync("npx", ["tsx", "scripts/anchor_probe.ts", "--stage", "2", ...extra], { stdio: "inherit" });
-process.exit(r.status ?? 1);
+/** V3.9 paid wrapper: exact AUTH before Stage-2 owner spawn. */
+import { runAuthorizedOwner } from "./v39_wrapper_runtime_v39";
+const code=runAuthorizedOwner(
+  "v39:probe:stage2",
+  "Phase 2 / Gate 2 Stage 2",
+  "scripts/v39_probe_stage2_owner_v39.ts",
+);
+process.exitCode=code;
