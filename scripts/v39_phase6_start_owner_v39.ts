@@ -3,11 +3,13 @@ import { execFileSync } from "child_process";
 import { readFileSync } from "fs";
 import { pool } from "../server/db";
 import { startBatch } from "../server/lib/disruption/adbCollectionController_v3";
+import { listSubscriptionsStrict } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import { resolveOwnerAuthorization } from "./v39_paid_guard_v39";
 
 const PHASE6_SCOPE = "Phase 6 (separate authorization)";
 const REQUIRED_SCHEMA_VERSION = "0047";
 const MAX_PHASE6_ALERT_CEILING = 57_900;
+const PROVIDER_MUTATION_LOCK = "v39-phase6-provider-mutation";
 
 function currentGitSha(): string {
   try {
@@ -27,8 +29,15 @@ function integer(value: unknown, label: string, min: number, max = Number.MAX_SA
   return n;
 }
 
+async function assertR1Strict(): Promise<void> {
+  const subscriptions = await listSubscriptionsStrict();
+  const foreign = subscriptions.filter((s) => s.isActive && s.billingType !== "LifetimeBased");
+  if (foreign.length) {
+    throw new Error(`REFUSED_R1: ${foreign.length} active billable subscription(s) exist before Phase-6 start: ${foreign.map((s) => s.id).join(",")}`);
+  }
+}
+
 export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise<number> {
-  // Owner-level AUTH verification is first. No DB/provider mutation precedes it.
   const commandAuth = resolveOwnerAuthorization(PHASE6_SCOPE, argv);
 
   const hashIndex = argv.indexOf("--manifest-sha256");
@@ -55,9 +64,7 @@ export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise
   );
   if (auth.rowCount !== 1) throw new Error("REFUSED_PHASE6_AUTH: persistent singleton authorization is missing");
   const row = auth.rows[0];
-  if (row.enabled !== true || row.revoked_at_utc !== null) {
-    throw new Error("REFUSED_PHASE6_AUTH: persistent authorization is disabled/revoked");
-  }
+  if (row.enabled !== true || row.revoked_at_utc !== null) throw new Error("REFUSED_PHASE6_AUTH: persistent authorization is disabled/revoked");
   if (String(row.authorization_id) !== commandAuth.authId) {
     throw new Error(`REFUSED_PHASE6_AUTH_ID: command AUTH ${commandAuth.authId} != persistent ${row.authorization_id}`);
   }
@@ -66,12 +73,8 @@ export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise
   }
 
   const gitSha = currentGitSha();
-  if (String(row.code_sha).toLowerCase() !== gitSha) {
-    throw new Error(`REFUSED_CODE_SHA: authorized=${row.code_sha} running=${gitSha}`);
-  }
-  if (String(row.schema_version) !== REQUIRED_SCHEMA_VERSION) {
-    throw new Error(`REFUSED_SCHEMA_VERSION: authorized=${row.schema_version} required=${REQUIRED_SCHEMA_VERSION}`);
-  }
+  if (String(row.code_sha).toLowerCase() !== gitSha) throw new Error(`REFUSED_CODE_SHA: authorized=${row.code_sha} running=${gitSha}`);
+  if (String(row.schema_version) !== REQUIRED_SCHEMA_VERSION) throw new Error(`REFUSED_SCHEMA_VERSION: authorized=${row.schema_version} required=${REQUIRED_SCHEMA_VERSION}`);
 
   const dailyCap = integer(row.alert_cap_per_parent_day, "alert_cap_per_parent_day", 1, 1900);
   const runCap = integer(row.phase6_alert_spend_ceiling, "phase6_alert_spend_ceiling", 1, MAX_PHASE6_ALERT_CEILING);
@@ -80,25 +83,14 @@ export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise
   const unsettled = integer(row.unsettled_burst_margin_credits, "unsettled_burst_margin_credits", 0);
   const protectedFloor = integer(row.protected_alert_floor, "protected_alert_floor", 1000);
   const watchdogPollMs = integer(row.safety_watchdog_poll_ms, "safety_watchdog_poll_ms", 250, 60_000);
-  const settleInitial = integer(row.settlement_initial_wait_seconds, "settlement_initial_wait_seconds", 0);
-  const settlePoll = integer(row.settlement_poll_interval_seconds, "settlement_poll_interval_seconds", 1);
-  const settleReads = integer(row.settlement_stable_read_count, "settlement_stable_read_count", 3);
-  const settleTimeout = integer(row.settlement_timeout_seconds, "settlement_timeout_seconds", 1);
+  integer(row.settlement_initial_wait_seconds, "settlement_initial_wait_seconds", 0);
+  integer(row.settlement_poll_interval_seconds, "settlement_poll_interval_seconds", 1);
+  integer(row.settlement_stable_read_count, "settlement_stable_read_count", 3);
+  integer(row.settlement_timeout_seconds, "settlement_timeout_seconds", 1);
 
   if (dailyCap !== 1900) throw new Error(`REFUSED_PHASE6_DAILY_CAP: authorized=${dailyCap} required=1900`);
-  if (softMargin < unsettled) {
-    throw new Error(`REFUSED_PHASE6_MARGIN_ORDER: soft=${softMargin} unsettled=${unsettled}`);
-  }
-  if (runCap > MAX_PHASE6_ALERT_CEILING || protectedFloor < 1000) {
-    throw new Error("REFUSED_PHASE6_BUDGET_TREE: frozen Alert ceilings/floor are invalid");
-  }
-  // Keep the variables explicit in the evidence boundary; zero tolerance is
-  // valid until/unless Gate evidence freezes a measured production tolerance.
-  void reconcileTolerance;
-  void settleInitial;
-  void settlePoll;
-  void settleReads;
-  void settleTimeout;
+  if (softMargin < unsettled) throw new Error(`REFUSED_PHASE6_MARGIN_ORDER: soft=${softMargin} unsettled=${unsettled}`);
+  if (runCap > MAX_PHASE6_ALERT_CEILING || protectedFloor < 1000) throw new Error("REFUSED_PHASE6_BUDGET_TREE: frozen Alert ceilings/floor are invalid");
 
   const schema = await pool.query(
     `SELECT
@@ -111,15 +103,10 @@ export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise
        to_regclass('clean.adb_budget_day_adjustment') AS budget_adjustment`,
   );
   const s = schema.rows[0] ?? {};
-  if (!s.calendar || !s.sampling_state || !s.admission || !s.identity_resolution ||
-      !s.safety_heartbeat || !s.settlement_evidence || !s.budget_adjustment) {
+  if (!s.calendar || !s.sampling_state || !s.admission || !s.identity_resolution || !s.safety_heartbeat || !s.settlement_evidence || !s.budget_adjustment) {
     throw new Error("REFUSED_SCHEMA_INCOMPLETE: required Phase-6/identity/safety tables are missing");
   }
 
-  // A short-lived CLI must never create paid subscriptions unless the
-  // long-lived server running the exact authorized code/config already has the
-  // frozen SEND-aware watchdog alive. The heartbeat is produced only by that
-  // owner after it validates the persistent authorization and running git SHA.
   const heartbeat = await pool.query(
     `SELECT authorization_id,code_sha,config_hash,watchdog_poll_ms,updated_at_utc,
             extract(epoch FROM (clock_timestamp()-updated_at_utc))*1000 AS age_ms
@@ -135,40 +122,53 @@ export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise
     String(hb.config_hash).toLowerCase() !== String(row.config_hash).toLowerCase() ||
     Number(hb.watchdog_poll_ms) !== watchdogPollMs ||
     !Number.isFinite(ageMs) || ageMs < 0 || ageMs > maxHeartbeatAgeMs
-  ) {
-    throw new Error(`REFUSED_SAFETY_WATCHDOG: heartbeat mismatch/stale age_ms=${ageMs} max=${maxHeartbeatAgeMs}`);
-  }
+  ) throw new Error(`REFUSED_SAFETY_WATCHDOG: heartbeat mismatch/stale age_ms=${ageMs} max=${maxHeartbeatAgeMs}`);
 
-  const result = await startBatch();
-  console.log(JSON.stringify({
-    schema: "v39.phase6-start-evidence.v3",
-    status: "PASS",
-    authorizationId: commandAuth.authId,
-    manifestSha256: actualHash,
-    codeSha: gitSha,
-    schemaVersion: REQUIRED_SCHEMA_VERSION,
-    calendarHash: String(row.calendar_hash),
-    configHash: String(row.config_hash),
-    dailyHardCap: dailyCap,
-    phase6AlertSpendCeiling: runCap,
-    dailySoftStopMarginCredits: softMargin,
-    unsettledBurstMarginCredits: unsettled,
-    productionReconcileToleranceCredits: reconcileTolerance,
-    safetyWatchdogPollMs: watchdogPollMs,
-    safetyHeartbeatAgeMs: ageMs,
-    batchId: result.batch.batchId,
-    effectiveBatchCreditBudget: result.batch.creditBudget,
-    created: result.created.length,
-    skipped: result.skipped.length,
-  }));
-  return 0;
+  // R1 is a live pre-mutation prerequisite. Unknown list state throws; an
+  // empty array is accepted only after a successful, schema-valid provider read.
+  await assertR1Strict();
+
+  // Serialize the entire initial four-subscription mutation window against the
+  // long-lived safety owner. The lock is session-scoped and auto-releases if
+  // this CLI process/DB session dies unexpectedly.
+  const lockClient = await pool.connect();
+  let locked = false;
+  try {
+    await lockClient.query(`SELECT pg_advisory_lock(hashtext($1))`, [PROVIDER_MUTATION_LOCK]);
+    locked = true;
+    const result = await startBatch();
+    console.log(JSON.stringify({
+      schema: "v39.phase6-start-evidence.v4",
+      status: "PASS",
+      authorizationId: commandAuth.authId,
+      manifestSha256: actualHash,
+      codeSha: gitSha,
+      schemaVersion: REQUIRED_SCHEMA_VERSION,
+      calendarHash: String(row.calendar_hash),
+      configHash: String(row.config_hash),
+      dailyHardCap: dailyCap,
+      phase6AlertSpendCeiling: runCap,
+      dailySoftStopMarginCredits: softMargin,
+      unsettledBurstMarginCredits: unsettled,
+      productionReconcileToleranceCredits: reconcileTolerance,
+      safetyWatchdogPollMs: watchdogPollMs,
+      safetyHeartbeatAgeMs: ageMs,
+      r1ActiveBillableBeforeStart: 0,
+      batchId: result.batch.batchId,
+      effectiveBatchCreditBudget: result.batch.creditBudget,
+      created: result.created.length,
+      skipped: result.skipped.length,
+    }));
+    return 0;
+  } finally {
+    if (locked) await lockClient.query(`SELECT pg_advisory_unlock(hashtext($1))`, [PROVIDER_MUTATION_LOCK]).catch(() => undefined);
+    lockClient.release();
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   runPhase6StartOwner().then((code) => { process.exitCode = code; }).catch((error: any) => {
-    console.error(JSON.stringify({ schema: "v39.phase6-start-evidence.v3", status: "FAIL", error: error?.message ?? String(error) }));
+    console.error(JSON.stringify({ schema: "v39.phase6-start-evidence.v4", status: "FAIL", error: error?.message ?? String(error) }));
     process.exitCode = 1;
-  }).finally(async () => {
-    await pool.end().catch(() => undefined);
-  });
+  }).finally(async () => { await pool.end().catch(() => undefined); });
 }
