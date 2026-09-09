@@ -3,6 +3,6 @@
  * Prints the resolved plan, verifies exact AUTH, refuses before SEND/request
  * on any mismatch. Shared guard owner: v39_paid_guard_v39.ts.
  */
-import { enforcePaidGuard } from "./v39_paid_guard_v39";
+import { runAuthorizedOwner } from "./v39_wrapper_runtime_v39";
 
-enforcePaidGuard("v39", "phase6:start:Phase 6 (separate authorization)");
+process.exitCode = runAuthorizedOwner("v39:phase6:start", "Phase 6 (separate authorization)", "scripts/v39_phase6_start_owner_v39.ts");

@@ -207,3 +207,119 @@ export async function persistPreSnapshot(
     return 0;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Production materializer (§1.5.6 / ChatGPT round-2 item 9): population → PRE.
+// Reads the immutable flight_population rows for one prediction cutoff and
+// appends one PRE snapshot per (flight, eligible horizon). This is the
+// production owner that completes the chain
+//   FIDS → query/response provenance → flight_population → PRE snapshots.
+// Invocation point is Phase-6 collection (cutoff horizons fire during the
+// run, per Plan §15 S3); Phase 0 delivers the owner + tests, never a live run.
+//
+// Mapping honesty rules:
+// - Only requested_airport_primary rows (departures) materialize; opposite-
+//   movement context rows are tallied blocked, never snapshotted as PRE.
+// - Horizon eligibility: (dep_scheduled_utc − cutoff) ≥ horizon offset.
+// - T milestone = provider-native dep_scheduled_utc (correct semantic class;
+//   Gate 0.5 verifies milestone semantics). NULL schedule → BLOCKED.
+// - Features: none attached in Phase 0 (history/weather providers run in
+//   Phase 6 with information_available_at ≤ cutoff). Snapshots record
+//   existence + provenance; feature completeness is NOT a prerequisite.
+// - Caller contract: compare inserted vs built; a shortfall outside known
+//   idempotent re-runs must pause downstream (fail-closed at the caller).
+// ---------------------------------------------------------------------------
+
+export const PRE_HORIZON_OFFSET_MIN: Record<PreHorizon, number> = {
+  "T-24h": 24 * 60,
+  "T-6h": 6 * 60,
+  "T-90m": 90,
+};
+
+export interface PreMaterializeInput {
+  cutoffUtc: Date;
+  batchId: string | null;
+  horizons?: readonly PreHorizon[];
+  frameHash: string | null;
+  configHash: string | null;
+}
+
+export interface PreMaterializeResult {
+  cutoffUtc: string;
+  populationRows: number;
+  built: number;
+  blocked: Record<string, number>;
+  inserted: number;
+}
+
+type QueryPool = {
+  query: (text: string, params: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }>;
+};
+
+export function horizonEligibleForCutoff(
+  depScheduledUtc: Date | null,
+  cutoffUtc: Date,
+  horizon: PreHorizon,
+): boolean {
+  if (!depScheduledUtc || !Number.isFinite(depScheduledUtc.getTime())) return false;
+  return depScheduledUtc.getTime() - cutoffUtc.getTime() >= PRE_HORIZON_OFFSET_MIN[horizon] * 60_000;
+}
+
+export async function materializePreSnapshotsForCutoff(
+  pool: QueryPool,
+  input: PreMaterializeInput,
+): Promise<PreMaterializeResult> {
+  const horizons = input.horizons ?? PRE_HORIZONS;
+  // SELECT failure throws (fail-closed): no partial materialization silently.
+  const res = await pool.query(
+    `SELECT analytic_identity_id, dep_scheduled_utc, population_query_id,
+            response_hash, population_role, scope_classification
+       FROM clean.flight_population
+      WHERE cutoff_utc = $1 AND source_type = 'fids'`,
+    [input.cutoffUtc],
+  );
+  const blocked: Record<string, number> = {};
+  const tally = (reason: string): void => {
+    blocked[reason] = (blocked[reason] ?? 0) + 1;
+  };
+  let built = 0;
+  let inserted = 0;
+  for (const row of res.rows) {
+    if (row.population_role !== "requested_airport_primary") {
+      tally("not_primary_role");
+      continue;
+    }
+    const depScheduled: Date | null = row.dep_scheduled_utc ? new Date(row.dep_scheduled_utc) : null;
+    for (const horizon of horizons) {
+      const outcome = buildPreSnapshot({
+        flightInstanceId: String(row.analytic_identity_id),
+        populationQueryId: row.population_query_id ?? null,
+        populationMemberAtCutoff: true,
+        horizonEligible: horizonEligibleForCutoff(depScheduled, input.cutoffUtc, horizon),
+        horizon,
+        // Provider-native scheduled departure; NULL → builder BLOCKED (t_unavailable).
+        selectedTMilestoneUtc: depScheduled,
+        selectedTVersion: depScheduled ? "scheduled_gate_out:provider-native (milestone semantics pending Gate 0.5)" : null,
+        predictionCutoffUtc: input.cutoffUtc,
+        features: [],
+        frameHash: input.frameHash,
+        configHash: input.configHash,
+        fidsResponseHash: row.response_hash ?? null,
+        scheduleVersion: null,
+      });
+      if (outcome.status === "blocked") {
+        tally(outcome.reason);
+        continue;
+      }
+      built += 1;
+      inserted += await persistPreSnapshot(pool, outcome.snapshot);
+    }
+  }
+  return {
+    cutoffUtc: input.cutoffUtc.toISOString(),
+    populationRows: res.rows.length,
+    built,
+    blocked,
+    inserted,
+  };
+}

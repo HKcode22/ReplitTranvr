@@ -35,6 +35,7 @@ import {
   reconcileSpend,
   type SettlementConfig,
 } from "../server/lib/disruption/settlement_v3";
+import { resolveOwnerAuthorization } from "./v39_paid_guard_v39";
 
 const ICAO = (process.env.ADB_CANARY_ICAO || "KLAX").toUpperCase();
 const WAIT_MS = Number(process.env.ADB_CANARY_WAIT_MS || 120_000);
@@ -50,6 +51,18 @@ const GATE3_TOLERANCE = 0; // exact reconciliation — not configurable
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 async function main(): Promise<void> {
+  // Owner-level anti-bypass (ChatGPT round-3 item 5): the canary always
+  // mutates (subscription create/delete), so it refuses direct unmediated
+  // execution. Normal entry is the v39:gate3:canary wrapper (sets
+  // V39_VERIFIED_AUTH after exact AUTH); direct --auth/--auth-file also works.
+  try {
+    const authz = resolveOwnerAuthorization("Phase 3 / Gate 3");
+    console.log(`canary authorized: ${authz.mode} ${authz.authId}\n`);
+  } catch (err: any) {
+    console.error(err?.message ?? err);
+    await pool.end();
+    process.exit(2);
+  }
   console.log("V3.9 credit canary — Gate 3 official isolated run (maxDeliveryRetries=0, tol=0)\n");
 
   const b1 = await getBalance();

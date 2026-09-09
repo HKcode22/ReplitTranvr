@@ -10,6 +10,6 @@ import { enforcePaidGuard } from "./v39_paid_guard_v39";
 const COMMAND = "v39:probe:stage1";
 enforcePaidGuard(COMMAND, "Phase 2 / Gate 2 Stage 1");
 // If the guard ever passes (verified AUTH on file), delegate with forwarded args:
-const extra = process.argv.slice(2).filter((a) => a !== "--auth" && a !== "--evidence-id" && !a.startsWith("AUTH-") && !a.startsWith("GATE-") && !a.startsWith("RUN-"));
+const extra = process.argv.slice(2).filter((a, i, all) => !["--auth", "--auth-file", "--evidence-id"].includes(a) && !["--auth", "--auth-file", "--evidence-id"].includes(all[i - 1]));
 const r = spawnSync("npx", ["tsx", "scripts/anchor_probe.ts", "--stage", "1", ...extra], { stdio: "inherit" });
 process.exit(r.status ?? 1);

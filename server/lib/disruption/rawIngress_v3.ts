@@ -282,3 +282,102 @@ export async function updateRawDeliveryOutcome(
     console.error(`[raw-ingest] raw_delivery outcome update failed:`, err?.message || err);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Transactional raw persistence (§1.5.2 architecture / ChatGPT round-3 item 8).
+// Envelope + items commit in ONE database transaction: either both are durable
+// or neither is. Returns the commit timestamp so callers derive available_at
+// from actual durable persistence (never receivedAt alone, never null).
+// THROWS on any failure — the caller must refuse 2xx.
+// ---------------------------------------------------------------------------
+
+export interface RawCommitResult {
+  deliveryId: string;
+  rawBodySha256: string;
+  itemsPersisted: number;
+  /** Application timestamp sampled immediately after COMMIT succeeds. */
+  committedAtUtc: Date;
+}
+
+export async function persistRawDeliveryTransaction(
+  delivery: RawDeliveryInput,
+  items: Omit<RawDeliveryItemInput, "deliveryId">[],
+): Promise<RawCommitResult> {
+  const rawBodyJson = JSON.stringify(delivery.rawBody);
+  const rawBodySha256 = sha256(rawBodyJson);
+  const deliveryId = `del_${rawBodySha256.slice(0, 16)}_${delivery.receivedAtUtc.getTime()}`;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `INSERT INTO clean.raw_delivery
+         (delivery_id, subscription_id, batch_id,
+          http_method, http_path,
+          raw_body, raw_body_sha256,
+          provider_published_utc, received_at_utc,
+          adb_delivery_id, adb_cost_credits,
+          processing_outcome, notification_items)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, 'pending', $12)
+       ON CONFLICT (delivery_id) DO NOTHING`,
+      [
+        deliveryId,
+        delivery.subscriptionId,
+        delivery.batchId,
+        delivery.httpMethod,
+        delivery.httpPath,
+        rawBodyJson,
+        rawBodySha256,
+        delivery.providerPublishedUtc,
+        delivery.receivedAtUtc,
+        delivery.adbDeliveryId,
+        delivery.adbCostCredits,
+        items.length,
+      ],
+    );
+    for (const item of items) {
+      const rawItemJson = JSON.stringify(item.rawItem);
+      await client.query(
+        `INSERT INTO clean.raw_delivery_item
+           (delivery_id, item_index, flight_number, carrier_iata, carrier_icao,
+            status, status_code, raw_item, raw_item_sha256,
+            last_updated_utc, departure_scheduled_utc, arrival_scheduled_utc,
+            parsing_outcome, canonical_flight_instance_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13, $14)
+         ON CONFLICT (delivery_id, item_index) DO NOTHING`,
+        [
+          deliveryId,
+          item.itemIndex,
+          item.flightNumber,
+          item.carrierIata,
+          item.carrierIcao,
+          item.status,
+          item.statusCode,
+          rawItemJson,
+          sha256(rawItemJson),
+          item.lastUpdatedUtc,
+          item.departureScheduledUtc,
+          item.arrivalScheduledUtc,
+          item.parsingOutcome,
+          item.canonicalFlightInstanceId,
+        ],
+      );
+    }
+    await client.query("COMMIT");
+    // This is conservatively at or after durable commit. Do not issue another
+    // fallible DB query here: failure after COMMIT cannot be rolled back and
+    // must not cause the caller to return 5xx for data already acknowledged.
+    const committedAtUtc = new Date();
+    return { deliveryId, rawBodySha256, itemsPersisted: items.length, committedAtUtc };
+  } catch (err: any) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // rollback best-effort; original error is what matters
+    }
+    console.error(`[raw-ingest] TRANSACTIONAL persist failed — must return 5xx:`, err?.message || err);
+    throw new Error(`Raw delivery transaction failed: ${err?.message || err}`);
+  } finally {
+    client.release();
+  }
+}

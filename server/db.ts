@@ -4,12 +4,25 @@ import * as schema from "@shared/schema";
 import { readFile } from "fs/promises";
 import path from "path";
 
+// Phase-0 least-privilege separation (§1.5.15 / security machinery):
+// - `pool` (exported, used by ALL runtime code) prefers DATABASE_RUNTIME_URL,
+//   a dedicated non-owner role with only raw INSERT/SELECT, identity
+//   SELECT/INSERT, expiry DELETE and tombstone INSERT.
+// - Migrations require DDL, so applyBootMigrations() uses the owner
+//   DATABASE_URL on a separate pool. Never run migrations as runtime.
+const runtimeConnectionString = process.env.DATABASE_RUNTIME_URL || process.env.DATABASE_URL;
+const ownerConnectionString = process.env.DATABASE_URL || process.env.DATABASE_RUNTIME_URL;
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: runtimeConnectionString,
+});
+
+const migrationPool = new Pool({
+  connectionString: ownerConnectionString,
 });
 
 export const db = drizzle(pool, { schema });
-export { pool };
+export { pool, migrationPool };
 
 // Boot-time migration runner for additive, idempotent SQL migrations that
 // must always be present (e.g. the agency disruption system tables added
@@ -43,6 +56,11 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0024_historical_feature_store.sql",
   "0025_raw_ingress_immutable_layers.sql",
   "0026_snapshot_outcome_tables.sql",
+  "0027_probe_budget_day.sql",
+  "0028_frame_versioning.sql",
+  "0029_fids_population_production.sql",
+  "0030_webhook_canonical_identity.sql",
+  "0031_retention_tombstone.sql",
 ];
 
 let bootMigrationsApplied = false;
@@ -63,7 +81,7 @@ export async function applyBootMigrations(): Promise<void> {
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
       for (const block of blocks) {
-        await pool.query(block);
+        await migrationPool.query(block);
       }
       console.log(`[migrations] applied ${file}`);
     } catch (err: any) {

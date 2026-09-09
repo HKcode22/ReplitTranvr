@@ -17,6 +17,7 @@
  */
 
 import crypto from "crypto";
+import { pool } from "../../db";
 
 export interface CanonicalFlightInstanceInput {
   // from FIDS/webhook normalized fields
@@ -51,6 +52,39 @@ export interface CanonicalFlightInstance {
   initialServiceDate?: string;
 }
 
+export interface WebhookIdentityObservation {
+  operatingCarrier: string | null | undefined;
+  operatingFlightNumber: string | null | undefined;
+  originIcao: string | null | undefined;
+  originalDestinationIcao: string | null | undefined;
+  scheduledGateOutUtc: string | null | undefined;
+  originTimeZone: string | null | undefined;
+  scheduleVerified: boolean;
+  providerFlightId?: string | null;
+}
+
+export interface PersistedWebhookIdentity {
+  flightInstanceId: string;
+  initialServiceDate: string;
+}
+
+export interface WebhookIdentityPersistence {
+  resolveOrCreate(input: {
+    providerFlightId: string | null;
+    operatingCarrier: string;
+    operatingFlightNumber: string;
+    originIcao: string;
+    originalDestinationIcao: string;
+    initialServiceDate: string;
+    scheduledGateOutUtc: string;
+    flightInstanceId: string;
+  }): Promise<PersistedWebhookIdentity>;
+}
+
+export type WebhookIdentityResolution =
+  | ({ status: "resolved" } & PersistedWebhookIdentity)
+  | { status: "quarantined"; reason: string };
+
 export interface RetimeDetectionResult {
   isRetime: boolean;
   retimeMinutes: number | null;
@@ -68,6 +102,117 @@ export interface CodeshareState {
 
 function sha8(s: string): string {
   return crypto.createHash("sha256").update(s).digest("hex").slice(0, 8);
+}
+
+function normalizedRequired(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toUpperCase();
+  return normalized || null;
+}
+
+/** Derive YYYY-MM-DD at the origin. Invalid/non-IANA zones are refused. */
+export function originLocalServiceDate(scheduledUtc: string, timeZone: string): string | null {
+  const instant = new Date(scheduledUtc);
+  if (!Number.isFinite(instant.getTime()) || !timeZone.includes("/")) return null;
+  try {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const parts = Object.fromEntries(formatter.formatToParts(instant).map((part) => [part.type, part.value]));
+    return parts.year && parts.month && parts.day ? `${parts.year}-${parts.month}-${parts.day}` : null;
+  } catch {
+    return null;
+  }
+}
+
+const postgresWebhookIdentityPersistence: WebhookIdentityPersistence = {
+  async resolveOrCreate(input) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const alias = input.providerFlightId
+        ? `${input.operatingCarrier}|${input.providerFlightId}`
+        : `${input.operatingCarrier}${input.operatingFlightNumber}|${input.originIcao}|${input.originalDestinationIcao}|${input.initialServiceDate}`;
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [alias]);
+      const existing = await client.query(
+        `SELECT flight_instance_id, initial_service_date::text
+           FROM clean.webhook_flight_identity
+          WHERE provider_identity_alias = $1`,
+        [alias],
+      );
+      if (existing.rows[0]) {
+        await client.query("COMMIT");
+        return {
+          flightInstanceId: existing.rows[0].flight_instance_id,
+          initialServiceDate: existing.rows[0].initial_service_date,
+        };
+      }
+      await client.query(
+        `INSERT INTO clean.webhook_flight_identity
+           (provider_identity_alias, provider_flight_id, flight_instance_id,
+            operating_carrier, operating_flight_number, origin_icao,
+            original_destination_icao, initial_service_date, initial_scheduled_gate_out_utc)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [alias, input.providerFlightId, input.flightInstanceId, input.operatingCarrier,
+          input.operatingFlightNumber, input.originIcao, input.originalDestinationIcao,
+          input.initialServiceDate, input.scheduledGateOutUtc],
+      );
+      await client.query("COMMIT");
+      return { flightInstanceId: input.flightInstanceId, initialServiceDate: input.initialServiceDate };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+};
+
+/** Production webhook identity boundary. No date or timezone fallback is allowed. */
+export async function resolveWebhookFlightIdentity(
+  observation: WebhookIdentityObservation,
+  persistence: WebhookIdentityPersistence = postgresWebhookIdentityPersistence,
+): Promise<WebhookIdentityResolution> {
+  if (!observation.scheduleVerified || !observation.scheduledGateOutUtc) {
+    return { status: "quarantined", reason: "verified scheduled gate-out is unavailable" };
+  }
+  if (!observation.originTimeZone) {
+    return { status: "quarantined", reason: "origin IANA timezone is unavailable" };
+  }
+  const initialServiceDate = originLocalServiceDate(observation.scheduledGateOutUtc, observation.originTimeZone);
+  if (!initialServiceDate) {
+    return { status: "quarantined", reason: "origin timezone or scheduled gate-out is invalid" };
+  }
+  const carrier = normalizedRequired(observation.operatingCarrier);
+  const number = normalizedRequired(observation.operatingFlightNumber)?.replace(/^0+/, "") || null;
+  const origin = normalizedRequired(observation.originIcao);
+  const destination = normalizedRequired(observation.originalDestinationIcao);
+  if (!carrier || !number || !origin || !destination) {
+    return { status: "quarantined", reason: "required operating-leg identity fields are unavailable" };
+  }
+  const canonical = canonicalFlightInstanceId({
+    operatingCarrier: carrier,
+    operatingFlightNumber: number,
+    origin,
+    destinationOriginal: destination,
+    scheduledGateOutUtc: observation.scheduledGateOutUtc,
+    serviceDate: initialServiceDate,
+    initialServiceDate,
+    providerFlightId: observation.providerFlightId,
+  });
+  const persisted = await persistence.resolveOrCreate({
+    providerFlightId: observation.providerFlightId?.trim() || null,
+    operatingCarrier: carrier,
+    operatingFlightNumber: number,
+    originIcao: origin,
+    originalDestinationIcao: destination,
+    initialServiceDate,
+    scheduledGateOutUtc: observation.scheduledGateOutUtc,
+    flightInstanceId: canonical.flight_instance_id,
+  });
+  return { status: "resolved", ...persisted };
 }
 
 // ---------------------------------------------------------------------------

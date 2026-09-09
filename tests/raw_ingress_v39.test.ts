@@ -201,21 +201,20 @@ describe("TEST-007: Identity preservation", () => {
 });
 
 describe("Phase 0B: raw-before-2xx production wiring order (§1.5.2)", () => {
-  it("routes_v3.ts calls raw persist before semantic upsert before 2xx", async () => {
+  it("routes_v3.ts commits envelope and items atomically before semantic upsert and 2xx", async () => {
     const { readFileSync } = await import("fs");
     const { join } = await import("path");
     const src = readFileSync(join(process.cwd(), "server/routes_v3.ts"), "utf8");
-    const iRaw = src.indexOf("await persistRawDelivery(");
-    const iItems = src.indexOf("await persistRawDeliveryItems(");
+    const iRaw = src.indexOf("await persistRawDeliveryTransaction(");
     const iEvents = src.indexOf("await appendResearchEvents(");
     const iUpsert = src.indexOf("await upsertFlightNotifications(rows)");
     const iAck = src.indexOf("res.status(200).json({");
-    for (const [name, idx] of [["persistRawDelivery", iRaw], ["persistRawDeliveryItems", iItems], ["appendResearchEvents", iEvents], ["upsertFlightNotifications", iUpsert], ["2xx ack", iAck]] as const) {
+    for (const [name, idx] of [["persistRawDeliveryTransaction", iRaw], ["appendResearchEvents", iEvents], ["upsertFlightNotifications", iUpsert], ["2xx ack", iAck]] as const) {
       expect(idx, `${name} must exist in routes_v3.ts`).toBeGreaterThan(-1);
     }
-    // Required architecture order: raw envelope → raw items → events → convenience upsert → 2xx.
-    expect(iRaw).toBeLessThan(iItems);
-    expect(iItems).toBeLessThan(iEvents);
+    // Required architecture order: atomic raw envelope+items, events,
+    // convenience upsert, then 2xx.
+    expect(iRaw).toBeLessThan(iEvents);
     expect(iEvents).toBeLessThan(iUpsert);
     expect(iUpsert).toBeLessThan(iAck);
   });
@@ -225,6 +224,15 @@ describe("Phase 0B: raw-before-2xx production wiring order (§1.5.2)", () => {
     const { join } = await import("path");
     const src = readFileSync(join(process.cwd(), "server/routes_v3.ts"), "utf8");
     expect(src).toContain('res.status(500).json({ error: "Raw persistence failed; please retry" })');
-    expect(src).toContain('res.status(500).json({ error: "Raw item persistence failed; please retry" })');
+    expect(src).not.toContain("await persistRawDeliveryItems(");
+  });
+
+  it("does not create semantic identity from UTC slicing or a mutable fallback date", async () => {
+    const { readFileSync } = await import("fs");
+    const { join } = await import("path");
+    const src = readFileSync(join(process.cwd(), "server/routes_v3.ts"), "utf8");
+    expect(src).toContain("resolveWebhookFlightIdentity({");
+    expect(src).toContain('identity?.status !== "resolved"');
+    expect(src).not.toContain("depScheduledUtc.toISOString().slice(0, 10)");
   });
 });

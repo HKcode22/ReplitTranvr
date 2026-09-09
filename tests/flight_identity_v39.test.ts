@@ -21,6 +21,8 @@ import {
   dedupCodeshares,
   isCrossAirportDuplicate,
   type CanonicalFlightInstanceInput,
+  resolveWebhookFlightIdentity,
+  type WebhookIdentityPersistence,
 } from "../server/lib/disruption/flightInstanceCanonical_v3";
 
 // ---------------------------------------------------------------------------
@@ -378,5 +380,65 @@ describe("Phase 0D: route/tail identity contract (§1.5.4 items 13–15)", () =>
     expect(diverted.currentOperationalDestinationIcao).toBe("KOAK");
     expect(diverted.originalScheduledDestinationIcao).toBe("KSFO");
     expect(diverted.midnightCrossing).toBe(true);
+  });
+});
+
+describe("production webhook canonical identity", () => {
+  function memoryPersistence(): WebhookIdentityPersistence {
+    const aliases = new Map<string, { flightInstanceId: string; initialServiceDate: string }>();
+    return {
+      async resolveOrCreate(input) {
+        const alias = input.providerFlightId ?? `${input.operatingCarrier}${input.operatingFlightNumber}|${input.originIcao}|${input.originalDestinationIcao}|${input.initialServiceDate}`;
+        const existing = aliases.get(alias);
+        if (existing) return existing;
+        const created = { flightInstanceId: input.flightInstanceId, initialServiceDate: input.initialServiceDate };
+        aliases.set(alias, created);
+        return created;
+      },
+    };
+  }
+
+  it("uses the origin-local date when UTC is across midnight", async () => {
+    const result = await resolveWebhookFlightIdentity({
+      operatingCarrier: "UA", operatingFlightNumber: "123", originIcao: "KLAX",
+      originalDestinationIcao: "KSFO", scheduledGateOutUtc: "2026-09-02T06:30:00Z",
+      originTimeZone: "America/Los_Angeles", scheduleVerified: true, providerFlightId: "provider-1",
+    }, memoryPersistence());
+    expect(result).toMatchObject({ status: "resolved", initialServiceDate: "2026-09-01" });
+  });
+
+  it("reuses the first identity and local date after a date-shift retime", async () => {
+    const persistence = memoryPersistence();
+    const first = await resolveWebhookFlightIdentity({
+      operatingCarrier: "UA", operatingFlightNumber: "123", originIcao: "KLAX",
+      originalDestinationIcao: "KSFO", scheduledGateOutUtc: "2026-09-02T06:30:00Z",
+      originTimeZone: "America/Los_Angeles", scheduleVerified: true, providerFlightId: "provider-2",
+    }, persistence);
+    const retimed = await resolveWebhookFlightIdentity({
+      operatingCarrier: "UA", operatingFlightNumber: "123", originIcao: "KLAX",
+      originalDestinationIcao: "KSFO", scheduledGateOutUtc: "2026-09-03T08:30:00Z",
+      originTimeZone: "America/Los_Angeles", scheduleVerified: true, providerFlightId: "provider-2",
+    }, persistence);
+    expect(retimed).toEqual(first);
+  });
+
+  it("quarantines missing/unverified schedule and invalid timezone without persistence", async () => {
+    let calls = 0;
+    const persistence: WebhookIdentityPersistence = { async resolveOrCreate() { calls++; throw new Error("must not persist"); } };
+    const base = { operatingCarrier: "UA", operatingFlightNumber: "123", originIcao: "KLAX", originalDestinationIcao: "KSFO", providerFlightId: "p" };
+    expect((await resolveWebhookFlightIdentity({ ...base, scheduledGateOutUtc: null, originTimeZone: "America/Los_Angeles", scheduleVerified: false }, persistence)).status).toBe("quarantined");
+    expect((await resolveWebhookFlightIdentity({ ...base, scheduledGateOutUtc: "2026-09-02T06:30:00Z", originTimeZone: "not-a-zone", scheduleVerified: true }, persistence)).status).toBe("quarantined");
+    expect(calls).toBe(0);
+  });
+
+  it("provider flight ID is an alias only, not canonical key material", async () => {
+    const observation = {
+      operatingCarrier: "UA", operatingFlightNumber: "123", originIcao: "KLAX",
+      originalDestinationIcao: "KSFO", scheduledGateOutUtc: "2026-09-02T06:30:00Z",
+      originTimeZone: "America/Los_Angeles", scheduleVerified: true,
+    };
+    const a = await resolveWebhookFlightIdentity({ ...observation, providerFlightId: "a" }, memoryPersistence());
+    const b = await resolveWebhookFlightIdentity({ ...observation, providerFlightId: "b" }, memoryPersistence());
+    expect(a.status === "resolved" && b.status === "resolved" && a.flightInstanceId).toBe(b.status === "resolved" ? b.flightInstanceId : "");
   });
 });

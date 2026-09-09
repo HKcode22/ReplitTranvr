@@ -567,6 +567,17 @@ export interface CandidatePools {
   regionalP: Map<string, number>;
 }
 
+export interface EligibleFrameCandidate {
+  icao: string;
+  tier: AirportTier;
+  trafficPrior: number;
+  region: string;
+}
+
+const FRAME_REGIONS = [
+  "North America", "Europe", "Asia-Pacific", "Gulf/Africa", "South America", "Oceania",
+] as const;
+
 /**
  * Weighted categorical draw WITHOUT replacement (seeded, reproducible). Each
  * pick's `p` is the CONDITIONAL probability of that draw given the remaining
@@ -599,6 +610,49 @@ function drawWithoutReplacement(
     out.push({ icao: pick.icao, p: total > 0 ? pick.score / total : 0 });
   }
   return out;
+}
+
+/** Materialize tier x region slots before selecting any airport. */
+export function selectFrameCandidates(
+  rows: EligibleFrameCandidate[],
+  seed: number,
+  tierMix: Record<AirportTier, number>,
+  recentlyUsed: ReadonlySet<string> = new Set(),
+): CandidatePools {
+  const candidates = {} as Record<AirportTier, string[]>;
+  const poolSizes = {} as Record<AirportTier, number>;
+  const regionalP = new Map<string, number>();
+
+  for (const tier of AIRPORT_TIERS) {
+    const tierRows = rows.filter((row) => row.tier === tier);
+    const slots = tierMix[tier] ?? 0;
+    poolSizes[tier] = tierRows.length;
+    candidates[tier] = [];
+    if (slots <= 0) continue;
+
+    const regionSlots = seededShuffle([...FRAME_REGIONS], seed + tier.length);
+    for (let slot = 0; slot < slots; slot++) {
+      const region = regionSlots[slot % regionSlots.length];
+      const cell = tierRows.filter((row) => row.region === region);
+      if (cell.length === 0) {
+        throw new Error(
+          `REFUSED_CELL_EMPTY: selected slot ${tier}×${region} has no eligible airport; substitution is forbidden.`,
+        );
+      }
+      if (tier === "REGIONAL") {
+        const [pick] = drawWithoutReplacement(
+          cell.map((row) => ({ icao: row.icao, score: row.trafficPrior > 0 ? row.trafficPrior : 1 })),
+          seed + slot,
+        );
+        candidates[tier].push(pick.icao);
+        regionalP.set(pick.icao, pick.p);
+      } else {
+        const ordered = seededShuffle(cell.map((row) => row.icao), seed + slot);
+        candidates[tier].push(ordered.find((icao) => !recentlyUsed.has(icao)) ?? ordered[0]);
+      }
+    }
+  }
+  return { candidates, poolSizes, regionalP };
 }
 
 /**
@@ -635,62 +689,36 @@ async function pickAirportCandidates(seed: number): Promise<CandidatePools> {
   const recentlyUsed = new Set<string>(recent.flat());
 
   const res = await pool.query(
-    `SELECT icao, tier, traffic_prior
-     FROM clean.adb_sampling_frame
-     WHERE in_frame = true AND post_eligible = true`,
+    `SELECT f.icao, f.tier, f.traffic_prior, f.region
+     FROM clean.adb_sampling_frame f
+     JOIN clean.adb_sampling_frame_registry r
+       ON r.registry_key = 'ACTIVE' AND r.active_frame_version = f.frame_version
+     WHERE f.in_frame = true
+       AND pre_eligible = true AND post_eligible = true
+       AND tier_source = 'curated'
+       AND region IS NOT NULL
+       AND exclusion_reason IS NULL`,
   );
   if (!res.rowCount || res.rowCount === 0) {
     throw new Error(
-      "adb_sampling_frame is empty (no post-eligible airports) — run " +
-        "`npm run build-catalog` (step 11) first. The collector refuses to " +
-        "sample from the old 276 catalog.",
+      "adb_sampling_frame has no dual-eligible verified-tier mapped-region airports " +
+        "in the active registered frame — run `npm run build-catalog` first. " +
+        "UNCLASSIFIED/UNMAPPED rows are excluded by rule, never substituted. " +
+        "The collector refuses to sample from the old 276 catalog.",
     );
   }
 
-  const frameByTier: Record<AirportTier, { icao: string; score: number }[]> = {
-    HUB: [],
-    MID: [],
-    REGIONAL: [],
-  };
-  for (const row of res.rows) {
-    const t = row.tier as AirportTier;
-    if (!frameByTier[t]) continue;
-    // Pre-probe: raw_score = traffic_prior (1.0 for unclassified, §8). The
-    // adaptive m_i (yield) enters here once probe data exists.
-    const score = Number(row.traffic_prior) > 0 ? Number(row.traffic_prior) : 1;
-    frameByTier[t].push({ icao: row.icao, score });
-  }
-
-  const candidates = {} as Record<AirportTier, string[]>;
-  const poolSizes = {} as Record<AirportTier, number>;
-  const regionalP = new Map<string, number>();
-  for (const tier of AIRPORT_TIERS) {
-    const slots = COLLECTOR_CONFIG.tierMix[tier] ?? 0;
-    poolSizes[tier] = frameByTier[tier].length;
-    if (slots <= 0) {
-      candidates[tier] = [];
-      continue;
-    }
-    if (tier === "REGIONAL") {
-      // Genuine normalized probability draw (§8): uniform pre-probe, adaptive
-      // m_i after probe. drawWithoutReplacement already yields the conditional
-      // p_i per pick, so candidates[tier] is the DRAW ORDER and regionalP has
-      // each airport's conditional design probability.
-      const drawn = drawWithoutReplacement(frameByTier[tier], seed);
-      candidates[tier] = drawn.map((d) => d.icao);
-      for (const d of drawn) regionalP.set(d.icao, d.p);
-      continue;
-    }
-    // HUB/MID: deterministic seeded slot-fill (planned share, §30).
-    const poolList = seededShuffle(
-      frameByTier[tier].map((x) => x.icao),
-      seed,
-    );
-    const fresh = poolList.filter((a) => !recentlyUsed.has(a));
-    const fallback = poolList.filter((a) => recentlyUsed.has(a));
-    candidates[tier] = [...fresh, ...fallback];
-  }
-  return { candidates, poolSizes, regionalP };
+  return selectFrameCandidates(
+    res.rows.map((row) => ({
+      icao: String(row.icao),
+      tier: row.tier as AirportTier,
+      trafficPrior: Number(row.traffic_prior),
+      region: String(row.region),
+    })),
+    seed,
+    COLLECTOR_CONFIG.tierMix,
+    recentlyUsed,
+  );
 }
 
 export interface StartBatchResult {
@@ -1630,17 +1658,15 @@ export function startCollectionWatchdog(): void {
           await stopBatch("budget_reached");
           return;
         }
-        // V3.9 R2 (§3.3, §45.5-R2): SOFT_STOP margin — stop the active batch
-        // when today's ACTUAL spend reaches `dailyCreditCap − softStopMargin`,
-        // so an asynchronous accounting burst cannot overshoot the hard cap.
-        // HARD_CAP remains dailyCreditCap; any overshoot is flagged MISMATCH
-        // in the batch reconciliation.
+        // V3.9 R2 (§3.3, §45.5-R2): one batch owns one immutable budget day.
+        // Use that batch's actual spend, never the UTC-calendar diagnostic, so
+        // midnight cannot erase spend from the authoritative soft-stop input.
+        // The frozen margin reserves room for the asynchronous final burst.
         if (COLLECTOR_CONFIG.dailyCreditCap > 0) {
-          const usedToday = await creditsUsedTodayUtc();
           const softStop = COLLECTOR_CONFIG.dailyCreditCap - COLLECTOR_CONFIG.softStopMargin;
-          if (usedToday >= softStop) {
+          if (used >= softStop) {
             console.warn(
-              `[adb-collector] ${active.batchId} SOFT_STOP — today's actual spend ${usedToday} ≥ ${softStop} (cap ${COLLECTOR_CONFIG.dailyCreditCap} − margin ${COLLECTOR_CONFIG.softStopMargin}) — stopping`,
+              `[adb-collector] ${active.batchId} SOFT_STOP — immutable budget-day spend ${used} ≥ ${softStop} (cap ${COLLECTOR_CONFIG.dailyCreditCap} − margin ${COLLECTOR_CONFIG.softStopMargin}) — stopping`,
             );
             await stopBatch("soft_stop");
             return;

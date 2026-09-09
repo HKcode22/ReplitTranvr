@@ -14,6 +14,7 @@
 // ============================================================
 
 import { getBalance, refillBalance } from "../server/lib/disruption/aerodataboxLimiter_v3";
+import { resolveOwnerAuthorization } from "./v39_paid_guard_v39";
 
 async function main(): Promise<void> {
   const amount = Number(process.argv[2]);
@@ -30,6 +31,17 @@ async function main(): Promise<void> {
     console.log(`  lastDeductedUtc  : ${bal.lastDeductedUtc ?? "—"}`);
     console.log("To refill (billing): npm run refill -- <credits>   # 1 unit = 1 credit");
     return;
+  }
+
+  // Owner-level anti-bypass (ChatGPT round-3 item 5): the billing refill
+  // endpoint mutates provider state, so an actual refill refuses direct
+  // unmediated execution. Balance display above stays read-only.
+  try {
+    const authz = resolveOwnerAuthorization("refill", process.argv.slice(2));
+    console.log(`refill authorized: ${authz.mode} ${authz.authId}`);
+  } catch (err: any) {
+    console.error(err?.message ?? err);
+    process.exit(2);
   }
 
   console.log(`Refilling ${amount} credit(s) via POST /subscriptions/balance/refill ...`);

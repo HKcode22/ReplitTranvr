@@ -19,6 +19,8 @@
 
 import type { Express, Request, Response, NextFunction } from "express";
 import { createHash } from "crypto";
+import { readFileSync } from "fs";
+import { join } from "path";
 import type { InsertFlightDataPrePost } from "@shared/schema";
 import {
   getBalance,
@@ -42,8 +44,9 @@ import {
   researchEventKey,
   semanticObservationKey,
 } from "./lib/disruption/flightDataPrePostStore_v3";
-import { canonicalFlightInstanceId } from "./lib/disruption/flightInstanceCanonical_v3";
-import { persistRawDelivery, persistRawDeliveryItems, persistProcessingAttempt } from "./lib/disruption/rawIngress_v3";
+import { resolveWebhookFlightIdentity } from "./lib/disruption/flightInstanceCanonical_v3";
+import { persistProcessingAttempt, persistRawDeliveryTransaction } from "./lib/disruption/rawIngress_v3";
+import { verifyAuthRecord, approvedArtifactHashesFromLedger, sha256HexString, type AuthRecord } from "./lib/disruption/authRecord_v39";
 import { pool } from "./db";
 import {
   startBatch,
@@ -74,20 +77,68 @@ function managementGuard(req: Request, res: Response, next: NextFunction): void 
   next();
 }
 
-// Mutation guard for provider-mutating management routes (ChatGPT P0-4,
-// §1.5.1 item 5): subscription create/delete, balance refill, and collection
-// start are REFUSED unless explicitly enabled. The webhook secret alone is
-// NOT experiment authorization. Read-only routes and collection/stop (safety)
-// stay available. Re-enable only with an exact AUTH-gated path.
-function managementMutationGuard(req: Request, res: Response, next: NextFunction): void {
-  const allowed = String(process.env.ALLOW_MANAGEMENT_MUTATIONS || "").toLowerCase().trim();
-  if (allowed !== "1" && allowed !== "true") {
-    res.status(403).json({
-      error: "Management mutations are disabled during PREP. Provider-mutating actions require the exact experiment authorization path, not the webhook secret alone.",
-    });
-    return;
+// Mutation guard for provider-mutating management routes (ChatGPT round-3
+// item 5, §1.5.1 item 5): subscription create/delete, balance refill, and
+// collection start require an EXACT experiment authorization, not a boolean
+// kill switch. The caller supplies x-experiment-auth: <AUTH record JSON>;
+// the record is verified (format, validity window, phase/gate scope match,
+// positive ceilings, NON-EMPTY predecessors present in the evidence ledger)
+// before any provider mutation. Read-only routes and collection/stop (safety)
+// stay available.
+function loadLedgerText(): string {
+  try {
+    return readFileSync(join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md"), "utf8");
+  } catch {
+    return "";
   }
-  next();
+}
+
+function loadLedgerEvidenceIds(): string[] {
+  const text = loadLedgerText();
+  return Array.from(
+    new Set(Array.from(text.matchAll(/\b((?:RUN|GATE|AUTH|ISS|DEC)-\d{8}-[0-9A-Z]+)\b/g)).map((m) => m[1])),
+  );
+}
+
+function managementMutationGuard(expectedScope: string) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const raw = req.header("x-experiment-auth");
+    if (!raw) {
+      res.status(403).json({
+        error: "Provider mutations require x-experiment-auth: <AUTH record JSON> with exact scope. See §1.5.15.",
+      });
+      return;
+    }
+    let record: AuthRecord;
+    try {
+      record = JSON.parse(raw);
+    } catch {
+      res.status(403).json({ error: "x-experiment-auth is not valid JSON." });
+      return;
+    }
+    if (!record.predecessorEvidenceIds || record.predecessorEvidenceIds.length === 0) {
+      res.status(403).json({
+        error: "AUTH refused: predecessor evidence list is empty — authorizations must cite the gate evidence that enables them.",
+      });
+      return;
+    }
+    // Hash-locked artifact (ChatGPT round-3 item 6): the exact presented
+    // bytes must hash to an approved AUTH_ARTIFACT_SHA256 ledger token.
+    // A hand-crafted record citing real ledger IDs still refuses here.
+    const ledgerText = loadLedgerText();
+    const verdict = verifyAuthRecord(record, {
+      nowUtc: new Date(),
+      existingEvidenceIds: loadLedgerEvidenceIds(),
+      expectedPhaseGate: expectedScope,
+      artifactHash: sha256HexString(raw),
+      approvedArtifactHashes: approvedArtifactHashesFromLedger(ledgerText),
+    });
+    if (!verdict.verified) {
+      res.status(403).json({ error: `AUTH refused: ${verdict.reason}` });
+      return;
+    }
+    next();
+  };
 }
 
 export function registerV3Routes(app: Express): void {
@@ -176,55 +227,51 @@ export function registerV3Routes(app: Express): void {
         }
       }
 
-      // S2 — durable raw persistence BEFORE semantic extraction and before 2xx (CRIT-003 / §1.5.2).
-      // If the DB insert fails, return 5xx so the provider retries (never silent loss).
+      // S2 — durable raw persistence BEFORE semantic extraction and before 2xx
+      // (CRIT-003 / §1.5.2 / ChatGPT round-3 item 8): envelope + items commit in
+      // ONE database transaction. Either both are durable or neither is. Any
+      // failure returns 5xx so the provider retries (never silent loss).
+      // available_at for all downstream facts derives from the actual durable
+      // commit timestamp returned here — never receivedAt alone, never null.
       let rawDeliveryId: string | null = null;
+      let rawCommittedAtUtc: Date = receivedAt;
       try {
-        const rawRec = await persistRawDelivery({
-          subscriptionId: subId ?? null,
-          batchId: sampling?.batchId ?? null,
-          httpMethod: req.method ?? "POST",
-          httpPath: req.originalUrl ?? req.path ?? null,
-          rawBody: body,
-          providerPublishedUtc: (() => {
-            const first = flights[0] as any;
-            const raw = first?.lastUpdatedUtc ?? balance?.lastDeductedUtc ?? null;
-            return raw ? new Date(raw) : null;
-          })(),
-          receivedAtUtc: receivedAt,
-          adbDeliveryId: (req.headers as any)?.["x-delivery-id"] ?? null,
-          adbCostCredits: null,
-        });
-        rawDeliveryId = rawRec.deliveryId;
-        try {
-          await persistRawDeliveryItems(
-            flights.map((flight: any, i: number) => {
-              const carrier = flight?.airline ?? {};
-              return {
-                deliveryId: rawRec.deliveryId,
-                itemIndex: i,
-                flightNumber: (typeof flight?.number === "string" && flight.number) ? String(flight.number) : (typeof flight?.callSign === "string" ? String(flight.callSign) : null),
-                carrierIata: carrier?.iata ?? null,
-                carrierIcao: carrier?.icao ?? null,
-                status: flight?.status != null ? String(flight.status) : null,
-                statusCode: typeof flight?.status === "number" ? Math.trunc(flight.status) : null,
-                rawItem: flight,
-                lastUpdatedUtc: flight?.lastUpdatedUtc ? new Date(flight.lastUpdatedUtc) : null,
-                departureScheduledUtc: flight?.departure?.scheduledTime?.utc ? new Date(flight.departure.scheduledTime.utc) : null,
-                arrivalScheduledUtc: flight?.arrival?.scheduledTime?.utc ? new Date(flight.arrival.scheduledTime.utc) : null,
-                parsingOutcome: "pending",
-                canonicalFlightInstanceId: null,
-              };
-            }),
-          );
-        } catch (itemErr: any) {
-          // §1.5.2 / ChatGPT P0-4: item provenance is part of the durable raw
-          // transaction — NOT best-effort. A failed item commit returns 5xx so
-          // the provider retries; the envelope alone is not sufficient ack.
-          console.error("[adb-v3-webhook] raw_delivery_item persistence failed — returning 5xx:", itemErr?.message || itemErr);
-          res.status(500).json({ error: "Raw item persistence failed; please retry" });
-          return;
-        }
+        const committed = await persistRawDeliveryTransaction(
+          {
+            subscriptionId: subId ?? null,
+            batchId: sampling?.batchId ?? null,
+            httpMethod: req.method ?? "POST",
+            httpPath: req.originalUrl ?? req.path ?? null,
+            rawBody: body,
+            providerPublishedUtc: (() => {
+              const first = flights[0] as any;
+              const raw = first?.lastUpdatedUtc ?? balance?.lastDeductedUtc ?? null;
+              return raw ? new Date(raw) : null;
+            })(),
+            receivedAtUtc: receivedAt,
+            adbDeliveryId: (req.headers as any)?.["x-delivery-id"] ?? null,
+            adbCostCredits: null,
+          },
+          flights.map((flight: any, i: number) => {
+            const carrier = flight?.airline ?? {};
+            return {
+              itemIndex: i,
+              flightNumber: (typeof flight?.number === "string" && flight.number) ? String(flight.number) : (typeof flight?.callSign === "string" ? String(flight.callSign) : null),
+              carrierIata: carrier?.iata ?? null,
+              carrierIcao: carrier?.icao ?? null,
+              status: flight?.status != null ? String(flight.status) : null,
+              statusCode: typeof flight?.status === "number" ? Math.trunc(flight.status) : null,
+              rawItem: flight,
+              lastUpdatedUtc: flight?.lastUpdatedUtc ? new Date(flight.lastUpdatedUtc) : null,
+              departureScheduledUtc: flight?.departure?.scheduledTime?.utc ? new Date(flight.departure.scheduledTime.utc) : null,
+              arrivalScheduledUtc: flight?.arrival?.scheduledTime?.utc ? new Date(flight.arrival.scheduledTime.utc) : null,
+              parsingOutcome: "pending",
+              canonicalFlightInstanceId: null,
+            };
+          }),
+        );
+        rawDeliveryId = committed.deliveryId;
+        rawCommittedAtUtc = committed.committedAtUtc;
       } catch (rawErr: any) {
         console.error("[adb-v3-webhook] raw delivery persistence failed — returning 5xx:", rawErr?.message || rawErr);
         res.status(500).json({ error: "Raw persistence failed; please retry" });
@@ -254,6 +301,21 @@ export function registerV3Routes(app: Express): void {
       let researchAppended = false;
       let attemptError: string | null = null;
 
+      const identities = await Promise.all(rows.map((r, i) => {
+        if (r.hasLiveLocation === true && r.locReportedUtc) return null;
+        const flight = flights[i] ?? {};
+        return resolveWebhookFlightIdentity({
+          operatingCarrier: r.carrierIata ?? r.carrierIcao,
+          operatingFlightNumber: r.flightNumber,
+          originIcao: r.depAirportIcao,
+          originalDestinationIcao: r.arrAirportIcao,
+          scheduledGateOutUtc: r.depScheduledUtc?.toISOString(),
+          originTimeZone: flight?.departure?.airport?.timeZone,
+          scheduleVerified: !!flight?.departure?.scheduledTime?.utc,
+          providerFlightId: typeof flight?.id === "string" ? flight.id : null,
+        });
+      }));
+
       // V3.9 S3/S4/S5 (§6, §6.2) + §1.5.5 item 4: append the research event log
       // BEFORE the convenience/current-state mutation — one row per
       // observation. Location observations keep the location-scoped key so
@@ -263,8 +325,14 @@ export function registerV3Routes(app: Express): void {
       // is not a universal identity. Never overwrites. Ignores errors (2xx first).
       try {
         await appendResearchEvents(
-          rows.map((r, i) => {
+          rows.flatMap((r, i) => {
             const hasLoc = r.hasLiveLocation === true && !!r.locReportedUtc;
+            const identity = identities[i];
+            const canonicalIdentityId = identity?.status === "resolved" ? identity.flightInstanceId : null;
+            if (!hasLoc && identity?.status !== "resolved") {
+              console.warn(`[adb-v3-webhook] semantic identity quarantined index=${i}: ${identity?.reason ?? "unavailable"}`);
+              return [];
+            }
             const eventKey = hasLoc
               ? researchEventKey({
                   flightNumber: r.flightNumber,
@@ -275,25 +343,7 @@ export function registerV3Routes(app: Express): void {
                   index: i,
                 })
               : semanticObservationKey({
-                  canonicalFlightInstanceId: canonicalFlightInstanceId({
-                    operatingCarrier: r.carrierIata ?? "",
-                    operatingFlightNumber: r.flightNumber,
-                    origin: r.depAirportIcao ?? "",
-                    destinationOriginal: r.arrAirportIcao ?? "",
-                    // Service date here uses the UTC slice because the extractor
-                    // row carries no airport timezone (no ICAO→IANA map exists yet;
-                    // that reference data belongs to Phase-2 frame work, and Gate-0.5
-                    // verifies edge/timezone behavior). This is SAFE for event-key
-                    // purposes by construction: a UTC-midnight straddle can only
-                    // SPLIT observations into distinct keys, never wrongly MERGE
-                    // distinct flights. Canonical perfection (origin-local
-                    // initial_service_date) lives in the identity module + FIDS
-                    // path where timezones are available (§1.5.4).
-                    scheduledGateOutUtc: r.depScheduledUtc ? r.depScheduledUtc.toISOString() : "",
-                    serviceDate: r.depScheduledUtc
-                      ? r.depScheduledUtc.toISOString().slice(0, 10)
-                      : "",
-                  }).flight_instance_id,
+                  canonicalFlightInstanceId: canonicalIdentityId!,
                   eventType: "status_change",
                   eventPhase: r.dataStage as "PRE" | "POST",
                   locReportedUtc: null,
@@ -302,7 +352,7 @@ export function registerV3Routes(app: Express): void {
                     .update(JSON.stringify(flights[i] ?? null))
                     .digest("hex"),
                 });
-            return {
+            return [{
             eventKey,
             flightNumber: r.flightNumber,
             carrierIata: r.carrierIata,
@@ -313,10 +363,10 @@ export function registerV3Routes(app: Express): void {
             aircraftModel: r.aircraftModel,
             eventTimestamp: r.locReportedUtc ?? r.lastUpdatedUtc,
             providerPublishedUtc: r.lastUpdatedUtc,
-            // §1.5.2 item 5: available_at from durable commit timing. The raw
-            // envelope was committed before this point, so receivedAt is the
-            // earliest time this fact was durably available to snapshots.
-            availableAt: r.receivedAt ?? receivedAt,
+            // §1.5.2 item 5 / ChatGPT round-3 item 8: available_at derives from
+            // the ACTUAL durable commit timestamp of the raw transaction above
+            // — never receivedAt alone, never null for snapshot facts.
+            availableAt: rawCommittedAtUtc,
             receivedTimestampUtc: r.receivedAt ?? new Date(),
             dataStage: r.dataStage as "PRE" | "POST",
             status: r.status,
@@ -352,7 +402,7 @@ export function registerV3Routes(app: Express): void {
             batchId: sampling?.batchId ?? null,
             subscriptionId: subId ?? null,
             ingestEventId: null,
-            };
+            }];
           }),
         );
         researchAppended = true;
@@ -520,7 +570,7 @@ export function registerV3Routes(app: Express): void {
     res.json({ balance });
   });
 
-  app.post("/api/v1/subscriptions/balance/refill", managementGuard, managementMutationGuard, async (req: Request, res: Response) => {
+  app.post("/api/v1/subscriptions/balance/refill", managementGuard, managementMutationGuard("refill"), async (req: Request, res: Response) => {
     const credits = Math.floor(Number(req.body?.credits));
     if (!Number.isFinite(credits) || credits <= 0) {
       return res.status(400).json({ error: "credits must be a positive integer" });
@@ -541,7 +591,7 @@ export function registerV3Routes(app: Express): void {
     res.json({ subscription });
   });
 
-  app.post("/api/v1/subscriptions/webhook", managementGuard, managementMutationGuard, async (req: Request, res: Response) => {
+  app.post("/api/v1/subscriptions/webhook", managementGuard, managementMutationGuard("subscription"), async (req: Request, res: Response) => {
     const { subjectType, subjectId, maxDeliveryRetries, url } = req.body || {};
     if (subjectType !== "FlightByNumber" && subjectType !== "FlightByAirportIcao") {
       return res.status(400).json({ error: "subjectType must be FlightByNumber or FlightByAirportIcao" });
@@ -569,7 +619,7 @@ export function registerV3Routes(app: Express): void {
     res.status(201).json({ subscription });
   });
 
-  app.delete("/api/v1/subscriptions/webhook/:id", managementGuard, managementMutationGuard, async (req: Request, res: Response) => {
+  app.delete("/api/v1/subscriptions/webhook/:id", managementGuard, managementMutationGuard("subscription"), async (req: Request, res: Response) => {
     const ok = await deleteSubscription(String(req.params.id));
     if (!ok) return res.status(502).json({ error: "Failed to delete subscription" });
     res.json({ success: true });
@@ -595,7 +645,7 @@ export function registerV3Routes(app: Express): void {
     }
   });
 
-  app.post("/api/v1/collection/start", managementGuard, managementMutationGuard, async (_req: Request, res: Response) => {
+  app.post("/api/v1/collection/start", managementGuard, managementMutationGuard("collection"), async (_req: Request, res: Response) => {
     try {
       const result = await startBatch();
       res.status(201).json(result);

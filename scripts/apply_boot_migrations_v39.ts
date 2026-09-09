@@ -17,7 +17,7 @@
  * Exit 0 = every file applied. Nonzero = first failing file + error.
  */
 
-import { applyBootMigrations, pool } from "../server/db";
+import { applyBootMigrations, migrationPool, pool } from "../server/db";
 
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) {
@@ -31,7 +31,8 @@ async function main(): Promise<void> {
     console.error(`migration-apply FAILED: ${err?.message ?? err}`);
     process.exit(1);
   } finally {
-    await pool.end();
+    await pool.end().catch(() => undefined);
+    await migrationPool.end().catch(() => undefined);
   }
   console.log(`migration-apply finished_at_utc=${new Date().toISOString()} result=PASS`);
 }

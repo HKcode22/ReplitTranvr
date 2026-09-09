@@ -22,7 +22,7 @@
  *  - Cargo/private explicitly excluded via withCargo=false, withPrivate=false
  */
 
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { pool } from "../../db";
 import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import {
@@ -47,6 +47,14 @@ export interface FidsCensusParams {
   withPrivate?: boolean;
   /** Requested direction; PRE population uses departure-primary role (§1.5.3). */
   direction?: "Departure" | "Arrival" | "Both";
+  serviceWindowStartUtc: Date;
+  serviceWindowEndUtc: Date;
+  cutoffUtc: Date;
+  batchId?: string | null;
+  restCategory?: "fids_base" | "fids_split" | "validation" | "outcome";
+  providerApiVersion: string;
+  fidsProtocolVersion: string;
+  openapiSha256: string;
 }
 
 export type PopulationRole = "requested_airport_primary" | "opposite_movement_context";
@@ -70,6 +78,32 @@ export interface FidsCensusResult {
   flightInstanceIds: string[]; // canonical ids via flightInstanceCanonical_v3
   flightCount: number;
   truncated?: boolean;
+  populationQueryId: string;
+  persistedPopulationRows: number;
+}
+
+export interface FidsCensusDependencies {
+  fetchAirport?: typeof fetchFidsAirport;
+  persist?: (query: FidsQueryObservation, rows: PopulationRow[]) => Promise<number>;
+  now?: () => Date;
+}
+
+export interface FidsQueryObservation {
+  populationQueryId: string;
+  sourceAirportIcao: string;
+  queryDirection: "Departure" | "Arrival" | "Both";
+  serviceWindowStartUtc: Date;
+  serviceWindowEndUtc: Date;
+  fromLocal: string;
+  toLocal: string;
+  airportIanaTimezone: string;
+  fidsRetrievalUtc: Date;
+  availableAtUtc: Date;
+  responseHash: string;
+  rawPayload: unknown;
+  providerApiVersion: string;
+  fidsProtocolVersion: string;
+  openapiSha256: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +159,7 @@ function parseFlightNumber(raw: string | null | undefined): { carrier: string; n
  *
  * Returns null if the FIDS call fails (caller decides retry logic).
  */
-export async function fetchFidsPopulation(params: FidsCensusParams): Promise<FidsCensusResult | null> {
+export async function fetchFidsPopulation(params: FidsCensusParams, deps: FidsCensusDependencies = {}): Promise<FidsCensusResult | null> {
   const {
     airportIcao, fromLocal, toLocal, ianaTimezone,
     withCancelled, withCodeshared,
@@ -134,9 +168,10 @@ export async function fetchFidsPopulation(params: FidsCensusParams): Promise<Fid
   } = params;
 
   // Step 1: Call FIDS endpoint (§1.5.3 contract: withLeg=true, explicit direction)
-  const fids = await fetchFidsAirport(airportIcao, fromLocal, toLocal, {
+  const fids = await (deps.fetchAirport ?? fetchFidsAirport)(airportIcao, fromLocal, toLocal, {
     direction,
     withLeg: true,
+    category: params.restCategory,
   });
 
   if (!fids) {
@@ -145,6 +180,7 @@ export async function fetchFidsPopulation(params: FidsCensusParams): Promise<Fid
   }
 
   // Step 2: Combine departures + arrivals into a single raw payload
+  const retrievalUtc = (deps.now ?? (() => new Date()))();
   const rawPayload = {
     airport: airportIcao,
     fromLocal,
@@ -152,36 +188,12 @@ export async function fetchFidsPopulation(params: FidsCensusParams): Promise<Fid
     ianaTimezone,
     departures: fids.departures,
     arrivals: fids.arrivals,
-    fetchedAtUtc: new Date().toISOString(),
+    fetchedAtUtc: retrievalUtc.toISOString(),
   };
   const rawJson = JSON.stringify(rawPayload);
   const responseHash = sha256(rawJson);
 
-  // Step 3: Persist raw payload + hash (FIDS census mode)
-  const retrievalUtc = new Date();
-  try {
-    await pool.query(
-      `INSERT INTO clean.adb_ingest_events
-         (subscription_id, batch_id, notification_items, payload_sha256, raw_payload,
-          parser_version, schema_version, upsert_outcome)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        null, // no subscription for FIDS census
-        null, // no batch for ad-hoc FIDS
-        fids.departures.length + fids.arrivals.length,
-        responseHash,
-        rawPayload,
-        "fidsCensus_v3",
-        "v3.9-f.8",
-        "fids_census",
-      ],
-    );
-  } catch (err: any) {
-    // FIDS census raw persistence failure is logged but doesn't block the caller
-    console.error(`[fids-census] raw persist failed for ${airportIcao}:`, err?.message || err);
-  }
-
-  // Step 4: Deduplicate flights via canonical flight_instance_id
+  // Step 3: Build immutable membership observations.
   // Filter: exclude cargo (withCargo=false already at API level, but double-check)
   // Filter: exclude private (withPrivate=false already at API level, but double-check)
   // Filter: honor withCancelled/withCodeshared flags
@@ -197,6 +209,11 @@ export async function fetchFidsPopulation(params: FidsCensusParams): Promise<Fid
   // scope_classification is assigned by the population persistence layer).
   const dedupInput = allFlights
     .filter((f: any) => {
+      const selectedUtc = f._direction === "departure"
+        ? f.departure?.scheduledTime?.utc
+        : f.arrival?.scheduledTime?.utc;
+      const selectedMs = selectedUtc ? new Date(selectedUtc).getTime() : Number.NaN;
+      if (!Number.isFinite(selectedMs) || selectedMs < params.serviceWindowStartUtc.getTime() || selectedMs >= params.serviceWindowEndUtc.getTime()) return false;
       // Skip cargo when excluded (CRIT-007 fix: previously checked withCancelled by mistake)
       if (!withCargo && f.isCargo === true) return false;
       // Skip private when excluded
@@ -216,7 +233,14 @@ export async function fetchFidsPopulation(params: FidsCensusParams): Promise<Fid
       // §1.5.3: PRE population uses the requested-airport departure as primary
       // membership; arrivals seen via direction=Both are opposite-movement context.
       const populationRole: PopulationRole =
-        f._direction === "departure" ? "requested_airport_primary" : "opposite_movement_context";
+        direction === "Arrival"
+          ? (f._direction === "arrival" ? "requested_airport_primary" : "opposite_movement_context")
+          : (f._direction === "departure" ? "requested_airport_primary" : "opposite_movement_context");
+      // §1.5.4 item 4 / ChatGPT round-3 item 7: initial_service_date is the
+      // ORIGIN-LOCAL date of the first verified schedule identity — immutable
+      // across later retimes. Computed here (FIDS path carries the airport IANA
+      // timezone) and passed explicitly so identity-v2 never falls back to UTC.
+      const localServiceDate = localDateOf(f.departure?.scheduledTime?.utc, ianaTimezone);
       return {
         operatingCarrier: parsed?.carrier ?? "",
         operatingFlightNumber: parsed?.number ?? "",
@@ -224,16 +248,60 @@ export async function fetchFidsPopulation(params: FidsCensusParams): Promise<Fid
         destinationOriginal: arrAirport.icao ?? "",
         scheduledGateOutUtc: f.departure?.scheduledTime?.utc ?? "",
         // Airport-LOCAL service date (§6.0), not UTC fallback (CRIT-007 fix)
-        serviceDate: localDateOf(f.departure?.scheduledTime?.utc, ianaTimezone),
+        serviceDate: localServiceDate,
+        initialServiceDate: localServiceDate,
         populationRole,
         marketingCarrier: parsed?.carrier ?? "",
         marketingNumber: parsed?.number ?? "",
         providerFlightId: f.id ?? null,
+        codeshareStatus: f.codeshareStatus ?? null,
+        _source: f,
       };
     });
 
   const deduped = dedupCodeshares(dedupInput);
   const flightInstanceIds = Array.from(deduped.values()).map((d) => d.instance.flight_instance_id);
+
+  const populationQueryId = randomUUID();
+  const availableAtUtc = (deps.now ?? (() => new Date()))();
+  const rows = dedupInput.map((flight) => {
+    const source = flight._source as any;
+    const identity = canonicalFlightInstanceId(flight);
+    const codeshareResolutionStatus = source?.codeshareStatus === "IsOperator" || source?.codeshareStatus === 1
+      ? "resolved_operator"
+      : source?.codeshareStatus === "IsCodeshared" || source?.codeshareStatus === 2
+        ? "resolved_marketing"
+        : "ambiguous_unknown";
+    return buildPopulationRow({
+      sourceAirportIcao: airportIcao, queryDirection: direction,
+      populationRole: flight.populationRole as PopulationRole,
+      serviceWindowStartUtc: params.serviceWindowStartUtc, serviceWindowEndUtc: params.serviceWindowEndUtc,
+      fromLocal, toLocal, airportIanaTimezone: ianaTimezone,
+      flightNumber: `${flight.operatingCarrier}${flight.operatingFlightNumber}`,
+      carrierIata: flight.operatingCarrier || null, carrierIcao: null, callSign: source?.callSign ?? null,
+      depAirportIcao: flight.origin || null, depAirportIata: source?.departure?.airport?.iata ?? null,
+      arrAirportIcao: flight.destinationOriginal || null, arrAirportIata: source?.arrival?.airport?.iata ?? null,
+      depScheduledUtc: flight.scheduledGateOutUtc ? new Date(flight.scheduledGateOutUtc) : null,
+      arrScheduledUtc: source?.arrival?.scheduledTime?.utc ? new Date(source.arrival.scheduledTime.utc) : null,
+      canonicalFlightInstanceId: codeshareResolutionStatus === "ambiguous_unknown" ? null : identity.flight_instance_id,
+      analyticIdentityId: identity.flight_instance_id,
+      providerRecordKey: flight.providerFlightId ?? null, rawPayloadSha256: responseHash,
+      scopeClassification: classifyScope(source ?? {}), codeshareResolutionStatus,
+      fidsRetrievalUtc: retrievalUtc, responseHash, availableAtUtc, cutoffUtc: params.cutoffUtc,
+      batchId: params.batchId ?? null, populationQueryId,
+      providerApiVersion: params.providerApiVersion, fidsProtocolVersion: params.fidsProtocolVersion,
+      openapiSha256: params.openapiSha256,
+    });
+  });
+  const query: FidsQueryObservation = {
+    populationQueryId, sourceAirportIcao: airportIcao, queryDirection: direction,
+    serviceWindowStartUtc: params.serviceWindowStartUtc, serviceWindowEndUtc: params.serviceWindowEndUtc,
+    fromLocal, toLocal, airportIanaTimezone: ianaTimezone, fidsRetrievalUtc: retrievalUtc,
+    availableAtUtc, responseHash, rawPayload, providerApiVersion: params.providerApiVersion,
+    fidsProtocolVersion: params.fidsProtocolVersion, openapiSha256: params.openapiSha256,
+  };
+  // Raw and normalized persistence is one transaction. Any provenance failure rejects the fetch.
+  const persistedPopulationRows = await (deps.persist ?? persistFidsObservation)(query, rows);
 
   // Step 5: Truncation signal. The verified provider contract (max range,
   // truncation behavior) is a Gate-0.5 MEASURE→FREEZE item; until then this
@@ -251,6 +319,8 @@ export async function fetchFidsPopulation(params: FidsCensusParams): Promise<Fid
     flightInstanceIds,
     flightCount: allFlights.length,
     truncated,
+    populationQueryId,
+    persistedPopulationRows,
   };
 }
 
@@ -367,6 +437,8 @@ export interface PopulationRowInput {
   arrScheduledUtc: Date | null;
   /** Canonical physical-leg id (identity-v2) or null when provisional/ambiguous. */
   canonicalFlightInstanceId: string | null;
+  analyticIdentityId: string;
+  populationQueryId: string;
   providerRecordKey: string | null;
   rawPayloadSha256: string | null;
   scopeClassification: "confirmed_core" | "unknown" | "auxiliary";
@@ -376,6 +448,9 @@ export interface PopulationRowInput {
   availableAtUtc: Date;
   cutoffUtc: Date;
   batchId: string | null;
+  providerApiVersion: string;
+  fidsProtocolVersion: string;
+  openapiSha256: string;
 }
 
 export interface PopulationRow {
@@ -399,6 +474,22 @@ export interface PopulationRow {
   rawPayloadSha256: string | null;
   /** JSON-encoded provenance the INSERT persists alongside the row. */
   provenanceJson: string;
+  populationQueryId: string;
+  queryDirection: "Departure" | "Arrival" | "Both";
+  populationRole: PopulationRole;
+  fromLocal: string;
+  toLocal: string;
+  airportIanaTimezone: string;
+  scopeClassification: "confirmed_core" | "unknown" | "auxiliary";
+  codeshareResolutionStatus: string | null;
+  fidsRetrievalUtc: Date;
+  availableAtUtc: Date;
+  responseHash: string;
+  canonicalFlightInstanceId: string | null;
+  analyticIdentityId: string;
+  providerApiVersion: string;
+  fidsProtocolVersion: string;
+  openapiSha256: string;
 }
 
 /**
@@ -420,6 +511,9 @@ export function buildPopulationRow(input: PopulationRowInput): PopulationRow {
     fidsRetrievalUtc: input.fidsRetrievalUtc.toISOString(),
     responseHash: input.responseHash,
     availableAtUtc: input.availableAtUtc.toISOString(),
+    providerApiVersion: input.providerApiVersion,
+    fidsProtocolVersion: input.fidsProtocolVersion,
+    openapiSha256: input.openapiSha256,
   };
   return {
     batchId: input.batchId,
@@ -441,6 +535,22 @@ export function buildPopulationRow(input: PopulationRowInput): PopulationRow {
     providerRecordKey: input.providerRecordKey,
     rawPayloadSha256: input.rawPayloadSha256,
     provenanceJson: JSON.stringify(provenance),
+    populationQueryId: input.populationQueryId,
+    queryDirection: input.queryDirection,
+    populationRole: input.populationRole,
+    fromLocal: input.fromLocal,
+    toLocal: input.toLocal,
+    airportIanaTimezone: input.airportIanaTimezone,
+    scopeClassification: input.scopeClassification,
+    codeshareResolutionStatus: input.codeshareResolutionStatus,
+    fidsRetrievalUtc: input.fidsRetrievalUtc,
+    availableAtUtc: input.availableAtUtc,
+    responseHash: input.responseHash,
+    canonicalFlightInstanceId: input.canonicalFlightInstanceId,
+    analyticIdentityId: input.analyticIdentityId,
+    providerApiVersion: input.providerApiVersion,
+    fidsProtocolVersion: input.fidsProtocolVersion,
+    openapiSha256: input.openapiSha256,
   };
 }
 
@@ -453,31 +563,88 @@ export async function persistPopulationRows(rows: PopulationRow[]): Promise<numb
   if (rows.length === 0) return 0;
   let inserted = 0;
   for (const r of rows) {
-    try {
       const res = await pool.query(
         `INSERT INTO clean.flight_population
            (batch_id, source_airport_icao, window_start_utc, window_end_utc, cutoff_utc,
             flight_number, carrier_iata, carrier_icao, call_sign,
             dep_airport_icao, dep_airport_iata, arr_airport_icao, arr_airport_iata,
             dep_scheduled_utc, arr_scheduled_utc,
-            source_type, provider_record_key, raw_payload_sha256)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-         ON CONFLICT (source_airport_icao, cutoff_utc, flight_number, carrier_iata, provider_record_key)
-         DO NOTHING`,
+             source_type, provider_record_key, raw_payload_sha256,
+             population_query_id, query_direction, population_role, from_local, to_local,
+             airport_iana_timezone, scope_classification, codeshare_resolution_status,
+             fids_retrieval_utc, available_at, response_hash, canonical_flight_instance_id,
+             analytic_identity_id, provider_api_version, fids_protocol_version, openapi_sha256)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,
+                  $19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)
+          ON CONFLICT (population_query_id, analytic_identity_id, population_role)
+          DO NOTHING`,
         [
           r.batchId, r.sourceAirportIcao, r.windowStartUtc, r.windowEndUtc, r.cutoffUtc,
           r.flightNumber, r.carrierIata, r.carrierIcao, r.callSign,
           r.depAirportIcao, r.depAirportIata, r.arrAirportIcao, r.arrAirportIata,
           r.depScheduledUtc, r.arrScheduledUtc,
-          r.sourceType, r.providerRecordKey, r.rawPayloadSha256,
-        ],
-      );
-      inserted += res.rowCount ?? 0;
-    } catch (err: any) {
-      console.error(`[fids-census] population persist failed:`, err?.message || err);
-    }
+           r.sourceType, r.providerRecordKey, r.rawPayloadSha256,
+           r.populationQueryId, r.queryDirection, r.populationRole, r.fromLocal, r.toLocal,
+           r.airportIanaTimezone, r.scopeClassification, r.codeshareResolutionStatus,
+           r.fidsRetrievalUtc, r.availableAtUtc, r.responseHash, r.canonicalFlightInstanceId,
+           r.analyticIdentityId, r.providerApiVersion, r.fidsProtocolVersion, r.openapiSha256,
+         ],
+       );
+       inserted += res.rowCount ?? 0;
   }
   return inserted;
+}
+
+export async function persistFidsObservation(query: FidsQueryObservation, rows: PopulationRow[]): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const rawInsert = await client.query(
+      `INSERT INTO clean.fids_query_response
+       (population_query_id, source_airport_icao, query_direction, service_window_start_utc,
+        service_window_end_utc, from_local, to_local, airport_iana_timezone, fids_retrieval_utc,
+        raw_persisted_at_utc, available_at, response_hash, raw_payload, provider_api_version,
+        fids_protocol_version, openapi_sha256)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),GREATEST($10,now()),$11,$12,$13,$14,$15)
+       RETURNING available_at`,
+      [query.populationQueryId, query.sourceAirportIcao, query.queryDirection,
+       query.serviceWindowStartUtc, query.serviceWindowEndUtc, query.fromLocal, query.toLocal,
+       query.airportIanaTimezone, query.fidsRetrievalUtc, query.availableAtUtc, query.responseHash,
+       query.rawPayload, query.providerApiVersion, query.fidsProtocolVersion, query.openapiSha256],
+    );
+    const durableAvailableAt = rawInsert.rows[0].available_at;
+    let inserted = 0;
+    for (const r of rows) {
+      const result = await client.query(
+        `INSERT INTO clean.flight_population
+         (batch_id, source_airport_icao, window_start_utc, window_end_utc, cutoff_utc,
+          flight_number, carrier_iata, carrier_icao, call_sign, dep_airport_icao, dep_airport_iata,
+          arr_airport_icao, arr_airport_iata, dep_scheduled_utc, arr_scheduled_utc, source_type,
+          provider_record_key, raw_payload_sha256, population_query_id, query_direction,
+          population_role, from_local, to_local, airport_iana_timezone, scope_classification,
+          codeshare_resolution_status, fids_retrieval_utc, available_at, response_hash,
+          canonical_flight_instance_id, analytic_identity_id, provider_api_version,
+          fids_protocol_version, openapi_sha256)
+         VALUES (${Array.from({ length: 34 }, (_, i) => `$${i + 1}`).join(",")})
+         ON CONFLICT (population_query_id, analytic_identity_id, population_role) DO NOTHING`,
+        [r.batchId,r.sourceAirportIcao,r.windowStartUtc,r.windowEndUtc,r.cutoffUtc,r.flightNumber,
+         r.carrierIata,r.carrierIcao,r.callSign,r.depAirportIcao,r.depAirportIata,r.arrAirportIcao,
+         r.arrAirportIata,r.depScheduledUtc,r.arrScheduledUtc,r.sourceType,r.providerRecordKey,
+         r.rawPayloadSha256,r.populationQueryId,r.queryDirection,r.populationRole,r.fromLocal,r.toLocal,
+         r.airportIanaTimezone,r.scopeClassification,r.codeshareResolutionStatus,r.fidsRetrievalUtc,
+         durableAvailableAt,r.responseHash,r.canonicalFlightInstanceId,r.analyticIdentityId,
+         r.providerApiVersion,r.fidsProtocolVersion,r.openapiSha256],
+      );
+      inserted += result.rowCount ?? 0;
+    }
+    await client.query("COMMIT");
+    return inserted;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 
@@ -497,13 +664,14 @@ export interface BatchFidsResult {
  */
 export async function fetchBatchFidsPopulation(
   params: FidsCensusParams[],
+  deps: FidsCensusDependencies = {},
 ): Promise<BatchFidsResult> {
   const airports: FidsCensusResult[] = [];
   const failed: string[] = [];
   let totalFlightInstances = 0;
 
   for (const p of params) {
-    const result = await fetchFidsPopulation(p);
+    const result = await fetchFidsPopulation(p, deps);
     if (result) {
       airports.push(result);
       totalFlightInstances += result.flightInstanceIds.length;

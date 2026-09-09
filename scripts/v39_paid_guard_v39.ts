@@ -15,7 +15,14 @@
  */
 
 import { readFileSync } from "fs";
-import { verifyAuthRecord, type AuthRecord } from "../server/lib/disruption/authRecord_v39";
+import { join } from "path";
+import {
+  approvedArtifactHashesFromLedger,
+  sha256HexString,
+  verifyAuthRecord,
+  type AuthRecord,
+  type AuthVerdict,
+} from "../server/lib/disruption/authRecord_v39";
 
 export interface ResolvedPaidPlan {
   command: string;
@@ -40,6 +47,107 @@ export function parseArgs(argv: string[]): { auth: string | null; evidenceId: st
   return { auth, evidenceId, authFile };
 }
 
+function loadLedgerEvidenceIds(): string[] {
+  try {
+    const ledger = readFileSync(join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md"), "utf8");
+    return Array.from(
+      new Set(Array.from(ledger.matchAll(/\b((?:RUN|GATE|AUTH|ISS|DEC)-\d{8}-[0-9A-Z]+)\b/g)).map((m) => m[1])),
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Approved AUTH artifact hashes, from `AUTH_ARTIFACT_SHA256:<64hex>` tokens in
+ * the evidence ledger. An artifact authorizes a mutation ONLY when the SHA-256
+ * of its exact bytes appears here. No tokens approved yet in Phase 0 → the
+ * set is empty and every paid path correctly refuses (fail-closed).
+ */
+export function loadApprovedArtifactHashes(): string[] {
+  try {
+    return approvedArtifactHashesFromLedger(
+      readFileSync(join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md"), "utf8"),
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function sha256Hex(raw: string): string {
+  return sha256HexString(raw);
+}
+
+export interface VerifiedAuthFile {
+  record: AuthRecord;
+  artifactHash: string;
+  verdict: AuthVerdict;
+}
+
+/**
+ * Verify an AUTH record file against the exact operation gate, the live
+ * evidence ledger, and the hash-locked approved-artifact set. Never throws —
+ * returns the verdict for the caller to enforce.
+ */
+export function verifyAuthFile(authFile: string, expectedPhaseGate: string, nowUtc = new Date()): VerifiedAuthFile | { error: string } {
+  let raw: string;
+  try {
+    raw = readFileSync(authFile, "utf8");
+  } catch (err: any) {
+    return { error: `cannot read AUTH record file ${authFile}: ${err?.message ?? err}` };
+  }
+  let record: AuthRecord;
+  try {
+    record = JSON.parse(raw);
+  } catch {
+    return { error: `AUTH record file ${authFile} is not valid JSON` };
+  }
+  const artifactHash = sha256Hex(raw);
+  const verdict = verifyAuthRecord(record, {
+    nowUtc,
+    existingEvidenceIds: loadLedgerEvidenceIds(),
+    expectedPhaseGate,
+    artifactHash,
+    approvedArtifactHashes: loadApprovedArtifactHashes(),
+  });
+  return { record, artifactHash, verdict };
+}
+
+/**
+ * Owner-level authorization for directly-executed paid scripts
+ * (credit_canary, anchor_probe, refill_credits). Two legitimate entries:
+ *   1. `V39_VERIFIED_AUTH=<authId>` — set ONLY by runAuthorizedOwner after its
+ *      own exact AUTH verification, propagated to the spawned child. The guard
+ *      decision already happened in-process; this only proves mediation.
+ *   2. `--auth-file <record.json>` — direct verification of the file against
+ *      the expected gate, ledger and approved-artifact set.
+ * Anything else → throws REFUSE (caller exits 2). Read-only invocations that
+ * perform no mutation may pass `allowReadOnly: true` with a probe that proves
+ * no mutation (scripts decide; refill balance-display uses it).
+ */
+export function resolveOwnerAuthorization(
+  expectedPhaseGate: string,
+  argv = process.argv.slice(2),
+  env = process.env,
+): { mode: "wrapper-mediated"; authId: string } | { mode: "direct-file"; authId: string } {
+  const mediated = env.V39_VERIFIED_AUTH;
+  if (mediated && /^AUTH-\d{8}-[A-Z0-9]+$/.test(mediated)) {
+    return { mode: "wrapper-mediated", authId: mediated };
+  }
+  const { auth, authFile } = parseArgs(argv);
+  if (auth && authFile) {
+    const checked = verifyAuthFile(authFile, expectedPhaseGate);
+    if (!("error" in checked) && checked.verdict.verified && checked.record.authorizationId === auth) {
+      return { mode: "direct-file", authId: auth };
+    }
+    const reason = "error" in checked ? checked.error : ((checked.verdict as { reason?: string }).reason ?? "verification failed");
+    throw new Error(`REFUSE: direct AUTH verification failed: ${reason}`);
+  }
+  throw new Error(
+    "REFUSE: paid script requires wrapper mediation (V39_VERIFIED_AUTH) or --auth <id> --auth-file <record.json>; direct unmediated execution never mutates",
+  );
+}
+
 /**
  * Enforce the paid-command contract. On success prints the verified plan and
  * RETURNS (caller proceeds). On any mismatch prints REFUSED and exits 2.
@@ -61,22 +169,18 @@ export function enforcePaidGuard(command: string, phaseGate: string): ResolvedPa
     );
     process.exit(2);
   }
-  let record: AuthRecord;
-  try {
-    record = JSON.parse(readFileSync(authFile, "utf8"));
-  } catch (err: any) {
-    console.error(`REFUSED: cannot read AUTH record file ${authFile}: ${err?.message ?? err}`);
+  const checked = verifyAuthFile(authFile, phaseGate);
+  if ("error" in checked) {
+    console.error(`REFUSED: ${checked.error}`);
     process.exit(2);
   }
+  const { record, verdict } = checked;
   if (record.authorizationId !== auth) {
     console.error(`REFUSED: record id ${record.authorizationId} does not match --auth ${auth}.`);
     process.exit(2);
   }
-  // Predecessor evidence: run-report IDs recorded so far (evidence ledger).
-  // Gate PASS records do not exist yet in Phase 0 → unsettled predecessors refuse.
-  const verdict = verifyAuthRecord(record, { nowUtc: new Date(), existingEvidenceIds: [] });
   if (!verdict.verified) {
-    console.error(`REFUSED: AUTH ${auth} failed verification: ${verdict.reason}`);
+    console.error(`REFUSED: AUTH ${auth} failed verification: ${(verdict as { reason: string }).reason}`);
     process.exit(2);
   }
   const plan: ResolvedPaidPlan = {
@@ -90,6 +194,6 @@ export function enforcePaidGuard(command: string, phaseGate: string): ResolvedPa
       ? `${record.startNotBeforeUtc}..${record.expiresAtUtc}` : null,
     stopOwner: record.cleanupOwner,
   };
-  console.log(`VERIFIED: AUTH ${auth} passed all checks (ceilings, window, predecessors).`);
+  console.log(`VERIFIED: AUTH ${auth} passed all checks (ceilings, window, predecessors, approved artifact ${(checked as { artifactHash: string }).artifactHash.slice(0, 12)}…).`);
   return plan;
 }

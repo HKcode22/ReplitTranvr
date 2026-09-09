@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+
 // ============================================================
 // v3 — AeroDataBox Flight Alert subscription manager.
 // The ONLY module allowed to make outbound calls to
@@ -28,6 +30,13 @@ const MIN_INTERVAL_MS = Number(process.env.ADB_API_MIN_INTERVAL_MS) > 0
   : 1000;
 const RATE_LIMIT_BACKOFF_MS = 1500;
 const RATE_LIMIT_MAX_RETRIES = 3;
+
+export type FidsRestCategory = "fids_base" | "fids_split" | "fids_retry" | "validation" | "outcome";
+export const FIDS_REST_UNITS_PER_ATTEMPT = 2;
+
+export interface FidsAttemptBudgetOwner {
+  reserve(category: FidsRestCategory, units: number, attemptNumber: number): Promise<string>;
+}
 
 let lastStartedAt = 0;
 let chain: Promise<void> = Promise.resolve();
@@ -195,24 +204,24 @@ export async function createSubscription(
   subjectId: string,
   opts?: { url?: string; maxDeliveryRetries?: number },
 ): Promise<WebhookSubscription | null> {
+  // Strict experimental rule OUTSIDE try/catch: nonzero retries THROW and must
+  // propagate to the caller (never collapse into a null return) — the single
+  // owner is resolveExperimentalRetries() (§1.5.1 item 4 / CRIT-004).
+  const maxDeliveryRetries = resolveExperimentalRetries(opts?.maxDeliveryRetries);
   try {
     const key = apiKey();
     if (!key) {
       console.warn("[adb-v3] createSubscription skipped — AERODATABOX_API_KEY not set");
       return null;
     }
+    // Strict experimental rule resolved above (outside try/catch).
     const targetUrl = opts?.url || defaultWebhookUrl();
     const resp = await throttledFetch(
       `${BASE_URL}/subscriptions/webhook/${encodeURIComponent(subjectType)}/${encodeURIComponent(subjectId)}`,
       {
         method: "POST",
         headers: headers(true),
-        body: JSON.stringify({
-          url: targetUrl,
-          ...(opts?.maxDeliveryRetries !== undefined
-            ? { maxDeliveryRetries: Math.min(2, Math.max(0, opts.maxDeliveryRetries)) }
-            : {}),
-        }),
+        body: JSON.stringify({ url: targetUrl, maxDeliveryRetries }),
       },
     );
     const text = await resp.text().catch(() => "");
@@ -344,7 +353,7 @@ export async function listFeedAirports(service: FeedService): Promise<string[] |
 // Endpoint: GET /flights/airports/{codeType}/{code}/{fromLocal}/{toLocal}
 // Parameters: direction=Both, withCancelled=true, withCodeshared=true,
 //   withCargo=false, withPrivate=false, withLocation=false
-// Cost: 1 REST API unit per call (NOT an Alert credit)
+// Current public contract pin: Tier 2 / 2 REST API units per attempt (NOT Alert credits).
 // ---------------------------------------------------------------------------
 
 export interface FidsAirportResult {
@@ -353,7 +362,53 @@ export interface FidsAirportResult {
 }
 
 /**
- * GET /flights/airports/icao/{icao}/{fromLocal}/{toLocal} — 1 REST API unit.
+ * Durable, atomic REST-budget owner. A category must have a pre-frozen control
+ * row; missing or exhausted controls refuse the request rather than borrowing.
+ */
+export const fidsRestLedger: FidsAttemptBudgetOwner = {
+  async reserve(category, units, attemptNumber) {
+    const { pool } = await import("../../db");
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const control = await client.query(
+        `UPDATE clean.adb_rest_budget_control
+            SET used_units = used_units + $2, updated_at = now()
+          WHERE category = $1 AND enabled = true
+            AND used_units + $2 <= cap_units
+          RETURNING cycle_id`,
+        [category, units],
+      );
+      if (control.rowCount !== 1) throw new Error(`REST budget unavailable for ${category}`);
+      const reservationId = randomUUID();
+      await client.query(
+        `INSERT INTO clean.adb_rest_attempt_ledger
+           (reservation_id, cycle_id, category, units, attempt_number, reserved_at)
+         VALUES ($1,$2,$3,$4,$5,now())`,
+        [reservationId, control.rows[0].cycle_id, category, units, attemptNumber],
+      );
+      await client.query("COMMIT");
+      return reservationId;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+};
+
+export interface FidsFetchOptions {
+  direction?: "Departure" | "Arrival" | "Both";
+  withLeg?: boolean;
+  category?: "fids_base" | "fids_split" | "validation" | "outcome";
+  budgetOwner?: FidsAttemptBudgetOwner;
+  fetchImpl?: typeof fetch;
+  sleepImpl?: (ms: number) => Promise<void>;
+}
+
+/**
+ * GET /flights/airports/icao/{icao}/{fromLocal}/{toLocal} — 2 REST API units at the current pin.
  * Fetches the FIDS population for one airport over a local-time window.
  * Returns the raw departures+arrivals arrays or null on failure.
  */
@@ -361,11 +416,14 @@ export async function fetchFidsAirport(
   icao: string,
   fromLocal: string,
   toLocal: string,
-  opts?: { direction?: "Departure" | "Arrival" | "Both"; withLeg?: boolean },
+  opts?: FidsFetchOptions,
 ): Promise<FidsAirportResult | null> {
   const direction = opts?.direction ?? "Both";
   // §1.5.3: withLeg=true includes the opposite movement (departure+arrival context).
   const withLeg = opts?.withLeg ?? true;
+  const owner = opts?.budgetOwner ?? fidsRestLedger;
+  const fetchImpl = opts?.fetchImpl ?? fetch;
+  const sleepImpl = opts?.sleepImpl ?? sleep;
   try {
     const params = new URLSearchParams({
       direction,
@@ -377,18 +435,32 @@ export async function fetchFidsAirport(
       withLeg: withLeg ? "true" : "false",
     });
     const url = `${BASE_URL}/flights/airports/icao/${encodeURIComponent(icao)}/${encodeURIComponent(fromLocal)}/${encodeURIComponent(toLocal)}?${params}`;
-    const resp = await throttledFetch(url, { headers: headers() });
-    if (!resp.ok) {
-      const body = (await resp.text().catch(() => "")).slice(0, 300);
-      console.warn(`[adb-v3] fetchFidsAirport ${icao} ${resp.status}: ${body}`);
-      return null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const category: FidsRestCategory = attempt === 1 ? (opts?.category ?? "fids_base") : "fids_retry";
+      // Reservation is deliberately adjacent to and before the physical request.
+      await owner.reserve(category, FIDS_REST_UNITS_PER_ATTEMPT, attempt);
+      let resp: Response;
+      try {
+        resp = await fetchImpl(url, { headers: headers(), signal: AbortSignal.timeout(15_000) });
+      } catch (error) {
+        if (attempt === 3) throw error;
+        await sleepImpl(RATE_LIMIT_BACKOFF_MS * attempt);
+        continue;
+      }
+      if (resp.ok) {
+        const raw: any = await readJsonOrNull(resp);
+        if (!raw || typeof raw !== "object") throw new Error("FIDS response schema invalid");
+        return {
+          departures: Array.isArray(raw.departures) ? raw.departures : [],
+          arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
+        };
+      }
+      const retryable = resp.status === 429 || [500, 502, 503, 504].includes(resp.status);
+      if (!retryable || attempt === 3) return null;
+      const retryAfter = Number(resp.headers.get("retry-after"));
+      await sleepImpl(Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : RATE_LIMIT_BACKOFF_MS * attempt);
     }
-    const raw: any = await readJsonOrNull(resp);
-    if (!raw || typeof raw !== "object") return null;
-    return {
-      departures: Array.isArray(raw.departures) ? raw.departures : [],
-      arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
-    };
+    return null;
   } catch (err: any) {
     console.error(`[adb-v3] fetchFidsAirport ${icao} error:`, err?.message || err);
     return null;

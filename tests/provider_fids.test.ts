@@ -16,7 +16,7 @@
  *  - split calls included in budget
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   STATUS_CODE_BY_NUMBER,
   CODESHARE_CODE,
@@ -37,7 +37,10 @@ import {
   FIDS_MAX_TOTAL_ATTEMPTS,
   FIDS_TRUNCATION_HEURISTIC_COUNT,
   type PopulationRowInput,
+  fetchFidsPopulation,
+  fetchBatchFidsPopulation,
 } from "../server/lib/disruption/fidsCensus_v3";
+import { fetchFidsAirport } from "../server/lib/disruption/aerodataboxLimiter_v3";
 
 describe("§70.1 Provider/FIDS contract", () => {
   describe("Status code mapping", () => {
@@ -386,6 +389,8 @@ describe("§1.5.3 population-row builder (append-only membership)", () => {
       depScheduledUtc: new Date("2026-09-01T10:00:00Z"),
       arrScheduledUtc: new Date("2026-09-01T11:30:00Z"),
       canonicalFlightInstanceId: "leg:abcd1234",
+      analyticIdentityId: "leg:abcd1234",
+      populationQueryId: "10000000-0000-4000-8000-000000000001",
       providerRecordKey: "rec_1",
       rawPayloadSha256: "ff".repeat(32),
       scopeClassification: "confirmed_core",
@@ -395,6 +400,9 @@ describe("§1.5.3 population-row builder (append-only membership)", () => {
       availableAtUtc: new Date("2026-09-01T07:00:05Z"),
       cutoffUtc: new Date("2026-09-01T08:00:00Z"),
       batchId: null,
+      providerApiVersion: "1.15.3.0",
+      fidsProtocolVersion: "v3.9-f.8",
+      openapiSha256: "aa".repeat(32),
       ...over,
     };
   }
@@ -418,6 +426,81 @@ describe("§1.5.3 population-row builder (append-only membership)", () => {
   it("opposite-movement context role is stamped distinctly", () => {
     const row = buildPopulationRow(popInput({ populationRole: "opposite_movement_context" }));
     expect(JSON.parse(row.provenanceJson).populationRole).toBe("opposite_movement_context");
+  });
+});
+
+describe("§1.5.3 production FIDS path", () => {
+  it("reserves base then retry immediately before each physical request", async () => {
+    const order: string[] = [];
+    const reserve = vi.fn(async (category: string) => { order.push(`reserve:${category}`); return crypto.randomUUID(); });
+    const fetchImpl = vi.fn(async () => {
+      order.push("fetch");
+      return fetchImpl.mock.calls.length === 1
+        ? new Response("busy", { status: 503 })
+        : new Response(JSON.stringify({ departures: [], arrivals: [] }), { status: 200 });
+    });
+    const result = await fetchFidsAirport("KLAX", "2026-09-01T01:00", "2026-09-01T07:00", {
+      budgetOwner: { reserve }, fetchImpl: fetchImpl as typeof fetch, sleepImpl: async () => {},
+    });
+    expect(result).toEqual({ departures: [], arrivals: [] });
+    expect(order).toEqual(["reserve:fids_base", "fetch", "reserve:fids_retry", "fetch"]);
+  });
+
+  it("budget refusal prevents the provider request", async () => {
+    const fetchImpl = vi.fn();
+    await expect(fetchFidsAirport("KLAX", "a", "b", {
+      budgetOwner: { reserve: async () => { throw new Error("budget exhausted"); } },
+      fetchImpl: fetchImpl as typeof fetch,
+    })).resolves.toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("normal fetch persists raw provenance and complete immutable population rows", async () => {
+    const persist = vi.fn(async (_query, rows) => rows.length);
+    const result = await fetchFidsPopulation({
+      airportIcao: "KLAX", fromLocal: "2026-09-01T01:00", toLocal: "2026-09-01T07:00",
+      ianaTimezone: "America/Los_Angeles", withCancelled: true, withCodeshared: true,
+      direction: "Departure", serviceWindowStartUtc: new Date("2026-09-01T08:00:00Z"),
+      serviceWindowEndUtc: new Date("2026-09-01T14:00:00Z"), cutoffUtc: new Date("2026-09-01T07:30:00Z"),
+      providerApiVersion: "1.15.3.0", fidsProtocolVersion: "v3.9-f.8", openapiSha256: "aa".repeat(32),
+    }, {
+      fetchAirport: async () => ({ departures: [{ id: "r1", number: "UA123", codeshareStatus: 1,
+        isCargo: false, isPrivate: false, isCharter: false,
+        departure: { airport: { icao: "KLAX", iata: "LAX" }, scheduledTime: { utc: "2026-09-01T10:00:00Z" } },
+        arrival: { airport: { icao: "KSFO", iata: "SFO" }, scheduledTime: { utc: "2026-09-01T11:30:00Z" } } }], arrivals: [] }),
+      persist,
+      now: () => new Date("2026-09-01T07:00:00Z"),
+    });
+    expect(result?.persistedPopulationRows).toBe(1);
+    const [query, rows] = persist.mock.calls[0];
+    expect(query).toMatchObject({ queryDirection: "Departure", airportIanaTimezone: "America/Los_Angeles", providerApiVersion: "1.15.3.0" });
+    expect(rows[0]).toMatchObject({ populationRole: "requested_airport_primary", scopeClassification: "confirmed_core",
+      codeshareResolutionStatus: "resolved_operator", canonicalFlightInstanceId: expect.any(String), availableAtUtc: new Date("2026-09-01T07:00:00Z") });
+  });
+
+  it("raw/provenance persistence failure rejects rather than returning success", async () => {
+    await expect(fetchFidsPopulation({
+      airportIcao: "KLAX", fromLocal: "a", toLocal: "b", ianaTimezone: "America/Los_Angeles",
+      withCancelled: true, withCodeshared: true, serviceWindowStartUtc: new Date("2026-09-01T08:00:00Z"),
+      serviceWindowEndUtc: new Date("2026-09-01T09:00:00Z"), cutoffUtc: new Date("2026-09-01T07:00:00Z"),
+      providerApiVersion: "1", fidsProtocolVersion: "p", openapiSha256: "aa".repeat(32),
+    }, { fetchAirport: async () => ({ departures: [], arrivals: [] }), persist: async () => { throw new Error("disk"); } }))
+      .rejects.toThrow("disk");
+  });
+
+  it("batch uses the same persistence path for every airport", async () => {
+    const persist = vi.fn(async () => 0);
+    const base = {
+      fromLocal: "a", toLocal: "b", ianaTimezone: "America/Los_Angeles", withCancelled: true,
+      withCodeshared: true, serviceWindowStartUtc: new Date("2026-09-01T08:00:00Z"),
+      serviceWindowEndUtc: new Date("2026-09-01T09:00:00Z"), cutoffUtc: new Date("2026-09-01T07:00:00Z"),
+      providerApiVersion: "1", fidsProtocolVersion: "p", openapiSha256: "aa".repeat(32),
+    };
+    const result = await fetchBatchFidsPopulation([{ ...base, airportIcao: "KLAX" }, { ...base, airportIcao: "KSFO" }], {
+      fetchAirport: async () => ({ departures: [], arrivals: [] }), persist,
+    });
+    expect(result.failed).toEqual([]);
+    expect(persist).toHaveBeenCalledTimes(2);
   });
 });
 

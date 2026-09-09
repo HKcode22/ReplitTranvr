@@ -35,12 +35,14 @@
 //   npm run anchor-probe -- --stage 2 [--hours 4]
 //   npm run anchor-probe -- --score
 //   npm run anchor-probe -- --status
-//   npm run anchor-probe -- --cleanup            delete orphaned probe subs (R1)
-//   npm run anchor-probe -- --cleanup --force    also delete untracked ACTIVE credit subs
+//   npm run anchor-probe -- --cleanup            delete orphaned probe subs (R1; --force REMOVED, never auto-deletes untracked subs)
 //   npm run anchor-probe -- --check-webhook      print webhook URL + reachability probe
 // ============================================================
 
 import { pool } from "../server/db";
+import { createHash, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import {
   getBalance,
   createSubscription,
@@ -49,7 +51,19 @@ import {
   defaultWebhookUrl,
   checkAirportFeeds,
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
-import { creditsUsedTodayUtc } from "../server/lib/disruption/adbCollectionController_v3";
+import {
+  runSettlement,
+  type SettlementConfig,
+} from "../server/lib/disruption/settlement_v3";
+import { resolveOwnerAuthorization } from "./v39_paid_guard_v39";
+import { PROBE_CAP_DAILY_UNITS } from "../server/lib/disruption/budgetAccounting_v3";
+import {
+  trafficScore,
+  geoScore,
+  carrierScore,
+  yieldScore,
+  anchorScore as frozenAnchorScore,
+} from "../server/lib/disruption/adbAirportCatalog_v3";
 
 // ---------------------------------------------------------------------------
 // FROZEN PARAMETERS (decided pre-probe, §9) — do not tune on outcomes.
@@ -61,14 +75,18 @@ const STAGE1_HOURS = Number(process.env.ADB_PROBE_STAGE1_HOURS || 2);
 const STAGE2_HOURS = Number(process.env.ADB_PROBE_STAGE2_HOURS || 4);
 /** Feasibility gate: minimum measured station capacity (rows/h) to be eligible. */
 const CAPACITY_GATE_ROWS_PER_HOUR = Number(process.env.ADB_PROBE_CAPACITY_GATE || 60);
-/** Probe spend cap per UTC day (inside the 1,900/day collection budget, §9). */
-const PROBE_DAILY_CAP = Number(process.env.ADB_PROBE_DAILY_CAP || 500);
+/**
+ * Probe spend cap — CUMULATIVE per immutable probe_budget_day_id (§1.5.11 /
+ * ChatGPT round-3 item 1), NOT per candidate and NOT per UTC day.
+ * Single owner: PROBE_CAP_DAILY_UNITS in budgetAccounting_v3.ts.
+ */
+const PROBE_DAILY_CAP = PROBE_CAP_DAILY_UNITS;
 
-// Frozen anchor-score weights (§9 step 5, our documented R&D choice):
-const W_EXOGENOUS = 0.4;
-const W_GEO = 0.2;
-const W_CARRIER = 0.2;
-const W_YIELD = 0.2;
+// NOTE (ChatGPT round-3 item 1): legacy shortlist-max/gauge weights removed.
+// Scoring uses the frozen §4.5/§9 formulas via adbAirportCatalog_v3 with
+// exogenous inputs from the Phase-2E preprobe freeze record (absent until
+// then → anchorScore honestly null). The SHORTLIST below remains the
+// provisional candidate structure only, not frozen membership.
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -116,8 +134,8 @@ const SHORTLIST: readonly Candidate[] = [
   { icao: "YSSY", region: "Oceania", exogFlightsPerYear: 240_000, exogGeo: 0.75, exogCarrier: 0.7 },
 ];
 
-// Frozen normalization: exogenous traffic standardized by the shortlist max.
-const MAX_EXOG_FLAIGHTS = Math.max(...SHORTLIST.map((c) => c.exogFlightsPerYear));
+// (Legacy shortlist-max normalization removed with the W_* weights above;
+// frozen hub_cut/degree_cap/carriers_cap come from the preprobe freeze record.)
 
 function candidateByIcao(icao: string): Candidate | undefined {
   return SHORTLIST.find((c) => c.icao.toUpperCase() === icao.toUpperCase());
@@ -146,7 +164,67 @@ interface ProbeRow {
   unique_flights_per_credit: number | null;
   tail_chain_links_per_credit: number | null;
   stability: number | null;
+  confirmed_unique_lower: number | null;
+  confirmed_plus_ambiguous_upper: number | null;
   status: string;
+}
+
+export interface ExposureRow {
+  status: string;
+  reservedCredits: number;
+  settledCredits: number | null;
+  internalSendCredits: number | null;
+}
+
+/** Conservative cap charge: terminal uncertainty never makes exposure vanish. */
+export function cumulativeProbeExposure(rows: ExposureRow[]): number {
+  return rows.reduce((sum, row) => {
+    const observed = Math.max(0, row.settledCredits ?? 0, row.internalSendCredits ?? 0);
+    return sum + Math.max(row.reservedCredits, observed);
+  }, 0);
+}
+
+export interface StabilityResult {
+  bucketCounts: number[];
+  stability: number | null;
+  status: "PASS" | "INSUFFICIENT_SAMPLE";
+}
+
+/** UTC epoch alignment is unambiguous; only buckets wholly inside exposure count. */
+export function completeBucketStability(
+  startMs: number,
+  endMs: number,
+  eventMs: readonly number[],
+  minimumBuckets: number,
+): StabilityResult {
+  const width = 15 * 60_000;
+  const first = Math.ceil(startMs / width) * width;
+  const lastExclusive = Math.floor(endMs / width) * width;
+  const counts: number[] = [];
+  for (let bucket = first; bucket + width <= lastExclusive; bucket += width) {
+    counts.push(eventMs.filter((t) => t >= bucket && t < bucket + width).length);
+  }
+  if (counts.length < minimumBuckets) return { bucketCounts: counts, stability: null, status: "INSUFFICIENT_SAMPLE" };
+  const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
+  if (mean === 0) return { bucketCounts: counts, stability: 0, status: "PASS" };
+  const variance = counts.reduce((a, b) => a + (b - mean) ** 2, 0) / counts.length;
+  return { bucketCounts: counts, stability: clamp01(1 / (1 + Math.sqrt(variance) / mean)), status: "PASS" };
+}
+
+export function deriveProbeStop(targetEndMs: number, actualEndMs: number, reason?: string) {
+  const durationCensored = actualEndMs < targetEndMs;
+  return { durationCensored, stopReason: durationCensored ? (reason ?? "safety_stop") : null };
+}
+
+export function probeCapStopReason(committedOther: number, currentSettled: number, currentInternal: number, cap = PROBE_DAILY_CAP): string | null {
+  return committedOther + Math.max(currentSettled, currentInternal) >= cap ? "probe_cap_soft_stop" : null;
+}
+
+export function ambiguityRankingInvariant(rows: readonly { icao: string; lower: number; upper: number }[]): boolean {
+  const order = (key: "lower" | "upper") => [...rows]
+    .sort((a, b) => b[key] - a[key] || a.icao.localeCompare(b.icao))
+    .map((row) => row.icao);
+  return order("lower").every((icao, index) => icao === order("upper")[index]);
 }
 
 async function hasStageProbe(icao: string, stage: number): Promise<boolean> {
@@ -178,6 +256,8 @@ async function readProbes(): Promise<ProbeRow[]> {
     unique_flights_per_credit: r.unique_flights_per_credit === null ? null : Number(r.unique_flights_per_credit),
     tail_chain_links_per_credit: r.tail_chain_links_per_credit === null ? null : Number(r.tail_chain_links_per_credit),
     stability: r.stability === null ? null : Number(r.stability),
+    confirmed_unique_lower: r.confirmed_unique_lower === null ? null : Number(r.confirmed_unique_lower),
+    confirmed_plus_ambiguous_upper: r.confirmed_plus_ambiguous_upper === null ? null : Number(r.confirmed_plus_ambiguous_upper),
     status: String(r.status),
   }));
 }
@@ -193,12 +273,83 @@ async function checkBudget(): Promise<{ ok: boolean; reason?: string }> {
   if (bal.creditsRemaining < reserve) {
     return { ok: false, reason: `balance ${bal.creditsRemaining} < reserve ${reserve}` };
   }
-  const usedToday = await creditsUsedTodayUtc();
-  if (usedToday + PROBE_DAILY_CAP > Number(process.env.ADB_DAILY_CREDIT_CAP || 1900)) {
-    return { ok: false, reason: `probe budget would push daily spend past the cap (today ${usedToday})` };
+  // Probe budget-day admission (§1.5.11 / ChatGPT round-3 item 1): cumulative
+  // settled spend under the CURRENT unsettled probe budget day must leave room.
+  // UTC-day spend is NOT authoritative and is not consulted here.
+  try {
+    const day = await getOrCreateProbeBudgetDay();
+    const spent = await probeBudgetDaySettledSpend(day);
+    if (spent >= PROBE_DAILY_CAP) {
+      return { ok: false, reason: `probe budget day ${day} already settled at cap (${spent}/${PROBE_DAILY_CAP})` };
+    }
+  } catch (err: any) {
+    return { ok: false, reason: `probe budget-day lookup failed: ${err?.message ?? err}` };
   }
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------------
+// Immutable probe budget day (§1.5.11): one ID per probe-day run; all probes
+// under it share the cumulative 500-credit ceiling. Settle the day before
+// starting another. Default-refuse windows crossing UTC midnight unless the
+// caller passes an explicitly split identity (not supported here → refuse).
+// ---------------------------------------------------------------------------
+
+/** Current unsettled probe budget day, or a fresh ID when none is open. */
+export async function getOrCreateProbeBudgetDay(): Promise<string> {
+  const open = await pool.query(`SELECT probe_budget_day_id FROM clean.adb_probe_budget_day WHERE state='OPEN' LIMIT 1`);
+  if (open.rowCount && open.rows[0].probe_budget_day_id) {
+    return String(open.rows[0].probe_budget_day_id);
+  }
+  const id = `probe_${randomUUID()}`;
+  const inserted = await pool.query(
+    `INSERT INTO clean.adb_probe_budget_day (probe_budget_day_id,state,cap_credits)
+     VALUES ($1,'OPEN',$2) ON CONFLICT DO NOTHING RETURNING probe_budget_day_id`,
+    [id, PROBE_DAILY_CAP],
+  );
+  if (inserted.rowCount) return id;
+  const concurrent = await pool.query(`SELECT probe_budget_day_id FROM clean.adb_probe_budget_day WHERE state='OPEN' LIMIT 1`);
+  if (!concurrent.rowCount) throw new Error("probe budget-day creation race did not resolve");
+  return String(concurrent.rows[0].probe_budget_day_id);
+}
+
+/** Conservative cumulative exposure: completed, failed, unresolved and reservations. */
+export async function probeBudgetDaySettledSpend(probeBudgetDayId: string): Promise<number> {
+  const r = await pool.query(
+    `SELECT COALESCE(sum(GREATEST(reserved_credits, COALESCE(credits_spent,0),
+                                  COALESCE(internal_send_credits,0))), 0)::int AS n
+       FROM clean.adb_anchor_probe WHERE probe_budget_day_id = $1`,
+    [probeBudgetDayId],
+  );
+  return r.rowCount ? Number(r.rows[0].n) : 0;
+}
+
+async function reserveProbeAttempt(candidate: Candidate, stage: number, start: Date, targetEnd: Date, hours: number, balanceBefore: number | null, dayId: string, estimate: number): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [dayId]);
+    const used = await client.query(
+      `SELECT COALESCE(sum(GREATEST(reserved_credits,COALESCE(credits_spent,0),COALESCE(internal_send_credits,0))),0)::int n
+         FROM clean.adb_anchor_probe WHERE probe_budget_day_id=$1`, [dayId]);
+    if (Number(used.rows[0].n) + estimate > PROBE_DAILY_CAP) throw new Error(`reservation exceeds probe cap (${used.rows[0].n}+${estimate}>${PROBE_DAILY_CAP})`);
+    const row = await client.query(
+      `INSERT INTO clean.adb_anchor_probe
+       (stage,icao,region,window_start,window_end,window_hours,balance_before,status,probe_budget_day_id,reserved_credits)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'probing',$8,$9) RETURNING probe_id`,
+      [stage,candidate.icao,candidate.region,start,targetEnd,hours,balanceBefore,dayId,estimate]);
+    await client.query("COMMIT");
+    return Number(row.rows[0].probe_id);
+  } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+}
+
+/** Shared settlement config for probes (frozen; same service as canary/gates). */
+const PROBE_SETTLEMENT: SettlementConfig = {
+  initialWaitSeconds: Number(process.env.ADB_PROBE_SETTLE_INITIAL_S || 30),
+  pollIntervalSeconds: Number(process.env.ADB_PROBE_SETTLE_POLL_S || 10),
+  stableReadCount: 3,
+  timeoutSeconds: Number(process.env.ADB_PROBE_SETTLE_TIMEOUT_S || 600),
+};
 
 // ---------------------------------------------------------------------------
 // R1 exclusivity (plan §11.2 step 1, §15 R1) — before ANY probe subscription
@@ -270,8 +421,29 @@ async function runSingleProbe(candidate: Candidate, stage: number, hours: number
   const balanceBefore = balBefore?.creditsRemaining ?? null;
   console.log(`  balance_before: ${balanceBefore}`);
 
+  // Probe budget-day admission (§1.5.11): resolve the immutable budget day and
+  // refuse when its settled spend already reaches the cumulative 500 cap, or
+  // when the window would cross UTC midnight without an explicit split.
+  const probeBudgetDayId = await getOrCreateProbeBudgetDay();
+  const windowStartPreview = new Date();
+  const windowEndPreview = new Date(windowStartPreview.getTime() + hours * 3600_000);
+  const crossesMidnight =
+    windowStartPreview.toISOString().slice(0, 10) !== windowEndPreview.toISOString().slice(0, 10);
+  if (crossesMidnight) {
+    console.log(`  SKIPPED — window crosses UTC midnight and no explicit split identity exists (default-refuse).`);
+    return;
+  }
+  const estimatedWorstCase = Number(process.env.ADB_PROBE_MAX_EXPOSURE_CREDITS);
+  if (!Number.isInteger(estimatedWorstCase) || estimatedWorstCase <= 0) {
+    console.log("  SKIPPED — ADB_PROBE_MAX_EXPOSURE_CREDITS must be an explicit positive integer from AUTH."); return;
+  }
+  const settledDaySpend = await probeBudgetDaySettledSpend(probeBudgetDayId);
+  console.log(`  probe_budget_day: ${probeBudgetDayId} (settled ${settledDaySpend}/${PROBE_DAILY_CAP})`);
+
+  const probeId = await reserveProbeAttempt(candidate, stage, windowStartPreview, windowEndPreview, hours, balanceBefore, probeBudgetDayId, estimatedWorstCase);
   const sub = await createSubscription("FlightByAirportIcao", icao, { maxDeliveryRetries: 0 });
   if (!sub?.id) {
+    await pool.query(`UPDATE clean.adb_anchor_probe SET status='failed',stop_reason='subscription_create_failed' WHERE probe_id=$1`, [probeId]);
     console.log(`  FAILED — could not subscribe to ${icao}.`);
     return;
   }
@@ -282,34 +454,55 @@ async function runSingleProbe(candidate: Candidate, stage: number, hours: number
   // cleanable record (status 'probing' → --cleanup deletes the sub and marks it
   // 'abandoned'). The UNIQUE(icao, stage, window_start) row is the same row the
   // final INSERT flips to 'completed'.
-  await pool.query(
-    `INSERT INTO clean.adb_anchor_probe
-       (stage, icao, region, window_start, window_end, window_hours,
-        subscription_id, balance_before, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'probing')
-     ON CONFLICT (icao, stage, window_start) DO NOTHING`,
-    [stage, icao, candidate.region, windowStart, windowStart, 0, sub.id, balanceBefore],
-  );
+  await pool.query(`UPDATE clean.adb_anchor_probe SET subscription_id=$1,window_start=$2 WHERE probe_id=$3`, [sub.id,windowStart,probeId]);
 
   console.log(`  probing ${hours}h — deliveries must reach the live webhook...`);
 
   // Poll every 60s so the process stays responsive; hard-stop at window end.
   const windowMs = hours * 3600 * 1000;
   const deadline = Date.now() + windowMs;
+  let liveStopReason: string | undefined;
   while (Date.now() < deadline) {
-    await sleep(Math.min(60_000, Math.max(1000, deadline - Date.now())));
+    const cadence = Number(process.env.ADB_PROBE_WATCHDOG_POLL_MS || 10_000);
+    await sleep(Math.min(cadence, Math.max(1000, deadline - Date.now())));
+    const liveInternal = await pool.query(
+      `SELECT COALESCE(sum(COALESCE(adb_cost_credits,notification_items,0)),0)::int n
+         FROM clean.raw_delivery WHERE subscription_id=$1`, [sub.id]);
+    const currentInternal = Number(liveInternal.rows[0]?.n ?? 0);
+    const currentBalance = await getBalance();
+    const currentSettled = balanceBefore !== null && currentBalance ? Math.max(0, balanceBefore - currentBalance.creditsRemaining) : 0;
+    liveStopReason = probeCapStopReason(settledDaySpend, currentSettled, currentInternal) ?? undefined;
+    if (liveStopReason) break;
   }
   const windowEnd = new Date();
 
   const delOk = await deleteSubscription(sub.id);
   console.log(`  subscription deleted: ${delOk ? "yes" : "NO (clean up manually)"}`);
-  await sleep(10_000); // settle in-flight deliveries
-
-  const balAfter = await getBalance();
-  const balanceAfter = balAfter?.creditsRemaining ?? null;
+  // Shared settlement (§1.5.11): ≥3 consecutive equal reads, change resets,
+  // timeout → unresolved. Replaces the old fixed 10s sleep + single read.
+  const settle = await runSettlement(PROBE_SETTLEMENT, async () => {
+    const b = await getBalance();
+    return b ? b.creditsRemaining : null;
+  });
+  if (settle.status !== "settled") {
+    console.log(`  SETTLEMENT_UNRESOLVED (${settle.reason}, ${settle.readsUsed} reads) — probe recorded as failed; no later probe starts until resolved.`);
+    await pool.query(
+      `UPDATE clean.adb_anchor_probe SET status='failed', window_end=now() WHERE subscription_id=$1 AND status='probing'`,
+      [sub.id],
+    );
+    return;
+  }
+  const balanceAfter = settle.stableBalance;
   const creditsSpent =
-    balanceBefore !== null && balanceAfter !== null ? Math.max(0, balanceBefore - balanceAfter) : null;
-  console.log(`  balance_after: ${balanceAfter}  credits_spent: ${creditsSpent}`);
+    balanceBefore !== null ? Math.max(0, balanceBefore - balanceAfter) : null;
+  console.log(`  balance_stable: ${balanceAfter} (${settle.readsUsed} reads)  credits_spent: ${creditsSpent}`);
+  const internalRes = await pool.query(
+    `SELECT COALESCE(sum(COALESCE(adb_cost_credits,notification_items,0)),0)::int AS n
+       FROM clean.raw_delivery
+      WHERE subscription_id=$1 AND received_at_utc >= $2 AND received_at_utc < $3`,
+    [sub.id, windowStart, windowEnd],
+  );
+  const internalSendCredits = Number(internalRes.rows[0]?.n ?? 0);
 
   // Count what was delivered for THIS subscription within the window.
   const countRes = await pool.query(
@@ -339,30 +532,54 @@ async function runSingleProbe(candidate: Candidate, stage: number, hours: number
   );
   const tailChainLinks = Number(chainRes.rows[0]?.links ?? 0);
 
-  // Stability: 1/(1+CV) of per-15-min bucket row counts within the window.
+  // Stability: 1/(1+CV) of COMPLETE per-15-min buckets only. Buckets cut by
+  // the window edges are partial and excluded. Fewer than the frozen minimum
+  // yields INSUFFICIENT_SAMPLE for stability (never a fabricated score).
   const bucketsRes = await pool.query(
-    `SELECT (extract(epoch FROM received_at)::int / 900) AS bucket, count(*)::int AS n
-       FROM clean.flight_data_pre_post
-      WHERE subscription_id = $1 AND received_at BETWEEN $2 AND $3
-      GROUP BY bucket ORDER BY bucket`,
+    `SELECT extract(epoch FROM min(rd.received_at_utc)) * 1000 AS event_ms
+       FROM clean.raw_delivery rd
+       JOIN clean.raw_delivery_item ri ON ri.delivery_id=rd.delivery_id
+      WHERE rd.subscription_id=$1 AND rd.received_at_utc >= $2 AND rd.received_at_utc < $3
+        AND ri.canonical_flight_instance_id IS NOT NULL
+      GROUP BY ri.canonical_flight_instance_id`,
     [sub.id, windowStart, windowEnd],
   );
-  const counts = bucketsRes.rows.map((r: any) => Number(r.n));
-  let stability: number | null = null;
-  if (counts.length > 1) {
-    const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
-    const variance = counts.reduce((a, b) => a + (b - mean) ** 2, 0) / counts.length;
-    const cv = mean > 0 ? Math.sqrt(variance) / mean : 1;
-    stability = clamp01(1 / (1 + cv));
+  const MIN_STABILITY_BUCKETS = Number(process.env.ADB_PROBE_MIN_STABILITY_BUCKETS || 4);
+  const stabilityResult = completeBucketStability(windowStart.getTime(), windowEnd.getTime(), bucketsRes.rows.map((r:any) => Number(r.event_ms)), MIN_STABILITY_BUCKETS);
+  const counts = stabilityResult.bucketCounts;
+  const stability = stabilityResult.stability;
+  if (stabilityResult.status === "INSUFFICIENT_SAMPLE") {
+    console.log(`  stability: INSUFFICIENT_SAMPLE (${counts.length} complete buckets < min ${MIN_STABILITY_BUCKETS})`);
   }
+
+  // Ambiguity bounds (§1.5.4 item 12): confirmed operating legs vs ambiguous
+  // codeshare records, counted separately — never coerced into one denominator.
+  const ambRes = await pool.query(
+    `SELECT count(DISTINCT flight_number)::int AS unique_total,
+            count(DISTINCT CASE WHEN codeshare_status = 'IsOperator' THEN flight_number END)::int AS confirmed_lower,
+            count(DISTINCT CASE WHEN codeshare_status IS NULL OR codeshare_status = 'Unknown' THEN flight_number END)::int AS ambiguous_n
+       FROM clean.flight_data_pre_post
+      WHERE subscription_id = $1 AND received_at BETWEEN $2 AND $3`,
+    [sub.id, windowStart, windowEnd],
+  );
+  const amb = ambRes.rows[0] ?? { unique_total: 0, confirmed_lower: 0, ambiguous_n: 0 };
+  const confirmedUniqueLower = Number(amb.confirmed_lower) ?? 0;
+  const confirmedPlusAmbiguousUpper = Number(amb.unique_total) ?? 0;
 
   const windowHours = (windowEnd.getTime() - windowStart.getTime()) / 3600_000;
   const rowsPerHour = windowHours > 0 ? rowsDelivered / windowHours : 0;
-  const ufPerCredit = creditsSpent && creditsSpent > 0 ? uniqueFlights / creditsSpent : null;
+  // The conservative confirmed lower bound, never the ambiguity-sensitive
+  // total, drives the observed-yield score.
+  const ufPerCredit = creditsSpent && creditsSpent > 0 ? confirmedUniqueLower / creditsSpent : null;
   const chainPerCredit = creditsSpent && creditsSpent > 0 ? tailChainLinks / creditsSpent : null;
+  // Cap censoring: the window ended at exposure end (target duration reached =
+  // complete; anything shorter would set durationCensored + stop reason here).
+  const targetEnd = windowStart.getTime() + hours * 3600_000;
+  const { durationCensored, stopReason } = deriveProbeStop(targetEnd, windowEnd.getTime(), liveStopReason);
 
   console.log(`  rows_delivered: ${rowsDelivered}  unique_flights: ${uniqueFlights}  chain_links: ${tailChainLinks}`);
-  console.log(`  rows_per_hour: ${rowsPerHour.toFixed(1)}  uf/credit: ${ufPerCredit?.toFixed(4) ?? "n/a"}  chain/credit: ${chainPerCredit?.toFixed(4) ?? "n/a"}  stability: ${stability?.toFixed(3) ?? "n/a"}`);
+  console.log(`  rows_per_hour: ${rowsPerHour.toFixed(1)}  uf/credit: ${ufPerCredit?.toFixed(4) ?? "n/a"}  chain/credit: ${chainPerCredit?.toFixed(4) ?? "n/a"}  stability: ${stability?.toFixed(3) ?? "n/a"}  complete_buckets: ${counts.length}/${MIN_STABILITY_BUCKETS}`);
+  console.log(`  ambiguity: confirmed_lower=${confirmedUniqueLower} upper=${confirmedPlusAmbiguousUpper} (ambiguous unknown=${Number(amb.ambiguous_n) ?? 0})`);
 
   await pool.query(
     `INSERT INTO clean.adb_anchor_probe
@@ -370,8 +587,12 @@ async function runSingleProbe(candidate: Candidate, stage: number, hours: number
         subscription_id, balance_before, balance_after, credits_spent,
         rows_delivered, unique_flights, tail_chain_links,
         rows_per_hour, unique_flights_per_credit, tail_chain_links_per_credit,
-        stability, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'completed')
+        stability, status, probe_budget_day_id, duration_censored, stop_reason,
+        complete_buckets, min_stability_buckets,
+        confirmed_unique_lower, confirmed_plus_ambiguous_upper,
+         settlement_reads, settlement_stable_balance, stability_status, internal_send_credits)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'completed',
+              $18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
      ON CONFLICT (icao, stage, window_start) DO UPDATE SET
        window_end = EXCLUDED.window_end,
        window_hours = EXCLUDED.window_hours,
@@ -384,6 +605,17 @@ async function runSingleProbe(candidate: Candidate, stage: number, hours: number
        unique_flights_per_credit = EXCLUDED.unique_flights_per_credit,
        tail_chain_links_per_credit = EXCLUDED.tail_chain_links_per_credit,
        stability = EXCLUDED.stability,
+       probe_budget_day_id = EXCLUDED.probe_budget_day_id,
+       duration_censored = EXCLUDED.duration_censored,
+       stop_reason = EXCLUDED.stop_reason,
+       complete_buckets = EXCLUDED.complete_buckets,
+       min_stability_buckets = EXCLUDED.min_stability_buckets,
+       confirmed_unique_lower = EXCLUDED.confirmed_unique_lower,
+       confirmed_plus_ambiguous_upper = EXCLUDED.confirmed_plus_ambiguous_upper,
+       settlement_reads = EXCLUDED.settlement_reads,
+        settlement_stable_balance = EXCLUDED.settlement_stable_balance,
+        stability_status = EXCLUDED.stability_status,
+        internal_send_credits = EXCLUDED.internal_send_credits,
        status = 'completed'`,
     [
       stage,
@@ -403,9 +635,20 @@ async function runSingleProbe(candidate: Candidate, stage: number, hours: number
       ufPerCredit,
       chainPerCredit,
       stability,
+      probeBudgetDayId,
+      durationCensored,
+      stopReason,
+      counts.length,
+      MIN_STABILITY_BUCKETS,
+      confirmedUniqueLower,
+      confirmedPlusAmbiguousUpper,
+      settle.readsUsed,
+      settle.stableBalance,
+      stabilityResult.status,
+      internalSendCredits,
     ],
   );
-  console.log(`  recorded in clean.adb_anchor_probe.`);
+  console.log(`  recorded in clean.adb_anchor_probe (budget day ${probeBudgetDayId}).`);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +670,40 @@ function stageAggregate(probes: ProbeRow[], icao: string): ProbeRow[] {
   return probes.filter((p) => p.icao === icao && p.stage === 1 && p.status === "completed");
 }
 
-function computeScores(probes: ProbeRow[]): Scored[] {
+/**
+ * Frozen exogenous inputs (§4.5/§9, Phase 2E preprobe freeze record).
+ * Absent until the licensed traffic/region reference is frozen — scoring
+ * without them returns anchorScore=null with reason (never legacy math).
+ */
+export interface FrozenExogenousInputs {
+  hubCutMetric: number;
+  degreeCap: number;
+  carriersCap: number;
+  perAirport: Record<string, {
+    trafficMetricValue: number;
+    degree: number;
+    effectiveCarriers: number;
+    intlShare: number;
+    regionShare: number;
+  }>;
+  anchorNormFrozenAt: string;
+}
+
+export async function loadFrozenExogenousInputs(path: string, expectedSha256: string): Promise<{ inputs: FrozenExogenousInputs; sha256: string }> {
+  if (!/^[a-f0-9]{64}$/i.test(expectedSha256)) throw new Error("invalid frozen artifact SHA-256");
+  const bytes = await readFile(path);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  if (sha256 !== expectedSha256.toLowerCase()) throw new Error(`preprobe artifact hash mismatch: expected ${expectedSha256}, got ${sha256}`);
+  const parsed = JSON.parse(bytes.toString("utf8"));
+  const inputs = parsed.exogenousInputs as FrozenExogenousInputs | undefined;
+  if (!inputs?.anchorNormFrozenAt || !inputs.perAirport || !(inputs.hubCutMetric > 0) || !(inputs.degreeCap > 0) || !(inputs.carriersCap > 0)) throw new Error("invalid frozen exogenous preprobe artifact");
+  return { inputs, sha256 };
+}
+
+function computeScores(
+  probes: ProbeRow[],
+  frozen: FrozenExogenousInputs | null,
+): Scored[] {
   const completed = probes.filter((p) => p.status === "completed");
   const byIcao = new Map<string, ProbeRow>();
   for (const p of completed) {
@@ -462,11 +738,26 @@ function computeScores(probes: ProbeRow[]): Scored[] {
       }
     }
 
-    const exogTraffic = clamp01(cand.exogFlightsPerYear / MAX_EXOG_FLAIGHTS);
-    const anchorScore =
-      yieldScore !== null
-        ? W_EXOGENOUS * exogTraffic + W_GEO * cand.exogGeo + W_CARRIER * cand.exogCarrier + W_YIELD * yieldScore
-        : null;
+    // Frozen §4.5/§9 formulas via the shared catalog owners — never the legacy
+    // shortlist-max/gauge math. Without frozen exogenous inputs, anchor stays
+    // null with reason (honest, not silently legacy).
+    let anchorScore: number | null = null;
+    if (frozen) {
+      const ex = frozen.perAirport[cand.icao];
+      if (ex) {
+        const t = trafficScore(ex.trafficMetricValue, frozen.hubCutMetric);
+        const g = geoScore(
+          Math.min(1, ex.degree / frozen.degreeCap),
+          ex.intlShare,
+          1 - ex.regionShare,
+        );
+        const c = carrierScore(
+          Math.min(1, ex.effectiveCarriers / frozen.carriersCap),
+          ex.intlShare,
+        );
+        anchorScore = frozenAnchorScore(t, g, c, yieldScore);
+      }
+    }
 
     const stage2 = probes.some((p) => p.icao === cand.icao && p.stage === 2 && p.status === "completed");
 
@@ -490,11 +781,10 @@ function computeScores(probes: ProbeRow[]): Scored[] {
 /**
  * --cleanup  (plan §11.2 step 1, §15 R1)
  * Deletes probe-owned ORPHAN subscriptions (rows still status='probing' from an
- * interrupted run) and marks them 'abandoned'. With --force, also deletes any
- * other ACTIVE credit-based subscription on the account (only safe pre-run,
- * when autoCollect=false means nothing legitimate is running).
+ * interrupted run) and marks them 'abandoned'. Untracked ACTIVE subscriptions
+ * are NEVER auto-deleted (the old --force path was removed per §1.5.1 item 6).
  */
-async function runCleanup(force: boolean): Promise<void> {
+async function runCleanup(): Promise<void> {
   console.log("R1 orphan cleanup — searching for probe subscriptions left 'probing'...");
 
   const probing = await pool.query(
@@ -514,8 +804,8 @@ async function runCleanup(force: boolean): Promise<void> {
     console.log(`  ${ok ? "deleted  " : "DELETE FAILED "} sub ${subId} (${row.icao} stage ${row.stage})`);
     if (ok) deleted++;
     await pool.query(
-      `UPDATE clean.adb_anchor_probe SET status='abandoned', window_end=now() WHERE probe_id=$1`,
-      [row.probe_id],
+      `UPDATE clean.adb_anchor_probe SET status=$1, stop_reason=$2, window_end=now() WHERE probe_id=$3`,
+      [ok ? "abandoned" : "failed", ok ? "operator_cleanup" : "cleanup_delete_failed", row.probe_id],
     );
   }
   console.log(`  probe-owned orphan subs deleted: ${deleted} of ${probing.rows.length}`);
@@ -523,21 +813,14 @@ async function runCleanup(force: boolean): Promise<void> {
   const foreign = await foreignActiveBillable();
   const untracked = foreign.filter((f) => !probing.rows.some((r: any) => r.subscription_id === f.id));
   if (untracked.length > 0) {
-    if (force) {
-      let n = 0;
-      for (const f of untracked) {
-        const ok = await deleteSubscription(f.id);
-        console.log(`  ${ok ? "deleted  " : "DELETE FAILED "} untracked ACTIVE credit sub ${f.id} (${f.subject})`);
-        if (ok) n++;
-      }
-      console.log(`  untracked ACTIVE credit subs deleted: ${n} of ${untracked.length}`);
-    } else {
-      console.log(
-        `  ${untracked.length} untracked ACTIVE credit sub(s) NOT touched: ` +
-          untracked.map((f) => `${f.id} (${f.subject})`).join(", ") +
-          `. Re-run with --force to delete them too.`,
-      );
-    }
+    // ChatGPT round-3 item 1 / §1.5.1 item 6: --force deletion of untracked
+    // ACTIVE subscriptions is REMOVED. Foreign billable subs are never
+    // auto-deleted — report them for human/owned cleanup (R1 refusal path).
+    console.log(
+      `  ${untracked.length} untracked ACTIVE credit sub(s) NOT touched (auto-delete removed): ` +
+        untracked.map((f) => `${f.id} (${f.subject})`).join(", ") +
+        `. Resolve via owned cleanup; paid work stays BLOCKED until R1 is clean.`,
+    );
   } else {
     console.log("  no other ACTIVE credit-based subscriptions on the account.");
   }
@@ -585,7 +868,26 @@ async function main(): Promise<void> {
   const doStatus = args.includes("--status");
   const doCleanup = args.includes("--cleanup");
   const doCheckWebhook = args.includes("--check-webhook");
-  const force = args.includes("--force");
+  if (args.includes("--force")) {
+    console.error("REFUSED: --force untracked-subscription deletion was removed (§1.5.1 item 6). Resolve foreign subs via owned cleanup.");
+    process.exit(2);
+  }
+  // Owner-level anti-bypass (ChatGPT round-3 item 5): mutating modes
+  // (stage runs, scoring writes, owned cleanup) refuse direct unmediated
+  // execution. Read-only modes (--status, --check-webhook) stay open.
+  // Score/cleanup operate on stage artifacts → stage-1 gate scope.
+  if (stage1 || stage2 || doScore || doCleanup) {
+    try {
+      const authz = resolveOwnerAuthorization(
+        stage2 ? "Phase 2 / Gate 2 Stage 2" : "Phase 2 / Gate 2 Stage 1",
+        args,
+      );
+      console.log(`probe authorized: ${authz.mode} ${authz.authId}`);
+    } catch (err: any) {
+      console.error(err?.message ?? err);
+      process.exit(2);
+    }
+  }
   const icaoIdx = args.indexOf("--icao");
   const onlyIcao = icaoIdx >= 0 && args[icaoIdx + 1] ? args[icaoIdx + 1].toUpperCase() : null;
   const hoursIdx = args.indexOf("--hours");
@@ -599,7 +901,7 @@ async function main(): Promise<void> {
   }
 
   if (doCleanup) {
-    await runCleanup(force);
+    await runCleanup();
     return;
   }
 
@@ -623,8 +925,15 @@ async function main(): Promise<void> {
 
   if (doScore) {
     const probes = await readProbes();
-    const scored = computeScores(probes);
+    // Frozen exogenous inputs come from the Phase-2E preprobe freeze record.
+    // Absent until then → anchor scores honestly null (never legacy math).
+    const artifactPath = process.env.ADB_PREPROBE_ARTIFACT_PATH;
+    const artifactHash = process.env.ADB_PREPROBE_ARTIFACT_SHA256;
+    if (!artifactPath || !artifactHash) throw new Error("scoring requires ADB_PREPROBE_ARTIFACT_PATH and ADB_PREPROBE_ARTIFACT_SHA256");
+    const frozen = await loadFrozenExogenousInputs(artifactPath, artifactHash);
+    const scored = computeScores(probes, frozen.inputs);
     console.log("\n--- FROZEN anchor score (§9) — filled with measured data ---");
+    console.log(`  preprobe artifact SHA-256 verified: ${frozen.sha256}`);
     const baseline = scored.find((s) => s.icao === "WSSS") ?? scored.find((s) => s.icao === "OMAA");
     if (!baseline) {
       console.log("No calibration baseline probed yet (WSSS/OMAA). Run stage 1 first.");
@@ -638,6 +947,12 @@ async function main(): Promise<void> {
     }
     const eligible = scored.filter((s) => s.anchorScore !== null && s.capacityPass).sort((a, b) => (b.anchorScore ?? 0) - (a.anchorScore ?? 0));
     console.log("\nProposed lock (top 5 capacity-passing, cross-region):");
+    const stage1Bounds = probes.filter((p) => p.stage === 1 && p.status === "completed" && p.confirmed_unique_lower !== null && p.confirmed_plus_ambiguous_upper !== null)
+      .map((p) => ({ icao: p.icao, lower: p.confirmed_unique_lower!, upper: p.confirmed_plus_ambiguous_upper! }));
+    if (!ambiguityRankingInvariant(stage1Bounds)) {
+      console.log("  INSUFFICIENT_IDENTITY_RESOLUTION: candidate order changes across ambiguity bounds; no final-five lock.");
+      return;
+    }
     const locked = eligible.slice(0, 5);
     if (locked.length < 5) {
       console.log("  (fewer than 5 eligible yet — run more stage-1 probes / stage 2)");
@@ -709,7 +1024,7 @@ async function main(): Promise<void> {
   }
 }
 
-main()
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) main()
   .then(async () => {
     await pool.end();
     process.exit(0);

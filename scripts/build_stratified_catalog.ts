@@ -25,15 +25,15 @@
 //     their human-classified tier: 30 HUB + 89 MID + 157 REGIONAL
 //     (`tier_source = "curated"`).
 //   - EVERY other universe airport is `tier_source = "unclassified"` and
-//     enters the REGIONAL stratum with `traffic_prior = 1.0` (§8). This v1
-//     is PROVISIONAL — V3.9-f.7 §4.1 requires a measured external traffic
+//     remains UNCLASSIFIED and excluded from core sampling. V3.9-f.7 §4.1
+//     requires a measured external traffic
 //     reference (OAG/Cirium or ACI/FAA 12-month scheduled departures) with
 //     frozen HUB/MID/REGIONAL thresholds + version/hash + rebuild of
 //     clean.adb_sampling_frame BEFORE Gate 1/2. Until rebuild, `tier_source='unclassified'`
 //     must be treated as `traffic_unverified` and 18-cell counts are provisional.
-//   - Macro-region mapping in this file is also PROVISIONAL (ICAO first-letter
-//     heuristic) — V3.9-f.7 §4.2 requires country→macro-region lookup with
-//     validated 6-region table + version/hash. See MUSE_A30_ASSESSMENT.md.
+//   - Macro-region mapping is the explicit airport-level frozen artifact in
+//     adbAirportCatalog_v3.ts. Missing entries remain visible as UNMAPPED;
+//     there is no ICAO-prefix fallback.
 //   - The daily slot mix is still {HUB:1, MID:2, REGIONAL:1} (§4) — the
 //     frame size does not change what we collect per day, only the eligible
 //     pool and its recorded design probabilities.
@@ -53,26 +53,18 @@
 //   from THIS table, not the static 276, so the measured frame actually
 //   drives collection.
 //
-// Macro-regions — confirmed against the plan's "Priority anchor regions"
-// (North America, Europe, Asia-Pacific, Gulf/Africa, South America,
-// Oceania). Every example airport in that list maps to exactly one region
-// (verified). ICAO first-letter mapping covers the WHOLE universe, not just
-// the catalog:
-//   K,C,M,T,P → North America   (US/Canada; Mexico-Central America-Caribbean;
-//                                US Pacific: Alaska PA, Hawaii PH, Guam PG)
-//   E,L,U,B   → Europe          (Russia/Central Asia grouped with Europe;
-//                                B = Iceland BI / Greenland BG, North Atlantic)
-//   R,V,W,Z   → Asia-Pacific    (E/SE/S Asia + China)
-//   O,H,F,D,G → Gulf/Africa     (Middle East + Africa)
-//   S         → South America
-//   Y,N,A     → Oceania         (Australia, NZ, Pacific islands, SW Pacific)
-// Regions are our geographic partition; auditable and changeable.
+// Macro-regions use an auditable, versioned airport-level mapping. Coordinates
+// may replace it in a later frozen artifact; Russia remains unmapped until then.
 // ============================================================
 
+import { createHash } from "node:crypto";
 import { pool, applyBootMigrations } from "../server/db";
 import { getAirportCoverage } from "../server/lib/disruption/adbCollectionController_v3";
 import {
   AIRPORT_TIERS,
+  AIRPORT_REGION_MAPPING_SOURCE,
+  AIRPORT_REGION_MAPPING_VERSION,
+  regionForIcao,
   tierForIcao,
   type AirportTier,
 } from "../server/lib/disruption/adbAirportCatalog_v3";
@@ -96,37 +88,33 @@ export const MACRO_REGIONS: readonly MacroRegion[] = [
 ];
 
 /**
- * ICAO → macro-region via the full first-letter prefix table (covers the
- * entire measured universe, not just the curated catalog). Every example
- * airport in the plan's "Priority anchor regions" list maps to exactly one
- * of the six regions. Returns null only for codes with no region mapping
- * (reported in the build output; should be ~0 for real ICAO codes).
+ * ICAO → macro-region (§1.5.10 / ChatGPT round-3 item 3).
+ *
+ * Resolution is only through the explicit frozen airport mapping. Missing
+ * airports, including Russia absent coordinates, remain UNMAPPED.
  */
+export const REGION_MAPPING_VERSION = AIRPORT_REGION_MAPPING_VERSION;
+
 export function macroRegionForIcao(icao: string): MacroRegion | null {
-  const p = (icao ?? "").trim().toUpperCase();
-  if (!p) return null;
-  const c = p[0];
-  if ("KCMTP".includes(c)) return "North America";
-  if ("ELUB".includes(c)) return "Europe";
-  if ("RVWZ".includes(c)) return "Asia-Pacific";
-  if ("OHFDG".includes(c)) return "Gulf/Africa";
-  if (c === "S") return "South America";
-  if ("YNA".includes(c)) return "Oceania";
-  return null;
+  return regionForIcao(icao);
 }
 
 export interface FrameRow {
   icao: string;
-  tier: AirportTier;
+  /** UNCLASSIFIED = missing traffic reference; visible, never blanket REGIONAL (§1.5.10). */
+  tier: AirportTier | "UNCLASSIFIED";
   /**
    * "curated"     = in our 276 catalog (human-classified traffic tier).
-   * "unclassified" = universe-only; provisional REGIONAL with traffic_prior=1.0
-   *                  (§8), NOT a measured traffic class until refined.
+   * "unclassified" = universe-only; tier stays UNCLASSIFIED (NOT provisional
+   *                  REGIONAL) until a frozen traffic reference classifies it.
    */
   tierSource: "curated" | "unclassified";
-  /** §8 REGIONAL prior — starts at 1.0 for unclassified airports. */
+  /** §8 priors HUB=3/MID=1.5/REGIONAL=1; UNCLASSIFIED carries 1.0 but is excluded from sampling. */
   trafficPrior: number;
-  region: MacroRegion;
+  region: MacroRegion | null;
+  /** How this row's region was assigned (override vs provisional table + version). */
+  regionSource: string | null;
+  exclusionReason: string | null;
   feedSchedule: boolean;
   feedLive: boolean;
   feedAdsb: boolean;
@@ -193,10 +181,10 @@ export function buildStratifiedFrame(cov: CoverageInput): CatalogFrame {
   for (const raw of cov.universeUnion) {
     const icao = raw.toUpperCase();
     const region = macroRegionForIcao(icao);
-    if (!region) {
-      unmapped.push(icao);
-      continue;
-    }
+    if (!region) unmapped.push(icao);
+    const regionSource = region
+      ? `${AIRPORT_REGION_MAPPING_SOURCE}@${REGION_MAPPING_VERSION}`
+      : null;
     const feedSchedule = scheduleSet.has(icao);
     const feedLive = liveSet.has(icao);
     const feedAdsb = adsbSet.has(icao);
@@ -206,8 +194,10 @@ export function buildStratifiedFrame(cov: CoverageInput): CatalogFrame {
         icao,
         tier: curatedTier,
         tierSource: "curated",
-        trafficPrior: 1.0,
+        trafficPrior: curatedTier === "HUB" ? 3 : curatedTier === "MID" ? 1.5 : 1.0,
         region,
+        regionSource,
+        exclusionReason: region ? null : "UNMAPPED_REGION",
         feedSchedule,
         feedLive,
         feedAdsb,
@@ -215,12 +205,16 @@ export function buildStratifiedFrame(cov: CoverageInput): CatalogFrame {
         postEligible: feedLive || feedAdsb,
       });
     } else {
+      // §1.5.10 / ChatGPT round-3 item 3: missing traffic reference stays
+      // UNCLASSIFIED (visible, excluded from sampling) — never blanket REGIONAL.
       frame.push({
         icao,
-        tier: "REGIONAL",
+        tier: "UNCLASSIFIED",
         tierSource: "unclassified",
         trafficPrior: 1.0,
         region,
+        regionSource,
+        exclusionReason: region ? "UNCLASSIFIED_TIER" : "UNCLASSIFIED_TIER;UNMAPPED_REGION",
         feedSchedule,
         feedLive,
         feedAdsb,
@@ -268,25 +262,64 @@ export function buildStratifiedFrame(cov: CoverageInput): CatalogFrame {
 }
 
 /** Write the measured frame into clean.adb_sampling_frame (migration 0021).
- *  The collector reads candidates from HERE, not the static 276. */
-export async function persistFrameToDb(frame: CatalogFrame): Promise<{ rows: number }> {
+ *  Versioned: every build INSERTs a new frame_version (never DELETEs prior
+ *  rows), so the prior frame artifact is preserved (§1.5.10 / ChatGPT round-3).
+ *  The collector reads candidates from the authoritative active registry. */
+export async function persistFrameToDb(
+  frame: CatalogFrame,
+  frameVersion?: string,
+  frameHash?: string | null,
+): Promise<{ rows: number; frameVersion: string }> {
   if (frame.frame.length === 0) {
     throw new Error("refusing to persist an empty frame — build failed?");
   }
-  await pool.query("DELETE FROM clean.adb_sampling_frame WHERE in_frame = true");
+  const effectiveHash = frameHash ?? createHash("sha256")
+    .update(JSON.stringify([...frame.frame].sort((a, b) => a.icao.localeCompare(b.icao))))
+    .digest("hex");
+  const version = frameVersion ?? `frame_${effectiveHash.slice(0, 16)}`;
+  const client = await pool.connect();
   let rows = 0;
-  for (const r of frame.frame) {
-    await pool.query(
+  try {
+    await client.query("BEGIN");
+    for (const r of frame.frame) {
+      await client.query(
       `INSERT INTO clean.adb_sampling_frame
-         (icao, tier, tier_source, traffic_prior, region,
-          feed_schedule, feed_live, feed_adsb, pre_eligible, post_eligible, in_frame)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)`,
-      [r.icao, r.tier, r.tierSource, r.trafficPrior, r.region,
-       r.feedSchedule, r.feedLive, r.feedAdsb, r.preEligible, r.postEligible],
+         (icao, tier, tier_source, traffic_prior, region, region_source, exclusion_reason,
+          feed_schedule, feed_live, feed_adsb, pre_eligible, post_eligible, in_frame,
+          frame_version, frame_hash)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true,$13,$14)
+       ON CONFLICT (icao, frame_version) DO UPDATE SET
+         tier = EXCLUDED.tier, tier_source = EXCLUDED.tier_source,
+         traffic_prior = EXCLUDED.traffic_prior, region = EXCLUDED.region,
+         region_source = EXCLUDED.region_source,
+         exclusion_reason = EXCLUDED.exclusion_reason,
+         feed_schedule = EXCLUDED.feed_schedule, feed_live = EXCLUDED.feed_live,
+         feed_adsb = EXCLUDED.feed_adsb, pre_eligible = EXCLUDED.pre_eligible,
+         post_eligible = EXCLUDED.post_eligible, in_frame = EXCLUDED.in_frame,
+         frame_hash = EXCLUDED.frame_hash`,
+      [r.icao, r.tier, r.tierSource, r.trafficPrior, r.region, r.regionSource, r.exclusionReason,
+       r.feedSchedule, r.feedLive, r.feedAdsb, r.preEligible, r.postEligible,
+       version, effectiveHash],
+      );
+      rows++;
+    }
+    await client.query(
+    `INSERT INTO clean.adb_sampling_frame_registry (registry_key, active_frame_version, frame_hash, activated_at)
+     VALUES ('ACTIVE', $1, $2, now())
+     ON CONFLICT (registry_key) DO UPDATE SET
+       active_frame_version = EXCLUDED.active_frame_version,
+       frame_hash = EXCLUDED.frame_hash,
+       activated_at = EXCLUDED.activated_at`,
+      [version, effectiveHash],
     );
-    rows++;
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
-  return { rows };
+  return { rows, frameVersion: version };
 }
 
 async function main(): Promise<void> {
@@ -321,7 +354,7 @@ async function main(): Promise<void> {
   console.log(`universeCount                 : ${frame.universeCount}  (measured AeroDataBox universe)`);
   console.log(`frameCount                    : ${frame.frame.length}  (every feed-eligible universe airport)`);
   console.log(`  curated (our 276 ∩ frame)   : ${curatedInFrame}`);
-  console.log(`  unclassified (universe)     : ${unclassified}  (provisional REGIONAL, traffic_prior=1.0, §8)`);
+  console.log(`  unclassified (universe)     : ${unclassified}  (visible, excluded from core sampling)`);
   console.log(`unmapped (no region)          : ${frame.unmapped.length}${frame.unmapped.length ? "  ⚠ " + frame.unmapped.join(", ") : ""}`);
   console.log(`curated catalog total         : ${frame.catalogCount}  (30 HUB + 89 MID + 157 REGIONAL)`);
   console.log(`curated ∩ universe            : ${frame.catalogInUniverse}  (ours that ADB serves)`);
@@ -334,7 +367,7 @@ async function main(): Promise<void> {
   console.log("");
   console.log("Frame validation:");
   console.log(`  exactly-one region per row                : ${frame.unmapped.length === 0 ? "YES" : "NO — " + frame.unmapped.length + " unmapped excluded"}`);
-  console.log(`  unclassified ⇒ REGIONAL + prior=1.0 (0022) : ${unclassified} rows (enforced by CHECK constraint)`);
+  console.log(`  unclassified ⇒ UNCLASSIFIED (excluded)      : ${unclassified} rows`);
 
   console.log("Primary strata (traffic tier × macro-region) — PART 1 §4 / §17 step 11:");
   console.log("  cell                          frame   curated");
@@ -369,12 +402,11 @@ async function main(): Promise<void> {
   console.log(`
 Frozen traffic-tier rule v1 (PROVISIONAL — V3.9-f.7 §4.1 requires rebuild with external traffic reference):
   curated catalog airports → their human-classified tier (HUB/MID/REGIONAL).
-  all other universe airports → REGIONAL as "unclassified" (tier_source =
-  "unclassified"), traffic_prior starts at 1.0 (§8). This is the plan's own
-  §8 long-tail design — NOT a measured traffic class. It is provisional: a
+  all other universe airports → UNCLASSIFIED (tier_source = "unclassified")
+  and excluded from core slots. A
   traffic reference snapshot (OAG/Cirium or ACI/FAA 12-month departures) +
   frozen thresholds + region country→macro-region lookup (§4.2) must re-tier
-  them before FREEZE (see V3.9-f.7 §4.1/4.2). No HUB/MID label is invented without traffic evidence.
+  them before FREEZE (see V3.9-f.7 §4.1/4.2). No tier or region is invented without evidence.
   ⚠ If unclassified >0, frame is NOT YET FINAL per A30 — rebuild required before Gate 1/2 + FREEZE.`);
 
   console.log(`
@@ -391,8 +423,10 @@ Only coverage-failed airports leave the frame.`);
   await pool.end();
 }
 
-main().catch(async (err: any) => {
-  console.error("catalog build failed:", err?.message || err);
-  await pool.end();
-  process.exit(1);
-});
+if (process.argv[1]?.endsWith("build_stratified_catalog.ts")) {
+  main().catch(async (err: any) => {
+    console.error("catalog build failed:", err?.message || err);
+    await pool.end();
+    process.exit(1);
+  });
+}

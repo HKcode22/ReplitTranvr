@@ -121,6 +121,36 @@ export function allCatalogAirports(): string[] {
   return AIRPORT_TIERS.flatMap((t) => [...AIRPORT_CATALOG[t]]);
 }
 
+export type AirportMacroRegion =
+  | "North America"
+  | "Europe"
+  | "Asia-Pacific"
+  | "Gulf/Africa"
+  | "South America"
+  | "Oceania";
+
+/**
+ * Frozen airport-level region artifact. This deliberately contains no ICAO
+ * prefix rules. Airports not explicitly verified here remain UNMAPPED until a
+ * versioned coordinate artifact is available. Russia is intentionally absent.
+ */
+export const AIRPORT_REGION_MAPPING_VERSION = "curated_airport_region_v1";
+export const AIRPORT_REGION_MAPPING_SOURCE = "curated_catalog_manual_review_2026-09-08";
+
+const REGION_BY_ICAO: ReadonlyMap<string, AirportMacroRegion> = new Map([
+  ["KJFK", "North America"], ["KLGA", "North America"], ["KABQ", "North America"],
+  ["EGLL", "Europe"], ["EDDM", "Europe"], ["EGPH", "Europe"],
+  ["RJTT", "Asia-Pacific"], ["RJBB", "Asia-Pacific"], ["ZBHH", "Asia-Pacific"],
+  ["OMDB", "Gulf/Africa"], ["OMAA", "Gulf/Africa"], ["GMMN", "Gulf/Africa"],
+  ["SBGR", "South America"], ["SCEL", "South America"], ["SBBR", "South America"],
+  ["YSSY", "Oceania"], ["YPPH", "Oceania"], ["YPAD", "Oceania"],
+]);
+
+export function regionForIcao(icao: string | null | undefined): AirportMacroRegion | null {
+  if (!icao) return null;
+  return REGION_BY_ICAO.get(icao.trim().toUpperCase()) ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Frame tier resolution (§1.5.10 / Phase 0J).
 //
