@@ -24,7 +24,7 @@
 
 import { randomInt } from "crypto";
 import { pool } from "../../db";
-import { reconcileSpend } from "./settlement_v3";
+import { reconcileSpend, runSettlement, type SettlementConfig } from "./settlement_v3";
 import {
   getBalance,
   createSubscription,
@@ -398,7 +398,11 @@ async function checkTemplateFreeze(
  *  delivered today (V3.9 three-quantity accounting, §13/§44-A/B). With
  *  maxDeliveryRetries=0 every notification item costs exactly 1 credit, so the
  *  adb_ingest_events ledger is the per-day internal basis (C_internal). The
- *  authoritative external number is the balance delta at batch stop / canary. */
+ *  authoritative external number is the balance delta at batch stop / canary.
+ *
+ *  DIAGNOSTIC ONLY (§1.5.11 / ChatGPT P0-3): UTC-day spend must NEVER drive
+ *  admission, caps, or reconciliation. Authoritative spend is per immutable
+ *  budget_day_id (run_day_index) via creditsUsedByBudgetDaySeq(). */
 export async function creditsUsedTodayUtc(): Promise<number> {
   const res = await pool.query(
     `SELECT COALESCE(sum(notification_items), 0)::int AS n
@@ -420,6 +424,49 @@ export async function actualBatchSpend(batchId: string): Promise<number> {
   );
   const items = res.rowCount ? res.rows[0].n : 0;
   return items > 0 ? items : estimateBatchCredits(batchId);
+}
+
+// ---------------------------------------------------------------------------
+// Immutable experiment budget-day ledger (§1.5.11 / ChatGPT P0-3).
+// budget_day_id = run_day_index of the owning parent batch-day (here: the
+// batch_seq, one batch per budget day). NEVER a UTC calendar date.
+// ---------------------------------------------------------------------------
+
+export interface BudgetDayState {
+  budgetDayId: string;
+  batchSeq: number | null;
+  status: "none" | "active" | "closed_settled" | "closed_unsettled";
+  settledSpend: number | null;
+}
+
+/** Latest budget-day state: the highest-seq batch determines the day. */
+export async function getLastBudgetDay(): Promise<BudgetDayState> {
+  const res = await pool.query(
+    `SELECT batch_seq, status, reconciliation_status, credits_consumed_actual
+       FROM clean.adb_collection_batches ORDER BY batch_seq DESC LIMIT 1`,
+  );
+  if (!res.rowCount) {
+    return { budgetDayId: budgetDayIdForBatch(0), batchSeq: null, status: "none", settledSpend: null };
+  }
+  const r = res.rows[0];
+  const seq = Number(r.batch_seq);
+  const settled = r.status === "CLOSED" && r.reconciliation_status === "PASS";
+  return {
+    budgetDayId: budgetDayIdForBatch(seq),
+    batchSeq: seq,
+    status: r.status === "ACTIVE" ? "active" : settled ? "closed_settled" : "closed_unsettled",
+    settledSpend: r.credits_consumed_actual != null ? Number(r.credits_consumed_actual) : null,
+  };
+}
+
+/** Authoritative settled spend for one immutable budget day. */
+export async function creditsUsedByBudgetDaySeq(batchSeq: number): Promise<number> {
+  const res = await pool.query(
+    `SELECT COALESCE(credits_consumed_actual, 0)::int AS n
+       FROM clean.adb_collection_batches WHERE batch_seq = $1`,
+    [batchSeq],
+  );
+  return res.rowCount ? Number(res.rows[0].n) : 0;
 }
 
 /** V3.9: delivery failures for a batch (webhook handler errors → §44-C gate). */
@@ -684,20 +731,34 @@ async function startBatchInner(): Promise<StartBatchResult> {
   // never collecting. minBatchCredits keeps the batch worth starting.
   const available = Math.max(0, balance.creditsRemaining - COLLECTOR_CONFIG.reserveCredits);
   let effectiveBudget = Math.min(COLLECTOR_CONFIG.batchBudget, available);
-  // V3.3 daily cap: a batch may never push today's UTC spend past the cap.
-  let dailyRemaining = effectiveBudget;
+  // §1.5.11 / ChatGPT P0-3: admission is per immutable budget_day_id
+  // (run_day_index), NEVER per UTC calendar day. The prior budget day must be
+  // fully settled/closed before a new day starts; spend fits the day's hard
+  // cap against settled (not UTC-day) spend.
+  const lastDay = await getLastBudgetDay();
+  if (lastDay.status === "active") {
+    throw new Error(
+      `Prior budget day ${lastDay.budgetDayId} is still ACTIVE — stop/close it (with settlement) before starting a new budget day.`,
+    );
+  }
+  if (lastDay.status === "closed_unsettled") {
+    throw new Error(
+      `Prior budget day ${lastDay.budgetDayId} is closed but UNSETTLED — reconcile it before starting a new budget day.`,
+    );
+  }
+  let dayRemaining = effectiveBudget;
   if (COLLECTOR_CONFIG.dailyCreditCap > 0) {
-    const usedToday = await creditsUsedTodayUtc();
-    dailyRemaining = Math.max(0, COLLECTOR_CONFIG.dailyCreditCap - usedToday);
-    effectiveBudget = Math.min(effectiveBudget, dailyRemaining);
+    // New budget day starts at zero settled spend; the cap binds the day.
+    dayRemaining = COLLECTOR_CONFIG.dailyCreditCap;
+    effectiveBudget = Math.min(effectiveBudget, dayRemaining);
   }
   if (effectiveBudget < COLLECTOR_CONFIG.minBatchCredits) {
     const capActive = COLLECTOR_CONFIG.dailyCreditCap > 0;
-    const why = capActive && dailyRemaining < COLLECTOR_CONFIG.minBatchCredits
-      ? `daily cap ${COLLECTOR_CONFIG.dailyCreditCap} reached — only ${dailyRemaining} credits left today`
+    const why = capActive && dayRemaining < COLLECTOR_CONFIG.minBatchCredits
+      ? `budget-day cap ${COLLECTOR_CONFIG.dailyCreditCap} reached`
       : `${balance.creditsRemaining} remaining, need reserve ${COLLECTOR_CONFIG.reserveCredits} + min batch ${COLLECTOR_CONFIG.minBatchCredits} (budget cap ${COLLECTOR_CONFIG.batchBudget})`;
     throw new Error(
-      `Credits too low for a batch: ${why}.${capActive && dailyRemaining < COLLECTOR_CONFIG.minBatchCredits ? " Wait for the next UTC day." : " Refill first."}`,
+      `Credits too low for a batch: ${why}.${capActive && dayRemaining < COLLECTOR_CONFIG.minBatchCredits ? " Close/settle the prior budget day first." : " Refill first."}`,
     );
   }
 
@@ -716,7 +777,7 @@ async function startBatchInner(): Promise<StartBatchResult> {
     candidates.HUB = [anchor, ...candidates.HUB.filter((a) => a !== anchor)];
   }
   console.log(
-    `[adb-collector] CREDIT-PLAN batch=${batchId} balance=${balance.creditsRemaining} reserve=${COLLECTOR_CONFIG.reserveCredits} → effectiveBudget=${effectiveBudget} dailyRemaining=${dailyRemaining} tierMix=${JSON.stringify(tierMix)}${anchor ? ` anchor=${anchor}` : ""}`,
+    `[adb-collector] CREDIT-PLAN batch=${batchId} balance=${balance.creditsRemaining} reserve=${COLLECTOR_CONFIG.reserveCredits} → effectiveBudget=${effectiveBudget} dayRemaining=${dayRemaining} tierMix=${JSON.stringify(tierMix)}${anchor ? ` anchor=${anchor}` : ""}`,
   );
 
   const now = new Date();
@@ -892,7 +953,24 @@ export async function stopBatch(reason: string): Promise<CollectionBatch | null>
   );
   const balanceBefore: number | null =
     beforeRes.rowCount && beforeRes.rows[0].balance_before != null ? Number(beforeRes.rows[0].balance_before) : null;
-  const balanceAfter = await getBalance();
+  // §1.5.11 / ChatGPT P0-2: shared settlement — ≥3 consecutive equal reads,
+  // change resets, timeout → SETTLEMENT_UNRESOLVED. Never a single post-read.
+  const settleCfg: SettlementConfig = {
+    initialWaitSeconds: Number(process.env.ADB_SETTLE_INITIAL_WAIT_S || 30),
+    pollIntervalSeconds: Number(process.env.ADB_SETTLE_POLL_S || 10),
+    stableReadCount: 3,
+    timeoutSeconds: Number(process.env.ADB_SETTLE_TIMEOUT_S || 600),
+  };
+  const settle = await runSettlement(settleCfg, async () => {
+    const b = await getBalance();
+    return b ? b.creditsRemaining : null;
+  });
+  const balanceAfter: number | null = settle.status === "settled" ? settle.stableBalance : null;
+  if (settle.status !== "settled") {
+    console.error(
+      `[adb-collector] batch ${active.batchId} SETTLEMENT_UNRESOLVED (${settle.reason}, ${settle.readsUsed} reads) — no later paid run starts until resolved.`,
+    );
+  }
   const aggRes = await pool.query(
     `SELECT COALESCE(sum(notification_items), 0)::int AS items,
             COALESCE(sum(rows_stored), 0)::int AS stored,
@@ -905,8 +983,8 @@ export async function stopBatch(reason: string): Promise<CollectionBatch | null>
   const agg = aggRes.rows[0] ?? { items: 0, stored: 0, inserted: 0, updated: 0, failures: 0 };
   const internal = Number(agg.items) ?? 0;
   const actual =
-    balanceBefore !== null && balanceAfter?.creditsRemaining != null
-      ? balanceBefore - balanceAfter.creditsRemaining
+    balanceBefore !== null && balanceAfter !== null
+      ? balanceBefore - balanceAfter
       : null;
   // §1.5.11 / ChatGPT P0-3: shared exact reconciliation (tol=0). A nonzero
   // discrepancy is MISMATCH until a measured/frozen PRODUCTION_RECONCILE_TOLERANCE
@@ -954,7 +1032,7 @@ export async function stopBatch(reason: string): Promise<CollectionBatch | null>
     [
       reason,
       active.batchId,
-      balanceAfter?.creditsRemaining ?? null,
+      balanceAfter ?? null,
       actual,
       internal,
       Number(agg.items) ?? 0,
@@ -1297,6 +1375,23 @@ async function cleanupOrphanSubscriptions(): Promise<number> {
   const subs = await listSubscriptions();
   if (subs.length === 0) return 0;
 
+  // R1 exclusivity (§1.5.11 / ChatGPT P0-4): only positively experiment-owned
+  // subscriptions may ever be auto-deleted. Foreign ACTIVE billable subs are
+  // detected + recorded + left alone — deleting them would be an unbounded
+  // provider mutation outside any authorization.
+  const ownedRes = await pool.query("SELECT subscription_id FROM clean.adb_collection_subs");
+  const ownedIds = new Set<string>(ownedRes.rows.map((r: any) => String(r.subscription_id)));
+  const foreignActive = subs.filter(
+    (s) => !ownedIds.has(String(s.id)) && s.isActive && s.billingType !== "LifetimeBased",
+  );
+  if (foreignActive.length > 0) {
+    console.error(
+      `[adb-collector] R1 REFUSAL: ${foreignActive.length} foreign ACTIVE billable subscription(s) present ` +
+        `(${foreignActive.map((s) => s.id).join(", ")}) — will NOT auto-delete; human/owned cleanup required. Paid work is BLOCKED until resolved.`,
+    );
+    return -1;
+  }
+
   const active = await getActiveBatch();
   const keep = new Set<string>();
   if (active) {
@@ -1310,10 +1405,11 @@ async function cleanupOrphanSubscriptions(): Promise<number> {
   let removed = 0;
   for (const s of subs) {
     if (keep.has(s.id)) continue;
+    if (!ownedIds.has(String(s.id))) continue; // never auto-delete what we cannot prove we own
     const ok = await deleteSubscription(s.id);
     if (ok) {
       removed++;
-      console.log(`[adb-collector] removed orphan subscription ${s.id}`);
+      console.log(`[adb-collector] removed owned stale subscription ${s.id}`);
     }
   }
   return removed;
@@ -1384,20 +1480,27 @@ async function maybeAutoStartNextBatch(): Promise<void> {
     if (nowMs < plannedMs || nowMs - plannedMs > windowMs) return;
   }
 
-  // One auto-started batch per UTC day (manual starts unaffected) — keeps the
-  // "1 × 4 h/day" cadence even on low-yield days that don't spend the cap.
-  const lastStartDay = await readMeta("auto_start_day");
-  const todayKey = new Date().toISOString().slice(0, 10);
-  if (lastStartDay === todayKey) return;
+  // One auto-started batch per SETTLED budget day (manual starts unaffected).
+  // The prior budget day must be closed AND reconciled-settled; a new day never
+  // starts on UTC-date rollover alone (§1.5.11 / ChatGPT P0-3).
+  const lastDay = await getLastBudgetDay();
+  if (lastDay.status === "active") return;
+  if (lastDay.status === "closed_unsettled") {
+    console.log(
+      `[adb-collector] prior budget day ${lastDay.budgetDayId} unsettled — watchdog will not auto-start`,
+    );
+    return;
+  }
 
-  // Daily credit cap: don't even call startBatch when today's quota is gone.
+  // Budget-day credit cap: don't even call startBatch when the settled day
+  // remainder cannot fund a batch. (UTC-day spend is diagnostic only.)
   if (COLLECTOR_CONFIG.dailyCreditCap > 0) {
     try {
-      const used = await creditsUsedTodayUtc();
+      const used = lastDay.settledSpend ?? 0;
       const remaining = COLLECTOR_CONFIG.dailyCreditCap - used;
       if (remaining < COLLECTOR_CONFIG.minBatchCredits) {
         console.log(
-          `[adb-collector] daily cap reached (${used}/${COLLECTOR_CONFIG.dailyCreditCap} credits today, ${remaining} left) — waiting for the next UTC day`,
+          `[adb-collector] budget-day cap reached for ${lastDay.budgetDayId} (${used}/${COLLECTOR_CONFIG.dailyCreditCap} settled) — waiting for next settled budget day`,
         );
         return;
       }
@@ -1417,7 +1520,7 @@ async function maybeAutoStartNextBatch(): Promise<void> {
 
   try {
     const result = await startBatch();
-    await writeMeta("auto_start_day", todayKey);
+    await writeMeta("auto_start_day", result.batch.batchId);
     const tierCounts = countTiers(result.batch.airports);
     console.log(
       `[adb-collector] AUTO-STARTED batch ${result.batch.batchId} airports=${result.batch.airports.join(",")} ` +

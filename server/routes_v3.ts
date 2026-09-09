@@ -74,6 +74,22 @@ function managementGuard(req: Request, res: Response, next: NextFunction): void 
   next();
 }
 
+// Mutation guard for provider-mutating management routes (ChatGPT P0-4,
+// §1.5.1 item 5): subscription create/delete, balance refill, and collection
+// start are REFUSED unless explicitly enabled. The webhook secret alone is
+// NOT experiment authorization. Read-only routes and collection/stop (safety)
+// stay available. Re-enable only with an exact AUTH-gated path.
+function managementMutationGuard(req: Request, res: Response, next: NextFunction): void {
+  const allowed = String(process.env.ALLOW_MANAGEMENT_MUTATIONS || "").toLowerCase().trim();
+  if (allowed !== "1" && allowed !== "true") {
+    res.status(403).json({
+      error: "Management mutations are disabled during PREP. Provider-mutating actions require the exact experiment authorization path, not the webhook secret alone.",
+    });
+    return;
+  }
+  next();
+}
+
 export function registerV3Routes(app: Express): void {
   // ---------------------------------------------------------------------
   // WEBHOOK INGRESS — durably persist raw delivery/items BEFORE successful
@@ -504,7 +520,7 @@ export function registerV3Routes(app: Express): void {
     res.json({ balance });
   });
 
-  app.post("/api/v1/subscriptions/balance/refill", managementGuard, async (req: Request, res: Response) => {
+  app.post("/api/v1/subscriptions/balance/refill", managementGuard, managementMutationGuard, async (req: Request, res: Response) => {
     const credits = Math.floor(Number(req.body?.credits));
     if (!Number.isFinite(credits) || credits <= 0) {
       return res.status(400).json({ error: "credits must be a positive integer" });
@@ -525,7 +541,7 @@ export function registerV3Routes(app: Express): void {
     res.json({ subscription });
   });
 
-  app.post("/api/v1/subscriptions/webhook", managementGuard, async (req: Request, res: Response) => {
+  app.post("/api/v1/subscriptions/webhook", managementGuard, managementMutationGuard, async (req: Request, res: Response) => {
     const { subjectType, subjectId, maxDeliveryRetries, url } = req.body || {};
     if (subjectType !== "FlightByNumber" && subjectType !== "FlightByAirportIcao") {
       return res.status(400).json({ error: "subjectType must be FlightByNumber or FlightByAirportIcao" });
@@ -553,7 +569,7 @@ export function registerV3Routes(app: Express): void {
     res.status(201).json({ subscription });
   });
 
-  app.delete("/api/v1/subscriptions/webhook/:id", managementGuard, async (req: Request, res: Response) => {
+  app.delete("/api/v1/subscriptions/webhook/:id", managementGuard, managementMutationGuard, async (req: Request, res: Response) => {
     const ok = await deleteSubscription(String(req.params.id));
     if (!ok) return res.status(502).json({ error: "Failed to delete subscription" });
     res.json({ success: true });
@@ -579,7 +595,7 @@ export function registerV3Routes(app: Express): void {
     }
   });
 
-  app.post("/api/v1/collection/start", managementGuard, async (_req: Request, res: Response) => {
+  app.post("/api/v1/collection/start", managementGuard, managementMutationGuard, async (_req: Request, res: Response) => {
     try {
       const result = await startBatch();
       res.status(201).json(result);

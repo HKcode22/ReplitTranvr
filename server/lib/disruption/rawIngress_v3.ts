@@ -153,6 +153,11 @@ export async function persistRawDelivery(input: RawDeliveryInput): Promise<RawDe
 /**
  * Persist individual flight items from a delivery. Append-only, never updated.
  * Called after raw_delivery is persisted but potentially before 2xx (§16).
+ *
+ * THROWS on persistence failure (§1.5.2 / ChatGPT P0-1): the caller MUST treat
+ * a throw as "raw not durable" and refuse 2xx. Never silently returns 0 on DB
+ * failure — a swallowed error would let the route acknowledge data it never
+ * stored. Returns the inserted row count on success (0 only when input empty).
  */
 export async function persistRawDeliveryItems(items: RawDeliveryItemInput[]): Promise<number> {
   if (items.length === 0) return 0;
@@ -200,7 +205,7 @@ export async function persistRawDeliveryItems(items: RawDeliveryItemInput[]): Pr
     return values.length;
   } catch (err: any) {
     console.error(`[raw-ingest] raw_delivery_item persist failed:`, err?.message || err);
-    return 0;
+    throw new Error(`Raw delivery-item persistence failed: ${err?.message || err}`);
   }
 }
 

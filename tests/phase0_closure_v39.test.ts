@@ -129,3 +129,62 @@ describe("Phase 0P: R1 exclusivity — foreign ACTIVE billable refused", () => {
     ).toBe(true);
   });
 });
+
+describe("Phase 0O: AUTH-record verification with success path (ChatGPT P1-7)", () => {
+  const NOW = new Date("2026-09-08T12:00:00Z");
+
+  function validRecord(over: Record<string, unknown> = {}) {
+    return {
+      authorizationId: "AUTH-20260908-G3",
+      phaseGate: "Phase 3 / Gate 3",
+      airportFilterWindow: "KLAX/departures/2026-09-08T08:00Z+2h",
+      maxAlertCredits: 100,
+      maxRestUnitsByCategory: null,
+      startNotBeforeUtc: "2026-09-08T00:00:00Z",
+      expiresAtUtc: "2026-09-09T00:00:00Z",
+      cleanupOwner: "operator",
+      predecessorEvidenceIds: ["GATE-2-20260907-001"],
+      ...over,
+    };
+  }
+
+  it("fully valid record VERIFIES (success path exists)", async () => {
+    const { verifyAuthRecord } = await import("../server/lib/disruption/authRecord_v39");
+    const v = verifyAuthRecord(validRecord() as any, {
+      nowUtc: NOW,
+      existingEvidenceIds: ["GATE-2-20260907-001"],
+    });
+    expect(v.verified).toBe(true);
+  });
+
+  it("missing record refused", async () => {
+    const { verifyAuthRecord } = await import("../server/lib/disruption/authRecord_v39");
+    expect(verifyAuthRecord(null, { nowUtc: NOW, existingEvidenceIds: [] }).verified).toBe(false);
+  });
+
+  it("malformed ID refused", async () => {
+    const { verifyAuthRecord } = await import("../server/lib/disruption/authRecord_v39");
+    const v = verifyAuthRecord(validRecord({ authorizationId: "nope" }) as any, { nowUtc: NOW, existingEvidenceIds: [] });
+    expect(v.verified).toBe(false);
+  });
+
+  it("expired record refused", async () => {
+    const { verifyAuthRecord } = await import("../server/lib/disruption/authRecord_v39");
+    const v = verifyAuthRecord(validRecord({ expiresAtUtc: "2026-09-01T00:00:00Z" }) as any, { nowUtc: NOW, existingEvidenceIds: ["GATE-2-20260907-001"] });
+    expect(v.verified).toBe(false);
+    if (!v.verified) expect(v.reason).toContain("expired");
+  });
+
+  it("missing predecessor evidence refused with names", async () => {
+    const { verifyAuthRecord } = await import("../server/lib/disruption/authRecord_v39");
+    const v = verifyAuthRecord(validRecord() as any, { nowUtc: NOW, existingEvidenceIds: [] });
+    expect(v.verified).toBe(false);
+    if (!v.verified) expect(v.reason).toContain("GATE-2-20260907-001");
+  });
+
+  it("non-positive ceiling refused", async () => {
+    const { verifyAuthRecord } = await import("../server/lib/disruption/authRecord_v39");
+    const v = verifyAuthRecord(validRecord({ maxAlertCredits: 0 }) as any, { nowUtc: NOW, existingEvidenceIds: ["GATE-2-20260907-001"] });
+    expect(v.verified).toBe(false);
+  });
+});

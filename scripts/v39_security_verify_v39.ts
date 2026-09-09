@@ -1,8 +1,14 @@
 /**
- * v39:security:verify — retention/security verifier (§1.5.15).
- * Checks the offline security/retention machinery; reports BLOCKED items with
- * reasons when the machinery or the real rights are missing. Exit 0 only when
- * every check passes. Unknown content class/control = BLOCKED (never PASS).
+ * v39:security:verify — retention/security verifier (§1.5.15 / ChatGPT P1-8).
+ *
+ * Two separate verdicts (never conflated):
+ *  - MACHINERY (Phase-0 scope): secret handling, DB path, webhook auth
+ *    config, raw-ingress owner, redaction utilities. All must pass, else exit 1.
+ *  - TERMS (Phase-2 prerequisite P scope): actual Plan Terms, content
+ *    classes, legal basis from Gate-0 channel evidence. Reported as
+ *    PENDING-BY-DESIGN here — it cannot pass in Phase 0 and must NOT fail
+ *    the Phase-0 aggregate preflight for that reason.
+ * Exit 0 iff all machinery checks pass (Terms pending is informational).
  */
 import { existsSync } from "fs";
 import { join } from "path";
@@ -11,46 +17,52 @@ interface Check { name: string; pass: boolean; detail: string; }
 
 function main(): void {
   const root = process.cwd();
-  const checks: Check[] = [];
+  const machinery: Check[] = [];
+  const termsPending: Check[] = [];
   const has = (p: string) => existsSync(join(root, p));
 
-  checks.push({
+  machinery.push({
     name: "webhook-secret-configured",
     pass: !!(process.env.AERODATABOX_WEBHOOK_SECRET || process.env.WEBHOOK_BASE_URL || process.env.REPLIT_DOMAINS),
     detail: "webhook secret or public base URL must be configured (else compensating-control state required)",
   });
-  checks.push({
+  machinery.push({
     name: "database-url-configured",
     pass: !!process.env.DATABASE_URL,
     detail: "DATABASE_URL required for webhook/raw/expiry least-privilege path",
   });
-  checks.push({
+  machinery.push({
     name: "raw-ingress-owner-exists",
     pass: has("server/lib/disruption/rawIngress_v3.ts"),
     detail: "rawIngress_v3.ts must exist for replay-safe identity checks",
   });
-  checks.push({
-    name: "no-secrets-in-repo",
-    pass: true, // verified by operator grep; real rights checked at prerequisite P
-    detail: "content-class/legal-basis values stay unset/BLOCKED until Phase-2 prerequisite P",
+  machinery.push({
+    name: "redaction-owner-exists",
+    pass: has("server/lib/redact.ts"),
+    detail: "redact.ts must exist; redaction tests prove secrets stay out of telemetry",
   });
-  checks.push({
+  termsPending.push({
     name: "real-terms-verified",
     pass: false,
-    detail: "BLOCKED: actual Plan Terms/content classes/legal basis require Gate-0 channel evidence (prerequisite P)",
+    detail: "PENDING-BY-DESIGN: actual Plan Terms/content classes/legal basis require Gate-0 channel evidence (prerequisite P, not Phase 0)",
   });
 
   console.log("SECURITY-VERIFY");
+  console.log("  machinery (Phase-0 scope):");
   let failed = 0;
-  for (const c of checks) {
-    console.log(`  [${c.pass ? "PASS" : "BLOCKED"}] ${c.name} — ${c.detail}`);
+  for (const c of machinery) {
+    console.log(`    [${c.pass ? "PASS" : "BLOCKED"}] ${c.name} — ${c.detail}`);
     if (!c.pass) failed++;
   }
+  console.log("  terms (prerequisite-P scope, informational here):");
+  for (const c of termsPending) {
+    console.log(`    [PENDING] ${c.name} — ${c.detail}`);
+  }
   if (failed > 0) {
-    console.log(`RESULT: BLOCKED (${failed} open items; unknown = BLOCKED)`);
+    console.log(`RESULT: BLOCKED (${failed} machinery items open)`);
     process.exit(1);
   }
-  console.log("RESULT: PASS");
+  console.log("RESULT: PASS (machinery green; Terms pending for prerequisite P)");
 }
 
 main();
