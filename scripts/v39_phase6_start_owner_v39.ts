@@ -6,7 +6,7 @@ import { startBatch } from "../server/lib/disruption/adbCollectionController_v3"
 import { resolveOwnerAuthorization } from "./v39_paid_guard_v39";
 
 const PHASE6_SCOPE = "Phase 6 (separate authorization)";
-const REQUIRED_SCHEMA_VERSION = "0045";
+const REQUIRED_SCHEMA_VERSION = "0046";
 
 function currentGitSha(): string {
   try {
