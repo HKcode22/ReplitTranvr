@@ -15,14 +15,28 @@ env:
   ADB_AUTO_COLLECT: "0"
   V39_PHASE6_PROCESS_ARMED: "0"
   AERODATABOX_API_KEY: ""
-  DATABASE_URL: ""
-  DATABASE_RUNTIME_URL: ""
-  NODE_ENV: "test"
+  DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+  DATABASE_RUNTIME_URL: "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+  NODE_ENV: test
 
 jobs:
   offline-safety:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: v39_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d v39_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v4
@@ -36,11 +50,38 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Apply production boot migrations — fresh database
+        run: npx tsx scripts/apply_boot_migrations_v39.ts
+
+      - name: Apply production boot migrations — idempotence replay
+        run: npx tsx scripts/apply_boot_migrations_v39.ts
+
+      - name: Verify current schema and triggers
+        run: npm run v39:migrate:check
+
       - name: TypeScript
         run: npm run v39:typecheck
 
       - name: Offline V3.9 tests
         run: npm run v39:test:offline
+
+      - name: Full test suite
+        run: npm run v39:test:full
+
+      - name: Lint
+        run: npm run v39:lint
+
+      - name: Registry
+        run: npm run v39:registry:check
+
+      - name: Traceability
+        run: npm run v39:traceability:check
+
+      - name: Contradiction scanner
+        run: npm run v39:scanner
+
+      - name: Aggregate Phase0 preflight
+        run: npm run v39:preflight
 
       - name: Production build
         run: npm run v39:build
