@@ -106,6 +106,7 @@ const REQUIRED_TRIGGERS = [
   "trg_apply_phase6_budget_limits",
   "trg_mark_phase6_hard_cap_mismatch",
   "trg_record_phase6_hard_cap_overshoot",
+  "trg_propagate_incident_to_phase6_failure",
 ];
 
 async function main(): Promise<void> {
