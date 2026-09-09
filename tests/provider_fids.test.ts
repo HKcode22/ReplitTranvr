@@ -475,7 +475,7 @@ describe("§1.5.3 production FIDS path", () => {
     const [query, rows] = persist.mock.calls[0];
     expect(query).toMatchObject({ queryDirection: "Departure", airportIanaTimezone: "America/Los_Angeles", providerApiVersion: "1.15.3.0" });
     expect(rows[0]).toMatchObject({ populationRole: "requested_airport_primary", scopeClassification: "confirmed_core",
-      codeshareResolutionStatus: "resolved_operator", canonicalFlightInstanceId: expect.any(String), availableAtUtc: new Date("2026-09-01T07:00:00Z") });
+      codeshareResolutionStatus: "confirmed_operating_leg", canonicalFlightInstanceId: expect.any(String), availableAtUtc: new Date("2026-09-01T07:00:00Z") });
   });
 
   it("raw/provenance persistence failure rejects rather than returning success", async () => {
