@@ -1,0 +1,46 @@
+name: V3.9 Phase0 Offline Safety
+
+on:
+  push:
+    branches:
+      - v39-phase0-final-repair
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  ADB_AUTO_COLLECT: "0"
+  V39_PHASE6_PROCESS_ARMED: "0"
+  AERODATABOX_API_KEY: ""
+  DATABASE_URL: ""
+  DATABASE_RUNTIME_URL: ""
+  NODE_ENV: "test"
+
+jobs:
+  offline-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: TypeScript
+        run: npm run v39:typecheck
+
+      - name: Offline V3.9 tests
+        run: npm run v39:test:offline
+
+      - name: Production build
+        run: npm run v39:build
