@@ -1,131 +1,89 @@
 /**
- * Weather signal — V3.9-f.8 §27 / Sep1_1 §27
+ * V3.9-f.8 weather availability/selection owner.
  *
- * Binding spec: AugMDnotes/V3.9_DataCollectPlan.md §27
- *
- * Sep1_1 §27 corrections:
- *  - ERA5 leak prevention: never use future-known weather data
- *  - LDM naming correction: LDM = Local Data Message (aviationweather.gov product)
- *    NOT "Live Data Message" or any other expansion
- *  - Operational vs retrospective sources distinguished
- *  - Weather source/version tracked for reproducibility
- *  - TAF issue time validated
- *  - Future weather exclusion enforced
- *
- * Weather products used:
- *  - METAR: current observations (operational, ~5min latency)
- *  - TAF: terminal aerodrome forecasts (operational, issued every 6h)
- *  - LDM (Local Data Message): regional weather data (aviationweather.gov)
- *  - ERA5: reanalysis dataset (retrospective ONLY, never operational)
- *
- * ERA5 leak prevention rule:
- *  - ERA5 data must NEVER be used for snapshots at T if the data was
- *    generated AFTER T. ERA5 is only for retrospective analysis.
- *  - Operational snapshots use only METAR/TAF/LDM data available at T.
+ * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§10, 12.2 and the
+ * Phase-0I implementation contract. Unknown weather remains missing; it is
+ * never converted into benign wind/visibility/ceiling values.
  */
 
 export interface WeatherSignal {
   iataCode: string;
   icaoCode: string;
-  flightCategory: string;
-  windSpeedKt: number;
-  gustSpeedKt: number;
-  visibilityMiles: number;
-  ceilingFt: number;
-  hasThunderstorm: boolean;
-  hasFreezing: boolean;
-  rawMetar: string;
-  riskContribution: number;
-  /** Weather source: 'metar' | 'taf' | 'ldm' | 'era5' */
+  flightCategory: "VFR" | "MVFR" | "IFR" | "LIFR" | "UNKNOWN";
+  windSpeedKt: number | null;
+  gustSpeedKt: number | null;
+  visibilityMiles: number | null;
+  ceilingFt: number | null;
+  hasThunderstorm: boolean | null;
+  hasFreezing: boolean | null;
+  rawMetar: string | null;
+  riskContribution: number | null;
   source: string;
-  /** Weather product version */
   sourceVersion: string;
-  /** When the weather observation was issued */
   issueTime: Date | null;
-  /** When we retrieved this data */
+  /** Earliest time this observation was usable by our system. */
+  availableAt: Date | null;
   retrievedAt: Date;
+  weatherMissing: boolean;
 }
 
 export interface WeatherRetrievalContext {
-  /** The prediction cutoff time — weather data must be available at or before this time */
   cutoffUtc: Date;
-  /** Whether this is for operational (live) or retrospective analysis */
   mode: "operational" | "retrospective";
-  /** Whether ERA5 data is allowed (only for retrospective) */
   allowEra5: boolean;
 }
 
-function defaultSignal(iataCode: string): WeatherSignal {
+/**
+ * Small explicit compatibility map only. The research pipeline must use the
+ * frozen airport reference/frame mapping. There is deliberately NO global
+ * "K"+IATA heuristic because V3.9 is global.
+ */
+const VERIFIED_IATA_ICAO: Record<string, string> = {
+  HNL: "PHNL", OGG: "PHOG", KOA: "PHKO", LIH: "PHLI", ANC: "PANC", FAI: "PAFA", JNU: "PAJN", SJU: "TJSJ",
+  YYZ: "CYYZ", YVR: "CYVR", YUL: "CYUL", YYC: "CYYC", LHR: "EGLL", CDG: "LFPG", FRA: "EDDF", AMS: "EHAM",
+  DXB: "OMDB", NRT: "RJAA", HND: "RJTT", ICN: "RKSI", SYD: "YSSY", MEX: "MMMX",
+  LAX: "KLAX", SFO: "KSFO", JFK: "KJFK", ORD: "KORD", ATL: "KATL", DFW: "KDFW", DEN: "KDEN", SEA: "KSEA",
+};
+
+export function iataToIcao(iata: string): string {
+  const code = (iata || "").trim().toUpperCase();
+  return VERIFIED_IATA_ICAO[code] ?? "";
+}
+
+function missingSignal(iataCode: string, retrievedAt = new Date()): WeatherSignal {
+  const code = (iataCode || "").trim().toUpperCase();
   return {
-    iataCode: (iataCode || "").toUpperCase(),
-    icaoCode: iataToIcao(iataCode || ""),
+    iataCode: code,
+    icaoCode: iataToIcao(code),
     flightCategory: "UNKNOWN",
-    windSpeedKt: 0,
-    gustSpeedKt: 0,
-    visibilityMiles: 10,
-    ceilingFt: 99999,
-    hasThunderstorm: false,
-    hasFreezing: false,
-    rawMetar: "",
-    riskContribution: 0,
+    windSpeedKt: null,
+    gustSpeedKt: null,
+    visibilityMiles: null,
+    ceilingFt: null,
+    hasThunderstorm: null,
+    hasFreezing: null,
+    rawMetar: null,
+    riskContribution: null,
     source: "none",
     sourceVersion: "v3.9-f.8",
     issueTime: null,
-    retrievedAt: new Date(),
+    availableAt: null,
+    retrievedAt,
+    weatherMissing: true,
   };
 }
 
-// Minimal IATA→ICAO mapping. For US airports, prepend "K". A small set of
-// common non-K ICAO codes are special-cased so weather lookups still work
-// for them; everything else falls back to K-prefix, which is fine for the
-// US-focused launch surface of the disruption monitor.
-const NON_K_ICAO: Record<string, string> = {
-  HNL: "PHNL",
-  OGG: "PHOG",
-  KOA: "PHKO",
-  LIH: "PHLI",
-  ANC: "PANC",
-  FAI: "PAFA",
-  JNU: "PAJN",
-  SJU: "TJSJ",
-  YYZ: "CYYZ",
-  YVR: "CYVR",
-  YUL: "CYUL",
-  YYC: "CYYC",
-  LHR: "EGLL",
-  CDG: "LFPG",
-  FRA: "EDDF",
-  AMS: "EHAM",
-  DXB: "OMDB",
-  NRT: "RJAA",
-  HND: "RJTT",
-  ICN: "RKSI",
-  SYD: "YSSY",
-  MEX: "MMMX",
-};
-
-function iataToIcao(iata: string): string {
-  const code = (iata || "").trim().toUpperCase();
-  if (!code) return "";
-  if (NON_K_ICAO[code]) return NON_K_ICAO[code];
-  if (code.length === 3) return `K${code}`;
-  return code;
-}
-
-function categoryFromMetar(
-  visibilityMiles: number,
-  ceilingFt: number,
-): "VFR" | "MVFR" | "IFR" | "LIFR" | "UNKNOWN" {
-  if (!Number.isFinite(visibilityMiles) && !Number.isFinite(ceilingFt)) return "UNKNOWN";
-  const vis = Number.isFinite(visibilityMiles) ? visibilityMiles : 99;
-  const ceil = Number.isFinite(ceilingFt) ? ceilingFt : 99999;
+function categoryFromMetar(visibilityMiles: number | null, ceilingFt: number | null): WeatherSignal["flightCategory"] {
+  if (visibilityMiles === null && ceilingFt === null) return "UNKNOWN";
+  const vis = visibilityMiles ?? Number.POSITIVE_INFINITY;
+  const ceil = ceilingFt ?? Number.POSITIVE_INFINITY;
   if (vis < 1 || ceil < 500) return "LIFR";
   if (vis < 3 || ceil < 1000) return "IFR";
   if (vis < 5 || ceil < 3000) return "MVFR";
   return "VFR";
 }
 
-function categoryPoints(cat: string): number {
+function categoryPoints(cat: WeatherSignal["flightCategory"]): number {
   switch (cat) {
     case "LIFR": return 25;
     case "IFR": return 18;
@@ -135,57 +93,26 @@ function categoryPoints(cat: string): number {
   }
 }
 
-// ---------------------------------------------------------------------------
-// ERA5 leak prevention (§27)
-// ---------------------------------------------------------------------------
-
-/**
- * Check if weather data is available at a given cutoff.
- * ERA5 leak prevention: data generated AFTER cutoff must be excluded.
- *
- * For operational mode: only METAR/TAF/LDM data with issueTime ≤ cutoff.
- * For retrospective mode: ERA5 allowed if allowEra5=true AND data is historical.
- */
+/** Missing/invalid issue time is never cutoff-safe. */
 export function isWeatherAvailableAtCutoff(
   issueTime: Date | null,
   cutoffUtc: Date,
   source: string,
   mode: "operational" | "retrospective",
 ): boolean {
-  if (!issueTime) return true; // missing issue time = treat as available
-
-  // ERA5 leak prevention: ERA5 data must not be used for operational snapshots
-  if (source === "era5" && mode === "operational") {
-    console.warn(`[weather] ERA5 data rejected for operational mode at cutoff ${cutoffUtc.toISOString()}`);
-    return false;
-  }
-
-  // Standard availability: issue time must be at or before cutoff
-  return issueTime <= cutoffUtc;
-}
-
-/**
- * Validate TAF issue time.
- * TAFs are issued every 6 hours and valid for 24-30 hours.
- * A TAF issued after the cutoff is future data and must be excluded.
- */
-export function validateTafIssueTime(
-  issueTime: Date | null,
-  cutoffUtc: Date,
-): boolean {
+  if (source === "era5" && mode === "operational") return false;
   if (!issueTime) return false;
-  return issueTime <= cutoffUtc;
+  const issue = issueTime.getTime();
+  const cutoff = cutoffUtc.getTime();
+  return Number.isFinite(issue) && Number.isFinite(cutoff) && issue <= cutoff;
 }
 
-// ---------------------------------------------------------------------------
-// Operational as-known weather selection (§1.5.9 / Phase 0I)
-// ---------------------------------------------------------------------------
+export function validateTafIssueTime(issueTime: Date | null, cutoffUtc: Date): boolean {
+  return isWeatherAvailableAtCutoff(issueTime, cutoffUtc, "taf", "operational");
+}
 
-/** Operational precedence: live_metar > archive_metar > frozen GFS/NAM grid. ERA5 is never operational. */
 export const WEATHER_OPERATIONAL_PRECEDENCE = ["live_metar", "archive_metar", "gfs", "nam"] as const;
 export type WeatherOperationalSource = (typeof WEATHER_OPERATIONAL_PRECEDENCE)[number];
-
-/** No qualifying observation within 6h → weather_missing. */
 export const WEATHER_OPERATIONAL_LOOKBACK_HOURS = 6;
 
 export interface WeatherCandidate {
@@ -203,176 +130,121 @@ export interface WeatherSelection {
 }
 
 /**
- * Select the operational as-known weather observation (§1.5.9):
- * latest qualifying candidate by precedence, requiring issue_time AND
- * available_at ≤ cutoff. ERA5 is rejected in operational use. TAF candidates
- * use their latest amendment satisfying both clocks.
+ * Select as-known weather using BOTH provider issue time and our availability
+ * time. Unknown clocks fail closed. ERA5 is never an operational fallback.
  */
-export function selectOperationalWeather(
-  candidates: WeatherCandidate[],
-  cutoffUtc: Date,
-): WeatherSelection {
+export function selectOperationalWeather(candidates: WeatherCandidate[], cutoffUtc: Date): WeatherSelection {
   const cutoffMs = cutoffUtc.getTime();
+  if (!Number.isFinite(cutoffMs)) {
+    return { selected: null, weatherMissing: true, sourceUsed: "none", reason: "invalid cutoff" };
+  }
+  const precedence = WEATHER_OPERATIONAL_PRECEDENCE as readonly string[];
   const eligible = candidates.filter((c) => {
-    if (c.source === "era5") return false; // never operational fallback
-    if (!c.issueTime || c.issueTime.getTime() > cutoffMs) return false;
-    if (c.availableAt && c.availableAt.getTime() > cutoffMs) return false;
-    return true;
+    if (!precedence.includes(c.source) || c.source === "era5") return false;
+    if (!c.issueTime || !c.availableAt) return false;
+    const issue = c.issueTime.getTime();
+    const available = c.availableAt.getTime();
+    return Number.isFinite(issue) && Number.isFinite(available) && issue <= cutoffMs && available <= cutoffMs;
   });
   if (eligible.length === 0) {
-    return { selected: null, weatherMissing: true, sourceUsed: "none", reason: "no qualifying observation within lookback" };
+    return { selected: null, weatherMissing: true, sourceUsed: "none", reason: "no cutoff-safe operational observation" };
   }
-  // Precedence first, then latest issue time within the winning source class.
-  const rank = (s: string): number => {
-    const i = (WEATHER_OPERATIONAL_PRECEDENCE as readonly string[]).indexOf(s);
-    return i === -1 ? WEATHER_OPERATIONAL_PRECEDENCE.length : i;
-  };
-  eligible.sort((a, b) => {
-    const r = rank(a.source) - rank(b.source);
-    if (r !== 0) return r;
-    return (b.issueTime?.getTime() ?? 0) - (a.issueTime?.getTime() ?? 0);
-  });
+  const rank = (s: string) => precedence.indexOf(s);
+  eligible.sort((a, b) => rank(a.source) - rank(b.source) || b.issueTime!.getTime() - a.issueTime!.getTime());
   const winner = eligible[0];
-  const ageHours = winner.issueTime
-    ? (cutoffMs - winner.issueTime.getTime()) / 3_600_000
-    : Number.POSITIVE_INFINITY;
+  const ageHours = (cutoffMs - winner.issueTime!.getTime()) / 3_600_000;
   if (ageHours > WEATHER_OPERATIONAL_LOOKBACK_HOURS) {
     return { selected: null, weatherMissing: true, sourceUsed: "none", reason: "latest qualifying observation older than 6h" };
   }
   return {
     selected: winner,
     weatherMissing: false,
-    sourceUsed: (WEATHER_OPERATIONAL_PRECEDENCE as readonly string[]).includes(winner.source)
-      ? (winner.source as WeatherOperationalSource)
-      : null,
-    reason: "selected by operational precedence",
+    sourceUsed: winner.source as WeatherOperationalSource,
+    reason: "selected by frozen operational precedence and cutoff clocks",
   };
 }
 
-// ---------------------------------------------------------------------------
-// Weather retrieval
-// ---------------------------------------------------------------------------
-
 /**
- * Get airport weather with ERA5 leak prevention.
- * In operational mode: only METAR data (no ERA5).
- * In retrospective mode: METAR + optionally ERA5.
+ * Convenience current-weather fetch used by the product surface. Research
+ * historical/as-of materialization should use the historical feature store and
+ * selectOperationalWeather rather than pretending a current fetch existed in
+ * the past. Unknown ICAO mapping fails closed.
  */
-export async function getAirportWeather(
-  iataCode: string,
-  context?: WeatherRetrievalContext,
-): Promise<WeatherSignal> {
-  const mode = context?.mode ?? "operational";
-  const cutoffUtc = context?.cutoffUtc ?? new Date();
-  const allowEra5 = context?.allowEra5 ?? false;
-
+export async function getAirportWeather(iataCode: string, context?: WeatherRetrievalContext): Promise<WeatherSignal> {
   const code = (iataCode || "").trim().toUpperCase();
-  if (!code) return defaultSignal("");
-
+  const retrievedAt = new Date();
+  if (!code) return missingSignal("", retrievedAt);
   const icao = iataToIcao(code);
-  if (!icao) return defaultSignal(code);
+  if (!icao) return missingSignal(code, retrievedAt);
 
-  // Operational mode: only METAR (never ERA5)
-  if (mode === "operational" || !allowEra5) {
-    return fetchMetarWeather(code, icao, cutoffUtc);
+  const mode = context?.mode ?? "operational";
+  const cutoffUtc = context?.cutoffUtc ?? retrievedAt;
+  if (mode === "retrospective") {
+    // Current METAR retrieval cannot establish what our system knew at a past
+    // cutoff. A historical/archive owner must supply an as-known candidate.
+    return missingSignal(code, retrievedAt);
   }
-
-  // Retrospective mode: try METAR first, fall back to ERA5 if needed
-  const metar = await fetchMetarWeather(code, icao, cutoffUtc);
-  if (metar.source !== "none") return metar;
-
-  // ERA5 fallback for retrospective analysis (not implemented yet)
-  // TODO: implement ERA5 retrieval when historical weather tables exist
-  console.log(`[weather] ERA5 fallback not yet implemented for ${code} in retrospective mode`);
-  return defaultSignal(code);
+  return fetchMetarWeather(code, icao, cutoffUtc);
 }
 
-/**
- * Fetch METAR weather from aviationweather.gov.
- * METAR is the operational weather source (§27).
- */
-async function fetchMetarWeather(
-  code: string,
-  icao: string,
-  cutoffUtc: Date,
-): Promise<WeatherSignal> {
-  const url = `https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(
-    icao,
-  )}&format=json`;
-
+async function fetchMetarWeather(code: string, icao: string, cutoffUtc: Date): Promise<WeatherSignal> {
+  const retrievedAt = new Date();
+  const url = `https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(icao)}&format=json`;
   try {
-    const resp = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "Travnr-Disruption-Monitor/1.0" },
-    });
-    if (!resp.ok) {
-      console.warn(`[weather] HTTP ${resp.status} for ${icao}`);
-      return { ...defaultSignal(code), source: "none" };
-    }
+    const resp = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "Travnr-Disruption-Monitor/1.0" } });
+    if (!resp.ok) return missingSignal(code, retrievedAt);
     const data: any = await resp.json();
     const row = Array.isArray(data) ? data[0] : null;
-    if (!row) {
-      console.log(`[weather] no METAR found for ${icao}`);
-      return { ...defaultSignal(code), source: "none" };
+    if (!row) return missingSignal(code, retrievedAt);
+
+    const issueRaw = row.reportTime ?? row.observation_time ?? null;
+    const parsed = issueRaw ? new Date(issueRaw) : null;
+    const issueTime = parsed && Number.isFinite(parsed.getTime()) ? parsed : null;
+    if (!isWeatherAvailableAtCutoff(issueTime, cutoffUtc, "metar", "operational")) return missingSignal(code, retrievedAt);
+
+    const numberOrNull = (value: unknown): number | null => {
+      if (value === null || value === undefined || value === "") return null;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    };
+    const windSpeedKt = numberOrNull(row.wspd ?? row.wind_speed_kt);
+    const gustSpeedKt = numberOrNull(row.wgst ?? row.wind_gust_kt);
+
+    let visibilityMiles: number | null = null;
+    const rawVis = row.visib ?? row.visibility_statute_mi;
+    if (typeof rawVis === "number" && Number.isFinite(rawVis)) visibilityMiles = rawVis;
+    else if (typeof rawVis === "string") {
+      const cleaned = rawVis.trim().replace(/\+$/, "");
+      const parts = cleaned.split(/\s+/);
+      let value = Number.NaN;
+      if (parts.length === 2 && parts[1].includes("/")) {
+        const [n, d] = parts[1].split("/").map(Number);
+        value = Number(parts[0]) + n / d;
+      } else if (cleaned.includes("/")) {
+        const [n, d] = cleaned.split("/").map(Number);
+        value = n / d;
+      } else value = Number(cleaned);
+      if (Number.isFinite(value)) visibilityMiles = value;
     }
 
-    // Parse issue time for ERA5 leak prevention
-    const issueTimeStr = row.reportTime || row.observation_time || row.rawOb;
-    let issueTime: Date | null = null;
-    if (issueTimeStr) {
-      const parsed = new Date(issueTimeStr);
-      if (!Number.isNaN(parsed.getTime())) issueTime = parsed;
+    let ceilingFt: number | null = null;
+    for (const layer of Array.isArray(row.clouds) ? row.clouds : []) {
+      const cover = String(layer?.cover ?? "").toUpperCase();
+      const base = Number(layer?.base);
+      if ((cover === "BKN" || cover === "OVC") && Number.isFinite(base)) {
+        ceilingFt = ceilingFt === null ? base : Math.min(ceilingFt, base);
+      }
     }
 
-    // ERA5 leak prevention: check availability at cutoff
-    if (!isWeatherAvailableAtCutoff(issueTime, cutoffUtc, "metar", "operational")) {
-      console.warn(`[weather] METAR for ${icao} issued after cutoff — excluded`);
-      return { ...defaultSignal(code), source: "none" };
-    }
-
-    const wxString = String(row.wxString || row.wx_string || "").toUpperCase();
+    const wxString = String(row.wxString ?? row.wx_string ?? "").toUpperCase();
     const hasThunderstorm = /\bTS\b|TSRA|TSGR/.test(wxString);
     const hasFreezing = /\bFZ\b|FZRA|FZDZ|FZFG|\bSN\b|\bPL\b/.test(wxString);
-    const windSpeedKt = Number(row.wspd ?? row.wind_speed_kt ?? 0) || 0;
-    const gustSpeedKt = Number(row.wgst ?? row.wind_gust_kt ?? 0) || 0;
-    const rawVis = row.visib ?? row.visibility_statute_mi;
-    let visMiles: number;
-    if (rawVis == null) {
-      visMiles = 10;
-    } else if (typeof rawVis === "string") {
-      const cleaned = rawVis.trim().replace(/\+$/, "");
-      const fracParts = cleaned.split(/\s+/);
-      if (fracParts.length === 2 && fracParts[1].includes("/")) {
-        const [n, d] = fracParts[1].split("/");
-        visMiles = parseFloat(fracParts[0]) + (parseFloat(n) / parseFloat(d));
-      } else if (cleaned.includes("/")) {
-        const [n, d] = cleaned.split("/");
-        visMiles = parseFloat(n) / parseFloat(d);
-      } else {
-        visMiles = parseFloat(cleaned);
-      }
-    } else {
-      visMiles = Number(rawVis);
-    }
-    const visibilityMiles = Number.isFinite(visMiles) ? visMiles : 10;
-
-    let ceilingFt = 99999;
-    const clouds: any[] = Array.isArray(row.clouds) ? row.clouds : [];
-    for (const layer of clouds) {
-      const cover = String(layer?.cover || "").toUpperCase();
-      if (cover === "BKN" || cover === "OVC") {
-        const base = Number(layer?.base);
-        if (Number.isFinite(base) && base < ceilingFt) ceilingFt = base;
-      }
-    }
-
     const flightCategory = categoryFromMetar(visibilityMiles, ceilingFt);
     let riskContribution = categoryPoints(flightCategory);
     if (hasThunderstorm) riskContribution += 10;
     if (hasFreezing) riskContribution += 5;
-    if (gustSpeedKt >= 25 || windSpeedKt >= 30) riskContribution += 3;
-    if (riskContribution > 25) riskContribution = 25;
-
-    const rawMetar = String(row.rawOb || row.raw_text || row.metar || "");
+    if ((gustSpeedKt ?? 0) >= 25 || (windSpeedKt ?? 0) >= 30) riskContribution += 3;
+    riskContribution = Math.min(25, riskContribution);
 
     return {
       iataCode: code,
@@ -384,15 +256,16 @@ async function fetchMetarWeather(
       ceilingFt,
       hasThunderstorm,
       hasFreezing,
-      rawMetar,
+      rawMetar: String(row.rawOb ?? row.raw_text ?? row.metar ?? "") || null,
       riskContribution,
-      source: "metar",
-      sourceVersion: "v3.9-f.8",
+      source: "live_metar",
+      sourceVersion: "aviationweather-data-api",
       issueTime,
-      retrievedAt: new Date(),
+      availableAt: retrievedAt,
+      retrievedAt,
+      weatherMissing: false,
     };
-  } catch (err: any) {
-    console.warn(`[weather] fetch failed for ${icao}:`, err?.message || err);
-    return { ...defaultSignal(code), source: "none" };
+  } catch {
+    return missingSignal(code, retrievedAt);
   }
 }
