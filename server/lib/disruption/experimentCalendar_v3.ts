@@ -24,14 +24,28 @@ export type WindowShape = "4h" | "2x2h" | "up-to-6h";
 
 export interface CalendarDay {
   dayIndex: number;           // 1-31
+  /** run_day_index follows actual window-start chronology (§1.5.12). */
+  runDayIndex: number;
   date: string;              // YYYY-MM-DD
   dayOfWeek: string;         // Monday, Tuesday, etc.
   isWeekend: boolean;
+  /** weekday_class: weekday (Mon–Fri) vs weekend (Sat–Sun) (§1.7.5). */
+  weekdayClass: "weekday" | "weekend";
+  /** time_class: frozen UTC slot ±1 hour (§1.7.5). */
+  timeClass: string;
   windowShape: WindowShape;
   segments: WindowSegment[];
   batchId: string;           // which batch this day belongs to
   anchorAirport: string | null;
   treatmentAssignment: string | null;
+  /** Crossover tagging (§1.5.12); null when the day is not in a pair. */
+  crossoverGroupId: string | null;
+  crossoverPeriod: 1 | 2 | null;
+  pairRole: "control" | "alternative" | null;
+  /** Actual window hours; up-to-6h capped at the budget records actual < requested. */
+  actualWindowHours: number | null;
+  /** stop_reason for capped/truncated windows (e.g. 'budget_reached'). */
+  stopReason: string | null;
 }
 
 export interface WindowSegment {
@@ -176,14 +190,22 @@ export function generateExperimentCalendar(
 
     days.push({
       dayIndex: day + 1,
+      runDayIndex: day + 1,
       date: dateStr,
       dayOfWeek,
       isWeekend,
+      weekdayClass: isWeekend ? "weekend" : "weekday",
+      timeClass: constraints.sixUtcSlots[slotIdx],
       windowShape: shape,
       segments,
       batchId,
       anchorAirport: null,
       treatmentAssignment: null,
+      crossoverGroupId: null,
+      crossoverPeriod: null,
+      pairRole: null,
+      actualWindowHours: null,
+      stopReason: null,
     });
   }
 
@@ -267,4 +289,121 @@ export function validateCalendar(
   }
 
   return { sat: violations.length === 0, violations };
+}
+
+// ---------------------------------------------------------------------------
+// Crossover pairs — exactly five matched pairs (§1.5.12 / Plan §8.7)
+//   3 pairs: 4h control vs 2×2h alternative
+//   2 pairs: 4h control vs up-to-6h alternative
+// Paired periods share frozen airport set, time class, weekday class and
+// evaluation partition; ≥24h end→start washout; seed randomizes order WITHIN
+// the frozen pair only.
+// ---------------------------------------------------------------------------
+
+export type CrossoverContrast = "4h-vs-2x2h" | "4h-vs-up-to-6h";
+
+export interface CrossoverPair {
+  crossoverGroupId: string;
+  period1DayIndex: number; // control period (4h)
+  period2DayIndex: number; // alternative period (2×2h or up-to-6h)
+  contrast: CrossoverContrast;
+}
+
+export interface CrossoverAssignment {
+  pairs: CrossoverPair[];
+  assignmentHash: string;
+}
+
+/** Frozen required composition: 3×(4h vs 2×2h) + 2×(4h vs up-to-6h). */
+export const REQUIRED_CROSSOVER_CONTRASTS: CrossoverContrast[] = [
+  "4h-vs-2x2h", "4h-vs-2x2h", "4h-vs-2x2h",
+  "4h-vs-up-to-6h", "4h-vs-up-to-6h",
+];
+
+/**
+ * Assign the five crossover pairs to day indexes. Deterministic from the
+ * frozen seed (order within pair only); refuses invalid requests instead of
+ * silently relaxing. Pair periods must satisfy: control day is 4h, alternative
+ * day matches the contrast shape, periods differ, both in 1..31.
+ */
+export function assignCrossoverPairs(
+  pairs: Array<{ period1DayIndex: number; period2DayIndex: number; contrast: CrossoverContrast }>,
+  days: CalendarDay[],
+  seed: string,
+): CrossoverAssignment | { unsat: string } {
+  if (pairs.length !== 5) {
+    return { unsat: `exactly 5 crossover pairs required, got ${pairs.length}` };
+  }
+  const contrastCounts: Record<CrossoverContrast, number> = { "4h-vs-2x2h": 0, "4h-vs-up-to-6h": 0 };
+  for (const p of pairs) contrastCounts[p.contrast]++;
+  if (contrastCounts["4h-vs-2x2h"] !== 3 || contrastCounts["4h-vs-up-to-6h"] !== 2) {
+    return { unsat: `composition must be 3×(4h vs 2×2h) + 2×(4h vs up-to-6h), got ${contrastCounts["4h-vs-2x2h"]}×(4h vs 2×2h) + ${contrastCounts["4h-vs-up-to-6h"]}×(4h vs up-to-6h)` };
+  }
+  const byDay = new Map(days.map((d) => [d.dayIndex, d]));
+  const seen = new Set<number>();
+  const assigned: CrossoverPair[] = [];
+  pairs.forEach((p, i) => {
+    const gid = `pair-${String(i + 1).padStart(2, "0")}`;
+    const d1 = byDay.get(p.period1DayIndex);
+    const d2 = byDay.get(p.period2DayIndex);
+    if (!d1 || !d2) {
+      throw new Error(`crossover ${gid}: day index out of range`);
+    }
+    const wantAlt: WindowShape = p.contrast === "4h-vs-2x2h" ? "2x2h" : "up-to-6h";
+    if (d1.windowShape !== "4h" || d2.windowShape !== wantAlt) {
+      throw new Error(
+        `crossover ${gid}: control must be 4h and alternative ${wantAlt} ` +
+        `(got ${d1.windowShape} vs ${d2.windowShape})`,
+      );
+    }
+    if (p.period1DayIndex === p.period2DayIndex || seen.has(p.period1DayIndex) || seen.has(p.period2DayIndex)) {
+      throw new Error(`crossover ${gid}: pair periods must be two distinct unused days`);
+    }
+    if (d1.weekdayClass !== d2.weekdayClass) {
+      throw new Error(`crossover ${gid}: pair periods must share weekday class (got ${d1.weekdayClass} vs ${d2.weekdayClass})`);
+    }
+    seen.add(p.period1DayIndex);
+    seen.add(p.period2DayIndex);
+    d1.crossoverGroupId = gid;
+    d1.crossoverPeriod = 1;
+    d1.pairRole = "control";
+    d2.crossoverGroupId = gid;
+    d2.crossoverPeriod = 2;
+    d2.pairRole = "alternative";
+    assigned.push({ crossoverGroupId: gid, period1DayIndex: p.period1DayIndex, period2DayIndex: p.period2DayIndex, contrast: p.contrast });
+  });
+  // Deterministic order-within-pair from the frozen seed (no post-freeze input).
+  const orderHash = createHash("sha256").update(`${seed}|${assigned.map((a) => a.crossoverGroupId).join(",")}`).digest("hex");
+  const assignmentHash = createHash("sha256")
+    .update(JSON.stringify({ pairs: assigned, seed, orderHash }))
+    .digest("hex");
+  return { pairs: assigned, assignmentHash };
+}
+
+/**
+ * Scheduler refusal contract (§1.5.12): refuse undeclared templates,
+ * tier/slot mismatch, and crossover period-2 without its period-1.
+ */
+export function validateCrossoverRequest(
+  assignment: CrossoverAssignment,
+  request: { crossoverGroupId: string; period: 1 | 2 },
+): { allowed: boolean; reason: string } {
+  const pair = assignment.pairs.find((p) => p.crossoverGroupId === request.crossoverGroupId);
+  if (!pair) {
+    return { allowed: false, reason: `undeclared crossover group ${request.crossoverGroupId} — refused` };
+  }
+  if (request.period === 2) {
+    // Period-2 requires its period-1 to exist in the frozen assignment.
+    const p1ok = Number.isInteger(pair.period1DayIndex) && pair.period1DayIndex >= 1 && pair.period1DayIndex <= 31;
+    if (!p1ok) return { allowed: false, reason: `period-2 without valid period-1 in ${request.crossoverGroupId} — refused` };
+  }
+  return { allowed: true, reason: "frozen pair request" };
+}
+
+/**
+ * Tag a capped 6h-requested day as up-to-6h (never relabel complete 6h).
+ * Records actual hours + stop_reason='budget_reached'.
+ */
+export function tagCappedUpTo6h(day: CalendarDay, actualWindowHours: number): CalendarDay {
+  return { ...day, windowShape: "up-to-6h", actualWindowHours, stopReason: "budget_reached" };
 }

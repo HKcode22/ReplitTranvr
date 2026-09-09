@@ -135,7 +135,7 @@ function getHealthSections(raw: HealthRawData): { past: HealthPastRow[]; activeH
 }
 
 function LiveStatusPill({ flight }: { flight: MonitoredFlightRow }) {
-  const revisedLocal = formatFlightTime(flight.flightStatus?.departureTime, flight.originIata);
+  const revisedLocal = formatFlightTime(flight.flightStatus?.departureTime ?? null, flight.originIata);
   const live = liveStatusFor(flight.flightStatus, revisedLocal);
   if (!live) {
     return (

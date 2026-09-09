@@ -11,12 +11,7 @@
 
 import { describe, it, expect } from "vitest";
 import { parseAutoCollect } from "../server/lib/disruption/adbCollectionController_v3";
-
-function resolveExperimentalRetries(requested: number | undefined): number {
-  if (requested === undefined) return 0; // omitted → 0
-  if (requested !== 0) throw new Error(`experimental maxDeliveryRetries must be 0, got ${requested}`);
-  return 0;
-}
+import { resolveExperimentalRetries } from "../server/lib/disruption/aerodataboxLimiter_v3";
 
 describe("PHASE 0A: ADB_AUTO_COLLECT fail-closed parser (§1.5.1)", () => {
   it("missing env → OFF", () => {

@@ -120,3 +120,82 @@ export function tierForIcao(icao: string | null | undefined): AirportTier | null
 export function allCatalogAirports(): string[] {
   return AIRPORT_TIERS.flatMap((t) => [...AIRPORT_CATALOG[t]]);
 }
+
+// ---------------------------------------------------------------------------
+// Frame tier resolution (§1.5.10 / Phase 0J).
+//
+// Missing traffic reference stays visible as tier='UNCLASSIFIED' with
+// tier_verified=false — never null-coerced, never blanket REGIONAL.
+// ---------------------------------------------------------------------------
+
+export type FrameTier = AirportTier | "UNCLASSIFIED";
+
+export interface TierResolution {
+  tier: FrameTier;
+  tierVerified: boolean;
+  tierSource: "catalog" | "missing_reference";
+}
+
+/** Resolve the frame tier: catalog hit → verified tier; miss → UNCLASSIFIED. */
+export function resolveFrameTier(icao: string | null | undefined): TierResolution {
+  const hit = tierForIcao(icao);
+  if (hit) return { tier: hit, tierVerified: true, tierSource: "catalog" };
+  return { tier: "UNCLASSIFIED", tierVerified: false, tierSource: "missing_reference" };
+}
+
+// ---------------------------------------------------------------------------
+// Anchor-score component formulas (§1.5.10 / §3.2.8 / Plan §9).
+// Frozen: traffic_score = min(1, metric/hub_cut); geo = 0.5*deg + 0.3*intl +
+// 0.2*rarity; carrier = 0.6*eff_norm + 0.4*intl; yield = mean of 3 clamped
+// components; anchor = 0.40*t + 0.20*g + 0.20*c + 0.20*y.
+// ---------------------------------------------------------------------------
+
+function clamp01(x: number): number {
+  if (!Number.isFinite(x)) return 0;
+  return Math.min(1, Math.max(0, x));
+}
+
+/** FROZEN: traffic_score = min(1, traffic_metric_value / hub_cut_metric). */
+export function trafficScore(trafficMetricValue: number, hubCutMetric: number): number {
+  if (!Number.isFinite(trafficMetricValue) || !Number.isFinite(hubCutMetric) || hubCutMetric <= 0) return 0;
+  return clamp01(trafficMetricValue / hubCutMetric);
+}
+
+/** FROZEN: geo_score = 0.5*degree_norm + 0.3*intl_share + 0.2*region_rarity. */
+export function geoScore(degreeNorm: number, intlShare: number, regionRarity: number): number {
+  return 0.5 * clamp01(degreeNorm) + 0.3 * clamp01(intlShare) + 0.2 * clamp01(regionRarity);
+}
+
+/** FROZEN: carrier_score = 0.6*effective_carriers_norm + 0.4*intl_share. */
+export function carrierScore(effectiveCarriersNorm: number, intlShare: number): number {
+  return 0.6 * clamp01(effectiveCarriersNorm) + 0.4 * clamp01(intlShare);
+}
+
+/** One standardized yield component vs the frozen reference (clamped). */
+export function standardizeYieldComponent(candidate: number, reference: number): number | null {
+  if (!Number.isFinite(candidate) || !Number.isFinite(reference) || reference <= 0) return null;
+  return clamp01(candidate / reference);
+}
+
+/** FROZEN: yield_score = arithmetic mean of the valid standardized components. */
+export function yieldScore(components: Array<number | null>): number | null {
+  const valid = components.filter((c): c is number => typeof c === "number" && Number.isFinite(c));
+  if (valid.length === 0) return null;
+  return valid.reduce((a, b) => a + b, 0) / valid.length;
+}
+
+/** FROZEN: anchor_score = 0.40*traffic + 0.20*geo + 0.20*carrier + 0.20*yield. */
+export function anchorScore(traffic: number, geo: number, carrier: number, yield_: number | null): number | null {
+  if (yield_ === null) return null; // no imputation from invalid references
+  return 0.4 * traffic + 0.2 * geo + 0.2 * carrier + 0.2 * yield_;
+}
+
+/** Capacity is a feasibility GATE (rows_per_hour ≥ 60), never a score component. */
+export const ANCHOR_CAPACITY_GATE_ROWS_PER_HOUR = 60;
+
+/** Cumulative probe ceiling per immutable probe_budget_day_id (NOT per candidate, NOT UTC reset). */
+export const PROBE_CAP_DAILY = 500;
+
+export function passesCapacityGate(rowsPerHour: number): boolean {
+  return Number.isFinite(rowsPerHour) && rowsPerHour >= ANCHOR_CAPACITY_GATE_ROWS_PER_HOUR;
+}

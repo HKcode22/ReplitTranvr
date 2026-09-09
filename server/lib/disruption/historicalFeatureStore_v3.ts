@@ -250,6 +250,66 @@ export function isHistoryReadySimple(historyReadyAt: string, cutoffUtc: string):
   return new Date(cutoffUtc) >= new Date(historyReadyAt);
 }
 
+// ---------------------------------------------------------------------------
+// Readiness computation + row-level completeness (§1.5.9 / Phase 0I)
+// ---------------------------------------------------------------------------
+
+/** Frozen minimum lookbacks (days) by entity family (§1.5.9). */
+export const HISTORY_MIN_LOOKBACK_DAYS: Record<string, number> = {
+  airport: 7,
+  route: 7,
+  carrier_airport: 7,
+  tail: 1, // previous-leg search within 24h
+  od: 7,
+  weather: 0.25, // operational lookback 6h
+};
+
+/** Minimum qualifying flights for airport/route recent-delay aggregates. */
+export const HISTORY_MIN_QUALIFYING_FLIGHTS = 5;
+
+/**
+ * Compute history_ready_at = max(bootstrap_end, earliest_snapshot_cutoff − lookback).
+ * Structural readiness boundary: earliest evaluation cutoff must be ≥ this value.
+ */
+export function computeHistoryReadyAt(
+  bootstrapEndUtc: Date | null,
+  earliestSnapshotCutoffUtc: Date,
+  lookbackDays: number,
+): Date {
+  const cutoffMinusLookback = new Date(
+    earliestSnapshotCutoffUtc.getTime() - lookbackDays * 86_400_000,
+  );
+  if (!bootstrapEndUtc) return cutoffMinusLookback;
+  return bootstrapEndUtc.getTime() >= cutoffMinusLookback.getTime()
+    ? bootstrapEndUtc
+    : cutoffMinusLookback;
+}
+
+export interface HistoryCompleteness {
+  complete: boolean;
+  qualifyingCount: number;
+  minimumRequired: number;
+  flag: "history_complete_for_snapshot" | "history_incomplete";
+}
+
+/**
+ * Row-level completeness (§1.5.9): airport/route recent-delay aggregates require
+ * at least 5 qualifying flights, otherwise `history_incomplete`. Incomplete
+ * history stays NULL/flagged and never deletes the snapshot row.
+ */
+export function evaluateHistoryCompleteness(
+  qualifyingCount: number,
+  minimumRequired: number = HISTORY_MIN_QUALIFYING_FLIGHTS,
+): HistoryCompleteness {
+  const complete = qualifyingCount >= minimumRequired;
+  return {
+    complete,
+    qualifyingCount,
+    minimumRequired,
+    flag: complete ? "history_complete_for_snapshot" : "history_incomplete",
+  };
+}
+
 /**
  * Get history readiness info for an entity.
  */

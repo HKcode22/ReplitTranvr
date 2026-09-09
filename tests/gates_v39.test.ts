@@ -18,6 +18,13 @@ import {
   type Gate05Measurement,
   type Gate5Funnel,
 } from "../server/lib/disruption/gates_v3";
+import {
+  runSettlement,
+  externalSpend,
+  reconcileSpend,
+  SETTLEMENT_MIN_STABLE_READS,
+  type SettlementConfig,
+} from "../server/lib/disruption/settlement_v3";
 
 // ---------------------------------------------------------------------------
 // TEST-019: Gate logic
@@ -178,5 +185,72 @@ describe("TEST-019: Gate logic", () => {
       const result = validateGate5Funnel(funnel);
       expect(result.outsidePopulationReasons.length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe("Phase 0K: shared settlement service (§1.5.11)", () => {
+  const cfg: SettlementConfig = {
+    initialWaitSeconds: 0,
+    pollIntervalSeconds: 0,
+    stableReadCount: 3,
+    timeoutSeconds: 60,
+  };
+  const noSleep = async (_ms: number) => {};
+
+  it("minimum stable reads is 3", () => {
+    expect(SETTLEMENT_MIN_STABLE_READS).toBe(3);
+  });
+
+  it("three consecutive equal reads settle", async () => {
+    const reads = [2900, 2895, 2895, 2895];
+    let i = 0;
+    const r = await runSettlement(cfg, async () => reads[Math.min(i++, reads.length - 1)], {
+      sleep: noSleep,
+      nowMs: (() => { let t = 0; return () => (t += 1000); })(),
+    });
+    expect(r.status).toBe("settled");
+    if (r.status === "settled") {
+      expect(r.stableBalance).toBe(2895);
+      expect(r.readsUsed).toBe(4);
+    }
+  });
+
+  it("a late change resets stability (needs 3-in-a-row again)", async () => {
+    const reads = [2900, 2900, 2899, 2899, 2899];
+    let i = 0;
+    const r = await runSettlement(cfg, async () => reads[Math.min(i++, reads.length - 1)], {
+      sleep: noSleep,
+      nowMs: (() => { let t = 0; return () => (t += 1000); })(),
+    });
+    expect(r.status).toBe("settled");
+    if (r.status === "settled") expect(r.stableBalance).toBe(2899);
+  });
+
+  it("timeout → SETTLEMENT_UNRESOLVED (never settles on drift)", async () => {
+    let n = 2900;
+    const r = await runSettlement(
+      { ...cfg, timeoutSeconds: 5 },
+      async () => n--,
+      { sleep: noSleep, nowMs: (() => { let t = 0; return () => { t += 2000; return t; }; })() },
+    );
+    expect(r.status).toBe("unresolved");
+    if (r.status === "unresolved") expect(r.reason).toBe("timeout");
+  });
+
+  it("reader failure → unresolved (not settled)", async () => {
+    const r = await runSettlement(cfg, async () => null, {
+      sleep: noSleep,
+      nowMs: (() => { let t = 0; return () => (t += 1000); })(),
+    });
+    expect(r.status).toBe("unresolved");
+  });
+
+  it("C_external = B_before − B_stable", () => {
+    expect(externalSpend(2900, 2895)).toBe(5);
+  });
+
+  it("Gate-3 reconciliation is exact (tol=0)", () => {
+    expect(reconcileSpend({ cExternal: 5, cInternal: 5, tolerance: 0 })).toMatchObject({ match: true, discrepancy: 0 });
+    expect(reconcileSpend({ cExternal: 5, cInternal: 4, tolerance: 0 }).match).toBe(false);
   });
 });

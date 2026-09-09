@@ -32,6 +32,11 @@ import {
 } from "../server/lib/disruption/flightInstanceCanonical_v3";
 import {
   utcIntervalToLocal,
+  fetchFidsWithRetry,
+  buildPopulationRow,
+  FIDS_MAX_TOTAL_ATTEMPTS,
+  FIDS_TRUNCATION_HEURISTIC_COUNT,
+  type PopulationRowInput,
 } from "../server/lib/disruption/fidsCensus_v3";
 
 describe("§70.1 Provider/FIDS contract", () => {
@@ -299,5 +304,119 @@ describe("§70.5 Identity", () => {
       
       expect(isCrossAirportDuplicate(a, b)).toBe(false);
     });
+  });
+});
+
+describe("§1.5.3 FIDS transport policy (max 3 attempts, transient-only retry)", () => {
+  it("max total attempts is 3", () => {
+    expect(FIDS_MAX_TOTAL_ATTEMPTS).toBe(3);
+  });
+
+  it("success on first attempt records 1 attempt", async () => {
+    const r = await fetchFidsWithRetry(async () => ({ ok: true, statusCode: 200, value: { x: 1 } }));
+    expect(r.value).toEqual({ x: 1 });
+    expect(r.attempts).toHaveLength(1);
+    expect(r.attempts[0].outcome).toBe("success");
+    expect(r.budgetExhausted).toBe(false);
+  });
+
+  it("429 then success: retries once, both attempts recorded", async () => {
+    let n = 0;
+    const r = await fetchFidsWithRetry(async () => {
+      n++;
+      if (n === 1) return { ok: false, statusCode: 429, value: null };
+      return { ok: true, statusCode: 200, value: { x: 1 } };
+    });
+    expect(r.value).toEqual({ x: 1 });
+    expect(r.attempts).toHaveLength(2);
+    expect(r.attempts[0].outcome).toBe("retryable_failure");
+    expect(r.attempts[1].outcome).toBe("success");
+  });
+
+  it("persistent 503: stops at 3 attempts, budget exhausted", async () => {
+    const r = await fetchFidsWithRetry(async () => ({ ok: false, statusCode: 503, value: null }));
+    expect(r.value).toBeNull();
+    expect(r.attempts).toHaveLength(3);
+    expect(r.budgetExhausted).toBe(true);
+  });
+
+  it("401 auth failure: never retried", async () => {
+    let calls = 0;
+    const r = await fetchFidsWithRetry(async () => {
+      calls++;
+      return { ok: false, statusCode: 401, value: null };
+    });
+    expect(calls).toBe(1);
+    expect(r.attempts[0].outcome).toBe("non_retryable_failure");
+  });
+
+  it("transport throw: retried until ceiling, then exhausted", async () => {
+    const r = await fetchFidsWithRetry(async () => { throw new Error("connect timeout"); });
+    expect(r.attempts).toHaveLength(3);
+    expect(r.attempts.every((a) => a.outcome === "transport_error")).toBe(true);
+    expect(r.budgetExhausted).toBe(true);
+  });
+});
+
+describe("§1.5.3 truncation signal is an explicit named heuristic", () => {
+  it("threshold constant exists and is used (not a magic number)", () => {
+    expect(FIDS_TRUNCATION_HEURISTIC_COUNT).toBe(500);
+  });
+});
+
+describe("§1.5.3 population-row builder (append-only membership)", () => {
+  function popInput(over: Partial<PopulationRowInput> = {}): PopulationRowInput {
+    return {
+      sourceAirportIcao: "KLAX",
+      queryDirection: "Both",
+      populationRole: "requested_airport_primary",
+      serviceWindowStartUtc: new Date("2026-09-01T08:00:00Z"),
+      serviceWindowEndUtc: new Date("2026-09-01T14:00:00Z"),
+      fromLocal: "2026-09-01 01:00",
+      toLocal: "2026-09-01 07:00",
+      airportIanaTimezone: "America/Los_Angeles",
+      flightNumber: "UA123",
+      carrierIata: "UA",
+      carrierIcao: "UAL",
+      callSign: "UAL123",
+      depAirportIcao: "KLAX",
+      depAirportIata: "LAX",
+      arrAirportIcao: "KSFO",
+      arrAirportIata: "SFO",
+      depScheduledUtc: new Date("2026-09-01T10:00:00Z"),
+      arrScheduledUtc: new Date("2026-09-01T11:30:00Z"),
+      canonicalFlightInstanceId: "leg:abcd1234",
+      providerRecordKey: "rec_1",
+      rawPayloadSha256: "ff".repeat(32),
+      scopeClassification: "confirmed_core",
+      codeshareResolutionStatus: "IsOperator",
+      fidsRetrievalUtc: new Date("2026-09-01T07:00:00Z"),
+      responseHash: "ee".repeat(32),
+      availableAtUtc: new Date("2026-09-01T07:00:05Z"),
+      cutoffUtc: new Date("2026-09-01T08:00:00Z"),
+      batchId: null,
+      ...over,
+    };
+  }
+
+  it("builds a row with source_type=fids and full provenance", () => {
+    const row = buildPopulationRow(popInput());
+    expect(row.sourceType).toBe("fids");
+    expect(row.flightNumber).toBe("UA123");
+    expect(row.sourceAirportIcao).toBe("KLAX");
+    const prov = JSON.parse(row.provenanceJson);
+    expect(prov.populationRole).toBe("requested_airport_primary");
+    expect(prov.canonicalFlightInstanceId).toBe("leg:abcd1234");
+    expect(prov.scopeClassification).toBe("confirmed_core");
+  });
+
+  it("unknown scope stays visible (never silently forced to core)", () => {
+    const row = buildPopulationRow(popInput({ scopeClassification: "unknown", canonicalFlightInstanceId: null }));
+    expect(JSON.parse(row.provenanceJson).scopeClassification).toBe("unknown");
+  });
+
+  it("opposite-movement context role is stamped distinctly", () => {
+    const row = buildPopulationRow(popInput({ populationRole: "opposite_movement_context" }));
+    expect(JSON.parse(row.provenanceJson).populationRole).toBe("opposite_movement_context");
   });
 });

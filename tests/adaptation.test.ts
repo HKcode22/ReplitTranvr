@@ -32,6 +32,18 @@ import {
   type ZeroYieldState,
   type MiState,
 } from "../server/lib/disruption/adaptiveMi_v3";
+import {
+  resolveFrameTier,
+  trafficScore,
+  geoScore,
+  carrierScore,
+  standardizeYieldComponent,
+  yieldScore,
+  anchorScore,
+  passesCapacityGate,
+  ANCHOR_CAPACITY_GATE_ROWS_PER_HOUR,
+  PROBE_CAP_DAILY,
+} from "../server/lib/disruption/adbAirportCatalog_v3";
 
 describe("§70.11 Adaptation", () => {
   describe("EMA calculation", () => {
@@ -243,5 +255,59 @@ describe("§70.11 Adaptation", () => {
       expect(result.m_i_initial_source).toBe("default_prior");
       expect(result.ema_initial_source).toBe("median_ema");
     });
+  });
+});
+
+describe("Phase 0J: frame tier resolution + anchor-score formulas (§1.5.10)", () => {
+  it("catalog hit resolves a verified tier", () => {
+    const r = resolveFrameTier("KLAX");
+    expect(r.tier).toBe("HUB");
+    expect(r.tierVerified).toBe(true);
+    expect(r.tierSource).toBe("catalog");
+  });
+
+  it("missing traffic reference stays UNCLASSIFIED (never REGIONAL, never null-coerced)", () => {
+    const r = resolveFrameTier("XXXX");
+    expect(r.tier).toBe("UNCLASSIFIED");
+    expect(r.tierVerified).toBe(false);
+    expect(r.tierSource).toBe("missing_reference");
+    expect(resolveFrameTier(null).tier).toBe("UNCLASSIFIED");
+  });
+
+  it("traffic_score = min(1, metric/hub_cut)", () => {
+    expect(trafficScore(100, 100)).toBe(1);
+    expect(trafficScore(50, 100)).toBe(0.5);
+    expect(trafficScore(200, 100)).toBe(1); // saturated
+    expect(trafficScore(10, 0)).toBe(0); // non-positive cut → 0, never NaN
+  });
+
+  it("geo/carrier scores follow frozen weights", () => {
+    expect(geoScore(1, 1, 1)).toBeCloseTo(1, 10);
+    expect(geoScore(0, 0, 0)).toBe(0);
+    expect(carrierScore(1, 1)).toBeCloseTo(1, 10);
+    expect(carrierScore(0.5, 0.5)).toBeCloseTo(0.5, 10);
+  });
+
+  it("yield components clamp against the frozen reference; invalid reference → null (no imputation)", () => {
+    expect(standardizeYieldComponent(0.5, 1)).toBe(0.5);
+    expect(standardizeYieldComponent(2, 1)).toBe(1); // saturated
+    expect(standardizeYieldComponent(0.5, 0)).toBeNull();
+    expect(yieldScore([0.5, 0.5, 0.5])).toBeCloseTo(0.5, 10);
+    expect(yieldScore([null, null, null])).toBeNull();
+  });
+
+  it("anchor_score = 0.40*t + 0.20*g + 0.20*c + 0.20*y; null yield → null", () => {
+    expect(anchorScore(1, 1, 1, 1)).toBeCloseTo(1, 10);
+    expect(anchorScore(1, 1, 1, null)).toBeNull();
+  });
+
+  it("capacity gate is rows_per_hour ≥ 60 (feasibility, not a score)", () => {
+    expect(ANCHOR_CAPACITY_GATE_ROWS_PER_HOUR).toBe(60);
+    expect(passesCapacityGate(60)).toBe(true);
+    expect(passesCapacityGate(59)).toBe(false);
+  });
+
+  it("PROBE_CAP_DAILY is 500 per immutable budget day (not per candidate)", () => {
+    expect(PROBE_CAP_DAILY).toBe(500);
   });
 });

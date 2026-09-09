@@ -182,6 +182,9 @@ export async function upsertFlightNotifications(
 // observation on its own loc_reported_utc so no point is overwritten under a
 // repeated lastUpdatedUtc. Fallback (no live location): lastUpdatedUtc, then
 // receivedAt|index (safety net so a malformed payload never collides).
+//
+// NOTE (§1.5.5 item 8): this location-scoped key is NOT a universal identity —
+// non-location updates must use semanticObservationKey() below.
 // ---------------------------------------------------------------------------
 export function researchEventKey(input: {
   flightNumber: string;
@@ -199,6 +202,48 @@ export function researchEventKey(input: {
       ? input.lastUpdatedUtc.toISOString()
       : `${input.receivedAt.toISOString()}|${input.index}`;
   return createHash("sha256").update(`evt|${flight}|${carrier}|${point}`).digest("hex");
+}
+
+// ---------------------------------------------------------------------------
+// General semantic observation identity (§1.5.5 / CRIT-009).
+//
+// Key is versioned over: canonical flight instance + event type/phase +
+// available provider state/location clocks + raw-item hash. It works for
+// location AND non-location events; the same timestamp may carry multiple
+// distinct updates (the raw-item hash disambiguates); null clocks are encoded
+// explicitly so "missing" never collides with "empty".
+// ---------------------------------------------------------------------------
+
+export interface SemanticObservationInput {
+  /** Identity-v2 physical leg (NOT flight+carrier strings, NOT provider flight.id). */
+  canonicalFlightInstanceId: string;
+  /** Semantic event type, e.g. "status_change" | "position_update" | "schedule_revision". */
+  eventType: string;
+  /** PRE or POST phase of the observation. */
+  eventPhase: "PRE" | "POST";
+  /** Location clock when a real live position exists, else null. */
+  locReportedUtc?: Date | null;
+  /** Provider state-update clock when supplied, else null. */
+  providerStateUpdatedUtc?: Date | null;
+  /** SHA-256 of the raw item this observation was derived from. */
+  rawItemSha256: string;
+}
+
+function clockPart(d: Date | null | undefined): string {
+  return d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString() : "null";
+}
+
+export function semanticObservationKey(input: SemanticObservationInput): string {
+  const parts = [
+    "sem",
+    input.canonicalFlightInstanceId,
+    input.eventType,
+    input.eventPhase,
+    clockPart(input.locReportedUtc ?? null),
+    clockPart(input.providerStateUpdatedUtc ?? null),
+    input.rawItemSha256,
+  ];
+  return createHash("sha256").update(parts.join("|")).digest("hex");
 }
 
 export interface ResearchEventInsert {

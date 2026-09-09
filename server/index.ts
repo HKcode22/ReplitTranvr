@@ -124,7 +124,7 @@ async function initStripe() {
   try {
     console.log('Initializing Stripe schema...');
     const migrationTimeout = Promise.race([
-      runMigrations({ databaseUrl, schema: 'stripe' }),
+      runMigrations({ databaseUrl }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Stripe migration timed out')), 10000))
     ]);
     await migrationTimeout;

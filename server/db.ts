@@ -42,6 +42,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0023_anchor_probe_results.sql",
   "0024_historical_feature_store.sql",
   "0025_raw_ingress_immutable_layers.sql",
+  "0026_snapshot_outcome_tables.sql",
 ];
 
 let bootMigrationsApplied = false;

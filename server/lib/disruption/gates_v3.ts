@@ -344,3 +344,27 @@ export function validateGate5Funnel(funnel: Gate5Funnel): {
     outsidePopulationReasons,
   };
 }
+
+// ---------------------------------------------------------------------------
+// R1 exclusivity (§1.5.11): no foreign ACTIVE billable subscription may
+// contaminate the authorized experimental set. An isolated canary/pilot uses
+// one experimental subscription; Phase-6 batches use batch-linked ones.
+// ---------------------------------------------------------------------------
+
+export interface SubscriptionOwnership {
+  id: string;
+  owned: boolean;
+  isActive: boolean;
+  billable: boolean;
+}
+
+export interface R1Exclusivity {
+  clean: boolean;
+  foreignActiveBillable: SubscriptionOwnership[];
+}
+
+/** R1 check: every ACTIVE billable subscription must be experiment-owned. */
+export function checkR1Exclusivity(subs: SubscriptionOwnership[]): R1Exclusivity {
+  const foreignActiveBillable = subs.filter((s) => !s.owned && s.isActive && s.billable);
+  return { clean: foreignActiveBillable.length === 0, foreignActiveBillable };
+}

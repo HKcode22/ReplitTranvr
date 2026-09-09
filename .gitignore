@@ -10,3 +10,10 @@ flight_data_pre_post.json
 archiveold/
 logs/
 travnr_db_dump/ 
+
+# never commit secrets
+.env
+.env.*
+
+# v39 runtime state (pause markers, never committed)
+.v39-state/

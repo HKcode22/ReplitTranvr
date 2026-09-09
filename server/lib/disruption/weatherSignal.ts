@@ -178,6 +178,78 @@ export function validateTafIssueTime(
 }
 
 // ---------------------------------------------------------------------------
+// Operational as-known weather selection (§1.5.9 / Phase 0I)
+// ---------------------------------------------------------------------------
+
+/** Operational precedence: live_metar > archive_metar > frozen GFS/NAM grid. ERA5 is never operational. */
+export const WEATHER_OPERATIONAL_PRECEDENCE = ["live_metar", "archive_metar", "gfs", "nam"] as const;
+export type WeatherOperationalSource = (typeof WEATHER_OPERATIONAL_PRECEDENCE)[number];
+
+/** No qualifying observation within 6h → weather_missing. */
+export const WEATHER_OPERATIONAL_LOOKBACK_HOURS = 6;
+
+export interface WeatherCandidate {
+  source: string;
+  issueTime: Date | null;
+  availableAt: Date | null;
+  payload: unknown;
+}
+
+export interface WeatherSelection {
+  selected: WeatherCandidate | null;
+  weatherMissing: boolean;
+  sourceUsed: WeatherOperationalSource | "none" | null;
+  reason: string;
+}
+
+/**
+ * Select the operational as-known weather observation (§1.5.9):
+ * latest qualifying candidate by precedence, requiring issue_time AND
+ * available_at ≤ cutoff. ERA5 is rejected in operational use. TAF candidates
+ * use their latest amendment satisfying both clocks.
+ */
+export function selectOperationalWeather(
+  candidates: WeatherCandidate[],
+  cutoffUtc: Date,
+): WeatherSelection {
+  const cutoffMs = cutoffUtc.getTime();
+  const eligible = candidates.filter((c) => {
+    if (c.source === "era5") return false; // never operational fallback
+    if (!c.issueTime || c.issueTime.getTime() > cutoffMs) return false;
+    if (c.availableAt && c.availableAt.getTime() > cutoffMs) return false;
+    return true;
+  });
+  if (eligible.length === 0) {
+    return { selected: null, weatherMissing: true, sourceUsed: "none", reason: "no qualifying observation within lookback" };
+  }
+  // Precedence first, then latest issue time within the winning source class.
+  const rank = (s: string): number => {
+    const i = (WEATHER_OPERATIONAL_PRECEDENCE as readonly string[]).indexOf(s);
+    return i === -1 ? WEATHER_OPERATIONAL_PRECEDENCE.length : i;
+  };
+  eligible.sort((a, b) => {
+    const r = rank(a.source) - rank(b.source);
+    if (r !== 0) return r;
+    return (b.issueTime?.getTime() ?? 0) - (a.issueTime?.getTime() ?? 0);
+  });
+  const winner = eligible[0];
+  const ageHours = winner.issueTime
+    ? (cutoffMs - winner.issueTime.getTime()) / 3_600_000
+    : Number.POSITIVE_INFINITY;
+  if (ageHours > WEATHER_OPERATIONAL_LOOKBACK_HOURS) {
+    return { selected: null, weatherMissing: true, sourceUsed: "none", reason: "latest qualifying observation older than 6h" };
+  }
+  return {
+    selected: winner,
+    weatherMissing: false,
+    sourceUsed: (WEATHER_OPERATIONAL_PRECEDENCE as readonly string[]).includes(winner.source)
+      ? (winner.source as WeatherOperationalSource)
+      : null,
+    reason: "selected by operational precedence",
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Weather retrieval
 // ---------------------------------------------------------------------------
 

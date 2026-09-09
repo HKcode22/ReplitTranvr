@@ -377,6 +377,7 @@ Frozen traffic-tier rule v1 (PROVISIONAL — V3.9-f.7 §4.1 requires rebuild wit
   them before FREEZE (see V3.9-f.7 §4.1/4.2). No HUB/MID label is invented without traffic evidence.
   ⚠ If unclassified >0, frame is NOT YET FINAL per A30 — rebuild required before Gate 1/2 + FREEZE.`);
 
+  console.log(`
 Feed eligibility: PRE needs FlightSchedules; POST needs FlightLiveUpdates or
   AdsbUpdates — recorded per airport (pre_eligible / post_eligible) so the
   frame never claims "provider supports airport" = "supports every layer".

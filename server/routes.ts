@@ -1654,6 +1654,13 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Express 5 types req.params/req.query values as string | string[].
+  // Helper: return the first string value for a param/query key (string coercion).
+  const param = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (Array.isArray(value) && value.length > 0 && typeof value[0] === "string") return value[0];
+    return "";
+  };
   const PgSession = connectPgSimple(session);
 
   app.use(
@@ -2057,7 +2064,7 @@ export async function registerRoutes(
     }
     let phone = parsed.data.phone || "";
     if (!phone) {
-      const userProfile = await storage.getTravelerProfile(req.session.userId!);
+      const userProfile = await storage.getProfile(req.session.userId!);
       if (userProfile?.phone) {
         phone = userProfile.phone;
       }
@@ -2179,7 +2186,7 @@ export async function registerRoutes(
 
       const proposal = await storage.createProposal({
         userId: req.session.userId!,
-        callRequestId: callRequestId || null,
+        callRequestId: callRequestId ?? undefined,
         title,
         summary: summary || null,
         totalEstimate: totalEstimate.toFixed(2),
@@ -2219,7 +2226,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/proposals/:id", isAuthenticated, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     const proposal = await storage.getProposal(id);
     if (!proposal || proposal.userId !== req.session.userId!) {
       return res.status(404).json({ message: "Proposal not found" });
@@ -2233,7 +2240,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/proposals/:id/approve", isAuthenticated, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     const proposal = await storage.getProposal(id);
     if (!proposal || proposal.userId !== req.session.userId!) {
       return res.status(404).json({ message: "Proposal not found" });
@@ -2253,7 +2260,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/proposals/:id/pay", isAuthenticated, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     const proposal = await storage.getProposal(id);
     if (!proposal || proposal.userId !== req.session.userId!) {
       return res.status(404).json({ message: "Proposal not found" });
@@ -2292,7 +2299,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/notifications/:id/read", isAuthenticated, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     const notif = await storage.getNotification(id);
     if (!notif || notif.userId !== req.session.userId!) {
       return res.status(404).json({ message: "Notification not found" });
@@ -2369,7 +2376,7 @@ export async function registerRoutes(
             fetch(buildUrl("06:00", "12:00"), { headers: { "x-rapidapi-key": apiKey, "x-rapidapi-host": "aerodatabox.p.rapidapi.com" } }),
             fetch(buildUrl("12:00", "23:59"), { headers: { "x-rapidapi-key": apiKey, "x-rapidapi-host": "aerodatabox.p.rapidapi.com" } }),
           ]);
-          const parse = async (r: Response) => {
+          const parse = async (r: Awaited<ReturnType<typeof fetch>>) => {
             if (!r.ok) return [];
             const d: any = await r.json();
             if (d?.departures && Array.isArray(d.departures)) return d.departures;
@@ -2482,7 +2489,7 @@ export async function registerRoutes(
     app.delete("/api/user/monitored-flights/:id", isAuthenticated, async (req: Request, res: Response) => {
       try {
         const userId = req.session.userId!;
-        const id = parseInt(req.params.id);
+        const id = parseInt(param(req.params.id));
         if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
         const [row] = await mDb.select({ id: tUMF.id, userId: tUMF.userId }).from(tUMF).where(mEq(tUMF.id, id)).limit(1);
         if (!row || row.userId !== userId) return res.status(404).json({ error: "Not found" });
@@ -2505,7 +2512,7 @@ export async function registerRoutes(
   // Used when the client loses connection mid-booking to check if the booking was actually saved
   app.get("/api/payments/by-intent/:intentId", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const { intentId } = req.params;
+      const intentId = param(req.params.intentId);
       if (!intentId) return res.status(400).json({ message: "Missing intentId" });
       const payment = await storage.getPaymentByStripeIntentId(intentId);
       if (!payment || payment.userId !== req.session.userId!) {
@@ -2520,7 +2527,7 @@ export async function registerRoutes(
   // REFUND REQUESTS
   app.post("/api/payments/:id/refund-request", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(param(req.params.id));
       const reason = (req.body?.reason || "").toString().slice(0, 2000);
       const payment = await storage.getPayment(id);
       if (!payment || payment.userId !== req.session.userId!) {
@@ -2719,7 +2726,7 @@ export async function registerRoutes(
   // Authenticated My Trips → Manage trip submissions (refund/cancel/change).
   app.post("/api/trips/:paymentId/request", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const paymentId = parseInt(req.params.paymentId);
+      const paymentId = parseInt(param(req.params.paymentId));
       const parsed = tripRequestBodySchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.issues[0]?.message || "Invalid request" });
@@ -2862,13 +2869,13 @@ export async function registerRoutes(
   });
 
   app.delete("/api/saved-cards/:id", isAuthenticated, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     await storage.deleteSavedCard(id, req.session.userId!);
     return res.json({ message: "Card removed" });
   });
 
   app.post("/api/saved-cards/:id/default", isAuthenticated, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     await storage.setDefaultCard(id, req.session.userId!);
     return res.json({ message: "Default card updated" });
   });
@@ -3416,7 +3423,7 @@ export async function registerRoutes(
   app.get("/api/duffel/offers/:offerId", isAuthenticated, async (req: Request, res: Response) => {
     if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
     try {
-      const offer = await duffel.offers.get(req.params.offerId);
+      const offer = await duffel.offers.get(param(req.params.offerId));
       return res.json(offer.data);
     } catch (err: any) {
       console.error("Duffel offer fetch error:", err?.errors || err);
@@ -3489,8 +3496,8 @@ export async function registerRoutes(
   app.post("/api/proposals/:proposalId/items/:itemId/refresh-flight", isAuthenticated, async (req: Request, res: Response) => {
     if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
     try {
-      const proposalId = parseInt(req.params.proposalId);
-      const itemId = parseInt(req.params.itemId);
+      const proposalId = parseInt(param(req.params.proposalId));
+      const itemId = parseInt(param(req.params.itemId));
 
       const proposal = await storage.getProposal(proposalId);
       if (!proposal || proposal.userId !== req.session.userId!) {
@@ -3579,7 +3586,7 @@ export async function registerRoutes(
 
   app.post("/api/proposals/:id/book-duffel", isAuthenticated, async (req: Request, res: Response) => {
     if (!duffel) return res.status(503).json({ message: "Duffel is not configured" });
-    const proposalId = parseInt(req.params.id);
+    const proposalId = parseInt(param(req.params.id));
     const proposal = await storage.getProposal(proposalId);
     if (!proposal || proposal.userId !== req.session.userId!) {
       return res.status(404).json({ message: "Proposal not found" });
@@ -4163,7 +4170,7 @@ export async function registerRoutes(
     requireAdmin,
     async (req: Request, res: Response) => {
       try {
-        const id = parseInt(req.params.id, 10);
+        const id = parseInt(param(req.params.id), 10);
         if (!Number.isFinite(id) || id <= 0) {
           return res.status(400).json({ message: "Invalid search id" });
         }
@@ -4612,7 +4619,7 @@ export async function registerRoutes(
     requireAdmin,
     async (req: Request, res: Response) => {
       try {
-        const id = parseInt(req.params.id, 10);
+        const id = parseInt(param(req.params.id), 10);
         if (!Number.isFinite(id) || id <= 0) {
           return res.status(400).json({ message: "Invalid booking id" });
         }
@@ -4737,7 +4744,7 @@ export async function registerRoutes(
   });
 
   app.delete("/api/admin/promo-codes/:id", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(param(req.params.id), 10);
     if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid id" });
     const updated = await storage.deactivatePromoCode(id);
     if (!updated) return res.status(404).json({ message: "Promo code not found" });
@@ -4889,7 +4896,7 @@ export async function registerRoutes(
         let customerPhone = direction === "inbound" ? c.from : c.to;
         // Final DID guard — under no circumstances expose Travnr's own
         // number as the "customer" phone in the admin UI.
-        if (isTravnrDid(customerPhone)) customerPhone = null;
+        if (isTravnrDid(customerPhone)) customerPhone = undefined;
 
         const dbRow = c.call_id ? dbRowByBlandId.get(c.call_id) : undefined;
         return {
@@ -4965,7 +4972,7 @@ export async function registerRoutes(
   // when a recent backend change has improved the prompt. Returns the new
   // summary (or 422 when Claude can't produce one — e.g. empty transcript).
   app.post("/api/admin/calls/:id/resummarize", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid call id" });
     if (!isCallSummaryAvailable()) {
       return res.status(503).json({ message: "Claude is not configured" });
@@ -5020,7 +5027,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/pending-manual/:id/complete", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     if (isNaN(id)) return res.status(400).json({ message: "Invalid payment ID" });
     const { duffelBookingRef, duffelOrderId, notes } = req.body || {};
     if (!duffelBookingRef || typeof duffelBookingRef !== "string" || !duffelBookingRef.trim()) {
@@ -5124,7 +5131,7 @@ export async function registerRoutes(
   // POST /api/admin/bookings/:id/cancel — record an admin-initiated cancellation.
   // Body: { reason: string (required), customerMessage?: string, externalCancellationRef?: string }
   app.post("/api/admin/bookings/:id/cancel", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     if (isNaN(id)) return res.status(400).json({ message: "Invalid booking ID" });
     const { reason, customerMessage, externalCancellationRef } = (req.body || {}) as {
       reason?: string; customerMessage?: string; externalCancellationRef?: string;
@@ -5191,7 +5198,7 @@ export async function registerRoutes(
   // POST /api/admin/bookings/:id/refund — record a refund the admin already
   // issued in Stripe. Body: { amount: string (required), stripeRefundId: string (required), reason: string (required), customerMessage?: string }
   app.post("/api/admin/bookings/:id/refund", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     if (isNaN(id)) return res.status(400).json({ message: "Invalid booking ID" });
     const { amount, stripeRefundId, reason, customerMessage } = (req.body || {}) as {
       amount?: string; stripeRefundId?: string; reason?: string; customerMessage?: string;
@@ -5283,7 +5290,7 @@ export async function registerRoutes(
   // admin has made manually with the airline. Body: { summary: string (required),
   // customerMessage: string (required), newBookingRef?: string, newDuffelOrderId?: string }
   app.post("/api/admin/bookings/:id/edit", isAuthenticated, requireAdmin, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
+    const id = parseInt(param(req.params.id));
     if (isNaN(id)) return res.status(400).json({ message: "Invalid booking ID" });
     const { summary, customerMessage, newBookingRef, newDuffelOrderId } = (req.body || {}) as {
       summary?: string; customerMessage?: string; newBookingRef?: string; newDuffelOrderId?: string;
@@ -5514,7 +5521,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/bland/calls/:callRequestId", isAuthenticated, async (req: Request, res: Response) => {
-    const callRequestId = parseInt(req.params.callRequestId);
+    const callRequestId = parseInt(param(req.params.callRequestId));
     if (isNaN(callRequestId)) return res.status(400).json({ message: "Invalid call request ID" });
     const callRequest = await storage.getCallRequest(callRequestId);
     if (!callRequest || callRequest.userId !== req.session.userId!) {
@@ -5612,7 +5619,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/call-requests/:id/generate-proposal", isAuthenticated, async (req: Request, res: Response) => {
-    const callRequestId = parseInt(req.params.id);
+    const callRequestId = parseInt(param(req.params.id));
     const callRequest = await storage.getCallRequest(callRequestId);
     if (!callRequest || callRequest.userId !== req.session.userId!) {
       return res.status(404).json({ message: "Call request not found" });
@@ -6236,7 +6243,7 @@ export async function registerRoutes(
       return;
     }
     proposalGenerationInFlight.add(callRequestId);
-    generateProposalFromCall(callRequestId, userId, summary, transcript, undefined, analysis)
+    generateProposalFromCall(callRequestId, userId, summary, transcript, analysis)
       .catch((err) => {
         console.error("Auto-proposal generation error:", err);
       })
@@ -7857,7 +7864,7 @@ export async function registerRoutes(
   app.post("/api/bland/stop/:callId", isAuthenticated, async (req: Request, res: Response) => {
     if (!bland.isConfigured()) return res.status(503).json({ message: "Bland AI is not configured" });
     try {
-      const blandCallId = req.params.callId;
+      const blandCallId = param(req.params.callId);
       const blandCall = await storage.getBlandCallByBlandId(blandCallId);
       if (!blandCall || blandCall.userId !== req.session.userId!) {
         return res.status(404).json({ message: "Call not found" });
@@ -7874,7 +7881,7 @@ export async function registerRoutes(
   // GUEST PROPOSAL (public, by token)
   app.get("/api/guest-proposal/:token", async (req: Request, res: Response) => {
     try {
-      const token = req.params.token;
+      const token = param(req.params.token);
       if (!token) return res.status(400).json({ message: "Missing token" });
       const row = await storage.getGuestProposalByToken(token);
       if (!row) return res.status(404).json({ message: "Not found" });
@@ -8104,7 +8111,7 @@ export async function registerRoutes(
   // any auth.
   app.get("/api/guest-booking/:optionToken/option", async (req: Request, res: Response) => {
     try {
-      const { optionToken } = req.params;
+      const optionToken = param(req.params.optionToken);
       if (!optionToken) return res.status(400).json({ message: "Missing token" });
 
       const resolved = await resolveGuestOption(optionToken);
@@ -8208,7 +8215,7 @@ export async function registerRoutes(
   // authenticated flight payment-intent endpoint.
   app.post("/api/guest-booking/:optionToken/payment-intent", guestBookingLimiter, async (req: Request, res: Response) => {
     try {
-      const { optionToken } = req.params;
+      const optionToken = param(req.params.optionToken);
       const resolved = await resolveGuestOption(optionToken);
       if (!resolved) return res.status(404).json({ message: "Booking option not found" });
       const { row, option } = resolved;
@@ -8416,7 +8423,7 @@ export async function registerRoutes(
     let claimPriorStatus: string | null = null;
     let bookingComplete = false;
     try {
-      const { optionToken } = req.params;
+      const optionToken = param(req.params.optionToken);
       const parsed = guestConfirmSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message || "Invalid input" });

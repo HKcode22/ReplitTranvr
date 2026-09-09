@@ -11,6 +11,10 @@
 
 import { describe, it, expect } from "vitest";
 import { createHash } from "crypto";
+import {
+  semanticObservationKey,
+  type SemanticObservationInput,
+} from "../server/lib/disruption/flightDataPrePostStore_v3";
 
 // Pure function tests for dedup key computation
 function computeDedupKey(flightNumber: string, carrierIata: string | null, lastUpdatedUtc: Date): string {
@@ -141,5 +145,64 @@ describe("Data stage determination", () => {
     const postStatuses = new Set(["EnRoute", "Departed", "Approaching", "Arrived", "Canceled", "CanceledUncertain"]);
     const stage = hasLocation || postStatuses.has(status) ? "POST" : "PRE";
     expect(stage).toBe("POST");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 0E — general semantic observation identity (§1.5.5 / CRIT-009)
+// ---------------------------------------------------------------------------
+
+describe("Phase 0E: semantic observation identity (§1.5.5)", () => {
+  const base: SemanticObservationInput = {
+    canonicalFlightInstanceId: "leg:abcd1234",
+    eventType: "status_change",
+    eventPhase: "PRE",
+    locReportedUtc: null,
+    providerStateUpdatedUtc: new Date("2026-09-01T12:00:00Z"),
+    rawItemSha256: "aa".repeat(32),
+  };
+
+  it("is deterministic for the same observation", () => {
+    expect(semanticObservationKey(base)).toBe(semanticObservationKey({ ...base }));
+    expect(semanticObservationKey(base)).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("works for non-location events (null location clock)", () => {
+    const k = semanticObservationKey({ ...base, locReportedUtc: null });
+    expect(k).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("same timestamp + different raw items = distinct observations", () => {
+    const k1 = semanticObservationKey(base);
+    const k2 = semanticObservationKey({ ...base, rawItemSha256: "bb".repeat(32) });
+    expect(k1).not.toBe(k2);
+  });
+
+  it("different event types at the same timestamp do not collide", () => {
+    const k1 = semanticObservationKey(base);
+    const k2 = semanticObservationKey({ ...base, eventType: "schedule_revision" });
+    expect(k1).not.toBe(k2);
+  });
+
+  it("location clock distinguishes position updates", () => {
+    const k1 = semanticObservationKey({
+      ...base,
+      eventType: "position_update",
+      eventPhase: "POST",
+      locReportedUtc: new Date("2026-09-01T12:00:00Z"),
+    });
+    const k2 = semanticObservationKey({
+      ...base,
+      eventType: "position_update",
+      eventPhase: "POST",
+      locReportedUtc: new Date("2026-09-01T12:01:00Z"),
+    });
+    expect(k1).not.toBe(k2);
+  });
+
+  it("is rooted in the canonical flight instance, not flight+carrier strings", () => {
+    const k1 = semanticObservationKey(base);
+    const k2 = semanticObservationKey({ ...base, canonicalFlightInstanceId: "leg:ffff0000" });
+    expect(k1).not.toBe(k2);
   });
 });

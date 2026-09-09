@@ -168,6 +168,23 @@ export async function refillBalance(credits: number): Promise<SubscriptionBalanc
 // ---------------------------------------------------------------------------
 
 /**
+ * Experimental retry guard (§1.5.1 item 4 / CRIT-004).
+ * V3.9 experimental collection requires maxDeliveryRetries=0: omitted (or 0)
+ * resolves to 0; any requested nonzero value is REFUSED by throwing — never
+ * silently stored or clamped. Single owner; routes/tests must import this,
+ * never reimplement the rule.
+ */
+export function resolveExperimentalRetries(requested: number | undefined): number {
+  if (requested === undefined) return 0;
+  if (requested !== 0) {
+    throw new Error(
+      `experimental maxDeliveryRetries must be 0, got ${requested} — refusing subscription creation`,
+    );
+  }
+  return 0;
+}
+
+/**
  * POST /subscriptions/webhook/{subjectType}/{subjectId} — free.
  * Creates a credit-based push subscription. Notifications POST to `url`.
  * maxDeliveryRetries: 0-2 (default 0). Each retry costs the same as an initial
@@ -344,9 +361,11 @@ export async function fetchFidsAirport(
   icao: string,
   fromLocal: string,
   toLocal: string,
-  opts?: { direction?: "Departure" | "Arrival" | "Both" },
+  opts?: { direction?: "Departure" | "Arrival" | "Both"; withLeg?: boolean },
 ): Promise<FidsAirportResult | null> {
   const direction = opts?.direction ?? "Both";
+  // §1.5.3: withLeg=true includes the opposite movement (departure+arrival context).
+  const withLeg = opts?.withLeg ?? true;
   try {
     const params = new URLSearchParams({
       direction,
@@ -355,6 +374,7 @@ export async function fetchFidsAirport(
       withCargo: "false",
       withPrivate: "false",
       withLocation: "false",
+      withLeg: withLeg ? "true" : "false",
     });
     const url = `${BASE_URL}/flights/airports/icao/${encodeURIComponent(icao)}/${encodeURIComponent(fromLocal)}/${encodeURIComponent(toLocal)}?${params}`;
     const resp = await throttledFetch(url, { headers: headers() });

@@ -578,11 +578,11 @@ function UpdateFlightPreferences({ proposal, item, onUpdated }: { proposal: Prop
         <div>
           <label className="text-xs font-medium mb-1.5 block">Passengers</label>
           <div className="flex items-center gap-1.5">
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setPassengerCount((c) => Math.max(1, c - 1))} disabled={passengerCount <= 1} aria-label="Decrease passenger count">
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setPassengerCount((c: number) => Math.max(1, c - 1))} disabled={passengerCount <= 1} aria-label="Decrease passenger count">
               <Minus className="w-3 h-3" aria-hidden="true" />
             </Button>
             <span className="w-6 text-center text-sm font-medium" aria-live="polite">{passengerCount}</span>
-            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setPassengerCount((c) => Math.min(9, c + 1))} disabled={passengerCount >= 9} aria-label="Increase passenger count">
+            <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => setPassengerCount((c: number) => Math.min(9, c + 1))} disabled={passengerCount >= 9} aria-label="Increase passenger count">
               <Plus className="w-3 h-3" aria-hidden="true" />
             </Button>
           </div>

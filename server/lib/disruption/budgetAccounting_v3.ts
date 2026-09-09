@@ -229,3 +229,45 @@ export function crossesBillingCycle(
   const cycleEnd = new Date(cycle.cycleEnd);
   return expEnd > cycleEnd;
 }
+
+// ---------------------------------------------------------------------------
+// Probe budget-day admission (§1.5.11 / TEST-018, TEST-021).
+// PROBE_CAP_DAILY=500 is cumulative per immutable probe_budget_day_id
+// (NOT per candidate, NOT a UTC-calendar reset). A probe may not cross UTC
+// midnight unless explicitly split; default is refuse. Settled total above
+// 500 is MISMATCH/PROTOCOL_DEVIATION.
+// ---------------------------------------------------------------------------
+
+/** Cumulative probe ceiling per immutable probe_budget_day_id. */
+export const PROBE_CAP_DAILY_UNITS = 500;
+
+/** True when [startUtc, endUtc) spans a UTC-midnight boundary. */
+export function probeWindowCrossesMidnightUtc(startUtc: Date, endUtc: Date): boolean {
+  const s = new Date(startUtc);
+  const e = new Date(endUtc);
+  s.setUTCHours(0, 0, 0, 0);
+  e.setUTCHours(0, 0, 0, 0);
+  return s.getTime() !== e.getTime();
+}
+
+export type ProbeAdmission = "allow" | "refuse:midnight" | "refuse:cap-exceeded";
+
+/**
+ * Admit a probe spend against its immutable budget day.
+ * Refuses midnight-crossing windows unless explicitly split, and any spend
+ * that would push the settled day total above PROBE_CAP_DAILY.
+ */
+export function admitProbeSpend(
+  windowStartUtc: Date,
+  windowEndUtc: Date,
+  explicitlySplit: boolean,
+  settledDayTotal: number,
+  requestedSpend: number,
+  cap: number = PROBE_CAP_DAILY_UNITS,
+): ProbeAdmission {
+  if (probeWindowCrossesMidnightUtc(windowStartUtc, windowEndUtc) && !explicitlySplit) {
+    return "refuse:midnight";
+  }
+  if (settledDayTotal + requestedSpend > cap) return "refuse:cap-exceeded";
+  return "allow";
+}

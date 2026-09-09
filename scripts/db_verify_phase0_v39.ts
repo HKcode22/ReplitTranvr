@@ -4,7 +4,7 @@
  * RUN THIS ON REPLIT (where the internal `helium` Postgres hostname resolves):
  *   export ADB_AUTO_COLLECT=0
  *   export DATABASE_URL="<from Replit secrets — never paste into chat/logs>"
- *   npx tsx scripts/db_verify_phase0.ts
+ *   npx tsx scripts/db_verify_phase0_v39.ts
  *
  * What it does:
  *   1. CONNECTS read-only and prints Postgres version.
@@ -79,10 +79,14 @@ async function main(): Promise<void> {
     record("unique:raw_delivery(delivery_id)", /raw_delivery.*delivery_id/.test(uqtxt), uqtxt.slice(0, 200) || "none found");
     record("unique:raw_delivery_item(delivery_id,item_index)", /raw_delivery_item.*delivery_id.*item_index/.test(uqtxt), uqtxt.slice(0, 200) || "none found");
 
-    // 4. population/snapshot families 0017–0025 (presence only)
+    // 4. population/snapshot families (presence only)
+    // flight_state is the mutable current-state convenience; it is served by
+    // the existing clean.flight_data_pre_post (production owner) — the plan's
+    // §2 graph names the concept, not a separate required table.
     for (const tbl of [
-      "clean.flight_population", "clean.flight_events", "clean.flight_state",
-      "clean.flight_snapshots", "clean.flight_outcomes", "clean.historical_feature_store",
+      "clean.flight_population", "clean.flight_events", "clean.flight_data_pre_post",
+      "clean.flight_snapshots", "clean.flight_airborne_snapshots", "clean.flight_outcomes",
+      "clean.historical_feature_store",
       "clean.adb_ingest_events", "clean.adb_collection_batches",
     ]) {
       record(`table:${tbl}`, names.has(tbl), names.has(tbl) ? "present" : "MISSING (see §1.5N)");
@@ -135,4 +139,4 @@ async function main(): Promise<void> {
   console.log("ALL CHECKS PASS — DB evidence complete for §1.5B/§1.5N (read + rolled-back proof).");
 }
 
-main().catch((e) => { console.error("db_verify_phase0 failed:", e?.message ?? e); process.exit(1); });
+main().catch((e) => { console.error("db_verify_phase0_v39 failed:", e?.message ?? e); process.exit(1); });

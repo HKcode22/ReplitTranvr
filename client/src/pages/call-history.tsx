@@ -70,7 +70,7 @@ function BlandCallCard({ blandCall }: { blandCall: BlandCall }) {
           </p>
           {blandCall.summary.length > summaryTruncateLength && (
             <Button
-              variant="link"
+              variant="ghost"
               size="sm"
               className="p-0 h-auto text-xs"
               onClick={() => setShowFullSummary(!showFullSummary)}

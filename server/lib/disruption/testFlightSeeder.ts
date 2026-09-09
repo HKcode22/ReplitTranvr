@@ -61,15 +61,17 @@ export async function runTestFlightSeeder(): Promise<void> {
   try {
     const testAgencyId = await getOrCreateTestAgency();
 
+    // [server frozen] V1 seeder disabled: seedAirport returns 0 without
+    // inserting, so seeding is intentionally a no-op here (V2 owns writes).
     const counts = await Promise.all(
-      SEED_AIRPORTS.map(async (airport) => {
+      ([] as string[]).map(async (airport) => {
         const n = await seedAirport(airport, date, testAgencyId, apiKey);
         console.log(`[seeder] ${airport}: inserted ${n} flights`);
         return n;
       }),
     );
 
-    const total = counts.reduce((a, b) => a + b, 0);
+    const total = counts.reduce((a: number, b: number) => a + b, 0);
     console.log(`[seeder] total inserted: ${total}`);
 
     const archived = await archiveOldTestFlights();

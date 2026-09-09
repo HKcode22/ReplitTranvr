@@ -18,6 +18,7 @@
 // ============================================================
 
 import type { Express, Request, Response, NextFunction } from "express";
+import { createHash } from "crypto";
 import type { InsertFlightDataPrePost } from "@shared/schema";
 import {
   getBalance,
@@ -27,6 +28,7 @@ import {
   getSubscription,
   deleteSubscription,
   defaultWebhookUrl,
+  resolveExperimentalRetries,
   type SubscriptionSubjectType,
 } from "./lib/disruption/aerodataboxLimiter_v3";
 import { flightNotificationContractSchema } from "./lib/disruption/flightStatus_v3";
@@ -38,7 +40,9 @@ import {
   upsertFlightNotifications,
   appendResearchEvents,
   researchEventKey,
+  semanticObservationKey,
 } from "./lib/disruption/flightDataPrePostStore_v3";
+import { canonicalFlightInstanceId } from "./lib/disruption/flightInstanceCanonical_v3";
 import { persistRawDelivery, persistRawDeliveryItems, persistProcessingAttempt } from "./lib/disruption/rawIngress_v3";
 import { pool } from "./db";
 import {
@@ -223,8 +227,6 @@ export function registerV3Routes(app: Express): void {
         else skipped++;
       });
 
-      const stats = await upsertFlightNotifications(rows);
-
       // §1.5.2 item 6: parser/semantic failure AFTER durable raw commit is
       // recorded as a processing_attempt (recoverable) — it never erases raw
       // evidence and the handler may still 2xx. Track outcomes for the attempt row.
@@ -232,20 +234,49 @@ export function registerV3Routes(app: Express): void {
       let researchAppended = false;
       let attemptError: string | null = null;
 
-      // V3.9 S3/S4/S5 (§6, §6.2): append the research event log — one row per
-      // observation, keyed on (flight, carrier, locReportedUtc) so every
-      // airborne point survives. Never overwrites. Ignores errors (2xx first).
+      // V3.9 S3/S4/S5 (§6, §6.2) + §1.5.5 item 4: append the research event log
+      // BEFORE the convenience/current-state mutation — one row per
+      // observation. Location observations keep the location-scoped key so
+      // every airborne point survives; NON-location updates use the general
+      // semantic-observation identity (canonical instance + type/phase +
+      // state clock + raw-item hash), because (flight,carrier,locReportedUtc)
+      // is not a universal identity. Never overwrites. Ignores errors (2xx first).
       try {
         await appendResearchEvents(
-          rows.map((r, i) => ({
-            eventKey: researchEventKey({
-              flightNumber: r.flightNumber,
-              carrierIata: r.carrierIata,
-              locReportedUtc: r.locReportedUtc,
-              lastUpdatedUtc: r.lastUpdatedUtc,
-              receivedAt: r.receivedAt ?? new Date(),
-              index: i,
-            }),
+          rows.map((r, i) => {
+            const hasLoc = r.hasLiveLocation === true && !!r.locReportedUtc;
+            const eventKey = hasLoc
+              ? researchEventKey({
+                  flightNumber: r.flightNumber,
+                  carrierIata: r.carrierIata,
+                  locReportedUtc: r.locReportedUtc,
+                  lastUpdatedUtc: r.lastUpdatedUtc,
+                  receivedAt: r.receivedAt ?? new Date(),
+                  index: i,
+                })
+              : semanticObservationKey({
+                  canonicalFlightInstanceId: canonicalFlightInstanceId({
+                    operatingCarrier: r.carrierIata ?? "",
+                    operatingFlightNumber: r.flightNumber,
+                    origin: r.depAirportIcao ?? "",
+                    destinationOriginal: r.arrAirportIcao ?? "",
+                    // Service-date approximation: UTC slice (the extractor row
+                    // carries no airport timezone; canonical path uses local).
+                    scheduledGateOutUtc: r.depScheduledUtc ? r.depScheduledUtc.toISOString() : "",
+                    serviceDate: r.depScheduledUtc
+                      ? r.depScheduledUtc.toISOString().slice(0, 10)
+                      : "",
+                  }).flight_instance_id,
+                  eventType: "status_change",
+                  eventPhase: r.dataStage as "PRE" | "POST",
+                  locReportedUtc: null,
+                  providerStateUpdatedUtc: r.lastUpdatedUtc ?? null,
+                  rawItemSha256: createHash("sha256")
+                    .update(JSON.stringify(flights[i] ?? null))
+                    .digest("hex"),
+                });
+            return {
+            eventKey,
             flightNumber: r.flightNumber,
             carrierIata: r.carrierIata,
             carrierIcao: r.carrierIcao,
@@ -287,7 +318,8 @@ export function registerV3Routes(app: Express): void {
             batchId: sampling?.batchId ?? null,
             subscriptionId: subId ?? null,
             ingestEventId: null,
-          })),
+            };
+          }),
         );
         researchAppended = true;
       } catch (researchErr: any) {
@@ -297,6 +329,11 @@ export function registerV3Routes(app: Express): void {
           attemptError,
         );
       }
+
+      // §1.5.5 item 4: convenience/current-state mutation happens AFTER the
+      // event-log append. If this throws, the outer catch records a failed
+      // processing_attempt (raw + any appended events remain durable).
+      const stats = await upsertFlightNotifications(rows);
 
       // Record the processing attempt for this delivery (best-effort; raw evidence already durable).
       try {
@@ -479,14 +516,18 @@ export function registerV3Routes(app: Express): void {
       return res.status(400).json({ error: "subjectId is required" });
     }
     // CRIT-004 / §1.5.1 item 4: V3.9 experimental collection requires maxDeliveryRetries=0.
-    // Omitted → stored/sent 0; any requested nonzero value is refused (never silently stored).
-    const retriesRequested = maxDeliveryRetries === undefined ? 0 : Number(maxDeliveryRetries);
-    if (!Number.isInteger(retriesRequested) || retriesRequested !== 0) {
+    // Single owner: resolveExperimentalRetries() in aerodataboxLimiter_v3.
+    let retriesResolved: number;
+    try {
+      retriesResolved = resolveExperimentalRetries(
+        maxDeliveryRetries === undefined ? undefined : Number(maxDeliveryRetries),
+      );
+    } catch {
       return res.status(400).json({ error: "maxDeliveryRetries must be 0 for V3.9 experimental subscriptions (omit or send 0)" });
     }
     const subscription = await createSubscription(subjectType as SubscriptionSubjectType, subjectId, {
       url: url || defaultWebhookUrl(),
-      maxDeliveryRetries: 0,
+      maxDeliveryRetries: retriesResolved,
     });
     if (!subscription) {
       return res.status(502).json({ error: "Failed to create subscription" });
