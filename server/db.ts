@@ -56,6 +56,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0041_phase6_start_admission_tolerance.sql",
   "0042_webhook_identity_resolution_ledger.sql",
   "0043_phase6_start_time_guard.sql",
+  "0044_webhook_attempt_provenance.sql",
 ];
 
 let bootMigrationsApplied = false;
