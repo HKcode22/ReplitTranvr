@@ -50,7 +50,10 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Apply production boot migrations — fresh database
+      - name: Provision repository base schema
+        run: npx drizzle-kit push --force
+
+      - name: Apply production boot migrations — fresh V3.9 layer
         run: npx tsx scripts/apply_boot_migrations_v39.ts
 
       - name: Apply production boot migrations — idempotence replay
