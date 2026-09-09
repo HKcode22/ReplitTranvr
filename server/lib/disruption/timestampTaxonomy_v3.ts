@@ -1,138 +1,58 @@
 /**
- * Timestamp taxonomy — V3.9-f.8 §14 / Sep1_1 §14
+ * Timestamp taxonomy — V3.9-f.8 cutoff-safety owner.
  *
- * 10+ timestamp fields with exact definitions and leakage rules.
- * Every timestamp in the system maps to exactly one of these categories.
- *
- * Frozen taxonomy (§14):
- *   1. scheduled_gate_out_utc   — T milestone candidate: scheduled pushback time
- *   2. scheduled_wheels_off_utc — T milestone fallback: scheduled takeoff time
- *   3. revised_gate_out_utc     — provider's revised pushback (if updated)
- *   4. predicted_gate_out_utc   — provider's predicted pushback (ML-based)
- *   5. actual_gate_out_utc      — real pushback time (POST only)
- *   6. actual_wheels_off_utc    — real takeoff time (POST only)
- *   7. scheduled_gate_in_utc    — scheduled arrival at gate
- *   8. scheduled_wheels_on_utc  — scheduled touchdown
- *   9. actual_gate_in_utc       — real gate arrival (POST only)
- *  10. actual_wheels_on_utc     — real touchdown (POST only)
- *  11. loc_reported_utc         — when the live position was reported
- *  12. last_updated_utc         — when the provider last updated the record
- *  13. received_at_utc          — when WE received the notification
- *  14. available_at             — when OUR system could build features (ETL lag)
- *  15. provider_published_utc   — when the provider generated the notification
- *
- * Leakage rule: source occurrence before cutoff but availability after cutoff
- * must be EXCLUDED from snapshots at that cutoff.
- *
- * Sep1_1 §14 corrections:
- *  - provider state timestamp distinct from location timestamp
- *  - available_at ≤ cutoff enforced in snapshot queries
- *  - optional missing feature does not delete snapshot
- *  - non-location location timestamp nullable
+ * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§6.1, 6.3-6.6, 7,
+ * 12.2, 14. Unknown information availability is never deployably eligible.
  */
 
-// ---------------------------------------------------------------------------
-// Timestamp field definitions
-// ---------------------------------------------------------------------------
-
 export interface TimestampTaxonomy {
-  /** T milestone candidate: scheduled pushback time (§6.0) */
   scheduledGateOutUtc: Date | null;
-  /** T milestone fallback: scheduled takeoff time (§6.0) */
   scheduledWheelsOffUtc: Date | null;
-  /** Provider's revised pushback (if updated) */
   revisedGateOutUtc: Date | null;
-  /** Provider's predicted pushback (ML-based) */
   predictedGateOutUtc: Date | null;
-  /** Real pushback time (POST only) */
   actualGateOutUtc: Date | null;
-  /** Real takeoff time (POST only) */
   actualWheelsOffUtc: Date | null;
-  /** Scheduled arrival at gate */
   scheduledGateInUtc: Date | null;
-  /** Scheduled touchdown */
   scheduledWheelsOnUtc: Date | null;
-  /** Real gate arrival (POST only) */
   actualGateInUtc: Date | null;
-  /** Real touchdown (POST only) */
   actualWheelsOnUtc: Date | null;
-  /** When the live position was reported */
   locReportedUtc: Date | null;
-  /** When the provider last updated the record */
   lastUpdatedUtc: Date | null;
-  /** When WE received the notification */
   receivedAtUtc: Date;
-  /** When OUR system could build features (ETL lag) */
   availableAt: Date | null;
-  /** When the provider generated the notification */
   providerPublishedUtc: Date | null;
 }
 
-// ---------------------------------------------------------------------------
-// Timestamp → FAA/ASPM milestone mapping (§8)
-// Only map when semantically verified; never blindly rename.
-// ---------------------------------------------------------------------------
-
 /**
- * Provider-native fields → FAA/ASPM milestone aliases.
- * Only map when the semantic meaning is verified; otherwise keep NULL + milestone_unverified=true.
- *
- * Sep1_1 §8 corrections:
- *  - scheduledTime → scheduled gate/wheels (verified semantics)
- *  - revisedTime → revised gate/wheels (provider update, not necessarily actual)
- *  - predictedTime → predicted gate/wheels (ML-based, not actual)
- *  - runwayTime → actual gate/wheels: UNVERIFIED candidate. "runway" looks
- *    like an actual movement time but its provider-native semantics are NOT
- *    confirmed until Gate 0.5 (gptP0analyze4 finding 6 / Log §8). Until then
- *    these stay NULL via milestone_unverified=true — NEVER copied into aliases
- *    merely to fill columns (routes_v3.ts does the correct thing).
- *  - actualTime is NOT used (provider contract does not have this field).
- *
- *  `verified` here means "provider-native semantics confirmed"; only the
- *  scheduled gate/wheels mappings are verified pre-Gate-0.5. All actual_*
- *  milestones are marked verified=false until Gate 0.5.
+ * Provider-native fields → project milestone aliases. Actual OOOI/runway
+ * semantics remain UNVERIFIED until Gate 0.5 and therefore are not copied into
+ * actual_* aliases pre-Gate-0.5.
  */
 export const PROVIDER_TO_FAA_MAPPING: Record<string, { target: string; verified: boolean }> = {
-  // Departure milestones — scheduled only verified pre-Gate-0.5
-  "departure.scheduledTime.utc":  { target: "scheduled_gate_out_utc", verified: true },
-  "departure.revisedTime.utc":    { target: "revised_gate_out_utc", verified: true },
-  "departure.predictedTime.utc":  { target: "predicted_gate_out_utc", verified: true },
-  "departure.runwayTime.utc":     { target: "actual_gate_out_utc", verified: false },
-  // Arrival milestones
-  "arrival.scheduledTime.utc":    { target: "scheduled_gate_in_utc", verified: true },
-  "arrival.revisedTime.utc":      { target: "revised_gate_in_utc", verified: true },
-  "arrival.predictedTime.utc":    { target: "predicted_gate_in_utc", verified: true },
-  "arrival.runwayTime.utc":       { target: "actual_wheels_on_utc", verified: false },
-  // Wheels milestones (derived from runway when available) — only after Gate 0.5
-  // confirms the runway→actual mapping; otherwise NULL.
+  "departure.scheduledTime.utc": { target: "scheduled_gate_out_utc", verified: true },
+  "departure.revisedTime.utc": { target: "revised_gate_out_utc", verified: true },
+  "departure.predictedTime.utc": { target: "predicted_gate_out_utc", verified: true },
+  "departure.runwayTime.utc": { target: "actual_gate_out_utc", verified: false },
+  "arrival.scheduledTime.utc": { target: "scheduled_gate_in_utc", verified: true },
+  "arrival.revisedTime.utc": { target: "revised_gate_in_utc", verified: true },
+  "arrival.predictedTime.utc": { target: "predicted_gate_in_utc", verified: true },
+  "arrival.runwayTime.utc": { target: "actual_wheels_on_utc", verified: false },
 };
 
-// ---------------------------------------------------------------------------
-// Leakage check (§14)
-// ---------------------------------------------------------------------------
-
-/**
- * Check if a timestamp is available at a given cutoff.
- * available_at ≤ cutoff is the eligibility rule.
- *
- * A source occurrence before cutoff but availability after cutoff
- * must be EXCLUDED from snapshots at that cutoff.
- *
- * gptP0analyze4 finding 6 / §14: UNKNOWN availability (null) can never be
- * treated as "available before cutoff" — that would leak a future-dated value
- * into a historical snapshot. Unknown → NOT eligible (fail-closed).
- */
+/** Unknown availability is never equivalent to available-before-cutoff. */
 export function isAvailableAtCutoff(availableAt: Date | null, cutoffUtc: Date): boolean {
-  if (availableAt === null) return false; // unknown availability = NOT eligible (no leakage)
-  return availableAt <= cutoffUtc;
+  if (availableAt === null) return false;
+  const a = availableAt.getTime();
+  const c = cutoffUtc.getTime();
+  return Number.isFinite(a) && Number.isFinite(c) && a <= c;
 }
 
 /**
- * Check if a feature is eligible for inclusion in a snapshot.
- * Both availability AND validity must hold:
- *   - information_available_at ≤ cutoff
- *   - valid_from ≤ cutoff
- *   - valid_to IS NULL OR valid_to > cutoff
+ * Generic bitemporal feature eligibility. The feature must have both a known
+ * information-availability clock and a known validity start. valid_to may be
+ * null to mean still valid. Missing optional features are represented by a
+ * missing value/flag at the snapshot layer, NOT by calling an unknown feature
+ * "eligible" here.
  */
 export function isFeatureEligible(
   informationAvailableAt: Date | null,
@@ -140,22 +60,19 @@ export function isFeatureEligible(
   validTo: Date | null,
   cutoffUtc: Date,
 ): boolean {
-  // Availability check
-  if (informationAvailableAt && informationAvailableAt > cutoffUtc) return false;
-  // Validity check
-  if (validFrom && validFrom > cutoffUtc) return false;
-  if (validTo && validTo <= cutoffUtc) return false;
+  if (informationAvailableAt === null || validFrom === null) return false;
+  const info = informationAvailableAt.getTime();
+  const from = validFrom.getTime();
+  const cutoff = cutoffUtc.getTime();
+  if (![info, from, cutoff].every(Number.isFinite)) return false;
+  if (info > cutoff || from > cutoff) return false;
+  if (validTo !== null) {
+    const to = validTo.getTime();
+    if (!Number.isFinite(to) || to <= cutoff) return false;
+  }
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Snapshot timestamp stamping
-// ---------------------------------------------------------------------------
-
-/**
- * Build the timestamp block for a snapshot row.
- * All timestamps are preserved distinctly; nullable fields stay NULL.
- */
 export function buildSnapshotTimestamps(
   flight: {
     depScheduledUtc?: Date | null;
@@ -171,19 +88,19 @@ export function buildSnapshotTimestamps(
 ): TimestampTaxonomy {
   return {
     scheduledGateOutUtc: flight.depScheduledUtc ?? null,
-    scheduledWheelsOffUtc: null, // derived from provider, not directly exposed
+    scheduledWheelsOffUtc: null,
     revisedGateOutUtc: flight.depRevisedUtc ?? null,
-    predictedGateOutUtc: null, // provider does not expose directly in all payloads
-    actualGateOutUtc: null, // runway→actual UNVERIFIED until Gate 0.5 (§8, gptP0analyze4 #6)
-    actualWheelsOffUtc: null, // derived from departure.runwayTime only after Gate 0.5
+    predictedGateOutUtc: null,
+    actualGateOutUtc: null,
+    actualWheelsOffUtc: null,
     scheduledGateInUtc: flight.arrScheduledUtc ?? null,
-    scheduledWheelsOnUtc: null, // derived from provider, not directly exposed
-    actualGateInUtc: null, // provider does not expose directly in all payloads
-    actualWheelsOnUtc: null, // arrival.runwayTime UNVERIFIED until Gate 0.5
+    scheduledWheelsOnUtc: null,
+    actualGateInUtc: null,
+    actualWheelsOnUtc: null,
     locReportedUtc: flight.locReportedUtc ?? null,
     lastUpdatedUtc: flight.lastUpdatedUtc ?? null,
     receivedAtUtc,
-    availableAt: null, // computed by ETL pipeline, not at extraction time
+    availableAt: null,
     providerPublishedUtc: flight.lastUpdatedUtc ?? null,
   };
 }
