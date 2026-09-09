@@ -17,6 +17,10 @@ function sha256Json(obj: unknown): string {
 function source(path: string): string {
   return readFileSync(join(process.cwd(), path), "utf8");
 }
+function regexIndex(src: string, pattern: RegExp): number {
+  const match = pattern.exec(src);
+  return match?.index ?? -1;
+}
 
 describe("TEST-006: raw durability/hash identity", () => {
   it("same raw payload hash is stable and changed payload differs", () => {
@@ -87,11 +91,11 @@ describe("TEST-007: semantic observation identity", () => {
 describe("Phase 0B: production webhook ordering", () => {
   it("orders raw transaction -> identity ledger -> semantic events -> mutable state -> 2xx", () => {
     const src = source("server/routes_v3.ts");
-    const iRaw = src.indexOf("await persistRawDeliveryTransaction(");
-    const iIdentity = src.indexOf("await persistIdentityResolutionLedger(");
-    const iEvents = src.indexOf("await appendResearchEvents(");
-    const iUpsert = src.indexOf("await upsertFlightNotifications(rows)");
-    const iAck = src.indexOf("res.status(200).json({ received: true, flights:");
+    const iRaw = regexIndex(src, /await\s+persistRawDeliveryTransaction\s*\(/);
+    const iIdentity = regexIndex(src, /await\s+persistIdentityResolutionLedger\s*\(/);
+    const iEvents = regexIndex(src, /await\s+appendResearchEvents\s*\(/);
+    const iUpsert = regexIndex(src, /await\s+upsertFlightNotifications\s*\(\s*rows\s*\)/);
+    const iAck = regexIndex(src, /res\.status\s*\(\s*200\s*\)\.json\s*\(\s*\{\s*received\s*:\s*true\s*,\s*flights\s*:/);
     for (const [name, index] of [
       ["raw transaction", iRaw],
       ["identity resolution ledger", iIdentity],
@@ -107,30 +111,30 @@ describe("Phase 0B: production webhook ordering", () => {
 
   it("raw DB failure is the only pre-durability 5xx path and opens raw-persistence incident", () => {
     const src = source("server/routes_v3.ts");
-    expect(src).toContain('recordIncident("raw-persistence"');
-    expect(src).toContain('res.status(500).json({ error: "Raw persistence failed; please retry" })');
+    expect(src).toMatch(/recordIncident\s*\(\s*["']raw-persistence["']/);
+    expect(src).toMatch(/res\.status\s*\(\s*500\s*\)\.json\s*\(\s*\{\s*error\s*:\s*["']Raw persistence failed; please retry["']\s*\}\s*\)/);
     expect(src).not.toContain("await persistRawDeliveryItems(");
   });
 
   it("post-raw identity/event persistence failure returns 2xx but opens persistent incident-stop", () => {
     const src = source("server/routes_v3.ts");
-    expect(src).toContain('recordIncident("persistence"');
+    expect(src).toMatch(/recordIncident\s*\(\s*["']persistence["']/);
     expect(src).toContain("semantic processing error after raw durability");
-    expect(src).toContain('res.status(200).json({ received: true, error:');
+    expect(src).toMatch(/res\.status\s*\(\s*200\s*\)\.json\s*\(\s*\{\s*received\s*:\s*true\s*,\s*error\s*:/);
   });
 
   it("does not create service-date identity from UTC slicing or a mutable fallback date", () => {
     const src = source("server/routes_v3.ts");
-    expect(src).toContain("resolveWebhookFlightIdentity({");
-    expect(src).toContain('identity.status !== "resolved"');
+    expect(src).toMatch(/resolveWebhookFlightIdentity\s*\(\s*\{/);
+    expect(src).toMatch(/identity\.status\s*!==\s*["']resolved["']/);
     expect(src).not.toContain("depScheduledUtc.toISOString().slice(0, 10)");
   });
 
   it("preserves original raw index after parser skips", () => {
     const src = source("server/routes_v3.ts");
-    expect(src).toContain("rawIndex: number");
-    expect(src).toContain("flights.forEach((flight: any, rawIndex: number)");
-    expect(src).toContain("item_index,raw_item_sha256,resolution_status");
+    expect(src).toMatch(/rawIndex\s*:\s*number/);
+    expect(src).toMatch(/flights\.forEach\s*\(\s*\(\s*flight\s*:\s*any\s*,\s*rawIndex\s*:\s*number\s*\)/);
+    expect(src).toMatch(/item_index\s*,\s*raw_item_sha256\s*,\s*resolution_status/);
     expect(src).not.toContain("const flight = flights[i] ?? {}");
   });
 
@@ -148,7 +152,15 @@ describe("Phase 0B: production webhook ordering", () => {
     expect(migration).toContain("resolution_status IN ('resolved','quarantined')");
     expect(migration).toContain("trg_webhook_identity_resolution_immutable");
     const route = source("server/routes_v3.ts");
-    expect(route).toContain("ON CONFLICT(delivery_id,item_index) DO NOTHING");
+    expect(route).toMatch(/ON\s+CONFLICT\s*\(\s*delivery_id\s*,\s*item_index\s*\)\s+DO\s+NOTHING/i);
     expect(route).toContain("IDENTITY_LEDGER_CONFLICT");
+  });
+
+  it("HTTP cannot start or stop Phase 6 outside the command owners", () => {
+    const src = source("server/routes_v3.ts");
+    expect(src).toContain("REFUSED_PHASE6_HTTP_START");
+    expect(src).toContain("REFUSED_PHASE6_HTTP_STOP");
+    expect(src).not.toMatch(/app\.post\s*\(\s*["']\/api\/v1\/collection\/start["'][\s\S]{0,500}startBatch\s*\(/);
+    expect(src).not.toMatch(/app\.post\s*\(\s*["']\/api\/v1\/collection\/stop["'][\s\S]{0,500}stopBatch\s*\(/);
   });
 });
