@@ -6,7 +6,7 @@ import { startBatch } from "../server/lib/disruption/adbCollectionController_v3"
 import { resolveOwnerAuthorization } from "./v39_paid_guard_v39";
 
 const PHASE6_SCOPE = "Phase 6 (separate authorization)";
-const REQUIRED_SCHEMA_VERSION = "0044";
+const REQUIRED_SCHEMA_VERSION = "0045";
 
 function currentGitSha(): string {
   try {
@@ -39,9 +39,7 @@ export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise
   );
   if (auth.rowCount !== 1) throw new Error("REFUSED_PHASE6_AUTH: persistent singleton authorization is missing");
   const row = auth.rows[0];
-  if (row.enabled !== true || row.revoked_at_utc !== null) {
-    throw new Error("REFUSED_PHASE6_AUTH: persistent authorization is disabled/revoked");
-  }
+  if (row.enabled !== true || row.revoked_at_utc !== null) throw new Error("REFUSED_PHASE6_AUTH: persistent authorization is disabled/revoked");
   if (String(row.authorization_id) !== commandAuth.authId) {
     throw new Error(`REFUSED_PHASE6_AUTH_ID: command AUTH ${commandAuth.authId} != persistent ${row.authorization_id}`);
   }
@@ -49,9 +47,7 @@ export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise
     throw new Error("REFUSED_PHASE6_MANIFEST_BINDING: persistent authorization does not bind the presented manifest bytes");
   }
   const gitSha = currentGitSha();
-  if (String(row.code_sha).toLowerCase() !== gitSha) {
-    throw new Error(`REFUSED_CODE_SHA: authorized=${row.code_sha} running=${gitSha}`);
-  }
+  if (String(row.code_sha).toLowerCase() !== gitSha) throw new Error(`REFUSED_CODE_SHA: authorized=${row.code_sha} running=${gitSha}`);
   if (String(row.schema_version) !== REQUIRED_SCHEMA_VERSION) {
     throw new Error(`REFUSED_SCHEMA_VERSION: authorized=${row.schema_version} required=${REQUIRED_SCHEMA_VERSION}`);
   }
@@ -87,11 +83,7 @@ export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   runPhase6StartOwner().then((code) => { process.exitCode = code; }).catch((error: any) => {
-    console.error(JSON.stringify({
-      schema: "v39.phase6-start-evidence.v2",
-      status: "FAIL",
-      error: error?.message ?? String(error),
-    }));
+    console.error(JSON.stringify({ schema: "v39.phase6-start-evidence.v2", status: "FAIL", error: error?.message ?? String(error) }));
     process.exitCode = 1;
   }).finally(async () => {
     await pool.end().catch(() => undefined);
