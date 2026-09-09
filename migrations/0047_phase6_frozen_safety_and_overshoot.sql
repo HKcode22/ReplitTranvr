@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS clean.adb_phase6_settlement_evidence (
   settlement_stable_read_count INTEGER NOT NULL CHECK (settlement_stable_read_count >= 3),
   settlement_timeout_seconds INTEGER NOT NULL CHECK (settlement_timeout_seconds > 0),
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK ((evidence_status='UNRESOLVED' AND balance_stable_after IS NULL AND external_spend IS NULL)
+  CHECK ((evidence_status='UNRESOLVED' AND balance_stable_after IS NULL AND external_spend IS NULL AND discrepancy IS NULL)
       OR (evidence_status IN ('SETTLED_PASS','SETTLED_MISMATCH') AND balance_before IS NOT NULL AND balance_stable_after IS NOT NULL AND external_spend IS NOT NULL AND discrepancy IS NOT NULL))
 );
 CREATE OR REPLACE FUNCTION clean.reject_phase6_settlement_evidence_mutation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'Phase-6 settlement evidence is append-only'; END $$;
@@ -80,20 +80,46 @@ CREATE OR REPLACE FUNCTION clean.require_phase6_settlement_evidence() RETURNS tr
 DECLARE ev clean.adb_phase6_settlement_evidence%ROWTYPE;
 BEGIN
   IF NEW.reconciliation_status IS NULL THEN RETURN NEW; END IF;
-  IF NEW.reconciliation_status IS NOT DISTINCT FROM OLD.reconciliation_status AND NEW.settled_alert_spend IS NOT DISTINCT FROM OLD.settled_alert_spend AND NEW.balance_stable_after IS NOT DISTINCT FROM OLD.balance_stable_after THEN RETURN NEW; END IF;
+  IF NEW.reconciliation_status IS NOT DISTINCT FROM OLD.reconciliation_status
+     AND NEW.settled_alert_spend IS NOT DISTINCT FROM OLD.settled_alert_spend
+     AND NEW.balance_stable_after IS NOT DISTINCT FROM OLD.balance_stable_after
+     AND NEW.notification_items_internal IS NOT DISTINCT FROM OLD.notification_items_internal THEN RETURN NEW; END IF;
   SELECT * INTO ev FROM clean.adb_phase6_settlement_evidence WHERE segment_id=NEW.segment_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'REFUSED_UNEVIDENCED_SETTLEMENT: segment % has no frozen settlement evidence', NEW.segment_id; END IF;
   IF ev.batch_id IS DISTINCT FROM NEW.batch_id THEN RAISE EXCEPTION 'REFUSED_SETTLEMENT_BATCH_MISMATCH: segment %', NEW.segment_id; END IF;
+
   IF NEW.reconciliation_status='PASS' THEN
-    IF ev.evidence_status <> 'SETTLED_PASS' OR NEW.balance_stable_after IS DISTINCT FROM ev.balance_stable_after OR NEW.settled_alert_spend IS DISTINCT FROM ev.external_spend OR NEW.notification_items_internal IS DISTINCT FROM ev.internal_spend THEN RAISE EXCEPTION 'REFUSED_SETTLEMENT_EVIDENCE_MISMATCH: PASS segment %', NEW.segment_id; END IF;
+    IF ev.evidence_status <> 'SETTLED_PASS'
+       OR NEW.balance_stable_after IS DISTINCT FROM ev.balance_stable_after
+       OR NEW.settled_alert_spend IS DISTINCT FROM ev.external_spend
+       OR NEW.notification_items_internal IS DISTINCT FROM ev.internal_spend THEN
+      RAISE EXCEPTION 'REFUSED_SETTLEMENT_EVIDENCE_MISMATCH: PASS segment %', NEW.segment_id;
+    END IF;
   ELSIF NEW.reconciliation_status='MISMATCH' THEN
-    IF ev.evidence_status NOT IN ('SETTLED_MISMATCH','UNRESOLVED') THEN RAISE EXCEPTION 'REFUSED_SETTLEMENT_EVIDENCE_MISMATCH: MISMATCH segment %', NEW.segment_id; END IF;
-  ELSE RAISE EXCEPTION 'REFUSED_PHASE6_RECONCILIATION_STATUS: %', NEW.reconciliation_status;
+    IF ev.evidence_status='SETTLED_MISMATCH' THEN
+      IF NEW.balance_stable_after IS DISTINCT FROM ev.balance_stable_after
+         OR NEW.settled_alert_spend IS DISTINCT FROM ev.external_spend
+         OR NEW.notification_items_internal IS DISTINCT FROM ev.internal_spend THEN
+        RAISE EXCEPTION 'REFUSED_SETTLEMENT_EVIDENCE_MISMATCH: SETTLED_MISMATCH segment %', NEW.segment_id;
+      END IF;
+    ELSIF ev.evidence_status='UNRESOLVED' THEN
+      IF NEW.balance_stable_after IS NOT NULL
+         OR NEW.settled_alert_spend IS NOT NULL
+         OR (NEW.notification_items_internal IS NOT NULL AND NEW.notification_items_internal IS DISTINCT FROM ev.internal_spend) THEN
+        RAISE EXCEPTION 'REFUSED_SETTLEMENT_EVIDENCE_MISMATCH: UNRESOLVED segment %', NEW.segment_id;
+      END IF;
+    ELSE
+      RAISE EXCEPTION 'REFUSED_SETTLEMENT_EVIDENCE_MISMATCH: MISMATCH segment %', NEW.segment_id;
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'REFUSED_PHASE6_RECONCILIATION_STATUS: %', NEW.reconciliation_status;
   END IF;
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS trg_require_phase6_settlement_evidence ON clean.adb_collection_segments;
-CREATE TRIGGER trg_require_phase6_settlement_evidence BEFORE UPDATE OF reconciliation_status,settled_alert_spend,balance_stable_after ON clean.adb_collection_segments FOR EACH ROW EXECUTE FUNCTION clean.require_phase6_settlement_evidence();
+CREATE TRIGGER trg_require_phase6_settlement_evidence
+  BEFORE UPDATE OF reconciliation_status,settled_alert_spend,balance_stable_after,notification_items_internal
+  ON clean.adb_collection_segments FOR EACH ROW EXECUTE FUNCTION clean.require_phase6_settlement_evidence();
 
 CREATE TABLE IF NOT EXISTS clean.adb_budget_day_adjustment (
   source_run_day_index INTEGER PRIMARY KEY CHECK (source_run_day_index BETWEEN 1 AND 31),
