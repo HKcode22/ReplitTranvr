@@ -6,7 +6,9 @@
  * (gate "all"/"Phase 0"/"PREP"/empty) that are unresolved. Entries gated on
  * future gates (Gate 0/0.5/3, FREEZE, Phase 6) are reported as
  * pending_by_design — they cannot be frozen in Phase 0 by construction.
- * Secrets are counted present/absent, never printed.
+ * Secrets are counted present/absent, never printed. A future-gate secret such
+ * as AERODATABOX_API_KEY must be declared/secret-typed now, but its actual
+ * value is verified at its owning gate rather than injected into offline CI.
  */
 import {
   PHASE6_CONFIG_REGISTRY,
@@ -28,15 +30,18 @@ function main(): void {
   const pendingByDesign: string[] = [];
   for (const c of required) {
     const key = `${c.key} (${c.phase}/${c.gate})`;
+    const currentScope = CURRENT_SCOPE_GATES.has(String(c.gate));
     if (c.secret) {
-      // Presence only, never values. Unset secrets in THIS env are missing-now.
+      // Presence only, never values. Only current-scope secrets must be set in
+      // Phase-0 execution; future-gate secrets are deliberately deferred.
       if (c.value === null || c.value === undefined || c.value === "") {
-        missingNow.push(`${key} [secret unset in current env]`);
+        if (currentScope) missingNow.push(`${key} [secret unset in current env]`);
+        else pendingByDesign.push(`${key} [secret value deferred to owning gate]`);
       }
       continue;
     }
     if (!unresolvedValue(c.value)) continue;
-    if (CURRENT_SCOPE_GATES.has(String(c.gate))) missingNow.push(key);
+    if (currentScope) missingNow.push(key);
     else pendingByDesign.push(key);
   }
   console.log("REGISTRY-CHECK");
