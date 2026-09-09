@@ -4,7 +4,12 @@
  * Phase-0 closure check in order and FAILS if any prerequisite fails:
  *   repo-intake → migrate:check → test:offline → test:full → typecheck →
  *   lint → build → registry:check → traceability:check → scanner → safety.
- * Exit 0 only when ALL pass. Prints the exact failed prerequisite otherwise.
+ *
+ * IMPORTANT lifecycle boundary: `v39:security:verify` is NOT executed here.
+ * The binding Log places its live/account/deployment evidence in Phase 2
+ * prerequisite P, after Gate 0. Phase 0 only proves that the verifier is a
+ * real non-stub command and that its machinery is covered by offline tests.
+ * Exit 0 only when every Phase-0 prerequisite below passes.
  */
 import { execSync } from "child_process";
 import { readFileSync } from "fs";
@@ -38,7 +43,6 @@ const STEPS: Step[] = [
   { name: "registry:check", cmd: "npm run v39:registry:check" },
   { name: "traceability:check", cmd: "npm run v39:traceability:check" },
   { name: "scanner", cmd: "npm run v39:scanner" },
-  { name: "security:verify", cmd: "npm run v39:security:verify" },
 ];
 
 function run(cmd: string): boolean {
@@ -55,15 +59,24 @@ function main(): void {
   const failed: string[] = [];
   for (const s of STEPS) {
     const mapped = mappedCommand(s.name);
-    if (isStub(mapped)) {
-      console.log(`  [FAIL] ${s.name} (echo stub — proves nothing)`);
-      failed.push(`${s.name}:stub`);
+    if (!mapped || isStub(mapped)) {
+      console.log(`  [FAIL] ${s.name} (${!mapped ? "missing mapping" : "echo stub — proves nothing"})`);
+      failed.push(`${s.name}:${!mapped ? "missing" : "stub"}`);
       continue;
     }
     const ok = run(s.cmd);
     console.log(`  [${ok ? "PASS" : "FAIL"}] ${s.name}`);
     if (!ok) failed.push(s.name);
   }
+
+  // Phase-0 proves the Phase-2 verifier exists and is not a stub; it does not
+  // fabricate the live evidence that Gate 0/Prerequisite P must supply later.
+  const securityMapped = mappedCommand("security:verify");
+  const securityOwnerReady = !!securityMapped && !isStub(securityMapped) && securityMapped.includes("v39_security_verify_v39.ts");
+  console.log(`  [${securityOwnerReady ? "PASS" : "FAIL"}] security-verifier-owner (${securityMapped ?? "missing"})`);
+  if (!securityOwnerReady) failed.push("security-verifier-owner");
+  console.log("  [DEFERRED] security live/account/deployment evidence → Phase 2 prerequisite P after Gate 0");
+
   // Safety: collection must resolve OFF in this process env.
   const autoCollect = process.env.ADB_AUTO_COLLECT;
   const safeOff = autoCollect === undefined || autoCollect === "" || ["0", "false", "off", "no"].includes(String(autoCollect).toLowerCase().trim());
