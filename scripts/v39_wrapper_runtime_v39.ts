@@ -1,15 +1,13 @@
 import { spawnSync, type SpawnSyncReturns } from "child_process";
-import { enforcePaidGuard } from "./v39_paid_guard_v39";
+import { enforcePaidGuard, parseArgs } from "./v39_paid_guard_v39";
 
 const CONTROL_OPTIONS = new Set(["--auth", "--auth-file", "--evidence-id"]);
 
+/** Operation-only args; AUTH controls are reattached explicitly for owner verification. */
 export function operationArgs(argv: string[]): string[] {
   const forwarded: string[] = [];
   for (let i = 0; i < argv.length; i++) {
-    if (CONTROL_OPTIONS.has(argv[i])) {
-      i++;
-      continue;
-    }
+    if (CONTROL_OPTIONS.has(argv[i])) { i++; continue; }
     forwarded.push(argv[i]);
   }
   return forwarded;
@@ -20,12 +18,7 @@ export interface WrapperDependencies {
   spawn: typeof spawnSync;
   write: (line: string) => void;
 }
-
-const defaults: WrapperDependencies = {
-  authorize: enforcePaidGuard,
-  spawn: spawnSync,
-  write: console.log,
-};
+const defaults: WrapperDependencies = { authorize: enforcePaidGuard, spawn: spawnSync, write: console.log };
 
 export function runAuthorizedOwner(
   command: string,
@@ -34,21 +27,27 @@ export function runAuthorizedOwner(
   argv = process.argv.slice(2),
   dependencies: WrapperDependencies = defaults,
 ): number {
-  const parsedEvidence = argv.findIndex((arg) => arg === "--evidence-id");
-  const evidenceId = parsedEvidence >= 0 ? argv[parsedEvidence + 1] ?? null : null;
+  const controls = parseArgs(argv);
+  const evidenceId = controls.evidenceId;
 
-  // This is deliberately the first operation. No child can exist before AUTH.
+  // Front-door check is always first. No child/provider call can precede AUTH.
   const plan = dependencies.authorize(command, phaseGate);
+  if (!controls.auth || !controls.authFile || controls.auth !== plan.authId) {
+    throw new Error("REFUSED: verified wrapper plan is missing the exact AUTH id/file needed for owner re-verification");
+  }
+
+  const childArgs = [
+    "--import", "tsx", owner,
+    ...operationArgs(argv),
+    "--auth", controls.auth,
+    "--auth-file", controls.authFile,
+  ];
+  if (evidenceId) childArgs.push("--evidence-id", evidenceId);
+
   const result: SpawnSyncReturns<Buffer> = dependencies.spawn(
     process.execPath,
-    ["--import", "tsx", owner, ...operationArgs(argv)],
-    {
-      stdio: "inherit",
-      // Mediation proof for the owner's anti-bypass check: set ONLY here,
-      // after exact AUTH verified in-process. Prevents accidental direct
-      // execution from mutating; not a boundary against machine owners.
-      env: { ...process.env, V39_VERIFIED_AUTH: plan.authId ?? "" },
-    },
+    childArgs,
+    { stdio: "inherit", env: { ...process.env } },
   );
   const passed = result.status === 0 && !result.error;
   dependencies.write(JSON.stringify({
