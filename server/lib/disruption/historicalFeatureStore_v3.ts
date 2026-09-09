@@ -1,27 +1,19 @@
 /**
- * Historical as-of feature store — V3.9-f.8 §12.2 / §12.2.1 / §70 / Sep1_1 §26
+ * Historical as-of feature store — V3.9-f.8 §12.2 / §12.2.1.
  *
- * Binding spec: AugMDnotes/V3.9_DataCollectPlan.md §12.2 + §12.2.1
- * One row per (entity_type, entity_id, feature_name, valid_from) with
- * feature_value, source, source_timestamp, information_available_timestamp, valid_from, valid_to
+ * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§0–21.
+ * Historical facts are append-only and bitemporal. At prediction cutoff T a
+ * feature is eligible only when information_available_at <= T, valid_from <= T,
+ * and valid_to is null or > T.
  *
- * Snapshot at T fetches max(valid_from) WHERE available_at ≤ T — never future computation.
- * Bootstrap: weather archive backfill + provider FIDS history as far as retained (≥7d) + pre-run collection.
- * history_ready_at = max(bootstrap_end, earliest_snapshot_cutoff - lookback) — earliest evaluation cutoff must be ≥ history_ready_at.
- *
- * Sep1_1 §26 corrections:
- *  - Real bitemporal/as-of logic, not a stub
- *  - Append-only: rows are never updated or deleted
- *  - as-of effective time query implemented
- *  - History readiness tracked per entity
- *  - Missing features stay NULL, never 0
+ * IMPORTANT Phase-0 safety rule: an infrastructure/database failure is NOT the
+ * same thing as a genuinely missing as-of feature. Missing rows return null (or
+ * an empty Map for a batch lookup); query/write failures throw a typed error so
+ * snapshot materializers can pause/fail closed instead of manufacturing
+ * history_incomplete from a broken store.
  */
 
 import { pool } from "../../db";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
 
 export interface HistoricalFeatureRow {
   entityType: "airport" | "route" | "carrier_airport" | "tail" | "od" | "weather";
@@ -49,31 +41,67 @@ export interface HistoryReadinessRow {
   verified: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// As-of lookup (§12.2.1)
-// ---------------------------------------------------------------------------
+export type HistoryLookupStatus = "FOUND" | "MISSING_AS_OF";
+
+export interface HistoryLookupResult {
+  status: HistoryLookupStatus;
+  row: HistoricalFeatureRow | null;
+}
+
+export interface HistoryQueryExecutor {
+  query: (text: string, params?: unknown[]) => Promise<{ rows: any[]; rowCount?: number | null }>;
+}
+
+export class HistoryStoreInfrastructureError extends Error {
+  readonly operation: string;
+  readonly causeValue: unknown;
+
+  constructor(operation: string, causeValue: unknown) {
+    const detail = causeValue instanceof Error ? causeValue.message : String(causeValue);
+    super(`historical feature store infrastructure failure during ${operation}: ${detail}`);
+    this.name = "HistoryStoreInfrastructureError";
+    this.operation = operation;
+    this.causeValue = causeValue;
+  }
+}
+
+function defaultExecutor(): HistoryQueryExecutor {
+  return { query: (text, params = []) => pool.query(text, params as any[]) };
+}
+
+function mapFeatureRow(row: any): HistoricalFeatureRow {
+  return {
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    featureName: row.feature_name,
+    featureValue: row.feature_value,
+    featureText: row.feature_text,
+    source: row.source,
+    sourceVersion: row.source_version,
+    sourceTimestamp: row.source_timestamp?.toISOString?.() ?? row.source_timestamp ?? null,
+    informationAvailableTimestamp:
+      row.information_available_at?.toISOString?.() ?? row.information_available_at,
+    validFrom: row.valid_from?.toISOString?.() ?? row.valid_from,
+    validTo: row.valid_to?.toISOString?.() ?? row.valid_to ?? null,
+    batchId: row.batch_id,
+    payloadSha256: row.payload_sha256,
+  };
+}
 
 /**
- * Fetch the most recent feature value for a given entity as of a cutoff time.
- *
- * Query: SELECT ... FROM clean.historical_feature_store
- *   WHERE entity_type = $1 AND entity_id = $2 AND feature_name = $3
- *     AND information_available_at <= $4  -- feature was computable at cutoff
- *     AND valid_from <= $4               -- feature was valid at cutoff
- *     AND (valid_to IS NULL OR valid_to > $4)  -- feature hadn't expired
- *   ORDER BY valid_from DESC LIMIT 1
- *
- * Returns null if no feature exists for the given entity at the cutoff.
- * Never throws: missing features return null (caller stamps history_incomplete).
+ * Explicit-status form used where callers need to distinguish a legitimate
+ * absent fact from a found fact. Infrastructure failures throw.
  */
-export async function getHistoricalFeatureAsOf(
+export async function getHistoricalFeatureAsOfResult(
   entityType: HistoricalFeatureRow["entityType"],
   entityId: string,
   featureName: string,
   cutoffUtc: string,
-): Promise<HistoricalFeatureRow | null> {
+  executor: HistoryQueryExecutor = defaultExecutor(),
+): Promise<HistoryLookupResult> {
+  let result: { rows: any[]; rowCount?: number | null };
   try {
-    const result = await pool.query(
+    result = await executor.query(
       `SELECT
          entity_type, entity_id, feature_name,
          feature_value, feature_text,
@@ -91,46 +119,55 @@ export async function getHistoricalFeatureAsOf(
        LIMIT 1`,
       [entityType, entityId, featureName, cutoffUtc],
     );
-
-    if (result.rows.length === 0) return null;
-
-    const row = result.rows[0];
-    return {
-      entityType: row.entity_type,
-      entityId: row.entity_id,
-      featureName: row.feature_name,
-      featureValue: row.feature_value,
-      featureText: row.feature_text,
-      source: row.source,
-      sourceVersion: row.source_version,
-      sourceTimestamp: row.source_timestamp?.toISOString?.() ?? row.source_timestamp ?? null,
-      informationAvailableTimestamp: row.information_available_at?.toISOString?.() ?? row.information_available_at,
-      validFrom: row.valid_from?.toISOString?.() ?? row.valid_from,
-      validTo: row.valid_to?.toISOString?.() ?? row.valid_to ?? null,
-      batchId: row.batch_id,
-      payloadSha256: row.payload_sha256,
-    };
-  } catch (err: any) {
-    console.error(`[history-store] as-of lookup failed (${entityType}/${entityId}/${featureName}):`, err?.message || err);
-    return null;
+  } catch (error) {
+    throw new HistoryStoreInfrastructureError(
+      `as-of lookup ${entityType}/${entityId}/${featureName}`,
+      error,
+    );
   }
+
+  if (result.rows.length === 0) return { status: "MISSING_AS_OF", row: null };
+  return { status: "FOUND", row: mapFeatureRow(result.rows[0]) };
 }
 
 /**
- * Batch as-of lookup: fetch multiple features for the same entity at a cutoff.
- * More efficient than individual calls when querying many features for one entity.
+ * Compatibility form: a genuinely absent feature returns null; infrastructure
+ * failure throws HistoryStoreInfrastructureError.
+ */
+export async function getHistoricalFeatureAsOf(
+  entityType: HistoricalFeatureRow["entityType"],
+  entityId: string,
+  featureName: string,
+  cutoffUtc: string,
+  executor: HistoryQueryExecutor = defaultExecutor(),
+): Promise<HistoricalFeatureRow | null> {
+  const result = await getHistoricalFeatureAsOfResult(
+    entityType,
+    entityId,
+    featureName,
+    cutoffUtc,
+    executor,
+  );
+  return result.row;
+}
+
+/**
+ * Batch as-of lookup. An empty Map means the query succeeded but none of the
+ * requested features existed as-of the cutoff. Database failure throws.
  */
 export async function getHistoricalFeaturesAsOf(
   entityType: HistoricalFeatureRow["entityType"],
   entityId: string,
   featureNames: string[],
   cutoffUtc: string,
+  executor: HistoryQueryExecutor = defaultExecutor(),
 ): Promise<Map<string, HistoricalFeatureRow>> {
   const results = new Map<string, HistoricalFeatureRow>();
   if (featureNames.length === 0) return results;
 
+  let queryResult: { rows: any[]; rowCount?: number | null };
   try {
-    const result = await pool.query(
+    queryResult = await executor.query(
       `SELECT DISTINCT ON (feature_name)
          entity_type, entity_id, feature_name,
          feature_value, feature_text,
@@ -147,43 +184,28 @@ export async function getHistoricalFeaturesAsOf(
        ORDER BY feature_name, valid_from DESC`,
       [entityType, entityId, featureNames, cutoffUtc],
     );
-
-    for (const row of result.rows) {
-      results.set(row.feature_name, {
-        entityType: row.entity_type,
-        entityId: row.entity_id,
-        featureName: row.feature_name,
-        featureValue: row.feature_value,
-        featureText: row.feature_text,
-        source: row.source,
-        sourceVersion: row.source_version,
-        sourceTimestamp: row.source_timestamp?.toISOString?.() ?? row.source_timestamp ?? null,
-        informationAvailableTimestamp: row.information_available_at?.toISOString?.() ?? row.information_available_at,
-        validFrom: row.valid_from?.toISOString?.() ?? row.valid_from,
-        validTo: row.valid_to?.toISOString?.() ?? row.valid_to ?? null,
-        batchId: row.batch_id,
-        payloadSha256: row.payload_sha256,
-      });
-    }
-  } catch (err: any) {
-    console.error(`[history-store] batch as-of lookup failed (${entityType}/${entityId}):`, err?.message || err);
+  } catch (error) {
+    throw new HistoryStoreInfrastructureError(
+      `batch as-of lookup ${entityType}/${entityId}`,
+      error,
+    );
   }
 
+  for (const row of queryResult.rows) results.set(row.feature_name, mapFeatureRow(row));
   return results;
 }
 
-// ---------------------------------------------------------------------------
-// Insert (append-only, §12.2)
-// ---------------------------------------------------------------------------
-
 /**
- * Insert a historical feature row. Append-only: rows are never updated or deleted.
- * ON CONFLICT (entity_type, entity_id, feature_name, valid_from) DO NOTHING
- * to ensure idempotent inserts.
+ * Append-only insert. Expected duplicate keys remain idempotent through
+ * ON CONFLICT DO NOTHING. Any database failure throws rather than silently
+ * pretending the feature was stored.
  */
-export async function insertHistoricalFeature(row: Omit<HistoricalFeatureRow, "featureText"> & { featureText?: string | null }): Promise<void> {
+export async function insertHistoricalFeature(
+  row: Omit<HistoricalFeatureRow, "featureText"> & { featureText?: string | null },
+  executor: HistoryQueryExecutor = defaultExecutor(),
+): Promise<void> {
   try {
-    await pool.query(
+    await executor.query(
       `INSERT INTO clean.historical_feature_store
          (entity_type, entity_id, feature_name, feature_value, feature_text,
           source, source_version, source_timestamp,
@@ -207,70 +229,65 @@ export async function insertHistoricalFeature(row: Omit<HistoricalFeatureRow, "f
         row.payloadSha256 ?? null,
       ],
     );
-  } catch (err: any) {
-    console.error(`[history-store] insert failed (${row.entityType}/${row.entityId}/${row.featureName}):`, err?.message || err);
+  } catch (error) {
+    throw new HistoryStoreInfrastructureError(
+      `insert ${row.entityType}/${row.entityId}/${row.featureName}`,
+      error,
+    );
   }
 }
 
-// ---------------------------------------------------------------------------
-// History readiness (§12.2)
-// ---------------------------------------------------------------------------
-
 /**
- * Check if historical features are ready for a given entity at a cutoff.
- * history_ready_at = max(bootstrap_end, earliest_snapshot_cutoff - lookback)
+ * Check persisted readiness. Missing readiness evidence is NOT_READY (false);
+ * an inability to query readiness is an infrastructure failure and throws.
  */
 export async function isHistoryReady(
   entityType: string,
   entityId: string,
   cutoffUtc: string,
+  executor: HistoryQueryExecutor = defaultExecutor(),
 ): Promise<boolean> {
+  let result: { rows: any[]; rowCount?: number | null };
   try {
-    const result = await pool.query(
+    result = await executor.query(
       `SELECT history_ready_at
        FROM clean.historical_readiness
        WHERE entity_type = $1 AND entity_id = $2 AND verified = true`,
       [entityType, entityId],
     );
-
-    if (result.rows.length === 0) return false;
-
-    const readyAt = result.rows[0].history_ready_at;
-    return new Date(cutoffUtc) >= new Date(readyAt);
-  } catch (err: any) {
-    console.error(`[history-store] readiness check failed (${entityType}/${entityId}):`, err?.message || err);
-    return false;
+  } catch (error) {
+    throw new HistoryStoreInfrastructureError(
+      `readiness check ${entityType}/${entityId}`,
+      error,
+    );
   }
+
+  if (result.rows.length === 0) return false;
+  const readyAt = new Date(result.rows[0].history_ready_at);
+  const cutoff = new Date(cutoffUtc);
+  if (!Number.isFinite(readyAt.getTime()) || !Number.isFinite(cutoff.getTime())) return false;
+  return cutoff >= readyAt;
 }
 
-/**
- * Simple cutoff-based readiness check (for callers that pre-computed history_ready_at).
- */
 export function isHistoryReadySimple(historyReadyAt: string, cutoffUtc: string): boolean {
-  return new Date(cutoffUtc) >= new Date(historyReadyAt);
+  const ready = new Date(historyReadyAt);
+  const cutoff = new Date(cutoffUtc);
+  return Number.isFinite(ready.getTime()) && Number.isFinite(cutoff.getTime()) && cutoff >= ready;
 }
 
-// ---------------------------------------------------------------------------
-// Readiness computation + row-level completeness (§1.5.9 / Phase 0I)
-// ---------------------------------------------------------------------------
-
-/** Frozen minimum lookbacks (days) by entity family (§1.5.9). */
+/** Frozen minimum lookbacks (days) by entity family. */
 export const HISTORY_MIN_LOOKBACK_DAYS: Record<string, number> = {
   airport: 7,
   route: 7,
   carrier_airport: 7,
-  tail: 1, // previous-leg search within 24h
+  tail: 1,
   od: 7,
-  weather: 0.25, // operational lookback 6h
+  weather: 0.25,
 };
 
-/** Minimum qualifying flights for airport/route recent-delay aggregates. */
 export const HISTORY_MIN_QUALIFYING_FLIGHTS = 5;
 
-/**
- * Compute history_ready_at = max(bootstrap_end, earliest_snapshot_cutoff − lookback).
- * Structural readiness boundary: earliest evaluation cutoff must be ≥ this value.
- */
+/** history_ready_at = max(bootstrap_end, earliest_snapshot_cutoff − lookback). */
 export function computeHistoryReadyAt(
   bootstrapEndUtc: Date | null,
   earliestSnapshotCutoffUtc: Date,
@@ -292,11 +309,6 @@ export interface HistoryCompleteness {
   flag: "history_complete_for_snapshot" | "history_incomplete";
 }
 
-/**
- * Row-level completeness (§1.5.9): airport/route recent-delay aggregates require
- * at least 5 qualifying flights, otherwise `history_incomplete`. Incomplete
- * history stays NULL/flagged and never deletes the snapshot row.
- */
 export function evaluateHistoryCompleteness(
   qualifyingCount: number,
   minimumRequired: number = HISTORY_MIN_QUALIFYING_FLIGHTS,
@@ -310,36 +322,38 @@ export function evaluateHistoryCompleteness(
   };
 }
 
-/**
- * Get history readiness info for an entity.
- */
+/** Missing row returns null; infrastructure failure throws. */
 export async function getHistoryReadiness(
   entityType: string,
   entityId: string,
+  executor: HistoryQueryExecutor = defaultExecutor(),
 ): Promise<HistoryReadinessRow | null> {
+  let result: { rows: any[]; rowCount?: number | null };
   try {
-    const result = await pool.query(
+    result = await executor.query(
       `SELECT entity_type, entity_id, history_ready_at, bootstrap_end,
               earliest_snapshot_cutoff, lookback_days, verified
        FROM clean.historical_readiness
        WHERE entity_type = $1 AND entity_id = $2`,
       [entityType, entityId],
     );
-
-    if (result.rows.length === 0) return null;
-
-    const row = result.rows[0];
-    return {
-      entityType: row.entity_type,
-      entityId: row.entity_id,
-      historyReadyAt: row.history_ready_at?.toISOString?.() ?? row.history_ready_at,
-      bootstrapEnd: row.bootstrap_end?.toISOString?.() ?? row.bootstrap_end ?? null,
-      earliestSnapshotCutoff: row.earliest_snapshot_cutoff?.toISOString?.() ?? row.earliest_snapshot_cutoff ?? null,
-      lookbackDays: row.lookback_days,
-      verified: row.verified,
-    };
-  } catch (err: any) {
-    console.error(`[history-store] readiness get failed (${entityType}/${entityId}):`, err?.message || err);
-    return null;
+  } catch (error) {
+    throw new HistoryStoreInfrastructureError(
+      `readiness get ${entityType}/${entityId}`,
+      error,
+    );
   }
+
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
+  return {
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    historyReadyAt: row.history_ready_at?.toISOString?.() ?? row.history_ready_at,
+    bootstrapEnd: row.bootstrap_end?.toISOString?.() ?? row.bootstrap_end ?? null,
+    earliestSnapshotCutoff:
+      row.earliest_snapshot_cutoff?.toISOString?.() ?? row.earliest_snapshot_cutoff ?? null,
+    lookbackDays: row.lookback_days,
+    verified: row.verified,
+  };
 }
