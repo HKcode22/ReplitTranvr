@@ -48,6 +48,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0033_incident_stop.sql",
   "0034_airborne_phase0_conformance.sql",
   "0035_anchor_probe_identity_bounds.sql",
+  "0036_webhook_identity_schedule_versions.sql",
 ];
 
 let bootMigrationsApplied = false;
@@ -63,8 +64,6 @@ export async function applyBootMigrations(): Promise<void> {
       for (const block of blocks) await migrationPool.query(block);
       console.log(`[migrations] applied ${file}`);
     } catch (err: any) {
-      // Allow a subsequent explicit verification process to retry after a boot
-      // failure; do not permanently mark the migration registry as applied.
       bootMigrationsApplied = false;
       console.error(`[migrations] failed to apply ${file}:`, err?.message || err);
       throw err;
