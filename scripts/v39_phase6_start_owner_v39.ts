@@ -6,7 +6,7 @@ import { startBatch } from "../server/lib/disruption/adbCollectionController_v3"
 import { resolveOwnerAuthorization } from "./v39_paid_guard_v39";
 
 const PHASE6_SCOPE = "Phase 6 (separate authorization)";
-const REQUIRED_SCHEMA_VERSION = "0043";
+const REQUIRED_SCHEMA_VERSION = "0044";
 
 function currentGitSha(): string {
   try {
@@ -19,10 +19,7 @@ function currentGitSha(): string {
 }
 
 export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise<number> {
-  // Owner-level verification is independent of the wrapper. Direct invocation
-  // with only environment/process arming can never start paid collection.
   const commandAuth = resolveOwnerAuthorization(PHASE6_SCOPE, argv);
-
   const hashIndex = argv.indexOf("--manifest-sha256");
   const expectedHash = hashIndex >= 0 ? argv[hashIndex + 1] : null;
   const manifestPath = process.env.V39_MANIFEST_PATH;
@@ -59,8 +56,6 @@ export async function runPhase6StartOwner(argv = process.argv.slice(2)): Promise
     throw new Error(`REFUSED_SCHEMA_VERSION: authorized=${row.schema_version} required=${REQUIRED_SCHEMA_VERSION}`);
   }
 
-  // Required schema objects are checked again here so a string label alone can
-  // never certify an incomplete migration state.
   const schema = await pool.query(
     `SELECT
        to_regclass('clean.adb_phase6_calendar_day') AS calendar,
