@@ -9,7 +9,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 export const MANIFEST_PLAN_VERSION = "v3.9-f.8";
-export const MANIFEST_SCHEMA_VERSION = "0046";
+export const MANIFEST_SCHEMA_VERSION = "0047";
 
 export interface ManifestEntry {
   type: "module" | "test" | "migration" | "config" | "document" | "rule" | "script";
@@ -38,10 +38,11 @@ const current = (
 
 export const V39_MANIFEST: ManifestEntry[] = [
   // ---- Runtime / transport / admission owners ----
-  current("module", "server/db.ts", "production boot-migration registry through schema 0046"),
+  current("module", "server/db.ts", "production boot-migration registry through schema 0047"),
   current("module", "server/routes_v3.ts", "webhook ingress and guarded management mutation surface", ["REQ-RAW-001", "REQ-RAW-002"]),
   current("module", "server/lib/disruption/aerodataboxLimiter_v3.ts", "central AeroDataBox transport and REST-unit ledger", ["REQ-RATE-001"]),
-  current("module", "server/lib/disruption/adbCollectionController_v3.ts", "hash-frozen Phase-6 collection/segment admission owner"),
+  current("module", "server/lib/disruption/adbCollectionController_v3.ts", "hash-frozen Phase-6 collection/segment admission and lifecycle owner"),
+  current("module", "server/lib/disruption/phase6SafetyWatchdog_v39.ts", "independent frozen SEND-aware Phase-6 safety/settlement owner", ["REQ-BUDGET-001", "REQ-SETTLE-001"]),
   current("module", "server/lib/disruption/phase6SamplingDecision_v39.ts", "frozen slot-region/adaptive sampling decision", ["REQ-ADAPT-001", "REQ-CAL-001"]),
   current("module", "server/lib/disruption/adaptiveMi_v3.ts", "binding REGIONAL adaptive state machine", ["REQ-ADAPT-001", "REQ-ADAPT-002", "REQ-ADAPT-003", "REQ-ADAPT-004"]),
   current("module", "server/lib/disruption/budgetAccounting_v3.ts", "Alert/REST budget accounting", ["REQ-BUDGET-001", "REQ-BUDGET-002"]),
@@ -83,7 +84,7 @@ export const V39_MANIFEST: ManifestEntry[] = [
   current("script", "scripts/v39_probe_stage2_v39.ts", "Stage-2 AUTH wrapper"),
   current("script", "scripts/v39_probe_stage2_owner_v39.ts", "robust exact-five Stage-2 confirmation owner"),
   current("script", "scripts/v39_phase6_start_v39.ts", "Phase-6 AUTH wrapper"),
-  current("script", "scripts/v39_phase6_start_owner_v39.ts", "manifest/code/schema-bound Phase-6 start owner"),
+  current("script", "scripts/v39_phase6_start_owner_v39.ts", "manifest/code/schema/safety-heartbeat-bound Phase-6 start owner"),
   current("script", "scripts/calendar_solve.ts", "strict calendar CLI"),
   current("script", "scripts/v39_security_verify_v39.ts", "deployment-aware security/retention verifier"),
   current("script", "scripts/v39_preflight_v39.ts", "aggregate Phase-0 preflight"),
@@ -112,6 +113,7 @@ export const V39_MANIFEST: ManifestEntry[] = [
   current("test", "tests/retention_security_v39.test.ts", "retention/security"),
   current("test", "tests/scanner_manifest_v39.test.ts", "manifest/scanner"),
   current("test", "tests/phase0_closure_v39.test.ts", "closure/anti-bypass"),
+  current("test", "tests/phase6_safety_watchdog_v39.test.ts", "scaled Gate-4 and production SEND-aware Phase-6 safety"),
 
   // ---- Additive schema lineage used by current Phase-0/Phase-6 machinery ----
   current("migration", "migrations/0017_collection_v39_credit_accounting.sql", "credit accounting"),
@@ -144,6 +146,7 @@ export const V39_MANIFEST: ManifestEntry[] = [
   current("migration", "migrations/0044_webhook_attempt_provenance.sql", "notification and delivery-attempt provenance"),
   current("migration", "migrations/0045_incident_stop_persistence_cause.sql", "incident cause alignment"),
   current("migration", "migrations/0046_subscription_create_uncertainty_stop.sql", "ambiguous provider CREATE -> incident/MISMATCH"),
+  current("migration", "migrations/0047_phase6_frozen_safety_and_overshoot.sql", "frozen Phase-6 soft-stop/run-cap/settlement/overshoot safety"),
 
   current("document", "SEPmd/V3.9_DataCollectPlan_f.8.md", "binding Plan §§0-21"),
   current("document", "SEPmd/V3.9_IMPLEMENTATION_LOG.md", "implementation/status/manual subordinate to Plan"),
