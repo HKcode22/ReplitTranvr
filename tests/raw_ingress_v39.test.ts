@@ -1,238 +1,154 @@
 /**
- * TEST-006/007: Raw ingress persistence (V3.9 Plan §15-16)
- *
- * Covers:
- *  - Raw payload immutable (no UPDATE after initial persist)
- *  - Hash stable across retries (SHA-256 deterministic)
- *  - Raw persistence before successful acknowledgement (ordering contract)
- *  - DB failure injection proves durability requirement
- *  - Delivery/attempt/item/semantic identities preserve retries
- *  - Same-clock updates don't erase trajectory
- *  - Processing attempt append-only
+ * V3.9 raw-ingress/semantic-identity offline regression tests.
+ * No network or paid provider operation is performed.
  */
-
-import { describe, it, expect } from "vitest";
 import { createHash } from "crypto";
-
-// Pure function tests - no DB required
-// These test the hash computation and identity contracts
+import { readFileSync } from "fs";
+import { join } from "path";
+import { describe, expect, it } from "vitest";
+import { semanticObservationKey } from "../server/lib/disruption/flightDataPrePostStore_v3";
 
 function sha256(data: string): string {
   return createHash("sha256").update(data).digest("hex");
 }
-
 function sha256Json(obj: unknown): string {
   return sha256(JSON.stringify(obj));
 }
+function source(path: string): string {
+  return readFileSync(join(process.cwd(), path), "utf8");
+}
 
-// ---------------------------------------------------------------------------
-// TEST-006: Raw ingress durability and hash stability
-// ---------------------------------------------------------------------------
-
-describe("TEST-006: Raw ingress durability contracts", () => {
-  describe("SHA-256 hash stability", () => {
-    it("same payload produces identical hash across retries", () => {
-      const payload = {
-        subscription: { id: "sub_123" },
-        flights: [{ flightNumber: "UA123", status: "Active" }],
-      };
-
-      const hash1 = sha256Json(payload);
-      const hash2 = sha256Json(payload);
-      const hash3 = sha256Json(payload);
-
-      expect(hash1).toBe(hash2);
-      expect(hash2).toBe(hash3);
-      expect(hash1).toMatch(/^[a-f0-9]{64}$/);
-    });
-
-    it("different payloads produce different hashes", () => {
-      const payload1 = { flights: [{ flightNumber: "UA123" }] };
-      const payload2 = { flights: [{ flightNumber: "UA456" }] };
-
-      expect(sha256Json(payload1)).not.toBe(sha256Json(payload2));
-    });
-
-    it("hash is deterministic for nested structures", () => {
-      const payload = {
-        flights: [
-          { flightNumber: "UA123", departure: { scheduledTime: "2026-09-01T10:00:00Z" } },
-          { flightNumber: "UA456", departure: { scheduledTime: "2026-09-01T11:00:00Z" } },
-        ],
-      };
-
-      const hash1 = sha256Json(payload);
-      const hash2 = sha256Json(JSON.parse(JSON.stringify(payload)));
-
-      expect(hash1).toBe(hash2);
-    });
+describe("TEST-006: raw durability/hash identity", () => {
+  it("same raw payload hash is stable and changed payload differs", () => {
+    const payload = { subscription: { id: "sub_123" }, flights: [{ number: "UA123", status: "Active" }] };
+    expect(sha256Json(payload)).toBe(sha256Json(JSON.parse(JSON.stringify(payload))));
+    expect(sha256Json(payload)).toMatch(/^[a-f0-9]{64}$/);
+    expect(sha256Json(payload)).not.toBe(sha256Json({ ...payload, flights: [{ number: "UA456" }] }));
   });
 
-  describe("Delivery identity contract", () => {
-    it("delivery ID incorporates body hash and timestamp for uniqueness", () => {
-      const rawBody = { flights: [{ flightNumber: "UA123" }] };
-      const rawBodySha256 = sha256Json(rawBody);
-      const receivedAt = new Date("2026-09-01T12:00:00Z");
-      
-      const deliveryId = `del_${rawBodySha256.slice(0, 16)}_${receivedAt.getTime()}`;
-      
-      expect(deliveryId).toMatch(/^del_[a-f0-9]{16}_\d+$/);
-    });
-
-    it("different timestamps produce different delivery IDs for same body", () => {
-      const rawBody = { flights: [] };
-      const rawBodySha256 = sha256Json(rawBody);
-      
-      const id1 = `del_${rawBodySha256.slice(0, 16)}_${Date.now()}`;
-      const id2 = `del_${rawBodySha256.slice(0, 16)}_${Date.now() + 1}`;
-      
-      // IDs may be same if timestamps are identical (fast test), but structure is correct
-      expect(id1).toMatch(/^del_[a-f0-9]{16}_\d+$/);
-      expect(id2).toMatch(/^del_[a-f0-9]{16}_\d+$/);
-    });
+  it("raw-item provenance is delivery + original item index + raw-item hash", () => {
+    const deliveryId = "del_abc";
+    const raw = { number: "UA123" };
+    const key = `${deliveryId}:7:${sha256Json(raw)}`;
+    expect(key).toBe(`${deliveryId}:7:${sha256Json(raw)}`);
   });
 
-  describe("Raw item identity contract", () => {
-    it("item identity is (delivery_id, item_index, raw_item_sha256)", () => {
-      const deliveryId = "del_abc123_1234567890";
-      const itemIndex = 0;
-      const rawItem = { flightNumber: "UA123" };
-      const rawItemSha256 = sha256Json(rawItem);
-
-      // Composite key
-      const key = `${deliveryId}:${itemIndex}:${rawItemSha256}`;
-      
-      expect(key).toBe(`del_abc123_1234567890:0:${rawItemSha256}`);
-    });
-
-    it("retries produce same item identity for same content", () => {
-      const rawItem = { flightNumber: "UA123", status: "Active" };
-      const hash1 = sha256Json(rawItem);
-      const hash2 = sha256Json(rawItem);
-
-      expect(hash1).toBe(hash2);
-    });
+  it("provider retry identity is based on notification id + attempt sequence when available", () => {
+    const rawIngress = source("server/lib/disruption/rawIngress_v3.ts");
+    expect(rawIngress).toContain("input.notificationId");
+    expect(rawIngress).toContain("input.deliveryAttemptSeqNo");
+    expect(rawIngress).toContain("del_adb_");
+    expect(rawIngress).toContain("provider_notification_generated_utc");
+    expect(rawIngress).toContain("delivery_attempt_utc");
+    expect(rawIngress).toContain("delivery_attempt_cost_credits");
   });
 
-  describe("Processing attempt append-only contract", () => {
-    it("each attempt has a unique attempt_index", () => {
-      const attempts = [
-        { deliveryId: "del_1", attemptIndex: 1, outcome: "success" },
-        { deliveryId: "del_1", attemptIndex: 2, outcome: "failed" },
-        { deliveryId: "del_1", attemptIndex: 3, outcome: "success" },
-      ];
-
-      const indices = attempts.map(a => a.attemptIndex);
-      expect(new Set(indices).size).toBe(indices.length);
-    });
+  it("attempt-provenance migration keeps all provider-native fields separate", () => {
+    const migration = source("migrations/0044_webhook_attempt_provenance.sql");
+    for (const field of [
+      "notification_id",
+      "provider_notification_generated_utc",
+      "delivery_attempt_seq_no",
+      "delivery_attempt_utc",
+      "delivery_attempt_cost_credits",
+    ]) expect(migration).toContain(field);
+    expect(migration).toContain("uq_raw_delivery_notification_attempt");
   });
 });
 
-// ---------------------------------------------------------------------------
-// TEST-007: Identity preservation across retries and same-clock updates
-// ---------------------------------------------------------------------------
-
-describe("TEST-007: Identity preservation", () => {
-  describe("Retry identity preservation", () => {
-    it("notification ID is stable across delivery attempts", () => {
-      const notificationId = "notif_abc123";
-      const attempts = [
-        { seqNo: 1, timestamp: new Date("2026-09-01T12:00:00Z") },
-        { seqNo: 2, timestamp: new Date("2026-09-01T12:00:05Z") },
-        { seqNo: 3, timestamp: new Date("2026-09-01T12:00:10Z") },
-      ];
-
-      // All attempts share the same notification ID
-      attempts.forEach(attempt => {
-        expect(typeof notificationId).toBe("string");
-        expect(notificationId).toBe("notif_abc123");
-      });
-    });
-
-    it("attempt sequence is monotonic", () => {
-      const seqNos = [1, 2, 3, 4, 5];
-      for (let i = 1; i < seqNos.length; i++) {
-        expect(seqNos[i]).toBeGreaterThan(seqNos[i - 1]);
-      }
-    });
+describe("TEST-007: semantic observation identity", () => {
+  it("same clocks but different semantic event type remain distinct", () => {
+    const base = {
+      canonicalFlightInstanceId: "fi_123",
+      eventPhase: "POST" as const,
+      locReportedUtc: new Date("2026-09-01T12:00:00Z"),
+      providerStateUpdatedUtc: new Date("2026-09-01T12:00:00Z"),
+      rawItemSha256: "a".repeat(64),
+    };
+    const position = semanticObservationKey({ ...base, eventType: "position_update" });
+    const status = semanticObservationKey({ ...base, eventType: "status_change" });
+    expect(position).not.toBe(status);
+    expect(position).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  describe("Same-clock update handling", () => {
-    it("multiple updates with same timestamp create distinct event rows", () => {
-      const events = [
-        { flight: "UA123", timestamp: "2026-09-01T12:00:00Z", type: "status_change" },
-        { flight: "UA123", timestamp: "2026-09-01T12:00:00Z", type: "gate_change" },
-        { flight: "UA123", timestamp: "2026-09-01T12:00:00Z", type: "delay_update" },
-      ];
-
-      // Same timestamp, different event types = distinct rows
-      expect(events.length).toBe(3);
-      const types = events.map(e => e.type);
-      expect(new Set(types).size).toBe(3);
-    });
-  });
-
-  describe("Semantic event identity", () => {
-    it("event identity includes flight instance, event type, and raw item hash", () => {
-      const eventKey = {
-        flightInstanceId: "UA123_LAX_SFO_20260901",
-        eventType: "departure_delay",
-        availableAt: new Date("2026-09-01T12:00:00Z"),
-        rawItemHash: sha256Json({ status: "delayed" }),
-      };
-
-      expect(eventKey.flightInstanceId).toBeTruthy();
-      expect(eventKey.eventType).toBeTruthy();
-      expect(eventKey.rawItemHash).toMatch(/^[a-f0-9]{64}$/);
-    });
-
-    it("non-location events use state/type timestamps, not location timestamp", () => {
-      const nonLocationEvent = {
-        type: "status_change",
-        providerStateUpdatedUtc: new Date("2026-09-01T12:00:00Z"),
-        locationReportedUtc: null, // No location for status change
-        timestampSource: "provider_state",
-      };
-
-      expect(nonLocationEvent.locationReportedUtc).toBeNull();
-      expect(nonLocationEvent.timestampSource).toBe("provider_state");
-    });
+  it("different raw item hashes keep same-clock updates distinct", () => {
+    const base = {
+      canonicalFlightInstanceId: "fi_123",
+      eventType: "status_change",
+      eventPhase: "POST" as const,
+      locReportedUtc: null,
+      providerStateUpdatedUtc: new Date("2026-09-01T12:00:00Z"),
+    };
+    expect(semanticObservationKey({ ...base, rawItemSha256: "a".repeat(64) }))
+      .not.toBe(semanticObservationKey({ ...base, rawItemSha256: "b".repeat(64) }));
   });
 });
 
-describe("Phase 0B: raw-before-2xx production wiring order (§1.5.2)", () => {
-  it("routes_v3.ts commits envelope and items atomically before semantic upsert and 2xx", async () => {
-    const { readFileSync } = await import("fs");
-    const { join } = await import("path");
-    const src = readFileSync(join(process.cwd(), "server/routes_v3.ts"), "utf8");
+describe("Phase 0B: production webhook ordering", () => {
+  it("orders raw transaction -> identity ledger -> semantic events -> mutable state -> 2xx", () => {
+    const src = source("server/routes_v3.ts");
     const iRaw = src.indexOf("await persistRawDeliveryTransaction(");
+    const iIdentity = src.indexOf("await persistIdentityResolutionLedger(");
     const iEvents = src.indexOf("await appendResearchEvents(");
     const iUpsert = src.indexOf("await upsertFlightNotifications(rows)");
-    const iAck = src.indexOf("res.status(200).json({");
-    for (const [name, idx] of [["persistRawDeliveryTransaction", iRaw], ["appendResearchEvents", iEvents], ["upsertFlightNotifications", iUpsert], ["2xx ack", iAck]] as const) {
-      expect(idx, `${name} must exist in routes_v3.ts`).toBeGreaterThan(-1);
-    }
-    // Required architecture order: atomic raw envelope+items, events,
-    // convenience upsert, then 2xx.
-    expect(iRaw).toBeLessThan(iEvents);
+    const iAck = src.indexOf("res.status(200).json({ received: true, flights:");
+    for (const [name, index] of [
+      ["raw transaction", iRaw],
+      ["identity resolution ledger", iIdentity],
+      ["semantic events", iEvents],
+      ["current-state upsert", iUpsert],
+      ["2xx", iAck],
+    ] as const) expect(index, name).toBeGreaterThan(-1);
+    expect(iRaw).toBeLessThan(iIdentity);
+    expect(iIdentity).toBeLessThan(iEvents);
     expect(iEvents).toBeLessThan(iUpsert);
     expect(iUpsert).toBeLessThan(iAck);
   });
 
-  it("raw DB failure path returns 5xx (not silent 2xx)", async () => {
-    const { readFileSync } = await import("fs");
-    const { join } = await import("path");
-    const src = readFileSync(join(process.cwd(), "server/routes_v3.ts"), "utf8");
+  it("raw DB failure is the only pre-durability 5xx path and opens raw-persistence incident", () => {
+    const src = source("server/routes_v3.ts");
+    expect(src).toContain('recordIncident("raw-persistence"');
     expect(src).toContain('res.status(500).json({ error: "Raw persistence failed; please retry" })');
     expect(src).not.toContain("await persistRawDeliveryItems(");
   });
 
-  it("does not create semantic identity from UTC slicing or a mutable fallback date", async () => {
-    const { readFileSync } = await import("fs");
-    const { join } = await import("path");
-    const src = readFileSync(join(process.cwd(), "server/routes_v3.ts"), "utf8");
+  it("post-raw identity/event persistence failure returns 2xx but opens persistent incident-stop", () => {
+    const src = source("server/routes_v3.ts");
+    expect(src).toContain('recordIncident("persistence"');
+    expect(src).toContain("semantic processing error after raw durability");
+    expect(src).toContain('res.status(200).json({ received: true, error:');
+  });
+
+  it("does not create service-date identity from UTC slicing or a mutable fallback date", () => {
+    const src = source("server/routes_v3.ts");
     expect(src).toContain("resolveWebhookFlightIdentity({");
-    expect(src).toContain('identity?.status !== "resolved"');
+    expect(src).toContain('identity.status !== "resolved"');
     expect(src).not.toContain("depScheduledUtc.toISOString().slice(0, 10)");
+  });
+
+  it("preserves original raw index after parser skips", () => {
+    const src = source("server/routes_v3.ts");
+    expect(src).toContain("rawIndex: number");
+    expect(src).toContain("flights.forEach((flight: any, rawIndex: number)");
+    expect(src).toContain("item_index,raw_item_sha256,resolution_status");
+    expect(src).not.toContain("const flight = flights[i] ?? {}");
+  });
+
+  it("preserves notification/attempt clocks and cost without substituting first-flight lastUpdatedUtc", () => {
+    const src = source("server/routes_v3.ts");
+    expect(src).toContain("notificationGeneratedUtc");
+    expect(src).toContain("attemptSeqNo");
+    expect(src).toContain("attemptUtc");
+    expect(src).toContain("deliveryAttemptCostCredits");
+    expect(src).not.toContain("flights[0]?.lastUpdatedUtc ?? balance?.lastDeductedUtc");
+  });
+
+  it("identity ledger is append-only and resolved/quarantined, never silently overwritten", () => {
+    const migration = source("migrations/0042_webhook_identity_resolution_ledger.sql");
+    expect(migration).toContain("resolution_status IN ('resolved','quarantined')");
+    expect(migration).toContain("trg_webhook_identity_resolution_immutable");
+    const route = source("server/routes_v3.ts");
+    expect(route).toContain("ON CONFLICT(delivery_id,item_index) DO NOTHING");
+    expect(route).toContain("IDENTITY_LEDGER_CONFLICT");
   });
 });
