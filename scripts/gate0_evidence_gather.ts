@@ -1,100 +1,74 @@
-/**
- * Gate 0 — non-spending account/budget evidence gatherer (plan §16 Gate 0, §3.2)
- *
- * Runs ONLY read-only, FREE AeroDataBox endpoints to record Gate-0 evidence:
- *   - GET /subscriptions/balance            (free)  Alert-credit balance
- *   - GET /subscriptions/webhook            (free)  list existing subscriptions
- *   - GET /health/services/airports/{icao}/feeds (free) live-update coverage probe
- *
- * It does NOT call the FIDS endpoint (1 REST unit/call), does NOT refill, does NOT
- * create/delete subscriptions. This is a READ-ONLY evidence gatherer.
- *
- * The plan (§16 Gate 0) also requires: user-confirmed 60,000-unit plan still
- * active, subscription_channel, billing-cycle dates, remaining/used units,
- * refill conversion/caps. Those come from the RapidAPI usage page + user, which
- * this script records as placeholders for manual confirmation.
- *
- * Usage: AERODATABOX_API_KEY=... npx tsx scripts/gate0_evidence_gather.ts
- */
+import "dotenv/config";
+import { readFileSync } from "fs";
+import { pathToFileURL } from "url";
+import { getBalanceStrict, listSubscriptionsStrict, type WebhookSubscription } from "../server/lib/disruption/aerodataboxLimiter_v3";
+import { evaluateGate0Accounting, GATE0_PHASE_GATE, serializeGate0Artifact, type Gate0AccountEvidence } from "../server/lib/disruption/gate0Accounting_v39";
+import { parseArgs, verifyAuthFile } from "./v39_paid_guard_v39";
 
-import {
-  getBalance,
-  listSubscriptions,
-  checkAirportFeeds,
-} from "../server/lib/disruption/aerodataboxLimiter_v3";
-
-const PROBE_ICAOS = ["KLAX", "KSFO", "KJFK", "WSSS", "OMAA"];
-
-function divider(): void {
-  console.log("  " + "-".repeat(60));
+export interface Gate0Readers {
+  getBalance(): Promise<{ creditsRemaining: number } | null>;
+  listSubscriptionsStrict(): Promise<WebhookSubscription[]>;
 }
 
-async function main(): Promise<void> {
-  const key = process.env.AERODATABOX_API_KEY;
-  if (!key) {
-    console.error("AERODATABOX_API_KEY not set — cannot gather Gate-0 evidence");
-    process.exit(1);
-  }
+type AuthVerifier = (authFile: string, phaseGate: string, auth: string) => boolean;
 
-  console.log("\n══════════════════════════════════════════════════════");
-  console.log("GATE-0 EVIDENCE GATHER (READ-ONLY, NON-SPENDING)");
-  console.log("══════════════════════════════════════════════════════\n");
-  console.log(`  gathered_at_utc: ${new Date().toISOString()}`);
-  divider();
-
-  // 1. Alert-credit balance (free)
-  console.log("  [1] GET /subscriptions/balance (free)");
-  const balance = await getBalance();
-  if (balance) {
-    console.log(`      creditsRemaining: ${balance.creditsRemaining}`);
-    console.log(`      lastRefilledUtc:  ${balance.lastRefilledUtc ?? "n/a"}`);
-    console.log(`      lastDeductedUtc:  ${balance.lastDeductedUtc ?? "n/a"}`);
-  } else {
-    console.log("      ERROR: balance read failed");
-  }
-  divider();
-
-  // 2. Existing subscriptions (free, READ-ONLY)
-  console.log("  [2] GET /subscriptions/webhook (free)");
-  const subs = await listSubscriptions();
-  if (subs.length === 0) {
-    console.log("      none (no billable subscriptions — R1 exclusivity holds)");
-  } else {
-    console.log(`      ${subs.length} subscription(s):`);
-    for (const s of subs) {
-      const subj = s.subject ? `${s.subject.type}/${s.subject.id}` : "?";
-      console.log(`        id=${s.id} active=${s.isActive} subject=${subj} expires=${s.expiresOnUtc ?? "n/a"}`);
-    }
-  }
-  divider();
-
-  // 3. Feed coverage probes (free) — for the candidate airports
-  console.log("  [3] GET /health/services/airports/{icao}/feeds (free, coverage)");
-  for (const icao of PROBE_ICAOS) {
-    const feeds = await checkAirportFeeds(icao);
-    if (feeds) {
-      const keys = Object.keys(feeds).filter((k) => k !== "icao" && k !== "message");
-      console.log(`      ${icao}: ${keys.join(", ") || "no feed keys returned"}`);
-    } else {
-      console.log(`      ${icao}: (no feed health returned)`);
-    }
-  }
-  divider();
-
-  // 4. Placeholders requiring user/RapidAPI-dashboard confirmation
-  console.log("  [4] USER/RapidAPI-DASHBOARD CONFIRMATION REQUIRED (plan §16 Gate 0):");
-  console.log("      MONTHLY_PLAN_ENTITLEMENT_UNITS = 60000 (USER-CONFIRMED)");
-  console.log("      subscription_channel            = VERIFY (RapidAPI / API.Market / direct)");
-  console.log("      billing-cycle dates             = VERIFY (RapidAPI usage page)");
-  console.log("      remaining/used REST units       = VERIFY (RapidAPI usage page)");
-  console.log("      refill conversion/caps          = VERIFY (1 unit = 1 credit; per-refill cap)");
-  divider();
-
-  console.log("\n  RESULT: read-only Gate-0 evidence gathered (balances + subscriptions + coverage).");
-  console.log("  Gate 0 is NOT PASS until the [4] items are confirmed by the user/RapidAPI page.\n");
+function accountEvidencePath(argv: string[]): string | null {
+  const index = argv.indexOf("--account-evidence-file");
+  return index >= 0 && index + 1 < argv.length ? argv[index + 1] : null;
 }
 
-main().catch((err) => {
-  console.error("gate0 evidence gather failed:", err?.message || err);
-  process.exit(1);
-});
+export async function runGate0Gather(
+  argv: string[],
+  readers: Gate0Readers = { getBalance: getBalanceStrict, listSubscriptionsStrict },
+  authorize: AuthVerifier = (file, phaseGate, auth) => {
+    const checked = verifyAuthFile(file, phaseGate);
+    return !("error" in checked) && checked.verdict.verified && checked.record.authorizationId === auth;
+  },
+): Promise<ReturnType<typeof evaluateGate0Accounting>> {
+  const { auth, authFile, evidenceId } = parseArgs(argv);
+  const evidenceFile = accountEvidencePath(argv);
+  if (!auth || !/^AUTH-\d{8}-[A-Z0-9]+$/.test(auth)) throw new Error("REFUSED: valid --auth is required");
+  if (!authFile) throw new Error("REFUSED: --auth-file is required");
+  if (!evidenceId || !/^GATE-0-\d{8}-[A-Z0-9]+$/.test(evidenceId)) throw new Error("REFUSED: valid --evidence-id is required");
+  if (!evidenceFile) throw new Error("REFUSED: --account-evidence-file is required");
+
+  // Authorization is established before parsing evidence or touching the provider.
+  if (!authorize(authFile, GATE0_PHASE_GATE, auth)) throw new Error("REFUSED: AUTH verification failed");
+
+  let account: Gate0AccountEvidence;
+  try { account = JSON.parse(readFileSync(evidenceFile, "utf8")); }
+  catch { throw new Error("REFUSED: account evidence must be readable JSON"); }
+  if (account.subscription_channel !== "rapidapi") {
+    return evaluateGate0Accounting(account, { evidenceId, authorizationId: auth }, ["BLOCKED:current_provider_reader_is_rapidapi_only"]);
+  }
+
+  const balance = await readers.getBalance();
+  if (!balance || !Number.isInteger(balance.creditsRemaining) || balance.creditsRemaining < 0) throw new Error("BLOCKED: authoritative getBalance is unavailable or uncertain");
+  const subscriptions = await readers.listSubscriptionsStrict();
+  const merged: Gate0AccountEvidence = {
+    ...account,
+    opening_nonexpiring_alert_balance: balance.creditsRemaining,
+    active_subscription_inventory: subscriptions.map((subscription) => ({
+      id: subscription.id,
+      active: subscription.isActive,
+      billing_type: subscription.billingType,
+      subject_type: subscription.subject?.type ?? null,
+      subject_id: subscription.subject?.id ?? null,
+    })).sort((a, b) => a.id.localeCompare(b.id)),
+  };
+  return evaluateGate0Accounting(merged, { evidenceId, authorizationId: auth });
+}
+
+export async function main(argv = process.argv.slice(2)): Promise<number> {
+  try {
+    const artifact = await runGate0Gather(argv);
+    process.stdout.write(serializeGate0Artifact(artifact));
+    return artifact.status === "PASS" ? 0 : 2;
+  } catch (error: any) {
+    const message = String(error?.message ?? error);
+    console.error(message.startsWith("REFUSED:") ? message : "BLOCKED: Gate-0 account evidence could not be established");
+    return 2;
+  }
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main().then((code) => { process.exitCode = code; });

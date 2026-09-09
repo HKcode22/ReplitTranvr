@@ -117,6 +117,22 @@ export async function getBalance(): Promise<SubscriptionBalance | null> {
   }
 }
 
+/** Gate/accounting reader: throws on every transport, HTTP, JSON, or schema uncertainty. */
+export async function getBalanceStrict(): Promise<SubscriptionBalance> {
+  if (!apiKey()) throw new Error("BALANCE_UNAVAILABLE: API key is not set");
+  let resp: Response;
+  try {
+    resp = await throttledFetch(`${BASE_URL}/subscriptions/balance`, { headers: headers() });
+  } catch {
+    throw new Error("BALANCE_UNAVAILABLE: transport failure");
+  }
+  if (!resp.ok) throw new Error(`BALANCE_UNAVAILABLE: HTTP ${resp.status}`);
+  const raw: any = await readJsonOrNull(resp);
+  const balance = normalizeBalance(raw?.balance ?? raw);
+  if (!balance) throw new Error("BALANCE_UNAVAILABLE: invalid response");
+  return balance;
+}
+
 /** POST /subscriptions/balance/refill — variable rate, 1 API unit per credit. */
 export async function refillBalance(credits: number): Promise<SubscriptionBalance | null> {
   try {
