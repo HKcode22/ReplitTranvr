@@ -85,8 +85,8 @@ describe("Gate 0 accounting owner", () => {
       api_units_remaining: 59_000,
       authorized_alert_refill_credits: 56_000,
       authorized_alert_refill_units: 56_000,
-      phase6_alert_spend_ceiling: MAX_DESIGN_CEILING,
-      unallocated_alert_credits: 100,
+      phase6_alert_spend_ceiling: 57_000,
+      unallocated_alert_credits: 0,
       unallocated_api_units: 1_200,
     });
     expect(evaluateGate0Accounting(grandfathered, identity).status).toBe("PASS");
