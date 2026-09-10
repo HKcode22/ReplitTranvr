@@ -117,8 +117,40 @@ export async function getBalance(): Promise<SubscriptionBalance | null> {
   }
 }
 
-/** Gate/accounting reader: throws on every transport, HTTP, JSON, or schema uncertainty. */
-export async function getBalanceStrict(): Promise<SubscriptionBalance> {
+export interface RapidApiQuotaSnapshot {
+  observedAtUtc: string;
+  apiUnitsLimit: number;
+  apiUnitsRemaining: number;
+  apiUnitsResetSeconds: number;
+  apiUnitsResetAtUtc: string;
+  requestsLimit: number;
+  requestsRemaining: number;
+  requestsResetSeconds: number;
+  requestId: string | null;
+  rapidApiRegion: string | null;
+  rapidApiVersion: string | null;
+}
+
+export interface StrictBalanceEvidence {
+  balance: SubscriptionBalance;
+  quota: RapidApiQuotaSnapshot;
+}
+
+function requiredHeaderInteger(resp: Response, name: string, positive = false): number {
+  const raw = resp.headers.get(name);
+  const value = raw === null ? NaN : Number(raw);
+  if (!Number.isInteger(value) || value < 0 || (positive && value <= 0)) {
+    throw new Error(`BALANCE_UNAVAILABLE: missing/invalid ${name}`);
+  }
+  return value;
+}
+
+/**
+ * Gate-0 balance/quota evidence reader. GET /subscriptions/balance is provider-
+ * documented Free Tier, so this captures the marketplace custom-quota headers
+ * without consuming API units. Any missing/invalid evidence fails closed.
+ */
+export async function getBalanceEvidenceStrict(): Promise<StrictBalanceEvidence> {
   if (!apiKey()) throw new Error("BALANCE_UNAVAILABLE: API key is not set");
   let resp: Response;
   try {
@@ -130,7 +162,35 @@ export async function getBalanceStrict(): Promise<SubscriptionBalance> {
   const raw: any = await readJsonOrNull(resp);
   const balance = normalizeBalance(raw?.balance ?? raw);
   if (!balance) throw new Error("BALANCE_UNAVAILABLE: invalid response");
-  return balance;
+
+  const dateHeader = resp.headers.get("date");
+  if (!dateHeader || !Number.isFinite(Date.parse(dateHeader))) throw new Error("BALANCE_UNAVAILABLE: missing/invalid Date header");
+  const observedAtUtc = new Date(Date.parse(dateHeader)).toISOString();
+  const apiUnitsLimit = requiredHeaderInteger(resp, "x-ratelimit-api-units-limit", true);
+  const apiUnitsRemaining = requiredHeaderInteger(resp, "x-ratelimit-api-units-remaining");
+  const apiUnitsResetSeconds = requiredHeaderInteger(resp, "x-ratelimit-api-units-reset");
+  const requestsLimit = requiredHeaderInteger(resp, "x-ratelimit-requests-limit", true);
+  const requestsRemaining = requiredHeaderInteger(resp, "x-ratelimit-requests-remaining");
+  const requestsResetSeconds = requiredHeaderInteger(resp, "x-ratelimit-requests-reset");
+  if (apiUnitsRemaining > apiUnitsLimit) throw new Error("BALANCE_UNAVAILABLE: API-unit remaining exceeds limit");
+  if (requestsRemaining > requestsLimit) throw new Error("BALANCE_UNAVAILABLE: request remaining exceeds limit");
+  const apiUnitsResetAtUtc = new Date(Date.parse(observedAtUtc) + apiUnitsResetSeconds * 1000).toISOString();
+
+  return {
+    balance,
+    quota: {
+      observedAtUtc, apiUnitsLimit, apiUnitsRemaining, apiUnitsResetSeconds, apiUnitsResetAtUtc,
+      requestsLimit, requestsRemaining, requestsResetSeconds,
+      requestId: resp.headers.get("x-rapidapi-request-id"),
+      rapidApiRegion: resp.headers.get("x-rapidapi-region"),
+      rapidApiVersion: resp.headers.get("x-rapidapi-version"),
+    },
+  };
+}
+
+/** Gate/accounting reader: strict balance-only compatibility wrapper. */
+export async function getBalanceStrict(): Promise<SubscriptionBalance> {
+  return (await getBalanceEvidenceStrict()).balance;
 }
 
 /** POST /subscriptions/balance/refill — variable rate, 1 API unit per credit. */
@@ -228,6 +288,7 @@ export async function listSubscriptionsStrict(): Promise<WebhookSubscription[]> 
   } catch (error: any) {
     throw new Error(`R1_LIST_UNAVAILABLE: ${error?.message ?? error}`);
   }
+  if (resp.status === 204) return [];
   if (!resp.ok) {
     const body = (await resp.text().catch(() => "")).slice(0, 300);
     throw new Error(`R1_LIST_UNAVAILABLE: HTTP ${resp.status} ${body}`);
