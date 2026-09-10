@@ -1,8 +1,9 @@
-name: V3.9 Phase0 Offline Safety
+name: V3.9 Offline Safety
 
 on:
   push:
     branches:
+      - main
       - v39-phase0-final-repair
   pull_request:
     branches:
