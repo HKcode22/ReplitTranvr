@@ -1,0 +1,448 @@
+name: V3.9 Gate0 Live Evidence Document Reconciliation
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconcile binding Plan, active Log, and evidence ledger
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          PLAN = Path('SEPmd/V3.9_DataCollectPlan_f.8.md')
+          LOG = Path('SEPmd/V3.9_IMPLEMENTATION_LOG.md')
+          LEDGER = Path('SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md')
+          plan = PLAN.read_text()
+          log = LOG.read_text()
+          ledger = LEDGER.read_text()
+
+          gate0_live = """
+> **CURRENT GATE-0 ACCOUNT EVIDENCE — 2026-09-10 06:47:29 UTC.** The RapidAPI credential currently loaded in the experiment Replit returned `x-ratelimit-api-units-limit=60,000`, `x-ratelimit-api-units-remaining=59,994`, and Flight-Alert balance `2,900`; the free subscription-inventory read returned HTTP `204 No Content` (zero returned subscriptions). Thus the live provider entitlement for this credential is **60,000 units** and 6 units have already been consumed in the current provider cycle. The project independently authorizes a conservative `project_cycle_api_unit_ceiling=50,000`, so `49,994` project-authorized units remain after observed cycle consumption and **10,000 provider-entitled units are outside project authority**. Do not divide 50,000 by 31 as an operational daily budget: REST/API units and Flight-Alert credits are separate resources. The live quota reset evidence resolves to `2026-10-04T02:21:21Z`; the user reports a recurring renewal date of 2026-09-04 and a $32 Team Ultra charge, but the exact UTC cycle-start timestamp was not exposed and is not fabricated. Current evidence is consistent with a grandfathered marketplace Ultra plan. **The provider GETs do not expose the RapidAPI team/application identity, so credential → intended `travnr` Team binding remains the one Gate-0 account-identity blocker.** No refill, FIDS call, subscription mutation, or database write was performed.
+
+> **Gate-0 lifecycle clarification (binding).** Gate 0 has two outputs: (A) **account/subscription verification**, which freezes the provider/account/channel/quota/balance facts and the project API-unit ceiling; and (B) a **staged funding/budget freeze**. A value that the Plan explicitly generates only after Gate 1, pre-probe reference freeze, safety smoke, Gate 0.5, Gate 5, calendar materialization, or another MEASURE→FREEZE step remains `BLOCKED_LATER_LIVE_VALUE` at early Gate 0 and does **not** invalidate truthful account evidence. Before the first paid action that can consume a given category, every admission value needed by that action must be frozen and its applicable partial budget identity must reconcile. Before final FREEZE/Phase 6, the complete Alert/API budget trees must reconcile. No later value may be guessed, borrowed from a unit-test fixture, or backfilled merely to make Gate 0 say PASS.
+"""
+          if 'CURRENT GATE-0 ACCOUNT EVIDENCE — 2026-09-10 06:47:29 UTC' not in plan:
+              anchor = '> **LIVE PROVIDER-CONTRACT CORRECTION (2026-09-09; V3.9-f.8, no scientific redesign).**'
+              start = plan.find(anchor)
+              if start < 0: raise SystemExit('Plan provider correction anchor missing')
+              end = plan.find('\n\n', start)
+              if end < 0: raise SystemExit('Plan provider correction paragraph end missing')
+              plan = plan[:end+2] + gate0_live + '\n' + plan[end+2:]
+
+          plan = plan.replace('### 3.2 Exact Alert/API balance trees (Gate 0)',
+                              '### 3.2 Staged Alert/API accounting identities (Gate 0 account verification → later budget FREEZE)')
+
+          old_tree = """```text
+ALERT BALANCE (credits):
+opening_nonexpiring_alert_balance + authorized_alert_refill_credits
+  = pre_run_alert_spend_ceiling
+  + phase6_alert_spend_ceiling
+  + protected_alert_floor
+  + ending_alert_margin
+  + unallocated_alert_credits
+
+API ENTITLEMENT (units, separately for each billing cycle):
+cycle_entitlement_units (= exact positive Gate-0-frozen entitlement for the active experiment subscription/cycle)
+  = api_units_consumed_before_freeze
+  + authorized_alert_refill_units
+  + FIDS_BASE_UNITS + FIDS_SPLIT_UNITS + FIDS_RETRY_UNIT_BUDGET
+  + VALIDATION_UNIT_BUDGET + OUTCOME_REST_UNIT_BUDGET
+  + HISTORY_BOOTSTRAP_UNIT_BUDGET + DIAGNOSTIC_UNIT_BUDGET
+  + protected_api_floor_units + ending_api_margin_units
+  + unallocated_api_units
+```"""
+          new_tree = """```text
+PROVIDER API IDENTITY (observable at Gate 0):
+cycle_entitlement_units
+  = api_units_consumed_before_freeze
+  + api_units_remaining
+
+PROJECT-AUTHORIZED API BUDGET (completed in stages; exact before affected spend / final FREEZE):
+project_cycle_api_unit_ceiling <= cycle_entitlement_units
+project_cycle_api_unit_ceiling
+  = api_units_consumed_before_freeze
+  + authorized_alert_refill_units
+  + FIDS_BASE_UNITS + FIDS_SPLIT_UNITS + FIDS_RETRY_UNIT_BUDGET
+  + VALIDATION_UNIT_BUDGET + OUTCOME_REST_UNIT_BUDGET
+  + HISTORY_BOOTSTRAP_UNIT_BUDGET + DIAGNOSTIC_UNIT_BUDGET
+  + protected_api_floor_units + ending_api_margin_units
+  + unallocated_api_units
+
+provider_entitlement_outside_project_ceiling
+  = cycle_entitlement_units - project_cycle_api_unit_ceiling
+
+ALERT BALANCE (completed before affected Alert spend / final FREEZE):
+opening_nonexpiring_alert_balance + authorized_alert_refill_credits
+  = pre_run_alert_spend_ceiling
+  + phase6_alert_spend_ceiling
+  + protected_alert_floor
+  + ending_alert_margin
+  + unallocated_alert_credits
+```"""
+          if old_tree not in plan: raise SystemExit('Plan old Gate0 accounting tree missing')
+          plan = plan.replace(old_tree, new_tree, 1)
+
+          staged_note = """
+**Current 2026-09-10 arithmetic (account evidence, not a completed future budget allocation):**
+
+```text
+provider entitlement                    = 60,000 API units
+provider remaining                      = 59,994 API units
+observed cycle consumption              =      6 API units
+provider identity check                 = 60,000 = 6 + 59,994
+
+project_cycle_api_unit_ceiling           = 50,000 API units
+project remaining after observed usage   = 49,994 API units
+provider entitlement outside project     = 10,000 API units
+
+settled Flight-Alert balance             =  2,900 credits
+protected_alert_floor                    =  1,000 credits (binding minimum)
+```
+
+The 10,000-unit difference is an intentional project safety reserve outside the experiment authorization; it is not `unallocated_api_units` inside the 50,000-unit project tree. The 49,994 figure is the remaining **cycle-wide project API envelope**, not a per-day target and not a promise that all of it will become Alert credits. Exact REST categories, authorized Alert refills, pre-run Alert sub-caps, ending margins, and the final Phase-6 Alert ceiling are frozen only when their Plan-owned evidence becomes available.
+"""
+          if 'provider entitlement                    = 60,000 API units' not in plan:
+              pos = plan.find(new_tree)
+              plan = plan[:pos+len(new_tree)] + '\n' + staged_note + plan[pos+len(new_tree):]
+
+          plan = plan.replace(
+              '`phase6_alert_spend_ceiling = min(MAX_DESIGN_CEILING, opening_nonexpiring_alert_balance + authorized_alert_refill_credits - pre_run_alert_spend_ceiling - protected_alert_floor - ending_alert_margin)`.\n  All terms must be verified, nonnegative, and reconciled. Any remaining authorized balance is `unallocated_alert_credits`; it is **not** automatically spendable by Phase 6.',
+              '`0 <= phase6_alert_spend_ceiling <= min(MAX_DESIGN_CEILING, opening_nonexpiring_alert_balance + authorized_alert_refill_credits - pre_run_alert_spend_ceiling - protected_alert_floor - ending_alert_margin)`.\n  A deliberately lower Phase-6 ceiling is allowed; the unused authorized Alert remainder is recorded as `unallocated_alert_credits` and is **not** automatically spendable by Phase 6. All terms must be verified, nonnegative, and reconciled before final FREEZE.'
+          )
+
+          old_gate = '| **0 — Budget partition** | After offline closure, use authorized account reads to confirm the active TEAM subscription identity and plan-version basis; freeze its exact positive entitlement, subscription channel, cycle dates/current remaining units/usage and rate/account limits; verify refill conversion/caps and separate Alert-credit vs REST/API-unit ledgers. For a newly subscribed/re-subscribed RapidAPI Ultra account, 50,000 units is the current planning baseline, not a substitute for live evidence. Any refill test is a separately authorized mutation. | active TEAM entitlement and plan-version basis verified from the same subscription identity; live cycle/account values recorded; exact budget identities balance; no protected-floor double-counting; no unapproved spend/mutation |'
+          new_gate = '| **0 — Account/quota identity + staged budget partition** | After offline closure, use authorized read-only account evidence to verify the intended TEAM credential, subscription channel/plan basis, live provider entitlement/remaining/used units, quota-reset/cycle evidence, request/account limits, current Alert balance, subscription inventory, and the separate project API-unit ceiling. Record refill/FIDS contract facts without mutating merely to prove them. Values explicitly owned by later Plan stages remain `BLOCKED_LATER_LIVE_VALUE`; no paid path may use a category until its required admission values and partial budget identity are frozen. | **Gate-0 account PASS** requires credential→intended TEAM identity plus internally consistent live account/quota evidence, project ceiling `<=` provider entitlement, current balance/inventory, and no unapproved mutation. **Later budget freeze may remain pending by design.** Complete Alert/API trees are mandatory before final FREEZE/Phase 6, and each affected paid action requires its own applicable frozen sub-budget first. |'
+          if old_gate not in plan: raise SystemExit('Plan Gate0 row missing')
+          plan = plan.replace(old_gate, new_gate, 1)
+
+          phase1_new = """PHASE 1 — Gate 0
+ 5. Establish the account identity separately from the project budget. For the current evidence state, live RapidAPI custom-quota headers report `cycle_entitlement_units=60,000`, `api_units_remaining=59,994`, hence `api_units_consumed_before_freeze=6`. The project independently freezes `project_cycle_api_unit_ceiling=50,000`; therefore 49,994 project-authorized cycle units remain and 10,000 provider-entitled units are outside project authority. Never replace the observed 60,000 entitlement with 50,000, and never treat the 10,000 outside-project reserve as spendable project budget.
+ 6. Under a Gate-0 read-only authorization, read the current Flight-Alert balance and subscription inventory and capture the marketplace quota headers. Record timestamps, safe request IDs, channel, live limit/remaining/reset evidence, and the current Alert balance. An authoritative HTTP 204 from the subscription-list endpoint means an empty returned inventory; malformed/error responses remain BLOCKED.
+ 7. Prove that the credential used by the experiment is the intended TEAM subscription/application. A provider response that proves quota but does not expose the RapidAPI team/app identity is insufficient by itself. Until exact credential→TEAM binding is evidenced, `GATE0_ACCOUNT_IDENTITY=BLOCKED` even though quota/balance arithmetic is valid.
+ 8. Freeze provider-contract facts that can be established without mutation: current FIDS tier/unit cost, refill conversion, terms/retention basis, and observed rate/quota mechanics. If a refill/balance cap or other value genuinely requires a mutation to establish, leave the affected path BLOCKED and require its own later authorization; do not mutate merely to make early Gate 0 complete.
+ 9. Write/hash the Gate-0 account artifact. Later-generated pre-run Alert subcaps, settlement/burst measurements, seven REST-category totals, API/Alert ending margins, and the final Phase-6 Alert ceiling remain `BLOCKED_LATER_LIVE_VALUE` until their Plan-owned stages produce them. Reconcile the applicable partial budget before each affected paid action and the complete two-ledger budget before final FREEZE. Gate-0 account PASS advances only to prerequisite P; it never authorizes a smoke, probe, FIDS call, refill, or Phase 6.
+
+"""
+          plan, n = re.subn(r'PHASE 1 — Gate 0\n.*?\nPHASE 2 — Gates 1–2\n', phase1_new + 'PHASE 2 — Gates 1–2\n', plan, count=1, flags=re.S)
+          if n != 1: raise SystemExit('Plan Phase1 block replacement failed')
+
+          # Update the top Log with current evidence and eliminate stale active Gate0 lifecycle.
+          top_log = """> **CURRENT PHASE-1 / GATE-0 STATUS — 2026-09-10:** `ACCOUNT_EVIDENCE=PARTIALLY_VERIFIED`, `GATE0_ACCOUNT=BLOCKED_TEAM_IDENTITY`, `BUDGET_FREEZE=BLOCKED_LATER_LIVE_VALUE`, `PAID_WORK=NO-GO`. Live free reads on the Replit credential established provider entitlement `60,000`, remaining `59,994`, observed cycle use `6`, Flight-Alert balance `2,900`, quota reset `2026-10-04T02:21:21Z`, and HTTP-204 empty webhook inventory. The user authorizes `project_cycle_api_unit_ceiling=50,000`, leaving `49,994` project units after observed usage and `10,000` provider-entitled units outside project authority. User-reported plan provenance is `travnr` Team Ultra, recurring/renewal date 2026-09-04, $32 charge, active roughly three months; this is consistent with grandfathered Ultra, but the provider account GETs do not expose RapidAPI team/app identity. **Exact credential→intended `travnr` Team binding remains the only current Gate-0 account-identity blocker.** Later REST/pre-run/Phase-6 budget values are not failures when their Plan-owned measurement/freeze stage has not occurred. No refill, FIDS request, provider mutation, or DB write occurred. Evidence file: `SEPmd/V3.9_GATE0_ACCOUNT_EVIDENCE_20260910.json`.\n\n"""
+          if 'CURRENT PHASE-1 / GATE-0 STATUS — 2026-09-10' not in log:
+              anchor = '> **LIVE PROVIDER-CONTRACT CORRECTION — 2026-09-09'
+              start = log.find(anchor)
+              if start < 0: raise SystemExit('Log provider correction anchor missing')
+              end = log.find('\n\n', start)
+              log = log[:end+2] + top_log + log[end+2:]
+
+          sec16 = """### 1.6 Phase 1 — Gate 0: account identity first, staged budget freeze second
+
+**Plan ownership:** §3 + §16 Gate 0 + §17 steps 5–9. **Prerequisite:** Phase-0 closure PASS (satisfied by RUN-20260909-010).
+
+**Purpose:** Gate 0 verifies the real account/channel/quota/balance state used by the experiment. It does **not** invent numeric values that the Plan explicitly generates later. The implementation now exposes two independent results: `status` for Gate-0 account verification and `budget_freeze_status` for the later complete funding tree.
+
+#### 1.6.1 Current Gate-0 evidence — 2026-09-10
+
+| Field | Current evidence | Status |
+|---|---|---|
+| channel | RapidAPI AeroDataBox gateway/key path | VERIFIED |
+| intended account | user reports `travnr` Team Ultra | USER_REPORTED |
+| credential → intended team/app binding | account GETs do not expose RapidAPI team/application identity | **BLOCKED — ONE IDENTITY PROOF REQUIRED** |
+| plan-version basis | existing Ultra active about three months; user reports $32 recurring charge; live quota still legacy 60k after Sep-2026 marketplace change | CONSISTENT_WITH_GRANDFATHERED; final account binding still required |
+| provider cycle entitlement | `60,000` API units | VERIFIED_LIVE_HEADER |
+| provider remaining | `59,994` API units | VERIFIED_LIVE_HEADER |
+| consumed this provider cycle | `6` API units (`60,000−59,994`) | VERIFIED_DERIVED |
+| project cycle API ceiling | `50,000` API units | FROZEN_PROJECT_AUTHORIZATION |
+| project remaining after observed usage | `49,994` API units | VERIFIED_DERIVED |
+| provider entitlement outside project ceiling | `10,000` API units | RESERVED_OUTSIDE_PROJECT |
+| quota reset / cycle end evidence | `2026-10-04T02:21:21Z` from response Date + reset-seconds header | VERIFIED_LIVE_HEADER_DERIVATION |
+| cycle-start date | user reports 2026-09-04; exact UTC start time not exposed | USER_REPORTED_DATE / NO_FABRICATED_TIME |
+| Flight-Alert balance | `2,900` credits | VERIFIED_LIVE_FREE_GET |
+| active webhook inventory | zero returned; provider HTTP `204 No Content` | VERIFIED_LIVE_FREE_GET |
+| protected Alert floor | `1,000` credits minimum | BINDING_PLAN_CONSTANT |
+| FIDS cost identity | Tier 2, 2 API units/request under current pinned provider contract | CONTRACT_VERIFIED; live behavior still Gate-0.5 where specified |
+| refill conversion | 1 API unit → 1 Flight-Alert credit | CONTRACT_VERIFIED; no refill authorized |
+| provider mutations | none | VERIFIED |
+| DB writes for Gate-0 reads | none | VERIFIED |
+
+The $32 charge is plan provenance only; it is not a budget unit. `50,000/31` is **not** a daily operational budget. API-unit costs are calendar/category driven, while Alert credits have the separate 1,900-per-`budget_day_id` hard ceiling.
+
+#### 1.6.2 Correct staged accounting identities
+
+```text
+PROVIDER API IDENTITY (Gate 0):
+60,000 = 6 + 59,994
+
+PROJECT API AUTHORIZATION:
+project_cycle_api_unit_ceiling = 50,000 <= provider entitlement 60,000
+project remaining now = 50,000 - 6 = 49,994
+provider entitlement outside project authority = 60,000 - 50,000 = 10,000
+
+LATER COMPLETE PROJECT API TREE:
+50,000
+  = api_units_consumed_before_freeze
+  + authorized_alert_refill_units
+  + seven REST-category budgets
+  + protected_api_floor_units
+  + ending_api_margin_units
+  + unallocated_api_units
+
+LATER COMPLETE ALERT TREE:
+opening_nonexpiring_alert_balance + authorized_alert_refill_credits
+  = pre_run_alert_spend_ceiling
+  + phase6_alert_spend_ceiling
+  + protected_alert_floor
+  + ending_alert_margin
+  + unallocated_alert_credits
+```
+
+The later tree is intentionally incomplete now because the Plan itself generates Stage-1/replacement subcaps after the pre-probe freeze, REST categories from the calendar/Gate-5/MEASURE→FREEZE steps, and settlement/burst values from the safety-smoke sequence. Such fields are `BLOCKED_LATER_LIVE_VALUE`, not guessed zeroes.
+
+For final funding, `phase6_alert_spend_ceiling` may be **any authorized value** satisfying `0 <= phase6_alert_spend_ceiling <= min(57,900, feasible Alert remainder)`. Any unused authorized Alert remainder is `unallocated_alert_credits`; the validator must not force the maximum feasible value.
+
+#### 1.6.3 Current decision and next permitted action
+
+**Gate-0 account verdict now:** `BLOCKED_TEAM_IDENTITY` only. Quota/balance arithmetic is internally consistent. The next permitted action is a **non-secret proof that the Replit `AERODATABOX_API_KEY` belongs to the intended `travnr` RapidAPI Team/application**. Do not send the key in chat.
+
+After that one identity proof is recorded, rerun `v39:gate0:inspect` under the hash-approved read-only Gate-0 AUTH. If the live headers remain consistent, Gate-0 account verification may PASS and the project advances to **Phase 2 prerequisite P (security/retention)**. No refill, FIDS call, smoke, probe, canary, or Phase-6 action is authorized by Gate-0 account PASS alone.
+
+---
+
+"""
+          log, n = re.subn(r'### 1\.6 Phase 1 — Gate 0:.*?\n---\n\n### 1\.7 ', sec16 + '### 1.7 ', log, count=1, flags=re.S)
+          if n != 1: raise SystemExit('Log §1.6 replacement failed')
+
+          sec6 = """<a id="sec-6"></a>
+## 6. Gate board — current repository-aware PASS/BLOCKED state
+
+This board is superseding current operational status. Older Phase-0-blocked snapshots elsewhere in the active manual are historical implementation evidence only and cannot override this board or the top status block.
+
+| State | Current result | Why / exact next requirement |
+|---|---|---|
+| **Phase 0** | **`PASS / COMPLETE`** | RUN-20260909-010 closed Phase 0; subsequent Gate-0 lifecycle correction passed zero-provider CI on current source lineage |
+| **Gate 0 / Phase 1 — account verification** | **`BLOCKED_TEAM_IDENTITY`** | live quota/balance/inventory facts are established; prove Replit credential belongs to intended `travnr` Team/app, then rerun formal read-only Gate-0 inspection |
+| **Gate-0 later budget freeze** | `BLOCKED_LATER_LIVE_VALUE` | expected: later Plan stages must generate pre-run subcaps, settlement/burst controls, REST categories, ending margins and final Phase-6 ceiling; do not invent them now |
+| **P / security-retention** | `BLOCKED_BY_GATE0_ACCOUNT` | first step after Gate-0 account PASS; verify current plan/terms/content retention/security before storing affected provider content |
+| **Gate 1** | `BLOCKED` | P PASS + authorized coverage evidence |
+| **reference/frame/preprobe** | `BLOCKED` | Gate 1 → licensed traffic/region freeze → final frame → exact pre-probe artifact |
+| **safety smoke / Gate 2 probes** | `NO-GO` | require predecessors + category-specific frozen budget + exact run AUTH |
+| **Gate 3 / Gate 0.5 / Gate 4 / Gate 5** | `NO-GO` | sequential predecessors not yet satisfied |
+| **FREEZE** | `NO-GO` | complete later two-ledger budgets + manifest/calendar/security/provider/reference/code hashes required |
+| **Phase 6** | **`NO-GO`** | no Gate-0 account PASS, no later gates, no final FREEZE/authorization |
+| **Phase 7** | `BLOCKED_BY_PHASE6` | collection not performed |
+
+### 6.1 Current stop rule
+
+> **Do not perform paid/provider mutations. Resolve only the Gate-0 TEAM credential identity proof, then rerun the formal read-only Gate-0 account inspection.**
+
+### 6.2 Current safety state
+
+`ADB_AUTO_COLLECT=0` and `V39_PHASE6_PROCESS_ARMED=0` remain the preparation state. The current Gate-0 work used free GET account reads only; no refill, FIDS request, subscription mutation, or Phase-6 start occurred.
+
+---
+"""
+          log, n = re.subn(r'<a id="sec-6"></a>.*?(?=<a id="sec-7"></a>)', sec6, log, count=1, flags=re.S)
+          if n != 1: raise SystemExit('Log §6 replacement failed')
+
+          sec7 = """<a id="sec-7"></a>
+## 7. GO/NO-GO verdict and mandatory handoff checkpoints
+
+```text
+PHASE0 = PASS / COMPLETE
+GATE0_ACCOUNT = BLOCKED_TEAM_IDENTITY
+GATE0_BUDGET_FREEZE = BLOCKED_LATER_LIVE_VALUE
+P = BLOCKED_BY_GATE0_ACCOUNT
+GATE1 = BLOCKED
+SAFETY_SMOKE = NO-GO
+GATE2_PROBES = NO-GO
+GATE3 = NO-GO
+GATE0.5 = NO-GO
+GATE4 = NO-GO
+GATE5 = NO-GO
+FREEZE = NO-GO
+PHASE6 = NO-GO
+
+PROVIDER_CYCLE_ENTITLEMENT = 60000 API units
+PROVIDER_REMAINING_AT_2026-09-10T06:47:29Z = 59994 API units
+PROJECT_CYCLE_API_UNIT_CEILING = 50000 API units
+PROJECT_REMAINING_AFTER_OBSERVED_USAGE = 49994 API units
+PROVIDER_UNITS_OUTSIDE_PROJECT_AUTHORITY = 10000 API units
+ALERT_BALANCE = 2900 credits
+CURRENT_ACTION = PROVE_REPLIT_KEY_TO_TRAVNR_TEAM_BINDING_THEN_RERUN_READ_ONLY_GATE0
+```
+
+### 7.1 What you should do next
+
+One non-secret identity proof is required: evidence that the `AERODATABOX_API_KEY` currently configured in Replit belongs to the intended `travnr` RapidAPI Team/application. The secret value itself must never be pasted into chat, docs, logs, or git. A screenshot/account view that shows the team/application and subscription/key label without revealing the key, or a teammate-confirmed replacement of the Replit secret from the team app followed by the same read-only quota evidence, is sufficient if its provenance is recorded.
+
+### 7.2 Next mandatory return point
+
+After the identity proof, rerun Gate-0 read-only inspection. If it PASSes with the same account/quota identity, append the Gate-0 PASS evidence and proceed to prerequisite P. Return immediately on any mismatch in entitlement, remaining units, Alert balance, inventory, plan/channel, or credential identity.
+
+### 7.3 Later mandatory return points
+
+Use §1.13 for subsequent gates: after prerequisite P, safety smoke, material Stage-1 ranking decisions, Gate 2, each Gate 3/0.5/4/5, FREEZE, and immediately on any Phase-6 pause/failure/mismatch.
+
+### 7.4 Run Reports remain evidence, not authorization
+
+A Run Report may record the current result and point to the next Plan/Log step. It cannot authorize a paid action, relax a budget, or turn `BLOCKED_LATER_LIVE_VALUE` into zero/default.
+
+---
+"""
+          log, n = re.subn(r'<a id="sec-7"></a>.*?(?=<a id="sec-8"></a>)', sec7, log, count=1, flags=re.S)
+          if n != 1: raise SystemExit('Log §7 replacement failed')
+
+          # Update §22 budget table and reserve rule.
+          log = log.replace(
+              '| **`cycle_entitlement_units`** | exact positive monthly API entitlement frozen from the active TEAM subscription. For a new/re-subscribed RapidAPI Ultra subscription, 50,000 units is the current planning baseline; a grandfathered 60,000 value is valid only for the exact legacy subscription identity that proves it |',
+              '| **`cycle_entitlement_units`** | live provider entitlement for the active credential; current evidence = **60,000**. It is not reduced to the project budget. Exact credential→`travnr` Team identity is still required for Gate-0 PASS |\n| **`project_cycle_api_unit_ceiling`** | independent project authorization ceiling; current frozen value = **50,000**. With 6 provider-cycle units already consumed, current project envelope remaining = **49,994** |\n| **provider entitlement outside project authority** | `60,000−50,000 = 10,000` units; deliberately unavailable to V3.9 unless a later explicit project reauthorization changes the ceiling |'
+          )
+          log = log.replace(
+              'There is **no valid arithmetic that simply adds Alert credits and REST API units as if they were the same post-allocation resource**. Gate 0 balances the Alert and API trees separately.',
+              'There is **no valid arithmetic that simply adds Alert credits and REST API units as if they were the same post-allocation resource**. Gate 0 first proves the provider API identity (`60,000=6+59,994`) and the separate 50,000 project ceiling. The complete project API and Alert trees are reconciled in stages as their Plan-owned values become available, and must both be complete before final FREEZE.'
+          )
+          log = log.replace(
+              '- Gate 0 must print the **current exact Alert balance tree** and separate REST/API-unit category tree. A legacy `spend ≤57,900` check is insufficient; the controller must enforce the frozen `phase6_alert_spend_ceiling≤57,900` plus protected floor/pre-run/ending allocations.',
+              '- Gate 0 must print the **current provider/account identity** and the separate project API ceiling/Alert balance. Later Plan-owned budget fields remain explicitly pending rather than fabricated. Before each affected paid action, its applicable partial budget must reconcile; before final FREEZE, the complete Alert and project-API trees must reconcile. A legacy `spend ≤57,900` check is insufficient.'
+          )
+
+          # Correct the strongest repeated active lifecycle phrases/mirrors.
+          log = log.replace(
+              'Gate 0 is not “check balance”; it freezes the identity and feasible budget trees needed to admit later work.',
+              'Gate 0 is not “check balance”; it verifies the account/subscription identity and establishes the project funding envelope, while budget values explicitly owned by later Plan stages remain `BLOCKED_LATER_LIVE_VALUE` until those stages.'
+          )
+          log = log.replace(
+              '**PASS:** complete current account/channel/budget artifact reconciles and all admission margins/reserves are known.',
+              '**PASS (account):** current account/channel/team identity, quota/reset evidence, Alert balance/inventory, provider cost contract and project ceiling reconcile. **Later budget freeze:** may remain `BLOCKED_LATER_LIVE_VALUE` until the owning stage produces each value.'
+          )
+          log = log.replace(
+              '**FAIL/BLOCKED:** unknown channel, cycle, unit balance, cost, cap, floor, reserve, or unexplained balance difference.',
+              '**FAIL/BLOCKED (account):** unknown intended-team credential identity, channel, live quota identity, balance/inventory, provider-contract mismatch, project ceiling above entitlement, or unexplained account evidence difference. A legitimately not-yet-generated later budget value is not an account-verification failure.'
+          )
+          log = log.replace(
+              'Gate 0 balances the Alert and API trees separately.',
+              'Gate 0 proves the account identities separately; the Alert and project-API funding trees are completed in stages and reconciled fully before final FREEZE.'
+          )
+          log = log.replace(
+              '`phase6_alert_spend_ceiling = min(57,900, opening_nonexpiring_alert_balance + authorized_alert_refill_credits - pre_run_alert_spend_ceiling - protected_alert_floor - ending_alert_margin)`',
+              '`0 <= phase6_alert_spend_ceiling <= min(57,900, opening_nonexpiring_alert_balance + authorized_alert_refill_credits - pre_run_alert_spend_ceiling - protected_alert_floor - ending_alert_margin)`'
+          )
+
+          # Add current evidence entry + exact AUTH hash approval to ledger, newest first.
+          ledger_entry = """<!-- GATE-0-20260910-A -->
+## GATE-0-20260910-A — Live RapidAPI account evidence + Gate-0 lifecycle correction
+
+**Current verdict:** `GATE0_ACCOUNT = BLOCKED_TEAM_IDENTITY`; `BUDGET_FREEZE = BLOCKED_LATER_LIVE_VALUE`; `PAID_WORK = NO-GO`.
+
+### Live free-read evidence
+
+- Evidence timestamp: `2026-09-10T06:47:29Z` (balance response; subscription-list response one second later).
+- Provider channel: RapidAPI AeroDataBox.
+- `x-ratelimit-api-units-limit = 60000`.
+- `x-ratelimit-api-units-remaining = 59994`.
+- Provider-cycle units already consumed: `6`.
+- `x-ratelimit-api-units-reset = 2057632` seconds at the evidence timestamp → `2026-10-04T02:21:21Z` reset/cycle-end evidence.
+- Request quota: `240000`; remaining at balance read `237905`.
+- Flight-Alert balance: `2900` credits.
+- `GET /subscriptions/webhook`: HTTP `204 No Content`; zero returned subscriptions.
+- Exactly two provider requests were made for this evidence: one free GET balance read and one free GET subscription-list read. No retry occurred. No FIDS call, refill, POST/PATCH/DELETE, subscription mutation, or database access/write occurred.
+- Sanitized evidence artifact: `SEPmd/V3.9_GATE0_ACCOUNT_EVIDENCE_20260910.json`.
+
+### Project authorization arithmetic
+
+```text
+provider entitlement                    60,000 API units
+provider remaining                      59,994 API units
+observed provider-cycle use                  6 API units
+project_cycle_api_unit_ceiling          50,000 API units
+project remaining after observed use    49,994 API units
+provider units outside project authority 10,000 API units
+Flight-Alert balance                     2,900 credits
+protected Alert floor                    1,000 credits minimum
+```
+
+The 50,000 project ceiling is deliberately independent of the 60,000 provider entitlement. `50,000/31` is not a daily budget. REST/API units and Flight-Alert credits remain separate ledgers; later category/Alert allocations are frozen only when their Plan-owned evidence exists.
+
+### Identity evidence and blocker
+
+User-provided account provenance: intended `travnr` Team Ultra; recurring/renewal date 2026-09-04; $32 payment; subscription active for roughly three months with no known re-subscription. Together with the live 60,000-unit entitlement, this is consistent with a grandfathered marketplace Ultra plan. **However, neither free provider GET exposes the RapidAPI team/application identity, and prior project evidence does not independently bind the Replit secret to `travnr` Team.** Gate-0 account PASS therefore remains blocked on that one identity proof; no guess is accepted.
+
+### Gate-0 implementation correction
+
+The Gate-0 validator was corrected so account verification no longer requires numeric values that the binding Plan generates only after Gate 1, pre-probe freeze, smoke, Gate 0.5, Gate 5, calendar construction, or other MEASURE→FREEZE steps. Such values report `BLOCKED_LATER_LIVE_VALUE`. The validator now distinguishes provider entitlement from `project_cycle_api_unit_ceiling`, accepts an authorized conservative Phase-6 ceiling below the feasible maximum, and treats authoritative HTTP 204 subscription inventory as empty rather than malformed.
+
+### Read-only AUTH for formal rerun
+
+- Authorization artifact: `SEPmd/V3.9_GATE0_AUTH_20260910_G0A.json`
+- Authorization ID: `AUTH-20260910-G0A`
+- Scope: `Phase 1 / Gate 0`, only the two read-only/free account GETs.
+- `maxAlertCredits = null`; `maxRestUnitsByCategory = null`; no mutation authority.
+- Predecessor: `RUN-20260909-010`.
+- **AUTH_ARTIFACT_SHA256:7acd388c4b20b5c1cea9ca3a7ef5c309671ad40971936ed67f27abcbd3d241a9**
+
+**Next permitted action:** verify the Replit credential belongs to the intended `travnr` RapidAPI Team/application. Then run the formal read-only Gate-0 inspector under `AUTH-20260910-G0A`. Do not proceed to prerequisite P until Gate-0 account identity passes.
+
+---
+
+"""
+          if '<!-- GATE-0-20260910-A -->' not in ledger:
+              marker = '---\n\n<!-- RUN-20260909-010 -->'
+              if marker not in ledger: raise SystemExit('Ledger top marker missing')
+              ledger = ledger.replace(marker, '---\n\n' + ledger_entry + '<!-- RUN-20260909-010 -->', 1)
+
+          PLAN.write_text(plan)
+          LOG.write_text(log)
+          LEDGER.write_text(ledger)
+
+          # Fail closed on the core contradictions we are removing.
+          required = [
+              ('Plan', plan, 'project_cycle_api_unit_ceiling <= cycle_entitlement_units'),
+              ('Plan', plan, 'GATE0_ACCOUNT_IDENTITY=BLOCKED'),
+              ('Log', log, 'CURRENT PHASE-1 / GATE-0 STATUS — 2026-09-10'),
+              ('Log', log, 'PROVIDER_CYCLE_ENTITLEMENT = 60000 API units'),
+              ('Ledger', ledger, 'AUTH_ARTIFACT_SHA256:7acd388c4b20b5c1cea9ca3a7ef5c309671ad40971936ed67f27abcbd3d241a9'),
+          ]
+          for name, text, needle in required:
+              if needle not in text: raise SystemExit(f'{name} required correction missing: {needle}')
+
+          active_log = log.split('<a id="sec-36"></a>',1)[0]
+          stale = [
+              'GATE0 = BLOCKED\nP = BLOCKED\nGATE1 = BLOCKED',
+              'CURRENT_ACTION = COMPLETE_LOG_§1.5_PHASE0',
+              'Stay in Phase 0. Begin with §1.5.1',
+              'phase6_alert_spend_ceiling = min(57,900, opening_nonexpiring_alert_balance',
+          ]
+          for needle in stale:
+              if needle in active_log: raise SystemExit(f'stale active Log wording remains: {needle}')
+          PY
+
+      - name: Validate document diff
+        shell: bash
+        run: |
+          git diff --check
+          grep -q 'provider entitlement                    = 60,000 API units' SEPmd/V3.9_DataCollectPlan_f.8.md
+          grep -q 'GATE0_ACCOUNT = BLOCKED_TEAM_IDENTITY' SEPmd/V3.9_IMPLEMENTATION_LOG.md
+          grep -q 'AUTH_ARTIFACT_SHA256:7acd388c4b20b5c1cea9ca3a7ef5c309671ad40971936ed67f27abcbd3d241a9' SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md
+
+      - name: Commit reconciled documents and self-delete
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/v39-gate0-doc-lifecycle-live-evidence.yml
+          git add SEPmd/V3.9_DataCollectPlan_f.8.md SEPmd/V3.9_IMPLEMENTATION_LOG.md SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md
+          git diff --cached --check
+          git commit -m "V3.9 Gate0: reconcile live account evidence and staged budgets"
+          git push origin HEAD:main
