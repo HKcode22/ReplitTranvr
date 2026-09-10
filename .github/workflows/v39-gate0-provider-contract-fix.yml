@@ -36,13 +36,10 @@ jobs:
                   raise SystemExit("Plan binding marker missing")
               plan = plan.replace(binding_marker, binding_marker + correction, 1)
 
-          # Preserve the historical/reference appendix. The first NON-NORMATIVE
-          # mention is in the introduction; the second begins the actual boundary.
-          first_non = plan.find("NON-NORMATIVE")
-          second_non = plan.find("NON-NORMATIVE", first_non + 1)
-          if first_non < 0 or second_non < 0:
-              raise SystemExit("Plan NON-NORMATIVE boundary not found twice")
-          active, historical = plan[:second_non], plan[second_non:]
+          # This execution-edition file ends after §21 with an explicit
+          # "End of binding execution edition" marker; historical material is
+          # not present in this file. Therefore the whole file is active.
+          active = plan
 
           replacements = [
               ("complete before the 60k starts.", "complete before affected authorized provider work starts."),
@@ -69,7 +66,7 @@ jobs:
           for old, new in replacements:
               active = active.replace(old, new)
 
-          plan = active + historical
+          plan = active
           plan_path.write_text(plan)
 
           log_note = """> **LIVE PROVIDER-CONTRACT CORRECTION — 2026-09-09 (Phase 1 / Gate 0; V3.9-f.8).** Current-new/re-subscribed RapidAPI Ultra is planned at **50,000 API units/month**, but Gate 0 freezes the exact positive entitlement and plan-version basis proven for the active TEAM subscription. A grandfathered 60,000-unit personal/legacy entitlement is valid only for that exact subscription identity. `MAX_DESIGN_CEILING=57,900` remains an Alert-credit upper bound only; API units and Alert credits are separate ledgers. Current provider docs classify ordinary FIDS as Tier 2 / 2 API units per request. Phase 0 remains PASS; this correction does not reopen Phase 0 or create V3.10.\n\n"""
@@ -108,17 +105,13 @@ jobs:
               active_log = active_log.replace(old, new)
           log_path.write_text(active_log + archive_marker + archive_log)
 
-          # Fail closed if the active execution sections still contain the known
-          # stale mandatory formulations. Intentional legacy/grandfather examples
-          # may remain, but not these commands/PASS criteria.
           stale_plan = [
               "complete before the 60k starts",
               "MONTHLY_PLAN_ENTITLEMENT_UNITS=60000",
               "60,000 entitlement confirmed unchanged",
               "cycle_entitlement_units (=60,000 while the USER-CONFIRMED plan remains active)",
           ]
-          second_non = plan_path.read_text().find("NON-NORMATIVE", plan_path.read_text().find("NON-NORMATIVE") + 1)
-          active_final = plan_path.read_text()[:second_non]
+          active_final = plan_path.read_text()
           for s in stale_plan:
               if s in active_final:
                   raise SystemExit(f"stale active Plan wording remains: {s}")
