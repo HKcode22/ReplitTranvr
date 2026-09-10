@@ -1,0 +1,59 @@
+name: V3.9 Gate0 Residual Doc Cleanup
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Clean remaining active 60k wording
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('SEPmd/V3.9_DataCollectPlan_f.8.md')
+          s=p.read_text()
+          s=s.replace('it is **not** derived by dividing/subtracting the 60,000-unit monthly entitlement or by assuming all `31×1,900=58,900` daily capacity is spendable.',
+                      'it is **not** derived by dividing/subtracting any monthly API-unit entitlement or by assuming all `31×1,900=58,900` daily capacity is spendable.')
+          s=s.replace('| Two-budget accounting: API quota vs Flight-Alert credits; 1 credit per flight item on SEND; retries cost extra; refill 1 unit = 1 credit; per-plan caps | AeroDataBox, ["Flight Alert API: Guide to the New System"](https://aerodatabox.com/flight-alert-api-2026/) (2026-01-31) and [current pricing/plan comparison](https://aerodatabox.com/pricing); rechecked 2026-09-02. |',
+                      '| Two-budget accounting: API quota vs Flight-Alert credits; 1 credit per flight item on SEND; retries cost extra; refill 1 unit = 1 credit; per-plan caps | AeroDataBox, ["Flight Alert API: Guide to the New System"](https://aerodatabox.com/flight-alert-api-2026/) (2026-01-31), [current pricing/plan comparison](https://aerodatabox.com/pricing), and [2026-09 marketplace plan/terms update](https://aerodatabox.com/2026-09-terms-update); provider-plan contract rechecked 2026-09-09. |')
+          s=s.replace('| Raw Contents caching/retention, permitted purpose, deletion, and Derived-Work distinctions | AeroDataBox, [Terms of Use](https://aerodatabox.com/terms), last updated 2026-08-21; Article 5.5/5.6 must be reconciled with the actual channel and Plan Terms before storing paid content. |',
+                      '| Raw Contents caching/retention, permitted purpose, deletion, and Derived-Work distinctions | AeroDataBox, [Terms of Use](https://aerodatabox.com/terms) Articles 5.5/5.6 plus the [2026-09 marketplace update](https://aerodatabox.com/2026-09-terms-update): default raw-Contents retention is constrained by the applicable Plan Terms/Terms, while qualifying Derived Works are treated separately under Article 5.6. Prerequisite P must verify the active TEAM plan/channel and classify stored fields before paid content is retained. |')
+          p.write_text(s)
+
+          p=Path('SEPmd/V3.9_IMPLEMENTATION_LOG.md')
+          s=p.read_text()
+          marker='<a id="sec-36"></a>'
+          active, archive=s.split(marker,1)
+          active=active.replace('The binding Plan remains unchanged.', 'The binding Plan\'s scientific architecture remains unchanged; the 2026-09-09 Gate-0 provider-contract correction above is authoritative.')
+          active=active.replace('| Monthly plan entitlement | **60,000 API units/month — USER-CONFIRMED** | Gate 0 verifies the same subscribed plan is active and records current cycle dates/remaining/consumed units; do not infer marketplace channel from entitlement alone. |',
+                                '| Monthly plan entitlement | **LIVE GATE-0 VERIFY for the active TEAM subscription** | Use 50,000 API units/month only as the current-new/re-subscribed RapidAPI Ultra planning baseline; freeze the exact active entitlement, `plan_version_basis`, channel, account/subscription identity, cycle, used/remaining units and current limits. A grandfathered 60,000 value applies only to the exact legacy subscription that proves it. |')
+          active=active.replace('| TEST-024 | 60,000-unit per-cycle accounting identity and rollover freeze | unit/integration | Gate-0 budget report + limiter config | repository test harness | `cycle_entitlement_units=60000`, prior cycle usage, Alert refill allocation, seven REST categories, unallocated remainder and a cycle rollover | exact per-cycle identity reconciles; 60,000 remains entitlement while remaining quota is sourced; rollover cannot expand the already-frozen Phase-6 Alert ceiling without re-FREEZE | NOT RUN | NOT_VERIFIED / REQUIRED OFFLINE | `gate0CycleAccounting.test.ts` pending |',
+                                '| TEST-024 | active-subscription per-cycle accounting identity and rollover freeze | unit/integration | Gate-0 budget report + limiter config | repository test harness | current-new 50,000-unit subscription fixture plus an explicitly grandfathered alternate entitlement, prior cycle usage, Alert refill allocation, seven REST categories, unallocated remainder and a cycle rollover | exact per-cycle identity reconciles against the entitlement proven for that subscription identity; no hardcoded 60,000 requirement; rollover cannot expand the already-frozen Phase-6 Alert ceiling without re-FREEZE | NOT RUN | NOT_VERIFIED / REQUIRED OFFLINE | `gate0CycleAccounting.test.ts` pending |')
+          p.write_text(active+marker+archive)
+
+          if 'The binding Plan remains unchanged.' in active:
+              raise SystemExit('stale binding-plan wording remains')
+          if '| Monthly plan entitlement | **60,000 API units/month — USER-CONFIRMED**' in active:
+              raise SystemExit('stale active entitlement row remains')
+          if '| TEST-024 | 60,000-unit per-cycle accounting identity' in active:
+              raise SystemExit('stale active TEST-024 remains')
+          PY
+      - name: Commit docs and self-delete
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/v39-gate0-doc-residual-cleanup.yml
+          git add SEPmd/V3.9_DataCollectPlan_f.8.md SEPmd/V3.9_IMPLEMENTATION_LOG.md
+          git diff --cached --check
+          git commit -m "V3.9 Gate0: remove residual fixed-entitlement wording"
+          git push origin HEAD:main
