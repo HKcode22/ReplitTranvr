@@ -2,6 +2,15 @@ import { createHash } from "crypto";
 
 export const GATE0_PHASE_GATE = "Phase 1 / Gate 0";
 export const MAX_DESIGN_CEILING = 57_900;
+/**
+ * Planning reference only, never an admission constant. As of the Sep-2026
+ * marketplace-plan change, a newly subscribed RapidAPI Ultra account is
+ * expected to expose 50,000 monthly API units. Gate 0 must freeze the actual
+ * entitlement reported for the active account/plan/cycle and may accept a
+ * different value only when that value is explicitly verified (for example a
+ * grandfathered subscription or later provider plan revision).
+ */
+export const CURRENT_NEW_RAPIDAPI_ULTRA_BASELINE_UNITS = 50_000;
 
 export const REST_CATEGORIES = [
   "fids_base_units",
@@ -23,15 +32,17 @@ export const PRE_RUN_SUBCAPS = [
 ] as const;
 
 export type SubscriptionChannel = "rapidapi" | "api_market" | "direct" | "custom";
+export type PlanVersionBasis = "current_new_subscription" | "grandfathered" | "custom_contract" | "provider_revised";
 type RestCategory = typeof REST_CATEGORIES[number];
 type PreRunSubcap = typeof PRE_RUN_SUBCAPS[number];
 
 export interface Gate0AccountEvidence {
-  schema_version: "v3.9-gate0-account-evidence-1";
+  schema_version: "v3.9-gate0-account-evidence-2";
   gathered_at_utc: string;
   provenance: string;
   active_subscribed_plan: string;
-  user_confirmed_60000_entitlement_applicable: boolean;
+  plan_version_basis: PlanVersionBasis;
+  entitlement_verified_for_active_subscription: boolean;
   subscription_channel: SubscriptionChannel;
   account_plan_id: string;
   billing_cycle_start_utc: string;
@@ -66,7 +77,7 @@ export interface Gate0AccountEvidence {
 }
 
 export interface Gate0Artifact {
-  schema_version: "v3.9-gate0-artifact-1";
+  schema_version: "v3.9-gate0-artifact-2";
   phase_gate: typeof GATE0_PHASE_GATE;
   evidence_id: string;
   authorization_id: string;
@@ -91,6 +102,10 @@ function finiteNonnegative(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) && value >= 0;
 }
 
+function positiveInteger(value: unknown): value is number {
+  return finiteNonnegative(value) && value > 0;
+}
+
 function text(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -108,14 +123,15 @@ export function evaluateGate0Accounting(
     "rate_limit_and_account_mechanics",
   ];
   for (const key of requiredText) if (!text(evidence[key])) reasons.push(`MISSING_OR_INVALID:${key}`);
-  if (evidence.schema_version !== "v3.9-gate0-account-evidence-1") reasons.push("INVALID:schema_version");
-  if (!evidence.user_confirmed_60000_entitlement_applicable) reasons.push("UNVERIFIED:user_confirmed_60000_entitlement_applicable");
+  if (evidence.schema_version !== "v3.9-gate0-account-evidence-2") reasons.push("INVALID:schema_version");
+  if (evidence.entitlement_verified_for_active_subscription !== true) reasons.push("UNVERIFIED:entitlement_for_active_subscription");
+  if (!(["current_new_subscription", "grandfathered", "custom_contract", "provider_revised"] as unknown[]).includes(evidence.plan_version_basis)) reasons.push("INVALID:plan_version_basis");
   if (!(["rapidapi", "api_market", "direct", "custom"] as unknown[]).includes(evidence.subscription_channel)) reasons.push("INVALID:subscription_channel");
   if (text(evidence.billing_cycle_start_utc) && text(evidence.billing_cycle_end_utc) &&
       (!(Date.parse(evidence.billing_cycle_start_utc) < Date.parse(evidence.billing_cycle_end_utc)))) reasons.push("INVALID:billing_cycle");
 
   const numeric: Array<keyof Gate0AccountEvidence> = [
-    "cycle_entitlement_units", "api_units_consumed_before_freeze", "api_units_remaining",
+    "api_units_consumed_before_freeze", "api_units_remaining",
     "opening_nonexpiring_alert_balance", "refill_conversion_api_units_per_credit", "refill_min_credits",
     "refill_max_credits", "alert_balance_cap_credits", "fids_units_per_request",
     "authorized_alert_refill_credits", "authorized_alert_refill_units", "protected_alert_floor",
@@ -124,9 +140,10 @@ export function evaluateGate0Accounting(
     "unallocated_alert_credits", "unallocated_api_units",
   ];
   for (const key of numeric) if (!finiteNonnegative(evidence[key])) reasons.push(`MISSING_OR_INVALID:${key}`);
+  if (!positiveInteger(evidence.cycle_entitlement_units)) reasons.push("MISSING_OR_INVALID:cycle_entitlement_units");
   if (evidence.protected_alert_floor !== undefined && finiteNonnegative(evidence.protected_alert_floor) && evidence.protected_alert_floor < 1_000) reasons.push("INVALID:protected_alert_floor_below_1000");
   if (evidence.refill_conversion_api_units_per_credit !== undefined && evidence.refill_conversion_api_units_per_credit !== 1) reasons.push("INVALID:refill_conversion_not_1_to_1");
-  if (evidence.cycle_entitlement_units !== undefined && evidence.cycle_entitlement_units !== 60_000) reasons.push("IDENTITY:confirmed_60000_entitlement_mismatch");
+  if (evidence.fids_units_per_request !== undefined && !positiveInteger(evidence.fids_units_per_request)) reasons.push("INVALID:fids_units_per_request_must_be_positive");
   if (!Array.isArray(evidence.refill_history)) reasons.push("MISSING_OR_INVALID:refill_history");
   if (!Array.isArray(evidence.active_subscription_inventory)) reasons.push("MISSING_OR_INVALID:active_subscription_inventory");
 
@@ -154,7 +171,11 @@ export function evaluateGate0Accounting(
 
   // Explicit allow-list serialization prevents credentials or dashboard extras entering evidence.
   const evidenceItems: Record<string, unknown> = {
-    account_plan: { active_subscribed_plan: evidence.active_subscribed_plan, entitlement_confirmed: evidence.user_confirmed_60000_entitlement_applicable },
+    account_plan: {
+      active_subscribed_plan: evidence.active_subscribed_plan,
+      plan_version_basis: evidence.plan_version_basis,
+      entitlement_verified_for_active_subscription: evidence.entitlement_verified_for_active_subscription,
+    },
     subscription_channel: evidence.subscription_channel,
     account_plan_id: evidence.account_plan_id,
     billing_cycle: { start_utc: evidence.billing_cycle_start_utc, end_utc: evidence.billing_cycle_end_utc, gathered_at_utc: evidence.gathered_at_utc, provenance: evidence.provenance },
@@ -177,7 +198,7 @@ export function evaluateGate0Accounting(
     unallocated_values: { alert_credits: evidence.unallocated_alert_credits, api_units: evidence.unallocated_api_units },
   };
   const unsigned = {
-    schema_version: "v3.9-gate0-artifact-1" as const,
+    schema_version: "v3.9-gate0-artifact-2" as const,
     phase_gate: GATE0_PHASE_GATE as typeof GATE0_PHASE_GATE,
     evidence_id: identity.evidenceId,
     authorization_id: identity.authorizationId,
