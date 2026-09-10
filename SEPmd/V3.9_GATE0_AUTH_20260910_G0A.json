@@ -1,0 +1,13 @@
+{
+  "authorizationId": "AUTH-20260910-G0A",
+  "phaseGate": "Phase 1 / Gate 0",
+  "airportFilterWindow": "RapidAPI account read-only: GET /subscriptions/balance and GET /subscriptions/webhook only",
+  "maxAlertCredits": null,
+  "maxRestUnitsByCategory": null,
+  "startNotBeforeUtc": "2026-09-10T07:00:00Z",
+  "expiresAtUtc": "2026-09-11T07:00:00Z",
+  "cleanupOwner": null,
+  "predecessorEvidenceIds": [
+    "RUN-20260909-010"
+  ]
+}
