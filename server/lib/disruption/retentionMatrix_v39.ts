@@ -44,7 +44,9 @@ export const RETENTION_MATRIX: readonly RetentionMatrixRow[] = Object.freeze([
   row("outcomes", ["clean.flight_outcomes"], "derived_work"),
   row("history_weather", ["clean.historical_feature_store", "clean.weather_observation", "clean.weather_forecast"], "derived_work"),
   row("sampling_frame", ["clean.adb_sampling_frame", "clean.adb_sampling_frame_registry"], "non_aerodatabox_metadata"),
-  row("coverage_artifacts", ["artifacts/gate1-coverage.json"], "non_aerodatabox_metadata"),
+  // Gate-1's provider airport/feed list is provider Content unless and until a
+  // non-reconstructable aggregate-only artifact replaces it.
+  row("coverage_artifacts", ["artifacts/gate1-coverage.json"], "raw_api_content"),
   row("probe_ledgers", ["clean.anchor_probe_results", "clean.adb_rest_attempt_ledger"], "non_aerodatabox_metadata"),
   row("settlement_ledgers", ["clean.adb_collection_batches", "clean.adb_ingest_events"], "non_aerodatabox_metadata"),
   row("manifests", ["clean.final_manifest", "SEPmd/V39_PREPROBE_FREEZE.json"], "non_aerodatabox_metadata"),
@@ -61,13 +63,9 @@ export interface RetentionMatrixVerdict {
 }
 
 /**
- * Runtime evidence overlay (prerequisite-P evidence, never committed).
- *
- * Source control keeps the UNVERIFIED baseline so offline CI stays honest.
- * At prerequisite-P runtime the operator supplies per-class verified evidence
- * (Terms + owner attestation); the verifier overlays it onto the frozen
- * baseline and gates on the result. Unknown content classes are rejected so
- * evidence cannot silently extend the matrix.
+ * Runtime evidence overlay (prerequisite-P evidence, never committed with
+ * secrets/provider payloads). Classification is frozen by the reviewed matrix;
+ * evidence must prove the legal/technical basis for that classification.
  */
 export interface RetentionClassEvidence {
   retentionVerifiedDate: string;
@@ -97,6 +95,50 @@ export function resolveRetentionMatrix(evidence: RetentionMatrixEvidence): { row
   return { rows, failures };
 }
 
+function normalized(value: string): string { return value.trim().toLowerCase(); }
+function hasDeleteAction(value: string): boolean { return /(hard[_ -]?delete|delete|purge|expire)/i.test(value); }
+
+function verifyClassificationSemantics(r: RetentionMatrixRow, failures: string[]): void {
+  const source = normalized(r.retentionSource);
+  const basis = normalized(r.retentionLegalBasis);
+  const period = normalized(r.retentionPeriodDaysOrCondition);
+
+  if (r.contentClassification === "raw_api_content") {
+    // Plan §10.2: raw AeroDataBox Contents use Article 5.5 / applicable Plan
+    // Terms, with the greater of seven days, Cache-Control max-age, or an
+    // explicitly longer Plan-Term allowance. A naked "30 days" is never enough.
+    if (!source.includes("aerodatabox") && !source.includes("provider")) {
+      failures.push(`raw-source-not-provider-terms:${r.contentClass}`);
+    }
+    if (!basis.includes("5.5") && !basis.includes("raw_api_content")) {
+      failures.push(`raw-basis-missing-article-5.5:${r.contentClass}`);
+    }
+    const dayMatch = period.match(/(?:^|\D)(\d+)\s*[_ -]?days?(?:\D|$)/i);
+    if (dayMatch && Number(dayMatch[1]) > 7 && !/(cache-control|max-age|plan[ _-]?terms|explicit[_ -]?provider[_ -]?grant)/i.test(period)) {
+      failures.push(`raw-retention-over-7d-without-provider-basis:${r.contentClass}`);
+    }
+    if (!hasDeleteAction(r.expiryAction)) failures.push(`raw-expiry-not-delete:${r.contentClass}`);
+  } else if (r.contentClassification === "derived_work") {
+    // Plan §10.2 expressly forbids treating normalization alone as a Derived
+    // Work. Evidence must cite Article 5.6 and affirm a non-reconstructable,
+    // non-trivial transformation for this exact class.
+    if (!source.includes("aerodatabox") && !source.includes("provider")) {
+      failures.push(`derived-source-not-provider-terms:${r.contentClass}`);
+    }
+    if (!basis.includes("5.6")) failures.push(`derived-basis-missing-article-5.6:${r.contentClass}`);
+    if (!/(non[-_ ]?reconstruct|cannot reconstruct|not reconstruct)/i.test(r.retentionLegalBasis)) {
+      failures.push(`derived-nonreconstructability-unproven:${r.contentClass}`);
+    }
+    if (!/(non[-_ ]?trivial|transform|aggregate|feature engineering|statistical|computational)/i.test(r.retentionLegalBasis)) {
+      failures.push(`derived-transformation-unproven:${r.contentClass}`);
+    }
+  } else {
+    if (!/(non[_ -]?aerodatabox[_ -]?metadata|project[_ -]?metadata|no[_ -]?provider[_ -]?content)/i.test(r.retentionLegalBasis)) {
+      failures.push(`metadata-provider-independence-unproven:${r.contentClass}`);
+    }
+  }
+}
+
 export function verifyRetentionMatrix(rows: readonly RetentionMatrixRow[] = RETENTION_MATRIX): RetentionMatrixVerdict {
   const failures: string[] = [];
   if (rows.length !== RETENTION_MATRIX.length) failures.push(`row-count:${rows.length}-expected-${RETENTION_MATRIX.length}`);
@@ -106,12 +148,15 @@ export function verifyRetentionMatrix(rows: readonly RetentionMatrixRow[] = RETE
     if (!["raw_api_content", "derived_work", "non_aerodatabox_metadata"].includes(r.contentClassification)) {
       failures.push(`classification-invalid:${r.contentClass}`);
     }
+    let complete = true;
     for (const f of ["retentionVerifiedDate", "retentionSource", "retentionLegalBasis", "retentionPeriodDaysOrCondition", "expiryAction"] as const) {
       const v = r[f];
       if (!v || v === "UNVERIFIED" || (f === "retentionVerifiedDate" && !ISO_DATE.test(v))) {
         failures.push(`unverified:${r.contentClass}:${f}`);
+        complete = false;
       }
     }
+    if (complete) verifyClassificationSemantics(r, failures);
   }
-  return { pass: failures.length === 0, failures };
+  return { pass: failures.length === 0, failures: [...new Set(failures)].sort() };
 }
