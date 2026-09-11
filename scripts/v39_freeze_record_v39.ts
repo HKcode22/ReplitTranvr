@@ -10,16 +10,22 @@ import { join } from "path";
 
 const mode = process.argv[2] === "preprobe" ? "preprobe" : "reference";
 
-function main(): void {
+async function main(): Promise<void> {
   const root = process.cwd();
   const missing: string[] = [];
   // Gate-1 coverage artifact does not exist yet (Gate 1 is BLOCKED).
   if (!existsSync(join(root, "artifacts", "gate1-coverage.json"))) {
     missing.push("Gate-1 coverage artifact (artifacts/gate1-coverage.json)");
   }
+  // Region mapping is frozen in code (regionMapping_v39.ts); traffic source still open.
+  try {
+    const { REGION_MAPPING_HASH } = await import("../server/lib/disruption/regionMapping_v39");
+    console.log(`  [READY] country→macro-region mapping hash=${REGION_MAPPING_HASH.slice(0, 12)}… (Phase 2C region half)`);
+  } catch {
+    missing.push("country→macro-region mapping + hash (Phase 2C)");
+  }
   // Licensed traffic/region sources are not frozen (Phase 2C not started).
   missing.push("licensed 12-month traffic source + hash (Phase 2C)");
-  missing.push("country→macro-region mapping + hash (Phase 2C)");
   if (mode === "preprobe") {
     // Final frame + shortlist depend on the reference freeze above.
     missing.push("final frame hash (Phase 2D)");
@@ -32,4 +38,4 @@ function main(): void {
   process.exit(1);
 }
 
-main();
+void main();
