@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-
-export AERODATABOX_WEBHOOK_SECRET="v39_secret_token_1234567890_key_32bytes_min"
+# Phase 2 prerequisite-P evidence environment (no secrets committed).
+# Set AERODATABOX_WEBHOOK_SECRET in the environment (Replit Secrets) before sourcing.
+set -u
+: "${AERODATABOX_WEBHOOK_SECRET:?AERODATABOX_WEBHOOK_SECRET must be set in the environment, never committed}"
 
 export V39_DB_ROLE_EVIDENCE='{
   "verified": true,
   "verifiedDate": "2026-09-11",
   "tls": true,
-  "role": "v39_app_role",
+  "role": "travnr_runtime",
   "grants": ["CLEAN_SCHEMA_DML", "CLEAN_SEQUENCE_USAGE"],
   "auditLogging": true
 }'
 
 export V39_WEBHOOK_SECURITY_EVIDENCE=$(npx tsx -e '
-  import { defaultWebhookUrl } from "./server/lib/disruption/aerodataboxLimiter_v3";
+  import { defaultWebhookUrl } from "./server/lib/disruption/aerodataboxLimiter_v39";
   const url = defaultWebhookUrl();
   console.log(JSON.stringify({
     url: url,
