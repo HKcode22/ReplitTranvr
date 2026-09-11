@@ -60,6 +60,43 @@ export interface RetentionMatrixVerdict {
   failures: string[];
 }
 
+/**
+ * Runtime evidence overlay (prerequisite-P evidence, never committed).
+ *
+ * Source control keeps the UNVERIFIED baseline so offline CI stays honest.
+ * At prerequisite-P runtime the operator supplies per-class verified evidence
+ * (Terms + owner attestation); the verifier overlays it onto the frozen
+ * baseline and gates on the result. Unknown content classes are rejected so
+ * evidence cannot silently extend the matrix.
+ */
+export interface RetentionClassEvidence {
+  retentionVerifiedDate: string;
+  retentionSource: string;
+  retentionLegalBasis: string;
+  retentionPeriodDaysOrCondition: string;
+  expiryAction: string;
+}
+export type RetentionMatrixEvidence = Record<string, RetentionClassEvidence>;
+
+export function parseRetentionMatrixEvidence(raw: string): RetentionMatrixEvidence {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error("retention-matrix-evidence-not-json"); }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("retention-matrix-evidence-not-object");
+  }
+  return parsed as RetentionMatrixEvidence;
+}
+
+export function resolveRetentionMatrix(evidence: RetentionMatrixEvidence): { rows: RetentionMatrixRow[]; failures: string[] } {
+  const failures: string[] = [];
+  const known = new Set(RETENTION_MATRIX.map((r) => r.contentClass));
+  for (const key of Object.keys(evidence)) {
+    if (!known.has(key)) failures.push(`unknown-content-class:${key}`);
+  }
+  const rows = RETENTION_MATRIX.map((r) => ({ ...r, ...(evidence[r.contentClass] ?? {}) }));
+  return { rows, failures };
+}
+
 export function verifyRetentionMatrix(rows: readonly RetentionMatrixRow[] = RETENTION_MATRIX): RetentionMatrixVerdict {
   const failures: string[] = [];
   if (rows.length !== RETENTION_MATRIX.length) failures.push(`row-count:${rows.length}-expected-${RETENTION_MATRIX.length}`);

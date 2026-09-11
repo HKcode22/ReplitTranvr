@@ -65,9 +65,17 @@ async function main(){
   if(!web)checks.push({name:"webhook-tls-auth-replay",pass:false,detail:"missing-V39_WEBHOOK_SECURITY_EVIDENCE"});else{const s=checkWebhookSecurity(web),l=await verifyWebhookLive(web),all=[...s.failures,...l];checks.push({name:"webhook-tls-auth-replay",pass:!all.length,detail:all.join(",")||"runtime ingress verified"})}
   checks.push(await verifyRetentionSurfaces(parseEvidence<RetentionDeploymentEvidence>("V39_RETENTION_DEPLOYMENT_EVIDENCE")));
   try {
-    const { RETENTION_MATRIX_HASH, verifyRetentionMatrix } = await import("../server/lib/disruption/retentionMatrix_v39");
-    const verdict = verifyRetentionMatrix();
-    checks.push({ name: "retention-content-matrix", pass: verdict.pass, detail: verdict.pass ? `matrix=${RETENTION_MATRIX_HASH.slice(0, 12)}… verified` : verdict.failures.slice(0, 3).join(",") });
+    const { RETENTION_MATRIX_HASH, parseRetentionMatrixEvidence, resolveRetentionMatrix, verifyRetentionMatrix } = await import("../server/lib/disruption/retentionMatrix_v39");
+    const overlayRaw = process.env.V39_RETENTION_MATRIX_EVIDENCE;
+    if (!overlayRaw) {
+      const verdict = verifyRetentionMatrix();
+      checks.push({ name: "retention-content-matrix", pass: false, detail: `missing-V39_RETENTION_MATRIX_EVIDENCE;${verdict.failures.slice(0, 2).join(",")}` });
+    } else {
+      const { rows, failures } = resolveRetentionMatrix(parseRetentionMatrixEvidence(overlayRaw));
+      const verdict = verifyRetentionMatrix(rows);
+      const all = [...failures, ...verdict.failures];
+      checks.push({ name: "retention-content-matrix", pass: all.length === 0, detail: all.length === 0 ? `matrix=${RETENTION_MATRIX_HASH.slice(0, 12)}… verified` : all.slice(0, 3).join(",") });
+    }
   } catch (err: any) { checks.push({ name: "retention-content-matrix", pass: false, detail: `matrix-check-error:${err?.message ?? err}` }); }
   try{const {pool}=await import("../server/db");await pool.query("SELECT 1 FROM clean.adb_incident_stop WHERE resolved=false LIMIT 1");const c=readFileSync(join(process.cwd(),"server","lib","disruption","adbCollectionController_v3.ts"),"utf8");checks.push({name:"incident-stop-refusal",pass:c.includes("clean.adb_incident_stop")&&c.includes("REFUSED_INCIDENT_STOP"),detail:"persistent incident admission source inspected"})}catch(err:any){checks.push({name:"incident-stop-refusal",pass:false,detail:`${err?.message??err}`})}
   for(const c of checks)console.log(`[${c.pass?"PASS":"BLOCKED"}] ${c.name} - ${c.detail}`);console.log("[PENDING] Terms/content-class/legal-right evidence remains prerequisite-P");if(checks.some(c=>!c.pass))process.exitCode=1;
