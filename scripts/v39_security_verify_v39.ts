@@ -1,4 +1,4 @@
-/** V3.9 Phase-0 security/retention machinery verifier. Legal rights remain prerequisite-P. */
+/** V3.9 prerequisite-P security/retention verifier. */
 import { readFileSync } from "fs";
 import { join } from "path";
 import { Pool } from "pg";
@@ -40,11 +40,15 @@ async function verifyWebhookLive(e:WebhookSecurityEvidence):Promise<string[]>{
 async function verifyRetentionSurfaces(e:RetentionDeploymentEvidence|null):Promise<Check>{
   if(!e)return{name:"retention-deployment-surfaces",pass:false,detail:"missing-V39_RETENTION_DEPLOYMENT_EVIDENCE"};
   const unknown=RETENTION_SURFACES.filter(s=>!e.surfaces?.[s]||e.surfaces[s]==="UNKNOWN");if(unknown.length)return{name:"retention-deployment-surfaces",pass:false,detail:`UNKNOWN surfaces: ${unknown.join(",")}`};
+  // A configured production database means the primary storage surface exists;
+  // calling it NOT_DEPLOYED is an invalid evidence claim, not a safe default.
+  if(process.env.DATABASE_URL && e.surfaces.primary!=="DEPLOYED"){
+    return{name:"retention-deployment-surfaces",pass:false,detail:"primary database is configured but evidence does not declare primary=DEPLOYED"};
+  }
   const deployed=RETENTION_SURFACES.filter(s=>e.surfaces[s]==="DEPLOYED");
-  // This verifier currently has a real adapter only for the primary PostgreSQL
-  // tombstone/content surface. A declared deployed replica/backup/object/log
-  // MUST remain BLOCKED until a real adapter is added; synthetic probes cannot
-  // certify it.
+  // This verifier currently has a real adapter only for primary PostgreSQL.
+  // Declared deployed replica/backup/object/log surfaces remain BLOCKED until a
+  // real deletion/expiry verifier exists for that surface.
   const unsupported=deployed.filter(s=>s!=="primary");if(unsupported.length)return{name:"retention-deployment-surfaces",pass:false,detail:`real adapter missing for DEPLOYED surfaces: ${unsupported.join(",")}`};
   if(e.surfaces.primary==="DEPLOYED"){
     try{
@@ -55,7 +59,7 @@ async function verifyRetentionSurfaces(e:RetentionDeploymentEvidence|null):Promi
       return{name:"retention-deployment-surfaces",pass:true,detail:`primary real dry-run evidence=${dry.evidenceHash}; other surfaces explicitly NOT_DEPLOYED`};
     }catch(err:any){return{name:"retention-deployment-surfaces",pass:false,detail:`primary real adapter failed:${err?.message??err}`};}
   }
-  return{name:"retention-deployment-surfaces",pass:true,detail:"all five surfaces explicitly NOT_DEPLOYED; no synthetic PASS used"};
+  return{name:"retention-deployment-surfaces",pass:false,detail:"primary storage surface not verified"};
 }
 
 async function main(){
@@ -74,10 +78,13 @@ async function main(){
       const { rows, failures } = resolveRetentionMatrix(parseRetentionMatrixEvidence(overlayRaw));
       const verdict = verifyRetentionMatrix(rows);
       const all = [...failures, ...verdict.failures];
-      checks.push({ name: "retention-content-matrix", pass: all.length === 0, detail: all.length === 0 ? `matrix=${RETENTION_MATRIX_HASH.slice(0, 12)}… verified` : all.slice(0, 3).join(",") });
+      checks.push({ name: "retention-content-matrix", pass: all.length === 0, detail: all.length === 0 ? `matrix=${RETENTION_MATRIX_HASH.slice(0, 12)}… verified` : all.slice(0, 5).join(",") });
     }
   } catch (err: any) { checks.push({ name: "retention-content-matrix", pass: false, detail: `matrix-check-error:${err?.message ?? err}` }); }
   try{const {pool}=await import("../server/db");await pool.query("SELECT 1 FROM clean.adb_incident_stop WHERE resolved=false LIMIT 1");const c=readFileSync(join(process.cwd(),"server","lib","disruption","adbCollectionController_v3.ts"),"utf8");checks.push({name:"incident-stop-refusal",pass:c.includes("clean.adb_incident_stop")&&c.includes("REFUSED_INCIDENT_STOP"),detail:"persistent incident admission source inspected"})}catch(err:any){checks.push({name:"incident-stop-refusal",pass:false,detail:`${err?.message??err}`})}
-  for(const c of checks)console.log(`[${c.pass?"PASS":"BLOCKED"}] ${c.name} - ${c.detail}`);console.log("[PENDING] Terms/content-class/legal-right evidence remains prerequisite-P");if(checks.some(c=>!c.pass))process.exitCode=1;
+  for(const c of checks)console.log(`[${c.pass?"PASS":"BLOCKED"}] ${c.name} - ${c.detail}`);
+  const pass=checks.length>0&&checks.every(c=>c.pass);
+  console.log(`[${pass?"PASS":"BLOCKED"}] PREPAID_SECURITY_RETENTION - ${pass?"prerequisite P evidence is complete for the verified runtime":"one or more prerequisite-P checks remain unresolved"}`);
+  if(!pass)process.exitCode=1;
 }
 void main();
