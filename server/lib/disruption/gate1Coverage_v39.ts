@@ -5,10 +5,13 @@ import { createHash } from "crypto";
  *
  * Measures the provider-covered airport universe from the pinned FREE
  * health/coverage endpoints only. No FIDS, no refill, no subscription
- * mutation, no probe. Produces the hashable `artifacts/gate1-coverage.json`
- * artifact that later reference/frame steps consume.
+ * mutation, no probe.
  *
- * Gate 1 does NOT freeze tiers; it produces coverage/reference readiness.
+ * IMPORTANT RETENTION RULE: provider airport membership lists are transient
+ * measurement inputs. The committed/public artifact contains only counts,
+ * deterministic hashes and provenance; it never republishes airport-by-airport
+ * provider coverage lists. A later frame rebuild performs its own authorized
+ * measurement and freezes the resulting frame under the then-current evidence.
  */
 
 export const GATE1_PHASE_GATE = "Phase 2 / Gate 1";
@@ -39,7 +42,7 @@ export interface Gate1CoverageInput {
 }
 
 export interface Gate1CoverageArtifact {
-  schema_version: "v3.9-gate1-coverage-1";
+  schema_version: "v3.9-gate1-coverage-2";
   phase_gate: typeof GATE1_PHASE_GATE;
   evidence_id: string;
   authorization_id: string;
@@ -53,8 +56,10 @@ export interface Gate1CoverageArtifact {
     provider_pin: string;
     endpoint_cost_basis: "documented-free";
     per_feed: Record<CoverageService, { count: number; response_sha256: string } | null>;
-    universe_icao: string[];
-    catalog_in_universe_icao: string[];
+    universe_set_sha256: string;
+    catalog_in_universe_set_sha256: string;
+    catalog_reference_sha256: string;
+    source_list_handling: "transient-not-committed";
   } | null;
   content_classification: "non_aerodatabox_metadata";
   artifact_sha256: string;
@@ -100,12 +105,14 @@ export function buildGate1CoverageArtifact(
     provider_pin: input.providerPin,
     endpoint_cost_basis: "documented-free" as const,
     per_feed: perFeed as Record<CoverageService, { count: number; response_sha256: string }>,
-    universe_icao: universeIcao,
-    catalog_in_universe_icao: catalogInUniverse,
+    universe_set_sha256: sha256Hex(canonical(universeIcao)),
+    catalog_in_universe_set_sha256: sha256Hex(canonical(catalogInUniverse)),
+    catalog_reference_sha256: sha256Hex(canonical(catalog)),
+    source_list_handling: "transient-not-committed" as const,
   } : null;
 
   const unsigned = {
-    schema_version: "v3.9-gate1-coverage-1" as const,
+    schema_version: "v3.9-gate1-coverage-2" as const,
     phase_gate: GATE1_PHASE_GATE as typeof GATE1_PHASE_GATE,
     evidence_id: identity.evidenceId,
     authorization_id: identity.authorizationId,
