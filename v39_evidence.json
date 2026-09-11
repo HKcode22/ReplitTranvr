@@ -1,9 +1,0 @@
-{
-  "webhook_raw_delivery": {
-    "retentionVerifiedDate": "2026-09-11",
-    "retentionSource": "RapidAPI_AeroDataBox_Terms",
-    "retentionLegalBasis": "Contractual Necessity",
-    "retentionPeriodDaysOrCondition": "7 days",
-    "expiryAction": "purge"
-  }
-}
