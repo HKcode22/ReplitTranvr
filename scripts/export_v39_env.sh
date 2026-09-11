@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Phase 2 prerequisite-P evidence environment (no secrets committed).
-# Set AERODATABOX_WEBHOOK_SECRET in the environment (Replit Secrets) before sourcing.
+# Phase 2 prerequisite-P helper.
+#
+# This file intentionally DOES NOT manufacture retention/legal PASS evidence.
+# It may prepare reproducible DB/webhook evidence, but retention deployment and
+# per-content-class evidence must come from independently verified facts.
 set -u
-: "${AERODATABOX_WEBHOOK_SECRET:?AERODATABOX_WEBHOOK_SECRET must be set in the environment, never committed}"
+: "${AERODATABOX_WEBHOOK_SECRET:?AERODATABOX_WEBHOOK_SECRET must be set in Replit Secrets, never committed}"
 
 export V39_DB_ROLE_EVIDENCE='{
   "verified": true,
@@ -14,37 +17,37 @@ export V39_DB_ROLE_EVIDENCE='{
 }'
 
 export V39_WEBHOOK_SECURITY_EVIDENCE=$(npx tsx -e '
-  import { defaultWebhookUrl } from "./server/lib/disruption/aerodataboxLimiter_v39";
+  import { defaultWebhookUrl } from "./server/lib/disruption/aerodataboxLimiter_v3";
   const url = defaultWebhookUrl();
   console.log(JSON.stringify({
-    url: url,
+    url,
     providerAuth: "token",
     compensatingControlApproved: true,
     replaySafeIdentity: true
   }));
 ')
 
+# Primary PostgreSQL is undeniably deployed. The other four surfaces are left
+# UNKNOWN until their real deployment/retention state is evidenced. UNKNOWN is
+# intentionally blocking in v39:security:verify.
 export V39_RETENTION_DEPLOYMENT_EVIDENCE='{
   "surfaces": {
-    "primary": "NOT_DEPLOYED",
-    "replica": "NOT_DEPLOYED",
-    "backup": "NOT_DEPLOYED",
-    "object": "NOT_DEPLOYED",
-    "log": "NOT_DEPLOYED"
+    "primary": "DEPLOYED",
+    "replica": "UNKNOWN",
+    "backup": "UNKNOWN",
+    "object": "UNKNOWN",
+    "log": "UNKNOWN"
   }
 }'
 
-export V39_RETENTION_MATRIX_EVIDENCE=$(npx tsx -e '
-  import { RETENTION_MATRIX } from "./server/lib/disruption/retentionMatrix_v39";
-  const evidence = {};
-  for (const row of RETENTION_MATRIX) {
-    evidence[row.contentClass] = {
-      retentionVerifiedDate: "2026-09-11",
-      retentionSource: "clean.retention_tombstone",
-      retentionLegalBasis: "contract_performance",
-      retentionPeriodDaysOrCondition: "30_days_or_tombstone",
-      expiryAction: "delete-raw-content"
-    };
-  }
-  console.log(JSON.stringify(evidence));
-')
+# DO NOT auto-create V39_RETENTION_MATRIX_EVIDENCE here. Plan §10.2 forbids one
+# blanket retention period and forbids self-classifying normalized copies as
+# Derived Works. Supply a reviewed per-class JSON artifact only after every row
+# has its real content classification, source/Terms basis, period/condition and
+# expiry action.
+unset V39_RETENTION_MATRIX_EVIDENCE 2>/dev/null || true
+
+printf '%s\n' \
+  'Prepared reproducible DB/webhook prerequisite-P evidence.' \
+  'Retention deployment remains BLOCKED until replica/backup/object/log surfaces are verified.' \
+  'Retention content matrix remains BLOCKED until reviewed per-class evidence is supplied.'
