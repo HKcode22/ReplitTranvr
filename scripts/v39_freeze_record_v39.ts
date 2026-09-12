@@ -23,6 +23,7 @@ import {
   parseFrozenTrafficReference,
   type FrozenTrafficReferenceV39,
 } from "../server/lib/disruption/trafficReference_v39";
+import { requireTrafficReferenceFreshnessV39 } from "../server/lib/disruption/trafficReferenceFreshness_v39";
 import {
   buildPreprobeReferenceFreezeV39,
   verifyPreprobeReferenceFreezeV39,
@@ -91,6 +92,8 @@ function verifyReferenceFreeze(input: unknown): input is ReferenceFreezeRecordV3
   const record = input as ReferenceFreezeRecordV39;
   if (record.schema_version !== "v3.9-reference-freeze-1" || record.status !== "READY_FROZEN_REFERENCE") return false;
   if (!SHA.test(record.artifact_sha256)) return false;
+  const frozenAt = new Date(record.frozen_at_utc);
+  if (!Number.isFinite(frozenAt.getTime())) return false;
   return sha256(canonical(unsignedReference(record))) === record.artifact_sha256;
 }
 
@@ -146,13 +149,16 @@ function writeReferenceFreeze(input: LoadedInputs): ReferenceFreezeRecordV39 {
     const existing = readJson(path, "REFERENCE_FREEZE_RECORD");
     if (!verifyReferenceFreeze(existing)) throw new Error("BLOCKED:REFERENCE_FREEZE_EXISTING_INVALID");
     if (!referenceMatchesCurrent(existing, input)) throw new Error("BLOCKED:REFERENCE_FREEZE_INPUT_DRIFT_REFUSE_OVERWRITE");
+    requireTrafficReferenceFreshnessV39(input.traffic, new Date(existing.frozen_at_utc));
     return existing;
   }
 
+  const frozenAt = new Date();
+  requireTrafficReferenceFreshnessV39(input.traffic, frozenAt);
   const base = {
     schema_version: "v3.9-reference-freeze-1" as const,
     status: "READY_FROZEN_REFERENCE" as const,
-    frozen_at_utc: new Date().toISOString(),
+    frozen_at_utc: frozenAt.toISOString(),
     plan_sha256: input.planSha256,
     prerequisite_p_artifact_sha256: input.pArtifactSha256,
     gate1_artifact_sha256: input.gate1.artifact_sha256,
@@ -273,11 +279,14 @@ async function writePreprobeFreeze(input: LoadedInputs): Promise<PreprobeReferen
     const existing = readJson(path, "PREPROBE_FREEZE_RECORD");
     if (!verifyPreprobeReferenceFreezeV39(existing)) throw new Error("BLOCKED:PREPROBE_FREEZE_EXISTING_INVALID");
     if (!existingPreprobeMatches(existing, input, frame)) throw new Error("BLOCKED:PREPROBE_FREEZE_INPUT_DRIFT_REFUSE_OVERWRITE");
+    requireTrafficReferenceFreshnessV39(input.traffic, new Date(existing.frozen_at_utc));
     return existing;
   }
 
+  const frozenAt = new Date();
+  requireTrafficReferenceFreshnessV39(input.traffic, frozenAt);
   const artifact = buildPreprobeReferenceFreezeV39(frame.rows, input.traffic, {
-    frozenAtUtc: new Date().toISOString(),
+    frozenAtUtc: frozenAt.toISOString(),
     planSha256: input.planSha256,
     prerequisitePArtifactSha256: input.pArtifactSha256,
     gate1ArtifactSha256: input.gate1.artifact_sha256,
