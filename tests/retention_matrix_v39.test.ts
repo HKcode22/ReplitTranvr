@@ -102,6 +102,15 @@ describe("prerequisite-P retention matrix", () => {
     expect(verdict.failures).toContain("fids-retention-over-24h:fids_population");
   });
 
+  it("rejects contradictory FIDS evidence that mentions 24 hours and a longer lifetime", () => {
+    const filled = RETENTION_MATRIX.map((r) => ({ ...r, ...validEvidenceFor(r) }));
+    const fids = filled.find((r) => r.contentClass === "fids_population")!;
+    fids.retentionPeriodDaysOrCondition = "24 hours for live FIDS cache; generic raw content may be kept for 7 days";
+    const verdict = verifyRetentionMatrix(filled);
+    expect(verdict.pass).toBe(false);
+    expect(verdict.failures).toContain("fids-retention-over-24h:fids_population");
+  });
+
   it("rejects FIDS evidence that omits a parseable 24-hour-or-shorter lifetime", () => {
     const filled = RETENTION_MATRIX.map((r) => ({ ...r, ...validEvidenceFor(r) }));
     const fids = filled.find((r) => r.contentClass === "fids_population")!;
