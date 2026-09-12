@@ -18,12 +18,21 @@ export interface ProviderContentColumnGroup {
 /**
  * Column-scope inventory for AeroDataBox-bearing data.
  *
- * A whole table is intentionally never considered a Derived Work merely because
- * it is normalized/cleaned. Groups stay BLOCKED until copied source values are
- * expired under the correct clock or the exact retained output is proven to be
- * a non-trivial, non-reconstructable Derived Work.
+ * Rules:
+ * - copying, flattening, cleaning, sorting, joining or renaming a provider value
+ *   does NOT make it a Derived Work;
+ * - hashes/project run IDs may be retained as project metadata only when they do
+ *   not themselves embed recoverable provider plaintext;
+ * - a whole mixed table is never declared a Derived Work merely because some
+ *   columns are computed;
+ * - a group remains BLOCKED until copied source values are expired under the
+ *   applicable hard clock or the exact retained output is proven to satisfy the
+ *   non-trivial/non-reconstructable Derived-Work basis.
  */
 export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup[] = Object.freeze([
+  // -------------------------------------------------------------------------
+  // HTTP/webhook ingress
+  // -------------------------------------------------------------------------
   {
     id: "raw-delivery-envelope",
     table: "clean.raw_delivery",
@@ -31,7 +40,16 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     retentionClass: "raw_provider_content",
     disposition: "expiry-covered",
     owner: "retentionExpiry_v39",
-    note: "Migration 0048 + expiry owner null these content-bearing fields and retain hashes/tombstones.",
+    note: "Migration 0048 + expiry owner null these content-bearing envelope fields and retain hashes/tombstones.",
+  },
+  {
+    id: "raw-delivery-extracted-provider-facts",
+    table: "clean.raw_delivery",
+    columns: ["subscription_id", "provider_published_utc", "adb_delivery_id", "adb_cost_credits"],
+    retentionClass: "raw_provider_content",
+    disposition: "classification-required",
+    owner: "UNVERIFIED",
+    note: "These values arrive from/identify the provider transaction and currently survive raw_body expiry.",
   },
   {
     id: "raw-delivery-item",
@@ -40,7 +58,28 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     retentionClass: "raw_provider_content",
     disposition: "expiry-covered",
     owner: "retentionExpiry_v39",
-    note: "Raw webhook item body.",
+    note: "Raw webhook flight item body.",
+  },
+  {
+    id: "raw-delivery-item-extracted-provider-facts",
+    table: "clean.raw_delivery_item",
+    columns: [
+      "flight_number", "carrier_iata", "carrier_icao", "status", "status_code",
+      "last_updated_utc", "departure_scheduled_utc", "arrival_scheduled_utc",
+    ],
+    retentionClass: "raw_provider_content",
+    disposition: "classification-required",
+    owner: "UNVERIFIED",
+    note: "Migration 0025 extracts these directly from raw_item for indexing; extraction is still a copy of provider Contents.",
+  },
+  {
+    id: "processing-attempt-provider-bearing-errors",
+    table: "clean.processing_attempt",
+    columns: ["validation_errors", "parse_errors", "storage_errors", "error_message"],
+    retentionClass: "raw_provider_content",
+    disposition: "classification-required",
+    owner: "UNVERIFIED",
+    note: "Error structures/strings may echo provider fields or payload fragments; they need redaction proof or raw-clock expiry.",
   },
   {
     id: "ingest-envelope-obvious-content",
@@ -60,6 +99,48 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     owner: "UNVERIFIED",
     note: "Copied provider publication timestamp survives raw_payload deletion unless separately expired or justified.",
   },
+
+  // -------------------------------------------------------------------------
+  // Canonical webhook identity and schedule evidence
+  // -------------------------------------------------------------------------
+  {
+    id: "webhook-flight-identity-provider-values",
+    table: "clean.webhook_flight_identity",
+    columns: [
+      "provider_identity_alias", "provider_flight_id", "provider_record_key", "callsign",
+      "operating_carrier", "operating_flight_number", "origin_icao", "original_destination_icao",
+      "initial_service_date", "initial_scheduled_gate_out_utc",
+    ],
+    retentionClass: "raw_provider_content",
+    disposition: "classification-required",
+    owner: "UNVERIFIED",
+    note: "Canonical flight_instance_id is project linkage, but this table also retains source identifiers/schedule facts and aliases that encode them.",
+  },
+  {
+    id: "webhook-schedule-version-provider-values",
+    table: "clean.webhook_flight_schedule_version",
+    columns: [
+      "observed_scheduled_gate_out_utc", "current_service_date", "provider_identity_alias",
+      "provider_record_key", "callsign",
+    ],
+    retentionClass: "raw_provider_content",
+    disposition: "classification-required",
+    owner: "UNVERIFIED",
+    note: "Append-only schedule-version evidence is still copied provider schedule/identity content.",
+  },
+  {
+    id: "webhook-resolution-copied-service-date",
+    table: "clean.webhook_identity_resolution",
+    columns: ["initial_service_date"],
+    retentionClass: "raw_provider_content",
+    disposition: "classification-required",
+    owner: "UNVERIFIED",
+    note: "Resolution status/hash/project flight_instance_id are audit metadata, but retained initial_service_date is copied source timing data.",
+  },
+
+  // -------------------------------------------------------------------------
+  // Flattened/latest-state webhook table
+  // -------------------------------------------------------------------------
   {
     id: "prepost-raw-json",
     table: "clean.flight_data_pre_post",
@@ -84,13 +165,17 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
       "aircraft_reg", "aircraft_mode_s", "aircraft_model", "aircraft_image_url", "aircraft_image_web_url", "aircraft_image_author", "aircraft_image_title", "aircraft_image_description", "aircraft_image_license",
       "loc_lat", "loc_lon", "loc_altitude_ft", "loc_pressure_altitude_ft", "loc_pressure_hpa", "loc_ground_speed_kt", "loc_true_track_deg", "loc_vsi_fpm", "loc_reported_utc",
       "subscription_id", "subscription_is_active", "subscription_billing_type", "subscription_activate_before_utc", "subscription_expires_on_utc", "subscription_created_on_utc", "subject_type", "subject_id", "subscriber_type", "subscriber_id",
-      "credits_remaining", "balance_last_refilled_utc", "balance_last_deducted_utc"
+      "credits_remaining", "balance_last_refilled_utc", "balance_last_deducted_utc",
     ],
     retentionClass: "raw_provider_content",
     disposition: "classification-required",
     owner: "UNVERIFIED",
     note: "Migration 0010 explicitly says every webhook field is flattened; normalization does not make these values Derived Works.",
   },
+
+  // -------------------------------------------------------------------------
+  // FIDS population layer
+  // -------------------------------------------------------------------------
   {
     id: "fids-response-payload",
     table: "clean.fids_query_response",
@@ -106,13 +191,17 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     columns: [
       "flight_number", "carrier_iata", "carrier_icao", "call_sign", "dep_airport_icao", "dep_airport_iata", "arr_airport_icao", "arr_airport_iata",
       "dep_scheduled_utc", "arr_scheduled_utc", "provider_record_key", "coverage_state", "from_local", "to_local", "airport_iana_timezone",
-      "scope_classification", "codeshare_resolution_status", "fids_retrieval_utc", "provider_api_version"
+      "scope_classification", "codeshare_resolution_status", "fids_retrieval_utc", "provider_api_version",
     ],
     retentionClass: "live_fids_cache",
     disposition: "classification-required",
     owner: "UNVERIFIED",
     note: "These are provider-observable FIDS/schedule values, not merely the raw JSON cache.",
   },
+
+  // -------------------------------------------------------------------------
+  // Semantic event / airborne pipeline
+  // -------------------------------------------------------------------------
   {
     id: "semantic-event-copied-provider-values",
     table: "clean.flight_events",
@@ -120,7 +209,7 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
       "subscription_id", "flight_number", "carrier_iata", "carrier_icao", "call_sign", "aircraft_reg", "aircraft_mode_s", "aircraft_model",
       "event_timestamp", "provider_published_utc", "status", "scheduled_gate_out", "actual_gate_out", "scheduled_wheels_off", "actual_wheels_off",
       "scheduled_wheels_on", "actual_wheels_on", "scheduled_gate_in", "actual_gate_in", "loc_lat", "loc_lon", "loc_altitude_ft", "loc_pressure_altitude_ft",
-      "loc_pressure_hpa", "loc_ground_speed_kt", "loc_true_track_deg", "loc_vsi_fpm", "loc_reported_utc", "eta_provider"
+      "loc_pressure_hpa", "loc_ground_speed_kt", "loc_true_track_deg", "loc_vsi_fpm", "loc_reported_utc", "eta_provider",
     ],
     retentionClass: "raw_provider_content",
     disposition: "classification-required",
@@ -134,7 +223,7 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     retentionClass: "raw_provider_content",
     disposition: "classification-required",
     owner: "UNVERIFIED",
-    note: "Current-state convenience table requires an exact column audit before it can be retained beyond raw limits.",
+    note: "Current-state convenience layer requires an exact schema/column audit before it can be retained beyond raw limits.",
   },
   {
     id: "raw-airborne-observations",
@@ -143,7 +232,7 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
       "subscription_id", "flight_number", "carrier_iata", "carrier_icao", "call_sign", "aircraft_reg", "aircraft_mode_s", "aircraft_model", "icao24",
       "event_timestamp", "loc_reported_utc", "provider_published_utc", "scheduled_gate_out", "actual_gate_out", "scheduled_wheels_off", "actual_wheels_off",
       "scheduled_wheels_on", "actual_wheels_on", "scheduled_gate_in", "actual_gate_in", "latitude", "longitude", "altitude_ft", "pressure_altitude_ft", "pressure_hpa",
-      "ground_speed_kt", "true_track_deg", "vsi_fpm", "on_ground", "flight_phase", "eta_provider"
+      "ground_speed_kt", "true_track_deg", "vsi_fpm", "on_ground", "flight_phase", "eta_provider",
     ],
     retentionClass: "raw_provider_content",
     disposition: "classification-required",
@@ -175,13 +264,17 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
       "flight_number", "carrier_iata", "airline", "aircraft_type", "callsign", "icao24", "registration", "event_timestamp", "provider_published_utc",
       "origin", "destination", "current_operational_destination", "scheduled_departure", "scheduled_arrival", "scheduled_gate_out", "actual_gate_out",
       "scheduled_wheels_off", "actual_wheels_off", "scheduled_wheels_on", "actual_wheels_on", "scheduled_gate_in", "actual_gate_in", "latitude", "longitude",
-      "altitude", "ground_speed", "heading", "vertical_rate", "on_ground", "flight_phase", "eta_provider"
+      "altitude", "ground_speed", "heading", "vertical_rate", "on_ground", "flight_phase", "eta_provider",
     ],
     retentionClass: "raw_provider_content",
     disposition: "classification-required",
     owner: "UNVERIFIED",
     note: "Prediction snapshot contains copied provider state in addition to derived/project fields.",
   },
+
+  // -------------------------------------------------------------------------
+  // Candidate retained Derived Works — must be proven, never assumed
+  // -------------------------------------------------------------------------
   {
     id: "pre-snapshot-feature-vector",
     table: "clean.flight_snapshots",
@@ -189,7 +282,7 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     retentionClass: "derived_work_candidate",
     disposition: "derived-work-proof-required",
     owner: "UNVERIFIED",
-    note: "365-day treatment is permitted only after exact feature/provenance output is shown non-trivial and non-reconstructable.",
+    note: "365-day treatment is permitted only after the exact feature/provenance output is shown non-trivial and non-reconstructable.",
   },
   {
     id: "outcome-evidence",
