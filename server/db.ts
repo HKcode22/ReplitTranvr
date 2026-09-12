@@ -55,6 +55,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0045_incident_stop_persistence_cause.sql",
   "0046_subscription_create_uncertainty_stop.sql",
   "0047_phase6_frozen_safety_and_overshoot.sql",
+  "0048_retention_content_expiry.sql",
 ];
 
 function explicitAutoCollectEnabled(): boolean {
