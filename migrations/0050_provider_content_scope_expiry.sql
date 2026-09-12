@@ -2,9 +2,9 @@
 -- provider-bearing scope of the ingress/latest-state compatibility layers.
 --
 -- This migration deliberately does NOT classify canonical identity, semantic
--- event, FIDS-population, or airborne stores as Derived Works. Those remain
--- separately BLOCKED in providerContentInventory_v39 until their exact expiry
--- or transformation owners are implemented and proven.
+-- event, FIDS-population, accounting/probe ledgers, or airborne stores as
+-- Derived Works. Those remain separately BLOCKED in providerContentInventory_v39
+-- until their exact expiry or transformation owners are implemented and proven.
 
 BEGIN;
 
@@ -38,7 +38,12 @@ BEGIN
       NEW.subscription_id IS NOT NULL OR
       NEW.provider_published_utc IS NOT NULL OR
       NEW.adb_delivery_id IS NOT NULL OR
-      NEW.adb_cost_credits IS NOT NULL;
+      NEW.adb_cost_credits IS NOT NULL OR
+      NEW.notification_id IS NOT NULL OR
+      NEW.provider_notification_generated_utc IS NOT NULL OR
+      NEW.delivery_attempt_seq_no IS NOT NULL OR
+      NEW.delivery_attempt_utc IS NOT NULL OR
+      NEW.delivery_attempt_cost_credits IS NOT NULL;
   ELSIF TG_TABLE_NAME = 'raw_delivery_item' THEN
     content_present :=
       NEW.raw_item IS NOT NULL OR
@@ -61,7 +66,9 @@ BEGIN
       NEW.raw_payload IS NOT NULL OR
       NEW.http_metadata IS NOT NULL OR
       NEW.error IS NOT NULL OR
-      NEW.provider_published_utc IS NOT NULL;
+      NEW.provider_published_utc IS NOT NULL OR
+      NEW.subscription_id IS NOT NULL OR
+      NEW.credits_remaining IS NOT NULL;
   ELSE
     RETURN NEW;
   END IF;
