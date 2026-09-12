@@ -244,7 +244,9 @@ export async function createSubscription(
     );
     const text = await resp.text().catch(() => "");
     if (!resp.ok) {
-      console.warn(`[adb-v3] createSubscription ${subjectType}/${subjectId} ${resp.status}: ${text.slice(0, 300)}`);
+      // Never print provider response bodies for subscription creation: an
+      // error response may echo the secret-bearing webhook target URL.
+      console.warn(`[adb-v3] createSubscription ${subjectType}/${subjectId} HTTP ${resp.status} (body redacted)`);
       return null;
     }
     let raw: any;

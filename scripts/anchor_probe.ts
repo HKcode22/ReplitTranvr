@@ -935,11 +935,13 @@ async function runCleanup(): Promise<void> {
   console.log("cleanup done.");
 }
 
-/** --check-webhook — prints the URL AeroDataBox posts to and probes reachability. */
+/** --check-webhook — probes reachability without printing the secret-bearing URL. */
 async function runCheckWebhook(): Promise<void> {
   const url = defaultWebhookUrl();
+  const parsedWebhook = new URL(url);
+  const redactedWebhook = `${parsedWebhook.origin}/api/v1/webhooks/aerodatabox/[REDACTED]`;
   console.log("Webhook reachability check (Gate 3/0.5 pre-requisite):\n");
-  console.log(`  defaultWebhookUrl() : ${url}`);
+  console.log(`  webhook target      : ${redactedWebhook}`);
   console.log(
     `  REPLIT_DOMAINS       : ${process.env.REPLIT_DOMAINS ? "set" : "NOT set"}  ` +
       `(WEBHOOK_BASE_URL override: ${process.env.WEBHOOK_BASE_URL ? "set" : "no"})`,

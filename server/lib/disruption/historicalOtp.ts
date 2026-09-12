@@ -136,7 +136,7 @@ export async function getHistoricalOtp(
 
     const rawText = await resp.text().catch(() => "");
     console.log(
-      `[historicalOtp] ${normalized} raw response (first 500 chars): ${rawText.slice(0, 500)}`,
+      `[historicalOtp] ${normalized} response received bytes=${Buffer.byteLength(rawText, "utf8")}`,
     );
 
     if (!resp.ok) {
