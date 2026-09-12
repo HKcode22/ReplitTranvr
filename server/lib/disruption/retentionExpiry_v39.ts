@@ -38,6 +38,7 @@ export interface RetentionExpiryCandidate {
     | "raw_delivery_item"
     | "processing_attempt"
     | "adb_ingest_events"
+    | "webhook_identity_resolution"
     | "flight_data_pre_post"
     | "fids_query_response"
     | "monitored_flights_v2";
@@ -350,6 +351,37 @@ export async function collectRetentionExpiryCandidates(
 
   if (room()) {
     const rows = await queryRows(
+      `SELECT resolution_id, resolved_at_utc, flight_instance_id, initial_service_date
+         FROM clean.webhook_identity_resolution
+        WHERE resolution_status='resolved'
+          AND provider_identity_expired_at_utc IS NULL
+          AND resolved_at_utc <= $1::timestamptz
+          AND (flight_instance_id IS NOT NULL OR initial_service_date IS NOT NULL)
+        ORDER BY resolved_at_utc, resolution_id LIMIT $2`,
+      [rawCutoff, room()],
+    );
+    for (const r of rows) {
+      const ageTimestampUtc = utc(r.resolved_at_utc);
+      const content = {
+        flight_instance_id: r.flight_instance_id,
+        initial_service_date: r.initial_service_date,
+      };
+      out.push(candidate({
+        sourceTable: "clean.webhook_identity_resolution",
+        recordId: `webhook_identity_resolution:${r.resolution_id}:provider_identity_scope_v1`,
+        contentClass: "webhook_identity_schedule",
+        contentColumns: Object.keys(content),
+        ageTimestampUtc,
+        retentionHours: policy.rawProviderHours,
+        contentHash: sha256(content),
+        kind: "webhook_identity_resolution",
+        key: Number(r.resolution_id),
+      }));
+    }
+  }
+
+  if (room()) {
+    const rows = await queryRows(
       `SELECT id, received_at, payload_sha256, to_jsonb(f) AS row_json
          FROM clean.flight_data_pre_post f
         WHERE received_at <= $1::timestamptz
@@ -532,6 +564,17 @@ async function expireOne(client: PoolClient, c: RetentionExpiryCandidate, runId:
               raw_expired_at_utc=COALESCE(raw_expired_at_utc,now()),
               provider_content_expired_at_utc=now()
         WHERE id=$1 AND provider_content_expired_at_utc IS NULL`,
+      [c.key],
+    );
+  } else if (c.kind === "webhook_identity_resolution") {
+    r = await client.query(
+      `UPDATE clean.webhook_identity_resolution
+          SET flight_instance_id=NULL,
+              initial_service_date=NULL,
+              provider_identity_expired_at_utc=now()
+        WHERE resolution_id=$1
+          AND resolution_status='resolved'
+          AND provider_identity_expired_at_utc IS NULL`,
       [c.key],
     );
   } else if (c.kind === "flight_data_pre_post") {
