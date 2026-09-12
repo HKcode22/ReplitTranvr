@@ -1,6 +1,6 @@
 /**
- * Phase-0 DB verification for current V3.9-f.8 schema 0047.
- * Read-only except a rolled-back proof transaction. Never performs a provider call.
+ * Phase-0 DB verification for current V3.9-f.8 schema through migration 0050.
+ * Read-only except rolled-back proof transactions. Never performs a provider call.
  */
 import pg from "pg";
 
@@ -56,9 +56,16 @@ const REQUIRED_COLUMNS = [
   "clean.raw_delivery:delivery_attempt_utc",
   "clean.raw_delivery:delivery_attempt_cost_credits",
   "clean.raw_delivery:adb_cost_credits",
+  "clean.raw_delivery:raw_expired_at_utc",
+  "clean.raw_delivery:provider_content_expired_at_utc",
   "clean.raw_delivery_item:delivery_id",
   "clean.raw_delivery_item:item_index",
+  "clean.raw_delivery_item:raw_expired_at_utc",
+  "clean.raw_delivery_item:provider_content_expired_at_utc",
   "clean.processing_attempt:delivery_id",
+  "clean.processing_attempt:provider_content_expired_at_utc",
+  "clean.adb_ingest_events:raw_expired_at_utc",
+  "clean.adb_ingest_events:provider_content_expired_at_utc",
   "clean.webhook_identity_resolution:resolution_status",
   "clean.webhook_identity_resolution:flight_instance_id",
   "clean.webhook_identity_resolution:initial_service_date",
@@ -68,6 +75,10 @@ const REQUIRED_COLUMNS = [
   "clean.flight_airborne_snapshots:trajectory_prefix_hash",
   "clean.airborne_eligibility_evidence:population_query_id",
   "clean.airborne_eligibility_evidence:evidence_available_at",
+  "clean.adb_sampling_frame:tier_verified",
+  "clean.adb_sampling_frame:traffic_reference_hash",
+  "clean.adb_sampling_frame_registry:tier_hash",
+  "clean.adb_sampling_frame_registry:region_mapping_hash",
   "clean.adb_phase6_calendar_day:scheduled_start_utc",
   "clean.adb_phase6_calendar_day:active_duration_minutes",
   "clean.adb_phase6_calendar_day:frame_hash",
@@ -107,6 +118,13 @@ const REQUIRED_TRIGGERS = [
   "trg_mark_phase6_hard_cap_mismatch",
   "trg_record_phase6_hard_cap_overshoot",
   "trg_propagate_incident_to_phase6_failure",
+  "trg_raw_delivery_retention_guard",
+  "trg_raw_delivery_item_retention_guard",
+  "trg_adb_ingest_events_retention_guard",
+  "trg_raw_delivery_provider_scope_guard",
+  "trg_raw_delivery_item_provider_scope_guard",
+  "trg_processing_attempt_provider_scope_guard",
+  "trg_adb_ingest_events_provider_scope_guard",
 ];
 
 async function main(): Promise<void> {
@@ -220,6 +238,24 @@ async function main(): Promise<void> {
       } catch { immutable = true; }
       record("identity-resolution-append-only", immutable, immutable ? "mutation rejected" : "MUTATION WAS ALLOWED");
 
+      let requiresClear = false;
+      try {
+        await client.query("UPDATE clean.raw_delivery SET provider_content_expired_at_utc=now() WHERE delivery_id=$1", [id]);
+      } catch { requiresClear = true; }
+      record("provider-scope-expiry-requires-clear", requiresClear, requiresClear ? "stamp rejected while protected content remained" : "UNSAFE stamp accepted");
+
+      await client.query(
+        `UPDATE clean.raw_delivery
+            SET raw_body=NULL,subscription_id=NULL,raw_expired_at_utc=now(),provider_content_expired_at_utc=now()
+          WHERE delivery_id=$1`,
+        [id],
+      );
+      let oneWay = false;
+      try {
+        await client.query("UPDATE clean.raw_delivery SET subscription_id='restored' WHERE delivery_id=$1", [id]);
+      } catch { oneWay = true; }
+      record("provider-scope-expiry-one-way", oneWay, oneWay ? "provider content restoration rejected" : "UNSAFE restoration accepted");
+
       await client.query("ROLLBACK");
       record("rollback-no-junk-rows", true, "rolled back proof transaction");
     } catch (e: any) {
@@ -238,7 +274,7 @@ async function main(): Promise<void> {
     for (const x of failed) console.log(`  - ${x.name}: ${x.detail}`);
     process.exit(1);
   }
-  console.log("ALL DB CHECKS PASS for current Phase-0 schema 0047.");
+  console.log("ALL DB CHECKS PASS for current Phase-0 schema through migration 0050.");
 }
 
 main().catch((e: any) => {
