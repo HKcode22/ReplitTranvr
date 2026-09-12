@@ -26,6 +26,8 @@ export interface ProviderContentColumnGroup {
  * - mixed tables remain raw/provider-bearing at table level until the copied
  *   provider columns are expired or the exact retained output qualifies for a
  *   separately proven Derived-Work class;
+ * - temporary tables may be covered by bounded hard-delete instead of proving
+ *   their encoded/provider values are independently retainable;
  * - nonexistent/logical tables are forbidden from this inventory.
  */
 export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup[] = Object.freeze([
@@ -76,10 +78,10 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     id: "raw-delivery-item-canonical-id-encoding",
     table: "clean.raw_delivery_item",
     columns: ["canonical_flight_instance_id"],
-    retentionClass: "derived_work_candidate",
-    disposition: "derived-work-proof-required",
-    owner: "UNVERIFIED",
-    note: "The canonical leg ID is project-generated, but the current leg:<8 hex chars> representation is only a 32-bit SHA-256 prefix over structured flight identity. It is not assumed non-reconstructable and is not silently covered by raw-item expiry while this proof remains unresolved.",
+    retentionClass: "raw_provider_content",
+    disposition: "expiry-covered",
+    owner: "retentionExpiry_v39",
+    note: "The short project leg ID is not assumed non-reconstructable; this raw-layer copy is therefore conservatively cleared with the rest of the item rather than retained as Derived Work.",
   },
   {
     id: "processing-attempt-provider-bearing-errors",
@@ -105,39 +107,42 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     columns: [
       "provider_identity_alias", "provider_flight_id", "provider_record_key", "callsign",
       "operating_carrier", "operating_flight_number", "origin_icao", "original_destination_icao",
-      "initial_service_date", "initial_scheduled_gate_out_utc",
+      "initial_service_date", "initial_scheduled_gate_out_utc", "flight_instance_id",
     ],
     retentionClass: "raw_provider_content",
-    disposition: "classification-required",
-    owner: "UNVERIFIED",
-    note: "Alias/source identity and initial schedule facts are direct or reversible provider-derived values.",
-  },
-  {
-    id: "canonical-flight-instance-id-encoding",
-    table: "clean.webhook_flight_identity",
-    columns: ["flight_instance_id"],
-    retentionClass: "derived_work_candidate",
-    disposition: "derived-work-proof-required",
-    owner: "UNVERIFIED",
-    note: "Current flight_instance_id is leg:<8 hex chars>, a 32-bit SHA-256 prefix of a structured leg identity. It is project-generated but must not be called non-reconstructable without a domain/inversion analysis; the same ID propagates downstream.",
+    disposition: "expiry-covered",
+    owner: "providerIdentityExpiry_v39",
+    note: "This operational linkage table is bounded and hard-deleted with a tombstone after the raw-provider clock once no recent schedule/resolution activity keeps it active; the short encoded ID is not retained here indefinitely.",
   },
   {
     id: "webhook-schedule-version-provider-values",
     table: "clean.webhook_flight_schedule_version",
-    columns: ["observed_scheduled_gate_out_utc", "current_service_date", "provider_identity_alias", "provider_record_key", "callsign"],
+    columns: [
+      "flight_instance_id", "observed_scheduled_gate_out_utc", "current_service_date",
+      "provider_identity_alias", "provider_record_key", "callsign",
+    ],
     retentionClass: "raw_provider_content",
-    disposition: "classification-required",
-    owner: "UNVERIFIED",
-    note: "Append-only schedule-version rows contain copied schedule/identity evidence and require a bounded expiry owner or another valid classification.",
+    disposition: "expiry-covered",
+    owner: "providerIdentityExpiry_v39",
+    note: "Temporary schedule-version rows are tombstoned and hard-deleted under the same bounded identity owner.",
   },
   {
     id: "webhook-resolution-provider-derived-values",
     table: "clean.webhook_identity_resolution",
     columns: ["flight_instance_id", "initial_service_date"],
     retentionClass: "raw_provider_content",
-    disposition: "classification-required",
+    disposition: "expiry-covered",
+    owner: "providerIdentityExpiry_v39",
+    note: "Migration 0052 permits exactly one audit-preserving transition and providerIdentityExpiry_v39 now selects, tombstones and clears the copied ID/service date while retaining resolution status/reason/hash/timestamps.",
+  },
+  {
+    id: "downstream-canonical-flight-instance-id-encoding",
+    table: "clean.flight_events",
+    columns: ["flight_instance_id"],
+    retentionClass: "derived_work_candidate",
+    disposition: "derived-work-proof-required",
     owner: "UNVERIFIED",
-    note: "Resolution status/reason/hash can be project audit metadata, but the propagated encoded leg ID and copied initial service date remain unresolved.",
+    note: "The surviving research-layer leg:<8 hex chars> identifier is only a 32-bit SHA-256 prefix over a structured flight identity. Temporary copies now expire, but downstream long-lived copies are not assumed non-reconstructable without a domain/inversion proof or a retention-safe redesign.",
   },
   {
     id: "prepost-provider-row",
@@ -151,11 +156,11 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
   {
     id: "fids-response-payload",
     table: "clean.fids_query_response",
-    columns: ["raw_payload"],
+    columns: ["raw_payload", "response_hash"],
     retentionClass: "live_fids_cache",
     disposition: "expiry-covered",
-    owner: "retentionExpiry_v39",
-    note: "Raw FIDS response payload is on the independent FIDS clock (24h maximum under owner-provided account evidence).",
+    owner: "retentionExpiry_v39+0053",
+    note: "Raw FIDS response payload and its raw-response fingerprint expire on the independent FIDS clock; migration 0053 extends the audited one-way transition to clear response_hash too.",
   },
   {
     id: "fids-population-provider-values",
@@ -163,13 +168,14 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     columns: [
       "flight_number", "carrier_iata", "carrier_icao", "call_sign", "dep_airport_icao", "dep_airport_iata",
       "arr_airport_icao", "arr_airport_iata", "dep_scheduled_utc", "arr_scheduled_utc", "provider_record_key",
-      "coverage_state", "from_local", "to_local", "airport_iana_timezone", "scope_classification",
-      "codeshare_resolution_status", "fids_retrieval_utc", "provider_api_version",
+      "raw_payload_sha256", "coverage_state", "population_query_id", "from_local", "to_local",
+      "airport_iana_timezone", "scope_classification", "codeshare_resolution_status", "fids_retrieval_utc",
+      "available_at", "response_hash", "canonical_flight_instance_id", "analytic_identity_id", "provider_api_version",
     ],
     retentionClass: "live_fids_cache",
-    disposition: "classification-required",
-    owner: "UNVERIFIED",
-    note: "Provider-observable FIDS/schedule values are copied outside raw_payload and cannot inherit a longer lifetime merely by being normalized.",
+    disposition: "expiry-covered",
+    owner: "retentionExpiry_v39+0053",
+    note: "Migration 0053 atomically creates child tombstones and nulls normalized provider/identity fields when the parent raw FIDS response expires. The durable experiment denominator is moved to a random project-owned population_member_id and research-membership state.",
   },
   {
     id: "semantic-event-copied-provider-values",
@@ -230,6 +236,24 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     disposition: "classification-required",
     owner: "UNVERIFIED",
     note: "Prediction snapshot contains exact copied provider state in addition to derived/project fields.",
+  },
+  {
+    id: "airborne-eligibility-provider-evidence",
+    table: "clean.airborne_eligibility_evidence",
+    columns: ["flight_instance_id", "population_query_id", "evidence_source", "movement_milestone", "evidence_observed_utc", "provider_api_version", "evidence_hash"],
+    retentionClass: "raw_provider_content",
+    disposition: "classification-required",
+    owner: "UNVERIFIED",
+    note: "Eligibility audit evidence can carry copied provider identity/milestone/provenance. It must receive a field-level expiry or a separately demonstrated non-reconstructable research representation.",
+  },
+  {
+    id: "airborne-quarantine-provider-evidence",
+    table: "clean.airborne_quarantine",
+    columns: ["flight_instance_id", "evidence_json"],
+    retentionClass: "raw_provider_content",
+    disposition: "classification-required",
+    owner: "UNVERIFIED",
+    note: "Quarantine reason/state is project audit metadata, but encoded identity and evidence_json may preserve provider values and therefore remain unresolved.",
   },
   {
     id: "collection-batch-provider-account-values",
