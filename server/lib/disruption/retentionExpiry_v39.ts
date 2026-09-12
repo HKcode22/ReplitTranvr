@@ -238,13 +238,15 @@ export async function collectRetentionExpiryCandidates(
     const rows = await queryRows(
       `SELECT id, created_at, raw_item, raw_item_sha256,
               flight_number, carrier_iata, carrier_icao, status, status_code,
-              last_updated_utc, departure_scheduled_utc, arrival_scheduled_utc
+              last_updated_utc, departure_scheduled_utc, arrival_scheduled_utc,
+              canonical_flight_instance_id
          FROM clean.raw_delivery_item
         WHERE provider_content_expired_at_utc IS NULL
           AND created_at <= $1::timestamptz
           AND (raw_item IS NOT NULL OR flight_number IS NOT NULL OR carrier_iata IS NOT NULL OR carrier_icao IS NOT NULL
                OR status IS NOT NULL OR status_code IS NOT NULL OR last_updated_utc IS NOT NULL
-               OR departure_scheduled_utc IS NOT NULL OR arrival_scheduled_utc IS NOT NULL)
+               OR departure_scheduled_utc IS NOT NULL OR arrival_scheduled_utc IS NOT NULL
+               OR canonical_flight_instance_id IS NOT NULL)
         ORDER BY created_at, id LIMIT $2`,
       [rawCutoff, room()],
     );
@@ -260,6 +262,7 @@ export async function collectRetentionExpiryCandidates(
         last_updated_utc: r.last_updated_utc,
         departure_scheduled_utc: r.departure_scheduled_utc,
         arrival_scheduled_utc: r.arrival_scheduled_utc,
+        canonical_flight_instance_id: r.canonical_flight_instance_id,
       };
       out.push(candidate({
         sourceTable: "clean.raw_delivery_item",
@@ -500,6 +503,7 @@ async function expireOne(client: PoolClient, c: RetentionExpiryCandidate, runId:
               last_updated_utc=NULL,
               departure_scheduled_utc=NULL,
               arrival_scheduled_utc=NULL,
+              canonical_flight_instance_id=NULL,
               raw_expired_at_utc=COALESCE(raw_expired_at_utc,now()),
               provider_content_expired_at_utc=now()
         WHERE id=$1 AND provider_content_expired_at_utc IS NULL`,
