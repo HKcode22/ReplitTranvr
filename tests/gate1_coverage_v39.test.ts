@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildGate1CoverageArtifact, serializeGate1Artifact } from "../server/lib/disruption/gate1Coverage_v39";
+import { buildGate1CoverageArtifact, serializeGate1Artifact, verifyGate1CoverageArtifact } from "../server/lib/disruption/gate1Coverage_v39";
 import { runGate1Coverage } from "../scripts/measure_coverage";
 
 const identity = { evidenceId: "GATE-1-20260911-001", authorizationId: "AUTH-20260911-G1" };
+const prerequisitePass = () => ({ pass: true, failures: [] as string[] });
 
 function validInput() {
   return {
@@ -31,10 +32,19 @@ describe("Gate 1 coverage artifact", () => {
     expect(a.coverage?.source_list_handling).toBe("transient-not-committed");
     expect(a.artifact_sha256).toBe(b.artifact_sha256);
     expect(a.artifact_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(verifyGate1CoverageArtifact(a).pass).toBe(true);
     const text = serializeGate1Artifact(a);
     expect(text).not.toContain("KLAX");
     expect(text).not.toContain("WSSS");
     expect(text).not.toContain("OMAA");
+  });
+
+  it("rejects retained historical/sanitized artifacts and tampering", () => {
+    const current = buildGate1CoverageArtifact(validInput(), identity);
+    const retained = { ...current, schema_version: "v3.9-gate1-coverage-sanitized-1", status: "PASS_MEASUREMENT_RETAINED" };
+    expect(verifyGate1CoverageArtifact(retained).pass).toBe(false);
+    const tampered = { ...current, universe_count: 999 };
+    expect(verifyGate1CoverageArtifact(tampered).failures).toContain("artifact-hash-mismatch");
   });
 
   it("blocks on missing feed or empty catalog, never zero-fills", () => {
@@ -63,7 +73,15 @@ describe("Gate 1 coverage command", () => {
 
   it("refuses before any provider call without valid AUTH", async () => {
     const r = reader();
-    await expect(runGate1Coverage(args, r, () => false, vi.fn())).rejects.toThrow("AUTH verification failed");
+    await expect(runGate1Coverage(args, r, () => false, vi.fn(), prerequisitePass)).rejects.toThrow("AUTH verification failed");
+    expect(r.listFeedAirports).not.toHaveBeenCalled();
+  });
+
+  it("refuses before any provider call when prerequisite P is absent or stale", async () => {
+    const r = reader();
+    const prerequisiteBlocked = vi.fn().mockReturnValue({ pass: false, failures: ["artifact-missing"] });
+    await expect(runGate1Coverage(args, r, () => true, vi.fn(), prerequisiteBlocked)).rejects.toThrow("prerequisite P PASS artifact required");
+    expect(prerequisiteBlocked).toHaveBeenCalledOnce();
     expect(r.listFeedAirports).not.toHaveBeenCalled();
   });
 
@@ -71,7 +89,7 @@ describe("Gate 1 coverage command", () => {
     const r = reader();
     const authorize = vi.fn().mockReturnValue(true);
     const writeArtifact = vi.fn();
-    const artifact = await runGate1Coverage(args, r, authorize, writeArtifact);
+    const artifact = await runGate1Coverage(args, r, authorize, writeArtifact, prerequisitePass);
     expect(authorize).toHaveBeenCalledWith("auth.json", "Phase 2 / Gate 1", identity.authorizationId);
     expect(r.listFeedAirports).toHaveBeenCalledTimes(3);
     expect(artifact.universe_count).toBe(2);
@@ -83,6 +101,6 @@ describe("Gate 1 coverage command", () => {
   it("fails closed when a feed is uncertain", async () => {
     const r = reader();
     r.listFeedAirports = vi.fn(async () => null);
-    await expect(runGate1Coverage(args, r, () => true, vi.fn())).rejects.toThrow("BLOCKED");
+    await expect(runGate1Coverage(args, r, () => true, vi.fn(), prerequisitePass)).rejects.toThrow("BLOCKED");
   });
 });

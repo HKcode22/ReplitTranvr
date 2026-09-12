@@ -1,6 +1,6 @@
 /** V3.9 prerequisite-P security/retention verifier. */
-import { readFileSync } from "fs";
-import { join } from "path";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
 import { Pool } from "pg";
 import {
   RETENTION_SURFACES,
@@ -11,6 +11,23 @@ import {
   type RetentionAdapters,
   type WebhookSecurityEvidence,
 } from "../server/lib/disruption/retentionSecurity_v39";
+import {
+  parsePrepaidGovernanceEvidence,
+  verifyPrepaidGovernanceEvidence,
+  verifyRawBefore2xxWiring,
+  verifyRawDerivedTombstoneDistinction,
+  verifyRetentionDryRunSource,
+  verifyRetentionExpiryPropagationSource,
+  verifySharedSettlementOwner,
+  type PrepaidGovernanceEvidence,
+} from "../server/lib/disruption/prepaidSecurityRetention_v39";
+import {
+  PREREQUISITE_P_ARTIFACT_RELATIVE_PATH,
+  buildPrerequisitePArtifact,
+  currentGitSha,
+  prerequisitePSecurityContractHash,
+  serializePrerequisitePArtifact,
+} from "../server/lib/disruption/prerequisitePArtifact_v39";
 
 interface Check { name:string; pass:boolean; detail:string }
 type SurfaceState="DEPLOYED"|"NOT_DEPLOYED"|"UNKNOWN";
@@ -40,51 +57,100 @@ async function verifyWebhookLive(e:WebhookSecurityEvidence):Promise<string[]>{
 async function verifyRetentionSurfaces(e:RetentionDeploymentEvidence|null):Promise<Check>{
   if(!e)return{name:"retention-deployment-surfaces",pass:false,detail:"missing-V39_RETENTION_DEPLOYMENT_EVIDENCE"};
   const unknown=RETENTION_SURFACES.filter(s=>!e.surfaces?.[s]||e.surfaces[s]==="UNKNOWN");if(unknown.length)return{name:"retention-deployment-surfaces",pass:false,detail:`UNKNOWN surfaces: ${unknown.join(",")}`};
-  // A configured production database means the primary storage surface exists;
-  // calling it NOT_DEPLOYED is an invalid evidence claim, not a safe default.
-  if(process.env.DATABASE_URL && e.surfaces.primary!=="DEPLOYED"){
-    return{name:"retention-deployment-surfaces",pass:false,detail:"primary database is configured but evidence does not declare primary=DEPLOYED"};
-  }
-  const deployed=RETENTION_SURFACES.filter(s=>e.surfaces[s]==="DEPLOYED");
-  // This verifier currently has a real adapter only for primary PostgreSQL.
-  // Declared deployed replica/backup/object/log surfaces remain BLOCKED until a
-  // real deletion/expiry verifier exists for that surface.
-  const unsupported=deployed.filter(s=>s!=="primary");if(unsupported.length)return{name:"retention-deployment-surfaces",pass:false,detail:`real adapter missing for DEPLOYED surfaces: ${unsupported.join(",")}`};
-  if(e.surfaces.primary==="DEPLOYED"){
-    try{
-      const {pool}=await import("../server/db");const tomb=await pool.query(`SELECT surface,record_id,content_hash,expired_at FROM clean.retention_tombstone WHERE expired_at<=now() ORDER BY expired_at ASC`);
-      const primary={listExpired:async()=>(tomb.rows as any[]).map(r=>({id:`${r.surface}:${r.record_id}`,contentHash:r.content_hash,expiresAt:new Date(r.expired_at).toISOString(),containsRawContent:false}))};
-      const dry=await executeRetentionDryRun({primary} as unknown as RetentionAdapters,new Date().toISOString(),true);
-      if(!/^[a-f0-9]{64}$/.test(dry.evidenceHash))throw new Error("invalid dry-run evidence hash");
-      return{name:"retention-deployment-surfaces",pass:true,detail:`primary real dry-run evidence=${dry.evidenceHash}; other surfaces explicitly NOT_DEPLOYED`};
-    }catch(err:any){return{name:"retention-deployment-surfaces",pass:false,detail:`primary real adapter failed:${err?.message??err}`};}
-  }
-  return{name:"retention-deployment-surfaces",pass:false,detail:"primary storage surface not verified"};
+  if(process.env.DATABASE_URL&&e.surfaces.primary!=="DEPLOYED")return{name:"retention-deployment-surfaces",pass:false,detail:"primary database is configured but primary is not DEPLOYED"};
+  const unsupported=RETENTION_SURFACES.filter(s=>s!=="primary"&&e.surfaces[s]==="DEPLOYED");
+  if(unsupported.length)return{name:"retention-deployment-surfaces",pass:false,detail:`deployed surfaces require verified expiry/deletion adapter: ${unsupported.join(",")}`};
+  if(e.surfaces.primary!=="DEPLOYED")return{name:"retention-deployment-surfaces",pass:false,detail:"primary storage surface not verified"};
+  try{
+    const {pool}=await import("../server/db");
+    const q=await pool.query(`SELECT to_regclass('clean.retention_tombstone') tomb,
+      to_regclass('clean.adb_retention_policy_v39') policy,
+      to_regclass('clean.adb_retention_enforcement_event_v39') enforcement`);
+    const r=q.rows[0]??{};
+    if(!r.tomb||!r.policy||!r.enforcement)return{name:"retention-deployment-surfaces",pass:false,detail:"primary retention schema incomplete"};
+    return{name:"retention-deployment-surfaces",pass:true,detail:"primary deployed with retention control schema; replica/backup/object/log explicitly NOT_DEPLOYED"};
+  }catch(err:any){return{name:"retention-deployment-surfaces",pass:false,detail:`primary retention schema check failed:${err?.message??err}`};}
+}
+
+function governanceEvidence(): { value:PrepaidGovernanceEvidence|null; parseFailure:string|null } {
+  const raw=process.env.V39_PREPAID_GOVERNANCE_EVIDENCE;
+  if(!raw)return{value:null,parseFailure:null};
+  try{return{value:parsePrepaidGovernanceEvidence(raw),parseFailure:null}}catch(err:any){return{value:null,parseFailure:String(err?.message??err)}}
+}
+
+async function verifyExpiryLive(retentionMatrixHash:string|null):Promise<Check>{
+  const staticVerdict=verifyRetentionExpiryPropagationSource();
+  if(!staticVerdict.pass)return{name:"retention-expiry-propagation",pass:false,detail:staticVerdict.detail};
+  try{
+    const {pool}=await import("../server/db");
+    const cols=await pool.query(`SELECT table_name,column_name FROM information_schema.columns
+      WHERE table_schema='clean' AND table_name = ANY($1::text[]) AND column_name IN ('retention_policy_hash','retention_expires_at')`,
+      [["raw_delivery","raw_delivery_item","raw_airborne_events","fids_query_response","flight_population"]]);
+    const seen=new Set(cols.rows.map((r:any)=>`${r.table_name}.${r.column_name}`));
+    const missing:string[]=[];
+    for(const t of ["raw_delivery","raw_delivery_item","raw_airborne_events","fids_query_response","flight_population"]){for(const c of ["retention_policy_hash","retention_expires_at"]){if(!seen.has(`${t}.${c}`))missing.push(`${t}.${c}`)}}
+    if(missing.length)return{name:"retention-expiry-propagation",pass:false,detail:`missing retention columns: ${missing.join(",")}`};
+    const event=await pool.query(`SELECT enabled,retention_matrix_hash,security_contract_hash,owner_approval_ref
+      FROM clean.adb_retention_enforcement_event_v39 ORDER BY event_id DESC LIMIT 1`);
+    if(!event.rowCount||event.rows[0].enabled!==true)return{name:"retention-expiry-propagation",pass:false,detail:"retention enforcement has no current ENABLED event"};
+    if(retentionMatrixHash&&event.rows[0].retention_matrix_hash!==retentionMatrixHash)return{name:"retention-expiry-propagation",pass:false,detail:"retention enforcement matrix hash mismatch"};
+    const expectedContract=prerequisitePSecurityContractHash();
+    if(event.rows[0].security_contract_hash!==expectedContract)return{name:"retention-expiry-propagation",pass:false,detail:"retention enforcement security-contract hash mismatch"};
+    const policies=await pool.query(`SELECT DISTINCT content_class FROM clean.adb_retention_policy_v39
+      WHERE retention_matrix_hash=$1 AND effective_from_utc<=now()`,[retentionMatrixHash]);
+    const classes=new Set(policies.rows.map((r:any)=>String(r.content_class)));
+    const missingPolicies=["webhook_raw_delivery","airborne_raw","fids_population"].filter(x=>!classes.has(x));
+    if(missingPolicies.length)return{name:"retention-expiry-propagation",pass:false,detail:`active raw retention policy missing: ${missingPolicies.join(",")}`};
+    return{name:"retention-expiry-propagation",pass:true,detail:`DB-triggered expiry active for webhook/AIRBORNE/FIDS; enforcement contract=${expectedContract.slice(0,12)}…`};
+  }catch(err:any){return{name:"retention-expiry-propagation",pass:false,detail:`retention expiry live check failed:${err?.message??err}`};}
+}
+
+async function verifyRetentionDryRunLive(deployment:RetentionDeploymentEvidence|null):Promise<Check>{
+  const sourceVerdict=verifyRetentionDryRunSource();
+  if(!sourceVerdict.pass)return{name:"retention-dry-run",pass:false,detail:sourceVerdict.detail};
+  if(!deployment||deployment.surfaces.primary!=="DEPLOYED")return{name:"retention-dry-run",pass:false,detail:"primary deployment state unavailable"};
+  if(RETENTION_SURFACES.some(s=>s!=="primary"&&deployment.surfaces[s]!=="NOT_DEPLOYED"))return{name:"retention-dry-run",pass:false,detail:"non-primary retention surface not explicitly NOT_DEPLOYED"};
+  try{
+    const {pool}=await import("../server/db");
+    const rows=await pool.query(`SELECT surface,record_id,content_hash,expires_at FROM clean.list_expired_retention_candidates_v39(now()) ORDER BY record_id`);
+    const empty={listExpired:async()=>[] as any[]};
+    const primary={listExpired:async()=>rows.rows.map((r:any)=>({id:String(r.record_id),contentHash:String(r.content_hash),expiresAt:new Date(r.expires_at).toISOString(),containsRawContent:true}))};
+    const adapters={primary,replica:empty,backup:empty,object:empty,log:empty} as RetentionAdapters;
+    const dry=await executeRetentionDryRun(adapters,new Date().toISOString(),true);
+    return{name:"retention-dry-run",pass:/^[a-f0-9]{64}$/.test(dry.evidenceHash),detail:`actual raw expiry candidates=${dry.actions.length}; evidence=${dry.evidenceHash}`};
+  }catch(err:any){return{name:"retention-dry-run",pass:false,detail:`actual raw expiry dry-run failed:${err?.message??err}`};}
 }
 
 async function main(){
-  const checks:Check[]=[];const db=parseEvidence<DatabaseRoleEvidence>("V39_DB_ROLE_EVIDENCE");
+  const artifactPath=join(process.cwd(),PREREQUISITE_P_ARTIFACT_RELATIVE_PATH);rmSync(artifactPath,{force:true});
+  const checks:Check[]=[];
+  const db=parseEvidence<DatabaseRoleEvidence>("V39_DB_ROLE_EVIDENCE");
   if(!db)checks.push({name:"least-privilege-db-tls",pass:false,detail:"missing-V39_DB_ROLE_EVIDENCE"});else{const s=checkLeastPrivilege(db),l=await verifyRoleLive(db.role),all=[...s.failures,...l];checks.push({name:"least-privilege-db-tls",pass:!all.length,detail:all.join(",")||`role=${db.role} live-verified`})}
   const web=parseEvidence<WebhookSecurityEvidence>("V39_WEBHOOK_SECURITY_EVIDENCE");
-  if(!web)checks.push({name:"webhook-tls-auth-replay",pass:false,detail:"missing-V39_WEBHOOK_SECURITY_EVIDENCE"});else{const s=checkWebhookSecurity(web),l=await verifyWebhookLive(web),all=[...s.failures,...l];checks.push({name:"webhook-tls-auth-replay",pass:!all.length,detail:all.join(",")||"runtime ingress verified"})}
-  checks.push(await verifyRetentionSurfaces(parseEvidence<RetentionDeploymentEvidence>("V39_RETENTION_DEPLOYMENT_EVIDENCE")));
-  try {
-    const { RETENTION_MATRIX_HASH, parseRetentionMatrixEvidence, resolveRetentionMatrix, verifyRetentionMatrix } = await import("../server/lib/disruption/retentionMatrix_v39");
-    const overlayRaw = process.env.V39_RETENTION_MATRIX_EVIDENCE;
-    if (!overlayRaw) {
-      const verdict = verifyRetentionMatrix();
-      checks.push({ name: "retention-content-matrix", pass: false, detail: `missing-V39_RETENTION_MATRIX_EVIDENCE;${verdict.failures.slice(0, 2).join(",")}` });
-    } else {
-      const { rows, failures } = resolveRetentionMatrix(parseRetentionMatrixEvidence(overlayRaw));
-      const verdict = verifyRetentionMatrix(rows);
-      const all = [...failures, ...verdict.failures];
-      checks.push({ name: "retention-content-matrix", pass: all.length === 0, detail: all.length === 0 ? `matrix=${RETENTION_MATRIX_HASH.slice(0, 12)}… verified` : all.slice(0, 5).join(",") });
-    }
-  } catch (err: any) { checks.push({ name: "retention-content-matrix", pass: false, detail: `matrix-check-error:${err?.message ?? err}` }); }
+  if(!web)checks.push({name:"webhook-tls-auth-replay",pass:false,detail:"missing-V39_WEBHOOK_SECURITY_EVIDENCE"});else{const s=checkWebhookSecurity(web),l=await verifyWebhookLive(web),all=[...s.failures,...l];checks.push({name:"webhook-tls-auth-replay",pass:!all.length,detail:all.join(",")||"runtime ingress TLS/auth/replay verified"})}
+  const deployment=parseEvidence<RetentionDeploymentEvidence>("V39_RETENTION_DEPLOYMENT_EVIDENCE");checks.push(await verifyRetentionSurfaces(deployment));
+
+  let retentionMatrixHash:string|null=null;
+  try{
+    const {RETENTION_MATRIX_HASH,parseRetentionMatrixEvidence,resolveRetentionMatrix,verifyRetentionMatrix}=await import("../server/lib/disruption/retentionMatrix_v39");retentionMatrixHash=RETENTION_MATRIX_HASH;const overlayRaw=process.env.V39_RETENTION_MATRIX_EVIDENCE;
+    if(!overlayRaw){const verdict=verifyRetentionMatrix();checks.push({name:"retention-content-matrix",pass:false,detail:`missing-V39_RETENTION_MATRIX_EVIDENCE;${verdict.failures.slice(0,2).join(",")}`})}
+    else{const {rows,failures}=resolveRetentionMatrix(parseRetentionMatrixEvidence(overlayRaw));const verdict=verifyRetentionMatrix(rows),all=[...failures,...verdict.failures];checks.push({name:"retention-content-matrix",pass:all.length===0,detail:all.length===0?`matrix=${RETENTION_MATRIX_HASH.slice(0,12)}… verified`:all.slice(0,5).join(",")})}
+  }catch(err:any){checks.push({name:"retention-content-matrix",pass:false,detail:`matrix-check-error:${err?.message??err}`})}
+
+  const gov=governanceEvidence();const govVerdict=verifyPrepaidGovernanceEvidence(gov.value);
+  checks.push({name:"governance-terms-owner-reference-license",pass:govVerdict.pass,detail:gov.parseFailure??(govVerdict.failures.join(",")||`verified=${gov.value?.verifiedDate}; traffic=${gov.value?.trafficReferenceSourceName}`)});
+  checks.push({name:"credentials-secret-redaction",pass:!!gov.value&&gov.value.credentialsOutsideLogsVerified===true&&gov.value.secretRedactionVerified===true,detail:gov.value?`credentialsOutsideLogs=${gov.value.credentialsOutsideLogsVerified}; secretRedaction=${gov.value.secretRedactionVerified}`:"missing governance evidence"});
+  const rawBefore=verifyRawBefore2xxWiring();checks.push({name:"raw-before-2xx",pass:rawBefore.pass,detail:rawBefore.detail});
+  checks.push(await verifyExpiryLive(retentionMatrixHash));
+  const distinction=verifyRawDerivedTombstoneDistinction();checks.push({name:"raw-derived-tombstone-distinction",pass:distinction.pass,detail:distinction.detail});
+  const settlement=verifySharedSettlementOwner();checks.push({name:"shared-settlement-configuration",pass:settlement.pass&&!!gov.value&&gov.value.sharedSettlementConfigurationVerified===true,detail:`${settlement.detail}; liveEvidence=${gov.value?.sharedSettlementConfigurationVerified===true}`});
+  checks.push(await verifyRetentionDryRunLive(deployment));
   try{const {pool}=await import("../server/db");await pool.query("SELECT 1 FROM clean.adb_incident_stop WHERE resolved=false LIMIT 1");const c=readFileSync(join(process.cwd(),"server","lib","disruption","adbCollectionController_v3.ts"),"utf8");checks.push({name:"incident-stop-refusal",pass:c.includes("clean.adb_incident_stop")&&c.includes("REFUSED_INCIDENT_STOP"),detail:"persistent incident admission source inspected"})}catch(err:any){checks.push({name:"incident-stop-refusal",pass:false,detail:`${err?.message??err}`})}
+
   for(const c of checks)console.log(`[${c.pass?"PASS":"BLOCKED"}] ${c.name} - ${c.detail}`);
-  const pass=checks.length>0&&checks.every(c=>c.pass);
-  console.log(`[${pass?"PASS":"BLOCKED"}] PREPAID_SECURITY_RETENTION - ${pass?"prerequisite P evidence is complete for the verified runtime":"one or more prerequisite-P checks remain unresolved"}`);
-  if(!pass)process.exitCode=1;
+  const requiredNames=new Set(checks.map(c=>c.name));
+  const pass=checks.length>0&&checks.every(c=>c.pass)&&!!retentionMatrixHash&&requiredNames.size===checks.length;
+  if(pass&&retentionMatrixHash){try{const artifact=buildPrerequisitePArtifact({verifiedAtUtc:new Date().toISOString(),codeSha:currentGitSha(),securityContractSha256:prerequisitePSecurityContractHash(),retentionMatrixSha256:retentionMatrixHash,checks});mkdirSync(dirname(artifactPath),{recursive:true});writeFileSync(artifactPath,serializePrerequisitePArtifact(artifact),{encoding:"utf8",mode:0o600});console.log(`[PASS] PREPAID_SECURITY_RETENTION - full prerequisite-P checklist verified; artifact=${PREREQUISITE_P_ARTIFACT_RELATIVE_PATH} sha256=${artifact.artifact_sha256}`);return}catch(err:any){rmSync(artifactPath,{force:true});console.log(`[BLOCKED] PREPAID_SECURITY_RETENTION - closure artifact failed:${err?.message??err}`);process.exitCode=1;return}}
+  console.log("[BLOCKED] PREPAID_SECURITY_RETENTION - one or more prerequisite-P controls remain unresolved");process.exitCode=1;
 }
 void main();
