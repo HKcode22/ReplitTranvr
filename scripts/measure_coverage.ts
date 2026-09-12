@@ -34,7 +34,7 @@ type AuthVerifier = (authFile: string, phaseGate: string, auth: string) => boole
 type PrerequisitePVerifier = () => { pass: boolean; failures: string[] };
 
 function verifyCurrentPrerequisiteP(): { pass: boolean; failures: string[] } {
-  const verdict = readCurrentPrerequisitePArtifact(process.cwd(), undefined, RETENTION_MATRIX_HASH);
+  const verdict = readCurrentPrerequisitePArtifact(process.cwd(), RETENTION_MATRIX_HASH);
   return { pass: verdict.pass, failures: verdict.failures };
 }
 
@@ -60,11 +60,12 @@ export async function runGate1Coverage(
   if (!authFile) throw new Error("REFUSED: --auth-file is required");
   if (!evidenceId || !/^GATE-1-\d{8}-[A-Z0-9]+$/.test(evidenceId)) throw new Error("REFUSED: valid --evidence-id is required");
 
-  // Authorization is established before touching the provider.
   if (!authorize(authFile, GATE1_PHASE_GATE, auth)) throw new Error("REFUSED: AUTH verification failed");
 
-  // Binding order: prerequisite P must be a durable PASS on this exact code
-  // state before Gate 1 may read even documented-free provider coverage.
+  // Binding order: prerequisite P must be a durable PASS bound to the current
+  // retention/security contract before Gate 1 may read even documented-free
+  // provider coverage. Evidence/doc-only commits do not invalidate P, but a
+  // relevant safety-owner change changes the contract hash and fails closed.
   const prerequisite = verifyPrerequisiteP();
   if (!prerequisite.pass) {
     throw new Error(`REFUSED: prerequisite P PASS artifact required (${prerequisite.failures.join(",") || "invalid"})`);
