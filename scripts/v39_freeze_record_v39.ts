@@ -2,13 +2,14 @@
  * v39:reference:freeze + v39:preprobe:freeze.
  *
  * This command is an admission checker, not a data-source chooser. It refuses
- * until Gate-1 evidence, the frozen region mapping and an actually obtained,
- * permitted 12-month traffic/schedule reference are present. It never converts
- * a candidate/provider name into a PASS by itself.
+ * until prerequisite P, Gate-1 evidence, the frozen region mapping and an
+ * actually obtained, permitted 12-month traffic/schedule reference are present.
+ * It never converts a candidate/provider name into a PASS by itself.
  */
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { verifyGate1CoverageArtifact } from "../server/lib/disruption/gate1Coverage_v39";
+import { loadVerifiedPrerequisitePPass } from "../server/lib/disruption/phase2Admission_v39";
 
 const mode = process.argv[2] === "preprobe" ? "preprobe" : "reference";
 
@@ -21,6 +22,17 @@ interface TrafficDecision {
 async function main(): Promise<void> {
   const root = process.cwd();
   const missing: string[] = [];
+
+  // Re-verify P independently. A stale Gate-1 artifact must never authorize a
+  // later freeze after the Plan, retention rules, or provider-content inventory
+  // have changed.
+  try {
+    const p = loadVerifiedPrerequisitePPass(root);
+    console.log(`  [READY] prerequisite P PASS hash=${p.artifact_sha256.slice(0, 12)}…`);
+  } catch {
+    missing.push("current prerequisite-P PASS evidence (artifacts/prepaid-security-retention-pass.json)");
+  }
+
   const coveragePath = join(root, "artifacts", "gate1-coverage.json");
   if (!existsSync(coveragePath)) {
     missing.push("fresh Gate-1 PASS evidence (artifacts/gate1-coverage.json)");
