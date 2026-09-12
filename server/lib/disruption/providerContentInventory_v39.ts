@@ -73,6 +73,15 @@ export const PROVIDER_CONTENT_COLUMN_GROUPS: readonly ProviderContentColumnGroup
     note: "Indexable copies extracted from raw_item are cleared together with raw_item.",
   },
   {
+    id: "raw-delivery-item-canonical-id-encoding",
+    table: "clean.raw_delivery_item",
+    columns: ["canonical_flight_instance_id"],
+    retentionClass: "derived_work_candidate",
+    disposition: "derived-work-proof-required",
+    owner: "UNVERIFIED",
+    note: "The canonical leg ID is project-generated, but the current leg:<8 hex chars> representation is only a 32-bit SHA-256 prefix over structured flight identity. It is not assumed non-reconstructable and is not silently covered by raw-item expiry while this proof remains unresolved.",
+  },
+  {
     id: "processing-attempt-provider-bearing-errors",
     table: "clean.processing_attempt",
     columns: ["validation_errors", "parse_errors", "storage_errors", "error_message"],
