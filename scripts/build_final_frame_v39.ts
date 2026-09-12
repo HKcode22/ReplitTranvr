@@ -2,8 +2,9 @@
  * Phase 2D final sampling-frame owner.
  *
  * This is the binding v39:frame:build command. It deliberately refuses before
- * any provider call unless BOTH a fresh valid Gate-1 PASS artifact and a frozen
- * permitted traffic reference are present. It does not use curated/human tiers.
+ * any provider call unless prerequisite P, a fresh valid Gate-1 PASS artifact,
+ * and a frozen permitted traffic reference are all present. It does not use
+ * curated/human tiers.
  *
  * Provider coverage membership is re-read transiently from the documented-free
  * coverage endpoints and must hash-match the frozen Gate-1 artifact exactly;
@@ -24,6 +25,7 @@ import {
   verifyGate1CoverageArtifact,
   type Gate1CoverageArtifact,
 } from "../server/lib/disruption/gate1Coverage_v39";
+import { loadVerifiedPrerequisitePPass } from "../server/lib/disruption/phase2Admission_v39";
 import {
   REGION_MAPPING_HASH,
   REGION_MAPPING_SOURCE,
@@ -278,7 +280,12 @@ async function persistFinalFrame(rows: FinalFrameRowV39[], traffic: FrozenTraffi
 export async function main(): Promise<number> {
   const root = process.cwd();
   try {
-    // Check all non-provider prerequisites before touching a coverage endpoint.
+    // P is re-verified here even though Gate 1 also requires it. This prevents
+    // stale/copied Gate-1 evidence or a direct frame invocation from bypassing
+    // the prerequisite after Plan/retention/inventory code changes.
+    loadVerifiedPrerequisitePPass(root);
+
+    // Check all remaining non-provider prerequisites before touching a coverage endpoint.
     const gate1 = loadGate1Artifact(root);
     const traffic = loadTrafficReference(root);
 
