@@ -1,0 +1,36 @@
+name: V3.9 Phase2 Audit Patch
+
+on:
+  push:
+    branches:
+      - v39-phase2-audit-repair
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[phase2-audit-bot]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply idempotent Phase2 audit patch
+        run: python3 scripts/v39_phase2_audit_patch.py
+      - name: Validate patch
+        run: |
+          git diff --check
+          grep -q 'PHASE2-AUDIT-20260911-001' SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md
+          grep -q 'PHASE2-AUDIT-CORRECTION-20260911' SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE2.md
+          grep -q 'CURRENT PHASE-2 RE-AUDIT STATUS' SEPmd/V3.9_IMPLEMENTATION_LOG.md
+          grep -q 'prerequisitePArtifact_v39.ts' server/lib/disruption/manifest_v3.ts
+          grep -q 'measure_coverage.ts' server/lib/disruption/manifest_v3.ts
+      - name: Commit patched records and remove temporary patch machinery
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm scripts/v39_phase2_audit_patch.py .github/workflows/v39-phase2-audit-patch.yml
+          git add SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE2.md SEPmd/V3.9_IMPLEMENTATION_LOG.md server/lib/disruption/manifest_v3.ts
+          git commit -m '[phase2-audit-bot] V3.9 Phase2 status and manifest correction'
+          git push origin HEAD:v39-phase2-audit-repair
