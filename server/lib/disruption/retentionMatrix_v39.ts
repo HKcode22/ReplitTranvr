@@ -44,9 +44,10 @@ export const RETENTION_MATRIX: readonly RetentionMatrixRow[] = Object.freeze([
   row("outcomes", ["clean.flight_outcomes"], "derived_work"),
   row("history_weather", ["clean.historical_feature_store", "clean.weather_observation", "clean.weather_forecast"], "derived_work"),
   row("sampling_frame", ["clean.adb_sampling_frame", "clean.adb_sampling_frame_registry"], "non_aerodatabox_metadata"),
-  // Gate-1's provider airport/feed list is provider Content unless and until a
-  // non-reconstructable aggregate-only artifact replaces it.
-  row("coverage_artifacts", ["artifacts/gate1-coverage.json"], "raw_api_content"),
+  // The committed Gate-1 artifact is aggregate-only: counts, hashes and
+  // provenance. Provider airport membership lists are transient and are not
+  // committed by the current owner.
+  row("coverage_artifacts", ["artifacts/gate1-coverage.json"], "non_aerodatabox_metadata"),
   row("probe_ledgers", ["clean.anchor_probe_results", "clean.adb_rest_attempt_ledger"], "non_aerodatabox_metadata"),
   row("settlement_ledgers", ["clean.adb_collection_batches", "clean.adb_ingest_events"], "non_aerodatabox_metadata"),
   row("manifests", ["clean.final_manifest", "SEPmd/V39_PREPROBE_FREEZE.json"], "non_aerodatabox_metadata"),
