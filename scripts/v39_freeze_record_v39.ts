@@ -8,6 +8,7 @@
  */
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import { verifyGate1CoverageArtifact } from "../server/lib/disruption/gate1Coverage_v39";
 
 const mode = process.argv[2] === "preprobe" ? "preprobe" : "reference";
 
@@ -22,9 +23,18 @@ async function main(): Promise<void> {
   const missing: string[] = [];
   const coveragePath = join(root, "artifacts", "gate1-coverage.json");
   if (!existsSync(coveragePath)) {
-    missing.push("Gate-1 coverage evidence (artifacts/gate1-coverage.json)");
+    missing.push("fresh Gate-1 PASS evidence (artifacts/gate1-coverage.json)");
   } else {
-    console.log("  [READY] Gate-1 measurement evidence exists (current committed form is sanitized counts/hashes only)");
+    try {
+      const coverage = JSON.parse(readFileSync(coveragePath, "utf8"));
+      if (!verifyGate1CoverageArtifact(coverage)) {
+        missing.push("fresh, untampered v3.9-gate1-coverage-2 PASS evidence; retained/sanitized historical Gate-1 evidence is not admissible");
+      } else {
+        console.log(`  [READY] fresh Gate-1 PASS evidence ${coverage.evidence_id} hash=${coverage.artifact_sha256.slice(0, 12)}…`);
+      }
+    } catch {
+      missing.push("valid fresh Gate-1 PASS evidence (artifacts/gate1-coverage.json)");
+    }
   }
 
   try {
