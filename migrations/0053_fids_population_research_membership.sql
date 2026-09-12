@@ -120,7 +120,7 @@ UPDATE clean.flight_snapshots s
    SET population_member_id = p.population_member_id
   FROM clean.flight_population p
  WHERE s.population_member_id IS NULL
-   AND s.population_query_id = p.population_query_id
+   AND s.population_query_id = p.population_query_id::text
    AND s.flight_instance_id = p.analytic_identity_id
    AND p.population_role = 'requested_airport_primary';
 
@@ -131,7 +131,7 @@ BEGIN
     SELECT p.population_member_id
       INTO NEW.population_member_id
       FROM clean.flight_population p
-     WHERE p.population_query_id = NEW.population_query_id
+     WHERE p.population_query_id::text = NEW.population_query_id
        AND p.analytic_identity_id = NEW.flight_instance_id
        AND p.population_role = 'requested_airport_primary'
        AND p.provider_content_expired_at_utc IS NULL
