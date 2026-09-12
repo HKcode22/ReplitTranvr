@@ -60,6 +60,11 @@ async function readJsonOrNull(resp: Response): Promise<any | null> {
   catch { return null; }
 }
 
+function safeHttpDiagnostic(operation: string, resp: Response): string {
+  const requestId = resp.headers.get("x-rapidapi-request-id");
+  return `[adb-v3] ${operation} HTTP ${resp.status}${requestId ? ` request_id=${requestId}` : ""} (body redacted)`;
+}
+
 function headers(json = false): Record<string, string> {
   const key = apiKey();
   const h: Record<string, string> = {
@@ -102,7 +107,7 @@ export async function getBalance(): Promise<SubscriptionBalance | null> {
   try {
     const resp = await throttledFetch(`${BASE_URL}/subscriptions/balance`, { headers: headers() });
     if (!resp.ok) {
-      console.warn(`[adb-v3] getBalance ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 300)}`);
+      console.warn(safeHttpDiagnostic("getBalance", resp));
       return null;
     }
     const raw: any = await readJsonOrNull(resp);
@@ -111,8 +116,8 @@ export async function getBalance(): Promise<SubscriptionBalance | null> {
       return null;
     }
     return normalizeBalance(raw?.balance ?? raw);
-  } catch (err: any) {
-    console.error("[adb-v3] getBalance error:", err?.message || err);
+  } catch {
+    console.error("[adb-v3] getBalance transport/error (details redacted)");
     return null;
   }
 }
@@ -202,13 +207,13 @@ export async function refillBalance(credits: number): Promise<SubscriptionBalanc
       body: JSON.stringify({ credits: Math.max(1, Math.floor(credits)) }),
     });
     if (!resp.ok) {
-      console.warn(`[adb-v3] refillBalance ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 300)}`);
+      console.warn(safeHttpDiagnostic("refillBalance", resp));
       return null;
     }
     const raw: any = await readJsonOrNull(resp);
     return normalizeBalance(raw?.balance ?? raw);
-  } catch (err: any) {
-    console.error("[adb-v3] refillBalance error:", err?.message || err);
+  } catch {
+    console.error("[adb-v3] refillBalance transport/error (details redacted)");
     return null;
   }
 }
@@ -244,17 +249,15 @@ export async function createSubscription(
     );
     const text = await resp.text().catch(() => "");
     if (!resp.ok) {
-      // Never print provider response bodies for subscription creation: an
-      // error response may echo the secret-bearing webhook target URL.
-      console.warn(`[adb-v3] createSubscription ${subjectType}/${subjectId} HTTP ${resp.status} (body redacted)`);
+      console.warn(safeHttpDiagnostic(`createSubscription ${subjectType}/${subjectId}`, resp));
       return null;
     }
     let raw: any;
     try { raw = JSON.parse(text); }
     catch { return null; }
     return normalizeSubscription(raw?.subscription ?? raw);
-  } catch (err: any) {
-    console.error("[adb-v3] createSubscription error:", err?.message || err);
+  } catch {
+    console.error("[adb-v3] createSubscription transport/error (details redacted)");
     return null;
   }
 }
@@ -264,15 +267,15 @@ export async function listSubscriptions(): Promise<WebhookSubscription[]> {
   try {
     const resp = await throttledFetch(`${BASE_URL}/subscriptions/webhook`, { headers: headers() });
     if (!resp.ok) {
-      console.warn(`[adb-v3] listSubscriptions ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 300)}`);
+      console.warn(safeHttpDiagnostic("listSubscriptions", resp));
       return [];
     }
     const raw: any = await readJsonOrNull(resp);
     const list = Array.isArray(raw) ? raw : raw?.subscriptions ?? raw?.items ?? [];
     if (!Array.isArray(list)) return [];
     return list.map(normalizeSubscription).filter((s): s is WebhookSubscription => s !== null);
-  } catch (err: any) {
-    console.error("[adb-v3] listSubscriptions error:", err?.message || err);
+  } catch {
+    console.error("[adb-v3] listSubscriptions transport/error (details redacted)");
     return [];
   }
 }
@@ -287,13 +290,12 @@ export async function listSubscriptionsStrict(): Promise<WebhookSubscription[]> 
   let resp: Response;
   try {
     resp = await throttledFetch(`${BASE_URL}/subscriptions/webhook`, { headers: headers() });
-  } catch (error: any) {
-    throw new Error(`R1_LIST_UNAVAILABLE: ${error?.message ?? error}`);
+  } catch {
+    throw new Error("R1_LIST_UNAVAILABLE: transport failure (details redacted)");
   }
   if (resp.status === 204) return [];
   if (!resp.ok) {
-    const body = (await resp.text().catch(() => "")).slice(0, 300);
-    throw new Error(`R1_LIST_UNAVAILABLE: HTTP ${resp.status} ${body}`);
+    throw new Error(`R1_LIST_UNAVAILABLE: HTTP ${resp.status} (body redacted)`);
   }
   const raw: any = await readJsonOrNull(resp);
   if (raw === null) throw new Error("R1_LIST_UNAVAILABLE: empty/invalid JSON response");
@@ -318,13 +320,13 @@ export async function getSubscription(subscriptionId: string): Promise<WebhookSu
       { headers: headers() },
     );
     if (!resp.ok) {
-      console.warn(`[adb-v3] getSubscription ${subscriptionId} ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 300)}`);
+      console.warn(safeHttpDiagnostic("getSubscription", resp));
       return null;
     }
     const raw: any = await readJsonOrNull(resp);
     return normalizeSubscription(raw?.subscription ?? raw);
-  } catch (err: any) {
-    console.error("[adb-v3] getSubscription error:", err?.message || err);
+  } catch {
+    console.error("[adb-v3] getSubscription transport/error (details redacted)");
     return null;
   }
 }
@@ -336,12 +338,12 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
       { method: "DELETE", headers: headers() },
     );
     if (resp.status >= 400) {
-      console.warn(`[adb-v3] deleteSubscription ${subscriptionId} ${resp.status}: ${(await resp.text().catch(() => "")).slice(0, 300)}`);
+      console.warn(safeHttpDiagnostic("deleteSubscription", resp));
       return false;
     }
     return true;
-  } catch (err: any) {
-    console.error("[adb-v3] deleteSubscription error:", err?.message || err);
+  } catch {
+    console.error("[adb-v3] deleteSubscription transport/error (details redacted)");
     return false;
   }
 }
@@ -354,8 +356,8 @@ export async function checkAirportFeeds(icao: string): Promise<AirportFeedsHealt
     );
     if (!resp.ok) return null;
     return await readJsonOrNull(resp);
-  } catch (err: any) {
-    console.error("[adb-v3] checkAirportFeeds error:", err?.message || err);
+  } catch {
+    console.error("[adb-v3] checkAirportFeeds transport/error (details redacted)");
     return null;
   }
 }
@@ -371,8 +373,8 @@ export async function listFeedAirports(service: FeedService): Promise<string[] |
     if (!raw || !Array.isArray(raw?.items)) return null;
     const items: string[] = raw.items.filter((x: unknown): x is string => typeof x === "string");
     return items.length > 0 ? items : null;
-  } catch (err: any) {
-    console.error("[adb-v3] listFeedAirports error:", err?.message || err);
+  } catch {
+    console.error("[adb-v3] listFeedAirports transport/error (details redacted)");
     return null;
   }
 }
@@ -471,8 +473,8 @@ export async function fetchFidsAirport(
       await sleepImpl(Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : RATE_LIMIT_BACKOFF_MS * attempt);
     }
     return null;
-  } catch (err: any) {
-    console.error(`[adb-v3] fetchFidsAirport ${icao} error:`, err?.message || err);
+  } catch {
+    console.error(`[adb-v3] fetchFidsAirport ${icao} transport/schema error (details redacted)`);
     return null;
   }
 }
