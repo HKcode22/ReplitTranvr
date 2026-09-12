@@ -29,7 +29,7 @@ describe("prerequisite-P retention matrix", () => {
   it("covers every Phase-2 content class with a stable hash", () => {
     expect(RETENTION_MATRIX.length).toBe(16);
     expect(RETENTION_MATRIX_HASH).toMatch(/^[a-f0-9]{64}$/);
-    expect(RETENTION_MATRIX.find((r) => r.contentClass === "coverage_artifacts")?.contentClassification).toBe("raw_api_content");
+    expect(RETENTION_MATRIX.find((r) => r.contentClass === "coverage_artifacts")?.contentClassification).toBe("non_aerodatabox_metadata");
   });
 
   it("blocks while any retention evidence is UNVERIFIED", () => {
