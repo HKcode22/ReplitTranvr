@@ -20,7 +20,18 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply DB isolation patch
-        run: python3 scripts/phase2_v39_db_split_patch_once.py
+        run: |
+          python3 scripts/phase2_v39_db_split_patch_once.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tests/v39_db_separation_v39.test.ts')
+          s=p.read_text()
+          bad='expect(provision).not.toContain("DATABASE_RUNTIME_URL", runtimeUrl");'
+          good='expect(provision).not.toContain("DATABASE_RUNTIME_URL\\\", runtimeUrl");'
+          if bad not in s:
+              raise SystemExit('expected malformed generated assertion missing')
+          p.write_text(s.replace(bad, good, 1))
+          PY
       - name: Validate targeted and offline suite
         run: |
           npx vitest run tests/v39_db_separation_v39.test.ts tests/phase0_closure_v39.test.ts tests/retention_matrix_v39.test.ts
