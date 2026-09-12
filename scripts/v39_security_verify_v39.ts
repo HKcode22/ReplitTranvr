@@ -15,6 +15,7 @@ import {
   PREREQUISITE_P_ARTIFACT_RELATIVE_PATH,
   buildPrerequisitePArtifact,
   currentGitSha,
+  prerequisitePSecurityContractHash,
   serializePrerequisitePArtifact,
 } from "../server/lib/disruption/prerequisitePArtifact_v39";
 
@@ -46,15 +47,10 @@ async function verifyWebhookLive(e:WebhookSecurityEvidence):Promise<string[]>{
 async function verifyRetentionSurfaces(e:RetentionDeploymentEvidence|null):Promise<Check>{
   if(!e)return{name:"retention-deployment-surfaces",pass:false,detail:"missing-V39_RETENTION_DEPLOYMENT_EVIDENCE"};
   const unknown=RETENTION_SURFACES.filter(s=>!e.surfaces?.[s]||e.surfaces[s]==="UNKNOWN");if(unknown.length)return{name:"retention-deployment-surfaces",pass:false,detail:`UNKNOWN surfaces: ${unknown.join(",")}`};
-  // A configured production database means the primary storage surface exists;
-  // calling it NOT_DEPLOYED is an invalid evidence claim, not a safe default.
   if(process.env.DATABASE_URL && e.surfaces.primary!=="DEPLOYED"){
     return{name:"retention-deployment-surfaces",pass:false,detail:"primary database is configured but evidence does not declare primary=DEPLOYED"};
   }
   const deployed=RETENTION_SURFACES.filter(s=>e.surfaces[s]==="DEPLOYED");
-  // This verifier currently has a real adapter only for primary PostgreSQL.
-  // Declared deployed replica/backup/object/log surfaces remain BLOCKED until a
-  // real deletion/expiry verifier exists for that surface.
   const unsupported=deployed.filter(s=>s!=="primary");if(unsupported.length)return{name:"retention-deployment-surfaces",pass:false,detail:`real adapter missing for DEPLOYED surfaces: ${unsupported.join(",")}`};
   if(e.surfaces.primary==="DEPLOYED"){
     try{
@@ -70,9 +66,6 @@ async function verifyRetentionSurfaces(e:RetentionDeploymentEvidence|null):Promi
 
 async function main(){
   const artifactPath=join(process.cwd(),PREREQUISITE_P_ARTIFACT_RELATIVE_PATH);
-  // A failed re-verification must never leave a stale PASS artifact usable by
-  // Gate 1. Remove it before checking anything, then rewrite only after every
-  // current-runtime prerequisite passes.
   rmSync(artifactPath,{force:true});
 
   const checks:Check[]=[];const db=parseEvidence<DatabaseRoleEvidence>("V39_DB_ROLE_EVIDENCE");
@@ -105,6 +98,7 @@ async function main(){
       const artifact=buildPrerequisitePArtifact({
         verifiedAtUtc:new Date().toISOString(),
         codeSha:currentGitSha(),
+        securityContractSha256:prerequisitePSecurityContractHash(),
         retentionMatrixSha256:retentionMatrixHash,
         checks,
       });
