@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildGate1CoverageArtifact, serializeGate1Artifact } from "../server/lib/disruption/gate1Coverage_v39";
+import { buildGate1CoverageArtifact, serializeGate1Artifact, verifyGate1CoverageArtifact } from "../server/lib/disruption/gate1Coverage_v39";
 import { runGate1Coverage } from "../scripts/measure_coverage";
 
 const identity = { evidenceId: "GATE-1-20260911-001", authorizationId: "AUTH-20260911-G1" };
@@ -35,6 +35,14 @@ describe("Gate 1 coverage artifact", () => {
     expect(text).not.toContain("KLAX");
     expect(text).not.toContain("WSSS");
     expect(text).not.toContain("OMAA");
+  });
+
+  it("verifies only the exact fresh PASS schema and rejects tampering or retained historical status", () => {
+    const pass = buildGate1CoverageArtifact(validInput(), identity);
+    expect(verifyGate1CoverageArtifact(pass)).toBe(true);
+    expect(verifyGate1CoverageArtifact({ ...pass, universe_count: 999 })).toBe(false);
+    expect(verifyGate1CoverageArtifact({ ...pass, status: "PASS_MEASUREMENT_RETAINED" })).toBe(false);
+    expect(verifyGate1CoverageArtifact({ ...pass, schema_version: "v3.9-gate1-coverage-sanitized-1" })).toBe(false);
   });
 
   it("blocks on missing feed or empty catalog, never zero-fills", () => {
