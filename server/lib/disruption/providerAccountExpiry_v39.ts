@@ -151,6 +151,23 @@ async function insertTombstone(client: PoolClient, candidate: ProviderAccountExp
   }
 }
 
+async function openDeletionIncident(runId: string, error: unknown, candidateCount: number): Promise<void> {
+  try {
+    await v39Pool.query(
+      `INSERT INTO clean.adb_incident_stop(cause,detail,resolved)
+       VALUES ('deletion',$1::jsonb,false)`,
+      [JSON.stringify({
+        owner: "providerAccountExpiry_v39",
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+        candidate_count: candidateCount,
+      })],
+    );
+  } catch (incidentError) {
+    console.error(`[v39-retention-account] failed to persist deletion incident: ${incidentError instanceof Error ? incidentError.message : String(incidentError)}`);
+  }
+}
+
 export async function applyProviderAccountExpiryCandidates(
   candidates: readonly ProviderAccountExpiryCandidate[],
 ): Promise<{ runId: string; expiredCount: number }> {
@@ -193,6 +210,7 @@ export async function applyProviderAccountExpiryCandidates(
     return { runId, expiredCount };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
+    await openDeletionIncident(runId, error, candidates.length);
     throw error;
   } finally {
     client.release();
