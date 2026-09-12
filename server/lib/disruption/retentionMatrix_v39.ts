@@ -15,11 +15,7 @@ export interface RetentionMatrixRow {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-function row(
-  contentClass: string,
-  tables: readonly string[],
-  contentClassification: ContentClassification,
-): RetentionMatrixRow {
+function row(contentClass: string, tables: readonly string[], contentClassification: ContentClassification): RetentionMatrixRow {
   return {
     contentClass,
     tables,
@@ -35,12 +31,10 @@ function row(
 /**
  * Table-level retention matrix.
  *
- * IMPORTANT: this is deliberately conservative for mixed tables. A table that
- * still contains copied AeroDataBox values is classified as raw_api_content at
- * table level even when some columns are project metadata or computed values.
- * Fine-grained exceptions are governed by providerContentInventory_v39 and may
- * only move to a longer-lived Derived-Work class after the exact retained
- * columns are proven non-trivial and non-reconstructable.
+ * Deliberately conservative for mixed tables: if copied AeroDataBox values are
+ * still present, the whole table remains raw_api_content at this layer. Exact
+ * longer-lived exceptions belong in providerContentInventory_v39 and require
+ * proof for the retained columns/output, not a table-name assertion.
  */
 export const RETENTION_MATRIX: readonly RetentionMatrixRow[] = Object.freeze([
   row("webhook_ingress", ["clean.raw_delivery", "clean.raw_delivery_item", "clean.processing_attempt"], "raw_api_content"),
@@ -55,14 +49,8 @@ export const RETENTION_MATRIX: readonly RetentionMatrixRow[] = Object.freeze([
   row("airborne_snapshots_mixed", ["clean.flight_airborne_snapshots"], "raw_api_content"),
   row("outcomes", ["clean.flight_outcomes"], "derived_work"),
   row("history_weather", ["clean.historical_feature_store", "clean.weather_observation", "clean.weather_forecast"], "derived_work"),
-
-  // Mixed provider-account/probe values: subscription IDs and provider balance
-  // observations prevent whole-table indefinite metadata treatment.
   row("probe_ledger_mixed", ["clean.adb_anchor_probe"], "raw_api_content"),
   row("collection_batch_ledger_mixed", ["clean.adb_collection_batches"], "raw_api_content"),
-
-  // Project-owned metadata classes. These classes must still prove that no
-  // third-party provider plaintext is present in the retained columns.
   row("sampling_frame", ["clean.adb_sampling_frame", "clean.adb_sampling_frame_registry"], "non_aerodatabox_metadata"),
   row("rest_attempt_ledger", ["clean.adb_rest_attempt_ledger"], "non_aerodatabox_metadata"),
   row("collection_segments", ["clean.adb_collection_segments"], "non_aerodatabox_metadata"),
@@ -79,11 +67,6 @@ export interface RetentionMatrixVerdict {
   failures: string[];
 }
 
-/**
- * Runtime evidence overlay (prerequisite-P evidence, never committed with
- * secrets/provider payloads). Classification is frozen by the reviewed matrix;
- * evidence must prove the legal/technical basis for that classification.
- */
 export interface RetentionClassEvidence {
   retentionVerifiedDate: string;
   retentionSource: string;
@@ -115,6 +98,20 @@ export function resolveRetentionMatrix(evidence: RetentionMatrixEvidence): { row
 function normalized(value: string): string { return value.trim().toLowerCase(); }
 function hasDeleteAction(value: string): boolean { return /(hard[_ -]?delete|delete|purge|expire)/i.test(value); }
 
+/** Return the smallest explicit time quantity in hours, or null if none is parseable. */
+function explicitPeriodHours(value: string): number | null {
+  const candidates: number[] = [];
+  for (const match of value.matchAll(/(?:^|\D)(\d+(?:\.\d+)?)\s*hours?(?:\D|$)/gi)) {
+    const n = Number(match[1]);
+    if (Number.isFinite(n)) candidates.push(n);
+  }
+  for (const match of value.matchAll(/(?:^|\D)(\d+(?:\.\d+)?)\s*days?(?:\D|$)/gi)) {
+    const n = Number(match[1]);
+    if (Number.isFinite(n)) candidates.push(n * 24);
+  }
+  return candidates.length ? Math.min(...candidates) : null;
+}
+
 function verifyClassificationSemantics(r: RetentionMatrixRow, failures: string[]): void {
   const source = normalized(r.retentionSource);
   const basis = normalized(r.retentionLegalBasis);
@@ -127,10 +124,24 @@ function verifyClassificationSemantics(r: RetentionMatrixRow, failures: string[]
     if (!basis.includes("5.5") && !basis.includes("raw_api_content")) {
       failures.push(`raw-basis-missing-article-5.5:${r.contentClass}`);
     }
-    const dayMatch = period.match(/(?:^|\D)(\d+)\s*[_ -]?days?(?:\D|$)/i);
-    if (dayMatch && Number(dayMatch[1]) > 7 && !/(cache-control|max-age|plan[ _-]?terms|explicit[_ -]?provider[_ -]?grant)/i.test(period)) {
+
+    const declaredHours = explicitPeriodHours(period);
+    const allowsLongerByProviderBasis = /(cache-control|max-age|plan[ _-]?terms|explicit[_ -]?provider[_ -]?grant)/i.test(period);
+    if (declaredHours !== null && declaredHours > 168 && !allowsLongerByProviderBasis) {
       failures.push(`raw-retention-over-7d-without-provider-basis:${r.contentClass}`);
     }
+
+    // Owner/account-plan evidence supplied for this project makes live FIDS a
+    // stricter hard class than generic Article-5.5 raw content. The matrix must
+    // itself prove <=24h; deployment-policy checks alone are not sufficient.
+    if (r.contentClass === "fids_population") {
+      if (declaredHours === null) failures.push("fids-retention-24h-unproven:fids_population");
+      else if (declaredHours > 24) failures.push("fids-retention-over-24h:fids_population");
+      if (!/(plan|account|provider)/i.test(`${r.retentionSource} ${r.retentionLegalBasis} ${r.retentionPeriodDaysOrCondition}`)) {
+        failures.push("fids-retention-account-basis-unproven:fids_population");
+      }
+    }
+
     if (!hasDeleteAction(r.expiryAction)) failures.push(`raw-expiry-not-delete:${r.contentClass}`);
   } else if (r.contentClassification === "derived_work") {
     if (!source.includes("aerodatabox") && !source.includes("provider")) {
