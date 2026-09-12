@@ -127,6 +127,27 @@ export function buildGate1CoverageArtifact(
   return { ...unsigned, artifact_sha256: sha256Hex(canonical(unsigned)) };
 }
 
+/**
+ * Verify that a persisted Gate-1 artifact is the exact current schema, a real
+ * PASS result, and cryptographically self-consistent. This deliberately rejects
+ * historical/sanitized compatibility artifacts such as PASS_MEASUREMENT_RETAINED.
+ */
+export function verifyGate1CoverageArtifact(value: unknown): value is Gate1CoverageArtifact {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  if (candidate.schema_version !== "v3.9-gate1-coverage-2") return false;
+  if (candidate.phase_gate !== GATE1_PHASE_GATE) return false;
+  if (candidate.status !== "PASS") return false;
+  if (!/^GATE-1-\d{8}-[A-Z0-9]+$/.test(String(candidate.evidence_id ?? ""))) return false;
+  if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(String(candidate.authorization_id ?? ""))) return false;
+  if (!candidate.coverage || typeof candidate.coverage !== "object" || Array.isArray(candidate.coverage)) return false;
+  if (candidate.content_classification !== "non_aerodatabox_metadata") return false;
+  const expected = String(candidate.artifact_sha256 ?? "");
+  if (!/^[a-f0-9]{64}$/.test(expected)) return false;
+  const { artifact_sha256: _ignored, ...unsigned } = candidate;
+  return sha256Hex(canonical(unsigned)) === expected;
+}
+
 export function serializeGate1Artifact(artifact: Gate1CoverageArtifact): string {
   return `${canonical(artifact)}\n`;
 }
