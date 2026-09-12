@@ -8,21 +8,21 @@
  *   verified V39_RETENTION_DEPLOYMENT_EVIDENCE
  *   configured TTLs matching that deployment evidence
  *
- * The single operator covers both the primary provider-content owner and the
- * provider-native account/subscription fields embedded in project ledgers.
- * This avoids a second retention command that an operator could forget to run.
- *
- * Examples:
- *   npm run v39:retention:dry-run -- --limit 100
- *   npm run v39:retention:apply -- --limit 100
- *
- * Output is metadata only. Provider payload/content is never printed.
+ * The single operator covers primary ingress/latest-state content, temporary
+ * provider identity/schedule linkage, and provider-native account/subscription
+ * fields embedded in project ledgers. One bounded command prevents an operator
+ * from accidentally running only part of the required retention work.
  */
 import { pathToFileURL } from "url";
 import {
   runRetentionExpiry,
   type RetentionExpiryResult,
 } from "../server/lib/disruption/retentionExpiry_v39";
+import {
+  applyProviderIdentityExpiryCandidates,
+  collectProviderIdentityExpiryCandidates,
+  type ProviderIdentityExpiryCandidate,
+} from "../server/lib/disruption/providerIdentityExpiry_v39";
 import {
   applyProviderAccountExpiryCandidates,
   collectProviderAccountExpiryCandidates,
@@ -53,11 +53,9 @@ export function parseRetentionCliArgs(argv: string[]): RetentionCliOptions {
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (arg === "--apply") {
-      apply = true;
-    } else if (arg === "--dry-run") {
-      apply = false;
-    } else if (arg === "--limit") {
+    if (arg === "--apply") apply = true;
+    else if (arg === "--dry-run") apply = false;
+    else if (arg === "--limit") {
       const next = argv[++i];
       if (next === undefined) throw new Error("--limit requires a value");
       limit = positiveBoundedInteger(next, "--limit", 1000);
@@ -69,11 +67,8 @@ export function parseRetentionCliArgs(argv: string[]): RetentionCliOptions {
       const next = argv[++i];
       if (next === undefined) throw new Error("--fids-hours requires a value");
       fidsRetentionHours = positiveBoundedInteger(next, "--fids-hours", 24);
-    } else if (arg === "--help" || arg === "-h") {
-      throw new Error("HELP");
-    } else {
-      throw new Error(`unknown argument: ${arg}`);
-    }
+    } else if (arg === "--help" || arg === "-h") throw new Error("HELP");
+    else throw new Error(`unknown argument: ${arg}`);
   }
 
   return { apply, limit, rawRetentionHours, fidsRetentionHours };
@@ -93,6 +88,20 @@ function safeBaseCandidate(candidate: RetentionExpiryResult["candidates"][number
   };
 }
 
+function safeIdentityCandidate(candidate: ProviderIdentityExpiryCandidate): Record<string, unknown> {
+  return {
+    record_id: candidate.recordId,
+    source_table: candidate.sourceTable,
+    content_class: candidate.contentClass,
+    content_columns: candidate.contentColumns,
+    age_timestamp_utc: candidate.ageTimestampUtc,
+    expires_at_utc: candidate.expiresAtUtc,
+    retention_hours: candidate.retentionHours,
+    content_hash: candidate.contentHash,
+    payload_hash: null,
+  };
+}
+
 function safeAccountCandidate(candidate: ProviderAccountExpiryCandidate): Record<string, unknown> {
   return {
     record_id: candidate.recordId,
@@ -109,25 +118,31 @@ function safeAccountCandidate(candidate: ProviderAccountExpiryCandidate): Record
 
 function safeResult(
   result: RetentionExpiryResult,
+  identityCandidates: readonly ProviderIdentityExpiryCandidate[],
   accountCandidates: readonly ProviderAccountExpiryCandidate[],
+  identityApply?: { runId: string; expiredCount: number },
   accountApply?: { runId: string; expiredCount: number },
 ): Record<string, unknown> {
   return {
     mode: result.mode,
     run_id: result.runId,
+    provider_identity_run_id: identityApply?.runId ?? null,
     provider_account_run_id: accountApply?.runId ?? null,
     raw_cutoff_utc: result.cutoffUtc,
     fids_cutoff_utc: result.fidsCutoffUtc,
     retention_hours: result.retentionHours,
-    candidate_count: result.candidates.length + accountCandidates.length,
+    candidate_count: result.candidates.length + identityCandidates.length + accountCandidates.length,
     base_candidate_count: result.candidates.length,
+    provider_identity_candidate_count: identityCandidates.length,
     provider_account_candidate_count: accountCandidates.length,
-    expired_count: result.expiredCount + (accountApply?.expiredCount ?? 0),
+    expired_count: result.expiredCount + (identityApply?.expiredCount ?? 0) + (accountApply?.expiredCount ?? 0),
     base_expired_count: result.expiredCount,
+    provider_identity_expired_count: identityApply?.expiredCount ?? 0,
     provider_account_expired_count: accountApply?.expiredCount ?? 0,
     evidence_hash: result.evidenceHash,
     candidates: [
       ...result.candidates.map(safeBaseCandidate),
+      ...identityCandidates.map(safeIdentityCandidate),
       ...accountCandidates.map(safeAccountCandidate),
     ],
   };
@@ -158,8 +173,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
 
   try {
     const now = new Date();
-    // In APPLY mode this call validates the retention matrix/deployment/TTL
-    // evidence before any destructive account-ledger expiry is possible.
+    // In APPLY mode this first call validates matrix/deployment/TTL evidence
+    // before either of the additional destructive owners can run.
     const result = await runRetentionExpiry({
       apply: options.apply,
       now,
@@ -168,15 +183,28 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       fidsRetentionHours: options.fidsRetentionHours,
     });
 
-    const remaining = Math.max(0, options.limit - result.candidates.length);
+    let remaining = Math.max(0, options.limit - result.candidates.length);
+    const identityCandidates = remaining > 0
+      ? await collectProviderIdentityExpiryCandidates(now, result.retentionHours, remaining)
+      : [];
+    remaining = Math.max(0, remaining - identityCandidates.length);
+
     const accountCandidates = remaining > 0
       ? await collectProviderAccountExpiryCandidates(now, result.retentionHours, remaining)
       : [];
+
+    const identityApply = options.apply
+      ? await applyProviderIdentityExpiryCandidates(identityCandidates)
+      : undefined;
     const accountApply = options.apply
       ? await applyProviderAccountExpiryCandidates(accountCandidates)
       : undefined;
 
-    console.log(JSON.stringify(safeResult(result, accountCandidates, accountApply), null, 2));
+    console.log(JSON.stringify(
+      safeResult(result, identityCandidates, accountCandidates, identityApply, accountApply),
+      null,
+      2,
+    ));
     return 0;
   } catch (error: any) {
     console.error(`${options.apply ? "BLOCKED" : "DRY_RUN_FAILED"}: ${String(error?.message ?? error)}`);
