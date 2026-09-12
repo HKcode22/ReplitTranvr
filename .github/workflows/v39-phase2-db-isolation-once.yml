@@ -26,11 +26,15 @@ jobs:
           from pathlib import Path
           p=Path('tests/v39_db_separation_v39.test.ts')
           s=p.read_text()
-          bad='expect(provision).not.toContain("DATABASE_RUNTIME_URL", runtimeUrl");'
-          good='expect(provision).not.toContain("DATABASE_RUNTIME_URL\\\", runtimeUrl");'
-          if bad not in s:
-              raise SystemExit('expected malformed generated assertion missing')
-          p.write_text(s.replace(bad, good, 1))
+          malformed='expect(provision).not.toContain("DATABASE_RUNTIME_URL", runtimeUrl");'
+          if malformed in s:
+              s=s.replace(malformed, 'expect(provision).not.toContain(\'upsertEnvVar(env, "DATABASE_RUNTIME_URL"\');', 1)
+          else:
+              legacy='expect(provision).not.toContain("DATABASE_RUNTIME_URL\\\", runtimeUrl");'
+              if legacy not in s:
+                  raise SystemExit('expected generated legacy-key assertion missing')
+              s=s.replace(legacy, 'expect(provision).not.toContain(\'upsertEnvVar(env, "DATABASE_RUNTIME_URL"\');', 1)
+          p.write_text(s)
           PY
       - name: Validate targeted and offline suite
         run: |
