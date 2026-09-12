@@ -15,6 +15,7 @@ import {
   verifyRetentionDeploymentEvidence,
   type RetentionDeploymentEvidenceV39,
 } from "../server/lib/disruption/retentionDeployment_v39";
+import { verifyProviderContentInventory } from "../server/lib/disruption/providerContentInventory_v39";
 
 interface Check { name: string; pass: boolean; detail: string }
 
@@ -37,7 +38,6 @@ async function verifyRoleLive(role: string): Promise<string[]> {
     if (a.rolcreatedb) failures.push("role-can-createdb");
     if (a.rolcreaterole) failures.push("role-can-createrole");
     if (!a.rolcanlogin) failures.push("role-cannot-login");
-
     const grants = await owner.query(
       `SELECT table_schema s, table_name t,
               string_agg(DISTINCT privilege_type,',' ORDER BY privilege_type) p
@@ -86,26 +86,12 @@ async function verifyWebhookLive(e: WebhookSecurityEvidence): Promise<string[]> 
   return failures;
 }
 
-/**
- * Verify both the declared recovery topology and a bounded primary PostgreSQL
- * dry-run. Backup/PITR is not treated as NOT_DEPLOYED merely because there is
- * no SQL adapter for it: its ability to reconstruct plaintext is the relevant
- * safety property and is checked by verifyRetentionDeploymentEvidence().
- */
 async function verifyRetentionSurfaces(e: RetentionDeploymentEvidenceV39 | null): Promise<Check> {
-  if (!e) {
-    return { name: "retention-deployment-surfaces", pass: false, detail: "missing-V39_RETENTION_DEPLOYMENT_EVIDENCE" };
-  }
-
+  if (!e) return { name: "retention-deployment-surfaces", pass: false, detail: "missing-V39_RETENTION_DEPLOYMENT_EVIDENCE" };
   const topology = verifyRetentionDeploymentEvidence(e);
   if (!topology.pass) {
-    return {
-      name: "retention-deployment-surfaces",
-      pass: false,
-      detail: `recovery-topology-blocked:${topology.failures.slice(0, 8).join(",")}`,
-    };
+    return { name: "retention-deployment-surfaces", pass: false, detail: `recovery-topology-blocked:${topology.failures.slice(0, 8).join(",")}` };
   }
-
   try {
     const { v39Pool: pool } = await import("../server/lib/disruption/db_v39");
     const tomb = await pool.query(
@@ -124,21 +110,13 @@ async function verifyRetentionSurfaces(e: RetentionDeploymentEvidenceV39 | null)
       })),
     };
     const empty = { listExpired: async () => [] as const };
-    const adapters: RetentionAdapters = {
-      primary,
-      replica: empty,
-      backup: empty,
-      object: empty,
-      log: empty,
-    };
+    const adapters: RetentionAdapters = { primary, replica: empty, backup: empty, object: empty, log: empty };
     const dry = await executeRetentionDryRun(adapters, new Date().toISOString(), true);
     if (!/^[a-f0-9]{64}$/.test(dry.evidenceHash)) throw new Error("invalid-dry-run-evidence-hash");
-    const rawHours = topology.effectiveRecoverableHours.raw_provider_content;
-    const fidsHours = topology.effectiveRecoverableHours.live_fids_cache;
     return {
       name: "retention-deployment-surfaces",
       pass: true,
-      detail: `topology+primary-dry-run verified; raw_recoverable=${rawHours}h; fids_recoverable=${fidsHours}h; dry_run=${dry.evidenceHash}`,
+      detail: `topology+primary-dry-run verified; raw_recoverable=${topology.effectiveRecoverableHours.raw_provider_content}h; fids_recoverable=${topology.effectiveRecoverableHours.live_fids_cache}h; dry_run=${dry.evidenceHash}`,
     };
   } catch (err: any) {
     return { name: "retention-deployment-surfaces", pass: false, detail: `primary-real-adapter-failed:${err?.message ?? err}` };
@@ -147,7 +125,6 @@ async function verifyRetentionSurfaces(e: RetentionDeploymentEvidenceV39 | null)
 
 async function main(): Promise<void> {
   const checks: Check[] = [];
-
   const db = parseEvidence<DatabaseRoleEvidence>("V39_DB_ROLE_EVIDENCE");
   if (!db) {
     checks.push({ name: "least-privilege-db-tls", pass: false, detail: "missing-V39_DB_ROLE_EVIDENCE" });
@@ -169,6 +146,15 @@ async function main(): Promise<void> {
   }
 
   checks.push(await verifyRetentionSurfaces(parseEvidence<RetentionDeploymentEvidenceV39>("V39_RETENTION_DEPLOYMENT_EVIDENCE")));
+
+  const columnCoverage = verifyProviderContentInventory();
+  checks.push({
+    name: "provider-content-column-coverage",
+    pass: columnCoverage.pass,
+    detail: columnCoverage.pass
+      ? `covered_groups=${columnCoverage.coveredGroupCount}; unresolved=0`
+      : `covered_groups=${columnCoverage.coveredGroupCount}; unresolved=${columnCoverage.unresolvedGroupCount}; ${columnCoverage.failures.slice(0, 6).join(",")}`,
+  });
 
   try {
     const { RETENTION_MATRIX_HASH, parseRetentionMatrixEvidence, resolveRetentionMatrix, verifyRetentionMatrix } = await import("../server/lib/disruption/retentionMatrix_v39");
