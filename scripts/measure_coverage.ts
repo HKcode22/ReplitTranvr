@@ -1,13 +1,8 @@
 // Phase 2B — Gate 1 coverage (Plan §§4, 17 step 10; Log §1.7.2, §2.20).
 //
-// Thin wrapper over the gate1Coverage_v39 production owner. Uses the pinned
-// FREE health/coverage endpoints only: no FIDS, no refill, no subscription
-// mutation, no probe. Writes artifacts/gate1-coverage.json.
-//
-// Usage:
-//   npm run v39:gate1:coverage -- --auth AUTH-YYYYMMDD-G1 \
-//     --auth-file <record.json> --evidence-id GATE-1-YYYYMMDD-001
-import { mkdirSync, writeFileSync } from "fs";
+// Uses documented-free health/coverage endpoints only. Prerequisite P and the
+// explicit Gate-1 authorization are both verified before any provider call.
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { pathToFileURL } from "url";
 import { listFeedAirports, type FeedService } from "../server/lib/disruption/aerodataboxLimiter_v3";
@@ -20,6 +15,7 @@ import {
   type CoverageService,
   type Gate1CoverageArtifact,
 } from "../server/lib/disruption/gate1Coverage_v39";
+import { verifyPrepaidSecurityPassArtifact } from "../server/lib/disruption/prepaidSecurityPass_v39";
 import { parseArgs, verifyAuthFile } from "./v39_paid_guard_v39";
 
 export interface Gate1CoverageReader {
@@ -29,6 +25,16 @@ export interface Gate1CoverageReader {
 }
 
 type AuthVerifier = (authFile: string, phaseGate: string, auth: string) => boolean;
+
+export function verifyPrerequisitePPassFile(root = process.cwd()): boolean {
+  const file = join(root, "artifacts", "prepaid-security-retention-pass.json");
+  if (!existsSync(file)) return false;
+  try {
+    return verifyPrepaidSecurityPassArtifact(JSON.parse(readFileSync(file, "utf8")), root);
+  } catch {
+    return false;
+  }
+}
 
 export async function runGate1Coverage(
   argv: string[],
@@ -75,6 +81,8 @@ export async function runGate1Coverage(
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   try {
+    // P must be proven before even the free coverage measurement is touched.
+    if (!verifyPrerequisitePPassFile()) throw new Error("BLOCKED: prerequisite P PASS artifact is missing, stale, tampered, or incompatible with current Plan/code");
     const artifact = await runGate1Coverage(argv);
     process.stdout.write(serializeGate1Artifact(artifact));
     return 0;
