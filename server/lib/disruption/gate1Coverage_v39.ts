@@ -36,7 +36,7 @@ export function sha256Hex(raw: string): string {
 
 export interface Gate1CoverageInput {
   feeds: Record<CoverageService, CoverageFeedInput | null>;
-  catalogIcaos: string[];
+  catalogIcaos: string[] | (() => string[]);
   fetchedAtUtc: string;
   providerPin: string;
 }
@@ -93,7 +93,8 @@ export function buildGate1CoverageArtifact(
       response_sha256: sha256Hex(canonical({ endpoint: service, airports: list })),
     };
   }
-  const catalog = Array.from(new Set(input.catalogIcaos.map(norm).filter(Boolean))).sort();
+  const catalogSource = typeof input.catalogIcaos === "function" ? input.catalogIcaos() : input.catalogIcaos;
+  const catalog = Array.from(new Set(catalogSource.map(norm).filter(Boolean))).sort();
   if (catalog.length === 0) reasons.push("MISSING:catalog_icaos");
 
   const universeIcao = Array.from(universe).sort();
