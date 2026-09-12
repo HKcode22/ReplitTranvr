@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildGate1CoverageArtifact, serializeGate1Artifact } from "../server/lib/disruption/gate1Coverage_v39";
+import { buildGate1CoverageArtifact, serializeGate1Artifact, verifyGate1CoverageArtifact } from "../server/lib/disruption/gate1Coverage_v39";
 import { runGate1Coverage } from "../scripts/measure_coverage";
 
 const identity = { evidenceId: "GATE-1-20260911-001", authorizationId: "AUTH-20260911-G1" };
@@ -32,10 +32,19 @@ describe("Gate 1 coverage artifact", () => {
     expect(a.coverage?.source_list_handling).toBe("transient-not-committed");
     expect(a.artifact_sha256).toBe(b.artifact_sha256);
     expect(a.artifact_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(verifyGate1CoverageArtifact(a).pass).toBe(true);
     const text = serializeGate1Artifact(a);
     expect(text).not.toContain("KLAX");
     expect(text).not.toContain("WSSS");
     expect(text).not.toContain("OMAA");
+  });
+
+  it("rejects retained historical/sanitized artifacts and tampering", () => {
+    const current = buildGate1CoverageArtifact(validInput(), identity);
+    const retained = { ...current, schema_version: "v3.9-gate1-coverage-sanitized-1", status: "PASS_MEASUREMENT_RETAINED" };
+    expect(verifyGate1CoverageArtifact(retained).pass).toBe(false);
+    const tampered = { ...current, universe_count: 999 };
+    expect(verifyGate1CoverageArtifact(tampered).failures).toContain("artifact-hash-mismatch");
   });
 
   it("blocks on missing feed or empty catalog, never zero-fills", () => {
