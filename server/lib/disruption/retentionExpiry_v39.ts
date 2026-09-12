@@ -104,7 +104,6 @@ export function resolveRetentionPrimaryPolicy(env: NodeJS.ProcessEnv = process.e
     HARD_RETENTION_LIMIT_HOURS.live_fids_cache,
     "V39_FIDS_RETENTION_HOURS",
   );
-
   return { rawProviderHours, liveFidsHours };
 }
 
@@ -129,9 +128,7 @@ function parseDeploymentEvidence(raw: string): RetentionDeploymentEvidenceV39 {
 }
 
 function assertApplyEvidence(policy: RetentionPrimaryPolicy): void {
-  if (process.env.V39_RETENTION_APPLY_ARMED !== "1") {
-    throw new Error("V39_RETENTION_APPLY_ARMED_REQUIRED");
-  }
+  if (process.env.V39_RETENTION_APPLY_ARMED !== "1") throw new Error("V39_RETENTION_APPLY_ARMED_REQUIRED");
 
   const matrixRaw = process.env.V39_RETENTION_MATRIX_EVIDENCE;
   if (!matrixRaw) throw new Error("V39_RETENTION_MATRIX_EVIDENCE_REQUIRED");
@@ -156,8 +153,7 @@ function assertApplyEvidence(policy: RetentionPrimaryPolicy): void {
 }
 
 async function queryRows(sql: string, params: unknown[]): Promise<any[]> {
-  const r = await v39Pool.query(sql, params);
-  return r.rows;
+  return (await v39Pool.query(sql, params)).rows;
 }
 
 function normalizePolicy(policyOrLegacyDays?: RetentionPrimaryPolicy | number): RetentionPrimaryPolicy {
@@ -168,6 +164,10 @@ function normalizePolicy(policyOrLegacyDays?: RetentionPrimaryPolicy | number): 
     };
   }
   return policyOrLegacyDays ?? resolveRetentionPrimaryPolicy();
+}
+
+function candidate(input: Omit<RetentionExpiryCandidate, "expiresAtUtc">): RetentionExpiryCandidate {
+  return { ...input, expiresAtUtc: expiryFromAgeHours(input.ageTimestampUtc, input.retentionHours) };
 }
 
 export async function collectRetentionExpiryCandidates(
@@ -186,18 +186,23 @@ export async function collectRetentionExpiryCandidates(
     const rows = await queryRows(
       `SELECT id, received_at_utc, raw_body, raw_body_sha256,
               http_request_headers, http_response_body, http_path, error_message,
-              subscription_id, provider_published_utc, adb_delivery_id, adb_cost_credits
+              subscription_id, provider_published_utc, adb_delivery_id, adb_cost_credits,
+              notification_id, provider_notification_generated_utc,
+              delivery_attempt_seq_no, delivery_attempt_utc, delivery_attempt_cost_credits
          FROM clean.raw_delivery
         WHERE provider_content_expired_at_utc IS NULL
           AND received_at_utc <= $1::timestamptz
           AND (raw_body IS NOT NULL OR http_request_headers IS NOT NULL OR http_response_body IS NOT NULL
                OR http_path IS NOT NULL OR error_message IS NOT NULL OR subscription_id IS NOT NULL
-               OR provider_published_utc IS NOT NULL OR adb_delivery_id IS NOT NULL OR adb_cost_credits IS NOT NULL)
+               OR provider_published_utc IS NOT NULL OR adb_delivery_id IS NOT NULL OR adb_cost_credits IS NOT NULL
+               OR notification_id IS NOT NULL OR provider_notification_generated_utc IS NOT NULL
+               OR delivery_attempt_seq_no IS NOT NULL OR delivery_attempt_utc IS NOT NULL
+               OR delivery_attempt_cost_credits IS NOT NULL)
         ORDER BY received_at_utc, id LIMIT $2`,
       [rawCutoff, room()],
     );
     for (const r of rows) {
-      const age = utc(r.received_at_utc);
+      const ageTimestampUtc = utc(r.received_at_utc);
       const content = {
         raw_body: r.raw_body,
         http_request_headers: r.http_request_headers,
@@ -208,23 +213,24 @@ export async function collectRetentionExpiryCandidates(
         provider_published_utc: r.provider_published_utc,
         adb_delivery_id: r.adb_delivery_id,
         adb_cost_credits: r.adb_cost_credits,
+        notification_id: r.notification_id,
+        provider_notification_generated_utc: r.provider_notification_generated_utc,
+        delivery_attempt_seq_no: r.delivery_attempt_seq_no,
+        delivery_attempt_utc: r.delivery_attempt_utc,
+        delivery_attempt_cost_credits: r.delivery_attempt_cost_credits,
       };
-      out.push({
+      out.push(candidate({
         sourceTable: "clean.raw_delivery",
-        recordId: `raw_delivery:${r.id}:full_provider_scope_v2`,
-        contentClass: "webhook_raw_delivery",
-        contentColumns: [
-          "raw_body", "http_request_headers", "http_response_body", "http_path", "error_message",
-          "subscription_id", "provider_published_utc", "adb_delivery_id", "adb_cost_credits",
-        ],
-        ageTimestampUtc: age,
-        expiresAtUtc: expiryFromAgeHours(age, policy.rawProviderHours),
+        recordId: `raw_delivery:${r.id}:full_provider_scope_v3`,
+        contentClass: "webhook_ingress",
+        contentColumns: Object.keys(content),
+        ageTimestampUtc,
         retentionHours: policy.rawProviderHours,
         contentHash: sha256(content),
         payloadHash: r.raw_body_sha256 || undefined,
         kind: "raw_delivery",
         key: Number(r.id),
-      });
+      }));
     }
   }
 
@@ -243,7 +249,7 @@ export async function collectRetentionExpiryCandidates(
       [rawCutoff, room()],
     );
     for (const r of rows) {
-      const age = utc(r.created_at);
+      const ageTimestampUtc = utc(r.created_at);
       const content = {
         raw_item: r.raw_item,
         flight_number: r.flight_number,
@@ -255,22 +261,18 @@ export async function collectRetentionExpiryCandidates(
         departure_scheduled_utc: r.departure_scheduled_utc,
         arrival_scheduled_utc: r.arrival_scheduled_utc,
       };
-      out.push({
+      out.push(candidate({
         sourceTable: "clean.raw_delivery_item",
-        recordId: `raw_delivery_item:${r.id}:full_provider_scope_v2`,
-        contentClass: "webhook_raw_delivery",
-        contentColumns: [
-          "raw_item", "flight_number", "carrier_iata", "carrier_icao", "status", "status_code",
-          "last_updated_utc", "departure_scheduled_utc", "arrival_scheduled_utc",
-        ],
-        ageTimestampUtc: age,
-        expiresAtUtc: expiryFromAgeHours(age, policy.rawProviderHours),
+        recordId: `raw_delivery_item:${r.id}:full_provider_scope_v3`,
+        contentClass: "webhook_ingress",
+        contentColumns: Object.keys(content),
+        ageTimestampUtc,
         retentionHours: policy.rawProviderHours,
         contentHash: sha256(content),
         payloadHash: r.raw_item_sha256 || undefined,
         kind: "raw_delivery_item",
         key: Number(r.id),
-      });
+      }));
     }
   }
 
@@ -285,59 +287,61 @@ export async function collectRetentionExpiryCandidates(
       [rawCutoff, room()],
     );
     for (const r of rows) {
-      const age = utc(r.created_at);
+      const ageTimestampUtc = utc(r.created_at);
       const content = {
         validation_errors: r.validation_errors,
         parse_errors: r.parse_errors,
         storage_errors: r.storage_errors,
         error_message: r.error_message,
       };
-      out.push({
+      out.push(candidate({
         sourceTable: "clean.processing_attempt",
-        recordId: `processing_attempt:${r.id}:provider_error_scope_v2`,
-        contentClass: "webhook_processing_errors",
-        contentColumns: ["validation_errors", "parse_errors", "storage_errors", "error_message"],
-        ageTimestampUtc: age,
-        expiresAtUtc: expiryFromAgeHours(age, policy.rawProviderHours),
+        recordId: `processing_attempt:${r.id}:provider_error_scope_v3`,
+        contentClass: "webhook_ingress",
+        contentColumns: Object.keys(content),
+        ageTimestampUtc,
         retentionHours: policy.rawProviderHours,
         contentHash: sha256(content),
         kind: "processing_attempt",
         key: Number(r.id),
-      });
+      }));
     }
   }
 
   if (room()) {
     const rows = await queryRows(
-      `SELECT id, received_at, raw_payload, payload_sha256, http_metadata, error, provider_published_utc
+      `SELECT id, received_at, raw_payload, payload_sha256, http_metadata, error,
+              provider_published_utc, subscription_id, credits_remaining
          FROM clean.adb_ingest_events
         WHERE provider_content_expired_at_utc IS NULL
           AND received_at <= $1::timestamptz
-          AND (raw_payload IS NOT NULL OR http_metadata IS NOT NULL OR error IS NOT NULL OR provider_published_utc IS NOT NULL)
+          AND (raw_payload IS NOT NULL OR http_metadata IS NOT NULL OR error IS NOT NULL
+               OR provider_published_utc IS NOT NULL OR subscription_id IS NOT NULL OR credits_remaining IS NOT NULL)
         ORDER BY received_at, id LIMIT $2`,
       [rawCutoff, room()],
     );
     for (const r of rows) {
-      const age = utc(r.received_at);
+      const ageTimestampUtc = utc(r.received_at);
       const content = {
         raw_payload: r.raw_payload,
         http_metadata: r.http_metadata,
         error: r.error,
         provider_published_utc: r.provider_published_utc,
+        subscription_id: r.subscription_id,
+        credits_remaining: r.credits_remaining,
       };
-      out.push({
+      out.push(candidate({
         sourceTable: "clean.adb_ingest_events",
-        recordId: `adb_ingest_events:${r.id}:full_provider_scope_v2`,
-        contentClass: "webhook_raw_delivery",
-        contentColumns: ["raw_payload", "http_metadata", "error", "provider_published_utc"],
-        ageTimestampUtc: age,
-        expiresAtUtc: expiryFromAgeHours(age, policy.rawProviderHours),
+        recordId: `adb_ingest_events:${r.id}:full_provider_scope_v3`,
+        contentClass: "webhook_ingest_ledger_mixed",
+        contentColumns: Object.keys(content),
+        ageTimestampUtc,
         retentionHours: policy.rawProviderHours,
         contentHash: sha256(content),
         payloadHash: r.payload_sha256 || undefined,
         kind: "adb_ingest_events",
         key: Number(r.id),
-      });
+      }));
     }
   }
 
@@ -350,20 +354,19 @@ export async function collectRetentionExpiryCandidates(
       [rawCutoff, room()],
     );
     for (const r of rows) {
-      const age = utc(r.received_at);
-      out.push({
+      const ageTimestampUtc = utc(r.received_at);
+      out.push(candidate({
         sourceTable: "clean.flight_data_pre_post",
-        recordId: `flight_data_pre_post:${r.id}:provider_row_v2`,
-        contentClass: "flight_data_pre_post_provider_row",
+        recordId: `flight_data_pre_post:${r.id}:provider_row_v3`,
+        contentClass: "latest_state_convenience",
         contentColumns: ["*entire-row*"],
-        ageTimestampUtc: age,
-        expiresAtUtc: expiryFromAgeHours(age, policy.rawProviderHours),
+        ageTimestampUtc,
         retentionHours: policy.rawProviderHours,
         contentHash: sha256(r.row_json),
         payloadHash: r.payload_sha256 || undefined,
         kind: "flight_data_pre_post",
         key: Number(r.id),
-      });
+      }));
     }
   }
 
@@ -378,20 +381,19 @@ export async function collectRetentionExpiryCandidates(
       [fidsCutoff, room()],
     );
     for (const r of rows) {
-      const age = utc(r.raw_persisted_at_utc);
-      out.push({
+      const ageTimestampUtc = utc(r.raw_persisted_at_utc);
+      out.push(candidate({
         sourceTable: "clean.fids_query_response",
         recordId: `fids_query_response:${r.population_query_id}:raw_payload`,
         contentClass: "fids_population",
         contentColumns: ["raw_payload"],
-        ageTimestampUtc: age,
-        expiresAtUtc: expiryFromAgeHours(age, policy.liveFidsHours),
+        ageTimestampUtc,
         retentionHours: policy.liveFidsHours,
         contentHash: sha256(r.raw_payload),
         payloadHash: r.response_hash || undefined,
         kind: "fids_query_response",
         key: String(r.population_query_id),
-      });
+      }));
     }
   }
 
@@ -409,20 +411,19 @@ export async function collectRetentionExpiryCandidates(
         [rawCutoff, room()],
       );
       for (const r of rows) {
-        const age = utc(r.created_at);
-        out.push({
+        const ageTimestampUtc = utc(r.created_at);
+        out.push(candidate({
           sourceTable: "clean.monitored_flights_v2",
           recordId: `monitored_flights_v2:${r.id}:raw_api_data`,
           contentClass: "legacy_provider_raw",
           contentColumns: ["raw_api_data"],
-          ageTimestampUtc: age,
-          expiresAtUtc: expiryFromAgeHours(age, policy.rawProviderHours),
+          ageTimestampUtc,
           retentionHours: policy.rawProviderHours,
           contentHash: sha256(r.raw_api_data),
           payloadHash: r.raw_api_sha256 || undefined,
           kind: "monitored_flights_v2",
           key: Number(r.id),
-        });
+        }));
       }
     }
   }
@@ -477,6 +478,11 @@ async function expireOne(client: PoolClient, c: RetentionExpiryCandidate, runId:
               provider_published_utc=NULL,
               adb_delivery_id=NULL,
               adb_cost_credits=NULL,
+              notification_id=NULL,
+              provider_notification_generated_utc=NULL,
+              delivery_attempt_seq_no=NULL,
+              delivery_attempt_utc=NULL,
+              delivery_attempt_cost_credits=NULL,
               raw_expired_at_utc=COALESCE(raw_expired_at_utc,now()),
               provider_content_expired_at_utc=now()
         WHERE id=$1 AND provider_content_expired_at_utc IS NULL`,
@@ -517,16 +523,15 @@ async function expireOne(client: PoolClient, c: RetentionExpiryCandidate, runId:
               http_metadata=NULL,
               error=NULL,
               provider_published_utc=NULL,
+              subscription_id=NULL,
+              credits_remaining=NULL,
               raw_expired_at_utc=COALESCE(raw_expired_at_utc,now()),
               provider_content_expired_at_utc=now()
         WHERE id=$1 AND provider_content_expired_at_utc IS NULL`,
       [c.key],
     );
   } else if (c.kind === "flight_data_pre_post") {
-    r = await client.query(
-      `DELETE FROM clean.flight_data_pre_post WHERE id=$1`,
-      [c.key],
-    );
+    r = await client.query(`DELETE FROM clean.flight_data_pre_post WHERE id=$1`, [c.key]);
   } else if (c.kind === "fids_query_response") {
     r = await client.query(
       `UPDATE clean.fids_query_response
@@ -582,13 +587,14 @@ export async function runRetentionExpiry(opts: {
   const candidates = await collectRetentionExpiryCandidates(now, policy, limit);
   const runId = `RETEXP-${now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`;
   let expiredCount = 0;
+
   if (apply && candidates.length) {
     const client = await v39Pool.connect();
     try {
       await client.query("BEGIN");
       const pHash = planHash();
-      for (const candidate of candidates) {
-        await expireOne(client, candidate, runId, pHash);
+      for (const c of candidates) {
+        await expireOne(client, c, runId, pHash);
         expiredCount += 1;
       }
       await client.query("COMMIT");
@@ -605,12 +611,12 @@ export async function runRetentionExpiry(opts: {
     }
   }
 
-  const rawCutoffUtc = new Date(now.getTime() - policy.rawProviderHours * 3_600_000).toISOString();
+  const cutoffUtc = new Date(now.getTime() - policy.rawProviderHours * 3_600_000).toISOString();
   const fidsCutoffUtc = new Date(now.getTime() - policy.liveFidsHours * 3_600_000).toISOString();
   const resultBase = {
     mode: apply ? "APPLY" as const : "DRY_RUN" as const,
     runId,
-    cutoffUtc: rawCutoffUtc,
+    cutoffUtc,
     fidsCutoffUtc,
     retentionDays: policy.rawProviderHours / 24,
     retentionHours: policy,
