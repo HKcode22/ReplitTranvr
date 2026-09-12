@@ -3,7 +3,6 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { Pool } from "pg";
 import {
-  RETENTION_SURFACES,
   checkLeastPrivilege,
   checkWebhookSecurity,
   executeRetentionDryRun,
@@ -16,6 +15,7 @@ import {
   type RetentionDeploymentEvidenceV39,
 } from "../server/lib/disruption/retentionDeployment_v39";
 import { verifyProviderContentInventory } from "../server/lib/disruption/providerContentInventory_v39";
+import type { RetentionMatrixRow } from "../server/lib/disruption/retentionMatrix_v39";
 
 interface Check { name: string; pass: boolean; detail: string }
 
@@ -123,6 +123,18 @@ async function verifyRetentionSurfaces(e: RetentionDeploymentEvidenceV39 | null)
   }
 }
 
+async function verifyMatrixStorage(rows: readonly RetentionMatrixRow[]): Promise<string[]> {
+  const tables = [...new Set(rows.flatMap((row) => row.tables).filter((name) => name.startsWith("clean.")))].sort();
+  if (!tables.length) return ["retention-matrix-has-no-runtime-tables"];
+  const { v39Pool: pool } = await import("../server/lib/disruption/db_v39");
+  const failures: string[] = [];
+  for (const table of tables) {
+    const found = await pool.query("SELECT to_regclass($1) AS c", [table]);
+    if (!found.rows[0]?.c) failures.push(`matrix-storage-missing:${table}`);
+  }
+  return failures;
+}
+
 async function main(): Promise<void> {
   const checks: Check[] = [];
   const db = parseEvidence<DatabaseRoleEvidence>("V39_DB_ROLE_EVIDENCE");
@@ -157,16 +169,32 @@ async function main(): Promise<void> {
   });
 
   try {
-    const { RETENTION_MATRIX_HASH, parseRetentionMatrixEvidence, resolveRetentionMatrix, verifyRetentionMatrix } = await import("../server/lib/disruption/retentionMatrix_v39");
+    const {
+      RETENTION_MATRIX,
+      RETENTION_MATRIX_HASH,
+      parseRetentionMatrixEvidence,
+      resolveRetentionMatrix,
+      verifyRetentionMatrix,
+    } = await import("../server/lib/disruption/retentionMatrix_v39");
     const overlayRaw = process.env.V39_RETENTION_MATRIX_EVIDENCE;
+    const storageFailures = await verifyMatrixStorage(RETENTION_MATRIX);
     if (!overlayRaw) {
       const verdict = verifyRetentionMatrix();
-      checks.push({ name: "retention-content-matrix", pass: false, detail: `missing-V39_RETENTION_MATRIX_EVIDENCE;${verdict.failures.slice(0, 2).join(",")}` });
+      const all = [...storageFailures, ...verdict.failures];
+      checks.push({
+        name: "retention-content-matrix",
+        pass: false,
+        detail: `missing-V39_RETENTION_MATRIX_EVIDENCE;${all.slice(0, 5).join(",")}`,
+      });
     } else {
       const { rows, failures } = resolveRetentionMatrix(parseRetentionMatrixEvidence(overlayRaw));
       const verdict = verifyRetentionMatrix(rows);
-      const all = [...failures, ...verdict.failures];
-      checks.push({ name: "retention-content-matrix", pass: all.length === 0, detail: all.length === 0 ? `matrix=${RETENTION_MATRIX_HASH.slice(0, 12)}… verified` : all.slice(0, 5).join(",") });
+      const all = [...storageFailures, ...failures, ...verdict.failures];
+      checks.push({
+        name: "retention-content-matrix",
+        pass: all.length === 0,
+        detail: all.length === 0 ? `matrix=${RETENTION_MATRIX_HASH.slice(0, 12)}… schema+evidence verified` : all.slice(0, 6).join(","),
+      });
     }
   } catch (err: any) {
     checks.push({ name: "retention-content-matrix", pass: false, detail: `matrix-check-error:${err?.message ?? err}` });
