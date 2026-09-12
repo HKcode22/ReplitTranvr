@@ -32,25 +32,41 @@ function row(
   };
 }
 
+/**
+ * Table-level retention matrix.
+ *
+ * IMPORTANT: this is deliberately conservative for mixed tables. A table that
+ * still contains copied AeroDataBox values is classified as raw_api_content at
+ * table level even when some columns are project metadata or computed values.
+ * Fine-grained exceptions are governed by providerContentInventory_v39 and may
+ * only move to a longer-lived Derived-Work class after the exact retained
+ * columns are proven non-trivial and non-reconstructable.
+ */
 export const RETENTION_MATRIX: readonly RetentionMatrixRow[] = Object.freeze([
-  row("webhook_raw_delivery", ["clean.raw_delivery", "clean.raw_delivery_item"], "raw_api_content"),
-  row("semantic_events", ["clean.flight_events"], "derived_work"),
-  row("current_state_convenience", ["clean.flight_state"], "derived_work"),
+  row("webhook_ingress", ["clean.raw_delivery", "clean.raw_delivery_item", "clean.processing_attempt"], "raw_api_content"),
+  row("webhook_identity_schedule", ["clean.webhook_flight_identity", "clean.webhook_flight_schedule_version", "clean.webhook_identity_resolution"], "raw_api_content"),
+  row("webhook_ingest_ledger_mixed", ["clean.adb_ingest_events"], "raw_api_content"),
+  row("latest_state_convenience", ["clean.flight_data_pre_post"], "raw_api_content"),
+  row("semantic_events_mixed", ["clean.flight_events"], "raw_api_content"),
   row("airborne_raw", ["clean.raw_airborne_events"], "raw_api_content"),
-  row("airborne_clean", ["clean.clean_airborne_points", "clean.flight_trajectory"], "derived_work"),
-  row("fids_population", ["clean.flight_population", "clean.raw_fids_query"], "raw_api_content"),
+  row("airborne_clean_mixed", ["clean.clean_airborne_points", "clean.flight_trajectory"], "raw_api_content"),
+  row("fids_population", ["clean.flight_population", "clean.fids_query_response"], "raw_api_content"),
   row("pre_snapshots", ["clean.flight_snapshots"], "derived_work"),
-  row("airborne_snapshots", ["clean.flight_airborne_snapshots"], "derived_work"),
+  row("airborne_snapshots_mixed", ["clean.flight_airborne_snapshots"], "raw_api_content"),
   row("outcomes", ["clean.flight_outcomes"], "derived_work"),
   row("history_weather", ["clean.historical_feature_store", "clean.weather_observation", "clean.weather_forecast"], "derived_work"),
+
+  // Mixed provider-account/probe values: subscription IDs and provider balance
+  // observations prevent whole-table indefinite metadata treatment.
+  row("probe_ledger_mixed", ["clean.adb_anchor_probe"], "raw_api_content"),
+  row("collection_batch_ledger_mixed", ["clean.adb_collection_batches"], "raw_api_content"),
+
+  // Project-owned metadata classes. These classes must still prove that no
+  // third-party provider plaintext is present in the retained columns.
   row("sampling_frame", ["clean.adb_sampling_frame", "clean.adb_sampling_frame_registry"], "non_aerodatabox_metadata"),
-  // The committed Gate-1 artifact is aggregate-only: counts, hashes and
-  // provenance. Provider airport membership lists are transient and are not
-  // committed by the current owner.
+  row("rest_attempt_ledger", ["clean.adb_rest_attempt_ledger"], "non_aerodatabox_metadata"),
+  row("collection_segments", ["clean.adb_collection_segments"], "non_aerodatabox_metadata"),
   row("coverage_artifacts", ["artifacts/gate1-coverage.json"], "non_aerodatabox_metadata"),
-  row("probe_ledgers", ["clean.anchor_probe_results", "clean.adb_rest_attempt_ledger"], "non_aerodatabox_metadata"),
-  row("settlement_ledgers", ["clean.adb_collection_batches", "clean.adb_ingest_events"], "non_aerodatabox_metadata"),
-  row("manifests", ["clean.final_manifest", "SEPmd/V39_PREPROBE_FREEZE.json"], "non_aerodatabox_metadata"),
   row("retention_audit", ["clean.retention_tombstone"], "non_aerodatabox_metadata"),
 ]);
 
@@ -105,9 +121,6 @@ function verifyClassificationSemantics(r: RetentionMatrixRow, failures: string[]
   const period = normalized(r.retentionPeriodDaysOrCondition);
 
   if (r.contentClassification === "raw_api_content") {
-    // Plan §10.2: raw AeroDataBox Contents use Article 5.5 / applicable Plan
-    // Terms, with the greater of seven days, Cache-Control max-age, or an
-    // explicitly longer Plan-Term allowance. A naked "30 days" is never enough.
     if (!source.includes("aerodatabox") && !source.includes("provider")) {
       failures.push(`raw-source-not-provider-terms:${r.contentClass}`);
     }
@@ -120,9 +133,6 @@ function verifyClassificationSemantics(r: RetentionMatrixRow, failures: string[]
     }
     if (!hasDeleteAction(r.expiryAction)) failures.push(`raw-expiry-not-delete:${r.contentClass}`);
   } else if (r.contentClassification === "derived_work") {
-    // Plan §10.2 expressly forbids treating normalization alone as a Derived
-    // Work. Evidence must cite Article 5.6 and affirm a non-reconstructable,
-    // non-trivial transformation for this exact class.
     if (!source.includes("aerodatabox") && !source.includes("provider")) {
       failures.push(`derived-source-not-provider-terms:${r.contentClass}`);
     }
