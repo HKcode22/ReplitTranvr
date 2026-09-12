@@ -3,7 +3,8 @@
 -- project-owned experimental/audit record.
 --
 -- Keep project-derived counters/scores/reconciliation fields. Expire only the
--- provider-native values under the raw-provider clock.
+-- provider-native values and direct external balance deltas under the
+-- raw-provider clock.
 
 BEGIN;
 
@@ -27,7 +28,8 @@ BEGIN
     content_present :=
       NEW.subscription_id IS NOT NULL OR
       NEW.balance_before IS NOT NULL OR
-      NEW.balance_after IS NOT NULL;
+      NEW.balance_after IS NOT NULL OR
+      NEW.credits_spent IS NOT NULL;
   ELSE
     RETURN NEW;
   END IF;
