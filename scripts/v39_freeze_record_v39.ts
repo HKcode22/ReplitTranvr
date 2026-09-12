@@ -8,6 +8,7 @@
  */
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import { pathToFileURL } from "url";
 import { verifyGate1CoverageArtifact } from "../server/lib/disruption/gate1Coverage_v39";
 import { RETENTION_MATRIX_HASH } from "../server/lib/disruption/retentionMatrix_v39";
 import { readCurrentPrerequisitePArtifact } from "../server/lib/disruption/prerequisitePArtifact_v39";
@@ -78,15 +79,11 @@ export async function assessFreezeInputs(root = process.cwd(), selectedMode: "re
     missing.push("frozen normalization caps + probe protocol (Phase 2E)");
   }
 
-  // Critical fail-closed rule: the previous implementation could exit 0 after
-  // only seeing READY inputs even though it never wrote a freeze artifact.
-  // Until the writer/schema is implemented, success is impossible by design.
   missing.push(`${selectedMode} hash-locked freeze-record writer/schema not yet implemented`);
-
   return { missing, ready };
 }
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   const result = await assessFreezeInputs(process.cwd(), mode);
   console.log(`${mode === "preprobe" ? "PREPROBE-FREEZE" : "REFERENCE-FREEZE"}`);
   for (const item of result.ready) console.log(`  [READY] ${item}`);
@@ -95,4 +92,4 @@ async function main(): Promise<void> {
   process.exitCode = 1;
 }
 
-void main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) void main();
