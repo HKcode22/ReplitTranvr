@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "crypto";
+import { readFileSync } from "fs";
+import path from "path";
 import type { PoolClient } from "pg";
 import { v39Pool } from "./db_v39";
 import type { RetentionPrimaryPolicy } from "./retentionExpiry_v39";
@@ -28,6 +30,11 @@ function canonical(value: unknown): string {
 
 function sha256(value: unknown): string {
   return createHash("sha256").update(typeof value === "string" ? value : canonical(value), "utf8").digest("hex");
+}
+
+function planHash(): string {
+  const file = path.resolve(process.cwd(), "SEPmd", "V3.9_DataCollectPlan_f.8.md");
+  return sha256(readFileSync(file));
 }
 
 function utc(value: unknown): string {
@@ -123,14 +130,14 @@ export async function collectProviderAccountExpiryCandidates(
     .slice(0, limit);
 }
 
-async function insertTombstone(client: PoolClient, candidate: ProviderAccountExpiryCandidate, runId: string, planHash: string): Promise<void> {
+async function insertTombstone(client: PoolClient, candidate: ProviderAccountExpiryCandidate, runId: string, pHash: string): Promise<void> {
   const inserted = await client.query(
     `INSERT INTO clean.retention_tombstone
        (surface,record_id,content_hash,expired_at,plan_hash,content_class,source_table,content_columns,retention_rule,expiry_run_id,deletion_mode)
      VALUES ('primary',$1,$2,$3::timestamptz,$4,$5,$6,$7::text[],$8,$9,'content-nullification')
      ON CONFLICT (surface,record_id) DO NOTHING
      RETURNING content_hash`,
-    [candidate.recordId, candidate.contentHash, candidate.expiresAtUtc, planHash, candidate.contentClass,
+    [candidate.recordId, candidate.contentHash, candidate.expiresAtUtc, pHash, candidate.contentClass,
       candidate.sourceTable, candidate.contentColumns, `max-${candidate.retentionHours}h/provider-account-content`, runId],
   );
   if (inserted.rowCount === 0) {
@@ -146,7 +153,6 @@ async function insertTombstone(client: PoolClient, candidate: ProviderAccountExp
 
 export async function applyProviderAccountExpiryCandidates(
   candidates: readonly ProviderAccountExpiryCandidate[],
-  planHash: string,
 ): Promise<{ runId: string; expiredCount: number }> {
   const runId = `RETACCT-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${randomUUID().slice(0, 8)}`;
   if (!candidates.length) return { runId, expiredCount: 0 };
@@ -155,8 +161,9 @@ export async function applyProviderAccountExpiryCandidates(
   let expiredCount = 0;
   try {
     await client.query("BEGIN");
+    const pHash = planHash();
     for (const candidate of candidates) {
-      await insertTombstone(client, candidate, runId, planHash);
+      await insertTombstone(client, candidate, runId, pHash);
       let result;
       if (candidate.kind === "collection_batch_account") {
         result = await client.query(
