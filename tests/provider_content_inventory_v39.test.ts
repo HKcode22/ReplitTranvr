@@ -5,30 +5,36 @@ import {
 } from "../server/lib/disruption/providerContentInventory_v39";
 
 describe("V3.9 provider-content column inventory", () => {
-  it("keeps P blocked while copied provider fields or Derived-Work proof remain unresolved", () => {
+  it("keeps P blocked only on the still-unresolved identity/FIDS/airborne/Derived-Work scopes", () => {
     const verdict = verifyProviderContentInventory();
     expect(verdict.pass).toBe(false);
-    expect(verdict.coveredGroupCount).toBeGreaterThanOrEqual(4);
+    expect(verdict.coveredGroupCount).toBeGreaterThanOrEqual(9);
     expect(verdict.unresolvedGroupCount).toBeGreaterThan(0);
-    expect(verdict.failures).toContain("classification-required:raw-delivery-item-extracted-provider-facts");
+    expect(verdict.failures).not.toContain("classification-required:raw-delivery-item-extracted-provider-facts");
+    expect(verdict.failures).not.toContain("classification-required:prepost-flattened-webhook-fields");
     expect(verdict.failures).toContain("classification-required:webhook-flight-identity-provider-values");
     expect(verdict.failures).toContain("classification-required:webhook-schedule-version-provider-values");
-    expect(verdict.failures).toContain("classification-required:prepost-flattened-webhook-fields");
     expect(verdict.failures).toContain("classification-required:fids-population-provider-values");
     expect(verdict.failures).toContain("classification-required:raw-airborne-observations");
     expect(verdict.failures).toContain("derived-work-proof-required:pre-snapshot-feature-vector");
   });
 
-  it("explicitly separates raw bodies from extracted/flattened provider copies", () => {
+  it("explicitly separates raw bodies from extracted/flattened provider copies and gives covered scopes an owner", () => {
     const byId = new Map(PROVIDER_CONTENT_COLUMN_GROUPS.map((g) => [g.id, g]));
 
     expect(byId.get("raw-delivery-envelope")?.disposition).toBe("expiry-covered");
+    expect(byId.get("raw-delivery-extracted-provider-facts")?.disposition).toBe("expiry-covered");
     expect(byId.get("raw-delivery-extracted-provider-facts")?.columns).toContain("provider_published_utc");
 
     expect(byId.get("raw-delivery-item")?.disposition).toBe("expiry-covered");
+    expect(byId.get("raw-delivery-item-extracted-provider-facts")?.disposition).toBe("expiry-covered");
     expect(byId.get("raw-delivery-item-extracted-provider-facts")?.columns).toContain("departure_scheduled_utc");
 
+    expect(byId.get("processing-attempt-provider-bearing-errors")?.disposition).toBe("expiry-covered");
+    expect(byId.get("ingest-envelope-flattened-provider-facts")?.disposition).toBe("expiry-covered");
+
     expect(byId.get("prepost-raw-json")?.disposition).toBe("expiry-covered");
+    expect(byId.get("prepost-flattened-webhook-fields")?.disposition).toBe("expiry-covered");
     expect(byId.get("prepost-flattened-webhook-fields")?.columns).toContain("dep_scheduled_utc");
     expect(byId.get("prepost-flattened-webhook-fields")?.columns).toContain("loc_lat");
 
@@ -37,6 +43,9 @@ describe("V3.9 provider-content column inventory", () => {
 
     expect(byId.get("fids-response-payload")?.retentionClass).toBe("live_fids_cache");
     expect(byId.get("fids-population-provider-values")?.retentionClass).toBe("live_fids_cache");
+
+    const covered = PROVIDER_CONTENT_COLUMN_GROUPS.filter((g) => g.disposition === "expiry-covered");
+    expect(covered.every((g) => g.owner !== "UNVERIFIED")).toBe(true);
   });
 
   it("does not classify copied provider values as derived work just because they are normalized", () => {
