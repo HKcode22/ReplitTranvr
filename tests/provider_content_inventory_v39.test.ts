@@ -5,25 +5,25 @@ import {
 } from "../server/lib/disruption/providerContentInventory_v39";
 
 describe("V3.9 provider-content column inventory", () => {
-  it("keeps P blocked on unresolved identity/FIDS/airborne/accounting/Derived-Work scopes", () => {
+  it("keeps P blocked on unresolved identity/FIDS/airborne/Derived-Work scopes", () => {
     const verdict = verifyProviderContentInventory();
     expect(verdict.pass).toBe(false);
-    expect(verdict.coveredGroupCount).toBeGreaterThanOrEqual(8);
+    expect(verdict.coveredGroupCount).toBeGreaterThanOrEqual(10);
     expect(verdict.unresolvedGroupCount).toBeGreaterThan(0);
     expect(verdict.failures).not.toContain("classification-required:raw-delivery-item-extracted-provider-facts");
     expect(verdict.failures).not.toContain("classification-required:prepost-provider-row");
+    expect(verdict.failures).not.toContain("classification-required:collection-batch-provider-account-values");
+    expect(verdict.failures).not.toContain("classification-required:anchor-probe-provider-account-values");
     expect(verdict.failures).toContain("derived-work-proof-required:raw-delivery-item-canonical-id-encoding");
     expect(verdict.failures).toContain("classification-required:webhook-flight-identity-provider-values");
     expect(verdict.failures).toContain("derived-work-proof-required:canonical-flight-instance-id-encoding");
     expect(verdict.failures).toContain("classification-required:webhook-schedule-version-provider-values");
     expect(verdict.failures).toContain("classification-required:fids-population-provider-values");
     expect(verdict.failures).toContain("classification-required:raw-airborne-observations");
-    expect(verdict.failures).toContain("classification-required:collection-batch-provider-account-values");
-    expect(verdict.failures).toContain("classification-required:anchor-probe-provider-account-values");
     expect(verdict.failures).toContain("derived-work-proof-required:pre-snapshot-feature-vector");
   });
 
-  it("covers provider-native notification, attempt, subscription and account fields in ingress expiry", () => {
+  it("covers provider-native notification, attempt, account and subscription fields with explicit expiry owners", () => {
     const byId = new Map(PROVIDER_CONTENT_COLUMN_GROUPS.map((g) => [g.id, g]));
 
     const raw = byId.get("raw-delivery-extracted-provider-facts")!;
@@ -45,6 +45,16 @@ describe("V3.9 provider-content column inventory", () => {
     expect(byId.get("processing-attempt-provider-bearing-errors")?.disposition).toBe("expiry-covered");
     expect(byId.get("prepost-provider-row")?.disposition).toBe("expiry-covered");
     expect(byId.get("fids-response-payload")?.retentionClass).toBe("live_fids_cache");
+
+    const batch = byId.get("collection-batch-provider-account-values")!;
+    expect(batch.disposition).toBe("expiry-covered");
+    expect(batch.owner).toBe("providerAccountExpiry_v39");
+    expect(batch.columns).toEqual(expect.arrayContaining(["balance_before", "balance_after", "credits_consumed_actual"]));
+
+    const probe = byId.get("anchor-probe-provider-account-values")!;
+    expect(probe.disposition).toBe("expiry-covered");
+    expect(probe.owner).toBe("providerAccountExpiry_v39");
+    expect(probe.columns).toEqual(expect.arrayContaining(["subscription_id", "balance_before", "balance_after", "credits_spent"]));
 
     const covered = PROVIDER_CONTENT_COLUMN_GROUPS.filter((g) => g.disposition === "expiry-covered");
     expect(covered.every((g) => g.owner !== "UNVERIFIED")).toBe(true);
