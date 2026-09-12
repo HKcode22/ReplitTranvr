@@ -55,6 +55,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0045_incident_stop_persistence_cause.sql",
   "0046_subscription_create_uncertainty_stop.sql",
   "0047_phase6_frozen_safety_and_overshoot.sql",
+  "0048_retention_policy_and_expiry.sql",
 ];
 
 function explicitAutoCollectEnabled(): boolean {
@@ -77,10 +78,6 @@ export async function applyBootMigrations(): Promise<void> {
       console.log(`[migrations] applied ${file}`);
     }
 
-    // A long-lived Phase-6 process with explicit ADB_AUTO_COLLECT opt-in must
-    // start the independent frozen safety owner immediately after the exact
-    // boot schema succeeds. Offline migration/verification scripts normally run
-    // with ADB_AUTO_COLLECT=0 and therefore never start a paid safety loop.
     if (explicitAutoCollectEnabled() && !phase6SafetyStarted) {
       const invokedScript = String(process.argv[1] ?? "");
       if (!invokedScript.includes("apply_boot_migrations_v39")) {
