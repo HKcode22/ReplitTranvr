@@ -5,25 +5,35 @@ import {
 } from "../server/lib/disruption/providerContentInventory_v39";
 
 describe("V3.9 provider-content column inventory", () => {
-  it("keeps P blocked on unresolved identity/FIDS/airborne/Derived-Work scopes", () => {
+  it("keeps P blocked only on still-unresolved downstream identity/airborne/Derived-Work scopes", () => {
     const verdict = verifyProviderContentInventory();
     expect(verdict.pass).toBe(false);
-    expect(verdict.coveredGroupCount).toBeGreaterThanOrEqual(10);
+    expect(verdict.coveredGroupCount).toBeGreaterThanOrEqual(15);
     expect(verdict.unresolvedGroupCount).toBeGreaterThan(0);
-    expect(verdict.failures).not.toContain("classification-required:raw-delivery-item-extracted-provider-facts");
-    expect(verdict.failures).not.toContain("classification-required:prepost-provider-row");
-    expect(verdict.failures).not.toContain("classification-required:collection-batch-provider-account-values");
-    expect(verdict.failures).not.toContain("classification-required:anchor-probe-provider-account-values");
-    expect(verdict.failures).toContain("derived-work-proof-required:raw-delivery-item-canonical-id-encoding");
-    expect(verdict.failures).toContain("classification-required:webhook-flight-identity-provider-values");
-    expect(verdict.failures).toContain("derived-work-proof-required:canonical-flight-instance-id-encoding");
-    expect(verdict.failures).toContain("classification-required:webhook-schedule-version-provider-values");
-    expect(verdict.failures).toContain("classification-required:fids-population-provider-values");
+
+    for (const coveredId of [
+      "raw-delivery-item-canonical-id-encoding",
+      "webhook-flight-identity-provider-values",
+      "webhook-schedule-version-provider-values",
+      "webhook-resolution-provider-derived-values",
+      "fids-population-provider-values",
+      "collection-batch-provider-account-values",
+      "anchor-probe-provider-account-values",
+    ]) {
+      expect(verdict.failures.some((failure) => failure.endsWith(`:${coveredId}`))).toBe(false);
+    }
+
+    expect(verdict.failures).toContain("derived-work-proof-required:downstream-canonical-flight-instance-id-encoding");
+    expect(verdict.failures).toContain("classification-required:semantic-event-copied-provider-values");
     expect(verdict.failures).toContain("classification-required:raw-airborne-observations");
+    expect(verdict.failures).toContain("classification-required:clean-airborne-copied-values");
+    expect(verdict.failures).toContain("classification-required:airborne-eligibility-provider-evidence");
+    expect(verdict.failures).toContain("classification-required:airborne-quarantine-provider-evidence");
     expect(verdict.failures).toContain("derived-work-proof-required:pre-snapshot-feature-vector");
+    expect(verdict.failures).toContain("derived-work-proof-required:outcome-evidence");
   });
 
-  it("covers provider-native notification, attempt, account and subscription fields with explicit expiry owners", () => {
+  it("covers provider-native notification, identity, FIDS, account and subscription fields with explicit owners", () => {
     const byId = new Map(PROVIDER_CONTENT_COLUMN_GROUPS.map((g) => [g.id, g]));
 
     const raw = byId.get("raw-delivery-extracted-provider-facts")!;
@@ -37,43 +47,51 @@ describe("V3.9 provider-content column inventory", () => {
       "delivery_attempt_cost_credits",
     ]));
 
-    const ingest = byId.get("ingest-envelope-provider-scope")!;
-    expect(ingest.disposition).toBe("expiry-covered");
-    expect(ingest.columns).toEqual(expect.arrayContaining(["subscription_id", "credits_remaining"]));
+    expect(byId.get("raw-delivery-item-canonical-id-encoding")?.owner).toBe("retentionExpiry_v39");
+    expect(byId.get("webhook-flight-identity-provider-values")?.owner).toBe("providerIdentityExpiry_v39");
+    expect(byId.get("webhook-schedule-version-provider-values")?.owner).toBe("providerIdentityExpiry_v39");
+    expect(byId.get("webhook-resolution-provider-derived-values")?.owner).toBe("providerIdentityExpiry_v39");
 
-    expect(byId.get("raw-delivery-item-extracted-provider-facts")?.disposition).toBe("expiry-covered");
-    expect(byId.get("processing-attempt-provider-bearing-errors")?.disposition).toBe("expiry-covered");
-    expect(byId.get("prepost-provider-row")?.disposition).toBe("expiry-covered");
-    expect(byId.get("fids-response-payload")?.retentionClass).toBe("live_fids_cache");
+    const fidsRaw = byId.get("fids-response-payload")!;
+    expect(fidsRaw.retentionClass).toBe("live_fids_cache");
+    expect(fidsRaw.disposition).toBe("expiry-covered");
+    expect(fidsRaw.columns).toEqual(expect.arrayContaining(["raw_payload", "response_hash"]));
+
+    const fidsPopulation = byId.get("fids-population-provider-values")!;
+    expect(fidsPopulation.retentionClass).toBe("live_fids_cache");
+    expect(fidsPopulation.disposition).toBe("expiry-covered");
+    expect(fidsPopulation.owner).toBe("retentionExpiry_v39+0053");
+    expect(fidsPopulation.columns).toEqual(expect.arrayContaining([
+      "population_query_id",
+      "response_hash",
+      "canonical_flight_instance_id",
+      "analytic_identity_id",
+    ]));
 
     const batch = byId.get("collection-batch-provider-account-values")!;
     expect(batch.disposition).toBe("expiry-covered");
     expect(batch.owner).toBe("providerAccountExpiry_v39");
-    expect(batch.columns).toEqual(expect.arrayContaining(["balance_before", "balance_after", "credits_consumed_actual"]));
 
     const probe = byId.get("anchor-probe-provider-account-values")!;
     expect(probe.disposition).toBe("expiry-covered");
     expect(probe.owner).toBe("providerAccountExpiry_v39");
-    expect(probe.columns).toEqual(expect.arrayContaining(["subscription_id", "balance_before", "balance_after", "credits_spent"]));
 
     const covered = PROVIDER_CONTENT_COLUMN_GROUPS.filter((g) => g.disposition === "expiry-covered");
     expect(covered.every((g) => g.owner !== "UNVERIFIED")).toBe(true);
   });
 
-  it("contains no phantom clean.flight_state and does not bless short canonical leg hashes", () => {
+  it("moves the short-hash blocker to surviving downstream research storage", () => {
     expect(PROVIDER_CONTENT_COLUMN_GROUPS.some((g) => g.table === "clean.flight_state")).toBe(false);
 
     const rawItemCanonical = PROVIDER_CONTENT_COLUMN_GROUPS.find((g) => g.id === "raw-delivery-item-canonical-id-encoding");
-    expect(rawItemCanonical?.table).toBe("clean.raw_delivery_item");
-    expect(rawItemCanonical?.columns).toContain("canonical_flight_instance_id");
-    expect(rawItemCanonical?.retentionClass).toBe("derived_work_candidate");
-    expect(rawItemCanonical?.disposition).toBe("derived-work-proof-required");
+    expect(rawItemCanonical?.retentionClass).toBe("raw_provider_content");
+    expect(rawItemCanonical?.disposition).toBe("expiry-covered");
 
-    const canonical = PROVIDER_CONTENT_COLUMN_GROUPS.find((g) => g.id === "canonical-flight-instance-id-encoding");
-    expect(canonical?.table).toBe("clean.webhook_flight_identity");
-    expect(canonical?.columns).toContain("flight_instance_id");
-    expect(canonical?.retentionClass).toBe("derived_work_candidate");
-    expect(canonical?.disposition).toBe("derived-work-proof-required");
+    const downstreamCanonical = PROVIDER_CONTENT_COLUMN_GROUPS.find((g) => g.id === "downstream-canonical-flight-instance-id-encoding");
+    expect(downstreamCanonical?.table).toBe("clean.flight_events");
+    expect(downstreamCanonical?.columns).toContain("flight_instance_id");
+    expect(downstreamCanonical?.retentionClass).toBe("derived_work_candidate");
+    expect(downstreamCanonical?.disposition).toBe("derived-work-proof-required");
   });
 
   it("does not classify copied provider values as derived work just because they are normalized", () => {
@@ -83,8 +101,7 @@ describe("V3.9 provider-content column inventory", () => {
     }
     const derivedCandidates = PROVIDER_CONTENT_COLUMN_GROUPS.filter((g) => g.retentionClass === "derived_work_candidate");
     expect(derivedCandidates.map((g) => g.id)).toEqual(expect.arrayContaining([
-      "raw-delivery-item-canonical-id-encoding",
-      "canonical-flight-instance-id-encoding",
+      "downstream-canonical-flight-instance-id-encoding",
       "pre-snapshot-feature-vector",
       "outcome-evidence",
     ]));
