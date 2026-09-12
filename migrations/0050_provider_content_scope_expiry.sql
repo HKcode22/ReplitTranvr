@@ -22,7 +22,10 @@ ALTER TABLE clean.adb_ingest_events
 
 -- Full-scope expiry is one-way. Before expiry the legacy owners may continue
 -- their normal lifecycle; once provider_content_expired_at_utc is stamped,
--- provider-bearing columns cannot be restored and the stamp cannot be changed.
+-- provider-bearing/reversible columns cannot be restored and the stamp cannot
+-- be changed. The raw-item canonical short ID is intentionally included here:
+-- it is an unnecessary raw-layer copy and is not granted indefinite retention
+-- merely because it is hashed/encoded.
 CREATE OR REPLACE FUNCTION clean.guard_v39_provider_scope_expiry()
 RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
@@ -54,7 +57,8 @@ BEGIN
       NEW.status_code IS NOT NULL OR
       NEW.last_updated_utc IS NOT NULL OR
       NEW.departure_scheduled_utc IS NOT NULL OR
-      NEW.arrival_scheduled_utc IS NOT NULL;
+      NEW.arrival_scheduled_utc IS NOT NULL OR
+      NEW.canonical_flight_instance_id IS NOT NULL;
   ELSIF TG_TABLE_NAME = 'processing_attempt' THEN
     content_present :=
       NEW.validation_errors IS NOT NULL OR
