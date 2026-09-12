@@ -94,11 +94,11 @@ export async function collectProviderAccountExpiryCandidates(
   if (room()) {
     const rows = await v39Pool.query(
       `SELECT probe_id, COALESCE(window_end, recorded_at, window_start) AS age_at,
-              subscription_id, balance_before, balance_after
+              subscription_id, balance_before, balance_after, credits_spent
          FROM clean.adb_anchor_probe
         WHERE provider_account_expired_at_utc IS NULL
           AND COALESCE(window_end, recorded_at, window_start) <= $1::timestamptz
-          AND (subscription_id IS NOT NULL OR balance_before IS NOT NULL OR balance_after IS NOT NULL)
+          AND (subscription_id IS NOT NULL OR balance_before IS NOT NULL OR balance_after IS NOT NULL OR credits_spent IS NOT NULL)
         ORDER BY COALESCE(window_end, recorded_at, window_start), probe_id
         LIMIT $2`,
       [cutoff, room()],
@@ -109,6 +109,7 @@ export async function collectProviderAccountExpiryCandidates(
         subscription_id: row.subscription_id,
         balance_before: row.balance_before,
         balance_after: row.balance_after,
+        credits_spent: row.credits_spent,
       };
       candidates.push({
         sourceTable: "clean.adb_anchor_probe",
@@ -198,6 +199,7 @@ export async function applyProviderAccountExpiryCandidates(
               SET subscription_id=NULL,
                   balance_before=NULL,
                   balance_after=NULL,
+                  credits_spent=NULL,
                   provider_account_expired_at_utc=now()
             WHERE probe_id=$1 AND provider_account_expired_at_utc IS NULL`,
           [candidate.key],
