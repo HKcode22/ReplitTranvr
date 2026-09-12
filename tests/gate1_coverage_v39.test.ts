@@ -3,6 +3,7 @@ import { buildGate1CoverageArtifact, serializeGate1Artifact } from "../server/li
 import { runGate1Coverage } from "../scripts/measure_coverage";
 
 const identity = { evidenceId: "GATE-1-20260911-001", authorizationId: "AUTH-20260911-G1" };
+const prerequisitePass = () => ({ pass: true, failures: [] as string[] });
 
 function validInput() {
   return {
@@ -63,7 +64,15 @@ describe("Gate 1 coverage command", () => {
 
   it("refuses before any provider call without valid AUTH", async () => {
     const r = reader();
-    await expect(runGate1Coverage(args, r, () => false, vi.fn())).rejects.toThrow("AUTH verification failed");
+    await expect(runGate1Coverage(args, r, () => false, vi.fn(), prerequisitePass)).rejects.toThrow("AUTH verification failed");
+    expect(r.listFeedAirports).not.toHaveBeenCalled();
+  });
+
+  it("refuses before any provider call when prerequisite P is absent or stale", async () => {
+    const r = reader();
+    const prerequisiteBlocked = vi.fn().mockReturnValue({ pass: false, failures: ["artifact-missing"] });
+    await expect(runGate1Coverage(args, r, () => true, vi.fn(), prerequisiteBlocked)).rejects.toThrow("prerequisite P PASS artifact required");
+    expect(prerequisiteBlocked).toHaveBeenCalledOnce();
     expect(r.listFeedAirports).not.toHaveBeenCalled();
   });
 
@@ -71,7 +80,7 @@ describe("Gate 1 coverage command", () => {
     const r = reader();
     const authorize = vi.fn().mockReturnValue(true);
     const writeArtifact = vi.fn();
-    const artifact = await runGate1Coverage(args, r, authorize, writeArtifact);
+    const artifact = await runGate1Coverage(args, r, authorize, writeArtifact, prerequisitePass);
     expect(authorize).toHaveBeenCalledWith("auth.json", "Phase 2 / Gate 1", identity.authorizationId);
     expect(r.listFeedAirports).toHaveBeenCalledTimes(3);
     expect(artifact.universe_count).toBe(2);
@@ -83,6 +92,6 @@ describe("Gate 1 coverage command", () => {
   it("fails closed when a feed is uncertain", async () => {
     const r = reader();
     r.listFeedAirports = vi.fn(async () => null);
-    await expect(runGate1Coverage(args, r, () => true, vi.fn())).rejects.toThrow("BLOCKED");
+    await expect(runGate1Coverage(args, r, () => true, vi.fn(), prerequisitePass)).rejects.toThrow("BLOCKED");
   });
 });
