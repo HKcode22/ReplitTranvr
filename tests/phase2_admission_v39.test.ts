@@ -19,10 +19,16 @@ describe("V3.9 Phase-2 fail-closed admission", () => {
     expect(coverage).toBeGreaterThan(p);
   });
 
-  it("reference/preprobe freeze independently re-verifies P", () => {
+  it("reference/preprobe freeze independently re-verifies P before Gate-1/traffic/frame inputs", () => {
     const freeze = source("scripts/v39_freeze_record_v39.ts");
-    expect(freeze).toContain("loadVerifiedPrerequisitePPass(root)");
-    expect(freeze).toContain("current prerequisite-P PASS evidence");
+    const p = freeze.indexOf("loadVerifiedPrerequisitePPass(root)");
+    const gate1 = freeze.indexOf("verifyGate1CoverageArtifact(gate1)");
+    const traffic = freeze.indexOf("parseFrozenTrafficReference(trafficRaw)");
+    const frame = freeze.indexOf("loadAndVerifyActiveFrame(input)");
+    expect(p).toBeGreaterThan(-1);
+    expect(gate1).toBeGreaterThan(p);
+    expect(traffic).toBeGreaterThan(gate1);
+    expect(frame).toBeGreaterThan(traffic);
   });
 
   it("Gate 1 remains P-gated before coverage measurement", () => {
