@@ -2,24 +2,24 @@ import { createHash } from "crypto";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { execFileSync } from "child_process";
+import { PREPAID_SECURITY_RETENTION_CONTROL_IDS } from "./prepaidSecurityRetention_v39";
 
 export const PREREQUISITE_P_PHASE_GATE = "Phase 2 / prerequisite P" as const;
-export const PREREQUISITE_P_SCHEMA_VERSION = "v3.9-prepaid-security-retention-2" as const;
+export const PREREQUISITE_P_SCHEMA_VERSION = "v3.9-prepaid-security-retention-3" as const;
 export const PREREQUISITE_P_ARTIFACT_RELATIVE_PATH = "artifacts/prepaid-security-retention.json" as const;
-
-export const PREREQUISITE_P_REQUIRED_CHECKS = Object.freeze([
-  "least-privilege-db-tls",
-  "webhook-tls-auth-replay",
-  "retention-deployment-surfaces",
-  "retention-content-matrix",
-  "incident-stop-refusal",
-] as const);
+export const PREREQUISITE_P_REQUIRED_CHECKS = PREPAID_SECURITY_RETENTION_CONTROL_IDS;
 
 export const PREREQUISITE_P_CONTRACT_FILES = Object.freeze([
   "server/lib/disruption/prerequisitePArtifact_v39.ts",
+  "server/lib/disruption/prepaidSecurityRetention_v39.ts",
   "server/lib/disruption/retentionMatrix_v39.ts",
   "server/lib/disruption/retentionSecurity_v39.ts",
   "server/lib/disruption/rawIngress_v3.ts",
+  "server/lib/disruption/flightDataPrePostStore_v3.ts",
+  "server/lib/disruption/fidsCensus_v3.ts",
+  "server/lib/disruption/settlement_v3.ts",
+  "server/lib/disruption/probeExecution_v39.ts",
+  "server/lib/disruption/phase6SafetyWatchdog_v39.ts",
   "server/lib/disruption/adbCollectionController_v3.ts",
   "server/routes_v3.ts",
   "scripts/v39_security_verify_v39.ts",
@@ -125,9 +125,7 @@ export function verifyPrerequisitePArtifact(
   const names = checks.map((check: any) => check?.name);
   for (const required of PREREQUISITE_P_REQUIRED_CHECKS) {
     const found = checks.find((check: any) => check?.name === required);
-    if (!found || found.pass !== true || !/^[a-f0-9]{64}$/i.test(String(found.detail_sha256 ?? ""))) {
-      failures.push(`check:${required}`);
-    }
+    if (!found || found.pass !== true || !/^[a-f0-9]{64}$/i.test(String(found.detail_sha256 ?? ""))) failures.push(`check:${required}`);
   }
   if (names.length !== PREREQUISITE_P_REQUIRED_CHECKS.length || new Set(names).size !== names.length) failures.push("check-set");
 
@@ -143,9 +141,8 @@ export function verifyPrerequisitePArtifact(
       checks: artifact.checks,
     };
     if (sha256Hex(canonical(unsigned)) !== artifact.artifact_sha256.toLowerCase()) failures.push("artifact-hash-mismatch");
-  } else {
-    failures.push("artifact-hash");
-  }
+  } else failures.push("artifact-hash");
+
   return { pass: failures.length === 0, failures: [...new Set(failures)].sort() };
 }
 
