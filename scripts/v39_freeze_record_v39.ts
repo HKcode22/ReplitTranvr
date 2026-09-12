@@ -1,41 +1,71 @@
 /**
- * v39:reference:freeze + v39:preprobe:freeze — freeze records (§1.5.15).
- * Both refuse until their frozen inputs exist: Gate-1 coverage artifact,
- * licensed traffic/region sources, final frame hash (reference); plus the
- * 12-candidate shortlist, replacements, normalization, and probe protocol
- * (preprobe). Exit 0 only with complete frozen inputs + written artifact hash.
+ * v39:reference:freeze + v39:preprobe:freeze.
+ *
+ * This command is an admission checker, not a data-source chooser. It refuses
+ * until Gate-1 evidence, the frozen region mapping and an actually obtained,
+ * permitted 12-month traffic/schedule reference are present. It never converts
+ * a candidate/provider name into a PASS by itself.
  */
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 
 const mode = process.argv[2] === "preprobe" ? "preprobe" : "reference";
 
+interface TrafficDecision {
+  status?: string;
+  decision?: string;
+  preferred_source_class?: string;
+}
+
 async function main(): Promise<void> {
   const root = process.cwd();
   const missing: string[] = [];
-  // Gate-1 coverage artifact does not exist yet (Gate 1 is BLOCKED).
-  if (!existsSync(join(root, "artifacts", "gate1-coverage.json"))) {
-    missing.push("Gate-1 coverage artifact (artifacts/gate1-coverage.json)");
+  const coveragePath = join(root, "artifacts", "gate1-coverage.json");
+  if (!existsSync(coveragePath)) {
+    missing.push("Gate-1 coverage evidence (artifacts/gate1-coverage.json)");
+  } else {
+    console.log("  [READY] Gate-1 measurement evidence exists (current committed form is sanitized counts/hashes only)");
   }
-  // Region mapping is frozen in code (regionMapping_v39.ts); traffic source still open.
+
   try {
-    const { REGION_MAPPING_HASH } = await import("../server/lib/disruption/regionMapping_v39");
-    console.log(`  [READY] country→macro-region mapping hash=${REGION_MAPPING_HASH.slice(0, 12)}… (Phase 2C region half)`);
+    const { REGION_MAPPING_HASH, REGION_MAPPING_VERSION, REGION_MAPPING_RETRIEVAL_DATE, REGION_REVIEWED_ISO_COUNT } = await import("../server/lib/disruption/regionMapping_v39");
+    if (REGION_REVIEWED_ISO_COUNT !== 249) throw new Error("ISO review incomplete");
+    console.log(`  [READY] country→macro-region mapping ${REGION_MAPPING_VERSION} date=${REGION_MAPPING_RETRIEVAL_DATE} hash=${REGION_MAPPING_HASH.slice(0, 12)}…`);
   } catch {
-    missing.push("country→macro-region mapping + hash (Phase 2C)");
+    missing.push("Plan-exact country→macro-region mapping + hash (Phase 2C)");
   }
-  // Licensed traffic/region sources are not frozen (Phase 2C not started).
-  missing.push("licensed 12-month traffic source + hash (Phase 2C)");
+
+  const trafficPath = join(root, "artifacts", "traffic-reference-decision.json");
+  if (!existsSync(trafficPath)) {
+    missing.push("traffic-reference decision/evidence artifact (Phase 2C)");
+  } else {
+    try {
+      const traffic = JSON.parse(readFileSync(trafficPath, "utf8")) as TrafficDecision;
+      if (traffic.status !== "READY_FROZEN_REFERENCE") {
+        missing.push(`TRAFFIC_REFERENCE=${traffic.status ?? "BLOCKED"}: obtain permitted global 12-month scheduled-route reference before frame rebuild`);
+      } else {
+        console.log(`  [READY] traffic reference: ${traffic.preferred_source_class ?? "frozen permitted source"}`);
+      }
+    } catch {
+      missing.push("valid traffic-reference decision/evidence artifact (Phase 2C)");
+    }
+  }
+
   if (mode === "preprobe") {
-    // Final frame + shortlist depend on the reference freeze above.
     missing.push("final frame hash (Phase 2D)");
     missing.push("12 dual-eligible HUB shortlist + ordered replacements (Phase 2E)");
     missing.push("frozen normalization caps + probe protocol (Phase 2E)");
   }
+
   console.log(`${mode === "preprobe" ? "PREPROBE-FREEZE" : "REFERENCE-FREEZE"}`);
   for (const m of missing) console.log(`  [BLOCKED] ${m}`);
-  console.log(`RESULT: BLOCKED (${missing.length} frozen inputs missing) — refusing to write freeze record`);
-  process.exit(1);
+  if (missing.length > 0) {
+    console.log(`RESULT: BLOCKED (${missing.length} frozen inputs missing) — refusing to write freeze record`);
+    process.exit(1);
+  }
+  // This branch intentionally remains unreachable until the real writer/schema
+  // is supplied with the frozen traffic reference and final frame artifacts.
+  console.log("RESULT: READY INPUTS — freeze-record writer not yet invoked");
 }
 
 void main();
