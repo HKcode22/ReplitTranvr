@@ -1,0 +1,99 @@
+name: V3.9 Phase2 Audit Status Fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch current Phase2 audit status
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ledger_p = Path('SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md')
+          expl_p = Path('SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE2.md')
+          log_p = Path('SEPmd/V3.9_IMPLEMENTATION_LOG.md')
+
+          ledger = ledger_p.read_text()
+          entry = '''<!-- PHASE2-AUDIT-20260911-001 -->
+## PHASE2-AUDIT-20260911-001 — prerequisite-P re-audit + Gate-1 ordering correction
+
+**Current decision:** `PHASE0=PASS`, `PHASE1=PASS`, `PREPAID_SECURITY_RETENTION=BLOCKED_REVERIFY`, `GATE1_MEASUREMENT=RETAINED_NOT_AUTHORIZING`, `REGION_REFERENCE=READY`, `TRAFFIC_REFERENCE=BLOCKED_PENDING_PERMITTED_REFERENCE`, `PHASE2D_FRAME=NO_GO`, `PHASE2E_PREPROBE=NO_GO`.
+
+A repository/runtime re-audit found that the earlier prerequisite-P claim was not reproducible on a clean runtime. The old helper could declare the deployed primary PostgreSQL surface `NOT_DEPLOYED` and synthesize one blanket 30-day retention rule for all content classes. That contradicts Plan §10.2, which requires surface-by-surface evidence, classification-specific retention, fail-closed unknowns, and forbids treating normalization alone as a Derived Work. On read-only Replit recheck the prerequisite-P evidence variables were absent and `v39:security:verify` did not PASS. Therefore the prior P readiness conclusion is superseded; no paid action is authorized.
+
+Repairs made in the current main lineage:
+- `scripts/export_v39_env.sh` can no longer synthesize a retention PASS; primary is declared deployed and replica/backup/object/log stay UNKNOWN until evidenced.
+- `v39:security:verify` now rejects `primary=NOT_DEPLOYED` when a production DB is configured and emits literal `PREPAID_SECURITY_RETENTION=PASS` only when every prerequisite-P check passes.
+- retention-matrix verification now rejects blanket >7-day raw retention without provider basis and requires Article-5.6/non-trivial/non-reconstructable evidence for a Derived-Work claim.
+- the Gate-1 public artifact owner now commits only counts/hashes/provenance; provider airport membership lists are transient. The previously committed current-tree list was replaced by a sanitized projection while preserving its original artifact hash in provenance. Git history still contains the historical bytes; no destructive history rewrite was performed.
+- Plan-exact region mapping was repaired: Russian airports with missing/invalid longitude are `UNMAPPED`; the mapping explicitly reviews all 249 ISO alpha-2 rows and records retrieval date/version/hash inputs.
+- `artifacts/traffic-reference-decision.json` now records the binding traffic decision: acquire a permitted global historical scheduled-route reference; until obtained, `TRAFFIC_REFERENCE=BLOCKED` and missing-reference airports remain `UNCLASSIFIED`.
+
+The historical `GATE-1-20260911-001` measurement remains useful evidence (free coverage endpoints; 4,344-universe counts/hashes) but, because prerequisite P must precede Gate 1, it does **not** authorize downstream progression. After prerequisite P is re-established on the current runtime, rerun Gate 1 under a fresh/valid read-only AUTH before final frame rebuild.
+
+**Traffic-source decision:** pursue a licensed/permitted global historical schedule source (preferred: Cirium or OAG with scope that covers the required 12-month research window and route/carrier fields). `BLOCKED` is the correct machine state until access is actually obtained; it is not permission to skip the reference. OpenSky can be useful university research traffic evidence but does not by itself satisfy Plan §4.5's scheduled-route degree/carrier/international reference. FAA/BTS is not a global six-region reference.
+
+**Next permitted work:** close prerequisite P only. Then rerun Gate 1. Then freeze traffic/reference rules and rebuild the final frame. Safety smoke, probes, Gate 2 and all paid work remain NO-GO.
+
+---
+
+'''
+          if '<!-- PHASE2-AUDIT-20260911-001 -->' not in ledger:
+              marker = '---\n\n'
+              ledger = ledger.replace(marker, marker + entry, 1)
+              ledger_p.write_text(ledger)
+
+          expl = expl_p.read_text()
+          correction = '''<!-- PHASE2-AUDIT-CORRECTION-20260911 -->
+## Superseding Phase-2 audit correction — 2026-09-11
+
+The explainer below accurately describes what the earlier session attempted, but its statements that prerequisite P "proved" legal/security storage readiness and that all five verifier checks "currently PASS" are **superseded** by the canonical audit `PHASE2-AUDIT-20260911-001`.
+
+Current truth: prerequisite P is `BLOCKED_REVERIFY`; Gate-1 measurement evidence is retained but must be rerun after P PASS; the region mapping is repaired/ready; the traffic reference is `BLOCKED_PENDING_PERMITTED_REFERENCE`; Phase 2D/2E and paid work are NO-GO. The old all-`NOT_DEPLOYED` retention declaration and blanket 30-day matrix were not valid evidence. Do not use those older sentences operationally.
+
+For traffic, the intended acquisition path is a permitted global historical schedule source (prefer Cirium/OAG if the actual license/evaluation includes the needed 12-month historical airport/route/carrier data). Until that source is in hand and hashed, the binding state remains `TRAFFIC_REFERENCE=BLOCKED` and missing traffic rows remain `UNCLASSIFIED`.
+
+---
+
+'''
+          if '<!-- PHASE2-AUDIT-CORRECTION-20260911 -->' not in expl:
+              marker = '---\n\n'
+              expl = expl.replace(marker, marker + correction, 1)
+              expl_p.write_text(expl)
+
+          log = log_p.read_text()
+          status = '''> **CURRENT PHASE-2 RE-AUDIT STATUS — 2026-09-11 (supersedes earlier Phase-2 readiness claims):** `PREPAID_SECURITY_RETENTION=BLOCKED_REVERIFY`, `GATE1_MEASUREMENT=RETAINED_NOT_AUTHORIZING`, `REGION_REFERENCE=READY`, `TRAFFIC_REFERENCE=BLOCKED_PENDING_PERMITTED_REFERENCE`, `PHASE2D=NO_GO`, `PHASE2E=NO_GO`, `PAID_WORK=NO_GO`. The prior prerequisite-P shell evidence was not reproducible and could misdeclare deployed storage/blanket retention. Current code now fails closed. Re-establish P on the current runtime, then rerun Gate 1; only then may reference/frame freeze continue. The traffic-source requirement is binding Plan §4.1/§4.5, not an agent invention. Pursue a permitted global 12-month scheduled-route source; until actually obtained, airports without traffic data remain `UNCLASSIFIED` and frame rebuild cannot PASS. Canonical evidence: `PHASE2-AUDIT-20260911-001`.\n\n'''
+          if 'CURRENT PHASE-2 RE-AUDIT STATUS — 2026-09-11' not in log:
+              anchor = '> **CURRENT PHASE-1 / GATE-0 STATUS — PASS (2026-09-10):**'
+              start = log.find(anchor)
+              if start < 0: raise SystemExit('current Gate0 status anchor missing')
+              end = log.find('\n\n', start)
+              if end < 0: raise SystemExit('current Gate0 status paragraph end missing')
+              log = log[:end+2] + status + log[end+2:]
+              log_p.write_text(log)
+          PY
+
+      - name: Validate and commit
+        shell: bash
+        run: |
+          git diff --check
+          grep -q 'PREPAID_SECURITY_RETENTION=BLOCKED_REVERIFY' SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md
+          grep -q 'CURRENT PHASE-2 RE-AUDIT STATUS' SEPmd/V3.9_IMPLEMENTATION_LOG.md
+          grep -q 'PHASE2-AUDIT-CORRECTION-20260911' SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE2.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/v39-phase2-audit-status-fix.yml
+          git add SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE2.md SEPmd/V3.9_IMPLEMENTATION_LOG.md
+          git commit -m "V3.9 Phase2: record prerequisite-P re-audit and traffic block"
+          git push origin HEAD:main
