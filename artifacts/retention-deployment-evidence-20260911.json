@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "v3.9-retention-deployment-evidence-1",
+  "evidenceId": "RETENTION-DEPLOYMENT-20260911-001",
+  "verifiedAtUtc": "2026-09-12T05:59:00Z",
+  "status": "BLOCKED_BACKUP_RECOVERY_AND_UNVERIFIED_SURFACES",
+  "ownerAttestation": {
+    "replitDatabasePanel": {
+      "pointInTimeRecovery": "On · last 7 days",
+      "recoveryWindow": "7 Days",
+      "recoveryWindowHours": 168
+    },
+    "rapidApiUltraRetentionTerms": {
+      "rawApiPayloadAndWebhookDelivery": "hard delete after 7 days max",
+      "liveFidsQueryCache": "hard delete after 24 hours max",
+      "derivedWorksAndAnalytics": "retain up to 365 days for aggregated, transformed feature vectors and delay models",
+      "systemMetadataAndAuditLogs": "retain indefinitely when project-owned and containing no third-party provider content"
+    }
+  },
+  "publicProviderEvidence": {
+    "termsUrl": "https://aerodatabox.com/terms/",
+    "termsArticle5_5": "Public Terms cap ordinary cached Contents at the greater of 7 days, Cache-Control max-age, or an explicit Plan-Term period.",
+    "termsArticle5_6": "Public Terms exempt genuine Derived Works from Article 5.5; Derived Work definition requires non-trivial processing and non-reconstructability of individual Contents values.",
+    "termsUpdateUrl": "https://aerodatabox.com/2026-09-terms-update",
+    "termsUpdateNote": "Public September update states default 7-day caching and a 60-day grace period for existing subscribers. Its 24-hour FIDS statement concerns query range on Ultra-2/Mega and is not used here as evidence of the owner's 24-hour RapidAPI Ultra cache limit.",
+    "pricingUrl": "https://aerodatabox.com/pricing/"
+  },
+  "primaryExpiryHours": {
+    "raw_provider_content": 168,
+    "live_fids_cache": 24
+  },
+  "surfaces": {
+    "primary": {
+      "state": "DEPLOYED",
+      "plaintextProviderContentRecoverable": true,
+      "recoveryWindowHours": 0,
+      "source": "Travnr PostgreSQL primary database"
+    },
+    "replica": {
+      "state": "UNKNOWN",
+      "plaintextProviderContentRecoverable": null,
+      "recoveryWindowHours": null,
+      "source": "not yet independently verified"
+    },
+    "backup": {
+      "state": "DEPLOYED",
+      "plaintextProviderContentRecoverable": true,
+      "recoveryWindowHours": 168,
+      "source": "project owner read from Replit Database Settings panel on 2026-09-11",
+      "note": "PITR is On, last 7 days; Recovery window 7 Days"
+    },
+    "object": {
+      "state": "UNKNOWN",
+      "plaintextProviderContentRecoverable": null,
+      "recoveryWindowHours": null,
+      "source": "not yet independently verified"
+    },
+    "log": {
+      "state": "UNKNOWN",
+      "plaintextProviderContentRecoverable": null,
+      "recoveryWindowHours": null,
+      "source": "repository log-redaction audit still incomplete"
+    }
+  },
+  "computedConsequence": {
+    "rawProviderContentRecoverableAgeHoursIfPrimaryExpiresAt168h": 336,
+    "liveFidsRecoverableAgeHoursIfPrimaryExpiresAt24h": 192,
+    "pVerdict": "BLOCKED",
+    "reason": "The confirmed 168-hour PITR window can preserve reconstructable plaintext beyond both hard primary retention maxima, and replica/object/log surfaces are not yet fully verified. Paid provider-content persistence therefore remains fail-closed."
+  },
+  "authorizationEffect": {
+    "gate1TransientCoverageMeasurement": "may be implemented/tested as a zero-paid-call, non-content-persisting path but must not be treated as a new PASS until the Plan's prerequisite ordering is satisfied",
+    "paidFids": "NO-GO",
+    "safetySmoke": "NO-GO",
+    "probes": "NO-GO",
+    "canary": "NO-GO",
+    "phase6": "NO-GO"
+  }
+}
