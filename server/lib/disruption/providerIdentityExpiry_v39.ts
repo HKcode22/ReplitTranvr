@@ -5,10 +5,13 @@ import type { PoolClient } from "pg";
 import { v39Pool } from "./db_v39";
 import type { RetentionPrimaryPolicy } from "./retentionExpiry_v39";
 
-export type ProviderIdentityExpiryKind = "schedule_version" | "flight_identity";
+export type ProviderIdentityExpiryKind = "schedule_version" | "resolution" | "flight_identity";
 
 export interface ProviderIdentityExpiryCandidate {
-  sourceTable: "clean.webhook_flight_schedule_version" | "clean.webhook_flight_identity";
+  sourceTable:
+    | "clean.webhook_flight_schedule_version"
+    | "clean.webhook_identity_resolution"
+    | "clean.webhook_flight_identity";
   recordId: string;
   contentClass: "webhook_identity_schedule";
   contentColumns: string[];
@@ -50,10 +53,12 @@ function expiresAt(age: string, hours: number): string {
 /**
  * Provider identity/schedule rows are operational linkage, not long-lived
  * research output. A schedule-version row expires from its observation time.
- * An identity row is eligible only when the identity itself is old AND no
- * schedule observation or resolution for the same leg has occurred inside the
- * retention window. This prevents deleting an actively used linkage row merely
- * because its first creation timestamp is old.
+ * Resolution-ledger audit metadata is retained, but its copied leg ID/service
+ * date is nulled after the same raw-provider clock. An identity row is eligible
+ * only when the identity itself is old AND no schedule observation or
+ * non-expired resolution for the same leg has occurred inside the retention
+ * window. This prevents deleting actively used linkage merely because its first
+ * creation timestamp is old.
  */
 export async function collectProviderIdentityExpiryCandidates(
   now: Date,
@@ -93,6 +98,40 @@ export async function collectProviderIdentityExpiryCandidates(
 
   if (room()) {
     const result = await v39Pool.query(
+      `SELECT resolution_id, resolved_at_utc, flight_instance_id, initial_service_date
+         FROM clean.webhook_identity_resolution
+        WHERE resolution_status='resolved'
+          AND provider_identity_expired_at_utc IS NULL
+          AND flight_instance_id IS NOT NULL
+          AND initial_service_date IS NOT NULL
+          AND resolved_at_utc <= $1::timestamptz
+        ORDER BY resolved_at_utc, resolution_id
+        LIMIT $2`,
+      [cutoff, room()],
+    );
+    for (const row of result.rows) {
+      const ageTimestampUtc = utc(row.resolved_at_utc);
+      const content = {
+        flight_instance_id: row.flight_instance_id,
+        initial_service_date: row.initial_service_date,
+      };
+      out.push({
+        sourceTable: "clean.webhook_identity_resolution",
+        recordId: `webhook_identity_resolution:${row.resolution_id}:provider_identity_v1`,
+        contentClass: "webhook_identity_schedule",
+        contentColumns: Object.keys(content),
+        ageTimestampUtc,
+        expiresAtUtc: expiresAt(ageTimestampUtc, policy.rawProviderHours),
+        retentionHours: policy.rawProviderHours,
+        contentHash: sha256(content),
+        kind: "resolution",
+        key: Number(row.resolution_id),
+      });
+    }
+  }
+
+  if (room()) {
+    const result = await v39Pool.query(
       `SELECT i.id, i.created_at_utc, to_jsonb(i) AS row_json
          FROM clean.webhook_flight_identity i
         WHERE i.created_at_utc <= $1::timestamptz
@@ -106,6 +145,7 @@ export async function collectProviderIdentityExpiryCandidates(
             SELECT 1
               FROM clean.webhook_identity_resolution r
              WHERE r.flight_instance_id=i.flight_instance_id
+               AND r.provider_identity_expired_at_utc IS NULL
                AND r.resolved_at_utc > $1::timestamptz
           )
         ORDER BY i.created_at_utc, i.id
@@ -129,24 +169,31 @@ export async function collectProviderIdentityExpiryCandidates(
     }
   }
 
-  // Delete old schedule-version evidence before the parent-like identity row
-  // when expiry timestamps tie. No FK exists, but this keeps the operational
-  // ordering explicit and future-proof.
+  // Expire child/evidence rows before the parent-like identity row when expiry
+  // timestamps tie. No FK requires this order, but it keeps lifecycle semantics
+  // explicit and future-proof.
+  const rank: Record<ProviderIdentityExpiryKind, number> = {
+    schedule_version: 0,
+    resolution: 1,
+    flight_identity: 2,
+  };
   return out.sort((a, b) =>
     a.expiresAtUtc.localeCompare(b.expiresAtUtc)
-    || (a.kind === b.kind ? a.recordId.localeCompare(b.recordId) : a.kind === "schedule_version" ? -1 : 1),
+    || rank[a.kind] - rank[b.kind]
+    || a.recordId.localeCompare(b.recordId),
   ).slice(0, limit);
 }
 
 async function insertTombstone(client: PoolClient, candidate: ProviderIdentityExpiryCandidate, runId: string, pHash: string): Promise<void> {
+  const deletionMode = candidate.kind === "resolution" ? "content-nullification" : "hard-delete";
   const inserted = await client.query(
     `INSERT INTO clean.retention_tombstone
        (surface,record_id,content_hash,expired_at,plan_hash,content_class,source_table,content_columns,retention_rule,expiry_run_id,deletion_mode)
-     VALUES ('primary',$1,$2,$3::timestamptz,$4,$5,$6,$7::text[],$8,$9,'hard-delete')
+     VALUES ('primary',$1,$2,$3::timestamptz,$4,$5,$6,$7::text[],$8,$9,$10)
      ON CONFLICT (surface,record_id) DO NOTHING
      RETURNING content_hash`,
     [candidate.recordId, candidate.contentHash, candidate.expiresAtUtc, pHash, candidate.contentClass,
-      candidate.sourceTable, candidate.contentColumns, `max-${candidate.retentionHours}h/provider-identity-content`, runId],
+      candidate.sourceTable, candidate.contentColumns, `max-${candidate.retentionHours}h/provider-identity-content`, runId, deletionMode],
   );
   if (inserted.rowCount === 0) {
     const existing = await client.query(
@@ -189,27 +236,45 @@ export async function applyProviderIdentityExpiryCandidates(
     const pHash = planHash();
     for (const candidate of candidates) {
       await insertTombstone(client, candidate, runId, pHash);
-      const result = candidate.kind === "schedule_version"
-        ? await client.query(
-            `DELETE FROM clean.webhook_flight_schedule_version
-              WHERE schedule_version_pk=$1 AND observed_at_utc <= $2::timestamptz`,
-            [candidate.key, candidate.ageTimestampUtc],
-          )
-        : await client.query(
-            `DELETE FROM clean.webhook_flight_identity i
-              WHERE i.id=$1
-                AND NOT EXISTS (
-                  SELECT 1 FROM clean.webhook_flight_schedule_version s
-                   WHERE s.flight_instance_id=i.flight_instance_id
-                     AND s.observed_at_utc > $2::timestamptz
-                )
-                AND NOT EXISTS (
-                  SELECT 1 FROM clean.webhook_identity_resolution r
-                   WHERE r.flight_instance_id=i.flight_instance_id
-                     AND r.resolved_at_utc > $2::timestamptz
-                )`,
-            [candidate.key, candidate.expiresAtUtc],
-          );
+      let result;
+      if (candidate.kind === "schedule_version") {
+        result = await client.query(
+          `DELETE FROM clean.webhook_flight_schedule_version
+            WHERE schedule_version_pk=$1 AND observed_at_utc <= $2::timestamptz`,
+          [candidate.key, candidate.ageTimestampUtc],
+        );
+      } else if (candidate.kind === "resolution") {
+        result = await client.query(
+          `UPDATE clean.webhook_identity_resolution
+              SET flight_instance_id=NULL,
+                  initial_service_date=NULL,
+                  provider_identity_expired_at_utc=now()
+            WHERE resolution_id=$1
+              AND resolution_status='resolved'
+              AND provider_identity_expired_at_utc IS NULL
+              AND flight_instance_id IS NOT NULL
+              AND initial_service_date IS NOT NULL
+              AND resolved_at_utc <= $2::timestamptz`,
+          [candidate.key, candidate.ageTimestampUtc],
+        );
+      } else {
+        result = await client.query(
+          `DELETE FROM clean.webhook_flight_identity i
+            WHERE i.id=$1
+              AND NOT EXISTS (
+                SELECT 1 FROM clean.webhook_flight_schedule_version s
+                 WHERE s.flight_instance_id=i.flight_instance_id
+                   AND s.observed_at_utc > $2::timestamptz
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM clean.webhook_identity_resolution r
+                 WHERE r.flight_instance_id=i.flight_instance_id
+                   AND r.provider_identity_expired_at_utc IS NULL
+                   AND r.resolved_at_utc > $2::timestamptz
+              )`,
+          [candidate.key, candidate.expiresAtUtc],
+        );
+      }
       if (result.rowCount !== 1) throw new Error(`RETENTION_ROW_CHANGED_OR_ACTIVE:${candidate.recordId}`);
       expiredCount += 1;
     }
