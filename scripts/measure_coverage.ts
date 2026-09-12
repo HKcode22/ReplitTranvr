@@ -20,6 +20,8 @@ import {
   type CoverageService,
   type Gate1CoverageArtifact,
 } from "../server/lib/disruption/gate1Coverage_v39";
+import { RETENTION_MATRIX_HASH } from "../server/lib/disruption/retentionMatrix_v39";
+import { readCurrentPrerequisitePArtifact } from "../server/lib/disruption/prerequisitePArtifact_v39";
 import { parseArgs, verifyAuthFile } from "./v39_paid_guard_v39";
 
 export interface Gate1CoverageReader {
@@ -29,6 +31,12 @@ export interface Gate1CoverageReader {
 }
 
 type AuthVerifier = (authFile: string, phaseGate: string, auth: string) => boolean;
+type PrerequisitePVerifier = () => { pass: boolean; failures: string[] };
+
+function verifyCurrentPrerequisiteP(): { pass: boolean; failures: string[] } {
+  const verdict = readCurrentPrerequisitePArtifact(process.cwd(), undefined, RETENTION_MATRIX_HASH);
+  return { pass: verdict.pass, failures: verdict.failures };
+}
 
 export async function runGate1Coverage(
   argv: string[],
@@ -45,6 +53,7 @@ export async function runGate1Coverage(
     mkdirSync(join(process.cwd(), "artifacts"), { recursive: true });
     writeFileSync(join(process.cwd(), "artifacts", "gate1-coverage.json"), text);
   },
+  verifyPrerequisiteP: PrerequisitePVerifier = verifyCurrentPrerequisiteP,
 ): Promise<Gate1CoverageArtifact> {
   const { auth, authFile, evidenceId } = parseArgs(argv);
   if (!auth || !/^AUTH-\d{8}-[A-Z0-9]+$/.test(auth)) throw new Error("REFUSED: valid --auth is required");
@@ -53,6 +62,13 @@ export async function runGate1Coverage(
 
   // Authorization is established before touching the provider.
   if (!authorize(authFile, GATE1_PHASE_GATE, auth)) throw new Error("REFUSED: AUTH verification failed");
+
+  // Binding order: prerequisite P must be a durable PASS on this exact code
+  // state before Gate 1 may read even documented-free provider coverage.
+  const prerequisite = verifyPrerequisiteP();
+  if (!prerequisite.pass) {
+    throw new Error(`REFUSED: prerequisite P PASS artifact required (${prerequisite.failures.join(",") || "invalid"})`);
+  }
 
   const feeds = {} as Record<CoverageService, { airports: string[] } | null>;
   for (const service of COVERAGE_SERVICES) {
