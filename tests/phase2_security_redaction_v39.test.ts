@@ -18,9 +18,25 @@ describe("prerequisite-P provider log redaction", () => {
     expect(text).toContain("/api/v1/webhooks/aerodatabox/[REDACTED]");
   });
 
-  it("does not print provider error bodies from subscription creation", () => {
+  it("never puts provider HTTP response bodies into subscription/balance/refill logs or strict errors", () => {
     const text = source("server/lib/disruption/aerodataboxLimiter_v3.ts");
-    expect(text).not.toContain("createSubscription ${subjectType}/${subjectId} ${resp.status}: ${text.slice(0, 300)}");
-    expect(text).toContain("createSubscription ${subjectType}/${subjectId} HTTP ${resp.status} (body redacted)");
+    expect(text).toContain("function safeHttpDiagnostic");
+    expect(text).toContain("(body redacted)");
+    expect(text).not.toContain("getBalance ${resp.status}: ${(await resp.text()");
+    expect(text).not.toContain("refillBalance ${resp.status}: ${(await resp.text()");
+    expect(text).not.toContain("listSubscriptions ${resp.status}: ${(await resp.text()");
+    expect(text).not.toContain("getSubscription ${subscriptionId} ${resp.status}: ${(await resp.text()");
+    expect(text).not.toContain("deleteSubscription ${subscriptionId} ${resp.status}: ${(await resp.text()");
+    expect(text).not.toContain("R1_LIST_UNAVAILABLE: HTTP ${resp.status} ${body}");
+    expect(text).not.toContain("const body = (await resp.text().catch(() => \"\")).slice(0, 300)");
+  });
+
+  it("does not put raw transport exception messages into AeroDataBox logs", () => {
+    const text = source("server/lib/disruption/aerodataboxLimiter_v3.ts");
+    expect(text).not.toContain('console.error("[adb-v3] getBalance error:", err?.message || err)');
+    expect(text).not.toContain('console.error("[adb-v3] refillBalance error:", err?.message || err)');
+    expect(text).not.toContain('console.error("[adb-v3] listSubscriptions error:", err?.message || err)');
+    expect(text).not.toContain('console.error("[adb-v3] getSubscription error:", err?.message || err)');
+    expect(text).not.toContain('console.error("[adb-v3] deleteSubscription error:", err?.message || err)');
   });
 });
