@@ -99,6 +99,26 @@ function writeOnce(path: string, raw: string, label: string): void {
   if (readFileSync(path, "utf8") !== raw) throw new Error(`BLOCKED:${label}_EXISTS_WITH_DIFFERENT_CONTENT`);
 }
 
+function loadMatchingExistingReport(
+  path: string,
+  expected: Pick<TrafficReferenceBuildReportV39,
+    "input_file_sha256" | "raw_reference_sha256" | "normalized_input_sha256" | "frozen_artifact_sha256" | "tier_hash">,
+): TrafficReferenceBuildReportV39 | null {
+  if (!existsSync(path)) return null;
+  const value = readJson(path, "TRAFFIC_REFERENCE_BUILD_REPORT");
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("BLOCKED:TRAFFIC_REFERENCE_BUILD_REPORT_INVALID");
+  }
+  const report = value as Partial<TrafficReferenceBuildReportV39>;
+  if (report.schema_version !== "v3.9-traffic-reference-build-report-1" || report.status !== "PASS") {
+    throw new Error("BLOCKED:TRAFFIC_REFERENCE_BUILD_REPORT_INVALID");
+  }
+  for (const key of ["input_file_sha256", "raw_reference_sha256", "normalized_input_sha256", "frozen_artifact_sha256", "tier_hash"] as const) {
+    if (report[key] !== expected[key]) throw new Error(`BLOCKED:TRAFFIC_REFERENCE_BUILD_REPORT_INPUT_DRIFT:${key}`);
+  }
+  return report as TrafficReferenceBuildReportV39;
+}
+
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   try {
     const root = process.cwd();
@@ -128,7 +148,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const intlMean = built.diagnostics.length
       ? built.diagnostics.reduce((sum, row) => sum + row.intlShare, 0) / built.diagnostics.length
       : 0;
-    const report: TrafficReferenceBuildReportV39 = {
+    const proposedReport: TrafficReferenceBuildReportV39 = {
       schema_version: "v3.9-traffic-reference-build-report-1",
       status: "PASS",
       built_at_utc: builtAt.toISOString(),
@@ -156,11 +176,15 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       },
     };
     const reportPath = join(root, "artifacts", "traffic-reference-build-report.json");
-    const reportRaw = `${JSON.stringify(report, null, 2)}\n`;
-    writeOnce(reportPath, reportRaw, "TRAFFIC_REFERENCE_BUILD_REPORT");
+    const existingReport = loadMatchingExistingReport(reportPath, proposedReport);
+    const report = existingReport ?? proposedReport;
+    if (!existingReport) {
+      writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+    }
 
     console.log(JSON.stringify({
       status: "PASS",
+      idempotent_existing_report: Boolean(existingReport),
       frozen_artifact_sha256: report.frozen_artifact_sha256,
       raw_reference_sha256: report.raw_reference_sha256,
       airport_count: report.airport_count,
