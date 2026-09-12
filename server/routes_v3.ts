@@ -32,7 +32,7 @@ import { upsertFlightNotifications, appendResearchEvents, semanticObservationKey
 import { resolveWebhookFlightIdentity, type WebhookIdentityResolution } from "./lib/disruption/flightInstanceCanonical_v3";
 import { persistProcessingAttempt, persistRawDeliveryTransaction, updateRawDeliveryOutcome } from "./lib/disruption/rawIngress_v3";
 import { verifyAuthRecord, approvedArtifactHashesFromLedger, sha256HexString, type AuthRecord } from "./lib/disruption/authRecord_v39";
-import { pool } from "./db";
+import { v39Pool as pool } from "./lib/disruption/db_v39";
 import {
   getCollectionStatus,
   getDiagnostics,

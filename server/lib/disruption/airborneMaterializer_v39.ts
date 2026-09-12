@@ -7,7 +7,7 @@
  * therefore can use only the trajectory prefix available by that cutoff.
  */
 import { createHash } from "crypto";
-import { pool } from "../../db";
+import { v39Pool as pool } from "./db_v39";
 import {
   buildAirborneSnapshot,
   computeTrajectoryCadence,

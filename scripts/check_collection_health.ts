@@ -13,7 +13,7 @@
 //   command: npm run health
 // ============================================================
 
-import { pool } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { getBalance } from "../server/lib/disruption/aerodataboxLimiter_v3";
 
 function flag(ok: boolean, label: string, detail: string): boolean {

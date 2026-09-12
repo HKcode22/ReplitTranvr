@@ -22,7 +22,7 @@
 //   npm run v39:gate3:canary -- --auth AUTH-YYYYMMDD-G3 --evidence-id GATE-3-YYYYMMDD-001
 // ============================================================
 
-import { pool } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import {
   getBalance,
   createSubscription,

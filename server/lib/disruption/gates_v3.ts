@@ -13,7 +13,7 @@
  *  - Small live reliability test (under human authorization)
  */
 
-import { pool } from "../../db";
+import { v39Pool as pool } from "./db_v39";
 import { getBalance } from "./aerodataboxLimiter_v3";
 
 // ---------------------------------------------------------------------------

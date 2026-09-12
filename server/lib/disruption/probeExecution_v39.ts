@@ -10,7 +10,7 @@
  */
 import { createHash } from "crypto";
 import { readFileSync } from "fs";
-import { pool } from "../../db";
+import { v39Pool as pool } from "./db_v39";
 import {
   getBalance,
   createSubscription,

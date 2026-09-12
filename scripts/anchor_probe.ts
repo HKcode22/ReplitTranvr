@@ -39,7 +39,7 @@
 //   npm run anchor-probe -- --check-webhook      print webhook URL + reachability probe
 // ============================================================
 
-import { pool } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";

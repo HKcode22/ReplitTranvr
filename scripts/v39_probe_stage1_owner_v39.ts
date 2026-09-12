@@ -3,7 +3,7 @@
  * Executes at most one paid probe per invocation from the exact frozen
  * shortlist/replacement protocol. No source-code shortlist is an authority.
  */
-import { pool } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import {
   executeProbe,
   loadProbeExecutionArtifacts,

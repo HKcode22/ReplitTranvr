@@ -14,7 +14,7 @@
 // ============================================================
 
 import { writeFileSync } from "fs";
-import { pool } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 
 // Explicit column order — received_at FIRST, then id, then the rest.
 const COLUMNS = [

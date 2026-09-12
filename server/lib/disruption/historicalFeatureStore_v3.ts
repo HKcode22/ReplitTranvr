@@ -13,7 +13,7 @@
  * history_incomplete from a broken store.
  */
 
-import { pool } from "../../db";
+import { v39Pool as pool } from "./db_v39";
 
 export interface HistoricalFeatureRow {
   entityType: "airport" | "route" | "carrier_airport" | "tail" | "od" | "weather";

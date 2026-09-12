@@ -8,7 +8,7 @@
  * analytic record with canonical_flight_instance_id=NULL.
  */
 import { createHash, randomUUID } from "crypto";
-import { pool } from "../../db";
+import { v39Pool as pool } from "./db_v39";
 import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import {
   canonicalFlightInstanceId,

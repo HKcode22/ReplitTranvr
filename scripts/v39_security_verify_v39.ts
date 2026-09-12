@@ -52,7 +52,7 @@ async function verifyRetentionSurfaces(e:RetentionDeploymentEvidence|null):Promi
   const unsupported=deployed.filter(s=>s!=="primary");if(unsupported.length)return{name:"retention-deployment-surfaces",pass:false,detail:`real adapter missing for DEPLOYED surfaces: ${unsupported.join(",")}`};
   if(e.surfaces.primary==="DEPLOYED"){
     try{
-      const {pool}=await import("../server/db");const tomb=await pool.query(`SELECT surface,record_id,content_hash,expired_at FROM clean.retention_tombstone WHERE expired_at<=now() ORDER BY expired_at ASC`);
+      const {v39Pool:pool}=await import("../server/lib/disruption/db_v39");const tomb=await pool.query(`SELECT surface,record_id,content_hash,expired_at FROM clean.retention_tombstone WHERE expired_at<=now() ORDER BY expired_at ASC`);
       const primary={listExpired:async()=>(tomb.rows as any[]).map(r=>({id:`${r.surface}:${r.record_id}`,contentHash:r.content_hash,expiresAt:new Date(r.expired_at).toISOString(),containsRawContent:false}))};
       const dry=await executeRetentionDryRun({primary} as unknown as RetentionAdapters,new Date().toISOString(),true);
       if(!/^[a-f0-9]{64}$/.test(dry.evidenceHash))throw new Error("invalid dry-run evidence hash");
@@ -81,7 +81,7 @@ async function main(){
       checks.push({ name: "retention-content-matrix", pass: all.length === 0, detail: all.length === 0 ? `matrix=${RETENTION_MATRIX_HASH.slice(0, 12)}… verified` : all.slice(0, 5).join(",") });
     }
   } catch (err: any) { checks.push({ name: "retention-content-matrix", pass: false, detail: `matrix-check-error:${err?.message ?? err}` }); }
-  try{const {pool}=await import("../server/db");await pool.query("SELECT 1 FROM clean.adb_incident_stop WHERE resolved=false LIMIT 1");const c=readFileSync(join(process.cwd(),"server","lib","disruption","adbCollectionController_v3.ts"),"utf8");checks.push({name:"incident-stop-refusal",pass:c.includes("clean.adb_incident_stop")&&c.includes("REFUSED_INCIDENT_STOP"),detail:"persistent incident admission source inspected"})}catch(err:any){checks.push({name:"incident-stop-refusal",pass:false,detail:`${err?.message??err}`})}
+  try{const {v39Pool:pool}=await import("../server/lib/disruption/db_v39");await pool.query("SELECT 1 FROM clean.adb_incident_stop WHERE resolved=false LIMIT 1");const c=readFileSync(join(process.cwd(),"server","lib","disruption","adbCollectionController_v3.ts"),"utf8");checks.push({name:"incident-stop-refusal",pass:c.includes("clean.adb_incident_stop")&&c.includes("REFUSED_INCIDENT_STOP"),detail:"persistent incident admission source inspected"})}catch(err:any){checks.push({name:"incident-stop-refusal",pass:false,detail:`${err?.message??err}`})}
   for(const c of checks)console.log(`[${c.pass?"PASS":"BLOCKED"}] ${c.name} - ${c.detail}`);
   const pass=checks.length>0&&checks.every(c=>c.pass);
   console.log(`[${pass?"PASS":"BLOCKED"}] PREPAID_SECURITY_RETENTION - ${pass?"prerequisite P evidence is complete for the verified runtime":"one or more prerequisite-P checks remain unresolved"}`);

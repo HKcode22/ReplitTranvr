@@ -1,4 +1,4 @@
-import { pool } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { validateGate5Funnel, type Gate5Funnel } from "../server/lib/disruption/gates_v3";
 
 export async function runGate5Owner(): Promise<number> {

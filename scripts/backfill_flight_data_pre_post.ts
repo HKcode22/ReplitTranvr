@@ -17,7 +17,7 @@
 // It is idempotent: re-running repairs rows that are still null.
 // ============================================================
 
-import { pool } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { extractFlightNotification, type SamplingMeta } from "../server/lib/disruption/flightNotificationExtractor_v3";
 import { tierForIcao } from "../server/lib/disruption/adbAirportCatalog_v3";
 

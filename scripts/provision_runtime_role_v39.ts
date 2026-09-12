@@ -1,31 +1,14 @@
-/**
- * Provision the least-privilege Neon runtime role (Phase-0 security machinery).
- *
- * - Uses owner DATABASE_URL only (DDL + role management).
- * - Creates/resets role travnr_runtime with a random 32-byte password.
- * - Grants: USAGE on schema clean; SELECT/INSERT/UPDATE/DELETE on ALL clean
- *   tables (+ default privileges for future tables); USAGE/SELECT on clean
- *   sequences. NO DDL, NO superuser/createdb/createrole.
- * - Why schema-wide DML (not per-table): the production runtime (controller
- *   batches/subs, FIDS census, population, snapshots, frame/probe ledgers,
- *   tombstones) needs full clean DML to function — proven by a read-only
- *   probe failing on a narrower grant. Least privilege = no schema change,
- *   no role power, TLS-only, audited. Verified live, not asserted.
- * - Writes DATABASE_RUNTIME_URL + V39_DB_ROLE_EVIDENCE into ignored .env
- *   WITHOUT printing secrets to stdout.
- */
+/** Provision/reconcile the dedicated least-privilege V3.9 clean-schema runtime role. */
 import { randomBytes } from "crypto";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { Pool } from "pg";
 
-const ROLE = "travnr_runtime";
+const ROLE = "travnr_v39_runtime";
 const ENV_PATH = join(process.cwd(), ".env");
 
-function escapeIdent(s: string): string {
-  return `"${s.replace(/"/g, `""`)}"`;
-}
-
+function escapeIdent(s: string): string { return `"${s.replace(/"/g, `""`)}"`; }
+function escapeLiteral(s: string): string { return s.replace(/'/g, `''`); }
 function upsertEnvVar(src: string, key: string, value: string): string {
   const line = `${key}=${value}`;
   const re = new RegExp(`^${key}=.*$`, "m");
@@ -35,128 +18,75 @@ function upsertEnvVar(src: string, key: string, value: string): string {
 
 async function main(): Promise<void> {
   const ownerUrl = process.env.DATABASE_URL;
-  if (!ownerUrl) {
-    console.error("DATABASE_URL (owner) not set — refusing.");
-    process.exit(2);
-  }
+  if (!ownerUrl) throw new Error("DATABASE_URL owner connection is required");
   const owner = new Pool({ connectionString: ownerUrl });
   try {
-  const exists = await owner.query("SELECT 1 FROM pg_roles WHERE rolname=$1", [ROLE]);
-  let password: string | null = null;
-  if (exists.rowCount === 0) {
-    password = randomBytes(32).toString("base64url");
-    await owner.query(`CREATE ROLE ${escapeIdent(ROLE)} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE PASSWORD '${password.replace(/'/g, `''`)}'`);
-    console.log(`role created: ${ROLE}`);
-  } else {
-    // Neon owners hold CREATEROLE but cannot ALTER ROLE (proven live), so
-    // password rotation goes through the Neon console. Reuse the stored
-    // runtime URL after verifying it still connects.
-    console.log(`role exists: ${ROLE} (Neon forbids ALTER ROLE — reusing stored credentials)`);
-    const stored = process.env.DATABASE_RUNTIME_URL;
-    if (!stored) {
-      console.error("role exists but DATABASE_RUNTIME_URL is unset and ALTER ROLE is forbidden — rotate the password in the Neon console, store it in ignored .env, and rerun.");
-      process.exit(1);
+    const meta = await owner.query("SELECT current_database() AS db, current_user AS owner_role");
+    const dbName = String(meta.rows[0]?.db ?? "");
+    const ownerRole = String(meta.rows[0]?.owner_role ?? "");
+    if (!dbName || !ownerRole) throw new Error("unable to resolve current database/owner role");
+
+    const password = randomBytes(32).toString("base64url");
+    const exists = await owner.query("SELECT 1 FROM pg_roles WHERE rolname=$1", [ROLE]);
+    if (exists.rowCount === 0) {
+      await owner.query(`CREATE ROLE ${escapeIdent(ROLE)} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${escapeLiteral(password)}'`);
+      console.log(`role created: ${ROLE}`);
+    } else {
+      await owner.query(`ALTER ROLE ${escapeIdent(ROLE)} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${escapeLiteral(password)}'`);
+      console.log(`role reconciled: ${ROLE}`);
     }
-    const probe = new Pool({ connectionString: stored });
-    try {
-      await probe.query("SELECT 1");
-    } catch (err: any) {
-      console.error(`stored runtime credentials do not connect (${err?.message ?? err}) — rotate in Neon console and rerun.`);
-      process.exit(1);
-    } finally {
-      await probe.end().catch(() => undefined);
+
+    // Remove any direct table grants left from an older use of this role.
+    const oldGrants = await owner.query(
+      `SELECT DISTINCT table_schema, table_name FROM information_schema.role_table_grants WHERE grantee=$1`,
+      [ROLE],
+    );
+    for (const row of oldGrants.rows) {
+      await owner.query(`REVOKE ALL PRIVILEGES ON TABLE ${escapeIdent(String(row.table_schema))}.${escapeIdent(String(row.table_name))} FROM ${escapeIdent(ROLE)}`);
     }
-    console.log("stored runtime credentials: connect OK");
-  }
-    await owner.query(`GRANT CONNECT ON DATABASE neondb TO ${escapeIdent(ROLE)}`);
+
+    await owner.query(`GRANT CONNECT ON DATABASE ${escapeIdent(dbName)} TO ${escapeIdent(ROLE)}`);
     await owner.query(`GRANT USAGE ON SCHEMA clean TO ${escapeIdent(ROLE)}`);
     await owner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA clean TO ${escapeIdent(ROLE)}`);
     await owner.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA clean TO ${escapeIdent(ROLE)}`);
-    await owner.query(
-      `ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA clean GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${escapeIdent(ROLE)}`,
-    );
-    await owner.query(
-      `ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA clean GRANT USAGE, SELECT ON SEQUENCES TO ${escapeIdent(ROLE)}`,
-    );
+    await owner.query(`ALTER DEFAULT PRIVILEGES FOR ROLE ${escapeIdent(ownerRole)} IN SCHEMA clean GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${escapeIdent(ROLE)}`);
+    await owner.query(`ALTER DEFAULT PRIVILEGES FOR ROLE ${escapeIdent(ownerRole)} IN SCHEMA clean GRANT USAGE, SELECT ON SEQUENCES TO ${escapeIdent(ROLE)}`);
 
-    // Verify role attributes (non-admin, can login).
-    const attr = await owner.query(
-      "SELECT rolsuper, rolcreatedb, rolcreaterole, rolcanlogin FROM pg_roles WHERE rolname=$1",
-      [ROLE],
-    );
+    const attr = await owner.query("SELECT rolsuper, rolcreatedb, rolcreaterole, rolcanlogin FROM pg_roles WHERE rolname=$1", [ROLE]);
     const a = attr.rows[0];
-    if (a.rolsuper || a.rolcreatedb || a.rolcreaterole || !a.rolcanlogin) {
-      console.error("role attribute verification FAILED");
-      process.exit(1);
-    }
-    // Verify grant scope live: every granted table in clean schema, table
-    // privileges within DML-only set (no CREATE/TRUNCATE/etc.).
+    if (!a || a.rolsuper || a.rolcreatedb || a.rolcreaterole || !a.rolcanlogin) throw new Error("runtime role attribute verification failed");
     const grants = await owner.query(
-      `SELECT table_schema AS s, table_name AS t, string_agg(DISTINCT privilege_type, ',' ORDER BY privilege_type) AS p
-         FROM information_schema.role_table_grants WHERE grantee=$1 GROUP BY 1, 2 ORDER BY 1, 2`,
+      `SELECT table_schema AS s, table_name AS t,string_agg(DISTINCT privilege_type,',' ORDER BY privilege_type) AS p FROM information_schema.role_table_grants WHERE grantee=$1 GROUP BY 1,2 ORDER BY 1,2`,
       [ROLE],
     );
-    const allowedTablePrivs = new Set(["SELECT", "INSERT", "UPDATE", "DELETE"]);
+    const allowed = new Set(["SELECT", "INSERT", "UPDATE", "DELETE"]);
+    if (!grants.rows.length) throw new Error("runtime role has no clean table grants");
     for (const row of grants.rows) {
-      if (row.s !== "clean") {
-        console.error(`grant outside clean schema: ${row.s}.${row.t}`);
-        process.exit(1);
-      }
-      for (const p of String(row.p).split(",")) {
-        if (!allowedTablePrivs.has(p)) {
-          console.error(`excess privilege ${p} on ${row.s}.${row.t}`);
-          process.exit(1);
-        }
-      }
+      if (row.s !== "clean") throw new Error(`grant outside clean schema: ${row.s}.${row.t}`);
+      for (const privilege of String(row.p).split(",")) if (!allowed.has(privilege)) throw new Error(`excess privilege ${privilege}@${row.s}.${row.t}`);
     }
-    if (grants.rows.length === 0) {
-      console.error("no table grants found for runtime role");
-      process.exit(1);
-    }
-    // TLS: owner URL requires SSL; runtime URL will too.
-    const tls = ownerUrl.includes("sslmode=");
-    // Audit trail: tombstone table must exist (non-content deletion evidence).
-    const tomb = await owner.query("SELECT to_regclass('clean.retention_tombstone') AS c");
-    const auditLogging = tomb.rows[0]?.c === "clean.retention_tombstone";
 
-    // Build runtime URL from owner URL with role + new password (no stdout).
-    // When reusing stored credentials (Neon ALTER restriction), keep them.
-    const storedReuse = password === null;
-    const u = new URL(storedReuse ? (process.env.DATABASE_RUNTIME_URL as string) : ownerUrl);
-    if (!storedReuse) {
-      u.username = ROLE;
-      u.password = password as string;
-      if (!u.searchParams.get("sslmode")) u.searchParams.set("sslmode", "require");
-    }
+    const u = new URL(ownerUrl);
+    u.username = ROLE;
+    u.password = password;
+    if (!u.searchParams.get("sslmode")) u.searchParams.set("sslmode", "require");
     const runtimeUrl = u.toString();
-
-    const evidence = {
-      tls,
-      role: ROLE,
-      grants: ["CLEAN_SCHEMA_DML", "CLEAN_SEQUENCE_USAGE"],
-      auditLogging,
-    };
-    let env = readFileSync(ENV_PATH, "utf8");
-    env = upsertEnvVar(env, "DATABASE_RUNTIME_URL", runtimeUrl);
-    env = upsertEnvVar(env, "V39_DB_ROLE_EVIDENCE", `'${JSON.stringify(evidence)}'`);
-    writeFileSync(ENV_PATH, env);
-
-    // Verify runtime connectivity + minimal write path (insert+delete one probe row, no junk left).
     const runtime = new Pool({ connectionString: runtimeUrl });
     try {
-      await runtime.query("SELECT 1");
-      console.log(`runtime connect: OK (role=${ROLE} tls=${tls} audit=${auditLogging})`);
-      console.log(`grant tables verified: ${grants.rows.length}`);
-    } finally {
-      await runtime.end().catch(() => undefined);
-    }
-    console.log("provision result=PASS (secrets written to .env, not printed)");
-  } finally {
-    await owner.end().catch(() => undefined);
-  }
+      const who = await runtime.query("SELECT current_user AS u");
+      if (who.rows[0]?.u !== ROLE) throw new Error("runtime connection role mismatch");
+      await runtime.query("SELECT 1 FROM clean.retention_tombstone LIMIT 1");
+    } finally { await runtime.end().catch(() => undefined); }
+
+    const tomb = await owner.query("SELECT to_regclass('clean.retention_tombstone') AS c");
+    const evidence = { verified: true, verifiedDate: new Date().toISOString().slice(0,10), tls: /sslmode=/i.test(runtimeUrl), role: ROLE, grants: ["CLEAN_SCHEMA_DML", "CLEAN_SEQUENCE_USAGE"], auditLogging: tomb.rows[0]?.c === "clean.retention_tombstone" };
+    let env = "";
+    try { env = readFileSync(ENV_PATH, "utf8"); } catch { env = ""; }
+    env = upsertEnvVar(env, "V39_DATABASE_RUNTIME_URL", runtimeUrl);
+    env = upsertEnvVar(env, "V39_DB_ROLE_EVIDENCE", `'${JSON.stringify(evidence)}'`);
+    writeFileSync(ENV_PATH, env, { mode: 0o600 });
+    console.log(`provision result=PASS role=${ROLE} clean_tables=${grants.rows.length} (secret URL written to ignored .env only)`);
+  } finally { await owner.end().catch(() => undefined); }
 }
 
-main().catch((e) => {
-  console.error(`provision FAILED: ${e?.message ?? e}`);
-  process.exit(1);
-});
+main().catch((e) => { console.error(`provision FAILED: ${e?.message ?? e}`); process.exit(1); });

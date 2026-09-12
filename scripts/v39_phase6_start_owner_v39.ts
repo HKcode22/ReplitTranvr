@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { execFileSync } from "child_process";
 import { readFileSync } from "fs";
-import { pool } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { startBatch } from "../server/lib/disruption/adbCollectionController_v3";
 import { listSubscriptionsStrict } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import { resolveOwnerAuthorization } from "./v39_paid_guard_v39";

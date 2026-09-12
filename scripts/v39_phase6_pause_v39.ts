@@ -9,7 +9,7 @@
  */
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
-import { pool } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { listSubscriptionsStrict } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import { phase6SafetyTick } from "../server/lib/disruption/phase6SafetyWatchdog_v39";
 

@@ -8,7 +8,7 @@
  * never substitutes another airport when a frozen cell/anchor fails.
  */
 import { createHash } from "crypto";
-import { pool } from "../../db";
+import { v39Pool as pool } from "./db_v39";
 import { reconcileSpend, runSettlement, type SettlementConfig } from "./settlement_v3";
 import {
   getBalance,

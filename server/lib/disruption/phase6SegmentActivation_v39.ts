@@ -6,7 +6,7 @@
  * sampling draw; it never redraws, substitutes, changes regions, or changes the
  * calendar. R1 and all FREE coverage checks complete before the first CREATE.
  */
-import { pool } from "../../db";
+import { v39Pool as pool } from "./db_v39";
 import {
   checkAirportFeeds,
   createSubscription,

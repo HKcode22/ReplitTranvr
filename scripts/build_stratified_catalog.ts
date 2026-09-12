@@ -58,7 +58,8 @@
 // ============================================================
 
 import { createHash } from "node:crypto";
-import { pool, applyBootMigrations } from "../server/db";
+import { applyBootMigrations } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { getAirportCoverage } from "../server/lib/disruption/adbCollectionController_v3";
 import {
   AIRPORT_TIERS,

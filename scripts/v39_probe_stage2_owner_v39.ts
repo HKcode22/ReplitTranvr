@@ -4,7 +4,7 @@
  * ranking is the only promotion authority; source-code shortlist constants are
  * never consulted.
  */
-import { pool } from "../server/db";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import {
   executeProbe,
   loadProbeExecutionArtifacts,

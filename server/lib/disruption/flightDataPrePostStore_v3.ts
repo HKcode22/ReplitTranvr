@@ -17,7 +17,8 @@
 // ============================================================
 
 import { sql } from "drizzle-orm";
-import { db, pool } from "../../db";
+import { db } from "../../db";
+import { v39Pool as pool } from "./db_v39";
 import { flightDataPrePost, type InsertFlightDataPrePost } from "@shared/schema";
 import { createHash } from "crypto";
 

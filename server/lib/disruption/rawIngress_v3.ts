@@ -4,7 +4,7 @@
  * notification and delivery-attempt clocks/identity are preserved separately.
  */
 import { createHash } from "crypto";
-import { pool } from "../../db";
+import { v39Pool as pool } from "./db_v39";
 
 export interface RawDeliveryInput {
   subscriptionId: string | null;

@@ -6,7 +6,7 @@
  * the sampling design, refills, performs FIDS, or changes the calendar.
  */
 import { execFileSync } from "child_process";
-import { pool } from "../../db";
+import { v39Pool as pool } from "./db_v39";
 import { deleteSubscription, getBalance } from "./aerodataboxLimiter_v3";
 import { reconcileSpend, runSettlement, type SettlementConfig } from "./settlement_v3";
 import {
