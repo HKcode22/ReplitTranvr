@@ -1,0 +1,32 @@
+{
+  "schema_version": "v3.9-traffic-reference-decision-1",
+  "phase": "Phase 2C reference freeze",
+  "status": "BLOCKED_PENDING_PERMITTED_REFERENCE",
+  "binding_plan_owner": "V3.9_DataCollectPlan_f.8.md §4.1 and §4.5",
+  "decision": "Acquire one permitted global historical scheduled-route reference; do not invent tiers while access is unresolved.",
+  "preferred_source_class": "global_historical_scheduled_route_reference",
+  "preferred_candidates": [
+    "Cirium historical/global schedules under an evaluation, academic, or contracted license whose scope explicitly permits the required research use",
+    "OAG historical/global schedules under an academic or contracted license whose scope explicitly permits the required research use"
+  ],
+  "traffic_metric_candidate": "scheduled_departures_over_frozen_12_month_window",
+  "reference_window_rule": "single 12-month window ending no more than 30 days before final frame freeze",
+  "must_supply": [
+    "airport-level traffic metric and units",
+    "global coverage adequate for the six-region frame",
+    "scheduled route origin/destination records for network degree",
+    "operating carrier for carrier diversity",
+    "origin/destination country for international-share calculation",
+    "license/access basis permitting project use",
+    "source/version/retrieval date",
+    "raw/reference hash",
+    "coverage and missing-reference counts"
+  ],
+  "not_sufficient_alone": {
+    "OurAirports": "airport metadata but no binding 12-month traffic/schedule reference",
+    "FAA_BTS": "useful U.S. reference but not a global six-region reference",
+    "OpenSky": "valuable university-accessible observed ADS-B traffic, but by itself does not supply the binding scheduled-route reference required for §4.5 degree/carrier/international variables"
+  },
+  "current_tier_policy": "Until a permitted reference is actually obtained and frozen, TRAFFIC_REFERENCE=BLOCKED; airports without verified traffic remain UNCLASSIFIED and final sampling-frame rebuild cannot PASS.",
+  "paid_or_provider_action_authorized": false
+}
