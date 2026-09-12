@@ -1,6 +1,6 @@
 /** V3.9 prerequisite-P security/retention verifier. */
-import { readFileSync } from "fs";
-import { join } from "path";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
 import { Pool } from "pg";
 import {
   RETENTION_SURFACES,
@@ -11,6 +11,12 @@ import {
   type RetentionAdapters,
   type WebhookSecurityEvidence,
 } from "../server/lib/disruption/retentionSecurity_v39";
+import {
+  PREREQUISITE_P_ARTIFACT_RELATIVE_PATH,
+  buildPrerequisitePArtifact,
+  currentGitSha,
+  serializePrerequisitePArtifact,
+} from "../server/lib/disruption/prerequisitePArtifact_v39";
 
 interface Check { name:string; pass:boolean; detail:string }
 type SurfaceState="DEPLOYED"|"NOT_DEPLOYED"|"UNKNOWN";
@@ -63,13 +69,22 @@ async function verifyRetentionSurfaces(e:RetentionDeploymentEvidence|null):Promi
 }
 
 async function main(){
+  const artifactPath=join(process.cwd(),PREREQUISITE_P_ARTIFACT_RELATIVE_PATH);
+  // A failed re-verification must never leave a stale PASS artifact usable by
+  // Gate 1. Remove it before checking anything, then rewrite only after every
+  // current-runtime prerequisite passes.
+  rmSync(artifactPath,{force:true});
+
   const checks:Check[]=[];const db=parseEvidence<DatabaseRoleEvidence>("V39_DB_ROLE_EVIDENCE");
   if(!db)checks.push({name:"least-privilege-db-tls",pass:false,detail:"missing-V39_DB_ROLE_EVIDENCE"});else{const s=checkLeastPrivilege(db),l=await verifyRoleLive(db.role),all=[...s.failures,...l];checks.push({name:"least-privilege-db-tls",pass:!all.length,detail:all.join(",")||`role=${db.role} live-verified`})}
   const web=parseEvidence<WebhookSecurityEvidence>("V39_WEBHOOK_SECURITY_EVIDENCE");
   if(!web)checks.push({name:"webhook-tls-auth-replay",pass:false,detail:"missing-V39_WEBHOOK_SECURITY_EVIDENCE"});else{const s=checkWebhookSecurity(web),l=await verifyWebhookLive(web),all=[...s.failures,...l];checks.push({name:"webhook-tls-auth-replay",pass:!all.length,detail:all.join(",")||"runtime ingress verified"})}
   checks.push(await verifyRetentionSurfaces(parseEvidence<RetentionDeploymentEvidence>("V39_RETENTION_DEPLOYMENT_EVIDENCE")));
+
+  let retentionMatrixHash:string|null=null;
   try {
     const { RETENTION_MATRIX_HASH, parseRetentionMatrixEvidence, resolveRetentionMatrix, verifyRetentionMatrix } = await import("../server/lib/disruption/retentionMatrix_v39");
+    retentionMatrixHash=RETENTION_MATRIX_HASH;
     const overlayRaw = process.env.V39_RETENTION_MATRIX_EVIDENCE;
     if (!overlayRaw) {
       const verdict = verifyRetentionMatrix();
@@ -83,8 +98,29 @@ async function main(){
   } catch (err: any) { checks.push({ name: "retention-content-matrix", pass: false, detail: `matrix-check-error:${err?.message ?? err}` }); }
   try{const {pool}=await import("../server/db");await pool.query("SELECT 1 FROM clean.adb_incident_stop WHERE resolved=false LIMIT 1");const c=readFileSync(join(process.cwd(),"server","lib","disruption","adbCollectionController_v3.ts"),"utf8");checks.push({name:"incident-stop-refusal",pass:c.includes("clean.adb_incident_stop")&&c.includes("REFUSED_INCIDENT_STOP"),detail:"persistent incident admission source inspected"})}catch(err:any){checks.push({name:"incident-stop-refusal",pass:false,detail:`${err?.message??err}`})}
   for(const c of checks)console.log(`[${c.pass?"PASS":"BLOCKED"}] ${c.name} - ${c.detail}`);
-  const pass=checks.length>0&&checks.every(c=>c.pass);
-  console.log(`[${pass?"PASS":"BLOCKED"}] PREPAID_SECURITY_RETENTION - ${pass?"prerequisite P evidence is complete for the verified runtime":"one or more prerequisite-P checks remain unresolved"}`);
-  if(!pass)process.exitCode=1;
+  const pass=checks.length>0&&checks.every(c=>c.pass)&&!!retentionMatrixHash;
+
+  if(pass&&retentionMatrixHash){
+    try{
+      const artifact=buildPrerequisitePArtifact({
+        verifiedAtUtc:new Date().toISOString(),
+        codeSha:currentGitSha(),
+        retentionMatrixSha256:retentionMatrixHash,
+        checks,
+      });
+      mkdirSync(dirname(artifactPath),{recursive:true});
+      writeFileSync(artifactPath,serializePrerequisitePArtifact(artifact),{encoding:"utf8",mode:0o600});
+      console.log(`[PASS] PREPAID_SECURITY_RETENTION - prerequisite P evidence is complete for the verified runtime; artifact=${PREREQUISITE_P_ARTIFACT_RELATIVE_PATH} sha256=${artifact.artifact_sha256}`);
+      return;
+    }catch(err:any){
+      rmSync(artifactPath,{force:true});
+      console.log(`[BLOCKED] PREPAID_SECURITY_RETENTION - PASS checks completed but closure artifact could not be written: ${err?.message??err}`);
+      process.exitCode=1;
+      return;
+    }
+  }
+
+  console.log("[BLOCKED] PREPAID_SECURITY_RETENTION - one or more prerequisite-P checks remain unresolved");
+  process.exitCode=1;
 }
 void main();
