@@ -51,6 +51,7 @@ export const V39_MANIFEST: ManifestEntry[] = [
   current("module", "server/lib/disruption/gates_v3.ts", "gate computations"),
   current("module", "server/lib/disruption/authRecord_v39.ts", "exact authorization artifact verifier"),
   current("module", "server/lib/disruption/retentionSecurity_v39.ts", "security/retention/incident machinery"),
+  current("module", "server/lib/disruption/prerequisitePArtifact_v39.ts", "durable prerequisite-P closure artifact and security-contract binding"),
 
   // ---- Population, identity, timestamp, raw/event layers ----
   current("module", "server/lib/disruption/fidsCensus_v3.ts", "provider-observable FIDS population and fail-closed service identity", ["REQ-FIDS-001", "REQ-FIDS-002", "REQ-FIDS-003"]),
@@ -89,6 +90,8 @@ export const V39_MANIFEST: ManifestEntry[] = [
   current("script", "scripts/v39_phase6_pause_v39.ts", "durable emergency pause using the same serialized runtime cleanup/settlement owner"),
   current("script", "scripts/calendar_solve.ts", "strict calendar CLI"),
   current("script", "scripts/v39_security_verify_v39.ts", "deployment-aware security/retention verifier"),
+  current("script", "scripts/measure_coverage.ts", "AUTH + prerequisite-P-gated Gate-1 coverage measurement"),
+  current("script", "scripts/v39_freeze_record_v39.ts", "fail-closed reference/preprobe freeze admission checker"),
   current("script", "scripts/v39_preflight_v39.ts", "aggregate Phase-0 preflight"),
   current("script", "scripts/db_verify_phase0_v39.ts", "current schema/trigger verification"),
   current("script", ".github/workflows/v39-phase0-offline.yml", "zero-provider CI: locked install, typecheck, offline tests, production build"),
@@ -114,6 +117,8 @@ export const V39_MANIFEST: ManifestEntry[] = [
   current("test", "tests/budget_accounting_v39.test.ts", "budget/accounting"),
   current("test", "tests/gates_v39.test.ts", "gate/settlement"),
   current("test", "tests/retention_security_v39.test.ts", "retention/security"),
+  current("test", "tests/gate1_coverage_v39.test.ts", "Gate-1 sanitized artifact and prerequisite-P admission"),
+  current("test", "tests/prerequisite_p_artifact_v39.test.ts", "durable prerequisite-P artifact/contract binding"),
   current("test", "tests/scanner_manifest_v39.test.ts", "manifest/scanner"),
   current("test", "tests/phase0_closure_v39.test.ts", "closure/anti-bypass"),
   current("test", "tests/phase6_safety_watchdog_v39.test.ts", "scaled Gate-4 and production SEND-aware Phase-6 safety"),
