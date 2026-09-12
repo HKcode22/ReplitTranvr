@@ -98,8 +98,8 @@ export function resolveRetentionMatrix(evidence: RetentionMatrixEvidence): { row
 function normalized(value: string): string { return value.trim().toLowerCase(); }
 function hasDeleteAction(value: string): boolean { return /(hard[_ -]?delete|delete|purge|expire)/i.test(value); }
 
-/** Return the smallest explicit time quantity in hours, or null if none is parseable. */
-function explicitPeriodHours(value: string): number | null {
+/** Return every explicit time quantity converted to hours. */
+function explicitPeriodHours(value: string): number[] {
   const candidates: number[] = [];
   for (const match of value.matchAll(/(?:^|\D)(\d+(?:\.\d+)?)\s*hours?(?:\D|$)/gi)) {
     const n = Number(match[1]);
@@ -109,7 +109,7 @@ function explicitPeriodHours(value: string): number | null {
     const n = Number(match[1]);
     if (Number.isFinite(n)) candidates.push(n * 24);
   }
-  return candidates.length ? Math.min(...candidates) : null;
+  return candidates;
 }
 
 function verifyClassificationSemantics(r: RetentionMatrixRow, failures: string[]): void {
@@ -125,18 +125,20 @@ function verifyClassificationSemantics(r: RetentionMatrixRow, failures: string[]
       failures.push(`raw-basis-missing-article-5.5:${r.contentClass}`);
     }
 
-    const declaredHours = explicitPeriodHours(period);
+    const declaredPeriods = explicitPeriodHours(period);
+    const longestDeclaredHours = declaredPeriods.length ? Math.max(...declaredPeriods) : null;
     const allowsLongerByProviderBasis = /(cache-control|max-age|plan[ _-]?terms|explicit[_ -]?provider[_ -]?grant)/i.test(period);
-    if (declaredHours !== null && declaredHours > 168 && !allowsLongerByProviderBasis) {
+    if (longestDeclaredHours !== null && longestDeclaredHours > 168 && !allowsLongerByProviderBasis) {
       failures.push(`raw-retention-over-7d-without-provider-basis:${r.contentClass}`);
     }
 
     // Owner/account-plan evidence supplied for this project makes live FIDS a
-    // stricter hard class than generic Article-5.5 raw content. The matrix must
-    // itself prove <=24h; deployment-policy checks alone are not sufficient.
+    // stricter hard class than generic Article-5.5 raw content. Because this is
+    // a class-specific row, contradictory longer periods are not accepted just
+    // because the same string also mentions "24 hours".
     if (r.contentClass === "fids_population") {
-      if (declaredHours === null) failures.push("fids-retention-24h-unproven:fids_population");
-      else if (declaredHours > 24) failures.push("fids-retention-over-24h:fids_population");
+      if (declaredPeriods.length === 0) failures.push("fids-retention-24h-unproven:fids_population");
+      else if (Math.max(...declaredPeriods) > 24) failures.push("fids-retention-over-24h:fids_population");
       if (!/(plan|account|provider)/i.test(`${r.retentionSource} ${r.retentionLegalBasis} ${r.retentionPeriodDaysOrCondition}`)) {
         failures.push("fids-retention-account-basis-unproven:fids_population");
       }
