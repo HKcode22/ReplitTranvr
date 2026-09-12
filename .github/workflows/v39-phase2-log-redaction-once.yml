@@ -1,0 +1,37 @@
+name: V3.9 Phase2 Log Redaction Once
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ github.event.head_commit.message == 'Run prerequisite-P log-redaction repair' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Apply redaction repair
+        run: python3 scripts/phase2_security_redaction_patch_once.py
+      - name: Validate targeted regression and typecheck
+        run: |
+          npx vitest run tests/phase2_security_redaction_v39.test.ts
+          npm run typecheck
+          git diff --check
+      - name: Commit repair and self-delete scaffolding
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm scripts/phase2_security_redaction_patch_once.py .github/workflows/v39-phase2-log-redaction-once.yml
+          git add server/lib/disruption/historicalOtp.ts scripts/anchor_probe.ts server/lib/disruption/aerodataboxLimiter_v3.ts tests/phase2_security_redaction_v39.test.ts
+          git commit -m 'V3.9 Phase2 P: redact provider content and webhook secrets from logs'
+          git push origin HEAD:main
