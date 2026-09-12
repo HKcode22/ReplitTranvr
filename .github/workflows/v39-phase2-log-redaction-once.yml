@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   repair:
-    if: ${{ github.event.head_commit.message == 'Run prerequisite-P log-redaction repair' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +24,7 @@ jobs:
       - name: Validate targeted regression and typecheck
         run: |
           npx vitest run tests/phase2_security_redaction_v39.test.ts
-          npm run typecheck
+          npm run v39:typecheck
           git diff --check
       - name: Commit repair and self-delete scaffolding
         run: |
