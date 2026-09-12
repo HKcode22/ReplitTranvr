@@ -12,6 +12,7 @@ describe("V3.9 provider-content column inventory", () => {
     expect(verdict.unresolvedGroupCount).toBeGreaterThan(0);
     expect(verdict.failures).not.toContain("classification-required:raw-delivery-item-extracted-provider-facts");
     expect(verdict.failures).not.toContain("classification-required:prepost-provider-row");
+    expect(verdict.failures).toContain("derived-work-proof-required:raw-delivery-item-canonical-id-encoding");
     expect(verdict.failures).toContain("classification-required:webhook-flight-identity-provider-values");
     expect(verdict.failures).toContain("derived-work-proof-required:canonical-flight-instance-id-encoding");
     expect(verdict.failures).toContain("classification-required:webhook-schedule-version-provider-values");
@@ -49,8 +50,15 @@ describe("V3.9 provider-content column inventory", () => {
     expect(covered.every((g) => g.owner !== "UNVERIFIED")).toBe(true);
   });
 
-  it("contains no phantom clean.flight_state and does not bless the 32-bit leg hash", () => {
+  it("contains no phantom clean.flight_state and does not bless short canonical leg hashes", () => {
     expect(PROVIDER_CONTENT_COLUMN_GROUPS.some((g) => g.table === "clean.flight_state")).toBe(false);
+
+    const rawItemCanonical = PROVIDER_CONTENT_COLUMN_GROUPS.find((g) => g.id === "raw-delivery-item-canonical-id-encoding");
+    expect(rawItemCanonical?.table).toBe("clean.raw_delivery_item");
+    expect(rawItemCanonical?.columns).toContain("canonical_flight_instance_id");
+    expect(rawItemCanonical?.retentionClass).toBe("derived_work_candidate");
+    expect(rawItemCanonical?.disposition).toBe("derived-work-proof-required");
+
     const canonical = PROVIDER_CONTENT_COLUMN_GROUPS.find((g) => g.id === "canonical-flight-instance-id-encoding");
     expect(canonical?.table).toBe("clean.webhook_flight_identity");
     expect(canonical?.columns).toContain("flight_instance_id");
@@ -65,6 +73,7 @@ describe("V3.9 provider-content column inventory", () => {
     }
     const derivedCandidates = PROVIDER_CONTENT_COLUMN_GROUPS.filter((g) => g.retentionClass === "derived_work_candidate");
     expect(derivedCandidates.map((g) => g.id)).toEqual(expect.arrayContaining([
+      "raw-delivery-item-canonical-id-encoding",
       "canonical-flight-instance-id-encoding",
       "pre-snapshot-feature-vector",
       "outcome-evidence",
