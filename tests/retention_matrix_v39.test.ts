@@ -93,6 +93,24 @@ describe("prerequisite-P retention matrix", () => {
     expect(verdict.failures).toContain("raw-retention-over-7d-without-provider-basis:webhook_ingress");
   });
 
+  it("rejects FIDS evidence above the owner-verified 24-hour maximum", () => {
+    const filled = RETENTION_MATRIX.map((r) => ({ ...r, ...validEvidenceFor(r) }));
+    const fids = filled.find((r) => r.contentClass === "fids_population")!;
+    fids.retentionPeriodDaysOrCondition = "7 days under generic raw cache terms";
+    const verdict = verifyRetentionMatrix(filled);
+    expect(verdict.pass).toBe(false);
+    expect(verdict.failures).toContain("fids-retention-over-24h:fids_population");
+  });
+
+  it("rejects FIDS evidence that omits a parseable 24-hour-or-shorter lifetime", () => {
+    const filled = RETENTION_MATRIX.map((r) => ({ ...r, ...validEvidenceFor(r) }));
+    const fids = filled.find((r) => r.contentClass === "fids_population")!;
+    fids.retentionPeriodDaysOrCondition = "short-lived according to provider policy";
+    const verdict = verifyRetentionMatrix(filled);
+    expect(verdict.pass).toBe(false);
+    expect(verdict.failures).toContain("fids-retention-24h-unproven:fids_population");
+  });
+
   it("rejects normalization-only Derived-Work claims", () => {
     const filled = RETENTION_MATRIX.map((r) => ({ ...r, ...validEvidenceFor(r) }));
     const snapshots = filled.find((r) => r.contentClass === "pre_snapshots")!;
