@@ -48,8 +48,6 @@ export function verifyPrepaidGovernanceEvidence(value: PrepaidGovernanceEvidence
   if (value.termsPlanRetentionVerified !== true) failures.push("terms-plan-retention-unverified");
   if (!String(value.ownerLegalApprovalRef ?? "").trim()) failures.push("owner-legal-approval-missing");
   if (value.regionReferenceLicenseVerified !== true) failures.push("region-reference-license-unverified");
-  // Log §1.7.1 item 4 is explicit: P verifies traffic/region reference
-  // license/use. A source preference or intended acquisition is not evidence.
   if (value.trafficReferenceLicenseVerified !== true) failures.push("traffic-reference-license-unverified");
   if (!String(value.trafficReferenceSourceName ?? "").trim()) failures.push("traffic-reference-source-missing");
   if (value.credentialsOutsideLogsVerified !== true) failures.push("credential-storage-unverified");
@@ -76,17 +74,21 @@ export function verifyRawBefore2xxWiring(root = process.cwd()): StaticPControlVe
 }
 
 export function verifyRetentionExpiryPropagationSource(root = process.cwd()): StaticPControlVerdict {
-  const migrations = [
-    "migrations/0048_retention_policy_and_expiry.sql",
-  ].map((p) => source(root, p)).join("\n");
-  const raw = source(root, "server/lib/disruption/rawIngress_v3.ts");
-  const flightStore = source(root, "server/lib/disruption/flightDataPrePostStore_v3.ts");
-  const fids = source(root, "server/lib/disruption/fidsCensus_v3.ts");
-  const hasColumns = migrations.includes("retention_expires_at") && migrations.includes("retention_policy_hash");
-  const hasPolicyOwner = migrations.includes("adb_retention_policy") && migrations.includes("retention enforcement");
-  const writerCoverage = raw.includes("retention_expires_at") && flightStore.includes("retention_expires_at") && fids.includes("retention_expires_at");
-  const pass = hasColumns && hasPolicyOwner && writerCoverage;
-  return { pass, detail: pass ? "raw webhook/FIDS/AIRBORNE expiry propagation owner present" : "retention expiry propagation owner/columns not fully implemented" };
+  const migration = source(root, "migrations/0048_retention_policy_and_expiry.sql");
+  const required = [
+    "adb_retention_policy_v39",
+    "adb_retention_enforcement_event_v39",
+    "retention_policy_hash",
+    "retention_expires_at",
+    "trg_raw_delivery_retention_v39",
+    "trg_raw_delivery_item_retention_v39",
+    "trg_raw_airborne_retention_v39",
+    "trg_fids_query_retention_v39",
+    "trg_flight_population_retention_v39",
+    "list_expired_retention_candidates_v39",
+  ];
+  const pass = required.every((token) => migration.includes(token));
+  return { pass, detail: pass ? "database-triggered raw webhook/FIDS/AIRBORNE expiry propagation owner present" : "retention expiry propagation owner/columns not fully implemented" };
 }
 
 export function verifyRawDerivedTombstoneDistinction(root = process.cwd()): StaticPControlVerdict {
@@ -108,9 +110,7 @@ export function verifyRetentionDryRunSource(root = process.cwd()): StaticPContro
   const security = source(root, "server/lib/disruption/retentionSecurity_v39.ts");
   const verifier = source(root, "scripts/v39_security_verify_v39.ts");
   const expiry = verifyRetentionExpiryPropagationSource(root);
-  // Dry-run is only meaningful if it enumerates actual provider-content expiry
-  // candidates. Querying tombstones themselves does not prove expiry behavior.
-  const actualCandidateQuery = verifier.includes("retention_expires_at") && !verifier.includes("FROM clean.retention_tombstone WHERE expired_at<=now() ORDER BY expired_at ASC");
+  const actualCandidateQuery = verifier.includes("list_expired_retention_candidates_v39") && !verifier.includes("FROM clean.retention_tombstone WHERE expired_at<=now() ORDER BY expired_at ASC");
   const pass = expiry.pass && security.includes("executeRetentionDryRun") && actualCandidateQuery;
   return { pass, detail: pass ? "dry-run enumerates actual expired retained content without deleting" : "retention dry-run does not yet prove actual raw-content expiry candidates" };
 }
