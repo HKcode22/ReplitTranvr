@@ -233,15 +233,25 @@ async function main(): Promise<void> {
       record("raw-before-semantic-ordering", a.rowCount === 1 && b.rowCount === 1 && p.rowCount === 1 && q.rowCount === 1, "delivery→item→identity/attempt readable inside rolled-back proof transaction");
 
       let immutable = false;
+      await client.query("SAVEPOINT verify_identity_immutable");
       try {
         await client.query("UPDATE clean.webhook_identity_resolution SET reason='changed' WHERE delivery_id=$1 AND item_index=0", [id]);
-      } catch { immutable = true; }
+      } catch {
+        immutable = true;
+        await client.query("ROLLBACK TO SAVEPOINT verify_identity_immutable");
+      }
+      await client.query("RELEASE SAVEPOINT verify_identity_immutable");
       record("identity-resolution-append-only", immutable, immutable ? "mutation rejected" : "MUTATION WAS ALLOWED");
 
       let requiresClear = false;
+      await client.query("SAVEPOINT verify_provider_scope_requires_clear");
       try {
         await client.query("UPDATE clean.raw_delivery SET provider_content_expired_at_utc=now() WHERE delivery_id=$1", [id]);
-      } catch { requiresClear = true; }
+      } catch {
+        requiresClear = true;
+        await client.query("ROLLBACK TO SAVEPOINT verify_provider_scope_requires_clear");
+      }
+      await client.query("RELEASE SAVEPOINT verify_provider_scope_requires_clear");
       record("provider-scope-expiry-requires-clear", requiresClear, requiresClear ? "stamp rejected while protected content remained" : "UNSAFE stamp accepted");
 
       await client.query(
@@ -251,16 +261,21 @@ async function main(): Promise<void> {
         [id],
       );
       let oneWay = false;
+      await client.query("SAVEPOINT verify_provider_scope_one_way");
       try {
         await client.query("UPDATE clean.raw_delivery SET subscription_id='restored' WHERE delivery_id=$1", [id]);
-      } catch { oneWay = true; }
+      } catch {
+        oneWay = true;
+        await client.query("ROLLBACK TO SAVEPOINT verify_provider_scope_one_way");
+      }
+      await client.query("RELEASE SAVEPOINT verify_provider_scope_one_way");
       record("provider-scope-expiry-one-way", oneWay, oneWay ? "provider content restoration rejected" : "UNSAFE restoration accepted");
 
       await client.query("ROLLBACK");
       record("rollback-no-junk-rows", true, "rolled back proof transaction");
     } catch (e: any) {
       try { await client.query("ROLLBACK"); } catch {}
-      record("raw-before-semantic-ordering", false, e?.message ?? String(e));
+      record("proof-transaction", false, e?.message ?? String(e));
     } finally {
       client.release();
     }
