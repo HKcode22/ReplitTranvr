@@ -12,6 +12,7 @@ export interface ProviderBlobStoreV39 {
 }
 
 export interface ProviderBlobRefV39 {
+  blobRefId: string;
   contractVersion: typeof PROVIDER_BLOB_CONTRACT_VERSION_V39;
   storageKind: typeof PROVIDER_BLOB_STORAGE_KIND_V39;
   objectName: string;
@@ -43,6 +44,7 @@ export interface ProviderBlobStorageEvidenceVerdictV39 {
 }
 
 const SHA = /^[a-f0-9]{64}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const OBJECT_NAME = /^v39\/provider\/(raw_provider_content|live_fids_cache)\/[0-9a-f]{2}\/[0-9a-f-]{36}\.blob$/;
 
 function sha256(bytes: Uint8Array): string {
@@ -58,17 +60,17 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 export function providerBlobObjectNameV39(contentClass: HardRetentionClass, uuid?: string): string {
   if (!(contentClass in HARD_RETENTION_LIMIT_HOURS)) throw new Error(`PROVIDER_BLOB_CLASS_INVALID:${contentClass}`);
   const resolvedUuid = uuid ?? randomUUID();
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(resolvedUuid)) {
-    throw new Error("PROVIDER_BLOB_UUID_INVALID");
-  }
+  if (!UUID.test(resolvedUuid)) throw new Error("PROVIDER_BLOB_UUID_INVALID");
   const normalized = resolvedUuid.toLowerCase();
   return `v39/provider/${contentClass}/${normalized.slice(0, 2)}/${normalized}.blob`;
 }
 
 export function validateProviderBlobRefV39(ref: ProviderBlobRefV39): void {
+  if (!UUID.test(ref.blobRefId)) throw new Error("PROVIDER_BLOB_REF_ID_INVALID");
   if (ref.contractVersion !== PROVIDER_BLOB_CONTRACT_VERSION_V39) throw new Error("PROVIDER_BLOB_CONTRACT_VERSION_INVALID");
   if (ref.storageKind !== PROVIDER_BLOB_STORAGE_KIND_V39) throw new Error("PROVIDER_BLOB_STORAGE_KIND_INVALID");
   if (!OBJECT_NAME.test(ref.objectName)) throw new Error("PROVIDER_BLOB_OBJECT_NAME_NOT_OPAQUE");
+  if (!ref.objectName.endsWith(`/${ref.blobRefId.toLowerCase()}.blob`)) throw new Error("PROVIDER_BLOB_REF_OBJECT_MISMATCH");
   if (!SHA.test(ref.contentSha256)) throw new Error("PROVIDER_BLOB_SHA256_INVALID");
   if (!Number.isInteger(ref.contentBytes) || ref.contentBytes < 0) throw new Error("PROVIDER_BLOB_SIZE_INVALID");
   if (!Number.isFinite(Date.parse(ref.persistedAtUtc)) || !Number.isFinite(Date.parse(ref.expiresAtUtc))) {
@@ -101,7 +103,9 @@ export async function persistProviderBlobBeforeAckV39(input: {
   if (!Number.isFinite(input.retentionHours) || input.retentionHours <= 0 || input.retentionHours > hard) {
     throw new Error(`PROVIDER_BLOB_RETENTION_OVER_HARD_LIMIT:${input.contentClass}`);
   }
-  const objectName = providerBlobObjectNameV39(input.contentClass, input.uuid);
+  const blobRefId = (input.uuid ?? randomUUID()).toLowerCase();
+  if (!UUID.test(blobRefId)) throw new Error("PROVIDER_BLOB_UUID_INVALID");
+  const objectName = providerBlobObjectNameV39(input.contentClass, blobRefId);
   const contentSha256 = sha256(input.bytes);
   try {
     await input.store.uploadBytes(objectName, input.bytes);
@@ -117,6 +121,7 @@ export async function persistProviderBlobBeforeAckV39(input: {
   const persistedAtUtc = input.now.toISOString();
   const expiresAtUtc = new Date(input.now.getTime() + input.retentionHours * 3_600_000).toISOString();
   const ref: ProviderBlobRefV39 = {
+    blobRefId,
     contractVersion: PROVIDER_BLOB_CONTRACT_VERSION_V39,
     storageKind: PROVIDER_BLOB_STORAGE_KIND_V39,
     objectName,
@@ -140,16 +145,17 @@ export async function deleteProviderBlobAtExpiryV39(input: {
   store: ProviderBlobStoreV39;
   ref: ProviderBlobRefV39;
   now: Date;
-  allowEarlyIncidentDelete?: boolean;
-}): Promise<{ objectName: string; contentSha256: string; deletedAtUtc: string }> {
+  allowEarlyDelete?: boolean;
+}): Promise<{ blobRefId: string; objectName: string; contentSha256: string; deletedAtUtc: string }> {
   validateProviderBlobRefV39(input.ref);
   if (!Number.isFinite(input.now.getTime())) throw new Error("PROVIDER_BLOB_DELETE_TIME_INVALID");
-  if (!input.allowEarlyIncidentDelete && input.now.getTime() < Date.parse(input.ref.expiresAtUtc)) {
+  if (!input.allowEarlyDelete && input.now.getTime() < Date.parse(input.ref.expiresAtUtc)) {
     throw new Error("PROVIDER_BLOB_DELETE_BEFORE_EXPIRY_REFUSED");
   }
   await input.store.delete(input.ref.objectName);
   if (await input.store.exists(input.ref.objectName)) throw new Error("PROVIDER_BLOB_DELETE_VERIFICATION_FAILED");
   return {
+    blobRefId: input.ref.blobRefId,
     objectName: input.ref.objectName,
     contentSha256: input.ref.contentSha256,
     deletedAtUtc: input.now.toISOString(),
