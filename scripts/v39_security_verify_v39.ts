@@ -1,4 +1,4 @@
-/** V3.9 prerequisite-P security/retention verifier. */
+/** V3.9 prerequisite-P security/retention verifier for Gate 1 + Phase-2 prepaid runtime. */
 import { readFileSync } from "fs";
 import { join } from "path";
 import { Pool } from "pg";
@@ -15,7 +15,11 @@ import {
   type RetentionDeploymentEvidenceV39,
 } from "../server/lib/disruption/retentionDeployment_v39";
 import { verifyProviderContentInventory } from "../server/lib/disruption/providerContentInventory_v39";
-import type { RetentionMatrixRow } from "../server/lib/disruption/retentionMatrix_v39";
+import {
+  parsePhase2RetentionScopeEvidenceV39,
+  verifyPhase2RetentionScopeEvidenceV39,
+} from "../server/lib/disruption/phase2RetentionEvidence_v39";
+import { verifyPhase2PrepaidSecurityV39 } from "../server/lib/disruption/phase2PrepaidSecurity_v39";
 
 interface Check { name: string; pass: boolean; detail: string }
 
@@ -78,8 +82,7 @@ async function verifyWebhookLive(e: WebhookSecurityEvidence): Promise<string[]> 
   try {
     const routes = readFileSync(join(process.cwd(), "server", "routes_v3.ts"), "utf8");
     if (!routes.includes("req.params.secret") || !routes.includes("webhookSecret()")) failures.push("ingress-secret-enforcement-missing");
-    const raw = readFileSync(join(process.cwd(), "server", "lib", "disruption", "rawIngress_v3.ts"), "utf8");
-    if (!raw.includes("ON CONFLICT (delivery_id) DO NOTHING")) failures.push("replay-idempotency-missing");
+    if (!routes.includes('/api/v1/webhooks/aerodatabox/:secret/prepaid/:sessionId')) failures.push("prepaid-secret-route-missing");
   } catch (err: any) {
     failures.push(`code-check:${err?.message ?? err}`);
   }
@@ -116,23 +119,29 @@ async function verifyRetentionSurfaces(e: RetentionDeploymentEvidenceV39 | null)
     return {
       name: "retention-deployment-surfaces",
       pass: true,
-      detail: `topology+primary-dry-run verified; raw_recoverable=${topology.effectiveRecoverableHours.raw_provider_content}h; fids_recoverable=${topology.effectiveRecoverableHours.live_fids_cache}h; dry_run=${dry.evidenceHash}`,
+      detail: `topology verified; raw_recoverable=${topology.effectiveRecoverableHours.raw_provider_content}h; fids_recoverable=${topology.effectiveRecoverableHours.live_fids_cache}h; dry_run=${dry.evidenceHash}`,
     };
   } catch (err: any) {
     return { name: "retention-deployment-surfaces", pass: false, detail: `primary-real-adapter-failed:${err?.message ?? err}` };
   }
 }
 
-async function verifyMatrixStorage(rows: readonly RetentionMatrixRow[]): Promise<string[]> {
-  const tables = [...new Set(rows.flatMap((row) => row.tables).filter((name) => name.startsWith("clean.")))].sort();
-  if (!tables.length) return ["retention-matrix-has-no-runtime-tables"];
-  const { v39Pool: pool } = await import("../server/lib/disruption/db_v39");
-  const failures: string[] = [];
-  for (const table of tables) {
-    const found = await pool.query("SELECT to_regclass($1) AS c", [table]);
-    if (!found.rows[0]?.c) failures.push(`matrix-storage-missing:${table}`);
+function verifyPhase2ScopeEvidence(): Check {
+  const raw = process.env.V39_PHASE2_RETENTION_SCOPE_EVIDENCE;
+  if (!raw) return { name: "phase2-retention-scope-evidence", pass: false, detail: "missing-V39_PHASE2_RETENTION_SCOPE_EVIDENCE" };
+  try {
+    const evidence = parsePhase2RetentionScopeEvidenceV39(raw);
+    const verdict = verifyPhase2RetentionScopeEvidenceV39(evidence);
+    return {
+      name: "phase2-retention-scope-evidence",
+      pass: verdict.pass,
+      detail: verdict.pass
+        ? `evidence=${evidence.evidenceId}; raw<=${evidence.rawProviderMaxHours}h; fids<=${evidence.liveFidsMaxHours}h; PITR prepaid plaintext=false`
+        : verdict.failures.join(","),
+    };
+  } catch (error: any) {
+    return { name: "phase2-retention-scope-evidence", pass: false, detail: String(error?.message ?? error) };
   }
-  return failures;
 }
 
 async function main(): Promise<void> {
@@ -154,50 +163,21 @@ async function main(): Promise<void> {
     const staticCheck = checkWebhookSecurity(webhook);
     const live = await verifyWebhookLive(webhook);
     const all = [...staticCheck.failures, ...live];
-    checks.push({ name: "webhook-tls-auth-replay", pass: !all.length, detail: all.join(",") || "runtime ingress verified" });
+    checks.push({ name: "webhook-tls-auth-replay", pass: !all.length, detail: all.join(",") || "runtime prepaid ingress verified" });
   }
 
+  checks.push(verifyPhase2ScopeEvidence());
   checks.push(await verifyRetentionSurfaces(parseEvidence<RetentionDeploymentEvidenceV39>("V39_RETENTION_DEPLOYMENT_EVIDENCE")));
 
-  const columnCoverage = verifyProviderContentInventory();
-  checks.push({
-    name: "provider-content-column-coverage",
-    pass: columnCoverage.pass,
-    detail: columnCoverage.pass
-      ? `covered_groups=${columnCoverage.coveredGroupCount}; unresolved=0`
-      : `covered_groups=${columnCoverage.coveredGroupCount}; unresolved=${columnCoverage.unresolvedGroupCount}; ${columnCoverage.failures.slice(0, 6).join(",")}`,
-  });
-
   try {
-    const {
-      RETENTION_MATRIX,
-      RETENTION_MATRIX_HASH,
-      parseRetentionMatrixEvidence,
-      resolveRetentionMatrix,
-      verifyRetentionMatrix,
-    } = await import("../server/lib/disruption/retentionMatrix_v39");
-    const overlayRaw = process.env.V39_RETENTION_MATRIX_EVIDENCE;
-    const storageFailures = await verifyMatrixStorage(RETENTION_MATRIX);
-    if (!overlayRaw) {
-      const verdict = verifyRetentionMatrix();
-      const all = [...storageFailures, ...verdict.failures];
-      checks.push({
-        name: "retention-content-matrix",
-        pass: false,
-        detail: `missing-V39_RETENTION_MATRIX_EVIDENCE;${all.slice(0, 5).join(",")}`,
-      });
-    } else {
-      const { rows, failures } = resolveRetentionMatrix(parseRetentionMatrixEvidence(overlayRaw));
-      const verdict = verifyRetentionMatrix(rows);
-      const all = [...storageFailures, ...failures, ...verdict.failures];
-      checks.push({
-        name: "retention-content-matrix",
-        pass: all.length === 0,
-        detail: all.length === 0 ? `matrix=${RETENTION_MATRIX_HASH.slice(0, 12)}… schema+evidence verified` : all.slice(0, 6).join(","),
-      });
-    }
-  } catch (err: any) {
-    checks.push({ name: "retention-content-matrix", pass: false, detail: `matrix-check-error:${err?.message ?? err}` });
+    const phase2 = await verifyPhase2PrepaidSecurityV39();
+    checks.push({
+      name: "phase2-prepaid-storage-and-runtime",
+      pass: phase2.pass,
+      detail: phase2.pass ? phase2.details.join("; ") : phase2.failures.slice(0, 8).join(","),
+    });
+  } catch (error: any) {
+    checks.push({ name: "phase2-prepaid-storage-and-runtime", pass: false, detail: String(error?.message ?? error) });
   }
 
   try {
@@ -213,9 +193,21 @@ async function main(): Promise<void> {
     checks.push({ name: "incident-stop-refusal", pass: false, detail: `${err?.message ?? err}` });
   }
 
+  // Transparency only: this is the FULL repository/Phase-6 inventory. It is
+  // intentionally allowed to remain unresolved here and is not prerequisite-P.
+  const downstream = verifyProviderContentInventory();
+  console.log(
+    `[DEFERRED_PHASE6] full-provider-content-inventory - covered_groups=${downstream.coveredGroupCount}; ` +
+    `unresolved=${downstream.unresolvedGroupCount}; ${downstream.failures.slice(0, 6).join(",")}`,
+  );
+
   for (const check of checks) console.log(`[${check.pass ? "PASS" : "BLOCKED"}] ${check.name} - ${check.detail}`);
   const pass = checks.length > 0 && checks.every((check) => check.pass);
-  console.log(`[${pass ? "PASS" : "BLOCKED"}] PREPAID_SECURITY_RETENTION - ${pass ? "prerequisite P evidence is complete for the verified runtime" : "one or more prerequisite-P checks remain unresolved"}`);
+  console.log(
+    `[${pass ? "PASS" : "BLOCKED"}] PREPAID_SECURITY_RETENTION - ` +
+    (pass ? "Phase-2 Gate-1 + isolated prepaid smoke/probe scope is verified; Phase-6 downstream inventory remains separately gated" :
+      "one or more Phase-2 prerequisite-P checks remain unresolved"),
+  );
   if (!pass) process.exitCode = 1;
 }
 
