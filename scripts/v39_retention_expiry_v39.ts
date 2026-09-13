@@ -3,8 +3,8 @@
  *
  * Safe default: DRY_RUN. APPLY remains fail-closed in the underlying owners.
  * One bounded command owns every presently implemented expiry surface:
- * logged provider fields, temporary identity/account fields, and independently
- * deletable App-Storage provider blobs used by the isolated prepaid runtime.
+ * logged provider fields, temporary identity/account fields, independently
+ * deletable App-Storage provider blobs, and expired UNLOGGED prepaid sessions.
  */
 import { pathToFileURL } from "url";
 import {
@@ -26,6 +26,11 @@ import {
   collectExpiredProviderBlobsV39,
   type ProviderBlobExpiryCandidateV39,
 } from "../server/lib/disruption/providerBlobExpiry_v39";
+import {
+  applyExpiredPrepaidProbeSessionsV39,
+  collectExpiredPrepaidProbeSessionsV39,
+  type ExpiredPrepaidProbeSessionV39,
+} from "../server/lib/disruption/prepaidProbeExpiry_v39";
 import { v39Pool } from "../server/lib/disruption/db_v39";
 
 export interface RetentionCliOptions {
@@ -112,14 +117,29 @@ function safeBlobCandidate(candidate: ProviderBlobExpiryCandidateV39): Record<st
     payload_hash: null,
   };
 }
+function safeSessionCandidate(candidate: ExpiredPrepaidProbeSessionV39): Record<string, unknown> {
+  return {
+    record_id: candidate.sessionId,
+    source_table: "clean.prepaid_probe_*_runtime",
+    content_class: "raw_provider_content",
+    content_columns: ["unlogged_runtime_session_and_children"],
+    age_timestamp_utc: null,
+    expires_at_utc: candidate.expiresAtUtc,
+    retention_hours: 24,
+    content_hash: null,
+    payload_hash: null,
+  };
+}
 
 function safeResult(
   result: RetentionExpiryResult,
   identityCandidates: readonly ProviderIdentityExpiryCandidate[],
   accountCandidates: readonly ProviderAccountExpiryCandidate[],
+  sessionCandidates: readonly ExpiredPrepaidProbeSessionV39[],
   blobCandidates: readonly ProviderBlobExpiryCandidateV39[],
   identityApply?: { runId: string; expiredCount: number },
   accountApply?: { runId: string; expiredCount: number },
+  sessionApply?: { runId: string; expiredCount: number },
   blobApply?: { runId: string; expiredCount: number },
 ): Record<string, unknown> {
   return {
@@ -127,25 +147,29 @@ function safeResult(
     run_id: result.runId,
     provider_identity_run_id: identityApply?.runId ?? null,
     provider_account_run_id: accountApply?.runId ?? null,
+    prepaid_session_run_id: sessionApply?.runId ?? null,
     provider_blob_run_id: blobApply?.runId ?? null,
     raw_cutoff_utc: result.cutoffUtc,
     fids_cutoff_utc: result.fidsCutoffUtc,
     retention_hours: result.retentionHours,
-    candidate_count: result.candidates.length + identityCandidates.length + accountCandidates.length + blobCandidates.length,
+    candidate_count: result.candidates.length + identityCandidates.length + accountCandidates.length + sessionCandidates.length + blobCandidates.length,
     base_candidate_count: result.candidates.length,
     provider_identity_candidate_count: identityCandidates.length,
     provider_account_candidate_count: accountCandidates.length,
+    prepaid_session_candidate_count: sessionCandidates.length,
     provider_blob_candidate_count: blobCandidates.length,
-    expired_count: result.expiredCount + (identityApply?.expiredCount ?? 0) + (accountApply?.expiredCount ?? 0) + (blobApply?.expiredCount ?? 0),
+    expired_count: result.expiredCount + (identityApply?.expiredCount ?? 0) + (accountApply?.expiredCount ?? 0) + (sessionApply?.expiredCount ?? 0) + (blobApply?.expiredCount ?? 0),
     base_expired_count: result.expiredCount,
     provider_identity_expired_count: identityApply?.expiredCount ?? 0,
     provider_account_expired_count: accountApply?.expiredCount ?? 0,
+    prepaid_session_expired_count: sessionApply?.expiredCount ?? 0,
     provider_blob_expired_count: blobApply?.expiredCount ?? 0,
     evidence_hash: result.evidenceHash,
     candidates: [
       ...result.candidates.map(safeBaseCandidate),
       ...identityCandidates.map(safeIdentityCandidate),
       ...accountCandidates.map(safeAccountCandidate),
+      ...sessionCandidates.map(safeSessionCandidate),
       ...blobCandidates.map(safeBlobCandidate),
     ],
   };
@@ -190,15 +214,23 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const accountCandidates = remaining > 0
       ? await collectProviderAccountExpiryCandidates(now, result.retentionHours, remaining) : [];
     remaining = Math.max(0, remaining - accountCandidates.length);
+    const sessionCandidates = remaining > 0
+      ? await collectExpiredPrepaidProbeSessionsV39(now, remaining) : [];
+    remaining = Math.max(0, remaining - sessionCandidates.length);
     const blobCandidates = remaining > 0
       ? await collectExpiredProviderBlobsV39(now, remaining) : [];
 
     const identityApply = options.apply ? await applyProviderIdentityExpiryCandidates(identityCandidates) : undefined;
     const accountApply = options.apply ? await applyProviderAccountExpiryCandidates(accountCandidates) : undefined;
+    // Expired sessions may delete their provider blobs early. Re-querying blob
+    // candidates happens before APPLY but blob deletion is idempotent and the
+    // provider-blob owner verifies the durable tombstone transition.
+    const sessionApply = options.apply ? await applyExpiredPrepaidProbeSessionsV39(sessionCandidates) : undefined;
     const blobApply = options.apply ? await applyExpiredProviderBlobsV39(blobCandidates) : undefined;
 
     console.log(JSON.stringify(
-      safeResult(result, identityCandidates, accountCandidates, blobCandidates, identityApply, accountApply, blobApply),
+      safeResult(result, identityCandidates, accountCandidates, sessionCandidates, blobCandidates,
+        identityApply, accountApply, sessionApply, blobApply),
       null,
       2,
     ));
