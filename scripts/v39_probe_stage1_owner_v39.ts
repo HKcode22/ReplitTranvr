@@ -5,10 +5,10 @@
  */
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import {
-  executeProbe,
   loadProbeExecutionArtifacts,
   type LoadedProbeExecutionArtifacts,
 } from "../server/lib/disruption/probeExecution_v39";
+import { executePrepaidProbeV39 } from "../server/lib/disruption/probeExecutionPrepaid_v39";
 import {
   selectStage2Top5,
   type Stage1ProbeEvidence,
@@ -48,27 +48,40 @@ function authCeiling(argv: string[]): number {
   return ceiling;
 }
 
+/**
+ * Safe-mode rows intentionally retain no exact provider credit delta. For the
+ * pure promotion math we express the already-frozen lower/upper per-credit
+ * bounds on a synthetic denominator of 1. This is algebraically identical to
+ * count/credits ratios and never recreates the deleted provider account value.
+ */
 async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvidence[]> {
   const r = await pool.query(
     `SELECT icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
             tail_chain_links_per_credit,stability,confirmed_unique_lower,
-            confirmed_plus_ambiguous_upper
+            confirmed_plus_ambiguous_upper,provider_content_safe_mode,
+            confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit
        FROM clean.adb_anchor_probe
       WHERE stage=1 AND preprobe_artifact_sha256=$1
       ORDER BY recorded_at ASC`,
     [preprobeHash],
   );
-  return r.rows.map((x: any) => ({
-    icao: String(x.icao).toUpperCase(),
-    status: String(x.status),
-    rowsPerHour: x.rows_per_hour == null ? null : Number(x.rows_per_hour),
-    creditsSpent: x.credits_spent == null ? null : Number(x.credits_spent),
-    uniqueFlightsPerCredit: x.unique_flights_per_credit == null ? null : Number(x.unique_flights_per_credit),
-    tailChainLinksPerCredit: x.tail_chain_links_per_credit == null ? null : Number(x.tail_chain_links_per_credit),
-    stability: x.stability == null ? null : Number(x.stability),
-    confirmedUniqueLower: x.confirmed_unique_lower == null ? null : Number(x.confirmed_unique_lower),
-    confirmedPlusAmbiguousUpper: x.confirmed_plus_ambiguous_upper == null ? null : Number(x.confirmed_plus_ambiguous_upper),
-  }));
+  return r.rows.map((x: any) => {
+    const safe = x.provider_content_safe_mode === true;
+    const lowerRate = x.confirmed_unique_lower_per_credit == null ? null : Number(x.confirmed_unique_lower_per_credit);
+    const upperRate = x.confirmed_plus_ambiguous_upper_per_credit == null ? null : Number(x.confirmed_plus_ambiguous_upper_per_credit);
+    const safeRates = safe && lowerRate !== null && upperRate !== null && Number.isFinite(lowerRate) && Number.isFinite(upperRate);
+    return {
+      icao: String(x.icao).toUpperCase(),
+      status: String(x.status),
+      rowsPerHour: x.rows_per_hour == null ? null : Number(x.rows_per_hour),
+      creditsSpent: safeRates ? 1 : (x.credits_spent == null ? null : Number(x.credits_spent)),
+      uniqueFlightsPerCredit: x.unique_flights_per_credit == null ? null : Number(x.unique_flights_per_credit),
+      tailChainLinksPerCredit: x.tail_chain_links_per_credit == null ? null : Number(x.tail_chain_links_per_credit),
+      stability: x.stability == null ? null : Number(x.stability),
+      confirmedUniqueLower: safeRates ? lowerRate : (x.confirmed_unique_lower == null ? null : Number(x.confirmed_unique_lower)),
+      confirmedPlusAmbiguousUpper: safeRates ? upperRate : (x.confirmed_plus_ambiguous_upper == null ? null : Number(x.confirmed_plus_ambiguous_upper)),
+    };
+  });
 }
 
 function terminal(status: string | undefined): boolean {
@@ -84,8 +97,6 @@ async function chooseNextStage1Target(
     if (!terminal(by.get(candidate.icao)?.status)) return { icao: candidate.icao, replacement: false };
   }
 
-  // All 12 primaries reached terminal Stage-1 outcomes. Only now may the
-  // frozen ordered replacement protocol begin.
   const promotion = selectStage2Top5(artifacts.preprobe, evidence);
   if (promotion.replacementsNeeded === 0) return null;
   if (!promotion.nextReplacement) {
@@ -104,7 +115,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
   if (!next) {
     const promotion = selectStage2Top5(artifacts.preprobe, evidence);
     console.log(JSON.stringify({
-      schema: "v39.anchor-stage1-evidence.v2",
+      schema: "v39.anchor-stage1-evidence.v3",
       status: "PASS",
       authorizationId: auth.authId,
       preprobeArtifactSha256: artifacts.preprobeSha256,
@@ -114,6 +125,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
       replacementsNeeded: promotion.replacementsNeeded,
       referenceIcao: promotion.referenceIcao,
       ambiguityMembershipInvariant: promotion.ambiguityMembershipInvariant,
+      providerContentSafeMode: true,
       message: "Stage 1/replacement requirements complete; no provider call made",
     }));
     return 0;
@@ -127,7 +139,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     }
   }
 
-  const result = await executeProbe({
+  const result = await executePrepaidProbeV39({
     stage: 1,
     icao: next.icao,
     allowReplacement: next.replacement,
@@ -138,7 +150,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     throw new Error(`REFUSED_STAGE1_PROBE_FAILED: ${next.icao} ${result.stopReason ?? "unknown"}`);
   }
   console.log(JSON.stringify({
-    schema: "v39.anchor-stage1-execution.v2",
+    schema: "v39.anchor-stage1-execution.v3",
     status: "PASS",
     authorizationId: auth.authId,
     preprobeArtifactSha256: artifacts.preprobeSha256,
@@ -147,10 +159,10 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     icao: next.icao,
     replacement: next.replacement,
     probeId: result.probeId,
-    creditsSpent: result.creditsSpent,
+    providerContentSafeMode: true,
     durationCensored: result.durationCensored,
     stopReason: result.stopReason,
-    message: "One sequential frozen Stage-1 probe completed; invoke again for the next authorized candidate",
+    message: "One sequential frozen Stage-1 probe completed through isolated App-Storage/UNLOGGED runtime",
   }));
   return 0;
 }
@@ -158,7 +170,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
 if (import.meta.url === `file://${process.argv[1]}`) {
   runStage1Owner().catch((error: any) => {
     console.error(JSON.stringify({
-      schema: "v39.anchor-stage1-execution.v2",
+      schema: "v39.anchor-stage1-execution.v3",
       status: "FAIL",
       error: error?.message ?? String(error),
     }));
