@@ -1,36 +1,49 @@
 {
-  "schema_version": "v3.9-phase2-current-status-2",
-  "recorded_at_utc": "2026-09-13T03:02:00Z",
+  "schema_version": "v3.9-phase2-current-status-3",
+  "recorded_at_utc": "2026-09-13T06:18:48.231Z",
   "binding_plan": "SEPmd/V3.9_DataCollectPlan_f.8.md",
   "implementation_log": "SEPmd/V3.9_IMPLEMENTATION_LOG.md#17-phase-2--prerequisite-p--gate-1--referencesframe--pre-probe-freeze--safety-smoke--gate-2",
-  "branch": "v39-p-phase2-closure-audit-20260911",
-  "current_execution_pointer": "PHASE_2A_PRODUCTION_BINDING",
+  "branch": "main",
+  "current_execution_pointer": "PHASE_2B_GATE1_FRESH_COVERAGE",
   "status": {
     "phase0": "PASS",
     "phase1_gate0": "PASS_EXISTING_EVIDENCE",
-    "phase2a_prerequisite_p": "AWAITING_PRODUCTION_BINDING_NOT_PASS",
-    "phase2b_gate1": "IMPLEMENTED_WAITING_ON_2A_FRESH_PASS_REQUIRED",
+    "phase2a_prerequisite_p": "PASS_LIVE_CRYPTOGRAPHIC",
+    "phase2b_gate1": "IMPLEMENTED_READY_FOR_FRESH_GATE1",
     "phase2c_reference_rules": "BINDING_PLAN_AMENDED_REFERENCE_VALIDATED_WAITING_ON_2B_FREEZE_RECORD",
-    "phase2d_final_frame": "IMPLEMENTED_WAITING_ON_2A_2C",
+    "phase2d_final_frame": "IMPLEMENTED_WAITING_ON_2B_2C",
     "phase2e_preprobe_freeze": "IMPLEMENTED_WAITING_ON_2D",
     "phase2f_safety_smoke": "IMPLEMENTED_NOT_RUN_EXACT_AUTH_REQUIRED_AFTER_2E",
     "phase2g_gate2_stage1": "IMPLEMENTED_NOT_RUN_WAITING_ON_2F_HANDOFF_AUTH",
     "phase2h_gate2_stage2": "IMPLEMENTED_NOT_RUN_WAITING_ON_2G_HANDOFF_AUTH",
     "phase2_complete": false,
-    "paid_work": "NO_GO_UNTIL_OWNED_AUTH_AND_PREDECESSORS_PASS",
+    "paid_work": "NO_GO_UNTIL_2E_COMPLETE_AND_OWNED_EXACT_AUTH_FOR_2F",
     "phase6_retention_inventory": "DEFERRED_UNRESOLVED_SEPARATE_FROM_PHASE2_P"
   },
   "phase2a_prerequisite_p": {
-    "implementation": "DONE_TESTED",
+    "implementation": "DONE_TESTED_EXECUTED_PASS",
+    "verified_at_utc": "2026-09-13T06:18:48.231Z",
+    "pass_artifact_path": "artifacts/prepaid-security-retention-pass.json",
+    "pass_artifact_sha256": "58f9a3cdcf4a742a6eb7d324beb8efa61bae74697fa8b50106604821b1058fbb",
+    "verification_receipt_sha256": "bcff84350c91585b8512241d28e3f07f2c408bfba21d1fed78e6bb6227d4a4aa",
+    "plan_sha256": "35a025a47646572f557555315c0cd84aaec8c00011d22519d9f79d29487d1506",
+    "phase2_prepaid_content_scope_sha256": "0833f4c991ea009c2b089ed6b34425ac1f425f5897375bfd304fd1a112de953b",
+    "runtime_role": "travnr_v39_runtime_recovery1",
     "plaintext_architecture": "dedicated Replit App Storage raw blobs + PostgreSQL UNLOGGED prepaid runtime",
     "database_pitr": "may remain enabled because Phase-2 prepaid plaintext is excluded from logged PostgreSQL by design",
-    "live_requirements_remaining": [
-      "dedicated production App Storage bucket ID",
-      "explicit production DB owner connection used to provision and verify travnr_v39_runtime",
-      "production webhook evidence for HTTPS secret prepaid route",
-      "owner-approved Phase-2 retention evidence",
-      "successful live synthetic App-Storage write/read/delete/absence and runtime verification",
-      "fresh prerequisite-P verification receipt and cryptographic P PASS artifact"
+    "live_verifier_checks": {
+      "least_privilege_db_tls": "PASS",
+      "webhook_tls_auth_replay": "PASS",
+      "phase2_retention_scope_evidence": "PASS",
+      "retention_deployment_surfaces": "PASS",
+      "phase2_prepaid_storage_and_runtime": "PASS",
+      "incident_stop_refusal": "PASS",
+      "prepaid_security_retention": "PASS"
+    },
+    "remaining_for_phase2a": [],
+    "deployment_handoff_before_paid_smoke_or_probe": [
+      "publish the generated restricted V39_DATABASE_RUNTIME_URL to the production deployment without exposing its value",
+      "publish the generated AERODATABOX_WEBHOOK_SECRET to the production deployment without exposing its value and ensure the deployed route uses the same secret"
     ]
   },
   "phase2c_reference": {
@@ -58,10 +71,10 @@
       "commit": "0bb10c8fc2168d0d5829b9157e3509e61ada372a",
       "result": "SUCCESS"
     },
-    "latest_head_revalidation": "IN_PROGRESS_AFTER_BINDING_PLAN_AND_RUNTIME_CONTRACT_ALIGNMENT"
+    "latest_head_revalidation": "PHASE2A_LIVE_PASS_SUPERSEDES_PRODUCTION_BINDING_WAIT"
   },
   "execution_order": [
-    "2A production-bind prerequisite-P inputs and record true P PASS",
+    "2A prerequisite-P production binding and cryptographic PASS — COMPLETE",
     "2B run fresh Gate 1 coverage and write hash-valid PASS artifact",
     "2C write run-specific reference freeze from the already validated binding source/rules",
     "2D rebuild and hash the final frame",
@@ -82,5 +95,5 @@
     "Gate-0.5 pilot",
     "Phase-6 start"
   ],
-  "historical_note": "older audit/retention/reference status artifacts are retained for provenance; this file and the dated §1.7 implementation-log table are the superseding Phase-2 status pointers"
+  "historical_note": "Phase 2A was executed against production and cryptographically passed at 2026-09-13T06:18:48.231Z. The execution pointer is now Phase 2B fresh Gate 1. Older awaiting-production-binding status is superseded."
 }
