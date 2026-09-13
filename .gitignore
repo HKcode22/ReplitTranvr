@@ -15,6 +15,9 @@ travnr_db_dump/
 .env
 .env.*
 
+# local/private research-source checkpoints and aggregates (never committed)
+.private/
+
 # v39 runtime state (pause markers, never committed)
 .v39-state/
 
