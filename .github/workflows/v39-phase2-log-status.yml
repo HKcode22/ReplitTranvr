@@ -1,0 +1,39 @@
+name: V3.9 Phase2 Log Status
+
+on:
+  push:
+    branches:
+      - v39-p-phase2-closure-audit-20260911
+    paths:
+      - scripts/v39_update_phase2_log_status.py
+      - .github/workflows/v39-phase2-log-status.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-phase2-log:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: v39-p-phase2-closure-audit-20260911
+          fetch-depth: 1
+      - name: Update exact Phase-2 log section
+        run: python3 scripts/v39_update_phase2_log_status.py
+      - name: Verify only canonical implementation log changed
+        run: |
+          set -euo pipefail
+          changed="$(git status --short)"
+          echo "$changed"
+          test "$(printf '%s\n' "$changed" | sed '/^$/d' | wc -l)" -eq 1
+          printf '%s\n' "$changed" | grep -Eq '^ M SEPmd/V3\.9_IMPLEMENTATION_LOG\.md$'
+      - name: Commit current Phase-2 execution pointer
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add SEPmd/V3.9_IMPLEMENTATION_LOG.md
+          git commit -m "V3.9: record exact Phase-2 2A-2H execution status"
+          git push origin HEAD:v39-p-phase2-closure-audit-20260911
