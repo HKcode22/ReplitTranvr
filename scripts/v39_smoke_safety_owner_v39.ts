@@ -12,7 +12,7 @@ import { dirname, resolve } from "path";
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { getBalance, listSubscriptionsStrict } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import { runPrepaidLiveWindowV39 } from "../server/lib/disruption/prepaidProbeWindow_v39";
-import { loadPreprobeHandoffBindingV39 } from "../server/lib/disruption/phase2Handoff_v39";
+import { loadPhase2FSmokeRuntimeV39 } from "../server/lib/disruption/phase2SmokeRuntime_v39";
 import { parseArgs, resolveOwnerAuthorization, verifyAuthFile } from "./v39_paid_guard_v39";
 
 const SCOPE = "Phase 2 / safety smoke";
@@ -24,29 +24,35 @@ interface SmokeArgs {
   icao: string;
   minutes: number;
   artifactPath: string;
+  preprobePath: string;
+  runtimePath: string;
+  runtimeSha256: string;
 }
 
 function parseSmokeArgs(argv: string[]): SmokeArgs {
   let icao = "";
   let minutes = 0;
   let artifactPath = DEFAULT_ARTIFACT;
+  let preprobePath = process.env.ADB_PREPROBE_ARTIFACT_PATH || DEFAULT_PREPROBE;
+  let runtimePath = "";
+  let runtimeSha256 = "";
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--icao") icao = String(argv[++i] ?? "").trim().toUpperCase();
     else if (argv[i] === "--minutes") minutes = Number(argv[++i]);
     else if (argv[i] === "--artifact") artifactPath = String(argv[++i] ?? "").trim();
+    else if (argv[i] === "--preprobe") preprobePath = String(argv[++i] ?? "").trim();
+    else if (argv[i] === "--runtime-file") runtimePath = String(argv[++i] ?? "").trim();
+    else if (argv[i] === "--runtime-sha") runtimeSha256 = String(argv[++i] ?? "").trim().toLowerCase();
   }
   if (!/^[A-Z0-9]{4}$/.test(icao)) throw new Error("REFUSED_SMOKE_ICAO_REQUIRED");
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 15) {
     throw new Error("REFUSED_SMOKE_WINDOW_MINUTES_MUST_BE_1_TO_15");
   }
   if (!artifactPath) throw new Error("REFUSED_SMOKE_ARTIFACT_PATH_REQUIRED");
-  return { icao, minutes, artifactPath };
-}
-
-function nonnegativeIntegerEnv(name: string): number {
-  const value = Number(process.env[name]);
-  if (!Number.isInteger(value) || value < 0) throw new Error(`REFUSED_${name}_MUST_BE_NONNEGATIVE_INTEGER`);
-  return value;
+  if (!preprobePath) throw new Error("REFUSED_SMOKE_PREPROBE_PATH_REQUIRED");
+  if (!runtimePath) throw new Error("REFUSED_SMOKE_RUNTIME_FILE_REQUIRED");
+  if (!/^[a-f0-9]{64}$/.test(runtimeSha256)) throw new Error("REFUSED_SMOKE_RUNTIME_SHA_REQUIRED");
+  return { icao, minutes, artifactPath, preprobePath, runtimePath, runtimeSha256 };
 }
 
 function exactScope(icao: string, minutes: number): string {
@@ -81,15 +87,22 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
   const args = parseSmokeArgs(argv);
   const record = checked.record;
 
-  // Bind the paid smoke to the exact current Phase-2E preprobe artifact. The
-  // ledger contains an evidence ID deterministically derived from BOTH the
-  // artifact's internal SHA and the exact file-byte SHA. The human-approved
-  // AUTH must name that evidence ID, so a stale/different preprobe cannot reuse
-  // a prior smoke authorization.
-  const preprobePath = process.env.ADB_PREPROBE_ARTIFACT_PATH || DEFAULT_PREPROBE;
-  const preprobe = loadPreprobeHandoffBindingV39(preprobePath);
-  if (!record.predecessorEvidenceIds.includes(preprobe.evidenceId)) {
-    throw new Error(`REFUSED_SMOKE_PREPROBE_BINDING_REQUIRED:${preprobe.evidenceId}`);
+  // All safety controls are frozen before the paid call. The runtime artifact
+  // itself is hash-locked and bound to the exact current Phase-2E preprobe.
+  const runtime = loadPhase2FSmokeRuntimeV39({
+    runtimePath: args.runtimePath,
+    expectedFileSha256: args.runtimeSha256,
+    preprobePath: args.preprobePath,
+  });
+  const preprobe = runtime.preprobe;
+  const requiredPredecessors = [preprobe.evidenceId, runtime.evidenceId];
+  for (const evidenceId of requiredPredecessors) {
+    if (!record.predecessorEvidenceIds.includes(evidenceId)) {
+      throw new Error(`REFUSED_SMOKE_PREDECESSOR_BINDING_REQUIRED:${evidenceId}`);
+    }
+  }
+  if (record.predecessorEvidenceIds.length !== requiredPredecessors.length) {
+    throw new Error("REFUSED_SMOKE_PREDECESSOR_SET_MUST_EQUAL_PREPROBE_AND_RUNTIME");
   }
 
   if (record.airportFilterWindow !== exactScope(args.icao, args.minutes)) {
@@ -103,25 +116,22 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
   }
   if (!record.cleanupOwner?.trim()) throw new Error("REFUSED_SMOKE_CLEANUP_OWNER_REQUIRED");
 
-  const preSmokeMargin = nonnegativeIntegerEnv("V39_PRE_SMOKE_UNSETTLED_BURST_MARGIN_CREDITS");
+  const frozen = runtime.runtime;
+  const preSmokeMargin = frozen.pre_smoke_unsettled_burst_margin_credits;
+  const settlement = {
+    initialWaitSeconds: frozen.settlement_initial_wait_seconds,
+    pollIntervalSeconds: frozen.settlement_poll_interval_seconds,
+    stableReadCount: frozen.settlement_stable_read_count,
+    timeoutSeconds: frozen.settlement_timeout_seconds,
+  };
+  const watchdogPollMs = frozen.watchdog_poll_ms;
+
   const beforeForeign = await activeBillableCount();
   if (beforeForeign !== 0) throw new Error(`REFUSED_R1_FOREIGN_ACTIVE_BILLABLE:${beforeForeign}`);
   const before = await getBalance();
   if (!before) throw new Error("REFUSED_SMOKE_BALANCE_UNKNOWN");
   if (before.creditsRemaining < PROTECTED_ALERT_FLOOR + alertCeiling + preSmokeMargin) {
     throw new Error("REFUSED_SMOKE_BALANCE_HEADROOM");
-  }
-
-  const settlement = {
-    initialWaitSeconds: Number(process.env.ADB_SMOKE_SETTLE_INITIAL_S ?? 30),
-    pollIntervalSeconds: Number(process.env.ADB_SMOKE_SETTLE_POLL_S ?? 10),
-    stableReadCount: 3,
-    timeoutSeconds: Number(process.env.ADB_SMOKE_SETTLE_TIMEOUT_S ?? 600),
-  };
-  if (!Number.isInteger(settlement.initialWaitSeconds) || settlement.initialWaitSeconds < 0 ||
-      !Number.isInteger(settlement.pollIntervalSeconds) || settlement.pollIntervalSeconds <= 0 ||
-      !Number.isInteger(settlement.timeoutSeconds) || settlement.timeoutSeconds <= 0) {
-    throw new Error("REFUSED_SMOKE_SETTLEMENT_CONFIG_INVALID");
   }
 
   const result = await runPrepaidLiveWindowV39({
@@ -133,7 +143,7 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
     balanceBefore: before.creditsRemaining,
     settlement,
     deletionRunId: `phase2-safety-smoke-${auth.authId}`,
-    watchdogPollMs: Number(process.env.ADB_SMOKE_WATCHDOG_POLL_MS ?? 5000),
+    watchdogPollMs,
   });
 
   const afterForeign = await activeBillableCount().catch(() => -1);
@@ -170,6 +180,7 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
       authorizationId: auth.authId,
       icao: args.icao,
       preprobeEvidenceId: preprobe.evidenceId,
+      smokeRuntimeEvidenceId: runtime.evidenceId,
       failures,
       cleanupVerified: Boolean(result.cleanupVerifiedAtUtc),
     });
@@ -186,6 +197,10 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
     preprobeArtifactSha256: preprobe.artifactSha256,
     preprobeFileSha256: preprobe.fileSha256,
     preprobeBindingSha256: preprobe.bindingSha256,
+    smokeRuntimeEvidenceId: runtime.evidenceId,
+    smokeRuntimeArtifactSha256: frozen.artifact_sha256,
+    smokeRuntimeFileSha256: runtime.fileSha256,
+    smokeRuntimeBindingSha256: runtime.bindingSha256,
     icao: args.icao,
     filter: "FlightByAirportIcao",
     windowMinutes: args.minutes,
@@ -202,6 +217,11 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
     confirmedPlusAmbiguousUpper: metrics!.confirmedPlusAmbiguousUpper,
     ambiguousUnknown: metrics!.ambiguousUnknown,
     settlementReads: result.settlementReads,
+    settlementInitialWaitSeconds: settlement.initialWaitSeconds,
+    settlementPollIntervalSeconds: settlement.pollIntervalSeconds,
+    settlementStableReadCount: settlement.stableReadCount,
+    settlementTimeoutSeconds: settlement.timeoutSeconds,
+    watchdogPollMs,
     exactExternalInternalReconciliation: true,
     rawBefore2xxPathVerified: true,
     providerContentCleanupVerified: true,
