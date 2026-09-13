@@ -13,6 +13,7 @@ import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { getBalance, listSubscriptionsStrict } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import { runPrepaidLiveWindowV39 } from "../server/lib/disruption/prepaidProbeWindow_v39";
 import { loadPhase2FSmokeRuntimeV39 } from "../server/lib/disruption/phase2SmokeRuntime_v39";
+import { loadPhase2FDeploymentBindingV39 } from "../server/lib/disruption/phase2DeploymentBinding_v39";
 import { parseArgs, resolveOwnerAuthorization, verifyAuthFile } from "./v39_paid_guard_v39";
 
 const SCOPE = "Phase 2 / safety smoke";
@@ -27,6 +28,7 @@ interface SmokeArgs {
   preprobePath: string;
   runtimePath: string;
   runtimeSha256: string;
+  deploymentEvidencePath: string;
 }
 
 function parseSmokeArgs(argv: string[]): SmokeArgs {
@@ -36,6 +38,7 @@ function parseSmokeArgs(argv: string[]): SmokeArgs {
   let preprobePath = process.env.ADB_PREPROBE_ARTIFACT_PATH || DEFAULT_PREPROBE;
   let runtimePath = "";
   let runtimeSha256 = "";
+  let deploymentEvidencePath = "";
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--icao") icao = String(argv[++i] ?? "").trim().toUpperCase();
     else if (argv[i] === "--minutes") minutes = Number(argv[++i]);
@@ -43,6 +46,7 @@ function parseSmokeArgs(argv: string[]): SmokeArgs {
     else if (argv[i] === "--preprobe") preprobePath = String(argv[++i] ?? "").trim();
     else if (argv[i] === "--runtime-file") runtimePath = String(argv[++i] ?? "").trim();
     else if (argv[i] === "--runtime-sha") runtimeSha256 = String(argv[++i] ?? "").trim().toLowerCase();
+    else if (argv[i] === "--deployment-evidence") deploymentEvidencePath = String(argv[++i] ?? "").trim();
   }
   if (!/^[A-Z0-9]{4}$/.test(icao)) throw new Error("REFUSED_SMOKE_ICAO_REQUIRED");
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 15) {
@@ -52,7 +56,8 @@ function parseSmokeArgs(argv: string[]): SmokeArgs {
   if (!preprobePath) throw new Error("REFUSED_SMOKE_PREPROBE_PATH_REQUIRED");
   if (!runtimePath) throw new Error("REFUSED_SMOKE_RUNTIME_FILE_REQUIRED");
   if (!/^[a-f0-9]{64}$/.test(runtimeSha256)) throw new Error("REFUSED_SMOKE_RUNTIME_SHA_REQUIRED");
-  return { icao, minutes, artifactPath, preprobePath, runtimePath, runtimeSha256 };
+  if (!deploymentEvidencePath) throw new Error("REFUSED_SMOKE_DEPLOYMENT_EVIDENCE_REQUIRED");
+  return { icao, minutes, artifactPath, preprobePath, runtimePath, runtimeSha256, deploymentEvidencePath };
 }
 
 function exactScope(icao: string, minutes: number): string {
@@ -86,6 +91,12 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
   }
   const args = parseSmokeArgs(argv);
   const record = checked.record;
+
+  // This proof is produced by a no-provider-mutation HTTPS check against the
+  // published app. It proves that the deployed process enforces the same local
+  // webhook secret and can read the V3.9 clean-schema runtime DB. It must be
+  // fresh so a later deployment cannot silently invalidate the smoke path.
+  const deployment = loadPhase2FDeploymentBindingV39(resolve(args.deploymentEvidencePath));
 
   // All safety controls are frozen before the paid call. The runtime artifact
   // itself is hash-locked and bound to the exact current Phase-2E preprobe.
@@ -181,6 +192,7 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
       icao: args.icao,
       preprobeEvidenceId: preprobe.evidenceId,
       smokeRuntimeEvidenceId: runtime.evidenceId,
+      deploymentBindingEvidenceId: deployment.evidenceId,
       failures,
       cleanupVerified: Boolean(result.cleanupVerifiedAtUtc),
     });
@@ -201,6 +213,10 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
     smokeRuntimeArtifactSha256: frozen.artifact_sha256,
     smokeRuntimeFileSha256: runtime.fileSha256,
     smokeRuntimeBindingSha256: runtime.bindingSha256,
+    deploymentBindingEvidenceId: deployment.evidenceId,
+    deploymentBindingArtifactSha256: deployment.artifact.artifact_sha256,
+    deploymentBindingFileSha256: deployment.fileSha256,
+    deploymentBindingSha256: deployment.bindingSha256,
     icao: args.icao,
     filter: "FlightByAirportIcao",
     windowMinutes: args.minutes,
