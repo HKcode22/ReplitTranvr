@@ -7,9 +7,10 @@ import {
   type FrozenTrafficReferenceV39,
 } from "./trafficReference_v39";
 
-/** Exact bytes emitted by successful MrAirspace freeze run 34732924481. */
+/** Exact frozen JSON bytes emitted by successful MrAirspace freeze run 34732924481. */
 export const V39_PINNED_TRAFFIC_REFERENCE_SHA256 =
   "e7d043a0bb21ba32a939cc54cf5798bff8eabc19611eb01fc98fabf4fd1a95c1" as const;
+/** Historical gzip-envelope hash retained as provenance only; JSON SHA is authoritative. */
 export const V39_PINNED_TRAFFIC_REFERENCE_GZIP_SHA256 =
   "63a314cb0d2105da8b76e590499c8b4d1c9602e1bdd11b88c7353dcc56513425" as const;
 export const V39_PINNED_TRAFFIC_REFERENCE_WORKFLOW_RUN_ID = "34732924481" as const;
@@ -41,8 +42,14 @@ function loadRawFile(path: string, pinnedRepositoryArtifact: boolean): LoadedTra
  * Priority:
  * 1. explicit operator file (`V39_TRAFFIC_REFERENCE_FILE`), validated normally;
  * 2. historical/plain repository JSON if intentionally materialized;
- * 3. exact repository-pinned gzip+base64 bytes from the successful reference
- *    workflow, reconstructed and checked against the original file SHA.
+ * 3. repository-pinned gzip+base64 transport from the successful reference
+ *    workflow, reconstructed and accepted only when the decompressed JSON bytes
+ *    match the exact validated frozen-artifact SHA-256.
+ *
+ * The gzip/base64 layer is only a repository transport envelope. Gzip wrapper
+ * bytes can differ (for example metadata/header differences) while containing
+ * identical JSON. Therefore the decompressed JSON SHA-256, not the gzip wrapper
+ * SHA, is the binding integrity authority.
  */
 export function loadFrozenTrafficReferenceV39(root = process.cwd()): LoadedTrafficReferenceV39 {
   const explicit = String(process.env.V39_TRAFFIC_REFERENCE_FILE ?? "").trim();
@@ -57,27 +64,20 @@ export function loadFrozenTrafficReferenceV39(root = process.cwd()): LoadedTraff
   const encodedPath = join(root, "artifacts", "traffic-reference-frozen.json.gz.b64");
   if (!existsSync(encodedPath)) throw new Error("BLOCKED:TRAFFIC_REFERENCE_FROZEN_FILE_MISSING");
 
-  // The repository pin is a transport envelope, not the authority. Some Git
-  // transports/editors can inject non-base64 formatting characters into a text
-  // envelope. Normalize those characters before decoding; acceptance still
-  // requires BOTH the exact pinned gzip SHA-256 and the exact reconstructed JSON
-  // SHA-256 below, so transport normalization cannot make altered content pass.
+  // Normalize transport-only formatting characters before base64 decoding. This
+  // cannot make altered scientific content pass because the decompressed bytes
+  // must still equal the exact pinned JSON SHA-256 below.
   const transport = readFileSync(encodedPath, "utf8");
   const encoded = transport.replace(/[^A-Za-z0-9+/=]/g, "");
   if (!encoded || encoded.length % 4 !== 0) {
     throw new Error("BLOCKED:PINNED_TRAFFIC_REFERENCE_BASE64_INVALID");
   }
 
-  let compressed: Buffer;
   let rawBuffer: Buffer;
   try {
-    compressed = Buffer.from(encoded, "base64");
-    if (sha256(compressed) !== V39_PINNED_TRAFFIC_REFERENCE_GZIP_SHA256) {
-      throw new Error("BLOCKED:PINNED_TRAFFIC_REFERENCE_GZIP_HASH_MISMATCH");
-    }
+    const compressed = Buffer.from(encoded, "base64");
     rawBuffer = gunzipSync(compressed);
-  } catch (error: any) {
-    if (String(error?.message ?? error).startsWith("BLOCKED:")) throw error;
+  } catch {
     throw new Error("BLOCKED:PINNED_TRAFFIC_REFERENCE_GZIP_INVALID");
   }
 
