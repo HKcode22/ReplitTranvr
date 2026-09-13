@@ -6,10 +6,10 @@
  */
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import {
-  executeProbe,
   loadProbeExecutionArtifacts,
   type LoadedProbeExecutionArtifacts,
 } from "../server/lib/disruption/probeExecution_v39";
+import { executePrepaidProbeV39 } from "../server/lib/disruption/probeExecutionPrepaid_v39";
 import {
   finalFiveMembershipInvariant,
   selectStage2Top5,
@@ -53,23 +53,30 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvid
   const r = await pool.query(
     `SELECT icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
             tail_chain_links_per_credit,stability,confirmed_unique_lower,
-            confirmed_plus_ambiguous_upper
+            confirmed_plus_ambiguous_upper,provider_content_safe_mode,
+            confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit
        FROM clean.adb_anchor_probe
       WHERE stage=1 AND preprobe_artifact_sha256=$1
       ORDER BY recorded_at ASC`,
     [preprobeHash],
   );
-  return r.rows.map((x: any) => ({
-    icao: String(x.icao).toUpperCase(),
-    status: String(x.status),
-    rowsPerHour: x.rows_per_hour == null ? null : Number(x.rows_per_hour),
-    creditsSpent: x.credits_spent == null ? null : Number(x.credits_spent),
-    uniqueFlightsPerCredit: x.unique_flights_per_credit == null ? null : Number(x.unique_flights_per_credit),
-    tailChainLinksPerCredit: x.tail_chain_links_per_credit == null ? null : Number(x.tail_chain_links_per_credit),
-    stability: x.stability == null ? null : Number(x.stability),
-    confirmedUniqueLower: x.confirmed_unique_lower == null ? null : Number(x.confirmed_unique_lower),
-    confirmedPlusAmbiguousUpper: x.confirmed_plus_ambiguous_upper == null ? null : Number(x.confirmed_plus_ambiguous_upper),
-  }));
+  return r.rows.map((x: any) => {
+    const safe = x.provider_content_safe_mode === true;
+    const lowerRate = x.confirmed_unique_lower_per_credit == null ? null : Number(x.confirmed_unique_lower_per_credit);
+    const upperRate = x.confirmed_plus_ambiguous_upper_per_credit == null ? null : Number(x.confirmed_plus_ambiguous_upper_per_credit);
+    const safeRates = safe && lowerRate !== null && upperRate !== null && Number.isFinite(lowerRate) && Number.isFinite(upperRate);
+    return {
+      icao: String(x.icao).toUpperCase(),
+      status: String(x.status),
+      rowsPerHour: x.rows_per_hour == null ? null : Number(x.rows_per_hour),
+      creditsSpent: safeRates ? 1 : (x.credits_spent == null ? null : Number(x.credits_spent)),
+      uniqueFlightsPerCredit: x.unique_flights_per_credit == null ? null : Number(x.unique_flights_per_credit),
+      tailChainLinksPerCredit: x.tail_chain_links_per_credit == null ? null : Number(x.tail_chain_links_per_credit),
+      stability: x.stability == null ? null : Number(x.stability),
+      confirmedUniqueLower: safeRates ? lowerRate : (x.confirmed_unique_lower == null ? null : Number(x.confirmed_unique_lower)),
+      confirmedPlusAmbiguousUpper: safeRates ? upperRate : (x.confirmed_plus_ambiguous_upper == null ? null : Number(x.confirmed_plus_ambiguous_upper)),
+    };
+  });
 }
 
 interface Stage2State {
@@ -136,7 +143,7 @@ export async function runStage2Owner(argv = process.argv.slice(2)): Promise<numb
   const confirmed = finalTargets.filter((row) => validStage2(byState.get(row.icao)));
   if (confirmed.length === 5) {
     console.log(JSON.stringify({
-      schema: "v39.anchor-stage2-evidence.v2",
+      schema: "v39.anchor-stage2-evidence.v3",
       status: "PASS",
       authorizationId: auth.authId,
       preprobeArtifactSha256: artifacts.preprobeSha256,
@@ -144,14 +151,13 @@ export async function runStage2Owner(argv = process.argv.slice(2)): Promise<numb
       referenceIcao: promotion.referenceIcao,
       confirmedFinalFive: finalTargets.map((x) => x.icao),
       ambiguityMembershipInvariant: true,
+      providerContentSafeMode: true,
     }));
     return 0;
   }
 
   const next = finalTargets.find((row) => !validStage2(byState.get(row.icao)) && !terminalInvalidStage2(byState.get(row.icao)));
   if (!next) {
-    // One of the target candidates became invalid. Recompute on the next
-    // invocation from the persisted state so the next ranked candidate enters.
     throw new Error("REFUSED_STAGE2_RECOMPUTE: a target confirmation is invalid; rerun to consume the next frozen ranked candidate");
   }
 
@@ -163,7 +169,7 @@ export async function runStage2Owner(argv = process.argv.slice(2)): Promise<numb
     }
   }
 
-  const result = await executeProbe({
+  const result = await executePrepaidProbeV39({
     stage: 2,
     icao: next.icao,
     allowReplacement: true,
@@ -174,7 +180,7 @@ export async function runStage2Owner(argv = process.argv.slice(2)): Promise<numb
     throw new Error(`REFUSED_STAGE2_PROBE_FAILED: ${next.icao} ${result.stopReason ?? "unknown"}`);
   }
   console.log(JSON.stringify({
-    schema: "v39.anchor-stage2-execution.v2",
+    schema: "v39.anchor-stage2-execution.v3",
     status: "PASS",
     authorizationId: auth.authId,
     preprobeArtifactSha256: artifacts.preprobeSha256,
@@ -182,10 +188,10 @@ export async function runStage2Owner(argv = process.argv.slice(2)): Promise<numb
     probeBudgetDayId: artifacts.runtime.probeBudgetDayId,
     icao: next.icao,
     probeId: result.probeId,
-    creditsSpent: result.creditsSpent,
+    providerContentSafeMode: true,
     durationCensored: result.durationCensored,
     stopReason: result.stopReason,
-    message: "One sequential frozen Stage-2 confirmation completed; invoke again until exact final five are confirmed",
+    message: "One sequential Stage-2 confirmation completed through isolated App-Storage/UNLOGGED runtime",
   }));
   return 0;
 }
@@ -193,7 +199,7 @@ export async function runStage2Owner(argv = process.argv.slice(2)): Promise<numb
 if (import.meta.url === `file://${process.argv[1]}`) {
   runStage2Owner().catch((error: any) => {
     console.error(JSON.stringify({
-      schema: "v39.anchor-stage2-execution.v2",
+      schema: "v39.anchor-stage2-execution.v3",
       status: "FAIL",
       error: error?.message ?? String(error),
     }));
