@@ -1,0 +1,54 @@
+{
+  "schema_version": "v3.9-traffic-reference-current-status-1",
+  "recorded_at_utc": "2026-09-13T03:00:00Z",
+  "status": "VALIDATED_CANDIDATE_PLAN_BLOCKED",
+  "binding_plan": "SEPmd/V3.9_DataCollectPlan_f.8.md",
+  "candidate": {
+    "source": "MrAirspace aircraft-flight-schedules + OurAirports",
+    "semantics": "observed_commercial_movements",
+    "reference_period_start": "2025-07-01",
+    "reference_period_end": "2026-06-30",
+    "retrieval_date": "2026-09-13",
+    "workflow_run_id": "34732924481",
+    "workflow_run_number": 4,
+    "workflow_commit": "d2f617e4fb51010f4187e732817f05fc06f4ad40",
+    "actions_artifact_id": "10310491450",
+    "actions_zip_sha256": "f89f8065799d332a2b185ec7d43c2ecd2beb2d5da878fc3afbd79625d3f3e24d",
+    "frozen_json_sha256": "e7d043a0bb21ba32a939cc54cf5798bff8eabc19611eb01fc98fabf4fd1a95c1",
+    "diagnostics_sha256": "90ba99e0531f7b63bcd9cad0370a272645fe8d9d4f9c129988732c5516eda6d0",
+    "raw_reference_sha256": "8dd10dd0b5e0e9f493ad823a37f0852b6882fef49f45ee7965af557408264424",
+    "tier_hash": "18cd871421220e72cd96044ae790fc95bdae1d69b9f9e43ac35566fd786eb7dc",
+    "airports": 2295,
+    "tier_counts": { "HUB": 115, "MID": 574, "REGIONAL": 1606 },
+    "hub_cut_metric": 64152,
+    "required_hubs": {
+      "WSSS": { "rank": 31, "tier": "HUB", "traffic_metric_value": 172463 },
+      "OMAA": { "rank": 104, "tier": "HUB", "traffic_metric_value": 73914 }
+    },
+    "repository_pin": "artifacts/traffic-reference-frozen.json.gz.b64"
+  },
+  "binding_plan_conflicts": [
+    {
+      "plan_section": "4.5",
+      "issue": "current single-reference frame design requires scheduled-route/schedule balancing variables; candidate is observed ADS-B-derived",
+      "guard": "trafficReferencePlanContract_v39.ts refuses non-scheduled semantics"
+    },
+    {
+      "plan_section": "4.1",
+      "issue": "reference period ends 75 calendar days before 2026-09-13 freeze attempt; binding maximum is 30 days",
+      "guard": "trafficReferenceFreshness_v39.ts refuses artifact-level relaxation above 30 days"
+    }
+  ],
+  "resolution_options": {
+    "A": "retain V3.9-f.8 unchanged and supply a permitted scheduled-route reference ending <=30 days before frame freeze",
+    "B": "formally amend the binding Plan before any paid probe/yield/outcome to authorize the explicit observed-network semantics and deterministic latest-complete-quarter freshness rule"
+  },
+  "recommended_resolution": "B",
+  "proposal": "SEPmd/V3.9_PHASE2_PLAN_AMENDMENT_PROPOSAL.md",
+  "effects": {
+    "final_frame": "NO_GO",
+    "preprobe_freeze": "NO_GO",
+    "paid_work": "NO_GO"
+  },
+  "historical_note": "artifacts/traffic-reference-decision.json remains retained historical source-discovery evidence and is superseded by this file for current status only"
+}
