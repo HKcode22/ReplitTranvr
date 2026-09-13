@@ -62,6 +62,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0052_identity_resolution_scope_expiry.sql",
   "0053_fids_population_research_membership.sql",
   "0054_provider_blob_storage_boundary.sql",
+  "0055_prepaid_probe_unlogged_runtime.sql",
 ];
 
 function explicitAutoCollectEnabled(): boolean {
