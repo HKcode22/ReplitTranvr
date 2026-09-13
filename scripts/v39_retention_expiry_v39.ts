@@ -217,15 +217,21 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const sessionCandidates = remaining > 0
       ? await collectExpiredPrepaidProbeSessionsV39(now, remaining) : [];
     remaining = Math.max(0, remaining - sessionCandidates.length);
-    const blobCandidates = remaining > 0
+
+    // DRY_RUN can list current due blobs immediately. APPLY must wait until
+    // expired-session cleanup completes because that owner may delete/tombstone
+    // the same blobs early as part of verified purpose-completion cleanup.
+    let blobCandidates = !options.apply && remaining > 0
       ? await collectExpiredProviderBlobsV39(now, remaining) : [];
 
     const identityApply = options.apply ? await applyProviderIdentityExpiryCandidates(identityCandidates) : undefined;
     const accountApply = options.apply ? await applyProviderAccountExpiryCandidates(accountCandidates) : undefined;
-    // Expired sessions may delete their provider blobs early. Re-querying blob
-    // candidates happens before APPLY but blob deletion is idempotent and the
-    // provider-blob owner verifies the durable tombstone transition.
     const sessionApply = options.apply ? await applyExpiredPrepaidProbeSessionsV39(sessionCandidates) : undefined;
+
+    if (options.apply) {
+      remaining = Math.max(0, options.limit - result.candidates.length - identityCandidates.length - accountCandidates.length - sessionCandidates.length);
+      blobCandidates = remaining > 0 ? await collectExpiredProviderBlobsV39(now, remaining) : [];
+    }
     const blobApply = options.apply ? await applyExpiredProviderBlobsV39(blobCandidates) : undefined;
 
     console.log(JSON.stringify(
