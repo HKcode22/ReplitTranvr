@@ -22,6 +22,10 @@ export interface Phase2SmokeEvidenceV39 {
   smokeRuntimeArtifactSha256: string;
   smokeRuntimeFileSha256: string;
   smokeRuntimeBindingSha256: string;
+  deploymentBindingEvidenceId: string;
+  deploymentBindingArtifactSha256: string;
+  deploymentBindingFileSha256: string;
+  deploymentBindingSha256: string;
   icao: string;
   filter: "FlightByAirportIcao";
   windowMinutes: number;
@@ -71,6 +75,11 @@ function positiveInteger(value: unknown, label: string): number {
   if (!Number.isInteger(n) || n <= 0) throw new Error(`SMOKE_HANDOFF_${label.toUpperCase()}_INVALID`);
   return n;
 }
+function requireSha(value: unknown, label: string): string {
+  const text = String(value ?? "");
+  if (!/^[a-f0-9]{64}$/i.test(text)) throw new Error(`SMOKE_HANDOFF_${label.toUpperCase()}_INVALID`);
+  return text.toLowerCase();
+}
 
 export function loadPhase2SmokeHandoffV39(input: {
   smokePath: string;
@@ -104,6 +113,12 @@ export function loadPhase2SmokeHandoffV39(input: {
       x.smokeRuntimeBindingSha256 !== runtime.bindingSha256) {
     throw new Error("SMOKE_HANDOFF_RUNTIME_BINDING_MISMATCH");
   }
+  if (!/^RUN-\d{8}-[A-F0-9]{64}$/.test(String(x.deploymentBindingEvidenceId ?? ""))) {
+    throw new Error("SMOKE_HANDOFF_DEPLOYMENT_EVIDENCE_ID_INVALID");
+  }
+  requireSha(x.deploymentBindingArtifactSha256, "deployment_artifact_sha256");
+  requireSha(x.deploymentBindingFileSha256, "deployment_file_sha256");
+  requireSha(x.deploymentBindingSha256, "deployment_binding_sha256");
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(String(x.authorizationId ?? ""))) throw new Error("SMOKE_HANDOFF_AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/i.test(String(x.authorizationArtifactSha256 ?? ""))) throw new Error("SMOKE_HANDOFF_AUTH_SHA_INVALID");
   if (!/^[A-Z0-9]{4}$/.test(String(x.icao ?? "")) || x.filter !== "FlightByAirportIcao") throw new Error("SMOKE_HANDOFF_SCOPE_INVALID");
