@@ -76,11 +76,28 @@ CREATE INDEX IF NOT EXISTS idx_prepaid_probe_item_runtime_key
   WHERE runtime_flight_key IS NOT NULL;
 
 -- Keep logged probe evidence project-owned. Provider subscription IDs and edge
--- account balances remain NULL in the safe prepaid path; these two columns bind
--- the aggregate result to the transient session without retaining provider IDs.
+-- account balances remain NULL in the safe prepaid path. The durable row keeps
+-- only the random runtime-session binding, project counters/aggregates, and the
+-- exact reconciliation state after the transient external balance observation
+-- has been compared to the internal SEND ledger.
 ALTER TABLE clean.adb_anchor_probe
   ADD COLUMN IF NOT EXISTS runtime_session_id UUID,
-  ADD COLUMN IF NOT EXISTS runtime_cleanup_verified_at_utc TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS runtime_cleanup_verified_at_utc TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS reconciliation_status TEXT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname='adb_anchor_probe_reconciliation_status_check'
+       AND conrelid='clean.adb_anchor_probe'::regclass
+  ) THEN
+    ALTER TABLE clean.adb_anchor_probe
+      ADD CONSTRAINT adb_anchor_probe_reconciliation_status_check
+      CHECK (reconciliation_status IS NULL OR reconciliation_status IN ('MATCH','MISMATCH','UNRESOLVED')) NOT VALID;
+  END IF;
+END $$;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_anchor_probe_runtime_session
   ON clean.adb_anchor_probe(runtime_session_id)
   WHERE runtime_session_id IS NOT NULL;
