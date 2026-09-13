@@ -10,7 +10,8 @@ export interface TrafficReferenceFreshnessVerdictV39 {
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
-const LEGACY_MAX_AGE_DAYS = 30;
+/** Binding V3.9-f.8 Plan §4.1 maximum; artifacts may not relax it. */
+export const V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS = 30;
 
 function utcDateStart(date: string): number | null {
   if (!DATE.test(date)) return null;
@@ -19,25 +20,36 @@ function utcDateStart(date: string): number | null {
 }
 
 /**
- * Plan §4.1 admission rule evaluated at frame/reference freeze time.
+ * Binding Plan §4.1 admission rule evaluated at frame/reference freeze time.
  *
- * Legacy schedule references retain the original 30-day cap. An explicitly
- * frozen open-data source may record a different bounded release-lag cap only
- * when the reference artifact also records its freshness basis. This prevents
- * silently relaxing freshness merely because a source is inconvenient.
+ * The evidence artifact is subordinate to the Plan. A source-specific
+ * `reference_max_age_days` may be stricter than the Plan, but may never relax
+ * the Plan's 30-day maximum. Any methodology change must first be made in the
+ * binding Plan and then propagated to code/tests as a separately reviewed
+ * change; an evidence memo or generated artifact cannot supersede it.
  */
 export function verifyTrafficReferenceFreshnessV39(
   ref: FrozenTrafficReferenceV39,
   frameFreezeAt: Date,
 ): TrafficReferenceFreshnessVerdictV39 {
   const failures: string[] = [];
-  const allowedMaxAgeDays = ref.reference_max_age_days ?? LEGACY_MAX_AGE_DAYS;
-  if (!Number.isInteger(allowedMaxAgeDays) || allowedMaxAgeDays < 1 || allowedMaxAgeDays > 93) {
+  const declaredMaxAge = ref.reference_max_age_days;
+  if (declaredMaxAge !== undefined && (!Number.isInteger(declaredMaxAge) || declaredMaxAge < 1)) {
     failures.push("reference-max-age-days-invalid");
   }
-  if (ref.reference_max_age_days !== undefined && !String(ref.reference_freshness_basis ?? "").trim()) {
+  if (declaredMaxAge !== undefined && declaredMaxAge > V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS) {
+    failures.push(`reference-artifact-attempts-plan-relaxation:${declaredMaxAge}d>${V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS}d`);
+  }
+  if (declaredMaxAge !== undefined && !String(ref.reference_freshness_basis ?? "").trim()) {
     failures.push("reference-freshness-basis-missing");
   }
+  const allowedMaxAgeDays = Math.min(
+    V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS,
+    Number.isInteger(declaredMaxAge) && (declaredMaxAge as number) > 0
+      ? (declaredMaxAge as number)
+      : V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS,
+  );
+
   if (!Number.isFinite(frameFreezeAt.getTime())) failures.push("frame-freeze-time-invalid");
   const freezeDate = Number.isFinite(frameFreezeAt.getTime()) ? frameFreezeAt.toISOString().slice(0, 10) : "INVALID";
   const freezeMs = freezeDate === "INVALID" ? null : utcDateStart(freezeDate);
@@ -50,7 +62,7 @@ export function verifyTrafficReferenceFreshnessV39(
   if (freezeMs !== null && endMs !== null) {
     ageDays = (freezeMs - endMs) / DAY_MS;
     if (ageDays < 0) failures.push(`reference-period-ends-after-freeze:${ageDays}d`);
-    if (Number.isInteger(allowedMaxAgeDays) && ageDays > allowedMaxAgeDays) {
+    if (ageDays > allowedMaxAgeDays) {
       failures.push(`reference-period-too-stale:${ageDays}d>max${allowedMaxAgeDays}d`);
     }
   }
