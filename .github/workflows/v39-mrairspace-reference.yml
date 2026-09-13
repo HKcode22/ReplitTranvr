@@ -1,0 +1,66 @@
+name: V3.9 MrAirspace Traffic Reference
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v39-p-phase2-closure-audit-20260911
+    paths:
+      - '.github/workflows/v39-mrairspace-reference.yml'
+      - 'scripts/v39_evaluate_mrairspace_reference_v39.py'
+      - 'scripts/v39_validate_mrairspace_reference_v39.ts'
+      - 'server/lib/disruption/regionMapping_v39.ts'
+
+permissions:
+  contents: read
+
+env:
+  ADB_AUTO_COLLECT: '0'
+  V39_PHASE6_PROCESS_ARMED: '0'
+  AERODATABOX_API_KEY: ''
+
+jobs:
+  evaluate-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact safety branch commit
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install public-data evaluation dependencies
+        run: python -m pip install --disable-pip-version-check 'duckdb>=1.5,<2' 'requests>=2.32,<3' 'timezonefinder>=8,<9'
+
+      - name: Build MrAirspace Jul-2025 through Jun-2026 candidate
+        run: |
+          mkdir -p /tmp/v39-mrairspace-output
+          python scripts/v39_evaluate_mrairspace_reference_v39.py \
+            --output /tmp/v39-mrairspace-output/traffic-reference-mrairspace-candidate.json \
+            --diagnostics /tmp/v39-mrairspace-output/traffic-reference-mrairspace-diagnostics.json
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install locked repository dependencies
+        run: npm ci
+
+      - name: Validate candidate coverage against Phase-2 requirements
+        run: npx tsx scripts/v39_validate_mrairspace_reference_v39.ts /tmp/v39-mrairspace-output/traffic-reference-mrairspace-candidate.json
+
+      - name: Publish compact candidate + diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v39-mrairspace-reference-${{ github.sha }}
+          path: |
+            /tmp/v39-mrairspace-output/traffic-reference-mrairspace-candidate.json
+            /tmp/v39-mrairspace-output/traffic-reference-mrairspace-diagnostics.json
+          if-no-files-found: warn
+          retention-days: 14
