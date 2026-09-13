@@ -19,6 +19,15 @@ describe("V3.9 Phase-2 production preparation boundaries", () => {
     expect(text).toContain("refusing ambiguous development/production target");
   });
 
+  it("re-verifies the least-privilege role against the explicit production owner connection, never generic DATABASE_URL", () => {
+    const text = source("scripts/v39_security_verify_v39.ts");
+    expect(text).toContain("V39_PRODUCTION_DATABASE_OWNER_URL");
+    expect(text).toContain("V39_DATABASE_TARGET_CONFIRM");
+    expect(text).toContain("production");
+    expect(text).not.toContain("const ownerUrl = process.env.DATABASE_URL");
+    expect(text).toContain("live-verified against explicit production owner connection");
+  });
+
   it("never reintroduces the historical hard-coded webhook deployment host", () => {
     const text = source("scripts/configure_webhook_evidence_v39.ts");
     expect(text).toContain("V39_PUBLIC_WEBHOOK_BASE_URL");
@@ -51,5 +60,25 @@ describe("V3.9 Phase-2 production preparation boundaries", () => {
     expect(text).toContain("code cannot self-approve provider-plan/retention evidence");
     expect(text).toContain('V39_PHASE2_RETENTION_APPLY_ARMED", "0"');
     expect(text).toContain("dedicated App Storage bucket");
+  });
+
+  it("provides a single fail-closed Phase-2A production closure runner without provider work", () => {
+    const text = source("scripts/v39_phase2a_close.sh");
+    for (const key of [
+      "V39_PRODUCTION_DATABASE_OWNER_URL",
+      "V39_PROVIDER_BLOB_BUCKET_ID",
+      "V39_DATABASE_TARGET_CONFIRM",
+      "V39_PUBLIC_WEBHOOK_BASE_URL",
+      "V39_PHASE2_OWNER_APPROVED",
+    ]) expect(text).toContain(key);
+    expect(text).toContain("provision_runtime_role_v39.ts");
+    expect(text).toContain("configure_webhook_evidence_v39.ts");
+    expect(text).toContain("prepare_phase2_p_evidence_v39.ts --owner-approved");
+    expect(text).toContain("v39_security_verify_v39.ts");
+    expect(text).toContain("v39_record_p_pass_v39.ts");
+    expect(text).toContain("V39_PHASE2_RETENTION_APPLY_ARMED=0");
+    expect(text).not.toContain("AERODATABOX_API_KEY");
+    expect(text).not.toContain("refill");
+    expect(text).not.toContain("FIDS");
   });
 });
