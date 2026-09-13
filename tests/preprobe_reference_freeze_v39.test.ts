@@ -85,7 +85,7 @@ describe("Phase 2 hash-locked pre-probe reference freeze", () => {
   it("freezes all 18 tier-region diagnostic cells and positive nearest-rank P90 caps", () => {
     const artifact = buildPreprobeReferenceFreezeV39(frameRows(), traffic(), evidence);
     expect(artifact.frame_diagnostics).toHaveLength(18);
-    expect(artifact.normalization.method).toBe("nearest-rank-p90-non-null-mapped-frame");
+    expect(artifact.normalization.method).toBe("nearest-rank-p90-non-null-frame");
     expect(artifact.degreeCap).toBeGreaterThan(0);
     expect(artifact.carriersCap).toBeGreaterThan(0);
     expect(artifact.probe_protocol.capacityGateRowsPerHour).toBe(60);
@@ -93,6 +93,28 @@ describe("Phase 2 hash-locked pre-probe reference freeze", () => {
     expect(artifact.probe_protocol.stage1TargetMinutes).toBe(120);
     expect(artifact.probe_protocol.stage2TargetMinutes).toBe(240);
     expect(verifyPreprobeReferenceFreezeV39(artifact)).toBe(true);
+  });
+
+  it("computes P90 normalization over all non-null frame airports, not only mapped/tier-verified rows", () => {
+    const extra: PreprobeFrameRowV39[] = Array.from({ length: 6 }, (_, i) => ({
+      icao: `Z${String(i).padStart(3, "0")}`,
+      tier: "UNCLASSIFIED",
+      tierVerified: false,
+      region: null,
+      preEligible: false,
+      postEligible: false,
+      trafficMetricValue: null,
+      outDegree: null,
+      inDegree: null,
+      undirectedDegree: 900 + i * 10,
+      effectiveCarriers: 90 + i,
+      intlShare: null,
+    }));
+    const artifact = buildPreprobeReferenceFreezeV39([...frameRows(), ...extra], traffic(), evidence);
+    // 20 non-null values => nearest-rank P90 is rank 18. After the 14 HUB
+    // values, the added degree/carrier values occupy ranks 15..20.
+    expect(artifact.degreeCap).toBe(930);
+    expect(artifact.carriersCap).toBe(93);
   });
 
   it("is deterministic for the same frozen inputs apart from no mutable runtime state", () => {
