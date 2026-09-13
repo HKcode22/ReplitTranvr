@@ -1,17 +1,17 @@
 {
-  "schema_version": "v3.9-phase2-current-status-3",
-  "recorded_at_utc": "2026-09-13T06:18:48.231Z",
+  "schema_version": "v3.9-phase2-current-status-4",
+  "recorded_at_utc": "2026-09-13T07:04:20.817Z",
   "binding_plan": "SEPmd/V3.9_DataCollectPlan_f.8.md",
   "implementation_log": "SEPmd/V3.9_IMPLEMENTATION_LOG.md#17-phase-2--prerequisite-p--gate-1--referencesframe--pre-probe-freeze--safety-smoke--gate-2",
   "branch": "main",
-  "current_execution_pointer": "PHASE_2B_GATE1_FRESH_COVERAGE",
+  "current_execution_pointer": "PHASE_2D_FINAL_FRAME",
   "status": {
     "phase0": "PASS",
     "phase1_gate0": "PASS_EXISTING_EVIDENCE",
     "phase2a_prerequisite_p": "PASS_LIVE_CRYPTOGRAPHIC",
-    "phase2b_gate1": "IMPLEMENTED_READY_FOR_FRESH_GATE1",
-    "phase2c_reference_rules": "BINDING_PLAN_AMENDED_REFERENCE_VALIDATED_WAITING_ON_2B_FREEZE_RECORD",
-    "phase2d_final_frame": "IMPLEMENTED_WAITING_ON_2B_2C",
+    "phase2b_gate1": "PASS_LIVE_DOCUMENTED_FREE_COVERAGE",
+    "phase2c_reference_rules": "PASS_RUN_SPECIFIC_REFERENCE_FROZEN",
+    "phase2d_final_frame": "IMPLEMENTED_RETRY_REQUIRED_AFTER_COVERAGE_ADAPTER_FIX",
     "phase2e_preprobe_freeze": "IMPLEMENTED_WAITING_ON_2D",
     "phase2f_safety_smoke": "IMPLEMENTED_NOT_RUN_EXACT_AUTH_REQUIRED_AFTER_2E",
     "phase2g_gate2_stage1": "IMPLEMENTED_NOT_RUN_WAITING_ON_2F_HANDOFF_AUTH",
@@ -46,6 +46,24 @@
       "publish the generated AERODATABOX_WEBHOOK_SECRET to the production deployment without exposing its value and ensure the deployed route uses the same secret"
     ]
   },
+  "phase2b_gate1": {
+    "implementation": "DONE_EXECUTED_PASS",
+    "authorization_id": "AUTH-20260913-G1B",
+    "evidence_id": "GATE-1-20260913-001",
+    "fetched_at_utc": "2026-09-13T07:04:20.817Z",
+    "artifact_sha256": "7d0e3b7d77966ac3f31b45ab10ea1c44901df4d01cf3d39464df155c031e8d50",
+    "endpoint_cost_basis": "documented-free",
+    "provider_pin": "aerodatabox.p.rapidapi.com/health:v1",
+    "universe_count": 4346,
+    "catalog_in_universe": 266,
+    "universe_not_in_catalog_count": 4080,
+    "per_feed_counts": {
+      "FlightSchedules": 3325,
+      "FlightLiveUpdates": 1451,
+      "AdsbUpdates": 1756
+    },
+    "source_list_handling": "transient-not-committed"
+  },
   "phase2c_reference": {
     "source": "MrAirspace aircraft-flight-schedules / ADSB.lol observed movements + OurAirports metadata",
     "semantics": "observed_commercial_movements",
@@ -55,6 +73,7 @@
     "candidate_frozen_json_sha256": "e7d043a0bb21ba32a939cc54cf5798bff8eabc19611eb01fc98fabf4fd1a95c1",
     "raw_reference_sha256": "8dd10dd0b5e0e9f493ad823a37f0852b6882fef49f45ee7965af557408264424",
     "tier_hash": "18cd871421220e72cd96044ae790fc95bdae1d69b9f9e43ac35566fd786eb7dc",
+    "region_mapping_hash": "4073cc05e958bf98b6501e418198305f80e7d17892318f6773d9e0aac9d3a764",
     "airport_count": 2295,
     "hub_count": 115,
     "mid_count": 574,
@@ -62,7 +81,15 @@
     "hub_cut_metric": 64152,
     "wsss_rank": 31,
     "omaa_rank": 104,
-    "run_specific_freeze_status": "WAITING_ON_FRESH_POST_P_GATE1"
+    "run_specific_freeze_status": "PASS",
+    "run_specific_freeze_artifact_sha256": "8850513781ff4db69fb95ffcf4563eeb8ee30b3225701fd9be22ebfdda0c402a",
+    "bound_gate1_artifact_sha256": "7d0e3b7d77966ac3f31b45ab10ea1c44901df4d01cf3d39464df155c031e8d50"
+  },
+  "phase2d_attempt": {
+    "status": "STOPPED_BEFORE_FRAME_DB_WRITE",
+    "reason": "live getAirportCoverage() returned controller shape {feeds,all}, while frame owner incorrectly consumed {universe,universeUnion}; fixed on main with explicit fail-closed adapter and regression tests",
+    "recovery_mode": "resume-after-2c; preserve the successful Gate-1 and write-once reference freeze; do not rerun Gate-1",
+    "runtime_db_handling": "general application boot migrations removed from Phase-2D execution; required clean-table schema is verified read-only through V39_DATABASE_RUNTIME_URL before frame persistence"
   },
   "offline_validation": {
     "last_complete_green_run_before_latest_plan_amendment": {
@@ -71,13 +98,15 @@
       "commit": "0bb10c8fc2168d0d5829b9157e3509e61ada372a",
       "result": "SUCCESS"
     },
-    "latest_head_revalidation": "PHASE2A_LIVE_PASS_SUPERSEDES_PRODUCTION_BINDING_WAIT"
+    "phase2d_adapter_regression_commit": "261a5dcf9d4b82e1b046feac5961f34190ea0064",
+    "phase2d_runtime_schema_safety_commit": "830f17a4d869c621873c9ee68e8d8a9ef2cc4002",
+    "latest_head_revalidation": "IN_PROGRESS_AT_RECORD_TIME"
   },
   "execution_order": [
     "2A prerequisite-P production binding and cryptographic PASS — COMPLETE",
-    "2B run fresh Gate 1 coverage and write hash-valid PASS artifact",
-    "2C write run-specific reference freeze from the already validated binding source/rules",
-    "2D rebuild and hash the final frame",
+    "2B fresh Gate 1 coverage PASS — COMPLETE",
+    "2C run-specific traffic/region reference freeze PASS — COMPLETE",
+    "2D rebuild and hash the final frame — CURRENT POINTER",
     "2E write and verify the preprobe_reference_freeze_record",
     "2F exact-authorized safety smoke then mandatory STOP/handoff",
     "2G exact-authorized Gate-2 Stage 1 then handoff",
@@ -95,5 +124,5 @@
     "Gate-0.5 pilot",
     "Phase-6 start"
   ],
-  "historical_note": "Phase 2A was executed against production and cryptographically passed at 2026-09-13T06:18:48.231Z. The execution pointer is now Phase 2B fresh Gate 1. Older awaiting-production-binding status is superseded."
+  "historical_note": "Phase 2A passed live at 2026-09-13T06:18:48.231Z. Phase 2B Gate-1 passed at 2026-09-13T07:04:20.817Z and Phase 2C wrote the hash-locked run-specific reference freeze. The first Phase-2D attempt stopped before any final-frame DB write due to a controller/frame coverage-shape mismatch; the pointer is Phase 2D resume using the already-frozen 2B/2C chain."
 }
