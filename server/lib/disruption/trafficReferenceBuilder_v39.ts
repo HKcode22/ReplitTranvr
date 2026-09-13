@@ -8,12 +8,11 @@ import {
 } from "./trafficReference_v39";
 
 /**
- * Provider-neutral schedule-reference row.
+ * Provider-neutral scheduled-route reference row.
  *
- * This is intentionally NOT an OAG/Cirium schema. A licensed source adapter
- * must map its permitted export into these fields. The builder then owns every
- * scientific transformation used by Phase 2, so the operator never hand-edits
- * airport tiers or diversity metrics.
+ * This is intentionally NOT an OAG/Cirium schema. Any permitted source adapter
+ * maps its lawful 12-month schedule/reference data into these fields. The
+ * builder owns the scientific transformation; operators never hand-edit tiers.
  */
 export interface NormalizedScheduleRouteRowV39 {
   origin_icao: string;
@@ -38,19 +37,29 @@ export interface TrafficReferenceBuildMetadataV39 {
   licenseAccessBasis: string;
 }
 
-export interface TrafficTierPolicyV39 {
-  /** Project sampling stratum, not an industry airport classification. */
-  hubRankShare: number;
-  /** Cumulative HUB+MID share. */
-  hubMidCumulativeRankShare: number;
-  version: string;
-}
-
-export const DEFAULT_TRAFFIC_TIER_POLICY_V39: Readonly<TrafficTierPolicyV39> = Object.freeze({
-  hubRankShare: 0.10,
-  hubMidCumulativeRankShare: 0.40,
-  version: "v39-rank-strata-10-30-60-v1",
-});
+/**
+ * Plan §4.1 MEASURE→FREEZE policy. There is deliberately NO default.
+ * The caller must freeze exactly one deterministic algorithm before building
+ * the final frame. This prevents code from silently inventing 10/30/60 or any
+ * other split that is not present in the binding Plan.
+ */
+export type TrafficTierPolicyV39 =
+  | {
+      kind: "rank";
+      version: string;
+      /** Fraction of sorted reference-covered airports assigned HUB. */
+      hubRankShare: number;
+      /** Cumulative fraction assigned HUB+MID. */
+      hubMidCumulativeRankShare: number;
+    }
+  | {
+      kind: "absolute";
+      version: string;
+      /** Equality enters HUB, per Plan §4.1 boundary policy. */
+      hubMinMetric: number;
+      /** Equality enters MID when below HUB, per Plan §4.1. */
+      midMinMetric: number;
+    };
 
 export interface AirportTrafficBuildDiagnosticV39 {
   icao: string;
@@ -90,6 +99,15 @@ interface AirportAccumulator {
   incomingQualifying: Set<string>;
 }
 
+interface TierAssignmentV39 {
+  tiers: FrozenTrafficTier[];
+  hubCount: number;
+  midCount: number;
+  regionalCount: number;
+  hubCutMetric: number;
+  tierCutRule: string;
+}
+
 function normalizedCode(value: unknown): string {
   return String(value ?? "").trim().toUpperCase();
 }
@@ -126,12 +144,26 @@ function assertMetadata(metadata: TrafficReferenceBuildMetadataV39): void {
   if (!SHA.test(metadata.rawReferenceSha256)) throw new Error("TRAFFIC_BUILD_RAW_REFERENCE_SHA256_INVALID");
 }
 
-function assertPolicy(policy: TrafficTierPolicyV39): void {
-  if (!policy.version.trim()) throw new Error("TRAFFIC_BUILD_TIER_POLICY_VERSION_MISSING");
-  if (!(policy.hubRankShare > 0 && policy.hubRankShare < 1)) throw new Error("TRAFFIC_BUILD_HUB_RANK_SHARE_INVALID");
-  if (!(policy.hubMidCumulativeRankShare > policy.hubRankShare && policy.hubMidCumulativeRankShare < 1)) {
-    throw new Error("TRAFFIC_BUILD_HUB_MID_RANK_SHARE_INVALID");
+function assertPolicy(policy: TrafficTierPolicyV39 | null | undefined): asserts policy is TrafficTierPolicyV39 {
+  if (!policy || typeof policy !== "object") throw new Error("TRAFFIC_BUILD_TIER_POLICY_REQUIRED");
+  if (!policy.version?.trim()) throw new Error("TRAFFIC_BUILD_TIER_POLICY_VERSION_MISSING");
+  if (policy.kind === "rank") {
+    if (!(policy.hubRankShare > 0 && policy.hubRankShare < 1)) throw new Error("TRAFFIC_BUILD_HUB_RANK_SHARE_INVALID");
+    if (!(policy.hubMidCumulativeRankShare > policy.hubRankShare && policy.hubMidCumulativeRankShare < 1)) {
+      throw new Error("TRAFFIC_BUILD_HUB_MID_RANK_SHARE_INVALID");
+    }
+    return;
   }
+  if (policy.kind === "absolute") {
+    if (!Number.isFinite(policy.hubMinMetric) || !Number.isFinite(policy.midMinMetric)) {
+      throw new Error("TRAFFIC_BUILD_ABSOLUTE_THRESHOLD_NONFINITE");
+    }
+    if (!(policy.hubMinMetric > policy.midMinMetric && policy.midMinMetric >= 0)) {
+      throw new Error("TRAFFIC_BUILD_ABSOLUTE_THRESHOLD_ORDER_INVALID");
+    }
+    return;
+  }
+  throw new Error("TRAFFIC_BUILD_TIER_POLICY_KIND_INVALID");
 }
 
 function assertRow(row: NormalizedScheduleRouteRowV39, index: number): NormalizedScheduleRouteRowV39 {
@@ -140,13 +172,9 @@ function assertRow(row: NormalizedScheduleRouteRowV39, index: number): Normalize
   const carrier = normalizedCode(row.operating_carrier);
   const originCountry = normalizedCode(row.origin_country_iso2);
   const destinationCountry = normalizedCode(row.destination_country_iso2);
-  if (!ICAO.test(origin) || !ICAO.test(destination) || origin === destination) {
-    throw new Error(`TRAFFIC_BUILD_ROUTE_INVALID:${index}`);
-  }
+  if (!ICAO.test(origin) || !ICAO.test(destination) || origin === destination) throw new Error(`TRAFFIC_BUILD_ROUTE_INVALID:${index}`);
   if (!carrier) throw new Error(`TRAFFIC_BUILD_CARRIER_MISSING:${index}`);
-  if (!ISO2.test(originCountry) || !ISO2.test(destinationCountry)) {
-    throw new Error(`TRAFFIC_BUILD_COUNTRY_INVALID:${index}`);
-  }
+  if (!ISO2.test(originCountry) || !ISO2.test(destinationCountry)) throw new Error(`TRAFFIC_BUILD_COUNTRY_INVALID:${index}`);
   if (!validFiniteLongitude(row.origin_longitude_e) || !validFiniteLongitude(row.destination_longitude_e)) {
     throw new Error(`TRAFFIC_BUILD_LONGITUDE_INVALID:${index}`);
   }
@@ -178,9 +206,7 @@ function getAirport(
     if (existing.longitudeE !== null && longitudeE !== null && Math.abs(existing.longitudeE - longitudeE) > 1e-9) {
       throw new Error(`TRAFFIC_BUILD_METADATA_LONGITUDE_CONFLICT:${icao}`);
     }
-    if (existing.timezone && timezone && existing.timezone !== timezone) {
-      throw new Error(`TRAFFIC_BUILD_METADATA_TIMEZONE_CONFLICT:${icao}`);
-    }
+    if (existing.timezone && timezone && existing.timezone !== timezone) throw new Error(`TRAFFIC_BUILD_METADATA_TIMEZONE_CONFLICT:${icao}`);
     if (existing.longitudeE === null && longitudeE !== null) existing.longitudeE = longitudeE;
     if (!existing.timezone && timezone) existing.timezone = timezone;
     return existing;
@@ -214,44 +240,92 @@ function carrierDiagnostics(carriers: Map<string, number>, total: number): {
     if (p >= 0.05) count5 += 1;
     if (p > 0) shannon -= p * Math.log(p);
   }
+  return { effectiveCarriers: hhi > 0 ? 1 / hhi : 0, carrierCount5Pct: count5, carrierShannon: shannon };
+}
+
+function assignTiers(
+  diagnostics: readonly AirportTrafficBuildDiagnosticV39[],
+  policy: TrafficTierPolicyV39,
+  weeklyRouteDepartureThreshold: number,
+  days: number,
+): TierAssignmentV39 {
+  if (policy.kind === "rank") {
+    const hubCount = Math.max(1, Math.ceil(diagnostics.length * policy.hubRankShare));
+    const hubMidCount = Math.min(
+      diagnostics.length,
+      Math.max(hubCount + 1, Math.ceil(diagnostics.length * policy.hubMidCumulativeRankShare)),
+    );
+    const midCount = Math.max(0, hubMidCount - hubCount);
+    const regionalCount = Math.max(0, diagnostics.length - hubMidCount);
+    const hubCutMetric = diagnostics[Math.min(hubCount, diagnostics.length) - 1].scheduledDepartures;
+    if (!(hubCutMetric > 0)) throw new Error("TRAFFIC_BUILD_HUB_CUT_NOT_POSITIVE");
+    const tiers = diagnostics.map((_, index): FrozenTrafficTier => {
+      const rank1 = index + 1;
+      if (rank1 <= hubCount) return "HUB";
+      if (rank1 <= hubMidCount) return "MID";
+      return "REGIONAL";
+    });
+    return {
+      tiers,
+      hubCount,
+      midCount,
+      regionalCount,
+      hubCutMetric,
+      tierCutRule: [
+        `policy=${policy.version}`,
+        `kind=rank`,
+        `sort=traffic_metric_desc_then_icao_asc`,
+        `hub_share=${policy.hubRankShare}`,
+        `hub_mid_cumulative_share=${policy.hubMidCumulativeRankShare}`,
+        `hub_rank_count=${hubCount}`,
+        `hub_mid_cumulative_rank_count=${hubMidCount}`,
+        `regional=remainder`,
+        `route_degree_threshold=scheduled_departures>=${weeklyRouteDepartureThreshold}_over_${days}d`,
+      ].join(";"),
+    };
+  }
+
+  const tiers = diagnostics.map((d): FrozenTrafficTier => {
+    if (d.scheduledDepartures >= policy.hubMinMetric) return "HUB";
+    if (d.scheduledDepartures >= policy.midMinMetric) return "MID";
+    return "REGIONAL";
+  });
+  const hubCount = tiers.filter((t) => t === "HUB").length;
+  const midCount = tiers.filter((t) => t === "MID").length;
+  const regionalCount = tiers.filter((t) => t === "REGIONAL").length;
+  if (hubCount === 0) throw new Error("TRAFFIC_BUILD_ABSOLUTE_POLICY_HAS_NO_HUB");
   return {
-    effectiveCarriers: hhi > 0 ? 1 / hhi : 0,
-    carrierCount5Pct: count5,
-    carrierShannon: shannon,
+    tiers,
+    hubCount,
+    midCount,
+    regionalCount,
+    hubCutMetric: policy.hubMinMetric,
+    tierCutRule: [
+      `policy=${policy.version}`,
+      `kind=absolute`,
+      `hub=traffic_metric>=${policy.hubMinMetric}`,
+      `mid=${policy.midMinMetric}<=traffic_metric<${policy.hubMinMetric}`,
+      `regional=traffic_metric<${policy.midMinMetric}`,
+      `boundary_equality=higher_tier`,
+      `route_degree_threshold=scheduled_departures>=${weeklyRouteDepartureThreshold}_over_${days}d`,
+    ].join(";"),
   };
 }
 
-function tierForRank(rank1: number, hubCount: number, hubMidCount: number): FrozenTrafficTier {
-  if (rank1 <= hubCount) return "HUB";
-  if (rank1 <= hubMidCount) return "MID";
-  return "REGIONAL";
-}
-
-/**
- * Build the exact frozen Phase-2 traffic reference from a permitted normalized
- * 12-month schedule export.
- *
- * Frozen project design (not an aviation-industry constant): sort airports by
- * scheduled departures DESC then ICAO ASC; top 10% are HUB, next 30% MID, and
- * remaining 60% REGIONAL. Missing-reference airports are handled later by the
- * final-frame owner and remain UNCLASSIFIED.
- */
+/** Build the frozen Phase-2 schedule reference using an explicitly frozen Plan §4.1 policy. */
 export function buildFrozenTrafficReferenceV39(
   rawRows: readonly NormalizedScheduleRouteRowV39[],
   metadata: TrafficReferenceBuildMetadataV39,
-  policy: TrafficTierPolicyV39 = DEFAULT_TRAFFIC_TIER_POLICY_V39,
+  policy: TrafficTierPolicyV39,
 ): TrafficReferenceBuildResultV39 {
   assertMetadata(metadata);
   assertPolicy(policy);
   if (!rawRows.length) throw new Error("TRAFFIC_BUILD_INPUT_EMPTY");
 
   const days = periodDays(metadata.referencePeriodStart, metadata.referencePeriodEnd);
-  // Binding interpretation of Plan §4.2 "≥1 scheduled departure/week": average
-  // frequency at least one departure per seven days over the complete frozen
-  // reference period. For a 365-day period this is 53 departures.
   const weeklyRouteDepartureThreshold = Math.ceil(days / 7);
   const rows = rawRows.map((row, i) => assertRow(row, i));
-  const normalizedInputSha256 = sha256Hex(rows);
+  const normalizedInputSha256 = sha256Hex({ rows, policy });
   const airports = new Map<string, AirportAccumulator>();
   const routeTotals = new Map<string, number>();
 
@@ -265,13 +339,8 @@ export function buildFrozenTrafficReferenceV39(
   for (const row of rows) {
     const origin = airports.get(row.origin_icao)!;
     origin.departures += row.scheduled_departures;
-    origin.carrierDepartures.set(
-      row.operating_carrier,
-      (origin.carrierDepartures.get(row.operating_carrier) ?? 0) + row.scheduled_departures,
-    );
-    if (row.origin_country_iso2 !== row.destination_country_iso2) {
-      origin.internationalDepartures += row.scheduled_departures;
-    }
+    origin.carrierDepartures.set(row.operating_carrier, (origin.carrierDepartures.get(row.operating_carrier) ?? 0) + row.scheduled_departures);
+    if (row.origin_country_iso2 !== row.destination_country_iso2) origin.internationalDepartures += row.scheduled_departures;
   }
 
   for (const [key, departures] of routeTotals) {
@@ -298,20 +367,14 @@ export function buildFrozenTrafficReferenceV39(
   }).sort((a, b) => b.scheduledDepartures - a.scheduledDepartures || a.icao.localeCompare(b.icao));
 
   if (!diagnostics.length || diagnostics[0].scheduledDepartures <= 0) throw new Error("TRAFFIC_BUILD_NO_DEPARTURE_AIRPORTS");
-  const hubRankCount = Math.max(1, Math.ceil(diagnostics.length * policy.hubRankShare));
-  const hubMidRankCount = Math.max(hubRankCount + 1, Math.ceil(diagnostics.length * policy.hubMidCumulativeRankShare));
-  const boundedHubMidRankCount = Math.min(diagnostics.length, hubMidRankCount);
-  const midRankCount = Math.max(0, boundedHubMidRankCount - hubRankCount);
-  const regionalRankCount = Math.max(0, diagnostics.length - boundedHubMidRankCount);
-  const hubCutMetric = diagnostics[Math.min(hubRankCount, diagnostics.length) - 1].scheduledDepartures;
-  if (!(hubCutMetric > 0)) throw new Error("TRAFFIC_BUILD_HUB_CUT_NOT_POSITIVE");
+  const assignment = assignTiers(diagnostics, policy, weeklyRouteDepartureThreshold, days);
 
   const frozenRows: FrozenTrafficAirportRow[] = diagnostics.map((d, index) => {
     const a = airports.get(d.icao)!;
     return {
       icao: d.icao,
       traffic_metric_value: d.scheduledDepartures,
-      tier: tierForRank(index + 1, hubRankCount, boundedHubMidRankCount),
+      tier: assignment.tiers[index],
       country_iso2: a.countryIso2,
       longitude_e: a.longitudeE,
       airport_timezone: a.timezone,
@@ -323,17 +386,6 @@ export function buildFrozenTrafficReferenceV39(
     };
   });
 
-  const tierCutRule = [
-    `policy=${policy.version}`,
-    `sort=traffic_metric_desc_then_icao_asc`,
-    `hub=top_${policy.hubRankShare}`,
-    `mid=next_${policy.hubMidCumulativeRankShare - policy.hubRankShare}`,
-    `regional=remainder`,
-    `hub_rank_count=${hubRankCount}`,
-    `hub_mid_cumulative_rank_count=${boundedHubMidRankCount}`,
-    `route_degree_threshold=scheduled_departures>=${weeklyRouteDepartureThreshold}_over_${days}d`,
-  ].join(";");
-
   const reference: FrozenTrafficReferenceV39 = {
     schema_version: "v3.9-traffic-reference-frozen-1",
     status: "READY_FROZEN_REFERENCE",
@@ -344,8 +396,8 @@ export function buildFrozenTrafficReferenceV39(
     reference_period_end: metadata.referencePeriodEnd,
     traffic_metric_name: "scheduled_departures",
     traffic_metric_units: "departures_per_frozen_12_month_period",
-    hub_cut_metric: hubCutMetric,
-    tier_cut_rule: tierCutRule,
+    hub_cut_metric: assignment.hubCutMetric,
+    tier_cut_rule: assignment.tierCutRule,
     raw_reference_sha256: metadata.rawReferenceSha256,
     tier_hash: computeTierHash(frozenRows),
     license_access_basis: metadata.licenseAccessBasis,
@@ -358,9 +410,9 @@ export function buildFrozenTrafficReferenceV39(
     reference,
     normalizedInputSha256,
     diagnostics,
-    hubRankCount,
-    midRankCount,
-    regionalRankCount,
+    hubRankCount: assignment.hubCount,
+    midRankCount: assignment.midCount,
+    regionalRankCount: assignment.regionalCount,
     weeklyRouteDepartureThreshold,
   };
 }
