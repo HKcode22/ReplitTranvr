@@ -1,9 +1,9 @@
 /**
  * V3.9 Phase-2 permitted traffic-reference import owner.
  *
- * OFFLINE ONLY: this command never calls AeroDataBox, OAG, Cirium, or any
- * network service. A separately licensed source adapter/export must first
- * produce the provider-neutral normalized JSON envelope accepted here.
+ * OFFLINE ONLY: this command never calls any provider or network service. A
+ * permitted source adapter/export first produces the provider-neutral normalized
+ * JSON envelope accepted here. OAG/Cirium are not assumed or required.
  *
  * Ordering is fail-closed: current prerequisite P + fresh Gate-1 PASS must be
  * valid before this command can write the frozen reference artifact.
@@ -18,18 +18,20 @@ import {
   buildFrozenTrafficReferenceV39,
   type NormalizedScheduleRouteRowV39,
   type TrafficReferenceBuildMetadataV39,
+  type TrafficTierPolicyV39,
 } from "../server/lib/disruption/trafficReferenceBuilder_v39";
 import { parseFrozenTrafficReference } from "../server/lib/disruption/trafficReference_v39";
 import { requireTrafficReferenceFreshnessV39 } from "../server/lib/disruption/trafficReferenceFreshness_v39";
 
 interface NormalizedTrafficReferenceInputV39 {
-  schema_version: "v3.9-normalized-schedule-reference-input-1";
+  schema_version: "v3.9-normalized-schedule-reference-input-2";
   metadata: TrafficReferenceBuildMetadataV39;
+  tier_policy: TrafficTierPolicyV39;
   rows: NormalizedScheduleRouteRowV39[];
 }
 
 interface TrafficReferenceBuildReportV39 {
-  schema_version: "v3.9-traffic-reference-build-report-1";
+  schema_version: "v3.9-traffic-reference-build-report-2";
   status: "PASS";
   built_at_utc: string;
   input_file_sha256: string;
@@ -41,6 +43,7 @@ interface TrafficReferenceBuildReportV39 {
   retrieval_date: string;
   reference_period_start: string;
   reference_period_end: string;
+  tier_policy: TrafficTierPolicyV39;
   airport_count: number;
   hub_count: number;
   mid_count: number;
@@ -77,10 +80,12 @@ function parseInput(path: string): { parsed: NormalizedTrafficReferenceInputV39;
   try { value = JSON.parse(raw); } catch { throw new Error("TRAFFIC_INPUT_INVALID_JSON"); }
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("TRAFFIC_INPUT_NOT_OBJECT");
   const input = value as Partial<NormalizedTrafficReferenceInputV39>;
-  if (input.schema_version !== "v3.9-normalized-schedule-reference-input-1") {
+  if (input.schema_version !== "v3.9-normalized-schedule-reference-input-2") {
     throw new Error("TRAFFIC_INPUT_SCHEMA_VERSION_INVALID");
   }
-  if (!input.metadata || !Array.isArray(input.rows)) throw new Error("TRAFFIC_INPUT_METADATA_OR_ROWS_MISSING");
+  if (!input.metadata || !input.tier_policy || !Array.isArray(input.rows)) {
+    throw new Error("TRAFFIC_INPUT_METADATA_POLICY_OR_ROWS_MISSING");
+  }
   return { parsed: input as NormalizedTrafficReferenceInputV39, raw };
 }
 
@@ -106,11 +111,9 @@ function loadMatchingExistingReport(
 ): TrafficReferenceBuildReportV39 | null {
   if (!existsSync(path)) return null;
   const value = readJson(path, "TRAFFIC_REFERENCE_BUILD_REPORT");
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("BLOCKED:TRAFFIC_REFERENCE_BUILD_REPORT_INVALID");
-  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("BLOCKED:TRAFFIC_REFERENCE_BUILD_REPORT_INVALID");
   const report = value as Partial<TrafficReferenceBuildReportV39>;
-  if (report.schema_version !== "v3.9-traffic-reference-build-report-1" || report.status !== "PASS") {
+  if (report.schema_version !== "v3.9-traffic-reference-build-report-2" || report.status !== "PASS") {
     throw new Error("BLOCKED:TRAFFIC_REFERENCE_BUILD_REPORT_INVALID");
   }
   for (const key of ["input_file_sha256", "raw_reference_sha256", "normalized_input_sha256", "frozen_artifact_sha256", "tier_hash"] as const) {
@@ -123,11 +126,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   try {
     const root = process.cwd();
     const inputArg = argv[0];
-    if (!inputArg || argv.length > 1) {
-      throw new Error("USAGE:v39_build_traffic_reference_v39 <normalized-reference-input.json>");
-    }
+    if (!inputArg || argv.length > 1) throw new Error("USAGE:v39_build_traffic_reference_v39 <normalized-reference-input.json>");
 
-    // No artifact mutation before the two binding Phase-2 predecessors pass.
     loadVerifiedPrerequisitePPass(root);
     loadFreshGate1(root);
 
@@ -135,7 +135,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     if (!existsSync(inputPath)) throw new Error("TRAFFIC_INPUT_FILE_MISSING");
     const input = parseInput(inputPath);
     const builtAt = new Date();
-    const built = buildFrozenTrafficReferenceV39(input.parsed.rows, input.parsed.metadata);
+    const built = buildFrozenTrafficReferenceV39(input.parsed.rows, input.parsed.metadata, input.parsed.tier_policy);
     requireTrafficReferenceFreshnessV39(built.reference, builtAt);
 
     const frozenPath = join(root, "artifacts", "traffic-reference-frozen.json");
@@ -149,7 +149,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       ? built.diagnostics.reduce((sum, row) => sum + row.intlShare, 0) / built.diagnostics.length
       : 0;
     const proposedReport: TrafficReferenceBuildReportV39 = {
-      schema_version: "v3.9-traffic-reference-build-report-1",
+      schema_version: "v3.9-traffic-reference-build-report-2",
       status: "PASS",
       built_at_utc: builtAt.toISOString(),
       input_file_sha256: sha256(input.raw),
@@ -161,6 +161,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       retrieval_date: built.reference.traffic_retrieval_date,
       reference_period_start: built.reference.reference_period_start,
       reference_period_end: built.reference.reference_period_end,
+      tier_policy: input.parsed.tier_policy,
       airport_count: built.reference.airports.length,
       hub_count: built.hubRankCount,
       mid_count: built.midRankCount,
@@ -178,13 +179,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     const reportPath = join(root, "artifacts", "traffic-reference-build-report.json");
     const existingReport = loadMatchingExistingReport(reportPath, proposedReport);
     const report = existingReport ?? proposedReport;
-    if (!existingReport) {
-      writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
-    }
+    if (!existingReport) writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
 
     console.log(JSON.stringify({
       status: "PASS",
       idempotent_existing_report: Boolean(existingReport),
+      tier_policy: report.tier_policy,
       frozen_artifact_sha256: report.frozen_artifact_sha256,
       raw_reference_sha256: report.raw_reference_sha256,
       airport_count: report.airport_count,
