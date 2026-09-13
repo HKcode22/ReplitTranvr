@@ -29,6 +29,7 @@ export interface PrepaidLiveWindowInputV39 {
   settlement: SettlementConfig;
   deletionRunId: string;
   watchdogPollMs: number;
+  onSessionArmed?: (sessionId: string) => Promise<void>;
 }
 
 export interface PrepaidLiveWindowResultV39 {
@@ -78,6 +79,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     icao: input.ownerKind === "anchor_probe" ? icao : null,
     lifetimeHours: 24,
   });
+  if (input.onSessionArmed) await input.onSessionArmed(session.sessionId);
   const webhookUrl = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), session.sessionId);
   const targetMs = input.targetHours * 3_600_000;
   let subscriptionDeleted = false;

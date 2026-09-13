@@ -31,6 +31,7 @@ import { extractFlightNotification, type SamplingMeta } from "./lib/disruption/f
 import { upsertFlightNotifications, appendResearchEvents, semanticObservationKey } from "./lib/disruption/flightDataPrePostStore_v3";
 import { resolveWebhookFlightIdentity, type WebhookIdentityResolution } from "./lib/disruption/flightInstanceCanonical_v3";
 import { persistProcessingAttempt, persistRawDeliveryTransaction, updateRawDeliveryOutcome } from "./lib/disruption/rawIngress_v3";
+import { persistPrepaidProbeWebhookV39 } from "./lib/disruption/prepaidProbeRuntime_v39";
 import { verifyAuthRecord, approvedArtifactHashesFromLedger, sha256HexString, type AuthRecord } from "./lib/disruption/authRecord_v39";
 import { v39Pool as pool } from "./lib/disruption/db_v39";
 import {
@@ -129,6 +130,20 @@ async function recordIncident(cause:string,detail:unknown):Promise<void>{
 }
 
 export function registerV3Routes(app:Express):void{
+  const prepaidWebhookIngress=async(req:Request,res:Response)=>{
+    const secret=webhookSecret();
+    if(secret&&(!req.params.secret||req.params.secret!==secret)){res.status(404).json({error:"Not found"});return;}
+    const sessionId=String(req.params.sessionId??"").trim();
+    try{
+      const persisted=await persistPrepaidProbeWebhookV39({sessionId,body:req.body??{},receivedAtUtc:new Date()});
+      console.log(`[adb-v3-prepaid] session=${sessionId} items=${persisted.itemCount} duplicate=${persisted.duplicate}`);
+      res.status(200).json({received:true,items:persisted.itemCount,duplicate:persisted.duplicate});
+    }catch(err:any){
+      console.error("[adb-v3-prepaid] durable persistence failed — returning 5xx (provider details redacted)");
+      await recordIncident("raw-persistence",{mode:"prepaid_probe",sessionId,error:String(err?.message??"error").slice(0,240)});
+      res.status(500).json({error:"Prepaid probe persistence failed; please retry"});
+    }
+  };
   const webhookIngress=async(req:Request,res:Response)=>{
     const startedAt=Date.now();let rawDeliveryIdForCatch:string|null=null;let receivedAtForCatch:Date|null=null;let flightsForCatch:any[]=[];let samplingForCatch:SamplingMeta|null=null;
     try{
@@ -167,6 +182,7 @@ export function registerV3Routes(app:Express):void{
     }
   };
 
+  app.post("/api/v1/webhooks/aerodatabox/:secret/prepaid/:sessionId",prepaidWebhookIngress);
   app.post("/api/v1/webhooks/aerodatabox",webhookIngress);
   app.post("/api/v1/webhooks/aerodatabox/:secret",webhookIngress);
   app.get("/api/v1/subscriptions/balance",managementGuard,async(_req,res)=>{res.status(200).json({balance:await getBalance()});});

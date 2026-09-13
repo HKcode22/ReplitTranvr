@@ -57,6 +57,8 @@ import {
   type SettlementConfig,
 } from "../server/lib/disruption/settlement_v3";
 import { resolveOwnerAuthorization } from "./v39_paid_guard_v39";
+import { runPrepaidLiveWindowV39 } from "../server/lib/disruption/prepaidProbeWindow_v39";
+import { cleanupPrepaidProbeSessionV39 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import { PROBE_CAP_DAILY_UNITS } from "../server/lib/disruption/budgetAccounting_v3";
 import {
   trafficScore,
@@ -409,7 +411,7 @@ export async function closeProbeBudgetDay(probeBudgetDayId: string): Promise<voi
   );
   const unsettled = await pool.query(
     `SELECT count(*)::int AS n FROM clean.adb_anchor_probe
-      WHERE probe_budget_day_id = $1 AND credits_spent IS NULL AND status IN ('completed','failed','abandoned')`,
+      WHERE probe_budget_day_id = $1 AND reconciliation_status IS DISTINCT FROM 'MATCH' AND status IN ('completed','failed','abandoned')`,
     [probeBudgetDayId],
   );
   if (Number(active.rows[0].n) > 0) {
@@ -425,20 +427,20 @@ export async function closeProbeBudgetDay(probeBudgetDayId: string): Promise<voi
   console.log(`  probe budget day ${probeBudgetDayId} CLOSED (settled, ready for the next day)`);
 }
 
-async function reserveProbeAttempt(candidate: Candidate, stage: number, start: Date, targetEnd: Date, hours: number, balanceBefore: number | null, dayId: string, estimate: number): Promise<number> {
+async function reserveProbeAttempt(candidate: Candidate, stage: number, start: Date, targetEnd: Date, hours: number, dayId: string, estimate: number): Promise<number> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [dayId]);
     const used = await client.query(
-      `SELECT COALESCE(sum(GREATEST(reserved_credits,COALESCE(credits_spent,0),COALESCE(internal_send_credits,0))),0)::int n
+      `SELECT COALESCE(sum(GREATEST(reserved_credits,COALESCE(internal_send_credits,0))),0)::int n
          FROM clean.adb_anchor_probe WHERE probe_budget_day_id=$1`, [dayId]);
     if (Number(used.rows[0].n) + estimate > PROBE_DAILY_CAP) throw new Error(`reservation exceeds probe cap (${used.rows[0].n}+${estimate}>${PROBE_DAILY_CAP})`);
     const row = await client.query(
       `INSERT INTO clean.adb_anchor_probe
-       (stage,icao,region,window_start,window_end,window_hours,balance_before,status,probe_budget_day_id,reserved_credits)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'probing',$8,$9) RETURNING probe_id`,
-      [stage,candidate.icao,candidate.region,start,targetEnd,hours,balanceBefore,dayId,estimate]);
+       (stage,icao,region,window_start,window_end,window_hours,status,probe_budget_day_id,reserved_credits)
+       VALUES ($1,$2,$3,$4,$5,$6,'probing',$7,$8) RETURNING probe_id`,
+      [stage,candidate.icao,candidate.region,start,targetEnd,hours,dayId,estimate]);
     await client.query("COMMIT");
     return Number(row.rows[0].probe_id);
   } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
@@ -461,7 +463,7 @@ const PROBE_SETTLEMENT: SettlementConfig = {
 // ---------------------------------------------------------------------------
 
 async function foreignActiveBillable(): Promise<
-  { id: string; subject?: string; billingType?: string }[]
+  { id: string; subject?: string; billingType?: string; subscriber?: string }[]
 > {
   const subs = await listSubscriptions();
   return subs
@@ -470,6 +472,7 @@ async function foreignActiveBillable(): Promise<
       id: s.id,
       subject: s.subject?.type ? `${s.subject.type}:${s.subject.id ?? "?"}` : "?",
       billingType: s.billingType,
+      subscriber: s.subscriber?.id ?? undefined,
     }));
 }
 
@@ -494,269 +497,84 @@ async function assertExclusivity(): Promise<{ ok: boolean; reason?: string }> {
 async function runSingleProbe(candidate: Candidate, stage: number, hours: number): Promise<void> {
   const icao = candidate.icao;
   console.log(`\n=== PROBE ${icao} (stage ${stage}, ${hours}h window, ${candidate.region}) ===`);
-
-  if (await hasStageProbe(icao, stage)) {
-    console.log(`  already probed (stage ${stage}) — skipping.`);
-    return;
-  }
-
+  if (await hasStageProbe(icao, stage)) { console.log(`  already probed (stage ${stage}) — skipping.`); return; }
   const budget = await checkBudget();
-  if (!budget.ok) {
-    console.log(`  SKIPPED — ${budget.reason}`);
-    return;
-  }
-
-  // R1 exclusivity: no foreign ACTIVE billable subscription may exist while we
-  // probe (plan §11.2/§15). Also catches orphaned subs from interrupted runs.
+  if (!budget.ok) { console.log(`  SKIPPED — ${budget.reason}`); return; }
   const exclusivity = await assertExclusivity();
-  if (!exclusivity.ok) {
-    console.log(`  SKIPPED — ${exclusivity.reason}`);
-    return;
-  }
-
-  // Free feed check (plan §9 step 3): confirm the airport is in the feeds.
+  if (!exclusivity.ok) { console.log(`  SKIPPED — ${exclusivity.reason}`); return; }
   const feeds = await checkAirportFeeds(icao);
-  console.log(`  feed membership check: ${feeds ? "covered" : "no feed data returned (may still work, proceeding)"}`);
-
+  console.log(`  feed membership check: ${feeds ? "covered" : "no feed data returned — REFUSED for paid probe"}`);
+  if (!feeds) return;
   const balBefore = await getBalance();
-  const balanceBefore = balBefore?.creditsRemaining ?? null;
-  console.log(`  balance_before: ${balanceBefore}`);
+  if (!balBefore || !Number.isInteger(balBefore.creditsRemaining)) { console.log("  SKIPPED — authoritative balance unavailable"); return; }
+  const balanceBefore = balBefore.creditsRemaining;
 
-  // Probe budget-day admission (§1.5.11): resolve the immutable budget day and
-  // refuse when its settled spend already reaches the cumulative 500 cap, or
-  // when the window would cross UTC midnight without an explicit split.
   const probeBudgetDayId = await getOrCreateProbeBudgetDay();
   const windowStartPreview = new Date();
   const windowEndPreview = new Date(windowStartPreview.getTime() + hours * 3600_000);
-  const crossesMidnight =
-    windowStartPreview.toISOString().slice(0, 10) !== windowEndPreview.toISOString().slice(0, 10);
-  if (crossesMidnight) {
-    console.log(`  SKIPPED — window crosses UTC midnight and no explicit split identity exists (default-refuse).`);
-    return;
+  if (windowStartPreview.toISOString().slice(0,10) !== windowEndPreview.toISOString().slice(0,10)) {
+    console.log("  SKIPPED — window crosses UTC midnight and no explicit split identity exists."); return;
   }
   const estimatedWorstCase = Number(process.env.ADB_PROBE_MAX_EXPOSURE_CREDITS);
   if (!Number.isInteger(estimatedWorstCase) || estimatedWorstCase <= 0) {
     console.log("  SKIPPED — ADB_PROBE_MAX_EXPOSURE_CREDITS must be an explicit positive integer from AUTH."); return;
   }
   const settledDaySpend = await probeBudgetDaySettledSpend(probeBudgetDayId);
-  console.log(`  probe_budget_day: ${probeBudgetDayId} (settled ${settledDaySpend}/${PROBE_DAILY_CAP})`);
+  const probeId = await reserveProbeAttempt(candidate, stage, windowStartPreview, windowEndPreview, hours, probeBudgetDayId, estimatedWorstCase);
 
-  const probeId = await reserveProbeAttempt(candidate, stage, windowStartPreview, windowEndPreview, hours, balanceBefore, probeBudgetDayId, estimatedWorstCase);
-  const sub = await createSubscription("FlightByAirportIcao", icao, { maxDeliveryRetries: 0 });
-  if (!sub?.id) {
-    await pool.query(`UPDATE clean.adb_anchor_probe SET status='failed',stop_reason='subscription_create_failed' WHERE probe_id=$1`, [probeId]);
-    console.log(`  FAILED — could not subscribe to ${icao}.`);
-    return;
-  }
-  console.log(`  subscription: ${sub.id}  isActive=${sub.isActive ?? "?"}  activateBeforeUtc=${sub.activateBeforeUtc ?? "n/a"}`);
-  const windowStart = new Date();
-
-  // Mark this probe 'probing' NOW so an interrupted run leaves a visible,
-  // cleanable record (status 'probing' → --cleanup deletes the sub and marks it
-  // 'abandoned'). The UNIQUE(icao, stage, window_start) row is the same row the
-  // final INSERT flips to 'completed'.
-  await pool.query(`UPDATE clean.adb_anchor_probe SET subscription_id=$1,window_start=$2 WHERE probe_id=$3`, [sub.id,windowStart,probeId]);
-
-  console.log(`  probing ${hours}h — deliveries must reach the live webhook...`);
-
-  // Poll every 60s so the process stays responsive; hard-stop at window end.
-  const windowMs = hours * 3600 * 1000;
-  const deadline = Date.now() + windowMs;
-  let liveStopReason: string | undefined;
-  while (Date.now() < deadline) {
-    const cadence = Number(process.env.ADB_PROBE_WATCHDOG_POLL_MS || 10_000);
-    await sleep(Math.min(cadence, Math.max(1000, deadline - Date.now())));
-    const liveInternal = await pool.query(
-      `SELECT COALESCE(sum(COALESCE(adb_cost_credits,notification_items,0)),0)::int n
-         FROM clean.raw_delivery WHERE subscription_id=$1`, [sub.id]);
-    const currentInternal = Number(liveInternal.rows[0]?.n ?? 0);
-    const currentBalance = await getBalance();
-    const currentSettled = balanceBefore !== null && currentBalance ? Math.max(0, balanceBefore - currentBalance.creditsRemaining) : 0;
-    liveStopReason = probeCapStopReason(settledDaySpend, currentSettled, currentInternal) ?? undefined;
-    if (liveStopReason) break;
-  }
-  const windowEnd = new Date();
-
-  const delOk = await deleteSubscription(sub.id);
-  console.log(`  subscription deleted: ${delOk ? "yes" : "NO (clean up manually)"}`);
-  // Shared settlement (§1.5.11): ≥3 consecutive equal reads, change resets,
-  // timeout → unresolved. Replaces the old fixed 10s sleep + single read.
-  const settle = await runSettlement(PROBE_SETTLEMENT, async () => {
-    const b = await getBalance();
-    return b ? b.creditsRemaining : null;
+  const live = await runPrepaidLiveWindowV39({
+    ownerKind: "anchor_probe", ownerProbeId: probeId, stage: stage as 1 | 2, icao,
+    targetHours: hours, settledOtherCredits: settledDaySpend, hardCapCredits: PROBE_DAILY_CAP,
+    balanceBefore, settlement: PROBE_SETTLEMENT,
+    deletionRunId: `anchor-probe:${probeId}:${randomUUID()}`,
+    watchdogPollMs: Number(process.env.ADB_PROBE_WATCHDOG_POLL_MS || 10_000),
+    onSessionArmed: async (sessionId) => {
+      await pool.query(`UPDATE clean.adb_anchor_probe SET runtime_session_id=$1 WHERE probe_id=$2`, [sessionId, probeId]);
+    },
   });
-  if (settle.status !== "settled") {
-    console.log(`  SETTLEMENT_UNRESOLVED (${settle.reason}, ${settle.readsUsed} reads) — probe recorded as failed; no later probe starts until resolved.`);
+
+  if (live.status !== "completed" || live.reconciliationStatus !== "MATCH" || !live.metrics || !live.cleanupVerifiedAtUtc) {
     await pool.query(
-      `UPDATE clean.adb_anchor_probe SET status='failed', window_end=now() WHERE subscription_id=$1 AND status='probing'`,
-      [sub.id],
+      `UPDATE clean.adb_anchor_probe
+          SET status='failed',window_start=$2,window_end=$3,duration_censored=$4,stop_reason=$5,
+              reconciliation_status=$6,internal_send_credits=$7,settlement_reads=$8,
+              runtime_cleanup_verified_at_utc=$9
+        WHERE probe_id=$1`,
+      [probeId,live.windowStart,live.windowEnd,live.durationCensored,live.stopReason,
+       live.reconciliationStatus,live.internalSendCredits,live.settlementReads,live.cleanupVerifiedAtUtc],
     );
+    console.log(`  FAILED — ${live.stopReason ?? live.reconciliationStatus}; provider account values were not persisted.`);
     return;
   }
-  const balanceAfter = settle.stableBalance;
-  const creditsSpent =
-    balanceBefore !== null ? Math.max(0, balanceBefore - balanceAfter) : null;
-  console.log(`  balance_stable: ${balanceAfter} (${settle.readsUsed} reads)  credits_spent: ${creditsSpent}`);
-  const internalRes = await pool.query(
-    `SELECT COALESCE(sum(COALESCE(adb_cost_credits,notification_items,0)),0)::int AS n
-       FROM clean.raw_delivery
-      WHERE subscription_id=$1 AND received_at_utc >= $2 AND received_at_utc < $3`,
-    [sub.id, windowStart, windowEnd],
-  );
-  const internalSendCredits = Number(internalRes.rows[0]?.n ?? 0);
 
-  // Count what was delivered for THIS subscription within the window.
-  const countRes = await pool.query(
-    `SELECT count(*)::int AS rows,
-            count(DISTINCT flight_number)::int AS unique_flights,
-            count(DISTINCT aircraft_reg)::int AS aircraft
-       FROM clean.flight_data_pre_post
-      WHERE subscription_id = $1 AND received_at BETWEEN $2 AND $3`,
-    [sub.id, windowStart, windowEnd],
-  );
-  const c = countRes.rows[0] ?? { rows: 0, unique_flights: 0, aircraft: 0 };
-  const rowsDelivered = Number(c.rows) ?? 0;
-  const uniqueFlights = Number(c.unique_flights) ?? 0;
-
-  // Tail-chain links: for each aircraft reg with n flights in the window,
-  // n-1 rotation links connect them (the aircraft-rotation chain).
-  const chainRes = await pool.query(
-    `SELECT COALESCE(sum(links), 0)::int AS links FROM (
-       SELECT count(*) - 1 AS links
-         FROM (SELECT DISTINCT flight_number, aircraft_reg
-                 FROM clean.flight_data_pre_post
-                WHERE subscription_id = $1 AND received_at BETWEEN $2 AND $3
-                  AND aircraft_reg IS NOT NULL) f
-        GROUP BY aircraft_reg
-     ) s`,
-    [sub.id, windowStart, windowEnd],
-  );
-  const tailChainLinks = Number(chainRes.rows[0]?.links ?? 0);
-
-  // Stability: 1/(1+CV) of COMPLETE per-15-min buckets only. Buckets cut by
-  // the window edges are partial and excluded. Fewer than the frozen minimum
-  // yields INSUFFICIENT_SAMPLE for stability (never a fabricated score).
-  const bucketsRes = await pool.query(
-    `SELECT extract(epoch FROM min(rd.received_at_utc)) * 1000 AS event_ms
-       FROM clean.raw_delivery rd
-       JOIN clean.raw_delivery_item ri ON ri.delivery_id=rd.delivery_id
-      WHERE rd.subscription_id=$1 AND rd.received_at_utc >= $2 AND rd.received_at_utc < $3
-        AND ri.canonical_flight_instance_id IS NOT NULL
-      GROUP BY ri.canonical_flight_instance_id`,
-    [sub.id, windowStart, windowEnd],
-  );
+  const metrics = live.metrics;
   const MIN_STABILITY_BUCKETS = Number(process.env.ADB_PROBE_MIN_STABILITY_BUCKETS || 4);
-  const stabilityResult = completeBucketStability(windowStart.getTime(), windowEnd.getTime(), bucketsRes.rows.map((r:any) => Number(r.event_ms)), MIN_STABILITY_BUCKETS);
-  const counts = stabilityResult.bucketCounts;
-  const stability = stabilityResult.stability;
-  if (stabilityResult.status === "INSUFFICIENT_SAMPLE") {
-    console.log(`  stability: INSUFFICIENT_SAMPLE (${counts.length} complete buckets < min ${MIN_STABILITY_BUCKETS})`);
-  }
-
-  // Ambiguity bounds (§1.5.4 item 12): confirmed operating legs vs ambiguous
-  // codeshare records, counted separately — never coerced into one denominator.
-  const ambRes = await pool.query(
-    `SELECT count(DISTINCT flight_number)::int AS unique_total,
-            count(DISTINCT CASE WHEN codeshare_status = 'IsOperator' THEN flight_number END)::int AS confirmed_lower,
-            count(DISTINCT CASE WHEN codeshare_status IS NULL OR codeshare_status = 'Unknown' THEN flight_number END)::int AS ambiguous_n
-       FROM clean.flight_data_pre_post
-      WHERE subscription_id = $1 AND received_at BETWEEN $2 AND $3`,
-    [sub.id, windowStart, windowEnd],
-  );
-  const amb = ambRes.rows[0] ?? { unique_total: 0, confirmed_lower: 0, ambiguous_n: 0 };
-  const confirmedUniqueLower = Number(amb.confirmed_lower) ?? 0;
-  const confirmedPlusAmbiguousUpper = Number(amb.unique_total) ?? 0;
-
-  const windowHours = (windowEnd.getTime() - windowStart.getTime()) / 3600_000;
-  const rowsPerHour = windowHours > 0 ? rowsDelivered / windowHours : 0;
-  // The conservative confirmed lower bound, never the ambiguity-sensitive
-  // total, drives the observed-yield score.
-  const ufPerCredit = creditsSpent && creditsSpent > 0 ? confirmedUniqueLower / creditsSpent : null;
-  const chainPerCredit = creditsSpent && creditsSpent > 0 ? tailChainLinks / creditsSpent : null;
-  // Cap censoring: the window ended at exposure end (target duration reached =
-  // complete; anything shorter would set durationCensored + stop reason here).
-  const targetEnd = windowStart.getTime() + hours * 3600_000;
-  const { durationCensored, stopReason } = deriveProbeStop(targetEnd, windowEnd.getTime(), liveStopReason);
-
-  console.log(`  rows_delivered: ${rowsDelivered}  unique_flights: ${uniqueFlights}  chain_links: ${tailChainLinks}`);
-  console.log(`  rows_per_hour: ${rowsPerHour.toFixed(1)}  uf/credit: ${ufPerCredit?.toFixed(4) ?? "n/a"}  chain/credit: ${chainPerCredit?.toFixed(4) ?? "n/a"}  stability: ${stability?.toFixed(3) ?? "n/a"}  complete_buckets: ${counts.length}/${MIN_STABILITY_BUCKETS}`);
-  console.log(`  ambiguity: confirmed_lower=${confirmedUniqueLower} upper=${confirmedPlusAmbiguousUpper} (ambiguous unknown=${Number(amb.ambiguous_n) ?? 0})`);
+  const stabilityResult = completeBucketStability(live.windowStart.getTime(), live.windowEnd.getTime(), metrics.firstObservationMs, MIN_STABILITY_BUCKETS);
+  const windowHours = (live.windowEnd.getTime() - live.windowStart.getTime()) / 3600_000;
+  const rowsPerHour = windowHours > 0 ? metrics.rowsDelivered / windowHours : 0;
+  const denominator = live.internalSendCredits;
+  const ufPerCredit = denominator > 0 ? metrics.confirmedUniqueLower / denominator : null;
+  const chainPerCredit = denominator > 0 ? metrics.tailChainLinks / denominator : null;
 
   await pool.query(
-    `INSERT INTO clean.adb_anchor_probe
-       (stage, icao, region, window_start, window_end, window_hours,
-        subscription_id, balance_before, balance_after, credits_spent,
-        rows_delivered, unique_flights, tail_chain_links,
-        rows_per_hour, unique_flights_per_credit, tail_chain_links_per_credit,
-        stability, status, probe_budget_day_id, duration_censored, stop_reason,
-        complete_buckets, min_stability_buckets,
-        confirmed_unique_lower, confirmed_plus_ambiguous_upper,
-         settlement_reads, settlement_stable_balance, stability_status, internal_send_credits)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'completed',
-              $18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
-     ON CONFLICT (icao, stage, window_start) DO UPDATE SET
-       window_end = EXCLUDED.window_end,
-       window_hours = EXCLUDED.window_hours,
-       balance_after = EXCLUDED.balance_after,
-       credits_spent = EXCLUDED.credits_spent,
-       rows_delivered = EXCLUDED.rows_delivered,
-       unique_flights = EXCLUDED.unique_flights,
-       tail_chain_links = EXCLUDED.tail_chain_links,
-       rows_per_hour = EXCLUDED.rows_per_hour,
-       unique_flights_per_credit = EXCLUDED.unique_flights_per_credit,
-       tail_chain_links_per_credit = EXCLUDED.tail_chain_links_per_credit,
-       stability = EXCLUDED.stability,
-       probe_budget_day_id = EXCLUDED.probe_budget_day_id,
-       duration_censored = EXCLUDED.duration_censored,
-       stop_reason = EXCLUDED.stop_reason,
-       complete_buckets = EXCLUDED.complete_buckets,
-       min_stability_buckets = EXCLUDED.min_stability_buckets,
-       confirmed_unique_lower = EXCLUDED.confirmed_unique_lower,
-       confirmed_plus_ambiguous_upper = EXCLUDED.confirmed_plus_ambiguous_upper,
-       settlement_reads = EXCLUDED.settlement_reads,
-        settlement_stable_balance = EXCLUDED.settlement_stable_balance,
-        stability_status = EXCLUDED.stability_status,
-        internal_send_credits = EXCLUDED.internal_send_credits,
-       status = 'completed'`,
-    [
-      stage,
-      icao,
-      candidate.region,
-      windowStart,
-      windowEnd,
-      windowHours,
-      sub.id,
-      balanceBefore,
-      balanceAfter,
-      creditsSpent,
-      rowsDelivered,
-      uniqueFlights,
-      tailChainLinks,
-      rowsPerHour,
-      ufPerCredit,
-      chainPerCredit,
-      stability,
-      probeBudgetDayId,
-      durationCensored,
-      stopReason,
-      counts.length,
-      MIN_STABILITY_BUCKETS,
-      confirmedUniqueLower,
-      confirmedPlusAmbiguousUpper,
-      settle.readsUsed,
-      settle.stableBalance,
-      stabilityResult.status,
-      internalSendCredits,
-    ],
+    `UPDATE clean.adb_anchor_probe SET
+       window_start=$2,window_end=$3,window_hours=$4,
+       rows_delivered=$5,unique_flights=$6,tail_chain_links=$7,rows_per_hour=$8,
+       unique_flights_per_credit=$9,tail_chain_links_per_credit=$10,stability=$11,
+       status='completed',duration_censored=$12,stop_reason=$13,
+       complete_buckets=$14,min_stability_buckets=$15,
+       confirmed_unique_lower=$16,confirmed_plus_ambiguous_upper=$17,
+       settlement_reads=$18,stability_status=$19,internal_send_credits=$20,
+       reconciliation_status='MATCH',runtime_cleanup_verified_at_utc=$21,reserved_credits=$20
+     WHERE probe_id=$1`,
+    [probeId,live.windowStart,live.windowEnd,windowHours,metrics.rowsDelivered,metrics.uniqueFlights,
+     metrics.tailChainLinks,rowsPerHour,ufPerCredit,chainPerCredit,stabilityResult.stability,
+     live.durationCensored,live.stopReason,stabilityResult.bucketCounts.length,MIN_STABILITY_BUCKETS,
+     metrics.confirmedUniqueLower,metrics.confirmedPlusAmbiguousUpper,live.settlementReads,
+     stabilityResult.status,live.internalSendCredits,new Date(live.cleanupVerifiedAtUtc)],
   );
-  console.log(`  recorded in clean.adb_anchor_probe (budget day ${probeBudgetDayId}).`);
-  // gptP0analyze4 #3: close the probe budget day once this probe is settled and
-  // terminal, so the sequence does not dead-end and the next day starts cleanly.
-  try {
-    await closeProbeBudgetDay(probeBudgetDayId);
-  } catch (err: any) {
-    console.error(`  probe budget day close deferred: ${err?.message ?? err}`);
-  }
+  console.log(`  completed: rows=${metrics.rowsDelivered} confirmed=${metrics.confirmedUniqueLower} chain=${metrics.tailChainLinks} internal_send=${live.internalSendCredits} cleanup=verified`);
+  // Do not close the 500-credit budget ledger automatically per candidate.
 }
 
 // ---------------------------------------------------------------------------
@@ -893,46 +711,50 @@ function computeScores(
  * are NEVER auto-deleted (the old --force path was removed per §1.5.1 item 6).
  */
 async function runCleanup(): Promise<void> {
-  console.log("R1 orphan cleanup — searching for probe subscriptions left 'probing'...");
-
+  console.log("R1 orphan cleanup — searching for probe-owned subscriptions...");
   const probing = await pool.query(
-    `SELECT probe_id, icao, stage, subscription_id, window_start
-       FROM clean.adb_anchor_probe
-      WHERE status = 'probing' ORDER BY window_start`,
+    `SELECT probe_id,icao,stage,subscription_id,runtime_session_id,window_start
+       FROM clean.adb_anchor_probe WHERE status='probing' ORDER BY window_start`,
   );
-
+  const active = await foreignActiveBillable();
+  const tracked = new Set<string>();
   let deleted = 0;
   for (const row of probing.rows) {
-    const subId = row.subscription_id as string | null;
-    if (!subId) {
-      await pool.query(`UPDATE clean.adb_anchor_probe SET status='abandoned' WHERE probe_id=$1`, [row.probe_id]);
-      continue;
+    const runtimeSession = row.runtime_session_id ? String(row.runtime_session_id) : null;
+    let subId = row.subscription_id as string | null;
+    if (runtimeSession) {
+      const runtime = await pool.query(`SELECT provider_subscription_id FROM clean.prepaid_probe_session_runtime WHERE session_id=$1`, [runtimeSession]);
+      subId = runtime.rows[0]?.provider_subscription_id ? String(runtime.rows[0].provider_subscription_id) : null;
+      if (!subId) subId = active.find((s) => s.subscriber?.includes(runtimeSession))?.id ?? null;
     }
-    const ok = await deleteSubscription(subId);
-    console.log(`  ${ok ? "deleted  " : "DELETE FAILED "} sub ${subId} (${row.icao} stage ${row.stage})`);
-    if (ok) deleted++;
+    if (subId) tracked.add(subId);
+    const ok = subId ? await deleteSubscription(subId) : true;
+    if (subId) console.log(`  ${ok ? "deleted" : "DELETE FAILED"} tracked probe subscription (${row.icao} stage ${row.stage})`);
+    if (ok && subId) deleted++;
+    let cleanupVerified: string | null = null;
+    if (ok && runtimeSession) {
+      try {
+        const cleanup = await cleanupPrepaidProbeSessionV39(runtimeSession, `operator-cleanup:${row.probe_id}:${randomUUID()}`);
+        cleanupVerified = cleanup.verifiedAtUtc;
+      } catch (error: any) {
+        console.error(`  runtime/blob cleanup failed for probe ${row.probe_id}: ${error?.message ?? error}`);
+      }
+    }
     await pool.query(
-      `UPDATE clean.adb_anchor_probe SET status=$1, stop_reason=$2, window_end=now() WHERE probe_id=$3`,
-      [ok ? "abandoned" : "failed", ok ? "operator_cleanup" : "cleanup_delete_failed", row.probe_id],
+      `UPDATE clean.adb_anchor_probe
+          SET status=$1,stop_reason=$2,window_end=now(),runtime_cleanup_verified_at_utc=COALESCE($3,runtime_cleanup_verified_at_utc)
+        WHERE probe_id=$4`,
+      [ok && (!runtimeSession || cleanupVerified) ? "abandoned" : "failed",
+       ok ? "operator_cleanup" : "cleanup_delete_failed", cleanupVerified, row.probe_id],
     );
   }
-  console.log(`  probe-owned orphan subs deleted: ${deleted} of ${probing.rows.length}`);
-
-  const foreign = await foreignActiveBillable();
-  const untracked = foreign.filter((f) => !probing.rows.some((r: any) => r.subscription_id === f.id));
-  if (untracked.length > 0) {
-    // ChatGPT round-3 item 1 / §1.5.1 item 6: --force deletion of untracked
-    // ACTIVE subscriptions is REMOVED. Foreign billable subs are never
-    // auto-deleted — report them for human/owned cleanup (R1 refusal path).
-    console.log(
-      `  ${untracked.length} untracked ACTIVE credit sub(s) NOT touched (auto-delete removed): ` +
-        untracked.map((f) => `${f.id} (${f.subject})`).join(", ") +
-        `. Resolve via owned cleanup; paid work stays BLOCKED until R1 is clean.`,
-    );
+  console.log(`  tracked probe subscriptions deleted: ${deleted}`);
+  const untracked = active.filter((s) => !tracked.has(s.id));
+  if (untracked.length) {
+    console.log(`  ${untracked.length} untracked ACTIVE credit subscription(s) NOT touched; paid work remains blocked until resolved by the owning cleanup path.`);
   } else {
     console.log("  no other ACTIVE credit-based subscriptions on the account.");
   }
-  console.log("cleanup done.");
 }
 
 /** --check-webhook — probes reachability without printing the secret-bearing URL. */
