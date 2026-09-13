@@ -1,5 +1,5 @@
 /** V3.9 prerequisite-P security/retention verifier for Gate 1 + Phase-2 prepaid runtime. */
-import { readFileSync } from "fs";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { Pool } from "pg";
 import {
@@ -20,11 +20,21 @@ import {
   verifyPhase2RetentionScopeEvidenceV39,
 } from "../server/lib/disruption/phase2RetentionEvidence_v39";
 import { verifyPhase2PrepaidSecurityV39 } from "../server/lib/disruption/phase2PrepaidSecurity_v39";
+import { buildPrepaidSecurityVerificationReceiptV39 } from "../server/lib/disruption/prepaidSecurityVerification_v39";
+import {
+  V39_PROVIDER_BLOB_BUCKET_ENV,
+  V39_PROVIDER_BLOB_MODE_ENV,
+  V39_PROVIDER_BLOB_REQUIRED_MODE,
+} from "../server/lib/disruption/replitProviderBlobStore_v39";
 
 interface Check { name: string; pass: boolean; detail: string }
 
-function parseEvidence<T>(name: string): T | null {
+function rawEvidence(name: string): string | null {
   const raw = process.env[name];
+  return raw && raw.trim() ? raw : null;
+}
+function parseEvidence<T>(name: string): T | null {
+  const raw = rawEvidence(name);
   if (!raw) return null;
   try { return JSON.parse(raw) as T; } catch { return null; }
 }
@@ -127,7 +137,7 @@ async function verifyRetentionSurfaces(e: RetentionDeploymentEvidenceV39 | null)
 }
 
 function verifyPhase2ScopeEvidence(): Check {
-  const raw = process.env.V39_PHASE2_RETENTION_SCOPE_EVIDENCE;
+  const raw = rawEvidence("V39_PHASE2_RETENTION_SCOPE_EVIDENCE");
   if (!raw) return { name: "phase2-retention-scope-evidence", pass: false, detail: "missing-V39_PHASE2_RETENTION_SCOPE_EVIDENCE" };
   try {
     const evidence = parsePhase2RetentionScopeEvidenceV39(raw);
@@ -142,6 +152,30 @@ function verifyPhase2ScopeEvidence(): Check {
   } catch (error: any) {
     return { name: "phase2-retention-scope-evidence", pass: false, detail: String(error?.message ?? error) };
   }
+}
+
+function writeVerificationReceipt(): void {
+  const dbRaw = rawEvidence("V39_DB_ROLE_EVIDENCE");
+  const webhookRaw = rawEvidence("V39_WEBHOOK_SECURITY_EVIDENCE");
+  const deploymentRaw = rawEvidence("V39_RETENTION_DEPLOYMENT_EVIDENCE");
+  const scopeRaw = rawEvidence("V39_PHASE2_RETENTION_SCOPE_EVIDENCE");
+  const bucketId = String(process.env[V39_PROVIDER_BLOB_BUCKET_ENV] ?? "").trim();
+  const mode = String(process.env[V39_PROVIDER_BLOB_MODE_ENV] ?? "").trim().toLowerCase();
+  if (!dbRaw || !webhookRaw || !deploymentRaw || !scopeRaw || !bucketId || mode !== V39_PROVIDER_BLOB_REQUIRED_MODE) {
+    throw new Error("P_RECEIPT_CURRENT_EVIDENCE_OR_BUCKET_CONFIG_MISSING");
+  }
+  const receipt = buildPrepaidSecurityVerificationReceiptV39({
+    verifiedAtUtc: new Date().toISOString(),
+    dbRoleEvidenceRaw: dbRaw,
+    webhookSecurityEvidenceRaw: webhookRaw,
+    retentionDeploymentEvidenceRaw: deploymentRaw,
+    phase2RetentionScopeEvidenceRaw: scopeRaw,
+    providerBlobBucketId: bucketId,
+  });
+  const dir = join(process.cwd(), "artifacts");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "prepaid-security-retention-verification.json"), `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600 });
+  console.log(`[PASS] prerequisite-p-verification-receipt - ${receipt.artifact_sha256}`);
 }
 
 async function main(): Promise<void> {
@@ -182,19 +216,18 @@ async function main(): Promise<void> {
 
   try {
     const { v39Pool: pool } = await import("../server/lib/disruption/db_v39");
-    await pool.query("SELECT 1 FROM clean.adb_incident_stop WHERE resolved=false LIMIT 1");
+    const activeIncident = await pool.query("SELECT cause FROM clean.adb_incident_stop WHERE resolved=false LIMIT 1");
     const controller = readFileSync(join(process.cwd(), "server", "lib", "disruption", "adbCollectionController_v3.ts"), "utf8");
+    const wired = controller.includes("clean.adb_incident_stop") && controller.includes("REFUSED_INCIDENT_STOP");
     checks.push({
       name: "incident-stop-refusal",
-      pass: controller.includes("clean.adb_incident_stop") && controller.includes("REFUSED_INCIDENT_STOP"),
-      detail: "persistent incident admission source inspected",
+      pass: wired && !activeIncident.rowCount,
+      detail: !wired ? "persistent incident admission source missing" : activeIncident.rowCount ? `unresolved-incident:${activeIncident.rows[0].cause}` : "persistent incident admission verified; no unresolved incident",
     });
   } catch (err: any) {
     checks.push({ name: "incident-stop-refusal", pass: false, detail: `${err?.message ?? err}` });
   }
 
-  // Transparency only: this is the FULL repository/Phase-6 inventory. It is
-  // intentionally allowed to remain unresolved here and is not prerequisite-P.
   const downstream = verifyProviderContentInventory();
   console.log(
     `[DEFERRED_PHASE6] full-provider-content-inventory - covered_groups=${downstream.coveredGroupCount}; ` +
@@ -208,7 +241,11 @@ async function main(): Promise<void> {
     (pass ? "Phase-2 Gate-1 + isolated prepaid smoke/probe scope is verified; Phase-6 downstream inventory remains separately gated" :
       "one or more Phase-2 prerequisite-P checks remain unresolved"),
   );
-  if (!pass) process.exitCode = 1;
+  if (!pass) {
+    process.exitCode = 1;
+    return;
+  }
+  writeVerificationReceipt();
 }
 
 void main();
