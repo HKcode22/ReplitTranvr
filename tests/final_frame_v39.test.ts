@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildFinalFrameRows, frameHash } from "../scripts/build_final_frame_v39";
+import {
+  buildFinalFrameRows,
+  frameHash,
+  normalizeAirportCoverageForFinalFrame,
+} from "../scripts/build_final_frame_v39";
 import { computeTierHash, type FrozenTrafficReferenceV39 } from "../server/lib/disruption/trafficReference_v39";
 
 function traffic(): FrozenTrafficReferenceV39 {
@@ -38,6 +42,36 @@ const coverage = {
 };
 
 describe("Phase 2D final frame construction", () => {
+  it("normalizes the live collection-controller {feeds, all} shape before frame use", () => {
+    const liveShape = {
+      fetchedAt: "2026-09-13T07:04:20.817Z",
+      feeds: {
+        FlightSchedules: ["uuee", "KLAX", "UHWW", "KZZZ", "KLAX"],
+        FlightLiveUpdates: ["KLAX", "UUEE", "UHWW", "KZZZ"],
+        AdsbUpdates: ["UHWW", "KLAX"],
+      },
+      all: ["KZZZ", "UHWW", "UUEE", "KLAX"],
+      byTier: {},
+      worldScheduledCommercial: 0,
+    };
+    const normalized = normalizeAirportCoverageForFinalFrame(liveShape);
+    expect(normalized.universe.FlightSchedules).toEqual(["KLAX", "KZZZ", "UHWW", "UUEE"]);
+    expect(normalized.universeUnion).toEqual(["KLAX", "KZZZ", "UHWW", "UUEE"]);
+    expect(buildFinalFrameRows(normalized, traffic())).toHaveLength(4);
+  });
+
+  it("refuses a live coverage object whose reported all-set disagrees with its feeds", () => {
+    expect(() => normalizeAirportCoverageForFinalFrame({
+      fetchedAt: "2026-09-13T07:04:20.817Z",
+      feeds: {
+        FlightSchedules: ["KLAX"],
+        FlightLiveUpdates: ["KLAX"],
+        AdsbUpdates: ["KLAX"],
+      },
+      all: ["KLAX", "KZZZ"],
+    })).toThrow("BLOCKED:COVERAGE_REMEASUREMENT_SHAPE_INVALID:all_union_mismatch");
+  });
+
   it("uses only frozen traffic tiers and reviewed country/longitude region mapping", () => {
     const rows = buildFinalFrameRows(coverage, traffic());
     const byIcao = new Map(rows.map((row) => [row.icao, row]));
