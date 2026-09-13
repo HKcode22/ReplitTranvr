@@ -12,11 +12,13 @@ import { dirname, resolve } from "path";
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { getBalance, listSubscriptionsStrict } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import { runPrepaidLiveWindowV39 } from "../server/lib/disruption/prepaidProbeWindow_v39";
+import { loadPreprobeHandoffBindingV39 } from "../server/lib/disruption/phase2Handoff_v39";
 import { parseArgs, resolveOwnerAuthorization, verifyAuthFile } from "./v39_paid_guard_v39";
 
 const SCOPE = "Phase 2 / safety smoke";
 const PROTECTED_ALERT_FLOOR = 1000;
 const DEFAULT_ARTIFACT = "artifacts/v39-phase2-safety-smoke.json";
+const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
 
 interface SmokeArgs {
   icao: string;
@@ -78,6 +80,18 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
   }
   const args = parseSmokeArgs(argv);
   const record = checked.record;
+
+  // Bind the paid smoke to the exact current Phase-2E preprobe artifact. The
+  // ledger contains an evidence ID deterministically derived from BOTH the
+  // artifact's internal SHA and the exact file-byte SHA. The human-approved
+  // AUTH must name that evidence ID, so a stale/different preprobe cannot reuse
+  // a prior smoke authorization.
+  const preprobePath = process.env.ADB_PREPROBE_ARTIFACT_PATH || DEFAULT_PREPROBE;
+  const preprobe = loadPreprobeHandoffBindingV39(preprobePath);
+  if (!record.predecessorEvidenceIds.includes(preprobe.evidenceId)) {
+    throw new Error(`REFUSED_SMOKE_PREPROBE_BINDING_REQUIRED:${preprobe.evidenceId}`);
+  }
+
   if (record.airportFilterWindow !== exactScope(args.icao, args.minutes)) {
     throw new Error(`REFUSED_SMOKE_SCOPE_MISMATCH:AUTH=${record.airportFilterWindow ?? "<null>"}`);
   }
@@ -155,6 +169,7 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
     await openIncident("phase2_safety_smoke_failed", {
       authorizationId: auth.authId,
       icao: args.icao,
+      preprobeEvidenceId: preprobe.evidenceId,
       failures,
       cleanupVerified: Boolean(result.cleanupVerifiedAtUtc),
     });
@@ -167,6 +182,10 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
     status: "PASS",
     authorizationId: auth.authId,
     authorizationArtifactSha256: auth.artifactHash,
+    preprobeEvidenceId: preprobe.evidenceId,
+    preprobeArtifactSha256: preprobe.artifactSha256,
+    preprobeFileSha256: preprobe.fileSha256,
+    preprobeBindingSha256: preprobe.bindingSha256,
     icao: args.icao,
     filter: "FlightByAirportIcao",
     windowMinutes: args.minutes,
