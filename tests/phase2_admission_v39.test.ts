@@ -39,10 +39,16 @@ describe("V3.9 Phase-2 fail-closed admission", () => {
     expect(run).toBeGreaterThan(verify);
   });
 
-  it("legacy curated frame command cannot be used as a production shortcut", () => {
+  it("legacy curated frame command cannot be used as a production shortcut and traffic authority is checked first", () => {
     const pkg = JSON.parse(source("package.json"));
     expect(pkg.scripts["build-catalog"]).toBe("tsx scripts/v39_legacy_frame_refusal.ts");
-    expect(pkg.scripts["v39:frame:build"]).toBe("tsx scripts/build_final_frame_v39.ts");
+    expect(pkg.scripts["v39:traffic:materialize"]).toBe("tsx scripts/v39_materialize_pinned_traffic_reference_v39.ts");
+    expect(pkg.scripts["v39:frame:build"]).toContain("npm run v39:traffic:materialize");
+    expect(pkg.scripts["v39:frame:build"]).toContain("tsx scripts/build_final_frame_v39.ts");
+    const materialize = pkg.scripts["v39:frame:build"].indexOf("v39:traffic:materialize");
+    const frame = pkg.scripts["v39:frame:build"].indexOf("build_final_frame_v39.ts");
+    expect(materialize).toBeGreaterThan(-1);
+    expect(frame).toBeGreaterThan(materialize);
     const refusal = source("scripts/v39_legacy_frame_refusal.ts");
     expect(refusal).toContain("BLOCKED: legacy curated-tier frame builder");
     expect(refusal).toContain("npm run v39:frame:build");
