@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, appendFileSync } from "fs";
 import { join, resolve } from "path";
 import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authRecord_v39";
-import { loadPreprobeHandoffBindingV39 } from "../server/lib/disruption/phase2Handoff_v39";
+import { loadPhase2FSmokeRuntimeV39 } from "../server/lib/disruption/phase2SmokeRuntime_v39";
 
 const PHASE = "Phase 2 / safety smoke";
 const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
@@ -27,23 +27,29 @@ function readAuth(path: string): { raw: string; record: AuthRecord; sha256: stri
   return { raw, record, sha256: sha256HexString(raw) };
 }
 
-function assertLedgerBinding(binding: ReturnType<typeof loadPreprobeHandoffBindingV39>): void {
+function assertLedgerBinding(runtime: ReturnType<typeof loadPhase2FSmokeRuntimeV39>): void {
   if (!existsSync(LEDGER)) throw new Error("REFUSED_PHASE2F_EVIDENCE_LEDGER_MISSING");
   const ledger = readFileSync(LEDGER, "utf8");
+  const binding = runtime.preprobe;
   const requiredTokens = [
     binding.evidenceId,
     `PREPROBE_ARTIFACT_SHA256:${binding.artifactSha256}`,
     `PREPROBE_FILE_SHA256:${binding.fileSha256}`,
     `PREPROBE_BINDING_SHA256:${binding.bindingSha256}`,
+    runtime.evidenceId,
+    `SMOKE_RUNTIME_ARTIFACT_SHA256:${runtime.runtime.artifact_sha256}`,
+    `SMOKE_RUNTIME_FILE_SHA256:${runtime.fileSha256}`,
+    `SMOKE_RUNTIME_BINDING_SHA256:${runtime.bindingSha256}`,
   ];
   const missing = requiredTokens.filter((token) => !ledger.includes(token));
-  if (missing.length) throw new Error(`REFUSED_PHASE2F_PREPROBE_HANDOFF_NOT_RECORDED:${missing[0]}`);
+  if (missing.length) throw new Error(`REFUSED_PHASE2F_HANDOFF_NOT_RECORDED:${missing[0]}`);
 }
 
-function assertRecord(record: AuthRecord, binding: ReturnType<typeof loadPreprobeHandoffBindingV39>): {
+function assertRecord(record: AuthRecord, runtime: ReturnType<typeof loadPhase2FSmokeRuntimeV39>): {
   icao: string;
   minutes: number;
 } {
+  const binding = runtime.preprobe;
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(String(record.authorizationId ?? ""))) {
     throw new Error("REFUSED_PHASE2F_AUTH_ID_INVALID");
   }
@@ -80,9 +86,10 @@ function assertRecord(record: AuthRecord, binding: ReturnType<typeof loadPreprob
   }
   if (expires <= Date.now()) throw new Error("REFUSED_PHASE2F_AUTH_ALREADY_EXPIRED");
 
-  if (!Array.isArray(record.predecessorEvidenceIds) || record.predecessorEvidenceIds.length !== 1 ||
-      record.predecessorEvidenceIds[0] !== binding.evidenceId) {
-    throw new Error(`REFUSED_PHASE2F_PREDECESSOR_MUST_EQUAL_CURRENT_PREPROBE_BINDING:${binding.evidenceId}`);
+  const expected = [binding.evidenceId, runtime.evidenceId];
+  if (!Array.isArray(record.predecessorEvidenceIds) || record.predecessorEvidenceIds.length !== expected.length ||
+      record.predecessorEvidenceIds.some((id, index) => id !== expected[index])) {
+    throw new Error(`REFUSED_PHASE2F_PREDECESSORS_MUST_EQUAL_CURRENT_BINDINGS:${expected.join(",")}`);
   }
   return { icao, minutes };
 }
@@ -92,14 +99,21 @@ function main(): void {
   const expectedSha = required("--expected-sha").toLowerCase();
   if (!/^[a-f0-9]{64}$/.test(expectedSha)) throw new Error("REFUSED_PHASE2F_EXPECTED_SHA_INVALID");
   const preprobePath = resolve(optional("--preprobe") ?? DEFAULT_PREPROBE);
-  const binding = loadPreprobeHandoffBindingV39(preprobePath);
-  assertLedgerBinding(binding);
+  const runtimePath = resolve(required("--runtime-file"));
+  const runtimeSha = required("--runtime-sha").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(runtimeSha)) throw new Error("REFUSED_PHASE2F_RUNTIME_SHA_INVALID");
+  const runtime = loadPhase2FSmokeRuntimeV39({
+    runtimePath,
+    expectedFileSha256: runtimeSha,
+    preprobePath,
+  });
+  assertLedgerBinding(runtime);
 
   const { raw, record, sha256 } = readAuth(authFile);
   if (sha256 !== expectedSha) {
     throw new Error(`REFUSED_PHASE2F_HUMAN_REVIEW_SHA_MISMATCH:expected=${expectedSha}:actual=${sha256}`);
   }
-  const scope = assertRecord(record, binding);
+  const scope = assertRecord(record, runtime);
 
   const ledgerBefore = readFileSync(LEDGER, "utf8");
   const token = `AUTH_ARTIFACT_SHA256:${sha256}`;
@@ -115,7 +129,9 @@ function main(): void {
       `- start_not_before_utc: ${record.startNotBeforeUtc}`,
       `- expires_at_utc: ${record.expiresAtUtc}`,
       `- cleanup_owner: ${record.cleanupOwner}`,
-      `- predecessor_evidence_id: ${binding.evidenceId}`,
+      `- predecessor_preprobe_evidence_id: ${runtime.preprobe.evidenceId}`,
+      `- predecessor_smoke_runtime_evidence_id: ${runtime.evidenceId}`,
+      `- smoke_runtime_binding_sha256: ${runtime.bindingSha256}`,
       `- AUTH_ARTIFACT_SHA256:${sha256}`,
       "- approval_scope: PHASE_2F_ONLY",
       "",
@@ -130,7 +146,8 @@ function main(): void {
     icao: scope.icao,
     window_minutes: scope.minutes,
     max_alert_credits: record.maxAlertCredits,
-    predecessor_evidence_id: binding.evidenceId,
+    predecessor_evidence_ids: record.predecessorEvidenceIds,
+    smoke_runtime_binding_sha256: runtime.bindingSha256,
     auth_artifact_sha256: sha256,
     paid_authorization: true,
     stage1_authorized: false,
@@ -138,8 +155,6 @@ function main(): void {
     ledger: LEDGER,
   }, null, 2));
 
-  // Keep the exact bytes live in this function so accidental transformations
-  // after human review cannot become the approved token.
   void raw;
 }
 
