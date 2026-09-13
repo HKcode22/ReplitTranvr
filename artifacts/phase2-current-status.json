@@ -1,17 +1,17 @@
 {
-  "schema_version": "v3.9-phase2-current-status-4",
-  "recorded_at_utc": "2026-09-13T07:04:20.817Z",
+  "schema_version": "v3.9-phase2-current-status-5",
+  "recorded_at_utc": "2026-09-13T08:04:23.000Z",
   "binding_plan": "SEPmd/V3.9_DataCollectPlan_f.8.md",
   "implementation_log": "SEPmd/V3.9_IMPLEMENTATION_LOG.md#17-phase-2--prerequisite-p--gate-1--referencesframe--pre-probe-freeze--safety-smoke--gate-2",
   "branch": "main",
-  "current_execution_pointer": "PHASE_2D_FINAL_FRAME",
+  "current_execution_pointer": "PHASE_2D_SCHEMA_CONTRACT_0057_REPAIR_THEN_FINAL_FRAME",
   "status": {
     "phase0": "PASS",
     "phase1_gate0": "PASS_EXISTING_EVIDENCE",
     "phase2a_prerequisite_p": "PASS_LIVE_CRYPTOGRAPHIC",
     "phase2b_gate1": "PASS_LIVE_DOCUMENTED_FREE_COVERAGE",
     "phase2c_reference_rules": "PASS_RUN_SPECIFIC_REFERENCE_FROZEN",
-    "phase2d_final_frame": "IMPLEMENTED_RETRY_REQUIRED_AFTER_COVERAGE_ADAPTER_FIX",
+    "phase2d_final_frame": "IMPLEMENTED_WAITING_ON_PRODUCTION_0057_SCHEMA_CONTRACT_REPAIR",
     "phase2e_preprobe_freeze": "IMPLEMENTED_WAITING_ON_2D",
     "phase2f_safety_smoke": "IMPLEMENTED_NOT_RUN_EXACT_AUTH_REQUIRED_AFTER_2E",
     "phase2g_gate2_stage1": "IMPLEMENTED_NOT_RUN_WAITING_ON_2F_HANDOFF_AUTH",
@@ -86,10 +86,11 @@
     "bound_gate1_artifact_sha256": "7d0e3b7d77966ac3f31b45ab10ea1c44901df4d01cf3d39464df155c031e8d50"
   },
   "phase2d_attempt": {
-    "status": "STOPPED_BEFORE_FRAME_DB_WRITE",
-    "reason": "live getAirportCoverage() returned controller shape {feeds,all}, while frame owner incorrectly consumed {universe,universeUnion}; fixed on main with explicit fail-closed adapter and regression tests",
+    "status": "STOPPED_AT_SCHEMA_PREFLIGHT_BEFORE_FRAME_DB_WRITE",
+    "reason": "the earlier getAirportCoverage() controller/frame adapter mismatch is fixed; the resumed Phase-2D path then correctly stopped because production clean.adb_sampling_frame still has the legacy tier_source CHECK contract and has not yet applied exact migration 0057_phase2d_tier_source_contract.sql",
+    "required_repair": "run only scripts/v39_apply_phase2d_schema_contract_v39.ts under the explicit production target/apply confirmations, then verify scripts/v39_check_phase2d_schema_contract_v39.ts PASS",
     "recovery_mode": "resume-after-2c; preserve the successful Gate-1 and write-once reference freeze; do not rerun Gate-1",
-    "runtime_db_handling": "general application boot migrations removed from Phase-2D execution; required clean-table schema is verified read-only through V39_DATABASE_RUNTIME_URL before frame persistence"
+    "runtime_db_handling": "general application migration/push commands are prohibited for this recovery; the guarded 0057 owner repair is the only intended schema mutation, followed by read-only runtime schema verification before frame persistence"
   },
   "offline_validation": {
     "last_complete_green_run_before_latest_plan_amendment": {
@@ -100,17 +101,18 @@
     },
     "phase2d_adapter_regression_commit": "261a5dcf9d4b82e1b046feac5961f34190ea0064",
     "phase2d_runtime_schema_safety_commit": "830f17a4d869c621873c9ee68e8d8a9ef2cc4002",
+    "phase2f_runtime_contract_test_fix_commit": "8172b1064f8a5941e72ed584c324fa1bbc7e3c23",
     "latest_head_revalidation": "IN_PROGRESS_AT_RECORD_TIME"
   },
   "execution_order": [
     "2A prerequisite-P production binding and cryptographic PASS — COMPLETE",
     "2B fresh Gate 1 coverage PASS — COMPLETE",
     "2C run-specific traffic/region reference freeze PASS — COMPLETE",
-    "2D rebuild and hash the final frame — CURRENT POINTER",
-    "2E write and verify the preprobe_reference_freeze_record",
+    "2D apply/verify exact production schema contract 0057, then rebuild and hash the final frame — CURRENT POINTER",
+    "2E write and verify the preprobe_reference_freeze_record and cryptographic handoff",
     "2F exact-authorized safety smoke then mandatory STOP/handoff",
-    "2G exact-authorized Gate-2 Stage 1 then handoff",
-    "2H exact-authorized Gate-2 Stage 2; Gate-2 PASS completes Phase 2",
+    "2G exact-authorized Gate-2 Stage 1 then promotion handoff",
+    "2H exact-authorized Gate-2 Stage 2; close the shared probe budget day; Gate-2 PASS completes Phase 2",
     "mandatory handoff before Phase 3"
   ],
   "prohibited_until_owned_gate": [
@@ -124,5 +126,5 @@
     "Gate-0.5 pilot",
     "Phase-6 start"
   ],
-  "historical_note": "Phase 2A passed live at 2026-09-13T06:18:48.231Z. Phase 2B Gate-1 passed at 2026-09-13T07:04:20.817Z and Phase 2C wrote the hash-locked run-specific reference freeze. The first Phase-2D attempt stopped before any final-frame DB write due to a controller/frame coverage-shape mismatch; the pointer is Phase 2D resume using the already-frozen 2B/2C chain."
+  "historical_note": "Phase 2A passed live at 2026-09-13T06:18:48.231Z. Phase 2B Gate-1 passed at 2026-09-13T07:04:20.817Z and Phase 2C wrote the hash-locked run-specific reference freeze. The first Phase-2D attempt stopped before any final-frame DB write on a coverage-shape adapter mismatch; that adapter was fixed. The resumed 2D path then stopped at the new schema preflight because production still has the legacy tier_source constraint. The current pointer is the guarded production 0057 schema-contract repair, followed by resume-after-2c; 2B/2C must not be rerun."
 }
