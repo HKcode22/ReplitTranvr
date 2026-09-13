@@ -7,7 +7,6 @@ import {
 import {
   assertProbeTimeClass,
   ensureProbeBudgetDay,
-  probeBudgetExposure,
   requireFrozenCandidate,
   PROBE_BUDGET_DAY_HARD_CAP,
   PROBE_STAGE1_TARGET_MINUTES,
@@ -61,6 +60,25 @@ async function assertR1Clean(): Promise<void> {
   if (foreign.length) throw new Error(`REFUSED_R1:${foreign.length}_ACTIVE_BILLABLE_SUBSCRIPTIONS`);
 }
 
+/**
+ * Safe-mode rows deliberately do not retain actual provider credit deltas.
+ * Their immutable reservation therefore remains the durable conservative
+ * exposure for that probe budget day. Legacy rows continue to use the maximum
+ * of their retained reservation/external/internal evidence.
+ */
+export async function prepaidSafeBudgetExposureV39(dayId: string, excludeProbeId: number | null = null): Promise<number> {
+  const result = await pool.query(
+    `SELECT COALESCE(sum(CASE
+       WHEN provider_content_safe_mode THEN reserved_credits
+       WHEN status='probing' THEN GREATEST(reserved_credits,COALESCE(credits_spent,0),COALESCE(internal_send_credits,0))
+       ELSE GREATEST(COALESCE(credits_spent,0),COALESCE(internal_send_credits,0)) END),0)::int n
+       FROM clean.adb_anchor_probe
+      WHERE probe_budget_day_id=$1 AND ($2::bigint IS NULL OR probe_id<>$2)`,
+    [dayId, excludeProbeId],
+  );
+  return Number(result.rows[0]?.n ?? 0);
+}
+
 async function reserveSafeProbe(input: ExecuteProbeInput, started: Date): Promise<number> {
   const runtime = input.artifacts.runtime;
   const candidate = requireFrozenCandidate(input.artifacts.preprobe, input.icao, input.allowReplacement);
@@ -79,13 +97,13 @@ async function reserveSafeProbe(input: ExecuteProbeInput, started: Date): Promis
     if (active.rowCount) throw new Error("REFUSED_PROBE_OVERLAP");
     const exposure = await client.query(
       `SELECT COALESCE(sum(CASE
-         WHEN status='probing' THEN reserved_credits
-         ELSE 0 END),0)::int n
+         WHEN provider_content_safe_mode THEN reserved_credits
+         WHEN status='probing' THEN GREATEST(reserved_credits,COALESCE(credits_spent,0),COALESCE(internal_send_credits,0))
+         ELSE GREATEST(COALESCE(credits_spent,0),COALESCE(internal_send_credits,0)) END),0)::int n
          FROM clean.adb_anchor_probe WHERE probe_budget_day_id=$1`,
       [runtime.probeBudgetDayId],
     );
-    const priorAggregateExposure = await probeBudgetExposure(runtime.probeBudgetDayId);
-    const conservativePrior = Math.max(Number(exposure.rows[0]?.n ?? 0), priorAggregateExposure);
+    const conservativePrior = Number(exposure.rows[0]?.n ?? 0);
     if (conservativePrior + reservation + runtime.unsettledBurstMarginCredits > PROBE_BUDGET_DAY_HARD_CAP) {
       throw new Error("REFUSED_PROBE_CAP");
     }
@@ -164,7 +182,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
   }
 
   const probeId = await reserveSafeProbe(input, started);
-  const priorExposure = await probeBudgetExposure(input.artifacts.runtime.probeBudgetDayId, probeId);
+  const priorExposure = await prepaidSafeBudgetExposureV39(input.artifacts.runtime.probeBudgetDayId, probeId);
   const settlement = {
     initialWaitSeconds: input.artifacts.runtime.settlementInitialWaitSeconds,
     pollIntervalSeconds: input.artifacts.runtime.settlementPollIntervalSeconds,
