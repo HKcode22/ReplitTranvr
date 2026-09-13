@@ -1,7 +1,7 @@
 {
   "authorizationId": "AUTH-20260913-G1B",
   "phaseGate": "Phase 2 / Gate 1",
-  "airportFilterWindow": "Documented-free AeroDataBox health coverage endpoints only: FlightSchedules, FlightLiveUpdates, AdsbUpdates; aggregate/hash evidence only; no FIDS, refill, subscription mutation, smoke, or probe",
+  "airportFilterWindow": "Documented-free AeroDataBox health coverage endpoints only: FlightSchedules, FlightLiveUpdates, AdsbUpdates; aggregate/hash evidence only; no FIDS; no refill; no subscription mutation; no smoke; no probe",
   "maxAlertCredits": null,
   "maxRestUnitsByCategory": null,
   "startNotBeforeUtc": "2026-09-13T06:30:00Z",
