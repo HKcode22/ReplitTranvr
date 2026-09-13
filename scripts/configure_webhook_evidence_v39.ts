@@ -38,6 +38,15 @@ function resolveBaseUrl(envText: string): string {
   return url.toString().replace(/\/$/, "");
 }
 
+function hasReplaySafeRawIdentity(rawSource: string): boolean {
+  // SQL formatting/whitespace is not semantically meaningful. The previous
+  // checker required an exact space after the comma and incorrectly rejected
+  // the real `ON CONFLICT (delivery_id,item_index) DO NOTHING` implementation.
+  const envelope = /ON\s+CONFLICT\s*\(\s*delivery_id\s*\)\s+DO\s+NOTHING/i.test(rawSource);
+  const item = /ON\s+CONFLICT\s*\(\s*delivery_id\s*,\s*item_index\s*\)\s+DO\s+NOTHING/i.test(rawSource);
+  return envelope && item;
+}
+
 async function main(): Promise<void> {
   let env = "";
   try { env = readFileSync(ENV_PATH, "utf8"); } catch { env = ""; }
@@ -64,7 +73,7 @@ async function main(): Promise<void> {
   const enforcesSecret = routes.includes("req.params.secret") && routes.includes("webhookSecret()");
   const prepaidRoute = routes.includes('/api/v1/webhooks/aerodatabox/:secret/prepaid/:sessionId');
   const raw = readFileSync(join(process.cwd(), "server", "lib", "disruption", "rawIngress_v3.ts"), "utf8");
-  const replaySafe = raw.includes("ON CONFLICT (delivery_id) DO NOTHING") && raw.includes("ON CONFLICT (delivery_id, item_index) DO NOTHING");
+  const replaySafe = hasReplaySafeRawIdentity(raw);
   if (!httpsOk || !hasSecretPath || !enforcesSecret || !prepaidRoute || !replaySafe) {
     throw new Error(`webhook verification failed https=${httpsOk} secretPath=${hasSecretPath} enforce=${enforcesSecret} prepaid=${prepaidRoute} replay=${replaySafe}`);
   }
