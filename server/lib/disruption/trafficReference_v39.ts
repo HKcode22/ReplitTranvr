@@ -1,6 +1,7 @@
 import { createHash } from "crypto";
 
 export type FrozenTrafficTier = "HUB" | "MID" | "REGIONAL";
+export type TrafficReferenceSemanticsV39 = "scheduled_commercial_service" | "observed_commercial_movements";
 
 export interface FrozenTrafficAirportRow {
   icao: string;
@@ -14,6 +15,8 @@ export interface FrozenTrafficAirportRow {
   undirected_degree: number | null;
   effective_carriers: number | null;
   intl_share: number | null;
+  /** Optional source-quality diagnostic; never used to invent a missing carrier metric. */
+  carrier_coverage_share?: number | null;
 }
 
 export interface FrozenTrafficReferenceV39 {
@@ -26,6 +29,11 @@ export interface FrozenTrafficReferenceV39 {
   reference_period_end: string;
   traffic_metric_name: string;
   traffic_metric_units: string;
+  /** Explicitly distinguishes a schedule source from ADS-B/flight-list observations. */
+  reference_semantics?: TrafficReferenceSemanticsV39;
+  /** Source-specific freeze-age cap; default legacy rule remains 30 days. */
+  reference_max_age_days?: number;
+  reference_freshness_basis?: string;
   hub_cut_metric: number;
   tier_cut_rule: string;
   raw_reference_sha256: string;
@@ -85,6 +93,15 @@ export function verifyFrozenTrafficReference(ref: FrozenTrafficReferenceV39): Tr
   ] as const) {
     if (!String(value ?? "").trim()) failures.push(`${name}-missing`);
   }
+  if (ref.reference_semantics !== undefined && !["scheduled_commercial_service", "observed_commercial_movements"].includes(ref.reference_semantics)) {
+    failures.push("reference-semantics-invalid");
+  }
+  if (ref.reference_max_age_days !== undefined && (!Number.isInteger(ref.reference_max_age_days) || ref.reference_max_age_days < 1 || ref.reference_max_age_days > 93)) {
+    failures.push("reference-max-age-days-invalid");
+  }
+  if (ref.reference_max_age_days !== undefined && !String(ref.reference_freshness_basis ?? "").trim()) {
+    failures.push("reference-freshness-basis-missing");
+  }
   if (!DATE.test(ref.traffic_retrieval_date ?? "")) failures.push("traffic-retrieval-date-invalid");
   if (!DATE.test(ref.reference_period_start ?? "") || !DATE.test(ref.reference_period_end ?? "")) {
     failures.push("reference-period-invalid");
@@ -108,12 +125,13 @@ export function verifyFrozenTrafficReference(ref: FrozenTrafficReferenceV39): Tr
     if (!finiteNonnegative(row.traffic_metric_value)) failures.push(`traffic-invalid:${icao}`);
     if (!["HUB", "MID", "REGIONAL"].includes(row.tier)) failures.push(`tier-invalid:${icao}`);
     if (!ISO2.test(String(row.country_iso2 ?? "").trim().toUpperCase())) failures.push(`country-invalid:${icao}`);
-    if (row.longitude_e !== null && (typeof row.longitude_e !== "number" || !Number.isFinite(row.longitude_e) || row.longitude_e < -180 || row.longitude_e > 180)) {
-      failures.push(`longitude-invalid:${icao}`);
-    }
+    if (row.longitude_e !== null && (typeof row.longitude_e !== "number" || !Number.isFinite(row.longitude_e) || row.longitude_e < -180 || row.longitude_e > 180)) failures.push(`longitude-invalid:${icao}`);
     if (!nullableNonnegative(row.out_degree) || !nullableNonnegative(row.in_degree) || !nullableNonnegative(row.undirected_degree)) failures.push(`degree-invalid:${icao}`);
     if (!nullableNonnegative(row.effective_carriers)) failures.push(`effective-carriers-invalid:${icao}`);
     if (row.intl_share !== null && (typeof row.intl_share !== "number" || !Number.isFinite(row.intl_share) || row.intl_share < 0 || row.intl_share > 1)) failures.push(`intl-share-invalid:${icao}`);
+    if (row.carrier_coverage_share !== undefined && row.carrier_coverage_share !== null && (typeof row.carrier_coverage_share !== "number" || !Number.isFinite(row.carrier_coverage_share) || row.carrier_coverage_share < 0 || row.carrier_coverage_share > 1)) {
+      failures.push(`carrier-coverage-share-invalid:${icao}`);
+    }
   }
 
   if (Array.isArray(ref.airports) && ref.airports.length > 0) {
