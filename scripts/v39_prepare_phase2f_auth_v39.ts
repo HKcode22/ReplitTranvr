@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { mkdirSync, writeFileSync } from "fs";
 import { dirname, resolve } from "path";
-import { loadPreprobeHandoffBindingV39 } from "../server/lib/disruption/phase2Handoff_v39";
+import { loadPhase2FSmokeRuntimeV39 } from "../server/lib/disruption/phase2SmokeRuntime_v39";
 import type { AuthRecord } from "../server/lib/disruption/authRecord_v39";
 
 const PHASE = "Phase 2 / safety smoke";
@@ -37,8 +37,16 @@ function main(): void {
   const expMs = Date.parse(expires);
   if (!Number.isFinite(startMs) || !Number.isFinite(expMs) || expMs <= startMs) throw new Error("INVALID:start/expiry window");
   const out = resolve(value("--out"));
-  const preprobePath = optional("--preprobe") ?? DEFAULT_PREPROBE;
-  const binding = loadPreprobeHandoffBindingV39(preprobePath);
+  const preprobePath = resolve(optional("--preprobe") ?? DEFAULT_PREPROBE);
+  const runtimePath = resolve(value("--runtime-file"));
+  const runtimeSha = value("--runtime-sha").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(runtimeSha)) throw new Error("INVALID:--runtime-sha");
+  const runtime = loadPhase2FSmokeRuntimeV39({
+    runtimePath,
+    expectedFileSha256: runtimeSha,
+    preprobePath,
+  });
+  const binding = runtime.preprobe;
   if (!binding.artifact.shortlist.some((candidate) => candidate.icao === icao)) {
     throw new Error(`REFUSED:SMOKE_ICAO_NOT_IN_FROZEN_SHORTLIST:${icao}`);
   }
@@ -52,7 +60,7 @@ function main(): void {
     startNotBeforeUtc: new Date(startMs).toISOString(),
     expiresAtUtc: new Date(expMs).toISOString(),
     cleanupOwner,
-    predecessorEvidenceIds: [binding.evidenceId],
+    predecessorEvidenceIds: [binding.evidenceId, runtime.evidenceId],
   };
   const raw = JSON.stringify(record, null, 2) + "\n";
   mkdirSync(dirname(out), { recursive: true });
@@ -68,11 +76,14 @@ function main(): void {
     start_not_before_utc: record.startNotBeforeUtc,
     expires_at_utc: record.expiresAtUtc,
     cleanup_owner: cleanupOwner,
-    predecessor_evidence_id: binding.evidenceId,
+    predecessor_evidence_ids: record.predecessorEvidenceIds,
     preprobe_artifact_sha256: binding.artifactSha256,
     preprobe_file_sha256: binding.fileSha256,
+    smoke_runtime_artifact_sha256: runtime.runtime.artifact_sha256,
+    smoke_runtime_file_sha256: runtime.fileSha256,
+    smoke_runtime_binding_sha256: runtime.bindingSha256,
     auth_artifact_sha256: sha(raw),
-    next: "Human reviews exact JSON and SHA, then runs the Phase-2F approval helper with --expected-sha",
+    next: "Human reviews exact JSON and SHA, then runs the Phase-2F approval helper with --expected-sha and the same runtime file/SHA",
   }, null, 2));
 }
 
