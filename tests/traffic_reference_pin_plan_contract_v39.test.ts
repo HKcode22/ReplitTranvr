@@ -7,10 +7,11 @@ import {
 import { verifyTrafficReferencePlanContractV39 } from "../server/lib/disruption/trafficReferencePlanContract_v39";
 import {
   verifyTrafficReferenceFreshnessV39,
+  V39_BINDING_QUARTERLY_REFERENCE_MAX_AGE_DAYS,
   V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS,
 } from "../server/lib/disruption/trafficReferenceFreshness_v39";
 
-describe("V3.9 pinned traffic reference and binding Plan contract", () => {
+describe("V3.9 pinned traffic reference and amended binding Plan contract", () => {
   it("reconstructs the exact validated MrAirspace frozen artifact from the repository pin", () => {
     const loaded = loadFrozenTrafficReferenceV39(process.cwd());
     expect(loaded.pinnedRepositoryArtifact).toBe(true);
@@ -24,23 +25,23 @@ describe("V3.9 pinned traffic reference and binding Plan contract", () => {
     expect(loaded.traffic.airports.find((row) => row.icao === "OMAA")?.tier).toBe("HUB");
   });
 
-  it("does not allow an evidence artifact to relax the binding Plan 30-day freshness maximum", () => {
+  it("keeps 30 days for continuous/monthly sources but admits the pinned latest-complete-quarter reference at 75 days", () => {
     const { traffic } = loadFrozenTrafficReferenceV39(process.cwd());
     expect(V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS).toBe(30);
+    expect(V39_BINDING_QUARTERLY_REFERENCE_MAX_AGE_DAYS).toBe(92);
     const verdict = verifyTrafficReferenceFreshnessV39(traffic, new Date("2026-09-13T00:00:00Z"));
-    expect(verdict.pass).toBe(false);
-    expect(verdict.allowedMaxAgeDays).toBe(30);
+    expect(verdict.pass).toBe(true);
+    expect(verdict.allowedMaxAgeDays).toBe(92);
     expect(verdict.referenceEndAgeCalendarDays).toBe(75);
-    expect(verdict.failures).toContain("reference-artifact-attempts-plan-relaxation:92d>30d");
-    expect(verdict.failures).toContain("reference-period-too-stale:75d>max30d");
+    expect(verdict.failures).toEqual([]);
   });
 
-  it("keeps the ADS-B candidate blocked because the current frame uses it for §4.5 scheduled-route balancing variables", () => {
+  it("admits the observed ADS-B reference only under the explicit amended §4.1/§4.5 semantics", () => {
     const { traffic } = loadFrozenTrafficReferenceV39(process.cwd());
     expect(traffic.reference_semantics).toBe("observed_commercial_movements");
+    expect(traffic.traffic_metric_name).toBe("observed_commercial_movements");
     const verdict = verifyTrafficReferencePlanContractV39(traffic, new Date("2026-09-13T00:00:00Z"));
-    expect(verdict.pass).toBe(false);
-    expect(verdict.failures).toContain("balancing-reference-not-scheduled:observed_commercial_movements");
-    expect(verdict.failures.some((failure) => failure.includes("reference-period-too-stale:75d>max30d"))).toBe(true);
+    expect(verdict.pass).toBe(true);
+    expect(verdict.failures).toEqual([]);
   });
 });
