@@ -1,17 +1,10 @@
 /**
- * V3.9 prerequisite-P retention expiry operator.
+ * V3.9 retention expiry operator.
  *
- * Safe default: DRY_RUN. No provider network calls are made by this command.
- * APPLY remains fail-closed inside retentionExpiry_v39.ts and needs:
- *   V39_RETENTION_APPLY_ARMED=1
- *   verified V39_RETENTION_MATRIX_EVIDENCE
- *   verified V39_RETENTION_DEPLOYMENT_EVIDENCE
- *   configured TTLs matching that deployment evidence
- *
- * The single operator covers primary ingress/latest-state content, temporary
- * provider identity/schedule linkage, and provider-native account/subscription
- * fields embedded in project ledgers. One bounded command prevents an operator
- * from accidentally running only part of the required retention work.
+ * Safe default: DRY_RUN. APPLY remains fail-closed in the underlying owners.
+ * One bounded command owns every presently implemented expiry surface:
+ * logged provider fields, temporary identity/account fields, and independently
+ * deletable App-Storage provider blobs used by the isolated prepaid runtime.
  */
 import { pathToFileURL } from "url";
 import {
@@ -28,6 +21,11 @@ import {
   collectProviderAccountExpiryCandidates,
   type ProviderAccountExpiryCandidate,
 } from "../server/lib/disruption/providerAccountExpiry_v39";
+import {
+  applyExpiredProviderBlobsV39,
+  collectExpiredProviderBlobsV39,
+  type ProviderBlobExpiryCandidateV39,
+} from "../server/lib/disruption/providerBlobExpiry_v39";
 import { v39Pool } from "../server/lib/disruption/db_v39";
 
 export interface RetentionCliOptions {
@@ -50,7 +48,6 @@ export function parseRetentionCliArgs(argv: string[]): RetentionCliOptions {
   let limit = 100;
   let rawRetentionHours: number | undefined;
   let fidsRetentionHours: number | undefined;
-
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--apply") apply = true;
@@ -70,7 +67,6 @@ export function parseRetentionCliArgs(argv: string[]): RetentionCliOptions {
     } else if (arg === "--help" || arg === "-h") throw new Error("HELP");
     else throw new Error(`unknown argument: ${arg}`);
   }
-
   return { apply, limit, rawRetentionHours, fidsRetentionHours };
 }
 
@@ -87,31 +83,32 @@ function safeBaseCandidate(candidate: RetentionExpiryResult["candidates"][number
     payload_hash: candidate.payloadHash ?? null,
   };
 }
-
 function safeIdentityCandidate(candidate: ProviderIdentityExpiryCandidate): Record<string, unknown> {
   return {
-    record_id: candidate.recordId,
-    source_table: candidate.sourceTable,
-    content_class: candidate.contentClass,
-    content_columns: candidate.contentColumns,
-    age_timestamp_utc: candidate.ageTimestampUtc,
-    expires_at_utc: candidate.expiresAtUtc,
-    retention_hours: candidate.retentionHours,
-    content_hash: candidate.contentHash,
-    payload_hash: null,
+    record_id: candidate.recordId, source_table: candidate.sourceTable,
+    content_class: candidate.contentClass, content_columns: candidate.contentColumns,
+    age_timestamp_utc: candidate.ageTimestampUtc, expires_at_utc: candidate.expiresAtUtc,
+    retention_hours: candidate.retentionHours, content_hash: candidate.contentHash, payload_hash: null,
   };
 }
-
 function safeAccountCandidate(candidate: ProviderAccountExpiryCandidate): Record<string, unknown> {
   return {
-    record_id: candidate.recordId,
-    source_table: candidate.sourceTable,
+    record_id: candidate.recordId, source_table: candidate.sourceTable,
+    content_class: candidate.contentClass, content_columns: candidate.contentColumns,
+    age_timestamp_utc: candidate.ageTimestampUtc, expires_at_utc: candidate.expiresAtUtc,
+    retention_hours: candidate.retentionHours, content_hash: candidate.contentHash, payload_hash: null,
+  };
+}
+function safeBlobCandidate(candidate: ProviderBlobExpiryCandidateV39): Record<string, unknown> {
+  return {
+    record_id: candidate.blobRefId,
+    source_table: "clean.provider_content_blob_ref",
     content_class: candidate.contentClass,
-    content_columns: candidate.contentColumns,
-    age_timestamp_utc: candidate.ageTimestampUtc,
+    content_columns: ["external_app_storage_object"],
+    age_timestamp_utc: null,
     expires_at_utc: candidate.expiresAtUtc,
-    retention_hours: candidate.retentionHours,
-    content_hash: candidate.contentHash,
+    retention_hours: candidate.ref.retentionHours,
+    content_hash: candidate.contentSha256,
     payload_hash: null,
   };
 }
@@ -120,30 +117,36 @@ function safeResult(
   result: RetentionExpiryResult,
   identityCandidates: readonly ProviderIdentityExpiryCandidate[],
   accountCandidates: readonly ProviderAccountExpiryCandidate[],
+  blobCandidates: readonly ProviderBlobExpiryCandidateV39[],
   identityApply?: { runId: string; expiredCount: number },
   accountApply?: { runId: string; expiredCount: number },
+  blobApply?: { runId: string; expiredCount: number },
 ): Record<string, unknown> {
   return {
     mode: result.mode,
     run_id: result.runId,
     provider_identity_run_id: identityApply?.runId ?? null,
     provider_account_run_id: accountApply?.runId ?? null,
+    provider_blob_run_id: blobApply?.runId ?? null,
     raw_cutoff_utc: result.cutoffUtc,
     fids_cutoff_utc: result.fidsCutoffUtc,
     retention_hours: result.retentionHours,
-    candidate_count: result.candidates.length + identityCandidates.length + accountCandidates.length,
+    candidate_count: result.candidates.length + identityCandidates.length + accountCandidates.length + blobCandidates.length,
     base_candidate_count: result.candidates.length,
     provider_identity_candidate_count: identityCandidates.length,
     provider_account_candidate_count: accountCandidates.length,
-    expired_count: result.expiredCount + (identityApply?.expiredCount ?? 0) + (accountApply?.expiredCount ?? 0),
+    provider_blob_candidate_count: blobCandidates.length,
+    expired_count: result.expiredCount + (identityApply?.expiredCount ?? 0) + (accountApply?.expiredCount ?? 0) + (blobApply?.expiredCount ?? 0),
     base_expired_count: result.expiredCount,
     provider_identity_expired_count: identityApply?.expiredCount ?? 0,
     provider_account_expired_count: accountApply?.expiredCount ?? 0,
+    provider_blob_expired_count: blobApply?.expiredCount ?? 0,
     evidence_hash: result.evidenceHash,
     candidates: [
       ...result.candidates.map(safeBaseCandidate),
       ...identityCandidates.map(safeIdentityCandidate),
       ...accountCandidates.map(safeAccountCandidate),
+      ...blobCandidates.map(safeBlobCandidate),
     ],
   };
 }
@@ -162,10 +165,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   try {
     options = parseRetentionCliArgs(argv);
   } catch (error: any) {
-    if (String(error?.message ?? error) === "HELP") {
-      console.log(usage());
-      return 0;
-    }
+    if (String(error?.message ?? error) === "HELP") { console.log(usage()); return 0; }
     console.error(`REFUSED: ${String(error?.message ?? error)}`);
     console.error(usage());
     return 2;
@@ -173,8 +173,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
 
   try {
     const now = new Date();
-    // In APPLY mode this first call validates matrix/deployment/TTL evidence
-    // before either of the additional destructive owners can run.
+    // This call is intentionally first: APPLY validates prerequisite-P
+    // deployment/matrix evidence before any destructive owner can run.
     const result = await runRetentionExpiry({
       apply: options.apply,
       now,
@@ -185,23 +185,20 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
 
     let remaining = Math.max(0, options.limit - result.candidates.length);
     const identityCandidates = remaining > 0
-      ? await collectProviderIdentityExpiryCandidates(now, result.retentionHours, remaining)
-      : [];
+      ? await collectProviderIdentityExpiryCandidates(now, result.retentionHours, remaining) : [];
     remaining = Math.max(0, remaining - identityCandidates.length);
-
     const accountCandidates = remaining > 0
-      ? await collectProviderAccountExpiryCandidates(now, result.retentionHours, remaining)
-      : [];
+      ? await collectProviderAccountExpiryCandidates(now, result.retentionHours, remaining) : [];
+    remaining = Math.max(0, remaining - accountCandidates.length);
+    const blobCandidates = remaining > 0
+      ? await collectExpiredProviderBlobsV39(now, remaining) : [];
 
-    const identityApply = options.apply
-      ? await applyProviderIdentityExpiryCandidates(identityCandidates)
-      : undefined;
-    const accountApply = options.apply
-      ? await applyProviderAccountExpiryCandidates(accountCandidates)
-      : undefined;
+    const identityApply = options.apply ? await applyProviderIdentityExpiryCandidates(identityCandidates) : undefined;
+    const accountApply = options.apply ? await applyProviderAccountExpiryCandidates(accountCandidates) : undefined;
+    const blobApply = options.apply ? await applyExpiredProviderBlobsV39(blobCandidates) : undefined;
 
     console.log(JSON.stringify(
-      safeResult(result, identityCandidates, accountCandidates, identityApply, accountApply),
+      safeResult(result, identityCandidates, accountCandidates, blobCandidates, identityApply, accountApply, blobApply),
       null,
       2,
     ));
