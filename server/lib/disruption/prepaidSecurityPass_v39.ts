@@ -13,6 +13,8 @@ export interface PrepaidSecurityPassArtifactV39 {
   provider_content_inventory_sha256: string;
   /** Exact Gate-1 + isolated smoke/probe content scope certified by prerequisite P. */
   phase2_prepaid_content_scope_sha256: string;
+  db_role_evidence_sha256: string;
+  webhook_security_evidence_sha256: string;
   retention_deployment_evidence_sha256: string;
   phase2_retention_scope_evidence_sha256: string;
   artifact_sha256: string;
@@ -39,6 +41,8 @@ export function currentProviderContentInventorySha256(): string {
 
 export function buildPrepaidSecurityPassArtifact(input: {
   verifiedAtUtc: string;
+  dbRoleEvidenceRaw: string;
+  webhookSecurityEvidenceRaw: string;
   retentionDeploymentEvidenceRaw: string;
   phase2RetentionScopeEvidenceRaw: string;
   root?: string;
@@ -51,6 +55,8 @@ export function buildPrepaidSecurityPassArtifact(input: {
     plan_sha256: currentPlanSha256(input.root),
     provider_content_inventory_sha256: currentProviderContentInventorySha256(),
     phase2_prepaid_content_scope_sha256: PHASE2_PREPAID_CONTENT_SCOPE_SHA256,
+    db_role_evidence_sha256: sha256Text(input.dbRoleEvidenceRaw),
+    webhook_security_evidence_sha256: sha256Text(input.webhookSecurityEvidenceRaw),
     retention_deployment_evidence_sha256: sha256Text(input.retentionDeploymentEvidenceRaw),
     phase2_retention_scope_evidence_sha256: sha256Text(input.phase2RetentionScopeEvidenceRaw),
   };
@@ -66,6 +72,8 @@ export function verifyPrepaidSecurityPassArtifact(value: unknown, root = process
   if (candidate.provider_content_inventory_sha256 !== currentProviderContentInventorySha256()) return false;
   if (candidate.phase2_prepaid_content_scope_sha256 !== PHASE2_PREPAID_CONTENT_SCOPE_SHA256) return false;
   for (const field of [
+    "db_role_evidence_sha256",
+    "webhook_security_evidence_sha256",
     "retention_deployment_evidence_sha256",
     "phase2_retention_scope_evidence_sha256",
     "artifact_sha256",
