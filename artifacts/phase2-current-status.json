@@ -1,23 +1,23 @@
 {
-  "schema_version": "v3.9-phase2-current-status-7",
-  "recorded_at_utc": "2026-09-13T14:54:24.000Z",
+  "schema_version": "v3.9-phase2-current-status-8",
+  "recorded_at_utc": "2026-09-13T15:16:38.000Z",
   "binding_plan": "SEPmd/V3.9_DataCollectPlan_f.8.md",
   "implementation_log": "SEPmd/V3.9_IMPLEMENTATION_LOG.md#17-phase-2--prerequisite-p--gate-1--referencesframe--pre-probe-freeze--safety-smoke--gate-2",
   "branch": "main",
-  "current_execution_pointer": "PHASE_2D_FINAL_FRAME_RESULT_PENDING_AFTER_REFRESHED_2B_2C_CHAIN",
+  "current_execution_pointer": "PHASE_2F_MANDATORY_SAFETY_SMOKE_PREPARE_RUNTIME_AND_EXACT_AUTH",
   "status": {
     "phase0": "PASS",
     "phase1_gate0": "PASS_EXISTING_EVIDENCE",
     "phase2a_prerequisite_p": "PASS_LIVE_CRYPTOGRAPHIC",
     "phase2b_gate1": "PASS_LIVE_REFRESHED_DOCUMENTED_FREE_COVERAGE",
     "phase2c_reference_rules": "PASS_REFRESHED_RUN_SPECIFIC_REFERENCE_FROZEN",
-    "phase2d_final_frame": "SCHEMA_0057_PASS_EXECUTION_RESULT_PENDING_AFTER_REFRESH",
-    "phase2e_preprobe_freeze": "IMPLEMENTED_WAITING_ON_2D_RESULT",
-    "phase2f_safety_smoke": "IMPLEMENTED_NOT_RUN_EXACT_AUTH_REQUIRED_AFTER_2E",
-    "phase2g_gate2_stage1": "IMPLEMENTED_NOT_RUN_WAITING_ON_2F_HANDOFF_AUTH",
-    "phase2h_gate2_stage2": "IMPLEMENTED_NOT_RUN_WAITING_ON_2G_HANDOFF_AUTH",
+    "phase2d_final_frame": "PASS_LIVE_FINAL_FRAME_PERSISTED_AND_HASHED",
+    "phase2e_preprobe_freeze": "PASS_LIVE_HASH_LOCKED_AND_HANDOFF_RECORDED",
+    "phase2f_safety_smoke": "IMPLEMENTED_NOT_RUN_EXACT_AUTH_REQUIRED_CURRENT_POINTER",
+    "phase2g_gate2_stage1": "IMPLEMENTED_NOT_RUN_WAITING_ON_2F_PASS_HANDOFF_AUTH",
+    "phase2h_gate2_stage2": "IMPLEMENTED_NOT_RUN_WAITING_ON_2G_PROMOTION_HANDOFF_AUTH",
     "phase2_complete": false,
-    "paid_work": "NO_GO_UNTIL_2E_COMPLETE_AND_OWNED_EXACT_AUTH_FOR_2F",
+    "paid_work": "NO_GO_UNTIL_PHASE2F_RUNTIME_IS_FROZEN_AND_EXACT_PHASE2F_AUTH_IS_HUMAN_REVIEWED_AND_APPROVED",
     "phase6_retention_inventory": "DEFERRED_UNRESOLVED_SEPARATE_FROM_PHASE2_P"
   },
   "phase2a_prerequisite_p": {
@@ -30,7 +30,6 @@
     "phase2_prepaid_content_scope_sha256": "0833f4c991ea009c2b089ed6b34425ac1f425f5897375bfd304fd1a112de953b",
     "runtime_role": "travnr_v39_runtime_recovery1",
     "plaintext_architecture": "dedicated Replit App Storage raw blobs + PostgreSQL UNLOGGED prepaid runtime",
-    "database_pitr": "may remain enabled because Phase-2 prepaid plaintext is excluded from logged PostgreSQL by design",
     "live_verifier_checks": {
       "least_privilege_db_tls": "PASS",
       "webhook_tls_auth_replay": "PASS",
@@ -40,10 +39,9 @@
       "incident_stop_refusal": "PASS",
       "prepaid_security_retention": "PASS"
     },
-    "remaining_for_phase2a": [],
     "deployment_handoff_before_paid_smoke_or_probe": [
-      "publish the generated restricted V39_DATABASE_RUNTIME_URL to the production deployment without exposing its value",
-      "publish the generated AERODATABOX_WEBHOOK_SECRET to the production deployment without exposing its value and ensure the deployed route uses the same secret"
+      "production deployment must receive the generated restricted V39_DATABASE_RUNTIME_URL without exposing its value",
+      "production deployment must receive AERODATABOX_WEBHOOK_SECRET and the deployed prepaid route must use the same secret"
     ]
   },
   "phase2b_gate1": {
@@ -55,30 +53,18 @@
     "provider_pin": "aerodatabox.p.rapidapi.com/health:v1",
     "source_list_handling": "transient-not-committed",
     "superseded_evidence_id": "GATE-1-20260913-001",
-    "superseded_fetched_at_utc": "2026-09-13T07:04:20.817Z",
     "superseded_artifact_sha256": "7d0e3b7d77966ac3f31b45ab10ea1c44901df4d01cf3d39464df155c031e8d50",
-    "superseded_universe_count": 4346,
-    "superseded_catalog_in_universe": 266,
-    "superseded_universe_not_in_catalog_count": 4080,
-    "superseded_per_feed_counts": {
-      "FlightSchedules": 3325,
-      "FlightLiveUpdates": 1451,
-      "AdsbUpdates": 1756
-    },
     "drift_detection": {
-      "detected_during_phase2d": true,
       "error": "BLOCKED:COVERAGE_FEED_DRIFT_SINCE_GATE1:FlightLiveUpdates",
-      "interpretation": "the normalized sorted FlightLiveUpdates membership hash changed after Gate 1; the all-feed union hash passed its preceding equality check",
-      "paid_or_mutating_provider_action": false,
-      "recovery_status": "PASS_SUPERSEDED_PRE_2D"
+      "recovery_status": "PASS_SUPERSEDED_PRE_2D",
+      "supersession_receipt_sha256": "f132e333c916b86c6aced224a7066202114f6e204f7131d140dc3082aabcc508",
+      "paid_or_mutating_provider_action": false
     }
   },
   "phase2c_reference": {
     "source": "MrAirspace aircraft-flight-schedules / ADSB.lol observed movements + OurAirports metadata",
     "semantics": "observed_commercial_movements",
-    "binding_plan_amendment": "V3.9-f.8 Phase-2 open-reference correction dated 2026-09-13 in Plan §§4.1/4.5",
     "reference_period": "2025-07-01..2026-06-30",
-    "source_cadence_rule": "latest complete four consecutive quarterly extracts; <=92 UTC calendar days at freeze",
     "candidate_frozen_json_sha256": "e7d043a0bb21ba32a939cc54cf5798bff8eabc19611eb01fc98fabf4fd1a95c1",
     "raw_reference_sha256": "8dd10dd0b5e0e9f493ad823a37f0852b6882fef49f45ee7965af557408264424",
     "tier_hash": "18cd871421220e72cd96044ae790fc95bdae1d69b9f9e43ac35566fd786eb7dc",
@@ -88,65 +74,87 @@
     "mid_count": 574,
     "regional_count": 1606,
     "hub_cut_metric": 64152,
-    "wsss_rank": 31,
-    "omaa_rank": 104,
     "run_specific_freeze_status": "PASS_REFRESHED_AFTER_GATE1_DRIFT",
     "run_specific_freeze_artifact_sha256": "8e35ceaa9a0432d08fdde85fc305e7f37fb24fc91c5b13503f776566b0a12b34",
     "bound_gate1_artifact_sha256": "061ff216eee8c8c7e150c8891f8ef79e4c88defb5e8da18be72e27f7490f8014",
     "superseded_run_specific_freeze_artifact_sha256": "8850513781ff4db69fb95ffcf4563eeb8ee30b3225701fd9be22ebfdda0c402a",
-    "superseded_bound_gate1_artifact_sha256": "7d0e3b7d77966ac3f31b45ab10ea1c44901df4d01cf3d39464df155c031e8d50",
-    "supersession_receipt_sha256": "f132e333c916b86c6aced224a7066202114f6e204f7131d140dc3082aabcc508",
-    "history_directory": "artifacts/phase2-history/coverage-drift/7d0e3b7d77966ac3f31b45ab10ea1c44901df4d01cf3d39464df155c031e8d50",
-    "refresh_rule": "old Gate-1/reference evidence preserved; canonical reference recreated only after unchanged Plan/P/traffic/tier/region inputs were verified; no preprobe existed"
+    "history_directory": "artifacts/phase2-history/coverage-drift/7d0e3b7d77966ac3f31b45ab10ea1c44901df4d01cf3d39464df155c031e8d50"
   },
-  "phase2d_attempt": {
-    "status": "EXECUTION_RESULT_PENDING_AFTER_REFRESHED_CHAIN",
+  "phase2d_final_frame": {
+    "implementation": "DONE_TESTED_EXECUTED_PASS",
+    "schema_contract": "0057",
     "schema_0057_apply": "PASS_APPLIED",
-    "schema_0057_migration_sha256": "2c5706d83574495319d052c50afde4bf649b4a13d2b68e135088f7e2fe3ad76f",
     "schema_0057_runtime_verify": "PASS",
-    "runtime_role": "travnr_v39_runtime_recovery1",
-    "refreshed_gate1_artifact_sha256": "061ff216eee8c8c7e150c8891f8ef79e4c88defb5e8da18be72e27f7490f8014",
-    "refreshed_reference_freeze_artifact_sha256": "8e35ceaa9a0432d08fdde85fc305e7f37fb24fc91c5b13503f776566b0a12b34",
-    "last_observed_terminal_stage": "[2D] Rebuild/hash the final frame from frozen Gate-1 coverage + frozen reference",
-    "frame_persistence_result": "NOT_YET_OBSERVED_IN_CHAT",
-    "runtime_db_handling": "0057 is complete; no further schema mutation is authorized for this recovery"
+    "frame_version": "frame_02ec6e78ba1fe3c2",
+    "frame_hash": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
+    "frame_rows": 4346,
+    "tier_verified": 2123,
+    "missing_reference": 2223,
+    "mapped_dual_eligible": 1125,
+    "traffic_reference_hash": "8dd10dd0b5e0e9f493ad823a37f0852b6882fef49f45ee7965af557408264424",
+    "tier_hash": "18cd871421220e72cd96044ae790fc95bdae1d69b9f9e43ac35566fd786eb7dc",
+    "region_mapping_version": "country-macro-region@v2",
+    "region_mapping_hash": "4073cc05e958bf98b6501e418198305f80e7d17892318f6773d9e0aac9d3a764"
+  },
+  "phase2e_preprobe_freeze": {
+    "implementation": "DONE_TESTED_EXECUTED_PASS",
+    "status": "READY_FROZEN_PREPROBE_REFERENCE",
+    "artifact_sha256": "b8cbdbc937080e7fe8f31388adc964d3a2910a5f913b2bec6225d363a081c275",
+    "file_sha256": "b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870",
+    "binding_sha256": "643bf82fd98b3da416433077bb7e21dc231c07a2f34289245436ec160c7d8984",
+    "evidence_id": "RUN-20260913-643BF82FD98B3DA416433077BB7E21DC231C07A2F34289245436EC160C7D8984",
+    "frame_version": "frame_02ec6e78ba1fe3c2",
+    "frame_hash": "02ec6e78ba1fe3c2923d5a32cc7bd61ed6016a5ed4cfa13ce000a9f52db37c94",
+    "diagnostics_hash": "8454d9a25b5a930fbcd764ce93bbf2d1fe3194dcd61a52affd02c96f5f970c6f",
+    "shortlist_count": 12,
+    "replacement_count": 99,
+    "degree_cap": 66,
+    "carriers_cap": 8.553607697644942,
+    "handoff_status": "PASS_RECORDED"
+  },
+  "phase2f_safety_smoke": {
+    "implementation": "DONE_TESTED_OWNER",
+    "execution": "NOT_RUN",
+    "predecessor_preprobe_evidence_id": "RUN-20260913-643BF82FD98B3DA416433077BB7E21DC231C07A2F34289245436EC160C7D8984",
+    "requirements_before_paid_start": [
+      "freeze exact Phase-2F smoke runtime controls and record their hashes",
+      "prove published production deployment is using the restricted runtime DB credential and same webhook secret",
+      "create exact Phase-2F draft AUTH bound to preprobe + smoke-runtime evidence",
+      "human review exact ICAO, window minutes, Alert ceiling, REST allowance, start/expiry, cleanup owner, predecessor IDs, and exact AUTH SHA",
+      "approve exact reviewed SHA using the Phase-2F-only approval owner"
+    ],
+    "stage1_authorized": false,
+    "stage2_authorized": false
   },
   "offline_validation": {
-    "last_complete_green_run": {
+    "latest_complete_green_run": {
       "workflow_run_number": 374,
       "workflow_run_id": "34764013083",
       "commit": "a3c6c96a845884f4ed10ced987ef30b6d852a4d5",
       "result": "SUCCESS"
     },
-    "phase2d_adapter_regression_commit": "261a5dcf9d4b82e1b046feac5961f34190ea0064",
-    "phase2d_runtime_schema_safety_commit": "830f17a4d869c621873c9ee68e8d8a9ef2cc4002",
-    "phase2f_runtime_contract_test_fix_commit": "8172b1064f8a5941e72ed584c324fa1bbc7e3c23",
-    "coverage_drift_recovery_owner_commit": "1468603d1c704c9b4b6e25f606dea104aa786fa0",
-    "coverage_drift_runner_commit": "ff44703c7068efc824688e71c53b5d2540ca2acf",
-    "coverage_drift_regression_test_commit": "48b2d3ed3c70ee57097d6c39cc5d73914e8eba8d",
-    "latest_head_revalidation": "PASS"
+    "coverage_drift_recovery_regression": "PASS",
+    "phase2f_exact_auth_runtime_contract": "PASS"
   },
   "execution_order": [
     "2A prerequisite-P production binding and cryptographic PASS — COMPLETE",
-    "2B refreshed documented-free Gate 1 coverage PASS after preserving superseded evidence — COMPLETE",
-    "2C refreshed run-specific traffic/region reference freeze bound to refreshed Gate 1 — COMPLETE",
-    "2D production schema contract 0057 apply/verify — COMPLETE; final frame rebuild/hash — RESULT PENDING FROM LIVE RUN",
-    "2E write and verify the preprobe_reference_freeze_record and cryptographic handoff after 2D PASS",
-    "2F exact-authorized safety smoke then mandatory STOP/handoff",
-    "2G exact-authorized Gate-2 Stage 1 then promotion handoff",
-    "2H exact-authorized Gate-2 Stage 2; close the shared probe budget day; Gate-2 PASS completes Phase 2",
+    "2B refreshed documented-free Gate 1 coverage PASS — COMPLETE",
+    "2C refreshed run-specific traffic/region reference freeze PASS — COMPLETE",
+    "2D final frame persisted and hash-locked — COMPLETE",
+    "2E preprobe_reference_freeze_record + cryptographic handoff — COMPLETE",
+    "2F mandatory safety smoke — CURRENT POINTER; freeze runtime, verify deployment binding, obtain exact human-reviewed authorization, execute/settle/cleanup, then STOP/handoff",
+    "2G Gate-2 Stage 1 — only after 2F PASS/handoff and separate exact AUTH",
+    "2H Gate-2 Stage 2 — only after 2G promotion/handoff and separate exact AUTH; Gate-2 PASS completes Phase 2",
     "mandatory handoff before Phase 3"
   ],
   "prohibited_until_owned_gate": [
-    "paid FIDS",
     "credit refill",
-    "experimental subscription create/delete",
-    "safety smoke before 2A-2E and exact AUTH",
-    "Stage-1 probe before smoke PASS/handoff and exact AUTH",
-    "Stage-2 probe before Stage-1 PASS/handoff and exact AUTH",
-    "canary",
+    "safety smoke before exact Phase-2F AUTH",
+    "Stage-1 probe before smoke PASS/handoff and exact Stage-1 AUTH",
+    "Stage-2 probe before Stage-1 promotion/handoff and exact Stage-2 AUTH",
+    "Gate-3 canary",
     "Gate-0.5 pilot",
     "Phase-6 start"
   ],
-  "historical_note": "Phase 2A passed live at 2026-09-13T06:18:48.231Z. Gate-1 evidence GATE-1-20260913-001 and reference freeze 88505137... were later superseded before any 2D frame write after FlightLiveUpdates membership drift was detected. The guarded recovery preserved those artifacts, measured replacement Gate-1 evidence GATE-1-20260913-002 with artifact 061ff216..., recreated the reference freeze as 8e35ceaa..., and recorded supersession receipt f132e333.... Production migration 0057 and its restricted-runtime verifier both remain PASS. The refreshed runner has reached the live 2D final-frame build; no 2D PASS or failure result has yet been observed in chat, so 2E/2F are not claimed complete."
+  "historical_note": "Phase 2A passed live at 2026-09-13T06:18:48.231Z. Original Gate-1/reference evidence was safely superseded before 2D after documented-free FlightLiveUpdates membership drift. Replacement Gate-1 artifact 061ff216... and reference freeze 8e35ceaa... passed. Production schema contract 0057 passed. Live Phase 2D then persisted frame_02ec6e78ba1fe3c2 with hash 02ec6e78..., and Phase 2E wrote hash-locked preprobe artifact b8cbdbc9... with exactly 12 candidates plus 99 replacements and recorded evidence RUN-20260913-643BF82F.... Phase 2F is now the first incomplete subphase; no paid/mutating Phase-2F action is authorized by this status record."
 }
