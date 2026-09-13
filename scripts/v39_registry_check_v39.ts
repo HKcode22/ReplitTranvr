@@ -4,12 +4,8 @@
  * Checks both the legacy Phase-6 registry and the dedicated V3.9 runtime/P
  * registry extension. Secrets are counted present/absent but never printed.
  */
-import {
-  PHASE6_CONFIG_REGISTRY,
-} from "../server/lib/disruption/configRegistry_v3";
-import {
-  V39_RUNTIME_CONFIG_REGISTRY,
-} from "../server/lib/disruption/configRegistryRuntime_v39";
+import { PHASE6_CONFIG_REGISTRY } from "../server/lib/disruption/configRegistry_v3";
+import { V39_RUNTIME_CONFIG_REGISTRY } from "../server/lib/disruption/configRegistryRuntime_v39";
 import type { ConfigEntry } from "../server/lib/disruption/configRegistry_v3";
 
 const CURRENT_SCOPE_GATES = new Set(["all", "", "Phase 0", "PREP", "Phase-0"]);
@@ -51,10 +47,17 @@ function main(): void {
 
   const expectedV39Keys = [
     "V39_DATABASE_RUNTIME_URL",
+    "V39_DB_ROLE_EVIDENCE",
+    "V39_WEBHOOK_SECURITY_EVIDENCE",
+    "V39_PROVIDER_BLOB_MODE",
+    "V39_PROVIDER_BLOB_BUCKET_ID",
+    "V39_PREPAID_RAW_RETENTION_HOURS",
+    "V39_PHASE2_RETENTION_APPLY_ARMED",
+    "V39_PHASE2_RETENTION_SCOPE_EVIDENCE",
+    "V39_RETENTION_DEPLOYMENT_EVIDENCE",
     "V39_RAW_PROVIDER_RETENTION_HOURS",
     "V39_FIDS_RETENTION_HOURS",
     "V39_RETENTION_APPLY_ARMED",
-    "V39_RETENTION_DEPLOYMENT_EVIDENCE",
     "V39_RETENTION_MATRIX_EVIDENCE",
   ];
   const registered = new Set(registry.map((entry) => entry.key));
