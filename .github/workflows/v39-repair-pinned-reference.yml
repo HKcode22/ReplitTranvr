@@ -33,26 +33,27 @@ jobs:
           mkdir -p /tmp/v39-reference
           gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir /tmp/v39-reference
           test -f /tmp/v39-reference/traffic-reference-frozen.json
-      - name: Verify authoritative JSON and regenerate deterministic transport
+      - name: Verify authoritative JSON and regenerate exact deterministic transport
         run: |
           set -euo pipefail
-          raw=/tmp/v39-reference/traffic-reference-frozen.json
-          actual_json="$(sha256sum "$raw" | awk '{print $1}')"
-          test "$actual_json" = "$EXPECTED_JSON_SHA256"
-          gzip -n -9 -c "$raw" > /tmp/traffic-reference-frozen.json.gz
-          actual_gzip="$(sha256sum /tmp/traffic-reference-frozen.json.gz | awk '{print $1}')"
-          test "$actual_gzip" = "$EXPECTED_GZIP_SHA256"
-          base64 -w 0 /tmp/traffic-reference-frozen.json.gz > artifacts/traffic-reference-frozen.json.gz.b64
-          printf '\n' >> artifacts/traffic-reference-frozen.json.gz.b64
           python3 - <<'PY'
-          import base64,gzip,hashlib,pathlib
-          p=pathlib.Path('artifacts/traffic-reference-frozen.json.gz.b64')
-          encoded=''.join(p.read_text().split())
-          compressed=base64.b64decode(encoded, validate=True)
-          raw=gzip.decompress(compressed)
-          assert hashlib.sha256(compressed).hexdigest() == '63a314cb0d2105da8b76e590499c8b4d1c9602e1bdd11b88c7353dcc56513425'
-          assert hashlib.sha256(raw).hexdigest() == 'e7d043a0bb21ba32a939cc54cf5798bff8eabc19611eb01fc98fabf4fd1a95c1'
-          print('PASS: repaired transport reproduces both pinned hashes')
+          import base64, gzip, hashlib, pathlib, os
+          raw_path = pathlib.Path('/tmp/v39-reference/traffic-reference-frozen.json')
+          raw = raw_path.read_bytes()
+          expected_json = os.environ['EXPECTED_JSON_SHA256']
+          expected_gzip = os.environ['EXPECTED_GZIP_SHA256']
+          actual_json = hashlib.sha256(raw).hexdigest()
+          assert actual_json == expected_json, (actual_json, expected_json)
+          compressed = gzip.compress(raw, compresslevel=9, mtime=0)
+          actual_gzip = hashlib.sha256(compressed).hexdigest()
+          assert actual_gzip == expected_gzip, (actual_gzip, expected_gzip)
+          target = pathlib.Path('artifacts/traffic-reference-frozen.json.gz.b64')
+          target.write_text(base64.b64encode(compressed).decode('ascii') + '\n', encoding='ascii')
+          decoded = base64.b64decode(''.join(target.read_text().split()), validate=True)
+          restored = gzip.decompress(decoded)
+          assert hashlib.sha256(decoded).hexdigest() == expected_gzip
+          assert hashlib.sha256(restored).hexdigest() == expected_json
+          print(f'PASS: JSON={actual_json} gzip={actual_gzip} bytes={len(raw)} compressed={len(compressed)}')
           PY
       - name: Commit repaired transport if needed
         run: |
