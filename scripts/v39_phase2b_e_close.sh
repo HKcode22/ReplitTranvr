@@ -101,6 +101,9 @@ npx tsx scripts/build_final_frame_v39.ts
 printf '%s\n' "[2E] Write/reuse the hash-locked preprobe_reference_freeze_record"
 npx tsx scripts/v39_freeze_record_v39.ts preprobe
 
+printf '%s\n' "[2E-handoff] Bind the exact preprobe artifact/file hashes into the local evidence ledger"
+npx tsx scripts/v39_record_preprobe_handoff_v39.ts
+
 node --input-type=module <<'NODE'
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
