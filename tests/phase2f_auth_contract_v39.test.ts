@@ -11,12 +11,12 @@ const handoff = readFileSync(join(root, "scripts", "v39_record_phase2_smoke_hand
 
 describe("Phase 2F exact authorization/runtime contract", () => {
   it("freezes smoke controls as evidence without creating paid authorization", () => {
-    expect(runtime).toContain('required("--pre-smoke-margin")');
-    expect(runtime).toContain('required("--settlement-initial-wait-s")');
-    expect(runtime).toContain('required("--settlement-poll-s")');
-    expect(runtime).toContain('required("--settlement-stable-reads")');
-    expect(runtime).toContain('required("--settlement-timeout-s")');
-    expect(runtime).toContain('required("--watchdog-poll-ms")');
+    expect(runtime).toContain('integer("--pre-smoke-margin", 0)');
+    expect(runtime).toContain('integer("--settlement-initial-wait-s", 0)');
+    expect(runtime).toContain('integer("--settlement-poll-s", 1)');
+    expect(runtime).toContain('integer("--settlement-stable-reads", 3)');
+    expect(runtime).toContain('integer("--settlement-timeout-s", 1)');
+    expect(runtime).toContain('integer("--watchdog-poll-ms", 1)');
     expect(runtime).toContain('status: "FROZEN_RUNTIME_EVIDENCE_ONLY_NOT_PAID_AUTH"');
     expect(runtime).toContain('paid_authorization: false');
     expect(runtime).not.toContain("AUTH_ARTIFACT_SHA256:");
