@@ -6,6 +6,7 @@ const root = process.cwd();
 const runtime = readFileSync(join(root, "scripts", "v39_prepare_phase2f_smoke_runtime_v39.ts"), "utf8");
 const draft = readFileSync(join(root, "scripts", "v39_prepare_phase2f_auth_v39.ts"), "utf8");
 const approve = readFileSync(join(root, "scripts", "v39_approve_phase2f_auth_v39.ts"), "utf8");
+const deployment = readFileSync(join(root, "scripts", "v39_verify_phase2f_deployment_binding_v39.ts"), "utf8");
 const smoke = readFileSync(join(root, "scripts", "v39_smoke_safety_owner_v39.ts"), "utf8");
 const handoff = readFileSync(join(root, "scripts", "v39_record_phase2_smoke_handoff_v39.ts"), "utf8");
 
@@ -43,10 +44,22 @@ describe("Phase 2F exact authorization/runtime contract", () => {
     expect(approve).toContain('stage2_authorized: false');
   });
 
-  it("makes the paid smoke consume only the frozen runtime controls and rebind exact predecessors", () => {
+  it("proves the published app enforces the same secret and can read the V3.9 runtime DB without a paid action", () => {
+    expect(deployment).toContain('wrong_secret_rejected_403');
+    expect(deployment).toContain('exact_secret_accepted_200');
+    expect(deployment).toContain('deployed_v39_runtime_db_read');
+    expect(deployment).toContain('/api/v1/collection/diagnostics');
+    expect(deployment).toContain('provider_subscription_created: false');
+    expect(deployment).toContain('provider_paid_action: false');
+  });
+
+  it("makes the paid smoke consume only frozen controls and require a fresh deployment binding", () => {
     expect(smoke).toContain("loadPhase2FSmokeRuntimeV39");
+    expect(smoke).toContain("loadPhase2FDeploymentBindingV39");
     expect(smoke).toContain('expectedFileSha256: args.runtimeSha256');
+    expect(smoke).toContain('REFUSED_SMOKE_DEPLOYMENT_EVIDENCE_REQUIRED');
     expect(smoke).toContain('const requiredPredecessors = [preprobe.evidenceId, runtime.evidenceId]');
+    expect(smoke).toContain('deploymentBindingEvidenceId: deployment.evidenceId');
     expect(smoke).toContain('frozen.pre_smoke_unsettled_burst_margin_credits');
     expect(smoke).toContain('frozen.settlement_initial_wait_seconds');
     expect(smoke).toContain('frozen.watchdog_poll_ms');
