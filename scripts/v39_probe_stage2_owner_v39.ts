@@ -11,6 +11,11 @@ import {
 } from "../server/lib/disruption/probeExecution_v39";
 import { executePrepaidProbeV39 } from "../server/lib/disruption/probeExecutionPrepaid_v39";
 import {
+  loadGate2RuntimeBindingV39,
+  stage2AuthorizationScopeV39,
+} from "../server/lib/disruption/phase2Gate2Runtime_v39";
+import { loadStage1PromotionHandoffV39 } from "../server/lib/disruption/phase2Stage1Handoff_v39";
+import {
   finalFiveMembershipInvariant,
   selectStage2Top5,
   type PromotionRow,
@@ -21,6 +26,7 @@ import {
   resolveOwnerAuthorization,
   verifyAuthFile,
 } from "./v39_paid_guard_v39";
+import type { AuthRecord } from "../server/lib/disruption/authRecord_v39";
 
 const SCOPE = "Phase 2 / Gate 2 Stage 2";
 
@@ -37,16 +43,15 @@ function loadArtifacts(): LoadedProbeExecutionArtifacts {
     runtimeSha256: requiredEnv("ADB_PROBE_RUNTIME_ARTIFACT_SHA256"),
   });
 }
-function authCeiling(argv: string[]): number {
-  const controls = parseArgs(argv);
-  if (!controls.authFile) throw new Error("REFUSED: --auth-file required");
-  const checked = verifyAuthFile(controls.authFile, SCOPE);
-  if ("error" in checked || !checked.verdict.verified) {
-    throw new Error(`REFUSED: owner AUTH re-verification failed: ${"error" in checked ? checked.error : checked.verdict.reason}`);
-  }
-  const ceiling = Number(checked.record.maxAlertCredits);
-  if (!Number.isFinite(ceiling) || ceiling <= 0) throw new Error("REFUSED: AUTH maxAlertCredits must be positive");
-  return ceiling;
+function loadGate2Binding() {
+  return loadGate2RuntimeBindingV39({
+    probeRuntimePath: requiredEnv("ADB_PROBE_RUNTIME_ARTIFACT_PATH"),
+    probeRuntimeFileSha256: requiredEnv("ADB_PROBE_RUNTIME_ARTIFACT_SHA256"),
+    smokePath: requiredEnv("ADB_PHASE2_SMOKE_ARTIFACT_PATH"),
+    smokeRuntimePath: requiredEnv("ADB_PHASE2_SMOKE_RUNTIME_ARTIFACT_PATH"),
+    smokeRuntimeFileSha256: requiredEnv("ADB_PHASE2_SMOKE_RUNTIME_ARTIFACT_SHA256"),
+    preprobePath: requiredEnv("ADB_PREPROBE_ARTIFACT_PATH"),
+  });
 }
 
 async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvidence[]> {
@@ -77,6 +82,41 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvid
       confirmedPlusAmbiguousUpper: safeRates ? upperRate : (x.confirmed_plus_ambiguous_upper == null ? null : Number(x.confirmed_plus_ambiguous_upper)),
     };
   });
+}
+
+function verifiedStage2Auth(
+  argv: string[],
+  binding: ReturnType<typeof loadGate2Binding>,
+  promotionBinding: ReturnType<typeof loadStage1PromotionHandoffV39>,
+): { record: AuthRecord; ceiling: number } {
+  const controls = parseArgs(argv);
+  if (!controls.authFile) throw new Error("REFUSED: --auth-file required");
+  const checked = verifyAuthFile(controls.authFile, SCOPE);
+  if ("error" in checked || !checked.verdict.verified) {
+    throw new Error(`REFUSED: owner AUTH re-verification failed: ${"error" in checked ? checked.error : checked.verdict.reason}`);
+  }
+  const record = checked.record;
+  const expectedScope = stage2AuthorizationScopeV39(binding, promotionBinding.bindingSha256);
+  if (record.airportFilterWindow !== expectedScope) {
+    throw new Error(`REFUSED_STAGE2_SCOPE_MISMATCH:AUTH=${record.airportFilterWindow ?? "<null>"}`);
+  }
+  const predecessors = [binding.smoke.evidenceId, binding.evidenceId, promotionBinding.evidenceId];
+  if (!Array.isArray(record.predecessorEvidenceIds) || record.predecessorEvidenceIds.length !== predecessors.length ||
+      record.predecessorEvidenceIds.some((id, index) => id !== predecessors[index])) {
+    throw new Error(`REFUSED_STAGE2_PREDECESSOR_MISMATCH:${predecessors.join(",")}`);
+  }
+  if (record.maxRestUnitsByCategory !== null && Object.values(record.maxRestUnitsByCategory).some((x) => Number(x) !== 0)) {
+    throw new Error("REFUSED_STAGE2_REST_UNITS_MUST_BE_ZERO");
+  }
+  if (!record.cleanupOwner?.trim()) throw new Error("REFUSED_STAGE2_CLEANUP_OWNER_REQUIRED");
+  const ceiling = Number(record.maxAlertCredits);
+  if (!Number.isInteger(ceiling) || ceiling <= 0 || ceiling > 500) {
+    throw new Error("REFUSED_STAGE2_AUTH_ALERT_CEILING_MUST_BE_1_TO_500");
+  }
+  if (binding.runtime.stage2ReservationCredits > ceiling) {
+    throw new Error("REFUSED_STAGE2_RUNTIME_RESERVATION_EXCEEDS_AUTH_CEILING");
+  }
+  return { record, ceiling };
 }
 
 interface Stage2State {
@@ -119,8 +159,11 @@ function remainingRankAfterStage2Failures(ranked: PromotionRow[], states: Stage2
 
 export async function runStage2Owner(argv = process.argv.slice(2)): Promise<number> {
   const auth = resolveOwnerAuthorization(SCOPE, argv);
-  const ceiling = authCeiling(argv);
   const artifacts = loadArtifacts();
+  const binding = loadGate2Binding();
+  if (artifacts.preprobeSha256 !== binding.smoke.preprobe.fileSha256 || artifacts.runtimeSha256 !== binding.runtimeFileSha256) {
+    throw new Error("REFUSED_STAGE2_EXECUTION_ARTIFACT_BINDING_MISMATCH");
+  }
   const stage1 = await readStage1Evidence(artifacts.preprobeSha256);
   const promotion = selectStage2Top5(artifacts.preprobe, stage1);
   if (!promotion.primaryStage1Complete) {
@@ -131,6 +174,13 @@ export async function runStage2Owner(argv = process.argv.slice(2)): Promise<numb
       `REFUSED_STAGE2: fewer than five Stage-1-valid candidates; next frozen replacement=${promotion.nextReplacement ?? "NONE"}. Run the Stage-1 owner first.`,
     );
   }
+  const promotionBinding = loadStage1PromotionHandoffV39({
+    path: requiredEnv("ADB_STAGE1_PROMOTION_ARTIFACT_PATH"),
+    expectedFileSha256: requiredEnv("ADB_STAGE1_PROMOTION_ARTIFACT_SHA256"),
+    gate2: binding,
+    currentPromotion: promotion,
+  });
+  const approved = verifiedStage2Auth(argv, binding, promotionBinding);
 
   const states = await readStage2State(artifacts.preprobeSha256);
   const byState = new Map(states.map((x) => [x.icao, x]));
@@ -148,6 +198,8 @@ export async function runStage2Owner(argv = process.argv.slice(2)): Promise<numb
       authorizationId: auth.authId,
       preprobeArtifactSha256: artifacts.preprobeSha256,
       runtimeArtifactSha256: artifacts.runtimeSha256,
+      stage1PromotionEvidenceId: promotionBinding.evidenceId,
+      stage1PromotionBindingSha256: promotionBinding.bindingSha256,
       referenceIcao: promotion.referenceIcao,
       confirmedFinalFive: finalTargets.map((x) => x.icao),
       ambiguityMembershipInvariant: true,
@@ -174,7 +226,7 @@ export async function runStage2Owner(argv = process.argv.slice(2)): Promise<numb
     icao: next.icao,
     allowReplacement: true,
     artifacts,
-    authMaxAlertCredits: ceiling,
+    authMaxAlertCredits: approved.ceiling,
   });
   if (result.status !== "completed") {
     throw new Error(`REFUSED_STAGE2_PROBE_FAILED: ${next.icao} ${result.stopReason ?? "unknown"}`);
@@ -185,13 +237,15 @@ export async function runStage2Owner(argv = process.argv.slice(2)): Promise<numb
     authorizationId: auth.authId,
     preprobeArtifactSha256: artifacts.preprobeSha256,
     runtimeArtifactSha256: artifacts.runtimeSha256,
+    stage1PromotionEvidenceId: promotionBinding.evidenceId,
+    stage1PromotionBindingSha256: promotionBinding.bindingSha256,
     probeBudgetDayId: artifacts.runtime.probeBudgetDayId,
     icao: next.icao,
     probeId: result.probeId,
     providerContentSafeMode: true,
     durationCensored: result.durationCensored,
     stopReason: result.stopReason,
-    message: "One sequential Stage-2 confirmation completed through isolated App-Storage/UNLOGGED runtime",
+    message: "One sequential frozen Stage-2 confirmation completed through isolated App-Storage/UNLOGGED runtime",
   }));
   return 0;
 }
