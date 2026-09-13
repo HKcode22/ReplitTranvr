@@ -1,5 +1,7 @@
 name: V3.9 MrAirspace Traffic Reference
 
+# Phase-2 zero-cost source evaluation only. No AeroDataBox/provider credentials
+# are used and this workflow does not authorize paid/live experimental traffic.
 on:
   workflow_dispatch:
   push:
