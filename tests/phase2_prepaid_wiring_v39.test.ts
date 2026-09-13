@@ -58,4 +58,22 @@ describe("Phase-2 isolated prepaid production wiring", () => {
     expect(requeryBlob).toBeGreaterThan(applySession);
     expect(applyBlob).toBeGreaterThan(requeryBlob);
   });
+
+  it("orders the post-P Phase 2B-E closure exactly as Gate1 -> reference -> frame -> preprobe and stops before smoke", () => {
+    const runner = read("scripts/v39_phase2b_e_close.sh");
+    const gate1 = runner.indexOf("scripts/measure_coverage.ts");
+    const materialize = runner.indexOf("scripts/v39_materialize_pinned_traffic_reference_v39.ts");
+    const referenceFreeze = runner.indexOf("scripts/v39_freeze_record_v39.ts reference");
+    const frame = runner.indexOf("scripts/build_final_frame_v39.ts");
+    const preprobe = runner.indexOf("scripts/v39_freeze_record_v39.ts preprobe");
+    expect(gate1).toBeGreaterThanOrEqual(0);
+    expect(materialize).toBeGreaterThan(gate1);
+    expect(referenceFreeze).toBeGreaterThan(materialize);
+    expect(frame).toBeGreaterThan(referenceFreeze);
+    expect(preprobe).toBeGreaterThan(frame);
+    expect(runner).toContain("MANDATORY STOP");
+    expect(runner).not.toContain("v39_smoke_safety_owner_v39.ts");
+    expect(runner).not.toContain("v39_probe_stage1_owner_v39.ts");
+    expect(runner).not.toContain("v39_probe_stage2_owner_v39.ts");
+  });
 });
