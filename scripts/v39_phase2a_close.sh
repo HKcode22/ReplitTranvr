@@ -32,7 +32,41 @@ if [[ "${V39_PUBLIC_WEBHOOK_BASE_URL}" != https://* ]]; then
   exit 1
 fi
 
+# Preserve the caller-confirmed production bindings. Sourcing generated .env
+# evidence must never silently replace these with stale duplicate lines.
+CALLER_V39_PRODUCTION_DATABASE_OWNER_URL="$V39_PRODUCTION_DATABASE_OWNER_URL"
+CALLER_V39_PROVIDER_BLOB_BUCKET_ID="$V39_PROVIDER_BLOB_BUCKET_ID"
+CALLER_V39_PUBLIC_WEBHOOK_BASE_URL="$V39_PUBLIC_WEBHOOK_BASE_URL"
+
+# Older Phase-2A retries could leave duplicate generated evidence keys in .env.
+# The writers update the first matching line, while `source .env` uses the last
+# matching line. That allowed stale role/webhook/retention evidence to override
+# freshly generated evidence. Canonicalize managed keys to their first (freshly
+# updated) occurrence before every reload.
+canonicalize_generated_env() {
+  [[ -f .env ]] || return 0
+  local tmp
+  tmp="$(mktemp .env.v39.XXXXXX)"
+  awk '
+    BEGIN {
+      split("V39_DATABASE_RUNTIME_URL V39_DB_ROLE_EVIDENCE V39_WEBHOOK_SECURITY_EVIDENCE WEBHOOK_BASE_URL V39_PHASE2_RETENTION_SCOPE_EVIDENCE V39_RETENTION_DEPLOYMENT_EVIDENCE V39_PROVIDER_BLOB_MODE V39_PREPAID_RAW_RETENTION_HOURS V39_PHASE2_RETENTION_APPLY_ARMED", keys, " ")
+      for (i in keys) managed[keys[i]] = 1
+    }
+    /^[A-Za-z_][A-Za-z0-9_]*=/ {
+      key = $0
+      sub(/=.*/, "", key)
+      if (managed[key]) {
+        if (seen[key]++) next
+      }
+    }
+    { print }
+  ' .env > "$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" .env
+}
+
 load_generated_env() {
+  canonicalize_generated_env
   if [[ -f .env ]]; then
     set -a
     # shellcheck disable=SC1091
@@ -41,12 +75,16 @@ load_generated_env() {
   fi
   # Caller-supplied production bindings are authoritative and must survive any
   # generated local evidence reload.
-  export V39_PRODUCTION_DATABASE_OWNER_URL
-  export V39_PROVIDER_BLOB_BUCKET_ID
+  export V39_PRODUCTION_DATABASE_OWNER_URL="$CALLER_V39_PRODUCTION_DATABASE_OWNER_URL"
+  export V39_PROVIDER_BLOB_BUCKET_ID="$CALLER_V39_PROVIDER_BLOB_BUCKET_ID"
   export V39_DATABASE_TARGET_CONFIRM=production
-  export V39_PUBLIC_WEBHOOK_BASE_URL
+  export V39_PUBLIC_WEBHOOK_BASE_URL="$CALLER_V39_PUBLIC_WEBHOOK_BASE_URL"
   export V39_PHASE2_OWNER_APPROVED=1
 }
+
+# Canonicalize any stale duplicate generated evidence left by prior retries
+# before the first production-role verification.
+load_generated_env
 
 printf '%s\n' "[2A/5] Provision/reconcile least-privilege production runtime role"
 npx tsx scripts/provision_runtime_role_v39.ts
