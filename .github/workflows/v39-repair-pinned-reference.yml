@@ -1,0 +1,68 @@
+name: V3.9 Repair Pinned Reference Transport
+
+on:
+  push:
+    branches:
+      - v39-p-phase2-closure-audit-20260911
+    paths:
+      - .github/workflows/v39-repair-pinned-reference.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  repair-pinned-reference:
+    runs-on: ubuntu-24.04
+    env:
+      EXPECTED_JSON_SHA256: e7d043a0bb21ba32a939cc54cf5798bff8eabc19611eb01fc98fabf4fd1a95c1
+      EXPECTED_GZIP_SHA256: 63a314cb0d2105da8b76e590499c8b4d1c9602e1bdd11b88c7353dcc56513425
+      SOURCE_RUN_ID: "34732924481"
+      SOURCE_ARTIFACT: v39-mrairspace-reference-d2f617e4fb51010f4187e732817f05fc06f4ad40
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout safety branch
+        uses: actions/checkout@v4
+        with:
+          ref: v39-p-phase2-closure-audit-20260911
+          fetch-depth: 1
+      - name: Download authoritative successful reference artifact
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/v39-reference
+          mkdir -p /tmp/v39-reference
+          gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir /tmp/v39-reference
+          test -f /tmp/v39-reference/traffic-reference-frozen.json
+      - name: Verify authoritative JSON and regenerate deterministic transport
+        run: |
+          set -euo pipefail
+          raw=/tmp/v39-reference/traffic-reference-frozen.json
+          actual_json="$(sha256sum "$raw" | awk '{print $1}')"
+          test "$actual_json" = "$EXPECTED_JSON_SHA256"
+          gzip -n -9 -c "$raw" > /tmp/traffic-reference-frozen.json.gz
+          actual_gzip="$(sha256sum /tmp/traffic-reference-frozen.json.gz | awk '{print $1}')"
+          test "$actual_gzip" = "$EXPECTED_GZIP_SHA256"
+          base64 -w 0 /tmp/traffic-reference-frozen.json.gz > artifacts/traffic-reference-frozen.json.gz.b64
+          printf '\n' >> artifacts/traffic-reference-frozen.json.gz.b64
+          python3 - <<'PY'
+          import base64,gzip,hashlib,pathlib
+          p=pathlib.Path('artifacts/traffic-reference-frozen.json.gz.b64')
+          encoded=''.join(p.read_text().split())
+          compressed=base64.b64decode(encoded, validate=True)
+          raw=gzip.decompress(compressed)
+          assert hashlib.sha256(compressed).hexdigest() == '63a314cb0d2105da8b76e590499c8b4d1c9602e1bdd11b88c7353dcc56513425'
+          assert hashlib.sha256(raw).hexdigest() == 'e7d043a0bb21ba32a939cc54cf5798bff8eabc19611eb01fc98fabf4fd1a95c1'
+          print('PASS: repaired transport reproduces both pinned hashes')
+          PY
+      - name: Commit repaired transport if needed
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- artifacts/traffic-reference-frozen.json.gz.b64; then
+            echo "Pinned transport already authoritative; no commit needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/traffic-reference-frozen.json.gz.b64
+          git commit -m "V3.9 Phase2: restore authoritative pinned traffic transport"
+          git push origin HEAD:v39-p-phase2-closure-audit-20260911
