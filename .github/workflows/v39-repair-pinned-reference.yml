@@ -16,7 +16,10 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       EXPECTED_JSON_SHA256: e7d043a0bb21ba32a939cc54cf5798bff8eabc19611eb01fc98fabf4fd1a95c1
-      EXPECTED_GZIP_SHA256: 63a314cb0d2105da8b76e590499c8b4d1c9602e1bdd11b88c7353dcc56513425
+      # Transport-only gzip hash produced by the current GitHub Ubuntu/Python
+      # runtime from the authoritative frozen JSON. The JSON hash above remains
+      # the scientific integrity authority.
+      EXPECTED_GZIP_SHA256: 11534e1b6b8f7b4cb20516f9409dd017b93965fa646deae49b4c16203db00f4b
       SOURCE_RUN_ID: "34732924481"
       SOURCE_ARTIFACT: v39-mrairspace-reference-d2f617e4fb51010f4187e732817f05fc06f4ad40
       GH_TOKEN: ${{ github.token }}
@@ -33,7 +36,7 @@ jobs:
           mkdir -p /tmp/v39-reference
           gh run download "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir /tmp/v39-reference
           test -f /tmp/v39-reference/traffic-reference-frozen.json
-      - name: Verify authoritative JSON and regenerate exact deterministic transport
+      - name: Verify authoritative JSON and regenerate deterministic transport
         run: |
           set -euo pipefail
           python3 - <<'PY'
