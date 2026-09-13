@@ -1,0 +1,70 @@
+{
+  "schema_version": "v3.9-phase2-current-status-1",
+  "recorded_at_utc": "2026-09-13T03:00:00Z",
+  "binding_plan": "SEPmd/V3.9_DataCollectPlan_f.8.md",
+  "branch": "v39-p-phase2-closure-audit-20260911",
+  "status": {
+    "phase0": "PASS",
+    "phase1_gate0": "PASS_EXISTING_EVIDENCE",
+    "prerequisite_p": "AWAITING_PRODUCTION_BINDING",
+    "gate1": "FRESH_PASS_REQUIRED_AFTER_P",
+    "traffic_reference": "VALIDATED_CANDIDATE_PLAN_BLOCKED",
+    "final_frame": "NO_GO",
+    "preprobe_freeze": "NO_GO",
+    "safety_smoke_gate2": "NO_GO",
+    "paid_work": "NO_GO",
+    "phase6_retention_inventory": "DEFERRED_UNRESOLVED"
+  },
+  "prerequisite_p_engineering": {
+    "status": "IMPLEMENTED_OFFLINE",
+    "plaintext_architecture": "dedicated Replit App Storage raw blobs + PostgreSQL UNLOGGED prepaid runtime",
+    "database_pitr": "may remain enabled because prepaid plaintext is excluded from logged PostgreSQL by design",
+    "live_requirements_remaining": [
+      "dedicated production App Storage bucket ID",
+      "explicit production DB owner connection used to provision and verify travnr_v39_runtime",
+      "production webhook evidence for HTTPS secret prepaid route",
+      "owner-approved Phase-2 retention evidence",
+      "successful live synthetic App-Storage write/read/delete/absence verification",
+      "fresh P verification receipt and cryptographic P PASS artifact"
+    ],
+    "phase6_note": "later provider-content stores remain independently unresolved; they do not masquerade as Derived Work and are not prerequisite-P scope"
+  },
+  "traffic_reference": {
+    "status_artifact": "artifacts/traffic-reference-current-status.json",
+    "candidate_pin": "artifacts/traffic-reference-frozen.json.gz.b64",
+    "candidate_frozen_json_sha256": "e7d043a0bb21ba32a939cc54cf5798bff8eabc19611eb01fc98fabf4fd1a95c1",
+    "plan_amendment_proposal": "SEPmd/V3.9_PHASE2_PLAN_AMENDMENT_PROPOSAL.md",
+    "block_reason": "binding V3.9-f.8 requires scheduled-route balancing variables and <=30-day reference age; current validated candidate is observed ADS-B-derived and 75 days old at 2026-09-13"
+  },
+  "offline_validation": {
+    "last_complete_green_run_before_plan_contract_hardening": {
+      "workflow_run_number": 274,
+      "workflow_run_id": "34732974312",
+      "commit": "0bb10c8fc2168d0d5829b9157e3509e61ada372a",
+      "result": "SUCCESS"
+    },
+    "current_head_revalidation": "IN_PROGRESS_AFTER_PLAN_CONTRACT_AND_STATUS_UPDATES"
+  },
+  "execution_order": [
+    "production-bind prerequisite P inputs",
+    "record true P PASS",
+    "fresh Gate 1",
+    "resolve traffic-reference Plan contract",
+    "build and hash final frame",
+    "write and verify preprobe reference freeze",
+    "MANDATORY STOP",
+    "separately authorize safety smoke/Gate 2"
+  ],
+  "prohibited_until_owned_gate": [
+    "paid FIDS",
+    "credit refill",
+    "experimental subscription create/delete",
+    "safety smoke",
+    "Stage-1 probe",
+    "Stage-2 probe",
+    "canary",
+    "Gate-0.5 pilot",
+    "Phase-6 start"
+  ],
+  "historical_note": "older audit and retention artifacts are retained for provenance; this file is the superseding machine-readable current-status pointer"
+}
