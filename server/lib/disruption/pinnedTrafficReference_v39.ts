@@ -56,7 +56,11 @@ export function loadFrozenTrafficReferenceV39(root = process.cwd()): LoadedTraff
 
   const encodedPath = join(root, "artifacts", "traffic-reference-frozen.json.gz.b64");
   if (!existsSync(encodedPath)) throw new Error("BLOCKED:TRAFFIC_REFERENCE_FROZEN_FILE_MISSING");
-  const encoded = readFileSync(encodedPath, "utf8").trim();
+  // Base64 is intentionally stored as a text artifact and may be line-wrapped
+  // by transport/repository tooling. Whitespace has no semantic meaning in the
+  // encoding; strip it before validating/decoding, then verify the exact gzip
+  // and reconstructed-original SHA-256 values below.
+  const encoded = readFileSync(encodedPath, "utf8").replace(/\s+/g, "");
   if (!encoded || !/^[A-Za-z0-9+/=]+$/.test(encoded)) {
     throw new Error("BLOCKED:PINNED_TRAFFIC_REFERENCE_BASE64_INVALID");
   }
