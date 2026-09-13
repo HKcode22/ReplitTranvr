@@ -41,8 +41,11 @@ function parseEvidence<T>(name: string): T | null {
 
 async function verifyRoleLive(role: string): Promise<string[]> {
   const failures: string[] = [];
-  const ownerUrl = process.env.DATABASE_URL;
-  if (!ownerUrl) return ["no-owner-DATABASE_URL-for-live-check"];
+  const ownerUrl = String(process.env.V39_PRODUCTION_DATABASE_OWNER_URL ?? "").trim();
+  if (!ownerUrl) return ["no-V39_PRODUCTION_DATABASE_OWNER_URL-for-live-check"];
+  if (String(process.env.V39_DATABASE_TARGET_CONFIRM ?? "").trim().toLowerCase() !== "production") {
+    return ["V39_DATABASE_TARGET_CONFIRM-production-required"];
+  }
   const owner = new Pool({ connectionString: ownerUrl });
   try {
     const attr = await owner.query("SELECT rolsuper, rolcreatedb, rolcreaterole, rolcanlogin FROM pg_roles WHERE rolname=$1", [role]);
@@ -187,7 +190,7 @@ async function main(): Promise<void> {
     const staticCheck = checkLeastPrivilege(db);
     const live = await verifyRoleLive(db.role);
     const all = [...staticCheck.failures, ...live];
-    checks.push({ name: "least-privilege-db-tls", pass: !all.length, detail: all.join(",") || `role=${db.role} live-verified` });
+    checks.push({ name: "least-privilege-db-tls", pass: !all.length, detail: all.join(",") || `role=${db.role} live-verified against explicit production owner connection` });
   }
 
   const webhook = parseEvidence<WebhookSecurityEvidence>("V39_WEBHOOK_SECURITY_EVIDENCE");
