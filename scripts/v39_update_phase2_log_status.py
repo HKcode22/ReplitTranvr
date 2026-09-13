@@ -28,7 +28,18 @@ def status_value(status: dict[str, Any], key: str) -> str:
 
 
 def is_pass(value: str) -> bool:
-    return "PASS" in value and "NOT_PASS" not in value and "WAITING" not in value
+    upper = value.upper()
+    blockers = (
+        "NOT_PASS",
+        "WAITING",
+        "SUPERSEDED",
+        "PENDING",
+        "BLOCKED",
+        "REFRESH",
+        "REQUIRED",
+        "NOT_RUN",
+    )
+    return "PASS" in upper and not any(token in upper for token in blockers)
 
 
 def execution_text(value: str) -> str:
@@ -38,11 +49,20 @@ def execution_text(value: str) -> str:
 def next_condition(key: str, value: str) -> str:
     if is_pass(value):
         return "Complete; preserve the recorded evidence and do not rerun unless an integrity check invalidates it."
+
+    upper = value.upper()
+    if key == "phase2b_gate1" and "SUPERSEDED" in upper:
+        return "Take the controlled fresh documented-free Gate-1 measurement with a new evidence ID; preserve the superseded Gate-1 artifact in Phase-2 history."
+    if key == "phase2c_reference_rules" and "SUPERSEDED" in upper:
+        return "Recreate the canonical reference freeze only from the refreshed Gate-1 artifact while Plan/P/traffic/tier/region inputs remain unchanged; preserve the superseded freeze in history."
+    if key == "phase2d_final_frame" and "SCHEMA_0057_PASS" in upper:
+        return "No further schema mutation. Complete the controlled Gate-1/reference drift refresh, then immediately rebuild/hash the final frame against that refreshed frozen chain."
+
     conditions = {
         "phase2a_prerequisite_p": "Complete the production security/retention binding and record cryptographic prerequisite-P PASS before Gate 1.",
         "phase2b_gate1": "Run fresh documented-free Gate-1 coverage only after prerequisite P PASS.",
         "phase2c_reference_rules": "Freeze the run-specific traffic/region reference only after the fresh Gate-1 PASS.",
-        "phase2d_final_frame": "Apply and verify only the guarded production 0057 Phase-2D schema contract, then resume after the already-passed 2C reference freeze and rebuild/hash the final frame; do not rerun Gate 1.",
+        "phase2d_final_frame": "Apply and verify only the guarded production 0057 Phase-2D schema contract, then rebuild/hash the final frame from the current frozen Gate-1/reference chain.",
         "phase2e_preprobe_freeze": "After the 2D frame passes and hash-matches its frozen inputs, write/verify the preprobe reference freeze and cryptographic handoff.",
         "phase2f_safety_smoke": "After 2E, freeze the smoke runtime controls, prepare a separate exact run-specific AUTH, obtain human exact-SHA approval, run the mandatory smoke, settle/clean up, then STOP for handoff.",
         "phase2g_gate2_stage1": "Only after 2F PASS/handoff, freeze the shared Gate-2 runtime and obtain a separate exact Stage-1 authorization before sequential probes.",
@@ -129,7 +149,7 @@ def render(data: dict[str, Any]) -> str:
             "|---|---|---|---|",
             *rows,
             "",
-            f"**Current pointer:** `{pointer}`. The machine-readable source of truth is `artifacts/phase2-current-status.json`; earlier PASS stages are preserved rather than rerun.",
+            f"**Current pointer:** `{pointer}`. The machine-readable source of truth is `artifacts/phase2-current-status.json`; earlier PASS evidence is preserved even when a later integrity check supersedes an input generation.",
             "",
         ]
     )
