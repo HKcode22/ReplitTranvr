@@ -9,6 +9,13 @@ set -euo pipefail
 # --resume-after-2c is only for a partial run where Gate 1 and the hash-locked
 # reference freeze already succeeded. It validates that frozen chain and skips
 # re-measuring Gate 1 so a retry cannot silently change the frozen inputs.
+#
+# --refresh-after-coverage-drift is only for a pre-2D refusal proving that a
+# documented-free provider feed membership changed after Gate 1. It preserves
+# the old Gate-1/reference artifacts in phase2-history, takes a fresh FREE Gate-1
+# measurement under the same exact authorization, recreates the reference freeze
+# only if Plan/P/traffic/region inputs are unchanged, and then resumes 2D. It is
+# forbidden after a preprobe freeze exists.
 
 usage() {
   cat >&2 <<'EOF'
@@ -17,7 +24,7 @@ USAGE:
     --auth AUTH-YYYYMMDD-ID \
     --auth-file path/to/gate1-auth.json \
     --evidence-id GATE-1-YYYYMMDD-ID \
-    [--resume-after-2c]
+    [--resume-after-2c | --refresh-after-coverage-drift]
 EOF
   exit 2
 }
@@ -26,12 +33,14 @@ AUTH=""
 AUTH_FILE=""
 EVIDENCE_ID=""
 RESUME_AFTER_2C=0
+REFRESH_AFTER_COVERAGE_DRIFT=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --auth) AUTH="${2:-}"; shift 2 ;;
     --auth-file) AUTH_FILE="${2:-}"; shift 2 ;;
     --evidence-id) EVIDENCE_ID="${2:-}"; shift 2 ;;
     --resume-after-2c) RESUME_AFTER_2C=1; shift ;;
+    --refresh-after-coverage-drift) REFRESH_AFTER_COVERAGE_DRIFT=1; shift ;;
     *) usage ;;
   esac
 done
@@ -39,6 +48,10 @@ done
 [[ "$AUTH" =~ ^AUTH-[0-9]{8}-[A-Z0-9]+$ ]] || usage
 [[ "$EVIDENCE_ID" =~ ^GATE-1-[0-9]{8}-[A-Z0-9]+$ ]] || usage
 [[ -n "$AUTH_FILE" && -f "$AUTH_FILE" ]] || usage
+if [[ "$RESUME_AFTER_2C" -eq 1 && "$REFRESH_AFTER_COVERAGE_DRIFT" -eq 1 ]]; then
+  echo "REFUSED: choose only one of --resume-after-2c or --refresh-after-coverage-drift" >&2
+  exit 2
+fi
 [[ -f artifacts/prepaid-security-retention-pass.json ]] || {
   echo "BLOCKED:PHASE2A_P_PASS_ARTIFACT_MISSING" >&2
   exit 1
@@ -58,20 +71,7 @@ fi
   exit 1
 }
 
-if [[ "$RESUME_AFTER_2C" -eq 0 ]]; then
-  printf '%s\n' "[2B] Fresh Gate 1 coverage measurement (documented-free endpoints only)"
-  npx tsx scripts/measure_coverage.ts \
-    --auth "$AUTH" \
-    --auth-file "$AUTH_FILE" \
-    --evidence-id "$EVIDENCE_ID"
-
-  printf '%s\n' "[2C] Materialize and verify the repository-pinned exogenous reference under binding f.8"
-  npx tsx scripts/v39_materialize_pinned_traffic_reference_v39.ts
-
-  printf '%s\n' "[2C] Write/reuse the hash-locked run-specific reference freeze"
-  npx tsx scripts/v39_freeze_record_v39.ts reference
-else
-  printf '%s\n' "[2B/2C] Resume requested: validate existing frozen Gate-1/reference chain; do not re-measure Gate 1"
+validate_existing_chain() {
   node --input-type=module <<'NODE'
 import { readFileSync } from 'node:fs';
 const read = (p) => JSON.parse(readFileSync(p, 'utf8'));
@@ -90,6 +90,32 @@ console.log(JSON.stringify({
   reference_freeze_artifact_sha256: reference.artifact_sha256,
 }, null, 2));
 NODE
+}
+
+if [[ "$REFRESH_AFTER_COVERAGE_DRIFT" -eq 1 ]]; then
+  printf '%s\n' "[2B/2C-refresh] Preserve prior evidence and refresh documented-free Gate 1 after confirmed feed drift"
+  npx tsx scripts/v39_refresh_gate1_reference_after_drift_v39.ts \
+    --auth "$AUTH" \
+    --auth-file "$AUTH_FILE" \
+    --evidence-id "$EVIDENCE_ID"
+
+  printf '%s\n' "[2B/2C-refresh] Validate the refreshed frozen chain"
+  validate_existing_chain
+elif [[ "$RESUME_AFTER_2C" -eq 0 ]]; then
+  printf '%s\n' "[2B] Fresh Gate 1 coverage measurement (documented-free endpoints only)"
+  npx tsx scripts/measure_coverage.ts \
+    --auth "$AUTH" \
+    --auth-file "$AUTH_FILE" \
+    --evidence-id "$EVIDENCE_ID"
+
+  printf '%s\n' "[2C] Materialize and verify the repository-pinned exogenous reference under binding f.8"
+  npx tsx scripts/v39_materialize_pinned_traffic_reference_v39.ts
+
+  printf '%s\n' "[2C] Write/reuse the hash-locked run-specific reference freeze"
+  npx tsx scripts/v39_freeze_record_v39.ts reference
+else
+  printf '%s\n' "[2B/2C] Resume requested: validate existing frozen Gate-1/reference chain; do not re-measure Gate 1"
+  validate_existing_chain
 fi
 
 printf '%s\n' "[2D-preflight] Verify final-frame schema contract before any coverage re-read"
