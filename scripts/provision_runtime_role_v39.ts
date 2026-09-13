@@ -1,4 +1,10 @@
-/** Provision/reconcile the dedicated least-privilege V3.9 clean-schema runtime role. */
+/**
+ * Provision/reconcile the dedicated least-privilege V3.9 clean-schema runtime role.
+ *
+ * IMPORTANT: Replit development and production databases are separate. This
+ * script refuses generic DATABASE_URL so a workspace cannot accidentally prove
+ * prerequisite P against the development DB while travnr.com uses production.
+ */
 import { randomBytes } from "crypto";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -6,6 +12,8 @@ import { Pool } from "pg";
 
 const ROLE = "travnr_v39_runtime";
 const ENV_PATH = join(process.cwd(), ".env");
+const OWNER_ENV = "V39_PRODUCTION_DATABASE_OWNER_URL";
+const TARGET_CONFIRM_ENV = "V39_DATABASE_TARGET_CONFIRM";
 
 function escapeIdent(s: string): string { return `"${s.replace(/"/g, `""`)}"`; }
 function escapeLiteral(s: string): string { return s.replace(/'/g, `''`); }
@@ -15,16 +23,29 @@ function upsertEnvVar(src: string, key: string, value: string): string {
   if (re.test(src)) return src.replace(re, () => line);
   return src.endsWith("\n") || src.length === 0 ? `${src}${line}\n` : `${src}\n${line}\n`;
 }
+function safeDbLabel(url: string): string {
+  const parsed = new URL(url);
+  return `${parsed.hostname}/${parsed.pathname.replace(/^\//, "") || "<database>"}`;
+}
 
 async function main(): Promise<void> {
-  const ownerUrl = process.env.DATABASE_URL;
-  if (!ownerUrl) throw new Error("DATABASE_URL owner connection is required");
+  if (String(process.env[TARGET_CONFIRM_ENV] ?? "").trim().toLowerCase() !== "production") {
+    throw new Error(`${TARGET_CONFIRM_ENV}=production is required; refusing ambiguous development/production target`);
+  }
+  const ownerUrl = String(process.env[OWNER_ENV] ?? "").trim();
+  if (!ownerUrl) {
+    throw new Error(`${OWNER_ENV} is required; copy the PRODUCTION database owner connection, never the workspace development DATABASE_URL`);
+  }
+  const parsedOwner = new URL(ownerUrl);
+  if (!/^postgres(?:ql)?:$/.test(parsedOwner.protocol)) throw new Error(`${OWNER_ENV} must be a PostgreSQL URL`);
+
   const owner = new Pool({ connectionString: ownerUrl });
   try {
-    const meta = await owner.query("SELECT current_database() AS db, current_user AS owner_role");
+    const meta = await owner.query("SELECT current_database() AS db, current_user AS owner_role, inet_server_addr()::text AS server_addr");
     const dbName = String(meta.rows[0]?.db ?? "");
     const ownerRole = String(meta.rows[0]?.owner_role ?? "");
-    if (!dbName || !ownerRole) throw new Error("unable to resolve current database/owner role");
+    if (!dbName || !ownerRole) throw new Error("unable to resolve production database/owner role");
+    if (ownerRole === ROLE) throw new Error("owner connection is already the runtime role; an owner/migration connection is required");
 
     const password = randomBytes(32).toString("base64url");
     const exists = await owner.query("SELECT 1 FROM pg_roles WHERE rolname=$1", [ROLE]);
@@ -36,7 +57,8 @@ async function main(): Promise<void> {
       console.log(`role reconciled: ${ROLE}`);
     }
 
-    // Remove any direct table grants left from an older use of this role.
+    // Remove direct table grants from any older use before re-granting the
+    // exact clean-schema DML contract. No other-schema table privilege remains.
     const oldGrants = await owner.query(
       `SELECT DISTINCT table_schema, table_name FROM information_schema.role_table_grants WHERE grantee=$1`,
       [ROLE],
@@ -73,19 +95,29 @@ async function main(): Promise<void> {
     const runtimeUrl = u.toString();
     const runtime = new Pool({ connectionString: runtimeUrl });
     try {
-      const who = await runtime.query("SELECT current_user AS u");
-      if (who.rows[0]?.u !== ROLE) throw new Error("runtime connection role mismatch");
+      const who = await runtime.query("SELECT current_user AS u,current_database() AS db");
+      if (who.rows[0]?.u !== ROLE || who.rows[0]?.db !== dbName) throw new Error("runtime connection role/database mismatch");
       await runtime.query("SELECT 1 FROM clean.retention_tombstone LIMIT 1");
     } finally { await runtime.end().catch(() => undefined); }
 
     const tomb = await owner.query("SELECT to_regclass('clean.retention_tombstone') AS c");
-    const evidence = { verified: true, verifiedDate: new Date().toISOString().slice(0,10), tls: /sslmode=/i.test(runtimeUrl), role: ROLE, grants: ["CLEAN_SCHEMA_DML", "CLEAN_SEQUENCE_USAGE"], auditLogging: tomb.rows[0]?.c === "clean.retention_tombstone" };
+    const evidence = {
+      verified: true,
+      verifiedDate: new Date().toISOString().slice(0, 10),
+      tls: /sslmode=/i.test(runtimeUrl),
+      role: ROLE,
+      grants: ["CLEAN_SCHEMA_DML", "CLEAN_SEQUENCE_USAGE"],
+      auditLogging: tomb.rows[0]?.c === "clean.retention_tombstone",
+      target: "production",
+      databaseName: dbName,
+    };
     let env = "";
     try { env = readFileSync(ENV_PATH, "utf8"); } catch { env = ""; }
     env = upsertEnvVar(env, "V39_DATABASE_RUNTIME_URL", runtimeUrl);
     env = upsertEnvVar(env, "V39_DB_ROLE_EVIDENCE", `'${JSON.stringify(evidence)}'`);
     writeFileSync(ENV_PATH, env, { mode: 0o600 });
-    console.log(`provision result=PASS role=${ROLE} clean_tables=${grants.rows.length} (secret URL written to ignored .env only)`);
+    console.log(`provision result=PASS target=production db=${safeDbLabel(ownerUrl)} role=${ROLE} clean_tables=${grants.rows.length}`);
+    console.log("runtime credential written to ignored .env only; copy it to the published deployment secret V39_DATABASE_RUNTIME_URL before live P/Gate1/smoke");
   } finally { await owner.end().catch(() => undefined); }
 }
 
