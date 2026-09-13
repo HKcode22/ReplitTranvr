@@ -81,6 +81,47 @@ function upperSet(values?: string[]): Set<string> {
   return new Set((values ?? []).map((value) => value.trim().toUpperCase()).filter(Boolean));
 }
 
+function normalizedStrings(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`BLOCKED:COVERAGE_REMEASUREMENT_SHAPE_INVALID:${label}`);
+  }
+  return [...new Set(value.map((item) => item.trim().toUpperCase()).filter(Boolean))].sort();
+}
+
+/**
+ * The live collection controller exposes coverage as { feeds, all }, whereas
+ * the Phase-2D frame builder intentionally uses the narrower
+ * { universe, universeUnion } shape. Keep that boundary explicit and validate
+ * it fail-closed so controller refactors cannot silently corrupt a frame.
+ */
+export function normalizeAirportCoverageForFinalFrame(input: unknown): CoverageForFinalFrame {
+  if (!input || typeof input !== "object") {
+    throw new Error("BLOCKED:COVERAGE_REMEASUREMENT_SHAPE_INVALID:root");
+  }
+  const raw = input as Record<string, unknown>;
+  if (!raw.feeds || typeof raw.feeds !== "object") {
+    throw new Error("BLOCKED:COVERAGE_REMEASUREMENT_SHAPE_INVALID:feeds");
+  }
+  const feeds = raw.feeds as Record<string, unknown>;
+  const schedule = normalizedStrings(feeds.FlightSchedules, "FlightSchedules");
+  const live = normalizedStrings(feeds.FlightLiveUpdates, "FlightLiveUpdates");
+  const adsb = normalizedStrings(feeds.AdsbUpdates, "AdsbUpdates");
+  const reportedAll = normalizedStrings(raw.all, "all");
+  const recomputedAll = [...new Set([...schedule, ...live, ...adsb])].sort();
+  if (reportedAll.length !== recomputedAll.length || reportedAll.some((icao, i) => icao !== recomputedAll[i])) {
+    throw new Error("BLOCKED:COVERAGE_REMEASUREMENT_SHAPE_INVALID:all_union_mismatch");
+  }
+  return {
+    fetchedAt: typeof raw.fetchedAt === "string" ? raw.fetchedAt : null,
+    universe: {
+      FlightSchedules: schedule,
+      FlightLiveUpdates: live,
+      AdsbUpdates: adsb,
+    },
+    universeUnion: recomputedAll,
+  };
+}
+
 function trafficPrior(tier: FrameTier): number {
   return tier === "HUB" ? 3 : tier === "MID" ? 1.5 : 1;
 }
@@ -291,8 +332,9 @@ export async function main(): Promise<number> {
 
     // Only now is a documented-free coverage re-read allowed; it must match the
     // frozen Gate-1 set exactly or the final frame build refuses.
-    const coverage = await getAirportCoverage();
-    if (!coverage) throw new Error("BLOCKED:COVERAGE_REMEASUREMENT_UNAVAILABLE");
+    const liveCoverage = await getAirportCoverage();
+    if (!liveCoverage) throw new Error("BLOCKED:COVERAGE_REMEASUREMENT_UNAVAILABLE");
+    const coverage = normalizeAirportCoverageForFinalFrame(liveCoverage);
     assertCoverageMatchesGate1(coverage, gate1);
 
     const rows = buildFinalFrameRows(coverage, traffic);
