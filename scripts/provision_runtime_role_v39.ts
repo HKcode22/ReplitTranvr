@@ -5,21 +5,25 @@
  * script refuses generic DATABASE_URL so a workspace cannot accidentally prove
  * prerequisite P against the development DB while travnr.com uses production.
  *
- * Rerun rule: once the runtime role already exists, do NOT rotate/ALTER it on
- * every Phase-2A retry. Reuse the previously generated V39_DATABASE_RUNTIME_URL
- * from the ignored .env, verify the role/grants live, and continue. This makes
- * Phase-2A idempotent and avoids managed-Postgres ALTER ROLE permission traps.
+ * Normal rerun rule: reuse the previously generated V39_DATABASE_RUNTIME_URL
+ * and verify the role/grants live. If that credential is genuinely lost, an
+ * explicit recovery flag may create a versioned replacement runtime role,
+ * revoke clean-schema grants/default grants from older V3.9 runtime roles, and
+ * verify the replacement by logging in as it. This avoids unsafe ALTER ROLE or
+ * DROP ROLE operations on managed Postgres.
  */
 import { randomBytes } from "crypto";
 import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { Pool } from "pg";
 
-const ROLE = "travnr_v39_runtime";
+const BASE_ROLE = "travnr_v39_runtime";
+const ROLE_PREFIX = "travnr_v39_runtime";
 const ENV_PATH = join(process.cwd(), ".env");
 const OWNER_ENV = "V39_PRODUCTION_DATABASE_OWNER_URL";
 const TARGET_CONFIRM_ENV = "V39_DATABASE_TARGET_CONFIRM";
 const RUNTIME_ENV = "V39_DATABASE_RUNTIME_URL";
+const RECOVERY_APPROVAL_ENV = "V39_RUNTIME_ROLE_RECOVERY_APPROVED";
 
 function escapeIdent(s: string): string { return `"${s.replace(/"/g, `""`)}"`; }
 function escapeLiteral(s: string): string { return s.replace(/'/g, `''`); }
@@ -45,13 +49,64 @@ function sameDatabaseTarget(a: string, b: string): boolean {
   const ub = new URL(b);
   return ua.hostname === ub.hostname && ua.port === ub.port && ua.pathname === ub.pathname;
 }
+function isAllowedRuntimeRoleName(role: string): boolean {
+  return /^travnr_v39_runtime(?:_recovery\d+)?$/.test(role);
+}
 
-async function verifyRoleAndGrants(owner: Pool): Promise<{ cleanTableCount: number }> {
-  const attr = await owner.query("SELECT rolsuper, rolcreatedb, rolcreaterole, rolcanlogin FROM pg_roles WHERE rolname=$1", [ROLE]);
+async function roleExists(owner: Pool, role: string): Promise<boolean> {
+  const result = await owner.query("SELECT 1 FROM pg_roles WHERE rolname=$1", [role]);
+  return Boolean(result.rowCount);
+}
+
+async function createRuntimeRole(owner: Pool, role: string, password: string): Promise<void> {
+  await owner.query(
+    `CREATE ROLE ${escapeIdent(role)} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${escapeLiteral(password)}'`,
+  );
+}
+
+async function grantRuntimeAccess(owner: Pool, ownerRole: string, dbName: string, role: string): Promise<void> {
+  await owner.query(`GRANT CONNECT ON DATABASE ${escapeIdent(dbName)} TO ${escapeIdent(role)}`);
+  await owner.query(`GRANT USAGE ON SCHEMA clean TO ${escapeIdent(role)}`);
+  await owner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA clean TO ${escapeIdent(role)}`);
+  await owner.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA clean TO ${escapeIdent(role)}`);
+  await owner.query(`ALTER DEFAULT PRIVILEGES FOR ROLE ${escapeIdent(ownerRole)} IN SCHEMA clean GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${escapeIdent(role)}`);
+  await owner.query(`ALTER DEFAULT PRIVILEGES FOR ROLE ${escapeIdent(ownerRole)} IN SCHEMA clean GRANT USAGE, SELECT ON SEQUENCES TO ${escapeIdent(role)}`);
+}
+
+async function revokeRuntimeAccess(owner: Pool, ownerRole: string, dbName: string, role: string): Promise<void> {
+  await owner.query(`ALTER DEFAULT PRIVILEGES FOR ROLE ${escapeIdent(ownerRole)} IN SCHEMA clean REVOKE ALL PRIVILEGES ON TABLES FROM ${escapeIdent(role)}`);
+  await owner.query(`ALTER DEFAULT PRIVILEGES FOR ROLE ${escapeIdent(ownerRole)} IN SCHEMA clean REVOKE ALL PRIVILEGES ON SEQUENCES FROM ${escapeIdent(role)}`);
+  await owner.query(`REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA clean FROM ${escapeIdent(role)}`);
+  await owner.query(`REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA clean FROM ${escapeIdent(role)}`);
+  await owner.query(`REVOKE ALL PRIVILEGES ON SCHEMA clean FROM ${escapeIdent(role)}`);
+  await owner.query(`REVOKE CONNECT ON DATABASE ${escapeIdent(dbName)} FROM ${escapeIdent(role)}`);
+}
+
+async function listExistingV39RuntimeRoles(owner: Pool): Promise<string[]> {
+  const result = await owner.query(
+    `SELECT rolname
+       FROM pg_roles
+      WHERE rolname=$1 OR rolname ~ '^travnr_v39_runtime_recovery[0-9]+$'
+      ORDER BY rolname`,
+    [BASE_ROLE],
+  );
+  return result.rows.map((r) => String(r.rolname));
+}
+
+async function chooseRecoveryRole(owner: Pool): Promise<string> {
+  for (let i = 1; i <= 20; i += 1) {
+    const candidate = `${ROLE_PREFIX}_recovery${i}`;
+    if (!(await roleExists(owner, candidate))) return candidate;
+  }
+  throw new Error("BLOCKED:no-unused-V3.9-runtime-recovery-role-name-available");
+}
+
+async function verifyRoleAndGrants(owner: Pool, role: string): Promise<{ cleanTableCount: number }> {
+  const attr = await owner.query("SELECT rolsuper, rolcreatedb, rolcreaterole, rolcanlogin FROM pg_roles WHERE rolname=$1", [role]);
   const a = attr.rows[0];
-  if (!a) throw new Error(`runtime role missing:${ROLE}`);
+  if (!a) throw new Error(`runtime role missing:${role}`);
   if (a.rolsuper || a.rolcreatedb || a.rolcreaterole || !a.rolcanlogin) {
-    throw new Error("runtime role attribute verification failed");
+    throw new Error(`runtime role attribute verification failed:${role}`);
   }
 
   const grants = await owner.query(
@@ -60,33 +115,57 @@ async function verifyRoleAndGrants(owner: Pool): Promise<{ cleanTableCount: numb
        FROM information_schema.role_table_grants
       WHERE grantee=$1
       GROUP BY 1,2 ORDER BY 1,2`,
-    [ROLE],
+    [role],
   );
   const allowed = new Set(["SELECT", "INSERT", "UPDATE", "DELETE"]);
-  if (!grants.rows.length) throw new Error("runtime role has no clean table grants");
+  if (!grants.rows.length) throw new Error(`runtime role has no clean table grants:${role}`);
   for (const row of grants.rows) {
-    if (row.s !== "clean") throw new Error(`grant outside clean schema: ${row.s}.${row.t}`);
+    if (row.s !== "clean") throw new Error(`grant outside clean schema:${row.s}.${row.t}`);
     for (const privilege of String(row.p).split(",")) {
-      if (!allowed.has(privilege)) throw new Error(`excess privilege ${privilege}@${row.s}.${row.t}`);
+      if (!allowed.has(privilege)) throw new Error(`excess privilege:${privilege}@${row.s}.${row.t}`);
     }
   }
   return { cleanTableCount: grants.rows.length };
 }
 
-async function verifyRuntimeConnection(runtimeUrl: string, dbName: string): Promise<void> {
+async function verifyNoOtherRuntimeTableGrants(owner: Pool, activeRole: string): Promise<void> {
+  const result = await owner.query(
+    `SELECT grantee, count(*)::int AS n
+       FROM information_schema.role_table_grants
+      WHERE table_schema='clean'
+        AND (grantee=$1 OR grantee ~ '^travnr_v39_runtime_recovery[0-9]+$')
+        AND grantee<>$2
+      GROUP BY grantee
+      ORDER BY grantee`,
+    [BASE_ROLE, activeRole],
+  );
+  if (result.rows.length) {
+    throw new Error(`stale-runtime-clean-grants-remain:${result.rows.map((r) => `${r.grantee}:${r.n}`).join(",")}`);
+  }
+}
+
+async function verifyRuntimeConnection(runtimeUrl: string, dbName: string, role: string): Promise<void> {
   const parsed = new URL(runtimeUrl);
   if (!/^postgres(?:ql)?:$/.test(parsed.protocol)) throw new Error(`${RUNTIME_ENV} must be a PostgreSQL URL`);
-  if (decodeURIComponent(parsed.username) !== ROLE) throw new Error(`${RUNTIME_ENV} username must be ${ROLE}`);
+  if (decodeURIComponent(parsed.username) !== role) throw new Error(`${RUNTIME_ENV} username must be ${role}`);
   const runtime = new Pool({ connectionString: runtimeUrl });
   try {
     const who = await runtime.query("SELECT current_user AS u,current_database() AS db");
-    if (who.rows[0]?.u !== ROLE || who.rows[0]?.db !== dbName) {
+    if (who.rows[0]?.u !== role || who.rows[0]?.db !== dbName) {
       throw new Error("runtime connection role/database mismatch");
     }
     await runtime.query("SELECT 1 FROM clean.retention_tombstone LIMIT 1");
   } finally {
     await runtime.end().catch(() => undefined);
   }
+}
+
+function makeRuntimeUrl(ownerUrl: string, role: string, password: string): string {
+  const u = new URL(ownerUrl);
+  u.username = role;
+  u.password = password;
+  u.searchParams.set("sslmode", "verify-full");
+  return u.toString();
 }
 
 async function main(): Promise<void> {
@@ -107,62 +186,61 @@ async function main(): Promise<void> {
     const dbName = String(meta.rows[0]?.db ?? "");
     const ownerRole = String(meta.rows[0]?.owner_role ?? "");
     if (!dbName || !ownerRole) throw new Error("unable to resolve production database/owner role");
-    if (ownerRole === ROLE) throw new Error("owner connection is already the runtime role; an owner/migration connection is required");
 
-    const existing = await owner.query("SELECT 1 FROM pg_roles WHERE rolname=$1", [ROLE]);
-    let runtimeUrl = "";
+    const envText = readEnvText();
+    let runtimeUrl = String(process.env[RUNTIME_ENV] ?? "").trim() || envValue(envText, RUNTIME_ENV);
+    let runtimeRole = "";
 
-    if (existing.rowCount === 0) {
-      const password = randomBytes(32).toString("base64url");
-      await owner.query(`CREATE ROLE ${escapeIdent(ROLE)} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD '${escapeLiteral(password)}'`);
-      console.log(`role created: ${ROLE}`);
-
-      // First-time provisioning only. Do not repeat this destructive grant
-      // reconciliation on ordinary retries once the role has already passed.
-      const oldGrants = await owner.query(
-        `SELECT DISTINCT table_schema, table_name FROM information_schema.role_table_grants WHERE grantee=$1`,
-        [ROLE],
-      );
-      for (const row of oldGrants.rows) {
-        await owner.query(`REVOKE ALL PRIVILEGES ON TABLE ${escapeIdent(String(row.table_schema))}.${escapeIdent(String(row.table_name))} FROM ${escapeIdent(ROLE)}`);
-      }
-
-      await owner.query(`GRANT CONNECT ON DATABASE ${escapeIdent(dbName)} TO ${escapeIdent(ROLE)}`);
-      await owner.query(`GRANT USAGE ON SCHEMA clean TO ${escapeIdent(ROLE)}`);
-      await owner.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA clean TO ${escapeIdent(ROLE)}`);
-      await owner.query(`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA clean TO ${escapeIdent(ROLE)}`);
-      await owner.query(`ALTER DEFAULT PRIVILEGES FOR ROLE ${escapeIdent(ownerRole)} IN SCHEMA clean GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${escapeIdent(ROLE)}`);
-      await owner.query(`ALTER DEFAULT PRIVILEGES FOR ROLE ${escapeIdent(ownerRole)} IN SCHEMA clean GRANT USAGE, SELECT ON SEQUENCES TO ${escapeIdent(ROLE)}`);
-
-      const u = new URL(ownerUrl);
-      u.username = ROLE;
-      u.password = password;
-      if (!u.searchParams.get("sslmode")) u.searchParams.set("sslmode", "verify-full");
-      runtimeUrl = u.toString();
-    } else {
-      const envText = readEnvText();
-      runtimeUrl = String(process.env[RUNTIME_ENV] ?? "").trim() || envValue(envText, RUNTIME_ENV);
-      if (!runtimeUrl) {
-        throw new Error(
-          `BLOCKED:${ROLE} already exists but ${RUNTIME_ENV} is missing. ` +
-          "Refusing to ALTER/rotate the existing production role during a retry. Restore the runtime URL created by the first successful provisioning pass.",
-        );
-      }
+    if (runtimeUrl) {
       if (!sameDatabaseTarget(ownerUrl, runtimeUrl)) {
         throw new Error(`BLOCKED:${RUNTIME_ENV} points to a different database target than ${OWNER_ENV}`);
       }
-      console.log(`role exists: ${ROLE}; reusing previously generated runtime credential (no ALTER ROLE)`);
+      runtimeRole = decodeURIComponent(new URL(runtimeUrl).username);
+      if (!isAllowedRuntimeRoleName(runtimeRole)) {
+        throw new Error(`BLOCKED:${RUNTIME_ENV} username is not an approved V3.9 runtime role`);
+      }
+      if (ownerRole === runtimeRole) throw new Error("owner connection is already the runtime role; an owner/migration connection is required");
+      console.log(`role exists: ${runtimeRole}; reusing previously generated runtime credential (no ALTER ROLE)`);
+    } else if (!(await roleExists(owner, BASE_ROLE))) {
+      runtimeRole = BASE_ROLE;
+      const password = randomBytes(32).toString("base64url");
+      await createRuntimeRole(owner, runtimeRole, password);
+      await grantRuntimeAccess(owner, ownerRole, dbName, runtimeRole);
+      runtimeUrl = makeRuntimeUrl(ownerUrl, runtimeRole, password);
+      console.log(`role created: ${runtimeRole}`);
+    } else {
+      if (String(process.env[RECOVERY_APPROVAL_ENV] ?? "").trim() !== "1") {
+        throw new Error(
+          `BLOCKED:${BASE_ROLE} exists but ${RUNTIME_ENV} is missing. ` +
+          `Set ${RECOVERY_APPROVAL_ENV}=1 to authorize creation of a versioned replacement role and revocation of old V3.9 runtime clean-schema grants.`,
+        );
+      }
+
+      runtimeRole = await chooseRecoveryRole(owner);
+      const password = randomBytes(32).toString("base64url");
+      await createRuntimeRole(owner, runtimeRole, password);
+
+      const oldRoles = await listExistingV39RuntimeRoles(owner);
+      for (const oldRole of oldRoles) {
+        if (oldRole === runtimeRole) continue;
+        await revokeRuntimeAccess(owner, ownerRole, dbName, oldRole);
+      }
+
+      await grantRuntimeAccess(owner, ownerRole, dbName, runtimeRole);
+      runtimeUrl = makeRuntimeUrl(ownerUrl, runtimeRole, password);
+      console.log(`runtime credential recovery: created ${runtimeRole}; revoked clean-schema/default grants from ${oldRoles.join(",")}`);
     }
 
-    const { cleanTableCount } = await verifyRoleAndGrants(owner);
-    await verifyRuntimeConnection(runtimeUrl, dbName);
+    const { cleanTableCount } = await verifyRoleAndGrants(owner, runtimeRole);
+    await verifyNoOtherRuntimeTableGrants(owner, runtimeRole);
+    await verifyRuntimeConnection(runtimeUrl, dbName, runtimeRole);
 
     const tomb = await owner.query("SELECT to_regclass('clean.retention_tombstone') AS c");
     const evidence = {
       verified: true,
       verifiedDate: new Date().toISOString().slice(0, 10),
       tls: /sslmode=/i.test(runtimeUrl),
-      role: ROLE,
+      role: runtimeRole,
       grants: ["CLEAN_SCHEMA_DML", "CLEAN_SEQUENCE_USAGE"],
       auditLogging: tomb.rows[0]?.c === "clean.retention_tombstone",
       target: "production",
@@ -174,8 +252,8 @@ async function main(): Promise<void> {
     env = upsertEnvVar(env, "V39_DB_ROLE_EVIDENCE", `'${JSON.stringify(evidence)}'`);
     writeFileSync(ENV_PATH, env, { mode: 0o600 });
 
-    console.log(`provision result=PASS target=production db=${safeDbLabel(ownerUrl)} role=${ROLE} clean_tables=${cleanTableCount}`);
-    console.log("runtime credential preserved in ignored .env; copy it to the published deployment secret V39_DATABASE_RUNTIME_URL before live P/Gate1/smoke");
+    console.log(`provision result=PASS target=production db=${safeDbLabel(ownerUrl)} role=${runtimeRole} clean_tables=${cleanTableCount}`);
+    console.log("runtime credential preserved in ignored .env; publish V39_DATABASE_RUNTIME_URL before live smoke/probe delivery");
   } finally {
     await owner.end().catch(() => undefined);
   }
