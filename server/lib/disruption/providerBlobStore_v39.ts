@@ -55,12 +55,13 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
   return true;
 }
 
-export function providerBlobObjectNameV39(contentClass: HardRetentionClass, uuid = randomUUID()): string {
+export function providerBlobObjectNameV39(contentClass: HardRetentionClass, uuid?: string): string {
   if (!(contentClass in HARD_RETENTION_LIMIT_HOURS)) throw new Error(`PROVIDER_BLOB_CLASS_INVALID:${contentClass}`);
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid)) {
+  const resolvedUuid = uuid ?? randomUUID();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(resolvedUuid)) {
     throw new Error("PROVIDER_BLOB_UUID_INVALID");
   }
-  const normalized = uuid.toLowerCase();
+  const normalized = resolvedUuid.toLowerCase();
   return `v39/provider/${contentClass}/${normalized.slice(0, 2)}/${normalized}.blob`;
 }
 
