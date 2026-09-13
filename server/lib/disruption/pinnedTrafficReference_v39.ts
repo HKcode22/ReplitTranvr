@@ -56,12 +56,15 @@ export function loadFrozenTrafficReferenceV39(root = process.cwd()): LoadedTraff
 
   const encodedPath = join(root, "artifacts", "traffic-reference-frozen.json.gz.b64");
   if (!existsSync(encodedPath)) throw new Error("BLOCKED:TRAFFIC_REFERENCE_FROZEN_FILE_MISSING");
-  // Base64 is intentionally stored as a text artifact and may be line-wrapped
-  // by transport/repository tooling. Whitespace has no semantic meaning in the
-  // encoding; strip it before validating/decoding, then verify the exact gzip
-  // and reconstructed-original SHA-256 values below.
-  const encoded = readFileSync(encodedPath, "utf8").replace(/\s+/g, "");
-  if (!encoded || !/^[A-Za-z0-9+/=]+$/.test(encoded)) {
+
+  // The repository pin is a transport envelope, not the authority. Some Git
+  // transports/editors can inject non-base64 formatting characters into a text
+  // envelope. Normalize those characters before decoding; acceptance still
+  // requires BOTH the exact pinned gzip SHA-256 and the exact reconstructed JSON
+  // SHA-256 below, so transport normalization cannot make altered content pass.
+  const transport = readFileSync(encodedPath, "utf8");
+  const encoded = transport.replace(/[^A-Za-z0-9+/=]/g, "");
+  if (!encoded || encoded.length % 4 !== 0) {
     throw new Error("BLOCKED:PINNED_TRAFFIC_REFERENCE_BASE64_INVALID");
   }
 
