@@ -1,53 +1,41 @@
 #!/usr/bin/env bash
-# Phase 2 prerequisite-P helper.
+# V3.9 prerequisite-P bootstrap guide.
 #
-# This file intentionally DOES NOT manufacture retention/legal PASS evidence.
-# It may prepare reproducible DB/webhook evidence, but retention deployment and
-# per-content-class evidence must come from independently verified facts.
-set -u
-: "${AERODATABOX_WEBHOOK_SECRET:?AERODATABOX_WEBHOOK_SECRET must be set in Replit Secrets, never committed}"
+# This helper intentionally does NOT fabricate evidence or provider authority.
+# It prints the exact safe setup sequence for the current Phase-2 architecture.
+set -euo pipefail
 
-export V39_DB_ROLE_EVIDENCE='{
-  "verified": true,
-  "verifiedDate": "2026-09-11",
-  "tls": true,
-  "role": "travnr_runtime",
-  "grants": ["CLEAN_SCHEMA_DML", "CLEAN_SEQUENCE_USAGE"],
-  "auditLogging": true
-}'
+cat <<'EOF'
+V3.9 Phase-2 prerequisite-P bootstrap (no provider calls):
 
-export V39_WEBHOOK_SECURITY_EVIDENCE=$(npx tsx -e '
-  import { defaultWebhookUrl } from "./server/lib/disruption/aerodataboxLimiter_v3";
-  const url = defaultWebhookUrl();
-  console.log(JSON.stringify({
-    url,
-    providerAuth: "token",
-    compensatingControlApproved: true,
-    replaySafeIdentity: true
-  }));
-')
+1. Ensure the production owner DATABASE_URL is available to the shell.
+2. Provision/reconcile the least-privilege runtime role:
+     npx tsx scripts/provision_runtime_role_v39.ts
+   This writes V39_DATABASE_RUNTIME_URL and V39_DB_ROLE_EVIDENCE to ignored .env.
 
-# Primary PostgreSQL is undeniably deployed. The other four surfaces are left
-# UNKNOWN until their real deployment/retention state is evidenced. UNKNOWN is
-# intentionally blocking in v39:security:verify.
-export V39_RETENTION_DEPLOYMENT_EVIDENCE='{
-  "surfaces": {
-    "primary": "DEPLOYED",
-    "replica": "UNKNOWN",
-    "backup": "UNKNOWN",
-    "object": "UNKNOWN",
-    "log": "UNKNOWN"
-  }
-}'
+3. Set V39_PUBLIC_WEBHOOK_BASE_URL to the actual HTTPS deployment origin
+   (Travnr production is https://travnr.com), then run:
+     npx tsx scripts/configure_webhook_evidence_v39.ts
+   This creates/keeps the webhook secret and writes no-secret webhook evidence.
 
-# DO NOT auto-create V39_RETENTION_MATRIX_EVIDENCE here. Plan §10.2 forbids one
-# blanket retention period and forbids self-classifying normalized copies as
-# Derived Works. Supply a reviewed per-class JSON artifact only after every row
-# has its real content classification, source/Terms basis, period/condition and
-# expiry action.
-unset V39_RETENTION_MATRIX_EVIDENCE 2>/dev/null || true
+4. Create/select a DEDICATED Replit App Storage bucket in the App Storage tool.
+   Put its exact Bucket ID in V39_PROVIDER_BLOB_BUCKET_ID. Do not use an
+   implicit/default bucket. Set V39_PROVIDER_BLOB_MODE=required.
 
-printf '%s\n' \
-  'Prepared reproducible DB/webhook prerequisite-P evidence.' \
-  'Retention deployment remains BLOCKED until replica/backup/object/log surfaces are verified.' \
-  'Retention content matrix remains BLOCKED until reviewed per-class evidence is supplied.'
+5. After the owner reviews/approves the already-supplied 168h raw / 24h FIDS
+   entitlement and the isolated storage topology, prepare machine evidence:
+     npx tsx scripts/prepare_phase2_p_evidence_v39.ts --owner-approved
+   Destructive retention remains unarmed (0).
+
+6. Apply migrations with the owner connection, then run the live P verifier:
+     npm run v39:security:verify
+   It independently verifies the DB role, HTTPS webhook, UNLOGGED tables,
+   safe logged constraints, no unresolved incident, and performs a synthetic
+   dedicated-bucket write/read/delete/absence test. Only then can it record P.
+
+No AeroDataBox paid request, subscription, FIDS call, refill, smoke or probe is
+performed by steps 1-6.
+
+The old full V39_RETENTION_MATRIX_EVIDENCE belongs to later Phase-6 retention
+closure and is deliberately NOT prerequisite-P.
+EOF
