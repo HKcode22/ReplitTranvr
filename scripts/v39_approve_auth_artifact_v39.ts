@@ -2,6 +2,8 @@ import { appendFileSync, readFileSync } from "fs";
 import { join } from "path";
 import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authRecord_v39";
 
+const GATE1_PHASE = "Phase 2 / Gate 1";
+
 function arg(name: string): string | null {
   const i = process.argv.indexOf(name);
   return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : null;
@@ -13,9 +15,7 @@ function die(message: string): never {
 }
 
 const authFile = arg("--auth-file");
-const expectedPhaseGate = arg("--phase-gate");
 if (!authFile) die("--auth-file is required");
-if (!expectedPhaseGate) die("--phase-gate is required");
 
 let raw = "";
 try { raw = readFileSync(authFile, "utf8"); }
@@ -26,7 +26,16 @@ try { record = JSON.parse(raw) as AuthRecord; }
 catch { die("AUTH file is not valid JSON"); }
 
 if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(String(record.authorizationId ?? ""))) die("authorizationId malformed");
-if (record.phaseGate !== expectedPhaseGate) die(`phaseGate mismatch: ${record.phaseGate ?? "<missing>"}`);
+if (record.phaseGate !== GATE1_PHASE) die(`only '${GATE1_PHASE}' may be approved by this helper`);
+if (record.maxAlertCredits !== null) die("Gate1 helper requires maxAlertCredits=null");
+if (record.maxRestUnitsByCategory !== null) die("Gate1 helper requires maxRestUnitsByCategory=null");
+if (record.cleanupOwner !== null) die("Gate1 helper requires cleanupOwner=null because no mutation is authorized");
+
+const scope = String(record.airportFilterWindow ?? "").toLowerCase();
+for (const required of ["documented-free", "no fids", "no refill", "no subscription mutation", "no smoke", "no probe"]) {
+  if (!scope.includes(required)) die(`Gate1 scope missing required restriction '${required}'`);
+}
+
 if (record.startNotBeforeUtc) {
   const start = new Date(record.startNotBeforeUtc);
   if (!Number.isFinite(start.getTime())) die("startNotBeforeUtc invalid");
@@ -48,13 +57,14 @@ catch (e: any) { die(`cannot read evidence ledger: ${e?.message ?? e}`); }
 if (!ledger.includes(token)) {
   appendFileSync(
     ledgerPath,
-    `\n### Exact AUTH approval — ${record.authorizationId}\n\`${token}\`\n`,
+    `\n### Exact read-only Gate1 AUTH approval — ${record.authorizationId}\n\`${token}\`\n`,
     "utf8",
   );
-  console.log(`APPROVED:${record.authorizationId}`);
+  console.log(`APPROVED_GATE1_ONLY:${record.authorizationId}`);
 } else {
   console.log(`ALREADY_APPROVED:${record.authorizationId}`);
 }
 console.log(`phase_gate=${record.phaseGate}`);
 console.log(`artifact_sha256=${hash}`);
-console.log(`ledger=SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md`);
+console.log("paid_or_mutating_authorization=false");
+console.log("ledger=SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md");
