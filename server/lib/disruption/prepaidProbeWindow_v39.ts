@@ -42,6 +42,8 @@ export interface PrepaidLiveWindowResultV39 {
   reconciliationStatus: "MATCH" | "MISMATCH" | "UNRESOLVED";
   externalCredits: number | null;
   internalSendCredits: number;
+  /** Maximum observed internal SEND ledger minus provider balance delta while live. */
+  maxObservedUnsettledCreditGap: number;
   settlementReads: number;
   metrics: PrepaidProbeMetricsV39 | null;
   cleanupVerifiedAtUtc: string | null;
@@ -66,8 +68,8 @@ function validateInput(input: PrepaidLiveWindowInputV39): void {
  * Single owner for a prepaid Alert exposure window.
  *
  * Provider subscription/balance values never leave process memory/UNLOGGED
- * runtime. The returned externalCredits exists only so the caller can report a
- * mismatch while still refusing to persist that provider account value.
+ * runtime. The returned externalCredits exists only for immediate reconciliation
+ * and MUST NOT be persisted as provider account content by callers.
  */
 export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39): Promise<PrepaidLiveWindowResultV39> {
   validateInput(input);
@@ -86,6 +88,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   let windowStart = new Date();
   let windowEnd = windowStart;
   let liveStopReason: string | null = null;
+  let maxObservedUnsettledCreditGap = 0;
 
   const sub = await createSubscription("FlightByAirportIcao", icao, {
     url: webhookUrl,
@@ -95,19 +98,10 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     const cleanup = await cleanupPrepaidProbeSessionV39(session.sessionId, `${input.deletionRunId}:create-failed`).catch(() => null);
     return {
-      status: "failed",
-      runtimeSessionId: session.sessionId,
-      windowStart,
-      windowEnd: new Date(),
-      durationCensored: true,
-      stopReason: "subscription_create_failed",
-      reconciliationStatus: "UNRESOLVED",
-      externalCredits: null,
-      internalSendCredits: 0,
-      settlementReads: 0,
-      metrics: null,
-      cleanupVerifiedAtUtc: cleanup?.verifiedAtUtc ?? null,
-      subscriptionDeleted: false,
+      status: "failed", runtimeSessionId: session.sessionId, windowStart, windowEnd: new Date(), durationCensored: true,
+      stopReason: "subscription_create_failed", reconciliationStatus: "UNRESOLVED", externalCredits: null,
+      internalSendCredits: 0, maxObservedUnsettledCreditGap, settlementReads: 0, metrics: null,
+      cleanupVerifiedAtUtc: cleanup?.verifiedAtUtc ?? null, subscriptionDeleted: false,
     };
   }
 
@@ -119,6 +113,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     const internal = await prepaidProbeInternalCreditsV39(session.sessionId);
     const balance = await getBalance();
     const external = balance ? Math.max(0, input.balanceBefore - balance.creditsRemaining) : 0;
+    maxObservedUnsettledCreditGap = Math.max(maxObservedUnsettledCreditGap, Math.max(0, internal - external));
     if (input.settledOtherCredits + Math.max(internal, external) >= input.hardCapCredits) {
       liveStopReason = "probe_cap_soft_stop";
       break;
@@ -130,19 +125,12 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   if (!subscriptionDeleted) {
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     return {
-      status: "failed",
-      runtimeSessionId: session.sessionId,
-      windowStart,
-      windowEnd,
-      durationCensored: windowEnd.getTime() < deadline,
-      stopReason: "subscription_delete_failed",
-      reconciliationStatus: "UNRESOLVED",
-      externalCredits: null,
+      status: "failed", runtimeSessionId: session.sessionId, windowStart, windowEnd,
+      durationCensored: windowEnd.getTime() < deadline, stopReason: "subscription_delete_failed",
+      reconciliationStatus: "UNRESOLVED", externalCredits: null,
       internalSendCredits: await prepaidProbeInternalCreditsV39(session.sessionId),
-      settlementReads: 0,
-      metrics: null,
-      cleanupVerifiedAtUtc: null,
-      subscriptionDeleted: false,
+      maxObservedUnsettledCreditGap, settlementReads: 0, metrics: null,
+      cleanupVerifiedAtUtc: null, subscriptionDeleted: false,
     };
   }
 
@@ -154,58 +142,36 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   if (settle.status !== "settled") {
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     return {
-      status: "failed",
-      runtimeSessionId: session.sessionId,
-      windowStart,
-      windowEnd,
-      durationCensored: windowEnd.getTime() < deadline,
-      stopReason: `settlement_unresolved:${settle.reason}`,
-      reconciliationStatus: "UNRESOLVED",
-      externalCredits: null,
+      status: "failed", runtimeSessionId: session.sessionId, windowStart, windowEnd,
+      durationCensored: windowEnd.getTime() < deadline, stopReason: `settlement_unresolved:${settle.reason}`,
+      reconciliationStatus: "UNRESOLVED", externalCredits: null,
       internalSendCredits: await prepaidProbeInternalCreditsV39(session.sessionId),
-      settlementReads: settle.readsUsed,
-      metrics: null,
-      cleanupVerifiedAtUtc: null,
-      subscriptionDeleted: true,
+      maxObservedUnsettledCreditGap, settlementReads: settle.readsUsed, metrics: null,
+      cleanupVerifiedAtUtc: null, subscriptionDeleted: true,
     };
   }
 
   const externalCredits = Math.max(0, input.balanceBefore - settle.stableBalance);
   const metrics = await prepaidProbeMetricsV39(session.sessionId, windowStart, windowEnd);
+  maxObservedUnsettledCreditGap = Math.max(maxObservedUnsettledCreditGap, Math.max(0, metrics.internalSendCredits - externalCredits));
   const reconciliationStatus = externalCredits === metrics.internalSendCredits ? "MATCH" : "MISMATCH";
   if (reconciliationStatus !== "MATCH") {
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     return {
-      status: "failed",
-      runtimeSessionId: session.sessionId,
-      windowStart,
-      windowEnd,
-      durationCensored: windowEnd.getTime() < deadline,
-      stopReason: "external_internal_credit_mismatch",
-      reconciliationStatus,
-      externalCredits,
-      internalSendCredits: metrics.internalSendCredits,
-      settlementReads: settle.readsUsed,
-      metrics,
-      cleanupVerifiedAtUtc: null,
-      subscriptionDeleted: true,
+      status: "failed", runtimeSessionId: session.sessionId, windowStart, windowEnd,
+      durationCensored: windowEnd.getTime() < deadline, stopReason: "external_internal_credit_mismatch",
+      reconciliationStatus, externalCredits, internalSendCredits: metrics.internalSendCredits,
+      maxObservedUnsettledCreditGap, settlementReads: settle.readsUsed, metrics,
+      cleanupVerifiedAtUtc: null, subscriptionDeleted: true,
     };
   }
 
   const cleanup = await cleanupPrepaidProbeSessionV39(session.sessionId, input.deletionRunId);
   return {
-    status: "completed",
-    runtimeSessionId: session.sessionId,
-    windowStart,
-    windowEnd,
-    durationCensored: windowEnd.getTime() < deadline,
-    stopReason: liveStopReason,
-    reconciliationStatus: "MATCH",
-    externalCredits,
-    internalSendCredits: metrics.internalSendCredits,
-    settlementReads: settle.readsUsed,
-    metrics,
-    cleanupVerifiedAtUtc: cleanup.verifiedAtUtc,
-    subscriptionDeleted: true,
+    status: "completed", runtimeSessionId: session.sessionId, windowStart, windowEnd,
+    durationCensored: windowEnd.getTime() < deadline, stopReason: liveStopReason,
+    reconciliationStatus: "MATCH", externalCredits, internalSendCredits: metrics.internalSendCredits,
+    maxObservedUnsettledCreditGap, settlementReads: settle.readsUsed, metrics,
+    cleanupVerifiedAtUtc: cleanup.verifiedAtUtc, subscriptionDeleted: true,
   };
 }
