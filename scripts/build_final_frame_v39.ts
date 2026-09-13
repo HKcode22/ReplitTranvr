@@ -16,7 +16,6 @@ import { createHash } from "crypto";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { pathToFileURL } from "url";
-import { applyBootMigrations } from "../server/db";
 import { v39Pool } from "../server/lib/disruption/db_v39";
 import { getAirportCoverage } from "../server/lib/disruption/adbCollectionController_v3";
 import { allCatalogAirports } from "../server/lib/disruption/adbAirportCatalog_v3";
@@ -248,6 +247,29 @@ function assertCoverageMatchesGate1(coverage: CoverageForFinalFrame, gate1: Gate
   }
 }
 
+async function assertFinalFrameSchemaReady(): Promise<void> {
+  try {
+    await v39Pool.query(
+      `SELECT icao,tier,tier_source,tier_verified,traffic_prior,traffic_metric_name,
+              traffic_metric_value,traffic_metric_units,traffic_reference_hash,country_iso2,
+              airport_longitude_e,airport_timezone,out_degree,in_degree,undirected_degree,
+              effective_carriers,intl_share,region,region_source,exclusion_reason,
+              feed_schedule,feed_live,feed_adsb,pre_eligible,post_eligible,in_frame,
+              frame_version,frame_hash
+         FROM clean.adb_sampling_frame LIMIT 0`,
+    );
+    await v39Pool.query(
+      `SELECT registry_key,active_frame_version,frame_hash,traffic_reference_hash,
+              region_mapping_hash,tier_hash,traffic_source_name,traffic_source_version,
+              traffic_retrieval_date,reference_period_start,reference_period_end,
+              traffic_metric_name,traffic_metric_units,tier_rule_json
+         FROM clean.adb_sampling_frame_registry LIMIT 0`,
+    );
+  } catch {
+    throw new Error("BLOCKED:FINAL_FRAME_SCHEMA_NOT_READY_FOR_RESTRICTED_RUNTIME_ROLE");
+  }
+}
+
 async function persistFinalFrame(rows: FinalFrameRowV39[], traffic: FrozenTrafficReferenceV39): Promise<{ frameVersion: string; frameHash: string }> {
   if (!rows.length) throw new Error("BLOCKED:FINAL_FRAME_EMPTY");
   const hash = frameHash(rows);
@@ -343,7 +365,10 @@ export async function main(): Promise<number> {
     if (!verified.length) throw new Error("BLOCKED:NO_TIER_VERIFIED_AIRPORTS");
     if (!dualEligible.length) throw new Error("BLOCKED:NO_DUAL_ELIGIBLE_MAPPED_AIRPORTS");
 
-    await applyBootMigrations();
+    // Phase 2A already established the production schema. Phase 2D must not
+    // invoke the general application migration owner under runtime credentials;
+    // it verifies the exact required clean-table columns read-only instead.
+    await assertFinalFrameSchemaReady();
     const persisted = await persistFinalFrame(rows, traffic);
     console.log(JSON.stringify({
       status: "PASS",
