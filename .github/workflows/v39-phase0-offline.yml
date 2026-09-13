@@ -90,3 +90,50 @@ jobs:
 
       - name: Production build
         run: npm run v39:build
+
+  # ONE-SHOT Phase-2 public-data evaluation. Remove this job after its artifact
+  # is captured. It has no provider secrets and makes no AeroDataBox/Replit calls.
+  opdi-reference-one-shot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install public-data dependencies
+        run: python -m pip install --disable-pip-version-check 'duckdb>=1.1,<2' 'requests>=2.32,<3'
+
+      - name: Build OPDI Aug-2025 through Jul-2026 candidate
+        run: |
+          mkdir -p /tmp/v39-opdi-output
+          python scripts/v39_build_opdi_reference_v39.py \
+            --output /tmp/v39-opdi-output/traffic-reference-opdi-candidate.json \
+            --diagnostics /tmp/v39-opdi-output/traffic-reference-opdi-diagnostics.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install locked repository dependencies
+        run: npm ci
+
+      - name: Validate Phase-2 candidate
+        run: npx tsx scripts/v39_validate_opdi_reference_v39.ts /tmp/v39-opdi-output/traffic-reference-opdi-candidate.json
+
+      - name: Upload compact reference evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v39-opdi-traffic-reference-${{ github.sha }}
+          path: |
+            /tmp/v39-opdi-output/traffic-reference-opdi-candidate.json
+            /tmp/v39-opdi-output/traffic-reference-opdi-diagnostics.json
+          if-no-files-found: warn
+          retention-days: 14
