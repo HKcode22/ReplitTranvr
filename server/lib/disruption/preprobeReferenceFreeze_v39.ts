@@ -70,7 +70,7 @@ export interface PreprobeReferenceFreezeV39 extends FrozenProbeArtifact {
   region_mapping_hash: string;
   region_mapping_source: string;
   normalization: {
-    method: "nearest-rank-p90-non-null-mapped-frame";
+    method: "nearest-rank-p90-non-null-frame";
     degreeCap: number;
     carriersCap: number;
   };
@@ -288,9 +288,10 @@ export function buildPreprobeReferenceFreezeV39(
   if (!Number.isFinite(frozenAt.getTime())) throw new Error("PREPROBE_FREEZE_FROZEN_AT_INVALID");
   if (!rows.length) throw new Error("PREPROBE_FREEZE_FRAME_EMPTY");
 
-  const mappedRows = rows.filter((row) => row.region !== null && row.tierVerified);
-  const degreeCap = nearestRankP90(mappedRows.map((row) => row.undirectedDegree).filter((x): x is number => x !== null), "degree");
-  const carriersCap = nearestRankP90(mappedRows.map((row) => row.effectiveCarriers).filter((x): x is number => x !== null), "carriers");
+  // Binding Plan: normalization caps use every non-null frame-airport value.
+  // Region mapping/tier eligibility constrain the shortlist, not the cap denominator.
+  const degreeCap = nearestRankP90(rows.map((row) => row.undirectedDegree).filter((x): x is number => x !== null), "degree");
+  const carriersCap = nearestRankP90(rows.map((row) => row.effectiveCarriers).filter((x): x is number => x !== null), "carriers");
   const selected = selectShortlistAndReplacements(rows, traffic, degreeCap, carriersCap);
   const diagnostics = buildFrameDiagnostics18V39(rows);
 
@@ -322,7 +323,7 @@ export function buildPreprobeReferenceFreezeV39(
     degreeCap,
     carriersCap,
     normalization: {
-      method: "nearest-rank-p90-non-null-mapped-frame" as const,
+      method: "nearest-rank-p90-non-null-frame" as const,
       degreeCap,
       carriersCap,
     },
