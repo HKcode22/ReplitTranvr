@@ -92,6 +92,9 @@ console.log(JSON.stringify({
 NODE
 fi
 
+printf '%s\n' "[2D-preflight] Verify final-frame schema contract before any coverage re-read"
+npx tsx scripts/v39_check_phase2d_schema_contract_v39.ts
+
 printf '%s\n' "[2D] Rebuild/hash the final frame from frozen Gate-1 coverage + frozen reference"
 npx tsx scripts/build_final_frame_v39.ts
 
