@@ -2,6 +2,8 @@ name: V3.9 MrAirspace Traffic Reference
 
 # Phase-2 zero-cost reference build only. No AeroDataBox/provider credentials
 # are used and this workflow does not authorize paid/live experimental traffic.
+# Evidence refresh: rebuild on the current safety-branch code so the frozen
+# reference provenance is tied to the same Phase-2 implementation checkpoint.
 on:
   workflow_dispatch:
   push:
