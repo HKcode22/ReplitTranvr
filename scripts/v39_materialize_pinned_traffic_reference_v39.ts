@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { parseFrozenTrafficReference } from "../server/lib/disruption/trafficReference_v39";
+import { requireTrafficReferencePlanContractV39 } from "../server/lib/disruption/trafficReferencePlanContract_v39";
 import {
   loadFrozenTrafficReferenceV39,
   V39_PINNED_TRAFFIC_REFERENCE_SHA256,
@@ -12,6 +13,7 @@ function main(): void {
   const root = process.cwd();
   if (process.env.V39_TRAFFIC_REFERENCE_FILE) {
     const loaded = loadFrozenTrafficReferenceV39(root);
+    requireTrafficReferencePlanContractV39(loaded.traffic, new Date());
     console.log(JSON.stringify({
       status: "PASS_EXPLICIT_REFERENCE",
       artifact_sha256: loaded.artifactSha256,
@@ -27,10 +29,16 @@ function main(): void {
     throw new Error("BLOCKED:PINNED_TRAFFIC_REFERENCE_HASH_MISMATCH");
   }
 
+  // Integrity-valid is not the same as Plan-admissible. In particular, the
+  // current pinned MrAirspace candidate is observed ADS-B-derived data with a
+  // quarterly release lag, while binding V3.9-f.8 §§4.1/4.5 still require a
+  // <=30-day reference end and scheduled-route balancing variables. Refuse
+  // before writing the executable plain JSON until the Plan itself is formally
+  // reconciled or a compliant scheduled reference is supplied.
+  requireTrafficReferencePlanContractV39(loaded.traffic, new Date());
+
   if (existsSync(target)) {
     const existing = readFileSync(target, "utf8");
-    // Parsing catches structurally invalid but byte-coincident assumptions;
-    // the loader has already cryptographically verified the file itself.
     parseFrozenTrafficReference(existing);
     if (existing !== loaded.raw) {
       throw new Error("BLOCKED:TRAFFIC_REFERENCE_EXISTING_DIFFERS_REFUSE_OVERWRITE");
