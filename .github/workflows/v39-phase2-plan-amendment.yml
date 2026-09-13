@@ -1,0 +1,39 @@
+name: V3.9 Phase2 Plan Amendment
+
+on:
+  push:
+    branches:
+      - v39-p-phase2-closure-audit-20260911
+    paths:
+      - scripts/v39_apply_phase2_reference_plan_amendment.py
+      - .github/workflows/v39-phase2-plan-amendment.yml
+
+permissions:
+  contents: write
+
+jobs:
+  amend-binding-plan:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: v39-p-phase2-closure-audit-20260911
+          fetch-depth: 1
+      - name: Apply exact reviewed amendment
+        run: python3 scripts/v39_apply_phase2_reference_plan_amendment.py
+      - name: Verify only binding Plan changed
+        run: |
+          set -euo pipefail
+          changed="$(git status --short)"
+          echo "$changed"
+          test "$(printf '%s\n' "$changed" | sed '/^$/d' | wc -l)" -eq 1
+          printf '%s\n' "$changed" | grep -Eq '^ M SEPmd/V3\.9_DataCollectPlan_f\.8\.md$'
+      - name: Commit amended Plan
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add SEPmd/V3.9_DataCollectPlan_f.8.md
+          git commit -m "V3.9-f.8: bind pre-probe open traffic reference semantics"
+          git push origin HEAD:v39-p-phase2-closure-audit-20260911
