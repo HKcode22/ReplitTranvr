@@ -62,7 +62,7 @@ describe("V3.9 Phase-2 production preparation boundaries", () => {
     expect(text).toContain("dedicated App Storage bucket");
   });
 
-  it("provides a single fail-closed Phase-2A production closure runner without provider work", () => {
+  it("provides a single fail-closed Phase-2A production closure runner with only local security/retention owners", () => {
     const text = source("scripts/v39_phase2a_close.sh");
     for (const key of [
       "V39_PRODUCTION_DATABASE_OWNER_URL",
@@ -78,7 +78,8 @@ describe("V3.9 Phase-2 production preparation boundaries", () => {
     expect(text).toContain("v39_record_p_pass_v39.ts");
     expect(text).toContain("V39_PHASE2_RETENTION_APPLY_ARMED=0");
     expect(text).not.toContain("AERODATABOX_API_KEY");
-    expect(text).not.toContain("refill");
-    expect(text).not.toContain("FIDS");
+    expect(text).not.toContain("credit_canary.ts");
+    expect(text).not.toContain("anchor_probe.ts");
+    expect(text).not.toContain("measure_coverage.ts");
   });
 });
