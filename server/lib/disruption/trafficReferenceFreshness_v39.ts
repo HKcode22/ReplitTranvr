@@ -10,8 +10,10 @@ export interface TrafficReferenceFreshnessVerdictV39 {
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const DAY_MS = 86_400_000;
-/** Binding V3.9-f.8 Plan §4.1 maximum; artifacts may not relax it. */
+/** Binding V3.9-f.8 §4.1 continuous/monthly source maximum. */
 export const V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS = 30;
+/** Binding V3.9-f.8 §4.1 latest-complete-quarter source maximum. */
+export const V39_BINDING_QUARTERLY_REFERENCE_MAX_AGE_DAYS = 92;
 
 function utcDateStart(date: string): number | null {
   if (!DATE.test(date)) return null;
@@ -19,14 +21,20 @@ function utcDateStart(date: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+function isLatestCompleteQuarterReference(ref: FrozenTrafficReferenceV39): boolean {
+  if (ref.reference_semantics !== "observed_commercial_movements") return false;
+  const basis = String(ref.reference_freshness_basis ?? "").toLowerCase();
+  return basis.includes("latest complete four-quarter") || basis.includes("latest-complete-quarter");
+}
+
 /**
- * Binding Plan §4.1 admission rule evaluated at frame/reference freeze time.
+ * Binding amended V3.9-f.8 Plan §4.1 admission rule evaluated at reference/
+ * frame freeze time.
  *
- * The evidence artifact is subordinate to the Plan. A source-specific
- * `reference_max_age_days` may be stricter than the Plan, but may never relax
- * the Plan's 30-day maximum. Any methodology change must first be made in the
- * binding Plan and then propagated to code/tests as a separately reviewed
- * change; an evidence memo or generated artifact cannot supersede it.
+ * Continuous/monthly references remain capped at 30 UTC calendar days. An
+ * explicitly observed, quarterly-published source frozen under the
+ * latest-complete-four-quarter rule may declare a cap no larger than 92 days.
+ * An artifact may be stricter than its Plan class, but may never relax it.
  */
 export function verifyTrafficReferenceFreshnessV39(
   ref: FrozenTrafficReferenceV39,
@@ -34,20 +42,28 @@ export function verifyTrafficReferenceFreshnessV39(
 ): TrafficReferenceFreshnessVerdictV39 {
   const failures: string[] = [];
   const declaredMaxAge = ref.reference_max_age_days;
+  const quarterly = isLatestCompleteQuarterReference(ref);
+  const planClassMax = quarterly
+    ? V39_BINDING_QUARTERLY_REFERENCE_MAX_AGE_DAYS
+    : V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS;
+
+  if (ref.reference_semantics === "observed_commercial_movements" && !quarterly && declaredMaxAge !== undefined && declaredMaxAge > V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS) {
+    failures.push("observed-reference-quarterly-basis-required-for-age-over-30d");
+  }
   if (declaredMaxAge !== undefined && (!Number.isInteger(declaredMaxAge) || declaredMaxAge < 1)) {
     failures.push("reference-max-age-days-invalid");
   }
-  if (declaredMaxAge !== undefined && declaredMaxAge > V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS) {
-    failures.push(`reference-artifact-attempts-plan-relaxation:${declaredMaxAge}d>${V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS}d`);
+  if (declaredMaxAge !== undefined && declaredMaxAge > planClassMax) {
+    failures.push(`reference-artifact-attempts-plan-relaxation:${declaredMaxAge}d>${planClassMax}d`);
   }
   if (declaredMaxAge !== undefined && !String(ref.reference_freshness_basis ?? "").trim()) {
     failures.push("reference-freshness-basis-missing");
   }
   const allowedMaxAgeDays = Math.min(
-    V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS,
+    planClassMax,
     Number.isInteger(declaredMaxAge) && (declaredMaxAge as number) > 0
       ? (declaredMaxAge as number)
-      : V39_BINDING_TRAFFIC_REFERENCE_MAX_AGE_DAYS,
+      : planClassMax,
   );
 
   if (!Number.isFinite(frameFreezeAt.getTime())) failures.push("frame-freeze-time-invalid");
