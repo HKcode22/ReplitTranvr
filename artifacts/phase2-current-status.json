@@ -1,10 +1,10 @@
 {
-  "schema_version": "v3.9-phase2-current-status-8",
-  "recorded_at_utc": "2026-09-13T15:16:38.000Z",
+  "schema_version": "v3.9-phase2-current-status-9",
+  "recorded_at_utc": "2026-09-14T03:18:00.000Z",
   "binding_plan": "SEPmd/V3.9_DataCollectPlan_f.8.md",
   "implementation_log": "SEPmd/V3.9_IMPLEMENTATION_LOG.md#17-phase-2--prerequisite-p--gate-1--referencesframe--pre-probe-freeze--safety-smoke--gate-2",
   "branch": "main",
-  "current_execution_pointer": "PHASE_2F_MANDATORY_SAFETY_SMOKE_PREPARE_RUNTIME_AND_EXACT_AUTH",
+  "current_execution_pointer": "PHASE_2F_BLOCKED_DEPLOYMENT_SECRET_ENFORCEMENT_REPAIR_AND_REDEPLOY",
   "status": {
     "phase0": "PASS",
     "phase1_gate0": "PASS_EXISTING_EVIDENCE",
@@ -13,11 +13,11 @@
     "phase2c_reference_rules": "PASS_REFRESHED_RUN_SPECIFIC_REFERENCE_FROZEN",
     "phase2d_final_frame": "PASS_LIVE_FINAL_FRAME_PERSISTED_AND_HASHED",
     "phase2e_preprobe_freeze": "PASS_LIVE_HASH_LOCKED_AND_HANDOFF_RECORDED",
-    "phase2f_safety_smoke": "IMPLEMENTED_NOT_RUN_EXACT_AUTH_REQUIRED_CURRENT_POINTER",
+    "phase2f_safety_smoke": "BLOCKED_LIVE_DEPLOYMENT_SECRET_NOT_ENFORCED_WRONG_SECRET_HTTP_200_NOT_RUN",
     "phase2g_gate2_stage1": "IMPLEMENTED_NOT_RUN_WAITING_ON_2F_PASS_HANDOFF_AUTH",
     "phase2h_gate2_stage2": "IMPLEMENTED_NOT_RUN_WAITING_ON_2G_PROMOTION_HANDOFF_AUTH",
     "phase2_complete": false,
-    "paid_work": "NO_GO_UNTIL_PHASE2F_RUNTIME_IS_FROZEN_AND_EXACT_PHASE2F_AUTH_IS_HUMAN_REVIEWED_AND_APPROVED",
+    "paid_work": "NO_GO_UNTIL_FAIL_CLOSED_SECRET_REPAIR_IS_DEPLOYED_AND_FRESH_PHASE2F_DEPLOYMENT_BINDING_PASS_EXISTS_AND_A_NEW_EXACT_AUTH_IS_HUMAN_REVIEWED_AND_APPROVED",
     "phase6_retention_inventory": "DEFERRED_UNRESOLVED_SEPARATE_FROM_PHASE2_P"
   },
   "phase2a_prerequisite_p": {
@@ -114,27 +114,51 @@
   },
   "phase2f_safety_smoke": {
     "implementation": "DONE_TESTED_OWNER",
-    "execution": "NOT_RUN",
+    "execution": "NOT_RUN_BLOCKED_BEFORE_PAID_START",
     "predecessor_preprobe_evidence_id": "RUN-20260913-643BF82FD98B3DA416433077BB7E21DC231C07A2F34289245436EC160C7D8984",
+    "frozen_runtime": {
+      "status": "FROZEN_RUNTIME_EVIDENCE_ONLY_NOT_PAID_AUTH",
+      "evidence_id": "RUN-20260913-E15416D57EA9C9AF77F294389D090A6995ED3576735625010BCE890820D4526E",
+      "artifact_sha256": "f7880a86b302604df3d3f547b85c23f5f422bfae33ba5f32be9396693e940a4c",
+      "file_sha256": "81df0df667a941488133fdb9c12dab40e90a06e64e657c7d9ee8dd8192b60e3c",
+      "binding_sha256": "e15416d57ea9c9af77f294389d090a6995ed3576735625010bce890820d4526e"
+    },
+    "deployment_binding_attempt": {
+      "status": "BLOCKED_DEPLOYMENT_SECRET_NOT_ENFORCED",
+      "wrong_secret_http_status": 200,
+      "pass_artifact_created": false,
+      "blocker_artifact": "artifacts/phase2f-blocked-deployment-secret-20260913.json"
+    },
+    "draft_authorization": {
+      "authorization_id": "AUTH-20260913-P2F1",
+      "artifact_sha256": "c857e1662cf06619be6e6d4fe043e0532db35c583f6867c084be4b403dfbf8f4",
+      "status": "DRAFT_ONLY_NOT_AUTHORIZED_EXPIRED",
+      "expires_at_utc": "2026-09-13T18:03:01.000Z",
+      "approved": false
+    },
     "requirements_before_paid_start": [
-      "freeze exact Phase-2F smoke runtime controls and record their hashes",
-      "prove published production deployment is using the restricted runtime DB credential and same webhook secret",
-      "create exact Phase-2F draft AUTH bound to preprobe + smoke-runtime evidence",
-      "human review exact ICAO, window minutes, Alert ceiling, REST allowance, start/expiry, cleanup owner, predecessor IDs, and exact AUTH SHA",
-      "approve exact reviewed SHA using the Phase-2F-only approval owner"
+      "patch server/routes_v3.ts so missing webhook secret fails closed",
+      "pass repository safety CI after the patch",
+      "deploy the patched production application",
+      "bind production AERODATABOX_WEBHOOK_SECRET and restricted V39_DATABASE_RUNTIME_URL without exposing either value",
+      "obtain a fresh Phase-2F deployment-binding PASS proving wrong-secret=403, exact-secret=200, deployed runtime DB read, openIncidents=0",
+      "regenerate a fresh exact Phase-2F AUTH because the previous draft expired",
+      "human review the exact fresh AUTH JSON and SHA",
+      "approve only that exact reviewed SHA using the Phase-2F-only approval owner"
     ],
     "stage1_authorized": false,
     "stage2_authorized": false
   },
   "offline_validation": {
     "latest_complete_green_run": {
-      "workflow_run_number": 374,
-      "workflow_run_id": "34764013083",
-      "commit": "a3c6c96a845884f4ed10ced987ef30b6d852a4d5",
+      "workflow_run_number": 385,
+      "workflow_run_id": "34765539552",
+      "commit": "b756bf8dda71653785b4d8b05cbe28056adfe4ac",
       "result": "SUCCESS"
     },
     "coverage_drift_recovery_regression": "PASS",
-    "phase2f_exact_auth_runtime_contract": "PASS"
+    "phase2f_exact_auth_runtime_contract": "PASS",
+    "phase2f_deployment_binding_contract": "PASS_OFFLINE_BUT_LIVE_DEPLOYMENT_CHECK_BLOCKED"
   },
   "execution_order": [
     "2A prerequisite-P production binding and cryptographic PASS — COMPLETE",
@@ -142,19 +166,20 @@
     "2C refreshed run-specific traffic/region reference freeze PASS — COMPLETE",
     "2D final frame persisted and hash-locked — COMPLETE",
     "2E preprobe_reference_freeze_record + cryptographic handoff — COMPLETE",
-    "2F mandatory safety smoke — CURRENT POINTER; freeze runtime, verify deployment binding, obtain exact human-reviewed authorization, execute/settle/cleanup, then STOP/handoff",
+    "2F mandatory safety smoke — CURRENT POINTER BLOCKED BEFORE PAID START; repair fail-open secret handling, redeploy, obtain fresh deployment PASS, regenerate/review/approve fresh exact AUTH, then execute/settle/cleanup and STOP/handoff",
     "2G Gate-2 Stage 1 — only after 2F PASS/handoff and separate exact AUTH",
     "2H Gate-2 Stage 2 — only after 2G promotion/handoff and separate exact AUTH; Gate-2 PASS completes Phase 2",
     "mandatory handoff before Phase 3"
   ],
   "prohibited_until_owned_gate": [
     "credit refill",
-    "safety smoke before exact Phase-2F AUTH",
+    "safety smoke while deployment binding is blocked",
+    "approval or execution of expired AUTH-20260913-P2F1",
     "Stage-1 probe before smoke PASS/handoff and exact Stage-1 AUTH",
     "Stage-2 probe before Stage-1 promotion/handoff and exact Stage-2 AUTH",
     "Gate-3 canary",
     "Gate-0.5 pilot",
     "Phase-6 start"
   ],
-  "historical_note": "Phase 2A passed live at 2026-09-13T06:18:48.231Z. Original Gate-1/reference evidence was safely superseded before 2D after documented-free FlightLiveUpdates membership drift. Replacement Gate-1 artifact 061ff216... and reference freeze 8e35ceaa... passed. Production schema contract 0057 passed. Live Phase 2D then persisted frame_02ec6e78ba1fe3c2 with hash 02ec6e78..., and Phase 2E wrote hash-locked preprobe artifact b8cbdbc9... with exactly 12 candidates plus 99 replacements and recorded evidence RUN-20260913-643BF82F.... Phase 2F is now the first incomplete subphase; no paid/mutating Phase-2F action is authorized by this status record."
+  "historical_note": "Phase 2A passed live at 2026-09-13T06:18:48.231Z. Original Gate-1/reference evidence was safely superseded before 2D after documented-free FlightLiveUpdates membership drift. Replacement Gate-1 artifact 061ff216... and reference freeze 8e35ceaa... passed. Production schema contract 0057 passed. Live Phase 2D persisted frame_02ec6e78ba1fe3c2 with hash 02ec6e78..., and Phase 2E wrote hash-locked preprobe artifact b8cbdbc9... with exactly 12 candidates plus 99 replacements and recorded evidence RUN-20260913-643BF82F.... Phase-2F non-paid preparation froze runtime evidence, but the live deployment verifier correctly blocked because a wrong secret received HTTP 200. No Phase-2F paid smoke was authorized or run. The old draft AUTH expired unapproved. Current work is the deployment-secret fail-closed repair and redeployment proof."
 }
