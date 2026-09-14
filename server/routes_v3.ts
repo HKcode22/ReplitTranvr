@@ -46,7 +46,7 @@ import { AIRPORT_CATALOG, AIRPORT_TIERS, tierForIcao } from "./lib/disruption/ad
 function webhookSecret(): string | null { return process.env.AERODATABOX_WEBHOOK_SECRET || null; }
 function managementGuard(req: Request, res: Response, next: NextFunction): void {
   const secret = webhookSecret();
-  if (!secret) return next();
+  if (!secret) { res.status(503).json({ error: "WEBHOOK_SECRET_NOT_CONFIGURED" }); return; }
   if (req.header("x-webhook-secret") !== secret) { res.status(403).json({ error: "Forbidden" }); return; }
   next();
 }
@@ -132,7 +132,8 @@ async function recordIncident(cause:string,detail:unknown):Promise<void>{
 export function registerV3Routes(app:Express):void{
   const prepaidWebhookIngress=async(req:Request,res:Response)=>{
     const secret=webhookSecret();
-    if(secret&&(!req.params.secret||req.params.secret!==secret)){res.status(404).json({error:"Not found"});return;}
+    if(!secret){res.status(503).json({error:"WEBHOOK_SECRET_NOT_CONFIGURED"});return;}
+    if(!req.params.secret||req.params.secret!==secret){res.status(404).json({error:"Not found"});return;}
     const sessionId=String(req.params.sessionId??"").trim();
     try{
       const persisted=await persistPrepaidProbeWebhookV39({sessionId,body:req.body??{},receivedAtUtc:new Date()});
@@ -147,7 +148,7 @@ export function registerV3Routes(app:Express):void{
   const webhookIngress=async(req:Request,res:Response)=>{
     const startedAt=Date.now();let rawDeliveryIdForCatch:string|null=null;let receivedAtForCatch:Date|null=null;let flightsForCatch:any[]=[];let samplingForCatch:SamplingMeta|null=null;
     try{
-      const secret=webhookSecret();if(secret&&(!req.params.secret||req.params.secret!==secret)){res.status(404).json({error:"Not found"});return;}
+      const secret=webhookSecret();if(!secret){res.status(503).json({error:"WEBHOOK_SECRET_NOT_CONFIGURED"});return;}if(!req.params.secret||req.params.secret!==secret){res.status(404).json({error:"Not found"});return;}
       const body:any=req.body||{};const flights:any[]=Array.isArray(body)?body:Array.isArray(body?.flights)?body.flights:[];flightsForCatch=flights;
       const parsed=flightNotificationContractSchema.safeParse(body);if(!parsed.success){const issues=parsed.error.issues.slice(0,5).map((i)=>`${i.path.join(".")||"$"}: ${i.message}`);console.warn(`[adb-v3-webhook] payload validation issues (${parsed.error.issues.length}): ${issues.join("; ")}`);}
       const subscription=body?.subscription??null,balance=body?.balance??null,receivedAt=new Date();receivedAtForCatch=receivedAt;const subId=typeof subscription?.id==="string"?subscription.id:null;
