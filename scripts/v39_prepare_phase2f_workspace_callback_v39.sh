@@ -69,11 +69,17 @@ if [[ -f "$PID_FILE" ]]; then
   rm -f "$PID_FILE"
 fi
 
-# Refuse to kill an unrelated process. The user can stop the normal Replit Run
-# process once if it owns port 5000; this helper never uses a blind port kill.
+# If port 5000 is occupied, invoke the guarded takeover helper. It will stop
+# ONLY a repo-owned, recognized Replit dev process (npm run dev / tsx server/index.ts)
+# and will refuse any unknown process. No blind fuser/pkill/process-group kill.
 if (echo >/dev/tcp/127.0.0.1/5000) >/dev/null 2>&1; then
-  echo 'REFUSED:PORT_5000_ALREADY_IN_USE_BY_UNOWNED_PROCESS'
-  echo 'ACTION: stop the current Replit Run/preview process, then rerun this same command.'
+  echo 'PORT_5000_BUSY=YES'
+  npx tsx scripts/v39_safe_takeover_port5000_v39.ts
+fi
+
+# Refuse if anything still owns the port after the guarded takeover attempt.
+if (echo >/dev/tcp/127.0.0.1/5000) >/dev/null 2>&1; then
+  echo 'REFUSED:PORT_5000_STILL_IN_USE_AFTER_GUARDED_TAKEOVER'
   exit 1
 fi
 
