@@ -72,19 +72,20 @@ async function main(): Promise<void> {
     throw new Error("BLOCKED:WORKSPACE_CALLBACK_ORIGIN_NOT_REPLIT_DEV");
   }
 
+  const runtimeHead = String(receipt.gitHead).toLowerCase();
   const health = await jsonResponse(`${callbackOrigin}/__v39/workspace-runtime`);
   if (health.status !== 200 || health.json?.status !== "PASS" ||
+      String(health.json?.git_head ?? "").toLowerCase() !== runtimeHead ||
       health.json?.route_owner !== "server/routes_v3.ts" ||
       health.json?.prepaid_route_registered !== true || Number(health.json?.retention_hours) !== 168 ||
       health.json?.bucket_prefix !== "replit-objstore") {
-    throw new Error(`BLOCKED:WORKSPACE_CALLBACK_RUNTIME_NOT_LIVE:http=${health.status}`);
+    throw new Error(`BLOCKED:WORKSPACE_CALLBACK_RUNTIME_NOT_LIVE_OR_HEAD_CHANGED:http=${health.status}`);
   }
 
   const incident = await pool.query(`SELECT count(*)::int AS n FROM clean.adb_incident_stop WHERE resolved=false`);
   const openIncidents = Number(incident.rows[0]?.n ?? -1);
   if (openIncidents !== 0) throw new Error(`BLOCKED:WORKSPACE_INGRESS_OPEN_INCIDENTS:${openIncidents}`);
 
-  const runtimeHead = String(receipt.gitHead).toLowerCase();
   const currentHead = git(["rev-parse", "HEAD"]).toLowerCase();
   const sourceCompatibility = SOURCE_PATHS.map((file) => {
     const runtimeSha = sha256(gitFileAt(runtimeHead, file));
