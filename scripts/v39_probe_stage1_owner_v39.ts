@@ -6,6 +6,7 @@
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import {
   loadProbeExecutionArtifacts,
+  PROBE_STAGE1_TARGET_MINUTES,
   type LoadedProbeExecutionArtifacts,
 } from "../server/lib/disruption/probeExecution_v39";
 import { executePrepaidProbeV39 } from "../server/lib/disruption/probeExecutionPrepaid_v39";
@@ -25,6 +26,7 @@ import {
 import type { AuthRecord } from "../server/lib/disruption/authRecord_v39";
 
 const SCOPE = "Phase 2 / Gate 2 Stage 1";
+const AUTH_CLEANUP_BUFFER_MS = 5 * 60_000;
 
 function requiredEnv(name: string): string {
   const value = process.env[name];
@@ -77,10 +79,22 @@ function verifiedStage1Auth(argv: string[], binding: ReturnType<typeof loadGate2
   if (!Number.isInteger(ceiling) || ceiling <= 0 || ceiling > 500) {
     throw new Error("REFUSED_STAGE1_AUTH_ALERT_CEILING_MUST_BE_1_TO_500");
   }
-  if (binding.runtime.stage1ReservationCredits > ceiling) {
-    throw new Error("REFUSED_STAGE1_RUNTIME_RESERVATION_EXCEEDS_AUTH_CEILING");
+  const protectedExposure = binding.runtime.stage1ReservationCredits + binding.runtime.unsettledBurstMarginCredits;
+  if (protectedExposure > ceiling) {
+    throw new Error("REFUSED_STAGE1_RUNTIME_RESERVATION_PLUS_MARGIN_EXCEEDS_AUTH_CEILING");
   }
   return { record, ceiling };
+}
+
+function assertStage1AuthCoversTargetWindow(record: AuthRecord, now = new Date()): void {
+  const expires = Date.parse(String(record.expiresAtUtc ?? ""));
+  if (!Number.isFinite(expires)) throw new Error("REFUSED_STAGE1_AUTH_EXPIRY_REQUIRED");
+  const targetEndWithCleanup = now.getTime() + PROBE_STAGE1_TARGET_MINUTES * 60_000 + AUTH_CLEANUP_BUFFER_MS;
+  if (targetEndWithCleanup > expires) {
+    throw new Error(
+      `REFUSED_STAGE1_AUTH_WINDOW_TOO_SHORT:target_plus_cleanup_ends=${new Date(targetEndWithCleanup).toISOString()}:auth_expires=${record.expiresAtUtc}`,
+    );
+  }
 }
 
 /**
@@ -148,6 +162,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     throw new Error("REFUSED_STAGE1_EXECUTION_ARTIFACT_BINDING_MISMATCH");
   }
   const approved = verifiedStage1Auth(argv, binding);
+  assertStage1AuthCoversTargetWindow(approved.record);
   const evidence = await readStage1Evidence(artifacts.preprobeSha256);
   const next = await chooseNextStage1Target(artifacts, evidence);
 
