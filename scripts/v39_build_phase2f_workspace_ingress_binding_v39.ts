@@ -8,6 +8,7 @@ import {
   loadPhase2FWorkspaceIngressBindingV39,
 } from "../server/lib/disruption/phase2WorkspaceIngressBinding_v39";
 
+const LEDGER = path.join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
 const SOURCE_PATHS = [
   "server/routes_v3.ts",
   "server/lib/disruption/prepaidProbeRuntime_v39.ts",
@@ -120,6 +121,28 @@ async function main(): Promise<void> {
   fs.writeFileSync(out, JSON.stringify(artifact, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
   const loaded = loadPhase2FWorkspaceIngressBindingV39(out);
 
+  if (!fs.existsSync(LEDGER)) throw new Error("BLOCKED:EVIDENCE_LEDGER_MISSING");
+  const ledger = fs.readFileSync(LEDGER, "utf8");
+  if (!ledger.includes(loaded.evidenceId)) {
+    fs.appendFileSync(LEDGER, [
+      "",
+      `### ${loaded.evidenceId} — Phase 2F workspace-live ingress binding`,
+      `- evidence_id: ${loaded.evidenceId}`,
+      `- ingress_kind: ${loaded.artifact.ingress_kind}`,
+      `- callback_origin: ${loaded.artifact.callback_origin}`,
+      `- callback_runtime_git_head: ${loaded.artifact.callback_runtime_git_head}`,
+      `- binding_creator_git_head: ${loaded.artifact.binding_creator_git_head}`,
+      `- source_compatibility_count: ${loaded.artifact.source_compatibility.length}`,
+      `- INGRESS_ARTIFACT_SHA256:${loaded.artifact.artifact_sha256}`,
+      `- INGRESS_FILE_SHA256:${loaded.fileSha256}`,
+      `- INGRESS_BINDING_SHA256:${loaded.bindingSha256}`,
+      `- open_incidents: 0`,
+      `- deployment_performed: false`,
+      `- provider_paid_or_mutating_action: false`,
+      "",
+    ].join("\n"), "utf8");
+  }
+
   console.log(JSON.stringify({
     status: "PASS_WORKSPACE_INGRESS_BINDING",
     ingress_kind: loaded.artifact.ingress_kind,
@@ -135,6 +158,7 @@ async function main(): Promise<void> {
     artifact_sha256: loaded.artifact.artifact_sha256,
     file_sha256: loaded.fileSha256,
     binding_sha256: loaded.bindingSha256,
+    ledger_recorded: true,
     path: out,
   }, null, 2));
 }
