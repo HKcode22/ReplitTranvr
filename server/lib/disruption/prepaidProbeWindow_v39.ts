@@ -7,6 +7,7 @@ import {
 import { runSettlement, type SettlementConfig } from "./settlement_v3";
 import {
   armPrepaidProbeSessionV39,
+  assertPrepaidProbePersistenceConfigV39,
   bindPrepaidProbeSubscriptionV39,
   cleanupPrepaidProbeSessionV39,
   prepaidProbeInternalCreditsV39,
@@ -73,6 +74,11 @@ function validateInput(input: PrepaidLiveWindowInputV39): void {
  */
 export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39): Promise<PrepaidLiveWindowResultV39> {
   validateInput(input);
+
+  // Defense in depth: do not create or arm a paid provider subscription
+  // unless the prepaid persistence path is locally configured to accept it.
+  assertPrepaidProbePersistenceConfigV39();
+
   const icao = input.icao.toUpperCase();
   const session = await armPrepaidProbeSessionV39({
     ownerKind: input.ownerKind,
@@ -112,7 +118,16 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     await sleep(Math.min(input.watchdogPollMs, Math.max(250, deadline - Date.now())));
     const internal = await prepaidProbeInternalCreditsV39(session.sessionId);
     const balance = await getBalance();
-    const external = balance ? Math.max(0, input.balanceBefore - balance.creditsRemaining) : 0;
+
+    // A missing authoritative balance can never be treated as zero spend.
+    // Stop the live exposure immediately; deletion occurs directly after
+    // leaving this loop, before settlement/reconciliation.
+    if (!balance) {
+      liveStopReason = "balance_read_failed";
+      break;
+    }
+
+    const external = Math.max(0, input.balanceBefore - balance.creditsRemaining);
     maxObservedUnsettledCreditGap = Math.max(maxObservedUnsettledCreditGap, Math.max(0, internal - external));
     if (input.settledOtherCredits + Math.max(internal, external) >= input.hardCapCredits) {
       liveStopReason = "probe_cap_soft_stop";
@@ -159,10 +174,38 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     return {
       status: "failed", runtimeSessionId: session.sessionId, windowStart, windowEnd,
-      durationCensored: windowEnd.getTime() < deadline, stopReason: "external_internal_credit_mismatch",
+      durationCensored: windowEnd.getTime() < deadline,
+      stopReason: liveStopReason === "balance_read_failed"
+        ? "balance_read_failed"
+        : "external_internal_credit_mismatch",
       reconciliationStatus, externalCredits, internalSendCredits: metrics.internalSendCredits,
       maxObservedUnsettledCreditGap, settlementReads: settle.readsUsed, metrics,
       cleanupVerifiedAtUtc: null, subscriptionDeleted: true,
+    };
+  }
+
+  if (liveStopReason === "balance_read_failed") {
+    await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
+    const cleanup = await cleanupPrepaidProbeSessionV39(
+      session.sessionId,
+      `${input.deletionRunId}:balance-read-failed`,
+    ).catch(() => null);
+
+    return {
+      status: "failed",
+      runtimeSessionId: session.sessionId,
+      windowStart,
+      windowEnd,
+      durationCensored: true,
+      stopReason: "balance_read_failed",
+      reconciliationStatus: "MATCH",
+      externalCredits,
+      internalSendCredits: metrics.internalSendCredits,
+      maxObservedUnsettledCreditGap,
+      settlementReads: settle.readsUsed,
+      metrics,
+      cleanupVerifiedAtUtc: cleanup?.verifiedAtUtc ?? null,
+      subscriptionDeleted: true,
     };
   }
 

@@ -24,6 +24,7 @@ import {
   V39_PROVIDER_BLOB_REQUIRED_MODE,
 } from "../server/lib/disruption/replitProviderBlobStore_v39";
 import { v39Pool } from "../server/lib/disruption/db_v39";
+import { resolvePrepaidRawRetentionHoursV39 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
 
 interface Options { apply: boolean; limit: number }
 function parse(argv: string[]): Options {
@@ -55,7 +56,7 @@ function requireApplySafety(evidence: { rawProviderMaxHours: number }): void {
     throw new Error("V39_PROVIDER_BLOB_MODE_MUST_BE_REQUIRED");
   }
   if (!String(process.env[V39_PROVIDER_BLOB_BUCKET_ENV] ?? "").trim()) throw new Error("V39_PROVIDER_BLOB_BUCKET_ID_REQUIRED");
-  const rawHours = Number(process.env.V39_PREPAID_RAW_RETENTION_HOURS);
+  const rawHours = resolvePrepaidRawRetentionHoursV39();
   if (!Number.isInteger(rawHours) || rawHours < 1 || rawHours > evidence.rawProviderMaxHours || rawHours > 168) {
     throw new Error("V39_PREPAID_RAW_RETENTION_HOURS_INVALID");
   }

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { prepaidProbeWebhookUrlV39 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import {
+  prepaidProbeWebhookUrlV39,
+  resolvePrepaidRawRetentionHoursV39,
+} from "../server/lib/disruption/prepaidProbeRuntime_v39";
 
 describe("V3.9 prepaid probe PITR-safe runtime", () => {
   it("uses a session-specific HTTPS webhook before a provider subscription ID exists", () => {
@@ -10,6 +13,24 @@ describe("V3.9 prepaid probe PITR-safe runtime", () => {
       .toBe(`https://travnr.example/api/v1/webhooks/aerodatabox/secret/prepaid/${session}`);
     expect(() => prepaidProbeWebhookUrlV39("http://insecure.example/hook", session)).toThrow(/MUST_BE_HTTPS/);
     expect(() => prepaidProbeWebhookUrlV39("https://example.test/hook", "not-a-uuid")).toThrow(/SESSION_ID_INVALID/);
+  });
+
+  it("honors the registry-safe 168h default when the optional prepaid retention override is absent", () => {
+    expect(resolvePrepaidRawRetentionHoursV39({} as NodeJS.ProcessEnv)).toBe(168);
+    expect(resolvePrepaidRawRetentionHoursV39({
+      V39_PREPAID_RAW_RETENTION_HOURS: "",
+    } as NodeJS.ProcessEnv)).toBe(168);
+    expect(resolvePrepaidRawRetentionHoursV39({
+      V39_PREPAID_RAW_RETENTION_HOURS: "24",
+    } as NodeJS.ProcessEnv)).toBe(24);
+
+    expect(() => resolvePrepaidRawRetentionHoursV39({
+      V39_PREPAID_RAW_RETENTION_HOURS: "0",
+    } as NodeJS.ProcessEnv)).toThrow(/MUST_BE_INTEGER_1_TO_168/);
+
+    expect(() => resolvePrepaidRawRetentionHoursV39({
+      V39_PREPAID_RAW_RETENTION_HOURS: "169",
+    } as NodeJS.ProcessEnv)).toThrow(/MUST_BE_INTEGER_1_TO_168/);
   });
 
   it("declares all provider-identifying runtime tables UNLOGGED and bounded to 24h", () => {

@@ -83,12 +83,30 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function resolveRawRetentionHours(env: NodeJS.ProcessEnv = process.env): number {
-  const value = Number(env[RAW_RETENTION_ENV]);
+export function resolvePrepaidRawRetentionHoursV39(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  // The V3.9 runtime registry defines 168h as the safe/default Phase-2
+  // prepaid raw-provider retention when this optional override is absent.
+  const raw = String(env[RAW_RETENTION_ENV] ?? "").trim();
+  const value = raw === "" ? 168 : Number(raw);
   if (!Number.isInteger(value) || value <= 0 || value > 168) {
     throw new Error(`${RAW_RETENTION_ENV}_MUST_BE_INTEGER_1_TO_168`);
   }
   return value;
+}
+
+/**
+ * Validate every local persistence prerequisite before a paid provider
+ * subscription may be created. Construction of the dedicated blob-store
+ * client is non-provider-mutating and fails closed on bad mode/bucket config.
+ */
+export function assertPrepaidProbePersistenceConfigV39(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const retentionHours = resolvePrepaidRawRetentionHoursV39(env);
+  createRequiredProviderBlobStoreV39(env);
+  return retentionHours;
 }
 
 function assertSessionId(sessionId: string): string {
@@ -269,7 +287,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
     store,
     bytes: rawBytes,
     contentClass: "raw_provider_content",
-    retentionHours: resolveRawRetentionHours(),
+    retentionHours: resolvePrepaidRawRetentionHoursV39(),
     now: receivedAt,
   });
 
