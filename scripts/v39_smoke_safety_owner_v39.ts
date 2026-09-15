@@ -7,6 +7,7 @@
  * balance edges, subscription ids, or raw payloads.
  */
 import { createHash } from "crypto";
+import { execFileSync } from "child_process";
 import { mkdirSync, writeFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
@@ -14,12 +15,23 @@ import { getBalance, listSubscriptionsStrict } from "../server/lib/disruption/ae
 import { runPrepaidLiveWindowV39 } from "../server/lib/disruption/prepaidProbeWindow_v39";
 import { loadPhase2FSmokeRuntimeV39 } from "../server/lib/disruption/phase2SmokeRuntime_v39";
 import { loadPhase2FDeploymentBindingV39 } from "../server/lib/disruption/phase2DeploymentBinding_v39";
+import { loadPhase2FWorkspaceIngressBindingV39 } from "../server/lib/disruption/phase2WorkspaceIngressBinding_v39";
 import { parseArgs, resolveOwnerAuthorization, verifyAuthFile } from "./v39_paid_guard_v39";
 
 const SCOPE = "Phase 2 / safety smoke";
 const PROTECTED_ALERT_FLOOR = 1000;
 const DEFAULT_ARTIFACT = "artifacts/v39-phase2-safety-smoke.json";
 const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
+
+type IngressKind = "production-deployment" | "replit-workspace-live";
+interface NormalizedIngress {
+  kind: IngressKind;
+  evidenceId: string;
+  artifactSha256: string;
+  fileSha256: string;
+  bindingSha256: string;
+  origin: string;
+}
 
 interface SmokeArgs {
   icao: string;
@@ -28,7 +40,8 @@ interface SmokeArgs {
   preprobePath: string;
   runtimePath: string;
   runtimeSha256: string;
-  deploymentEvidencePath: string;
+  deploymentEvidencePath: string | null;
+  workspaceIngressEvidencePath: string | null;
 }
 
 function parseSmokeArgs(argv: string[]): SmokeArgs {
@@ -38,7 +51,8 @@ function parseSmokeArgs(argv: string[]): SmokeArgs {
   let preprobePath = process.env.ADB_PREPROBE_ARTIFACT_PATH || DEFAULT_PREPROBE;
   let runtimePath = "";
   let runtimeSha256 = "";
-  let deploymentEvidencePath = "";
+  let deploymentEvidencePath: string | null = null;
+  let workspaceIngressEvidencePath: string | null = null;
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--icao") icao = String(argv[++i] ?? "").trim().toUpperCase();
     else if (argv[i] === "--minutes") minutes = Number(argv[++i]);
@@ -46,7 +60,8 @@ function parseSmokeArgs(argv: string[]): SmokeArgs {
     else if (argv[i] === "--preprobe") preprobePath = String(argv[++i] ?? "").trim();
     else if (argv[i] === "--runtime-file") runtimePath = String(argv[++i] ?? "").trim();
     else if (argv[i] === "--runtime-sha") runtimeSha256 = String(argv[++i] ?? "").trim().toLowerCase();
-    else if (argv[i] === "--deployment-evidence") deploymentEvidencePath = String(argv[++i] ?? "").trim();
+    else if (argv[i] === "--deployment-evidence") deploymentEvidencePath = String(argv[++i] ?? "").trim() || null;
+    else if (argv[i] === "--workspace-ingress-evidence") workspaceIngressEvidencePath = String(argv[++i] ?? "").trim() || null;
   }
   if (!/^[A-Z0-9]{4}$/.test(icao)) throw new Error("REFUSED_SMOKE_ICAO_REQUIRED");
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 15) {
@@ -56,8 +71,54 @@ function parseSmokeArgs(argv: string[]): SmokeArgs {
   if (!preprobePath) throw new Error("REFUSED_SMOKE_PREPROBE_PATH_REQUIRED");
   if (!runtimePath) throw new Error("REFUSED_SMOKE_RUNTIME_FILE_REQUIRED");
   if (!/^[a-f0-9]{64}$/.test(runtimeSha256)) throw new Error("REFUSED_SMOKE_RUNTIME_SHA_REQUIRED");
-  if (!deploymentEvidencePath) throw new Error("REFUSED_SMOKE_DEPLOYMENT_EVIDENCE_REQUIRED");
-  return { icao, minutes, artifactPath, preprobePath, runtimePath, runtimeSha256, deploymentEvidencePath };
+  if (Number(Boolean(deploymentEvidencePath)) + Number(Boolean(workspaceIngressEvidencePath)) !== 1) {
+    throw new Error("REFUSED_SMOKE_EXACTLY_ONE_INGRESS_EVIDENCE_REQUIRED");
+  }
+  return {
+    icao, minutes, artifactPath, preprobePath, runtimePath, runtimeSha256,
+    deploymentEvidencePath, workspaceIngressEvidencePath,
+  };
+}
+
+function loadIngress(args: SmokeArgs): NormalizedIngress {
+  if (args.workspaceIngressEvidencePath) {
+    const workspace = loadPhase2FWorkspaceIngressBindingV39(resolve(args.workspaceIngressEvidencePath));
+    const currentHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim().toLowerCase();
+    if (workspace.artifact.binding_creator_git_head.toLowerCase() !== currentHead) {
+      throw new Error(`REFUSED_SMOKE_WORKSPACE_INGRESS_GIT_HEAD_CHANGED:bound=${workspace.artifact.binding_creator_git_head}:current=${currentHead}`);
+    }
+    const rawBase = String(process.env.WEBHOOK_BASE_URL ?? process.env.V39_PUBLIC_WEBHOOK_BASE_URL ?? "").trim();
+    if (!rawBase) throw new Error("REFUSED_SMOKE_WORKSPACE_CALLBACK_BASE_ENV_REQUIRED");
+    let envOrigin: string;
+    try { envOrigin = new URL(rawBase).origin; }
+    catch { throw new Error("REFUSED_SMOKE_WORKSPACE_CALLBACK_BASE_ENV_INVALID"); }
+    if (envOrigin !== workspace.artifact.callback_origin) {
+      throw new Error(`REFUSED_SMOKE_WORKSPACE_CALLBACK_BASE_MISMATCH:bound=${workspace.artifact.callback_origin}:runtime=${envOrigin}`);
+    }
+    const bucket = String(process.env.V39_PROVIDER_BLOB_BUCKET_ID ?? "").trim();
+    if (!bucket.startsWith("replit-objstore-")) throw new Error("REFUSED_SMOKE_WORKSPACE_CORRECTED_BUCKET_REQUIRED");
+    if (String(process.env.V39_PROVIDER_BLOB_MODE ?? "").trim().toLowerCase() !== "required") {
+      throw new Error("REFUSED_SMOKE_WORKSPACE_BLOB_MODE_REQUIRED");
+    }
+    return {
+      kind: "replit-workspace-live",
+      evidenceId: workspace.evidenceId,
+      artifactSha256: workspace.artifact.artifact_sha256,
+      fileSha256: workspace.fileSha256,
+      bindingSha256: workspace.bindingSha256,
+      origin: workspace.artifact.callback_origin,
+    };
+  }
+
+  const deployment = loadPhase2FDeploymentBindingV39(resolve(args.deploymentEvidencePath!));
+  return {
+    kind: "production-deployment",
+    evidenceId: deployment.evidenceId,
+    artifactSha256: deployment.artifact.artifact_sha256,
+    fileSha256: deployment.fileSha256,
+    bindingSha256: deployment.bindingSha256,
+    origin: deployment.artifact.deployment_origin,
+  };
 }
 
 function exactScope(icao: string, minutes: number): string {
@@ -92,11 +153,10 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
   const args = parseSmokeArgs(argv);
   const record = checked.record;
 
-  // This proof is produced by a no-provider-mutation HTTPS check against the
-  // published app. It proves that the deployed process enforces the same local
-  // webhook secret and can read the V3.9 clean-schema runtime DB. It must be
-  // fresh so a later deployment cannot silently invalidate the smoke path.
-  const deployment = loadPhase2FDeploymentBindingV39(resolve(args.deploymentEvidencePath));
+  // Exactly one fresh public ingress proof is required. Production deployment
+  // evidence and a no-redeploy Replit workspace-live binding are intentionally
+  // distinct evidence types; a workspace callback is never mislabeled as a deployment.
+  const ingress = loadIngress(args);
 
   // All safety controls are frozen before the paid call. The runtime artifact
   // itself is hash-locked and bound to the exact current Phase-2E preprobe.
@@ -192,7 +252,8 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
       icao: args.icao,
       preprobeEvidenceId: preprobe.evidenceId,
       smokeRuntimeEvidenceId: runtime.evidenceId,
-      deploymentBindingEvidenceId: deployment.evidenceId,
+      ingressBindingKind: ingress.kind,
+      ingressBindingEvidenceId: ingress.evidenceId,
       failures,
       cleanupVerified: Boolean(result.cleanupVerifiedAtUtc),
     });
@@ -213,10 +274,12 @@ export async function runSafetySmokeOwner(argv = process.argv.slice(2)): Promise
     smokeRuntimeArtifactSha256: frozen.artifact_sha256,
     smokeRuntimeFileSha256: runtime.fileSha256,
     smokeRuntimeBindingSha256: runtime.bindingSha256,
-    deploymentBindingEvidenceId: deployment.evidenceId,
-    deploymentBindingArtifactSha256: deployment.artifact.artifact_sha256,
-    deploymentBindingFileSha256: deployment.fileSha256,
-    deploymentBindingSha256: deployment.bindingSha256,
+    ingressBindingKind: ingress.kind,
+    ingressBindingEvidenceId: ingress.evidenceId,
+    ingressBindingArtifactSha256: ingress.artifactSha256,
+    ingressBindingFileSha256: ingress.fileSha256,
+    ingressBindingSha256: ingress.bindingSha256,
+    ingressOrigin: ingress.origin,
     icao: args.icao,
     filter: "FlightByAirportIcao",
     windowMinutes: args.minutes,
