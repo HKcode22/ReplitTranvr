@@ -168,6 +168,7 @@ nohup env \
     --runtime-sha "$RUNTIME_SHA" \
     --probe-budget-day-id "$BUDGET_DAY" \
     --expected-head "$EXPECTED_HEAD" \
+    --callback-base "$BASE" \
     --log "$LOG" \
     --status "$STATUS" \
     --heartbeat "$HEARTBEAT" \
