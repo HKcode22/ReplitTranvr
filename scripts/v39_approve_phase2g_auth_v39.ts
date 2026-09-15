@@ -63,8 +63,9 @@ function main(): void {
     throw new Error("REFUSED_PHASE2G_PREDECESSOR_MISMATCH");
   }
   const ceiling = Number(record.maxAlertCredits);
-  if (!Number.isInteger(ceiling) || ceiling <= 0 || ceiling > 500 || binding.runtime.stage1ReservationCredits > ceiling) {
-    throw new Error("REFUSED_PHASE2G_ALERT_CEILING_INVALID");
+  const protectedExposure = binding.runtime.stage1ReservationCredits + binding.runtime.unsettledBurstMarginCredits;
+  if (!Number.isInteger(ceiling) || ceiling <= 0 || ceiling > 500 || protectedExposure > ceiling) {
+    throw new Error("REFUSED_PHASE2G_ALERT_CEILING_INVALID_FOR_RESERVATION_PLUS_MARGIN");
   }
   if (record.maxRestUnitsByCategory !== null && Object.values(record.maxRestUnitsByCategory).some((x) => Number(x) !== 0)) {
     throw new Error("REFUSED_PHASE2G_REST_UNITS_MUST_BE_ZERO");
@@ -85,6 +86,7 @@ function main(): void {
       `- phase_gate: ${PHASE}`,
       `- exact_scope: ${record.airportFilterWindow}`,
       `- max_alert_credits: ${record.maxAlertCredits}`,
+      `- protected_exposure_credits: ${protectedExposure}`,
       `- start_not_before_utc: ${record.startNotBeforeUtc}`,
       `- expires_at_utc: ${record.expiresAtUtc}`,
       `- cleanup_owner: ${record.cleanupOwner}`,
@@ -101,6 +103,7 @@ function main(): void {
     authorization_id: record.authorizationId,
     exact_scope: record.airportFilterWindow,
     max_alert_credits: ceiling,
+    protected_exposure_credits: protectedExposure,
     predecessor_evidence_ids: expectedPredecessors,
     auth_artifact_sha256: sha256,
     stage1_authorized: true,
