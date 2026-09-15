@@ -30,15 +30,22 @@ describe("Phase 2 Gate-2 runtime and exact authorization contract", () => {
     expect(stage1).toContain("REFUSED_STAGE1_SCOPE_MISMATCH");
     expect(stage1).toContain("const predecessors = [binding.smoke.evidenceId, binding.evidenceId]");
     expect(stage1).toContain("REFUSED_STAGE1_EXECUTION_ARTIFACT_BINDING_MISMATCH");
-    expect(stage1).toContain("binding.runtime.stage1ReservationCredits > ceiling");
+    expect(stage1).toContain("binding.runtime.stage1ReservationCredits + binding.runtime.unsettledBurstMarginCredits");
+    expect(stage1).toContain("REFUSED_STAGE1_RUNTIME_RESERVATION_PLUS_MARGIN_EXCEEDS_AUTH_CEILING");
+    expect(stage1).toContain("PROBE_STAGE1_TARGET_MINUTES * 60_000 + AUTH_CLEANUP_BUFFER_MS");
+    expect(stage1).toContain("REFUSED_STAGE1_AUTH_WINDOW_TOO_SHORT");
   });
 
-  it("keeps Stage-1 draft separate from human SHA approval", () => {
+  it("keeps Stage-1 draft separate from human SHA approval and covers protected exposure", () => {
     expect(stage1Draft).toContain('status: "DRAFT_ONLY_NOT_AUTHORIZED"');
     expect(stage1Draft).toContain("stage1AuthorizationScopeV39");
+    expect(stage1Draft).toContain("stage1ReservationCredits + binding.runtime.unsettledBurstMarginCredits");
+    expect(stage1Draft).toContain("STAGE1_RESERVATION_PLUS_MARGIN_EXCEEDS_AUTH_CEILING");
     expect(stage1Draft).not.toContain("AUTH_ARTIFACT_SHA256:");
     expect(stage1Approve).toContain('required("--expected-sha")');
     expect(stage1Approve).toContain("REFUSED_PHASE2G_HUMAN_REVIEW_SHA_MISMATCH");
+    expect(stage1Approve).toContain("stage1ReservationCredits + binding.runtime.unsettledBurstMarginCredits");
+    expect(stage1Approve).toContain("REFUSED_PHASE2G_ALERT_CEILING_INVALID_FOR_RESERVATION_PLUS_MARGIN");
     expect(stage1Approve).toContain("approval_scope: PHASE_2G_STAGE1_ONLY");
     expect(stage1Approve).toContain("stage2_authorized: false");
   });
