@@ -100,9 +100,9 @@ export function buildPhase2FWorkspaceIngressBindingV39(
   const unsigned = {
     schema_version: PHASE2F_WORKSPACE_INGRESS_SCHEMA_V39,
     status: "PASS" as const,
-    checked_at_utc: checked.toISOString(),
     ingress_kind: "replit-workspace-live" as const,
     ...input,
+    checked_at_utc: checked.toISOString(),
     callback_origin: origin.origin,
   };
   return { ...unsigned, artifact_sha256: hashObject(unsigned) };
