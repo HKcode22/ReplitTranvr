@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { verifyAuthFile } from "./v39_paid_guard_v39";
+import { enforcePaidGuard, verifyAuthFile } from "./v39_paid_guard_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const CALLBACK_POLL_MS = 15_000;
@@ -62,6 +62,13 @@ async function main(): Promise<void> {
   if (!fs.existsSync(authFile)) throw new Error("SUPERVISOR_REFUSED:AUTH_FILE_MISSING");
   const actualAuthSha = sha256File(authFile);
   if (actualAuthSha !== expectedAuthSha) throw new Error(`SUPERVISOR_REFUSED:AUTH_SHA_MISMATCH:${actualAuthSha}`);
+
+  // Preserve the same paid front-door contract as every V3.9 paid wrapper.
+  // This function reads the exact --auth/--auth-file from this supervisor's
+  // argv and refuses before the owner/provider can be spawned.
+  const guardedPlan = enforcePaidGuard("v39:probe:stage1", PHASE);
+  if (guardedPlan.authId !== authId) throw new Error("SUPERVISOR_REFUSED:PAID_GUARD_AUTH_ID_MISMATCH");
+
   const checked = verifyAuthFile(authFile, PHASE);
   if ("error" in checked || !checked.verdict.verified) {
     throw new Error(`SUPERVISOR_REFUSED:AUTH_NOT_CURRENTLY_VERIFIED:${"error" in checked ? checked.error : checked.verdict.reason}`);
@@ -94,10 +101,9 @@ async function main(): Promise<void> {
   fs.writeSync(logFd, `${JSON.stringify(supervisorStart)}\n`);
   fs.fsyncSync(logFd);
 
-  // The supervisor is the paid front door: it has just re-verified the exact
-  // approved AUTH bytes. The owner is spawned directly and independently
-  // re-verifies the same AUTH, which also lets the supervisor signal the real
-  // paid owner (rather than a blocking wrapper parent) before recovery.
+  // The owner is spawned directly after the paid guard. It independently
+  // re-verifies the same AUTH, while direct parentage lets the supervisor
+  // signal the real paid owner before fail-closed recovery.
   const child = spawn(
     process.execPath,
     ["--import", "tsx", "scripts/v39_probe_stage1_owner_v39.ts", "--auth", authId, "--auth-file", authFile],
