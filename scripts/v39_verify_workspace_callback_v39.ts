@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomBytes } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import {
   armPrepaidProbeSessionV39,
   cleanupPrepaidProbeSessionV39,
@@ -10,14 +9,6 @@ import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 
 function sha256(raw: Buffer | string): string {
   return createHash("sha256").update(raw).digest("hex");
-}
-
-function gitHead(): string {
-  try {
-    return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-  } catch {
-    return "unknown";
-  }
 }
 
 function resolveBase(): string {
@@ -60,6 +51,7 @@ async function main(): Promise<void> {
   if (
     health.status !== 200 ||
     healthJson?.status !== "PASS" ||
+    !/^[a-f0-9]{40}$/i.test(String(healthJson?.git_head ?? "")) ||
     healthJson?.route_owner !== "server/routes_v3.ts" ||
     healthJson?.prepaid_route_registered !== true ||
     Number(healthJson?.retention_hours) !== 168 ||
@@ -67,6 +59,7 @@ async function main(): Promise<void> {
   ) {
     throw new Error(`REFUSED:WORKSPACE_RUNTIME_HEALTH_INVALID:http=${health.status}`);
   }
+  const runtimeGitHead = String(healthJson.git_head).toLowerCase();
 
   const wrongSecret = `phase2f-wrong-${randomBytes(16).toString("hex")}`;
   const wrongSession = "00000000-0000-4000-8000-000000000001";
@@ -207,7 +200,7 @@ async function main(): Promise<void> {
       providerSubscriptionCreated: false,
       alertCreditsSpent: 0,
       callbackOrigin: base,
-      gitHead: gitHead(),
+      gitHead: runtimeGitHead,
       exactRouteOwner: "server/routes_v3.ts",
       wrongSecretRejected404: true,
       exactSecretAccepted200: true,
