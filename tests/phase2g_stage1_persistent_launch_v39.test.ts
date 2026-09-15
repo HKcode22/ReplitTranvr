@@ -7,6 +7,7 @@ const preflight = readFileSync(join(root, "scripts", "v39_phase2g_stage1_paid_pr
 const launcher = readFileSync(join(root, "scripts", "v39_phase2g_stage1_launch_logged_v39.sh"), "utf8");
 const supervisor = readFileSync(join(root, "scripts", "v39_phase2g_stage1_logged_supervisor_v39.ts"), "utf8");
 const recovery = readFileSync(join(root, "scripts", "v39_phase2g_stage1_recover_after_exit_v39.ts"), "utf8");
+const sleepCheck = readFileSync(join(root, "scripts", "v39_phase2g_stage1_sleep_check_v39.ts"), "utf8");
 
 describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   it("keeps the paid preflight read-only and emits an immutable exact receipt", () => {
@@ -121,5 +122,22 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(recovery).toContain('kind: "stage1_supervisor_recovery"');
     expect(recovery).toContain('status: "RECOVERY_COMPLETED_FAIL_CLOSED"');
     expect(recovery).not.toContain('status: "PASS"');
+  });
+
+  it("makes the pre-sleep health check read-only and refuse a second launch on any uncertainty", () => {
+    expect(sleepCheck).toContain('status: "RUNNING_HEALTHY_UNATTENDED_WINDOW"');
+    expect(sleepCheck).toContain('"BLOCKED_DO_NOT_RELAUNCH"');
+    expect(sleepCheck).toContain("heartbeatAgeSeconds > 90");
+    expect(sleepCheck).toContain("supervisor_process_not_alive");
+    expect(sleepCheck).toContain("provider_subscription_not_bound");
+    expect(sleepCheck).toContain("exact_owned_credit_subscription_not_active");
+    expect(sleepCheck).toContain("foreign_active_billable=");
+    expect(sleepCheck).toContain("workspace_callback_not_reachable");
+    expect(sleepCheck).toContain("host_failure_boundary");
+    expect(sleepCheck).not.toContain("createSubscription(");
+    expect(sleepCheck).not.toContain("deleteSubscription(");
+    expect(sleepCheck).not.toContain("INSERT INTO clean.");
+    expect(sleepCheck).not.toContain("UPDATE clean.");
+    expect(sleepCheck).not.toContain("DELETE FROM clean.");
   });
 });
