@@ -10,7 +10,8 @@ const recovery = readFileSync(join(root, "scripts", "v39_phase2g_stage1_recover_
 
 describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   it("keeps the paid preflight read-only and emits an immutable exact receipt", () => {
-    expect(preflight).toContain('status: "PASS_READY_FOR_PAID_STAGE1"');
+    expect(preflight).toContain('let status: "PASS_READY_FOR_PAID_STAGE1" | "PASS_WAIT_FOR_AUTH_START" | "BLOCKED"');
+    expect(preflight).toContain('status = "PASS_READY_FOR_PAID_STAGE1"');
     expect(preflight).toContain('? "PASS_WAIT_FOR_AUTH_START"');
     expect(preflight).toContain('status = "BLOCKED"');
     expect(preflight).toContain('provider_paid_action_performed: false');
@@ -77,6 +78,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   });
 
   it("front-door verifies the AUTH and supervises the actual paid owner directly", () => {
+    expect(supervisor).toContain('enforcePaidGuard("v39:probe:stage1", PHASE)');
     expect(supervisor).toContain('verifyAuthFile(authFile, PHASE)');
     expect(supervisor).toContain("checked.record.authorizationId !== authId");
     expect(supervisor).toContain('"scripts/v39_probe_stage1_owner_v39.ts"');
