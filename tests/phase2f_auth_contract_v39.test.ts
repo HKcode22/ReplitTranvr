@@ -44,7 +44,7 @@ describe("Phase 2F exact authorization/runtime contract", () => {
     expect(approve).toContain('stage2_authorized: false');
   });
 
-  it("proves the published app enforces the same secret and can read the V3.9 runtime DB without a paid action", () => {
+  it("retains the legacy production deployment proof path without making it mandatory for no-redeploy workspace ingress", () => {
     expect(deployment).toContain('wrong_secret_rejected_403');
     expect(deployment).toContain('exact_secret_accepted_200');
     expect(deployment).toContain('deployed_v39_runtime_db_read');
@@ -53,13 +53,16 @@ describe("Phase 2F exact authorization/runtime contract", () => {
     expect(deployment).toContain('provider_paid_action: false');
   });
 
-  it("makes the paid smoke consume only frozen controls and require a fresh deployment binding", () => {
+  it("makes the paid smoke consume frozen controls and require exactly one truthful ingress binding", () => {
     expect(smoke).toContain("loadPhase2FSmokeRuntimeV39");
     expect(smoke).toContain("loadPhase2FDeploymentBindingV39");
+    expect(smoke).toContain("loadPhase2FWorkspaceIngressBindingV39");
     expect(smoke).toContain('expectedFileSha256: args.runtimeSha256');
-    expect(smoke).toContain('REFUSED_SMOKE_DEPLOYMENT_EVIDENCE_REQUIRED');
+    expect(smoke).toContain('REFUSED_SMOKE_EXACTLY_ONE_INGRESS_EVIDENCE_REQUIRED');
+    expect(smoke).toContain('--workspace-ingress-evidence');
+    expect(smoke).toContain('ingressBindingKind: ingress.kind');
+    expect(smoke).toContain('ingressBindingEvidenceId: ingress.evidenceId');
     expect(smoke).toContain('const requiredPredecessors = [preprobe.evidenceId, runtime.evidenceId]');
-    expect(smoke).toContain('deploymentBindingEvidenceId: deployment.evidenceId');
     expect(smoke).toContain('frozen.pre_smoke_unsettled_burst_margin_credits');
     expect(smoke).toContain('frozen.settlement_initial_wait_seconds');
     expect(smoke).toContain('frozen.watchdog_poll_ms');
