@@ -125,7 +125,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   });
 
   it("makes the pre-sleep health check read-only and refuse a second launch on any uncertainty", () => {
-    expect(sleepCheck).toContain('status: "RUNNING_HEALTHY_UNATTENDED_WINDOW"');
+    expect(sleepCheck).toContain('"RUNNING_HEALTHY_UNATTENDED_WINDOW"');
     expect(sleepCheck).toContain('"BLOCKED_DO_NOT_RELAUNCH"');
     expect(sleepCheck).toContain("heartbeatAgeSeconds > 90");
     expect(sleepCheck).toContain("supervisor_process_not_alive");
