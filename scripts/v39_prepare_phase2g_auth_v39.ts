@@ -42,8 +42,9 @@ function main(): void {
     smokeRuntimeFileSha256: required("--smoke-runtime-sha").toLowerCase(),
     preprobePath: resolve(optional("--preprobe") ?? DEFAULT_PREPROBE),
   });
-  if (binding.runtime.stage1ReservationCredits > alertCeiling) {
-    throw new Error("REFUSED:STAGE1_RESERVATION_EXCEEDS_AUTH_CEILING");
+  const protectedExposure = binding.runtime.stage1ReservationCredits + binding.runtime.unsettledBurstMarginCredits;
+  if (protectedExposure > alertCeiling) {
+    throw new Error("REFUSED:STAGE1_RESERVATION_PLUS_MARGIN_EXCEEDS_AUTH_CEILING");
   }
 
   const record: AuthRecord = {
@@ -67,6 +68,7 @@ function main(): void {
     phase_gate: PHASE,
     exact_scope: record.airportFilterWindow,
     max_alert_credits: alertCeiling,
+    protected_exposure_credits: protectedExposure,
     predecessor_evidence_ids: record.predecessorEvidenceIds,
     preprobe_file_sha256: binding.smoke.preprobe.fileSha256,
     gate2_runtime_file_sha256: binding.runtimeFileSha256,
