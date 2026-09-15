@@ -4,6 +4,7 @@ import { loadPreprobeHandoffBindingV39, type PreprobeHandoffBindingV39 } from ".
 import { loadPhase2FSmokeRuntimeV39, type LoadedPhase2FSmokeRuntimeV39 } from "./phase2SmokeRuntime_v39";
 
 const SMOKE_SCHEMA = "v39.phase2-safety-smoke.v1";
+export type Phase2FIngressKindV39 = "production-deployment" | "replit-workspace-live";
 
 function sha256(raw: string): string {
   return createHash("sha256").update(raw, "utf8").digest("hex");
@@ -22,10 +23,12 @@ export interface Phase2SmokeEvidenceV39 {
   smokeRuntimeArtifactSha256: string;
   smokeRuntimeFileSha256: string;
   smokeRuntimeBindingSha256: string;
-  deploymentBindingEvidenceId: string;
-  deploymentBindingArtifactSha256: string;
-  deploymentBindingFileSha256: string;
-  deploymentBindingSha256: string;
+  ingressBindingKind: Phase2FIngressKindV39;
+  ingressBindingEvidenceId: string;
+  ingressBindingArtifactSha256: string;
+  ingressBindingFileSha256: string;
+  ingressBindingSha256: string;
+  ingressOrigin: string;
   icao: string;
   filter: "FlightByAirportIcao";
   windowMinutes: number;
@@ -81,6 +84,45 @@ function requireSha(value: unknown, label: string): string {
   return text.toLowerCase();
 }
 
+function normalizeIngress(x: Record<string, unknown>): {
+  kind: Phase2FIngressKindV39;
+  evidenceId: string;
+  artifactSha256: string;
+  fileSha256: string;
+  bindingSha256: string;
+  origin: string;
+} {
+  // New generic ingress evidence. Workspace-live evidence is never represented
+  // as a deployment. Production-deployment remains an allowed explicit kind.
+  if (x.ingressBindingKind !== undefined) {
+    const kind = String(x.ingressBindingKind) as Phase2FIngressKindV39;
+    if (!(["production-deployment", "replit-workspace-live"] as string[]).includes(kind)) {
+      throw new Error("SMOKE_HANDOFF_INGRESS_KIND_INVALID");
+    }
+    const evidenceId = String(x.ingressBindingEvidenceId ?? "");
+    if (!/^RUN-\d{8}-[A-F0-9]{64}$/.test(evidenceId)) throw new Error("SMOKE_HANDOFF_INGRESS_EVIDENCE_ID_INVALID");
+    const artifactSha256 = requireSha(x.ingressBindingArtifactSha256, "ingress_artifact_sha256");
+    const fileSha256 = requireSha(x.ingressBindingFileSha256, "ingress_file_sha256");
+    const bindingSha256 = requireSha(x.ingressBindingSha256, "ingress_binding_sha256");
+    const rawOrigin = String(x.ingressOrigin ?? "");
+    let origin: URL;
+    try { origin = new URL(rawOrigin); } catch { throw new Error("SMOKE_HANDOFF_INGRESS_ORIGIN_INVALID"); }
+    if (origin.protocol !== "https:" || origin.origin !== rawOrigin) throw new Error("SMOKE_HANDOFF_INGRESS_ORIGIN_INVALID");
+    if (kind === "replit-workspace-live" && (!origin.hostname.endsWith(".replit.dev") || origin.hostname.includes("travnr.com"))) {
+      throw new Error("SMOKE_HANDOFF_WORKSPACE_INGRESS_ORIGIN_INVALID");
+    }
+    return { kind, evidenceId, artifactSha256, fileSha256, bindingSha256, origin: origin.origin };
+  }
+
+  // Backward-compatible loader for historical production smoke artifacts.
+  const evidenceId = String(x.deploymentBindingEvidenceId ?? "");
+  if (!/^RUN-\d{8}-[A-F0-9]{64}$/.test(evidenceId)) throw new Error("SMOKE_HANDOFF_DEPLOYMENT_EVIDENCE_ID_INVALID");
+  const artifactSha256 = requireSha(x.deploymentBindingArtifactSha256, "deployment_artifact_sha256");
+  const fileSha256 = requireSha(x.deploymentBindingFileSha256, "deployment_file_sha256");
+  const bindingSha256 = requireSha(x.deploymentBindingSha256, "deployment_binding_sha256");
+  return { kind: "production-deployment", evidenceId, artifactSha256, fileSha256, bindingSha256, origin: "https://travnr.com" };
+}
+
 export function loadPhase2SmokeHandoffV39(input: {
   smokePath: string;
   preprobePath: string;
@@ -113,12 +155,7 @@ export function loadPhase2SmokeHandoffV39(input: {
       x.smokeRuntimeBindingSha256 !== runtime.bindingSha256) {
     throw new Error("SMOKE_HANDOFF_RUNTIME_BINDING_MISMATCH");
   }
-  if (!/^RUN-\d{8}-[A-F0-9]{64}$/.test(String(x.deploymentBindingEvidenceId ?? ""))) {
-    throw new Error("SMOKE_HANDOFF_DEPLOYMENT_EVIDENCE_ID_INVALID");
-  }
-  requireSha(x.deploymentBindingArtifactSha256, "deployment_artifact_sha256");
-  requireSha(x.deploymentBindingFileSha256, "deployment_file_sha256");
-  requireSha(x.deploymentBindingSha256, "deployment_binding_sha256");
+  const ingress = normalizeIngress(x);
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(String(x.authorizationId ?? ""))) throw new Error("SMOKE_HANDOFF_AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/i.test(String(x.authorizationArtifactSha256 ?? ""))) throw new Error("SMOKE_HANDOFF_AUTH_SHA_INVALID");
   if (!/^[A-Z0-9]{4}$/.test(String(x.icao ?? "")) || x.filter !== "FlightByAirportIcao") throw new Error("SMOKE_HANDOFF_SCOPE_INVALID");
@@ -162,9 +199,18 @@ export function loadPhase2SmokeHandoffV39(input: {
   const generated = new Date(String(x.generatedAtUtc ?? ""));
   if (!Number.isFinite(generated.getTime())) throw new Error("SMOKE_HANDOFF_GENERATED_AT_INVALID");
 
-  const smoke = x as unknown as Phase2SmokeEvidenceV39;
+  const normalized = {
+    ...x,
+    ingressBindingKind: ingress.kind,
+    ingressBindingEvidenceId: ingress.evidenceId,
+    ingressBindingArtifactSha256: ingress.artifactSha256,
+    ingressBindingFileSha256: ingress.fileSha256,
+    ingressBindingSha256: ingress.bindingSha256,
+    ingressOrigin: ingress.origin,
+  };
+  const smoke = normalized as unknown as Phase2SmokeEvidenceV39;
   const smokeBindingSha256 = sha256(
-    `v39-phase2-smoke-handoff-v2:${preprobe.bindingSha256}:${runtime.bindingSha256}:${smokeFileSha256}`,
+    `v39-phase2-smoke-handoff-v3:${preprobe.bindingSha256}:${runtime.bindingSha256}:${ingress.bindingSha256}:${smokeFileSha256}`,
   );
   const date = generated.toISOString().slice(0, 10).replaceAll("-", "");
   const evidenceId = `RUN-${date}-${smokeBindingSha256.toUpperCase()}`;
