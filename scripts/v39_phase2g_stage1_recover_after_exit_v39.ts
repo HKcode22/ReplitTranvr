@@ -3,10 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import {
+  defaultWebhookUrl,
   deleteSubscription,
   listSubscriptionsStrict,
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
-import { cleanupPrepaidProbeSessionV39 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import {
+  cleanupPrepaidProbeSessionV39,
+  prepaidProbeWebhookUrlV39,
+} from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authRecord_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
@@ -88,6 +92,8 @@ async function main(): Promise<void> {
     throw new Error(`RECOVERY_REFUSED:EXPECTED_ONE_PROBING_ROW_GOT_${probes.rowCount ?? probes.rows.length}`);
   }
   const probeId = Number(probes.rows[0].probe_id);
+  const probeIcao = String(probes.rows[0].icao ?? "").toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(probeIcao)) throw new Error("RECOVERY_REFUSED:PROBE_ICAO_INVALID");
 
   const sessions = await pool.query(
     `SELECT session_id,provider_subscription_id,state
@@ -111,32 +117,65 @@ async function main(): Promise<void> {
   if ((sessions.rowCount ?? sessions.rows.length) === 1) {
     const row = sessions.rows[0];
     sessionId = String(row.session_id);
-    const providerSubscriptionId = row.provider_subscription_id ? String(row.provider_subscription_id) : null;
+    const boundProviderSubscriptionId = row.provider_subscription_id ? String(row.provider_subscription_id) : null;
     stopReason = "supervisor_child_exit_recovered";
 
-    if (providerSubscriptionId) {
-      const before = await listSubscriptionsStrict();
-      const owned = before.find((subscription) => subscription.id === providerSubscriptionId);
+    const before = await listSubscriptionsStrict();
+    const activeBillableBefore = before.filter((subscription) => subscription.isActive && subscription.billingType !== "LifetimeBased");
+    let ownedProviderSubscriptionId = boundProviderSubscriptionId;
+
+    // There is a very small crash interval after the provider returns a new
+    // subscription id but before the UNLOGGED runtime row binds that id. In
+    // that interval we recover only an exact match to this already-armed
+    // session's deterministic callback URL + Stage-1 airport. We never delete
+    // an unmatched/ambiguous subscription merely because it is billable.
+    if (!ownedProviderSubscriptionId) {
+      const expectedSubscriberId = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), sessionId);
+      const exactUnboundMatches = activeBillableBefore.filter((subscription) =>
+        subscription.billingType === "CreditBased" &&
+        String(subscription.subject?.type ?? "") === "FlightByAirportIcao" &&
+        String(subscription.subject?.id ?? "").toUpperCase() === probeIcao &&
+        String(subscription.subscriber?.id ?? "") === expectedSubscriberId,
+      );
+      if (exactUnboundMatches.length > 1) {
+        await openRecoveryIncident({ probeId, budgetDayId, reason: "multiple_exact_unbound_subscription_matches" });
+        throw new Error("RECOVERY_REFUSED:MULTIPLE_EXACT_UNBOUND_SUBSCRIPTION_MATCHES");
+      }
+      if (exactUnboundMatches.length === 1) {
+        ownedProviderSubscriptionId = exactUnboundMatches[0].id;
+      } else if (activeBillableBefore.length > 0) {
+        await openRecoveryIncident({
+          probeId,
+          budgetDayId,
+          reason: "unbound_session_with_unmatched_active_billable_subscription",
+          activeBillableCount: activeBillableBefore.length,
+        });
+        throw new Error("RECOVERY_REFUSED:UNBOUND_SESSION_ACTIVE_BILLABLE_NOT_EXACTLY_OWNED");
+      }
+    }
+
+    if (ownedProviderSubscriptionId) {
+      const owned = before.find((subscription) => subscription.id === ownedProviderSubscriptionId);
       if (owned?.isActive) {
         if (owned.billingType !== "CreditBased") {
           await openRecoveryIncident({ probeId, budgetDayId, reason: "owned_subscription_billing_type_unexpected" });
           throw new Error("RECOVERY_REFUSED:OWNED_ACTIVE_SUBSCRIPTION_NOT_CREDIT_BASED");
         }
         providerDeleteAttempted = true;
-        const deleted = await deleteSubscription(providerSubscriptionId);
+        const deleted = await deleteSubscription(ownedProviderSubscriptionId);
         if (!deleted) {
           await openRecoveryIncident({ probeId, budgetDayId, reason: "owned_subscription_delete_failed" });
           throw new Error("RECOVERY_FAILED:OWNED_SUBSCRIPTION_DELETE_FAILED");
         }
       }
       const after = await listSubscriptionsStrict();
-      providerDeleteVerified = !after.some((subscription) => subscription.id === providerSubscriptionId && subscription.isActive);
+      providerDeleteVerified = !after.some((subscription) => subscription.id === ownedProviderSubscriptionId && subscription.isActive);
       if (!providerDeleteVerified) {
         await openRecoveryIncident({ probeId, budgetDayId, reason: "owned_subscription_still_active_after_delete" });
         throw new Error("RECOVERY_FAILED:OWNED_SUBSCRIPTION_STILL_ACTIVE");
       }
     } else {
-      providerDeleteVerified = true;
+      providerDeleteVerified = activeBillableBefore.length === 0;
     }
 
     try {
@@ -158,7 +197,19 @@ async function main(): Promise<void> {
       throw error;
     }
   } else {
-    providerDeleteVerified = true;
+    const activeBillable = (await listSubscriptionsStrict()).filter(
+      (subscription) => subscription.isActive && subscription.billingType !== "LifetimeBased",
+    );
+    providerDeleteVerified = activeBillable.length === 0;
+    if (!providerDeleteVerified) {
+      await openRecoveryIncident({
+        probeId,
+        budgetDayId,
+        reason: "no_runtime_session_but_active_billable_subscription_present",
+        activeBillableCount: activeBillable.length,
+      });
+      throw new Error("RECOVERY_REFUSED:NO_RUNTIME_SESSION_ACTIVE_BILLABLE_PRESENT");
+    }
   }
 
   await markProbeFailed({ probeId, sessionId, stopReason, cleanupVerifiedAtUtc });
