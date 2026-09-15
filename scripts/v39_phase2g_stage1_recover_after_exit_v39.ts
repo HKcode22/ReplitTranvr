@@ -1,0 +1,198 @@
+import "dotenv/config";
+import fs from "node:fs";
+import path from "node:path";
+import { v39Pool as pool } from "../server/lib/disruption/db_v39";
+import {
+  deleteSubscription,
+  listSubscriptionsStrict,
+} from "../server/lib/disruption/aerodataboxLimiter_v3";
+import { cleanupPrepaidProbeSessionV39 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authRecord_v39";
+
+const PHASE = "Phase 2 / Gate 2 Stage 1";
+const LEDGER = path.join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+
+function required(name: string): string {
+  const i = process.argv.indexOf(name);
+  const value = i >= 0 ? String(process.argv[i + 1] ?? "").trim() : "";
+  if (!value) throw new Error(`MISSING:${name}`);
+  return value;
+}
+function readAuth(authPath: string): { record: AuthRecord; sha256: string } {
+  const raw = fs.readFileSync(authPath, "utf8");
+  let record: AuthRecord;
+  try { record = JSON.parse(raw); }
+  catch { throw new Error("RECOVERY_REFUSED:AUTH_INVALID_JSON"); }
+  return { record, sha256: sha256HexString(raw) };
+}
+async function openRecoveryIncident(detail: Record<string, unknown>): Promise<void> {
+  await pool.query(
+    `INSERT INTO clean.adb_incident_stop(cause,occurred_at_utc,detail,resolved)
+     VALUES('reconciliation',now(),$1::jsonb,false)`,
+    [JSON.stringify({ kind: "stage1_supervisor_recovery", owner: "v39_phase2g_stage1_recover_after_exit_v39", ...detail })],
+  );
+}
+async function markProbeFailed(input: {
+  probeId: number;
+  sessionId: string | null;
+  stopReason: string;
+  cleanupVerifiedAtUtc: string | null;
+}): Promise<void> {
+  await pool.query(
+    `UPDATE clean.adb_anchor_probe
+        SET status='failed',window_end=now(),duration_censored=true,stop_reason=$2,
+            reconciliation_status='UNRESOLVED',runtime_session_id=COALESCE($3::uuid,runtime_session_id),
+            runtime_cleanup_verified_at_utc=COALESCE($4::timestamptz,runtime_cleanup_verified_at_utc)
+      WHERE probe_id=$1 AND status='probing'`,
+    [input.probeId, input.stopReason, input.sessionId, input.cleanupVerifiedAtUtc],
+  );
+}
+
+async function main(): Promise<void> {
+  const authId = required("--auth").toUpperCase();
+  const authPath = path.resolve(required("--auth-file"));
+  const expectedAuthSha = required("--auth-sha").toLowerCase();
+  const budgetDayId = required("--probe-budget-day-id");
+  if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("RECOVERY_REFUSED:AUTH_ID_INVALID");
+  if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("RECOVERY_REFUSED:AUTH_SHA_INVALID");
+
+  const auth = readAuth(authPath);
+  if (auth.sha256 !== expectedAuthSha) throw new Error("RECOVERY_REFUSED:AUTH_SHA_MISMATCH");
+  if (auth.record.authorizationId !== authId) throw new Error("RECOVERY_REFUSED:AUTH_ID_MISMATCH");
+  if (auth.record.phaseGate !== PHASE) throw new Error("RECOVERY_REFUSED:AUTH_PHASE_MISMATCH");
+  if (!String(auth.record.cleanupOwner ?? "").trim()) throw new Error("RECOVERY_REFUSED:CLEANUP_OWNER_MISSING");
+  const ledger = fs.readFileSync(LEDGER, "utf8");
+  if (!ledger.includes(`### ${authId} — approved Phase 2G Stage-1 authorization`) ||
+      !ledger.includes(`AUTH_ARTIFACT_SHA256:${expectedAuthSha}`) ||
+      !ledger.includes("approval_scope: PHASE_2G_STAGE1_ONLY")) {
+    throw new Error("RECOVERY_REFUSED:EXACT_AUTH_NOT_APPROVED_IN_LEDGER");
+  }
+
+  const probes = await pool.query(
+    `SELECT probe_id,icao,status FROM clean.adb_anchor_probe
+      WHERE stage=1 AND probe_budget_day_id=$1 AND status='probing'
+      ORDER BY recorded_at ASC`,
+    [budgetDayId],
+  );
+  if ((probes.rowCount ?? probes.rows.length) === 0) {
+    console.log(JSON.stringify({
+      schema: "v39.phase2g-stage1-abnormal-exit-recovery.v1",
+      status: "NO_RECOVERY_NEEDED",
+      probe_budget_day_id: budgetDayId,
+      active_probe_rows: 0,
+      provider_mutation_performed: false,
+    }, null, 2));
+    return;
+  }
+  if ((probes.rowCount ?? probes.rows.length) !== 1) {
+    throw new Error(`RECOVERY_REFUSED:EXPECTED_ONE_PROBING_ROW_GOT_${probes.rowCount ?? probes.rows.length}`);
+  }
+  const probeId = Number(probes.rows[0].probe_id);
+
+  const sessions = await pool.query(
+    `SELECT session_id,provider_subscription_id,state
+       FROM clean.prepaid_probe_session_runtime
+      WHERE owner_kind='anchor_probe' AND owner_probe_id=$1 AND stage=1
+        AND state IN ('armed','active','settling')
+      ORDER BY created_at_utc DESC`,
+    [probeId],
+  );
+  if ((sessions.rowCount ?? sessions.rows.length) > 1) {
+    await openRecoveryIncident({ probeId, budgetDayId, reason: "multiple_active_runtime_sessions" });
+    throw new Error("RECOVERY_REFUSED:MULTIPLE_ACTIVE_RUNTIME_SESSIONS");
+  }
+
+  let providerDeleteAttempted = false;
+  let providerDeleteVerified = false;
+  let cleanupVerifiedAtUtc: string | null = null;
+  let sessionId: string | null = null;
+  let stopReason = "supervisor_child_exit_before_runtime_session";
+
+  if ((sessions.rowCount ?? sessions.rows.length) === 1) {
+    const row = sessions.rows[0];
+    sessionId = String(row.session_id);
+    const providerSubscriptionId = row.provider_subscription_id ? String(row.provider_subscription_id) : null;
+    stopReason = "supervisor_child_exit_recovered";
+
+    if (providerSubscriptionId) {
+      const before = await listSubscriptionsStrict();
+      const owned = before.find((subscription) => subscription.id === providerSubscriptionId);
+      if (owned?.isActive) {
+        if (owned.billingType !== "CreditBased") {
+          await openRecoveryIncident({ probeId, budgetDayId, reason: "owned_subscription_billing_type_unexpected" });
+          throw new Error("RECOVERY_REFUSED:OWNED_ACTIVE_SUBSCRIPTION_NOT_CREDIT_BASED");
+        }
+        providerDeleteAttempted = true;
+        const deleted = await deleteSubscription(providerSubscriptionId);
+        if (!deleted) {
+          await openRecoveryIncident({ probeId, budgetDayId, reason: "owned_subscription_delete_failed" });
+          throw new Error("RECOVERY_FAILED:OWNED_SUBSCRIPTION_DELETE_FAILED");
+        }
+      }
+      const after = await listSubscriptionsStrict();
+      providerDeleteVerified = !after.some((subscription) => subscription.id === providerSubscriptionId && subscription.isActive);
+      if (!providerDeleteVerified) {
+        await openRecoveryIncident({ probeId, budgetDayId, reason: "owned_subscription_still_active_after_delete" });
+        throw new Error("RECOVERY_FAILED:OWNED_SUBSCRIPTION_STILL_ACTIVE");
+      }
+    } else {
+      providerDeleteVerified = true;
+    }
+
+    try {
+      const cleanup = await cleanupPrepaidProbeSessionV39(sessionId, `phase2g-supervisor-recovery-${probeId}`);
+      cleanupVerifiedAtUtc = cleanup.verifiedAtUtc;
+    } catch (error) {
+      await markProbeFailed({
+        probeId,
+        sessionId,
+        stopReason: "supervisor_child_exit_cleanup_failed",
+        cleanupVerifiedAtUtc: null,
+      });
+      await openRecoveryIncident({
+        probeId,
+        budgetDayId,
+        reason: "runtime_cleanup_failed",
+        providerDeleteVerified,
+      });
+      throw error;
+    }
+  } else {
+    providerDeleteVerified = true;
+  }
+
+  await markProbeFailed({ probeId, sessionId, stopReason, cleanupVerifiedAtUtc });
+  await openRecoveryIncident({
+    probeId,
+    budgetDayId,
+    reason: stopReason,
+    providerDeleteAttempted,
+    providerDeleteVerified,
+    runtimeCleanupVerified: Boolean(cleanupVerifiedAtUtc),
+  });
+
+  console.log(JSON.stringify({
+    schema: "v39.phase2g-stage1-abnormal-exit-recovery.v1",
+    status: "RECOVERY_COMPLETED_FAIL_CLOSED",
+    probe_budget_day_id: budgetDayId,
+    probe_id: probeId,
+    provider_delete_attempted: providerDeleteAttempted,
+    provider_delete_verified: providerDeleteVerified,
+    runtime_cleanup_verified: Boolean(cleanupVerifiedAtUtc),
+    probe_marked_failed: true,
+    incident_opened: true,
+  }, null, 2));
+}
+
+main()
+  .catch((error) => {
+    console.error(JSON.stringify({
+      schema: "v39.phase2g-stage1-abnormal-exit-recovery.v1",
+      status: "RECOVERY_FAILED_OR_REFUSED",
+      error: error instanceof Error ? error.message : String(error),
+    }, null, 2));
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await pool.end().catch(() => undefined);
+  });
