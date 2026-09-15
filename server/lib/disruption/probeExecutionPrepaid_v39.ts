@@ -62,9 +62,11 @@ async function assertR1Clean(): Promise<void> {
 
 /**
  * Safe-mode rows deliberately do not retain actual provider credit deltas.
- * Their immutable reservation therefore remains the durable conservative
- * exposure for that probe budget day. Legacy rows continue to use the maximum
- * of their retained reservation/external/internal evidence.
+ * Their immutable reserved_credits value therefore includes the requested
+ * live reservation PLUS the frozen unsettled-burst margin. That guard-banded
+ * amount is the durable conservative exposure for the probe budget day.
+ * Legacy rows continue to use the maximum of their retained
+ * reservation/external/internal evidence.
  */
 export async function prepaidSafeBudgetExposureV39(dayId: string, excludeProbeId: number | null = null): Promise<number> {
   const result = await pool.query(
@@ -83,6 +85,7 @@ async function reserveSafeProbe(input: ExecuteProbeInput, started: Date): Promis
   const runtime = input.artifacts.runtime;
   const candidate = requireFrozenCandidate(input.artifacts.preprobe, input.icao, input.allowReplacement);
   const reservation = input.stage === 1 ? runtime.stage1ReservationCredits : runtime.stage2ReservationCredits;
+  const durableReservedExposure = reservation + runtime.unsettledBurstMarginCredits;
   const targetMinutes = input.stage === 1 ? PROBE_STAGE1_TARGET_MINUTES : PROBE_STAGE2_TARGET_MINUTES;
   const targetEnd = new Date(started.getTime() + targetMinutes * 60_000);
   if (started.toISOString().slice(0, 10) !== targetEnd.toISOString().slice(0, 10)) {
@@ -104,7 +107,7 @@ async function reserveSafeProbe(input: ExecuteProbeInput, started: Date): Promis
       [runtime.probeBudgetDayId],
     );
     const conservativePrior = Number(exposure.rows[0]?.n ?? 0);
-    if (conservativePrior + reservation + runtime.unsettledBurstMarginCredits > PROBE_BUDGET_DAY_HARD_CAP) {
+    if (conservativePrior + durableReservedExposure > PROBE_BUDGET_DAY_HARD_CAP) {
       throw new Error("REFUSED_PROBE_CAP");
     }
     const inserted = await client.query(
@@ -114,7 +117,7 @@ async function reserveSafeProbe(input: ExecuteProbeInput, started: Date): Promis
        VALUES($1,$2,$3,$4,$5,$6,'probing',$7,$8,$9,true)
        RETURNING probe_id`,
       [input.stage, candidate.icao, candidate.region, started, targetEnd, targetMinutes / 60,
-       runtime.probeBudgetDayId, reservation, input.artifacts.preprobeSha256],
+       runtime.probeBudgetDayId, durableReservedExposure, input.artifacts.preprobeSha256],
     );
     await client.query("COMMIT");
     return Number(inserted.rows[0].probe_id);
@@ -151,6 +154,19 @@ async function markSafeFailure(input: {
   });
 }
 
+async function markProbeBudgetDayMismatch(dayId: string, detail: Record<string, unknown>): Promise<void> {
+  await pool.query(
+    `UPDATE clean.adb_probe_budget_day
+        SET state='MISMATCH',closed_at=COALESCE(closed_at,now())
+      WHERE probe_budget_day_id=$1 AND state='OPEN'`,
+    [dayId],
+  );
+  await openIncident("probe_cap_overshoot", {
+    probeBudgetDayId: dayId,
+    ...detail,
+  });
+}
+
 /**
  * Authoritative Phase-2 Stage-1/2 execution path.
  *
@@ -172,7 +188,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
   const reservation = input.stage === 1
     ? input.artifacts.runtime.stage1ReservationCredits
     : input.artifacts.runtime.stage2ReservationCredits;
-  if (!(input.authMaxAlertCredits > 0) || reservation > input.authMaxAlertCredits) {
+  if (!(input.authMaxAlertCredits > 0) || reservation + input.artifacts.runtime.unsettledBurstMarginCredits > input.authMaxAlertCredits) {
     throw new Error("REFUSED_AUTH_CEILING");
   }
   const before = await getBalance();
@@ -183,6 +199,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
 
   const probeId = await reserveSafeProbe(input, started);
   const priorExposure = await prepaidSafeBudgetExposureV39(input.artifacts.runtime.probeBudgetDayId, probeId);
+  const liveHardCapCredits = Math.min(PROBE_BUDGET_DAY_HARD_CAP, priorExposure + reservation);
   const settlement = {
     initialWaitSeconds: input.artifacts.runtime.settlementInitialWaitSeconds,
     pollIntervalSeconds: input.artifacts.runtime.settlementPollIntervalSeconds,
@@ -196,7 +213,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     icao: candidate.icao,
     targetHours: input.stage === 1 ? PROBE_STAGE1_TARGET_MINUTES / 60 : PROBE_STAGE2_TARGET_MINUTES / 60,
     settledOtherCredits: priorExposure,
-    hardCapCredits: PROBE_BUDGET_DAY_HARD_CAP,
+    hardCapCredits: liveHardCapCredits,
     balanceBefore: before.creditsRemaining,
     settlement,
     deletionRunId: `phase2-probe-${probeId}`,
@@ -218,6 +235,33 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       creditsSpent: null,
       durationCensored: true,
       stopReason: result.stopReason ?? "prepaid_probe_failed",
+    };
+  }
+
+  const settledCurrentCredits = Math.max(result.externalCredits ?? 0, result.internalSendCredits);
+  const settledBudgetDayCredits = priorExposure + settledCurrentCredits;
+  if (settledBudgetDayCredits > PROBE_BUDGET_DAY_HARD_CAP) {
+    await markSafeFailure({
+      probeId,
+      runtimeSessionId: result.runtimeSessionId,
+      ended: result.windowEnd,
+      stopReason: "probe_cap_overshoot",
+      reconciliationStatus: "MATCH",
+      cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+    });
+    await markProbeBudgetDayMismatch(input.artifacts.runtime.probeBudgetDayId, {
+      probeId,
+      priorExposure,
+      settledCurrentCredits,
+      settledBudgetDayCredits,
+      hardCapCredits: PROBE_BUDGET_DAY_HARD_CAP,
+    });
+    return {
+      probeId,
+      status: "failed",
+      creditsSpent: null,
+      durationCensored: true,
+      stopReason: "probe_cap_overshoot",
     };
   }
 
