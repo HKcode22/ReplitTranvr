@@ -30,6 +30,11 @@ function requiredConfig(): { bucketPrefix: string; retentionHours: number } {
   };
 }
 
+// Capture this once before serving. A later `git pull` must never make a
+// long-lived process claim it loaded code that it did not actually import.
+const startupGitHead = gitHead();
+if (!/^[a-f0-9]{40}$/i.test(startupGitHead)) throw new Error("WORKSPACE_CALLBACK_STARTUP_GIT_HEAD_INVALID");
+
 const config = requiredConfig();
 const app = express();
 app.set("trust proxy", 1);
@@ -52,7 +57,7 @@ app.get("/__v39/workspace-runtime", (_req, res) => {
   res.status(200).json({
     schema: "v39.phase2f-workspace-runtime.v1",
     status: "PASS",
-    git_head: gitHead(),
+    git_head: startupGitHead,
     route_owner: "server/routes_v3.ts",
     prepaid_route_registered: true,
     retention_hours: config.retentionHours,
@@ -73,7 +78,7 @@ server.listen({ port, host: "0.0.0.0" }, () => {
       schema: "v39.phase2f-workspace-runtime-start.v1",
       status: "PASS",
       port,
-      git_head: gitHead(),
+      git_head: startupGitHead,
       prepaid_route_registered: true,
       retention_hours: config.retentionHours,
       bucket_prefix: config.bucketPrefix,
