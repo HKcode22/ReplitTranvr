@@ -15,6 +15,7 @@ import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authR
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const LEDGER = path.join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function required(name: string): string {
   const i = process.argv.indexOf(name);
@@ -73,7 +74,7 @@ async function main(): Promise<void> {
   }
 
   const probes = await pool.query(
-    `SELECT probe_id,icao,status FROM clean.adb_anchor_probe
+    `SELECT probe_id,icao,status,runtime_session_id FROM clean.adb_anchor_probe
       WHERE stage=1 AND probe_budget_day_id=$1 AND status='probing'
       ORDER BY recorded_at ASC`,
     [budgetDayId],
@@ -94,6 +95,9 @@ async function main(): Promise<void> {
   const probeId = Number(probes.rows[0].probe_id);
   const probeIcao = String(probes.rows[0].icao ?? "").toUpperCase();
   if (!/^[A-Z0-9]{4}$/.test(probeIcao)) throw new Error("RECOVERY_REFUSED:PROBE_ICAO_INVALID");
+  const durableSessionIdRaw = probes.rows[0].runtime_session_id == null ? "" : String(probes.rows[0].runtime_session_id).toLowerCase();
+  const durableSessionId = durableSessionIdRaw && UUID.test(durableSessionIdRaw) ? durableSessionIdRaw : null;
+  if (durableSessionIdRaw && !durableSessionId) throw new Error("RECOVERY_REFUSED:DURABLE_RUNTIME_SESSION_ID_INVALID");
 
   const sessions = await pool.query(
     `SELECT session_id,provider_subscription_id,state
@@ -113,10 +117,22 @@ async function main(): Promise<void> {
   let cleanupVerifiedAtUtc: string | null = null;
   let sessionId: string | null = null;
   let stopReason = "supervisor_child_exit_before_runtime_session";
+  const runtimeSessionPresent = (sessions.rowCount ?? sessions.rows.length) === 1;
 
-  if ((sessions.rowCount ?? sessions.rows.length) === 1) {
+  if (runtimeSessionPresent) {
     const row = sessions.rows[0];
-    sessionId = String(row.session_id);
+    sessionId = String(row.session_id).toLowerCase();
+    if (!UUID.test(sessionId)) throw new Error("RECOVERY_REFUSED:RUNTIME_SESSION_ID_INVALID");
+    if (durableSessionId && durableSessionId !== sessionId) {
+      await openRecoveryIncident({
+        probeId,
+        budgetDayId,
+        reason: "durable_runtime_session_mismatch",
+        durableSessionId,
+        runtimeSessionId: sessionId,
+      });
+      throw new Error("RECOVERY_REFUSED:DURABLE_RUNTIME_SESSION_MISMATCH");
+    }
     const boundProviderSubscriptionId = row.provider_subscription_id ? String(row.provider_subscription_id) : null;
     stopReason = "supervisor_child_exit_recovered";
 
@@ -197,18 +213,86 @@ async function main(): Promise<void> {
       throw error;
     }
   } else {
-    const activeBillable = (await listSubscriptionsStrict()).filter(
+    const before = await listSubscriptionsStrict();
+    const activeBillableBefore = before.filter(
       (subscription) => subscription.isActive && subscription.billingType !== "LifetimeBased",
     );
-    providerDeleteVerified = activeBillable.length === 0;
-    if (!providerDeleteVerified) {
-      await openRecoveryIncident({
-        probeId,
-        budgetDayId,
-        reason: "no_runtime_session_but_active_billable_subscription_present",
-        activeBillableCount: activeBillable.length,
-      });
-      throw new Error("RECOVERY_REFUSED:NO_RUNTIME_SESSION_ACTIVE_BILLABLE_PRESENT");
+
+    // PostgreSQL deliberately resets UNLOGGED runtime tables after crash
+    // recovery. New probes persist only the random runtime session UUID in the
+    // logged adb_anchor_probe row before provider creation. That UUID is enough
+    // to reconstruct the deterministic callback URL and prove exact ownership
+    // without persisting provider subscription IDs or payload content.
+    if (durableSessionId) {
+      sessionId = durableSessionId;
+      const expectedSubscriberId = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), durableSessionId);
+      const exactResetMatches = activeBillableBefore.filter((subscription) =>
+        subscription.billingType === "CreditBased" &&
+        String(subscription.subject?.type ?? "") === "FlightByAirportIcao" &&
+        String(subscription.subject?.id ?? "").toUpperCase() === probeIcao &&
+        String(subscription.subscriber?.type ?? "") === "WebHook" &&
+        String(subscription.subscriber?.id ?? "") === expectedSubscriberId,
+      );
+      if (exactResetMatches.length > 1) {
+        await openRecoveryIncident({
+          probeId,
+          budgetDayId,
+          reason: "multiple_exact_runtime_reset_subscription_matches",
+          durableSessionId,
+        });
+        throw new Error("RECOVERY_REFUSED:MULTIPLE_EXACT_RUNTIME_RESET_SUBSCRIPTION_MATCHES");
+      }
+      if (exactResetMatches.length === 1) {
+        const ownedProviderSubscriptionId = exactResetMatches[0].id;
+        providerDeleteAttempted = true;
+        const deleted = await deleteSubscription(ownedProviderSubscriptionId);
+        if (!deleted) {
+          await openRecoveryIncident({
+            probeId,
+            budgetDayId,
+            reason: "runtime_reset_owned_subscription_delete_failed",
+            durableSessionId,
+          });
+          throw new Error("RECOVERY_FAILED:RUNTIME_RESET_OWNED_SUBSCRIPTION_DELETE_FAILED");
+        }
+        const after = await listSubscriptionsStrict();
+        providerDeleteVerified = !after.some(
+          (subscription) => subscription.id === ownedProviderSubscriptionId && subscription.isActive,
+        );
+        if (!providerDeleteVerified) {
+          await openRecoveryIncident({
+            probeId,
+            budgetDayId,
+            reason: "runtime_reset_owned_subscription_still_active_after_delete",
+            durableSessionId,
+          });
+          throw new Error("RECOVERY_FAILED:RUNTIME_RESET_OWNED_SUBSCRIPTION_STILL_ACTIVE");
+        }
+        stopReason = "supervisor_child_exit_after_runtime_reset_recovered";
+      } else if (activeBillableBefore.length > 0) {
+        await openRecoveryIncident({
+          probeId,
+          budgetDayId,
+          reason: "runtime_reset_durable_session_unmatched_active_billable_subscription",
+          durableSessionId,
+          activeBillableCount: activeBillableBefore.length,
+        });
+        throw new Error("RECOVERY_REFUSED:RUNTIME_RESET_ACTIVE_BILLABLE_NOT_EXACTLY_OWNED");
+      } else {
+        providerDeleteVerified = true;
+        stopReason = "supervisor_child_exit_after_runtime_reset_no_active_subscription";
+      }
+    } else {
+      providerDeleteVerified = activeBillableBefore.length === 0;
+      if (!providerDeleteVerified) {
+        await openRecoveryIncident({
+          probeId,
+          budgetDayId,
+          reason: "no_runtime_session_but_active_billable_subscription_present",
+          activeBillableCount: activeBillableBefore.length,
+        });
+        throw new Error("RECOVERY_REFUSED:NO_RUNTIME_SESSION_ACTIVE_BILLABLE_PRESENT");
+      }
     }
   }
 
@@ -220,6 +304,8 @@ async function main(): Promise<void> {
     providerDeleteAttempted,
     providerDeleteVerified,
     runtimeCleanupVerified: Boolean(cleanupVerifiedAtUtc),
+    runtimeSessionPresent,
+    durableSessionIdUsed: !runtimeSessionPresent && Boolean(durableSessionId),
   });
 
   console.log(JSON.stringify({
@@ -230,6 +316,8 @@ async function main(): Promise<void> {
     provider_delete_attempted: providerDeleteAttempted,
     provider_delete_verified: providerDeleteVerified,
     runtime_cleanup_verified: Boolean(cleanupVerifiedAtUtc),
+    runtime_session_present: runtimeSessionPresent,
+    durable_session_id_used: !runtimeSessionPresent && Boolean(durableSessionId),
     probe_marked_failed: true,
     incident_opened: true,
   }, null, 2));
