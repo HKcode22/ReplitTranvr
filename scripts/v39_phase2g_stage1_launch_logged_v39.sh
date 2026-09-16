@@ -149,7 +149,10 @@ PID_FILE="artifacts/phase2g-stage1-${SAFE_AUTH}-${STAMP}.pid"
 printf '{"schema":"v39.phase2g-stage1-launch.v1","state":"LAUNCH_REQUESTED","generated_at_utc":"%s","authorization_id":"%s","git_head":"%s","preflight_receipt":"%s","log_path":"%s"}\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$AUTH" "$CURRENT_HEAD" "$PREFLIGHT" "$LOG" > "$LOG"
 
-nohup env \
+# Spawn the supervisor in a new OS session/process group. Unlike a plain
+# background/nohup job, this detaches it from the interactive terminal job
+# group while preserving the same exact environment and paid front-door guard.
+env \
   ADB_PREPROBE_ARTIFACT_PATH="$PREPROBE" \
   ADB_PREPROBE_ARTIFACT_SHA256="$PREPROBE_SHA" \
   ADB_PROBE_RUNTIME_ARTIFACT_PATH="$RUNTIME_FILE" \
@@ -161,7 +164,11 @@ nohup env \
   V39_PROVIDER_BLOB_MODE="required" \
   V39_PUBLIC_WEBHOOK_BASE_URL="$BASE" \
   WEBHOOK_BASE_URL="$BASE" \
-  node --import tsx scripts/v39_phase2g_stage1_logged_supervisor_v39.ts \
+  node --import tsx scripts/v39_phase2g_spawn_detached_supervisor_v39.ts \
+    --log "$LOG" \
+    --pid-file "$PID_FILE" \
+    -- \
+    scripts/v39_phase2g_stage1_logged_supervisor_v39.ts \
     --auth "$AUTH" \
     --auth-file "$AUTH_FILE" \
     --auth-sha "$AUTH_SHA" \
@@ -171,10 +178,17 @@ nohup env \
     --callback-base "$BASE" \
     --log "$LOG" \
     --status "$STATUS" \
-    --heartbeat "$HEARTBEAT" \
-  >>"$LOG" 2>&1 < /dev/null &
-SUPERVISOR_PID=$!
-echo "$SUPERVISOR_PID" > "$PID_FILE"
+    --heartbeat "$HEARTBEAT"
+
+if [[ ! -s "$PID_FILE" ]]; then
+  echo 'REFUSED:DETACHED_SUPERVISOR_PID_FILE_MISSING'
+  exit 1
+fi
+SUPERVISOR_PID="$(tr -d '[:space:]' < "$PID_FILE")"
+if [[ ! "$SUPERVISOR_PID" =~ ^[0-9]+$ ]]; then
+  echo 'REFUSED:DETACHED_SUPERVISOR_PID_INVALID'
+  exit 1
+fi
 
 sleep 3
 if ! kill -0 "$SUPERVISOR_PID" 2>/dev/null; then
