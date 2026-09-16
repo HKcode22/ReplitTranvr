@@ -5,9 +5,12 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const preflight = readFileSync(join(root, "scripts", "v39_phase2g_stage1_paid_preflight_v39.ts"), "utf8");
 const launcher = readFileSync(join(root, "scripts", "v39_phase2g_stage1_launch_logged_v39.sh"), "utf8");
+const detachedSpawner = readFileSync(join(root, "scripts", "v39_phase2g_spawn_detached_supervisor_v39.ts"), "utf8");
 const supervisor = readFileSync(join(root, "scripts", "v39_phase2g_stage1_logged_supervisor_v39.ts"), "utf8");
 const recovery = readFileSync(join(root, "scripts", "v39_phase2g_stage1_recover_after_exit_v39.ts"), "utf8");
 const sleepCheck = readFileSync(join(root, "scripts", "v39_phase2g_stage1_sleep_check_v39.ts"), "utf8");
+const probeExecution = readFileSync(join(root, "server", "lib", "disruption", "probeExecutionPrepaid_v39.ts"), "utf8");
+const prepaidWindow = readFileSync(join(root, "server", "lib", "disruption", "prepaidProbeWindow_v39.ts"), "utf8");
 
 describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   it("keeps the paid preflight read-only and emits an immutable exact receipt", () => {
@@ -67,15 +70,32 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(launcher).toContain('"deployment_performed": false');
   });
 
-  it("launches a nohup supervisor with durable log, status, heartbeat and pid artifacts", () => {
-    expect(launcher).toContain("nohup env");
+  it("launches the supervisor in an independent OS session with durable artifacts", () => {
+    expect(launcher).toContain("v39_phase2g_spawn_detached_supervisor_v39.ts");
+    expect(launcher).not.toContain("nohup env");
     expect(launcher).toContain(".log\"");
     expect(launcher).toContain(".status.json\"");
     expect(launcher).toContain(".heartbeat.json\"");
     expect(launcher).toContain(".pid\"");
-    expect(launcher).toContain('echo "$SUPERVISOR_PID" > "$PID_FILE"');
+    expect(launcher).toContain('SUPERVISOR_PID="$(tr -d');
     expect(launcher).toContain('"status": "LAUNCHED_PERSISTENT_SUPERVISOR"');
     expect(launcher).toContain('--callback-base "$BASE"');
+    expect(detachedSpawner).toContain("detached: true");
+    expect(detachedSpawner).toContain("child.unref()");
+    expect(detachedSpawner).toContain('childArgs[0] !== "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"');
+    expect(detachedSpawner).toContain('provider_paid_action_performed: false');
+    expect(detachedSpawner).toContain('deployment_performed: false');
+  });
+
+  it("durably binds the random runtime session before provider subscription creation", () => {
+    expect(probeExecution).toContain("durablyBindProbeRuntimeSession");
+    expect(probeExecution).toContain("SET runtime_session_id=$2::uuid");
+    expect(probeExecution).toContain("REFUSED_RUNTIME_SESSION_DURABLE_BIND_FAILED");
+    expect(probeExecution).toContain("onSessionArmed: async (sessionId)");
+    const hookIndex = prepaidWindow.indexOf("if (input.onSessionArmed) await input.onSessionArmed(session.sessionId)");
+    const createIndex = prepaidWindow.indexOf('createSubscription("FlightByAirportIcao"');
+    expect(hookIndex).toBeGreaterThanOrEqual(0);
+    expect(createIndex).toBeGreaterThan(hookIndex);
   });
 
   it("front-door verifies the AUTH and supervises the actual paid owner directly", () => {
@@ -104,13 +124,23 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(supervisor).toContain("recovery_exit_code");
   });
 
-  it("scopes recovery to one exact Stage-1 probe/session and never deletes an unmatched billable subscription", () => {
+  it("recovers exact ownership after an UNLOGGED runtime reset without persisting provider IDs", () => {
+    expect(recovery).toContain("SELECT probe_id,icao,status,runtime_session_id");
+    expect(recovery).toContain("durableSessionId");
+    expect(recovery).toContain("prepaidProbeWebhookUrlV39(defaultWebhookUrl(), durableSessionId)");
+    expect(recovery).toContain('String(subscription.subject?.type ?? "") === "FlightByAirportIcao"');
+    expect(recovery).toContain('String(subscription.subject?.id ?? "").toUpperCase() === probeIcao');
+    expect(recovery).toContain('String(subscription.subscriber?.type ?? "") === "WebHook"');
+    expect(recovery).toContain("RECOVERY_REFUSED:RUNTIME_RESET_ACTIVE_BILLABLE_NOT_EXACTLY_OWNED");
+    expect(recovery).toContain("supervisor_child_exit_after_runtime_reset_recovered");
+    expect(recovery).toContain("durable_session_id_used");
+  });
+
+  it("scopes recovery to one exact Stage-1 probe/session and never bulk-deletes unmatched billable subscriptions", () => {
     expect(recovery).toContain("stage=1 AND probe_budget_day_id=$1 AND status='probing'");
     expect(recovery).toContain("owner_kind='anchor_probe' AND owner_probe_id=$1 AND stage=1");
     expect(recovery).toContain("RECOVERY_REFUSED:MULTIPLE_ACTIVE_RUNTIME_SESSIONS");
     expect(recovery).toContain('subscription.billingType === "CreditBased"');
-    expect(recovery).toContain('subscription.subject?.type ?? "") === "FlightByAirportIcao"');
-    expect(recovery).toContain("prepaidProbeWebhookUrlV39(defaultWebhookUrl(), sessionId)");
     expect(recovery).toContain("RECOVERY_REFUSED:UNBOUND_SESSION_ACTIVE_BILLABLE_NOT_EXACTLY_OWNED");
     expect(recovery).toContain("deleteSubscription(ownedProviderSubscriptionId)");
     expect(recovery).not.toContain("for (const subscription of activeBillableBefore)");
