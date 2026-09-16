@@ -129,6 +129,29 @@ async function reserveSafeProbe(input: ExecuteProbeInput, started: Date): Promis
   }
 }
 
+async function durablyBindProbeRuntimeSession(input: {
+  probeId: number;
+  sessionId: string;
+  stage: 1 | 2;
+  icao: string;
+}): Promise<void> {
+  const bound = await pool.query(
+    `UPDATE clean.adb_anchor_probe
+        SET runtime_session_id=$2::uuid
+      WHERE probe_id=$1
+        AND status='probing'
+        AND stage=$3
+        AND UPPER(icao)=UPPER($4)
+        AND provider_content_safe_mode=true
+        AND (runtime_session_id IS NULL OR runtime_session_id=$2::uuid)
+      RETURNING probe_id`,
+    [input.probeId, input.sessionId, input.stage, input.icao],
+  );
+  if ((bound.rowCount ?? bound.rows.length) !== 1) {
+    throw new Error("REFUSED_RUNTIME_SESSION_DURABLE_BIND_FAILED");
+  }
+}
+
 async function markSafeFailure(input: {
   probeId: number;
   runtimeSessionId?: string | null;
@@ -173,7 +196,9 @@ async function markProbeBudgetDayMismatch(dayId: string, detail: Record<string, 
  * Provider payloads go to App Storage and provider-identifying working state
  * goes only to UNLOGGED tables through runPrepaidLiveWindowV39. The logged
  * adb_anchor_probe row receives aggregate research evidence only after
- * reconciliation and verified transient cleanup.
+ * reconciliation and verified transient cleanup. The random runtime-session
+ * UUID is the one exception: it is durably bound before provider creation so
+ * a PostgreSQL UNLOGGED-table reset cannot destroy exact recovery ownership.
  */
 export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<ExecuteProbeResult> {
   await assertIncidentClear();
@@ -218,6 +243,14 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     settlement,
     deletionRunId: `phase2-probe-${probeId}`,
     watchdogPollMs: input.artifacts.runtime.watchdogPollMs,
+    onSessionArmed: async (sessionId) => {
+      await durablyBindProbeRuntimeSession({
+        probeId,
+        sessionId,
+        stage: input.stage,
+        icao: candidate.icao,
+      });
+    },
   });
 
   if (result.status !== "completed" || !result.metrics || result.reconciliationStatus !== "MATCH" || !result.cleanupVerifiedAtUtc) {
