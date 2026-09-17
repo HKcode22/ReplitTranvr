@@ -14,12 +14,13 @@ const PHASE = "Phase 2 / Gate 2 Stage 1";
 const TARGET_MINUTES = 120;
 const AUTH_CLEANUP_BUFFER_MINUTES = 5;
 const CALLBACK_SOURCE_PATHS = [
+  "server/index.ts",
   "server/routes_v3.ts",
+  "server/lib/disruption/workspaceRuntimeHealth_v39.ts",
   "server/lib/disruption/prepaidProbeRuntime_v39.ts",
   "server/lib/disruption/providerBlobStore_v39.ts",
   "server/lib/disruption/replitProviderBlobStore_v39.ts",
   "server/lib/disruption/db_v39.ts",
-  "scripts/v39_workspace_v3_server_v39.ts",
 ] as const;
 
 function required(name: string): string {
@@ -178,6 +179,8 @@ async function main(): Promise<void> {
   let callback: Record<string, unknown> = {
     origin,
     reachable: false,
+    exact_contract: false,
+    managed_replit_workflow: false,
     source_compatible_with_current_head: false,
   };
   if (!origin) {
@@ -198,10 +201,21 @@ async function main(): Promise<void> {
         });
         sourceCompatible = checks.every((check) => check.match);
       }
-      const reachable = health.status === 200 && health.json?.status === "PASS";
+      const exactContract = health.status === 200 &&
+        health.json?.schema === "v39.phase2f-workspace-runtime.v1" &&
+        health.json?.status === "PASS" &&
+        health.json?.prepaid_route_registered === true &&
+        health.json?.provider_mutation === false &&
+        health.json?.managed_replit_workflow === true &&
+        runtimeHead === currentHead;
+      const reachable = exactContract && sourceCompatible;
       callback = {
         origin,
         reachable,
+        exact_contract: exactContract,
+        schema: health.json?.schema ?? null,
+        route_owner: health.json?.route_owner ?? null,
+        managed_replit_workflow: health.json?.managed_replit_workflow === true,
         runtime_git_head: runtimeHead || null,
         current_git_head: currentHead,
         retention_hours: health.json?.retention_hours ?? null,
@@ -210,12 +224,14 @@ async function main(): Promise<void> {
         protected_source_count: CALLBACK_SOURCE_PATHS.length,
         source_compatible_with_current_head: sourceCompatible,
       };
-      if (!reachable) blockers.push("workspace_callback_not_reachable");
+      if (!exactContract) blockers.push("workspace_callback_exact_managed_contract_failed");
       if (!sourceCompatible) blockers.push("workspace_callback_source_not_compatible");
     } catch (error) {
       callback = {
         origin,
         reachable: false,
+        exact_contract: false,
+        managed_replit_workflow: false,
         source_compatible_with_current_head: false,
         error: error instanceof Error ? error.message : String(error),
       };
