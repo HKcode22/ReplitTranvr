@@ -79,6 +79,7 @@ check_health() {
     json?.status === "PASS" &&
     json?.prepaid_route_registered === true &&
     json?.provider_mutation === false &&
+    json?.managed_replit_workflow === true &&
     String(json?.git_head || "").toLowerCase() === expectedHead;
   if (!pass) {
     console.error(JSON.stringify({
@@ -96,7 +97,7 @@ check_health() {
     label,
     git_head: json.git_head,
     route_owner: json.route_owner,
-    managed_replit_workflow: json.managed_replit_workflow === true,
+    managed_replit_workflow: true,
   }));
 })().catch((error) => {
   console.error(JSON.stringify({
