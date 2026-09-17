@@ -1,0 +1,60 @@
+{
+  "schema": "v39.phase2g-stage1-paid-preflight.v1",
+  "status": "PASS_READY_FOR_PAID_STAGE1",
+  "mutation_performed": false,
+  "provider_paid_action_performed": false,
+  "deployment_performed": false,
+  "generated_at_utc": "2026-09-16T11:04:33.172Z",
+  "git_head": "cd4403913a45990951e60bc09b889802ba7f2362",
+  "expected_git_head": "cd4403913a45990951e60bc09b889802ba7f2362",
+  "auth": {
+    "authorization_id": "AUTH-20260916-P2G02",
+    "file": "SEPmd/V3.9_PHASE2G_AUTH_20260916_P2G02.json",
+    "sha256": "fecc9a2c052e492cd40ffdfad204702d14eb0b122dbd37941f03cd5e0bec3cc4",
+    "start_not_before_utc": "2026-09-16T11:00:00.000Z",
+    "expires_at_utc": "2026-09-16T15:30:00.000Z",
+    "max_alert_credits": 500,
+    "protected_exposure_credits": 500,
+    "safe_latest_start_utc": "2026-09-16T13:25:00.000Z",
+    "approved_in_ledger": true
+  },
+  "gate2_runtime": {
+    "file": "artifacts/phase2g-gate2-runtime-P2G-S1-20260915-01.json",
+    "file_sha256": "aa306c163df31e6f309eaad4fcc365e1d0ac6ffac1b9103c940bc73fceffd49e",
+    "binding_sha256": "c6eb2419656f12ae24dcf4b41a3f7fd86982be950525fa2560c82b154e38b544",
+    "evidence_id": "RUN-20260915-C6EB2419656F12AE24DCF4B41A3F7FD86982BE950525FA2560C82B154E38B544",
+    "probe_budget_day_id": "P2G-S1-20260915-01",
+    "stage1_reservation_credits": 450,
+    "unsettled_burst_margin_credits": 50
+  },
+  "provider": {
+    "credits_remaining": 2863,
+    "protected_floor_after_authorized_exposure": 1000,
+    "active_billable_subscriptions": 0
+  },
+  "database": {
+    "open_incidents": 0,
+    "active_probes": 0,
+    "same_budget_day_probe_rows": 0,
+    "open_probe_budget_days": 0
+  },
+  "frozen_stage1_time_class": {
+    "utc_slot_hour": 12,
+    "weekday_class": "weekday",
+    "eligible_now": true,
+    "would_cross_utc_midnight_if_started_now": false
+  },
+  "callback": {
+    "origin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+    "reachable": true,
+    "runtime_git_head": "cd4403913a45990951e60bc09b889802ba7f2362",
+    "current_git_head": "cd4403913a45990951e60bc09b889802ba7f2362",
+    "retention_hours": 168,
+    "bucket_prefix": "replit-objstore",
+    "matched_protected_sources": 6,
+    "protected_source_count": 6,
+    "source_compatible_with_current_head": true
+  },
+  "blockers": [],
+  "next": "Launch only through the exact hash-bound persistent Stage-1 launcher."
+}

@@ -1,0 +1,68 @@
+{
+  "schema": "v39.phase2f-failed-smoke-recovery-basis.v1",
+  "status": "EVIDENCE_PASS",
+  "historicalSmokeStatus": "FAIL",
+  "historicalMismatchPreserved": true,
+  "exactHistoricalReconciliationRecovered": false,
+  "failedAuthorizationId": "AUTH-20260915-P2F011738",
+  "failedRuntimeSessionId": "4eb0fad5-0732-42f6-b273-efae577df432",
+  "failedWindowUtc": {
+    "start": "2026-09-15T01:27:23Z",
+    "end": "2026-09-15T01:33:24Z"
+  },
+  "providerState": {
+    "repeatedBalanceReads": [
+      {
+        "atUtc": "2026-09-15T02:31:32.980Z",
+        "creditsRemaining": 2884,
+        "lastRefilledUtc": "2026-08-17 03:55",
+        "lastDeductedUtc": "2026-09-15 01:31"
+      },
+      {
+        "atUtc": "2026-09-15T02:31:34.260Z",
+        "creditsRemaining": 2884,
+        "lastRefilledUtc": "2026-08-17 03:55",
+        "lastDeductedUtc": "2026-09-15 01:31"
+      },
+      {
+        "atUtc": "2026-09-15T02:31:35.532Z",
+        "creditsRemaining": 2884,
+        "lastRefilledUtc": "2026-08-17 03:55",
+        "lastDeductedUtc": "2026-09-15 01:31"
+      }
+    ],
+    "stableBalance": 2884,
+    "lastDeductedUtc": "2026-09-15 01:31",
+    "latestDeductionFallsWithinFailedSmokeWindow": true,
+    "lastRefilledUtc": "2026-08-17 03:55",
+    "activeBillableSubscriptions": 0
+  },
+  "accountingDisposition": {
+    "gate0TrustedBalance": 2900,
+    "currentBalance": 2884,
+    "conservativeExternalDeltaSinceGate0": 16,
+    "exactFailedSmokeExternalSpendProven": false,
+    "exactFailedSmokeInternalSpendProven": false,
+    "note": "Historical mismatch is retained. The conservative balance delta is recorded for safety, but no exact per-SEND internal count is invented or backfilled."
+  },
+  "remediationEvidence": {
+    "sourceCommit": "cadb15467545309c28301eb26fb3ae33fca2e153",
+    "persistenceSelftestArtifact": "artifacts/phase2f-local-persistence-selftest-20260915T022018Z.json",
+    "persistenceSelftestSha256": "98b523abaf19a9bb8375dc6f5db22bfd3e7280ea560d53160365a8f8f9da16e9",
+    "retentionHours": 168,
+    "rawPersistencePassed": true,
+    "blobPersistencePassed": true,
+    "normalizedRuntimePersistencePassed": true,
+    "cleanupPassed": true,
+    "postCleanupRuntimeRows": 0,
+    "postCleanupLiveBlobs": 0,
+    "failedSessionResidue": {
+      "sessions": 0,
+      "deliveries": 0,
+      "items": 0,
+      "blobs": 0
+    }
+  },
+  "resolutionMeaning": "Clear the persistent incident stop only after guarded operator review and proof of a new valid provider/storage/runtime state. This does not convert the failed Phase-2F smoke into PASS; a fresh authorized smoke remains required.",
+  "reviewedAtUtc": "2026-09-15T02:31:37.828Z"
+}

@@ -1,0 +1,25 @@
+{
+  "schema": "v39.phase2g-detached-supervisor-spawn.v1",
+  "status": "DETACHED_SUPERVISOR_ALIVE",
+  "supervisor_pid": 858,
+  "pid_file": "artifacts/phase2g-stage1-AUTH-20260917-P2G04-20260917T123013Z.pid",
+  "log_file": "artifacts/phase2g-stage1-AUTH-20260917-P2G04-20260917T123013Z.log",
+  "detached": true,
+  "provider_paid_action_performed": false,
+  "deployment_performed": false
+}
+{
+  "schema": "v39.phase2g-stage1-launch.v1",
+  "status": "LAUNCHED_PERSISTENT_SUPERVISOR",
+  "authorization_id": "AUTH-20260917-P2G04",
+  "git_head": "f06820486ca8395edde2de29a6da81f5b1dc8b40",
+  "probe_budget_day_id": "P2G-S1-20260917-03",
+  "supervisor_pid": 858,
+  "log_file": "artifacts/phase2g-stage1-AUTH-20260917-P2G04-20260917T123013Z.log",
+  "status_file": "artifacts/phase2g-stage1-AUTH-20260917-P2G04-20260917T123013Z.status.json",
+  "heartbeat_file": "artifacts/phase2g-stage1-AUTH-20260917-P2G04-20260917T123013Z.heartbeat.json",
+  "pid_file": "artifacts/phase2g-stage1-AUTH-20260917-P2G04-20260917T123013Z.pid",
+  "workspace_callback_base": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+  "deployment_performed": false,
+  "note": "Do not launch a second Stage-1 command. Inspect status/heartbeat/log if the terminal disconnects."
+}

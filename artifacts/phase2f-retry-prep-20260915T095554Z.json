@@ -1,0 +1,55 @@
+{
+  "schema": "v39.phase2f-retry-prep.v1",
+  "status": "PASS_DRAFT_ONLY_NOT_AUTHORIZED",
+  "preparedAtUtc": "2026-09-15T09:55:58.108Z",
+  "gitHead": "cb537fe7fbae385ef0d370c15ffa38930b5dfd24",
+  "phase": "Phase 2F mandatory safety smoke retry",
+  "executionEnvironment": "replit-workspace-live",
+  "deploymentPerformed": false,
+  "providerPaidOrMutatingActionPerformed": false,
+  "alertCreditsSpentDuringPrep": 0,
+  "authorizationStatus": "DRAFT_ONLY_NOT_AUTHORIZED",
+  "workspaceCallback": {
+    "path": "artifacts/phase2f-workspace-callback-verification-20260915T095554Z.json",
+    "sha256": "bd3eaf84e3887cac8223b8755ead58b1eba6606d910e9f0d23340ae4835b7347",
+    "origin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+    "runtimeGitHead": "cb537fe7fbae385ef0d370c15ffa38930b5dfd24"
+  },
+  "workspaceIngress": {
+    "path": "artifacts/phase2f-workspace-ingress-binding-20260915T095554Z.json",
+    "evidenceId": "RUN-20260915-2C0DE28EE26B8F900DBE3D164ECEE0C707F3614AEC5EC9153A83B23A32AE742A",
+    "artifactSha256": "7c68aa8bacfc4595d308b2ff4f51ed06ae4ee42da0d0fd7cba817695753f0834",
+    "fileSha256": "49a7885cbff797491a9bcfd54a7ee4af39cd98e91064558fb2c0f9a1046139ed",
+    "bindingSha256": "2c0de28ee26b8f900dbe3d164ecee0c707f3614aec5ec9153a83b23a32ae742a"
+  },
+  "smokeRuntime": {
+    "path": "artifacts/phase2f-smoke-runtime-20260915T095554Z.json",
+    "evidenceId": "RUN-20260915-5DE439B8354EAFDEAB14F951C28A109896F467D8694F7CCA948228A55C7EF85B",
+    "artifactSha256": "7bf570cb13c9673375e75b459b920e6373f3f15129d8a1a591458649d6044ae5",
+    "fileSha256": "58dbadb53bedc27dbaa236d020e21e7059470dd5ba0d10594475c5af2429d232",
+    "bindingSha256": "5de439b8354eafdeab14f951c28a109896f467d8694f7cca948228a55c7ef85b",
+    "preSmokeMarginCredits": 50,
+    "settlementInitialWaitSeconds": 30,
+    "settlementPollIntervalSeconds": 10,
+    "settlementStableReadCount": 3,
+    "settlementTimeoutSeconds": 600,
+    "watchdogPollMs": 5000
+  },
+  "draftAuthorization": {
+    "path": "SEPmd/V3.9_PHASE2F_AUTH_20260915T095554Z.json",
+    "authorizationId": "AUTH-20260915-P2F095554",
+    "sha256": "595c79981e5df654b4e0846930d943c78d01fe333ab822a8b29b743144cb44e2",
+    "airportFilterWindow": "FlightByAirportIcao:WSSS;window_minutes=5",
+    "maxAlertCredits": 100,
+    "maxRestUnitsByCategory": null,
+    "startNotBeforeUtc": "2026-09-15T09:55:56.785Z",
+    "expiresAtUtc": "2026-09-15T11:55:56.819Z",
+    "cleanupOwner": "phase2f-workspace-smoke-owner",
+    "predecessorEvidenceIds": [
+      "RUN-20260913-643BF82FD98B3DA416433077BB7E21DC231C07A2F34289245436EC160C7D8984",
+      "RUN-20260915-5DE439B8354EAFDEAB14F951C28A109896F467D8694F7CCA948228A55C7EF85B"
+    ]
+  },
+  "nextPermittedAction": "HUMAN_REVIEW_AND_EXPLICIT_APPROVAL_OF_EXACT_DRAFT_AUTH_ONLY",
+  "paidSmokeMayRunNow": false
+}

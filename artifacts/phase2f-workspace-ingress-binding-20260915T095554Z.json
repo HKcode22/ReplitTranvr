@@ -1,0 +1,62 @@
+{
+  "schema_version": "v3.9-phase2f-workspace-ingress-binding-1",
+  "status": "PASS",
+  "ingress_kind": "replit-workspace-live",
+  "checked_at_utc": "2026-09-15T09:55:55.891Z",
+  "callback_origin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+  "callback_receipt_sha256": "bd3eaf84e3887cac8223b8755ead58b1eba6606d910e9f0d23340ae4835b7347",
+  "callback_receipt_generated_at_utc": "2026-09-15T09:55:54.394Z",
+  "callback_runtime_git_head": "cb537fe7fbae385ef0d370c15ffa38930b5dfd24",
+  "binding_creator_git_head": "cb537fe7fbae385ef0d370c15ffa38930b5dfd24",
+  "exact_route_owner": "server/routes_v3.ts",
+  "public_https_ingress": true,
+  "wrong_secret_rejected_404": true,
+  "exact_secret_accepted_200": true,
+  "runtime_health_rechecked": true,
+  "retention_hours": 168,
+  "bucket_prefix": "replit-objstore",
+  "open_incidents": 0,
+  "provider_called_during_verification": false,
+  "provider_subscription_created_during_verification": false,
+  "alert_credits_spent_during_verification": 0,
+  "deployment_performed": false,
+  "source_compatibility": [
+    {
+      "path": "server/routes_v3.ts",
+      "runtime_sha256": "775454e488645d410b76a7cfcf370f3393ed73e364751d3fadbdc43781cdf9a5",
+      "current_sha256": "775454e488645d410b76a7cfcf370f3393ed73e364751d3fadbdc43781cdf9a5",
+      "match": true
+    },
+    {
+      "path": "server/lib/disruption/prepaidProbeRuntime_v39.ts",
+      "runtime_sha256": "d8272438886ffea3b0a826e9a04bef7c9ac90c9e634dd10a5865641614cb0330",
+      "current_sha256": "d8272438886ffea3b0a826e9a04bef7c9ac90c9e634dd10a5865641614cb0330",
+      "match": true
+    },
+    {
+      "path": "server/lib/disruption/providerBlobStore_v39.ts",
+      "runtime_sha256": "31eedd6774ef6d5bba14ccab676d1e190ee07beef8a34cc9650686217e5656dc",
+      "current_sha256": "31eedd6774ef6d5bba14ccab676d1e190ee07beef8a34cc9650686217e5656dc",
+      "match": true
+    },
+    {
+      "path": "server/lib/disruption/replitProviderBlobStore_v39.ts",
+      "runtime_sha256": "25953d794addd6e30f086932bbafe27264cbfd1e892925db1b9eafb3fb87ea07",
+      "current_sha256": "25953d794addd6e30f086932bbafe27264cbfd1e892925db1b9eafb3fb87ea07",
+      "match": true
+    },
+    {
+      "path": "server/lib/disruption/db_v39.ts",
+      "runtime_sha256": "fa399c00f690d5fbe4b6282c094d8e1ebd23260121a72db6a4279170fefedd1e",
+      "current_sha256": "fa399c00f690d5fbe4b6282c094d8e1ebd23260121a72db6a4279170fefedd1e",
+      "match": true
+    },
+    {
+      "path": "scripts/v39_workspace_v3_server_v39.ts",
+      "runtime_sha256": "b0cc6be0b478368478658a383ff6f96cc59b3c9c99f9aecc9b4b67ae4a9bec91",
+      "current_sha256": "b0cc6be0b478368478658a383ff6f96cc59b3c9c99f9aecc9b4b67ae4a9bec91",
+      "match": true
+    }
+  ],
+  "artifact_sha256": "7c68aa8bacfc4595d308b2ff4f51ed06ae4ee42da0d0fd7cba817695753f0834"
+}

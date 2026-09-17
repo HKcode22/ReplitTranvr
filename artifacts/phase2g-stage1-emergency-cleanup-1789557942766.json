@@ -1,0 +1,16 @@
+{
+  "schema": "v39.phase2g-stage1-emergency-owned-subscription-cleanup.v1",
+  "status": "EXACT_OWNED_SUBSCRIPTION_DELETED_VERIFIED",
+  "observed_at_utc": "2026-09-16T11:25:42.765Z",
+  "git_head": "cd4403913a45990951e60bc09b889802ba7f2362",
+  "authorization_id": "AUTH-20260916-P2G02",
+  "probe_budget_day_id": "P2G-S1-20260915-01",
+  "probe_id": 1,
+  "icao": "WSSS",
+  "subscription_id": "e9ac5d24-e8e7-4096-84bc-3ff5c7c8e466",
+  "session_id": "c6f464b3-e8fe-4b5c-af61-22e403b40ae5",
+  "preflight_sha256": "612f67e2eaa94e3ef3bd92a8b4845d17a6cd67a78e6cd2ce63186065f3cca60b",
+  "active_billable_before": 1,
+  "active_billable_after": 0,
+  "provider_delete_verified": true
+}

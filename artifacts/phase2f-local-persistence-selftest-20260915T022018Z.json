@@ -1,0 +1,33 @@
+{
+  "schema": "v39.phase2f-local-persistence-selftest.v1",
+  "status": "PASS",
+  "aerodatabox_called": false,
+  "subscription_created": false,
+  "alert_credits_spent": 0,
+  "retention_hours": 168,
+  "persistence": {
+    "duplicate": false,
+    "item_count": 1,
+    "delivery_id_present": true,
+    "blob_ref_present": true
+  },
+  "before_cleanup": {
+    "sessions": 1,
+    "deliveries": 1,
+    "items": 1,
+    "live_blobs": 1
+  },
+  "cleanup": {
+    "deleted_blobs": 1,
+    "deleted_runtime_rows": 3,
+    "verified_at_utc": "2026-09-15T02:20:22.946Z"
+  },
+  "after_cleanup": {
+    "sessions": 0,
+    "deliveries": 0,
+    "items": 0,
+    "live_blobs": 0
+  },
+  "error": null,
+  "generated_at_utc": "2026-09-15T02:20:23.007Z"
+}
