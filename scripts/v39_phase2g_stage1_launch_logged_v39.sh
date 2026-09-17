@@ -134,10 +134,53 @@ fi
 if [[ -z "$DOMAIN" || "$DOMAIN" != *.replit.dev ]]; then echo 'REFUSED:NO_REPLIT_WORKSPACE_PUBLIC_DOMAIN'; exit 2; fi
 if [[ "$DOMAIN" == "travnr.com" || "$DOMAIN" == "www.travnr.com" ]]; then echo 'REFUSED:PRODUCTION_DOMAIN_NOT_ALLOWED'; exit 2; fi
 BASE="https://${DOMAIN}"
-if ! curl -fsS --max-time 5 "$BASE/__v39/workspace-runtime" >/dev/null; then
-  echo 'REFUSED:WORKSPACE_CALLBACK_NOT_REACHABLE_AT_LAUNCH'
-  exit 2
-fi
+
+# Final launch-time health check must validate the exact JSON contract. A Vite
+# catch-all HTML 200 is not a callback health pass.
+CALLBACK_BASE="$BASE" EXPECTED_HEAD="$EXPECTED_HEAD" node <<'NODE'
+(async () => {
+  const base = String(process.env.CALLBACK_BASE || '').replace(/\/+$/, '');
+  const expectedHead = String(process.env.EXPECTED_HEAD || '').toLowerCase();
+  const response = await fetch(`${base}/__v39/workspace-runtime`, {
+    headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(5000),
+  });
+  const text = await response.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch {}
+  const ok = response.status === 200 &&
+    json?.schema === 'v39.phase2f-workspace-runtime.v1' &&
+    json?.status === 'PASS' &&
+    json?.prepaid_route_registered === true &&
+    json?.provider_mutation === false &&
+    json?.managed_replit_workflow === true &&
+    String(json?.git_head || '').toLowerCase() === expectedHead;
+  if (!ok) {
+    console.error(JSON.stringify({
+      status: 'REFUSED',
+      reason: 'WORKSPACE_CALLBACK_HEALTH_CONTRACT_FAILED_AT_LAUNCH',
+      http_status: response.status,
+      content_type: response.headers.get('content-type'),
+      expected_git_head: expectedHead,
+      observed: json ?? text.slice(0, 240),
+    }, null, 2));
+    process.exit(2);
+  }
+  console.log(JSON.stringify({
+    status: 'PASS',
+    check: 'WORKSPACE_CALLBACK_HEALTH_AT_LAUNCH',
+    git_head: json.git_head,
+    route_owner: json.route_owner,
+  }));
+})().catch((error) => {
+  console.error(JSON.stringify({
+    status: 'REFUSED',
+    reason: 'WORKSPACE_CALLBACK_HEALTH_REQUEST_FAILED_AT_LAUNCH',
+    error: error instanceof Error ? error.message : String(error),
+  }, null, 2));
+  process.exit(2);
+});
+NODE
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SAFE_AUTH="${AUTH//[^A-Za-z0-9_-]/_}"
