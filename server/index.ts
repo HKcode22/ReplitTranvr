@@ -12,6 +12,7 @@ import { applyBootMigrations } from './db';
 import { startMonitoringEngine } from './lib/disruption/monitor';
 import { startTestFlightSeeder } from './lib/disruption/testFlightSeeder';
 import { installConsoleTee } from './lib/disruption/logFile';
+import { registerWorkspaceRuntimeHealthV39 } from './lib/disruption/workspaceRuntimeHealth_v39';
 
 // Persist every console line to logs/collector.log so collection logs
 // survive Shell refreshes / restarts (tail -f logs/collector.log).
@@ -73,7 +74,7 @@ app.use(
         ],
         scriptSrcAttr: ["'none'"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-        fontSrc: ["'self'", "data:", "https://fonts.gstatic.com"],
+        fontSrc: ["'self'", "data:", "blob:", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https:", ...stripeImgSrc],
         connectSrc: [
           "'self'",
@@ -279,6 +280,14 @@ app.use((req, res, next) => {
   // management endpoints via the x-webhook-secret header.
   const { registerV3Routes } = await import("./routes_v3");
   registerV3Routes(app);
+
+  // Keep the V3.9 paid-callback health contract on the same Replit-managed
+  // server that owns port 5000. A workspace/runtime replacement can therefore
+  // restart the normal workflow without changing the callback application's
+  // identity or falling through to Vite HTML at this path.
+  registerWorkspaceRuntimeHealthV39(app, {
+    routeOwner: "server/index.ts+server/routes_v3.ts",
+  });
 
   await registerRoutes(httpServer, app);
 
