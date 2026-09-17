@@ -80,6 +80,8 @@ export function providerBlobStorageRequiredV39(env: NodeJS.ProcessEnv = process.
  */
 export function createRequiredProviderBlobStoreV39(env: NodeJS.ProcessEnv = process.env): ReplitProviderBlobStoreV39 {
   if (!providerBlobStorageRequiredV39(env)) throw new Error("V39_PROVIDER_BLOB_MODE_NOT_REQUIRED");
-  const bucketId = normalizeProviderBlobBucketIdV39(String(env[V39_PROVIDER_BLOB_BUCKET_ENV] ?? ""));
+  const rawBucketId = String(env[V39_PROVIDER_BLOB_BUCKET_ENV] ?? "").trim();
+  if (!rawBucketId) throw new Error("V39_PROVIDER_BLOB_BUCKET_ID_REQUIRED");
+  const bucketId = normalizeProviderBlobBucketIdV39(rawBucketId);
   return new ReplitProviderBlobStoreV39(bucketId);
 }
