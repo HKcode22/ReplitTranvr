@@ -44,7 +44,7 @@ build = ["npm", "run", "build"]
 
 [userenv.shared]
 SENDGRID_FROM_EMAIL = "hello@travnr.com"
-V39_PROVIDER_BLOB_BUCKET_ID = "eplit-objstore-89d08290-bfed-4ba9-ab3a-517a47e8095f"
+V39_PROVIDER_BLOB_BUCKET_ID = "replit-objstore-89d08290-bfed-4ba9-ab3a-517a47e8095f"
 V39_PROVIDER_BLOB_MODE = "required"
 V39_PUBLIC_WEBHOOK_BASE_URL = "https://travnr.com"
 ADB_AUTO_COLLECT = "false"
