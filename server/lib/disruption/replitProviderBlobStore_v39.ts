@@ -13,6 +13,21 @@ function message(error: unknown): string {
 }
 
 /**
+ * Normalize the one historical Replit user-env typo that omitted the leading
+ * `r` from `replit-objstore-...`. This keeps the ordinary Replit-managed app
+ * and the Phase-2 callback helper on the same dedicated provider bucket.
+ *
+ * Any other bucket shape is refused. We never fall back to the default bucket.
+ */
+export function normalizeProviderBlobBucketIdV39(raw: string): string {
+  const value = String(raw ?? "").trim();
+  if (!value) throw new Error("V39_PROVIDER_BLOB_BUCKET_ID_REQUIRED");
+  if (value.startsWith("replit-objstore-")) return value;
+  if (value.startsWith("eplit-objstore-")) return `r${value}`;
+  throw new Error("V39_PROVIDER_BLOB_BUCKET_ID_UNEXPECTED");
+}
+
+/**
  * Thin adapter over Replit's official @replit/object-storage SDK.
  *
  * We require an explicitly named dedicated bucket for provider content. Falling
@@ -24,8 +39,7 @@ export class ReplitProviderBlobStoreV39 implements ProviderBlobStoreV39 {
   private readonly client: Client;
 
   constructor(bucketId: string) {
-    const normalized = bucketId.trim();
-    if (!normalized) throw new Error("V39_PROVIDER_BLOB_BUCKET_ID_REQUIRED");
+    const normalized = normalizeProviderBlobBucketIdV39(bucketId);
     this.client = new Client({ bucketId: normalized });
   }
 
@@ -61,12 +75,11 @@ export function providerBlobStorageRequiredV39(env: NodeJS.ProcessEnv = process.
 
 /**
  * Production construction is intentionally fail-closed. `required` mode with a
- * missing dedicated bucket is a configuration error, never a fallback to
- * PostgreSQL plaintext or the app's default object bucket.
+ * missing/unknown dedicated bucket is a configuration error, never a fallback
+ * to PostgreSQL plaintext or the app's default object bucket.
  */
 export function createRequiredProviderBlobStoreV39(env: NodeJS.ProcessEnv = process.env): ReplitProviderBlobStoreV39 {
   if (!providerBlobStorageRequiredV39(env)) throw new Error("V39_PROVIDER_BLOB_MODE_NOT_REQUIRED");
-  const bucketId = String(env[V39_PROVIDER_BLOB_BUCKET_ENV] ?? "").trim();
-  if (!bucketId) throw new Error("V39_PROVIDER_BLOB_BUCKET_ID_REQUIRED");
+  const bucketId = normalizeProviderBlobBucketIdV39(String(env[V39_PROVIDER_BLOB_BUCKET_ENV] ?? ""));
   return new ReplitProviderBlobStoreV39(bucketId);
 }
