@@ -1,0 +1,14 @@
+{
+  "schema": "v39.phase2g-stage1-heartbeat.v1",
+  "state": "RUNNING",
+  "observed_at_utc": "2026-09-17T13:14:45.033Z",
+  "started_at_utc": "2026-09-17T12:30:14.107Z",
+  "supervisor_pid": 858,
+  "child_pid": 879,
+  "authorization_id": "AUTH-20260917-P2G04",
+  "git_head": "f06820486ca8395edde2de29a6da81f5b1dc8b40",
+  "probe_budget_day_id": "P2G-S1-20260917-03",
+  "callback_consecutive_failures": 0,
+  "callback_watchdog_triggered": false,
+  "log_path": "artifacts/phase2g-stage1-AUTH-20260917-P2G04-20260917T123013Z.log"
+}

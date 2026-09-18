@@ -1,0 +1,15 @@
+{
+  "schema_version": "v3.9-phase2f-smoke-runtime-1",
+  "created_at_utc": "2026-09-15T09:55:56.647Z",
+  "preprobe_evidence_id": "RUN-20260913-643BF82FD98B3DA416433077BB7E21DC231C07A2F34289245436EC160C7D8984",
+  "preprobe_artifact_sha256": "b8cbdbc937080e7fe8f31388adc964d3a2910a5f913b2bec6225d363a081c275",
+  "preprobe_file_sha256": "b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870",
+  "preprobe_binding_sha256": "643bf82fd98b3da416433077bb7e21dc231c07a2f34289245436ec160c7d8984",
+  "pre_smoke_unsettled_burst_margin_credits": 50,
+  "settlement_initial_wait_seconds": 30,
+  "settlement_poll_interval_seconds": 10,
+  "settlement_stable_read_count": 3,
+  "settlement_timeout_seconds": 600,
+  "watchdog_poll_ms": 5000,
+  "artifact_sha256": "7bf570cb13c9673375e75b459b920e6373f3f15129d8a1a591458649d6044ae5"
+}

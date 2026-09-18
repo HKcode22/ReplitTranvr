@@ -1,0 +1,96 @@
+{
+  "schema": "v39.phase2g-failed-stage1-adjudication-plan.v1",
+  "status": "READY_FOR_EXACT_ADJUDICATION_NOT_APPLIED",
+  "generated_at_utc": "2026-09-16T12:23:06.749Z",
+  "probe_budget_day_id": "P2G-S1-20260915-01",
+  "probe_id": 1,
+  "icao": "WSSS",
+  "failed_probe_status": "failed",
+  "duration_censored": true,
+  "reconciliation_status": "UNRESOLVED",
+  "reserved_credits": 500,
+  "runtime_session_id": null,
+  "recovery_session_id": "c6f464b3-e8fe-4b5c-af61-22e403b40ae5",
+  "cleanup_evidence_file": "artifacts/phase2g-stage1-emergency-cleanup-1789557942766.json",
+  "cleanup_evidence_sha256": "d2004b97b8f791af3219da0fabeb51ac9d3f1ce82c602cd8c22871906eaf7bb8",
+  "durable_blob_ref_count": 3,
+  "active_probe_count": 0,
+  "active_runtime_rows": 0,
+  "active_billable_subscriptions": 0,
+  "incident_ids": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "incident_count": 9,
+  "incident_fingerprints": [
+    {
+      "id": 3,
+      "cause": "raw-persistence",
+      "occurred_at_utc": "2026-09-16T11:18:54.785Z",
+      "detail_sha256": "2997ae5dd0627f335a8014384f34eacc252c6ede8cbb2ad67edacedda642e648"
+    },
+    {
+      "id": 4,
+      "cause": "reconciliation",
+      "occurred_at_utc": "2026-09-16T11:19:07.915Z",
+      "detail_sha256": "45f09f3ea75eb1cf1599524e505f349f5d75deae368a3133641988ac760051b8"
+    },
+    {
+      "id": 5,
+      "cause": "reconciliation",
+      "occurred_at_utc": "2026-09-16T11:19:18.908Z",
+      "detail_sha256": "45f09f3ea75eb1cf1599524e505f349f5d75deae368a3133641988ac760051b8"
+    },
+    {
+      "id": 6,
+      "cause": "raw-persistence",
+      "occurred_at_utc": "2026-09-16T11:20:56.951Z",
+      "detail_sha256": "2997ae5dd0627f335a8014384f34eacc252c6ede8cbb2ad67edacedda642e648"
+    },
+    {
+      "id": 7,
+      "cause": "reconciliation",
+      "occurred_at_utc": "2026-09-16T11:21:03.210Z",
+      "detail_sha256": "45f09f3ea75eb1cf1599524e505f349f5d75deae368a3133641988ac760051b8"
+    },
+    {
+      "id": 8,
+      "cause": "raw-persistence",
+      "occurred_at_utc": "2026-09-16T11:21:03.508Z",
+      "detail_sha256": "2997ae5dd0627f335a8014384f34eacc252c6ede8cbb2ad67edacedda642e648"
+    },
+    {
+      "id": 9,
+      "cause": "raw-persistence",
+      "occurred_at_utc": "2026-09-16T11:22:23.144Z",
+      "detail_sha256": "2997ae5dd0627f335a8014384f34eacc252c6ede8cbb2ad67edacedda642e648"
+    },
+    {
+      "id": 10,
+      "cause": "raw-persistence",
+      "occurred_at_utc": "2026-09-16T11:24:54.608Z",
+      "detail_sha256": "2997ae5dd0627f335a8014384f34eacc252c6ede8cbb2ad67edacedda642e648"
+    },
+    {
+      "id": 11,
+      "cause": "reconciliation",
+      "occurred_at_utc": "2026-09-16T11:26:20.927Z",
+      "detail_sha256": "e208a803eaafb7bf0275a5440f64c90f7140c1c0bd8044fe959fc4f688fcc349"
+    }
+  ],
+  "intended_mutation": {
+    "resolve_only_exact_incident_ids": true,
+    "preserve_failed_probe_as_failed_unresolved": true,
+    "close_only_exact_failed_budget_day": true,
+    "provider_mutation": false,
+    "deployment": false
+  },
+  "plan_binding_sha256": "50fb63659f71cee37a99b6e3b9c2a38772e1d5c3a882df9a829f75d1034021b8"
+}

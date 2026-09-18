@@ -1,0 +1,13 @@
+{
+  "schema_version": "v3.9-phase2f-deployment-binding-1",
+  "status": "PASS",
+  "checked_at_utc": "2026-09-14T14:38:26.584Z",
+  "deployment_origin": "https://travnr.com",
+  "diagnostics_path": "/api/v1/collection/diagnostics",
+  "https": true,
+  "wrong_secret_rejected_403": true,
+  "exact_secret_accepted_200": true,
+  "deployed_v39_runtime_db_read": true,
+  "open_incidents": 0,
+  "artifact_sha256": "4241b499e8601a7975c9ba0f06523d22d2015da571909854c1ec3f401a6790e6"
+}

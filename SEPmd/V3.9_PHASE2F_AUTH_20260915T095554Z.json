@@ -1,0 +1,14 @@
+{
+  "authorizationId": "AUTH-20260915-P2F095554",
+  "phaseGate": "Phase 2 / safety smoke",
+  "airportFilterWindow": "FlightByAirportIcao:WSSS;window_minutes=5",
+  "maxAlertCredits": 100,
+  "maxRestUnitsByCategory": null,
+  "startNotBeforeUtc": "2026-09-15T09:55:56.785Z",
+  "expiresAtUtc": "2026-09-15T11:55:56.819Z",
+  "cleanupOwner": "phase2f-workspace-smoke-owner",
+  "predecessorEvidenceIds": [
+    "RUN-20260913-643BF82FD98B3DA416433077BB7E21DC231C07A2F34289245436EC160C7D8984",
+    "RUN-20260915-5DE439B8354EAFDEAB14F951C28A109896F467D8694F7CCA948228A55C7EF85B"
+  ]
+}

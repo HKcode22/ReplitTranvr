@@ -1,0 +1,15 @@
+{
+  "schema": "v39.phase2g-stage1-supervisor.v1",
+  "state": "RUNNING",
+  "started_at_utc": "2026-09-16T11:05:14.379Z",
+  "supervisor_pid": 729,
+  "git_head": "cd4403913a45990951e60bc09b889802ba7f2362",
+  "authorization_id": "AUTH-20260916-P2G02",
+  "auth_sha256": "fecc9a2c052e492cd40ffdfad204702d14eb0b122dbd37941f03cd5e0bec3cc4",
+  "runtime_sha256": "aa306c163df31e6f309eaad4fcc365e1d0ac6ffac1b9103c940bc73fceffd49e",
+  "probe_budget_day_id": "P2G-S1-20260915-01",
+  "callback_base": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+  "log_path": "artifacts/phase2g-stage1-AUTH-20260916-P2G02-20260916T110512Z.log",
+  "heartbeat_path": "artifacts/phase2g-stage1-AUTH-20260916-P2G02-20260916T110512Z.heartbeat.json",
+  "child_pid": 750
+}

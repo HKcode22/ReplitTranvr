@@ -1,0 +1,25 @@
+{
+  "schema": "v39.phase2g-failed-stage1-adjudication-receipt.v1",
+  "status": "FAILED_ATTEMPT_ADJUDICATED_AND_BUDGET_CLOSED",
+  "applied_at_utc": "2026-09-17T13:37:41.329Z",
+  "plan_file": "artifacts/phase2g-failed-stage1-adjudication-plan-20260917T133323007Z.json",
+  "plan_file_sha256": "98b2f8861d62aa0151dec3147d3c932e9f74441f831acb441e56681ffde559a9",
+  "plan_binding_sha256": "fe9360b17cddbd29c07ebf8b6320240bc5bd501dd4f26de8456f01ee830ead29",
+  "probe_budget_day_id": "P2G-S1-20260917-03",
+  "probe_id": 3,
+  "failed_probe_preserved": true,
+  "reconciliation_status_preserved": "UNRESOLVED",
+  "incidents_resolved": [
+    12,
+    13,
+    14,
+    15
+  ],
+  "incident_count": 4,
+  "budget_state": "CLOSED",
+  "budget_closed_at_utc": "2026-09-17T13:37:40.187Z",
+  "active_billable_subscriptions_before_apply": 0,
+  "provider_mutation_performed": false,
+  "deployment_performed": false,
+  "next": "Freeze a new Stage-1 runtime/budget day and create a new DRAFT_ONLY_NOT_AUTHORIZED authorization; do not reuse the failed budget day or prior AUTH."
+}

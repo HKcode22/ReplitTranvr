@@ -1,0 +1,18 @@
+{
+  "schema": "v39.phase2f-local-persistence-selftest.v1",
+  "status": "FAIL",
+  "provider_called": false,
+  "subscription_created": false,
+  "alert_credits_authorized": 0,
+  "retention_hours": 168,
+  "persistence": null,
+  "before_cleanup": null,
+  "cleanup": {
+    "deleted_blobs": 0,
+    "deleted_runtime_rows": 1,
+    "verified_at_utc": "2026-09-15T02:16:01.224Z"
+  },
+  "after_cleanup": null,
+  "error": "V39_PROVIDER_BLOB_UPLOAD_FAILED:{\"message\":\"Error: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 404,\\n    \\\"message\\\": \\\"The specified bucket does not exist.\\\",\\n    \\\"errors\\\": [\\n      {\\n        \\\"message\\\": \\\"The specified bucket does not exist.\\\",\\n        \\\"domain\\\": \\\"global\\\",\\n        \\\"reason\\\": \\\"notFound\\\"\\n      }\\n    ]\\n  }\\n}\\n\"}",
+  "generated_at_utc": "2026-09-15T02:16:01.224Z"
+}

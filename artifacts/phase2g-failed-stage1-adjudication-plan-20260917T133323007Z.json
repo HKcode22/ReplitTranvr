@@ -1,0 +1,61 @@
+{
+  "schema": "v39.phase2g-failed-stage1-adjudication-plan.v1",
+  "status": "READY_FOR_EXACT_ADJUDICATION_NOT_APPLIED",
+  "generated_at_utc": "2026-09-17T13:33:23.007Z",
+  "probe_budget_day_id": "P2G-S1-20260917-03",
+  "probe_id": 3,
+  "icao": "MMUN",
+  "failed_probe_status": "failed",
+  "duration_censored": true,
+  "reconciliation_status": "UNRESOLVED",
+  "reserved_credits": 500,
+  "runtime_session_id": "2a19b4cb-9c1f-44d0-8291-4108f9ac41ad",
+  "recovery_session_id": "2a19b4cb-9c1f-44d0-8291-4108f9ac41ad",
+  "cleanup_evidence_file": "artifacts/phase2g-stage1-emergency-cleanup-P2G04.json",
+  "cleanup_evidence_sha256": "149b6cf54fb2a80f4cc26974792ec126ddea5cc50b9cf2bcef89aa3f4a985ce6",
+  "durable_blob_ref_count": 17,
+  "active_probe_count": 0,
+  "active_runtime_rows": 0,
+  "active_billable_subscriptions": 0,
+  "incident_ids": [
+    12,
+    13,
+    14,
+    15
+  ],
+  "incident_count": 4,
+  "incident_fingerprints": [
+    {
+      "id": 12,
+      "cause": "reconciliation",
+      "occurred_at_utc": "2026-09-17T13:21:34.844Z",
+      "detail_sha256": "ad926ee833a85ae56bb723fd6b01ba8b6bb7164af383979cf5e9099ff1863537"
+    },
+    {
+      "id": 13,
+      "cause": "raw-persistence",
+      "occurred_at_utc": "2026-09-17T13:22:49.343Z",
+      "detail_sha256": "eee586cfa070c6f7ee9a27a967594834ad86352f0a48443df6334675f7549914"
+    },
+    {
+      "id": 14,
+      "cause": "raw-persistence",
+      "occurred_at_utc": "2026-09-17T13:26:50.341Z",
+      "detail_sha256": "eee586cfa070c6f7ee9a27a967594834ad86352f0a48443df6334675f7549914"
+    },
+    {
+      "id": 15,
+      "cause": "reconciliation",
+      "occurred_at_utc": "2026-09-17T13:26:54.579Z",
+      "detail_sha256": "9efc6a409cffb6e551228cf2d0064ade85c83261807bc61b58e14453943b4edd"
+    }
+  ],
+  "intended_mutation": {
+    "resolve_only_exact_incident_ids": true,
+    "preserve_failed_probe_as_failed_unresolved": true,
+    "close_only_exact_failed_budget_day": true,
+    "provider_mutation": false,
+    "deployment": false
+  },
+  "plan_binding_sha256": "fe9360b17cddbd29c07ebf8b6320240bc5bd501dd4f26de8456f01ee830ead29"
+}

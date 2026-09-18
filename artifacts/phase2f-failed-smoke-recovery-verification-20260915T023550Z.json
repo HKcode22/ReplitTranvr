@@ -1,0 +1,46 @@
+{
+  "schema": "v39.phase2f-failed-smoke-recovery-verification.v1",
+  "status": "PASS",
+  "historicalSmokeConvertedToPass": false,
+  "exactHistoricalReconciliationClaimed": false,
+  "historicalMismatchPreserved": true,
+  "failedAuthorizationId": "AUTH-20260915-P2F011738",
+  "failedRuntimeSessionId": "4eb0fad5-0732-42f6-b273-efae577df432",
+  "balanceReads": [
+    {
+      "atUtc": "2026-09-15T02:35:46.152Z",
+      "creditsRemaining": 2884,
+      "lastRefilledUtc": "2026-08-17 03:55",
+      "lastDeductedUtc": "2026-09-15 01:31"
+    },
+    {
+      "atUtc": "2026-09-15T02:35:47.440Z",
+      "creditsRemaining": 2884,
+      "lastRefilledUtc": "2026-08-17 03:55",
+      "lastDeductedUtc": "2026-09-15 01:31"
+    },
+    {
+      "atUtc": "2026-09-15T02:35:48.687Z",
+      "creditsRemaining": 2884,
+      "lastRefilledUtc": "2026-08-17 03:55",
+      "lastDeductedUtc": "2026-09-15 01:31"
+    }
+  ],
+  "currentBalance": 2884,
+  "lastDeductedUtc": "2026-09-15 01:31",
+  "activeBillableSubscriptions": 0,
+  "persistenceSelftestArtifact": "artifacts/phase2f-local-persistence-selftest-20260915T022018Z.json",
+  "persistenceSelftestSha256": "98b523abaf19a9bb8375dc6f5db22bfd3e7280ea560d53160365a8f8f9da16e9",
+  "failedSessionResidue": {
+    "sessions": 0,
+    "deliveries": 0,
+    "items": 0,
+    "blobs": 0
+  },
+  "openIncidents": 0,
+  "recoveredIncidents": 2,
+  "incident1ResolvedAtUtc": "2026-09-15T02:31:37.828Z",
+  "incident2ResolvedAtUtc": "2026-09-15T02:31:37.828Z",
+  "mutationPerformedByThisVerifier": false,
+  "generatedAtUtc": "2026-09-15T02:35:50.358Z"
+}
