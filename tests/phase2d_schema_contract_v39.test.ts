@@ -4,10 +4,29 @@ import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const migration = readFileSync(join(root, "migrations", "0057_phase2d_tier_source_contract.sql"), "utf8");
+const legacyDesignMigration = readFileSync(
+  join(root, "migrations", "0022_collection_v39_design_probability.sql"),
+  "utf8",
+);
 const dbOwner = readFileSync(join(root, "server", "db.ts"), "utf8");
 const repairOwner = readFileSync(join(root, "scripts", "v39_apply_phase2d_schema_contract_v39.ts"), "utf8");
 
 describe("Phase 2D sampling-frame schema contract", () => {
+  it("does not resurrect the obsolete 0022 tier_source rule after the v2 contract exists", () => {
+    expect(legacyDesignMigration).toContain("adb_sampling_frame_tier_source_rule");
+    expect(legacyDesignMigration).toContain("adb_sampling_frame_tier_source_check_v2");
+
+    const modernGuard = legacyDesignMigration.indexOf(
+      "adb_sampling_frame_tier_source_check_v2",
+    );
+    const legacyAdd = legacyDesignMigration.indexOf(
+      "ADD CONSTRAINT adb_sampling_frame_tier_source_rule",
+    );
+
+    expect(modernGuard).toBeGreaterThan(-1);
+    expect(legacyAdd).toBeGreaterThan(modernGuard);
+  });
+
   it("retires the stale 0021 tier_source check and preserves legacy plus f.8 values", () => {
     expect(migration).toContain("DROP CONSTRAINT adb_sampling_frame_tier_source_check");
     expect(migration).toContain("adb_sampling_frame_tier_source_check_v2");

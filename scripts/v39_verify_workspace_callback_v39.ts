@@ -52,7 +52,7 @@ async function main(): Promise<void> {
     health.status !== 200 ||
     healthJson?.status !== "PASS" ||
     !/^[a-f0-9]{40}$/i.test(String(healthJson?.git_head ?? "")) ||
-    healthJson?.route_owner !== "server/routes_v3.ts" ||
+    healthJson?.route_owner !== "server/index.ts+server/routes_v3.ts" ||
     healthJson?.prepaid_route_registered !== true ||
     Number(healthJson?.retention_hours) !== 168 ||
     healthJson?.bucket_prefix !== "replit-objstore"
@@ -201,7 +201,7 @@ async function main(): Promise<void> {
       alertCreditsSpent: 0,
       callbackOrigin: base,
       gitHead: runtimeGitHead,
-      exactRouteOwner: "server/routes_v3.ts",
+      exactRouteOwner: "server/index.ts+server/routes_v3.ts",
       wrongSecretRejected404: true,
       exactSecretAccepted200: true,
       publicHttpsIngress: true,

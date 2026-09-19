@@ -141,14 +141,24 @@ END $$;
 -- --- 4. frame-table invariants (sampling frame, migration 0021) ---
 DO $$
 BEGIN
+  -- On a fresh historical schema, install the legacy rule and let migration
+  -- 0028 retire it later. On an already-modern schema, migration 0057's v2
+  -- tier_source contract is authoritative; never resurrect this obsolete rule
+  -- during boot replay because current f.8 rows legitimately use
+  -- traffic_reference / missing_reference.
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
-    WHERE conname = 'adb_sampling_frame_tier_source_rule'
+    WHERE conrelid = 'clean.adb_sampling_frame'::regclass
+      AND conname = 'adb_sampling_frame_tier_source_rule'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'clean.adb_sampling_frame'::regclass
+      AND conname = 'adb_sampling_frame_tier_source_check_v2'
   ) THEN
     ALTER TABLE clean.adb_sampling_frame
       ADD CONSTRAINT adb_sampling_frame_tier_source_rule
       CHECK (
-        (tier_source = 'curated'     AND tier IN ('HUB', 'MID', 'REGIONAL')) OR
+        (tier_source = 'curated'      AND tier IN ('HUB', 'MID', 'REGIONAL')) OR
         (tier_source = 'unclassified' AND tier = 'REGIONAL')
       );
   END IF;
