@@ -103,15 +103,24 @@ function assertStage1AuthCoversTargetWindow(record: AuthRecord, now = new Date()
  * bounds on a synthetic denominator of 1. This is algebraically identical to
  * count/credits ratios and never recreates the deleted provider account value.
  */
-async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvidence[]> {
+interface Stage1AttemptEvidence extends Stage1ProbeEvidence {
+  probeId: number;
+  durationCensored: boolean;
+  stopReason: string | null;
+  reconciliationStatus: string | null;
+  recordedAtUtc: string;
+}
+
+async function readStage1Evidence(preprobeHash: string): Promise<Stage1AttemptEvidence[]> {
   const r = await pool.query(
-    `SELECT icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
+    `SELECT probe_id,icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
             tail_chain_links_per_credit,stability,confirmed_unique_lower,
             confirmed_plus_ambiguous_upper,provider_content_safe_mode,
-            confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit
+            confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit,
+            duration_censored,stop_reason,reconciliation_status,recorded_at
        FROM clean.adb_anchor_probe
       WHERE stage=1 AND preprobe_artifact_sha256=$1
-      ORDER BY recorded_at ASC`,
+      ORDER BY recorded_at ASC,probe_id ASC`,
     [preprobeHash],
   );
   return r.rows.map((x: any) => {
@@ -120,6 +129,7 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvid
     const upperRate = x.confirmed_plus_ambiguous_upper_per_credit == null ? null : Number(x.confirmed_plus_ambiguous_upper_per_credit);
     const safeRates = safe && lowerRate !== null && upperRate !== null && Number.isFinite(lowerRate) && Number.isFinite(upperRate);
     return {
+      probeId: Number(x.probe_id),
       icao: String(x.icao).toUpperCase(),
       status: String(x.status),
       rowsPerHour: x.rows_per_hour == null ? null : Number(x.rows_per_hour),
@@ -129,22 +139,77 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvid
       stability: x.stability == null ? null : Number(x.stability),
       confirmedUniqueLower: safeRates ? lowerRate : (x.confirmed_unique_lower == null ? null : Number(x.confirmed_unique_lower)),
       confirmedPlusAmbiguousUpper: safeRates ? upperRate : (x.confirmed_plus_ambiguous_upper == null ? null : Number(x.confirmed_plus_ambiguous_upper)),
+      durationCensored: x.duration_censored === true,
+      stopReason: x.stop_reason == null ? null : String(x.stop_reason),
+      reconciliationStatus: x.reconciliation_status == null ? null : String(x.reconciliation_status),
+      recordedAtUtc: new Date(x.recorded_at).toISOString(),
     };
   });
 }
 
-function terminal(status: string | undefined): boolean {
-  return status === "completed" || status === "failed" || status === "abandoned";
+const MAX_INFRASTRUCTURE_INVALID_RERUNS_PER_PRIMARY = 1;
+
+export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEvidence): boolean {
+  if (attempt.status !== "failed") return false;
+  if (attempt.durationCensored !== true) return false;
+  if (attempt.reconciliationStatus !== "UNRESOLVED") return false;
+  const reason = String(attempt.stopReason ?? "");
+  return reason.startsWith("supervisor_child_exit");
+}
+
+/**
+ * Scientific sequencing rule for primary Stage-1 candidates:
+ * - preserve every original attempt row;
+ * - a completed/non-infrastructure terminal result is terminal;
+ * - one and only one rerun is permitted after a verified infrastructure-invalid
+ *   first attempt;
+ * - a second failed attempt is terminal for sequencing, preventing retry bias.
+ *
+ * This rule is symmetric across every frozen primary candidate and does not
+ * change the two-hour/time-class/cap/score protocol.
+ */
+export function chooseNextPrimaryStage1TargetV39(
+  shortlist: Array<{ icao: string }>,
+  attempts: Stage1AttemptEvidence[],
+): string | null {
+  const grouped = new Map<string, Stage1AttemptEvidence[]>();
+  for (const attempt of attempts) {
+    const key = attempt.icao.toUpperCase();
+    const rows = grouped.get(key) ?? [];
+    rows.push(attempt);
+    grouped.set(key, rows);
+  }
+
+  for (const candidate of shortlist) {
+    const icao = candidate.icao.toUpperCase();
+    const rows = grouped.get(icao) ?? [];
+    if (rows.length === 0) return icao;
+
+    if (rows.some((row) => row.status === "completed")) continue;
+
+    const latest = rows[rows.length - 1];
+    const infraInvalidCount = rows.filter(isInfrastructureInvalidStage1AttemptV39).length;
+    if (
+      rows.length === 1 &&
+      infraInvalidCount <= MAX_INFRASTRUCTURE_INVALID_RERUNS_PER_PRIMARY &&
+      isInfrastructureInvalidStage1AttemptV39(latest)
+    ) {
+      return icao;
+    }
+
+    // Any second attempt, abandoned row, or non-infrastructure failure is
+    // terminal for sequencing. The immutable history remains available for
+    // adjudication/promotion.
+  }
+  return null;
 }
 
 async function chooseNextStage1Target(
   artifacts: LoadedProbeExecutionArtifacts,
-  evidence: Stage1ProbeEvidence[],
+  evidence: Stage1AttemptEvidence[],
 ): Promise<{ icao: string; replacement: boolean } | null> {
-  const by = new Map(evidence.map((e) => [e.icao, e]));
-  for (const candidate of artifacts.preprobe.shortlist) {
-    if (!terminal(by.get(candidate.icao)?.status)) return { icao: candidate.icao, replacement: false };
-  }
+  const nextPrimary = chooseNextPrimaryStage1TargetV39(artifacts.preprobe.shortlist, evidence);
+  if (nextPrimary) return { icao: nextPrimary, replacement: false };
 
   const promotion = selectStage2Top5(artifacts.preprobe, evidence);
   if (promotion.replacementsNeeded === 0) return null;
