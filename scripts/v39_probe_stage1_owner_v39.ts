@@ -103,7 +103,7 @@ function assertStage1AuthCoversTargetWindow(record: AuthRecord, now = new Date()
  * bounds on a synthetic denominator of 1. This is algebraically identical to
  * count/credits ratios and never recreates the deleted provider account value.
  */
-interface Stage1AttemptEvidence extends Stage1ProbeEvidence {
+export interface Stage1AttemptEvidence extends Stage1ProbeEvidence {
   probeId: number;
   durationCensored: boolean;
   stopReason: string | null;
