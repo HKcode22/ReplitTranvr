@@ -22,15 +22,6 @@ async function main():Promise<void>{
   if(!UUID.test(sessionId)) throw new Error("REFUSED:SESSION_ID_INVALID");
   if(!Number.isInteger(expectedLive)||expectedLive<1||expectedLive>500) throw new Error("REFUSED:EXPECTED_LIVE_BLOBS_INVALID");
 
-  const before=await pool.query(
-    `SELECT count(*)::int AS live_blobs,
-            count(*)::int FILTER (WHERE deletion_verified_at_utc IS NOT NULL) AS deleted_blobs,
-            min(persisted_at_utc) AS first_blob_utc,
-            max(persisted_at_utc) AS last_blob_utc
-       FROM clean.provider_content_blob_ref
-      WHERE source_kind='webhook' AND source_record_id LIKE $1`,
-    [`prepaid:${sessionId}:%`],
-  );
   const counts=await pool.query(
     `SELECT
        (SELECT count(*)::int FROM clean.prepaid_probe_session_runtime WHERE session_id=$1) AS sessions,
