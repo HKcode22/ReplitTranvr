@@ -30,6 +30,28 @@ function balanceRemaining(body: any): number | null {
   return numberOrNull(body?.balance?.creditsRemaining);
 }
 
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function canonical(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${canonical(object[key])}`).join(",")}}`;
+}
+
+function runtimeFlightKey(flight: any): string | null {
+  const number = stringOrNull(flight?.number);
+  const providerId = stringOrNull(flight?.id);
+  const depIcao = stringOrNull(flight?.departure?.airport?.icao)?.toUpperCase() ?? null;
+  const arrIcao = stringOrNull(flight?.arrival?.airport?.icao)?.toUpperCase() ?? null;
+  const depScheduled = stringOrNull(flight?.departure?.scheduledTime?.utc);
+  const callsign = stringOrNull(flight?.callSign);
+  if (!number && !providerId && !callsign) return null;
+  return createHash("sha256").update(canonical({ number, providerId, depIcao, arrIcao, depScheduled, callsign })).digest("hex");
+}
+
 async function main(): Promise<void> {
   const session = arg("--session");
   const externalRaw = arg("--external-credits");
@@ -62,6 +84,14 @@ async function main(): Promise<void> {
   const bodyHashes = new Set<string>();
   const balances: number[] = [];
   const payloadSummaries: Array<Record<string, unknown>> = [];
+  const distinctFlightNumbers = new Set<string>();
+  const distinctRuntimeFlightKeys = new Set<string>();
+  const distinctAircraftRegs = new Set<string>();
+  const operatorFlightNumbers = new Set<string>();
+  const ambiguousFlightNumbers = new Set<string>();
+  const flightsByAircraftReg = new Map<string, Set<string>>();
+  let payloadsWithZeroItems = 0;
+  let maxItemsInPayload = 0;
 
   for (const row of refs.rows) {
     if (row.deletion_verified_at_utc) {
@@ -86,6 +116,28 @@ async function main(): Promise<void> {
     payloads += 1;
     totalBytes += bytes.byteLength;
     totalItems += flights.length;
+    if (flights.length === 0) payloadsWithZeroItems += 1;
+    maxItemsInPayload = Math.max(maxItemsInPayload, flights.length);
+    for (const flight of flights) {
+      const number = stringOrNull(flight?.number);
+      const reg = stringOrNull(flight?.aircraft?.reg);
+      const codeshare = flight?.codeshareStatus;
+      const key = runtimeFlightKey(flight);
+      if (number) distinctFlightNumbers.add(number);
+      if (key) distinctRuntimeFlightKeys.add(key);
+      if (reg) {
+        distinctAircraftRegs.add(reg);
+        if (number) {
+          const set = flightsByAircraftReg.get(reg) ?? new Set<string>();
+          set.add(number);
+          flightsByAircraftReg.set(reg, set);
+        }
+      }
+      if (number && (codeshare === "IsOperator" || codeshare === 1)) operatorFlightNumbers.add(number);
+      if (number && (codeshare === null || codeshare === undefined || codeshare === "Unknown" || codeshare === 0)) {
+        ambiguousFlightNumbers.add(number);
+      }
+    }
     if (bodyHashes.has(actualSha)) duplicateBodyHashes += 1;
     bodyHashes.add(actualSha);
     if (cost === null) {
@@ -110,6 +162,10 @@ async function main(): Promise<void> {
   }
 
   const liveRefs = refs.rows.filter((r: any) => !r.deletion_verified_at_utc).length;
+  let reconstructedTailChainLinks = 0;
+  for (const flights of flightsByAircraftReg.values()) {
+    reconstructedTailChainLinks += Math.max(flights.size - 1, 0);
+  }
   const result = {
     schema: "v39.phase2g-prepaid-session-reconstruction.v1",
     providerCalled: false,
@@ -122,6 +178,14 @@ async function main(): Promise<void> {
     shaVerified,
     totalPersistedBytes: totalBytes,
     totalFlightItems: totalItems,
+    payloadsWithZeroFlightItems: payloadsWithZeroItems,
+    maxFlightItemsInOnePayload: maxItemsInPayload,
+    distinctFlightNumbers: distinctFlightNumbers.size,
+    distinctRuntimeFlightKeys: distinctRuntimeFlightKeys.size,
+    distinctAircraftRegistrations: distinctAircraftRegs.size,
+    confirmedOperatorFlightNumbers: operatorFlightNumbers.size,
+    ambiguousUnknownFlightNumbers: ambiguousFlightNumbers.size,
+    reconstructedTailChainLinks,
     payloadsWithExplicitCostCredits: costCreditsPresent,
     payloadsUsingItemCountFallback: costCreditsMissing,
     sumExplicitCostCredits,
