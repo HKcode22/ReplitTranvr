@@ -42,6 +42,21 @@
 - [ ] zero active foreign billable subscriptions
 - [ ] provider balance has sufficient headroom
 
+### Frozen fresh Tuesday identifiers
+
+The guarded helper now prepares the fresh validation chain with:
+- runtime/budget ID: `P2G-S1-20260922-06`;
+- AUTH ID: `AUTH-20260922-P2G07`;
+- AUTH start: `2026-09-22T11:00:00Z` (04:00 PDT);
+- AUTH expiry: `2026-09-22T15:00:00Z`;
+- Stage-1 reservation: 450 Alert credits;
+- frozen unsettled-burst margin: 50 Alert credits;
+- AUTH ceiling: 500 Alert credits;
+- `min_stability_buckets=6`;
+- expected Stage-1 candidate: WSSS.
+
+The helper has no paid-launch mode. AUTH approval still requires explicit review of the generated artifact SHA, and the final provider-read preflight refuses to run more than 30 minutes before AUTH start.
+
 ### Fresh Tuesday authorization
 - [ ] new budget-day ID
 - [ ] fresh runtime artifact; never reuse P2G06 runtime
