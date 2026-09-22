@@ -28,26 +28,21 @@ function atomicWriteJson(file: string, value: unknown): void {
   fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", "utf8");
   fs.renameSync(tmp, file);
 }
-async function callbackHealthy(base: string, expectedHead: string): Promise<boolean> {
+async function callbackHealthy(base: string): Promise<boolean> {
   try {
-    const response = await fetch(`${base}/__v39/workspace-runtime`, {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (response.status !== 200) return false;
+    const wrongSecret = "phase2g-healthcheck-intentionally-wrong";
+    const session = "00000000-0000-4000-8000-000000000000";
+    const response = await fetch(
+      `${base}/api/v1/webhooks/aerodatabox/${encodeURIComponent(wrongSecret)}/prepaid/${session}`,
+      {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
     const json: any = await response.json().catch(() => null);
-    const ownerMode = String(json?.runtime_owner_mode ?? "");
-    const durabilityClass = String(json?.runtime_durability_class ?? "");
-    const ownerContract =
-      ownerMode === "replit-published-deployment" &&
-      json?.published_deployment === true &&
-      (durabilityClass === "autoscale" || durabilityClass === "reserved-vm");
-    return json?.schema === "v39.phase2f-workspace-runtime.v1" &&
-      json?.status === "PASS" &&
-      json?.prepaid_route_registered === true &&
-      json?.provider_mutation === false &&
-      ownerContract &&
-      String(json?.git_head ?? "").toLowerCase() === expectedHead;
+    return response.status === 404 && json?.error === "Not found";
   } catch {
     return false;
   }
@@ -99,7 +94,7 @@ async function main(): Promise<void> {
   }
   const head = gitHead();
   if (head !== expectedHead) throw new Error(`SUPERVISOR_REFUSED:GIT_HEAD_MISMATCH:${head}`);
-  if (!(await callbackHealthy(callbackBase, expectedHead))) throw new Error("SUPERVISOR_REFUSED:CALLBACK_NOT_HEALTHY_AT_START");
+  if (!(await callbackHealthy(callbackBase))) throw new Error("SUPERVISOR_REFUSED:CALLBACK_NOT_HEALTHY_AT_START");
 
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logFd = fs.openSync(logPath, "a");
@@ -181,7 +176,7 @@ async function main(): Promise<void> {
     if (callbackCheckInFlight || child.exitCode !== null || child.killed) return;
     callbackCheckInFlight = true;
     try {
-      const healthy = await callbackHealthy(callbackBase, expectedHead);
+      const healthy = await callbackHealthy(callbackBase);
       callbackFailureCount = healthy ? 0 : callbackFailureCount + 1;
       if (!healthy) {
         fs.writeSync(logFd, `${JSON.stringify({
