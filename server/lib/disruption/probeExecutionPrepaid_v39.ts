@@ -279,7 +279,8 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
   }
 
   const acceptedReconciliation = result.reconciliationStatus === "MATCH";
-  if (result.status !== "completed" || !result.metrics || !acceptedReconciliation || !result.cleanupVerifiedAtUtc) {
+  if (result.status !== "completed" || result.durationCensored || result.stopReason !== null ||
+      !result.metrics || !acceptedReconciliation || !result.cleanupVerifiedAtUtc) {
     await markSafeFailure({
       probeId,
       runtimeSessionId: result.runtimeSessionId,
