@@ -122,3 +122,16 @@ If WSSS fails:
 - no automatic fourth WSSS run;
 - preserve exact diagnostic evidence;
 - stop and adjudicate before any MMUN launch.
+
+
+## P2G07 provider-502 recovery freeze — 2026-09-22
+
+P2G07/probe 5 failed before the 120-minute target because the provider returned HTTP 502 during the live balance-read/delete path. The exact subscription remained active after the child exited until an exact-ID operator deletion was verified. P2G07 remains failed/UNRESOLVED and is excluded from scoring.
+
+A separate prospective recovery supplement is now frozen at:
+`SEPmd/phase2g/amendments/2026-09-22_P2G07_PROVIDER502_RECOVERY_AMENDMENT.md`
+
+Machine-readable binding:
+`artifacts/phase2g-compact6-p2g07-provider502-recovery-freeze-20260922.json`
+
+Exactly one recovery WSSS attempt is permitted only after P2G07 reconstruction, raw cleanup, incident/budget adjudication, hardened-source tests, a fresh runtime/budget `P2G-S1-20260922-07`, and fresh AUTH `AUTH-20260922-P2G08`. No outcome/yield metric from P2G07 is a reason for the retry. The scientific target, time class, reconciliation rule, and credit ceiling remain unchanged.
