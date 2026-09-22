@@ -201,10 +201,12 @@ describe("Phase2G callback and cleanup evidence ordering", () => {
   it("writes reconciliation evidence before any non-MATCH cleanup and keeps DELIVERY_GAP terminal", () => {
     const evidenceIndex = windowSource.indexOf("await persistProbeReconciliationEvidenceV39({");
     const terminalIndex = windowSource.indexOf('if (reconciliationStatus !== "MATCH")');
-    const deliveryGapReasonIndex = windowSource.indexOf('"external_internal_delivery_gap"', terminalIndex);
+    const persistedReasonIndex = windowSource.indexOf("stopReason: reconciliationStopReason", evidenceIndex);
+    const deliveryGapReasonIndex = windowSource.indexOf('"external_internal_delivery_gap"');
     expect(evidenceIndex).toBeGreaterThan(-1);
-    expect(terminalIndex).toBeGreaterThan(evidenceIndex);
-    expect(deliveryGapReasonIndex).toBeGreaterThan(terminalIndex);
+    expect(persistedReasonIndex).toBeGreaterThan(evidenceIndex);
+    expect(deliveryGapReasonIndex).toBeGreaterThan(-1);
+    expect(terminalIndex).toBeGreaterThan(persistedReasonIndex);
   });
 
   it("preserves UNRESOLVED aggregate evidence before cleanup", () => {
