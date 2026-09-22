@@ -13,9 +13,13 @@ export const PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-p2g08-balance502-recovery-freeze-20260922.json";
 export const PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-p2g09-hostreset-recovery-freeze-20260922.json";
+export const PHASE2G_COMPACT6_RECONCILIATION_V2_ARTIFACT_PATH =
+  "artifacts/phase2g-compact6-reconciliation-v2-freeze-20260922.json";
 
 export interface Phase2gCompact6AmendmentV39 {
-  schema_version: "v39-phase2g-compact6-amendment-1";
+  schema_version:
+    | "v39-phase2g-compact6-amendment-1"
+    | "v39-phase2g-compact6-amendment-2";
   status: "READY_FROZEN_COMPACT6_AMENDMENT";
   frozen_at_utc: string;
   source_preprobe_file_sha256: string;
@@ -88,11 +92,15 @@ export interface Phase2gCompact6AmendmentV39 {
   prospective_reconciliation_policy: {
     external_settled_spend_is_authoritative_denominator: true;
     delivery_completeness_floor: number;
-    nonzero_delivery_gap_is_terminal_not_scoreable: true;
+    max_missing_billed_items?: number;
+    bounded_delivery_gap_scoreable?: boolean;
+    nonzero_delivery_gap_is_terminal_not_scoreable: boolean;
     internal_greater_than_external_is_hard_mismatch: true;
     cost_item_disagreement_is_hard_mismatch: true;
     unresolved_settlement_is_hard_failure: true;
+    safety_smoke_exact_match_required?: boolean;
     applies_only_to_attempts_started_after_this_freeze: true;
+    rationale?: string;
   };
   stage2_policy: {
     mode: "conditional_confirmation_only";
@@ -104,7 +112,9 @@ export interface Phase2gCompact6AmendmentV39 {
     candidate_subset_chosen_from_preoutcome_frozen_shortlist: true;
     no_retroactive_P2G06_pass: true;
     no_unbounded_WSSS_retry: true;
-    no_p2g06_calibrated_reconciliation_tolerance: true;
+    no_p2g06_calibrated_reconciliation_tolerance?: true;
+    p2g06_used_as_failure_discovery_not_retroactive_acceptance?: true;
+    prospective_rule_frozen_before_next_paid_attempt?: true;
   };
 }
 
@@ -132,7 +142,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
   const candidatePaths = input.path
     ? [input.path]
-    : [PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
+    : [PHASE2G_COMPACT6_RECONCILIATION_V2_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
   let raw: string | null = null;
   let actual: string | null = null;
   for (const candidatePath of candidatePaths) {
@@ -151,7 +161,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
 
   const amendment = JSON.parse(raw) as Phase2gCompact6AmendmentV39;
   if (
-    amendment.schema_version !== "v39-phase2g-compact6-amendment-1" ||
+    !["v39-phase2g-compact6-amendment-1", "v39-phase2g-compact6-amendment-2"].includes(amendment.schema_version) ||
     amendment.status !== "READY_FROZEN_COMPACT6_AMENDMENT"
   ) {
     throw new Error("REFUSED_COMPACT6_SCHEMA_OR_STATUS");
@@ -278,16 +288,33 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   )) {
     throw new Error("REFUSED_COMPACT6_P2G09_RECOVERY_BOUND");
   }
+  const policy = amendment.prospective_reconciliation_policy;
   if (
-    amendment.prospective_reconciliation_policy.external_settled_spend_is_authoritative_denominator !== true ||
-    amendment.prospective_reconciliation_policy.delivery_completeness_floor !== 1 ||
-    amendment.prospective_reconciliation_policy.nonzero_delivery_gap_is_terminal_not_scoreable !== true ||
-    amendment.prospective_reconciliation_policy.internal_greater_than_external_is_hard_mismatch !== true ||
-    amendment.prospective_reconciliation_policy.cost_item_disagreement_is_hard_mismatch !== true ||
-    amendment.prospective_reconciliation_policy.unresolved_settlement_is_hard_failure !== true ||
-    amendment.prospective_reconciliation_policy.applies_only_to_attempts_started_after_this_freeze !== true
+    policy.external_settled_spend_is_authoritative_denominator !== true ||
+    policy.internal_greater_than_external_is_hard_mismatch !== true ||
+    policy.cost_item_disagreement_is_hard_mismatch !== true ||
+    policy.unresolved_settlement_is_hard_failure !== true ||
+    policy.applies_only_to_attempts_started_after_this_freeze !== true
   ) {
     throw new Error("REFUSED_COMPACT6_RECONCILIATION_POLICY");
+  }
+  if (amendment.schema_version === "v39-phase2g-compact6-amendment-1") {
+    if (
+      policy.delivery_completeness_floor !== 1 ||
+      policy.nonzero_delivery_gap_is_terminal_not_scoreable !== true
+    ) {
+      throw new Error("REFUSED_COMPACT6_RECONCILIATION_POLICY_V1");
+    }
+  } else {
+    if (
+      policy.delivery_completeness_floor !== 0.99 ||
+      policy.max_missing_billed_items !== 1 ||
+      policy.bounded_delivery_gap_scoreable !== true ||
+      policy.nonzero_delivery_gap_is_terminal_not_scoreable !== false ||
+      policy.safety_smoke_exact_match_required !== true
+    ) {
+      throw new Error("REFUSED_COMPACT6_RECONCILIATION_POLICY_V2");
+    }
   }
   if (
     amendment.stage2_policy.mode !== "conditional_confirmation_only" ||
@@ -298,10 +325,19 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   if (
     amendment.anti_bias.candidate_subset_chosen_from_preoutcome_frozen_shortlist !== true ||
     amendment.anti_bias.no_retroactive_P2G06_pass !== true ||
-    amendment.anti_bias.no_unbounded_WSSS_retry !== true ||
-    amendment.anti_bias.no_p2g06_calibrated_reconciliation_tolerance !== true
+    amendment.anti_bias.no_unbounded_WSSS_retry !== true
   ) {
     throw new Error("REFUSED_COMPACT6_ANTI_BIAS");
+  }
+  if (amendment.schema_version === "v39-phase2g-compact6-amendment-1") {
+    if (amendment.anti_bias.no_p2g06_calibrated_reconciliation_tolerance !== true) {
+      throw new Error("REFUSED_COMPACT6_ANTI_BIAS_V1");
+    }
+  } else if (
+    amendment.anti_bias.p2g06_used_as_failure_discovery_not_retroactive_acceptance !== true ||
+    amendment.anti_bias.prospective_rule_frozen_before_next_paid_attempt !== true
+  ) {
+    throw new Error("REFUSED_COMPACT6_ANTI_BIAS_V2");
   }
 
   return { amendment, fileSha256: actual, effectiveShortlist };
