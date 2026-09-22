@@ -3,6 +3,7 @@ import {
   defaultWebhookUrl,
   deleteSubscription,
   getBalance,
+  listSubscriptionsStrict,
 } from "./aerodataboxLimiter_v3";
 import { runSettlement, type SettlementConfig } from "./settlement_v3";
 import {
@@ -99,6 +100,39 @@ export function classifyProbeReconciliationV39(input: {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+async function deleteOwnedSubscriptionVerifiedV39(subscriptionId: string): Promise<boolean> {
+  // DELETE is scoped to the exact provider id returned by createSubscription.
+  // A transient gateway error is ambiguous: the provider may have applied the
+  // delete even when our response is 5xx. Verify account state after every
+  // attempt and retry only this same exact id. LIST/DELETE are free operations.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const before = await listSubscriptionsStrict();
+      if (!before.some((subscription) => subscription.id === subscriptionId && subscription.isActive)) {
+        return true;
+      }
+    } catch {
+      // Account read uncertainty does not authorize success; continue with the
+      // exact-id idempotent delete and verify again afterward.
+    }
+
+    await deleteSubscription(subscriptionId);
+    await sleep(5_000);
+
+    try {
+      const after = await listSubscriptionsStrict();
+      if (!after.some((subscription) => subscription.id === subscriptionId && subscription.isActive)) {
+        return true;
+      }
+    } catch {
+      // Keep fail-closed and make at most the bounded exact-id retries.
+    }
+
+    if (attempt < 3) await sleep(10_000);
+  }
+  return false;
+}
+
 function validateInput(input: PrepaidLiveWindowInputV39): void {
   if (!/^[A-Z0-9]{4}$/.test(input.icao.toUpperCase())) throw new Error("PREPAID_WINDOW_ICAO_INVALID");
   if (!(input.targetHours > 0 && input.targetHours <= 6)) throw new Error("PREPAID_WINDOW_DURATION_INVALID");
@@ -182,7 +216,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   }
   windowEnd = new Date();
 
-  subscriptionDeleted = await deleteSubscription(sub.id);
+  subscriptionDeleted = await deleteOwnedSubscriptionVerifiedV39(sub.id);
   if (!subscriptionDeleted) {
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     return {
