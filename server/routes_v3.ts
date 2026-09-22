@@ -11,7 +11,7 @@
  * v39:phase6:pause so provider DELETE + frozen settlement remain single-owner.
  */
 import type { Express, Request, Response, NextFunction } from "express";
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
 import type { InsertFlightDataPrePost } from "@shared/schema";
@@ -32,6 +32,7 @@ import { upsertFlightNotifications, appendResearchEvents, semanticObservationKey
 import { resolveWebhookFlightIdentity, type WebhookIdentityResolution } from "./lib/disruption/flightInstanceCanonical_v3";
 import { persistProcessingAttempt, persistRawDeliveryTransaction, updateRawDeliveryOutcome } from "./lib/disruption/rawIngress_v3";
 import {
+  cleanupPrepaidProbeSessionLocalV39,
   persistPrepaidProbeWebhookV39,
   recordPrepaidProbeCallbackFailureV39,
 } from "./lib/disruption/prepaidProbeRuntime_v39";
@@ -47,6 +48,18 @@ import {
 import { AIRPORT_CATALOG, AIRPORT_TIERS, tierForIcao } from "./lib/disruption/adbAirportCatalog_v3";
 
 function webhookSecret(): string | null { return process.env.AERODATABOX_WEBHOOK_SECRET || null; }
+function phase2gControlGuard(req: Request, res: Response, next: NextFunction): void {
+  const expected = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "").trim();
+  const supplied = String(req.header("x-v39-phase2g-control-secret") ?? "");
+  if (!expected) { res.status(503).json({ error: "PHASE2G_CONTROL_SECRET_NOT_CONFIGURED" }); return; }
+  const a = Buffer.from(expected);
+  const b = Buffer.from(supplied);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+}
 function managementGuard(req: Request, res: Response, next: NextFunction): void {
   const secret = webhookSecret();
   if (!secret) { res.status(503).json({ error: "WEBHOOK_SECRET_NOT_CONFIGURED" }); return; }
@@ -188,6 +201,58 @@ export function registerV3Routes(app:Express):void{
   };
 
   app.post("/api/v1/webhooks/aerodatabox/:secret/prepaid/:sessionId",prepaidWebhookIngress);
+
+  // Phase-2G remote cleanup bridge. The GitHub-hosted Stage-1 owner has the
+  // authoritative 120-minute clock/provider control, while raw provider blobs
+  // remain in Replit Object Storage. This endpoint performs only exact
+  // session-scoped blob/runtime cleanup and cannot create/delete subscriptions.
+  app.post("/__v39/phase2g/runtime-cleanup", phase2gControlGuard, async (req,res) => {
+    const sessionId = String(req.body?.sessionId ?? "").trim().toLowerCase();
+    const deletionRunId = String(req.body?.deletionRunId ?? "").trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
+      res.status(400).json({ error: "SESSION_ID_INVALID" });
+      return;
+    }
+    if (!deletionRunId || deletionRunId.length > 200) {
+      res.status(400).json({ error: "DELETION_RUN_ID_INVALID" });
+      return;
+    }
+    const owner = await pool.query(
+      `SELECT probe_id,status,stage,provider_content_safe_mode
+         FROM clean.adb_anchor_probe
+        WHERE runtime_session_id=$1::uuid
+          AND stage=1
+          AND provider_content_safe_mode=true
+        ORDER BY probe_id DESC`,
+      [sessionId],
+    );
+    if (owner.rowCount !== 1) {
+      res.status(409).json({ error: "EXACT_STAGE1_SESSION_OWNER_NOT_FOUND" });
+      return;
+    }
+    try {
+      const cleaned = await cleanupPrepaidProbeSessionLocalV39(sessionId, deletionRunId);
+      res.status(200).json({
+        schema: "v39.phase2g-runtime-cleanup.v1",
+        status: "PASS",
+        session_id: sessionId,
+        probe_id: Number(owner.rows[0].probe_id),
+        deleted_blobs: cleaned.deletedBlobs,
+        deleted_runtime_rows: cleaned.deletedRuntimeRows,
+        verified_at_utc: cleaned.verifiedAtUtc,
+        provider_mutation: false,
+      });
+    } catch (error:any) {
+      console.error("[phase2g-runtime-cleanup] failed:", error?.message ?? error);
+      res.status(500).json({
+        schema: "v39.phase2g-runtime-cleanup.v1",
+        status: "FAIL",
+        session_id: sessionId,
+        error: String(error?.message ?? "cleanup failed").slice(0,240),
+        provider_mutation: false,
+      });
+    }
+  });
   app.post("/api/v1/webhooks/aerodatabox",webhookIngress);
   app.post("/api/v1/webhooks/aerodatabox/:secret",webhookIngress);
   app.get("/api/v1/subscriptions/balance",managementGuard,async(_req,res)=>{res.status(200).json({balance:await getBalance()});});
