@@ -57,6 +57,7 @@ describe("Phase2G managed runtime survival guards", () => {
     process.env.V39_PROVIDER_BLOB_MODE = "required";
     process.env.V39_PROVIDER_BLOB_BUCKET_ID = "eplit-objstore-test";
     process.env.V39_PREPAID_RAW_RETENTION_HOURS = "168";
+    process.env.V39_WORKSPACE_RUNTIME_OWNER_MODE = "replit-managed-project";
 
     const { registeredPath, handler } = captureWorkspaceHealthHandler();
     expect(registeredPath).toBe("/__v39/workspace-runtime");
@@ -69,14 +70,51 @@ describe("Phase2G managed runtime survival guards", () => {
       git_head: "a".repeat(40),
       prepaid_route_registered: true,
       provider_mutation: false,
+      runtime_owner_mode: "replit-managed-project",
       managed_replit_workflow: true,
+      detached_workspace_server: false,
       retention_hours: 168,
+    });
+  });
+
+  it("reports the guarded detached fallback honestly", () => {
+    process.env.V39_PROVIDER_BLOB_MODE = "required";
+    process.env.V39_PROVIDER_BLOB_BUCKET_ID = "replit-objstore-test";
+    process.env.V39_PREPAID_RAW_RETENTION_HOURS = "168";
+    process.env.V39_WORKSPACE_RUNTIME_OWNER_MODE = "phase2g-detached-npm-run-dev";
+
+    const { handler } = captureWorkspaceHealthHandler();
+    const result = invokeJsonRoute(handler);
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toMatchObject({
+      status: "PASS",
+      runtime_owner_mode: "phase2g-detached-npm-run-dev",
+      managed_replit_workflow: false,
+      detached_workspace_server: true,
+    });
+  });
+
+  it("fails closed when workspace owner mode is not explicitly labeled", () => {
+    process.env.V39_PROVIDER_BLOB_MODE = "required";
+    process.env.V39_PROVIDER_BLOB_BUCKET_ID = "replit-objstore-test";
+    delete process.env.V39_WORKSPACE_RUNTIME_OWNER_MODE;
+
+    const { handler } = captureWorkspaceHealthHandler();
+    const result = invokeJsonRoute(handler);
+    expect(result.statusCode).toBe(503);
+    expect(result.body).toMatchObject({
+      status: "FAIL",
+      runtime_owner_mode: null,
+      managed_replit_workflow: false,
+      detached_workspace_server: false,
+      error: "WORKSPACE_RUNTIME_OWNER_MODE_INVALID_OR_MISSING",
     });
   });
 
   it("fails the health contract closed for an unknown bucket", () => {
     process.env.V39_PROVIDER_BLOB_MODE = "required";
     process.env.V39_PROVIDER_BLOB_BUCKET_ID = "wrong-bucket";
+    process.env.V39_WORKSPACE_RUNTIME_OWNER_MODE = "replit-managed-project";
 
     const { handler } = captureWorkspaceHealthHandler();
     const result = invokeJsonRoute(handler);
@@ -85,7 +123,9 @@ describe("Phase2G managed runtime survival guards", () => {
       schema: "v39.phase2f-workspace-runtime.v1",
       status: "FAIL",
       provider_mutation: false,
+      runtime_owner_mode: "replit-managed-project",
       managed_replit_workflow: true,
+      detached_workspace_server: false,
       error: "V39_PROVIDER_BLOB_BUCKET_ID_UNEXPECTED",
     });
   });
@@ -98,7 +138,7 @@ describe("Phase2G managed runtime survival guards", () => {
     expect(script).not.toContain("v39_safe_takeover_port5000_v39.ts");
     expect(script).not.toContain("v39_workspace_v3_server_v39.ts");
     expect(script).not.toContain("nohup env");
-    expect(script).toContain("REPLIT_MANAGED_PORT_5000_NOT_LISTENING");
+    expect(script).toContain("WORKSPACE_PORT_5000_NOT_LISTENING");
     expect(script).toContain('json?.schema === "v39.phase2f-workspace-runtime.v1"');
     expect(script).toContain("PORT_TAKEOVER_PERFORMED=false");
   });
@@ -110,7 +150,8 @@ describe("Phase2G managed runtime survival guards", () => {
     );
     expect(script).toContain("WORKSPACE_CALLBACK_HEALTH_CONTRACT_FAILED_AT_LAUNCH");
     expect(script).toContain("json?.schema === 'v39.phase2f-workspace-runtime.v1'");
-    expect(script).toContain("json?.managed_replit_workflow === true");
+    expect(script).toContain("runtime_owner_mode");
+    expect(script).toContain("phase2g-detached-npm-run-dev");
     expect(script).toContain("String(json?.git_head || '').toLowerCase() === expectedHead");
     expect(script).not.toContain('curl -fsS --max-time 5 "$BASE/__v39/workspace-runtime" >/dev/null');
   });
