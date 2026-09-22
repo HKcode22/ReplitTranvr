@@ -116,3 +116,16 @@ Before the next paid run:
 ## Retention
 
 Once this reconstruction and safe aggregate evidence are preserved, the 36 P2G06 raw provider objects should be deleted through the exact-session cleanup path and deletion verification should be recorded. Raw provider content should not be retained merely for convenience.
+
+
+## 2026-09-22 final pre-adjudication cleanup verification
+
+Before deletion, the exact P2G06 session was reconstructed again from the still-live Replit object-storage payloads. The reconstruction artifact was hash-verified as `635aec4f6da80d4ebe5cd314eecf4fe27b20442e0fd6994129ba7389b646aa0d` and again proved 36/36 payloads, 282,218 bytes, 219 flight items, 219 internal received credits, 220 external settled credits, a one-credit gap, and zero cost/item disagreements.
+
+The exact-session cleanup then deleted 36/36 P2G06 raw objects and independently verified zero live blobs and zero transient runtime rows. The cleanup receipt SHA-256 is `ee4fce51d932a93a69fd0fe8a349ff95106742530a88412b540aee7735588bf3`.
+
+A durable cleanup manifest is recorded at `artifacts/phase2g-p2g06-cleanup-manifest-20260922.json`.
+
+Important retention clarification: the raw payload objects themselves were deleted after the hash-verified reconstruction was preserved; this record does not claim that a second byte-for-byte archive of all 36 raw payload bodies was made. The preserved evidence is the reconstruction artifact/hash, the GitHub reconstruction report, the cleanup receipt/hash, and the cleanup manifest.
+
+At the post-cleanup check, probe 4 remained historically `failed`, `duration_censored=false`, `reconciliation_status=MISMATCH`, and `stop_reason=external_internal_credit_mismatch`. Incident 16 and budget day `P2G-S1-20260921-05` remain pending the separate guarded adjudication step.
