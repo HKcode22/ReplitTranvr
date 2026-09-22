@@ -138,6 +138,9 @@ set +e
 node --import tsx scripts/v39_phase2g_stage1_logged_supervisor_v39.ts   --auth "$AUTH"   --auth-file "$AUTH_FILE"   --auth-sha "$AUTH_SHA"   --runtime-sha "$RUNTIME_SHA"   --probe-budget-day-id "$BUDGET_DAY"   --expected-head "$EXPECTED_HEAD"   --callback-base "$BASE"   --log "$LOG"   --status "$STATUS"   --heartbeat "$HEARTBEAT"   --expected-icao "$EXPECTED_ICAO"   --owner-executor github-actions
 RC=$?
 set -e
+kill "$TAIL_PID" 2>/dev/null || true
+wait "$TAIL_PID" 2>/dev/null || true
+trap - EXIT
 
 echo "OWNER_EXIT_CODE=$RC"
 echo "OWNER_LOG=$LOG"
