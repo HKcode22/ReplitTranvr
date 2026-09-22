@@ -25,6 +25,14 @@ export interface FrozenProbeArtifact {
   hubCutMetric: number;
   degreeCap: number;
   carriersCap: number;
+  probeDesign?: {
+    variant: "compact6-region-stratified-v1";
+    sourcePreprobeFileSha256: string;
+    legacyEvidencePreprobeSha256: string;
+    grandfatheredProbeIds: number[];
+    macroRegions: string[];
+    stage2Mode: "conditional-confirmation-v1";
+  };
 }
 export interface Stage1ProbeEvidence {
   icao: string;
@@ -76,14 +84,37 @@ export function loadFrozenProbeArtifact(
     throw new Error(`REFUSED: preprobe artifact hash mismatch expected=${expectedHash} actual=${actual}`);
   }
   const p = JSON.parse(raw) as FrozenProbeArtifact;
-  if (!Array.isArray(p.shortlist) || p.shortlist.length !== 12) {
-    throw new Error("REFUSED: Stage-1 shortlist must contain exactly 12 candidates");
+  const compact = p.probeDesign?.variant === "compact6-region-stratified-v1";
+  const requiredCount = compact ? 6 : 12;
+  if (!Array.isArray(p.shortlist) || p.shortlist.length !== requiredCount) {
+    throw new Error(`REFUSED: Stage-1 shortlist must contain exactly ${requiredCount} candidates`);
   }
   p.replacements = Array.isArray(p.replacements) ? p.replacements : [];
   const primary = p.shortlist.map((x) => normalizedIcao(x.icao));
   const all = [...p.shortlist, ...p.replacements].map((x) => normalizedIcao(x.icao));
-  if (new Set(primary).size !== 12 || new Set(all).size !== all.length) {
+  if (new Set(primary).size !== requiredCount || new Set(all).size !== all.length) {
     throw new Error("REFUSED: frozen shortlist/replacement ICAOs are not unique");
+  }
+  if (compact) {
+    const expected = ["WSSS","OMAA","MMUN","LKPR","SKBO","YSSY"];
+    if (primary.some((icao, index) => icao !== expected[index])) {
+      throw new Error(`REFUSED: compact-6 shortlist must equal ${expected.join(",")}`);
+    }
+    const expectedRegions = new Set([
+      "Asia-Pacific","Gulf/Africa","North America","Europe","South America","Oceania",
+    ]);
+    const actualRegions = new Set(p.shortlist.map((x) => x.region));
+    if (actualRegions.size !== expectedRegions.size || [...expectedRegions].some((x) => !actualRegions.has(x))) {
+      throw new Error("REFUSED: compact-6 shortlist must cover each frozen macro-region exactly once");
+    }
+    if (!/^[a-f0-9]{64}$/i.test(p.probeDesign!.sourcePreprobeFileSha256) ||
+        !/^[a-f0-9]{64}$/i.test(p.probeDesign!.legacyEvidencePreprobeSha256)) {
+      throw new Error("REFUSED: compact-6 source/legacy preprobe hashes invalid");
+    }
+    if (!Array.isArray(p.probeDesign!.grandfatheredProbeIds) ||
+        p.probeDesign!.grandfatheredProbeIds.some((x) => !Number.isInteger(x) || x <= 0)) {
+      throw new Error("REFUSED: compact-6 grandfathered probe IDs invalid");
+    }
   }
   for (const must of ["WSSS", "OMAA"]) {
     if (!primary.includes(must)) throw new Error(`REFUSED: required yield-reference candidate ${must} missing`);
@@ -242,8 +273,8 @@ export function finalFiveMembershipInvariant(rankedRows: PromotionRow[]): boolea
 
 /**
  * Exact Stage-2 promotion/replacement protocol.
- * - All 12 frozen primary Stage-1 candidates must reach a terminal probe state
- *   before replacements are consumed.
+ * - All frozen primary Stage-1 candidates (12 legacy or 6 compact-amended)
+ *   must reach a terminal probe state before replacements are consumed.
  * - Capacity is a gate, not a score component.
  * - Frozen replacements are consumed sequentially only when <5 valid primary
  *   candidates remain.
