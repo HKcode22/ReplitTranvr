@@ -14,7 +14,7 @@
 - [ ] evidence persisted before transient cleanup
 - [ ] true mismatch cleans exact-session raw objects only after evidence write
 - [ ] external settled spend used as Stage-1 yield denominator
-- [ ] delivery gap increases ambiguity upper bound
+- [ ] any positive delivery gap is durably recorded and terminal before scoring
 - [ ] compact-6 owner sequencing active
 - [ ] exactly one post-P2G06 WSSS validation run allowed
 - [ ] compact amendment SHA bound into runtime and AUTH scope
@@ -57,18 +57,17 @@
 ## Tuesday prospective acceptance states
 
 ### MATCH
-External settled credits equal received internal credits exactly.
+External settled credits equal received internal credits exactly, with zero explicit cost/item disagreements. Under the current frozen rule, this is the only reconciliation state eligible for a completed/scored probe.
 
 ### DELIVERY_GAP
-May complete only when:
-- external > internal;
-- received/external >= 0.99;
-- explicit cost/item disagreements = 0;
-- settlement resolved;
-- callback/provider ownership guards pass;
-- cleanup verified.
+A positive settled external-minus-received gap is preserved as its own durable diagnostic state rather than hidden inside a generic mismatch. Under the current frozen rule it is **terminal and non-scoreable** even when provider SEND billing plausibly explains it.
 
-The provider external total remains the denominator.
+- persist external spend, internal received credits, exact gap, completeness, callback counters, and settlement evidence;
+- perform exact-session cleanup only after the durable receipt exists;
+- mark the probe failed/non-promotion-valid;
+- do not auto-relaunch WSSS.
+
+Any future nonzero production tolerance would require a separate, pre-outcome MEASURE → FREEZE amendment and may not be calibrated from P2G06 or Tuesday's validation result.
 
 ### MISMATCH / UNRESOLVED
 Fail closed. Do not auto-relaunch WSSS.
