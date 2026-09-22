@@ -470,7 +470,7 @@ export interface ExecuteProbeInput {
 }
 export interface ExecuteProbeResult {
   probeId: number;
-  status: "completed" | "failed";
+  status: "completed" | "settling" | "failed";
   creditsSpent: number | null;
   durationCensored: boolean;
   stopReason: string | null;
