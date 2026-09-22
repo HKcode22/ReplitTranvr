@@ -116,17 +116,16 @@ async function main(): Promise<void> {
     "V39_DATABASE_RUNTIME_URL",
     "AERODATABOX_API_KEY",
     "AERODATABOX_WEBHOOK_SECRET",
-    "V39_REMOTE_BLOB_CLEANUP_SECRET",
   ]) {
     if (!String(process.env[key] ?? "").trim()) {
       throw new Error(`WATCHDOG_REFUSED:MISSING_SECRET_ENV:${key}`);
     }
   }
 
-  process.env.V39_REMOTE_BLOB_CLEANUP_BASE = callbackBase;
   process.env.WEBHOOK_BASE_URL = callbackBase;
   process.env.V39_PUBLIC_WEBHOOK_BASE_URL = callbackBase;
   process.env.V39_PROVIDER_BLOB_MODE = "required";
+  process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP = "1";
 
   const started = Date.now();
   let probeSeenAt: number | null = null;
@@ -194,8 +193,18 @@ async function main(): Promise<void> {
 
     if (status === "settling" || status === "failed") {
       const subs = await listSubscriptionsStrict();
-      const active = subs.filter((s) => s.isActive && s.billingType !== "LifetimeBased");
+      const active = subs.filter((sub) => sub.isActive && sub.billingType !== "LifetimeBased");
       if (active.length === 0) {
+        if (
+          status === "settling" &&
+          (probe.duration_censored !== false ||
+           probe.stop_reason != null ||
+           probe.reconciliation_status !== "MATCH" ||
+           probe.runtime_cleanup_verified_at_utc != null ||
+           !sessionId)
+        ) {
+          throw new Error("WATCHDOG_REFUSED:SETTLING_PROBE_SHAPE_INVALID");
+        }
         console.log(JSON.stringify({
           schema: "v39.phase2g-github-safety-watchdog.v1",
           status: status === "settling"
@@ -205,6 +214,8 @@ async function main(): Promise<void> {
                 : "OWNER_FAILED_PROVIDER_SAFE_CLEANUP_PENDING"),
           observed_at_utc: new Date().toISOString(),
           probe_id: Number(probe.probe_id),
+          session_id: sessionId,
+          active_billable_subscriptions: 0,
           reconciliation_status: probe.reconciliation_status,
           runtime_cleanup_verified: Boolean(probe.runtime_cleanup_verified_at_utc),
           provider_mutation: false,
