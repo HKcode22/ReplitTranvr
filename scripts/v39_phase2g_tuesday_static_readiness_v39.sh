@@ -35,6 +35,7 @@ echo "PROTECTED_SOURCE_TREE_CLEAN"
 echo "=== SHELL SYNTAX ==="
 bash -n scripts/v39_phase2g_stage1_launch_logged_v39.sh
 bash -n scripts/v39_phase2g_tuesday_prepare_v39.sh
+bash -n scripts/v39_phase2g_overnight_wsss_guard_v39.sh
 echo "SHELL_SYNTAX_PASS"
 
 echo "=== TARGETED TESTS ==="
