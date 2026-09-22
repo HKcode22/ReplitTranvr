@@ -54,13 +54,17 @@ export function loadGate2RuntimeBindingV39(input: {
 }
 
 export function stage1AuthorizationScopeV39(binding: Gate2RuntimeBindingV39): string {
-  return [
+  const parts = [
     "Gate2Stage1",
     `preprobe_file_sha256=${binding.smoke.preprobe.fileSha256}`,
     `runtime_file_sha256=${binding.runtimeFileSha256}`,
     `probe_budget_day_id=${binding.runtime.probeBudgetDayId}`,
-    "target_minutes=120",
-  ].join(";");
+  ];
+  if (binding.runtime.stage1AmendmentSha256) {
+    parts.push(`stage1_amendment_sha256=${binding.runtime.stage1AmendmentSha256}`);
+  }
+  parts.push("target_minutes=120");
+  return parts.join(";");
 }
 
 export function stage2AuthorizationScopeV39(binding: Gate2RuntimeBindingV39, promotionBindingSha256: string): string {
