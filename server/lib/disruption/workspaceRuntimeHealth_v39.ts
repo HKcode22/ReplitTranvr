@@ -4,6 +4,8 @@ import { resolvePrepaidRawRetentionHoursV39 } from "./prepaidProbeRuntime_v39";
 import { normalizeProviderBlobBucketIdV39 } from "./replitProviderBlobStore_v39";
 
 function gitHead(): string {
+  const deployed = String(process.env.V39_DEPLOYED_GIT_HEAD ?? "").trim().toLowerCase();
+  if (/^[a-f0-9]{40}$/.test(deployed)) return deployed;
   try {
     return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim().toLowerCase();
   } catch {
@@ -13,11 +15,14 @@ function gitHead(): string {
 
 export type WorkspaceRuntimeOwnerModeV39 =
   | "replit-managed-project"
-  | "phase2g-detached-npm-run-dev";
+  | "phase2g-detached-npm-run-dev"
+  | "replit-published-deployment";
 
 function runtimeOwnerMode(): WorkspaceRuntimeOwnerModeV39 {
   const raw = String(process.env.V39_WORKSPACE_RUNTIME_OWNER_MODE ?? "").trim();
-  if (raw === "replit-managed-project" || raw === "phase2g-detached-npm-run-dev") return raw;
+  if (raw === "replit-managed-project" ||
+      raw === "phase2g-detached-npm-run-dev" ||
+      raw === "replit-published-deployment") return raw;
   throw new Error("WORKSPACE_RUNTIME_OWNER_MODE_INVALID_OR_MISSING");
 }
 
@@ -33,8 +38,10 @@ export interface WorkspaceRuntimeHealthRegistrationV39 {
  * runs set V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-managed-project in .replit.
  * When the Run UI is unavailable, the guarded Tuesday helper may start the same
  * npm run dev command in a detached OS session and labels that mode
- * phase2g-detached-npm-run-dev. Both modes remain subject to exact Git/callback
- * health checks; an unlabeled/manual process fails closed.
+ * phase2g-detached-npm-run-dev. Published deployments use
+ * replit-published-deployment and must also declare their durability class.
+ * Every mode remains subject to exact Git/callback health checks; an
+ * unlabeled/manual process fails closed.
  */
 export function registerWorkspaceRuntimeHealthV39(
   app: Express,
@@ -56,6 +63,12 @@ export function registerWorkspaceRuntimeHealthV39(
       );
       const retentionHours = resolvePrepaidRawRetentionHoursV39();
       const managed = ownerMode === "replit-managed-project";
+      const detached = ownerMode === "phase2g-detached-npm-run-dev";
+      const published = ownerMode === "replit-published-deployment";
+      const durabilityClass = String(process.env.V39_RUNTIME_DURABILITY_CLASS ?? "").trim().toLowerCase();
+      if (published && durabilityClass !== "reserved-vm" && durabilityClass !== "autoscale") {
+        throw new Error("PUBLISHED_RUNTIME_DURABILITY_CLASS_INVALID_OR_MISSING");
+      }
 
       res.status(200).json({
         schema: "v39.phase2f-workspace-runtime.v1",
@@ -68,7 +81,9 @@ export function registerWorkspaceRuntimeHealthV39(
         provider_mutation: false,
         runtime_owner_mode: ownerMode,
         managed_replit_workflow: managed,
-        detached_workspace_server: !managed,
+        detached_workspace_server: detached,
+        published_deployment: published,
+        runtime_durability_class: published ? durabilityClass : null,
       });
     } catch (error) {
       res.status(503).json({
@@ -81,6 +96,10 @@ export function registerWorkspaceRuntimeHealthV39(
         runtime_owner_mode: ownerMode,
         managed_replit_workflow: ownerMode === "replit-managed-project",
         detached_workspace_server: ownerMode === "phase2g-detached-npm-run-dev",
+        published_deployment: ownerMode === "replit-published-deployment",
+        runtime_durability_class: ownerMode === "replit-published-deployment"
+          ? String(process.env.V39_RUNTIME_DURABILITY_CLASS ?? "").trim().toLowerCase() || null
+          : null,
         error: error instanceof Error ? error.message : String(error),
       });
     }
