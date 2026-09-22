@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS clean.adb_probe_reconciliation_evidence (
 
   settlement_reads INTEGER NOT NULL CHECK (settlement_reads >= 0),
   max_observed_unsettled_credit_gap INTEGER NOT NULL CHECK (max_observed_unsettled_credit_gap >= 0),
+  max_observed_external_delivery_gap INTEGER NOT NULL CHECK (max_observed_external_delivery_gap >= 0),
   delivery_completeness_floor DOUBLE PRECISION NOT NULL CHECK (delivery_completeness_floor > 0 AND delivery_completeness_floor <= 1),
 
   window_start_utc TIMESTAMPTZ NOT NULL,
