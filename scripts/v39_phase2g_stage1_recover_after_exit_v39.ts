@@ -60,6 +60,7 @@ async function main(): Promise<void> {
   const authPath = path.resolve(required("--auth-file"));
   const expectedAuthSha = required("--auth-sha").toLowerCase();
   const budgetDayId = required("--probe-budget-day-id");
+  const deferCleanup = process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP === "1";
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("RECOVERY_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("RECOVERY_REFUSED:AUTH_SHA_INVALID");
 
@@ -220,23 +221,25 @@ async function main(): Promise<void> {
       [sessionId, probeId],
     );
 
-    try {
-      const cleanup = await cleanupPrepaidProbeSessionV39(sessionId, `phase2g-supervisor-recovery-${probeId}`);
-      cleanupVerifiedAtUtc = cleanup.verifiedAtUtc;
-    } catch (error) {
-      await markProbeFailed({
-        probeId,
-        sessionId,
-        stopReason: "supervisor_child_exit_cleanup_failed",
-        cleanupVerifiedAtUtc: null,
-      });
-      await openRecoveryIncident({
-        probeId,
-        budgetDayId,
-        reason: "runtime_cleanup_failed",
-        providerDeleteVerified,
-      });
-      throw error;
+    if (!deferCleanup) {
+      try {
+        const cleanup = await cleanupPrepaidProbeSessionV39(sessionId, `phase2g-supervisor-recovery-${probeId}`);
+        cleanupVerifiedAtUtc = cleanup.verifiedAtUtc;
+      } catch (error) {
+        await markProbeFailed({
+          probeId,
+          sessionId,
+          stopReason: "supervisor_child_exit_cleanup_failed",
+          cleanupVerifiedAtUtc: null,
+        });
+        await openRecoveryIncident({
+          probeId,
+          budgetDayId,
+          reason: "runtime_cleanup_failed",
+          providerDeleteVerified,
+        });
+        throw error;
+      }
     }
   } else {
     const before = await listSubscriptionsStrict();
@@ -332,21 +335,23 @@ async function main(): Promise<void> {
         stopReason,
         cleanupVerifiedAtUtc: null,
       });
-      try {
-        const cleanup = await cleanupPrepaidProbeSessionV39(
-          durableSessionId,
-          `phase2g-runtime-reset-recovery-${probeId}`,
-        );
-        cleanupVerifiedAtUtc = cleanup.verifiedAtUtc;
-      } catch (error) {
-        await openRecoveryIncident({
-          probeId,
-          budgetDayId,
-          reason: "runtime_reset_blob_cleanup_failed",
-          providerDeleteVerified,
-          durableSessionId,
-        });
-        throw error;
+      if (!deferCleanup) {
+        try {
+          const cleanup = await cleanupPrepaidProbeSessionV39(
+            durableSessionId,
+            `phase2g-runtime-reset-recovery-${probeId}`,
+          );
+          cleanupVerifiedAtUtc = cleanup.verifiedAtUtc;
+        } catch (error) {
+          await openRecoveryIncident({
+            probeId,
+            budgetDayId,
+            reason: "runtime_reset_blob_cleanup_failed",
+            providerDeleteVerified,
+            durableSessionId,
+          });
+          throw error;
+        }
       }
     }
   }
@@ -371,6 +376,7 @@ async function main(): Promise<void> {
     provider_delete_attempted: providerDeleteAttempted,
     provider_delete_verified: providerDeleteVerified,
     runtime_cleanup_verified: Boolean(cleanupVerifiedAtUtc),
+    cleanup_deferred_to_replit_workspace: deferCleanup && !cleanupVerifiedAtUtc,
     runtime_session_present: runtimeSessionPresent,
     durable_session_id_used: !runtimeSessionPresent && Boolean(durableSessionId),
     probe_marked_failed: true,
