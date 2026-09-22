@@ -1,7 +1,7 @@
 {
   "schema_version": "v39-phase2g-compact6-amendment-1",
   "status": "READY_FROZEN_COMPACT6_AMENDMENT",
-  "frozen_at_utc": "2026-09-22T02:00:43.000Z",
+  "frozen_at_utc": "2026-09-22T02:26:00.000Z",
   "source_preprobe_file_sha256": "b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870",
   "source_stage1_candidate_count": 12,
   "effective_stage1_candidate_count": 6,
@@ -33,11 +33,12 @@
   "wsss_postfix_validation_rerun": {
     "authorized": true,
     "maximum_additional_attempts": 1,
-    "reason": "P2G06 exposed a previously uninstrumented provider-SEND versus received-callback reconciliation gap; validate the corrected prospective accounting path without retroactively reclassifying P2G06."
+    "reason": "P2G06 exposed a previously uninstrumented provider-SEND versus received-callback reconciliation gap; validate the corrected prospective evidence path without retroactively reclassifying P2G06 or calibrating an acceptance tolerance from it."
   },
   "prospective_reconciliation_policy": {
     "external_settled_spend_is_authoritative_denominator": true,
-    "delivery_completeness_floor": 0.99,
+    "delivery_completeness_floor": 1.0,
+    "nonzero_delivery_gap_is_terminal_not_scoreable": true,
     "internal_greater_than_external_is_hard_mismatch": true,
     "cost_item_disagreement_is_hard_mismatch": true,
     "unresolved_settlement_is_hard_failure": true,
@@ -58,6 +59,7 @@
   "anti_bias": {
     "candidate_subset_chosen_from_preoutcome_frozen_shortlist": true,
     "no_retroactive_P2G06_pass": true,
-    "no_unbounded_WSSS_retry": true
+    "no_unbounded_WSSS_retry": true,
+    "no_p2g06_calibrated_reconciliation_tolerance": true
   }
 }
