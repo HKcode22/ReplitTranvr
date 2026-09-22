@@ -50,7 +50,7 @@ async function markProbeFailed(input: {
             reconciliation_status=COALESCE(reconciliation_status,'UNRESOLVED'),
             runtime_session_id=COALESCE($3::uuid,runtime_session_id),
             runtime_cleanup_verified_at_utc=COALESCE($4::timestamptz,runtime_cleanup_verified_at_utc)
-      WHERE probe_id=$1 AND status IN ('probing','failed')`,
+      WHERE probe_id=$1 AND status IN ('probing','settling','failed')`,
     [input.probeId, input.stopReason, input.sessionId, input.cleanupVerifiedAtUtc],
   );
 }
@@ -81,7 +81,7 @@ async function main(): Promise<void> {
        FROM clean.adb_anchor_probe
       WHERE stage=1 AND probe_budget_day_id=$1
         AND (
-          status='probing'
+          status IN ('probing','settling')
           OR (
             status='failed'
             AND reconciliation_status='UNRESOLVED'
