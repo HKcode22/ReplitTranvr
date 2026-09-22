@@ -11,6 +11,7 @@ const recovery = readFileSync(join(root, "scripts", "v39_phase2g_stage1_recover_
 const sleepCheck = readFileSync(join(root, "scripts", "v39_phase2g_stage1_sleep_check_v39.ts"), "utf8");
 const probeExecution = readFileSync(join(root, "server", "lib", "disruption", "probeExecutionPrepaid_v39.ts"), "utf8");
 const prepaidWindow = readFileSync(join(root, "server", "lib", "disruption", "prepaidProbeWindow_v39.ts"), "utf8");
+const overnightGuard = readFileSync(join(root, "scripts", "v39_phase2g_overnight_wsss_guard_v39.sh"), "utf8");
 
 describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   it("keeps the paid preflight read-only and emits an immutable exact receipt", () => {
@@ -113,6 +114,16 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     const createIndex = prepaidWindow.indexOf('createSubscription("FlightByAirportIcao"');
     expect(hookIndex).toBeGreaterThanOrEqual(0);
     expect(createIndex).toBeGreaterThan(hookIndex);
+  });
+
+  it("makes the overnight guard single-launch, exact-PASS, and never auto-retry", () => {
+    expect(overnightGuard).toContain("PHASE2G_OVERNIGHT_ARM=YES");
+    expect(overnightGuard).toContain("PHASE2G_OVERNIGHT_EXPECTED_HEAD");
+    expect(overnightGuard).toContain("PASS_READY_FOR_PAID_STAGE1");
+    expect(overnightGuard).toContain("OVERNIGHT_PAID_LAUNCH=STARTED_ONCE");
+    expect(overnightGuard).toContain("BLOCKED_DO_NOT_RELAUNCH");
+    expect(overnightGuard).toContain("scripts/v39_phase2g_stage1_launch_logged_v39.sh");
+    expect(overnightGuard).not.toContain("while true; do\n    bash scripts/v39_phase2g_stage1_launch_logged_v39.sh");
   });
 
   it("front-door verifies the AUTH and supervises the actual paid owner directly", () => {
