@@ -1,0 +1,170 @@
+name: Phase2G Paid Stage1 Owner
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type RUN_PAID_STAGE1_ONCE'
+        required: true
+        type: string
+      auth_id:
+        description: 'Exact AUTH id'
+        required: true
+        type: string
+      auth_file:
+        description: 'Committed AUTH artifact path'
+        required: true
+        type: string
+      auth_sha:
+        description: 'AUTH SHA-256'
+        required: true
+        type: string
+      runtime_file:
+        description: 'Committed Gate2 runtime artifact path'
+        required: true
+        type: string
+      runtime_sha:
+        description: 'Runtime SHA-256'
+        required: true
+        type: string
+      preprobe_file:
+        description: 'Committed preprobe artifact path'
+        required: true
+        type: string
+      preprobe_sha:
+        description: 'Preprobe SHA-256'
+        required: true
+        type: string
+      smoke_file:
+        description: 'Committed safety-smoke artifact path'
+        required: true
+        type: string
+      smoke_runtime_file:
+        description: 'Committed smoke runtime artifact path'
+        required: true
+        type: string
+      smoke_runtime_sha:
+        description: 'Smoke runtime SHA-256'
+        required: true
+        type: string
+      preflight_file:
+        description: 'Fresh committed preflight receipt path'
+        required: true
+        type: string
+      preflight_sha:
+        description: 'Preflight receipt SHA-256'
+        required: true
+        type: string
+      expected_head:
+        description: 'Exact source commit authorized for this run'
+        required: true
+        type: string
+      budget_day:
+        description: 'Fresh probe budget day id'
+        required: true
+        type: string
+      expected_icao:
+        description: 'Frozen Stage1 ICAO'
+        required: true
+        default: 'WSSS'
+        type: string
+      callback_base:
+        description: 'Stable published callback origin'
+        required: true
+        default: 'https://travnr.com'
+        type: string
+      provider_blob_bucket_id:
+        description: 'Dedicated Replit provider blob bucket id'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2g-paid-stage1-global
+  cancel-in-progress: false
+
+jobs:
+  owner:
+    if: ${{ inputs.confirm == 'RUN_PAID_STAGE1_ONCE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    environment: phase2g-paid
+    env:
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+      V39_REMOTE_BLOB_CLEANUP_SECRET: ${{ secrets.V39_PHASE2G_CONTROL_SECRET }}
+      V39_PROVIDER_BLOB_BUCKET_ID: ${{ inputs.provider_blob_bucket_id }}
+      V39_PROVIDER_BLOB_MODE: required
+    steps:
+      - name: Checkout exact authorized source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_head }}
+          fetch-depth: 1
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Refuse missing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET V39_REMOTE_BLOB_CLEANUP_SECRET; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Missing required Phase2G environment secret: $key"
+              exit 2
+            fi
+          done
+
+      - name: Run exact paid Stage1 owner
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/v39_phase2g_github_actions_owner_v39.sh             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --preprobe "${{ inputs.preprobe_file }}"             --preprobe-sha "${{ inputs.preprobe_sha }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --preflight "${{ inputs.preflight_file }}"             --preflight-sha "${{ inputs.preflight_sha }}"             --expected-head "${{ inputs.expected_head }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --provider-blob-bucket-id "${{ inputs.provider_blob_bucket_id }}"
+
+  safety-watchdog:
+    if: ${{ inputs.confirm == 'RUN_PAID_STAGE1_ONCE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 175
+    environment: phase2g-paid
+    env:
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+      V39_REMOTE_BLOB_CLEANUP_SECRET: ${{ secrets.V39_PHASE2G_CONTROL_SECRET }}
+      V39_PROVIDER_BLOB_BUCKET_ID: ${{ inputs.provider_blob_bucket_id }}
+      V39_PROVIDER_BLOB_MODE: required
+    steps:
+      - name: Checkout exact authorized source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_head }}
+          fetch-depth: 1
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Independent paid-safety watchdog
+        shell: bash
+        env:
+          V39_REMOTE_BLOB_CLEANUP_BASE: ${{ inputs.callback_base }}
+          WEBHOOK_BASE_URL: ${{ inputs.callback_base }}
+          V39_PUBLIC_WEBHOOK_BASE_URL: ${{ inputs.callback_base }}
+        run: |
+          set -euo pipefail
+          npx tsx scripts/v39_phase2g_github_actions_watchdog_v39.ts             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-head "${{ inputs.expected_head }}"             --preflight "${{ inputs.preflight_file }}"             --preflight-sha "${{ inputs.preflight_sha }}"             --callback-base "${{ inputs.callback_base }}"
