@@ -81,9 +81,10 @@ if [[ "$CURRENT_HEAD" != "$EXPECTED_HEAD" ]]; then
   exit 2
 fi
 
-if ! git diff --quiet -- server scripts migrations tests || ! git diff --cached --quiet -- server scripts migrations tests; then
+PROTECTED_STATUS="$(git status --porcelain=v1 --untracked-files=all -- server scripts migrations tests)"
+if [[ -n "$PROTECTED_STATUS" ]]; then
   echo 'REFUSED:PROTECTED_SOURCE_TREE_DIRTY'
-  git status --short -- server scripts migrations tests
+  printf '%s\n' "$PROTECTED_STATUS"
   exit 2
 fi
 
