@@ -20,6 +20,7 @@ PREFLIGHT_SHA=""
 EXPECTED_HEAD=""
 BUDGET_DAY=""
 EXPECTED_ICAO=""
+CALLBACK_BASE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -38,6 +39,7 @@ while [[ $# -gt 0 ]]; do
     --expected-head) EXPECTED_HEAD="${2:-}"; shift 2 ;;
     --probe-budget-day-id) BUDGET_DAY="${2:-}"; shift 2 ;;
     --expected-icao) EXPECTED_ICAO="${2:-}"; shift 2 ;;
+    --callback-base) CALLBACK_BASE="${2:-}"; shift 2 ;;
     *) echo "REFUSED:UNKNOWN_ARGUMENT=$1"; exit 2 ;;
   esac
 done
@@ -57,7 +59,8 @@ for pair in \
   "PREFLIGHT_SHA:$PREFLIGHT_SHA" \
   "EXPECTED_HEAD:$EXPECTED_HEAD" \
   "BUDGET_DAY:$BUDGET_DAY" \
-  "EXPECTED_ICAO:$EXPECTED_ICAO"; do
+  "EXPECTED_ICAO:$EXPECTED_ICAO" \
+  "CALLBACK_BASE:$CALLBACK_BASE"; do
   name="${pair%%:*}"
   value="${pair#*:}"
   if [[ -z "$value" ]]; then
@@ -131,24 +134,24 @@ case "$CURRENT_BUCKET" in
   *) echo 'REFUSED:V39_PROVIDER_BLOB_BUCKET_ID_UNEXPECTED_OR_MISSING'; exit 2 ;;
 esac
 
-DOMAIN=""
-if [[ -n "${REPLIT_DEV_DOMAIN:-}" ]]; then
-  DOMAIN="${REPLIT_DEV_DOMAIN#https://}"
-  DOMAIN="${DOMAIN#http://}"
-  DOMAIN="${DOMAIN%%/*}"
+BASE="${CALLBACK_BASE%/}"
+if [[ ! "$BASE" =~ ^https://[^/]+$ ]]; then
+  echo 'REFUSED:CALLBACK_BASE_MUST_BE_HTTPS_ORIGIN'
+  exit 2
 fi
-if [[ -z "$DOMAIN" && -n "${REPLIT_DOMAINS:-}" ]]; then
-  IFS=',' read -ra DOMAINS <<< "$REPLIT_DOMAINS"
-  for raw in "${DOMAINS[@]}"; do
-    d="${raw#https://}"
-    d="${d#http://}"
-    d="${d%%/*}"
-    if [[ "$d" == *.replit.dev ]]; then DOMAIN="$d"; break; fi
-  done
+CALLBACK_HOST="${BASE#https://}"
+if [[ "$CALLBACK_HOST" == *.replit.dev ]]; then
+  echo 'REFUSED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED_FOR_PAID_STAGE1'
+  exit 2
 fi
-if [[ -z "$DOMAIN" || "$DOMAIN" != *.replit.dev ]]; then echo 'REFUSED:NO_REPLIT_WORKSPACE_PUBLIC_DOMAIN'; exit 2; fi
-if [[ "$DOMAIN" == "travnr.com" || "$DOMAIN" == "www.travnr.com" ]]; then echo 'REFUSED:PRODUCTION_DOMAIN_NOT_ALLOWED'; exit 2; fi
-BASE="https://${DOMAIN}"
+
+# A paid Stage-1 owner must not be launched from the interactive Replit
+# development workspace. Replit documents that REPLIT_DEV_DOMAIN is a
+# development-only variable and it is absent in published deployments.
+if [[ -n "${REPLIT_DEV_DOMAIN:-}" && -z "${V39_ALLOW_INTERACTIVE_OWNER_FOR_OFFLINE_TESTS:-}" ]]; then
+  echo 'REFUSED:INTERACTIVE_REPLIT_WORKSPACE_CANNOT_OWN_PAID_STAGE1'
+  exit 2
+fi
 
 # Final launch-time health check must validate the exact JSON contract. A Vite
 # catch-all HTML 200 is not a callback health pass.
@@ -165,6 +168,9 @@ CALLBACK_BASE="$BASE" EXPECTED_HEAD="$EXPECTED_HEAD" node <<'NODE'
   try { json = JSON.parse(text); } catch {}
   const ownerMode = String(json?.runtime_owner_mode || '');
   const ownerContract =
+    (ownerMode === 'replit-published-deployment' &&
+      json?.published_deployment === true &&
+      json?.runtime_durability_class === 'reserved-vm') ||
     (ownerMode === 'replit-managed-project' &&
       json?.managed_replit_workflow === true &&
       json?.detached_workspace_server === false) ||
@@ -281,7 +287,7 @@ cat <<EOF
   "status_file": "$STATUS",
   "heartbeat_file": "$HEARTBEAT",
   "pid_file": "$PID_FILE",
-  "workspace_callback_base": "$BASE",
+  "callback_public_base": "$BASE",
   "deployment_performed": false,
   "note": "Do not launch a second Stage-1 command. Inspect status/heartbeat/log if the terminal disconnects."
 }
