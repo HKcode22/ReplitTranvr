@@ -100,6 +100,9 @@ export function classifyProbeReconciliationV39(input: {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+const LIVE_PROVIDER_BALANCE_POLL_MS_V39 = 60_000;
+const LIVE_PROVIDER_BALANCE_FAILED_POLL_LIMIT_V39 = 3;
+
 async function getBalanceWithTransientRetryV39(): Promise<Awaited<ReturnType<typeof getBalance>>> {
   // AeroDataBox balance is a free control-plane read. A single gateway 5xx
   // must not censor a two-hour scientific probe. Retry briefly and boundedly;
@@ -187,6 +190,9 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   let windowEnd = windowStart;
   let liveStopReason: string | null = null;
   let maxObservedUnsettledCreditGap = 0;
+  let lastExternalCredits = 0;
+  let nextProviderBalancePollAt = 0;
+  let consecutiveFailedProviderBalancePolls = 0;
 
   const sub = await createSubscription("FlightByAirportIcao", icao, {
     url: webhookUrl,
@@ -209,19 +215,30 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   while (Date.now() < deadline) {
     await sleep(Math.min(input.watchdogPollMs, Math.max(250, deadline - Date.now())));
     const internal = await prepaidProbeInternalCreditsV39(session.sessionId);
-    const balance = await getBalanceWithTransientRetryV39();
 
-    // A missing authoritative balance after bounded retries can never be
-    // treated as zero spend. Stop exposure fail-closed; deletion occurs
-    // directly after leaving this loop.
-    if (!balance) {
-      liveStopReason = "balance_read_failed_after_retries";
-      break;
+    // The 5-second watchdog remains local and protects the soft cap from
+    // received SEND evidence. Provider balance is a control-plane cross-check,
+    // not something we need to hammer every watchdog tick.
+    if (Date.now() >= nextProviderBalancePollAt) {
+      const balance = await getBalanceWithTransientRetryV39();
+      nextProviderBalancePollAt = Date.now() + LIVE_PROVIDER_BALANCE_POLL_MS_V39;
+      if (balance) {
+        consecutiveFailedProviderBalancePolls = 0;
+        lastExternalCredits = Math.max(0, input.balanceBefore - balance.creditsRemaining);
+        maxObservedUnsettledCreditGap = Math.max(
+          maxObservedUnsettledCreditGap,
+          Math.max(0, internal - lastExternalCredits),
+        );
+      } else {
+        consecutiveFailedProviderBalancePolls += 1;
+        if (consecutiveFailedProviderBalancePolls >= LIVE_PROVIDER_BALANCE_FAILED_POLL_LIMIT_V39) {
+          liveStopReason = "balance_read_failed_after_retries";
+          break;
+        }
+      }
     }
 
-    const external = Math.max(0, input.balanceBefore - balance.creditsRemaining);
-    maxObservedUnsettledCreditGap = Math.max(maxObservedUnsettledCreditGap, Math.max(0, internal - external));
-    if (input.settledOtherCredits + Math.max(internal, external) >= input.hardCapCredits) {
+    if (input.settledOtherCredits + Math.max(internal, lastExternalCredits) >= input.hardCapCredits) {
       liveStopReason = "probe_cap_soft_stop";
       break;
     }
@@ -303,8 +320,8 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   const deliveryGapCredits = classified.deliveryGapCredits;
   const deliveryCompleteness = classified.deliveryCompleteness;
   const reconciliationStatus = classified.status;
-  const reconciliationStopReason = liveStopReason === "balance_read_failed"
-    ? "balance_read_failed"
+  const reconciliationStopReason = liveStopReason === "balance_read_failed_after_retries"
+    ? "balance_read_failed_after_retries"
     : reconciliationStatus === "DELIVERY_GAP"
       ? "external_internal_delivery_gap"
       : reconciliationStatus === "MISMATCH"
@@ -350,11 +367,11 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     };
   }
 
-  if (liveStopReason === "balance_read_failed") {
+  if (liveStopReason === "balance_read_failed_after_retries") {
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     const cleanup = await cleanupPrepaidProbeSessionV39(
       session.sessionId,
-      `${input.deletionRunId}:balance-read-failed`,
+      `${input.deletionRunId}:balance-read-failed-after-retries`,
     ).catch(() => null);
 
     return {
@@ -363,7 +380,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       windowStart,
       windowEnd,
       durationCensored: true,
-      stopReason: "balance_read_failed",
+      stopReason: "balance_read_failed_after_retries",
       reconciliationStatus: "MATCH",
       externalCredits,
       internalSendCredits: metrics.internalSendCredits,
