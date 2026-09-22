@@ -281,7 +281,12 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     };
   }
 
-  const acceptedReconciliation = result.reconciliationStatus === "MATCH";
+  const acceptedReconciliation =
+    result.reconciliationStatus === "MATCH" ||
+    result.reconciliationStatus === "DELIVERY_GAP";
+  const acceptedStopReason =
+    result.stopReason === null ||
+    (result.reconciliationStatus === "DELIVERY_GAP" && result.stopReason === "bounded_delivery_gap");
   const cleanupDeferredSafely =
     result.status === "settling" &&
     result.subscriptionDeleted === true &&
@@ -290,7 +295,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     result.status === "completed" &&
     Boolean(result.cleanupVerifiedAtUtc);
   if ((!cleanupDeferredSafely && !cleanupCompletedSafely) ||
-      result.durationCensored || result.stopReason !== null ||
+      result.durationCensored || !acceptedStopReason ||
       !result.metrics || !acceptedReconciliation) {
     await markSafeFailure({
       probeId,
@@ -383,8 +388,10 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     input.artifacts.runtime.minStabilityBuckets,
   );
   const hours = Math.max((result.windowEnd.getTime() - result.windowStart.getTime()) / 3_600_000, 1 / 3600);
+  const deliveryGapCredits = Math.max(0, denominator - result.metrics.internalSendCredits);
   const lowerRate = result.metrics.confirmedUniqueLower / denominator;
-  const upperRate = result.metrics.confirmedPlusAmbiguousUpper / denominator;
+  const upperIdentityCount = result.metrics.confirmedPlusAmbiguousUpper + deliveryGapCredits;
+  const upperRate = upperIdentityCount / denominator;
   const chainRate = result.metrics.tailChainLinks / denominator;
 
   const durableStatus = cleanupDeferredSafely ? "settling" : "completed";
