@@ -288,12 +288,20 @@ async function main(): Promise<void> {
         });
         sourceCompatible = checks.every((check) => check.match);
       }
+      const runtimeOwnerMode = String(health.json?.runtime_owner_mode ?? "");
+      const runtimeOwnerContract =
+        (runtimeOwnerMode === "replit-managed-project" &&
+          health.json?.managed_replit_workflow === true &&
+          health.json?.detached_workspace_server === false) ||
+        (runtimeOwnerMode === "phase2g-detached-npm-run-dev" &&
+          health.json?.managed_replit_workflow === false &&
+          health.json?.detached_workspace_server === true);
       const exactContract = health.status === 200 &&
         health.json?.schema === "v39.phase2f-workspace-runtime.v1" &&
         health.json?.status === "PASS" &&
         health.json?.prepaid_route_registered === true &&
         health.json?.provider_mutation === false &&
-        health.json?.managed_replit_workflow === true &&
+        runtimeOwnerContract &&
         runtimeHead === currentHead;
       const reachable = exactContract && sourceCompatible;
       callback = {
@@ -302,7 +310,9 @@ async function main(): Promise<void> {
         exact_contract: exactContract,
         schema: health.json?.schema ?? null,
         route_owner: health.json?.route_owner ?? null,
+        runtime_owner_mode: runtimeOwnerMode || null,
         managed_replit_workflow: health.json?.managed_replit_workflow === true,
+        detached_workspace_server: health.json?.detached_workspace_server === true,
         runtime_git_head: runtimeHead || null,
         current_git_head: currentHead,
         retention_hours: health.json?.retention_hours ?? null,
@@ -311,7 +321,7 @@ async function main(): Promise<void> {
         protected_source_count: CALLBACK_SOURCE_PATHS.length,
         source_compatible_with_current_head: sourceCompatible,
       };
-      if (!exactContract) blockers.push("workspace_callback_exact_managed_contract_failed");
+      if (!exactContract) blockers.push("workspace_callback_exact_owner_contract_failed");
       if (!sourceCompatible) blockers.push("workspace_callback_source_not_compatible");
     } catch (error) {
       callback = {
