@@ -1,0 +1,23 @@
+{
+  "schema": "v39.phase2g-p2g08-censored-false-pass-adjudication.v1",
+  "mode": "APPLY",
+  "probe_id": 6,
+  "icao": "WSSS",
+  "probe_budget_day_id": "P2G-S1-20260922-07",
+  "historical_status_before": "completed",
+  "corrected_status": "failed",
+  "duration_censored": true,
+  "stop_reason": "balance_read_failed_after_retries",
+  "reconciliation_status_preserved": "MATCH",
+  "measured_duration_minutes": 8.2572,
+  "runtime_cleanup_verified_at_utc": "2026-09-22T12:26:56.796Z",
+  "active_billable_subscriptions": 0,
+  "open_incidents": 0,
+  "provider_mutation": false,
+  "scientific_metrics_preserved": true,
+  "status": "P2G08_CENSORED_FALSE_PASS_ADJUDICATED",
+  "applied_at_utc": "2026-09-22T12:44:17.053Z",
+  "budget_state": "CLOSED",
+  "budget_closed_at_utc": "2026-09-22T12:44:16.641Z",
+  "next": "Use only the frozen P2G08 balance-control-plane recovery amendment with a fresh runtime/budget/AUTH."
+}

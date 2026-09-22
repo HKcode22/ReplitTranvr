@@ -1,0 +1,64 @@
+{
+  "schema": "v39.phase2g-stage1-paid-preflight.v1",
+  "status": "PASS_READY_FOR_PAID_STAGE1",
+  "mutation_performed": false,
+  "provider_paid_action_performed": false,
+  "deployment_performed": false,
+  "generated_at_utc": "2026-09-21T11:00:13.254Z",
+  "git_head": "89d3dd1f859bf17f75ce39b33f91bf9a644a37d9",
+  "expected_git_head": "89d3dd1f859bf17f75ce39b33f91bf9a644a37d9",
+  "auth": {
+    "authorization_id": "AUTH-20260921-P2G06",
+    "file": "SEPmd/V3.9_PHASE2G_AUTH_20260921_P2G06.json",
+    "sha256": "58cc3925daf73f51c64b33e7bb8c059624687fd2dd4b9299ece0c5b01215343b",
+    "start_not_before_utc": "2026-09-21T11:00:00.000Z",
+    "expires_at_utc": "2026-09-21T15:30:00.000Z",
+    "max_alert_credits": 500,
+    "protected_exposure_credits": 500,
+    "safe_latest_start_utc": "2026-09-21T13:25:00.000Z",
+    "approved_in_ledger": true
+  },
+  "gate2_runtime": {
+    "file": "artifacts/phase2g-gate2-runtime-P2G-S1-20260921-05.json",
+    "file_sha256": "1a3e176ffa00d3b448371c924d210b0bfaefeebc54f064997f89b16451e05d8d",
+    "binding_sha256": "af26d29d3abc9f87b048d70dc2c2662c07718c7d3d869bfb54e66ac9c877a604",
+    "evidence_id": "RUN-20260915-AF26D29D3ABC9F87B048D70DC2C2662C07718C7D3D869BFB54E66AC9C877A604",
+    "probe_budget_day_id": "P2G-S1-20260921-05",
+    "stage1_reservation_credits": 450,
+    "unsettled_burst_margin_credits": 50
+  },
+  "provider": {
+    "credits_remaining": 2544,
+    "protected_floor_after_authorized_exposure": 1000,
+    "active_billable_subscriptions": 0
+  },
+  "database": {
+    "open_incidents": 0,
+    "active_probes": 0,
+    "same_budget_day_probe_rows": 0,
+    "open_probe_budget_days": 0
+  },
+  "frozen_stage1_time_class": {
+    "utc_slot_hour": 12,
+    "weekday_class": "weekday",
+    "eligible_now": true,
+    "would_cross_utc_midnight_if_started_now": false
+  },
+  "callback": {
+    "origin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+    "reachable": true,
+    "exact_contract": true,
+    "schema": "v39.phase2f-workspace-runtime.v1",
+    "route_owner": "server/index.ts+server/routes_v3.ts",
+    "managed_replit_workflow": true,
+    "runtime_git_head": "89d3dd1f859bf17f75ce39b33f91bf9a644a37d9",
+    "current_git_head": "89d3dd1f859bf17f75ce39b33f91bf9a644a37d9",
+    "retention_hours": 168,
+    "bucket_prefix": "replit-objstore",
+    "matched_protected_sources": 7,
+    "protected_source_count": 7,
+    "source_compatible_with_current_head": true
+  },
+  "blockers": [],
+  "next": "Launch only through the exact hash-bound persistent Stage-1 launcher."
+}

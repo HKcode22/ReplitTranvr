@@ -1,0 +1,40 @@
+{
+  "schema": "v39.phase2f-workspace-callback-verification.v1",
+  "status": "PASS",
+  "executionEnvironment": "replit-workspace-live",
+  "deploymentPerformed": false,
+  "providerCalled": false,
+  "providerSubscriptionCreated": false,
+  "alertCreditsSpent": 0,
+  "callbackOrigin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+  "gitHead": "725dfe3caee63e7b34dbe21f53e3b95dedf6cab7",
+  "exactRouteOwner": "server/index.ts+server/routes_v3.ts",
+  "wrongSecretRejected404": true,
+  "exactSecretAccepted200": true,
+  "publicHttpsIngress": true,
+  "retentionHours": 168,
+  "bucketPrefix": "replit-objstore",
+  "beforeCleanup": {
+    "sessions": 1,
+    "deliveries": 1,
+    "items": 1,
+    "blobs": 1,
+    "live_blobs": 1
+  },
+  "cleanup": {
+    "deletedBlobs": 1,
+    "deletedRuntimeRows": 3,
+    "verifiedAtUtc": "2026-09-20T08:10:30.362Z"
+  },
+  "afterCleanup": {
+    "sessions": 0,
+    "deliveries": 0,
+    "items": 0,
+    "blobs": 1,
+    "deleted_blobs": 1,
+    "live_blobs": 0
+  },
+  "openIncidentsBefore": 0,
+  "openIncidentsAfter": 0,
+  "generatedAtUtc": "2026-09-20T08:10:30.505Z"
+}

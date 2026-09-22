@@ -1,0 +1,22 @@
+{
+  "schema": "v39.phase2g-stage1-unattended-health.v1",
+  "status": "RUNNING_HEALTHY_UNATTENDED_WINDOW",
+  "mutation_performed": false,
+  "provider_paid_action_performed": false,
+  "authorization_id": "AUTH-20260921-P2G06",
+  "probe_budget_day_id": "P2G-S1-20260921-05",
+  "supervisor_alive": true,
+  "heartbeat_age_seconds": 4,
+  "persistent_log_bytes": 1286,
+  "open_incidents": 0,
+  "probing_rows": 1,
+  "runtime_session_state": "active",
+  "provider_subscription_bound": true,
+  "exact_owned_credit_subscription_active": true,
+  "foreign_active_billable_subscriptions": 0,
+  "callback_base": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+  "callback_reachable": true,
+  "blockers": [],
+  "host_failure_boundary": "This proves the current Replit workspace/process/callback path is healthy now; it does not provide an independent external cleanup agent if the entire Replit workspace is terminated.",
+  "next": "Keep the Mac plugged in, awake, lid open, network connected, and Replit workspace active. Do not relaunch the paid probe."
+}

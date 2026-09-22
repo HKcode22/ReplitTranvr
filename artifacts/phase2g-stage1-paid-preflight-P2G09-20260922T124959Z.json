@@ -1,0 +1,84 @@
+{
+  "schema": "v39.phase2g-stage1-paid-preflight.v1",
+  "status": "PASS_READY_FOR_PAID_STAGE1",
+  "mutation_performed": false,
+  "provider_paid_action_performed": false,
+  "deployment_performed": false,
+  "generated_at_utc": "2026-09-22T12:50:13.790Z",
+  "git_head": "e6ce0780090cdfd9f2861e09ceb6c7194d3d4363",
+  "expected_git_head": "e6ce0780090cdfd9f2861e09ceb6c7194d3d4363",
+  "auth": {
+    "authorization_id": "AUTH-20260922-P2G09",
+    "file": "SEPmd/V3.9_PHASE2G_AUTH_20260922_P2G09.json",
+    "sha256": "7c051123728eef012da43cfd31536b119e3168461a580e51404e06ffba171cb2",
+    "start_not_before_utc": "2026-09-22T12:40:00.000Z",
+    "expires_at_utc": "2026-09-22T15:00:00.000Z",
+    "max_alert_credits": 500,
+    "protected_exposure_credits": 500,
+    "safe_latest_start_utc": "2026-09-22T12:55:00.000Z",
+    "approved_in_ledger": true
+  },
+  "gate2_runtime": {
+    "file": "artifacts/phase2g-gate2-runtime-P2G-S1-20260922-08.json",
+    "file_sha256": "297b2430221a21ad3325e56731d7c18c6e027911e29ffcd0572553506d571dc3",
+    "binding_sha256": "a2fa2eeaa3ef00d01b1e7bed1b9849abc5b6a470f2e699b7f5437c6ad4225ce9",
+    "evidence_id": "RUN-20260915-A2FA2EEAA3EF00D01B1E7BED1B9849ABC5B6A470F2E699B7F5437C6AD4225CE9",
+    "probe_budget_day_id": "P2G-S1-20260922-08",
+    "stage1_reservation_credits": 450,
+    "unsettled_burst_margin_credits": 50,
+    "stage1_amendment_sha256": "934d44768e104f84ddbfd6ce322e847f68059f33423470333230081d7c9ab6fe",
+    "compact6_validated": true,
+    "next_candidate": "WSSS",
+    "expected_icao": "WSSS"
+  },
+  "provider": {
+    "credits_remaining": 2194,
+    "protected_floor_after_authorized_exposure": 1000,
+    "active_billable_subscriptions": 0,
+    "balance_stability_canary": [
+      {
+        "read": 1,
+        "creditsRemaining": 2194
+      },
+      {
+        "read": 2,
+        "creditsRemaining": 2194
+      },
+      {
+        "read": 3,
+        "creditsRemaining": 2194
+      }
+    ]
+  },
+  "database": {
+    "open_incidents": 0,
+    "active_probes": 0,
+    "same_budget_day_probe_rows": 0,
+    "open_probe_budget_days": 0
+  },
+  "frozen_stage1_time_class": {
+    "utc_slot_hour": 12,
+    "weekday_class": "weekday",
+    "eligible_now": true,
+    "would_cross_utc_midnight_if_started_now": false
+  },
+  "callback": {
+    "origin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+    "reachable": true,
+    "exact_contract": true,
+    "schema": "v39.phase2f-workspace-runtime.v1",
+    "route_owner": "server/index.ts+server/routes_v3.ts",
+    "runtime_owner_mode": "phase2g-detached-npm-run-dev",
+    "managed_replit_workflow": false,
+    "detached_workspace_server": true,
+    "runtime_git_head": "e6ce0780090cdfd9f2861e09ceb6c7194d3d4363",
+    "current_git_head": "e6ce0780090cdfd9f2861e09ceb6c7194d3d4363",
+    "retention_hours": 168,
+    "bucket_prefix": "replit-objstore",
+    "matched_protected_sources": 11,
+    "protected_source_count": 11,
+    "source_compatible_with_current_head": true
+  },
+  "blockers": [],
+  "next": "Launch only through the exact hash-bound persistent Stage-1 launcher."
+}
