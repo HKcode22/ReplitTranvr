@@ -111,7 +111,10 @@ export interface Stage1AttemptEvidence extends Stage1ProbeEvidence {
   recordedAtUtc: string;
 }
 
-async function readStage1Evidence(preprobeHash: string): Promise<Stage1AttemptEvidence[]> {
+async function readStage1Evidence(artifacts: LoadedProbeExecutionArtifacts): Promise<Stage1AttemptEvidence[]> {
+  const compact = artifacts.preprobe.probeDesign?.variant === "compact6-region-stratified-v1";
+  const legacyHash = compact ? artifacts.preprobe.probeDesign!.legacyEvidencePreprobeSha256 : null;
+  const grandfatheredProbeIds = compact ? artifacts.preprobe.probeDesign!.grandfatheredProbeIds : [];
   const r = await pool.query(
     `SELECT probe_id,icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
             tail_chain_links_per_credit,stability,confirmed_unique_lower,
@@ -119,9 +122,14 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1AttemptEv
             confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit,
             duration_censored,stop_reason,reconciliation_status,recorded_at
        FROM clean.adb_anchor_probe
-      WHERE stage=1 AND preprobe_artifact_sha256=$1
+      WHERE stage=1 AND (
+        preprobe_artifact_sha256=$1
+        OR ($2::text IS NOT NULL
+            AND preprobe_artifact_sha256=$2
+            AND probe_id = ANY($3::bigint[]))
+      )
       ORDER BY recorded_at ASC,probe_id ASC`,
-    [preprobeHash],
+    [artifacts.preprobeSha256, legacyHash, grandfatheredProbeIds],
   );
   return r.rows.map((x: any) => {
     const safe = x.provider_content_safe_mode === true;
@@ -228,7 +236,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
   }
   const approved = verifiedStage1Auth(argv, binding);
   assertStage1AuthCoversTargetWindow(approved.record);
-  const evidence = await readStage1Evidence(artifacts.preprobeSha256);
+  const evidence = await readStage1Evidence(artifacts);
   const next = await chooseNextStage1Target(artifacts, evidence);
 
   if (!next) {
