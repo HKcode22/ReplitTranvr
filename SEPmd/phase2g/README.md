@@ -107,6 +107,9 @@ Immediately before the Tuesday readiness pass, the paid launcher was re-audited 
 
 To avoid long interactive shell pastes, use `scripts/v39_phase2g_tuesday_prepare_v39.sh`. It exposes guarded modes for status, static readiness, P2G06 adjudication dry-run/apply, and synthetic callback verification. It never launches a paid Stage-1 probe. The mutation mode requires an explicit `PHASE2G_CONFIRM_P2G06_APPLY=YES` environment confirmation.
 
+## Workspace owner modes
+
+Final readiness distinguishes the preferred Replit-managed Project process from the guarded detached fallback used only when the Replit UI does not expose usable workflow controls. The health/preflight/launcher/watchdog chain now requires a truthful explicit owner mode and refuses unlabeled processes.
 ## Tuesday objective
 
 One and only one post-fix WSSS validation run may occur under the compact-6 amendment.
