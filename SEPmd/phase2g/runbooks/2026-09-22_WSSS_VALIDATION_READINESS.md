@@ -78,6 +78,19 @@ The helper has no paid-launch mode. AUTH approval still requires explicit review
 - [ ] blockers=[]
 - [ ] owner next candidate exactly WSSS
 
+## Optional overnight guarded execution
+
+If the operator needs to sleep, `scripts/v39_phase2g_overnight_wsss_guard_v39.sh` may be explicitly armed before the window. It is an execution convenience around the same frozen runtime/AUTH/preflight/launcher contracts; it does not alter the scientific protocol.
+
+Binding overnight safety behavior:
+- explicit final Git HEAD must be supplied and match at arm time and again before preflight/launch;
+- early and final preflights are provider read-only;
+- paid launch is permitted only on an exact fresh `PASS_READY_FOR_PAID_STAGE1`, empty blockers, WSSS next-candidate binding, exact callback contract, exact artifact hashes, and current source tree;
+- at most one paid launch is attempted;
+- there is no automatic paid retry under any failure state;
+- after launch, the existing persistent supervisor remains authoritative for callback watchdog/fail-closed recovery;
+- the overnight guard performs read-only health checks and records `BLOCKED_DO_NOT_RELAUNCH` on uncertainty;
+- the guard refuses to launch at or after `2026-09-22T12:55:00Z`, preserving the 120-minute target plus 5-minute cleanup buffer before AUTH expiry.
 ## Tuesday prospective acceptance states
 
 ### MATCH
