@@ -55,7 +55,7 @@ BASE="https://${DOMAIN}"
 # and the exact V3.9 workspace-health contract. This keeps the callback on the
 # same lifecycle Replit itself restarts after a workspace/runtime replacement.
 if ! (echo >/dev/tcp/127.0.0.1/5000) >/dev/null 2>&1; then
-  echo 'REFUSED:REPLIT_MANAGED_PORT_5000_NOT_LISTENING'
+  echo 'REFUSED:WORKSPACE_PORT_5000_NOT_LISTENING'
   exit 1
 fi
 
@@ -74,12 +74,20 @@ check_health() {
   const text = await response.text();
   let json = null;
   try { json = JSON.parse(text); } catch {}
+  const ownerMode = String(json?.runtime_owner_mode || "");
+  const ownerContract =
+    (ownerMode === "replit-managed-project" &&
+      json?.managed_replit_workflow === true &&
+      json?.detached_workspace_server === false) ||
+    (ownerMode === "phase2g-detached-npm-run-dev" &&
+      json?.managed_replit_workflow === false &&
+      json?.detached_workspace_server === true);
   const pass = response.status === 200 &&
     json?.schema === "v39.phase2f-workspace-runtime.v1" &&
     json?.status === "PASS" &&
     json?.prepaid_route_registered === true &&
     json?.provider_mutation === false &&
-    json?.managed_replit_workflow === true &&
+    ownerContract &&
     String(json?.git_head || "").toLowerCase() === expectedHead;
   if (!pass) {
     console.error(JSON.stringify({
@@ -97,7 +105,9 @@ check_health() {
     label,
     git_head: json.git_head,
     route_owner: json.route_owner,
-    managed_replit_workflow: true,
+    runtime_owner_mode: ownerMode,
+    managed_replit_workflow: json.managed_replit_workflow === true,
+    detached_workspace_server: json.detached_workspace_server === true,
   }));
 })().catch((error) => {
   console.error(JSON.stringify({
@@ -126,7 +136,8 @@ npx tsx scripts/v39_verify_workspace_callback_v39.ts
 echo
 printf 'WORKSPACE_CALLBACK_PREP=PASS\n'
 printf 'WORKSPACE_CALLBACK_BASE=%s\n' "$BASE"
-printf 'WORKSPACE_SERVER_OWNER=REPLIT_MANAGED_NPM_RUN_DEV\n'
+OWNER_MODE="$(curl -fsS "http://127.0.0.1:5000/__v39/workspace-runtime" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).runtime_owner_mode||"unknown")}catch{console.log("unknown")}})')"
+printf 'WORKSPACE_SERVER_OWNER_MODE=%s\n' "$OWNER_MODE"
 printf 'WORKSPACE_SERVER_GIT_HEAD=%s\n' "$CURRENT_HEAD"
 printf 'PORT_TAKEOVER_PERFORMED=false\n'
 printf 'DEPLOYMENT_PERFORMED=false\n'
