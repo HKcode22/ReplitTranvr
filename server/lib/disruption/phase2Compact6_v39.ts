@@ -11,6 +11,8 @@ export const PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-p2g07-provider502-recovery-freeze-20260922.json";
 export const PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-p2g08-balance502-recovery-freeze-20260922.json";
+export const PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH =
+  "artifacts/phase2g-compact6-p2g09-hostreset-recovery-freeze-20260922.json";
 
 export interface Phase2gCompact6AmendmentV39 {
   schema_version: "v39-phase2g-compact6-amendment-1";
@@ -64,6 +66,25 @@ export interface Phase2gCompact6AmendmentV39 {
     outcome_metrics_not_used_to_authorize: true;
     reason: string;
   };
+  p2g09_hostreset_recovery_rerun?: {
+    authorized: true;
+    maximum_additional_attempts: 1;
+    failed_probe_id: 7;
+    failed_status: "failed";
+    failed_duration_censored: true;
+    failed_reconciliation_status: "UNRESOLVED";
+    failed_stop_reason: "supervisor_child_exit_recovered";
+    excluded_from_final_scoring: true;
+    requires_fresh_runtime_budget_auth: true;
+    requires_owner_executor: "github-actions";
+    requires_live_callback_verification: true;
+    requires_deferred_cleanup_state_machine: true;
+    requires_zero_active_billable_at_launch: true;
+    no_further_automatic_wsss_retry: true;
+    outcome_metrics_not_used_to_authorize: true;
+    authorization_basis: "replit_development_runtime_host_reset_only";
+    reason: string;
+  };
   prospective_reconciliation_policy: {
     external_settled_spend_is_authoritative_denominator: true;
     delivery_completeness_floor: number;
@@ -111,7 +132,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
   const candidatePaths = input.path
     ? [input.path]
-    : [PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
+    : [PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
   let raw: string | null = null;
   let actual: string | null = null;
   for (const candidatePath of candidatePaths) {
@@ -235,6 +256,27 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     recoveryP2g08.outcome_metrics_not_used_to_authorize !== true
   )) {
     throw new Error("REFUSED_COMPACT6_P2G08_RECOVERY_BOUND");
+  }
+  const recoveryP2g09 = amendment.p2g09_hostreset_recovery_rerun;
+  if (recoveryP2g09 !== undefined && (
+    recoveryP2g09.authorized !== true ||
+    recoveryP2g09.maximum_additional_attempts !== 1 ||
+    recoveryP2g09.failed_probe_id !== 7 ||
+    recoveryP2g09.failed_status !== "failed" ||
+    recoveryP2g09.failed_duration_censored !== true ||
+    recoveryP2g09.failed_reconciliation_status !== "UNRESOLVED" ||
+    recoveryP2g09.failed_stop_reason !== "supervisor_child_exit_recovered" ||
+    recoveryP2g09.excluded_from_final_scoring !== true ||
+    recoveryP2g09.requires_fresh_runtime_budget_auth !== true ||
+    recoveryP2g09.requires_owner_executor !== "github-actions" ||
+    recoveryP2g09.requires_live_callback_verification !== true ||
+    recoveryP2g09.requires_deferred_cleanup_state_machine !== true ||
+    recoveryP2g09.requires_zero_active_billable_at_launch !== true ||
+    recoveryP2g09.no_further_automatic_wsss_retry !== true ||
+    recoveryP2g09.outcome_metrics_not_used_to_authorize !== true ||
+    recoveryP2g09.authorization_basis !== "replit_development_runtime_host_reset_only"
+  )) {
+    throw new Error("REFUSED_COMPACT6_P2G09_RECOVERY_BOUND");
   }
   if (
     amendment.prospective_reconciliation_policy.external_settled_spend_is_authoritative_denominator !== true ||
