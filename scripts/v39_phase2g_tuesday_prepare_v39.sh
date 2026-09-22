@@ -475,6 +475,7 @@ run_preflight() {
     --expected-head "$(git rev-parse HEAD)" \
     --expected-icao WSSS \
     --callback-base "$callback_base" \
+    --owner-executor github-actions \
     --out "$out"
 
   echo "PREFLIGHT_RECEIPT=$out"
