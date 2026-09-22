@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# P2G09 proved that the interactive Replit workspace is not a durable paid
+# owner. Prospective paid Stage-1 ownership is GitHub Actions only. Keep the
+# historical implementation below for auditability, but refuse before reading
+# AUTH/provider state or performing any provider action.
+echo "REFUSED:DEPRECATED_LOCAL_STAGE1_LAUNCH_USE_GITHUB_ACTIONS"
+exit 2
+
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 mkdir -p artifacts
