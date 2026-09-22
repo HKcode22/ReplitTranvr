@@ -31,7 +31,10 @@ import { extractFlightNotification, type SamplingMeta } from "./lib/disruption/f
 import { upsertFlightNotifications, appendResearchEvents, semanticObservationKey } from "./lib/disruption/flightDataPrePostStore_v3";
 import { resolveWebhookFlightIdentity, type WebhookIdentityResolution } from "./lib/disruption/flightInstanceCanonical_v3";
 import { persistProcessingAttempt, persistRawDeliveryTransaction, updateRawDeliveryOutcome } from "./lib/disruption/rawIngress_v3";
-import { persistPrepaidProbeWebhookV39 } from "./lib/disruption/prepaidProbeRuntime_v39";
+import {
+  persistPrepaidProbeWebhookV39,
+  recordPrepaidProbeCallbackFailureV39,
+} from "./lib/disruption/prepaidProbeRuntime_v39";
 import { verifyAuthRecord, approvedArtifactHashesFromLedger, sha256HexString, type AuthRecord } from "./lib/disruption/authRecord_v39";
 import { v39Pool as pool } from "./lib/disruption/db_v39";
 import {
@@ -141,6 +144,7 @@ export function registerV3Routes(app:Express):void{
       res.status(200).json({received:true,items:persisted.itemCount,duplicate:persisted.duplicate});
     }catch(err:any){
       console.error("[adb-v3-prepaid] durable persistence failed — returning 5xx (provider details redacted)");
+      await recordPrepaidProbeCallbackFailureV39(sessionId).catch(()=>undefined);
       await recordIncident("raw-persistence",{mode:"prepaid_probe",sessionId,error:String(err?.message??"error").slice(0,240)});
       res.status(500).json({error:"Prepaid probe persistence failed; please retry"});
     }
