@@ -34,6 +34,7 @@ export interface Phase2gCompact6AmendmentV39 {
   prospective_reconciliation_policy: {
     external_settled_spend_is_authoritative_denominator: true;
     delivery_completeness_floor: number;
+    nonzero_delivery_gap_is_terminal_not_scoreable: true;
     internal_greater_than_external_is_hard_mismatch: true;
     cost_item_disagreement_is_hard_mismatch: true;
     unresolved_settlement_is_hard_failure: true;
@@ -49,6 +50,7 @@ export interface Phase2gCompact6AmendmentV39 {
     candidate_subset_chosen_from_preoutcome_frozen_shortlist: true;
     no_retroactive_P2G06_pass: true;
     no_unbounded_WSSS_retry: true;
+    no_p2g06_calibrated_reconciliation_tolerance: true;
   };
 }
 
@@ -158,7 +160,8 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   }
   if (
     amendment.prospective_reconciliation_policy.external_settled_spend_is_authoritative_denominator !== true ||
-    amendment.prospective_reconciliation_policy.delivery_completeness_floor !== 0.99 ||
+    amendment.prospective_reconciliation_policy.delivery_completeness_floor !== 1 ||
+    amendment.prospective_reconciliation_policy.nonzero_delivery_gap_is_terminal_not_scoreable !== true ||
     amendment.prospective_reconciliation_policy.internal_greater_than_external_is_hard_mismatch !== true ||
     amendment.prospective_reconciliation_policy.cost_item_disagreement_is_hard_mismatch !== true ||
     amendment.prospective_reconciliation_policy.unresolved_settlement_is_hard_failure !== true ||
@@ -175,7 +178,8 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   if (
     amendment.anti_bias.candidate_subset_chosen_from_preoutcome_frozen_shortlist !== true ||
     amendment.anti_bias.no_retroactive_P2G06_pass !== true ||
-    amendment.anti_bias.no_unbounded_WSSS_retry !== true
+    amendment.anti_bias.no_unbounded_WSSS_retry !== true ||
+    amendment.anti_bias.no_p2g06_calibrated_reconciliation_tolerance !== true
   ) {
     throw new Error("REFUSED_COMPACT6_ANTI_BIAS");
   }
