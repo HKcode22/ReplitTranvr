@@ -9,6 +9,15 @@ import {
   stage1AuthorizationScopeV39,
 } from "../server/lib/disruption/phase2Gate2Runtime_v39";
 import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authRecord_v39";
+import {
+  loadPhase2gCompact6AmendmentV39,
+  PHASE2G_COMPACT6_ARTIFACT_PATH,
+} from "../server/lib/disruption/phase2Compact6_v39";
+import {
+  chooseNextPrimaryStage1TargetV39,
+  isP2g06PostfixWsssValidationEligibleV39,
+  type Stage1AttemptEvidence,
+} from "./v39_probe_stage1_owner_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const TARGET_MINUTES = 120;
@@ -18,9 +27,13 @@ const CALLBACK_SOURCE_PATHS = [
   "server/routes_v3.ts",
   "server/lib/disruption/workspaceRuntimeHealth_v39.ts",
   "server/lib/disruption/prepaidProbeRuntime_v39.ts",
+  "server/lib/disruption/prepaidProbeWindow_v39.ts",
+  "server/lib/disruption/probeExecutionPrepaid_v39.ts",
+  "server/lib/disruption/phase2Compact6_v39.ts",
   "server/lib/disruption/providerBlobStore_v39.ts",
   "server/lib/disruption/replitProviderBlobStore_v39.ts",
   "server/lib/disruption/db_v39.ts",
+  "server/db.ts",
 ] as const;
 
 function required(name: string): string {
@@ -92,6 +105,11 @@ async function main(): Promise<void> {
   const expectedAuthSha = required("--auth-sha").toLowerCase();
   const expectedHead = required("--expected-head").toLowerCase();
   const outPath = path.resolve(required("--out"));
+  const expectedIcaoRaw = optional("--expected-icao", "").trim().toUpperCase();
+  const expectedIcao = expectedIcaoRaw || null;
+  if (expectedIcao && !/^[A-Z0-9]{4}$/.test(expectedIcao)) {
+    throw new Error("BLOCKED:EXPECTED_ICAO_INVALID");
+  }
 
   if (!/^[a-f0-9]{64}$/.test(runtimeSha)) throw new Error("BLOCKED:RUNTIME_SHA_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("BLOCKED:AUTH_SHA_INVALID");
@@ -109,6 +127,33 @@ async function main(): Promise<void> {
     smokeRuntimeFileSha256: smokeRuntimeSha,
     preprobePath,
   });
+
+  let compact6: ReturnType<typeof loadPhase2gCompact6AmendmentV39> | null = null;
+  if (binding.runtime.stage1AmendmentSha256) {
+    try {
+      compact6 = loadPhase2gCompact6AmendmentV39({
+        expectedSha256: binding.runtime.stage1AmendmentSha256,
+        sourcePreprobeFileSha256: binding.smoke.preprobe.fileSha256,
+        preprobe: binding.smoke.preprobe.artifact,
+        path: path.resolve(PHASE2G_COMPACT6_ARTIFACT_PATH),
+      });
+    } catch (error) {
+      blockers.push(`compact6_amendment_invalid:${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  const migrationCheck = await pool.query(
+    `SELECT
+       to_regclass('clean.adb_probe_reconciliation_evidence') IS NOT NULL AS evidence_table,
+       EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_schema='clean'
+            AND table_name='prepaid_probe_session_runtime'
+            AND column_name='callback_requests_seen'
+       ) AS callback_counter`,
+  );
+  if (migrationCheck.rows[0]?.evidence_table !== true) blockers.push("phase2g_reconciliation_evidence_table_missing");
+  if (migrationCheck.rows[0]?.callback_counter !== true) blockers.push("phase2g_callback_counter_migration_missing");
 
   const auth = readAuth(authPath);
   if (auth.sha256 !== expectedAuthSha) blockers.push(`auth_sha_mismatch:${auth.sha256}`);
@@ -153,6 +198,46 @@ async function main(): Promise<void> {
   const activeProbe = await pool.query(`SELECT count(*)::int AS n FROM clean.adb_anchor_probe WHERE status='probing'`);
   const activeProbes = Number(activeProbe.rows[0]?.n ?? -1);
   if (activeProbes !== 0) blockers.push(`active_probes=${activeProbes}`);
+
+  let nextCandidate: string | null = null;
+  if (compact6) {
+    const stage1Rows = await pool.query(
+      `SELECT probe_id,icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
+              tail_chain_links_per_credit,stability,confirmed_unique_lower,
+              confirmed_plus_ambiguous_upper,duration_censored,stop_reason,
+              reconciliation_status,recorded_at
+         FROM clean.adb_anchor_probe
+        WHERE stage=1 AND preprobe_artifact_sha256=$1
+        ORDER BY recorded_at ASC,probe_id ASC`,
+      [binding.smoke.preprobe.fileSha256],
+    );
+    const evidence: Stage1AttemptEvidence[] = stage1Rows.rows.map((row: any) => ({
+      probeId: Number(row.probe_id),
+      icao: String(row.icao).toUpperCase(),
+      status: String(row.status),
+      rowsPerHour: row.rows_per_hour == null ? null : Number(row.rows_per_hour),
+      creditsSpent: row.credits_spent == null ? null : Number(row.credits_spent),
+      uniqueFlightsPerCredit: row.unique_flights_per_credit == null ? null : Number(row.unique_flights_per_credit),
+      tailChainLinksPerCredit: row.tail_chain_links_per_credit == null ? null : Number(row.tail_chain_links_per_credit),
+      stability: row.stability == null ? null : Number(row.stability),
+      confirmedUniqueLower: row.confirmed_unique_lower == null ? null : Number(row.confirmed_unique_lower),
+      confirmedPlusAmbiguousUpper: row.confirmed_plus_ambiguous_upper == null ? null : Number(row.confirmed_plus_ambiguous_upper),
+      durationCensored: row.duration_censored === true,
+      stopReason: row.stop_reason == null ? null : String(row.stop_reason),
+      reconciliationStatus: row.reconciliation_status == null ? null : String(row.reconciliation_status),
+      recordedAtUtc: new Date(row.recorded_at).toISOString(),
+    }));
+
+    nextCandidate = isP2g06PostfixWsssValidationEligibleV39(evidence)
+      ? "WSSS"
+      : chooseNextPrimaryStage1TargetV39(compact6.effectiveShortlist, evidence);
+
+    if (expectedIcao && nextCandidate !== expectedIcao) {
+      blockers.push(`next_candidate_mismatch:expected=${expectedIcao}:actual=${nextCandidate ?? "<none>"}`);
+    }
+  } else if (expectedIcao) {
+    blockers.push("expected_icao_requires_stage1_amendment");
+  }
 
   const sameDayRows = await pool.query(
     `SELECT probe_id,icao,status FROM clean.adb_anchor_probe WHERE probe_budget_day_id=$1 ORDER BY recorded_at ASC`,
@@ -301,6 +386,10 @@ async function main(): Promise<void> {
       probe_budget_day_id: binding.runtime.probeBudgetDayId,
       stage1_reservation_credits: binding.runtime.stage1ReservationCredits,
       unsettled_burst_margin_credits: binding.runtime.unsettledBurstMarginCredits,
+      stage1_amendment_sha256: binding.runtime.stage1AmendmentSha256,
+      compact6_validated: compact6 !== null,
+      next_candidate: nextCandidate,
+      expected_icao: expectedIcao,
     },
     provider: {
       credits_remaining: balance.creditsRemaining,
