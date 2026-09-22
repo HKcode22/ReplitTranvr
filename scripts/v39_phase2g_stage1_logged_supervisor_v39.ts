@@ -38,6 +38,9 @@ async function callbackHealthy(base: string, expectedHead: string): Promise<bool
     const json: any = await response.json().catch(() => null);
     const ownerMode = String(json?.runtime_owner_mode ?? "");
     const ownerContract =
+      (ownerMode === "replit-published-deployment" &&
+        json?.published_deployment === true &&
+        json?.runtime_durability_class === "reserved-vm") ||
       (ownerMode === "replit-managed-project" &&
         json?.managed_replit_workflow === true &&
         json?.detached_workspace_server === false) ||
@@ -72,7 +75,10 @@ async function main(): Promise<void> {
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("SUPERVISOR_REFUSED:AUTH_SHA_INVALID");
   if (!/^[a-f0-9]{64}$/.test(runtimeSha)) throw new Error("SUPERVISOR_REFUSED:RUNTIME_SHA_INVALID");
   if (!/^[a-f0-9]{40}$/.test(expectedHead)) throw new Error("SUPERVISOR_REFUSED:EXPECTED_HEAD_INVALID");
-  if (!/^https:\/\/[^/]+\.replit\.dev$/i.test(callbackBase)) throw new Error("SUPERVISOR_REFUSED:CALLBACK_BASE_NOT_REPLIT_DEV");
+  if (!/^https:\/\/[^/]+$/i.test(callbackBase)) throw new Error("SUPERVISOR_REFUSED:CALLBACK_BASE_NOT_HTTPS_ORIGIN");
+  if (/\.replit\.dev$/i.test(new URL(callbackBase).hostname)) {
+    throw new Error("SUPERVISOR_REFUSED:INTERACTIVE_DEV_CALLBACK_BASE_NOT_ALLOWED");
+  }
   if (!/^[A-Z0-9]{4}$/.test(expectedIcao)) throw new Error("SUPERVISOR_REFUSED:EXPECTED_ICAO_INVALID");
   if (!fs.existsSync(authFile)) throw new Error("SUPERVISOR_REFUSED:AUTH_FILE_MISSING");
   const actualAuthSha = sha256File(authFile);
