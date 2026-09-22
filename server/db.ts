@@ -65,6 +65,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0055_prepaid_probe_unlogged_runtime.sql",
   "0056_prepaid_probe_safe_evidence.sql",
   "0057_phase2d_tier_source_contract.sql",
+  "0058_phase2g_reconciliation_evidence.sql",
 ];
 
 function explicitAutoCollectEnabled(): boolean {
