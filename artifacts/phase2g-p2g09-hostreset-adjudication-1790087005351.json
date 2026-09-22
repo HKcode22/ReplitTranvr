@@ -1,0 +1,22 @@
+{
+  "schema": "v39.phase2g-p2g09-hostreset-adjudication.v1",
+  "mode": "APPLY",
+  "status_before": "failed",
+  "probe_id": 7,
+  "icao": "WSSS",
+  "probe_budget_day_id": "P2G-S1-20260922-08",
+  "duration_censored": true,
+  "stop_reason": "supervisor_child_exit_recovered",
+  "reconciliation_status_preserved": "UNRESOLVED",
+  "runtime_cleanup_verified_at_utc": "2026-09-22T13:02:52.174Z",
+  "incident_id": 23,
+  "active_billable_subscriptions": 0,
+  "provider_mutation": false,
+  "failed_scientific_evidence_preserved": true,
+  "status": "P2G09_HOSTRESET_ADJUDICATED_AND_BUDGET_CLOSED",
+  "applied_at_utc": "2026-09-22T14:23:25.350Z",
+  "budget_state": "CLOSED",
+  "budget_closed_at_utc": "2026-09-22T14:23:24.957Z",
+  "open_incidents_after": 0,
+  "next": "Do not reuse P2G09 AUTH or budget. Implement runtime hardening before any fresh paid Stage-1 authorization."
+}
