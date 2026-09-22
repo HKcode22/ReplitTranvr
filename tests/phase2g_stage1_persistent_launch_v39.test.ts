@@ -12,6 +12,7 @@ const sleepCheck = readFileSync(join(root, "scripts", "v39_phase2g_stage1_sleep_
 const probeExecution = readFileSync(join(root, "server", "lib", "disruption", "probeExecutionPrepaid_v39.ts"), "utf8");
 const prepaidWindow = readFileSync(join(root, "server", "lib", "disruption", "prepaidProbeWindow_v39.ts"), "utf8");
 const overnightGuard = readFileSync(join(root, "scripts", "v39_phase2g_overnight_wsss_guard_v39.sh"), "utf8");
+const runtimeHealth = readFileSync(join(root, "server", "lib", "disruption", "workspaceRuntimeHealth_v39.ts"), "utf8");
 
 describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   it("keeps the paid preflight read-only and emits an immutable exact receipt", () => {
@@ -51,7 +52,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).toContain("currentHead !== expectedHead");
     expect(preflight).toContain("probe_budget_day_already_has_probe_rows");
     expect(preflight).toContain("active_billable_subscriptions=");
-    expect(preflight).toContain("workspace_callback_source_not_compatible");
+    expect(preflight).toContain("published_callback_source_not_compatible");
     expect(preflight).toContain("provider_balance_below_protected_floor");
   });
 
@@ -81,19 +82,22 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(launcher).toContain("REFUSED:PREFLIGHT_RECEIPT_");
   });
 
-  it("requires an explicit truthful workspace owner mode across preflight, launch and watchdog", () => {
+  it("requires an explicit truthful published Reserved VM runtime contract", () => {
     expect(preflight).toContain("runtime_owner_mode");
-    expect(preflight).toContain("replit-managed-project");
-    expect(preflight).toContain("phase2g-detached-npm-run-dev");
-    expect(launcher).toContain("runtime_owner_mode");
-    expect(launcher).toContain("phase2g-detached-npm-run-dev");
-    expect(supervisor).toContain("runtime_owner_mode");
-    expect(supervisor).toContain("phase2g-detached-npm-run-dev");
+    expect(preflight).toContain("replit-published-deployment");
+    expect(preflight).toContain('runtime_durability_class === "reserved-vm"');
+    expect(launcher).toContain("replit-published-deployment");
+    expect(supervisor).toContain("replit-published-deployment");
+    expect(supervisor).toContain('runtime_durability_class === "reserved-vm"');
+    expect(runtimeHealth).toContain("replit-published-deployment");
+    expect(runtimeHealth).toContain("V39_RUNTIME_DURABILITY_CLASS");
   });
 
-  it("uses only the workspace callback, process-scoped bucket correction, and no deployment", () => {
-    expect(launcher).toContain("*.replit.dev");
-    expect(launcher).toContain("REFUSED:PRODUCTION_DOMAIN_NOT_ALLOWED");
+  it("requires a stable non-development callback and refuses interactive workspace ownership", () => {
+    expect(launcher).toContain("CALLBACK_BASE");
+    expect(launcher).toContain("REFUSED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED_FOR_PAID_STAGE1");
+    expect(launcher).toContain("REFUSED:INTERACTIVE_REPLIT_WORKSPACE_CANNOT_OWN_PAID_STAGE1");
+    expect(preflight).toContain("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED");
     expect(launcher).toContain('eplit-objstore-*) CORRECT_BUCKET="r${CURRENT_BUCKET}"');
     expect(launcher).toContain('V39_PROVIDER_BLOB_BUCKET_ID="$CORRECT_BUCKET"');
     expect(launcher).toContain('V39_PUBLIC_WEBHOOK_BASE_URL="$BASE"');
@@ -234,7 +238,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(sleepCheck).toContain("provider_subscription_not_bound");
     expect(sleepCheck).toContain("exact_owned_credit_subscription_not_active");
     expect(sleepCheck).toContain("foreign_active_billable=");
-    expect(sleepCheck).toContain("workspace_callback_not_reachable");
+    expect(sleepCheck).toContain("published_reserved_vm_callback_not_reachable");
     expect(sleepCheck).toContain("host_failure_boundary");
     expect(sleepCheck).not.toContain("createSubscription(");
     expect(sleepCheck).not.toContain("deleteSubscription(");
