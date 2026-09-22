@@ -28,7 +28,7 @@ function atomicWriteJson(file: string, value: unknown): void {
   fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", "utf8");
   fs.renameSync(tmp, file);
 }
-async function callbackHealthy(base: string): Promise<boolean> {
+async function callbackHealthy(base: string, expectedHead: string): Promise<boolean> {
   try {
     const response = await fetch(`${base}/__v39/workspace-runtime`, {
       headers: { accept: "application/json" },
@@ -36,7 +36,12 @@ async function callbackHealthy(base: string): Promise<boolean> {
     });
     if (response.status !== 200) return false;
     const json: any = await response.json().catch(() => null);
-    return json?.status === "PASS";
+    return json?.schema === "v39.phase2f-workspace-runtime.v1" &&
+      json?.status === "PASS" &&
+      json?.prepaid_route_registered === true &&
+      json?.provider_mutation === false &&
+      json?.managed_replit_workflow === true &&
+      String(json?.git_head ?? "").toLowerCase() === expectedHead;
   } catch {
     return false;
   }
@@ -53,12 +58,14 @@ async function main(): Promise<void> {
   const logPath = path.resolve(required("--log"));
   const statusPath = path.resolve(required("--status"));
   const heartbeatPath = path.resolve(required("--heartbeat"));
+  const expectedIcao = required("--expected-icao").toUpperCase();
 
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("SUPERVISOR_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("SUPERVISOR_REFUSED:AUTH_SHA_INVALID");
   if (!/^[a-f0-9]{64}$/.test(runtimeSha)) throw new Error("SUPERVISOR_REFUSED:RUNTIME_SHA_INVALID");
   if (!/^[a-f0-9]{40}$/.test(expectedHead)) throw new Error("SUPERVISOR_REFUSED:EXPECTED_HEAD_INVALID");
   if (!/^https:\/\/[^/]+\.replit\.dev$/i.test(callbackBase)) throw new Error("SUPERVISOR_REFUSED:CALLBACK_BASE_NOT_REPLIT_DEV");
+  if (!/^[A-Z0-9]{4}$/.test(expectedIcao)) throw new Error("SUPERVISOR_REFUSED:EXPECTED_ICAO_INVALID");
   if (!fs.existsSync(authFile)) throw new Error("SUPERVISOR_REFUSED:AUTH_FILE_MISSING");
   const actualAuthSha = sha256File(authFile);
   if (actualAuthSha !== expectedAuthSha) throw new Error(`SUPERVISOR_REFUSED:AUTH_SHA_MISMATCH:${actualAuthSha}`);
@@ -78,7 +85,7 @@ async function main(): Promise<void> {
   }
   const head = gitHead();
   if (head !== expectedHead) throw new Error(`SUPERVISOR_REFUSED:GIT_HEAD_MISMATCH:${head}`);
-  if (!(await callbackHealthy(callbackBase))) throw new Error("SUPERVISOR_REFUSED:CALLBACK_NOT_HEALTHY_AT_START");
+  if (!(await callbackHealthy(callbackBase, expectedHead))) throw new Error("SUPERVISOR_REFUSED:CALLBACK_NOT_HEALTHY_AT_START");
 
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logFd = fs.openSync(logPath, "a");
@@ -93,6 +100,7 @@ async function main(): Promise<void> {
     auth_sha256: expectedAuthSha,
     runtime_sha256: runtimeSha,
     probe_budget_day_id: budgetDayId,
+    expected_icao: expectedIcao,
     callback_base: callbackBase,
     log_path: path.relative(process.cwd(), logPath),
     heartbeat_path: path.relative(process.cwd(), heartbeatPath),
@@ -106,7 +114,7 @@ async function main(): Promise<void> {
   // signal the real paid owner before fail-closed recovery.
   const child = spawn(
     process.execPath,
-    ["--import", "tsx", "scripts/v39_probe_stage1_owner_v39.ts", "--auth", authId, "--auth-file", authFile],
+    ["--import", "tsx", "scripts/v39_probe_stage1_owner_v39.ts", "--auth", authId, "--auth-file", authFile, "--icao", expectedIcao],
     {
       cwd: process.cwd(),
       env: { ...process.env },
@@ -158,7 +166,7 @@ async function main(): Promise<void> {
     if (callbackCheckInFlight || child.exitCode !== null || child.killed) return;
     callbackCheckInFlight = true;
     try {
-      const healthy = await callbackHealthy(callbackBase);
+      const healthy = await callbackHealthy(callbackBase, expectedHead);
       callbackFailureCount = healthy ? 0 : callbackFailureCount + 1;
       if (!healthy) {
         fs.writeSync(logFd, `${JSON.stringify({
@@ -259,6 +267,7 @@ async function main(): Promise<void> {
     auth_sha256: expectedAuthSha,
     runtime_sha256: runtimeSha,
     probe_budget_day_id: budgetDayId,
+    expected_icao: expectedIcao,
     callback_base: callbackBase,
     log_path: path.relative(process.cwd(), logPath),
     heartbeat_path: path.relative(process.cwd(), heartbeatPath),
