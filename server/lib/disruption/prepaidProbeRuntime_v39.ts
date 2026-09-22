@@ -401,16 +401,31 @@ export async function persistPrepaidProbeWebhookV39(input: {
        evidence.notificationGeneratedUtc, evidence.attemptSeqNo, evidence.attemptUtc,
        evidence.costCredits, flights.length],
     );
-    for (let itemIndex = 0; itemIndex < flights.length; itemIndex += 1) {
-      const flight = flights[itemIndex];
-      const itemRaw = canonical(flight);
+    if (flights.length > 0) {
+      const values: unknown[] = [];
+      const tuples: string[] = [];
+      for (let itemIndex = 0; itemIndex < flights.length; itemIndex += 1) {
+        const flight = flights[itemIndex];
+        const itemRaw = canonical(flight);
+        const offset = values.length;
+        values.push(
+          sessionId,
+          deliveryId,
+          itemIndex,
+          sha256(itemRaw),
+          stringOrNull(flight?.number),
+          stringOrNull(flight?.aircraft?.reg),
+          normalizeCodeshareStatus(flight?.codeshareStatus),
+          runtimeFlightKey(flight),
+          receivedAt,
+        );
+        tuples.push(`(${offset + 1},${offset + 2},${offset + 3},${offset + 4},${offset + 5},${offset + 6},${offset + 7},${offset + 8},${offset + 9})`);
+      }
       await client.query(
         `INSERT INTO clean.prepaid_probe_item_runtime
          (session_id,delivery_id,item_index,raw_item_sha256,flight_number,aircraft_reg,codeshare_status,runtime_flight_key,received_at_utc)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [sessionId, deliveryId, itemIndex, sha256(itemRaw), stringOrNull(flight?.number),
-         stringOrNull(flight?.aircraft?.reg), normalizeCodeshareStatus(flight?.codeshareStatus),
-         runtimeFlightKey(flight), receivedAt],
+         VALUES ${tuples.join(",")}`,
+        values,
       );
     }
     if (subId) {
