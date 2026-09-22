@@ -45,11 +45,17 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).not.toContain("path: path.resolve(PHASE2G_COMPACT6_ARTIFACT_PATH)");
   });
 
-  it("requires a three-read provider balance stability canary for the final P2G08 recovery", () => {
+  it("requires a three-read provider balance stability canary for the P2G08 control-plane recovery", () => {
     expect(preflight).toContain("p2g08_balance502_recovery_rerun");
     expect(preflight).toContain("provider_balance_stability_canary_failed_at_read");
     expect(preflight).toContain("provider_balance_stability_canary_not_stable");
     expect(preflight).toContain("balance_stability_canary");
+  });
+
+  it("recognizes only the prospective P2G09 host-reset recovery amendment", () => {
+    expect(preflight).toContain("p2g09_hostreset_recovery_rerun");
+    expect(preflight).toContain("isP2g09HostResetRecoveryEligibleV39");
+    expect(preflight).toContain("phase2g_settling_status_migration_missing");
   });
 
   it("re-binds the exact approved AUTH, runtime, head, budget day, account and callback before launch", () => {
@@ -139,7 +145,8 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(githubOwner).toContain('owner_executor !== "github-actions"');
     expect(githubOwner).toContain('--owner-executor github-actions');
     expect(githubOwner).toContain('V39_DEFER_PROVIDER_CONTENT_CLEANUP="1"');
-    expect(githubOwner).toContain('V39_PROVIDER_BLOB_BUCKET_ID="$PROVIDER_BLOB_BUCKET_ID"');
+    expect(githubOwner).not.toContain("PROVIDER_BLOB_BUCKET_ID");
+    expect(githubOwner).not.toContain("V39_REMOTE_BLOB_CLEANUP_SECRET");
     expect(githubOwner).not.toContain("nohup");
     expect(githubOwner).not.toContain("setsid");
   });
@@ -154,7 +161,9 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(githubWorkflow).toContain("needs.gate.outputs.preflight_sha");
     expect(githubWorkflow).toContain("callback_verification_file");
     expect(githubWorkflow).toContain("callback_verification_sha");
-    expect(githubWorkflow).toContain("--provider-blob-bucket-id");
+    expect(githubWorkflow).not.toContain("--provider-blob-bucket-id");
+    expect(githubWorkflow).not.toContain("V39_PHASE2G_CONTROL_SECRET");
+    expect(githubWorkflow).toContain("V39_DEFER_PROVIDER_CONTENT_CLEANUP");
     expect(githubWorkflow).toContain("timeout-minutes: 175");
     expect(githubWorkflow).toContain("cancel-in-progress: false");
     const workflowDispatchInputs = githubWorkflow.slice(
@@ -173,6 +182,8 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(githubWatchdog).toContain("v39_phase2g_stage1_recover_after_exit_v39.ts");
     expect(githubWatchdog).not.toContain("createSubscription(");
     expect(githubWatchdog).not.toContain("refillBalance(");
+    expect(githubWatchdog).toContain("PROVIDER_SAFE_AWAITING_REPLIT_CLEANUP");
+    expect(githubWatchdog).toContain("OWNER_FAILED_PROVIDER_SAFE_CLEANUP_PENDING");
   });
 
   it("defers provider-blob cleanup until after provider-safe settlement and finalizes from Replit", () => {
