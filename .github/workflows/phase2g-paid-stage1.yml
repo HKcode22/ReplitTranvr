@@ -47,14 +47,6 @@ on:
         description: 'Smoke runtime SHA-256'
         required: true
         type: string
-      preflight_file:
-        description: 'Fresh committed preflight receipt path'
-        required: true
-        type: string
-      preflight_sha:
-        description: 'Preflight receipt SHA-256'
-        required: true
-        type: string
       expected_head:
         description: 'Exact source commit authorized for this run'
         required: true
@@ -86,8 +78,84 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  owner:
+  gate:
     if: ${{ inputs.confirm == 'RUN_PAID_STAGE1_ONCE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: phase2g-paid
+    outputs:
+      preflight_b64: ${{ steps.preflight.outputs.preflight_b64 }}
+      preflight_sha: ${{ steps.preflight.outputs.preflight_sha }}
+    env:
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+    steps:
+      - name: Checkout exact authorized source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_head }}
+          fetch-depth: 1
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Refuse missing gate secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Missing required Phase2G gate secret: $key"
+              exit 2
+            fi
+          done
+
+      - name: Generate fresh read-only paid preflight
+        id: preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_SHA,,}" == "${{ inputs.expected_head }}" ]] || {
+            echo "::error::GITHUB_SHA does not match expected_head"
+            exit 2
+          }
+
+          OUT="${RUNNER_TEMP}/phase2g-stage1-paid-preflight.json"
+
+          npx tsx scripts/v39_phase2g_stage1_paid_preflight_v39.ts             --preprobe "${{ inputs.preprobe_file }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --expected-head "${{ inputs.expected_head }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --owner-executor github-actions             --out "$OUT"
+
+          SHA="$(sha256sum "$OUT" | awk '{print $1}')"
+          B64="$(base64 -w0 "$OUT")"
+          echo "preflight_sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "preflight_b64=$B64" >> "$GITHUB_OUTPUT"
+
+          node --input-type=module - "$OUT" <<'NODE'
+          import fs from "node:fs";
+          const p = process.argv[2];
+          const j = JSON.parse(fs.readFileSync(p, "utf8"));
+          if (j.status !== "PASS_READY_FOR_PAID_STAGE1") {
+            console.error(JSON.stringify(j, null, 2));
+            process.exit(2);
+          }
+          console.log(JSON.stringify({
+            status: j.status,
+            owner_executor: j.owner_executor,
+            callback: j.callback,
+            provider: j.provider,
+            database: j.database,
+            blockers: j.blockers,
+          }, null, 2));
+          NODE
+
+  owner:
+    needs: gate
+    if: ${{ inputs.confirm == 'RUN_PAID_STAGE1_ONCE' && needs.gate.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 175
     environment: phase2g-paid
@@ -114,13 +182,25 @@ jobs:
       - name: Install exact dependencies
         run: npm ci
 
-      - name: Refuse missing secrets
+      - name: Reconstruct exact gate receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/phase2g-stage1-paid-preflight.json"
+          printf '%s' '${{ needs.gate.outputs.preflight_b64 }}' | base64 -d > "$OUT"
+          [[ "$(sha256sum "$OUT" | awk '{print $1}')" == "${{ needs.gate.outputs.preflight_sha }}" ]] || {
+            echo "::error::Preflight handoff SHA mismatch"
+            exit 2
+          }
+          echo "PHASE2G_PREFLIGHT=$OUT" >> "$GITHUB_ENV"
+
+      - name: Refuse missing owner secrets
         shell: bash
         run: |
           set -euo pipefail
           for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET V39_REMOTE_BLOB_CLEANUP_SECRET; do
             if [[ -z "${!key:-}" ]]; then
-              echo "::error::Missing required Phase2G environment secret: $key"
+              echo "::error::Missing required Phase2G owner secret: $key"
               exit 2
             fi
           done
@@ -129,10 +209,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/v39_phase2g_github_actions_owner_v39.sh             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --preprobe "${{ inputs.preprobe_file }}"             --preprobe-sha "${{ inputs.preprobe_sha }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --preflight "${{ inputs.preflight_file }}"             --preflight-sha "${{ inputs.preflight_sha }}"             --expected-head "${{ inputs.expected_head }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --provider-blob-bucket-id "${{ inputs.provider_blob_bucket_id }}"
+          bash scripts/v39_phase2g_github_actions_owner_v39.sh             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --preprobe "${{ inputs.preprobe_file }}"             --preprobe-sha "${{ inputs.preprobe_sha }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --preflight "$PHASE2G_PREFLIGHT"             --preflight-sha "${{ needs.gate.outputs.preflight_sha }}"             --expected-head "${{ inputs.expected_head }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --provider-blob-bucket-id "${{ inputs.provider_blob_bucket_id }}"
 
   safety-watchdog:
-    if: ${{ inputs.confirm == 'RUN_PAID_STAGE1_ONCE' }}
+    needs: gate
+    if: ${{ inputs.confirm == 'RUN_PAID_STAGE1_ONCE' && needs.gate.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 175
     environment: phase2g-paid
@@ -158,6 +239,18 @@ jobs:
 
       - name: Install exact dependencies
         run: npm ci
+
+      - name: Reconstruct exact gate receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/phase2g-stage1-paid-preflight.json"
+          printf '%s' '${{ needs.gate.outputs.preflight_b64 }}' | base64 -d > "$OUT"
+          [[ "$(sha256sum "$OUT" | awk '{print $1}')" == "${{ needs.gate.outputs.preflight_sha }}" ]] || {
+            echo "::error::Preflight handoff SHA mismatch"
+            exit 2
+          }
+          echo "PHASE2G_PREFLIGHT=$OUT" >> "$GITHUB_ENV"
 
       - name: Independent paid-safety watchdog
         shell: bash
@@ -167,4 +260,4 @@ jobs:
           V39_PUBLIC_WEBHOOK_BASE_URL: ${{ inputs.callback_base }}
         run: |
           set -euo pipefail
-          npx tsx scripts/v39_phase2g_github_actions_watchdog_v39.ts             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-head "${{ inputs.expected_head }}"             --preflight "${{ inputs.preflight_file }}"             --preflight-sha "${{ inputs.preflight_sha }}"             --callback-base "${{ inputs.callback_base }}"
+          npx tsx scripts/v39_phase2g_github_actions_watchdog_v39.ts             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-head "${{ inputs.expected_head }}"             --preflight "$PHASE2G_PREFLIGHT"             --preflight-sha "${{ needs.gate.outputs.preflight_sha }}"             --callback-base "${{ inputs.callback_base }}"
