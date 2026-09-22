@@ -367,11 +367,13 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     };
   }
 
-  if (liveStopReason === "balance_read_failed_after_retries") {
+  const durationCensored = windowEnd.getTime() < deadline;
+  if (durationCensored) {
+    const stopReason = reconciliationStopReason ?? "duration_censored_before_target";
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     const cleanup = await cleanupPrepaidProbeSessionV39(
       session.sessionId,
-      `${input.deletionRunId}:balance-read-failed-after-retries`,
+      `${input.deletionRunId}:duration-censored`,
     ).catch(() => null);
 
     return {
@@ -380,7 +382,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       windowStart,
       windowEnd,
       durationCensored: true,
-      stopReason: "balance_read_failed_after_retries",
+      stopReason,
       reconciliationStatus: "MATCH",
       externalCredits,
       internalSendCredits: metrics.internalSendCredits,
