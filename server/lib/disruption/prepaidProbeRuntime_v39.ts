@@ -5,7 +5,10 @@ import {
   persistProviderBlobBeforeAckV39,
   type ProviderBlobRefV39,
 } from "./providerBlobStore_v39";
-import { createRequiredProviderBlobStoreV39 } from "./replitProviderBlobStore_v39";
+import {
+  createRequiredProviderBlobStoreV39,
+  normalizeProviderBlobBucketIdV39,
+} from "./replitProviderBlobStore_v39";
 import { CODESHARE_CODE } from "./flightNotificationExtractor_v3";
 
 export type PrepaidProbeOwnerKindV39 = "phase2_safety_smoke" | "anchor_probe";
@@ -119,7 +122,24 @@ export function assertPrepaidProbePersistenceConfigV39(
   env: NodeJS.ProcessEnv = process.env,
 ): number {
   const retentionHours = resolvePrepaidRawRetentionHoursV39(env);
-  createRequiredProviderBlobStoreV39(env);
+  const remoteBase = String(env.V39_REMOTE_BLOB_CLEANUP_BASE ?? "").trim().replace(/\/+$/, "");
+  if (remoteBase) {
+    if (!/^https:\/\/[^/]+$/i.test(remoteBase)) {
+      throw new Error("V39_REMOTE_BLOB_CLEANUP_BASE_MUST_BE_HTTPS_ORIGIN");
+    }
+    if (/\.replit\.dev$/i.test(new URL(remoteBase).hostname)) {
+      throw new Error("V39_REMOTE_BLOB_CLEANUP_BASE_CANNOT_BE_REPLIT_DEV");
+    }
+    if (!String(env.V39_REMOTE_BLOB_CLEANUP_SECRET ?? "").trim()) {
+      throw new Error("V39_REMOTE_BLOB_CLEANUP_SECRET_REQUIRED");
+    }
+    if (String(env.V39_PROVIDER_BLOB_MODE ?? "").trim().toLowerCase() !== "required") {
+      throw new Error("V39_PROVIDER_BLOB_MODE_NOT_REQUIRED");
+    }
+    normalizeProviderBlobBucketIdV39(String(env.V39_PROVIDER_BLOB_BUCKET_ID ?? ""));
+  } else {
+    createRequiredProviderBlobStoreV39(env);
+  }
   return retentionHours;
 }
 
@@ -553,7 +573,16 @@ function blobRefFromRow(row: any): ProviderBlobRefV39 {
  * Purpose-completion cleanup. Raw provider blobs are deleted and verified
  * absent first; only then are transient UNLOGGED normalized rows removed.
  */
-export async function cleanupPrepaidProbeSessionV39(sessionId: string, deletionRunId: string): Promise<{ deletedBlobs: number; deletedRuntimeRows: number; verifiedAtUtc: string }> {
+export interface PrepaidProbeCleanupResultV39 {
+  deletedBlobs: number;
+  deletedRuntimeRows: number;
+  verifiedAtUtc: string;
+}
+
+export async function cleanupPrepaidProbeSessionLocalV39(
+  sessionId: string,
+  deletionRunId: string,
+): Promise<PrepaidProbeCleanupResultV39> {
   const id = assertSessionId(sessionId);
   if (!String(deletionRunId ?? "").trim()) throw new Error("PREPAID_PROBE_DELETION_RUN_ID_REQUIRED");
   const store = createRequiredProviderBlobStoreV39();
@@ -609,4 +638,51 @@ export async function cleanupPrepaidProbeSessionV39(sessionId: string, deletionR
     throw new Error(`PREPAID_PROBE_CLEANUP_VERIFICATION_FAILED:${JSON.stringify(v)}`);
   }
   return { deletedBlobs, deletedRuntimeRows, verifiedAtUtc: new Date().toISOString() };
+}
+
+export async function cleanupPrepaidProbeSessionV39(
+  sessionId: string,
+  deletionRunId: string,
+): Promise<PrepaidProbeCleanupResultV39> {
+  const id = assertSessionId(sessionId);
+  if (!String(deletionRunId ?? "").trim()) throw new Error("PREPAID_PROBE_DELETION_RUN_ID_REQUIRED");
+
+  const base = String(process.env.V39_REMOTE_BLOB_CLEANUP_BASE ?? "").trim().replace(/\/+$/, "");
+  if (!base) return cleanupPrepaidProbeSessionLocalV39(id, deletionRunId);
+
+  if (!/^https:\/\/[^/]+$/i.test(base)) {
+    throw new Error("V39_REMOTE_BLOB_CLEANUP_BASE_MUST_BE_HTTPS_ORIGIN");
+  }
+  if (/\.replit\.dev$/i.test(new URL(base).hostname)) {
+    throw new Error("V39_REMOTE_BLOB_CLEANUP_BASE_CANNOT_BE_REPLIT_DEV");
+  }
+  const secret = String(process.env.V39_REMOTE_BLOB_CLEANUP_SECRET ?? "").trim();
+  if (!secret) throw new Error("V39_REMOTE_BLOB_CLEANUP_SECRET_REQUIRED");
+
+  const response = await fetch(`${base}/__v39/phase2g/runtime-cleanup`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-v39-phase2g-control-secret": secret,
+    },
+    body: JSON.stringify({ sessionId: id, deletionRunId }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  const text = await response.text().catch(() => "");
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch {}
+  if (response.status !== 200 ||
+      json?.schema !== "v39.phase2g-runtime-cleanup.v1" ||
+      json?.status !== "PASS" ||
+      String(json?.session_id ?? "").toLowerCase() !== id ||
+      !Number.isInteger(Number(json?.deleted_blobs)) ||
+      !Number.isInteger(Number(json?.deleted_runtime_rows)) ||
+      !Number.isFinite(Date.parse(String(json?.verified_at_utc ?? "")))) {
+    throw new Error(`PREPAID_PROBE_REMOTE_CLEANUP_FAILED:http=${response.status}`);
+  }
+  return {
+    deletedBlobs: Number(json.deleted_blobs),
+    deletedRuntimeRows: Number(json.deleted_runtime_rows),
+    verifiedAtUtc: new Date(String(json.verified_at_utc)).toISOString(),
+  };
 }
