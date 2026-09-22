@@ -320,6 +320,35 @@ async function main(): Promise<void> {
         throw new Error("RECOVERY_REFUSED:NO_RUNTIME_SESSION_ACTIVE_BILLABLE_PRESENT");
       }
     }
+
+    // When PostgreSQL has reset the UNLOGGED runtime tables, the durable probe
+    // row still owns the random session UUID. After provider deletion/absence
+    // is verified, mark the probe failed first and ask the published Replit
+    // cleanup bridge to tombstone any remaining blob refs for that exact UUID.
+    if (durableSessionId && providerDeleteVerified) {
+      await markProbeFailed({
+        probeId,
+        sessionId: durableSessionId,
+        stopReason,
+        cleanupVerifiedAtUtc: null,
+      });
+      try {
+        const cleanup = await cleanupPrepaidProbeSessionV39(
+          durableSessionId,
+          `phase2g-runtime-reset-recovery-${probeId}`,
+        );
+        cleanupVerifiedAtUtc = cleanup.verifiedAtUtc;
+      } catch (error) {
+        await openRecoveryIncident({
+          probeId,
+          budgetDayId,
+          reason: "runtime_reset_blob_cleanup_failed",
+          providerDeleteVerified,
+          durableSessionId,
+        });
+        throw error;
+      }
+    }
   }
 
   await markProbeFailed({ probeId, sessionId, stopReason, cleanupVerifiedAtUtc });
