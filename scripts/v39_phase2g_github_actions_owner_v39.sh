@@ -26,7 +26,6 @@ EXPECTED_HEAD=""
 BUDGET_DAY=""
 EXPECTED_ICAO=""
 CALLBACK_BASE=""
-PROVIDER_BLOB_BUCKET_ID=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -46,12 +45,11 @@ while [[ $# -gt 0 ]]; do
     --probe-budget-day-id) BUDGET_DAY="${2:-}"; shift 2 ;;
     --expected-icao) EXPECTED_ICAO="${2:-}"; shift 2 ;;
     --callback-base) CALLBACK_BASE="${2:-}"; shift 2 ;;
-    --provider-blob-bucket-id) PROVIDER_BLOB_BUCKET_ID="${2:-}"; shift 2 ;;
     *) echo "REFUSED:UNKNOWN_ARGUMENT=$1"; exit 2 ;;
   esac
 done
 
-for pair in   "AUTH:$AUTH"   "AUTH_FILE:$AUTH_FILE"   "AUTH_SHA:$AUTH_SHA"   "RUNTIME_FILE:$RUNTIME_FILE"   "RUNTIME_SHA:$RUNTIME_SHA"   "PREPROBE:$PREPROBE"   "PREPROBE_SHA:$PREPROBE_SHA"   "SMOKE:$SMOKE"   "SMOKE_RUNTIME:$SMOKE_RUNTIME"   "SMOKE_RUNTIME_SHA:$SMOKE_RUNTIME_SHA"   "PREFLIGHT:$PREFLIGHT"   "PREFLIGHT_SHA:$PREFLIGHT_SHA"   "EXPECTED_HEAD:$EXPECTED_HEAD"   "BUDGET_DAY:$BUDGET_DAY"   "EXPECTED_ICAO:$EXPECTED_ICAO"   "CALLBACK_BASE:$CALLBACK_BASE"   "PROVIDER_BLOB_BUCKET_ID:$PROVIDER_BLOB_BUCKET_ID"; do
+for pair in   "AUTH:$AUTH"   "AUTH_FILE:$AUTH_FILE"   "AUTH_SHA:$AUTH_SHA"   "RUNTIME_FILE:$RUNTIME_FILE"   "RUNTIME_SHA:$RUNTIME_SHA"   "PREPROBE:$PREPROBE"   "PREPROBE_SHA:$PREPROBE_SHA"   "SMOKE:$SMOKE"   "SMOKE_RUNTIME:$SMOKE_RUNTIME"   "SMOKE_RUNTIME_SHA:$SMOKE_RUNTIME_SHA"   "PREFLIGHT:$PREFLIGHT"   "PREFLIGHT_SHA:$PREFLIGHT_SHA"   "EXPECTED_HEAD:$EXPECTED_HEAD"   "BUDGET_DAY:$BUDGET_DAY"   "EXPECTED_ICAO:$EXPECTED_ICAO"   "CALLBACK_BASE:$CALLBACK_BASE"; do
   name="${pair%%:*}"
   value="${pair#*:}"
   [[ -n "$value" ]] || { echo "REFUSED:MISSING_$name"; exit 2; }
@@ -97,7 +95,7 @@ const age = Date.now() - generated;
 if (!Number.isFinite(generated) || age < -30000 || age > 10 * 60_000) fail("STALE");
 NODE
 
-for required_secret in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET V39_REMOTE_BLOB_CLEANUP_SECRET; do
+for required_secret in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET; do
   [[ -n "${!required_secret:-}" ]] || {
     echo "REFUSED:MISSING_SECRET_ENV=$required_secret"
     exit 2
@@ -127,12 +125,15 @@ export ADB_PROBE_RUNTIME_ARTIFACT_SHA256="$RUNTIME_SHA"
 export ADB_PHASE2_SMOKE_ARTIFACT_PATH="$SMOKE"
 export ADB_PHASE2_SMOKE_RUNTIME_ARTIFACT_PATH="$SMOKE_RUNTIME"
 export ADB_PHASE2_SMOKE_RUNTIME_ARTIFACT_SHA256="$SMOKE_RUNTIME_SHA"
-export V39_PROVIDER_BLOB_BUCKET_ID="$PROVIDER_BLOB_BUCKET_ID"
-export V39_PROVIDER_BLOB_MODE="required"
 export V39_PUBLIC_WEBHOOK_BASE_URL="$BASE"
 export WEBHOOK_BASE_URL="$BASE"
-export V39_REMOTE_BLOB_CLEANUP_BASE="$BASE"
 export V39_OWNER_EXECUTOR="github-actions"
+export V39_DEFER_PROVIDER_CONTENT_CLEANUP="1"
+
+touch "$LOG"
+tail -n 0 -F "$LOG" &
+TAIL_PID=$!
+trap 'kill "$TAIL_PID" 2>/dev/null || true' EXIT
 
 set +e
 node --import tsx scripts/v39_phase2g_stage1_logged_supervisor_v39.ts   --auth "$AUTH"   --auth-file "$AUTH_FILE"   --auth-sha "$AUTH_SHA"   --runtime-sha "$RUNTIME_SHA"   --probe-budget-day-id "$BUDGET_DAY"   --expected-head "$EXPECTED_HEAD"   --callback-base "$BASE"   --log "$LOG"   --status "$STATUS"   --heartbeat "$HEARTBEAT"   --expected-icao "$EXPECTED_ICAO"   --owner-executor github-actions
