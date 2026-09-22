@@ -73,6 +73,9 @@ describe("Phase-2G free independent-owner architecture", () => {
     expect(routes).toContain("timingSafeEqual");
     expect(routes).toContain("runtime_session_id=$1::uuid");
     expect(routes).toContain("cleanupPrepaidProbeSessionLocalV39");
+    expect(routes).toContain("RUNTIME_CLEANUP_REFUSED_STATE");
+    expect(routes).toContain("RUNTIME_CLEANUP_ACTIVE_BILLABLE");
+    expect(routes).toContain("listSubscriptionsStrict");
     expect(routes).toContain("provider_mutation: false");
   });
 
