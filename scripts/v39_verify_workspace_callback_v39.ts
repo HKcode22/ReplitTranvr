@@ -32,6 +32,10 @@ async function bodyJson(response: Response): Promise<any | null> {
 
 async function main(): Promise<void> {
   const base = resolveBase();
+  const contractMode = String(process.env.V39_CALLBACK_CONTRACT_MODE ?? "workspace-health").trim().toLowerCase();
+  if (!["workspace-health","legacy-live-prepaid-route"].includes(contractMode)) {
+    throw new Error("REFUSED:CALLBACK_CONTRACT_MODE_INVALID");
+  }
   const secret = String(process.env.AERODATABOX_WEBHOOK_SECRET ?? "").trim();
   if (secret.length < 32) throw new Error("REFUSED:WEBHOOK_SECRET_REQUIRED");
 
@@ -42,34 +46,40 @@ async function main(): Promise<void> {
     throw new Error(`REFUSED:OPEN_INCIDENTS_BEFORE_WORKSPACE_CALLBACK:${openBefore.rows[0]?.n}`);
   }
 
-  const health = await fetch(`${base}/__v39/workspace-runtime`, {
-    method: "GET",
-    headers: { accept: "application/json" },
-    signal: AbortSignal.timeout(15_000),
-  });
-  const healthJson = await bodyJson(health);
-  if (
-    health.status !== 200 ||
-    healthJson?.status !== "PASS" ||
-    !/^[a-f0-9]{40}$/i.test(String(healthJson?.git_head ?? "")) ||
-    healthJson?.route_owner !== "server/index.ts+server/routes_v3.ts" ||
-    healthJson?.prepaid_route_registered !== true ||
-    Number(healthJson?.retention_hours) !== 168 ||
-    healthJson?.bucket_prefix !== "replit-objstore"
-  ) {
-    throw new Error(`REFUSED:WORKSPACE_RUNTIME_HEALTH_INVALID:http=${health.status}`);
-  }
-  const runtimeGitHead = String(healthJson.git_head).toLowerCase();
-  const runtimeOwnerMode = String(healthJson.runtime_owner_mode ?? "");
-  const runtimeOwnerContract =
-    (runtimeOwnerMode === "replit-managed-project" &&
-      healthJson.managed_replit_workflow === true &&
-      healthJson.detached_workspace_server === false) ||
-    (runtimeOwnerMode === "phase2g-detached-npm-run-dev" &&
-      healthJson.managed_replit_workflow === false &&
-      healthJson.detached_workspace_server === true);
-  if (!runtimeOwnerContract) {
-    throw new Error(`REFUSED:WORKSPACE_RUNTIME_OWNER_CONTRACT_INVALID:mode=${runtimeOwnerMode || "<missing>"}`);
+  let runtimeGitHead: string | null = null;
+  let runtimeOwnerMode: string | null = null;
+  let healthJson: any = null;
+
+  if (contractMode === "workspace-health") {
+    const health = await fetch(`${base}/__v39/workspace-runtime`, {
+      method: "GET",
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    healthJson = await bodyJson(health);
+    if (
+      health.status !== 200 ||
+      healthJson?.status !== "PASS" ||
+      !/^[a-f0-9]{40}$/i.test(String(healthJson?.git_head ?? "")) ||
+      healthJson?.route_owner !== "server/index.ts+server/routes_v3.ts" ||
+      healthJson?.prepaid_route_registered !== true ||
+      Number(healthJson?.retention_hours) !== 168 ||
+      healthJson?.bucket_prefix !== "replit-objstore"
+    ) {
+      throw new Error(`REFUSED:WORKSPACE_RUNTIME_HEALTH_INVALID:http=${health.status}`);
+    }
+    runtimeGitHead = String(healthJson.git_head).toLowerCase();
+    runtimeOwnerMode = String(healthJson.runtime_owner_mode ?? "");
+    const runtimeOwnerContract =
+      (runtimeOwnerMode === "replit-managed-project" &&
+        healthJson.managed_replit_workflow === true &&
+        healthJson.detached_workspace_server === false) ||
+      (runtimeOwnerMode === "phase2g-detached-npm-run-dev" &&
+        healthJson.managed_replit_workflow === false &&
+        healthJson.detached_workspace_server === true);
+    if (!runtimeOwnerContract) {
+      throw new Error(`REFUSED:WORKSPACE_RUNTIME_OWNER_CONTRACT_INVALID:mode=${runtimeOwnerMode || "<missing>"}`);
+    }
   }
 
   const wrongSecret = `phase2f-wrong-${randomBytes(16).toString("hex")}`;
@@ -83,8 +93,8 @@ async function main(): Promise<void> {
       signal: AbortSignal.timeout(15_000),
     },
   );
-  await wrong.arrayBuffer().catch(() => undefined);
-  if (wrong.status !== 404) {
+  const wrongJson = await bodyJson(wrong);
+  if (wrong.status !== 404 || wrongJson?.error !== "Not found") {
     throw new Error(`REFUSED:WORKSPACE_WRONG_SECRET_NOT_REJECTED:http=${wrong.status}`);
   }
 
@@ -206,16 +216,18 @@ async function main(): Promise<void> {
       schema: "v39.phase2f-workspace-callback-verification.v1",
       status: "PASS",
       executionEnvironment: "replit-workspace-live",
+      callbackContractMode: contractMode,
       deploymentPerformed: false,
       providerCalled: false,
       providerSubscriptionCreated: false,
       alertCreditsSpent: 0,
       callbackOrigin: base,
       gitHead: runtimeGitHead,
-      exactRouteOwner: "server/index.ts+server/routes_v3.ts",
+      exactRouteOwner: contractMode === "workspace-health" ? "server/index.ts+server/routes_v3.ts" : null,
       runtimeOwnerMode,
-      managedReplitWorkflow: healthJson.managed_replit_workflow === true,
-      detachedWorkspaceServer: healthJson.detached_workspace_server === true,
+      managedReplitWorkflow: healthJson?.managed_replit_workflow === true,
+      detachedWorkspaceServer: healthJson?.detached_workspace_server === true,
+      legacyLiveRouteBehaviorVerified: contractMode === "legacy-live-prepaid-route",
       wrongSecretRejected404: true,
       exactSecretAccepted200: true,
       publicHttpsIngress: true,
