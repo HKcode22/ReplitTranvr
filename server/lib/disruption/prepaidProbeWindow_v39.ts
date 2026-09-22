@@ -337,8 +337,6 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     internalSendCredits: metrics.internalSendCredits,
     costItemDisagreementCount: metrics.costItemDisagreementCount,
   });
-  const deliveryGapCredits = classified.deliveryGapCredits;
-  const deliveryCompleteness = classified.deliveryCompleteness;
   const reconciliationStatus = classified.status;
   const reconciliationStopReason = liveStopReason === "balance_read_failed_after_retries"
     ? "balance_read_failed_after_retries"
