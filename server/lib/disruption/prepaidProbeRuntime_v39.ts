@@ -209,6 +209,16 @@ export async function setPrepaidProbeSessionStateV39(sessionId: string, state: P
   if (result.rowCount !== 1) throw new Error("PREPAID_PROBE_SESSION_STATE_UPDATE_FAILED");
 }
 
+export async function recordPrepaidProbeCallbackFailureV39(sessionId: string): Promise<void> {
+  const id = assertSessionId(sessionId);
+  await pool.query(
+    `UPDATE clean.prepaid_probe_session_runtime
+        SET callback_failures=callback_failures+1
+      WHERE session_id=$1`,
+    [id],
+  );
+}
+
 export async function prepaidProbeSessionExistsV39(sessionId: string): Promise<boolean> {
   const id = assertSessionId(sessionId);
   const result = await pool.query(
@@ -320,12 +330,6 @@ export async function persistPrepaidProbeWebhookV39(input: {
       now: receivedAt,
     });
   } catch (error) {
-    await pool.query(
-      `UPDATE clean.prepaid_probe_session_runtime
-          SET callback_failures=callback_failures+1
-        WHERE session_id=$1`,
-      [sessionId],
-    ).catch(() => undefined);
     throw error;
   }
 
@@ -385,12 +389,6 @@ export async function persistPrepaidProbeWebhookV39(input: {
     return { deliveryId, blobRefId: blob.blobRefId, itemCount: flights.length, duplicate: false };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
-    await pool.query(
-      `UPDATE clean.prepaid_probe_session_runtime
-          SET callback_failures=callback_failures+1
-        WHERE session_id=$1`,
-      [sessionId],
-    ).catch(() => undefined);
     try {
       await deleteProviderBlobAtExpiryV39({ store, ref: blob, now: new Date(), allowEarlyDelete: true });
     } catch { /* fail original request; orphan cleanup/expiry job still has opaque path in the thrown context only */ }
