@@ -158,6 +158,12 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(supervisor).toContain("recovery_exit_code");
   });
 
+  it("never converts a censored Stage1 window into a completed PASS", () => {
+    expect(prepaidWindow).toContain("duration_censored_before_target");
+    expect(probeExecution).toContain("result.durationCensored");
+    expect(probeExecution).toContain("result.stopReason !== null");
+  });
+
   it("separates the 5-second local watchdog from one-minute provider balance polling", () => {
     expect(prepaidWindow).toContain("LIVE_PROVIDER_BALANCE_POLL_MS_V39 = 60_000");
     expect(prepaidWindow).toContain("LIVE_PROVIDER_BALANCE_FAILED_POLL_LIMIT_V39 = 3");
