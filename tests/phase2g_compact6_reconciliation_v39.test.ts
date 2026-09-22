@@ -92,14 +92,14 @@ describe("Phase2G prospective reconciliation classification", () => {
     }).status).toBe("MATCH");
   });
 
-  it("classifies the reconstructed P2G06-shaped 220/219 accounting as a bounded DELIVERY_GAP prospectively", () => {
+  it("classifies positive external-minus-received accounting as diagnostic DELIVERY_GAP", () => {
     const result = classifyProbeReconciliationV39({
       ownerKind: "anchor_probe",
       externalCredits: 220,
       internalSendCredits: 219,
       costItemDisagreementCount: 0,
     });
-    expect(PROBE_DELIVERY_COMPLETENESS_FLOOR_V39).toBe(0.99);
+    expect(PROBE_DELIVERY_COMPLETENESS_FLOOR_V39).toBe(1);
     expect(result.status).toBe("DELIVERY_GAP");
     expect(result.deliveryGapCredits).toBe(1);
     expect(result.deliveryCompleteness).toBeCloseTo(219 / 220, 12);
@@ -134,15 +134,25 @@ describe("Phase2G prospective reconciliation classification", () => {
     }).status).toBe("MISMATCH");
   });
 
-  it("hard-fails when delivery completeness falls below the prospectively frozen floor", () => {
+  it("keeps even a larger positive external-minus-received gap diagnostic rather than silently accepting it", () => {
     const result = classifyProbeReconciliationV39({
       ownerKind: "anchor_probe",
       externalCredits: 220,
       internalSendCredits: 217,
       costItemDisagreementCount: 0,
     });
-    expect(result.deliveryCompleteness).toBeLessThan(0.99);
-    expect(result.status).toBe("MISMATCH");
+    expect(result.deliveryCompleteness).toBeLessThan(1);
+    expect(result.status).toBe("DELIVERY_GAP");
+  });
+
+  it("rejects attempts to inject a non-exact acceptance floor", () => {
+    expect(() => classifyProbeReconciliationV39({
+      ownerKind: "anchor_probe",
+      externalCredits: 220,
+      internalSendCredits: 219,
+      costItemDisagreementCount: 0,
+      deliveryCompletenessFloor: 0.99,
+    })).toThrow("PROBE_NONZERO_RECONCILIATION_TOLERANCE_NOT_AUTHORIZED");
   });
 });
 
@@ -158,12 +168,12 @@ describe("Phase2G execution source contract", () => {
 
   it("uses authoritative external spend as the Stage1 yield denominator", () => {
     expect(execution).toContain("const denominator = result.externalCredits;");
-    expect(execution).toContain("const deliveryGapCredits = Math.max(0, result.externalCredits - result.internalSendCredits);");
-    expect(execution).toContain("const adjustedAmbiguityUpper = result.metrics.confirmedPlusAmbiguousUpper + deliveryGapCredits;");
+    expect(execution).toContain('const acceptedReconciliation = result.reconciliationStatus === "MATCH";');
+    expect(execution).not.toContain("adjustedAmbiguityUpper");
   });
 
-  it("allows only MATCH or DELIVERY_GAP completed safe-mode evidence", () => {
-    expect(migration).toContain("reconciliation_status IN ('MATCH','DELIVERY_GAP')");
+  it("allows only MATCH as a completed safe-mode reconciliation state", () => {
+    expect(migration).toContain("reconciliation_status = 'MATCH'");
     expect(migration).toContain("clean.adb_probe_reconciliation_evidence");
     expect(migration).toContain("Phase-2G reconciliation evidence is append-only");
   });
@@ -188,13 +198,13 @@ describe("Phase2G callback and cleanup evidence ordering", () => {
     expect(routes).toContain("await recordPrepaidProbeCallbackFailureV39(sessionId).catch(()=>undefined);");
   });
 
-  it("writes reconciliation evidence before mismatch cleanup", () => {
+  it("writes reconciliation evidence before any non-MATCH cleanup and keeps DELIVERY_GAP terminal", () => {
     const evidenceIndex = windowSource.indexOf("await persistProbeReconciliationEvidenceV39({");
-    const mismatchIndex = windowSource.indexOf('if (reconciliationStatus === "MISMATCH")');
-    const mismatchCleanupIndex = windowSource.indexOf("${input.deletionRunId}:mismatch", mismatchIndex);
+    const terminalIndex = windowSource.indexOf('if (reconciliationStatus !== "MATCH")');
+    const deliveryGapReasonIndex = windowSource.indexOf('"external_internal_delivery_gap"', terminalIndex);
     expect(evidenceIndex).toBeGreaterThan(-1);
-    expect(mismatchIndex).toBeGreaterThan(evidenceIndex);
-    expect(mismatchCleanupIndex).toBeGreaterThan(mismatchIndex);
+    expect(terminalIndex).toBeGreaterThan(evidenceIndex);
+    expect(deliveryGapReasonIndex).toBeGreaterThan(terminalIndex);
   });
 
   it("preserves UNRESOLVED aggregate evidence before cleanup", () => {
