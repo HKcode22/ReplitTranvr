@@ -36,6 +36,8 @@ Usage:
   bash scripts/v39_phase2g_tuesday_prepare_v39.sh auth-draft
   PHASE2G_CONFIRM_AUTH_SHA=<64hex> bash scripts/v39_phase2g_tuesday_prepare_v39.sh auth-approve
   bash scripts/v39_phase2g_tuesday_prepare_v39.sh preflight
+  bash scripts/v39_phase2g_tuesday_prepare_v39.sh server-start
+  bash scripts/v39_phase2g_tuesday_prepare_v39.sh server-status
 
 Safety:
   - This helper NEVER launches a paid Stage-1 probe.
@@ -47,6 +49,7 @@ Safety:
     no AeroDataBox provider call; 0 Alert credits.
   - fresh-runtime/auth-draft/auth-approve: local evidence/ledger writes only; no provider call.
   - preflight: provider balance/subscription READS only; no provider mutation; 0 Alert credits.
+  - server-start/status: local workspace server lifecycle only; no provider call; 0 Alert credits.
   - This helper has no paid-launch mode.
 EOF
 }
@@ -327,6 +330,94 @@ run_auth_approve() {
     --preprobe "$PREPROBE"
 }
 
+run_server_start() {
+  echo "=== PHASE2G WORKSPACE SERVER START ==="
+  echo "provider_call=false"
+  echo "provider_mutation=false"
+  echo "alert_credits_spent=0"
+  require_repo_state
+
+  if (echo >/dev/tcp/127.0.0.1/5000) >/dev/null 2>&1; then
+    echo "SERVER_ALREADY_LISTENING=true"
+    run_server_status
+    return
+  fi
+
+  mkdir -p artifacts
+  local stamp pid_file log_file
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  pid_file="artifacts/phase2g-workspace-server-${stamp}.pid"
+  log_file="artifacts/phase2g-workspace-server-${stamp}.log"
+
+  setsid bash -lc 'exec npm run dev' >"$log_file" 2>&1 < /dev/null &
+  local pid=$!
+  printf '%s\n' "$pid" > "$pid_file"
+
+  echo "SERVER_START_PID=$pid"
+  echo "SERVER_PID_FILE=$pid_file"
+  echo "SERVER_LOG_FILE=$log_file"
+
+  for _ in {1..30}; do
+    if (echo >/dev/tcp/127.0.0.1/5000) >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+
+  if ! (echo >/dev/tcp/127.0.0.1/5000) >/dev/null 2>&1; then
+    echo "REFUSED:SERVER_DID_NOT_BIND_PORT_5000"
+    tail -80 "$log_file" || true
+    exit 2
+  fi
+
+  run_server_status
+}
+
+run_server_status() {
+  echo "=== PHASE2G WORKSPACE SERVER STATUS ==="
+  echo "provider_call=false"
+  echo "provider_mutation=false"
+  echo "alert_credits_spent=0"
+  require_repo_state
+
+  if ! (echo >/dev/tcp/127.0.0.1/5000) >/dev/null 2>&1; then
+    echo "SERVER_STATUS=DOWN"
+    return 2
+  fi
+
+  EXPECTED_HEAD="$(git rev-parse HEAD)" node <<'NODE'
+(async () => {
+  const expected = String(process.env.EXPECTED_HEAD || "").toLowerCase();
+  const response = await fetch("http://127.0.0.1:5000/__v39/workspace-runtime", {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(5000),
+  });
+  const text = await response.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch {}
+  console.log(JSON.stringify({
+    http_status: response.status,
+    observed: json ?? text.slice(0,240),
+    expected_git_head: expected,
+  }, null, 2));
+  const pass = response.status === 200 &&
+    json?.schema === "v39.phase2f-workspace-runtime.v1" &&
+    json?.status === "PASS" &&
+    String(json?.git_head || "").toLowerCase() === expected &&
+    json?.prepaid_route_registered === true &&
+    json?.provider_mutation === false;
+  if (!pass) {
+    console.error("SERVER_STATUS=REFUSED_HEAD_OR_HEALTH_MISMATCH");
+    process.exit(2);
+  }
+  console.log("SERVER_STATUS=PASS");
+})().catch((error) => {
+  console.error(String(error instanceof Error ? error.message : error));
+  process.exit(2);
+});
+NODE
+}
+
 run_preflight() {
   echo "=== FRESH TUESDAY PAID-STAGE1 PREFLIGHT ==="
   echo "provider_call=balance_and_subscription_reads_only"
@@ -388,6 +479,8 @@ case "$mode" in
   auth-draft) run_auth_draft ;;
   auth-approve) run_auth_approve ;;
   preflight) run_preflight ;;
+  server-start) run_server_start ;;
+  server-status) run_server_status ;;
   *)
     echo "REFUSED:UNKNOWN_MODE=$mode"
     usage
