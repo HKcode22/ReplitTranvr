@@ -1,6 +1,6 @@
 # Phase 2G — Canonical Index and Timeline
 
-> Last organized: 2026-09-21 19:00 PDT / 2026-09-22 02:00 UTC
+> Last organized: 2026-09-21 19:26 PDT / 2026-09-22 02:26 UTC
 > Branch: `phase2g-weekend-hardening-20260918`
 > Purpose: one place to find the current Phase-2G truth without moving or deleting historical files immediately before a paid run.
 
@@ -15,7 +15,7 @@
 ### Current Phase-2G amendment
 - `SEPmd/phase2g/amendments/2026-09-21_COMPACT6_RECONCILIATION_AMENDMENT.md`
 - `artifacts/phase2g-compact6-amendment-freeze-20260921.json`
-- Compact-6 amendment file SHA-256: `07c474f8440e3fdb222a18c660ed61a5fc25d018487fe0171aff6642637a5c45`.
+- Compact-6 amendment file SHA-256: `09092f8d4896af4bbea11fd13d177417aa8cb92538e0cebff5e5301f3e1c4500`.
 - This is an additive amendment. It does not rewrite the original preprobe artifact.
 
 ### P2G06 WSSS failure/forensics
@@ -78,13 +78,15 @@ This proves WSSS collected substantial data. P2G06 failed the old exact-equality
 The original Plan already states that settled provider balance delta is authoritative and the received callback ledger can be incomplete because AeroDataBox bills on SEND.
 
 For post-amendment Stage-1/2 anchor probes:
-- external settled spend is the denominator;
-- exact equality => `MATCH`;
-- a positive provider-send/received-callback gap may be `DELIVERY_GAP` only when the prospectively frozen completeness floor is met and all other integrity checks pass;
+- external settled spend is the authoritative accounting value;
+- exact equality with zero cost/item disagreement => `MATCH`, the only completed/promotion-valid state under the current freeze;
+- a positive provider-send/received-callback gap => `DELIVERY_GAP`, preserved durably but terminal/non-scoreable;
 - internal > external => hard `MISMATCH`;
 - costCredits/item disagreement => hard `MISMATCH`;
 - unresolved settlement => hard failure;
-- safety-smoke/canary exact-equality requirements stay strict.
+- safety-smoke/canary and Stage-1/2 completion all remain exact-match.
+
+A prior draft used a 0.99 completeness threshold after P2G06. That was removed before paid use because the pre-P2G06 Plan requires any nonzero production tolerance to be independently measured/frozen and not calibrated from the failed one-credit run.
 
 P2G06 itself is excluded from final scoring and is not retroactively reclassified.
 
