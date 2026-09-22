@@ -63,22 +63,15 @@ delivery_completeness = C_internal / C_external
 - zero cost/item disagreements.
 
 ### DELIVERY_GAP
-Allowed only for an anchor probe when all are true:
-- settlement resolved;
-- `C_external > C_internal`;
-- delivery completeness >= 0.99;
-- cost/item disagreement count = 0;
-- no foreign billable subscription;
-- provider subscription ownership is exact;
-- cleanup succeeds;
-- the raw/normalized evidence path itself does not report corruption.
+A positive `C_external - C_internal` with zero explicit cost/item disagreement is preserved as its own diagnostic state so the exact SEND-versus-received gap is not lost.
 
-The 0.99 floor is a **prospective project quality threshold**, not a universal scientific constant. P2G06 is not scored under it.
+Under the current frozen rule, **DELIVERY_GAP is terminal and non-scoreable**. It does not authorize a completed/promotion-valid anchor probe. The acceptance floor remains exact (`delivery_completeness = 1.0`).
+
+Any future nonzero production tolerance must be measured and frozen in a separate pre-outcome amendment. It may not be calibrated from P2G06 or from the Tuesday WSSS validation result.
 
 ### MISMATCH
 Any of:
 - `C_internal > C_external`;
-- delivery completeness < 0.99;
 - any explicit cost/item disagreement;
 - other contradictory settled accounting.
 
@@ -87,20 +80,17 @@ Authoritative provider settlement cannot be established.
 
 ## 5. Metric handling for a DELIVERY_GAP
 
-The external provider spend is the cost denominator.
+A DELIVERY_GAP does **not** produce promotion-valid yield metrics under the current exact-match rule.
 
-For example, if:
-- external = 220;
-- received = 219;
+The durable reconciliation receipt still records:
+- authoritative external settled spend;
+- internal received credits;
+- exact delivery gap and completeness;
+- callback request/success/failure counters;
+- delivery/item/cost diagnostics;
+- settlement reads, duration, cleanup, and stop reason.
 
-then all per-credit yield measures use 220, never 219.
-
-To avoid overstating identity certainty:
-- confirmed unique lower remains the received confirmed value;
-- confirmed-plus-ambiguous upper is increased by `delivery_gap`;
-- top-five membership must remain invariant under the resulting recorded bounds.
-
-A positive gap can therefore never make the airport look artificially more efficient.
+This preserves the operational evidence needed to diagnose SEND-versus-delivery loss without converting missing provider deliveries into scored observations.
 
 ## 6. Safety smoke remains strict
 
@@ -132,7 +122,7 @@ Machine-readable amendment:
 `artifacts/phase2g-compact6-amendment-freeze-20260921.json`
 
 SHA-256:
-`07c474f8440e3fdb222a18c660ed61a5fc25d018487fe0171aff6642637a5c45`
+`09092f8d4896af4bbea11fd13d177417aa8cb92538e0cebff5e5301f3e1c4500`
 
 A Tuesday runtime must contain this amendment SHA, and the AUTH scope must contain the runtime-bound amendment SHA.
 
@@ -155,4 +145,5 @@ Relevant provider behavior:
 - P2G06 is excluded from final scoring.
 - Candidate six were selected from the pre-outcome frozen shortlist.
 - No additional WSSS retries beyond the one post-fix validation.
-- The 0.99 prospective rule applies only to runs started after this amendment freeze.
+- No nonzero reconciliation tolerance is inferred from P2G06.
+- Under this corrected freeze, only exact MATCH is completion/promotion-valid; DELIVERY_GAP remains diagnostic and terminal.
