@@ -9,6 +9,8 @@ export const PHASE2G_COMPACT6_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-amendment-freeze-20260921.json";
 export const PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-p2g07-provider502-recovery-freeze-20260922.json";
+export const PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH =
+  "artifacts/phase2g-compact6-p2g08-balance502-recovery-freeze-20260922.json";
 
 export interface Phase2gCompact6AmendmentV39 {
   schema_version: "v39-phase2g-compact6-amendment-1";
@@ -43,6 +45,22 @@ export interface Phase2gCompact6AmendmentV39 {
     excluded_from_final_scoring: true;
     requires_fresh_runtime_budget_auth: true;
     authorization_basis: "provider_502_and_orphan_subscription_safety_failure_only";
+    outcome_metrics_not_used_to_authorize: true;
+    reason: string;
+  };
+  p2g08_balance502_recovery_rerun?: {
+    authorized: true;
+    maximum_additional_attempts: 1;
+    failed_probe_id: 6;
+    failed_status: "failed";
+    failed_duration_censored: true;
+    failed_reconciliation_status: "MATCH";
+    failed_stop_reason: "balance_read_failed_after_retries";
+    excluded_from_final_scoring: true;
+    requires_fresh_runtime_budget_auth: true;
+    requires_balance_stability_canary: true;
+    minimum_consecutive_balance_reads: 3;
+    no_further_automatic_wsss_retry: true;
     outcome_metrics_not_used_to_authorize: true;
     reason: string;
   };
@@ -93,7 +111,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
   const candidatePaths = input.path
     ? [input.path]
-    : [PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
+    : [PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
   let raw: string | null = null;
   let actual: string | null = null;
   for (const candidatePath of candidatePaths) {
@@ -199,6 +217,24 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     recovery.outcome_metrics_not_used_to_authorize !== true
   )) {
     throw new Error("REFUSED_COMPACT6_P2G07_RECOVERY_BOUND");
+  }
+  const recoveryP2g08 = amendment.p2g08_balance502_recovery_rerun;
+  if (recoveryP2g08 !== undefined && (
+    recoveryP2g08.authorized !== true ||
+    recoveryP2g08.maximum_additional_attempts !== 1 ||
+    recoveryP2g08.failed_probe_id !== 6 ||
+    recoveryP2g08.failed_status !== "failed" ||
+    recoveryP2g08.failed_duration_censored !== true ||
+    recoveryP2g08.failed_reconciliation_status !== "MATCH" ||
+    recoveryP2g08.failed_stop_reason !== "balance_read_failed_after_retries" ||
+    recoveryP2g08.excluded_from_final_scoring !== true ||
+    recoveryP2g08.requires_fresh_runtime_budget_auth !== true ||
+    recoveryP2g08.requires_balance_stability_canary !== true ||
+    recoveryP2g08.minimum_consecutive_balance_reads !== 3 ||
+    recoveryP2g08.no_further_automatic_wsss_retry !== true ||
+    recoveryP2g08.outcome_metrics_not_used_to_authorize !== true
+  )) {
+    throw new Error("REFUSED_COMPACT6_P2G08_RECOVERY_BOUND");
   }
   if (
     amendment.prospective_reconciliation_policy.external_settled_spend_is_authoritative_denominator !== true ||
