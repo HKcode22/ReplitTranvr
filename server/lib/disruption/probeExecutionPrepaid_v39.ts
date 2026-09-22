@@ -159,21 +159,24 @@ async function markSafeFailure(input: {
   stopReason: string;
   reconciliationStatus?: "MATCH" | "DELIVERY_GAP" | "MISMATCH" | "UNRESOLVED" | null;
   cleanupVerifiedAtUtc?: string | null;
+  durationCensored?: boolean | null;
 }): Promise<void> {
   await pool.query(
     `UPDATE clean.adb_anchor_probe
         SET status='failed',window_end=$2,stop_reason=$3,runtime_session_id=COALESCE($4,runtime_session_id),
             reconciliation_status=COALESCE($5,reconciliation_status),
-            runtime_cleanup_verified_at_utc=COALESCE($6::timestamptz,runtime_cleanup_verified_at_utc)
+            runtime_cleanup_verified_at_utc=COALESCE($6::timestamptz,runtime_cleanup_verified_at_utc),
+            duration_censored=COALESCE($7::boolean,duration_censored)
       WHERE probe_id=$1`,
     [input.probeId, input.ended, input.stopReason, input.runtimeSessionId ?? null,
-     input.reconciliationStatus ?? null, input.cleanupVerifiedAtUtc ?? null],
+     input.reconciliationStatus ?? null, input.cleanupVerifiedAtUtc ?? null, input.durationCensored ?? null],
   );
   await openIncident("prepaid_probe_failed", {
     probeId: input.probeId,
     stopReason: input.stopReason,
     cleanupVerified: Boolean(input.cleanupVerifiedAtUtc),
     reconciliationStatus: input.reconciliationStatus ?? null,
+    durationCensored: input.durationCensored ?? null,
   });
 }
 
@@ -262,6 +265,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       stopReason: result.stopReason ?? "prepaid_probe_failed",
       reconciliationStatus: result.reconciliationStatus,
       cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+      durationCensored: result.durationCensored,
     });
     return {
       probeId,
@@ -280,6 +284,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       stopReason: "authoritative_external_spend_invalid",
       reconciliationStatus: "MISMATCH",
       cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+      durationCensored: result.durationCensored,
     });
     await markProbeBudgetDayMismatch(input.artifacts.runtime.probeBudgetDayId, {
       probeId,
@@ -305,6 +310,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       stopReason: "probe_cap_overshoot",
       reconciliationStatus: result.reconciliationStatus === "DELIVERY_GAP" ? "DELIVERY_GAP" : "MATCH",
       cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+      durationCensored: result.durationCensored,
     });
     await markProbeBudgetDayMismatch(input.artifacts.runtime.probeBudgetDayId, {
       probeId,
@@ -331,6 +337,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       stopReason: "zero_reconciled_credits",
       reconciliationStatus: result.reconciliationStatus === "DELIVERY_GAP" ? "DELIVERY_GAP" : "MATCH",
       cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+      durationCensored: result.durationCensored,
     });
     return { probeId, status: "failed", creditsSpent: null, durationCensored: result.durationCensored, stopReason: "zero_reconciled_credits" };
   }
