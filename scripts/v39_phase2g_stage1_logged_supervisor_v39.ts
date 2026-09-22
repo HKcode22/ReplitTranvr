@@ -37,16 +37,11 @@ async function callbackHealthy(base: string, expectedHead: string): Promise<bool
     if (response.status !== 200) return false;
     const json: any = await response.json().catch(() => null);
     const ownerMode = String(json?.runtime_owner_mode ?? "");
+    const durabilityClass = String(json?.runtime_durability_class ?? "");
     const ownerContract =
-      (ownerMode === "replit-published-deployment" &&
-        json?.published_deployment === true &&
-        json?.runtime_durability_class === "reserved-vm") ||
-      (ownerMode === "replit-managed-project" &&
-        json?.managed_replit_workflow === true &&
-        json?.detached_workspace_server === false) ||
-      (ownerMode === "phase2g-detached-npm-run-dev" &&
-        json?.managed_replit_workflow === false &&
-        json?.detached_workspace_server === true);
+      ownerMode === "replit-published-deployment" &&
+      json?.published_deployment === true &&
+      (durabilityClass === "autoscale" || durabilityClass === "reserved-vm");
     return json?.schema === "v39.phase2f-workspace-runtime.v1" &&
       json?.status === "PASS" &&
       json?.prepaid_route_registered === true &&
@@ -70,6 +65,7 @@ async function main(): Promise<void> {
   const statusPath = path.resolve(required("--status"));
   const heartbeatPath = path.resolve(required("--heartbeat"));
   const expectedIcao = required("--expected-icao").toUpperCase();
+  const ownerExecutor = required("--owner-executor").trim().toLowerCase();
 
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("SUPERVISOR_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("SUPERVISOR_REFUSED:AUTH_SHA_INVALID");
@@ -80,6 +76,10 @@ async function main(): Promise<void> {
     throw new Error("SUPERVISOR_REFUSED:INTERACTIVE_DEV_CALLBACK_BASE_NOT_ALLOWED");
   }
   if (!/^[A-Z0-9]{4}$/.test(expectedIcao)) throw new Error("SUPERVISOR_REFUSED:EXPECTED_ICAO_INVALID");
+  if (ownerExecutor !== "github-actions") throw new Error("SUPERVISOR_REFUSED:OWNER_EXECUTOR_MUST_BE_GITHUB_ACTIONS");
+  if (process.env.GITHUB_ACTIONS !== "true" && process.env.V39_ALLOW_NON_GITHUB_OWNER_FOR_OFFLINE_TESTS !== "1") {
+    throw new Error("SUPERVISOR_REFUSED:GITHUB_ACTIONS_RUNTIME_REQUIRED");
+  }
   if (!fs.existsSync(authFile)) throw new Error("SUPERVISOR_REFUSED:AUTH_FILE_MISSING");
   const actualAuthSha = sha256File(authFile);
   if (actualAuthSha !== expectedAuthSha) throw new Error(`SUPERVISOR_REFUSED:AUTH_SHA_MISMATCH:${actualAuthSha}`);
@@ -115,6 +115,7 @@ async function main(): Promise<void> {
     runtime_sha256: runtimeSha,
     probe_budget_day_id: budgetDayId,
     expected_icao: expectedIcao,
+    owner_executor: ownerExecutor,
     callback_base: callbackBase,
     log_path: path.relative(process.cwd(), logPath),
     heartbeat_path: path.relative(process.cwd(), heartbeatPath),
@@ -282,6 +283,7 @@ async function main(): Promise<void> {
     runtime_sha256: runtimeSha,
     probe_budget_day_id: budgetDayId,
     expected_icao: expectedIcao,
+    owner_executor: ownerExecutor,
     callback_base: callbackBase,
     log_path: path.relative(process.cwd(), logPath),
     heartbeat_path: path.relative(process.cwd(), heartbeatPath),
