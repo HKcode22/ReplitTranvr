@@ -366,18 +366,13 @@ export async function persistPrepaidProbeWebhookV39(input: {
       ? input.body.flights
       : [];
   const store = createRequiredProviderBlobStoreV39();
-  let blob: ProviderBlobRefV39;
-  try {
-    blob = await persistProviderBlobBeforeAckV39({
-      store,
-      bytes: rawBytes,
-      contentClass: "raw_provider_content",
-      retentionHours: resolvePrepaidRawRetentionHoursV39(),
-      now: receivedAt,
-    });
-  } catch (error) {
-    throw error;
-  }
+  const blob: ProviderBlobRefV39 = await persistProviderBlobBeforeAckV39({
+    store,
+    bytes: rawBytes,
+    contentClass: "raw_provider_content",
+    retentionHours: resolvePrepaidRawRetentionHoursV39(),
+    now: receivedAt,
+  });
 
   const client = await pool.connect();
   try {
