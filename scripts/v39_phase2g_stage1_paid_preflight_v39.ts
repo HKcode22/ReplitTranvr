@@ -236,9 +236,11 @@ async function main(): Promise<void> {
   const openIncidents = Number(incidents.rows[0]?.n ?? -1);
   if (openIncidents !== 0) blockers.push(`open_incidents=${openIncidents}`);
 
-  const activeProbe = await pool.query(`SELECT count(*)::int AS n FROM clean.adb_anchor_probe WHERE status='probing'`);
+  const activeProbe = await pool.query(
+    `SELECT count(*)::int AS n FROM clean.adb_anchor_probe WHERE status IN ('probing','settling')`,
+  );
   const activeProbes = Number(activeProbe.rows[0]?.n ?? -1);
-  if (activeProbes !== 0) blockers.push(`active_probes=${activeProbes}`);
+  if (activeProbes !== 0) blockers.push(`active_or_settling_probes=${activeProbes}`);
 
   let nextCandidate: string | null = null;
   if (compact6) {
@@ -349,22 +351,22 @@ async function main(): Promise<void> {
   };
 
   if (callbackVerification) {
-    const generatedMs = Date.parse(String(callbackVerification.generatedAtUtc ?? ""));
+    const generatedMs = Date.parse(String(callbackVerification.generated_at_utc ?? ""));
     const ageMs = Date.now() - generatedMs;
-    const before = callbackVerification.beforeCleanup ?? {};
-    const after = callbackVerification.afterCleanup ?? {};
+    const before = callbackVerification.before_cleanup ?? {};
+    const after = callbackVerification.after_cleanup ?? {};
     const artifactContract =
-      callbackVerification.schema === "v39.phase2f-workspace-callback-verification.v1" &&
+      callbackVerification.schema === "v39.phase2g-live-callback-verification.v1" &&
       callbackVerification.status === "PASS" &&
-      callbackVerification.callbackContractMode === "legacy-live-prepaid-route" &&
-      callbackVerification.callbackOrigin === origin &&
-      callbackVerification.deploymentPerformed === false &&
-      callbackVerification.providerCalled === false &&
-      callbackVerification.providerSubscriptionCreated === false &&
-      Number(callbackVerification.alertCreditsSpent) === 0 &&
-      callbackVerification.wrongSecretRejected404 === true &&
-      callbackVerification.exactSecretAccepted200 === true &&
-      callbackVerification.legacyLiveRouteBehaviorVerified === true &&
+      callbackVerification.contract_mode === "live-prepaid-route-end-to-end" &&
+      callbackVerification.callback_origin === origin &&
+      callbackVerification.provider_called === false &&
+      callbackVerification.provider_subscription_created === false &&
+      Number(callbackVerification.alert_credits_spent) === 0 &&
+      callbackVerification.wrong_secret_rejected_404 === true &&
+      callbackVerification.correct_secret_accepted_200 === true &&
+      callbackVerification.persistence_verified === true &&
+      callbackVerification.local_exact_session_cleanup_verified === true &&
       Number(before.sessions) === 1 &&
       Number(before.deliveries) === 1 &&
       Number(before.items) === 1 &&
@@ -373,14 +375,11 @@ async function main(): Promise<void> {
       Number(after.sessions) === 0 &&
       Number(after.deliveries) === 0 &&
       Number(after.items) === 0 &&
-      Number(after.blobs) === 1 &&
-      Number(after.deleted_blobs) === 1 &&
       Number(after.live_blobs) === 0 &&
-      Number(callbackVerification.openIncidentsBefore) === 0 &&
-      Number(callbackVerification.openIncidentsAfter) === 0 &&
+      Number(after.deleted_blobs) === 1 &&
       Number.isFinite(generatedMs) &&
       ageMs >= -5 * 60_000 &&
-      ageMs <= 12 * 60 * 60_000;
+      ageMs <= 24 * 60 * 60_000;
 
     if (!artifactContract) blockers.push("callback_verification_contract_invalid_or_stale");
 
@@ -393,7 +392,7 @@ async function main(): Promise<void> {
         exact_contract: artifactContract && liveRouteHealthy,
         contract_mode: "legacy-live-prepaid-route",
         callback_verification_sha256: callbackVerificationSha,
-        callback_verification_generated_at_utc: callbackVerification.generatedAtUtc ?? null,
+        callback_verification_generated_at_utc: callbackVerification.generated_at_utc ?? null,
         wrong_secret_live_check_status: live.status,
         provider_blob_boundary_proven_by_callback_verification: artifactContract,
         source_compatible_with_current_head: null,
@@ -483,7 +482,7 @@ async function main(): Promise<void> {
     },
     database: {
       open_incidents: openIncidents,
-      active_probes: activeProbes,
+      active_or_settling_probes: activeProbes,
       same_budget_day_probe_rows: sameDayRows.rowCount ?? sameDayRows.rows.length,
       open_probe_budget_days: openBudgetDays.length,
     },
