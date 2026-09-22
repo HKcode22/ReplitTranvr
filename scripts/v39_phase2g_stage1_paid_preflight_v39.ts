@@ -327,84 +327,90 @@ async function main(): Promise<void> {
   if (activeBillable.length !== 0) blockers.push(`active_billable_subscriptions=${activeBillable.length}`);
 
   const origin = callbackBase;
+  let callbackVerification: any = null;
+  try {
+    const callbackRaw = fs.readFileSync(callbackVerificationPath);
+    const actualCallbackSha = sha256(callbackRaw);
+    if (actualCallbackSha !== callbackVerificationSha) {
+      blockers.push(`callback_verification_sha_mismatch:${actualCallbackSha}`);
+    } else {
+      callbackVerification = JSON.parse(callbackRaw.toString("utf8"));
+    }
+  } catch (error) {
+    blockers.push(`callback_verification_unreadable:${error instanceof Error ? error.message : String(error)}`);
+  }
+
   let callback: Record<string, unknown> = {
     origin,
     reachable: false,
     exact_contract: false,
-    managed_replit_workflow: false,
-    source_compatible_with_current_head: false,
+    contract_mode: "legacy-live-prepaid-route",
+    callback_verification_sha256: callbackVerificationSha,
   };
-  if (!origin) {
-    blockers.push("published_callback_origin_missing");
-  } else {
+
+  if (callbackVerification) {
+    const generatedMs = Date.parse(String(callbackVerification.generatedAtUtc ?? ""));
+    const ageMs = Date.now() - generatedMs;
+    const before = callbackVerification.beforeCleanup ?? {};
+    const after = callbackVerification.afterCleanup ?? {};
+    const artifactContract =
+      callbackVerification.schema === "v39.phase2f-workspace-callback-verification.v1" &&
+      callbackVerification.status === "PASS" &&
+      callbackVerification.callbackContractMode === "legacy-live-prepaid-route" &&
+      callbackVerification.callbackOrigin === origin &&
+      callbackVerification.deploymentPerformed === false &&
+      callbackVerification.providerCalled === false &&
+      callbackVerification.providerSubscriptionCreated === false &&
+      Number(callbackVerification.alertCreditsSpent) === 0 &&
+      callbackVerification.wrongSecretRejected404 === true &&
+      callbackVerification.exactSecretAccepted200 === true &&
+      callbackVerification.legacyLiveRouteBehaviorVerified === true &&
+      Number(before.sessions) === 1 &&
+      Number(before.deliveries) === 1 &&
+      Number(before.items) === 1 &&
+      Number(before.blobs) === 1 &&
+      Number(before.live_blobs) === 1 &&
+      Number(after.sessions) === 0 &&
+      Number(after.deliveries) === 0 &&
+      Number(after.items) === 0 &&
+      Number(after.blobs) === 1 &&
+      Number(after.deleted_blobs) === 1 &&
+      Number(after.live_blobs) === 0 &&
+      Number(callbackVerification.openIncidentsBefore) === 0 &&
+      Number(callbackVerification.openIncidentsAfter) === 0 &&
+      Number.isFinite(generatedMs) &&
+      ageMs >= -5 * 60_000 &&
+      ageMs <= 12 * 60 * 60_000;
+
+    if (!artifactContract) blockers.push("callback_verification_contract_invalid_or_stale");
+
     try {
-      const health = await getJson(`${origin}/__v39/workspace-runtime`);
-      const runtimeHead = String(health.json?.git_head ?? "").toLowerCase();
-      let matched = 0;
-      let sourceCompatible = false;
-      if (/^[a-f0-9]{40}$/.test(runtimeHead)) {
-        const checks = CALLBACK_SOURCE_PATHS.map((file) => {
-          const runtimeSourceSha = sha256(gitFileAt(runtimeHead, file));
-          const currentSourceSha = sha256(fs.readFileSync(path.resolve(file)));
-          const match = runtimeSourceSha === currentSourceSha;
-          if (match) matched += 1;
-          return { file, match };
-        });
-        sourceCompatible = checks.every((check) => check.match);
-      }
-      const runtimeOwnerMode = String(health.json?.runtime_owner_mode ?? "");
-      const callbackDurabilityClass = String(health.json?.runtime_durability_class ?? "");
-      const runtimeOwnerContract =
-        runtimeOwnerMode === "replit-published-deployment" &&
-        health.json?.published_deployment === true &&
-        (callbackDurabilityClass === "autoscale" || callbackDurabilityClass === "reserved-vm");
-      const exactContract = health.status === 200 &&
-        health.json?.schema === "v39.phase2f-workspace-runtime.v1" &&
-        health.json?.status === "PASS" &&
-        health.json?.prepaid_route_registered === true &&
-        health.json?.provider_mutation === false &&
-        runtimeOwnerContract &&
-        runtimeHead === currentHead;
-      const reachable = exactContract && sourceCompatible;
+      const live = await prepaidRouteHealth(origin);
+      const liveRouteHealthy = live.status === 404 && live.json?.error === "Not found";
       callback = {
         origin,
-        reachable,
-        exact_contract: exactContract,
-        schema: health.json?.schema ?? null,
-        route_owner: health.json?.route_owner ?? null,
-        runtime_owner_mode: runtimeOwnerMode || null,
-        managed_replit_workflow: health.json?.managed_replit_workflow === true,
-        detached_workspace_server: health.json?.detached_workspace_server === true,
-        published_deployment: health.json?.published_deployment === true,
-        runtime_durability_class: health.json?.runtime_durability_class ?? null,
-        runtime_git_head: runtimeHead || null,
-        current_git_head: currentHead,
-        retention_hours: health.json?.retention_hours ?? null,
-        bucket_prefix: health.json?.bucket_prefix ?? null,
-        matched_protected_sources: matched,
-        protected_source_count: CALLBACK_SOURCE_PATHS.length,
-        source_compatible_with_current_head: sourceCompatible,
+        reachable: liveRouteHealthy,
+        exact_contract: artifactContract && liveRouteHealthy,
+        contract_mode: "legacy-live-prepaid-route",
+        callback_verification_sha256: callbackVerificationSha,
+        callback_verification_generated_at_utc: callbackVerification.generatedAtUtc ?? null,
+        wrong_secret_live_check_status: live.status,
+        provider_blob_boundary_proven_by_callback_verification: artifactContract,
+        source_compatible_with_current_head: null,
       };
-      if (!exactContract) blockers.push("published_callback_exact_owner_contract_failed");
-      if (!sourceCompatible) blockers.push("published_callback_source_not_compatible");
+      if (!liveRouteHealthy) blockers.push("published_callback_live_route_check_failed");
     } catch (error) {
       callback = {
         origin,
         reachable: false,
         exact_contract: false,
-        managed_replit_workflow: false,
-        published_deployment: false,
-        runtime_durability_class: null,
-        source_compatible_with_current_head: false,
+        contract_mode: "legacy-live-prepaid-route",
+        callback_verification_sha256: callbackVerificationSha,
         error: error instanceof Error ? error.message : String(error),
       };
-      blockers.push("published_callback_check_failed");
+      blockers.push("published_callback_live_route_check_failed");
     }
   }
-
-  const bucketRaw = String(process.env.V39_PROVIDER_BLOB_BUCKET_ID ?? "").trim();
-  const bucketCorrectable = bucketRaw.startsWith("replit-objstore-") || bucketRaw.startsWith("eplit-objstore-");
-  if (!bucketCorrectable) blockers.push("provider_blob_bucket_config_missing_or_unexpected");
 
   const now = new Date();
   const tc = binding.smoke.preprobe.artifact.probeTimeClass;
