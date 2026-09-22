@@ -111,6 +111,13 @@ export interface Stage1AttemptEvidence extends Stage1ProbeEvidence {
   recordedAtUtc: string;
 }
 
+interface Compact6WsssValidationRuleV39 {
+  icao: "WSSS";
+  historicalProbeId: number;
+  historicalStopReason: "external_internal_credit_mismatch";
+  maxAdditionalRuns: 1;
+}
+
 async function readStage1Evidence(artifacts: LoadedProbeExecutionArtifacts): Promise<Stage1AttemptEvidence[]> {
   const compact = artifacts.preprobe.probeDesign?.variant === "compact6-region-stratified-v1";
   const legacyHash = compact ? artifacts.preprobe.probeDesign!.legacyEvidencePreprobeSha256 : null;
@@ -179,6 +186,7 @@ export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEv
 export function chooseNextPrimaryStage1TargetV39(
   shortlist: Array<{ icao: string }>,
   attempts: Stage1AttemptEvidence[],
+  options?: { compact6WsssValidation?: Compact6WsssValidationRuleV39 | null },
 ): string | null {
   const grouped = new Map<string, Stage1AttemptEvidence[]>();
   for (const attempt of attempts) {
@@ -194,6 +202,23 @@ export function chooseNextPrimaryStage1TargetV39(
     if (rows.length === 0) return icao;
 
     if (rows.some((row) => row.status === "completed")) continue;
+
+    if (icao === "WSSS" && options?.compact6WsssValidation) {
+      const rule = options.compact6WsssValidation;
+      const historical = rows.find((row) => row.probeId === rule.historicalProbeId);
+      const postHistorical = rows.filter((row) => row.probeId > rule.historicalProbeId);
+      const historicalMatches =
+        historical?.status === "failed" &&
+        historical.durationCensored === false &&
+        historical.reconciliationStatus === "MISMATCH" &&
+        historical.stopReason === rule.historicalStopReason;
+      if (historicalMatches && postHistorical.length < rule.maxAdditionalRuns) {
+        return "WSSS";
+      }
+      if (historicalMatches && postHistorical.length >= rule.maxAdditionalRuns) {
+        continue;
+      }
+    }
 
     const latest = rows[rows.length - 1];
     const infraInvalidCount = rows.filter(isInfrastructureInvalidStage1AttemptV39).length;
@@ -216,7 +241,14 @@ async function chooseNextStage1Target(
   artifacts: LoadedProbeExecutionArtifacts,
   evidence: Stage1AttemptEvidence[],
 ): Promise<{ icao: string; replacement: boolean } | null> {
-  const nextPrimary = chooseNextPrimaryStage1TargetV39(artifacts.preprobe.shortlist, evidence);
+  const compactValidation = artifacts.preprobe.probeDesign?.variant === "compact6-region-stratified-v1"
+    ? artifacts.preprobe.probeDesign.wsssValidationRerun ?? null
+    : null;
+  const nextPrimary = chooseNextPrimaryStage1TargetV39(
+    artifacts.preprobe.shortlist,
+    evidence,
+    { compact6WsssValidation: compactValidation as Compact6WsssValidationRuleV39 | null },
+  );
   if (nextPrimary) return { icao: nextPrimary, replacement: false };
 
   const promotion = selectStage2Top5(artifacts.preprobe, evidence);
