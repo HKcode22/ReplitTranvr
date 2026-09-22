@@ -27,8 +27,10 @@ Responsibilities:
 - receive the exact prepaid callback route;
 - persist raw provider bytes to the existing dedicated Replit Object Storage boundary before 2xx;
 - persist runtime callback/accounting metadata;
-- expose the read-only V3.9 runtime health contract;
-- perform only secret-guarded exact-session provider-blob/runtime cleanup when requested by the authorized external owner.
+- expose the already-deployed prepaid webhook route;
+- persist the callback payload/runtime evidence using the existing Replit Object Storage and PostgreSQL boundaries.
+
+The current live deployment is a legacy September snapshot and does **not** expose the newer `/__v39/workspace-runtime` or remote cleanup endpoints. This is not hidden or treated as an exact-source match. Instead, paid readiness requires a fresh zero-credit end-to-end verification receipt proving the live prepaid route still rejects a wrong secret, accepts the exact secret for a synthetic armed session, persists one blob/delivery/item, and can be cleaned exactly from the Replit workspace.
 
 It does **not** own the 120-minute experiment clock and does not need one in-process loop to survive for two hours.
 
@@ -46,8 +48,9 @@ Responsibilities:
 - monitor callback health and provider accounting;
 - exact-delete the owned subscription at the normal endpoint;
 - settle/reconcile using the existing V3.9 logic;
-- request exact-session Replit blob/runtime cleanup through the secret-guarded published endpoint;
-- mark the probe completed only under the existing exact MATCH acceptance rule.
+- after exact deletion + settlement + exact MATCH, persist the probe as `settling`;
+- exit provider-safe without requiring Replit object-storage access;
+- never mark the probe `completed` until the later Replit workspace cleanup/finalizer verifies exact-session deletion.
 
 The GitHub runner is independent of the Replit Development Sandbox, so editor/Shell/runtime resets cannot kill the paid owner.
 
@@ -92,31 +95,32 @@ This is not treated as a substitute for callback evidence: callback success/fail
 
 ## Object-storage boundary
 
-Raw provider content remains in the existing dedicated Replit Object Storage path. GitHub Actions is not given Replit object-storage credentials.
+Raw provider content remains in the existing dedicated Replit Object Storage path. GitHub Actions is **not** given Replit object-storage credentials.
 
-At cleanup:
+Successful completion is deliberately split:
 
-1. the GitHub owner has already exact-deleted the provider subscription;
-2. it sends the random session UUID and deletion-run ID to the published `/__v39/phase2g/runtime-cleanup` endpoint;
-3. the endpoint requires a separate high-entropy `V39_PHASE2G_CONTROL_SECRET`;
-4. the endpoint verifies exactly one provider-safe Stage-1 probe owns that runtime session;
-5. Replit deletes and verifies only that session's raw blobs/runtime rows;
-6. the endpoint cannot create/delete provider subscriptions and reports `provider_mutation=false`.
+1. GitHub owner exact-deletes the provider subscription.
+2. GitHub owner settles provider balance and persists durable reconciliation evidence.
+3. Only an exact full-duration MATCH may enter `status='settling'`.
+4. At `settling`, the provider subscription is already verified inactive; no further Alert credits can accrue.
+5. From the Replit workspace, run `scripts/v39_phase2g_exact_session_purpose_cleanup_v39.ts` for the exact random session UUID. It refuses if any billable provider subscription is active.
+6. The cleanup receipt proves all transient runtime rows and live blob refs for that exact session are gone.
+7. Run `scripts/v39_phase2g_finalize_settling_probe_v39.ts`; it verifies the cleanup receipt, durable MATCH evidence, exact session/probe/budget binding, zero active subscriptions, then changes the same probe to `completed` and closes the budget.
+8. If Replit resets during steps 5–7, repeat/finalize cleanup after recovery. The scientific 120-minute window is already provider-safe and does not need to be rerun.
 
 ## Secret boundary
 
 Never commit secret values.
 
-GitHub environment `phase2g-paid` requires:
+GitHub environment `phase2g-paid` requires only:
 
 - `V39_DATABASE_RUNTIME_URL`
 - `AERODATABOX_API_KEY`
 - `AERODATABOX_WEBHOOK_SECRET`
-- `V39_PHASE2G_CONTROL_SECRET`
 
-The matching `V39_PHASE2G_CONTROL_SECRET` must also be configured in the published Replit deployment.
+No new cross-platform Replit cleanup secret is required.
 
-The provider blob bucket ID is not treated as a secret but remains exact/frozen input.
+The provider blob bucket ID is not treated as a secret but remains an exact/frozen workflow input.
 
 ## Launch architecture
 
@@ -126,7 +130,7 @@ The generic workflow is:
 
 It contains three stages:
 
-1. **gate** — read-only provider/DB preflight, exact callback/source verification, and a three-read balance canary where required;
+1. **gate** — read-only provider/DB preflight, hash-bound zero-credit live callback verification, immediate wrong-secret live route recheck, and a three-read balance canary where required;
 2. **owner** — full foreground paid Stage-1 owner;
 3. **safety-watchdog** — independent fail-safe observer/recovery owner.
 
@@ -138,18 +142,18 @@ The workflow requires the explicit confirmation phrase:
 
 The old local/Replit paid launcher is prospectively disabled.
 
-## Source and deployment binding
+## Source and callback binding
 
 Before any future paid launch:
 
 - all runtime/auth/evidence artifacts needed for the attempt are committed;
-- the exact branch commit is pushed to GitHub;
-- the published callback deployment runs the exact authorized protected source;
-- the deployment health route proves the embedded build Git HEAD;
-- preflight verifies protected callback source compatibility;
-- GitHub Actions checks out the exact authorized commit.
+- the exact GitHub owner/source commit is pushed and hash-bound;
+- the live callback deployment is **not** claimed to run that same commit because the user has no republish permission;
+- a fresh committed `v39.phase2g-live-callback-verification.v1` receipt proves the existing live route end-to-end with zero provider calls and zero Alert credits;
+- the GitHub gate verifies that receipt SHA, requires it to be recent, and rechecks the live wrong-secret contract immediately before launch;
+- GitHub Actions checks out the exact authorized owner commit.
 
-No source edits occur after the paid gate opens.
+No source edits occur after the paid gate opens. The callback compatibility proof is behavioral and explicit; it is not represented as an unavailable deployment Git-head proof.
 
 ## P2G09 historical handling
 
@@ -171,15 +175,15 @@ The prior `no_further_automatic_wsss_retry` rule means no blind or implicit retr
 3. Full Phase-2G tests pass.
 4. TypeScript passes.
 5. Production build passes and embeds the exact Git HEAD.
-6. Remote cleanup endpoint unit/static tests pass.
+6. Deferred-cleanup + settling-state + exact-session finalizer tests pass.
 7. GitHub owner refuses non-GitHub execution.
 8. GitHub watchdog proves it cannot create subscriptions.
-9. Synthetic published callback test passes.
-10. Secret-guarded cleanup dry/synthetic test proves exact session scoping.
-11. Published callback health proves exact source commit and Autoscale runtime identity.
+9. Zero-credit live callback verification against `travnr.com` passes end-to-end and its receipt is committed/hash-bound.
+10. Exact-session Replit cleanup dry/synthetic test proves zero-active-subscription gating and exact session scoping.
+11. Settling finalizer synthetic test proves a provider-safe MATCH cannot become `completed` before cleanup verification.
 12. Generic workflow is reviewed before being added to the default branch so `workflow_dispatch` can be used.
 13. GitHub environment secrets are configured manually; values are never written to git/chat logs.
-14. Fresh runtime, budget and AUTH are created prospectively.
+14. Fresh prospective infrastructure amendment/runtime/budget/AUTH are created.
 15. Fresh read-only GitHub gate returns PASS before any provider mutation.
 16. Launch only inside the frozen weekday Stage-1 time class.
 
@@ -209,7 +213,7 @@ After further review, a Reserved VM is **not required** for the next recovery at
 
 The preferred architecture is:
 
-- Replit published **Autoscale** deployment: HTTP callback receiver and exact-session Replit Object Storage cleanup bridge.
+- Existing published `travnr.com` deployment: HTTP callback receiver only; no republish is required for this recovery path.
 - GitHub Actions **owner job**: runs the existing audited Stage-1 owner in the foreground for the 120-minute scientific window.
 - GitHub Actions **independent safety-watchdog job**: watches the same durable budget/probe/session and may only invoke exact fail-closed recovery; it cannot create a second subscription.
 - PostgreSQL: shared experiment state/runtime counters.
@@ -218,7 +222,7 @@ The preferred architecture is:
 
 This removes the P2G09 single point of failure: a Replit editor/Shell/Development Sandbox reset cannot terminate the GitHub-hosted owner.
 
-The owner supervisor performs a published callback health GET every 15 seconds. During an active probe this also continuously exercises the Autoscale deployment, reducing callback cold-start risk without a dedicated always-on VM.
+The owner supervisor performs a wrong-secret prepaid-route POST health check every 15 seconds. During an active probe this also continuously exercises the Autoscale deployment, reducing callback cold-start risk without a dedicated always-on VM.
 
 ### Exact role separation
 
@@ -247,7 +251,7 @@ travnr.com published Autoscale callback
                       - exact recovery on safety boundary
 ```
 
-At purpose completion, the GitHub owner calls the secret-guarded published cleanup bridge. The Replit deployment deletes/verifies only the exact session's raw objects/runtime rows locally. Provider subscription creation/deletion remains owned by the audited Stage-1 owner/recovery code.
+At purpose completion, GitHub has already stopped and reconciled provider exposure. It leaves a full-duration exact-MATCH probe in `settling`. The Replit workspace then performs exact-session cleanup locally and the finalizer changes that same probe to `completed` and closes the budget. Provider subscription creation/deletion remains owned by the audited GitHub Stage-1 owner/recovery code.
 
 ### Why this is stronger than the previous Replit workspace owner
 
