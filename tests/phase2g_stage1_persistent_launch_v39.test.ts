@@ -158,6 +158,14 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(supervisor).toContain("recovery_exit_code");
   });
 
+  it("separates the 5-second local watchdog from one-minute provider balance polling", () => {
+    expect(prepaidWindow).toContain("LIVE_PROVIDER_BALANCE_POLL_MS_V39 = 60_000");
+    expect(prepaidWindow).toContain("LIVE_PROVIDER_BALANCE_FAILED_POLL_LIMIT_V39 = 3");
+    expect(prepaidWindow).toContain("nextProviderBalancePollAt");
+    expect(prepaidWindow).toContain("consecutiveFailedProviderBalancePolls");
+    expect(probeExecution).toContain('startsWith("balance_read_failed")');
+  });
+
   it("does not censor a paid probe on one transient balance-read failure", () => {
     expect(prepaidWindow).toContain("getBalanceWithTransientRetryV39");
     expect(prepaidWindow).toContain("attempt <= 3");
