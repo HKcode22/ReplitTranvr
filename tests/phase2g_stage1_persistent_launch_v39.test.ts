@@ -152,6 +152,13 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(supervisor).toContain("recovery_exit_code");
   });
 
+  it("does not censor a paid probe on one transient balance-read failure", () => {
+    expect(prepaidWindow).toContain("getBalanceWithTransientRetryV39");
+    expect(prepaidWindow).toContain("attempt <= 3");
+    expect(prepaidWindow).toContain("balance_read_failed_after_retries");
+    expect(prepaidWindow).not.toContain('liveStopReason = "balance_read_failed";');
+  });
+
   it("recovers an exact orphan subscription even after the owner already marked the probe failed", () => {
     expect(recovery).toContain("status='failed'");
     expect(recovery).toContain("subscription_delete_failed");
