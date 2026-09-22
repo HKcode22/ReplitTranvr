@@ -37,7 +37,7 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["env", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "node", "dist/index.mjs"]
+run = ["env", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "V39_RUNTIME_DURABILITY_CLASS=autoscale", "node", "dist/index.mjs"]
 build = ["npm", "run", "build"]
 
 [userenv]
