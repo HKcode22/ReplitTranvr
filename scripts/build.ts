@@ -1,6 +1,7 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { rm, readFile, writeFile } from "fs/promises";
+import { execFileSync } from "child_process";
 
 // server deps to bundle to reduce openat(2) syscalls
 // which helps cold start times
@@ -32,7 +33,19 @@ const allowlist = [
   "zod-validation-error",
 ];
 
+function resolveBuildGitHead(): string {
+  const explicit = String(process.env.V39_BUILD_GIT_HEAD ?? "").trim().toLowerCase();
+  if (/^[a-f0-9]{40}$/.test(explicit)) return explicit;
+  try {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim().toLowerCase();
+    if (/^[a-f0-9]{40}$/.test(head)) return head;
+  } catch {}
+  throw new Error("V39_BUILD_GIT_HEAD_UNRESOLVED");
+}
+
 async function buildAll() {
+  const buildGitHead = resolveBuildGitHead();
+  console.log(`V39 build git head: ${buildGitHead}`);
   await rm("dist", { recursive: true, force: true });
 
   console.log("building client...");
@@ -57,6 +70,7 @@ async function buildAll() {
     },
     define: {
       "process.env.NODE_ENV": '"production"',
+      "process.env.V39_DEPLOYED_GIT_HEAD": JSON.stringify(buildGitHead),
     },
     minify: true,
     external: externals,
@@ -64,6 +78,10 @@ async function buildAll() {
   });
 
   await writeFile("dist/index.cjs", 'import("./index.mjs");\n');
+  await writeFile(
+    "dist/v39-build-meta.json",
+    JSON.stringify({ schema: "v39.build-meta.v1", git_head: buildGitHead }, null, 2) + "\n",
+  );
 }
 
 buildAll().catch((err) => {
