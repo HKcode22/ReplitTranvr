@@ -16,6 +16,7 @@ import {
   chooseNextPrimaryStage1TargetV39,
   isP2g06PostfixWsssValidationEligibleV39,
   isP2g07Provider502RecoveryEligibleV39,
+  isP2g08Balance502RecoveryEligibleV39,
   type Stage1AttemptEvidence,
 } from "./v39_probe_stage1_owner_v39";
 
@@ -229,10 +230,13 @@ async function main(): Promise<void> {
       recordedAtUtc: new Date(row.recorded_at).toISOString(),
     }));
 
-    nextCandidate = compact6.amendment.p2g07_provider502_recovery_rerun?.authorized === true &&
-        isP2g07Provider502RecoveryEligibleV39(evidence)
+    nextCandidate = compact6.amendment.p2g08_balance502_recovery_rerun?.authorized === true &&
+        isP2g08Balance502RecoveryEligibleV39(evidence)
       ? "WSSS"
-      : isP2g06PostfixWsssValidationEligibleV39(evidence)
+      : compact6.amendment.p2g07_provider502_recovery_rerun?.authorized === true &&
+          isP2g07Provider502RecoveryEligibleV39(evidence)
+        ? "WSSS"
+        : isP2g06PostfixWsssValidationEligibleV39(evidence)
         ? "WSSS"
         : chooseNextPrimaryStage1TargetV39(compact6.effectiveShortlist, evidence);
 
@@ -255,7 +259,26 @@ async function main(): Promise<void> {
   const openBudgetDays = budgetDays.rows.filter((row: any) => row.state === "OPEN");
   if (openBudgetDays.length !== 0) blockers.push(`open_probe_budget_days=${openBudgetDays.length}`);
 
-  const balance = await getBalance();
+  const balanceCanary: Array<{read:number;creditsRemaining:number}> = [];
+  const requireBalanceCanary = compact6?.amendment.p2g08_balance502_recovery_rerun?.requires_balance_stability_canary === true;
+  if (requireBalanceCanary) {
+    for (let i = 1; i <= 3; i += 1) {
+      const canaryBalance = await getBalance();
+      if (!canaryBalance) {
+        blockers.push(`provider_balance_stability_canary_failed_at_read=${i}`);
+        break;
+      }
+      balanceCanary.push({ read: i, creditsRemaining: canaryBalance.creditsRemaining });
+      if (i < 3) await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+    if (balanceCanary.length === 3 &&
+        !balanceCanary.every((entry) => entry.creditsRemaining === balanceCanary[0].creditsRemaining)) {
+      blockers.push("provider_balance_stability_canary_not_stable");
+    }
+  }
+  const balance = balanceCanary.length === 3
+    ? { creditsRemaining: balanceCanary[2].creditsRemaining }
+    : await getBalance();
   if (!balance) throw new Error("BLOCKED:PROVIDER_BALANCE_READ_FAILED");
   if (balance.creditsRemaining < 1000 + protectedExposure) {
     blockers.push(`provider_balance_below_protected_floor:${balance.creditsRemaining}`);
@@ -409,6 +432,7 @@ async function main(): Promise<void> {
       credits_remaining: balance.creditsRemaining,
       protected_floor_after_authorized_exposure: 1000,
       active_billable_subscriptions: activeBillable.length,
+      balance_stability_canary: balanceCanary,
     },
     database: {
       open_incidents: openIncidents,
