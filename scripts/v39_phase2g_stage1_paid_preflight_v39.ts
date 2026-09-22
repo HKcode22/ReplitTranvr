@@ -118,6 +118,8 @@ async function main(): Promise<void> {
   const currentHead = git(["rev-parse", "HEAD"]).toLowerCase();
   const blockers: string[] = [];
   if (currentHead !== expectedHead) blockers.push(`git_head_mismatch:${currentHead}`);
+  const protectedStatus = git(["status", "--porcelain=v1", "--untracked-files=all", "--", "server", "scripts", "migrations", "tests"]);
+  if (protectedStatus.trim()) blockers.push("protected_source_tree_dirty");
 
   const binding = loadGate2RuntimeBindingV39({
     probeRuntimePath: runtimePath,
