@@ -96,7 +96,7 @@ async function reserveSafeProbe(input: ExecuteProbeInput, started: Date): Promis
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [runtime.probeBudgetDayId]);
-    const active = await client.query(`SELECT 1 FROM clean.adb_anchor_probe WHERE status='probing' LIMIT 1`);
+    const active = await client.query(`SELECT 1 FROM clean.adb_anchor_probe WHERE status IN ('probing','settling') LIMIT 1`);
     if (active.rowCount) throw new Error("REFUSED_PROBE_OVERLAP");
     const exposure = await client.query(
       `SELECT COALESCE(sum(CASE
@@ -198,8 +198,10 @@ async function markProbeBudgetDayMismatch(dayId: string, detail: Record<string, 
  *
  * Provider payloads go to App Storage and provider-identifying working state
  * goes only to UNLOGGED tables through runPrepaidLiveWindowV39. The logged
- * adb_anchor_probe row receives aggregate research evidence only after
- * reconciliation and verified transient cleanup. The random runtime-session
+ * adb_anchor_probe row receives provider-safe aggregate research evidence
+ * after reconciliation. When cleanup is deferred, a full-duration exact-MATCH
+ * result is persisted as status='settling' until exact-session transient
+ * cleanup is verified in Replit; only then may it become 'completed'. The random runtime-session
  * UUID is the one exception: it is durably bound before provider creation so
  * a PostgreSQL UNLOGGED-table reset cannot destroy exact recovery ownership.
  */
@@ -246,6 +248,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     settlement,
     deletionRunId: `phase2-probe-${probeId}`,
     watchdogPollMs: input.artifacts.runtime.watchdogPollMs,
+    deferCleanup: process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP === "1",
     onSessionArmed: async (sessionId) => {
       await durablyBindProbeRuntimeSession({
         probeId,
@@ -279,8 +282,16 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
   }
 
   const acceptedReconciliation = result.reconciliationStatus === "MATCH";
-  if (result.status !== "completed" || result.durationCensored || result.stopReason !== null ||
-      !result.metrics || !acceptedReconciliation || !result.cleanupVerifiedAtUtc) {
+  const cleanupDeferredSafely =
+    result.status === "settling" &&
+    result.subscriptionDeleted === true &&
+    result.cleanupVerifiedAtUtc === null;
+  const cleanupCompletedSafely =
+    result.status === "completed" &&
+    Boolean(result.cleanupVerifiedAtUtc);
+  if ((!cleanupDeferredSafely && !cleanupCompletedSafely) ||
+      result.durationCensored || result.stopReason !== null ||
+      !result.metrics || !acceptedReconciliation) {
     await markSafeFailure({
       probeId,
       runtimeSessionId: result.runtimeSessionId,
@@ -376,9 +387,10 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
   const upperRate = result.metrics.confirmedPlusAmbiguousUpper / denominator;
   const chainRate = result.metrics.tailChainLinks / denominator;
 
+  const durableStatus = cleanupDeferredSafely ? "settling" : "completed";
   await pool.query(
     `UPDATE clean.adb_anchor_probe
-        SET status='completed',window_start=$2,window_end=$3,window_hours=$4,
+        SET status=$24,window_start=$2,window_end=$3,window_hours=$4,
             rows_delivered=$5,unique_flights=$6,tail_chain_links=$7,rows_per_hour=$8,
             unique_flights_per_credit=$9,tail_chain_links_per_credit=$10,stability=$11,
             duration_censored=$12,stop_reason=$13,complete_buckets=$14,min_stability_buckets=$15,
@@ -394,12 +406,12 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
      input.artifacts.runtime.minStabilityBuckets, result.metrics.confirmedUniqueLower,
      result.metrics.confirmedPlusAmbiguousUpper, lowerRate, upperRate,
      stability.stability === null ? "INSUFFICIENT_SAMPLE" : "PASS",
-     result.runtimeSessionId, result.cleanupVerifiedAtUtc, result.reconciliationStatus],
+     result.runtimeSessionId, result.cleanupVerifiedAtUtc, result.reconciliationStatus, durableStatus],
   );
 
   return {
     probeId,
-    status: "completed",
+    status: durableStatus,
     creditsSpent: null,
     durationCensored: result.durationCensored,
     stopReason: result.stopReason,
