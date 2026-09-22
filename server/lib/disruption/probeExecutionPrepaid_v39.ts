@@ -383,8 +383,14 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     input.artifacts.runtime.minStabilityBuckets,
   );
   const hours = Math.max((result.windowEnd.getTime() - result.windowStart.getTime()) / 3_600_000, 1 / 3600);
+  const deliveryGapCredits = Math.max(0, denominator - result.metrics.internalSendCredits);
   const lowerRate = result.metrics.confirmedUniqueLower / denominator;
-  const upperRate = result.metrics.confirmedPlusAmbiguousUpper / denominator;
+  // Every missing billed credit can represent at most one additional unseen
+  // flight item. Widen only the upper identity bound; never inflate the nominal
+  // observed unique-flight or chain counts.
+  const upperIdentityCount =
+    result.metrics.confirmedPlusAmbiguousUpper + deliveryGapCredits;
+  const upperRate = upperIdentityCount / denominator;
   const chainRate = result.metrics.tailChainLinks / denominator;
 
   const durableStatus = cleanupDeferredSafely ? "settling" : "completed";
