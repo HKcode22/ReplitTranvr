@@ -85,6 +85,8 @@ case "${1:-help}" in
     ;;
   preflight)
     require_repo_state
+    callback_base="${PHASE2G_PUBLISHED_CALLBACK_BASE:-}"
+    [[ -n "$callback_base" ]] || { echo "REFUSED:PHASE2G_PUBLISHED_CALLBACK_BASE_REQUIRED"; exit 2; }
     runtime_sha="$(sha256sum "$RUNTIME" | awk '{print $1}')"
     auth_sha="$(sha256sum "$AUTH" | awk '{print $1}')"
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -100,6 +102,7 @@ case "${1:-help}" in
       --auth-sha "$auth_sha" \
       --expected-head "$(git rev-parse HEAD)" \
       --expected-icao WSSS \
+      --callback-base "$callback_base" \
       --out "$out"
     echo "PREFLIGHT_RECEIPT=$out"
     echo "PREFLIGHT_SHA=$(sha256sum "$out" | awk '{print $1}')"
