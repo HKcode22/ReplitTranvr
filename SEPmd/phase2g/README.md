@@ -103,6 +103,10 @@ For now:
 
 Immediately before the Tuesday readiness pass, the paid launcher was re-audited against the static readiness gate. The static gate already rejected tracked, staged, and untracked changes under `server`, `scripts`, `migrations`, and `tests`, but the final paid launcher only checked tracked/staged diffs. The launcher now uses `git status --porcelain=v1 --untracked-files=all` over those protected paths and refuses any protected-source drift at launch time. A regression assertion was added to `tests/phase2g_stage1_persistent_launch_v39.test.ts`.
 
+## Short Tuesday preparation helper
+
+To avoid long interactive shell pastes, use `scripts/v39_phase2g_tuesday_prepare_v39.sh`. It exposes guarded modes for status, static readiness, P2G06 adjudication dry-run/apply, and synthetic callback verification. It never launches a paid Stage-1 probe. The mutation mode requires an explicit `PHASE2G_CONFIRM_P2G06_APPLY=YES` environment confirmation.
+
 ## Tuesday objective
 
 One and only one post-fix WSSS validation run may occur under the compact-6 amendment.
