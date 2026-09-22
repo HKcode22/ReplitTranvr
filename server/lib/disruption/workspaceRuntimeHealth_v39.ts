@@ -11,18 +11,30 @@ function gitHead(): string {
   }
 }
 
+export type WorkspaceRuntimeOwnerModeV39 =
+  | "replit-managed-project"
+  | "phase2g-detached-npm-run-dev";
+
+function runtimeOwnerMode(): WorkspaceRuntimeOwnerModeV39 {
+  const raw = String(process.env.V39_WORKSPACE_RUNTIME_OWNER_MODE ?? "").trim();
+  if (raw === "replit-managed-project" || raw === "phase2g-detached-npm-run-dev") return raw;
+  throw new Error("WORKSPACE_RUNTIME_OWNER_MODE_INVALID_OR_MISSING");
+}
+
 export interface WorkspaceRuntimeHealthRegistrationV39 {
   routeOwner: string;
   startupGitHead?: string;
 }
 
 /**
- * Register the Phase-2 workspace health contract on the Replit-managed app.
+ * Register the Phase-2 workspace health contract on the canonical port-5000 app.
  *
- * This route performs no provider mutation and no database write. It exists so
- * the normal `npm run dev` process can remain the canonical owner of port 5000;
- * Phase-2 must not kill Replit's managed workflow merely to install a separate
- * callback server.
+ * The owner lifecycle is explicit rather than inferred. Normal Replit Project
+ * runs set V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-managed-project in .replit.
+ * When the Run UI is unavailable, the guarded Tuesday helper may start the same
+ * npm run dev command in a detached OS session and labels that mode
+ * phase2g-detached-npm-run-dev. Both modes remain subject to exact Git/callback
+ * health checks; an unlabeled/manual process fails closed.
  */
 export function registerWorkspaceRuntimeHealthV39(
   app: Express,
@@ -31,16 +43,19 @@ export function registerWorkspaceRuntimeHealthV39(
   const startupGitHead = String(input.startupGitHead ?? gitHead()).toLowerCase();
 
   app.get("/__v39/workspace-runtime", (_req, res) => {
+    let ownerMode: WorkspaceRuntimeOwnerModeV39 | null = null;
     try {
       if (!/^[a-f0-9]{40}$/.test(startupGitHead)) {
         throw new Error("WORKSPACE_RUNTIME_GIT_HEAD_INVALID");
       }
+      ownerMode = runtimeOwnerMode();
       const mode = String(process.env.V39_PROVIDER_BLOB_MODE ?? "").trim().toLowerCase();
       if (mode !== "required") throw new Error("WORKSPACE_RUNTIME_BLOB_MODE_NOT_REQUIRED");
       const bucket = normalizeProviderBlobBucketIdV39(
         String(process.env.V39_PROVIDER_BLOB_BUCKET_ID ?? ""),
       );
       const retentionHours = resolvePrepaidRawRetentionHoursV39();
+      const managed = ownerMode === "replit-managed-project";
 
       res.status(200).json({
         schema: "v39.phase2f-workspace-runtime.v1",
@@ -51,7 +66,9 @@ export function registerWorkspaceRuntimeHealthV39(
         retention_hours: retentionHours,
         bucket_prefix: bucket.split("-").slice(0, 2).join("-"),
         provider_mutation: false,
-        managed_replit_workflow: true,
+        runtime_owner_mode: ownerMode,
+        managed_replit_workflow: managed,
+        detached_workspace_server: !managed,
       });
     } catch (error) {
       res.status(503).json({
@@ -61,7 +78,9 @@ export function registerWorkspaceRuntimeHealthV39(
         route_owner: input.routeOwner,
         prepaid_route_registered: true,
         provider_mutation: false,
-        managed_replit_workflow: true,
+        runtime_owner_mode: ownerMode,
+        managed_replit_workflow: ownerMode === "replit-managed-project",
+        detached_workspace_server: ownerMode === "phase2g-detached-npm-run-dev",
         error: error instanceof Error ? error.message : String(error),
       });
     }
