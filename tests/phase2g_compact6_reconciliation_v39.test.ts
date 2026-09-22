@@ -168,3 +168,40 @@ describe("Phase2G execution source contract", () => {
     expect(migration).toContain("Phase-2G reconciliation evidence is append-only");
   });
 });
+
+describe("Phase2G callback and cleanup evidence ordering", () => {
+  const runtime = readFileSync(
+    join(process.cwd(), "server", "lib", "disruption", "prepaidProbeRuntime_v39.ts"),
+    "utf8",
+  );
+  const windowSource = readFileSync(
+    join(process.cwd(), "server", "lib", "disruption", "prepaidProbeWindow_v39.ts"),
+    "utf8",
+  );
+  const routes = readFileSync(
+    join(process.cwd(), "server", "routes_v3.ts"),
+    "utf8",
+  );
+
+  it("counts prepaid callback failures at the HTTP boundary", () => {
+    expect(runtime).toContain("export async function recordPrepaidProbeCallbackFailureV39");
+    expect(routes).toContain("await recordPrepaidProbeCallbackFailureV39(sessionId).catch(()=>undefined);");
+  });
+
+  it("writes reconciliation evidence before mismatch cleanup", () => {
+    const evidenceIndex = windowSource.indexOf("await persistProbeReconciliationEvidenceV39({");
+    const mismatchIndex = windowSource.indexOf('if (reconciliationStatus === "MISMATCH")');
+    const mismatchCleanupIndex = windowSource.indexOf("${input.deletionRunId}:mismatch", mismatchIndex);
+    expect(evidenceIndex).toBeGreaterThan(-1);
+    expect(mismatchIndex).toBeGreaterThan(evidenceIndex);
+    expect(mismatchCleanupIndex).toBeGreaterThan(mismatchIndex);
+  });
+
+  it("preserves UNRESOLVED aggregate evidence before cleanup", () => {
+    const unresolvedIndex = windowSource.indexOf('evidenceStatus: "UNRESOLVED"');
+    const unresolvedCleanupIndex = windowSource.indexOf("${input.deletionRunId}:settlement-unresolved");
+    expect(unresolvedIndex).toBeGreaterThan(-1);
+    expect(unresolvedCleanupIndex).toBeGreaterThan(unresolvedIndex);
+  });
+});
+
