@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { cleanupPrepaidProbeSessionV39 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import { listSubscriptionsStrict } from "../server/lib/disruption/aerodataboxLimiter_v3";
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -21,6 +22,10 @@ async function main():Promise<void>{
   const apply=has("--apply");
   if(!UUID.test(sessionId)) throw new Error("REFUSED:SESSION_ID_INVALID");
   if(!Number.isInteger(expectedLive)||expectedLive<1||expectedLive>500) throw new Error("REFUSED:EXPECTED_LIVE_BLOBS_INVALID");
+
+  const subscriptions=await listSubscriptionsStrict();
+  const activeBillable=subscriptions.filter((sub)=>sub.isActive&&sub.billingType!=="LifetimeBased");
+  if(activeBillable.length!==0) throw new Error(`REFUSED:ACTIVE_BILLABLE_SUBSCRIPTIONS:${activeBillable.length}`);
 
   const counts=await pool.query(
     `SELECT
@@ -45,6 +50,7 @@ async function main():Promise<void>{
       expected_live_blobs:expectedLive,
       observed_live_blobs:liveN,
       transient_runtime:counts.rows[0],
+      active_billable_subscriptions:0,
       provider_mutation:false,
       subscription_mutation:false,
       alert_credits_spent:0
@@ -72,6 +78,7 @@ async function main():Promise<void>{
     deleted_runtime_rows:result.deletedRuntimeRows,
     verified_at_utc:result.verifiedAtUtc,
     final:after.rows[0],
+    active_billable_subscriptions:0,
     provider_mutation:false,
     subscription_mutation:false,
     alert_credits_spent:0
