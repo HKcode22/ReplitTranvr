@@ -52,7 +52,9 @@ export interface PrepaidLiveWindowResultV39 {
   subscriptionDeleted: boolean;
 }
 
-export const PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 = 0.99;
+// Current frozen acceptance remains exact. A positive external-minus-received
+// gap is preserved as DELIVERY_GAP evidence, but is terminal/non-scoreable.
+export const PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 = 1;
 
 export function classifyProbeReconciliationV39(input: {
   ownerKind: PrepaidProbeOwnerKindV39;
@@ -85,9 +87,10 @@ export function classifyProbeReconciliationV39(input: {
   if (
     input.ownerKind === "anchor_probe" &&
     deliveryGapCredits > 0 &&
-    deliveryCompleteness >= floor &&
     input.costItemDisagreementCount === 0
   ) {
+    // DELIVERY_GAP is a diagnostic classification only under the current
+    // exact-match acceptance rule. Do not convert it into a completed probe.
     return { status: "DELIVERY_GAP", deliveryGapCredits, deliveryCompleteness };
   }
 
@@ -242,8 +245,9 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
 
   // V3.9 §3.2 makes settled provider spend authoritative and explicitly
   // warns that a billed SEND can be absent from the received callback ledger.
-  // Safety-smoke owners remain exact-match only. Anchor probes may carry a
-  // small, prospectively frozen delivery gap as bounded uncertainty.
+  // Safety-smoke owners remain exact-match only. Anchor probes preserve a
+  // positive external-minus-received gap as DELIVERY_GAP evidence, but the
+  // current frozen acceptance rule remains exact and therefore fail-closed.
   const classified = classifyProbeReconciliationV39({
     ownerKind: input.ownerKind,
     externalCredits,
@@ -276,14 +280,16 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     });
   }
 
-  if (reconciliationStatus === "MISMATCH") {
+  if (reconciliationStatus !== "MATCH") {
     const stopReason = liveStopReason === "balance_read_failed"
       ? "balance_read_failed"
-      : "external_internal_credit_mismatch";
+      : reconciliationStatus === "DELIVERY_GAP"
+        ? "external_internal_delivery_gap"
+        : "external_internal_credit_mismatch";
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     const cleanup = await cleanupPrepaidProbeSessionV39(
       session.sessionId,
-      `${input.deletionRunId}:mismatch`,
+      `${input.deletionRunId}:${reconciliationStatus === "DELIVERY_GAP" ? "delivery-gap" : "mismatch"}`,
     ).catch(() => null);
     return {
       status: "failed", runtimeSessionId: session.sessionId, windowStart, windowEnd,
