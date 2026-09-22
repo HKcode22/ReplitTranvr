@@ -115,17 +115,7 @@ export interface Stage1AttemptEvidence extends Stage1ProbeEvidence {
   recordedAtUtc: string;
 }
 
-interface Compact6WsssValidationRuleV39 {
-  icao: "WSSS";
-  historicalProbeId: number;
-  historicalStopReason: "external_internal_credit_mismatch";
-  maxAdditionalRuns: 1;
-}
-
-async function readStage1Evidence(artifacts: LoadedProbeExecutionArtifacts): Promise<Stage1AttemptEvidence[]> {
-  const compact = artifacts.preprobe.probeDesign?.variant === "compact6-region-stratified-v1";
-  const legacyHash = compact ? artifacts.preprobe.probeDesign!.legacyEvidencePreprobeSha256 : null;
-  const grandfatheredProbeIds = compact ? artifacts.preprobe.probeDesign!.grandfatheredProbeIds : [];
+async function readStage1Evidence(preprobeHash: string): Promise<Stage1AttemptEvidence[]> {
   const r = await pool.query(
     `SELECT probe_id,icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
             tail_chain_links_per_credit,stability,confirmed_unique_lower,
@@ -133,14 +123,9 @@ async function readStage1Evidence(artifacts: LoadedProbeExecutionArtifacts): Pro
             confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit,
             duration_censored,stop_reason,reconciliation_status,recorded_at
        FROM clean.adb_anchor_probe
-      WHERE stage=1 AND (
-        preprobe_artifact_sha256=$1
-        OR ($2::text IS NOT NULL
-            AND preprobe_artifact_sha256=$2
-            AND probe_id = ANY($3::bigint[]))
-      )
+      WHERE stage=1 AND preprobe_artifact_sha256=$1
       ORDER BY recorded_at ASC,probe_id ASC`,
-    [artifacts.preprobeSha256, legacyHash, grandfatheredProbeIds],
+    [preprobeHash],
   );
   return r.rows.map((x: any) => {
     const safe = x.provider_content_safe_mode === true;
@@ -207,7 +192,6 @@ export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEv
 export function chooseNextPrimaryStage1TargetV39(
   shortlist: Array<{ icao: string }>,
   attempts: Stage1AttemptEvidence[],
-  options?: { compact6WsssValidation?: Compact6WsssValidationRuleV39 | null },
 ): string | null {
   const grouped = new Map<string, Stage1AttemptEvidence[]>();
   for (const attempt of attempts) {
@@ -224,23 +208,6 @@ export function chooseNextPrimaryStage1TargetV39(
 
     if (rows.some((row) => row.status === "completed")) continue;
 
-    if (icao === "WSSS" && options?.compact6WsssValidation) {
-      const rule = options.compact6WsssValidation;
-      const historical = rows.find((row) => row.probeId === rule.historicalProbeId);
-      const postHistorical = rows.filter((row) => row.probeId > rule.historicalProbeId);
-      const historicalMatches =
-        historical?.status === "failed" &&
-        historical.durationCensored === false &&
-        historical.reconciliationStatus === "MISMATCH" &&
-        historical.stopReason === rule.historicalStopReason;
-      if (historicalMatches && postHistorical.length < rule.maxAdditionalRuns) {
-        return "WSSS";
-      }
-      if (historicalMatches && postHistorical.length >= rule.maxAdditionalRuns) {
-        continue;
-      }
-    }
-
     const latest = rows[rows.length - 1];
     const infraInvalidCount = rows.filter(isInfrastructureInvalidStage1AttemptV39).length;
     if (
@@ -252,27 +219,24 @@ export function chooseNextPrimaryStage1TargetV39(
     }
 
     // Any second attempt, abandoned row, or non-infrastructure failure is
-    // terminal for sequencing. The immutable history remains available for
-    // adjudication/promotion.
+    // terminal for the ordinary sequencing rule.
   }
   return null;
 }
 
 async function chooseNextStage1Target(
-  artifacts: LoadedProbeExecutionArtifacts,
+  artifactForSelection: LoadedProbeExecutionArtifacts["preprobe"],
   evidence: Stage1AttemptEvidence[],
+  allowP2g06PostfixWsssValidation: boolean,
 ): Promise<{ icao: string; replacement: boolean } | null> {
-  const compactValidation = artifacts.preprobe.probeDesign?.variant === "compact6-region-stratified-v1"
-    ? artifacts.preprobe.probeDesign.wsssValidationRerun ?? null
-    : null;
-  const nextPrimary = chooseNextPrimaryStage1TargetV39(
-    artifacts.preprobe.shortlist,
-    evidence,
-    { compact6WsssValidation: compactValidation as Compact6WsssValidationRuleV39 | null },
-  );
+  if (allowP2g06PostfixWsssValidation && isP2g06PostfixWsssValidationEligibleV39(evidence)) {
+    return { icao: "WSSS", replacement: false };
+  }
+
+  const nextPrimary = chooseNextPrimaryStage1TargetV39(artifactForSelection.shortlist, evidence);
   if (nextPrimary) return { icao: nextPrimary, replacement: false };
 
-  const promotion = selectStage2Top5(artifacts.preprobe, evidence);
+  const promotion = selectStage2Top5(artifactForSelection, evidence);
   if (promotion.replacementsNeeded === 0) return null;
   if (!promotion.nextReplacement) {
     throw new Error(`REFUSED_GATE2_UNSAT: ${promotion.replacementsNeeded} Stage-1-valid candidate(s) still needed but frozen replacements are exhausted`);
@@ -289,11 +253,24 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
   }
   const approved = verifiedStage1Auth(argv, binding);
   assertStage1AuthCoversTargetWindow(approved.record);
-  const evidence = await readStage1Evidence(artifacts);
-  const next = await chooseNextStage1Target(artifacts, evidence);
+  const evidence = await readStage1Evidence(artifacts.preprobeSha256);
+  const compact6 = artifacts.runtime.stage1AmendmentSha256
+    ? loadPhase2gCompact6AmendmentV39({
+        expectedSha256: artifacts.runtime.stage1AmendmentSha256,
+        sourcePreprobeFileSha256: artifacts.preprobeSha256,
+        preprobe: artifacts.preprobe,
+      })
+    : null;
+  const selectionArtifact = compact6
+    ? {
+        ...artifacts.preprobe,
+        shortlist: compact6.effectiveShortlist,
+      }
+    : artifacts.preprobe;
+  const next = await chooseNextStage1Target(selectionArtifact, evidence, compact6 !== null);
 
   if (!next) {
-    const promotion = selectStage2Top5(artifacts.preprobe, evidence);
+    const promotion = selectStage2Top5(selectionArtifact, evidence);
     console.log(JSON.stringify({
       schema: "v39.anchor-stage1-evidence.v3",
       status: "PASS",
