@@ -108,6 +108,13 @@ async function main(): Promise<void> {
   const outPath = path.resolve(required("--out"));
   const expectedIcaoRaw = optional("--expected-icao", "").trim().toUpperCase();
   const expectedIcao = expectedIcaoRaw || null;
+  const callbackBase = required("--callback-base").replace(/\/+$/, "");
+  if (!/^https:\/\/[^/]+$/i.test(callbackBase)) {
+    throw new Error("BLOCKED:CALLBACK_BASE_MUST_BE_HTTPS_ORIGIN");
+  }
+  if (/\.replit\.dev$/i.test(new URL(callbackBase).hostname)) {
+    throw new Error("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED");
+  }
   if (expectedIcao && !/^[A-Z0-9]{4}$/.test(expectedIcao)) {
     throw new Error("BLOCKED:EXPECTED_ICAO_INVALID");
   }
@@ -287,7 +294,7 @@ async function main(): Promise<void> {
   const activeBillable = subscriptions.filter((subscription) => subscription.isActive && subscription.billingType !== "LifetimeBased");
   if (activeBillable.length !== 0) blockers.push(`active_billable_subscriptions=${activeBillable.length}`);
 
-  const origin = workspaceOrigin();
+  const origin = callbackBase;
   let callback: Record<string, unknown> = {
     origin,
     reachable: false,
@@ -296,7 +303,7 @@ async function main(): Promise<void> {
     source_compatible_with_current_head: false,
   };
   if (!origin) {
-    blockers.push("workspace_callback_origin_missing");
+    blockers.push("published_callback_origin_missing");
   } else {
     try {
       const health = await getJson(`${origin}/__v39/workspace-runtime`);
@@ -315,6 +322,9 @@ async function main(): Promise<void> {
       }
       const runtimeOwnerMode = String(health.json?.runtime_owner_mode ?? "");
       const runtimeOwnerContract =
+        (runtimeOwnerMode === "replit-published-deployment" &&
+          health.json?.published_deployment === true &&
+          health.json?.runtime_durability_class === "reserved-vm") ||
         (runtimeOwnerMode === "replit-managed-project" &&
           health.json?.managed_replit_workflow === true &&
           health.json?.detached_workspace_server === false) ||
@@ -338,6 +348,8 @@ async function main(): Promise<void> {
         runtime_owner_mode: runtimeOwnerMode || null,
         managed_replit_workflow: health.json?.managed_replit_workflow === true,
         detached_workspace_server: health.json?.detached_workspace_server === true,
+        published_deployment: health.json?.published_deployment === true,
+        runtime_durability_class: health.json?.runtime_durability_class ?? null,
         runtime_git_head: runtimeHead || null,
         current_git_head: currentHead,
         retention_hours: health.json?.retention_hours ?? null,
@@ -346,18 +358,20 @@ async function main(): Promise<void> {
         protected_source_count: CALLBACK_SOURCE_PATHS.length,
         source_compatible_with_current_head: sourceCompatible,
       };
-      if (!exactContract) blockers.push("workspace_callback_exact_owner_contract_failed");
-      if (!sourceCompatible) blockers.push("workspace_callback_source_not_compatible");
+      if (!exactContract) blockers.push("published_callback_exact_owner_contract_failed");
+      if (!sourceCompatible) blockers.push("published_callback_source_not_compatible");
     } catch (error) {
       callback = {
         origin,
         reachable: false,
         exact_contract: false,
         managed_replit_workflow: false,
+        published_deployment: false,
+        runtime_durability_class: null,
         source_compatible_with_current_head: false,
         error: error instanceof Error ? error.message : String(error),
       };
-      blockers.push("workspace_callback_check_failed");
+      blockers.push("published_callback_check_failed");
     }
   }
 
