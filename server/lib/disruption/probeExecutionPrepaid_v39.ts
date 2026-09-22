@@ -256,6 +256,28 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     },
   });
 
+  if (
+    result.durationCensored === true &&
+    String(result.stopReason ?? "").startsWith("balance_read_failed")
+  ) {
+    await markSafeFailure({
+      probeId,
+      runtimeSessionId: result.runtimeSessionId,
+      ended: result.windowEnd,
+      stopReason: result.stopReason ?? "balance_read_failed_after_retries",
+      reconciliationStatus: result.reconciliationStatus,
+      cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+      durationCensored: true,
+    });
+    return {
+      probeId,
+      status: "failed",
+      creditsSpent: null,
+      durationCensored: true,
+      stopReason: result.stopReason ?? "balance_read_failed_after_retries",
+    };
+  }
+
   const acceptedReconciliation = result.reconciliationStatus === "MATCH";
   if (result.status !== "completed" || !result.metrics || !acceptedReconciliation || !result.cleanupVerifiedAtUtc) {
     await markSafeFailure({
