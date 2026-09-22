@@ -36,11 +36,19 @@ async function callbackHealthy(base: string, expectedHead: string): Promise<bool
     });
     if (response.status !== 200) return false;
     const json: any = await response.json().catch(() => null);
+    const ownerMode = String(json?.runtime_owner_mode ?? "");
+    const ownerContract =
+      (ownerMode === "replit-managed-project" &&
+        json?.managed_replit_workflow === true &&
+        json?.detached_workspace_server === false) ||
+      (ownerMode === "phase2g-detached-npm-run-dev" &&
+        json?.managed_replit_workflow === false &&
+        json?.detached_workspace_server === true);
     return json?.schema === "v39.phase2f-workspace-runtime.v1" &&
       json?.status === "PASS" &&
       json?.prepaid_route_registered === true &&
       json?.provider_mutation === false &&
-      json?.managed_replit_workflow === true &&
+      ownerContract &&
       String(json?.git_head ?? "").toLowerCase() === expectedHead;
   } catch {
     return false;
