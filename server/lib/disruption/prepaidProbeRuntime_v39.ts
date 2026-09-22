@@ -38,7 +38,21 @@ export interface PrepaidProbeMetricsV39 {
   confirmedPlusAmbiguousUpper: number;
   ambiguousUnknown: number;
   firstObservationMs: number[];
+  deliveryCount: number;
+  notificationItemsReceived: number;
+  explicitCostDeliveryCount: number;
+  fallbackDeliveryCount: number;
+  costItemDisagreementCount: number;
+  callbackRequestsSeen: number;
+  callbackSuccess2xx: number;
+  callbackFailures: number;
 }
+
+export type PrepaidProbeReconciliationEvidenceStatusV39 =
+  | "MATCH"
+  | "DELIVERY_GAP"
+  | "MISMATCH"
+  | "UNRESOLVED";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RAW_RETENTION_ENV = "V39_PREPAID_RAW_RETENTION_HOURS";
@@ -258,6 +272,13 @@ export async function persistPrepaidProbeWebhookV39(input: {
   if (!["armed", "active", "settling"].includes(state)) throw new Error(`PREPAID_PROBE_SESSION_NOT_ACCEPTING:${state}`);
   if (new Date(session.rows[0].expires_at_utc).getTime() <= receivedAt.getTime()) throw new Error("PREPAID_PROBE_SESSION_EXPIRED");
 
+  await pool.query(
+    `UPDATE clean.prepaid_probe_session_runtime
+        SET callback_requests_seen=callback_requests_seen+1
+      WHERE session_id=$1`,
+    [sessionId],
+  );
+
   const subId = providerSubscriptionId(input.body);
   const boundSub = session.rows[0].provider_subscription_id ? String(session.rows[0].provider_subscription_id) : null;
   if (boundSub && subId && boundSub !== subId) throw new Error("PREPAID_PROBE_PROVIDER_SUBSCRIPTION_MISMATCH");
@@ -274,6 +295,12 @@ export async function persistPrepaidProbeWebhookV39(input: {
   );
   if (prior.rowCount) {
     if (String(prior.rows[0].raw_body_sha256) !== bodySha256) throw new Error("PREPAID_PROBE_DUPLICATE_HASH_CONFLICT");
+    await pool.query(
+      `UPDATE clean.prepaid_probe_session_runtime
+          SET callback_success_2xx=callback_success_2xx+1
+        WHERE session_id=$1`,
+      [sessionId],
+    );
     return { deliveryId, blobRefId: String(prior.rows[0].blob_ref_id), itemCount: Array.isArray(input.body?.flights) ? input.body.flights.length : Array.isArray(input.body) ? input.body.length : 0, duplicate: true };
   }
 
@@ -283,13 +310,24 @@ export async function persistPrepaidProbeWebhookV39(input: {
       ? input.body.flights
       : [];
   const store = createRequiredProviderBlobStoreV39();
-  const blob = await persistProviderBlobBeforeAckV39({
-    store,
-    bytes: rawBytes,
-    contentClass: "raw_provider_content",
-    retentionHours: resolvePrepaidRawRetentionHoursV39(),
-    now: receivedAt,
-  });
+  let blob: ProviderBlobRefV39;
+  try {
+    blob = await persistProviderBlobBeforeAckV39({
+      store,
+      bytes: rawBytes,
+      contentClass: "raw_provider_content",
+      retentionHours: resolvePrepaidRawRetentionHoursV39(),
+      now: receivedAt,
+    });
+  } catch (error) {
+    await pool.query(
+      `UPDATE clean.prepaid_probe_session_runtime
+          SET callback_failures=callback_failures+1
+        WHERE session_id=$1`,
+      [sessionId],
+    ).catch(() => undefined);
+    throw error;
+  }
 
   const client = await pool.connect();
   try {
@@ -337,10 +375,22 @@ export async function persistPrepaidProbeWebhookV39(input: {
     } else {
       await client.query(`UPDATE clean.prepaid_probe_session_runtime SET last_delivery_at_utc=$2 WHERE session_id=$1`, [sessionId, receivedAt]);
     }
+    await client.query(
+      `UPDATE clean.prepaid_probe_session_runtime
+          SET callback_success_2xx=callback_success_2xx+1
+        WHERE session_id=$1`,
+      [sessionId],
+    );
     await client.query("COMMIT");
     return { deliveryId, blobRefId: blob.blobRefId, itemCount: flights.length, duplicate: false };
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
+    await pool.query(
+      `UPDATE clean.prepaid_probe_session_runtime
+          SET callback_failures=callback_failures+1
+        WHERE session_id=$1`,
+      [sessionId],
+    ).catch(() => undefined);
     try {
       await deleteProviderBlobAtExpiryV39({ store, ref: blob, now: new Date(), allowEarlyDelete: true });
     } catch { /* fail original request; orphan cleanup/expiry job still has opaque path in the thrown context only */ }
@@ -390,23 +440,100 @@ export async function prepaidProbeMetricsV39(sessionId: string, start: Date, end
       GROUP BY runtime_flight_key`,
     [id, start, end],
   );
-  const internalSendCredits = await pool.query(
-    `SELECT COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::int AS n
+  const deliveries = await pool.query(
+    `SELECT
+        count(*)::int AS delivery_count,
+        COALESCE(sum(notification_items),0)::int AS notification_items,
+        COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::int AS internal_credits,
+        count(*) FILTER (WHERE delivery_attempt_cost_credits IS NOT NULL)::int AS explicit_cost_count,
+        count(*) FILTER (WHERE delivery_attempt_cost_credits IS NULL)::int AS fallback_count,
+        count(*) FILTER (
+          WHERE delivery_attempt_cost_credits IS NOT NULL
+            AND delivery_attempt_cost_credits <> notification_items
+        )::int AS cost_item_disagreement_count
        FROM clean.prepaid_probe_delivery_runtime
       WHERE session_id=$1 AND received_at_utc >= $2 AND received_at_utc < $3`,
     [id, start, end],
   );
+  const sessionCounters = await pool.query(
+    `SELECT callback_requests_seen,callback_success_2xx,callback_failures
+       FROM clean.prepaid_probe_session_runtime WHERE session_id=$1`,
+    [id],
+  );
   const row = counts.rows[0] ?? {};
+  const d = deliveries.rows[0] ?? {};
+  const s = sessionCounters.rows[0] ?? {};
   return {
     rowsDelivered: Number(row.rows ?? 0),
     uniqueFlights: Number(row.unique_flights ?? 0),
     tailChainLinks: Number(chain.rows[0]?.links ?? 0),
-    internalSendCredits: Number(internalSendCredits.rows[0]?.n ?? 0),
+    internalSendCredits: Number(d.internal_credits ?? 0),
     confirmedUniqueLower: Number(row.confirmed_lower ?? 0),
     confirmedPlusAmbiguousUpper: Number(row.unique_flights ?? 0),
     ambiguousUnknown: Number(row.ambiguous_n ?? 0),
     firstObservationMs: observations.rows.map((r: any) => Number(r.event_ms)).filter((n: number) => Number.isFinite(n)),
+    deliveryCount: Number(d.delivery_count ?? 0),
+    notificationItemsReceived: Number(d.notification_items ?? 0),
+    explicitCostDeliveryCount: Number(d.explicit_cost_count ?? 0),
+    fallbackDeliveryCount: Number(d.fallback_count ?? 0),
+    costItemDisagreementCount: Number(d.cost_item_disagreement_count ?? 0),
+    callbackRequestsSeen: Number(s.callback_requests_seen ?? 0),
+    callbackSuccess2xx: Number(s.callback_success_2xx ?? 0),
+    callbackFailures: Number(s.callback_failures ?? 0),
   };
+}
+
+export async function persistProbeReconciliationEvidenceV39(input: {
+  probeId: number;
+  runtimeSessionId: string;
+  stage: 1 | 2;
+  icao: string;
+  evidenceStatus: PrepaidProbeReconciliationEvidenceStatusV39;
+  externalSpendCredits: number | null;
+  metrics: PrepaidProbeMetricsV39;
+  settlementReads: number;
+  maxObservedUnsettledCreditGap: number;
+  deliveryCompletenessFloor: number;
+  windowStartUtc: Date;
+  windowEndUtc: Date;
+  durationCensored: boolean;
+  stopReason: string | null;
+}): Promise<void> {
+  const sessionId = assertSessionId(input.runtimeSessionId);
+  const external = input.externalSpendCredits;
+  if (external !== null && (!Number.isInteger(external) || external < 0)) {
+    throw new Error("PREPAID_PROBE_RECONCILIATION_EXTERNAL_INVALID");
+  }
+  if (!(input.deliveryCompletenessFloor > 0 && input.deliveryCompletenessFloor <= 1)) {
+    throw new Error("PREPAID_PROBE_RECONCILIATION_FLOOR_INVALID");
+  }
+  const gap = external === null ? null : external - input.metrics.internalSendCredits;
+  const completeness = external === null
+    ? null
+    : external === 0
+      ? (input.metrics.internalSendCredits === 0 ? 1 : 0)
+      : input.metrics.internalSendCredits / external;
+
+  await pool.query(
+    `INSERT INTO clean.adb_probe_reconciliation_evidence
+       (probe_id,runtime_session_id,stage,icao,evidence_status,
+        external_spend_credits,internal_received_credits,delivery_gap_credits,delivery_completeness,
+        delivery_count,notification_items_received,explicit_cost_delivery_count,fallback_delivery_count,
+        cost_item_disagreement_count,callback_requests_seen,callback_success_2xx,callback_failures,
+        settlement_reads,max_observed_unsettled_credit_gap,delivery_completeness_floor,
+        window_start_utc,window_end_utc,duration_censored,stop_reason)
+     VALUES($1,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+    [
+      input.probeId, sessionId, input.stage, input.icao.toUpperCase(), input.evidenceStatus,
+      external, input.metrics.internalSendCredits, gap, completeness,
+      input.metrics.deliveryCount, input.metrics.notificationItemsReceived,
+      input.metrics.explicitCostDeliveryCount, input.metrics.fallbackDeliveryCount,
+      input.metrics.costItemDisagreementCount, input.metrics.callbackRequestsSeen,
+      input.metrics.callbackSuccess2xx, input.metrics.callbackFailures,
+      input.settlementReads, input.maxObservedUnsettledCreditGap, input.deliveryCompletenessFloor,
+      input.windowStartUtc, input.windowEndUtc, input.durationCensored, input.stopReason,
+    ],
+  );
 }
 
 function blobRefFromRow(row: any): ProviderBlobRefV39 {
