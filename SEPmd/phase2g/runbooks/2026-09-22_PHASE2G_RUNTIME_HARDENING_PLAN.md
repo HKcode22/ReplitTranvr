@@ -272,3 +272,71 @@ The paid GitHub Actions workflow is manual only (`workflow_dispatch`), requires 
 3. `safety-watchdog`: consumes the same receipt and independently protects the exact subscription.
 
 The workflow must exist on the repository default branch before it can be manually dispatched. Do not merge/activate it until branch static/typecheck/build tests pass and the published callback deployment is verified on the exact source HEAD.
+
+
+## No-redeploy callback contract confirmed — 2026-09-22
+
+The user does not have Replit deployment/publish permission. A redeploy is therefore **not a prerequisite** for the next infrastructure-recovery attempt.
+
+A live zero-mutation route probe against the existing published deployment was performed at approximately 2026-09-22T15:14:57Z:
+
+- URL shape: `POST https://travnr.com/api/v1/webhooks/aerodatabox/<intentionally-wrong-secret>/prepaid/<synthetic-uuid>`
+- request body: `{}`
+- response: HTTP 404
+- content type: `application/json`
+- response body: `{"error":"Not found"}`
+
+This is the expected fail-closed behavior of the already-deployed prepaid callback route and demonstrates that the existing published snapshot has both the prepaid route and a configured webhook secret. No provider call, subscription creation, database callback write, or Alert-credit spend occurs on this wrong-secret test.
+
+Before any paid run, `scripts/v39_phase2g_verify_live_callback_v39.ts` must additionally perform a zero-credit **correct-secret synthetic callback** end to end and prove:
+
+- one synthetic runtime session/delivery/item;
+- one raw provider blob reference;
+- immediate exact-session local cleanup;
+- zero live blobs/runtime rows afterward;
+- zero open incidents;
+- provider called=false;
+- provider subscription created=false;
+- Alert credits spent=0.
+
+The resulting hash-bound `v39.phase2g-live-callback-verification.v1` receipt is required by paid preflight and must be no more than 24 hours old. Paid preflight also repeats the wrong-secret live-route check immediately before launch.
+
+## Deferred-cleanup completion contract
+
+The GitHub Actions owner is responsible for the paid-risk boundary:
+
+1. create exactly one authorized subscription;
+2. supervise the immutable 120-minute window;
+3. enforce live credit/callback guards;
+4. delete and verify the exact provider subscription;
+5. obtain authoritative settlement;
+6. persist exact reconciliation evidence.
+
+For a full-duration exact MATCH, the durable probe becomes `status='settling'` after step 6. At that point **provider exposure is already zero**, but Replit-local raw-content/runtime cleanup is still pending.
+
+No new paid probe may start while any `settling` row exists.
+
+Post-stop Replit cleanup then uses:
+
+1. `v39_phase2g_exact_session_purpose_cleanup_v39.ts` — exact session only; refuses any active billable provider subscription.
+2. `v39_phase2g_finalize_settling_probe_v39.ts` — consumes the hash-bound cleanup receipt, re-verifies zero active billable subscriptions + MATCH/full-duration shape, changes `settling -> completed`, and closes that exact budget day.
+
+A Replit Development Sandbox reset during this post-stop cleanup cannot extend provider billing or alter the already-frozen 120-minute window; cleanup can be retried fail-closed.
+
+## Prospective P2G09 infrastructure-recovery bound
+
+A new frozen amendment, `artifacts/phase2g-compact6-p2g09-hostreset-recovery-freeze-20260922.json`, authorizes at most **one** additional WSSS attempt solely because P2G09/probe 7 was censored by the documented Replit Development Sandbox/process reset.
+
+Eligibility requires the exact WSSS attempt history through probe 7. Any sixth WSSS row makes the eligibility predicate false.
+
+The amendment requires:
+
+- fresh runtime, budget, and AUTH;
+- GitHub Actions as the paid lifecycle owner;
+- fresh zero-credit live callback verification;
+- installed/tested `settling` state machine;
+- zero active billable subscriptions at launch;
+- unchanged 120-minute target, frozen weekday time class, 500-credit authorization ceiling, and exact reconciliation rule;
+- P2G09 remains failed/censored/UNRESOLVED and excluded from scoring;
+- no WSSS outcome metric is used to authorize the retry;
+- no further automatic WSSS retry after this bounded recovery.
