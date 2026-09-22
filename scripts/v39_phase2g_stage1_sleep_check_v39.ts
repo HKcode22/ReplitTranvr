@@ -38,7 +38,8 @@ async function callbackHealthy(base: string, expectedHead: string): Promise<bool
       json?.provider_mutation === false &&
       json?.runtime_owner_mode === "replit-published-deployment" &&
       json?.published_deployment === true &&
-      json?.runtime_durability_class === "reserved-vm" &&
+      (json?.runtime_durability_class === "autoscale" ||
+       json?.runtime_durability_class === "reserved-vm") &&
       String(json?.git_head ?? "").toLowerCase() === expectedHead;
   } catch {
     return false;
@@ -150,7 +151,7 @@ async function main(): Promise<void> {
   }
 
   const callbackReachable = await callbackHealthy(callbackBase, expectedHead);
-  if (!callbackReachable) blockers.push("published_reserved_vm_callback_not_reachable");
+  if (!callbackReachable) blockers.push("published_callback_not_reachable");
 
   const result = {
     schema: "v39.phase2g-stage1-unattended-health.v1",
@@ -171,9 +172,9 @@ async function main(): Promise<void> {
     callback_base: callbackBase || null,
     callback_reachable: callbackReachable,
     blockers,
-    host_failure_boundary: "This proves the current Replit workspace/process/callback path is healthy now; it does not provide an independent external cleanup agent if the entire Replit workspace is terminated.",
+    host_failure_boundary: "Legacy local monitor only. The prospective paid owner is GitHub Actions and the published Replit deployment is callback-only; interactive workspace resets are outside the paid-owner failure domain.",
     next: blockers.length === 0
-      ? "Keep the Mac plugged in, awake, lid open, network connected, and Replit workspace active. Do not relaunch the paid probe."
+      ? "Legacy monitor is healthy. Do not use it as launch authority; prospective paid ownership is GitHub Actions."
       : "Stay awake and inspect status/heartbeat/log/database/provider state. Do not launch a second paid probe.",
   };
   console.log(JSON.stringify(result, null, 2));
