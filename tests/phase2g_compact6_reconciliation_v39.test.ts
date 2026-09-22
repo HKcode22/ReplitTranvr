@@ -7,6 +7,7 @@ import {
   loadPhase2gCompact6AmendmentV39,
   PHASE2G_COMPACT6_ARTIFACT_PATH,
   PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH,
+  PHASE2G_COMPACT6_RECONCILIATION_V2_ARTIFACT_PATH,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
   classifyProbeReconciliationV39,
@@ -252,9 +253,18 @@ describe("Phase2G callback and cleanup evidence ordering", () => {
     "utf8",
   );
 
-  it("counts prepaid callback failures at the HTTP boundary", () => {
+  it("counts prepaid callback attempts/success/failure exactly at the HTTP boundary", () => {
+    expect(runtime).toContain("export async function recordPrepaidProbeCallbackAttemptV39");
+    expect(runtime).toContain("export async function recordPrepaidProbeCallbackSuccessV39");
     expect(runtime).toContain("export async function recordPrepaidProbeCallbackFailureV39");
+    expect(routes).toContain("await recordPrepaidProbeCallbackAttemptV39(sessionId).catch(()=>undefined);");
+    expect(routes).toContain("await recordPrepaidProbeCallbackSuccessV39(sessionId).catch(()=>undefined);");
     expect(routes).toContain("await recordPrepaidProbeCallbackFailureV39(sessionId).catch(()=>undefined);");
+  });
+
+  it("stops early after a persistent external gap larger than the one-credit bound", () => {
+    expect(windowSource).toContain("LIVE_EXTERNAL_GAP_FAILED_POLL_LIMIT_V39 = 3");
+    expect(windowSource).toContain('liveStopReason = "persistent_external_delivery_gap_gt_one"');
   });
 
   it("writes reconciliation evidence before mismatch cleanup and keeps bounded DELIVERY_GAP scoreable", () => {
