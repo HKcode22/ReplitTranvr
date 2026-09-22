@@ -6,6 +6,7 @@ import { loadFrozenProbeArtifact } from "../server/lib/disruption/anchorPromotio
 import {
   loadPhase2gCompact6AmendmentV39,
   PHASE2G_COMPACT6_ARTIFACT_PATH,
+  PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
   classifyProbeReconciliationV39,
@@ -13,6 +14,7 @@ import {
 } from "../server/lib/disruption/prepaidProbeWindow_v39";
 import {
   isP2g06PostfixWsssValidationEligibleV39,
+  isP2g09HostResetRecoveryEligibleV39,
   type Stage1AttemptEvidence,
 } from "../scripts/v39_probe_stage1_owner_v39";
 
@@ -63,6 +65,44 @@ describe("Phase2G compact-6 amendment", () => {
     expect(new Set(loaded.effectiveShortlist.map((x) => x.region)).size).toBe(6);
     expect(loaded.amendment.p2g06_excluded_from_final_scoring).toBe(true);
     expect(loaded.amendment.wsss_postfix_validation_rerun.maximum_additional_attempts).toBe(1);
+  });
+
+  it("loads the prospective P2G09 host-reset recovery artifact with one bounded GitHub-owner attempt", () => {
+    const preprobe = loadFrozenProbeArtifact(PREPROBE_PATH, PREPROBE_SHA);
+    const p = join(process.cwd(), PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH);
+    const raw = readFileSync(p, "utf8");
+    const loaded = loadPhase2gCompact6AmendmentV39({
+      expectedSha256: sha256(raw),
+      sourcePreprobeFileSha256: PREPROBE_SHA,
+      preprobe: preprobe.artifact,
+      path: p,
+    });
+    const recovery = loaded.amendment.p2g09_hostreset_recovery_rerun;
+    expect(recovery?.authorized).toBe(true);
+    expect(recovery?.maximum_additional_attempts).toBe(1);
+    expect(recovery?.failed_probe_id).toBe(7);
+    expect(recovery?.requires_owner_executor).toBe("github-actions");
+    expect(recovery?.requires_live_callback_verification).toBe(true);
+    expect(recovery?.requires_deferred_cleanup_state_machine).toBe(true);
+    expect(recovery?.no_further_automatic_wsss_retry).toBe(true);
+    expect(recovery?.outcome_metrics_not_used_to_authorize).toBe(true);
+  });
+
+  it("matches the P2G09 recovery only before a sixth WSSS attempt exists", () => {
+    const evidence = [
+      attempt(1, "WSSS", "failed", true, "UNRESOLVED", "supervisor_child_exit_before_runtime_session"),
+      attempt(2, "OMAA", "completed", false, "MATCH", null),
+      attempt(3, "MMUN", "failed", true, "UNRESOLVED", "supervisor_child_exit_after_runtime_reset_recovered"),
+      attempt(4, "WSSS", "failed", false, "MISMATCH", "external_internal_credit_mismatch"),
+      attempt(5, "WSSS", "failed", true, "UNRESOLVED", "subscription_delete_failed"),
+      attempt(6, "WSSS", "failed", true, "MATCH", "balance_read_failed_after_retries"),
+      attempt(7, "WSSS", "failed", true, "UNRESOLVED", "supervisor_child_exit_recovered"),
+    ];
+    expect(isP2g09HostResetRecoveryEligibleV39(evidence)).toBe(true);
+    expect(isP2g09HostResetRecoveryEligibleV39([
+      ...evidence,
+      attempt(8, "WSSS", "failed", true, "UNRESOLVED", "supervisor_child_exit_recovered"),
+    ])).toBe(false);
   });
 
   it("authorizes exactly the historical P2G06 pattern for one post-fix WSSS validation", () => {
