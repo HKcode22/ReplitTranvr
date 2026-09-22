@@ -73,10 +73,6 @@ on:
         description: 'Callback verification artifact SHA-256'
         required: true
         type: string
-      provider_blob_bucket_id:
-        description: 'Dedicated Replit provider blob bucket id'
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -136,7 +132,7 @@ jobs:
 
           OUT="${RUNNER_TEMP}/phase2g-stage1-paid-preflight.json"
 
-          npx tsx scripts/v39_phase2g_stage1_paid_preflight_v39.ts             --preprobe "${{ inputs.preprobe_file }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --expected-head "${{ inputs.expected_head }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --provider-blob-bucket-id "${{ inputs.provider_blob_bucket_id }}"             --callback-verification "${{ inputs.callback_verification_file }}"             --callback-verification-sha "${{ inputs.callback_verification_sha }}"             --owner-executor github-actions             --out "$OUT"
+          npx tsx scripts/v39_phase2g_stage1_paid_preflight_v39.ts             --preprobe "${{ inputs.preprobe_file }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --expected-head "${{ inputs.expected_head }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --callback-verification "${{ inputs.callback_verification_file }}"             --callback-verification-sha "${{ inputs.callback_verification_sha }}"             --owner-executor github-actions             --out "$OUT"
 
           SHA="$(sha256sum "$OUT" | awk '{print $1}')"
           B64="$(base64 -w0 "$OUT")"
