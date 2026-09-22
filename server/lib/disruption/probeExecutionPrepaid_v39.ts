@@ -157,7 +157,7 @@ async function markSafeFailure(input: {
   runtimeSessionId?: string | null;
   ended: Date;
   stopReason: string;
-  reconciliationStatus?: "MATCH" | "MISMATCH" | "UNRESOLVED" | null;
+  reconciliationStatus?: "MATCH" | "DELIVERY_GAP" | "MISMATCH" | "UNRESOLVED" | null;
   cleanupVerifiedAtUtc?: string | null;
 }): Promise<void> {
   await pool.query(
@@ -333,7 +333,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       reconciliationStatus: result.reconciliationStatus === "DELIVERY_GAP" ? "DELIVERY_GAP" : "MATCH",
       cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
     });
-    return { probeId, status: "failed", creditsSpent: null, durationCensored: true, stopReason: "zero_reconciled_credits" };
+    return { probeId, status: "failed", creditsSpent: null, durationCensored: result.durationCensored, stopReason: "zero_reconciled_credits" };
   }
 
   const stability = completeBucketStability(
