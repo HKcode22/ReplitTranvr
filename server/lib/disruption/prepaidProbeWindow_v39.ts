@@ -54,6 +54,46 @@ export interface PrepaidLiveWindowResultV39 {
 
 export const PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 = 0.99;
 
+export function classifyProbeReconciliationV39(input: {
+  ownerKind: PrepaidProbeOwnerKindV39;
+  externalCredits: number;
+  internalSendCredits: number;
+  costItemDisagreementCount: number;
+  deliveryCompletenessFloor?: number;
+}): {
+  status: "MATCH" | "DELIVERY_GAP" | "MISMATCH";
+  deliveryGapCredits: number;
+  deliveryCompleteness: number;
+} {
+  const floor = input.deliveryCompletenessFloor ?? PROBE_DELIVERY_COMPLETENESS_FLOOR_V39;
+  if (!(floor > 0 && floor <= 1)) throw new Error("PROBE_DELIVERY_COMPLETENESS_FLOOR_INVALID");
+  if (!Number.isInteger(input.externalCredits) || input.externalCredits < 0 ||
+      !Number.isInteger(input.internalSendCredits) || input.internalSendCredits < 0 ||
+      !Number.isInteger(input.costItemDisagreementCount) || input.costItemDisagreementCount < 0) {
+    throw new Error("PROBE_RECONCILIATION_INPUT_INVALID");
+  }
+
+  const deliveryGapCredits = input.externalCredits - input.internalSendCredits;
+  const deliveryCompleteness = input.externalCredits === 0
+    ? (input.internalSendCredits === 0 ? 1 : 0)
+    : input.internalSendCredits / input.externalCredits;
+
+  if (deliveryGapCredits === 0 && input.costItemDisagreementCount === 0) {
+    return { status: "MATCH", deliveryGapCredits, deliveryCompleteness };
+  }
+
+  if (
+    input.ownerKind === "anchor_probe" &&
+    deliveryGapCredits > 0 &&
+    deliveryCompleteness >= floor &&
+    input.costItemDisagreementCount === 0
+  ) {
+    return { status: "DELIVERY_GAP", deliveryGapCredits, deliveryCompleteness };
+  }
+
+  return { status: "MISMATCH", deliveryGapCredits, deliveryCompleteness };
+}
+
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 function validateInput(input: PrepaidLiveWindowInputV39): void {
@@ -200,26 +240,19 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   const metrics = await prepaidProbeMetricsV39(session.sessionId, windowStart, windowEnd);
   maxObservedUnsettledCreditGap = Math.max(maxObservedUnsettledCreditGap, Math.max(0, metrics.internalSendCredits - externalCredits));
 
-  const deliveryGapCredits = externalCredits - metrics.internalSendCredits;
-  const deliveryCompleteness = externalCredits === 0
-    ? (metrics.internalSendCredits === 0 ? 1 : 0)
-    : metrics.internalSendCredits / externalCredits;
-
-  // V3.9 §3.2 makes the settled provider balance delta authoritative and
-  // explicitly notes that a billed SEND may never reach the callback. The
-  // received-attempt ledger is therefore diagnostic rather than an equality
-  // oracle. Accept only a small pre-frozen delivery loss; contradictory
-  // accounting (internal > external), cost/item disagreement, or <99%
-  // completeness remains a hard MISMATCH.
-  const exactMatch = deliveryGapCredits === 0 && metrics.costItemDisagreementCount === 0;
-  const anchorDeliveryGapAccepted =
-    input.ownerKind === "anchor_probe" &&
-    deliveryGapCredits > 0 &&
-    deliveryCompleteness >= PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 &&
-    metrics.costItemDisagreementCount === 0;
-
-  const reconciliationStatus: "MATCH" | "DELIVERY_GAP" | "MISMATCH" =
-    exactMatch ? "MATCH" : anchorDeliveryGapAccepted ? "DELIVERY_GAP" : "MISMATCH";
+  // V3.9 §3.2 makes settled provider spend authoritative and explicitly
+  // warns that a billed SEND can be absent from the received callback ledger.
+  // Safety-smoke owners remain exact-match only. Anchor probes may carry a
+  // small, prospectively frozen delivery gap as bounded uncertainty.
+  const classified = classifyProbeReconciliationV39({
+    ownerKind: input.ownerKind,
+    externalCredits,
+    internalSendCredits: metrics.internalSendCredits,
+    costItemDisagreementCount: metrics.costItemDisagreementCount,
+  });
+  const deliveryGapCredits = classified.deliveryGapCredits;
+  const deliveryCompleteness = classified.deliveryCompleteness;
+  const reconciliationStatus = classified.status;
 
   if (input.ownerKind === "anchor_probe") {
     if (!Number.isInteger(input.ownerProbeId) || !input.ownerProbeId || ![1, 2].includes(Number(input.stage))) {
