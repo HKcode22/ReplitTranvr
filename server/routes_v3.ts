@@ -218,16 +218,27 @@ export function registerV3Routes(app:Express):void{
       return;
     }
     const owner = await pool.query(
-      `SELECT probe_id,status,stage,provider_content_safe_mode
-         FROM clean.adb_anchor_probe
-        WHERE runtime_session_id=$1::uuid
-          AND stage=1
-          AND provider_content_safe_mode=true
-        ORDER BY probe_id DESC`,
+      `SELECT p.probe_id,p.status,p.stage,p.provider_content_safe_mode,
+              r.state AS runtime_state
+         FROM clean.adb_anchor_probe p
+         JOIN clean.prepaid_probe_session_runtime r
+           ON r.session_id=p.runtime_session_id
+        WHERE p.runtime_session_id=$1::uuid
+          AND p.stage=1
+          AND p.provider_content_safe_mode=true
+          AND r.owner_kind='anchor_probe'
+          AND r.owner_probe_id=p.probe_id
+          AND r.stage=1
+        ORDER BY p.probe_id DESC`,
       [sessionId],
     );
     if (owner.rowCount !== 1) {
       res.status(409).json({ error: "EXACT_STAGE1_SESSION_OWNER_NOT_FOUND" });
+      return;
+    }
+    const runtimeState = String(owner.rows[0].runtime_state ?? "");
+    if (runtimeState !== "settling" && runtimeState !== "failed") {
+      res.status(409).json({ error: `RUNTIME_CLEANUP_REFUSED_STATE:${runtimeState || "missing"}` });
       return;
     }
     try {
