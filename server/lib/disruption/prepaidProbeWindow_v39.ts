@@ -100,6 +100,18 @@ export function classifyProbeReconciliationV39(input: {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+async function getBalanceWithTransientRetryV39(): Promise<Awaited<ReturnType<typeof getBalance>>> {
+  // AeroDataBox balance is a free control-plane read. A single gateway 5xx
+  // must not censor a two-hour scientific probe. Retry briefly and boundedly;
+  // repeated failure still stops exposure fail-closed.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const balance = await getBalance();
+    if (balance) return balance;
+    if (attempt < 3) await sleep(attempt === 1 ? 2_000 : 3_000);
+  }
+  return null;
+}
+
 async function deleteOwnedSubscriptionVerifiedV39(subscriptionId: string): Promise<boolean> {
   // DELETE is scoped to the exact provider id returned by createSubscription.
   // A transient gateway error is ambiguous: the provider may have applied the
@@ -197,13 +209,13 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   while (Date.now() < deadline) {
     await sleep(Math.min(input.watchdogPollMs, Math.max(250, deadline - Date.now())));
     const internal = await prepaidProbeInternalCreditsV39(session.sessionId);
-    const balance = await getBalance();
+    const balance = await getBalanceWithTransientRetryV39();
 
-    // A missing authoritative balance can never be treated as zero spend.
-    // Stop the live exposure immediately; deletion occurs directly after
-    // leaving this loop, before settlement/reconciliation.
+    // A missing authoritative balance after bounded retries can never be
+    // treated as zero spend. Stop exposure fail-closed; deletion occurs
+    // directly after leaving this loop.
     if (!balance) {
-      liveStopReason = "balance_read_failed";
+      liveStopReason = "balance_read_failed_after_retries";
       break;
     }
 
