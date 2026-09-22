@@ -148,8 +148,12 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(githubWorkflow).toContain("needs.gate.outputs.preflight_sha");
     expect(githubWorkflow).toContain("timeout-minutes: 175");
     expect(githubWorkflow).toContain("cancel-in-progress: false");
-    expect(githubWorkflow).not.toContain("preflight_file:");
-    expect(githubWorkflow).not.toContain("preflight_sha:");
+    const workflowDispatchInputs = githubWorkflow.slice(
+      githubWorkflow.indexOf("workflow_dispatch:"),
+      githubWorkflow.indexOf("\npermissions:"),
+    );
+    expect(workflowDispatchInputs).not.toContain("preflight_file:");
+    expect(workflowDispatchInputs).not.toContain("preflight_sha:");
   });
 
   it("keeps the independent GitHub watchdog exact-recovery-only and incapable of starting a subscription", () => {
