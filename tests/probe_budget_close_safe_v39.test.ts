@@ -11,7 +11,7 @@ describe("Gate-2 safe-mode probe budget-day closure", () => {
   });
 
   it("refuses closure with active or failed probes and records overshoot as mismatch", () => {
-    expect(source).toContain("REFUSED_PROBE_BUDGET_DAY_ACTIVE_PROBE");
+    expect(source).toContain("REFUSED_PROBE_BUDGET_DAY_ACTIVE_OR_SETTLING_PROBE");
     expect(source).toContain("REFUSED_PROBE_BUDGET_DAY_HAS_FAILED_OR_ABANDONED_PROBE");
     expect(source).toContain("state='MISMATCH'");
     expect(source).toContain("PROTOCOL_DEVIATION_PROBE_BUDGET_DAY_EXPOSURE");
