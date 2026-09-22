@@ -30,6 +30,12 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).not.toContain("DELETE FROM clean.");
   });
 
+  it("allows the hash-bound P2G07 recovery amendment in paid preflight without hard-wiring the old compact6 path", () => {
+    expect(preflight).toContain("isP2g07Provider502RecoveryEligibleV39");
+    expect(preflight).toContain("p2g07_provider502_recovery_rerun");
+    expect(preflight).not.toContain("path: path.resolve(PHASE2G_COMPACT6_ARTIFACT_PATH)");
+  });
+
   it("re-binds the exact approved AUTH, runtime, head, budget day, account and callback before launch", () => {
     expect(preflight).toContain("auth.sha256 !== expectedAuthSha");
     expect(preflight).toContain("auth_scope_mismatch");
