@@ -201,3 +201,70 @@ The prior `no_further_automatic_wsss_retry` rule means no blind or implicit retr
   `SEPmd/phase2g/incidents/2026-09-22_REPLIT_SUPPORT_REPORT.md`
 - GitHub issue #4
 - V3.9 Data Collection Plan and Implementation Log remain the baseline scientific authority.
+
+
+## Final no-extra-cost execution architecture
+
+After further review, a Reserved VM is **not required** for the next recovery attempt.
+
+The preferred architecture is:
+
+- Replit published **Autoscale** deployment: HTTP callback receiver and exact-session Replit Object Storage cleanup bridge.
+- GitHub Actions **owner job**: runs the existing audited Stage-1 owner in the foreground for the 120-minute scientific window.
+- GitHub Actions **independent safety-watchdog job**: watches the same durable budget/probe/session and may only invoke exact fail-closed recovery; it cannot create a second subscription.
+- PostgreSQL: shared experiment state/runtime counters.
+- Replit Object Storage: raw provider payload boundary remains unchanged.
+- Interactive Replit Development Sandbox/Shell: **not part of paid execution**.
+
+This removes the P2G09 single point of failure: a Replit editor/Shell/Development Sandbox reset cannot terminate the GitHub-hosted owner.
+
+The owner supervisor performs a published callback health GET every 15 seconds. During an active probe this also continuously exercises the Autoscale deployment, reducing callback cold-start risk without a dedicated always-on VM.
+
+### Exact role separation
+
+```text
+AeroDataBox
+    |
+    v
+travnr.com published Autoscale callback
+    |
+    +--> Replit Object Storage (raw provider payload)
+    |
+    +--> PostgreSQL runtime evidence
+                 ^
+                 |
+       GitHub Actions owner
+       - exact AUTH/runtime/preprobe binding
+       - creates one subscription
+       - 120-minute immutable deadline
+       - provider balance guard
+       - settlement/reconciliation
+       - published callback health every 15s
+                 |
+                 +--> GitHub Actions safety watchdog
+                      - cannot create subscriptions
+                      - observes exact probe/session/budget
+                      - exact recovery on safety boundary
+```
+
+At purpose completion, the GitHub owner calls the secret-guarded published cleanup bridge. The Replit deployment deletes/verifies only the exact session's raw objects/runtime rows locally. Provider subscription creation/deletion remains owned by the audited Stage-1 owner/recovery code.
+
+### Why this is stronger than the previous Replit workspace owner
+
+The prior design required one process inside the Development Sandbox to survive for two hours. `setsid` only detached that process from a Shell; it could not survive replacement of the sandbox/runtime.
+
+The new design makes the long-running owner a GitHub-hosted job. The published Replit deployment is request-driven and can restart independently without destroying the owner clock. The owner repeatedly checks the published callback and fails closed if the callback becomes persistently unavailable.
+
+### Cost constraint
+
+This architecture is selected specifically to avoid requiring a new Reserved VM deployment charge. Repository visibility is public, so standard GitHub-hosted Actions runners are eligible for GitHub's public-repository hosted-runner policy. Current account/billing limits must still be reviewed before paid provider execution, but no Reserved VM is part of the frozen design.
+
+### Workflow activation rule
+
+The paid GitHub Actions workflow is manual only (`workflow_dispatch`), requires the literal confirmation token `RUN_PAID_STAGE1_ONCE`, uses a global non-cancelling concurrency group, and has three jobs:
+
+1. `gate`: generates one fresh read-only preflight receipt;
+2. `owner`: consumes that exact receipt and runs the paid owner in the foreground;
+3. `safety-watchdog`: consumes the same receipt and independently protects the exact subscription.
+
+The workflow must exist on the repository default branch before it can be manually dispatched. Do not merge/activate it until branch static/typecheck/build tests pass and the published callback deployment is verified on the exact source HEAD.
