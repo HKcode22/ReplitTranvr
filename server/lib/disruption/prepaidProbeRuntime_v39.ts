@@ -553,6 +553,7 @@ export async function persistProbeReconciliationEvidenceV39(input: {
   metrics: PrepaidProbeMetricsV39;
   settlementReads: number;
   maxObservedUnsettledCreditGap: number;
+  maxObservedExternalDeliveryGap: number;
   deliveryCompletenessFloor: number;
   windowStartUtc: Date;
   windowEndUtc: Date;
@@ -580,9 +581,9 @@ export async function persistProbeReconciliationEvidenceV39(input: {
         external_spend_credits,internal_received_credits,delivery_gap_credits,delivery_completeness,
         delivery_count,notification_items_received,explicit_cost_delivery_count,fallback_delivery_count,
         cost_item_disagreement_count,callback_requests_seen,callback_success_2xx,callback_failures,
-        settlement_reads,max_observed_unsettled_credit_gap,delivery_completeness_floor,
+        settlement_reads,max_observed_unsettled_credit_gap,max_observed_external_delivery_gap,delivery_completeness_floor,
         window_start_utc,window_end_utc,duration_censored,stop_reason)
-     VALUES($1,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+     VALUES($1,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
     [
       input.probeId, sessionId, input.stage, input.icao.toUpperCase(), input.evidenceStatus,
       external, input.metrics.internalSendCredits, gap, completeness,
@@ -590,8 +591,9 @@ export async function persistProbeReconciliationEvidenceV39(input: {
       input.metrics.explicitCostDeliveryCount, input.metrics.fallbackDeliveryCount,
       input.metrics.costItemDisagreementCount, input.metrics.callbackRequestsSeen,
       input.metrics.callbackSuccess2xx, input.metrics.callbackFailures,
-      input.settlementReads, input.maxObservedUnsettledCreditGap, input.deliveryCompletenessFloor,
-      input.windowStartUtc, input.windowEndUtc, input.durationCensored, input.stopReason,
+      input.settlementReads, input.maxObservedUnsettledCreditGap, input.maxObservedExternalDeliveryGap,
+      input.deliveryCompletenessFloor, input.windowStartUtc, input.windowEndUtc,
+      input.durationCensored, input.stopReason,
     ],
   );
 }
