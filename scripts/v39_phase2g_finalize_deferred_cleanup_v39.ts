@@ -5,7 +5,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { listSubscriptionsStrict } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import { cleanupPrepaidProbeSessionLocalV39 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
-import { prepaidSafeBudgetExposureV39, PROBE_BUDGET_DAY_HARD_CAP } from "../server/lib/disruption/probeExecutionPrepaid_v39";
+import { prepaidSafeBudgetExposureV39 } from "../server/lib/disruption/probeExecutionPrepaid_v39";
+import { PROBE_BUDGET_DAY_HARD_CAP } from "../server/lib/disruption/probeExecution_v39";
 
 function required(name:string):string {
   const i=process.argv.indexOf(name);
