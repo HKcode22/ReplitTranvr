@@ -103,6 +103,7 @@ case "${1:-help}" in
       --expected-head "$(git rev-parse HEAD)" \
       --expected-icao WSSS \
       --callback-base "$callback_base" \
+      --owner-executor github-actions \
       --out "$out"
     echo "PREFLIGHT_RECEIPT=$out"
     echo "PREFLIGHT_SHA=$(sha256sum "$out" | awk '{print $1}')"
