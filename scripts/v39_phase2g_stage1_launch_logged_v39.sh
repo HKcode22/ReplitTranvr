@@ -163,12 +163,20 @@ CALLBACK_BASE="$BASE" EXPECTED_HEAD="$EXPECTED_HEAD" node <<'NODE'
   const text = await response.text();
   let json = null;
   try { json = JSON.parse(text); } catch {}
+  const ownerMode = String(json?.runtime_owner_mode || '');
+  const ownerContract =
+    (ownerMode === 'replit-managed-project' &&
+      json?.managed_replit_workflow === true &&
+      json?.detached_workspace_server === false) ||
+    (ownerMode === 'phase2g-detached-npm-run-dev' &&
+      json?.managed_replit_workflow === false &&
+      json?.detached_workspace_server === true);
   const ok = response.status === 200 &&
     json?.schema === 'v39.phase2f-workspace-runtime.v1' &&
     json?.status === 'PASS' &&
     json?.prepaid_route_registered === true &&
     json?.provider_mutation === false &&
-    json?.managed_replit_workflow === true &&
+    ownerContract &&
     String(json?.git_head || '').toLowerCase() === expectedHead;
   if (!ok) {
     console.error(JSON.stringify({
@@ -186,6 +194,7 @@ CALLBACK_BASE="$BASE" EXPECTED_HEAD="$EXPECTED_HEAD" node <<'NODE'
     check: 'WORKSPACE_CALLBACK_HEALTH_AT_LAUNCH',
     git_head: json.git_head,
     route_owner: json.route_owner,
+    runtime_owner_mode: ownerMode,
   }));
 })().catch((error) => {
   console.error(JSON.stringify({
