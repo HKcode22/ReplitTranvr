@@ -152,6 +152,16 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(supervisor).toContain("recovery_exit_code");
   });
 
+  it("recovers an exact orphan subscription even after the owner already marked the probe failed", () => {
+    expect(recovery).toContain("status='failed'");
+    expect(recovery).toContain("subscription_delete_failed");
+    expect(recovery).toContain("state IN ('armed','active','settling','failed')");
+    expect(recovery).toContain("status IN ('probing','failed')");
+    expect(probeExecution).toContain("duration_censored=COALESCE");
+    expect(prepaidWindow).toContain("deleteOwnedSubscriptionVerifiedV39");
+    expect(prepaidWindow).toContain("listSubscriptionsStrict");
+  });
+
   it("recovers exact ownership after an UNLOGGED runtime reset without persisting provider IDs", () => {
     expect(recovery).toContain("SELECT probe_id,icao,status,runtime_session_id");
     expect(recovery).toContain("durableSessionId");
@@ -165,7 +175,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   });
 
   it("scopes recovery to one exact Stage-1 probe/session and never bulk-deletes unmatched billable subscriptions", () => {
-    expect(recovery).toContain("stage=1 AND probe_budget_day_id=$1 AND status='probing'");
+    expect(recovery).toContain("stage=1 AND probe_budget_day_id=$1");
     expect(recovery).toContain("owner_kind='anchor_probe' AND owner_probe_id=$1 AND stage=1");
     expect(recovery).toContain("RECOVERY_REFUSED:MULTIPLE_ACTIVE_RUNTIME_SESSIONS");
     expect(recovery).toContain('subscription.billingType === "CreditBased"');
