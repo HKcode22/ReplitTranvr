@@ -253,7 +253,9 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     },
   });
 
-  if (result.status !== "completed" || !result.metrics || result.reconciliationStatus !== "MATCH" || !result.cleanupVerifiedAtUtc) {
+  const acceptedReconciliation =
+    result.reconciliationStatus === "MATCH" || result.reconciliationStatus === "DELIVERY_GAP";
+  if (result.status !== "completed" || !result.metrics || !acceptedReconciliation || !result.cleanupVerifiedAtUtc) {
     await markSafeFailure({
       probeId,
       runtimeSessionId: result.runtimeSessionId,
@@ -266,12 +268,35 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       probeId,
       status: "failed",
       creditsSpent: null,
-      durationCensored: true,
+      durationCensored: result.durationCensored,
       stopReason: result.stopReason ?? "prepaid_probe_failed",
     };
   }
 
-  const settledCurrentCredits = Math.max(result.externalCredits ?? 0, result.internalSendCredits);
+  if (result.externalCredits === null || result.externalCredits < result.internalSendCredits) {
+    await markSafeFailure({
+      probeId,
+      runtimeSessionId: result.runtimeSessionId,
+      ended: result.windowEnd,
+      stopReason: "authoritative_external_spend_invalid",
+      reconciliationStatus: "MISMATCH",
+      cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+    });
+    await markProbeBudgetDayMismatch(input.artifacts.runtime.probeBudgetDayId, {
+      probeId,
+      externalCredits: result.externalCredits,
+      internalSendCredits: result.internalSendCredits,
+    });
+    return {
+      probeId,
+      status: "failed",
+      creditsSpent: null,
+      durationCensored: result.durationCensored,
+      stopReason: "authoritative_external_spend_invalid",
+    };
+  }
+
+  const settledCurrentCredits = result.externalCredits;
   const settledBudgetDayCredits = priorExposure + settledCurrentCredits;
   if (settledBudgetDayCredits > PROBE_BUDGET_DAY_HARD_CAP) {
     await markSafeFailure({
@@ -298,7 +323,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     };
   }
 
-  const denominator = result.metrics.internalSendCredits;
+  const denominator = result.externalCredits;
   if (!(denominator > 0)) {
     await markSafeFailure({
       probeId,
@@ -318,8 +343,10 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     input.artifacts.runtime.minStabilityBuckets,
   );
   const hours = Math.max((result.windowEnd.getTime() - result.windowStart.getTime()) / 3_600_000, 1 / 3600);
+  const deliveryGapCredits = Math.max(0, result.externalCredits - result.internalSendCredits);
+  const adjustedAmbiguityUpper = result.metrics.confirmedPlusAmbiguousUpper + deliveryGapCredits;
   const lowerRate = result.metrics.confirmedUniqueLower / denominator;
-  const upperRate = result.metrics.confirmedPlusAmbiguousUpper / denominator;
+  const upperRate = adjustedAmbiguityUpper / denominator;
   const chainRate = result.metrics.tailChainLinks / denominator;
 
   await pool.query(
@@ -331,7 +358,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
             confirmed_unique_lower=$16,confirmed_plus_ambiguous_upper=$17,
             confirmed_unique_lower_per_credit=$18,confirmed_plus_ambiguous_upper_per_credit=$19,
             stability_status=$20,runtime_session_id=$21,runtime_cleanup_verified_at_utc=$22::timestamptz,
-            reconciliation_status='MATCH'
+            reconciliation_status=$23
       WHERE probe_id=$1 AND provider_content_safe_mode=true`,
     [probeId, result.windowStart, result.windowEnd, hours,
      result.metrics.rowsDelivered, result.metrics.confirmedUniqueLower, result.metrics.tailChainLinks,
