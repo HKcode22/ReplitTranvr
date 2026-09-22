@@ -11,6 +11,18 @@ RECON_SHA="635aec4f6da80d4ebe5cd314eecf4fe27b20442e0fd6994129ba7389b646aa0d"
 CLEANUP="artifacts/phase2g-exact-session-purpose-cleanup-p2g06-wsss-final-1790059551714.json"
 CLEANUP_SHA="ee4fce51d932a93a69fd0fe8a349ff95106742530a88412b540aee7735588bf3"
 
+SMOKE="artifacts/v39-phase2-safety-smoke-AUTH-20260915-P2F095554-20260915T100325Z.json"
+SMOKE_RUNTIME="artifacts/phase2f-smoke-runtime-20260915T095554Z.json"
+SMOKE_RUNTIME_SHA="58dbadb53bedc27dbaa236d020e21e7059470dd5ba0d10594475c5af2429d232"
+PREPROBE="artifacts/preprobe-reference-freeze-record.json"
+COMPACT6="artifacts/phase2g-compact6-amendment-freeze-20260921.json"
+FRESH_RUNTIME="artifacts/phase2g-gate2-runtime-P2G-S1-20260922-06.json"
+FRESH_BUDGET_DAY="P2G-S1-20260922-06"
+FRESH_AUTH="SEPmd/V3.9_PHASE2G_AUTH_20260922_P2G07.json"
+FRESH_AUTH_ID="AUTH-20260922-P2G07"
+FRESH_AUTH_START="2026-09-22T11:00:00Z"
+FRESH_AUTH_EXPIRES="2026-09-22T15:00:00Z"
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -20,6 +32,10 @@ Usage:
   PHASE2G_CONFIRM_P2G06_APPLY=YES bash scripts/v39_phase2g_tuesday_prepare_v39.sh p2g06-apply
   bash scripts/v39_phase2g_tuesday_prepare_v39.sh callback-verify
   bash scripts/v39_phase2g_tuesday_prepare_v39.sh post-close
+  bash scripts/v39_phase2g_tuesday_prepare_v39.sh fresh-runtime
+  bash scripts/v39_phase2g_tuesday_prepare_v39.sh auth-draft
+  PHASE2G_CONFIRM_AUTH_SHA=<64hex> bash scripts/v39_phase2g_tuesday_prepare_v39.sh auth-approve
+  bash scripts/v39_phase2g_tuesday_prepare_v39.sh preflight
 
 Safety:
   - This helper NEVER launches a paid Stage-1 probe.
@@ -29,6 +45,9 @@ Safety:
     no provider subscription mutation; 0 Alert credits.
   - callback-verify: synthetic Replit callback/storage verification only;
     no AeroDataBox provider call; 0 Alert credits.
+  - fresh-runtime/auth-draft/auth-approve: local evidence/ledger writes only; no provider call.
+  - preflight: provider balance/subscription READS only; no provider mutation; 0 Alert credits.
+  - This helper has no paid-launch mode.
 EOF
 }
 
@@ -202,6 +221,157 @@ run_post_close() {
   run_callback_verify
 }
 
+run_fresh_runtime() {
+  echo "=== FRESH TUESDAY GATE2 RUNTIME ==="
+  echo "provider_call=false"
+  echo "provider_mutation=false"
+  echo "alert_credits_spent=0"
+  echo "database_mutation=false"
+  require_repo_state
+
+  if [[ -f "$FRESH_RUNTIME" ]]; then
+    echo "FRESH_RUNTIME_ALREADY_EXISTS=$FRESH_RUNTIME"
+    sha256sum "$FRESH_RUNTIME"
+    return
+  fi
+
+  npx tsx scripts/v39_prepare_gate2_runtime_v39.ts \
+    --preprobe "$PREPROBE" \
+    --smoke "$SMOKE" \
+    --smoke-runtime-file "$SMOKE_RUNTIME" \
+    --smoke-runtime-sha "$SMOKE_RUNTIME_SHA" \
+    --out "$FRESH_RUNTIME" \
+    --probe-budget-day-id "$FRESH_BUDGET_DAY" \
+    --min-stability-buckets 6 \
+    --stage1-reservation 450 \
+    --stage2-reservation 450 \
+    --stage1-amendment-file "$COMPACT6"
+
+  echo "FRESH_RUNTIME_SHA256=$(sha256sum "$FRESH_RUNTIME" | awk '{print $1}')"
+}
+
+run_auth_draft() {
+  echo "=== FRESH TUESDAY AUTH DRAFT ==="
+  echo "provider_call=false"
+  echo "provider_mutation=false"
+  echo "alert_credits_spent=0"
+  echo "database_mutation=false"
+  require_repo_state
+  [[ -f "$FRESH_RUNTIME" ]] || {
+    echo "REFUSED:FRESH_RUNTIME_MISSING"
+    exit 2
+  }
+
+  local runtime_sha
+  runtime_sha="$(sha256sum "$FRESH_RUNTIME" | awk '{print $1}')"
+
+  if [[ -f "$FRESH_AUTH" ]]; then
+    echo "FRESH_AUTH_ALREADY_EXISTS=$FRESH_AUTH"
+    echo "FRESH_AUTH_SHA256=$(sha256sum "$FRESH_AUTH" | awk '{print $1}')"
+    cat "$FRESH_AUTH"
+    return
+  fi
+
+  npx tsx scripts/v39_prepare_phase2g_auth_v39.ts \
+    --auth "$FRESH_AUTH_ID" \
+    --alert-ceiling 500 \
+    --start "$FRESH_AUTH_START" \
+    --expires "$FRESH_AUTH_EXPIRES" \
+    --cleanup-owner "scripts/v39_probe_stage1_owner_v39.ts" \
+    --out "$FRESH_AUTH" \
+    --runtime-file "$FRESH_RUNTIME" \
+    --runtime-sha "$runtime_sha" \
+    --smoke "$SMOKE" \
+    --smoke-runtime-file "$SMOKE_RUNTIME" \
+    --smoke-runtime-sha "$SMOKE_RUNTIME_SHA" \
+    --preprobe "$PREPROBE"
+
+  echo "FRESH_AUTH_SHA256=$(sha256sum "$FRESH_AUTH" | awk '{print $1}')"
+  echo "AUTH_REVIEW_REQUIRED_BEFORE_APPROVAL=true"
+}
+
+run_auth_approve() {
+  echo "=== FRESH TUESDAY AUTH APPROVAL ==="
+  echo "provider_call=false"
+  echo "provider_mutation=false"
+  echo "alert_credits_spent=0"
+  echo "database_mutation=false"
+  require_repo_state
+
+  [[ -f "$FRESH_RUNTIME" && -f "$FRESH_AUTH" ]] || {
+    echo "REFUSED:FRESH_RUNTIME_OR_AUTH_MISSING"
+    exit 2
+  }
+
+  local runtime_sha auth_sha confirmed
+  runtime_sha="$(sha256sum "$FRESH_RUNTIME" | awk '{print $1}')"
+  auth_sha="$(sha256sum "$FRESH_AUTH" | awk '{print $1}')"
+  confirmed="${PHASE2G_CONFIRM_AUTH_SHA:-}"
+
+  [[ "$confirmed" == "$auth_sha" ]] || {
+    echo "REFUSED:AUTH_SHA_CONFIRMATION_REQUIRED"
+    echo "actual_auth_sha=$auth_sha"
+    echo "Run after human review:"
+    echo "PHASE2G_CONFIRM_AUTH_SHA=$auth_sha bash scripts/v39_phase2g_tuesday_prepare_v39.sh auth-approve"
+    exit 2
+  }
+
+  npx tsx scripts/v39_approve_phase2g_auth_v39.ts \
+    --expected-sha "$auth_sha" \
+    --auth-file "$FRESH_AUTH" \
+    --runtime-file "$FRESH_RUNTIME" \
+    --runtime-sha "$runtime_sha" \
+    --smoke "$SMOKE" \
+    --smoke-runtime-file "$SMOKE_RUNTIME" \
+    --smoke-runtime-sha "$SMOKE_RUNTIME_SHA" \
+    --preprobe "$PREPROBE"
+}
+
+run_preflight() {
+  echo "=== FRESH TUESDAY PAID-STAGE1 PREFLIGHT ==="
+  echo "provider_call=balance_and_subscription_reads_only"
+  echo "provider_mutation=false"
+  echo "alert_credits_spent=0"
+  require_repo_state
+
+  [[ -f "$FRESH_RUNTIME" && -f "$FRESH_AUTH" ]] || {
+    echo "REFUSED:FRESH_RUNTIME_OR_AUTH_MISSING"
+    exit 2
+  }
+
+  local runtime_sha auth_sha now_s start_s seconds_until_start
+  runtime_sha="$(sha256sum "$FRESH_RUNTIME" | awk '{print $1}')"
+  auth_sha="$(sha256sum "$FRESH_AUTH" | awk '{print $1}')"
+  now_s="$(date -u +%s)"
+  start_s="$(date -u -d "$FRESH_AUTH_START" +%s)"
+  seconds_until_start=$((start_s-now_s))
+
+  if (( seconds_until_start > 1800 )); then
+    echo "REFUSED:PREFLIGHT_TOO_EARLY seconds_until_auth_start=$seconds_until_start"
+    echo "Earliest useful final preflight is 30 minutes before $FRESH_AUTH_START"
+    exit 2
+  fi
+
+  local stamp out
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  out="artifacts/phase2g-stage1-paid-preflight-P2G07-${stamp}.json"
+
+  npx tsx scripts/v39_phase2g_stage1_paid_preflight_v39.ts \
+    --preprobe "$PREPROBE" \
+    --smoke "$SMOKE" \
+    --smoke-runtime-file "$SMOKE_RUNTIME" \
+    --smoke-runtime-sha "$SMOKE_RUNTIME_SHA" \
+    --runtime-file "$FRESH_RUNTIME" \
+    --runtime-sha "$runtime_sha" \
+    --auth-file "$FRESH_AUTH" \
+    --auth-sha "$auth_sha" \
+    --expected-head "$(git rev-parse HEAD)" \
+    --expected-icao WSSS \
+    --out "$out"
+
+  echo "PREFLIGHT_RECEIPT=$out"
+}
+
 mode="${1:-help}"
 case "$mode" in
   help|-h|--help) usage ;;
@@ -214,6 +384,10 @@ case "$mode" in
   p2g06-apply) run_apply ;;
   callback-verify) run_callback_verify ;;
   post-close) run_post_close ;;
+  fresh-runtime) run_fresh_runtime ;;
+  auth-draft) run_auth_draft ;;
+  auth-approve) run_auth_approve ;;
+  preflight) run_preflight ;;
   *)
     echo "REFUSED:UNKNOWN_MODE=$mode"
     usage
