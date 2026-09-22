@@ -109,6 +109,10 @@ async function main(): Promise<void> {
   const expectedIcaoRaw = optional("--expected-icao", "").trim().toUpperCase();
   const expectedIcao = expectedIcaoRaw || null;
   const callbackBase = required("--callback-base").replace(/\/+$/, "");
+  const ownerExecutor = required("--owner-executor").trim().toLowerCase();
+  if (ownerExecutor !== "github-actions") {
+    throw new Error("BLOCKED:OWNER_EXECUTOR_MUST_BE_GITHUB_ACTIONS");
+  }
   if (!/^https:\/\/[^/]+$/i.test(callbackBase)) {
     throw new Error("BLOCKED:CALLBACK_BASE_MUST_BE_HTTPS_ORIGIN");
   }
@@ -321,16 +325,11 @@ async function main(): Promise<void> {
         sourceCompatible = checks.every((check) => check.match);
       }
       const runtimeOwnerMode = String(health.json?.runtime_owner_mode ?? "");
+      const callbackDurabilityClass = String(health.json?.runtime_durability_class ?? "");
       const runtimeOwnerContract =
-        (runtimeOwnerMode === "replit-published-deployment" &&
-          health.json?.published_deployment === true &&
-          health.json?.runtime_durability_class === "reserved-vm") ||
-        (runtimeOwnerMode === "replit-managed-project" &&
-          health.json?.managed_replit_workflow === true &&
-          health.json?.detached_workspace_server === false) ||
-        (runtimeOwnerMode === "phase2g-detached-npm-run-dev" &&
-          health.json?.managed_replit_workflow === false &&
-          health.json?.detached_workspace_server === true);
+        runtimeOwnerMode === "replit-published-deployment" &&
+        health.json?.published_deployment === true &&
+        (callbackDurabilityClass === "autoscale" || callbackDurabilityClass === "reserved-vm");
       const exactContract = health.status === 200 &&
         health.json?.schema === "v39.phase2f-workspace-runtime.v1" &&
         health.json?.status === "PASS" &&
@@ -460,10 +459,11 @@ async function main(): Promise<void> {
       eligible_now: timeClassEligible,
       would_cross_utc_midnight_if_started_now: wouldCrossUtcMidnight,
     },
+    owner_executor: ownerExecutor,
     callback,
     blockers,
     next: status === "PASS_READY_FOR_PAID_STAGE1"
-      ? "Launch only through the exact hash-bound persistent Stage-1 launcher."
+      ? "Launch only through the exact hash-bound GitHub Actions Stage-1 owner; the published deployment is callback-only."
       : status === "PASS_WAIT_FOR_AUTH_START"
         ? "Wait until AUTH start/time-class opens, rerun this preflight, then launch only on PASS_READY_FOR_PAID_STAGE1."
         : "Resolve blockers; do not launch Stage 1.",
