@@ -17,6 +17,10 @@ const githubOwner = readFileSync(join(root, "scripts", "v39_phase2g_github_actio
 const githubWatchdog = readFileSync(join(root, "scripts", "v39_phase2g_github_actions_watchdog_v39.ts"), "utf8");
 const githubWorkflow = readFileSync(join(root, ".github", "workflows", "phase2g-paid-stage1.yml"), "utf8");
 const routesV3 = readFileSync(join(root, "server", "routes_v3.ts"), "utf8");
+const exactCleanup = readFileSync(join(root, "scripts", "v39_phase2g_exact_session_purpose_cleanup_v39.ts"), "utf8");
+const settlingFinalizer = readFileSync(join(root, "scripts", "v39_phase2g_finalize_settling_probe_v39.ts"), "utf8");
+const liveCallbackVerify = readFileSync(join(root, "scripts", "v39_phase2g_verify_live_callback_v39.ts"), "utf8");
+const settlingMigration = readFileSync(join(root, "migrations", "0059_phase2g_settling_state.sql"), "utf8");
 
 describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   it("keeps the paid preflight read-only and emits an immutable exact receipt", () => {
@@ -56,7 +60,8 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).toContain("currentHead !== expectedHead");
     expect(preflight).toContain("probe_budget_day_already_has_probe_rows");
     expect(preflight).toContain("active_billable_subscriptions=");
-    expect(preflight).toContain("published_callback_source_not_compatible");
+    expect(preflight).toContain("callback_verification_contract_invalid_or_stale");
+    expect(preflight).toContain("published_callback_live_route_check_failed");
     expect(preflight).toContain("provider_balance_below_protected_floor");
   });
 
@@ -86,17 +91,17 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(launcher).toContain("REFUSED:PREFLIGHT_RECEIPT_");
   });
 
-  it("separates the published callback runtime from the GitHub Actions paid owner", () => {
+  it("separates the existing published callback route from the GitHub Actions paid owner", () => {
     expect(preflight).toContain('ownerExecutor !== "github-actions"');
     expect(preflight).toContain('owner_executor: ownerExecutor');
-    expect(preflight).toContain("replit-published-deployment");
-    expect(preflight).toContain('callbackDurabilityClass === "autoscale"');
-    expect(preflight).toContain('callbackDurabilityClass === "reserved-vm"');
+    expect(preflight).toContain('contract_mode: "legacy-live-prepaid-route"');
+    expect(preflight).toContain("callback_verification_contract_invalid_or_stale");
+    expect(preflight).toContain("prepaidRouteHealth");
     expect(supervisor).toContain('ownerExecutor !== "github-actions"');
     expect(supervisor).toContain('process.env.GITHUB_ACTIONS !== "true"');
-    expect(supervisor).toContain('durabilityClass === "autoscale"');
+    expect(supervisor).toContain("phase2g-healthcheck-intentionally-wrong");
+    expect(supervisor).toContain('/api/v1/webhooks/aerodatabox/');
     expect(runtimeHealth).toContain("replit-published-deployment");
-    expect(runtimeHealth).toContain("V39_RUNTIME_DURABILITY_CLASS");
   });
 
   it("requires a stable non-development callback and refuses interactive workspace ownership", () => {
@@ -133,7 +138,8 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(githubOwner).toContain('GITHUB_SHA_MISMATCH');
     expect(githubOwner).toContain('owner_executor !== "github-actions"');
     expect(githubOwner).toContain('--owner-executor github-actions');
-    expect(githubOwner).toContain('V39_REMOTE_BLOB_CLEANUP_BASE="$BASE"');
+    expect(githubOwner).toContain('V39_DEFER_PROVIDER_CONTENT_CLEANUP="1"');
+    expect(githubOwner).toContain('V39_PROVIDER_BLOB_BUCKET_ID="$PROVIDER_BLOB_BUCKET_ID"');
     expect(githubOwner).not.toContain("nohup");
     expect(githubOwner).not.toContain("setsid");
   });
@@ -146,6 +152,9 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(githubWorkflow).toContain("--owner-executor github-actions");
     expect(githubWorkflow).toContain("preflight_b64");
     expect(githubWorkflow).toContain("needs.gate.outputs.preflight_sha");
+    expect(githubWorkflow).toContain("callback_verification_file");
+    expect(githubWorkflow).toContain("callback_verification_sha");
+    expect(githubWorkflow).toContain("--provider-blob-bucket-id");
     expect(githubWorkflow).toContain("timeout-minutes: 175");
     expect(githubWorkflow).toContain("cancel-in-progress: false");
     const workflowDispatchInputs = githubWorkflow.slice(
@@ -166,15 +175,19 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(githubWatchdog).not.toContain("refillBalance(");
   });
 
-  it("delegates provider-blob cleanup back to the published Replit app through a secret-guarded exact-session route", () => {
+  it("defers provider-blob cleanup until after provider-safe settlement and finalizes from Replit", () => {
     expect(prepaidWindow).toContain("deleteOwnedSubscriptionVerifiedV39");
-    expect(routesV3).toContain('/__v39/phase2g/runtime-cleanup');
-    expect(routesV3).toContain("phase2gControlGuard");
-    expect(routesV3).toContain("timingSafeEqual");
-    expect(routesV3).toContain("cleanupPrepaidProbeSessionLocalV39");
-    expect(routesV3).toContain("runtime_session_id=$1::uuid");
-    expect(routesV3).toContain("provider_mutation: false");
-    expect(routesV3).not.toContain('app.post("/__v39/phase2g/runtime-cleanup",managementMutationGuard');
+    expect(prepaidWindow).toContain("if (input.deferCleanup)");
+    expect(prepaidWindow).toContain('status: "settling"');
+    expect(probeExecution).toContain('const durableStatus = cleanupDeferredSafely ? "settling" : "completed"');
+    expect(exactCleanup).toContain("ACTIVE_BILLABLE_SUBSCRIPTIONS");
+    expect(exactCleanup).toContain("cleanupPrepaidProbeSessionV39");
+    expect(settlingFinalizer).toContain('String(probe.status)!=="settling"');
+    expect(settlingFinalizer).toContain('SET status=\'completed\'');
+    expect(settlingFinalizer).toContain("PASS_COMPLETED_AND_BUDGET_CLOSED");
+    expect(settlingMigration).toContain("'settling'");
+    expect(liveCallbackVerify).toContain("provider_called: false");
+    expect(liveCallbackVerify).toContain("correct_secret_accepted_200");
   });
 
   it("durably binds the random runtime session before provider subscription creation", () => {
@@ -249,7 +262,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(recovery).toContain("status='failed'");
     expect(recovery).toContain("subscription_delete_failed");
     expect(recovery).toContain("state IN ('armed','active','settling','failed')");
-    expect(recovery).toContain("status IN ('probing','failed')");
+    expect(recovery).toContain("status IN ('probing','settling','failed')");
     expect(probeExecution).toContain("duration_censored=COALESCE");
     expect(prepaidWindow).toContain("deleteOwnedSubscriptionVerifiedV39");
     expect(prepaidWindow).toContain("listSubscriptionsStrict");
