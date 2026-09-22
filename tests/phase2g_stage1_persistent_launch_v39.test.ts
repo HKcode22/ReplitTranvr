@@ -13,6 +13,10 @@ const probeExecution = readFileSync(join(root, "server", "lib", "disruption", "p
 const prepaidWindow = readFileSync(join(root, "server", "lib", "disruption", "prepaidProbeWindow_v39.ts"), "utf8");
 const overnightGuard = readFileSync(join(root, "scripts", "v39_phase2g_overnight_wsss_guard_v39.sh"), "utf8");
 const runtimeHealth = readFileSync(join(root, "server", "lib", "disruption", "workspaceRuntimeHealth_v39.ts"), "utf8");
+const githubOwner = readFileSync(join(root, "scripts", "v39_phase2g_github_actions_owner_v39.sh"), "utf8");
+const githubWatchdog = readFileSync(join(root, "scripts", "v39_phase2g_github_actions_watchdog_v39.ts"), "utf8");
+const githubWorkflow = readFileSync(join(root, ".github", "workflows", "phase2g-paid-stage1.yml"), "utf8");
+const routesV3 = readFileSync(join(root, "server", "routes_v3.ts"), "utf8");
 
 describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   it("keeps the paid preflight read-only and emits an immutable exact receipt", () => {
@@ -82,13 +86,15 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(launcher).toContain("REFUSED:PREFLIGHT_RECEIPT_");
   });
 
-  it("requires an explicit truthful published Reserved VM runtime contract", () => {
-    expect(preflight).toContain("runtime_owner_mode");
+  it("separates the published callback runtime from the GitHub Actions paid owner", () => {
+    expect(preflight).toContain('ownerExecutor !== "github-actions"');
+    expect(preflight).toContain('owner_executor: ownerExecutor');
     expect(preflight).toContain("replit-published-deployment");
-    expect(preflight).toContain('runtime_durability_class === "reserved-vm"');
-    expect(launcher).toContain("replit-published-deployment");
-    expect(supervisor).toContain("replit-published-deployment");
-    expect(supervisor).toContain('runtime_durability_class === "reserved-vm"');
+    expect(preflight).toContain('callbackDurabilityClass === "autoscale"');
+    expect(preflight).toContain('callbackDurabilityClass === "reserved-vm"');
+    expect(supervisor).toContain('ownerExecutor !== "github-actions"');
+    expect(supervisor).toContain('process.env.GITHUB_ACTIONS !== "true"');
+    expect(supervisor).toContain('durabilityClass === "autoscale"');
     expect(runtimeHealth).toContain("replit-published-deployment");
     expect(runtimeHealth).toContain("V39_RUNTIME_DURABILITY_CLASS");
   });
@@ -120,6 +126,51 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(detachedSpawner).toContain('childArgs[0] !== "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"');
     expect(detachedSpawner).toContain('provider_paid_action_performed: false');
     expect(detachedSpawner).toContain('deployment_performed: false');
+  });
+
+  it("runs the prospective paid owner on a foreground GitHub Actions runner, not a Replit shell", () => {
+    expect(githubOwner).toContain('GITHUB_ACTIONS_RUNTIME_REQUIRED');
+    expect(githubOwner).toContain('GITHUB_SHA_MISMATCH');
+    expect(githubOwner).toContain('owner_executor !== "github-actions"');
+    expect(githubOwner).toContain('--owner-executor github-actions');
+    expect(githubOwner).toContain('V39_REMOTE_BLOB_CLEANUP_BASE="$BASE"');
+    expect(githubOwner).not.toContain("nohup");
+    expect(githubOwner).not.toContain("setsid");
+  });
+
+  it("uses one read-only gate receipt for two independent GitHub jobs", () => {
+    expect(githubWorkflow).toContain("jobs:");
+    expect(githubWorkflow).toContain("gate:");
+    expect(githubWorkflow).toContain("owner:");
+    expect(githubWorkflow).toContain("safety-watchdog:");
+    expect(githubWorkflow).toContain("--owner-executor github-actions");
+    expect(githubWorkflow).toContain("preflight_b64");
+    expect(githubWorkflow).toContain("needs.gate.outputs.preflight_sha");
+    expect(githubWorkflow).toContain("timeout-minutes: 175");
+    expect(githubWorkflow).toContain("cancel-in-progress: false");
+    expect(githubWorkflow).not.toContain("preflight_file:");
+    expect(githubWorkflow).not.toContain("preflight_sha:");
+  });
+
+  it("keeps the independent GitHub watchdog exact-recovery-only and incapable of starting a subscription", () => {
+    expect(githubWatchdog).toContain("LIVE_CREDIT_LIMIT = 450");
+    expect(githubWatchdog).toContain("probe_deadline_plus_cleanup_grace_exceeded");
+    expect(githubWatchdog).toContain("external_live_credit_limit_reached");
+    expect(githubWatchdog).toContain("internal_live_credit_limit_reached");
+    expect(githubWatchdog).toContain("v39_phase2g_stage1_recover_after_exit_v39.ts");
+    expect(githubWatchdog).not.toContain("createSubscription(");
+    expect(githubWatchdog).not.toContain("refillBalance(");
+  });
+
+  it("delegates provider-blob cleanup back to the published Replit app through a secret-guarded exact-session route", () => {
+    expect(prepaidWindow).toContain("deleteOwnedSubscriptionVerifiedV39");
+    expect(routesV3).toContain('/__v39/phase2g/runtime-cleanup');
+    expect(routesV3).toContain("phase2gControlGuard");
+    expect(routesV3).toContain("timingSafeEqual");
+    expect(routesV3).toContain("cleanupPrepaidProbeSessionLocalV39");
+    expect(routesV3).toContain("runtime_session_id=$1::uuid");
+    expect(routesV3).toContain("provider_mutation: false");
+    expect(routesV3).not.toContain('app.post("/__v39/phase2g/runtime-cleanup",managementMutationGuard');
   });
 
   it("durably binds the random runtime session before provider subscription creation", () => {
@@ -238,7 +289,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(sleepCheck).toContain("provider_subscription_not_bound");
     expect(sleepCheck).toContain("exact_owned_credit_subscription_not_active");
     expect(sleepCheck).toContain("foreign_active_billable=");
-    expect(sleepCheck).toContain("published_reserved_vm_callback_not_reachable");
+    expect(sleepCheck).toContain("published_callback_not_reachable");
     expect(sleepCheck).toContain("host_failure_boundary");
     expect(sleepCheck).not.toContain("createSubscription(");
     expect(sleepCheck).not.toContain("deleteSubscription(");
