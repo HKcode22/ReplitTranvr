@@ -22,8 +22,9 @@ function processAlive(pid: number): boolean {
     return false;
   }
 }
-async function callbackHealthy(base: string): Promise<boolean> {
-  if (!/^https:\/\/[^/]+\.replit\.dev$/i.test(base)) return false;
+async function callbackHealthy(base: string, expectedHead: string): Promise<boolean> {
+  if (!/^https:\/\/[^/]+$/i.test(base)) return false;
+  if (/\.replit\.dev$/i.test(new URL(base).hostname)) return false;
   try {
     const response = await fetch(`${base.replace(/\/+$/, "")}/__v39/workspace-runtime`, {
       headers: { accept: "application/json" },
@@ -31,7 +32,14 @@ async function callbackHealthy(base: string): Promise<boolean> {
     });
     if (response.status !== 200) return false;
     const json: any = await response.json().catch(() => null);
-    return json?.status === "PASS";
+    return json?.schema === "v39.phase2f-workspace-runtime.v1" &&
+      json?.status === "PASS" &&
+      json?.prepaid_route_registered === true &&
+      json?.provider_mutation === false &&
+      json?.runtime_owner_mode === "replit-published-deployment" &&
+      json?.published_deployment === true &&
+      json?.runtime_durability_class === "reserved-vm" &&
+      String(json?.git_head ?? "").toLowerCase() === expectedHead;
   } catch {
     return false;
   }
@@ -141,8 +149,8 @@ async function main(): Promise<void> {
     }
   }
 
-  const callbackReachable = await callbackHealthy(callbackBase);
-  if (!callbackReachable) blockers.push("workspace_callback_not_reachable");
+  const callbackReachable = await callbackHealthy(callbackBase, expectedHead);
+  if (!callbackReachable) blockers.push("published_reserved_vm_callback_not_reachable");
 
   const result = {
     schema: "v39.phase2g-stage1-unattended-health.v1",
