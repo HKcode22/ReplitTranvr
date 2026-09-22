@@ -36,6 +36,13 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).not.toContain("path: path.resolve(PHASE2G_COMPACT6_ARTIFACT_PATH)");
   });
 
+  it("requires a three-read provider balance stability canary for the final P2G08 recovery", () => {
+    expect(preflight).toContain("p2g08_balance502_recovery_rerun");
+    expect(preflight).toContain("provider_balance_stability_canary_failed_at_read");
+    expect(preflight).toContain("provider_balance_stability_canary_not_stable");
+    expect(preflight).toContain("balance_stability_canary");
+  });
+
   it("re-binds the exact approved AUTH, runtime, head, budget day, account and callback before launch", () => {
     expect(preflight).toContain("auth.sha256 !== expectedAuthSha");
     expect(preflight).toContain("auth_scope_mismatch");
