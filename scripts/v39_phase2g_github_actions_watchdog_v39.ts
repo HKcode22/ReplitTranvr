@@ -192,20 +192,34 @@ async function main(): Promise<void> {
       return;
     }
 
-    if (status === "failed" && probe.runtime_cleanup_verified_at_utc) {
+    if (status === "settling" || status === "failed") {
       const subs = await listSubscriptionsStrict();
       const active = subs.filter((s) => s.isActive && s.billingType !== "LifetimeBased");
       if (active.length === 0) {
         console.log(JSON.stringify({
           schema: "v39.phase2g-github-safety-watchdog.v1",
-          status: "OWNER_FAILED_BUT_CLEANUP_VERIFIED",
+          status: status === "settling"
+            ? "PROVIDER_SAFE_AWAITING_REPLIT_CLEANUP"
+            : (probe.runtime_cleanup_verified_at_utc
+                ? "OWNER_FAILED_BUT_CLEANUP_VERIFIED"
+                : "OWNER_FAILED_PROVIDER_SAFE_CLEANUP_PENDING"),
           observed_at_utc: new Date().toISOString(),
           probe_id: Number(probe.probe_id),
+          reconciliation_status: probe.reconciliation_status,
+          runtime_cleanup_verified: Boolean(probe.runtime_cleanup_verified_at_utc),
           provider_mutation: false,
         }));
         return;
       }
-      await invokeRecovery({ authId, authFile, authSha, budgetDay, reason: "failed_probe_still_has_active_billable_subscription" });
+      await invokeRecovery({
+        authId,
+        authFile,
+        authSha,
+        budgetDay,
+        reason: status === "settling"
+          ? "settling_probe_still_has_active_billable_subscription"
+          : "failed_probe_still_has_active_billable_subscription",
+      });
     }
 
     if (status !== "probing") {
