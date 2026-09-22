@@ -60,9 +60,13 @@ export interface PrepaidLiveWindowResultV39 {
   subscriptionDeleted: boolean;
 }
 
-// Current frozen acceptance remains exact. A positive external-minus-received
-// gap is preserved as DELIVERY_GAP evidence, but is terminal/non-scoreable.
-export const PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 = 1;
+// Prospective Phase-2G amendment after P2G06:
+ // AeroDataBox bills one credit per flight item on SEND, so an isolated anchor
+ // probe may legitimately have one billed item that never reaches our callback.
+ // We allow at most one missing billed item, never internal>external, and never
+ // any cost-vs-item inconsistency. Safety-smoke/canary owners remain exact.
+export const PROBE_MAX_MISSING_DELIVERY_CREDITS_V39 = 1;
+export const PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 = 0.99;
 
 export function classifyProbeReconciliationV39(input: {
   ownerKind: PrepaidProbeOwnerKindV39;
@@ -76,7 +80,7 @@ export function classifyProbeReconciliationV39(input: {
   deliveryCompleteness: number;
 } {
   const floor = input.deliveryCompletenessFloor ?? PROBE_DELIVERY_COMPLETENESS_FLOOR_V39;
-  if (floor !== 1) throw new Error("PROBE_NONZERO_RECONCILIATION_TOLERANCE_NOT_AUTHORIZED");
+  if (!(floor > 0 && floor <= 1)) throw new Error("PROBE_RECONCILIATION_FLOOR_INVALID");
   if (!Number.isInteger(input.externalCredits) || input.externalCredits < 0 ||
       !Number.isInteger(input.internalSendCredits) || input.internalSendCredits < 0 ||
       !Number.isInteger(input.costItemDisagreementCount) || input.costItemDisagreementCount < 0) {
@@ -95,10 +99,10 @@ export function classifyProbeReconciliationV39(input: {
   if (
     input.ownerKind === "anchor_probe" &&
     deliveryGapCredits > 0 &&
+    deliveryGapCredits <= PROBE_MAX_MISSING_DELIVERY_CREDITS_V39 &&
+    deliveryCompleteness >= floor &&
     input.costItemDisagreementCount === 0
   ) {
-    // DELIVERY_GAP is a diagnostic classification only under the current
-    // exact-match acceptance rule. Do not convert it into a completed probe.
     return { status: "DELIVERY_GAP", deliveryGapCredits, deliveryCompleteness };
   }
 
@@ -326,11 +330,9 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   const metrics = await prepaidProbeMetricsV39(session.sessionId, windowStart, windowEnd);
   maxObservedUnsettledCreditGap = Math.max(maxObservedUnsettledCreditGap, Math.max(0, metrics.internalSendCredits - externalCredits));
 
-  // V3.9 §3.2 makes settled provider spend authoritative and explicitly
-  // warns that a billed SEND can be absent from the received callback ledger.
-  // Safety-smoke owners remain exact-match only. Anchor probes preserve a
-  // positive external-minus-received gap as DELIVERY_GAP evidence, but the
-  // current frozen acceptance rule remains exact and therefore fail-closed.
+  // The prospective Phase-2G amendment keeps settled provider spend as the
+  // denominator and permits only a tightly bounded one-credit positive
+  // delivery gap for anchor probes. Safety-smoke owners remain exact-match.
   const classified = classifyProbeReconciliationV39({
     ownerKind: input.ownerKind,
     externalCredits,
@@ -370,12 +372,12 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     });
   }
 
-  if (reconciliationStatus !== "MATCH") {
+  if (reconciliationStatus === "MISMATCH") {
     const stopReason = reconciliationStopReason ?? "external_internal_credit_mismatch";
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     const cleanup = await cleanupOrDefer(
       session.sessionId,
-      `${input.deletionRunId}:${reconciliationStatus === "DELIVERY_GAP" ? "delivery-gap" : "mismatch"}`,
+      `${input.deletionRunId}:mismatch`,
     ).catch(() => null);
     return {
       status: "failed", runtimeSessionId: session.sessionId, windowStart, windowEnd,
@@ -421,7 +423,8 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     await setPrepaidProbeSessionStateV39(session.sessionId, "settling");
     return {
       status: "settling", runtimeSessionId: session.sessionId, windowStart, windowEnd,
-      durationCensored: false, stopReason: null,
+      durationCensored: false,
+      stopReason: reconciliationStatus === "DELIVERY_GAP" ? "bounded_delivery_gap" : null,
       reconciliationStatus, externalCredits, internalSendCredits: metrics.internalSendCredits,
       maxObservedUnsettledCreditGap, settlementReads: settle.readsUsed, metrics,
       cleanupVerifiedAtUtc: null, subscriptionDeleted: true,
@@ -431,7 +434,8 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   const cleanup = await cleanupPrepaidProbeSessionV39(session.sessionId, input.deletionRunId);
   return {
     status: "completed", runtimeSessionId: session.sessionId, windowStart, windowEnd,
-    durationCensored: windowEnd.getTime() < deadline, stopReason: liveStopReason,
+    durationCensored: windowEnd.getTime() < deadline,
+    stopReason: reconciliationStatus === "DELIVERY_GAP" ? "bounded_delivery_gap" : liveStopReason,
     reconciliationStatus, externalCredits, internalSendCredits: metrics.internalSendCredits,
     maxObservedUnsettledCreditGap, settlementReads: settle.readsUsed, metrics,
     cleanupVerifiedAtUtc: cleanup.verifiedAtUtc, subscriptionDeleted: true,
