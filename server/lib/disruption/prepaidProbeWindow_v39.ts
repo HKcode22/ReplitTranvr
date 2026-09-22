@@ -68,7 +68,7 @@ export function classifyProbeReconciliationV39(input: {
   deliveryCompleteness: number;
 } {
   const floor = input.deliveryCompletenessFloor ?? PROBE_DELIVERY_COMPLETENESS_FLOOR_V39;
-  if (!(floor > 0 && floor <= 1)) throw new Error("PROBE_DELIVERY_COMPLETENESS_FLOOR_INVALID");
+  if (floor !== 1) throw new Error("PROBE_NONZERO_RECONCILIATION_TOLERANCE_NOT_AUTHORIZED");
   if (!Number.isInteger(input.externalCredits) || input.externalCredits < 0 ||
       !Number.isInteger(input.internalSendCredits) || input.internalSendCredits < 0 ||
       !Number.isInteger(input.costItemDisagreementCount) || input.costItemDisagreementCount < 0) {
