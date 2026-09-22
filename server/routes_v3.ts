@@ -20,6 +20,7 @@ import {
   refillBalance,
   createSubscription,
   listSubscriptions,
+  listSubscriptionsStrict,
   getSubscription,
   deleteSubscription,
   defaultWebhookUrl,
@@ -221,14 +222,14 @@ export function registerV3Routes(app:Express):void{
       `SELECT p.probe_id,p.status,p.stage,p.provider_content_safe_mode,
               r.state AS runtime_state
          FROM clean.adb_anchor_probe p
-         JOIN clean.prepaid_probe_session_runtime r
+         LEFT JOIN clean.prepaid_probe_session_runtime r
            ON r.session_id=p.runtime_session_id
-        WHERE p.runtime_session_id=$1::uuid
-          AND p.stage=1
-          AND p.provider_content_safe_mode=true
           AND r.owner_kind='anchor_probe'
           AND r.owner_probe_id=p.probe_id
           AND r.stage=1
+        WHERE p.runtime_session_id=$1::uuid
+          AND p.stage=1
+          AND p.provider_content_safe_mode=true
         ORDER BY p.probe_id DESC`,
       [sessionId],
     );
@@ -236,11 +237,39 @@ export function registerV3Routes(app:Express):void{
       res.status(409).json({ error: "EXACT_STAGE1_SESSION_OWNER_NOT_FOUND" });
       return;
     }
-    const runtimeState = String(owner.rows[0].runtime_state ?? "");
-    if (runtimeState !== "settling" && runtimeState !== "failed") {
-      res.status(409).json({ error: `RUNTIME_CLEANUP_REFUSED_STATE:${runtimeState || "missing"}` });
+    const runtimeState = owner.rows[0].runtime_state == null
+      ? null
+      : String(owner.rows[0].runtime_state);
+    const durableProbeStatus = String(owner.rows[0].status ?? "");
+    const stateAllowsCleanup =
+      runtimeState === "settling" ||
+      runtimeState === "failed" ||
+      (runtimeState === null && durableProbeStatus === "failed");
+    if (!stateAllowsCleanup) {
+      res.status(409).json({
+        error: `RUNTIME_CLEANUP_REFUSED_STATE:${runtimeState ?? "missing"}:probe=${durableProbeStatus || "missing"}`,
+      });
       return;
     }
+
+    // Blob/runtime evidence may be deleted only after every billable provider
+    // subscription is verified inactive. This endpoint never deletes provider
+    // subscriptions itself.
+    let activeBillable: any[];
+    try {
+      const subscriptions = await listSubscriptionsStrict();
+      activeBillable = subscriptions.filter(
+        (subscription) => subscription.isActive && subscription.billingType !== "LifetimeBased",
+      );
+    } catch {
+      res.status(503).json({ error: "RUNTIME_CLEANUP_PROVIDER_STATE_UNAVAILABLE" });
+      return;
+    }
+    if (activeBillable.length !== 0) {
+      res.status(409).json({ error: `RUNTIME_CLEANUP_ACTIVE_BILLABLE:${activeBillable.length}` });
+      return;
+    }
+
     try {
       const cleaned = await cleanupPrepaidProbeSessionLocalV39(sessionId, deletionRunId);
       res.status(200).json({
