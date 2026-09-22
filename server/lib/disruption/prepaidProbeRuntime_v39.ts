@@ -122,6 +122,32 @@ export function assertPrepaidProbePersistenceConfigV39(
   env: NodeJS.ProcessEnv = process.env,
 ): number {
   const retentionHours = resolvePrepaidRawRetentionHoursV39(env);
+  const deferred = String(env.V39_DEFER_PROVIDER_CONTENT_CLEANUP ?? "").trim() === "1";
+
+  if (deferred) {
+    // GitHub Actions owns only provider exposure/control. Raw callback payloads
+    // are written by the already-published Replit webhook receiver, and exact
+    // session cleanup is performed later from the Replit workspace after the
+    // provider subscription is verified inactive. Do not require Replit
+    // object-storage credentials on the GitHub runner.
+    const callbackBase = String(
+      env.V39_PUBLIC_WEBHOOK_BASE_URL ?? env.WEBHOOK_BASE_URL ?? "",
+    ).trim().replace(/\/+$/, "");
+    if (!/^https:\/\/[^/]+$/i.test(callbackBase)) {
+      throw new Error("V39_DEFERRED_CALLBACK_BASE_MUST_BE_HTTPS_ORIGIN");
+    }
+    if (/\.replit\.dev$/i.test(new URL(callbackBase).hostname)) {
+      throw new Error("V39_DEFERRED_CALLBACK_BASE_CANNOT_BE_REPLIT_DEV");
+    }
+    if (String(env.V39_PROVIDER_BLOB_MODE ?? "").trim().toLowerCase() !== "required") {
+      throw new Error("V39_PROVIDER_BLOB_MODE_NOT_REQUIRED");
+    }
+    // Bind the intended dedicated bucket identity without constructing a local
+    // Replit SDK client on GitHub.
+    normalizeProviderBlobBucketIdV39(String(env.V39_PROVIDER_BLOB_BUCKET_ID ?? ""));
+    return retentionHours;
+  }
+
   const remoteBase = String(env.V39_REMOTE_BLOB_CLEANUP_BASE ?? "").trim().replace(/\/+$/, "");
   if (remoteBase) {
     if (!/^https:\/\/[^/]+$/i.test(remoteBase)) {
