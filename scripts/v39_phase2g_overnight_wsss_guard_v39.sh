@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# P2G09 proved that an interactive Replit development workspace can be
+# replaced while a paid Stage-1 subscription remains active. This overnight
+# launcher is retained only as historical evidence and must never launch a
+# new paid probe. Future paid Stage-1 uses the published Reserved VM contract.
+echo "REFUSED:DEPRECATED_INTERACTIVE_WORKSPACE_STAGE1_OWNER_AFTER_P2G09"
+exit 2
+
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 mkdir -p artifacts
