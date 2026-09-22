@@ -77,6 +77,23 @@ function workspaceOrigin(): string | null {
   }
   return null;
 }
+async function prepaidRouteHealth(origin: string): Promise<{ status: number; json: any | null }> {
+  const wrongSecret = "phase2g-preflight-intentionally-wrong";
+  const session = "00000000-0000-4000-8000-000000000000";
+  const response = await fetch(
+    `${origin}/api/v1/webhooks/aerodatabox/${encodeURIComponent(wrongSecret)}/prepaid/${session}`,
+    {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  const text = await response.text().catch(() => "");
+  let json: any | null = null;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+  return { status: response.status, json };
+}
 async function getJson(url: string): Promise<{ status: number; json: any | null }> {
   const response = await fetch(url, {
     headers: { accept: "application/json" },
@@ -104,6 +121,8 @@ async function main(): Promise<void> {
   const runtimeSha = required("--runtime-sha").toLowerCase();
   const authPath = path.resolve(required("--auth-file"));
   const expectedAuthSha = required("--auth-sha").toLowerCase();
+  const callbackVerificationPath = path.resolve(required("--callback-verification"));
+  const callbackVerificationSha = required("--callback-verification-sha").toLowerCase();
   const expectedHead = required("--expected-head").toLowerCase();
   const outPath = path.resolve(required("--out"));
   const expectedIcaoRaw = optional("--expected-icao", "").trim().toUpperCase();
@@ -125,6 +144,7 @@ async function main(): Promise<void> {
 
   if (!/^[a-f0-9]{64}$/.test(runtimeSha)) throw new Error("BLOCKED:RUNTIME_SHA_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("BLOCKED:AUTH_SHA_INVALID");
+  if (!/^[a-f0-9]{64}$/.test(callbackVerificationSha)) throw new Error("BLOCKED:CALLBACK_VERIFICATION_SHA_INVALID");
   if (!/^[a-f0-9]{40}$/.test(expectedHead)) throw new Error("BLOCKED:EXPECTED_HEAD_INVALID");
 
   const currentHead = git(["rev-parse", "HEAD"]).toLowerCase();
@@ -163,10 +183,18 @@ async function main(): Promise<void> {
           WHERE table_schema='clean'
             AND table_name='prepaid_probe_session_runtime'
             AND column_name='callback_requests_seen'
-       ) AS callback_counter`,
+       ) AS callback_counter,
+       EXISTS (
+         SELECT 1
+           FROM pg_constraint
+          WHERE conrelid='clean.adb_anchor_probe'::regclass
+            AND conname='adb_anchor_probe_status_check'
+            AND pg_get_constraintdef(oid) ILIKE '%settling%'
+       ) AS settling_status`,
   );
   if (migrationCheck.rows[0]?.evidence_table !== true) blockers.push("phase2g_reconciliation_evidence_table_missing");
   if (migrationCheck.rows[0]?.callback_counter !== true) blockers.push("phase2g_callback_counter_migration_missing");
+  if (migrationCheck.rows[0]?.settling_status !== true) blockers.push("phase2g_settling_status_migration_missing");
 
   const auth = readAuth(authPath);
   if (auth.sha256 !== expectedAuthSha) blockers.push(`auth_sha_mismatch:${auth.sha256}`);
