@@ -191,6 +191,32 @@ export function isP2g07Provider502RecoveryEligibleV39(
   );
 }
 
+export function isP2g08Balance502RecoveryEligibleV39(
+  attempts: Stage1AttemptEvidence[],
+): boolean {
+  const wsss = attempts.filter((row) => row.icao.toUpperCase() === "WSSS");
+  if (wsss.length !== 4) return false;
+  const [first, second, third, fourth] = wsss;
+  return (
+    isInfrastructureInvalidStage1AttemptV39(first) &&
+    second.probeId === 4 &&
+    second.status === "failed" &&
+    second.durationCensored === false &&
+    second.reconciliationStatus === "MISMATCH" &&
+    second.stopReason === "external_internal_credit_mismatch" &&
+    third.probeId === 5 &&
+    third.status === "failed" &&
+    third.durationCensored === true &&
+    third.reconciliationStatus === "UNRESOLVED" &&
+    third.stopReason === "subscription_delete_failed" &&
+    fourth.probeId === 6 &&
+    fourth.status === "failed" &&
+    fourth.durationCensored === true &&
+    fourth.reconciliationStatus === "MATCH" &&
+    fourth.stopReason === "balance_read_failed_after_retries"
+  );
+}
+
 export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEvidence): boolean {
   if (attempt.status !== "failed") return false;
   if (attempt.durationCensored !== true) return false;
@@ -250,7 +276,11 @@ async function chooseNextStage1Target(
   evidence: Stage1AttemptEvidence[],
   allowP2g06PostfixWsssValidation: boolean,
   allowP2g07Provider502Recovery: boolean,
+  allowP2g08Balance502Recovery: boolean,
 ): Promise<{ icao: string; replacement: boolean } | null> {
+  if (allowP2g08Balance502Recovery && isP2g08Balance502RecoveryEligibleV39(evidence)) {
+    return { icao: "WSSS", replacement: false };
+  }
   if (allowP2g07Provider502Recovery && isP2g07Provider502RecoveryEligibleV39(evidence)) {
     return { icao: "WSSS", replacement: false };
   }
@@ -297,6 +327,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     evidence,
     compact6 !== null,
     compact6?.amendment.p2g07_provider502_recovery_rerun?.authorized === true,
+    compact6?.amendment.p2g08_balance502_recovery_rerun?.authorized === true,
   );
 
   if (!next) {
