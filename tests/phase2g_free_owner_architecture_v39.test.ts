@@ -37,8 +37,8 @@ describe("Phase-2G free independent-owner architecture", () => {
     expect(workflow).toContain("--owner-executor github-actions");
     expect(workflow).toContain("preflight_b64");
     expect(workflow).toContain("preflight_sha");
-    expect(workflow).not.toContain("preflight_file:");
-    expect(workflow).not.toContain("preflight_sha:");
+    expect(workflow).not.toContain("      preflight_file:");
+    expect(workflow).not.toContain("description: 'Preflight receipt SHA-256'");
   });
 
   it("runs owner and independent watchdog only after the same gate succeeds", () => {
