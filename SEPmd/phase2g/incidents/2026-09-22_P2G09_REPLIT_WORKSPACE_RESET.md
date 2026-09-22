@@ -148,3 +148,20 @@ The incident must therefore be described as a Replit development-workspace/runti
 
 See:
 `SEPmd/phase2g/runbooks/2026-09-22_PHASE2G_RUNTIME_HARDENING_PLAN.md`
+
+
+## Replit app inspection confirmation
+
+A read-only Replit Agent inspection of app `95ac2e69-854d-460f-8e9d-8e4711aef739` after the incident confirmed:
+
+- the Run button maps to the managed `Project` workflow;
+- that workflow launches `V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-managed-project npm run dev`;
+- the existing published app is Autoscale and was successfully built/public;
+- the project can control workflow commands and shutdown/watchdog behavior, but cannot prevent development workspace suspension/recycling, process-namespace resets, Shell resets, or Replit restarting the managed workflow;
+- the observed simultaneous loss of detached server/supervisor/child/Shell state while preserving filesystem/Git state is more consistent with a development-workspace lifecycle/process-manager reset than with an app-level shutdown;
+- keeping the editor/browser open does not prevent platform lifecycle events;
+- `nohup`, `setsid`, and shell detachment cannot survive replacement of the workspace runtime itself;
+- Reserved VM is the appropriate Replit-native option for an always-on webhook server plus continuously running lifecycle owner;
+- Autoscale is appropriate for request-driven HTTP handling but should not be treated as a continuous two-hour in-process supervisor guarantee.
+
+This inspection changed no project or runtime state.
