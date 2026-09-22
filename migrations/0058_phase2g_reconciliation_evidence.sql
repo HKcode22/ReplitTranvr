@@ -69,6 +69,21 @@ CREATE TABLE IF NOT EXISTS clean.adb_probe_reconciliation_evidence (
   )
 );
 
+ALTER TABLE clean.adb_anchor_probe
+  DROP CONSTRAINT IF EXISTS adb_anchor_probe_safe_completed_shape;
+
+ALTER TABLE clean.adb_anchor_probe
+  ADD CONSTRAINT adb_anchor_probe_safe_completed_shape
+  CHECK (
+    NOT provider_content_safe_mode OR status <> 'completed' OR (
+      runtime_session_id IS NOT NULL AND
+      runtime_cleanup_verified_at_utc IS NOT NULL AND
+      reconciliation_status IN ('MATCH','DELIVERY_GAP') AND
+      confirmed_unique_lower_per_credit IS NOT NULL AND
+      confirmed_plus_ambiguous_upper_per_credit IS NOT NULL
+    )
+  ) NOT VALID;
+
 CREATE OR REPLACE FUNCTION clean.reject_phase2g_reconciliation_evidence_mutation()
 RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
