@@ -33,10 +33,17 @@ export interface PrepaidLiveWindowInputV39 {
   deletionRunId: string;
   watchdogPollMs: number;
   onSessionArmed?: (sessionId: string) => Promise<void>;
+  /**
+   * When true, provider deletion/settlement/reconciliation complete here but
+   * exact-session Replit Object Storage/runtime cleanup is deferred to a
+   * post-stop Replit workspace finalizer. No provider exposure remains while
+   * cleanup is pending.
+   */
+  deferCleanup?: boolean;
 }
 
 export interface PrepaidLiveWindowResultV39 {
-  status: "completed" | "failed";
+  status: "completed" | "settling" | "failed";
   runtimeSessionId: string;
   windowStart: Date;
   windowEnd: Date;
@@ -158,6 +165,9 @@ function validateInput(input: PrepaidLiveWindowInputV39): void {
     throw new Error("PREPAID_WINDOW_WATCHDOG_POLL_INVALID");
   }
   if (!String(input.deletionRunId ?? "").trim()) throw new Error("PREPAID_WINDOW_DELETION_RUN_ID_REQUIRED");
+  if (input.deferCleanup != null && typeof input.deferCleanup !== "boolean") {
+    throw new Error("PREPAID_WINDOW_DEFER_CLEANUP_INVALID");
+  }
 }
 
 /**
@@ -170,9 +180,19 @@ function validateInput(input: PrepaidLiveWindowInputV39): void {
 export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39): Promise<PrepaidLiveWindowResultV39> {
   validateInput(input);
 
-  // Defense in depth: do not create or arm a paid provider subscription
-  // unless the prepaid persistence path is locally configured to accept it.
-  assertPrepaidProbePersistenceConfigV39();
+  // When cleanup is local, require the local Replit Object Storage boundary.
+  // Under deferred cleanup the callback receiver is the already-deployed
+  // Travnr service, so the GitHub owner must not require Replit-local object
+  // storage credentials. Callback persistence is proven prospectively by the
+  // frozen zero-credit live-callback verification artifact.
+  if (!input.deferCleanup) {
+    assertPrepaidProbePersistenceConfigV39();
+  }
+
+  const cleanupOrDefer = async (sessionId: string, runId: string) => {
+    if (input.deferCleanup) return null;
+    return cleanupPrepaidProbeSessionV39(sessionId, runId);
+  };
 
   const icao = input.icao.toUpperCase();
   const session = await armPrepaidProbeSessionV39({
@@ -200,7 +220,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   });
   if (!sub?.id) {
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
-    const cleanup = await cleanupPrepaidProbeSessionV39(session.sessionId, `${input.deletionRunId}:create-failed`).catch(() => null);
+    const cleanup = await cleanupOrDefer(session.sessionId, `${input.deletionRunId}:create-failed`).catch(() => null);
     return {
       status: "failed", runtimeSessionId: session.sessionId, windowStart, windowEnd: new Date(), durationCensored: true,
       stopReason: "subscription_create_failed", reconciliationStatus: "UNRESOLVED", externalCredits: null,
@@ -288,7 +308,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       });
     }
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
-    const cleanup = await cleanupPrepaidProbeSessionV39(
+    const cleanup = await cleanupOrDefer(
       session.sessionId,
       `${input.deletionRunId}:settlement-unresolved`,
     ).catch(() => null);
@@ -353,7 +373,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   if (reconciliationStatus !== "MATCH") {
     const stopReason = reconciliationStopReason ?? "external_internal_credit_mismatch";
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
-    const cleanup = await cleanupPrepaidProbeSessionV39(
+    const cleanup = await cleanupOrDefer(
       session.sessionId,
       `${input.deletionRunId}:${reconciliationStatus === "DELIVERY_GAP" ? "delivery-gap" : "mismatch"}`,
     ).catch(() => null);
@@ -371,7 +391,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   if (durationCensored) {
     const stopReason = reconciliationStopReason ?? "duration_censored_before_target";
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
-    const cleanup = await cleanupPrepaidProbeSessionV39(
+    const cleanup = await cleanupOrDefer(
       session.sessionId,
       `${input.deletionRunId}:duration-censored`,
     ).catch(() => null);
@@ -391,6 +411,20 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       metrics,
       cleanupVerifiedAtUtc: cleanup?.verifiedAtUtc ?? null,
       subscriptionDeleted: true,
+    };
+  }
+
+  if (input.deferCleanup) {
+    // Provider exposure is already stopped and authoritative reconciliation is
+    // MATCH. Keep transient callback evidence intact in state='settling' until
+    // the Replit workspace performs exact-session purpose cleanup.
+    await setPrepaidProbeSessionStateV39(session.sessionId, "settling");
+    return {
+      status: "settling", runtimeSessionId: session.sessionId, windowStart, windowEnd,
+      durationCensored: false, stopReason: null,
+      reconciliationStatus, externalCredits, internalSendCredits: metrics.internalSendCredits,
+      maxObservedUnsettledCreditGap, settlementReads: settle.readsUsed, metrics,
+      cleanupVerifiedAtUtc: null, subscriptionDeleted: true,
     };
   }
 
