@@ -50,6 +50,13 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).toContain("probe_would_cross_utc_midnight");
   });
 
+  it("makes the final launcher reject tracked, staged, or untracked protected-source drift", () => {
+    expect(launcher).toContain("git status --porcelain=v1 --untracked-files=all -- server scripts migrations tests");
+    expect(launcher).toContain("REFUSED:PROTECTED_SOURCE_TREE_DIRTY");
+    expect(launcher).toContain("PROTECTED_STATUS");
+    expect(launcher).not.toContain("git diff --quiet -- server scripts migrations tests");
+  });
+
   it("makes the launcher consume only a fresh hash-bound PASS receipt", () => {
     expect(launcher).toContain("ACTUAL_PREFLIGHT_SHA");
     expect(launcher).toContain("PASS_READY_FOR_PAID_STAGE1");
