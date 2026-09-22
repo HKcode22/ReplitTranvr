@@ -11,11 +11,11 @@ import {
 import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authRecord_v39";
 import {
   loadPhase2gCompact6AmendmentV39,
-  PHASE2G_COMPACT6_ARTIFACT_PATH,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
   chooseNextPrimaryStage1TargetV39,
   isP2g06PostfixWsssValidationEligibleV39,
+  isP2g07Provider502RecoveryEligibleV39,
   type Stage1AttemptEvidence,
 } from "./v39_probe_stage1_owner_v39";
 
@@ -137,7 +137,6 @@ async function main(): Promise<void> {
         expectedSha256: binding.runtime.stage1AmendmentSha256,
         sourcePreprobeFileSha256: binding.smoke.preprobe.fileSha256,
         preprobe: binding.smoke.preprobe.artifact,
-        path: path.resolve(PHASE2G_COMPACT6_ARTIFACT_PATH),
       });
     } catch (error) {
       blockers.push(`compact6_amendment_invalid:${error instanceof Error ? error.message : String(error)}`);
@@ -230,9 +229,12 @@ async function main(): Promise<void> {
       recordedAtUtc: new Date(row.recorded_at).toISOString(),
     }));
 
-    nextCandidate = isP2g06PostfixWsssValidationEligibleV39(evidence)
+    nextCandidate = compact6.amendment.p2g07_provider502_recovery_rerun?.authorized === true &&
+        isP2g07Provider502RecoveryEligibleV39(evidence)
       ? "WSSS"
-      : chooseNextPrimaryStage1TargetV39(compact6.effectiveShortlist, evidence);
+      : isP2g06PostfixWsssValidationEligibleV39(evidence)
+        ? "WSSS"
+        : chooseNextPrimaryStage1TargetV39(compact6.effectiveShortlist, evidence);
 
     if (expectedIcao && nextCandidate !== expectedIcao) {
       blockers.push(`next_candidate_mismatch:expected=${expectedIcao}:actual=${nextCandidate ?? "<none>"}`);
