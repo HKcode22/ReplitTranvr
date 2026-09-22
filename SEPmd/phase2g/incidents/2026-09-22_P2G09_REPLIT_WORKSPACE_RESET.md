@@ -165,3 +165,22 @@ A read-only Replit Agent inspection of app `95ac2e69-854d-460f-8e9d-8e4711aef739
 - Autoscale is appropriate for request-driven HTTP handling but should not be treated as a continuous two-hour in-process supervisor guarantee.
 
 This inspection changed no project or runtime state.
+
+
+## Confirmed paid-launch callback binding bug
+
+Post-incident source review found a concrete launcher defect that materially increased exposure to this failure class.
+
+Before the hardening commits, `scripts/v39_phase2g_stage1_launch_logged_v39.sh`:
+
+1. derived its callback base exclusively from a temporary `.replit.dev` workspace domain;
+2. explicitly refused the production domain;
+3. then overwrote both `V39_PUBLIC_WEBHOOK_BASE_URL` and `WEBHOOK_BASE_URL` with that temporary workspace base for the paid Stage-1 process.
+
+This overrode the repository-level shared configuration `WEBHOOK_BASE_URL=https://travnr.com/`.
+
+Because `prepaidProbeWindow_v39.ts` constructs the provider subscriber URL from `defaultWebhookUrl()`, and `defaultWebhookUrl()` prefers `WEBHOOK_BASE_URL`, P2G09's AeroDataBox prepaid callback was therefore deliberately bound to the interactive development workspace rather than the already-published Travnr origin.
+
+This is a project implementation bug, separate from the underlying Replit workspace lifecycle event. The workspace reset was outside the user's control, but the code should not have made a paid experiment depend on that lifecycle.
+
+Prospective fix commits prohibit `.replit.dev` for paid Stage-1 and require an explicit stable published callback base plus Reserved-VM durability contract.
