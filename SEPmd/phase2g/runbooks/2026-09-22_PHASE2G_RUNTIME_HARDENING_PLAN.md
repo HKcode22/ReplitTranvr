@@ -1,202 +1,203 @@
-# Phase 2G Runtime Hardening Plan — Remove Interactive Workspace as Single Point of Failure
+# Phase 2G Runtime Hardening Plan — Free Independent Owner Architecture
 
 > Created after P2G09 host/process incident on 2026-09-22.
-> Status: implementation required before the next paid Stage-1 attempt.
+> Updated after rejecting a new fixed-cost Reserved VM requirement.
+> Status: implementation and validation required before the next paid Stage-1 attempt.
 
 ## Goal
 
-Make a two-hour Stage-1 probe continue safely when the Replit editor, Shell, development workspace, or a single Node process restarts.
+A two-hour Stage-1 probe must not depend on:
 
-The system must not depend on a human keeping a Shell tab open.
+- a Replit Shell tab,
+- the Replit editor remaining open,
+- one Replit Development Sandbox process surviving for two hours,
+- the user's Mac remaining awake,
+- or a new fixed-cost Reserved VM.
 
-## Architecture decision
+The callback receiver and the experiment owner must live in separate failure domains.
 
-### Preferred target
+## Prospective architecture
 
-Use a **dedicated Replit Reserved VM deployment** for the V3.9 collector/control plane, or an equivalent always-on VM/service.
+### Callback receiver — existing Replit published Autoscale app
 
-Replit documents Reserved VM as a dedicated server that never sleeps and as the appropriate deployment type for background work and always-on APIs.
+The existing published Travnr deployment remains the HTTP callback receiver.
 
-Do not treat the development `.replit.dev` workspace as an availability guarantee.
+Responsibilities:
 
-### Keep the normal Travnr web deployment isolated
+- receive the exact prepaid callback route;
+- persist raw provider bytes to the existing dedicated Replit Object Storage boundary before 2xx;
+- persist runtime callback/accounting metadata;
+- expose the read-only V3.9 runtime health contract;
+- perform only secret-guarded exact-session provider-blob/runtime cleanup when requested by the authorized external owner.
 
-The current main app is configured as Autoscale. Do not silently convert the user-facing Travnr production deployment solely for the experiment.
+It does **not** own the 120-minute experiment clock and does not need one in-process loop to survive for two hours.
 
-Preferred isolation:
+The paid callback base must be a stable published HTTPS origin such as `https://travnr.com`. A `.replit.dev` Development Sandbox origin is prohibited for paid Stage-1.
 
-- existing Travnr app: normal product deployment
-- dedicated V3.9 collector deployment: Reserved VM
-- dedicated stable callback hostname, e.g. a Replit `.replit.app` deployment URL or approved collector subdomain
-- same production database/object-storage contracts only after explicit binding verification
+### Paid owner — GitHub Actions
 
-If a separate Reserved VM is not available, changing the existing production deployment type requires explicit human review because it changes cost and production hosting behavior.
+The exact paid Stage-1 owner runs foreground on a standard GitHub-hosted Actions runner.
 
-## Why Autoscale alone is insufficient for the owner
+Responsibilities:
 
-Autoscale is request-driven and may scale to zero. It is appropriate for APIs, including webhook receivers, but a two-hour background owner loop cannot rely on continuous process residence when no request is active.
+- verify exact AUTH, artifact hashes, source commit, budget and WSSS binding;
+- create the one exact AeroDataBox subscription;
+- retain the original frozen 120-minute deadline;
+- monitor callback health and provider accounting;
+- exact-delete the owned subscription at the normal endpoint;
+- settle/reconcile using the existing V3.9 logic;
+- request exact-session Replit blob/runtime cleanup through the secret-guarded published endpoint;
+- mark the probe completed only under the existing exact MATCH acceptance rule.
 
-Therefore either:
+The GitHub runner is independent of the Replit Development Sandbox, so editor/Shell/runtime resets cannot kill the paid owner.
 
-1. run the lifecycle owner on Reserved VM, or
-2. run the lifecycle owner as a dedicated deployment job while callbacks are served by a stable deployment.
+For this public repository, standard GitHub-hosted runner usage is currently documented by GitHub as free. This removes the need for a new fixed Reserved VM charge. Existing Replit Autoscale usage remains subject to the user's existing Replit plan/usage terms; this design does not claim all Replit compute is cost-free.
 
-## Mac fallback
+### Independent safety watchdog — second GitHub Actions job
 
-A Mac can run the lifecycle owner, but it is a fallback, not the preferred production design.
+A second GitHub job runs independently of the primary owner.
 
-It is viable only if:
+It:
 
-- callback URL is a stable public deployment URL, not localhost and not a temporary tunnel;
-- the Mac has the exact source HEAD;
-- production DB/provider credentials are available securely;
-- `caffeinate`/power/network protections are active;
-- a process manager such as `launchd` or `tmux` keeps the owner independent of a Terminal tab;
-- an independent provider cleanup path remains available.
+- never creates a subscription;
+- never refills credits;
+- observes the same exact budget/probe/session;
+- uses internal received-credit evidence and lower-frequency provider-balance reads;
+- invokes only the existing exact-ID abnormal-exit recovery if a hard safety condition occurs;
+- triggers on the frozen live credit limit, unresolved active subscription after failure, deadline+cleanup-grace overrun, or watchdog maximum runtime.
 
-Mac risks include sleep, reboot, network loss, local process termination, and credential exposure.
+This gives the paid window two independent GitHub-hosted processes instead of one Replit workspace process.
 
-## Required code changes
+## Why this fixes P2G09
 
-### H1 — Freeze two separate endpoints
+P2G09 proved that callback receipt and paid ownership are separate concerns.
 
-Runtime/AUTH must record:
+The original supervisor/child disappeared during a Replit Development Sandbox lifecycle event, but the HTTP app returned and another AeroDataBox callback was successfully received afterward. The scientific data path itself was not what failed; the two-hour lifecycle owner disappeared.
 
-- `callback_public_base`
-- `owner_runtime_identity`
+The new design leaves callback receipt on the published app and moves the lifecycle owner to GitHub infrastructure.
 
-They must not be inferred from the same development-domain variable.
+A Replit Development Sandbox reset therefore no longer terminates the experiment owner.
 
-### H2 — Reject temporary development callback ownership for paid Stage 1
+## Provider constraint
 
-Paid preflight must fail if the paid owner contract is an interactive development-only runtime.
+AeroDataBox credit-based webhook subscriptions do not automatically expire under the currently pinned provider contract. The project must therefore retain an independent authoritative deadline executor and exact deletion path.
 
-Development callback tests may still use `.replit.dev`, but paid Stage 1 must require the explicitly frozen production collector binding.
+The GitHub owner provides that executor; the independent watchdog provides a second fail-safe.
 
-### H3 — Durable owner lease
+## Callback availability and Autoscale
 
-Add a durable control-plane lease for an active probe:
+The published callback is request-driven. The GitHub owner performs callback-health reads every 15 seconds during the paid window. These requests also keep the published callback service active/warm during the two-hour probe.
 
-- probe ID
-- session UUID
-- owner generation
-- original window start
-- immutable deadline
-- lease heartbeat
-- owner runtime identity
-- recovery state
+This is not treated as a substitute for callback evidence: callback success/failure counters and the provider accounting/reconciliation rules remain binding.
 
-Use a database advisory lock or compare-and-swap lease so only one owner controls a probe at a time.
+## Object-storage boundary
 
-### H4 — Restart/resume
+Raw provider content remains in the existing dedicated Replit Object Storage path. GitHub Actions is not given Replit object-storage credentials.
 
-On collector startup:
+At cleanup:
 
-1. find the exact active/probing Stage-1 row;
-2. acquire the exact owner lease;
-3. verify the durable session UUID;
-4. verify the exact provider subscription using deterministic callback URL + airport;
-5. verify callback health;
-6. verify no foreign billable subscription;
-7. if the original deadline is still in the future and continuity requirements are satisfied, resume supervision for the **remaining original window**;
-8. never create a second subscription as part of resume;
-9. otherwise fail closed and exact-delete.
+1. the GitHub owner has already exact-deleted the provider subscription;
+2. it sends the random session UUID and deletion-run ID to the published `/__v39/phase2g/runtime-cleanup` endpoint;
+3. the endpoint requires a separate high-entropy `V39_PHASE2G_CONTROL_SECRET`;
+4. the endpoint verifies exactly one provider-safe Stage-1 probe owns that runtime session;
+5. Replit deletes and verifies only that session's raw blobs/runtime rows;
+6. the endpoint cannot create/delete provider subscriptions and reports `provider_mutation=false`.
 
-The restart must not reset the scientific clock.
+## Secret boundary
 
-### H5 — Durable minimal callback receipts
+Never commit secret values.
 
-UNLOGGED runtime tables can disappear after database crash recovery.
+GitHub environment `phase2g-paid` requires:
 
-Persist only the minimum non-payload metadata necessary to reconstruct continuity:
+- `V39_DATABASE_RUNTIME_URL`
+- `AERODATABOX_API_KEY`
+- `AERODATABOX_WEBHOOK_SECRET`
+- `V39_PHASE2G_CONTROL_SECRET`
 
-- session UUID
-- delivery timestamp
-- notification item count
-- explicit delivery-attempt credit value when present
-- payload/blob hash/reference
-- callback HTTP outcome/counter
+The matching `V39_PHASE2G_CONTROL_SECRET` must also be configured in the published Replit deployment.
 
-Raw provider payload remains in the existing controlled object-storage/retention path.
+The provider blob bucket ID is not treated as a secret but remains exact/frozen input.
 
-This allows a restart to reconstruct accounting without retaining unnecessary provider content in ordinary tables.
+## Launch architecture
 
-### H6 — External fail-safe
+The generic workflow is:
 
-Add a second independent watchdog that is not the same process as the owner.
+`.github/workflows/phase2g-paid-stage1.yml`
 
-It may be:
+It contains three stages:
 
-- a Scheduled Deployment,
-- a small separate Reserved VM worker,
-- another approved external job runner.
+1. **gate** — read-only provider/DB preflight, exact callback/source verification, and a three-read balance canary where required;
+2. **owner** — full foreground paid Stage-1 owner;
+3. **safety-watchdog** — independent fail-safe observer/recovery owner.
 
-It should:
+The gate creates the preflight receipt inside GitHub Actions and passes its exact bytes/SHA to both downstream jobs. The receipt is not committed, so creating it cannot change the source commit it verifies.
 
-- read the durable owner heartbeat,
-- identify only the exact owned subscription,
-- never create subscriptions,
-- exact-delete only after a frozen stale-owner threshold,
-- open an incident,
-- never bulk-delete.
+The workflow requires the explicit confirmation phrase:
 
-The Mac monitor remains observational and is not the primary fail-safe.
+`RUN_PAID_STAGE1_ONCE`
 
-### H7 — Provider 502 resilience remains separate
+The old local/Replit paid launcher is prospectively disabled.
 
-Do not conflate host restart handling with AeroDataBox control-plane handling.
+## Source and deployment binding
 
-Keep:
+Before any future paid launch:
 
-- slow provider balance polling,
-- bounded retry cycles,
-- exact-ID delete retries,
-- authoritative settlement,
-- exact reconciliation rule,
-- no tolerance learned from failed attempts.
+- all runtime/auth/evidence artifacts needed for the attempt are committed;
+- the exact branch commit is pushed to GitHub;
+- the published callback deployment runs the exact authorized protected source;
+- the deployment health route proves the embedded build Git HEAD;
+- preflight verifies protected callback source compatibility;
+- GitHub Actions checks out the exact authorized commit.
 
-## Required tests
+No source edits occur after the paid gate opens.
 
-Before paid relaunch:
+## P2G09 historical handling
 
-1. offline unit tests pass;
-2. TypeScript passes;
-3. callback synthetic storage test passes;
-4. exact production/deployment callback health contract passes;
-5. crash test: kill the owner process mid-window while callback server stays alive;
-6. resume test: replacement owner attaches to the same subscription and same immutable deadline;
-7. duplicate-owner test: second owner is refused by the lease;
-8. host restart simulation: runtime process restarts and does not create a second subscription;
-9. UNLOGGED-loss simulation: durable metadata is sufficient to reconstruct/fail closed;
-10. provider-balance 502 simulation remains fail-closed after bounded retries;
-11. exact provider delete 502 simulation remains exact-ID only;
-12. external watchdog dry run proves zero mutation while owner heartbeat is healthy.
+P2G09 remains:
 
-## Paid launch gate
+- failed;
+- duration-censored;
+- reconciliation UNRESOLVED;
+- excluded from scientific scoring.
 
-A future WSSS attempt is allowed only after a new explicit infrastructure-recovery authorization is created prospectively.
+Its infrastructure failure can prospectively justify one new explicitly authorized attempt only after the new architecture passes all offline/deployment gates.
 
-The reason for a future retry may be the documented P2G09 host/process infrastructure failure; WSSS yield or ranking must not be used as the reason to retry.
+The prior `no_further_automatic_wsss_retry` rule means no blind or implicit retry. It does not permanently prohibit WSSS after a separately documented infrastructure remediation and prospective authorization.
 
-The prior phrase `no_further_automatic_wsss_retry` means no blind/implicit retry. It does not mean WSSS can never be attempted again. A new, documented authorization can be created after the new runtime design is frozen and tested.
+## Required validation before another paid attempt
 
-## Next operational sequence
+1. P2G09 exact adjudication and budget/incident closeout.
+2. Feature branch rebased with the preserved local evidence commit.
+3. Full Phase-2G tests pass.
+4. TypeScript passes.
+5. Production build passes and embeds the exact Git HEAD.
+6. Remote cleanup endpoint unit/static tests pass.
+7. GitHub owner refuses non-GitHub execution.
+8. GitHub watchdog proves it cannot create subscriptions.
+9. Synthetic published callback test passes.
+10. Secret-guarded cleanup dry/synthetic test proves exact session scoping.
+11. Published callback health proves exact source commit and Autoscale runtime identity.
+12. Generic workflow is reviewed before being added to the default branch so `workflow_dispatch` can be used.
+13. GitHub environment secrets are configured manually; values are never written to git/chat logs.
+14. Fresh runtime, budget and AUTH are created prospectively.
+15. Fresh read-only GitHub gate returns PASS before any provider mutation.
+16. Launch only inside the frozen weekday Stage-1 time class.
 
-1. Close/adjudicate P2G09 as failed/censored/UNRESOLVED.
-2. Implement H1–H7.
-3. Configure a stable collector deployment.
-4. Verify production secrets/database/object-storage bindings without paid mutation.
-5. Run synthetic callback and crash/resume tests.
-6. Freeze a new runtime artifact and a new infrastructure-recovery amendment.
-7. Create a fresh budget day and fresh AUTH.
-8. Run read-only provider preflight.
-9. Start WSSS in the frozen weekday 12:00 UTC time class only after every gate passes.
+## Failure policy
 
-## Sources
+- Do not launch a second subscription because one job becomes uncertain.
+- Owner failure does not authorize a retry.
+- Watchdog recovery is exact-ID only.
+- Foreign active billable subscriptions fail closed.
+- Any non-MATCH reconciliation remains terminal/non-scoreable.
+- No tolerance is calibrated from prior failed attempts.
+- No WSSS yield/ranking outcome is used to justify retry authorization.
 
-- Replit deployment types:
-  https://docs.replit.com/features/publishing/deployment-types
-- Replit Reserved VM description:
-  dedicated server that never sleeps; intended for background work and always-on APIs.
-- Replit Scheduled deployments:
-  scheduled command jobs; no public URL.
+## References
+
+- P2G09 incident:
+  `SEPmd/phase2g/incidents/2026-09-22_P2G09_REPLIT_WORKSPACE_RESET.md`
+- Replit support-ready report:
+  `SEPmd/phase2g/incidents/2026-09-22_REPLIT_SUPPORT_REPORT.md`
+- GitHub issue #4
+- V3.9 Data Collection Plan and Implementation Log remain the baseline scientific authority.
