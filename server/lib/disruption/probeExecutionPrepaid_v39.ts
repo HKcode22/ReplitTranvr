@@ -253,8 +253,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     },
   });
 
-  const acceptedReconciliation =
-    result.reconciliationStatus === "MATCH" || result.reconciliationStatus === "DELIVERY_GAP";
+  const acceptedReconciliation = result.reconciliationStatus === "MATCH";
   if (result.status !== "completed" || !result.metrics || !acceptedReconciliation || !result.cleanupVerifiedAtUtc) {
     await markSafeFailure({
       probeId,
@@ -343,10 +342,8 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     input.artifacts.runtime.minStabilityBuckets,
   );
   const hours = Math.max((result.windowEnd.getTime() - result.windowStart.getTime()) / 3_600_000, 1 / 3600);
-  const deliveryGapCredits = Math.max(0, result.externalCredits - result.internalSendCredits);
-  const adjustedAmbiguityUpper = result.metrics.confirmedPlusAmbiguousUpper + deliveryGapCredits;
   const lowerRate = result.metrics.confirmedUniqueLower / denominator;
-  const upperRate = adjustedAmbiguityUpper / denominator;
+  const upperRate = result.metrics.confirmedPlusAmbiguousUpper / denominator;
   const chainRate = result.metrics.tailChainLinks / denominator;
 
   await pool.query(
