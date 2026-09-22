@@ -5,7 +5,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 mkdir -p artifacts
 
-EXPECTED_HEAD="d13387714c73b26334138dd577a29454457a5961"
+EXPECTED_HEAD="${PHASE2G_OVERNIGHT_EXPECTED_HEAD:-}"
 AUTH_ID="AUTH-20260922-P2G07"
 AUTH_FILE="SEPmd/V3.9_PHASE2G_AUTH_20260922_P2G07.json"
 AUTH_SHA="abe286b39c190505dec0bada95908667615848088df050e278a13d79b2a0c703"
@@ -25,7 +25,7 @@ LATEST_SAFE_START_UTC="2026-09-22T12:55:00Z"
 usage() {
   cat <<'EOF'
 Usage:
-  PHASE2G_OVERNIGHT_ARM=YES bash scripts/v39_phase2g_overnight_wsss_guard_v39.sh --detach
+  PHASE2G_OVERNIGHT_EXPECTED_HEAD=<40hex> PHASE2G_OVERNIGHT_ARM=YES bash scripts/v39_phase2g_overnight_wsss_guard_v39.sh --detach
   bash scripts/v39_phase2g_overnight_wsss_guard_v39.sh --status
 
 Safety:
@@ -42,6 +42,10 @@ sha_file() {
 }
 
 assert_static_bindings() {
+  [[ "$EXPECTED_HEAD" =~ ^[a-f0-9]{40}$ ]] || {
+    echo "OVERNIGHT_REFUSED:PHASE2G_OVERNIGHT_EXPECTED_HEAD_REQUIRED"
+    exit 2
+  }
   local head
   head="$(git rev-parse HEAD)"
   [[ "$head" == "$EXPECTED_HEAD" ]] || {
@@ -278,6 +282,17 @@ run_guard() {
   # Give owner time to create and bind the provider subscription.
   sleep 90
 
+  # If the owner already reached a terminal state, do not misclassify that as
+  # an unhealthy running window. Preserve final status/log and never relaunch.
+  local initial_state
+  initial_state="$(node -e 'const fs=require("fs");try{const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(j.state||""))}catch{}' "$status")"
+  if [[ "$initial_state" != "RUNNING" && "$initial_state" != "STARTING" ]]; then
+    echo "OVERNIGHT_SUPERVISOR_FINAL_STATE=$initial_state"
+    cat "$status" || true
+    tail -120 "$log" || true
+    exit 0
+  fi
+
   # Read-only health proof. Never relaunch.
   set +e
   run_health_check "$status" "$heartbeat" "$pid_file" "$log"
@@ -323,7 +338,7 @@ case "$mode" in
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
     out="artifacts/phase2g-overnight-guard-${stamp}.log"
     pid_file="artifacts/phase2g-overnight-guard-${stamp}.pid"
-    setsid bash "$0" --run >"$out" 2>&1 < /dev/null &
+    setsid env PHASE2G_OVERNIGHT_EXPECTED_HEAD="$EXPECTED_HEAD" bash "$0" --run >"$out" 2>&1 < /dev/null &
     pid=$!
     printf '%s\n' "$pid" >"$pid_file"
     sleep 2
