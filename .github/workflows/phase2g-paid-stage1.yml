@@ -65,8 +65,12 @@ on:
         required: true
         default: 'https://travnr.com'
         type: string
-      provider_blob_bucket_id:
-        description: 'Dedicated Replit provider blob bucket id'
+      callback_verification_file:
+        description: 'Committed fresh zero-credit live callback verification artifact'
+        required: true
+        type: string
+      callback_verification_sha:
+        description: 'Callback verification artifact SHA-256'
         required: true
         type: string
 
@@ -128,7 +132,7 @@ jobs:
 
           OUT="${RUNNER_TEMP}/phase2g-stage1-paid-preflight.json"
 
-          npx tsx scripts/v39_phase2g_stage1_paid_preflight_v39.ts             --preprobe "${{ inputs.preprobe_file }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --expected-head "${{ inputs.expected_head }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --owner-executor github-actions             --out "$OUT"
+          npx tsx scripts/v39_phase2g_stage1_paid_preflight_v39.ts             --preprobe "${{ inputs.preprobe_file }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --expected-head "${{ inputs.expected_head }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --callback-verification "${{ inputs.callback_verification_file }}"             --callback-verification-sha "${{ inputs.callback_verification_sha }}"             --owner-executor github-actions             --out "$OUT"
 
           SHA="$(sha256sum "$OUT" | awk '{print $1}')"
           B64="$(base64 -w0 "$OUT")"
@@ -163,9 +167,7 @@ jobs:
       V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
       AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
-      V39_REMOTE_BLOB_CLEANUP_SECRET: ${{ secrets.V39_PHASE2G_CONTROL_SECRET }}
-      V39_PROVIDER_BLOB_BUCKET_ID: ${{ inputs.provider_blob_bucket_id }}
-      V39_PROVIDER_BLOB_MODE: required
+      V39_DEFER_PROVIDER_CONTENT_CLEANUP: '1'
     steps:
       - name: Checkout exact authorized source
         uses: actions/checkout@v4
@@ -198,7 +200,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET V39_REMOTE_BLOB_CLEANUP_SECRET; do
+          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET; do
             if [[ -z "${!key:-}" ]]; then
               echo "::error::Missing required Phase2G owner secret: $key"
               exit 2
@@ -209,7 +211,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/v39_phase2g_github_actions_owner_v39.sh             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --preprobe "${{ inputs.preprobe_file }}"             --preprobe-sha "${{ inputs.preprobe_sha }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --preflight "$PHASE2G_PREFLIGHT"             --preflight-sha "${{ needs.gate.outputs.preflight_sha }}"             --expected-head "${{ inputs.expected_head }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --provider-blob-bucket-id "${{ inputs.provider_blob_bucket_id }}"
+          bash scripts/v39_phase2g_github_actions_owner_v39.sh             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --preprobe "${{ inputs.preprobe_file }}"             --preprobe-sha "${{ inputs.preprobe_sha }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --preflight "$PHASE2G_PREFLIGHT"             --preflight-sha "${{ needs.gate.outputs.preflight_sha }}"             --expected-head "${{ inputs.expected_head }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"
 
   safety-watchdog:
     needs: gate
@@ -221,9 +223,7 @@ jobs:
       V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
       AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
-      V39_REMOTE_BLOB_CLEANUP_SECRET: ${{ secrets.V39_PHASE2G_CONTROL_SECRET }}
-      V39_PROVIDER_BLOB_BUCKET_ID: ${{ inputs.provider_blob_bucket_id }}
-      V39_PROVIDER_BLOB_MODE: required
+      V39_DEFER_PROVIDER_CONTENT_CLEANUP: '1'
     steps:
       - name: Checkout exact authorized source
         uses: actions/checkout@v4
@@ -255,9 +255,9 @@ jobs:
       - name: Independent paid-safety watchdog
         shell: bash
         env:
-          V39_REMOTE_BLOB_CLEANUP_BASE: ${{ inputs.callback_base }}
           WEBHOOK_BASE_URL: ${{ inputs.callback_base }}
           V39_PUBLIC_WEBHOOK_BASE_URL: ${{ inputs.callback_base }}
+          V39_DEFER_PROVIDER_CONTENT_CLEANUP: '1'
         run: |
           set -euo pipefail
           npx tsx scripts/v39_phase2g_github_actions_watchdog_v39.ts             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-head "${{ inputs.expected_head }}"             --preflight "$PHASE2G_PREFLIGHT"             --preflight-sha "${{ needs.gate.outputs.preflight_sha }}"             --callback-base "${{ inputs.callback_base }}"
