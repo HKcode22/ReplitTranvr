@@ -97,8 +97,6 @@ jobs:
     env:
       V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
-      V39_PROVIDER_BLOB_BUCKET_ID: ${{ inputs.provider_blob_bucket_id }}
-      V39_PROVIDER_BLOB_MODE: required
     steps:
       - name: Checkout exact authorized source
         uses: actions/checkout@v4
