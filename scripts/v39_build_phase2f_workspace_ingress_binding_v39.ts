@@ -6,6 +6,7 @@ import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import {
   buildPhase2FWorkspaceIngressBindingV39,
   loadPhase2FWorkspaceIngressBindingV39,
+  PHASE2F_WORKSPACE_ROUTE_OWNER_V39,
 } from "../server/lib/disruption/phase2WorkspaceIngressBinding_v39";
 
 const LEDGER = path.join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
@@ -52,7 +53,7 @@ async function main(): Promise<void> {
   }
   if (receipt.executionEnvironment !== "replit-workspace-live" || receipt.deploymentPerformed !== false ||
       receipt.providerCalled !== false || receipt.providerSubscriptionCreated !== false ||
-      Number(receipt.alertCreditsSpent) !== 0 || receipt.exactRouteOwner !== "server/routes_v3.ts" ||
+      Number(receipt.alertCreditsSpent) !== 0 || receipt.exactRouteOwner !== PHASE2F_WORKSPACE_ROUTE_OWNER_V39 ||
       receipt.wrongSecretRejected404 !== true || receipt.exactSecretAccepted200 !== true ||
       receipt.publicHttpsIngress !== true || Number(receipt.retentionHours) !== 168 ||
       receipt.bucketPrefix !== "replit-objstore" || Number(receipt.openIncidentsBefore) !== 0 ||
@@ -77,7 +78,7 @@ async function main(): Promise<void> {
   const health = await jsonResponse(`${callbackOrigin}/__v39/workspace-runtime`);
   if (health.status !== 200 || health.json?.status !== "PASS" ||
       String(health.json?.git_head ?? "").toLowerCase() !== runtimeHead ||
-      health.json?.route_owner !== "server/routes_v3.ts" ||
+      health.json?.route_owner !== PHASE2F_WORKSPACE_ROUTE_OWNER_V39 ||
       health.json?.prepaid_route_registered !== true || Number(health.json?.retention_hours) !== 168 ||
       health.json?.bucket_prefix !== "replit-objstore") {
     throw new Error(`BLOCKED:WORKSPACE_CALLBACK_RUNTIME_NOT_LIVE_OR_HEAD_CHANGED:http=${health.status}`);
@@ -102,7 +103,7 @@ async function main(): Promise<void> {
     callback_receipt_generated_at_utc: new Date(generatedMs).toISOString(),
     callback_runtime_git_head: runtimeHead,
     binding_creator_git_head: currentHead,
-    exact_route_owner: "server/routes_v3.ts",
+    exact_route_owner: PHASE2F_WORKSPACE_ROUTE_OWNER_V39,
     public_https_ingress: true,
     wrong_secret_rejected_404: true,
     exact_secret_accepted_200: true,

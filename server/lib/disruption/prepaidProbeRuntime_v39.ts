@@ -5,7 +5,10 @@ import {
   persistProviderBlobBeforeAckV39,
   type ProviderBlobRefV39,
 } from "./providerBlobStore_v39";
-import { createRequiredProviderBlobStoreV39 } from "./replitProviderBlobStore_v39";
+import {
+  createRequiredProviderBlobStoreV39,
+  normalizeProviderBlobBucketIdV39,
+} from "./replitProviderBlobStore_v39";
 import { CODESHARE_CODE } from "./flightNotificationExtractor_v3";
 
 export type PrepaidProbeOwnerKindV39 = "phase2_safety_smoke" | "anchor_probe";
@@ -38,7 +41,21 @@ export interface PrepaidProbeMetricsV39 {
   confirmedPlusAmbiguousUpper: number;
   ambiguousUnknown: number;
   firstObservationMs: number[];
+  deliveryCount: number;
+  notificationItemsReceived: number;
+  explicitCostDeliveryCount: number;
+  fallbackDeliveryCount: number;
+  costItemDisagreementCount: number;
+  callbackRequestsSeen: number;
+  callbackSuccess2xx: number;
+  callbackFailures: number;
 }
+
+export type PrepaidProbeReconciliationEvidenceStatusV39 =
+  | "MATCH"
+  | "DELIVERY_GAP"
+  | "MISMATCH"
+  | "UNRESOLVED";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RAW_RETENTION_ENV = "V39_PREPAID_RAW_RETENTION_HOURS";
@@ -105,7 +122,50 @@ export function assertPrepaidProbePersistenceConfigV39(
   env: NodeJS.ProcessEnv = process.env,
 ): number {
   const retentionHours = resolvePrepaidRawRetentionHoursV39(env);
-  createRequiredProviderBlobStoreV39(env);
+  const deferred = String(env.V39_DEFER_PROVIDER_CONTENT_CLEANUP ?? "").trim() === "1";
+
+  if (deferred) {
+    // GitHub Actions owns only provider exposure/control. Raw callback payloads
+    // are written by the already-published Replit webhook receiver, and exact
+    // session cleanup is performed later from the Replit workspace after the
+    // provider subscription is verified inactive. Do not require Replit
+    // object-storage credentials on the GitHub runner.
+    const callbackBase = String(
+      env.V39_PUBLIC_WEBHOOK_BASE_URL ?? env.WEBHOOK_BASE_URL ?? "",
+    ).trim().replace(/\/+$/, "");
+    if (!/^https:\/\/[^/]+$/i.test(callbackBase)) {
+      throw new Error("V39_DEFERRED_CALLBACK_BASE_MUST_BE_HTTPS_ORIGIN");
+    }
+    if (/\.replit\.dev$/i.test(new URL(callbackBase).hostname)) {
+      throw new Error("V39_DEFERRED_CALLBACK_BASE_CANNOT_BE_REPLIT_DEV");
+    }
+    if (String(env.V39_PROVIDER_BLOB_MODE ?? "").trim().toLowerCase() !== "required") {
+      throw new Error("V39_PROVIDER_BLOB_MODE_NOT_REQUIRED");
+    }
+    // Bind the intended dedicated bucket identity without constructing a local
+    // Replit SDK client on GitHub.
+    normalizeProviderBlobBucketIdV39(String(env.V39_PROVIDER_BLOB_BUCKET_ID ?? ""));
+    return retentionHours;
+  }
+
+  const remoteBase = String(env.V39_REMOTE_BLOB_CLEANUP_BASE ?? "").trim().replace(/\/+$/, "");
+  if (remoteBase) {
+    if (!/^https:\/\/[^/]+$/i.test(remoteBase)) {
+      throw new Error("V39_REMOTE_BLOB_CLEANUP_BASE_MUST_BE_HTTPS_ORIGIN");
+    }
+    if (/\.replit\.dev$/i.test(new URL(remoteBase).hostname)) {
+      throw new Error("V39_REMOTE_BLOB_CLEANUP_BASE_CANNOT_BE_REPLIT_DEV");
+    }
+    if (!String(env.V39_REMOTE_BLOB_CLEANUP_SECRET ?? "").trim()) {
+      throw new Error("V39_REMOTE_BLOB_CLEANUP_SECRET_REQUIRED");
+    }
+    if (String(env.V39_PROVIDER_BLOB_MODE ?? "").trim().toLowerCase() !== "required") {
+      throw new Error("V39_PROVIDER_BLOB_MODE_NOT_REQUIRED");
+    }
+    normalizeProviderBlobBucketIdV39(String(env.V39_PROVIDER_BLOB_BUCKET_ID ?? ""));
+  } else {
+    createRequiredProviderBlobStoreV39(env);
+  }
   return retentionHours;
 }
 
@@ -193,6 +253,36 @@ export async function setPrepaidProbeSessionStateV39(sessionId: string, state: P
     [id, state],
   );
   if (result.rowCount !== 1) throw new Error("PREPAID_PROBE_SESSION_STATE_UPDATE_FAILED");
+}
+
+export async function recordPrepaidProbeCallbackAttemptV39(sessionId: string): Promise<void> {
+  const id = assertSessionId(sessionId);
+  await pool.query(
+    `UPDATE clean.prepaid_probe_session_runtime
+        SET callback_requests_seen=callback_requests_seen+1
+      WHERE session_id=$1`,
+    [id],
+  );
+}
+
+export async function recordPrepaidProbeCallbackSuccessV39(sessionId: string): Promise<void> {
+  const id = assertSessionId(sessionId);
+  await pool.query(
+    `UPDATE clean.prepaid_probe_session_runtime
+        SET callback_success_2xx=callback_success_2xx+1
+      WHERE session_id=$1`,
+    [id],
+  );
+}
+
+export async function recordPrepaidProbeCallbackFailureV39(sessionId: string): Promise<void> {
+  const id = assertSessionId(sessionId);
+  await pool.query(
+    `UPDATE clean.prepaid_probe_session_runtime
+        SET callback_failures=callback_failures+1
+      WHERE session_id=$1`,
+    [id],
+  );
 }
 
 export async function prepaidProbeSessionExistsV39(sessionId: string): Promise<boolean> {
@@ -283,13 +373,18 @@ export async function persistPrepaidProbeWebhookV39(input: {
       ? input.body.flights
       : [];
   const store = createRequiredProviderBlobStoreV39();
-  const blob = await persistProviderBlobBeforeAckV39({
-    store,
-    bytes: rawBytes,
-    contentClass: "raw_provider_content",
-    retentionHours: resolvePrepaidRawRetentionHoursV39(),
-    now: receivedAt,
-  });
+  let blob: ProviderBlobRefV39;
+  try {
+    blob = await persistProviderBlobBeforeAckV39({
+      store,
+      bytes: rawBytes,
+      contentClass: "raw_provider_content",
+      retentionHours: resolvePrepaidRawRetentionHoursV39(),
+      now: receivedAt,
+    });
+  } catch (error) {
+    throw error;
+  }
 
   const client = await pool.connect();
   try {
@@ -313,16 +408,31 @@ export async function persistPrepaidProbeWebhookV39(input: {
        evidence.notificationGeneratedUtc, evidence.attemptSeqNo, evidence.attemptUtc,
        evidence.costCredits, flights.length],
     );
-    for (let itemIndex = 0; itemIndex < flights.length; itemIndex += 1) {
-      const flight = flights[itemIndex];
-      const itemRaw = canonical(flight);
+    if (flights.length > 0) {
+      const values: unknown[] = [];
+      const tuples: string[] = [];
+      for (let itemIndex = 0; itemIndex < flights.length; itemIndex += 1) {
+        const flight = flights[itemIndex];
+        const itemRaw = canonical(flight);
+        const offset = values.length;
+        values.push(
+          sessionId,
+          deliveryId,
+          itemIndex,
+          sha256(itemRaw),
+          stringOrNull(flight?.number),
+          stringOrNull(flight?.aircraft?.reg),
+          normalizeCodeshareStatus(flight?.codeshareStatus),
+          runtimeFlightKey(flight),
+          receivedAt,
+        );
+        tuples.push(`(${offset + 1},${offset + 2},${offset + 3},${offset + 4},${offset + 5},${offset + 6},${offset + 7},${offset + 8},${offset + 9})`);
+      }
       await client.query(
         `INSERT INTO clean.prepaid_probe_item_runtime
          (session_id,delivery_id,item_index,raw_item_sha256,flight_number,aircraft_reg,codeshare_status,runtime_flight_key,received_at_utc)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [sessionId, deliveryId, itemIndex, sha256(itemRaw), stringOrNull(flight?.number),
-         stringOrNull(flight?.aircraft?.reg), normalizeCodeshareStatus(flight?.codeshareStatus),
-         runtimeFlightKey(flight), receivedAt],
+         VALUES ${tuples.join(",")}`,
+        values,
       );
     }
     if (subId) {
@@ -390,23 +500,102 @@ export async function prepaidProbeMetricsV39(sessionId: string, start: Date, end
       GROUP BY runtime_flight_key`,
     [id, start, end],
   );
-  const internalSendCredits = await pool.query(
-    `SELECT COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::int AS n
+  const deliveries = await pool.query(
+    `SELECT
+        count(*)::int AS delivery_count,
+        COALESCE(sum(notification_items),0)::int AS notification_items,
+        COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::int AS internal_credits,
+        count(*) FILTER (WHERE delivery_attempt_cost_credits IS NOT NULL)::int AS explicit_cost_count,
+        count(*) FILTER (WHERE delivery_attempt_cost_credits IS NULL)::int AS fallback_count,
+        count(*) FILTER (
+          WHERE delivery_attempt_cost_credits IS NOT NULL
+            AND delivery_attempt_cost_credits <> notification_items
+        )::int AS cost_item_disagreement_count
        FROM clean.prepaid_probe_delivery_runtime
       WHERE session_id=$1 AND received_at_utc >= $2 AND received_at_utc < $3`,
     [id, start, end],
   );
+  const sessionCounters = await pool.query(
+    `SELECT callback_requests_seen,callback_success_2xx,callback_failures
+       FROM clean.prepaid_probe_session_runtime WHERE session_id=$1`,
+    [id],
+  );
   const row = counts.rows[0] ?? {};
+  const d = deliveries.rows[0] ?? {};
+  const s = sessionCounters.rows[0] ?? {};
   return {
     rowsDelivered: Number(row.rows ?? 0),
     uniqueFlights: Number(row.unique_flights ?? 0),
     tailChainLinks: Number(chain.rows[0]?.links ?? 0),
-    internalSendCredits: Number(internalSendCredits.rows[0]?.n ?? 0),
+    internalSendCredits: Number(d.internal_credits ?? 0),
     confirmedUniqueLower: Number(row.confirmed_lower ?? 0),
     confirmedPlusAmbiguousUpper: Number(row.unique_flights ?? 0),
     ambiguousUnknown: Number(row.ambiguous_n ?? 0),
     firstObservationMs: observations.rows.map((r: any) => Number(r.event_ms)).filter((n: number) => Number.isFinite(n)),
+    deliveryCount: Number(d.delivery_count ?? 0),
+    notificationItemsReceived: Number(d.notification_items ?? 0),
+    explicitCostDeliveryCount: Number(d.explicit_cost_count ?? 0),
+    fallbackDeliveryCount: Number(d.fallback_count ?? 0),
+    costItemDisagreementCount: Number(d.cost_item_disagreement_count ?? 0),
+    callbackRequestsSeen: Number(s.callback_requests_seen ?? 0),
+    callbackSuccess2xx: Number(s.callback_success_2xx ?? 0),
+    callbackFailures: Number(s.callback_failures ?? 0),
   };
+}
+
+export async function persistProbeReconciliationEvidenceV39(input: {
+  probeId: number;
+  runtimeSessionId: string;
+  stage: 1 | 2;
+  icao: string;
+  evidenceStatus: PrepaidProbeReconciliationEvidenceStatusV39;
+  externalSpendCredits: number | null;
+  metrics: PrepaidProbeMetricsV39;
+  settlementReads: number;
+  maxObservedUnsettledCreditGap: number;
+  maxObservedExternalDeliveryGap: number;
+  deliveryCompletenessFloor: number;
+  windowStartUtc: Date;
+  windowEndUtc: Date;
+  durationCensored: boolean;
+  stopReason: string | null;
+}): Promise<void> {
+  const sessionId = assertSessionId(input.runtimeSessionId);
+  const external = input.externalSpendCredits;
+  if (external !== null && (!Number.isInteger(external) || external < 0)) {
+    throw new Error("PREPAID_PROBE_RECONCILIATION_EXTERNAL_INVALID");
+  }
+  if (!(input.deliveryCompletenessFloor > 0 && input.deliveryCompletenessFloor <= 1)) {
+    throw new Error("PREPAID_PROBE_RECONCILIATION_FLOOR_INVALID");
+  }
+  const gap = external === null ? null : external - input.metrics.internalSendCredits;
+  const completeness = external === null
+    ? null
+    : external === 0
+      ? (input.metrics.internalSendCredits === 0 ? 1 : 0)
+      : input.metrics.internalSendCredits / external;
+
+  await pool.query(
+    `INSERT INTO clean.adb_probe_reconciliation_evidence
+       (probe_id,runtime_session_id,stage,icao,evidence_status,
+        external_spend_credits,internal_received_credits,delivery_gap_credits,delivery_completeness,
+        delivery_count,notification_items_received,explicit_cost_delivery_count,fallback_delivery_count,
+        cost_item_disagreement_count,callback_requests_seen,callback_success_2xx,callback_failures,
+        settlement_reads,max_observed_unsettled_credit_gap,max_observed_external_delivery_gap,delivery_completeness_floor,
+        window_start_utc,window_end_utc,duration_censored,stop_reason)
+     VALUES($1,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
+    [
+      input.probeId, sessionId, input.stage, input.icao.toUpperCase(), input.evidenceStatus,
+      external, input.metrics.internalSendCredits, gap, completeness,
+      input.metrics.deliveryCount, input.metrics.notificationItemsReceived,
+      input.metrics.explicitCostDeliveryCount, input.metrics.fallbackDeliveryCount,
+      input.metrics.costItemDisagreementCount, input.metrics.callbackRequestsSeen,
+      input.metrics.callbackSuccess2xx, input.metrics.callbackFailures,
+      input.settlementReads, input.maxObservedUnsettledCreditGap, input.maxObservedExternalDeliveryGap,
+      input.deliveryCompletenessFloor, input.windowStartUtc, input.windowEndUtc,
+      input.durationCensored, input.stopReason,
+    ],
+  );
 }
 
 function blobRefFromRow(row: any): ProviderBlobRefV39 {
@@ -428,7 +617,16 @@ function blobRefFromRow(row: any): ProviderBlobRefV39 {
  * Purpose-completion cleanup. Raw provider blobs are deleted and verified
  * absent first; only then are transient UNLOGGED normalized rows removed.
  */
-export async function cleanupPrepaidProbeSessionV39(sessionId: string, deletionRunId: string): Promise<{ deletedBlobs: number; deletedRuntimeRows: number; verifiedAtUtc: string }> {
+export interface PrepaidProbeCleanupResultV39 {
+  deletedBlobs: number;
+  deletedRuntimeRows: number;
+  verifiedAtUtc: string;
+}
+
+export async function cleanupPrepaidProbeSessionLocalV39(
+  sessionId: string,
+  deletionRunId: string,
+): Promise<PrepaidProbeCleanupResultV39> {
   const id = assertSessionId(sessionId);
   if (!String(deletionRunId ?? "").trim()) throw new Error("PREPAID_PROBE_DELETION_RUN_ID_REQUIRED");
   const store = createRequiredProviderBlobStoreV39();
@@ -484,4 +682,51 @@ export async function cleanupPrepaidProbeSessionV39(sessionId: string, deletionR
     throw new Error(`PREPAID_PROBE_CLEANUP_VERIFICATION_FAILED:${JSON.stringify(v)}`);
   }
   return { deletedBlobs, deletedRuntimeRows, verifiedAtUtc: new Date().toISOString() };
+}
+
+export async function cleanupPrepaidProbeSessionV39(
+  sessionId: string,
+  deletionRunId: string,
+): Promise<PrepaidProbeCleanupResultV39> {
+  const id = assertSessionId(sessionId);
+  if (!String(deletionRunId ?? "").trim()) throw new Error("PREPAID_PROBE_DELETION_RUN_ID_REQUIRED");
+
+  const base = String(process.env.V39_REMOTE_BLOB_CLEANUP_BASE ?? "").trim().replace(/\/+$/, "");
+  if (!base) return cleanupPrepaidProbeSessionLocalV39(id, deletionRunId);
+
+  if (!/^https:\/\/[^/]+$/i.test(base)) {
+    throw new Error("V39_REMOTE_BLOB_CLEANUP_BASE_MUST_BE_HTTPS_ORIGIN");
+  }
+  if (/\.replit\.dev$/i.test(new URL(base).hostname)) {
+    throw new Error("V39_REMOTE_BLOB_CLEANUP_BASE_CANNOT_BE_REPLIT_DEV");
+  }
+  const secret = String(process.env.V39_REMOTE_BLOB_CLEANUP_SECRET ?? "").trim();
+  if (!secret) throw new Error("V39_REMOTE_BLOB_CLEANUP_SECRET_REQUIRED");
+
+  const response = await fetch(`${base}/__v39/phase2g/runtime-cleanup`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-v39-phase2g-control-secret": secret,
+    },
+    body: JSON.stringify({ sessionId: id, deletionRunId }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  const text = await response.text().catch(() => "");
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch {}
+  if (response.status !== 200 ||
+      json?.schema !== "v39.phase2g-runtime-cleanup.v1" ||
+      json?.status !== "PASS" ||
+      String(json?.session_id ?? "").toLowerCase() !== id ||
+      !Number.isInteger(Number(json?.deleted_blobs)) ||
+      !Number.isInteger(Number(json?.deleted_runtime_rows)) ||
+      !Number.isFinite(Date.parse(String(json?.verified_at_utc ?? "")))) {
+    throw new Error(`PREPAID_PROBE_REMOTE_CLEANUP_FAILED:http=${response.status}`);
+  }
+  return {
+    deletedBlobs: Number(json.deleted_blobs),
+    deletedRuntimeRows: Number(json.deleted_runtime_rows),
+    verifiedAtUtc: new Date(String(json.verified_at_utc)).toISOString(),
+  };
 }

@@ -45,10 +45,12 @@ async function markProbeFailed(input: {
 }): Promise<void> {
   await pool.query(
     `UPDATE clean.adb_anchor_probe
-        SET status='failed',window_end=now(),duration_censored=true,stop_reason=$2,
-            reconciliation_status='UNRESOLVED',runtime_session_id=COALESCE($3::uuid,runtime_session_id),
+        SET status='failed',window_end=COALESCE(window_end,now()),duration_censored=true,
+            stop_reason=COALESCE(stop_reason,$2),
+            reconciliation_status=COALESCE(reconciliation_status,'UNRESOLVED'),
+            runtime_session_id=COALESCE($3::uuid,runtime_session_id),
             runtime_cleanup_verified_at_utc=COALESCE($4::timestamptz,runtime_cleanup_verified_at_utc)
-      WHERE probe_id=$1 AND status='probing'`,
+      WHERE probe_id=$1 AND status IN ('probing','settling','failed')`,
     [input.probeId, input.stopReason, input.sessionId, input.cleanupVerifiedAtUtc],
   );
 }
@@ -58,6 +60,7 @@ async function main(): Promise<void> {
   const authPath = path.resolve(required("--auth-file"));
   const expectedAuthSha = required("--auth-sha").toLowerCase();
   const budgetDayId = required("--probe-budget-day-id");
+  const deferCleanup = process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP === "1";
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("RECOVERY_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("RECOVERY_REFUSED:AUTH_SHA_INVALID");
 
@@ -74,8 +77,18 @@ async function main(): Promise<void> {
   }
 
   const probes = await pool.query(
-    `SELECT probe_id,icao,status,runtime_session_id FROM clean.adb_anchor_probe
-      WHERE stage=1 AND probe_budget_day_id=$1 AND status='probing'
+    `SELECT probe_id,icao,status,runtime_session_id,stop_reason,reconciliation_status,runtime_cleanup_verified_at_utc
+       FROM clean.adb_anchor_probe
+      WHERE stage=1 AND probe_budget_day_id=$1
+        AND (
+          status IN ('probing','settling')
+          OR (
+            status='failed'
+            AND reconciliation_status='UNRESOLVED'
+            AND runtime_cleanup_verified_at_utc IS NULL
+            AND stop_reason IN ('subscription_delete_failed','balance_read_failed')
+          )
+        )
       ORDER BY recorded_at ASC`,
     [budgetDayId],
   );
@@ -103,7 +116,7 @@ async function main(): Promise<void> {
     `SELECT session_id,provider_subscription_id,state
        FROM clean.prepaid_probe_session_runtime
       WHERE owner_kind='anchor_probe' AND owner_probe_id=$1 AND stage=1
-        AND state IN ('armed','active','settling')
+        AND state IN ('armed','active','settling','failed')
       ORDER BY created_at_utc DESC`,
     [probeId],
   );
@@ -194,23 +207,39 @@ async function main(): Promise<void> {
       providerDeleteVerified = activeBillableBefore.length === 0;
     }
 
-    try {
-      const cleanup = await cleanupPrepaidProbeSessionV39(sessionId, `phase2g-supervisor-recovery-${probeId}`);
-      cleanupVerifiedAtUtc = cleanup.verifiedAtUtc;
-    } catch (error) {
-      await markProbeFailed({
-        probeId,
-        sessionId,
-        stopReason: "supervisor_child_exit_cleanup_failed",
-        cleanupVerifiedAtUtc: null,
-      });
-      await openRecoveryIncident({
-        probeId,
-        budgetDayId,
-        reason: "runtime_cleanup_failed",
-        providerDeleteVerified,
-      });
-      throw error;
+    // The exact provider subscription is now verified inactive. Transition the
+    // surviving runtime owner out of active before any raw/runtime cleanup so
+    // the published cleanup bridge can refuse premature evidence deletion.
+    await pool.query(
+      `UPDATE clean.prepaid_probe_session_runtime
+          SET state='failed'
+        WHERE session_id=$1::uuid
+          AND owner_kind='anchor_probe'
+          AND owner_probe_id=$2
+          AND stage=1
+          AND state IN ('armed','active','settling','failed')`,
+      [sessionId, probeId],
+    );
+
+    if (!deferCleanup) {
+      try {
+        const cleanup = await cleanupPrepaidProbeSessionV39(sessionId, `phase2g-supervisor-recovery-${probeId}`);
+        cleanupVerifiedAtUtc = cleanup.verifiedAtUtc;
+      } catch (error) {
+        await markProbeFailed({
+          probeId,
+          sessionId,
+          stopReason: "supervisor_child_exit_cleanup_failed",
+          cleanupVerifiedAtUtc: null,
+        });
+        await openRecoveryIncident({
+          probeId,
+          budgetDayId,
+          reason: "runtime_cleanup_failed",
+          providerDeleteVerified,
+        });
+        throw error;
+      }
     }
   } else {
     const before = await listSubscriptionsStrict();
@@ -294,6 +323,37 @@ async function main(): Promise<void> {
         throw new Error("RECOVERY_REFUSED:NO_RUNTIME_SESSION_ACTIVE_BILLABLE_PRESENT");
       }
     }
+
+    // When PostgreSQL has reset the UNLOGGED runtime tables, the durable probe
+    // row still owns the random session UUID. After provider deletion/absence
+    // is verified, mark the probe failed first and ask the published Replit
+    // cleanup bridge to tombstone any remaining blob refs for that exact UUID.
+    if (durableSessionId && providerDeleteVerified) {
+      await markProbeFailed({
+        probeId,
+        sessionId: durableSessionId,
+        stopReason,
+        cleanupVerifiedAtUtc: null,
+      });
+      if (!deferCleanup) {
+        try {
+          const cleanup = await cleanupPrepaidProbeSessionV39(
+            durableSessionId,
+            `phase2g-runtime-reset-recovery-${probeId}`,
+          );
+          cleanupVerifiedAtUtc = cleanup.verifiedAtUtc;
+        } catch (error) {
+          await openRecoveryIncident({
+            probeId,
+            budgetDayId,
+            reason: "runtime_reset_blob_cleanup_failed",
+            providerDeleteVerified,
+            durableSessionId,
+          });
+          throw error;
+        }
+      }
+    }
   }
 
   await markProbeFailed({ probeId, sessionId, stopReason, cleanupVerifiedAtUtc });
@@ -316,6 +376,7 @@ async function main(): Promise<void> {
     provider_delete_attempted: providerDeleteAttempted,
     provider_delete_verified: providerDeleteVerified,
     runtime_cleanup_verified: Boolean(cleanupVerifiedAtUtc),
+    cleanup_deferred_to_replit_workspace: deferCleanup && !cleanupVerifiedAtUtc,
     runtime_session_present: runtimeSessionPresent,
     durable_session_id_used: !runtimeSessionPresent && Boolean(durableSessionId),
     probe_marked_failed: true,

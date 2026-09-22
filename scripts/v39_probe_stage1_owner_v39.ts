@@ -24,6 +24,10 @@ import {
   verifyAuthFile,
 } from "./v39_paid_guard_v39";
 import type { AuthRecord } from "../server/lib/disruption/authRecord_v39";
+import {
+  compact6EffectiveArtifactV39,
+  loadPhase2gCompact6AmendmentV39,
+} from "../server/lib/disruption/phase2Compact6_v39";
 
 const SCOPE = "Phase 2 / Gate 2 Stage 1";
 const AUTH_CLEANUP_BUFFER_MS = 5 * 60_000;
@@ -103,15 +107,24 @@ function assertStage1AuthCoversTargetWindow(record: AuthRecord, now = new Date()
  * bounds on a synthetic denominator of 1. This is algebraically identical to
  * count/credits ratios and never recreates the deleted provider account value.
  */
-async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvidence[]> {
+export interface Stage1AttemptEvidence extends Stage1ProbeEvidence {
+  probeId: number;
+  durationCensored: boolean;
+  stopReason: string | null;
+  reconciliationStatus: string | null;
+  recordedAtUtc: string;
+}
+
+async function readStage1Evidence(preprobeHash: string): Promise<Stage1AttemptEvidence[]> {
   const r = await pool.query(
-    `SELECT icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
+    `SELECT probe_id,icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
             tail_chain_links_per_credit,stability,confirmed_unique_lower,
             confirmed_plus_ambiguous_upper,provider_content_safe_mode,
-            confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit
+            confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit,
+            duration_censored,stop_reason,reconciliation_status,recorded_at
        FROM clean.adb_anchor_probe
       WHERE stage=1 AND preprobe_artifact_sha256=$1
-      ORDER BY recorded_at ASC`,
+      ORDER BY recorded_at ASC,probe_id ASC`,
     [preprobeHash],
   );
   return r.rows.map((x: any) => {
@@ -120,6 +133,7 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvid
     const upperRate = x.confirmed_plus_ambiguous_upper_per_credit == null ? null : Number(x.confirmed_plus_ambiguous_upper_per_credit);
     const safeRates = safe && lowerRate !== null && upperRate !== null && Number.isFinite(lowerRate) && Number.isFinite(upperRate);
     return {
+      probeId: Number(x.probe_id),
       icao: String(x.icao).toUpperCase(),
       status: String(x.status),
       rowsPerHour: x.rows_per_hour == null ? null : Number(x.rows_per_hour),
@@ -129,24 +143,190 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvid
       stability: x.stability == null ? null : Number(x.stability),
       confirmedUniqueLower: safeRates ? lowerRate : (x.confirmed_unique_lower == null ? null : Number(x.confirmed_unique_lower)),
       confirmedPlusAmbiguousUpper: safeRates ? upperRate : (x.confirmed_plus_ambiguous_upper == null ? null : Number(x.confirmed_plus_ambiguous_upper)),
+      durationCensored: x.duration_censored === true,
+      stopReason: x.stop_reason == null ? null : String(x.stop_reason),
+      reconciliationStatus: x.reconciliation_status == null ? null : String(x.reconciliation_status),
+      recordedAtUtc: new Date(x.recorded_at).toISOString(),
     };
   });
 }
 
-function terminal(status: string | undefined): boolean {
-  return status === "completed" || status === "failed" || status === "abandoned";
+const MAX_INFRASTRUCTURE_INVALID_RERUNS_PER_PRIMARY = 1;
+
+export function isP2g06PostfixWsssValidationEligibleV39(
+  attempts: Stage1AttemptEvidence[],
+): boolean {
+  const wsss = attempts.filter((row) => row.icao.toUpperCase() === "WSSS");
+  if (wsss.length !== 2) return false;
+  const first = wsss[0];
+  const second = wsss[1];
+  return (
+    isInfrastructureInvalidStage1AttemptV39(first) &&
+    second.probeId === 4 &&
+    second.status === "failed" &&
+    second.durationCensored === false &&
+    second.reconciliationStatus === "MISMATCH" &&
+    second.stopReason === "external_internal_credit_mismatch"
+  );
+}
+
+export function isP2g07Provider502RecoveryEligibleV39(
+  attempts: Stage1AttemptEvidence[],
+): boolean {
+  const wsss = attempts.filter((row) => row.icao.toUpperCase() === "WSSS");
+  if (wsss.length !== 3) return false;
+  const [first, second, third] = wsss;
+  return (
+    isInfrastructureInvalidStage1AttemptV39(first) &&
+    second.probeId === 4 &&
+    second.status === "failed" &&
+    second.durationCensored === false &&
+    second.reconciliationStatus === "MISMATCH" &&
+    second.stopReason === "external_internal_credit_mismatch" &&
+    third.probeId === 5 &&
+    third.status === "failed" &&
+    third.durationCensored === true &&
+    third.reconciliationStatus === "UNRESOLVED" &&
+    third.stopReason === "subscription_delete_failed"
+  );
+}
+
+export function isP2g08Balance502RecoveryEligibleV39(
+  attempts: Stage1AttemptEvidence[],
+): boolean {
+  const wsss = attempts.filter((row) => row.icao.toUpperCase() === "WSSS");
+  if (wsss.length !== 4) return false;
+  const [first, second, third, fourth] = wsss;
+  return (
+    isInfrastructureInvalidStage1AttemptV39(first) &&
+    second.probeId === 4 &&
+    second.status === "failed" &&
+    second.durationCensored === false &&
+    second.reconciliationStatus === "MISMATCH" &&
+    second.stopReason === "external_internal_credit_mismatch" &&
+    third.probeId === 5 &&
+    third.status === "failed" &&
+    third.durationCensored === true &&
+    third.reconciliationStatus === "UNRESOLVED" &&
+    third.stopReason === "subscription_delete_failed" &&
+    fourth.probeId === 6 &&
+    fourth.status === "failed" &&
+    fourth.durationCensored === true &&
+    fourth.reconciliationStatus === "MATCH" &&
+    fourth.stopReason === "balance_read_failed_after_retries"
+  );
+}
+
+export function isP2g09HostResetRecoveryEligibleV39(
+  attempts: Stage1AttemptEvidence[],
+): boolean {
+  const wsss = attempts.filter((row) => row.icao.toUpperCase() === "WSSS");
+  if (wsss.length !== 5) return false;
+  const [first, second, third, fourth, fifth] = wsss;
+  return (
+    isInfrastructureInvalidStage1AttemptV39(first) &&
+    second.probeId === 4 &&
+    second.status === "failed" &&
+    second.durationCensored === false &&
+    second.reconciliationStatus === "MISMATCH" &&
+    second.stopReason === "external_internal_credit_mismatch" &&
+    third.probeId === 5 &&
+    third.status === "failed" &&
+    third.durationCensored === true &&
+    third.reconciliationStatus === "UNRESOLVED" &&
+    third.stopReason === "subscription_delete_failed" &&
+    fourth.probeId === 6 &&
+    fourth.status === "failed" &&
+    fourth.durationCensored === true &&
+    fourth.reconciliationStatus === "MATCH" &&
+    fourth.stopReason === "balance_read_failed_after_retries" &&
+    fifth.probeId === 7 &&
+    fifth.status === "failed" &&
+    fifth.durationCensored === true &&
+    fifth.reconciliationStatus === "UNRESOLVED" &&
+    fifth.stopReason === "supervisor_child_exit_recovered"
+  );
+}
+
+export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEvidence): boolean {
+  if (attempt.status !== "failed") return false;
+  if (attempt.durationCensored !== true) return false;
+  if (attempt.reconciliationStatus !== "UNRESOLVED") return false;
+  const reason = String(attempt.stopReason ?? "");
+  return reason.startsWith("supervisor_child_exit");
+}
+
+/**
+ * Scientific sequencing rule for primary Stage-1 candidates:
+ * - preserve every original attempt row;
+ * - a completed/non-infrastructure terminal result is terminal;
+ * - one and only one rerun is permitted after a verified infrastructure-invalid
+ *   first attempt;
+ * - a second failed attempt is terminal for sequencing, preventing retry bias.
+ *
+ * This rule is symmetric across every frozen primary candidate and does not
+ * change the two-hour/time-class/cap/score protocol.
+ */
+export function chooseNextPrimaryStage1TargetV39(
+  shortlist: Array<{ icao: string }>,
+  attempts: Stage1AttemptEvidence[],
+): string | null {
+  const grouped = new Map<string, Stage1AttemptEvidence[]>();
+  for (const attempt of attempts) {
+    const key = attempt.icao.toUpperCase();
+    const rows = grouped.get(key) ?? [];
+    rows.push(attempt);
+    grouped.set(key, rows);
+  }
+
+  for (const candidate of shortlist) {
+    const icao = candidate.icao.toUpperCase();
+    const rows = grouped.get(icao) ?? [];
+    if (rows.length === 0) return icao;
+
+    if (rows.some((row) => row.status === "completed")) continue;
+
+    const latest = rows[rows.length - 1];
+    const infraInvalidCount = rows.filter(isInfrastructureInvalidStage1AttemptV39).length;
+    if (
+      rows.length === 1 &&
+      infraInvalidCount <= MAX_INFRASTRUCTURE_INVALID_RERUNS_PER_PRIMARY &&
+      isInfrastructureInvalidStage1AttemptV39(latest)
+    ) {
+      return icao;
+    }
+
+    // Any second attempt, abandoned row, or non-infrastructure failure is
+    // terminal for the ordinary sequencing rule.
+  }
+  return null;
 }
 
 async function chooseNextStage1Target(
-  artifacts: LoadedProbeExecutionArtifacts,
-  evidence: Stage1ProbeEvidence[],
+  artifactForSelection: LoadedProbeExecutionArtifacts["preprobe"],
+  evidence: Stage1AttemptEvidence[],
+  allowP2g06PostfixWsssValidation: boolean,
+  allowP2g07Provider502Recovery: boolean,
+  allowP2g08Balance502Recovery: boolean,
+  allowP2g09HostResetRecovery: boolean,
 ): Promise<{ icao: string; replacement: boolean } | null> {
-  const by = new Map(evidence.map((e) => [e.icao, e]));
-  for (const candidate of artifacts.preprobe.shortlist) {
-    if (!terminal(by.get(candidate.icao)?.status)) return { icao: candidate.icao, replacement: false };
+  if (allowP2g09HostResetRecovery && isP2g09HostResetRecoveryEligibleV39(evidence)) {
+    return { icao: "WSSS", replacement: false };
+  }
+  if (allowP2g08Balance502Recovery && isP2g08Balance502RecoveryEligibleV39(evidence)) {
+    return { icao: "WSSS", replacement: false };
+  }
+  if (allowP2g07Provider502Recovery && isP2g07Provider502RecoveryEligibleV39(evidence)) {
+    return { icao: "WSSS", replacement: false };
+  }
+  if (allowP2g06PostfixWsssValidation && isP2g06PostfixWsssValidationEligibleV39(evidence)) {
+    return { icao: "WSSS", replacement: false };
   }
 
-  const promotion = selectStage2Top5(artifacts.preprobe, evidence);
+  const nextPrimary = chooseNextPrimaryStage1TargetV39(artifactForSelection.shortlist, evidence);
+  if (nextPrimary) return { icao: nextPrimary, replacement: false };
+
+  const promotion = selectStage2Top5(artifactForSelection, evidence);
   if (promotion.replacementsNeeded === 0) return null;
   if (!promotion.nextReplacement) {
     throw new Error(`REFUSED_GATE2_UNSAT: ${promotion.replacementsNeeded} Stage-1-valid candidate(s) still needed but frozen replacements are exhausted`);
@@ -164,10 +344,30 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
   const approved = verifiedStage1Auth(argv, binding);
   assertStage1AuthCoversTargetWindow(approved.record);
   const evidence = await readStage1Evidence(artifacts.preprobeSha256);
-  const next = await chooseNextStage1Target(artifacts, evidence);
+  const compact6 = artifacts.runtime.stage1AmendmentSha256
+    ? loadPhase2gCompact6AmendmentV39({
+        expectedSha256: artifacts.runtime.stage1AmendmentSha256,
+        sourcePreprobeFileSha256: artifacts.preprobeSha256,
+        preprobe: artifacts.preprobe,
+      })
+    : null;
+  const selectionArtifact = compact6
+    ? {
+        ...artifacts.preprobe,
+        shortlist: compact6.effectiveShortlist,
+      }
+    : artifacts.preprobe;
+  const next = await chooseNextStage1Target(
+    selectionArtifact,
+    evidence,
+    compact6 !== null,
+    compact6?.amendment.p2g07_provider502_recovery_rerun?.authorized === true,
+    compact6?.amendment.p2g08_balance502_recovery_rerun?.authorized === true,
+    compact6?.amendment.p2g09_hostreset_recovery_rerun?.authorized === true,
+  );
 
   if (!next) {
-    const promotion = selectStage2Top5(artifacts.preprobe, evidence);
+    const promotion = selectStage2Top5(selectionArtifact, evidence);
     console.log(JSON.stringify({
       schema: "v39.anchor-stage1-evidence.v3",
       status: "PASS",
@@ -182,6 +382,8 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
       referenceIcao: promotion.referenceIcao,
       ambiguityMembershipInvariant: promotion.ambiguityMembershipInvariant,
       providerContentSafeMode: true,
+      stage1AmendmentSha256: artifacts.runtime.stage1AmendmentSha256,
+      compact6: compact6 !== null,
       message: "Stage 1/replacement requirements complete; no provider call made",
     }));
     return 0;
@@ -202,12 +404,16 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     artifacts,
     authMaxAlertCredits: approved.ceiling,
   });
-  if (result.status !== "completed") {
-    throw new Error(`REFUSED_STAGE1_PROBE_FAILED: ${next.icao} ${result.stopReason ?? "unknown"}`);
+  const deferredCleanup = process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP === "1";
+  const safeTerminal =
+    result.status === "completed" ||
+    (deferredCleanup && result.status === "settling");
+  if (!safeTerminal || result.durationCensored || result.stopReason !== null) {
+    throw new Error(`REFUSED_STAGE1_PROBE_FAILED: ${next.icao} ${result.stopReason ?? (result.durationCensored ? "duration_censored" : result.status)}`);
   }
   console.log(JSON.stringify({
     schema: "v39.anchor-stage1-execution.v3",
-    status: "PASS",
+    status: result.status === "settling" ? "PASS_PROVIDER_SAFE_AWAITING_CLEANUP" : "PASS",
     authorizationId: auth.authId,
     preprobeArtifactSha256: artifacts.preprobeSha256,
     runtimeArtifactSha256: artifacts.runtimeSha256,
@@ -218,9 +424,14 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     replacement: next.replacement,
     probeId: result.probeId,
     providerContentSafeMode: true,
+    stage1AmendmentSha256: artifacts.runtime.stage1AmendmentSha256,
+    compact6: compact6 !== null,
     durationCensored: result.durationCensored,
     stopReason: result.stopReason,
-    message: "One sequential frozen Stage-1 probe completed through isolated App-Storage/UNLOGGED runtime",
+    cleanupPending: result.status === "settling",
+    message: result.status === "settling"
+      ? "Provider deleted and exact reconciliation persisted; exact-session Replit cleanup is pending with zero provider exposure"
+      : "One sequential frozen Stage-1 probe completed through isolated App-Storage/UNLOGGED runtime",
   }));
   return 0;
 }

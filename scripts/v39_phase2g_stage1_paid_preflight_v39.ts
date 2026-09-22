@@ -9,6 +9,17 @@ import {
   stage1AuthorizationScopeV39,
 } from "../server/lib/disruption/phase2Gate2Runtime_v39";
 import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authRecord_v39";
+import {
+  loadPhase2gCompact6AmendmentV39,
+} from "../server/lib/disruption/phase2Compact6_v39";
+import {
+  chooseNextPrimaryStage1TargetV39,
+  isP2g06PostfixWsssValidationEligibleV39,
+  isP2g07Provider502RecoveryEligibleV39,
+  isP2g08Balance502RecoveryEligibleV39,
+  isP2g09HostResetRecoveryEligibleV39,
+  type Stage1AttemptEvidence,
+} from "./v39_probe_stage1_owner_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const TARGET_MINUTES = 120;
@@ -18,9 +29,13 @@ const CALLBACK_SOURCE_PATHS = [
   "server/routes_v3.ts",
   "server/lib/disruption/workspaceRuntimeHealth_v39.ts",
   "server/lib/disruption/prepaidProbeRuntime_v39.ts",
+  "server/lib/disruption/prepaidProbeWindow_v39.ts",
+  "server/lib/disruption/probeExecutionPrepaid_v39.ts",
+  "server/lib/disruption/phase2Compact6_v39.ts",
   "server/lib/disruption/providerBlobStore_v39.ts",
   "server/lib/disruption/replitProviderBlobStore_v39.ts",
   "server/lib/disruption/db_v39.ts",
+  "server/db.ts",
 ] as const;
 
 function required(name: string): string {
@@ -63,6 +78,23 @@ function workspaceOrigin(): string | null {
   }
   return null;
 }
+async function prepaidRouteHealth(origin: string): Promise<{ status: number; json: any | null }> {
+  const wrongSecret = "phase2g-preflight-intentionally-wrong";
+  const session = "00000000-0000-4000-8000-000000000000";
+  const response = await fetch(
+    `${origin}/api/v1/webhooks/aerodatabox/${encodeURIComponent(wrongSecret)}/prepaid/${session}`,
+    {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  const text = await response.text().catch(() => "");
+  let json: any | null = null;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+  return { status: response.status, json };
+}
 async function getJson(url: string): Promise<{ status: number; json: any | null }> {
   const response = await fetch(url, {
     headers: { accept: "application/json" },
@@ -90,16 +122,37 @@ async function main(): Promise<void> {
   const runtimeSha = required("--runtime-sha").toLowerCase();
   const authPath = path.resolve(required("--auth-file"));
   const expectedAuthSha = required("--auth-sha").toLowerCase();
+  const callbackVerificationPath = path.resolve(required("--callback-verification"));
+  const callbackVerificationSha = required("--callback-verification-sha").toLowerCase();
   const expectedHead = required("--expected-head").toLowerCase();
   const outPath = path.resolve(required("--out"));
+  const expectedIcaoRaw = optional("--expected-icao", "").trim().toUpperCase();
+  const expectedIcao = expectedIcaoRaw || null;
+  const callbackBase = required("--callback-base").replace(/\/+$/, "");
+  const ownerExecutor = required("--owner-executor").trim().toLowerCase();
+  if (ownerExecutor !== "github-actions") {
+    throw new Error("BLOCKED:OWNER_EXECUTOR_MUST_BE_GITHUB_ACTIONS");
+  }
+  if (!/^https:\/\/[^/]+$/i.test(callbackBase)) {
+    throw new Error("BLOCKED:CALLBACK_BASE_MUST_BE_HTTPS_ORIGIN");
+  }
+  if (/\.replit\.dev$/i.test(new URL(callbackBase).hostname)) {
+    throw new Error("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED");
+  }
+  if (expectedIcao && !/^[A-Z0-9]{4}$/.test(expectedIcao)) {
+    throw new Error("BLOCKED:EXPECTED_ICAO_INVALID");
+  }
 
   if (!/^[a-f0-9]{64}$/.test(runtimeSha)) throw new Error("BLOCKED:RUNTIME_SHA_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("BLOCKED:AUTH_SHA_INVALID");
+  if (!/^[a-f0-9]{64}$/.test(callbackVerificationSha)) throw new Error("BLOCKED:CALLBACK_VERIFICATION_SHA_INVALID");
   if (!/^[a-f0-9]{40}$/.test(expectedHead)) throw new Error("BLOCKED:EXPECTED_HEAD_INVALID");
 
   const currentHead = git(["rev-parse", "HEAD"]).toLowerCase();
   const blockers: string[] = [];
   if (currentHead !== expectedHead) blockers.push(`git_head_mismatch:${currentHead}`);
+  const protectedStatus = git(["status", "--porcelain=v1", "--untracked-files=all", "--", "server", "scripts", "migrations", "tests"]);
+  if (protectedStatus.trim()) blockers.push("protected_source_tree_dirty");
 
   const binding = loadGate2RuntimeBindingV39({
     probeRuntimePath: runtimePath,
@@ -109,6 +162,40 @@ async function main(): Promise<void> {
     smokeRuntimeFileSha256: smokeRuntimeSha,
     preprobePath,
   });
+
+  let compact6: ReturnType<typeof loadPhase2gCompact6AmendmentV39> | null = null;
+  if (binding.runtime.stage1AmendmentSha256) {
+    try {
+      compact6 = loadPhase2gCompact6AmendmentV39({
+        expectedSha256: binding.runtime.stage1AmendmentSha256,
+        sourcePreprobeFileSha256: binding.smoke.preprobe.fileSha256,
+        preprobe: binding.smoke.preprobe.artifact,
+      });
+    } catch (error) {
+      blockers.push(`compact6_amendment_invalid:${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  const migrationCheck = await pool.query(
+    `SELECT
+       to_regclass('clean.adb_probe_reconciliation_evidence') IS NOT NULL AS evidence_table,
+       EXISTS (
+         SELECT 1 FROM information_schema.columns
+          WHERE table_schema='clean'
+            AND table_name='prepaid_probe_session_runtime'
+            AND column_name='callback_requests_seen'
+       ) AS callback_counter,
+       EXISTS (
+         SELECT 1
+           FROM pg_constraint
+          WHERE conrelid='clean.adb_anchor_probe'::regclass
+            AND conname='adb_anchor_probe_status_check'
+            AND pg_get_constraintdef(oid) ILIKE '%settling%'
+       ) AS settling_status`,
+  );
+  if (migrationCheck.rows[0]?.evidence_table !== true) blockers.push("phase2g_reconciliation_evidence_table_missing");
+  if (migrationCheck.rows[0]?.callback_counter !== true) blockers.push("phase2g_callback_counter_migration_missing");
+  if (migrationCheck.rows[0]?.settling_status !== true) blockers.push("phase2g_settling_status_migration_missing");
 
   const auth = readAuth(authPath);
   if (auth.sha256 !== expectedAuthSha) blockers.push(`auth_sha_mismatch:${auth.sha256}`);
@@ -150,9 +237,60 @@ async function main(): Promise<void> {
   const openIncidents = Number(incidents.rows[0]?.n ?? -1);
   if (openIncidents !== 0) blockers.push(`open_incidents=${openIncidents}`);
 
-  const activeProbe = await pool.query(`SELECT count(*)::int AS n FROM clean.adb_anchor_probe WHERE status='probing'`);
+  const activeProbe = await pool.query(
+    `SELECT count(*)::int AS n FROM clean.adb_anchor_probe WHERE status IN ('probing','settling')`,
+  );
   const activeProbes = Number(activeProbe.rows[0]?.n ?? -1);
-  if (activeProbes !== 0) blockers.push(`active_probes=${activeProbes}`);
+  if (activeProbes !== 0) blockers.push(`active_or_settling_probes=${activeProbes}`);
+
+  let nextCandidate: string | null = null;
+  if (compact6) {
+    const stage1Rows = await pool.query(
+      `SELECT probe_id,icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
+              tail_chain_links_per_credit,stability,confirmed_unique_lower,
+              confirmed_plus_ambiguous_upper,duration_censored,stop_reason,
+              reconciliation_status,recorded_at
+         FROM clean.adb_anchor_probe
+        WHERE stage=1 AND preprobe_artifact_sha256=$1
+        ORDER BY recorded_at ASC,probe_id ASC`,
+      [binding.smoke.preprobe.fileSha256],
+    );
+    const evidence: Stage1AttemptEvidence[] = stage1Rows.rows.map((row: any) => ({
+      probeId: Number(row.probe_id),
+      icao: String(row.icao).toUpperCase(),
+      status: String(row.status),
+      rowsPerHour: row.rows_per_hour == null ? null : Number(row.rows_per_hour),
+      creditsSpent: row.credits_spent == null ? null : Number(row.credits_spent),
+      uniqueFlightsPerCredit: row.unique_flights_per_credit == null ? null : Number(row.unique_flights_per_credit),
+      tailChainLinksPerCredit: row.tail_chain_links_per_credit == null ? null : Number(row.tail_chain_links_per_credit),
+      stability: row.stability == null ? null : Number(row.stability),
+      confirmedUniqueLower: row.confirmed_unique_lower == null ? null : Number(row.confirmed_unique_lower),
+      confirmedPlusAmbiguousUpper: row.confirmed_plus_ambiguous_upper == null ? null : Number(row.confirmed_plus_ambiguous_upper),
+      durationCensored: row.duration_censored === true,
+      stopReason: row.stop_reason == null ? null : String(row.stop_reason),
+      reconciliationStatus: row.reconciliation_status == null ? null : String(row.reconciliation_status),
+      recordedAtUtc: new Date(row.recorded_at).toISOString(),
+    }));
+
+    nextCandidate = compact6.amendment.p2g09_hostreset_recovery_rerun?.authorized === true &&
+        isP2g09HostResetRecoveryEligibleV39(evidence)
+      ? "WSSS"
+      : compact6.amendment.p2g08_balance502_recovery_rerun?.authorized === true &&
+          isP2g08Balance502RecoveryEligibleV39(evidence)
+        ? "WSSS"
+        : compact6.amendment.p2g07_provider502_recovery_rerun?.authorized === true &&
+          isP2g07Provider502RecoveryEligibleV39(evidence)
+        ? "WSSS"
+        : isP2g06PostfixWsssValidationEligibleV39(evidence)
+        ? "WSSS"
+        : chooseNextPrimaryStage1TargetV39(compact6.effectiveShortlist, evidence);
+
+    if (expectedIcao && nextCandidate !== expectedIcao) {
+      blockers.push(`next_candidate_mismatch:expected=${expectedIcao}:actual=${nextCandidate ?? "<none>"}`);
+    }
+  } else if (expectedIcao) {
+    blockers.push("expected_icao_requires_stage1_amendment");
+  }
 
   const sameDayRows = await pool.query(
     `SELECT probe_id,icao,status FROM clean.adb_anchor_probe WHERE probe_budget_day_id=$1 ORDER BY recorded_at ASC`,
@@ -166,7 +304,26 @@ async function main(): Promise<void> {
   const openBudgetDays = budgetDays.rows.filter((row: any) => row.state === "OPEN");
   if (openBudgetDays.length !== 0) blockers.push(`open_probe_budget_days=${openBudgetDays.length}`);
 
-  const balance = await getBalance();
+  const balanceCanary: Array<{read:number;creditsRemaining:number}> = [];
+  const requireBalanceCanary = compact6?.amendment.p2g08_balance502_recovery_rerun?.requires_balance_stability_canary === true;
+  if (requireBalanceCanary) {
+    for (let i = 1; i <= 3; i += 1) {
+      const canaryBalance = await getBalance();
+      if (!canaryBalance) {
+        blockers.push(`provider_balance_stability_canary_failed_at_read=${i}`);
+        break;
+      }
+      balanceCanary.push({ read: i, creditsRemaining: canaryBalance.creditsRemaining });
+      if (i < 3) await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+    if (balanceCanary.length === 3 &&
+        !balanceCanary.every((entry) => entry.creditsRemaining === balanceCanary[0].creditsRemaining)) {
+      blockers.push("provider_balance_stability_canary_not_stable");
+    }
+  }
+  const balance = balanceCanary.length === 3
+    ? { creditsRemaining: balanceCanary[2].creditsRemaining }
+    : await getBalance();
   if (!balance) throw new Error("BLOCKED:PROVIDER_BALANCE_READ_FAILED");
   if (balance.creditsRemaining < 1000 + protectedExposure) {
     blockers.push(`provider_balance_below_protected_floor:${balance.creditsRemaining}`);
@@ -175,73 +332,88 @@ async function main(): Promise<void> {
   const activeBillable = subscriptions.filter((subscription) => subscription.isActive && subscription.billingType !== "LifetimeBased");
   if (activeBillable.length !== 0) blockers.push(`active_billable_subscriptions=${activeBillable.length}`);
 
-  const origin = workspaceOrigin();
+  const origin = callbackBase;
+  let callbackVerification: any = null;
+  try {
+    const callbackRaw = fs.readFileSync(callbackVerificationPath);
+    const actualCallbackSha = sha256(callbackRaw);
+    if (actualCallbackSha !== callbackVerificationSha) {
+      blockers.push(`callback_verification_sha_mismatch:${actualCallbackSha}`);
+    } else {
+      callbackVerification = JSON.parse(callbackRaw.toString("utf8"));
+    }
+  } catch (error) {
+    blockers.push(`callback_verification_unreadable:${error instanceof Error ? error.message : String(error)}`);
+  }
+
   let callback: Record<string, unknown> = {
     origin,
     reachable: false,
     exact_contract: false,
-    managed_replit_workflow: false,
-    source_compatible_with_current_head: false,
+    contract_mode: "legacy-live-prepaid-route",
+    callback_verification_sha256: callbackVerificationSha,
   };
-  if (!origin) {
-    blockers.push("workspace_callback_origin_missing");
-  } else {
+
+  if (callbackVerification) {
+    const generatedMs = Date.parse(String(callbackVerification.generated_at_utc ?? ""));
+    const ageMs = Date.now() - generatedMs;
+    const before = callbackVerification.before_cleanup ?? {};
+    const after = callbackVerification.after_cleanup ?? {};
+    const artifactContract =
+      callbackVerification.schema === "v39.phase2g-live-callback-verification.v1" &&
+      callbackVerification.status === "PASS" &&
+      callbackVerification.contract_mode === "live-prepaid-route-end-to-end" &&
+      callbackVerification.callback_origin === origin &&
+      callbackVerification.provider_called === false &&
+      callbackVerification.provider_subscription_created === false &&
+      Number(callbackVerification.alert_credits_spent) === 0 &&
+      callbackVerification.wrong_secret_rejected_404 === true &&
+      callbackVerification.correct_secret_accepted_200 === true &&
+      callbackVerification.persistence_verified === true &&
+      callbackVerification.local_exact_session_cleanup_verified === true &&
+      Number(before.sessions) === 1 &&
+      Number(before.deliveries) === 1 &&
+      Number(before.items) === 1 &&
+      Number(before.blobs) === 1 &&
+      Number(before.live_blobs) === 1 &&
+      Number(after.sessions) === 0 &&
+      Number(after.deliveries) === 0 &&
+      Number(after.items) === 0 &&
+      Number(after.live_blobs) === 0 &&
+      Number(after.deleted_blobs) === 1 &&
+      Number.isFinite(generatedMs) &&
+      ageMs >= -5 * 60_000 &&
+      ageMs <= 24 * 60 * 60_000;
+
+    if (!artifactContract) blockers.push("callback_verification_contract_invalid_or_stale");
+
     try {
-      const health = await getJson(`${origin}/__v39/workspace-runtime`);
-      const runtimeHead = String(health.json?.git_head ?? "").toLowerCase();
-      let matched = 0;
-      let sourceCompatible = false;
-      if (/^[a-f0-9]{40}$/.test(runtimeHead)) {
-        const checks = CALLBACK_SOURCE_PATHS.map((file) => {
-          const runtimeSourceSha = sha256(gitFileAt(runtimeHead, file));
-          const currentSourceSha = sha256(fs.readFileSync(path.resolve(file)));
-          const match = runtimeSourceSha === currentSourceSha;
-          if (match) matched += 1;
-          return { file, match };
-        });
-        sourceCompatible = checks.every((check) => check.match);
-      }
-      const exactContract = health.status === 200 &&
-        health.json?.schema === "v39.phase2f-workspace-runtime.v1" &&
-        health.json?.status === "PASS" &&
-        health.json?.prepaid_route_registered === true &&
-        health.json?.provider_mutation === false &&
-        health.json?.managed_replit_workflow === true &&
-        runtimeHead === currentHead;
-      const reachable = exactContract && sourceCompatible;
+      const live = await prepaidRouteHealth(origin);
+      const liveRouteHealthy = live.status === 404 && live.json?.error === "Not found";
       callback = {
         origin,
-        reachable,
-        exact_contract: exactContract,
-        schema: health.json?.schema ?? null,
-        route_owner: health.json?.route_owner ?? null,
-        managed_replit_workflow: health.json?.managed_replit_workflow === true,
-        runtime_git_head: runtimeHead || null,
-        current_git_head: currentHead,
-        retention_hours: health.json?.retention_hours ?? null,
-        bucket_prefix: health.json?.bucket_prefix ?? null,
-        matched_protected_sources: matched,
-        protected_source_count: CALLBACK_SOURCE_PATHS.length,
-        source_compatible_with_current_head: sourceCompatible,
+        reachable: liveRouteHealthy,
+        exact_contract: artifactContract && liveRouteHealthy,
+        contract_mode: "legacy-live-prepaid-route",
+        callback_verification_sha256: callbackVerificationSha,
+        callback_verification_generated_at_utc: callbackVerification.generated_at_utc ?? null,
+        wrong_secret_live_check_status: live.status,
+        provider_blob_boundary_proven_by_callback_verification: artifactContract,
+        source_compatible_with_current_head: null,
       };
-      if (!exactContract) blockers.push("workspace_callback_exact_managed_contract_failed");
-      if (!sourceCompatible) blockers.push("workspace_callback_source_not_compatible");
+      if (!liveRouteHealthy) blockers.push("published_callback_live_route_check_failed");
     } catch (error) {
       callback = {
         origin,
         reachable: false,
         exact_contract: false,
-        managed_replit_workflow: false,
-        source_compatible_with_current_head: false,
+        contract_mode: "legacy-live-prepaid-route",
+        callback_verification_sha256: callbackVerificationSha,
         error: error instanceof Error ? error.message : String(error),
       };
-      blockers.push("workspace_callback_check_failed");
+      blockers.push("published_callback_live_route_check_failed");
     }
   }
-
-  const bucketRaw = String(process.env.V39_PROVIDER_BLOB_BUCKET_ID ?? "").trim();
-  const bucketCorrectable = bucketRaw.startsWith("replit-objstore-") || bucketRaw.startsWith("eplit-objstore-");
-  if (!bucketCorrectable) blockers.push("provider_blob_bucket_config_missing_or_unexpected");
 
   const now = new Date();
   const tc = binding.smoke.preprobe.artifact.probeTimeClass;
@@ -301,15 +473,20 @@ async function main(): Promise<void> {
       probe_budget_day_id: binding.runtime.probeBudgetDayId,
       stage1_reservation_credits: binding.runtime.stage1ReservationCredits,
       unsettled_burst_margin_credits: binding.runtime.unsettledBurstMarginCredits,
+      stage1_amendment_sha256: binding.runtime.stage1AmendmentSha256,
+      compact6_validated: compact6 !== null,
+      next_candidate: nextCandidate,
+      expected_icao: expectedIcao,
     },
     provider: {
       credits_remaining: balance.creditsRemaining,
       protected_floor_after_authorized_exposure: 1000,
       active_billable_subscriptions: activeBillable.length,
+      balance_stability_canary: balanceCanary,
     },
     database: {
       open_incidents: openIncidents,
-      active_probes: activeProbes,
+      active_or_settling_probes: activeProbes,
       same_budget_day_probe_rows: sameDayRows.rowCount ?? sameDayRows.rows.length,
       open_probe_budget_days: openBudgetDays.length,
     },
@@ -319,10 +496,11 @@ async function main(): Promise<void> {
       eligible_now: timeClassEligible,
       would_cross_utc_midnight_if_started_now: wouldCrossUtcMidnight,
     },
+    owner_executor: ownerExecutor,
     callback,
     blockers,
     next: status === "PASS_READY_FOR_PAID_STAGE1"
-      ? "Launch only through the exact hash-bound persistent Stage-1 launcher."
+      ? "Launch only through the exact hash-bound GitHub Actions Stage-1 owner; the published deployment is callback-only."
       : status === "PASS_WAIT_FOR_AUTH_START"
         ? "Wait until AUTH start/time-class opens, rerun this preflight, then launch only on PASS_READY_FOR_PAID_STAGE1."
         : "Resolve blockers; do not launch Stage 1.",

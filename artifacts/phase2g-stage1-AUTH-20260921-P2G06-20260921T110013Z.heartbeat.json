@@ -1,0 +1,9 @@
+{
+  "schema": "v39.phase2g-stage1-heartbeat.v1",
+  "state": "STOPPED",
+  "observed_at_utc": "2026-09-21T13:01:19.855Z",
+  "child_exit_code": 1,
+  "child_signal": null,
+  "callback_watchdog_triggered": false,
+  "recovery_exit_code": 0
+}

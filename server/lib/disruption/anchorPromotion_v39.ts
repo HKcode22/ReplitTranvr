@@ -242,8 +242,8 @@ export function finalFiveMembershipInvariant(rankedRows: PromotionRow[]): boolea
 
 /**
  * Exact Stage-2 promotion/replacement protocol.
- * - All 12 frozen primary Stage-1 candidates must reach a terminal probe state
- *   before replacements are consumed.
+ * - All frozen primary Stage-1 candidates (12 legacy or 6 compact-amended)
+ *   must reach a terminal probe state before replacements are consumed.
  * - Capacity is a gate, not a score component.
  * - Frozen replacements are consumed sequentially only when <5 valid primary
  *   candidates remain.

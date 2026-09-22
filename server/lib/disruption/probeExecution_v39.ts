@@ -43,6 +43,7 @@ export interface ProbeRuntimeConfig {
   unsettledBurstMarginCredits: number;
   stage1ReservationCredits: number;
   stage2ReservationCredits: number;
+  stage1AmendmentSha256: string | null;
 }
 
 export interface ProbeTimeClassConfig {
@@ -123,9 +124,15 @@ export function loadProbeRuntimeConfig(
     unsettledBurstMarginCredits: nonnegativeInt(x.unsettledBurstMarginCredits, "unsettledBurstMarginCredits"),
     stage1ReservationCredits: positiveInt(x.stage1ReservationCredits, "stage1ReservationCredits"),
     stage2ReservationCredits: positiveInt(x.stage2ReservationCredits, "stage2ReservationCredits"),
+    stage1AmendmentSha256: x.stage1AmendmentSha256 == null || String(x.stage1AmendmentSha256).trim() === ""
+      ? null
+      : String(x.stage1AmendmentSha256).trim().toLowerCase(),
   };
   if (!config.version || !/^[A-Za-z0-9_.:-]+$/.test(config.probeBudgetDayId)) {
     throw new Error("REFUSED: invalid probe runtime version/budget-day id");
+  }
+  if (config.stage1AmendmentSha256 !== null && !/^[a-f0-9]{64}$/.test(config.stage1AmendmentSha256)) {
+    throw new Error("REFUSED: invalid stage1AmendmentSha256");
   }
   if (config.settlementStableReadCount < 3) {
     throw new Error("REFUSED: settlementStableReadCount must be >=3");
@@ -463,7 +470,7 @@ export interface ExecuteProbeInput {
 }
 export interface ExecuteProbeResult {
   probeId: number;
-  status: "completed" | "failed";
+  status: "completed" | "settling" | "failed";
   creditsSpent: number | null;
   durationCensored: boolean;
   stopReason: string | null;

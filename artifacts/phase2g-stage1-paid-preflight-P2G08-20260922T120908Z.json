@@ -1,0 +1,75 @@
+{
+  "schema": "v39.phase2g-stage1-paid-preflight.v1",
+  "status": "BLOCKED",
+  "mutation_performed": false,
+  "provider_paid_action_performed": false,
+  "deployment_performed": false,
+  "generated_at_utc": "2026-09-22T12:09:13.218Z",
+  "git_head": "bf4e3711f609796425209cd8514a6cfe84c15cd3",
+  "expected_git_head": "bf4e3711f609796425209cd8514a6cfe84c15cd3",
+  "auth": {
+    "authorization_id": "AUTH-20260922-P2G08",
+    "file": "SEPmd/V3.9_PHASE2G_AUTH_20260922_P2G08.json",
+    "sha256": "3864dccd32a8681efbfa00d8576e84904e740b4d4877aa760f2b892db7f5722d",
+    "start_not_before_utc": "2026-09-22T12:00:00.000Z",
+    "expires_at_utc": "2026-09-22T15:00:00.000Z",
+    "max_alert_credits": 500,
+    "protected_exposure_credits": 500,
+    "safe_latest_start_utc": "2026-09-22T12:55:00.000Z",
+    "approved_in_ledger": true
+  },
+  "gate2_runtime": {
+    "file": "artifacts/phase2g-gate2-runtime-P2G-S1-20260922-07.json",
+    "file_sha256": "acf64d0c71b543cbb955d79021aad2d92c44d16349f4e4ff58ca85a038d2bdae",
+    "binding_sha256": "8c81903ac2141ee167706baa47c2458e81a0993c19e3b4c8e7fe4e92b28efac9",
+    "evidence_id": "RUN-20260915-8C81903AC2141EE167706BAA47C2458E81A0993C19E3B4C8E7FE4E92B28EFAC9",
+    "probe_budget_day_id": "P2G-S1-20260922-07",
+    "stage1_reservation_credits": 450,
+    "unsettled_burst_margin_credits": 50,
+    "stage1_amendment_sha256": "41fc8b11b7a69d94e51263c34a0b8ef240fe2988c98c2e10f7d62892a2770e09",
+    "compact6_validated": false,
+    "next_candidate": null,
+    "expected_icao": "WSSS"
+  },
+  "provider": {
+    "credits_remaining": 2215,
+    "protected_floor_after_authorized_exposure": 1000,
+    "active_billable_subscriptions": 0
+  },
+  "database": {
+    "open_incidents": 0,
+    "active_probes": 0,
+    "same_budget_day_probe_rows": 0,
+    "open_probe_budget_days": 0
+  },
+  "frozen_stage1_time_class": {
+    "utc_slot_hour": 12,
+    "weekday_class": "weekday",
+    "eligible_now": true,
+    "would_cross_utc_midnight_if_started_now": false
+  },
+  "callback": {
+    "origin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+    "reachable": false,
+    "exact_contract": false,
+    "schema": "v39.phase2f-workspace-runtime.v1",
+    "route_owner": "server/index.ts+server/routes_v3.ts",
+    "runtime_owner_mode": "phase2g-detached-npm-run-dev",
+    "managed_replit_workflow": false,
+    "detached_workspace_server": true,
+    "runtime_git_head": "d0d4b1c29942593498908f2a145f8f230dad434c",
+    "current_git_head": "bf4e3711f609796425209cd8514a6cfe84c15cd3",
+    "retention_hours": 168,
+    "bucket_prefix": "replit-objstore",
+    "matched_protected_sources": 8,
+    "protected_source_count": 11,
+    "source_compatible_with_current_head": false
+  },
+  "blockers": [
+    "compact6_amendment_invalid:REFUSED_COMPACT6_HASH_MISMATCH:expected=41fc8b11b7a69d94e51263c34a0b8ef240fe2988c98c2e10f7d62892a2770e09:known_paths=/home/runner/workspace/artifacts/phase2g-compact6-amendment-freeze-20260921.json",
+    "expected_icao_requires_stage1_amendment",
+    "workspace_callback_exact_owner_contract_failed",
+    "workspace_callback_source_not_compatible"
+  ],
+  "next": "Resolve blockers; do not launch Stage 1."
+}

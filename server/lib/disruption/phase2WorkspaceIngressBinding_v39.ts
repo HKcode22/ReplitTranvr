@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { readFileSync } from "fs";
 
 export const PHASE2F_WORKSPACE_INGRESS_SCHEMA_V39 = "v3.9-phase2f-workspace-ingress-binding-1" as const;
+export const PHASE2F_WORKSPACE_ROUTE_OWNER_V39 = "server/index.ts+server/routes_v3.ts" as const;
 export const PHASE2F_WORKSPACE_INGRESS_MAX_AGE_MS = 30 * 60 * 1000;
 
 function canonical(value: unknown): string {
@@ -37,7 +38,7 @@ export interface Phase2FWorkspaceIngressArtifactV39 {
   callback_receipt_generated_at_utc: string;
   callback_runtime_git_head: string;
   binding_creator_git_head: string;
-  exact_route_owner: "server/routes_v3.ts";
+  exact_route_owner: typeof PHASE2F_WORKSPACE_ROUTE_OWNER_V39;
   public_https_ingress: true;
   wrong_secret_rejected_404: true;
   exact_secret_accepted_200: true;
@@ -79,7 +80,7 @@ export function buildPhase2FWorkspaceIngressBindingV39(
     throw new Error("PHASE2F_WORKSPACE_INGRESS_GIT_HEAD_INVALID");
   }
   requireSha(input.callback_receipt_sha256, "RECEIPT_SHA");
-  if (input.exact_route_owner !== "server/routes_v3.ts" || input.public_https_ingress !== true ||
+  if (input.exact_route_owner !== PHASE2F_WORKSPACE_ROUTE_OWNER_V39 || input.public_https_ingress !== true ||
       input.wrong_secret_rejected_404 !== true || input.exact_secret_accepted_200 !== true ||
       input.runtime_health_rechecked !== true || input.retention_hours !== 168 ||
       input.bucket_prefix !== "replit-objstore" || input.open_incidents !== 0 ||

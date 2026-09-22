@@ -1,0 +1,65 @@
+{
+  "schema_version": "v39-phase2g-compact6-amendment-1",
+  "status": "READY_FROZEN_COMPACT6_AMENDMENT",
+  "frozen_at_utc": "2026-09-22T02:26:00.000Z",
+  "source_preprobe_file_sha256": "b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870",
+  "source_stage1_candidate_count": 12,
+  "effective_stage1_candidate_count": 6,
+  "candidate_icaos": [
+    "WSSS",
+    "OMAA",
+    "MMUN",
+    "LKPR",
+    "SKBO",
+    "YSSY"
+  ],
+  "candidate_regions": {
+    "WSSS": "Asia-Pacific",
+    "OMAA": "Gulf/Africa",
+    "MMUN": "North America",
+    "LKPR": "Europe",
+    "SKBO": "South America",
+    "YSSY": "Oceania"
+  },
+  "selection_rule": "one_preoutcome_frozen_shortlist_candidate_per_macro_region_preserving_WSSS_OMAA_references",
+  "p2g06_historical_probe_id": 4,
+  "p2g06_historical_status": "failed",
+  "p2g06_historical_reconciliation_status": "MISMATCH",
+  "p2g06_historical_stop_reason": "external_internal_credit_mismatch",
+  "p2g06_reconstructed_external_credits": 220,
+  "p2g06_reconstructed_internal_credits": 219,
+  "p2g06_reconstructed_delivery_gap_credits": 1,
+  "p2g06_excluded_from_final_scoring": true,
+  "wsss_postfix_validation_rerun": {
+    "authorized": true,
+    "maximum_additional_attempts": 1,
+    "reason": "P2G06 exposed a previously uninstrumented provider-SEND versus received-callback reconciliation gap; validate the corrected prospective evidence path without retroactively reclassifying P2G06 or calibrating an acceptance tolerance from it."
+  },
+  "prospective_reconciliation_policy": {
+    "external_settled_spend_is_authoritative_denominator": true,
+    "delivery_completeness_floor": 1.0,
+    "nonzero_delivery_gap_is_terminal_not_scoreable": true,
+    "internal_greater_than_external_is_hard_mismatch": true,
+    "cost_item_disagreement_is_hard_mismatch": true,
+    "unresolved_settlement_is_hard_failure": true,
+    "applies_only_to_attempts_started_after_this_freeze": true
+  },
+  "stage2_policy": {
+    "mode": "conditional_confirmation_only",
+    "automatic_five_four_hour_confirmations": false,
+    "triggers": [
+      "fewer_than_five_valid_compact_stage1_candidates",
+      "candidate_fails_60_rows_per_hour_capacity_gate",
+      "final_five_membership_not_invariant_under_recorded_identity_bounds",
+      "both_WSSS_and_OMAA_invalid_as_yield_reference",
+      "fifth_vs_sixth_membership_not_robust"
+    ],
+    "result_label_without_triggered_stage2": "compact Stage-1-selected anchor pool"
+  },
+  "anti_bias": {
+    "candidate_subset_chosen_from_preoutcome_frozen_shortlist": true,
+    "no_retroactive_P2G06_pass": true,
+    "no_unbounded_WSSS_retry": true,
+    "no_p2g06_calibrated_reconciliation_tolerance": true
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schema": "v39.phase2g-p2g06-cleanup-manifest.v1",
+  "recorded_at_utc": "2026-09-22T06:45:51.653Z",
+  "runtime_session_id": "e45ef007-6129-4b95-bd29-80a1d700be6e",
+  "probe_id": 4,
+  "icao": "WSSS",
+  "reconstruction": {
+    "local_artifact": "artifacts/P2G06-WSSS-reconstruction-precleanup-20260922T064215Z.json",
+    "sha256": "635aec4f6da80d4ebe5cd314eecf4fe27b20442e0fd6994129ba7389b646aa0d",
+    "payloads_reconstructed": 36,
+    "sha_verified": 36,
+    "persisted_bytes": 282218,
+    "flight_items": 219,
+    "internal_received_credits": 219,
+    "external_provider_spend_credits": 220,
+    "gap_credits": 1,
+    "cost_item_disagreements": 0
+  },
+  "cleanup": {
+    "local_receipt": "artifacts/phase2g-exact-session-purpose-cleanup-p2g06-wsss-final-1790059551714.json",
+    "sha256": "ee4fce51d932a93a69fd0fe8a349ff95106742530a88412b540aee7735588bf3",
+    "deletion_run_id": "phase2g-purpose-p2g06-wsss-final-20260922T064542554Z-98efe6cd",
+    "expected_live_blobs": 36,
+    "deleted_blobs": 36,
+    "live_blobs_after": 0,
+    "transient_sessions_after": 0,
+    "transient_deliveries_after": 0,
+    "transient_items_after": 0
+  },
+  "historical_probe_preserved": {
+    "status": "failed",
+    "duration_censored": false,
+    "reconciliation_status": "MISMATCH",
+    "stop_reason": "external_internal_credit_mismatch",
+    "budget_day": "P2G-S1-20260921-05"
+  },
+  "retention_note": {
+    "raw_payload_objects_deleted": true,
+    "full_raw_payload_byte_backup_asserted": false,
+    "preserved_before_deletion": "hash-verified reconstruction artifact plus independent safety copy; cleanup receipt then independently verified"
+  },
+  "provider_call": false,
+  "provider_mutation": false,
+  "alert_credits_spent": 0
+}

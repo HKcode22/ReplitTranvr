@@ -96,7 +96,7 @@ async function reserveSafeProbe(input: ExecuteProbeInput, started: Date): Promis
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [runtime.probeBudgetDayId]);
-    const active = await client.query(`SELECT 1 FROM clean.adb_anchor_probe WHERE status='probing' LIMIT 1`);
+    const active = await client.query(`SELECT 1 FROM clean.adb_anchor_probe WHERE status IN ('probing','settling') LIMIT 1`);
     if (active.rowCount) throw new Error("REFUSED_PROBE_OVERLAP");
     const exposure = await client.query(
       `SELECT COALESCE(sum(CASE
@@ -157,23 +157,26 @@ async function markSafeFailure(input: {
   runtimeSessionId?: string | null;
   ended: Date;
   stopReason: string;
-  reconciliationStatus?: "MATCH" | "MISMATCH" | "UNRESOLVED" | null;
+  reconciliationStatus?: "MATCH" | "DELIVERY_GAP" | "MISMATCH" | "UNRESOLVED" | null;
   cleanupVerifiedAtUtc?: string | null;
+  durationCensored?: boolean | null;
 }): Promise<void> {
   await pool.query(
     `UPDATE clean.adb_anchor_probe
         SET status='failed',window_end=$2,stop_reason=$3,runtime_session_id=COALESCE($4,runtime_session_id),
             reconciliation_status=COALESCE($5,reconciliation_status),
-            runtime_cleanup_verified_at_utc=COALESCE($6::timestamptz,runtime_cleanup_verified_at_utc)
+            runtime_cleanup_verified_at_utc=COALESCE($6::timestamptz,runtime_cleanup_verified_at_utc),
+            duration_censored=COALESCE($7::boolean,duration_censored)
       WHERE probe_id=$1`,
     [input.probeId, input.ended, input.stopReason, input.runtimeSessionId ?? null,
-     input.reconciliationStatus ?? null, input.cleanupVerifiedAtUtc ?? null],
+     input.reconciliationStatus ?? null, input.cleanupVerifiedAtUtc ?? null, input.durationCensored ?? null],
   );
   await openIncident("prepaid_probe_failed", {
     probeId: input.probeId,
     stopReason: input.stopReason,
     cleanupVerified: Boolean(input.cleanupVerifiedAtUtc),
     reconciliationStatus: input.reconciliationStatus ?? null,
+    durationCensored: input.durationCensored ?? null,
   });
 }
 
@@ -195,8 +198,10 @@ async function markProbeBudgetDayMismatch(dayId: string, detail: Record<string, 
  *
  * Provider payloads go to App Storage and provider-identifying working state
  * goes only to UNLOGGED tables through runPrepaidLiveWindowV39. The logged
- * adb_anchor_probe row receives aggregate research evidence only after
- * reconciliation and verified transient cleanup. The random runtime-session
+ * adb_anchor_probe row receives provider-safe aggregate research evidence
+ * after reconciliation. When cleanup is deferred, a full-duration exact-MATCH
+ * result is persisted as status='settling' until exact-session transient
+ * cleanup is verified in Replit; only then may it become 'completed'. The random runtime-session
  * UUID is the one exception: it is durably bound before provider creation so
  * a PostgreSQL UNLOGGED-table reset cannot destroy exact recovery ownership.
  */
@@ -243,6 +248,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     settlement,
     deletionRunId: `phase2-probe-${probeId}`,
     watchdogPollMs: input.artifacts.runtime.watchdogPollMs,
+    deferCleanup: process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP === "1",
     onSessionArmed: async (sessionId) => {
       await durablyBindProbeRuntimeSession({
         probeId,
@@ -253,7 +259,44 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     },
   });
 
-  if (result.status !== "completed" || !result.metrics || result.reconciliationStatus !== "MATCH" || !result.cleanupVerifiedAtUtc) {
+  if (
+    result.durationCensored === true &&
+    String(result.stopReason ?? "").startsWith("balance_read_failed")
+  ) {
+    await markSafeFailure({
+      probeId,
+      runtimeSessionId: result.runtimeSessionId,
+      ended: result.windowEnd,
+      stopReason: result.stopReason ?? "balance_read_failed_after_retries",
+      reconciliationStatus: result.reconciliationStatus,
+      cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+      durationCensored: true,
+    });
+    return {
+      probeId,
+      status: "failed",
+      creditsSpent: null,
+      durationCensored: true,
+      stopReason: result.stopReason ?? "balance_read_failed_after_retries",
+    };
+  }
+
+  const acceptedReconciliation =
+    result.reconciliationStatus === "MATCH" ||
+    result.reconciliationStatus === "DELIVERY_GAP";
+  const acceptedStopReason =
+    result.stopReason === null ||
+    (result.reconciliationStatus === "DELIVERY_GAP" && result.stopReason === "bounded_delivery_gap");
+  const cleanupDeferredSafely =
+    result.status === "settling" &&
+    result.subscriptionDeleted === true &&
+    result.cleanupVerifiedAtUtc === null;
+  const cleanupCompletedSafely =
+    result.status === "completed" &&
+    Boolean(result.cleanupVerifiedAtUtc);
+  if ((!cleanupDeferredSafely && !cleanupCompletedSafely) ||
+      result.durationCensored || !acceptedStopReason ||
+      !result.metrics || !acceptedReconciliation) {
     await markSafeFailure({
       probeId,
       runtimeSessionId: result.runtimeSessionId,
@@ -261,17 +304,42 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       stopReason: result.stopReason ?? "prepaid_probe_failed",
       reconciliationStatus: result.reconciliationStatus,
       cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+      durationCensored: result.durationCensored,
     });
     return {
       probeId,
       status: "failed",
       creditsSpent: null,
-      durationCensored: true,
+      durationCensored: result.durationCensored,
       stopReason: result.stopReason ?? "prepaid_probe_failed",
     };
   }
 
-  const settledCurrentCredits = Math.max(result.externalCredits ?? 0, result.internalSendCredits);
+  if (result.externalCredits === null || result.externalCredits < result.internalSendCredits) {
+    await markSafeFailure({
+      probeId,
+      runtimeSessionId: result.runtimeSessionId,
+      ended: result.windowEnd,
+      stopReason: "authoritative_external_spend_invalid",
+      reconciliationStatus: "MISMATCH",
+      cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+      durationCensored: result.durationCensored,
+    });
+    await markProbeBudgetDayMismatch(input.artifacts.runtime.probeBudgetDayId, {
+      probeId,
+      externalCredits: result.externalCredits,
+      internalSendCredits: result.internalSendCredits,
+    });
+    return {
+      probeId,
+      status: "failed",
+      creditsSpent: null,
+      durationCensored: result.durationCensored,
+      stopReason: "authoritative_external_spend_invalid",
+    };
+  }
+
+  const settledCurrentCredits = result.externalCredits;
   const settledBudgetDayCredits = priorExposure + settledCurrentCredits;
   if (settledBudgetDayCredits > PROBE_BUDGET_DAY_HARD_CAP) {
     await markSafeFailure({
@@ -279,8 +347,9 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       runtimeSessionId: result.runtimeSessionId,
       ended: result.windowEnd,
       stopReason: "probe_cap_overshoot",
-      reconciliationStatus: "MATCH",
+      reconciliationStatus: result.reconciliationStatus === "DELIVERY_GAP" ? "DELIVERY_GAP" : "MATCH",
       cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+      durationCensored: result.durationCensored,
     });
     await markProbeBudgetDayMismatch(input.artifacts.runtime.probeBudgetDayId, {
       probeId,
@@ -293,22 +362,23 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       probeId,
       status: "failed",
       creditsSpent: null,
-      durationCensored: true,
+      durationCensored: result.durationCensored,
       stopReason: "probe_cap_overshoot",
     };
   }
 
-  const denominator = result.metrics.internalSendCredits;
+  const denominator = result.externalCredits;
   if (!(denominator > 0)) {
     await markSafeFailure({
       probeId,
       runtimeSessionId: result.runtimeSessionId,
       ended: result.windowEnd,
       stopReason: "zero_reconciled_credits",
-      reconciliationStatus: "MATCH",
+      reconciliationStatus: result.reconciliationStatus === "DELIVERY_GAP" ? "DELIVERY_GAP" : "MATCH",
       cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+      durationCensored: result.durationCensored,
     });
-    return { probeId, status: "failed", creditsSpent: null, durationCensored: true, stopReason: "zero_reconciled_credits" };
+    return { probeId, status: "failed", creditsSpent: null, durationCensored: result.durationCensored, stopReason: "zero_reconciled_credits" };
   }
 
   const stability = completeBucketStability(
@@ -318,20 +388,23 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     input.artifacts.runtime.minStabilityBuckets,
   );
   const hours = Math.max((result.windowEnd.getTime() - result.windowStart.getTime()) / 3_600_000, 1 / 3600);
+  const deliveryGapCredits = Math.max(0, denominator - result.metrics.internalSendCredits);
   const lowerRate = result.metrics.confirmedUniqueLower / denominator;
-  const upperRate = result.metrics.confirmedPlusAmbiguousUpper / denominator;
+  const upperIdentityCount = result.metrics.confirmedPlusAmbiguousUpper + deliveryGapCredits;
+  const upperRate = upperIdentityCount / denominator;
   const chainRate = result.metrics.tailChainLinks / denominator;
 
+  const durableStatus = cleanupDeferredSafely ? "settling" : "completed";
   await pool.query(
     `UPDATE clean.adb_anchor_probe
-        SET status='completed',window_start=$2,window_end=$3,window_hours=$4,
+        SET status=$24,window_start=$2,window_end=$3,window_hours=$4,
             rows_delivered=$5,unique_flights=$6,tail_chain_links=$7,rows_per_hour=$8,
             unique_flights_per_credit=$9,tail_chain_links_per_credit=$10,stability=$11,
             duration_censored=$12,stop_reason=$13,complete_buckets=$14,min_stability_buckets=$15,
             confirmed_unique_lower=$16,confirmed_plus_ambiguous_upper=$17,
             confirmed_unique_lower_per_credit=$18,confirmed_plus_ambiguous_upper_per_credit=$19,
             stability_status=$20,runtime_session_id=$21,runtime_cleanup_verified_at_utc=$22::timestamptz,
-            reconciliation_status='MATCH'
+            reconciliation_status=$23
       WHERE probe_id=$1 AND provider_content_safe_mode=true`,
     [probeId, result.windowStart, result.windowEnd, hours,
      result.metrics.rowsDelivered, result.metrics.confirmedUniqueLower, result.metrics.tailChainLinks,
@@ -340,12 +413,12 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
      input.artifacts.runtime.minStabilityBuckets, result.metrics.confirmedUniqueLower,
      result.metrics.confirmedPlusAmbiguousUpper, lowerRate, upperRate,
      stability.stability === null ? "INSUFFICIENT_SAMPLE" : "PASS",
-     result.runtimeSessionId, result.cleanupVerifiedAtUtc],
+     result.runtimeSessionId, result.cleanupVerifiedAtUtc, result.reconciliationStatus, durableStatus],
   );
 
   return {
     probeId,
-    status: "completed",
+    status: durableStatus,
     creditsSpent: null,
     durationCensored: result.durationCensored,
     stopReason: result.stopReason,

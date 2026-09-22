@@ -1,0 +1,32 @@
+{
+  "schema": "v39.phase2g-p2g07-provider502-adjudication.v1",
+  "mode": "APPLY",
+  "probe_id": 5,
+  "probe_budget_day_id": "P2G-S1-20260922-06",
+  "session_id": "9e55fa14-f156-4b5b-91b7-675b064b8d15",
+  "failed_probe_preserved": true,
+  "corrected_duration_censored": true,
+  "measured_duration_minutes": 38.96091666666667,
+  "reconciliation_status_preserved": "UNRESOLVED",
+  "stop_reason_preserved": "subscription_delete_failed",
+  "reconstruction_sha256": "e07aee87151d05f18782017c400ab46cb83ac81a8081a2313b55b2d2c6c3306e",
+  "cleanup_sha256": "47bca4a30d2b82b9c86c04f60ce4cf81988e492bc69c96abfe2860838a579733",
+  "reconstructed_internal_credits": 87,
+  "settled_external_credits": 109,
+  "observed_external_minus_internal": 22,
+  "incidents_to_resolve": [
+    17,
+    18,
+    19,
+    20,
+    21,
+    22
+  ],
+  "active_billable_subscriptions": 0,
+  "provider_mutation": false,
+  "status": "P2G07_PROVIDER502_ADJUDICATED",
+  "applied_at_utc": "2026-09-22T12:06:43.130Z",
+  "budget_state": "CLOSED",
+  "budget_closed_at_utc": "2026-09-22T12:06:42.650Z",
+  "next": "Use only the prospectively frozen P2G07 provider-502 recovery amendment with a fresh runtime/budget/AUTH."
+}

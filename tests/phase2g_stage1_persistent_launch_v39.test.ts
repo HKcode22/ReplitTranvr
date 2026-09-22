@@ -11,6 +11,16 @@ const recovery = readFileSync(join(root, "scripts", "v39_phase2g_stage1_recover_
 const sleepCheck = readFileSync(join(root, "scripts", "v39_phase2g_stage1_sleep_check_v39.ts"), "utf8");
 const probeExecution = readFileSync(join(root, "server", "lib", "disruption", "probeExecutionPrepaid_v39.ts"), "utf8");
 const prepaidWindow = readFileSync(join(root, "server", "lib", "disruption", "prepaidProbeWindow_v39.ts"), "utf8");
+const overnightGuard = readFileSync(join(root, "scripts", "v39_phase2g_overnight_wsss_guard_v39.sh"), "utf8");
+const runtimeHealth = readFileSync(join(root, "server", "lib", "disruption", "workspaceRuntimeHealth_v39.ts"), "utf8");
+const githubOwner = readFileSync(join(root, "scripts", "v39_phase2g_github_actions_owner_v39.sh"), "utf8");
+const githubWatchdog = readFileSync(join(root, "scripts", "v39_phase2g_github_actions_watchdog_v39.ts"), "utf8");
+const githubWorkflow = readFileSync(join(root, ".github", "workflows", "phase2g-paid-stage1.yml"), "utf8");
+const routesV3 = readFileSync(join(root, "server", "routes_v3.ts"), "utf8");
+const exactCleanup = readFileSync(join(root, "scripts", "v39_phase2g_exact_session_purpose_cleanup_v39.ts"), "utf8");
+const settlingFinalizer = readFileSync(join(root, "scripts", "v39_phase2g_finalize_settling_probe_v39.ts"), "utf8");
+const liveCallbackVerify = readFileSync(join(root, "scripts", "v39_phase2g_verify_live_callback_v39.ts"), "utf8");
+const settlingMigration = readFileSync(join(root, "migrations", "0059_phase2g_settling_state.sql"), "utf8");
 
 describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   it("keeps the paid preflight read-only and emits an immutable exact receipt", () => {
@@ -29,6 +39,25 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).not.toContain("DELETE FROM clean.");
   });
 
+  it("allows the hash-bound P2G07 recovery amendment in paid preflight without hard-wiring the old compact6 path", () => {
+    expect(preflight).toContain("isP2g07Provider502RecoveryEligibleV39");
+    expect(preflight).toContain("p2g07_provider502_recovery_rerun");
+    expect(preflight).not.toContain("path: path.resolve(PHASE2G_COMPACT6_ARTIFACT_PATH)");
+  });
+
+  it("requires a three-read provider balance stability canary for the P2G08 control-plane recovery", () => {
+    expect(preflight).toContain("p2g08_balance502_recovery_rerun");
+    expect(preflight).toContain("provider_balance_stability_canary_failed_at_read");
+    expect(preflight).toContain("provider_balance_stability_canary_not_stable");
+    expect(preflight).toContain("balance_stability_canary");
+  });
+
+  it("recognizes only the prospective P2G09 host-reset recovery amendment", () => {
+    expect(preflight).toContain("p2g09_hostreset_recovery_rerun");
+    expect(preflight).toContain("isP2g09HostResetRecoveryEligibleV39");
+    expect(preflight).toContain("phase2g_settling_status_migration_missing");
+  });
+
   it("re-binds the exact approved AUTH, runtime, head, budget day, account and callback before launch", () => {
     expect(preflight).toContain("auth.sha256 !== expectedAuthSha");
     expect(preflight).toContain("auth_scope_mismatch");
@@ -37,7 +66,8 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).toContain("currentHead !== expectedHead");
     expect(preflight).toContain("probe_budget_day_already_has_probe_rows");
     expect(preflight).toContain("active_billable_subscriptions=");
-    expect(preflight).toContain("workspace_callback_source_not_compatible");
+    expect(preflight).toContain("callback_verification_contract_invalid_or_stale");
+    expect(preflight).toContain("published_callback_live_route_check_failed");
     expect(preflight).toContain("provider_balance_below_protected_floor");
   });
 
@@ -50,6 +80,13 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).toContain("probe_would_cross_utc_midnight");
   });
 
+  it("makes the final launcher reject tracked, staged, or untracked protected-source drift", () => {
+    expect(launcher).toContain("git status --porcelain=v1 --untracked-files=all -- server scripts migrations tests");
+    expect(launcher).toContain("REFUSED:PROTECTED_SOURCE_TREE_DIRTY");
+    expect(launcher).toContain("PROTECTED_STATUS");
+    expect(launcher).not.toContain("git diff --quiet -- server scripts migrations tests");
+  });
+
   it("makes the launcher consume only a fresh hash-bound PASS receipt", () => {
     expect(launcher).toContain("ACTUAL_PREFLIGHT_SHA");
     expect(launcher).toContain("PASS_READY_FOR_PAID_STAGE1");
@@ -60,9 +97,24 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(launcher).toContain("REFUSED:PREFLIGHT_RECEIPT_");
   });
 
-  it("uses only the workspace callback, process-scoped bucket correction, and no deployment", () => {
-    expect(launcher).toContain("*.replit.dev");
-    expect(launcher).toContain("REFUSED:PRODUCTION_DOMAIN_NOT_ALLOWED");
+  it("separates the existing published callback route from the GitHub Actions paid owner", () => {
+    expect(preflight).toContain('ownerExecutor !== "github-actions"');
+    expect(preflight).toContain('owner_executor: ownerExecutor');
+    expect(preflight).toContain('contract_mode: "legacy-live-prepaid-route"');
+    expect(preflight).toContain("callback_verification_contract_invalid_or_stale");
+    expect(preflight).toContain("prepaidRouteHealth");
+    expect(supervisor).toContain('ownerExecutor !== "github-actions"');
+    expect(supervisor).toContain('process.env.GITHUB_ACTIONS !== "true"');
+    expect(supervisor).toContain("phase2g-healthcheck-intentionally-wrong");
+    expect(supervisor).toContain('/api/v1/webhooks/aerodatabox/');
+    expect(runtimeHealth).toContain("replit-published-deployment");
+  });
+
+  it("requires a stable non-development callback and refuses interactive workspace ownership", () => {
+    expect(launcher).toContain("CALLBACK_BASE");
+    expect(launcher).toContain("REFUSED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED_FOR_PAID_STAGE1");
+    expect(launcher).toContain("REFUSED:INTERACTIVE_REPLIT_WORKSPACE_CANNOT_OWN_PAID_STAGE1");
+    expect(preflight).toContain("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED");
     expect(launcher).toContain('eplit-objstore-*) CORRECT_BUCKET="r${CURRENT_BUCKET}"');
     expect(launcher).toContain('V39_PROVIDER_BLOB_BUCKET_ID="$CORRECT_BUCKET"');
     expect(launcher).toContain('V39_PUBLIC_WEBHOOK_BASE_URL="$BASE"');
@@ -87,6 +139,68 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(detachedSpawner).toContain('deployment_performed: false');
   });
 
+  it("runs the prospective paid owner on a foreground GitHub Actions runner, not a Replit shell", () => {
+    expect(githubOwner).toContain('GITHUB_ACTIONS_RUNTIME_REQUIRED');
+    expect(githubOwner).toContain('GITHUB_SHA_MISMATCH');
+    expect(githubOwner).toContain('owner_executor !== "github-actions"');
+    expect(githubOwner).toContain('--owner-executor github-actions');
+    expect(githubOwner).toContain('V39_DEFER_PROVIDER_CONTENT_CLEANUP="1"');
+    expect(githubOwner).not.toContain("PROVIDER_BLOB_BUCKET_ID");
+    expect(githubOwner).not.toContain("V39_REMOTE_BLOB_CLEANUP_SECRET");
+    expect(githubOwner).not.toContain("nohup");
+    expect(githubOwner).not.toContain("setsid");
+  });
+
+  it("uses one read-only gate receipt for two independent GitHub jobs", () => {
+    expect(githubWorkflow).toContain("jobs:");
+    expect(githubWorkflow).toContain("gate:");
+    expect(githubWorkflow).toContain("owner:");
+    expect(githubWorkflow).toContain("safety-watchdog:");
+    expect(githubWorkflow).toContain("--owner-executor github-actions");
+    expect(githubWorkflow).toContain("preflight_b64");
+    expect(githubWorkflow).toContain("needs.gate.outputs.preflight_sha");
+    expect(githubWorkflow).toContain("callback_verification_file");
+    expect(githubWorkflow).toContain("callback_verification_sha");
+    expect(githubWorkflow).not.toContain("--provider-blob-bucket-id");
+    expect(githubWorkflow).not.toContain("V39_PHASE2G_CONTROL_SECRET");
+    expect(githubWorkflow).toContain("V39_DEFER_PROVIDER_CONTENT_CLEANUP");
+    expect(githubWorkflow).toContain("timeout-minutes: 175");
+    expect(githubWorkflow).toContain("cancel-in-progress: false");
+    const workflowDispatchInputs = githubWorkflow.slice(
+      githubWorkflow.indexOf("workflow_dispatch:"),
+      githubWorkflow.indexOf("\npermissions:"),
+    );
+    expect(workflowDispatchInputs).not.toContain("preflight_file:");
+    expect(workflowDispatchInputs).not.toContain("preflight_sha:");
+  });
+
+  it("keeps the independent GitHub watchdog exact-recovery-only and incapable of starting a subscription", () => {
+    expect(githubWatchdog).toContain("LIVE_CREDIT_LIMIT = 450");
+    expect(githubWatchdog).toContain("probe_deadline_plus_cleanup_grace_exceeded");
+    expect(githubWatchdog).toContain("external_live_credit_limit_reached");
+    expect(githubWatchdog).toContain("internal_live_credit_limit_reached");
+    expect(githubWatchdog).toContain("v39_phase2g_stage1_recover_after_exit_v39.ts");
+    expect(githubWatchdog).not.toContain("createSubscription(");
+    expect(githubWatchdog).not.toContain("refillBalance(");
+    expect(githubWatchdog).toContain("PROVIDER_SAFE_AWAITING_REPLIT_CLEANUP");
+    expect(githubWatchdog).toContain("OWNER_FAILED_PROVIDER_SAFE_CLEANUP_PENDING");
+  });
+
+  it("defers provider-blob cleanup until after provider-safe settlement and finalizes from Replit", () => {
+    expect(prepaidWindow).toContain("deleteOwnedSubscriptionVerifiedV39");
+    expect(prepaidWindow).toContain("if (input.deferCleanup)");
+    expect(prepaidWindow).toContain('status: "settling"');
+    expect(probeExecution).toContain('const durableStatus = cleanupDeferredSafely ? "settling" : "completed"');
+    expect(exactCleanup).toContain("ACTIVE_BILLABLE_SUBSCRIPTIONS");
+    expect(exactCleanup).toContain("cleanupPrepaidProbeSessionV39");
+    expect(settlingFinalizer).toContain('String(probe.status)!=="settling"');
+    expect(settlingFinalizer).toContain('SET status=\'completed\'');
+    expect(settlingFinalizer).toContain("PASS_COMPLETED_AND_BUDGET_CLOSED");
+    expect(settlingMigration).toContain("'settling'");
+    expect(liveCallbackVerify).toContain("provider_called: false");
+    expect(liveCallbackVerify).toContain("correct_secret_accepted_200");
+  });
+
   it("durably binds the random runtime session before provider subscription creation", () => {
     expect(probeExecution).toContain("durablyBindProbeRuntimeSession");
     expect(probeExecution).toContain("SET runtime_session_id=$2::uuid");
@@ -96,6 +210,16 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     const createIndex = prepaidWindow.indexOf('createSubscription("FlightByAirportIcao"');
     expect(hookIndex).toBeGreaterThanOrEqual(0);
     expect(createIndex).toBeGreaterThan(hookIndex);
+  });
+
+  it("makes the overnight guard single-launch, exact-PASS, and never auto-retry", () => {
+    expect(overnightGuard).toContain("PHASE2G_OVERNIGHT_ARM=YES");
+    expect(overnightGuard).toContain("PHASE2G_OVERNIGHT_EXPECTED_HEAD");
+    expect(overnightGuard).toContain("PASS_READY_FOR_PAID_STAGE1");
+    expect(overnightGuard).toContain("OVERNIGHT_PAID_LAUNCH=STARTED_ONCE");
+    expect(overnightGuard).toContain("BLOCKED_DO_NOT_RELAUNCH");
+    expect(overnightGuard).toContain("scripts/v39_phase2g_stage1_launch_logged_v39.sh");
+    expect(overnightGuard).not.toContain("while true; do\n    bash scripts/v39_phase2g_stage1_launch_logged_v39.sh");
   });
 
   it("front-door verifies the AUTH and supervises the actual paid owner directly", () => {
@@ -124,6 +248,37 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(supervisor).toContain("recovery_exit_code");
   });
 
+  it("never converts a censored Stage1 window into a completed PASS", () => {
+    expect(prepaidWindow).toContain("duration_censored_before_target");
+    expect(probeExecution).toContain("result.durationCensored");
+    expect(probeExecution).toContain("result.stopReason !== null");
+  });
+
+  it("separates the 5-second local watchdog from one-minute provider balance polling", () => {
+    expect(prepaidWindow).toContain("LIVE_PROVIDER_BALANCE_POLL_MS_V39 = 60_000");
+    expect(prepaidWindow).toContain("LIVE_PROVIDER_BALANCE_FAILED_POLL_LIMIT_V39 = 3");
+    expect(prepaidWindow).toContain("nextProviderBalancePollAt");
+    expect(prepaidWindow).toContain("consecutiveFailedProviderBalancePolls");
+    expect(probeExecution).toContain('startsWith("balance_read_failed")');
+  });
+
+  it("does not censor a paid probe on one transient balance-read failure", () => {
+    expect(prepaidWindow).toContain("getBalanceWithTransientRetryV39");
+    expect(prepaidWindow).toContain("attempt <= 3");
+    expect(prepaidWindow).toContain("balance_read_failed_after_retries");
+    expect(prepaidWindow).not.toContain('liveStopReason = "balance_read_failed";');
+  });
+
+  it("recovers an exact orphan subscription even after the owner already marked the probe failed", () => {
+    expect(recovery).toContain("status='failed'");
+    expect(recovery).toContain("subscription_delete_failed");
+    expect(recovery).toContain("state IN ('armed','active','settling','failed')");
+    expect(recovery).toContain("status IN ('probing','settling','failed')");
+    expect(probeExecution).toContain("duration_censored=COALESCE");
+    expect(prepaidWindow).toContain("deleteOwnedSubscriptionVerifiedV39");
+    expect(prepaidWindow).toContain("listSubscriptionsStrict");
+  });
+
   it("recovers exact ownership after an UNLOGGED runtime reset without persisting provider IDs", () => {
     expect(recovery).toContain("SELECT probe_id,icao,status,runtime_session_id");
     expect(recovery).toContain("durableSessionId");
@@ -137,7 +292,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   });
 
   it("scopes recovery to one exact Stage-1 probe/session and never bulk-deletes unmatched billable subscriptions", () => {
-    expect(recovery).toContain("stage=1 AND probe_budget_day_id=$1 AND status='probing'");
+    expect(recovery).toContain("stage=1 AND probe_budget_day_id=$1");
     expect(recovery).toContain("owner_kind='anchor_probe' AND owner_probe_id=$1 AND stage=1");
     expect(recovery).toContain("RECOVERY_REFUSED:MULTIPLE_ACTIVE_RUNTIME_SESSIONS");
     expect(recovery).toContain('subscription.billingType === "CreditBased"');
@@ -162,7 +317,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(sleepCheck).toContain("provider_subscription_not_bound");
     expect(sleepCheck).toContain("exact_owned_credit_subscription_not_active");
     expect(sleepCheck).toContain("foreign_active_billable=");
-    expect(sleepCheck).toContain("workspace_callback_not_reachable");
+    expect(sleepCheck).toContain("published_callback_not_reachable");
     expect(sleepCheck).toContain("host_failure_boundary");
     expect(sleepCheck).not.toContain("createSubscription(");
     expect(sleepCheck).not.toContain("deleteSubscription(");

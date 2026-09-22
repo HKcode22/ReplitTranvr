@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import {
   buildPhase2FWorkspaceIngressBindingV39,
   loadPhase2FWorkspaceIngressBindingV39,
   type Phase2FWorkspaceIngressArtifactV39,
+  PHASE2F_WORKSPACE_ROUTE_OWNER_V39,
 } from "../server/lib/disruption/phase2WorkspaceIngressBinding_v39";
 
 type WorkspaceIngressInput = Omit<
@@ -32,7 +33,7 @@ function validInput(checkedAtUtc = "2026-09-15T09:40:00.000Z"): WorkspaceIngress
     callback_receipt_generated_at_utc: checkedAtUtc,
     callback_runtime_git_head: "b".repeat(40),
     binding_creator_git_head: "c".repeat(40),
-    exact_route_owner: "server/routes_v3.ts",
+    exact_route_owner: PHASE2F_WORKSPACE_ROUTE_OWNER_V39,
     public_https_ingress: true,
     wrong_secret_rejected_404: true,
     exact_secret_accepted_200: true,
@@ -53,6 +54,26 @@ function fixture(checkedAtUtc = "2026-09-15T09:40:00.000Z") {
 }
 
 describe("Phase 2F no-redeploy workspace ingress binding", () => {
+  it("keeps the managed runtime and live verifier on the same route-owner contract", () => {
+    const server = readFileSync(join(process.cwd(), "server", "index.ts"), "utf8");
+    const verifier = readFileSync(
+      join(process.cwd(), "scripts", "v39_verify_workspace_callback_v39.ts"),
+      "utf8",
+    );
+
+    expect(PHASE2F_WORKSPACE_ROUTE_OWNER_V39)
+      .toBe("server/index.ts+server/routes_v3.ts");
+    expect(server).toContain(
+      `routeOwner: "${PHASE2F_WORKSPACE_ROUTE_OWNER_V39}"`,
+    );
+    expect(verifier).toContain(
+      `healthJson?.route_owner !== "${PHASE2F_WORKSPACE_ROUTE_OWNER_V39}"`,
+    );
+    expect(verifier).toContain(
+      `exactRouteOwner: "${PHASE2F_WORKSPACE_ROUTE_OWNER_V39}"`,
+    );
+  });
+
   it("loads a fresh hash-bound workspace ingress receipt without calling it a deployment", () => {
     const artifact = fixture();
     const dir = mkdtempSync(join(tmpdir(), "v39-workspace-ingress-"));

@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# P2G09 proved that the interactive Replit workspace is not a durable paid
+# owner. Prospective paid Stage-1 ownership is GitHub Actions only. Keep the
+# historical implementation below for auditability, but refuse before reading
+# AUTH/provider state or performing any provider action.
+echo "REFUSED:DEPRECATED_LOCAL_STAGE1_LAUNCH_USE_GITHUB_ACTIONS"
+exit 2
+
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 mkdir -p artifacts
@@ -19,6 +26,8 @@ PREFLIGHT=""
 PREFLIGHT_SHA=""
 EXPECTED_HEAD=""
 BUDGET_DAY=""
+EXPECTED_ICAO=""
+CALLBACK_BASE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +45,8 @@ while [[ $# -gt 0 ]]; do
     --preflight-sha) PREFLIGHT_SHA="${2:-}"; shift 2 ;;
     --expected-head) EXPECTED_HEAD="${2:-}"; shift 2 ;;
     --probe-budget-day-id) BUDGET_DAY="${2:-}"; shift 2 ;;
+    --expected-icao) EXPECTED_ICAO="${2:-}"; shift 2 ;;
+    --callback-base) CALLBACK_BASE="${2:-}"; shift 2 ;;
     *) echo "REFUSED:UNKNOWN_ARGUMENT=$1"; exit 2 ;;
   esac
 done
@@ -54,7 +65,9 @@ for pair in \
   "PREFLIGHT:$PREFLIGHT" \
   "PREFLIGHT_SHA:$PREFLIGHT_SHA" \
   "EXPECTED_HEAD:$EXPECTED_HEAD" \
-  "BUDGET_DAY:$BUDGET_DAY"; do
+  "BUDGET_DAY:$BUDGET_DAY" \
+  "EXPECTED_ICAO:$EXPECTED_ICAO" \
+  "CALLBACK_BASE:$CALLBACK_BASE"; do
   name="${pair%%:*}"
   value="${pair#*:}"
   if [[ -z "$value" ]]; then
@@ -70,10 +83,18 @@ if [[ ! "$PREPROBE_SHA" =~ ^[a-f0-9]{64}$ ]]; then echo 'REFUSED:PREPROBE_SHA_IN
 if [[ ! "$SMOKE_RUNTIME_SHA" =~ ^[a-f0-9]{64}$ ]]; then echo 'REFUSED:SMOKE_RUNTIME_SHA_INVALID'; exit 2; fi
 if [[ ! "$PREFLIGHT_SHA" =~ ^[a-f0-9]{64}$ ]]; then echo 'REFUSED:PREFLIGHT_SHA_INVALID'; exit 2; fi
 if [[ ! "$EXPECTED_HEAD" =~ ^[a-f0-9]{40}$ ]]; then echo 'REFUSED:EXPECTED_HEAD_INVALID'; exit 2; fi
+if [[ ! "$EXPECTED_ICAO" =~ ^[A-Z0-9]{4}$ ]]; then echo 'REFUSED:EXPECTED_ICAO_INVALID'; exit 2; fi
 
 CURRENT_HEAD="$(git rev-parse HEAD)"
 if [[ "$CURRENT_HEAD" != "$EXPECTED_HEAD" ]]; then
   echo "REFUSED:GIT_HEAD_MISMATCH current=$CURRENT_HEAD expected=$EXPECTED_HEAD"
+  exit 2
+fi
+
+PROTECTED_STATUS="$(git status --porcelain=v1 --untracked-files=all -- server scripts migrations tests)"
+if [[ -n "$PROTECTED_STATUS" ]]; then
+  echo 'REFUSED:PROTECTED_SOURCE_TREE_DIRTY'
+  printf '%s\n' "$PROTECTED_STATUS"
   exit 2
 fi
 
@@ -90,7 +111,7 @@ if [[ "$ACTUAL_RUNTIME_SHA" != "$RUNTIME_SHA" ]]; then echo "REFUSED:RUNTIME_SHA
 if [[ "$ACTUAL_PREPROBE_SHA" != "$PREPROBE_SHA" ]]; then echo "REFUSED:PREPROBE_SHA_MISMATCH actual=$ACTUAL_PREPROBE_SHA"; exit 2; fi
 if [[ "$ACTUAL_PREFLIGHT_SHA" != "$PREFLIGHT_SHA" ]]; then echo "REFUSED:PREFLIGHT_SHA_MISMATCH actual=$ACTUAL_PREFLIGHT_SHA"; exit 2; fi
 
-AUTH="$AUTH" AUTH_SHA="$AUTH_SHA" RUNTIME_SHA="$RUNTIME_SHA" EXPECTED_HEAD="$EXPECTED_HEAD" BUDGET_DAY="$BUDGET_DAY" PREFLIGHT="$PREFLIGHT" \
+AUTH="$AUTH" AUTH_SHA="$AUTH_SHA" RUNTIME_SHA="$RUNTIME_SHA" EXPECTED_HEAD="$EXPECTED_HEAD" BUDGET_DAY="$BUDGET_DAY" EXPECTED_ICAO="$EXPECTED_ICAO" PREFLIGHT="$PREFLIGHT" \
 node <<'NODE'
 const fs = require('fs');
 const receipt = JSON.parse(fs.readFileSync(process.env.PREFLIGHT, 'utf8'));
@@ -102,6 +123,10 @@ if (receipt.auth?.authorization_id !== process.env.AUTH) fail('AUTH_ID');
 if (receipt.auth?.sha256 !== process.env.AUTH_SHA) fail('AUTH_SHA');
 if (receipt.gate2_runtime?.file_sha256 !== process.env.RUNTIME_SHA) fail('RUNTIME_SHA');
 if (receipt.gate2_runtime?.probe_budget_day_id !== process.env.BUDGET_DAY) fail('BUDGET_DAY');
+if (receipt.gate2_runtime?.next_candidate !== process.env.EXPECTED_ICAO) fail('NEXT_CANDIDATE');
+if (receipt.gate2_runtime?.expected_icao !== process.env.EXPECTED_ICAO) fail('EXPECTED_ICAO');
+if (receipt.gate2_runtime?.compact6_validated !== true) fail('COMPACT6_NOT_VALIDATED');
+if (!/^[a-f0-9]{64}$/.test(String(receipt.gate2_runtime?.stage1_amendment_sha256 || ''))) fail('AMENDMENT_SHA');
 if (Array.isArray(receipt.blockers) && receipt.blockers.length !== 0) fail('BLOCKERS');
 const generated = Date.parse(String(receipt.generated_at_utc || ''));
 if (!Number.isFinite(generated)) fail('TIMESTAMP');
@@ -116,24 +141,24 @@ case "$CURRENT_BUCKET" in
   *) echo 'REFUSED:V39_PROVIDER_BLOB_BUCKET_ID_UNEXPECTED_OR_MISSING'; exit 2 ;;
 esac
 
-DOMAIN=""
-if [[ -n "${REPLIT_DEV_DOMAIN:-}" ]]; then
-  DOMAIN="${REPLIT_DEV_DOMAIN#https://}"
-  DOMAIN="${DOMAIN#http://}"
-  DOMAIN="${DOMAIN%%/*}"
+BASE="${CALLBACK_BASE%/}"
+if [[ ! "$BASE" =~ ^https://[^/]+$ ]]; then
+  echo 'REFUSED:CALLBACK_BASE_MUST_BE_HTTPS_ORIGIN'
+  exit 2
 fi
-if [[ -z "$DOMAIN" && -n "${REPLIT_DOMAINS:-}" ]]; then
-  IFS=',' read -ra DOMAINS <<< "$REPLIT_DOMAINS"
-  for raw in "${DOMAINS[@]}"; do
-    d="${raw#https://}"
-    d="${d#http://}"
-    d="${d%%/*}"
-    if [[ "$d" == *.replit.dev ]]; then DOMAIN="$d"; break; fi
-  done
+CALLBACK_HOST="${BASE#https://}"
+if [[ "$CALLBACK_HOST" == *.replit.dev ]]; then
+  echo 'REFUSED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED_FOR_PAID_STAGE1'
+  exit 2
 fi
-if [[ -z "$DOMAIN" || "$DOMAIN" != *.replit.dev ]]; then echo 'REFUSED:NO_REPLIT_WORKSPACE_PUBLIC_DOMAIN'; exit 2; fi
-if [[ "$DOMAIN" == "travnr.com" || "$DOMAIN" == "www.travnr.com" ]]; then echo 'REFUSED:PRODUCTION_DOMAIN_NOT_ALLOWED'; exit 2; fi
-BASE="https://${DOMAIN}"
+
+# A paid Stage-1 owner must not be launched from the interactive Replit
+# development workspace. Replit documents that REPLIT_DEV_DOMAIN is a
+# development-only variable and it is absent in published deployments.
+if [[ -n "${REPLIT_DEV_DOMAIN:-}" && -z "${V39_ALLOW_INTERACTIVE_OWNER_FOR_OFFLINE_TESTS:-}" ]]; then
+  echo 'REFUSED:INTERACTIVE_REPLIT_WORKSPACE_CANNOT_OWN_PAID_STAGE1'
+  exit 2
+fi
 
 # Final launch-time health check must validate the exact JSON contract. A Vite
 # catch-all HTML 200 is not a callback health pass.
@@ -148,12 +173,23 @@ CALLBACK_BASE="$BASE" EXPECTED_HEAD="$EXPECTED_HEAD" node <<'NODE'
   const text = await response.text();
   let json = null;
   try { json = JSON.parse(text); } catch {}
+  const ownerMode = String(json?.runtime_owner_mode || '');
+  const ownerContract =
+    (ownerMode === 'replit-published-deployment' &&
+      json?.published_deployment === true &&
+      json?.runtime_durability_class === 'reserved-vm') ||
+    (ownerMode === 'replit-managed-project' &&
+      json?.managed_replit_workflow === true &&
+      json?.detached_workspace_server === false) ||
+    (ownerMode === 'phase2g-detached-npm-run-dev' &&
+      json?.managed_replit_workflow === false &&
+      json?.detached_workspace_server === true);
   const ok = response.status === 200 &&
     json?.schema === 'v39.phase2f-workspace-runtime.v1' &&
     json?.status === 'PASS' &&
     json?.prepaid_route_registered === true &&
     json?.provider_mutation === false &&
-    json?.managed_replit_workflow === true &&
+    ownerContract &&
     String(json?.git_head || '').toLowerCase() === expectedHead;
   if (!ok) {
     console.error(JSON.stringify({
@@ -171,6 +207,7 @@ CALLBACK_BASE="$BASE" EXPECTED_HEAD="$EXPECTED_HEAD" node <<'NODE'
     check: 'WORKSPACE_CALLBACK_HEALTH_AT_LAUNCH',
     git_head: json.git_head,
     route_owner: json.route_owner,
+    runtime_owner_mode: ownerMode,
   }));
 })().catch((error) => {
   console.error(JSON.stringify({
@@ -221,7 +258,8 @@ env \
     --callback-base "$BASE" \
     --log "$LOG" \
     --status "$STATUS" \
-    --heartbeat "$HEARTBEAT"
+    --heartbeat "$HEARTBEAT" \
+    --expected-icao "$EXPECTED_ICAO"
 
 if [[ ! -s "$PID_FILE" ]]; then
   echo 'REFUSED:DETACHED_SUPERVISOR_PID_FILE_MISSING'
@@ -250,12 +288,13 @@ cat <<EOF
   "authorization_id": "$AUTH",
   "git_head": "$CURRENT_HEAD",
   "probe_budget_day_id": "$BUDGET_DAY",
+  "expected_icao": "$EXPECTED_ICAO",
   "supervisor_pid": $SUPERVISOR_PID,
   "log_file": "$LOG",
   "status_file": "$STATUS",
   "heartbeat_file": "$HEARTBEAT",
   "pid_file": "$PID_FILE",
-  "workspace_callback_base": "$BASE",
+  "callback_public_base": "$BASE",
   "deployment_performed": false,
   "note": "Do not launch a second Stage-1 command. Inspect status/heartbeat/log if the terminal disconnects."
 }

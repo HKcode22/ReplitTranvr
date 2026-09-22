@@ -1,0 +1,31 @@
+{
+  "schema": "phase2g-p2g07-poststop-settlement.v1",
+  "baseline_credits": 2324,
+  "stable_credits_remaining": 2215,
+  "settled_external_spend": 109,
+  "active_billable_subscriptions": 0,
+  "readings": [
+    {
+      "read": 1,
+      "observed_at_utc": "2026-09-22T12:00:06.374Z",
+      "credits_remaining": 2215,
+      "active_billable_count": 0,
+      "active_billable_ids": []
+    },
+    {
+      "read": 2,
+      "observed_at_utc": "2026-09-22T12:00:17.647Z",
+      "credits_remaining": 2215,
+      "active_billable_count": 0,
+      "active_billable_ids": []
+    },
+    {
+      "read": 3,
+      "observed_at_utc": "2026-09-22T12:00:28.999Z",
+      "credits_remaining": 2215,
+      "active_billable_count": 0,
+      "active_billable_ids": []
+    }
+  ],
+  "provider_mutation": false
+}

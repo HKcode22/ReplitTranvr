@@ -1,0 +1,23 @@
+{
+  "schema": "v39.phase2g-zero-credit-soak.v1",
+  "provider_paid_action_performed": false,
+  "provider_subscription_created": false,
+  "alert_credits_spent": 0,
+  "expected_git_head": "bd3011f55eb5c3ec34b0b18291c640a1a19a8fdc",
+  "duration_minutes": 3,
+  "interval_seconds": 30,
+  "started_at_utc": "2026-09-19T12:43:51.714Z",
+  "log_path": "artifacts/phase2g-zero-credit-soak-20260919T124351Z.log",
+  "heartbeat_path": "artifacts/phase2g-zero-credit-soak-20260919T124351Z.heartbeat.json",
+  "state": "PASS_STABLE",
+  "ended_at_utc": "2026-09-19T12:46:51.755Z",
+  "pid": 753,
+  "cycles": 6,
+  "passes": 6,
+  "failures": 0,
+  "max_consecutive_failures": 0,
+  "recovered_after_failure": false,
+  "final_cycle_passed": true,
+  "mutation_scope": "synthetic prepaid ingress + immediate cleanup only",
+  "host_failure_boundary": "A whole Replit container termination also terminates this rehearsal process; that boundary cannot be made independent from inside the same workspace."
+}

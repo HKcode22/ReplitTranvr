@@ -30,13 +30,19 @@ function atomicWriteJson(file: string, value: unknown): void {
 }
 async function callbackHealthy(base: string): Promise<boolean> {
   try {
-    const response = await fetch(`${base}/__v39/workspace-runtime`, {
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (response.status !== 200) return false;
+    const wrongSecret = "phase2g-healthcheck-intentionally-wrong";
+    const session = "00000000-0000-4000-8000-000000000000";
+    const response = await fetch(
+      `${base}/api/v1/webhooks/aerodatabox/${encodeURIComponent(wrongSecret)}/prepaid/${session}`,
+      {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
     const json: any = await response.json().catch(() => null);
-    return json?.status === "PASS";
+    return response.status === 404 && json?.error === "Not found";
   } catch {
     return false;
   }
@@ -53,12 +59,22 @@ async function main(): Promise<void> {
   const logPath = path.resolve(required("--log"));
   const statusPath = path.resolve(required("--status"));
   const heartbeatPath = path.resolve(required("--heartbeat"));
+  const expectedIcao = required("--expected-icao").toUpperCase();
+  const ownerExecutor = required("--owner-executor").trim().toLowerCase();
 
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("SUPERVISOR_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("SUPERVISOR_REFUSED:AUTH_SHA_INVALID");
   if (!/^[a-f0-9]{64}$/.test(runtimeSha)) throw new Error("SUPERVISOR_REFUSED:RUNTIME_SHA_INVALID");
   if (!/^[a-f0-9]{40}$/.test(expectedHead)) throw new Error("SUPERVISOR_REFUSED:EXPECTED_HEAD_INVALID");
-  if (!/^https:\/\/[^/]+\.replit\.dev$/i.test(callbackBase)) throw new Error("SUPERVISOR_REFUSED:CALLBACK_BASE_NOT_REPLIT_DEV");
+  if (!/^https:\/\/[^/]+$/i.test(callbackBase)) throw new Error("SUPERVISOR_REFUSED:CALLBACK_BASE_NOT_HTTPS_ORIGIN");
+  if (/\.replit\.dev$/i.test(new URL(callbackBase).hostname)) {
+    throw new Error("SUPERVISOR_REFUSED:INTERACTIVE_DEV_CALLBACK_BASE_NOT_ALLOWED");
+  }
+  if (!/^[A-Z0-9]{4}$/.test(expectedIcao)) throw new Error("SUPERVISOR_REFUSED:EXPECTED_ICAO_INVALID");
+  if (ownerExecutor !== "github-actions") throw new Error("SUPERVISOR_REFUSED:OWNER_EXECUTOR_MUST_BE_GITHUB_ACTIONS");
+  if (process.env.GITHUB_ACTIONS !== "true" && process.env.V39_ALLOW_NON_GITHUB_OWNER_FOR_OFFLINE_TESTS !== "1") {
+    throw new Error("SUPERVISOR_REFUSED:GITHUB_ACTIONS_RUNTIME_REQUIRED");
+  }
   if (!fs.existsSync(authFile)) throw new Error("SUPERVISOR_REFUSED:AUTH_FILE_MISSING");
   const actualAuthSha = sha256File(authFile);
   if (actualAuthSha !== expectedAuthSha) throw new Error(`SUPERVISOR_REFUSED:AUTH_SHA_MISMATCH:${actualAuthSha}`);
@@ -93,6 +109,8 @@ async function main(): Promise<void> {
     auth_sha256: expectedAuthSha,
     runtime_sha256: runtimeSha,
     probe_budget_day_id: budgetDayId,
+    expected_icao: expectedIcao,
+    owner_executor: ownerExecutor,
     callback_base: callbackBase,
     log_path: path.relative(process.cwd(), logPath),
     heartbeat_path: path.relative(process.cwd(), heartbeatPath),
@@ -106,7 +124,7 @@ async function main(): Promise<void> {
   // signal the real paid owner before fail-closed recovery.
   const child = spawn(
     process.execPath,
-    ["--import", "tsx", "scripts/v39_probe_stage1_owner_v39.ts", "--auth", authId, "--auth-file", authFile],
+    ["--import", "tsx", "scripts/v39_probe_stage1_owner_v39.ts", "--auth", authId, "--auth-file", authFile, "--icao", expectedIcao],
     {
       cwd: process.cwd(),
       env: { ...process.env },
@@ -259,6 +277,8 @@ async function main(): Promise<void> {
     auth_sha256: expectedAuthSha,
     runtime_sha256: runtimeSha,
     probe_budget_day_id: budgetDayId,
+    expected_icao: expectedIcao,
+    owner_executor: ownerExecutor,
     callback_base: callbackBase,
     log_path: path.relative(process.cwd(), logPath),
     heartbeat_path: path.relative(process.cwd(), heartbeatPath),

@@ -1,0 +1,26 @@
+{"status":"PASS","check":"WORKSPACE_CALLBACK_HEALTH_AT_LAUNCH","git_head":"89d3dd1f859bf17f75ce39b33f91bf9a644a37d9","route_owner":"server/index.ts+server/routes_v3.ts"}
+{
+  "schema": "v39.phase2g-detached-supervisor-spawn.v1",
+  "status": "DETACHED_SUPERVISOR_ALIVE",
+  "supervisor_pid": 709,
+  "pid_file": "artifacts/phase2g-stage1-AUTH-20260921-P2G06-20260921T110013Z.pid",
+  "log_file": "artifacts/phase2g-stage1-AUTH-20260921-P2G06-20260921T110013Z.log",
+  "detached": true,
+  "provider_paid_action_performed": false,
+  "deployment_performed": false
+}
+{
+  "schema": "v39.phase2g-stage1-launch.v1",
+  "status": "LAUNCHED_PERSISTENT_SUPERVISOR",
+  "authorization_id": "AUTH-20260921-P2G06",
+  "git_head": "89d3dd1f859bf17f75ce39b33f91bf9a644a37d9",
+  "probe_budget_day_id": "P2G-S1-20260921-05",
+  "supervisor_pid": 709,
+  "log_file": "artifacts/phase2g-stage1-AUTH-20260921-P2G06-20260921T110013Z.log",
+  "status_file": "artifacts/phase2g-stage1-AUTH-20260921-P2G06-20260921T110013Z.status.json",
+  "heartbeat_file": "artifacts/phase2g-stage1-AUTH-20260921-P2G06-20260921T110013Z.heartbeat.json",
+  "pid_file": "artifacts/phase2g-stage1-AUTH-20260921-P2G06-20260921T110013Z.pid",
+  "workspace_callback_base": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+  "deployment_performed": false,
+  "note": "Do not launch a second Stage-1 command. Inspect status/heartbeat/log if the terminal disconnects."
+}
