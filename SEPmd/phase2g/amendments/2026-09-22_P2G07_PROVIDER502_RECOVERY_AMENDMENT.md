@@ -29,6 +29,7 @@ No further WSSS retry is automatically authorized after this recovery attempt.
 1. `markSafeFailure` now persists the computed `duration_censored` value.
 2. The supervisor recovery path can recover an exact owned subscription even when the owner already changed the probe row from `probing` to `failed / UNRESOLVED`.
 3. The provider deletion path verifies exact subscription inactivity after transient delete failures and makes bounded exact-ID retries only.
+4. The live balance watchdog now makes bounded short retries for a transient control-plane 5xx; one failed balance read no longer censors the two-hour window, while repeated failure still stops exposure fail-closed.
 
 ## Binding artifact
 
