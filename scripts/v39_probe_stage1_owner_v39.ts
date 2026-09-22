@@ -368,12 +368,16 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     artifacts,
     authMaxAlertCredits: approved.ceiling,
   });
-  if (result.status !== "completed" || result.durationCensored || result.stopReason !== null) {
-    throw new Error(`REFUSED_STAGE1_PROBE_FAILED: ${next.icao} ${result.stopReason ?? (result.durationCensored ? "duration_censored" : "unknown")}`);
+  const deferredCleanup = process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP === "1";
+  const safeTerminal =
+    result.status === "completed" ||
+    (deferredCleanup && result.status === "settling");
+  if (!safeTerminal || result.durationCensored || result.stopReason !== null) {
+    throw new Error(`REFUSED_STAGE1_PROBE_FAILED: ${next.icao} ${result.stopReason ?? (result.durationCensored ? "duration_censored" : result.status)}`);
   }
   console.log(JSON.stringify({
     schema: "v39.anchor-stage1-execution.v3",
-    status: "PASS",
+    status: result.status === "settling" ? "PASS_PROVIDER_SAFE_AWAITING_CLEANUP" : "PASS",
     authorizationId: auth.authId,
     preprobeArtifactSha256: artifacts.preprobeSha256,
     runtimeArtifactSha256: artifacts.runtimeSha256,
@@ -388,7 +392,10 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     compact6: compact6 !== null,
     durationCensored: result.durationCensored,
     stopReason: result.stopReason,
-    message: "One sequential frozen Stage-1 probe completed through isolated App-Storage/UNLOGGED runtime",
+    cleanupPending: result.status === "settling",
+    message: result.status === "settling"
+      ? "Provider deleted and exact reconciliation persisted; exact-session Replit cleanup is pending with zero provider exposure"
+      : "One sequential frozen Stage-1 probe completed through isolated App-Storage/UNLOGGED runtime",
   }));
   return 0;
 }
