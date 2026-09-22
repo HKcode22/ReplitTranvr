@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   chooseNextPrimaryStage1TargetV39,
   isInfrastructureInvalidStage1AttemptV39,
+  isP2g07Provider502RecoveryEligibleV39,
 } from "../scripts/v39_probe_stage1_owner_v39";
 
 const shortlist = [
@@ -85,6 +86,22 @@ describe("Phase2G bounded infrastructure-invalid Stage1 rerun policy", () => {
       attempt(4, "WSSS", "failed", "supervisor_child_exit_recovered", true, "UNRESOLVED"),
     ];
     expect(chooseNextPrimaryStage1TargetV39(shortlist, attempts)).toBe("MMUN");
+  });
+
+
+  it("permits only the prospectively amended P2G07 provider-502 WSSS recovery shape", () => {
+    const attempts = [
+      attempt(1, "WSSS", "failed", "supervisor_child_exit_before_runtime_session", true, "UNRESOLVED"),
+      attempt(2, "OMAA", "completed", null, false, "MATCH"),
+      attempt(3, "MMUN", "failed", "supervisor_child_exit_after_runtime_reset_recovered", true, "UNRESOLVED"),
+      attempt(4, "WSSS", "failed", "external_internal_credit_mismatch", false, "MISMATCH"),
+      attempt(5, "WSSS", "failed", "subscription_delete_failed", true, "UNRESOLVED"),
+    ];
+    expect(isP2g07Provider502RecoveryEligibleV39(attempts)).toBe(true);
+
+    const altered = attempts.map((row) => ({ ...row }));
+    altered[4].stopReason = "zero_reconciled_credits";
+    expect(isP2g07Provider502RecoveryEligibleV39(altered)).toBe(false);
   });
 
   it("does not rerun an ordinary scientific/provider failure as infrastructure-invalid", () => {
