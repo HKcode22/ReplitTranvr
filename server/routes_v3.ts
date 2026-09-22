@@ -35,6 +35,8 @@ import { persistProcessingAttempt, persistRawDeliveryTransaction, updateRawDeliv
 import {
   cleanupPrepaidProbeSessionLocalV39,
   persistPrepaidProbeWebhookV39,
+  recordPrepaidProbeCallbackAttemptV39,
+  recordPrepaidProbeCallbackSuccessV39,
   recordPrepaidProbeCallbackFailureV39,
 } from "./lib/disruption/prepaidProbeRuntime_v39";
 import { verifyAuthRecord, approvedArtifactHashesFromLedger, sha256HexString, type AuthRecord } from "./lib/disruption/authRecord_v39";
@@ -152,8 +154,10 @@ export function registerV3Routes(app:Express):void{
     if(!secret){res.status(503).json({error:"WEBHOOK_SECRET_NOT_CONFIGURED"});return;}
     if(!req.params.secret||req.params.secret!==secret){res.status(404).json({error:"Not found"});return;}
     const sessionId=String(req.params.sessionId??"").trim();
+    await recordPrepaidProbeCallbackAttemptV39(sessionId).catch(()=>undefined);
     try{
       const persisted=await persistPrepaidProbeWebhookV39({sessionId,body:req.body??{},receivedAtUtc:new Date()});
+      await recordPrepaidProbeCallbackSuccessV39(sessionId).catch(()=>undefined);
       console.log(`[adb-v3-prepaid] session=${sessionId} items=${persisted.itemCount} duplicate=${persisted.duplicate}`);
       res.status(200).json({received:true,items:persisted.itemCount,duplicate:persisted.duplicate});
     }catch(err:any){
