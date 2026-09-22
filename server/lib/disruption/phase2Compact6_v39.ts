@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import type {
   FrozenProbeArtifact,
   FrozenProbeCandidate,
@@ -7,6 +7,8 @@ import type {
 
 export const PHASE2G_COMPACT6_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-amendment-freeze-20260921.json";
+export const PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH =
+  "artifacts/phase2g-compact6-p2g07-provider502-recovery-freeze-20260922.json";
 
 export interface Phase2gCompact6AmendmentV39 {
   schema_version: "v39-phase2g-compact6-amendment-1";
@@ -29,6 +31,19 @@ export interface Phase2gCompact6AmendmentV39 {
   wsss_postfix_validation_rerun: {
     authorized: true;
     maximum_additional_attempts: 1;
+    reason: string;
+  };
+  p2g07_provider502_recovery_rerun?: {
+    authorized: true;
+    maximum_additional_attempts: 1;
+    failed_probe_id: 5;
+    failed_status: "failed";
+    failed_reconciliation_status: "UNRESOLVED";
+    failed_stop_reason: "subscription_delete_failed";
+    excluded_from_final_scoring: true;
+    requires_fresh_runtime_budget_auth: true;
+    authorization_basis: "provider_502_and_orphan_subscription_safety_failure_only";
+    outcome_metrics_not_used_to_authorize: true;
     reason: string;
   };
   prospective_reconciliation_policy: {
@@ -76,11 +91,23 @@ export function loadPhase2gCompact6AmendmentV39(input: {
 } {
   const expected = assertSha256(input.expectedSha256, "COMPACT6_EXPECTED");
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
-  const path = input.path ?? PHASE2G_COMPACT6_ARTIFACT_PATH;
-  const raw = readFileSync(path, "utf8");
-  const actual = sha256(raw);
-  if (actual !== expected) {
-    throw new Error(`REFUSED_COMPACT6_HASH_MISMATCH:expected=${expected}:actual=${actual}`);
+  const candidatePaths = input.path
+    ? [input.path]
+    : [PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
+  let raw: string | null = null;
+  let actual: string | null = null;
+  for (const candidatePath of candidatePaths) {
+    if (!existsSync(candidatePath)) continue;
+    const candidateRaw = readFileSync(candidatePath, "utf8");
+    const candidateSha = sha256(candidateRaw);
+    if (candidateSha === expected) {
+      raw = candidateRaw;
+      actual = candidateSha;
+      break;
+    }
+  }
+  if (raw === null || actual === null) {
+    throw new Error(`REFUSED_COMPACT6_HASH_MISMATCH:expected=${expected}:known_paths=${candidatePaths.join(",")}`);
   }
 
   const amendment = JSON.parse(raw) as Phase2gCompact6AmendmentV39;
@@ -157,6 +184,21 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     amendment.wsss_postfix_validation_rerun.maximum_additional_attempts !== 1
   ) {
     throw new Error("REFUSED_COMPACT6_WSSS_VALIDATION_BOUND");
+  }
+  const recovery = amendment.p2g07_provider502_recovery_rerun;
+  if (recovery !== undefined && (
+    recovery.authorized !== true ||
+    recovery.maximum_additional_attempts !== 1 ||
+    recovery.failed_probe_id !== 5 ||
+    recovery.failed_status !== "failed" ||
+    recovery.failed_reconciliation_status !== "UNRESOLVED" ||
+    recovery.failed_stop_reason !== "subscription_delete_failed" ||
+    recovery.excluded_from_final_scoring !== true ||
+    recovery.requires_fresh_runtime_budget_auth !== true ||
+    recovery.authorization_basis !== "provider_502_and_orphan_subscription_safety_failure_only" ||
+    recovery.outcome_metrics_not_used_to_authorize !== true
+  )) {
+    throw new Error("REFUSED_COMPACT6_P2G07_RECOVERY_BOUND");
   }
   if (
     amendment.prospective_reconciliation_policy.external_settled_spend_is_authoritative_denominator !== true ||
