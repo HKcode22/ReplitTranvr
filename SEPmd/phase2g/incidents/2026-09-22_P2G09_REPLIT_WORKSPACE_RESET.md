@@ -140,9 +140,9 @@ The incident must therefore be described as a Replit development-workspace/runti
 
 1. Do not use an interactive `.replit.dev` development workspace as the sole paid lifecycle owner.
 2. Pin the provider callback base and owner runtime separately and hash-bind both into runtime/AUTH evidence.
-3. Move the always-on callback/control plane to deployment infrastructure appropriate for long-running/background work.
-4. Add restart/resume semantics so loss of one process does not automatically orphan an active subscription.
-5. Add an independent fail-safe that can delete the exact owned subscription if the primary owner disappears.
+3. Keep the callback/control plane on the published deployment, but move the 120-minute paid lifecycle owner to an independent GitHub Actions foreground job.
+4. Keep durable ownership/session evidence so loss of one executor cannot create a second subscription.
+5. Run a second independent GitHub Actions safety-watchdog job that can only exact-recover/delete the owned subscription if the primary owner disappears.
 6. Preserve the existing exact-ID/no-bulk-delete recovery discipline.
 7. Re-run offline, synthetic callback, crash/restart, and provider-read-only gates before another paid attempt.
 
@@ -161,7 +161,7 @@ A read-only Replit Agent inspection of app `95ac2e69-854d-460f-8e9d-8e4711aef739
 - the observed simultaneous loss of detached server/supervisor/child/Shell state while preserving filesystem/Git state is more consistent with a development-workspace lifecycle/process-manager reset than with an app-level shutdown;
 - keeping the editor/browser open does not prevent platform lifecycle events;
 - `nohup`, `setsid`, and shell detachment cannot survive replacement of the workspace runtime itself;
-- Reserved VM is the appropriate Replit-native option for an always-on webhook server plus continuously running lifecycle owner;
+- Reserved VM is a Replit-native always-on option, but the selected no-extra-cost remediation instead separates the published Autoscale callback receiver from a GitHub Actions lifecycle owner;
 - Autoscale is appropriate for request-driven HTTP handling but should not be treated as a continuous two-hour in-process supervisor guarantee.
 
 This inspection changed no project or runtime state.
