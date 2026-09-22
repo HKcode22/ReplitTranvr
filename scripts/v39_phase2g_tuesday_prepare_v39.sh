@@ -430,6 +430,12 @@ NODE
 
 run_preflight() {
   echo "=== FRESH TUESDAY PAID-STAGE1 PREFLIGHT ==="
+  local callback_base
+  callback_base="${PHASE2G_PUBLISHED_CALLBACK_BASE:-}"
+  [[ -n "$callback_base" ]] || {
+    echo "REFUSED:PHASE2G_PUBLISHED_CALLBACK_BASE_REQUIRED"
+    return 2
+  }
   echo "provider_call=balance_and_subscription_reads_only"
   echo "provider_mutation=false"
   echo "alert_credits_spent=0"
@@ -468,6 +474,7 @@ run_preflight() {
     --auth-sha "$auth_sha" \
     --expected-head "$(git rev-parse HEAD)" \
     --expected-icao WSSS \
+    --callback-base "$callback_base" \
     --out "$out"
 
   echo "PREFLIGHT_RECEIPT=$out"
