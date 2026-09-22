@@ -71,7 +71,7 @@ describe("Phase-2G free independent-owner architecture", () => {
     expect(owner).toContain('V39_DEFER_PROVIDER_CONTENT_CLEANUP="1"');
     expect(watchdog).toContain('V39_DEFER_PROVIDER_CONTENT_CLEANUP = "1"');
     expect(workflow).toContain("callback_verification_file");
-    expect(workflow).toContain("provider_blob_bucket_id");
+    expect(workflow).not.toContain("provider_blob_bucket_id");
     expect(preflight).toContain("v39.phase2g-live-callback-verification.v1");
   });
 
@@ -79,7 +79,7 @@ describe("Phase-2G free independent-owner architecture", () => {
     expect(workflow).not.toContain("REPLIT_OBJECT_STORAGE");
     expect(workflow).not.toContain("OBJECT_STORAGE_TOKEN");
     expect(workflow).not.toContain("V39_PHASE2G_CONTROL_SECRET");
-    expect(owner).toContain("V39_PROVIDER_BLOB_BUCKET_ID");
+    expect(owner).not.toContain("V39_PROVIDER_BLOB_BUCKET_ID");
     expect(owner).toContain("V39_DEFER_PROVIDER_CONTENT_CLEANUP");
   });
 });
