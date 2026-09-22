@@ -20,7 +20,8 @@ describe("Phase-2G free independent-owner architecture", () => {
     expect(replit).toContain('V39_RUNTIME_DURABILITY_CLASS=autoscale');
     expect(preflight).toContain("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED");
     expect(preflight).toContain('ownerExecutor !== "github-actions"');
-    expect(preflight).toContain('callbackDurabilityClass === "autoscale"');
+    expect(preflight).toContain('contract_mode: "legacy-live-prepaid-route"');
+    expect(preflight).toContain("callback_verification_contract_invalid_or_stale");
   });
 
   it("makes GitHub Actions the only prospective paid owner", () => {
@@ -65,23 +66,20 @@ describe("Phase-2G free independent-owner architecture", () => {
     expect(watchdog).not.toContain("refillBalance(");
   });
 
-  it("keeps raw provider blob cleanup inside Replit behind an exact secret/session guard", () => {
-    expect(runtime).toContain("V39_REMOTE_BLOB_CLEANUP_BASE");
-    expect(runtime).toContain("V39_REMOTE_BLOB_CLEANUP_SECRET");
-    expect(runtime).toContain("/__v39/phase2g/runtime-cleanup");
-    expect(routes).toContain("phase2gControlGuard");
-    expect(routes).toContain("timingSafeEqual");
-    expect(routes).toContain("runtime_session_id=$1::uuid");
-    expect(routes).toContain("cleanupPrepaidProbeSessionLocalV39");
-    expect(routes).toContain("RUNTIME_CLEANUP_REFUSED_STATE");
-    expect(routes).toContain("RUNTIME_CLEANUP_ACTIVE_BILLABLE");
-    expect(routes).toContain("listSubscriptionsStrict");
-    expect(routes).toContain("provider_mutation: false");
+  it("keeps raw provider blob cleanup deferred to the Replit workspace after provider stop", () => {
+    expect(runtime).toContain("V39_DEFER_PROVIDER_CONTENT_CLEANUP");
+    expect(owner).toContain('V39_DEFER_PROVIDER_CONTENT_CLEANUP="1"');
+    expect(watchdog).toContain('V39_DEFER_PROVIDER_CONTENT_CLEANUP = "1"');
+    expect(workflow).toContain("callback_verification_file");
+    expect(workflow).toContain("provider_blob_bucket_id");
+    expect(preflight).toContain("v39.phase2g-live-callback-verification.v1");
   });
 
-  it("never gives GitHub the Replit blob-store credential surface", () => {
+  it("never gives GitHub the Replit object-storage credential surface", () => {
     expect(workflow).not.toContain("REPLIT_OBJECT_STORAGE");
     expect(workflow).not.toContain("OBJECT_STORAGE_TOKEN");
-    expect(owner).toContain("V39_REMOTE_BLOB_CLEANUP_SECRET");
+    expect(workflow).not.toContain("V39_PHASE2G_CONTROL_SECRET");
+    expect(owner).toContain("V39_PROVIDER_BLOB_BUCKET_ID");
+    expect(owner).toContain("V39_DEFER_PROVIDER_CONTENT_CLEANUP");
   });
 });
