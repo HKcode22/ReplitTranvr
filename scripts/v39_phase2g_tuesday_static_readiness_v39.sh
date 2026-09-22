@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-EXPECTED_COMPACT6_SHA="07c474f8440e3fdb222a18c660ed61a5fc25d018487fe0171aff6642637a5c45"
+EXPECTED_COMPACT6_SHA="09092f8d4896af4bbea11fd13d177417aa8cb92538e0cebff5e5301f3e1c4500"
 COMPACT6="artifacts/phase2g-compact6-amendment-freeze-20260921.json"
 
 echo "=== PHASE2G TUESDAY STATIC READINESS ==="
