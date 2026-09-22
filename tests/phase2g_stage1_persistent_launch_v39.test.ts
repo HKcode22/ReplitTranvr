@@ -67,6 +67,16 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(launcher).toContain("REFUSED:PREFLIGHT_RECEIPT_");
   });
 
+  it("requires an explicit truthful workspace owner mode across preflight, launch and watchdog", () => {
+    expect(preflight).toContain("runtime_owner_mode");
+    expect(preflight).toContain("replit-managed-project");
+    expect(preflight).toContain("phase2g-detached-npm-run-dev");
+    expect(launcher).toContain("runtime_owner_mode");
+    expect(launcher).toContain("phase2g-detached-npm-run-dev");
+    expect(supervisor).toContain("runtime_owner_mode");
+    expect(supervisor).toContain("phase2g-detached-npm-run-dev");
+  });
+
   it("uses only the workspace callback, process-scoped bucket correction, and no deployment", () => {
     expect(launcher).toContain("*.replit.dev");
     expect(launcher).toContain("REFUSED:PRODUCTION_DOMAIN_NOT_ALLOWED");
