@@ -281,7 +281,12 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     };
   }
 
-  const acceptedReconciliation = result.reconciliationStatus === "MATCH";
+  const acceptedReconciliation =
+    result.reconciliationStatus === "MATCH" ||
+    result.reconciliationStatus === "DELIVERY_GAP";
+  const acceptedStopReason =
+    result.stopReason === null ||
+    (result.reconciliationStatus === "DELIVERY_GAP" && result.stopReason === "bounded_delivery_gap");
   const cleanupDeferredSafely =
     result.status === "settling" &&
     result.subscriptionDeleted === true &&
@@ -290,7 +295,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     result.status === "completed" &&
     Boolean(result.cleanupVerifiedAtUtc);
   if ((!cleanupDeferredSafely && !cleanupCompletedSafely) ||
-      result.durationCensored || result.stopReason !== null ||
+      result.durationCensored || !acceptedStopReason ||
       !result.metrics || !acceptedReconciliation) {
     await markSafeFailure({
       probeId,
