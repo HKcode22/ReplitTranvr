@@ -3,6 +3,8 @@ import { createHash } from "crypto";
 import { dirname, join, resolve } from "path";
 import { loadPhase2SmokeHandoffV39 } from "../server/lib/disruption/phase2SmokeHandoff_v39";
 import { loadGate2RuntimeBindingV39 } from "../server/lib/disruption/phase2Gate2Runtime_v39";
+import { loadFrozenProbeArtifact } from "../server/lib/disruption/anchorPromotion_v39";
+import { loadPhase2gCompact6AmendmentV39 } from "../server/lib/disruption/phase2Compact6_v39";
 
 const LEDGER = join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
 const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
@@ -40,6 +42,8 @@ function main(): void {
   const minStabilityBuckets = positiveInt("--min-stability-buckets");
   const stage1ReservationCredits = positiveInt("--stage1-reservation");
   const stage2ReservationCredits = positiveInt("--stage2-reservation");
+  const stage1AmendmentPathArg = optional("--stage1-amendment-file");
+  let stage1AmendmentSha256: string | null = null;
 
   const smoke = loadPhase2SmokeHandoffV39({
     smokePath,
@@ -47,6 +51,19 @@ function main(): void {
     runtimePath: smokeRuntimePath,
     expectedRuntimeFileSha256: smokeRuntimeSha,
   });
+  if (stage1AmendmentPathArg) {
+    const stage1AmendmentPath = resolve(stage1AmendmentPathArg);
+    const amendmentRaw = readFileSync(stage1AmendmentPath, "utf8");
+    stage1AmendmentSha256 = sha(amendmentRaw);
+    const preprobeLoaded = loadFrozenProbeArtifact(preprobePath, smoke.preprobe.fileSha256);
+    loadPhase2gCompact6AmendmentV39({
+      expectedSha256: stage1AmendmentSha256,
+      sourcePreprobeFileSha256: smoke.preprobe.fileSha256,
+      preprobe: preprobeLoaded.artifact,
+      path: stage1AmendmentPath,
+    });
+  }
+
   const ledgerBefore = readFileSync(LEDGER, "utf8");
   if (!ledgerBefore.includes(smoke.evidenceId)) {
     throw new Error(`BLOCKED:SMOKE_HANDOFF_NOT_RECORDED:${smoke.evidenceId}`);
@@ -68,6 +85,7 @@ function main(): void {
     unsettledBurstMarginCredits: margin,
     stage1ReservationCredits,
     stage2ReservationCredits,
+    stage1AmendmentSha256,
   };
   const raw = JSON.stringify(config, null, 2) + "\n";
   mkdirSync(dirname(out), { recursive: true });
@@ -95,6 +113,7 @@ function main(): void {
       `- unsettled_burst_margin_credits: ${margin}`,
       `- stage1_reservation_credits: ${stage1ReservationCredits}`,
       `- stage2_reservation_credits: ${stage2ReservationCredits}`,
+      `- stage1_amendment_sha256: ${stage1AmendmentSha256 ?? "<none>"}`,
       "- paid_authorization: false",
       "",
     ].join("\n"), "utf8");
@@ -112,6 +131,7 @@ function main(): void {
     unsettled_burst_margin_credits: margin,
     stage1_reservation_credits: stage1ReservationCredits,
     stage2_reservation_credits: stage2ReservationCredits,
+    stage1_amendment_sha256: stage1AmendmentSha256,
     next: "Prepare a separate exact Stage-1 AUTH bound to this runtime and the smoke PASS handoff",
   }, null, 2));
 }
