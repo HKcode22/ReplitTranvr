@@ -45,10 +45,12 @@ async function markProbeFailed(input: {
 }): Promise<void> {
   await pool.query(
     `UPDATE clean.adb_anchor_probe
-        SET status='failed',window_end=now(),duration_censored=true,stop_reason=$2,
-            reconciliation_status='UNRESOLVED',runtime_session_id=COALESCE($3::uuid,runtime_session_id),
+        SET status='failed',window_end=COALESCE(window_end,now()),duration_censored=true,
+            stop_reason=COALESCE(stop_reason,$2),
+            reconciliation_status=COALESCE(reconciliation_status,'UNRESOLVED'),
+            runtime_session_id=COALESCE($3::uuid,runtime_session_id),
             runtime_cleanup_verified_at_utc=COALESCE($4::timestamptz,runtime_cleanup_verified_at_utc)
-      WHERE probe_id=$1 AND status='probing'`,
+      WHERE probe_id=$1 AND status IN ('probing','failed')`,
     [input.probeId, input.stopReason, input.sessionId, input.cleanupVerifiedAtUtc],
   );
 }
@@ -74,8 +76,18 @@ async function main(): Promise<void> {
   }
 
   const probes = await pool.query(
-    `SELECT probe_id,icao,status,runtime_session_id FROM clean.adb_anchor_probe
-      WHERE stage=1 AND probe_budget_day_id=$1 AND status='probing'
+    `SELECT probe_id,icao,status,runtime_session_id,stop_reason,reconciliation_status,runtime_cleanup_verified_at_utc
+       FROM clean.adb_anchor_probe
+      WHERE stage=1 AND probe_budget_day_id=$1
+        AND (
+          status='probing'
+          OR (
+            status='failed'
+            AND reconciliation_status='UNRESOLVED'
+            AND runtime_cleanup_verified_at_utc IS NULL
+            AND stop_reason IN ('subscription_delete_failed','balance_read_failed')
+          )
+        )
       ORDER BY recorded_at ASC`,
     [budgetDayId],
   );
@@ -103,7 +115,7 @@ async function main(): Promise<void> {
     `SELECT session_id,provider_subscription_id,state
        FROM clean.prepaid_probe_session_runtime
       WHERE owner_kind='anchor_probe' AND owner_probe_id=$1 AND stage=1
-        AND state IN ('armed','active','settling')
+        AND state IN ('armed','active','settling','failed')
       ORDER BY created_at_utc DESC`,
     [probeId],
   );
