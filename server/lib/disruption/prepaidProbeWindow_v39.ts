@@ -184,31 +184,37 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   // oracle. Accept only a small pre-frozen delivery loss; contradictory
   // accounting (internal > external), cost/item disagreement, or <99%
   // completeness remains a hard MISMATCH.
-  const reconciliationStatus: "MATCH" | "DELIVERY_GAP" | "MISMATCH" =
-    deliveryGapCredits === 0 && metrics.costItemDisagreementCount === 0
-      ? "MATCH"
-      : deliveryGapCredits > 0 &&
-          deliveryCompleteness >= PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 &&
-          metrics.costItemDisagreementCount === 0
-        ? "DELIVERY_GAP"
-        : "MISMATCH";
+  const exactMatch = deliveryGapCredits === 0 && metrics.costItemDisagreementCount === 0;
+  const anchorDeliveryGapAccepted =
+    input.ownerKind === "anchor_probe" &&
+    deliveryGapCredits > 0 &&
+    deliveryCompleteness >= PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 &&
+    metrics.costItemDisagreementCount === 0;
 
-  await persistProbeReconciliationEvidenceV39({
-    probeId: Number(input.ownerProbeId),
-    runtimeSessionId: session.sessionId,
-    stage: input.stage as 1 | 2,
-    icao,
-    evidenceStatus: reconciliationStatus,
-    externalSpendCredits: externalCredits,
-    metrics,
-    settlementReads: settle.readsUsed,
-    maxObservedUnsettledCreditGap,
-    deliveryCompletenessFloor: PROBE_DELIVERY_COMPLETENESS_FLOOR_V39,
-    windowStartUtc: windowStart,
-    windowEndUtc: windowEnd,
-    durationCensored: windowEnd.getTime() < deadline,
-    stopReason: liveStopReason,
-  });
+  const reconciliationStatus: "MATCH" | "DELIVERY_GAP" | "MISMATCH" =
+    exactMatch ? "MATCH" : anchorDeliveryGapAccepted ? "DELIVERY_GAP" : "MISMATCH";
+
+  if (input.ownerKind === "anchor_probe") {
+    if (!Number.isInteger(input.ownerProbeId) || !input.ownerProbeId || ![1, 2].includes(Number(input.stage))) {
+      throw new Error("PREPAID_PROBE_RECONCILIATION_OWNER_METADATA_REQUIRED");
+    }
+    await persistProbeReconciliationEvidenceV39({
+      probeId: input.ownerProbeId,
+      runtimeSessionId: session.sessionId,
+      stage: input.stage as 1 | 2,
+      icao,
+      evidenceStatus: reconciliationStatus,
+      externalSpendCredits: externalCredits,
+      metrics,
+      settlementReads: settle.readsUsed,
+      maxObservedUnsettledCreditGap,
+      deliveryCompletenessFloor: PROBE_DELIVERY_COMPLETENESS_FLOOR_V39,
+      windowStartUtc: windowStart,
+      windowEndUtc: windowEnd,
+      durationCensored: windowEnd.getTime() < deadline,
+      stopReason: liveStopReason,
+    });
+  }
 
   if (reconciliationStatus === "MISMATCH") {
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
