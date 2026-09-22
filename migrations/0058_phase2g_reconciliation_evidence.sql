@@ -98,4 +98,20 @@ CREATE TRIGGER trg_phase2g_reconciliation_evidence_immutable
   BEFORE UPDATE OR DELETE ON clean.adb_probe_reconciliation_evidence
   FOR EACH ROW EXECUTE FUNCTION clean.reject_phase2g_reconciliation_evidence_mutation();
 
+-- Prospective compact-6 amendment: a completed safe-mode anchor probe may be
+-- MATCH or a bounded DELIVERY_GAP. The detailed append-only reconciliation
+-- evidence is the authority for any DELIVERY_GAP completion.
+ALTER TABLE clean.adb_anchor_probe DROP CONSTRAINT IF EXISTS adb_anchor_probe_safe_completed_shape;
+ALTER TABLE clean.adb_anchor_probe
+  ADD CONSTRAINT adb_anchor_probe_safe_completed_shape
+  CHECK (
+    NOT provider_content_safe_mode OR status <> 'completed' OR (
+      runtime_session_id IS NOT NULL AND
+      runtime_cleanup_verified_at_utc IS NOT NULL AND
+      reconciliation_status IN ('MATCH','DELIVERY_GAP') AND
+      confirmed_unique_lower_per_credit IS NOT NULL AND
+      confirmed_plus_ambiguous_upper_per_credit IS NOT NULL
+    )
+  ) NOT VALID;
+
 COMMIT;
