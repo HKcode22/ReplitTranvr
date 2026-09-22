@@ -27,7 +27,7 @@ require_repo_state() {
 case "${1:-help}" in
   static)
     require_repo_state
-    npx vitest run tests/phase2g_stage1_rerun_policy_v39.test.ts tests/phase2g_stage1_persistent_launch_v39.test.ts tests/phase2g_compact6_reconciliation_v39.test.ts tests/phase2g_probe_guard_band_v39.test.ts tests/prepaid_probe_runtime_v39.test.ts
+    npx vitest run tests/phase2g_stage1_rerun_policy_v39.test.ts tests/phase2g_stage1_persistent_launch_v39.test.ts tests/phase2g_compact6_reconciliation_v39.test.ts tests/phase2g_probe_guard_band_v39.test.ts tests/prepaid_probe_runtime_v39.test.ts tests/phase2g_free_owner_architecture_v39.test.ts
     npx tsc --noEmit
     echo "P2G09_STATIC=PASS"
     ;;
