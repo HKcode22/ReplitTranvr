@@ -206,6 +206,20 @@ async function main(): Promise<void> {
       providerDeleteVerified = activeBillableBefore.length === 0;
     }
 
+    // The exact provider subscription is now verified inactive. Transition the
+    // surviving runtime owner out of active before any raw/runtime cleanup so
+    // the published cleanup bridge can refuse premature evidence deletion.
+    await pool.query(
+      `UPDATE clean.prepaid_probe_session_runtime
+          SET state='failed'
+        WHERE session_id=$1::uuid
+          AND owner_kind='anchor_probe'
+          AND owner_probe_id=$2
+          AND stage=1
+          AND state IN ('armed','active','settling','failed')`,
+      [sessionId, probeId],
+    );
+
     try {
       const cleanup = await cleanupPrepaidProbeSessionV39(sessionId, `phase2g-supervisor-recovery-${probeId}`);
       cleanupVerifiedAtUtc = cleanup.verifiedAtUtc;
