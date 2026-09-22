@@ -257,6 +257,13 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   const deliveryGapCredits = classified.deliveryGapCredits;
   const deliveryCompleteness = classified.deliveryCompleteness;
   const reconciliationStatus = classified.status;
+  const reconciliationStopReason = liveStopReason === "balance_read_failed"
+    ? "balance_read_failed"
+    : reconciliationStatus === "DELIVERY_GAP"
+      ? "external_internal_delivery_gap"
+      : reconciliationStatus === "MISMATCH"
+        ? "external_internal_credit_mismatch"
+        : liveStopReason;
 
   if (input.ownerKind === "anchor_probe") {
     if (!Number.isInteger(input.ownerProbeId) || !input.ownerProbeId || ![1, 2].includes(Number(input.stage))) {
@@ -276,16 +283,12 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       windowStartUtc: windowStart,
       windowEndUtc: windowEnd,
       durationCensored: windowEnd.getTime() < deadline,
-      stopReason: liveStopReason,
+      stopReason: reconciliationStopReason,
     });
   }
 
   if (reconciliationStatus !== "MATCH") {
-    const stopReason = liveStopReason === "balance_read_failed"
-      ? "balance_read_failed"
-      : reconciliationStatus === "DELIVERY_GAP"
-        ? "external_internal_delivery_gap"
-        : "external_internal_credit_mismatch";
+    const stopReason = reconciliationStopReason ?? "external_internal_credit_mismatch";
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     const cleanup = await cleanupPrepaidProbeSessionV39(
       session.sessionId,
