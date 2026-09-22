@@ -124,7 +124,6 @@ async function main(): Promise<void> {
 
   process.env.WEBHOOK_BASE_URL = callbackBase;
   process.env.V39_PUBLIC_WEBHOOK_BASE_URL = callbackBase;
-  process.env.V39_PROVIDER_BLOB_MODE = "required";
   process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP = "1";
 
   const started = Date.now();
