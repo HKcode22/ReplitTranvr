@@ -337,8 +337,8 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     artifacts,
     authMaxAlertCredits: approved.ceiling,
   });
-  if (result.status !== "completed") {
-    throw new Error(`REFUSED_STAGE1_PROBE_FAILED: ${next.icao} ${result.stopReason ?? "unknown"}`);
+  if (result.status !== "completed" || result.durationCensored || result.stopReason !== null) {
+    throw new Error(`REFUSED_STAGE1_PROBE_FAILED: ${next.icao} ${result.stopReason ?? (result.durationCensored ? "duration_censored" : "unknown")}`);
   }
   console.log(JSON.stringify({
     schema: "v39.anchor-stage1-execution.v3",
