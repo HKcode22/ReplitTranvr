@@ -32,9 +32,10 @@ if [[ -n "$PROTECTED_STATUS" ]]; then
 fi
 echo "PROTECTED_SOURCE_TREE_CLEAN"
 
-echo "=== LAUNCHER SYNTAX ==="
+echo "=== SHELL SYNTAX ==="
 bash -n scripts/v39_phase2g_stage1_launch_logged_v39.sh
-echo "LAUNCHER_SYNTAX_PASS"
+bash -n scripts/v39_phase2g_tuesday_prepare_v39.sh
+echo "SHELL_SYNTAX_PASS"
 
 echo "=== TARGETED TESTS ==="
 npx vitest run   tests/phase2g_compact6_reconciliation_v39.test.ts   tests/phase2g_runtime_survival_v39.test.ts   tests/phase2g_stage1_persistent_launch_v39.test.ts   tests/phase2g_stage1_rerun_policy_v39.test.ts   tests/phase2g_zero_credit_soak_v39.test.ts   tests/phase2g_exact_session_purpose_cleanup_v39.test.ts   tests/phase2g_probe_guard_band_v39.test.ts   tests/prepaid_probe_runtime_v39.test.ts
