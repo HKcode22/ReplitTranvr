@@ -13,6 +13,7 @@ import {
   prepaidProbeInternalCreditsV39,
   prepaidProbeMetricsV39,
   prepaidProbeWebhookUrlV39,
+  persistProbeReconciliationEvidenceV39,
   setPrepaidProbeSessionStateV39,
   type PrepaidProbeMetricsV39,
   type PrepaidProbeOwnerKindV39,
@@ -40,7 +41,7 @@ export interface PrepaidLiveWindowResultV39 {
   windowEnd: Date;
   durationCensored: boolean;
   stopReason: string | null;
-  reconciliationStatus: "MATCH" | "MISMATCH" | "UNRESOLVED";
+  reconciliationStatus: "MATCH" | "DELIVERY_GAP" | "MISMATCH" | "UNRESOLVED";
   externalCredits: number | null;
   internalSendCredits: number;
   /** Maximum observed internal SEND ledger minus provider balance delta while live. */
@@ -50,6 +51,8 @@ export interface PrepaidLiveWindowResultV39 {
   cleanupVerifiedAtUtc: string | null;
   subscriptionDeleted: boolean;
 }
+
+export const PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 = 0.99;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -169,8 +172,45 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   const externalCredits = Math.max(0, input.balanceBefore - settle.stableBalance);
   const metrics = await prepaidProbeMetricsV39(session.sessionId, windowStart, windowEnd);
   maxObservedUnsettledCreditGap = Math.max(maxObservedUnsettledCreditGap, Math.max(0, metrics.internalSendCredits - externalCredits));
-  const reconciliationStatus = externalCredits === metrics.internalSendCredits ? "MATCH" : "MISMATCH";
-  if (reconciliationStatus !== "MATCH") {
+
+  const deliveryGapCredits = externalCredits - metrics.internalSendCredits;
+  const deliveryCompleteness = externalCredits === 0
+    ? (metrics.internalSendCredits === 0 ? 1 : 0)
+    : metrics.internalSendCredits / externalCredits;
+
+  // V3.9 §3.2 makes the settled provider balance delta authoritative and
+  // explicitly notes that a billed SEND may never reach the callback. The
+  // received-attempt ledger is therefore diagnostic rather than an equality
+  // oracle. Accept only a small pre-frozen delivery loss; contradictory
+  // accounting (internal > external), cost/item disagreement, or <99%
+  // completeness remains a hard MISMATCH.
+  const reconciliationStatus: "MATCH" | "DELIVERY_GAP" | "MISMATCH" =
+    deliveryGapCredits === 0 && metrics.costItemDisagreementCount === 0
+      ? "MATCH"
+      : deliveryGapCredits > 0 &&
+          deliveryCompleteness >= PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 &&
+          metrics.costItemDisagreementCount === 0
+        ? "DELIVERY_GAP"
+        : "MISMATCH";
+
+  await persistProbeReconciliationEvidenceV39({
+    probeId: Number(input.ownerProbeId),
+    runtimeSessionId: session.sessionId,
+    stage: input.stage as 1 | 2,
+    icao,
+    evidenceStatus: reconciliationStatus,
+    externalSpendCredits: externalCredits,
+    metrics,
+    settlementReads: settle.readsUsed,
+    maxObservedUnsettledCreditGap,
+    deliveryCompletenessFloor: PROBE_DELIVERY_COMPLETENESS_FLOOR_V39,
+    windowStartUtc: windowStart,
+    windowEndUtc: windowEnd,
+    durationCensored: windowEnd.getTime() < deadline,
+    stopReason: liveStopReason,
+  });
+
+  if (reconciliationStatus === "MISMATCH") {
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     return {
       status: "failed", runtimeSessionId: session.sessionId, windowStart, windowEnd,
@@ -213,7 +253,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   return {
     status: "completed", runtimeSessionId: session.sessionId, windowStart, windowEnd,
     durationCensored: windowEnd.getTime() < deadline, stopReason: liveStopReason,
-    reconciliationStatus: "MATCH", externalCredits, internalSendCredits: metrics.internalSendCredits,
+    reconciliationStatus, externalCredits, internalSendCredits: metrics.internalSendCredits,
     maxObservedUnsettledCreditGap, settlementReads: settle.readsUsed, metrics,
     cleanupVerifiedAtUtc: cleanup.verifiedAtUtc, subscriptionDeleted: true,
   };
