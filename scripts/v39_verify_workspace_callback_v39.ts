@@ -60,6 +60,17 @@ async function main(): Promise<void> {
     throw new Error(`REFUSED:WORKSPACE_RUNTIME_HEALTH_INVALID:http=${health.status}`);
   }
   const runtimeGitHead = String(healthJson.git_head).toLowerCase();
+  const runtimeOwnerMode = String(healthJson.runtime_owner_mode ?? "");
+  const runtimeOwnerContract =
+    (runtimeOwnerMode === "replit-managed-project" &&
+      healthJson.managed_replit_workflow === true &&
+      healthJson.detached_workspace_server === false) ||
+    (runtimeOwnerMode === "phase2g-detached-npm-run-dev" &&
+      healthJson.managed_replit_workflow === false &&
+      healthJson.detached_workspace_server === true);
+  if (!runtimeOwnerContract) {
+    throw new Error(`REFUSED:WORKSPACE_RUNTIME_OWNER_CONTRACT_INVALID:mode=${runtimeOwnerMode || "<missing>"}`);
+  }
 
   const wrongSecret = `phase2f-wrong-${randomBytes(16).toString("hex")}`;
   const wrongSession = "00000000-0000-4000-8000-000000000001";
@@ -202,6 +213,9 @@ async function main(): Promise<void> {
       callbackOrigin: base,
       gitHead: runtimeGitHead,
       exactRouteOwner: "server/index.ts+server/routes_v3.ts",
+      runtimeOwnerMode,
+      managedReplitWorkflow: healthJson.managed_replit_workflow === true,
+      detachedWorkspaceServer: healthJson.detached_workspace_server === true,
       wrongSecretRejected404: true,
       exactSecretAccepted200: true,
       publicHttpsIngress: true,
