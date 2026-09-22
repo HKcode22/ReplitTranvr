@@ -349,7 +349,8 @@ run_server_start() {
   pid_file="artifacts/phase2g-workspace-server-${stamp}.pid"
   log_file="artifacts/phase2g-workspace-server-${stamp}.log"
 
-  setsid bash -lc 'exec npm run dev' >"$log_file" 2>&1 < /dev/null &
+  setsid env V39_WORKSPACE_RUNTIME_OWNER_MODE=phase2g-detached-npm-run-dev \
+    bash -lc 'exec npm run dev' >"$log_file" 2>&1 < /dev/null &
   local pid=$!
   printf '%s\n' "$pid" > "$pid_file"
 
@@ -400,12 +401,21 @@ run_server_status() {
     observed: json ?? text.slice(0,240),
     expected_git_head: expected,
   }, null, 2));
+  const ownerMode = String(json?.runtime_owner_mode || "");
+  const ownerContract =
+    (ownerMode === "replit-managed-project" &&
+      json?.managed_replit_workflow === true &&
+      json?.detached_workspace_server === false) ||
+    (ownerMode === "phase2g-detached-npm-run-dev" &&
+      json?.managed_replit_workflow === false &&
+      json?.detached_workspace_server === true);
   const pass = response.status === 200 &&
     json?.schema === "v39.phase2f-workspace-runtime.v1" &&
     json?.status === "PASS" &&
     String(json?.git_head || "").toLowerCase() === expected &&
     json?.prepaid_route_registered === true &&
-    json?.provider_mutation === false;
+    json?.provider_mutation === false &&
+    ownerContract;
   if (!pass) {
     console.error("SERVER_STATUS=REFUSED_HEAD_OR_HEALTH_MISMATCH");
     process.exit(2);
