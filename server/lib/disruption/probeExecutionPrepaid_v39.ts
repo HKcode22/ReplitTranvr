@@ -304,7 +304,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       runtimeSessionId: result.runtimeSessionId,
       ended: result.windowEnd,
       stopReason: "probe_cap_overshoot",
-      reconciliationStatus: "MATCH",
+      reconciliationStatus: result.reconciliationStatus === "DELIVERY_GAP" ? "DELIVERY_GAP" : "MATCH",
       cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
     });
     await markProbeBudgetDayMismatch(input.artifacts.runtime.probeBudgetDayId, {
@@ -318,7 +318,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       probeId,
       status: "failed",
       creditsSpent: null,
-      durationCensored: true,
+      durationCensored: result.durationCensored,
       stopReason: "probe_cap_overshoot",
     };
   }
@@ -330,7 +330,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       runtimeSessionId: result.runtimeSessionId,
       ended: result.windowEnd,
       stopReason: "zero_reconciled_credits",
-      reconciliationStatus: "MATCH",
+      reconciliationStatus: result.reconciliationStatus === "DELIVERY_GAP" ? "DELIVERY_GAP" : "MATCH",
       cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
     });
     return { probeId, status: "failed", creditsSpent: null, durationCensored: true, stopReason: "zero_reconciled_credits" };
@@ -367,7 +367,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
      input.artifacts.runtime.minStabilityBuckets, result.metrics.confirmedUniqueLower,
      result.metrics.confirmedPlusAmbiguousUpper, lowerRate, upperRate,
      stability.stability === null ? "INSUFFICIENT_SAMPLE" : "PASS",
-     result.runtimeSessionId, result.cleanupVerifiedAtUtc],
+     result.runtimeSessionId, result.cleanupVerifiedAtUtc, result.reconciliationStatus],
   );
 
   return {
