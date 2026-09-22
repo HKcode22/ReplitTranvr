@@ -70,7 +70,7 @@ describe("Phase 2F no-redeploy workspace ingress binding", () => {
       `healthJson?.route_owner !== "${PHASE2F_WORKSPACE_ROUTE_OWNER_V39}"`,
     );
     expect(verifier).toContain(
-      `exactRouteOwner: "${PHASE2F_WORKSPACE_ROUTE_OWNER_V39}"`,
+      `exactRouteOwner: contractMode === "workspace-health" ? "${PHASE2F_WORKSPACE_ROUTE_OWNER_V39}" : null`,
     );
   });
 
