@@ -19,6 +19,7 @@ PREFLIGHT=""
 PREFLIGHT_SHA=""
 EXPECTED_HEAD=""
 BUDGET_DAY=""
+EXPECTED_ICAO=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -36,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --preflight-sha) PREFLIGHT_SHA="${2:-}"; shift 2 ;;
     --expected-head) EXPECTED_HEAD="${2:-}"; shift 2 ;;
     --probe-budget-day-id) BUDGET_DAY="${2:-}"; shift 2 ;;
+    --expected-icao) EXPECTED_ICAO="${2:-}"; shift 2 ;;
     *) echo "REFUSED:UNKNOWN_ARGUMENT=$1"; exit 2 ;;
   esac
 done
@@ -54,7 +56,8 @@ for pair in \
   "PREFLIGHT:$PREFLIGHT" \
   "PREFLIGHT_SHA:$PREFLIGHT_SHA" \
   "EXPECTED_HEAD:$EXPECTED_HEAD" \
-  "BUDGET_DAY:$BUDGET_DAY"; do
+  "BUDGET_DAY:$BUDGET_DAY" \
+  "EXPECTED_ICAO:$EXPECTED_ICAO"; do
   name="${pair%%:*}"
   value="${pair#*:}"
   if [[ -z "$value" ]]; then
@@ -70,10 +73,17 @@ if [[ ! "$PREPROBE_SHA" =~ ^[a-f0-9]{64}$ ]]; then echo 'REFUSED:PREPROBE_SHA_IN
 if [[ ! "$SMOKE_RUNTIME_SHA" =~ ^[a-f0-9]{64}$ ]]; then echo 'REFUSED:SMOKE_RUNTIME_SHA_INVALID'; exit 2; fi
 if [[ ! "$PREFLIGHT_SHA" =~ ^[a-f0-9]{64}$ ]]; then echo 'REFUSED:PREFLIGHT_SHA_INVALID'; exit 2; fi
 if [[ ! "$EXPECTED_HEAD" =~ ^[a-f0-9]{40}$ ]]; then echo 'REFUSED:EXPECTED_HEAD_INVALID'; exit 2; fi
+if [[ ! "$EXPECTED_ICAO" =~ ^[A-Z0-9]{4}$ ]]; then echo 'REFUSED:EXPECTED_ICAO_INVALID'; exit 2; fi
 
 CURRENT_HEAD="$(git rev-parse HEAD)"
 if [[ "$CURRENT_HEAD" != "$EXPECTED_HEAD" ]]; then
   echo "REFUSED:GIT_HEAD_MISMATCH current=$CURRENT_HEAD expected=$EXPECTED_HEAD"
+  exit 2
+fi
+
+if ! git diff --quiet -- server scripts migrations tests || ! git diff --cached --quiet -- server scripts migrations tests; then
+  echo 'REFUSED:PROTECTED_SOURCE_TREE_DIRTY'
+  git status --short -- server scripts migrations tests
   exit 2
 fi
 
@@ -90,7 +100,7 @@ if [[ "$ACTUAL_RUNTIME_SHA" != "$RUNTIME_SHA" ]]; then echo "REFUSED:RUNTIME_SHA
 if [[ "$ACTUAL_PREPROBE_SHA" != "$PREPROBE_SHA" ]]; then echo "REFUSED:PREPROBE_SHA_MISMATCH actual=$ACTUAL_PREPROBE_SHA"; exit 2; fi
 if [[ "$ACTUAL_PREFLIGHT_SHA" != "$PREFLIGHT_SHA" ]]; then echo "REFUSED:PREFLIGHT_SHA_MISMATCH actual=$ACTUAL_PREFLIGHT_SHA"; exit 2; fi
 
-AUTH="$AUTH" AUTH_SHA="$AUTH_SHA" RUNTIME_SHA="$RUNTIME_SHA" EXPECTED_HEAD="$EXPECTED_HEAD" BUDGET_DAY="$BUDGET_DAY" PREFLIGHT="$PREFLIGHT" \
+AUTH="$AUTH" AUTH_SHA="$AUTH_SHA" RUNTIME_SHA="$RUNTIME_SHA" EXPECTED_HEAD="$EXPECTED_HEAD" BUDGET_DAY="$BUDGET_DAY" EXPECTED_ICAO="$EXPECTED_ICAO" PREFLIGHT="$PREFLIGHT" \
 node <<'NODE'
 const fs = require('fs');
 const receipt = JSON.parse(fs.readFileSync(process.env.PREFLIGHT, 'utf8'));
@@ -102,6 +112,10 @@ if (receipt.auth?.authorization_id !== process.env.AUTH) fail('AUTH_ID');
 if (receipt.auth?.sha256 !== process.env.AUTH_SHA) fail('AUTH_SHA');
 if (receipt.gate2_runtime?.file_sha256 !== process.env.RUNTIME_SHA) fail('RUNTIME_SHA');
 if (receipt.gate2_runtime?.probe_budget_day_id !== process.env.BUDGET_DAY) fail('BUDGET_DAY');
+if (receipt.gate2_runtime?.next_candidate !== process.env.EXPECTED_ICAO) fail('NEXT_CANDIDATE');
+if (receipt.gate2_runtime?.expected_icao !== process.env.EXPECTED_ICAO) fail('EXPECTED_ICAO');
+if (receipt.gate2_runtime?.compact6_validated !== true) fail('COMPACT6_NOT_VALIDATED');
+if (!/^[a-f0-9]{64}$/.test(String(receipt.gate2_runtime?.stage1_amendment_sha256 || ''))) fail('AMENDMENT_SHA');
 if (Array.isArray(receipt.blockers) && receipt.blockers.length !== 0) fail('BLOCKERS');
 const generated = Date.parse(String(receipt.generated_at_utc || ''));
 if (!Number.isFinite(generated)) fail('TIMESTAMP');
@@ -221,7 +235,8 @@ env \
     --callback-base "$BASE" \
     --log "$LOG" \
     --status "$STATUS" \
-    --heartbeat "$HEARTBEAT"
+    --heartbeat "$HEARTBEAT" \
+    --expected-icao "$EXPECTED_ICAO"
 
 if [[ ! -s "$PID_FILE" ]]; then
   echo 'REFUSED:DETACHED_SUPERVISOR_PID_FILE_MISSING'
@@ -250,6 +265,7 @@ cat <<EOF
   "authorization_id": "$AUTH",
   "git_head": "$CURRENT_HEAD",
   "probe_budget_day_id": "$BUDGET_DAY",
+  "expected_icao": "$EXPECTED_ICAO",
   "supervisor_pid": $SUPERVISOR_PID,
   "log_file": "$LOG",
   "status_file": "$STATUS",
