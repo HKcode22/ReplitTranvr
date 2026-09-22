@@ -105,22 +105,6 @@ describe("Phase2G compact-6 amendment", () => {
     ])).toBe(false);
   });
 
-  it("loads the prospective compact6 v2 rule without rewriting the historical v1 freeze", () => {
-    const preprobe = loadFrozenProbeArtifact(PREPROBE_PATH, PREPROBE_SHA);
-    const path = join(process.cwd(), PHASE2G_COMPACT6_RECONCILIATION_V2_ARTIFACT_PATH);
-    const raw = readFileSync(path, "utf8");
-    const loaded = loadPhase2gCompact6AmendmentV39({
-      expectedSha256: sha256(raw),
-      sourcePreprobeFileSha256: PREPROBE_SHA,
-      preprobe: preprobe.artifact,
-      path,
-    });
-    expect(loaded.amendment.schema_version).toBe("v39-phase2g-compact6-amendment-2");
-    expect(loaded.amendment.prospective_reconciliation_policy.max_missing_billed_items).toBe(1);
-    expect(loaded.amendment.prospective_reconciliation_policy.delivery_completeness_floor).toBe(0.99);
-    expect(loaded.amendment.anti_bias.no_retroactive_P2G06_pass).toBe(true);
-  });
-
   it("authorizes exactly the historical P2G06 pattern for one post-fix WSSS validation", () => {
     const evidence = [
       attempt(1, "WSSS", "failed", true, "UNRESOLVED", "supervisor_child_exit_before_runtime_session"),
@@ -155,7 +139,7 @@ describe("Phase2G prospective reconciliation classification", () => {
       internalSendCredits: 219,
       costItemDisagreementCount: 0,
     });
-    expect(PROBE_DELIVERY_COMPLETENESS_FLOOR_V39).toBe(0.99);
+    expect(PROBE_DELIVERY_COMPLETENESS_FLOOR_V39).toBe(1);
     expect(result.status).toBe("DELIVERY_GAP");
     expect(result.deliveryGapCredits).toBe(1);
     expect(result.deliveryCompleteness).toBeCloseTo(219 / 220, 12);
@@ -190,7 +174,7 @@ describe("Phase2G prospective reconciliation classification", () => {
     }).status).toBe("MISMATCH");
   });
 
-  it("hard-fails a gap larger than one billed item", () => {
+  it("keeps any positive external-minus-received gap diagnostic rather than scoreable", () => {
     const result = classifyProbeReconciliationV39({
       ownerKind: "anchor_probe",
       externalCredits: 220,
@@ -198,18 +182,17 @@ describe("Phase2G prospective reconciliation classification", () => {
       costItemDisagreementCount: 0,
     });
     expect(result.deliveryGapCredits).toBe(2);
-    expect(result.status).toBe("MISMATCH");
+    expect(result.status).toBe("DELIVERY_GAP");
   });
 
-  it("hard-fails a one-item gap when delivery completeness is below the frozen floor", () => {
-    const result = classifyProbeReconciliationV39({
+  it("refuses a nonzero reconciliation tolerance", () => {
+    expect(() => classifyProbeReconciliationV39({
       ownerKind: "anchor_probe",
-      externalCredits: 10,
-      internalSendCredits: 9,
+      externalCredits: 220,
+      internalSendCredits: 219,
       costItemDisagreementCount: 0,
-    });
-    expect(result.deliveryCompleteness).toBe(0.9);
-    expect(result.status).toBe("MISMATCH");
+      deliveryCompletenessFloor: 0.99,
+    })).toThrow("PROBE_NONZERO_RECONCILIATION_TOLERANCE_NOT_AUTHORIZED");
   });
 });
 
@@ -223,16 +206,16 @@ describe("Phase2G execution source contract", () => {
     "utf8",
   );
 
-  it("uses authoritative external spend as the Stage1 yield denominator", () => {
+  it("uses authoritative external spend as the Stage1 yield denominator without imputing missing deliveries", () => {
     expect(execution).toContain("const denominator = result.externalCredits;");
-    expect(execution).toContain('result.reconciliationStatus === "DELIVERY_GAP"');
-    expect(execution).toContain("const denominator = result.externalCredits;");
-    expect(execution).toContain("const upperIdentityCount =");
-    expect(execution).toContain("result.metrics.confirmedPlusAmbiguousUpper + deliveryGapCredits");
+    expect(execution).toContain("const upperRate = result.metrics.confirmedPlusAmbiguousUpper / denominator;");
+    expect(execution).not.toContain("const upperIdentityCount =");
+    expect(execution).not.toContain("result.metrics.confirmedPlusAmbiguousUpper + deliveryGapCredits");
   });
 
-  it("allows only evidenced MATCH or bounded DELIVERY_GAP as completed safe-mode reconciliation states", () => {
-    expect(migration).toContain("reconciliation_status IN ('MATCH','DELIVERY_GAP')");
+  it("allows only exact MATCH as a completed safe-mode reconciliation state", () => {
+    expect(migration).toContain("reconciliation_status = 'MATCH'");
+    expect(migration).not.toContain("reconciliation_status IN ('MATCH','DELIVERY_GAP')");
     expect(migration).toContain("clean.adb_probe_reconciliation_evidence");
     expect(migration).toContain("Phase-2G reconciliation evidence is append-only");
   });
@@ -257,15 +240,15 @@ describe("Phase2G callback and cleanup evidence ordering", () => {
     expect(routes).toContain("await recordPrepaidProbeCallbackFailureV39(sessionId).catch(()=>undefined);");
   });
 
-  it("writes reconciliation evidence before mismatch cleanup and keeps bounded DELIVERY_GAP scoreable", () => {
+  it("writes reconciliation evidence before terminal DELIVERY_GAP or mismatch cleanup", () => {
     const evidenceIndex = windowSource.indexOf("await persistProbeReconciliationEvidenceV39({");
-    const terminalIndex = windowSource.indexOf('if (reconciliationStatus === "MISMATCH")');
+    const terminalIndex = windowSource.indexOf('if (reconciliationStatus !== "MATCH")');
     const persistedReasonIndex = windowSource.indexOf("stopReason: reconciliationStopReason", evidenceIndex);
     const deliveryGapReasonIndex = windowSource.indexOf('"external_internal_delivery_gap"');
     expect(evidenceIndex).toBeGreaterThan(-1);
     expect(persistedReasonIndex).toBeGreaterThan(evidenceIndex);
     expect(deliveryGapReasonIndex).toBeGreaterThan(-1);
-    expect(windowSource).toContain('stopReason: reconciliationStatus === "DELIVERY_GAP" ? "bounded_delivery_gap" : null');
+    expect(windowSource).not.toContain('"bounded_delivery_gap"');
     expect(terminalIndex).toBeGreaterThan(persistedReasonIndex);
   });
 
