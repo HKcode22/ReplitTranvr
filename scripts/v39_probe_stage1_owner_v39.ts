@@ -24,6 +24,10 @@ import {
   verifyAuthFile,
 } from "./v39_paid_guard_v39";
 import type { AuthRecord } from "../server/lib/disruption/authRecord_v39";
+import {
+  compact6EffectiveArtifactV39,
+  loadPhase2gCompact6AmendmentV39,
+} from "../server/lib/disruption/phase2Compact6_v39";
 
 const SCOPE = "Phase 2 / Gate 2 Stage 1";
 const AUTH_CLEANUP_BUFFER_MS = 5 * 60_000;
@@ -164,6 +168,23 @@ async function readStage1Evidence(artifacts: LoadedProbeExecutionArtifacts): Pro
 
 const MAX_INFRASTRUCTURE_INVALID_RERUNS_PER_PRIMARY = 1;
 
+export function isP2g06PostfixWsssValidationEligibleV39(
+  attempts: Stage1AttemptEvidence[],
+): boolean {
+  const wsss = attempts.filter((row) => row.icao.toUpperCase() === "WSSS");
+  if (wsss.length !== 2) return false;
+  const first = wsss[0];
+  const second = wsss[1];
+  return (
+    isInfrastructureInvalidStage1AttemptV39(first) &&
+    second.probeId === 4 &&
+    second.status === "failed" &&
+    second.durationCensored === false &&
+    second.reconciliationStatus === "MISMATCH" &&
+    second.stopReason === "external_internal_credit_mismatch"
+  );
+}
+
 export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEvidence): boolean {
   if (attempt.status !== "failed") return false;
   if (attempt.durationCensored !== true) return false;
@@ -287,6 +308,8 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
       referenceIcao: promotion.referenceIcao,
       ambiguityMembershipInvariant: promotion.ambiguityMembershipInvariant,
       providerContentSafeMode: true,
+      stage1AmendmentSha256: artifacts.runtime.stage1AmendmentSha256,
+      compact6: compact6 !== null,
       message: "Stage 1/replacement requirements complete; no provider call made",
     }));
     return 0;
@@ -323,6 +346,8 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     replacement: next.replacement,
     probeId: result.probeId,
     providerContentSafeMode: true,
+    stage1AmendmentSha256: artifacts.runtime.stage1AmendmentSha256,
+    compact6: compact6 !== null,
     durationCensored: result.durationCensored,
     stopReason: result.stopReason,
     message: "One sequential frozen Stage-1 probe completed through isolated App-Storage/UNLOGGED runtime",
