@@ -32,8 +32,8 @@
 ### Final runtime
 - [ ] local branch at exact intended final Git HEAD
 - [ ] protected source tree clean
-- [ ] managed Replit Project restarted once on final HEAD
-- [ ] runtime health PASS and exact HEAD
+- [ ] workspace server started on final HEAD using an explicitly labeled owner mode: preferred `replit-managed-project`; if the Replit Run UI is unavailable, guarded fallback `phase2g-detached-npm-run-dev`
+- [ ] runtime health PASS, exact HEAD, and truthful `runtime_owner_mode` contract
 - [ ] public callback synthetic verification PASS
 - [ ] zero open incidents
 - [ ] zero active probes
@@ -42,6 +42,15 @@
 - [ ] zero active foreign billable subscriptions
 - [ ] provider balance has sufficient headroom
 
+### Workspace-server ownership correction
+
+The final readiness audit found that the health route previously hard-coded `managed_replit_workflow=true`, even when the temporary Tuesday helper had restored the same `npm run dev` command in a detached shell because the Replit UI exposed no Stop/Run control. That wording was semantically inaccurate.
+
+The corrected contract now requires an explicit owner label:
+- `replit-managed-project` — only when the `.replit` Project workflow sets the owner-mode environment variable;
+- `phase2g-detached-npm-run-dev` — guarded fallback when the UI workflow control is unavailable.
+
+An unlabeled/manual server fails the workspace health contract. The fallback does not weaken paid safety: preflight, final launcher, and supervisor watchdog all require the explicit owner contract, exact Git HEAD, exact callback JSON contract, and public callback reachability. The detached fallback is not claimed to have Replit workflow auto-restart semantics; loss of callback still triggers the Stage-1 supervisor's fail-closed callback watchdog and exact-session recovery.
 ### Frozen fresh Tuesday identifiers
 
 The guarded helper now prepares the fresh validation chain with:
