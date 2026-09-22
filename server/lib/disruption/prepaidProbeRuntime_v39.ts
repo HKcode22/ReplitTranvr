@@ -255,6 +255,26 @@ export async function setPrepaidProbeSessionStateV39(sessionId: string, state: P
   if (result.rowCount !== 1) throw new Error("PREPAID_PROBE_SESSION_STATE_UPDATE_FAILED");
 }
 
+export async function recordPrepaidProbeCallbackAttemptV39(sessionId: string): Promise<void> {
+  const id = assertSessionId(sessionId);
+  await pool.query(
+    `UPDATE clean.prepaid_probe_session_runtime
+        SET callback_requests_seen=callback_requests_seen+1
+      WHERE session_id=$1`,
+    [id],
+  );
+}
+
+export async function recordPrepaidProbeCallbackSuccessV39(sessionId: string): Promise<void> {
+  const id = assertSessionId(sessionId);
+  await pool.query(
+    `UPDATE clean.prepaid_probe_session_runtime
+        SET callback_success_2xx=callback_success_2xx+1
+      WHERE session_id=$1`,
+    [id],
+  );
+}
+
 export async function recordPrepaidProbeCallbackFailureV39(sessionId: string): Promise<void> {
   const id = assertSessionId(sessionId);
   await pool.query(
@@ -328,13 +348,6 @@ export async function persistPrepaidProbeWebhookV39(input: {
   if (!["armed", "active", "settling"].includes(state)) throw new Error(`PREPAID_PROBE_SESSION_NOT_ACCEPTING:${state}`);
   if (new Date(session.rows[0].expires_at_utc).getTime() <= receivedAt.getTime()) throw new Error("PREPAID_PROBE_SESSION_EXPIRED");
 
-  await pool.query(
-    `UPDATE clean.prepaid_probe_session_runtime
-        SET callback_requests_seen=callback_requests_seen+1
-      WHERE session_id=$1`,
-    [sessionId],
-  );
-
   const subId = providerSubscriptionId(input.body);
   const boundSub = session.rows[0].provider_subscription_id ? String(session.rows[0].provider_subscription_id) : null;
   if (boundSub && subId && boundSub !== subId) throw new Error("PREPAID_PROBE_PROVIDER_SUBSCRIPTION_MISMATCH");
@@ -351,12 +364,6 @@ export async function persistPrepaidProbeWebhookV39(input: {
   );
   if (prior.rowCount) {
     if (String(prior.rows[0].raw_body_sha256) !== bodySha256) throw new Error("PREPAID_PROBE_DUPLICATE_HASH_CONFLICT");
-    await pool.query(
-      `UPDATE clean.prepaid_probe_session_runtime
-          SET callback_success_2xx=callback_success_2xx+1
-        WHERE session_id=$1`,
-      [sessionId],
-    );
     return { deliveryId, blobRefId: String(prior.rows[0].blob_ref_id), itemCount: Array.isArray(input.body?.flights) ? input.body.flights.length : Array.isArray(input.body) ? input.body.length : 0, duplicate: true };
   }
 
@@ -440,12 +447,6 @@ export async function persistPrepaidProbeWebhookV39(input: {
     } else {
       await client.query(`UPDATE clean.prepaid_probe_session_runtime SET last_delivery_at_utc=$2 WHERE session_id=$1`, [sessionId, receivedAt]);
     }
-    await client.query(
-      `UPDATE clean.prepaid_probe_session_runtime
-          SET callback_success_2xx=callback_success_2xx+1
-        WHERE session_id=$1`,
-      [sessionId],
-    );
     await client.query("COMMIT");
     return { deliveryId, blobRefId: blob.blobRefId, itemCount: flights.length, duplicate: false };
   } catch (error) {
