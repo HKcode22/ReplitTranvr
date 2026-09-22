@@ -40,11 +40,11 @@ async function main(): Promise<void> {
 
   const active = await pool.query(
     `SELECT count(*)::int n FROM clean.adb_anchor_probe
-      WHERE probe_budget_day_id=$1 AND status='probing'`,
+      WHERE probe_budget_day_id=$1 AND status IN ('probing','settling')`,
     [dayId],
   );
   if (Number(active.rows[0]?.n ?? 0) !== 0) {
-    throw new Error("REFUSED_PROBE_BUDGET_DAY_ACTIVE_PROBE");
+    throw new Error("REFUSED_PROBE_BUDGET_DAY_ACTIVE_OR_SETTLING_PROBE");
   }
 
   const failures = await pool.query(
