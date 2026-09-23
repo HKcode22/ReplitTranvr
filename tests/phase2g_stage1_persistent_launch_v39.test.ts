@@ -185,6 +185,10 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(githubWatchdog).toContain("LIVE_CREDIT_LIMIT = 450");
     expect(githubWatchdog).toContain("probe_deadline_plus_cleanup_grace_exceeded");
     expect(githubWatchdog).toContain("external_live_credit_limit_reached");
+    expect(githubWatchdog).toContain("DELIVERY_GAP_CONSECUTIVE_PROVIDER_POLLS_LIMIT = 3");
+    expect(githubWatchdog).toContain("callback_persistence_failure_count");
+    expect(githubWatchdog).toContain("persistent_external_internal_delivery_gap");
+    expect(githubWatchdog).toContain("delivery_gap_provider_polls");
     expect(githubWatchdog).toContain("internal_live_credit_limit_reached");
     expect(githubWatchdog).toContain("v39_phase2g_stage1_recover_after_exit_v39.ts");
     expect(githubWatchdog).not.toContain("createSubscription(");
