@@ -26,6 +26,7 @@ EXPECTED_HEAD=""
 BUDGET_DAY=""
 EXPECTED_ICAO=""
 CALLBACK_BASE=""
+CALLBACK_MODE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,11 +46,12 @@ while [[ $# -gt 0 ]]; do
     --probe-budget-day-id) BUDGET_DAY="${2:-}"; shift 2 ;;
     --expected-icao) EXPECTED_ICAO="${2:-}"; shift 2 ;;
     --callback-base) CALLBACK_BASE="${2:-}"; shift 2 ;;
+    --callback-mode) CALLBACK_MODE="${2:-}"; shift 2 ;;
     *) echo "REFUSED:UNKNOWN_ARGUMENT=$1"; exit 2 ;;
   esac
 done
 
-for pair in   "AUTH:$AUTH"   "AUTH_FILE:$AUTH_FILE"   "AUTH_SHA:$AUTH_SHA"   "RUNTIME_FILE:$RUNTIME_FILE"   "RUNTIME_SHA:$RUNTIME_SHA"   "PREPROBE:$PREPROBE"   "PREPROBE_SHA:$PREPROBE_SHA"   "SMOKE:$SMOKE"   "SMOKE_RUNTIME:$SMOKE_RUNTIME"   "SMOKE_RUNTIME_SHA:$SMOKE_RUNTIME_SHA"   "PREFLIGHT:$PREFLIGHT"   "PREFLIGHT_SHA:$PREFLIGHT_SHA"   "EXPECTED_HEAD:$EXPECTED_HEAD"   "BUDGET_DAY:$BUDGET_DAY"   "EXPECTED_ICAO:$EXPECTED_ICAO"   "CALLBACK_BASE:$CALLBACK_BASE"; do
+for pair in   "AUTH:$AUTH"   "AUTH_FILE:$AUTH_FILE"   "AUTH_SHA:$AUTH_SHA"   "RUNTIME_FILE:$RUNTIME_FILE"   "RUNTIME_SHA:$RUNTIME_SHA"   "PREPROBE:$PREPROBE"   "PREPROBE_SHA:$PREPROBE_SHA"   "SMOKE:$SMOKE"   "SMOKE_RUNTIME:$SMOKE_RUNTIME"   "SMOKE_RUNTIME_SHA:$SMOKE_RUNTIME_SHA"   "PREFLIGHT:$PREFLIGHT"   "PREFLIGHT_SHA:$PREFLIGHT_SHA"   "EXPECTED_HEAD:$EXPECTED_HEAD"   "BUDGET_DAY:$BUDGET_DAY"   "EXPECTED_ICAO:$EXPECTED_ICAO"   "CALLBACK_BASE:$CALLBACK_BASE"   "CALLBACK_MODE:$CALLBACK_MODE"; do
   name="${pair%%:*}"
   value="${pair#*:}"
   [[ -n "$value" ]] || { echo "REFUSED:MISSING_$name"; exit 2; }
@@ -74,7 +76,7 @@ sha_file() { sha256sum "$1" | awk '{print $1}'; }
 [[ "$(sha_file "$PREPROBE")" == "$PREPROBE_SHA" ]] || { echo "REFUSED:PREPROBE_SHA_MISMATCH"; exit 2; }
 [[ "$(sha_file "$PREFLIGHT")" == "$PREFLIGHT_SHA" ]] || { echo "REFUSED:PREFLIGHT_SHA_MISMATCH"; exit 2; }
 
-AUTH="$AUTH" AUTH_SHA="$AUTH_SHA" RUNTIME_SHA="$RUNTIME_SHA" EXPECTED_HEAD="$EXPECTED_HEAD" BUDGET_DAY="$BUDGET_DAY" EXPECTED_ICAO="$EXPECTED_ICAO" PREFLIGHT="$PREFLIGHT" CALLBACK_BASE="$CALLBACK_BASE" node --input-type=module <<'NODE'
+AUTH="$AUTH" AUTH_SHA="$AUTH_SHA" RUNTIME_SHA="$RUNTIME_SHA" EXPECTED_HEAD="$EXPECTED_HEAD" BUDGET_DAY="$BUDGET_DAY" EXPECTED_ICAO="$EXPECTED_ICAO" PREFLIGHT="$PREFLIGHT" CALLBACK_BASE="$CALLBACK_BASE" CALLBACK_MODE="$CALLBACK_MODE" node --input-type=module <<'NODE'
 import fs from "node:fs";
 const r = JSON.parse(fs.readFileSync(process.env.PREFLIGHT, "utf8"));
 const fail = (x) => { console.error("REFUSED:PREFLIGHT_RECEIPT_" + x); process.exit(2); };
@@ -87,6 +89,7 @@ if (r.gate2_runtime?.file_sha256 !== process.env.RUNTIME_SHA) fail("RUNTIME_SHA"
 if (r.gate2_runtime?.probe_budget_day_id !== process.env.BUDGET_DAY) fail("BUDGET");
 if (r.gate2_runtime?.expected_icao !== process.env.EXPECTED_ICAO) fail("ICAO");
 if (r.owner_executor !== "github-actions") fail("OWNER_EXECUTOR");
+if (r.callback_mode !== process.env.CALLBACK_MODE) fail("CALLBACK_MODE");
 if (r.callback?.origin !== process.env.CALLBACK_BASE) fail("CALLBACK_BASE");
 if (r.callback?.reachable !== true || r.callback?.exact_contract !== true) fail("CALLBACK");
 if (Array.isArray(r.blockers) && r.blockers.length !== 0) fail("BLOCKERS");
@@ -104,7 +107,18 @@ done
 
 BASE="${CALLBACK_BASE%/}"
 [[ "$BASE" =~ ^https://[^/]+$ ]] || { echo "REFUSED:CALLBACK_BASE_INVALID"; exit 2; }
-[[ "${BASE#https://}" != *.replit.dev ]] || { echo "REFUSED:REPLIT_DEV_CALLBACK_NOT_ALLOWED"; exit 2; }
+case "$CALLBACK_MODE" in
+  published)
+    [[ "${BASE#https://}" != *.replit.dev ]] || { echo "REFUSED:REPLIT_DEV_REQUIRES_EXPLICIT_CONTINGENCY"; exit 2; }
+    ;;
+  same-app-development-contingency)
+    [[ "${BASE#https://}" == *.replit.dev ]] || { echo "REFUSED:DEV_CONTINGENCY_REQUIRES_REPLIT_DEV"; exit 2; }
+    ;;
+  *)
+    echo "REFUSED:CALLBACK_MODE_INVALID"
+    exit 2
+    ;;
+esac
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SAFE_AUTH="${AUTH//[^A-Za-z0-9_-]/_}"
@@ -116,6 +130,7 @@ echo "GITHUB_ACTIONS_OWNER=STARTING"
 echo "GITHUB_RUN_ID=${GITHUB_RUN_ID:-unknown}"
 echo "EXPECTED_HEAD=$EXPECTED_HEAD"
 echo "CALLBACK_BASE=$BASE"
+echo "CALLBACK_MODE=$CALLBACK_MODE"
 echo "PROVIDER_MUTATION=AUTHORIZED_ONLY_BY_EXISTING_AUTH"
 
 export ADB_PREPROBE_ARTIFACT_PATH="$PREPROBE"
@@ -136,7 +151,7 @@ TAIL_PID=$!
 trap 'kill "$TAIL_PID" 2>/dev/null || true' EXIT
 
 set +e
-node --import tsx scripts/v39_phase2g_stage1_logged_supervisor_v39.ts   --auth "$AUTH"   --auth-file "$AUTH_FILE"   --auth-sha "$AUTH_SHA"   --runtime-sha "$RUNTIME_SHA"   --probe-budget-day-id "$BUDGET_DAY"   --expected-head "$EXPECTED_HEAD"   --callback-base "$BASE"   --log "$LOG"   --status "$STATUS"   --heartbeat "$HEARTBEAT"   --expected-icao "$EXPECTED_ICAO"   --owner-executor github-actions
+node --import tsx scripts/v39_phase2g_stage1_logged_supervisor_v39.ts   --auth "$AUTH"   --auth-file "$AUTH_FILE"   --auth-sha "$AUTH_SHA"   --runtime-sha "$RUNTIME_SHA"   --probe-budget-day-id "$BUDGET_DAY"   --expected-head "$EXPECTED_HEAD"   --callback-base "$BASE"   --callback-mode "$CALLBACK_MODE"   --log "$LOG"   --status "$STATUS"   --heartbeat "$HEARTBEAT"   --expected-icao "$EXPECTED_ICAO"   --owner-executor github-actions
 RC=$?
 set -e
 kill "$TAIL_PID" 2>/dev/null || true
