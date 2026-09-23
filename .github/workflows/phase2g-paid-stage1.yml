@@ -145,6 +145,36 @@ jobs:
             fi
           done
 
+      - name: Verify GitHub/Replit runtime DB binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHALLENGE="phase2g-${GITHUB_RUN_ID}-${{ inputs.expected_head }}"
+          PROOF="$(CHALLENGE="$CHALLENGE" node --input-type=module <<'NODE'
+          import { createHmac } from "node:crypto";
+          const key = String(process.env.V39_DATABASE_RUNTIME_URL ?? "");
+          const challenge = String(process.env.CHALLENGE ?? "");
+          if (!key || !challenge) process.exit(2);
+          process.stdout.write(createHmac("sha256", key).update(`phase2g-db-binding:${challenge}`).digest("hex"));
+          NODE
+          )"
+          RESPONSE="$(curl --silent --show-error --fail-with-body --max-time 15             -X POST             -H "x-v39-phase2g-db-challenge: ${CHALLENGE}"             -H "x-v39-phase2g-db-proof: ${PROOF}"             "${{ inputs.callback_base }}/__v39/phase2g/runtime-db-binding")"
+          node --input-type=module - "$RESPONSE" <<'NODE'
+          const response = JSON.parse(process.argv[2]);
+          if (
+            response?.schema !== "v39.phase2g-runtime-db-binding.v1" ||
+            response?.status !== "PASS" ||
+            response?.provider_call !== false ||
+            response?.provider_mutation !== false ||
+            response?.database_mutation !== false ||
+            Number(response?.alert_credits_spent) !== 0
+          ) {
+            console.error("GitHub/Replit runtime DB binding check failed");
+            process.exit(2);
+          }
+          console.log("GITHUB_REPLIT_RUNTIME_DB_BINDING=PASS");
+          NODE
+
       - name: Verify GitHub/Replit webhook-secret binding
         shell: bash
         run: |
