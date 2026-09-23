@@ -5,6 +5,7 @@ import {
   isP2g07Provider502RecoveryEligibleV39,
   isP2g08Balance502RecoveryEligibleV39,
   isP2g09HostResetRecoveryEligibleV39,
+  isP2g10SecretMismatchRecoveryEligibleV39,
 } from "../scripts/v39_probe_stage1_owner_v39";
 
 const shortlist = [
@@ -143,6 +144,30 @@ describe("Phase2G bounded infrastructure-invalid Stage1 rerun policy", () => {
       attempt(8, "WSSS", "failed", "supervisor_child_exit_recovered", true, "UNRESOLVED"),
     ];
     expect(isP2g09HostResetRecoveryEligibleV39(afterSixthWsss)).toBe(false);
+  });
+
+  it("permits only the exact P2G10 GitHub/Replit secret-mismatch recovery shape", () => {
+    const attempts = [
+      attempt(1, "WSSS", "failed", "supervisor_child_exit_before_runtime_session", true, "UNRESOLVED"),
+      attempt(2, "OMAA", "completed", null, false, "MATCH"),
+      attempt(3, "MMUN", "failed", "supervisor_child_exit_after_runtime_reset_recovered", true, "UNRESOLVED"),
+      attempt(4, "WSSS", "failed", "external_internal_credit_mismatch", false, "MISMATCH"),
+      attempt(5, "WSSS", "failed", "subscription_delete_failed", true, "UNRESOLVED"),
+      attempt(6, "WSSS", "failed", "balance_read_failed_after_retries", true, "MATCH"),
+      attempt(7, "WSSS", "failed", "supervisor_child_exit_recovered", true, "UNRESOLVED"),
+      attempt(8, "WSSS", "failed", "supervisor_child_exit_recovered", true, "UNRESOLVED"),
+    ];
+    expect(isP2g10SecretMismatchRecoveryEligibleV39(attempts)).toBe(true);
+
+    const altered = attempts.map((row) => ({ ...row }));
+    altered[7].reconciliationStatus = "MATCH";
+    expect(isP2g10SecretMismatchRecoveryEligibleV39(altered)).toBe(false);
+
+    const afterSeventhWsss = [
+      ...attempts,
+      attempt(9, "WSSS", "failed", "supervisor_child_exit_recovered", true, "UNRESOLVED"),
+    ];
+    expect(isP2g10SecretMismatchRecoveryEligibleV39(afterSeventhWsss)).toBe(false);
   });
 
   it("does not rerun an ordinary scientific/provider failure as infrastructure-invalid", () => {
