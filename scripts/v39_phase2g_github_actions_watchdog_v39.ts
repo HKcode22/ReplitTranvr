@@ -89,20 +89,24 @@ async function main(): Promise<void> {
   const preflight = required("--preflight");
   const preflightSha = required("--preflight-sha").toLowerCase();
   const callbackBase = required("--callback-base").replace(/\/+$/, "");
+  const callbackMode = required("--callback-mode").trim().toLowerCase();
 
   if (gitHead() !== expectedHead || String(process.env.GITHUB_SHA ?? "").toLowerCase() !== expectedHead) {
     throw new Error("WATCHDOG_REFUSED:GIT_HEAD_MISMATCH");
   }
   if (sha256File(authFile) !== authSha) throw new Error("WATCHDOG_REFUSED:AUTH_SHA_MISMATCH");
   if (sha256File(preflight) !== preflightSha) throw new Error("WATCHDOG_REFUSED:PREFLIGHT_SHA_MISMATCH");
-  if (!/^https:\/\/[^/]+$/i.test(callbackBase) || /\.replit\.dev$/i.test(new URL(callbackBase).hostname)) {
-    throw new Error("WATCHDOG_REFUSED:CALLBACK_BASE_INVALID");
-  }
+  if (!/^https:\/\/[^/]+$/i.test(callbackBase)) throw new Error("WATCHDOG_REFUSED:CALLBACK_BASE_INVALID");
+  const isReplitDev = new URL(callbackBase).hostname.toLowerCase().endsWith(".replit.dev");
+  if (!["published", "same-app-development-contingency"].includes(callbackMode)) throw new Error("WATCHDOG_REFUSED:CALLBACK_MODE_INVALID");
+  if (isReplitDev && callbackMode !== "same-app-development-contingency") throw new Error("WATCHDOG_REFUSED:REPLIT_DEV_REQUIRES_EXPLICIT_CONTINGENCY");
+  if (!isReplitDev && callbackMode === "same-app-development-contingency") throw new Error("WATCHDOG_REFUSED:DEV_CONTINGENCY_REQUIRES_REPLIT_DEV");
 
   const receipt = JSON.parse(fs.readFileSync(preflight, "utf8"));
   if (receipt?.schema !== "v39.phase2g-stage1-paid-preflight.v1" ||
       receipt?.status !== "PASS_READY_FOR_PAID_STAGE1" ||
       receipt?.owner_executor !== "github-actions" ||
+      receipt?.callback_mode !== callbackMode ||
       receipt?.callback?.origin !== callbackBase ||
       receipt?.gate2_runtime?.probe_budget_day_id !== budgetDay) {
     throw new Error("WATCHDOG_REFUSED:PREFLIGHT_BINDING_MISMATCH");
