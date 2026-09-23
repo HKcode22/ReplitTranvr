@@ -1,0 +1,56 @@
+import { readFileSync } from "fs";
+import { join } from "path";
+import { describe, expect, it } from "vitest";
+
+const root = process.cwd();
+const preflight = readFileSync(join(root, "scripts", "v39_phase2g_stage1_paid_preflight_v39.ts"), "utf8");
+const verifier = readFileSync(join(root, "scripts", "v39_phase2g_verify_live_callback_v39.ts"), "utf8");
+const owner = readFileSync(join(root, "scripts", "v39_phase2g_github_actions_owner_v39.sh"), "utf8");
+const supervisor = readFileSync(join(root, "scripts", "v39_phase2g_stage1_logged_supervisor_v39.ts"), "utf8");
+const watchdog = readFileSync(join(root, "scripts", "v39_phase2g_github_actions_watchdog_v39.ts"), "utf8");
+const localLauncher = readFileSync(join(root, "scripts", "v39_phase2g_stage1_launch_logged_v39.sh"), "utf8");
+const resolver = readFileSync(join(root, "scripts", "v39_phase2g_resolve_incident24_v39.ts"), "utf8");
+const workflow = readFileSync(join(root, ".github", "workflows", "phase2g-paid-stage1.yml"), "utf8");
+const freeze = JSON.parse(readFileSync(join(root, "artifacts", "phase2g-same-app-dev-callback-contingency-freeze-20260923.json"), "utf8"));
+
+describe("Phase-2G same-app development callback contingency", () => {
+  it("freezes infrastructure only and preserves the scientific protocol", () => {
+    expect(freeze.schema).toBe("v39.phase2g-same-app-dev-callback-contingency.v1");
+    expect(freeze.status).toBe("FROZEN");
+    expect(freeze.authorized).toBe(true);
+    expect(freeze.owner_executor).toBe("github-actions");
+    expect(freeze.independent_watchdog_required).toBe(true);
+    expect(freeze.scientific_protocol_unchanged).toBe(true);
+    expect(freeze.stage1_target_minutes).toBe(120);
+    expect(freeze.exact_match_required).toBe(true);
+    expect(freeze.no_automatic_retry).toBe(true);
+  });
+
+  it("allows replit.dev only under explicit contingency and exact runtime health", () => {
+    expect(preflight).toContain("INTERACTIVE_REPLIT_DEV_CALLBACK_REQUIRES_EXPLICIT_CONTINGENCY");
+    expect(preflight).toContain("development_callback_runtime_health_not_exact");
+    expect(verifier).toContain("REFUSED:DEV_RUNTIME_HEALTH_NOT_EXACT");
+    expect(verifier).toContain("workspace_git_head");
+  });
+
+  it("keeps paid ownership on GitHub and local launcher disabled", () => {
+    expect(owner).toContain("GITHUB_ACTIONS_RUNTIME_REQUIRED");
+    expect(supervisor).toContain("OWNER_EXECUTOR_MUST_BE_GITHUB_ACTIONS");
+    expect(watchdog).toContain("GITHUB_ACTIONS_RUNTIME_REQUIRED");
+    expect(localLauncher).toContain("REFUSED:DEPRECATED_LOCAL_STAGE1_LAUNCH_USE_GITHUB_ACTIONS");
+    expect(workflow).toContain("same-app-development-contingency");
+  });
+
+  it("does not weaken exact reconciliation or create an automatic retry", () => {
+    expect(freeze.exact_match_required).toBe(true);
+    expect(freeze.provider_send_received_gap_acceptance).toBe(false);
+    expect(freeze.no_automatic_retry).toBe(true);
+  });
+
+  it("resolves only the known zero-credit incident 24 after callback proof", () => {
+    expect(verifier).toContain('Number(incidents.rows[0]?.id) === 24');
+    expect(resolver).toContain("PASS_READY_TO_RESOLVE_INCIDENT24");
+    expect(resolver).toContain("PHASE2G_CONFIRM_INCIDENT24_RESOLUTION");
+    expect(resolver).toContain("WHERE id=24 AND resolved=false");
+  });
+});
