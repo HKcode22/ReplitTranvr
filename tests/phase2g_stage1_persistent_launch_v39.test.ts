@@ -100,7 +100,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   it("separates the existing published callback route from the GitHub Actions paid owner", () => {
     expect(preflight).toContain('ownerExecutor !== "github-actions"');
     expect(preflight).toContain('owner_executor: ownerExecutor');
-    expect(preflight).toContain('contract_mode: "legacy-live-prepaid-route"');
+    expect(preflight).toContain('const callbackContractMode = isDevContingency ? "same-app-development-contingency" : "legacy-live-prepaid-route"');
     expect(preflight).toContain("callback_verification_contract_invalid_or_stale");
     expect(preflight).toContain("prepaidRouteHealth");
     expect(supervisor).toContain('ownerExecutor !== "github-actions"');
