@@ -1,0 +1,173 @@
+{
+  "schema": "v39.phase2g-historical-attempt-register.v1",
+  "generated_for": "Thursday P2G11 preparation",
+  "canonical_branch": "main",
+  "attempts": [
+    {
+      "key": "pre-gate-20260819",
+      "airport": "WSSS",
+      "kind": "predecessor_canary_and_premature_probe",
+      "status": "invalid_pre_gate",
+      "scientific_valid": false,
+      "root_cause": "is_randomized NULL persistence defect plus launch before canary PASS",
+      "control_refs": [
+        "server/lib/disruption/flightNotificationExtractor_v3.ts",
+        "migrations/0022_collection_v39_design_probability.sql"
+      ]
+    },
+    {
+      "key": "probe1",
+      "probe_id": 1,
+      "auth": "AUTH-20260916-P2G02",
+      "budget": "P2G-S1-20260915-01",
+      "airport": "WSSS",
+      "status": "failed",
+      "duration_censored": true,
+      "reconciliation": "UNRESOLVED",
+      "scientific_valid": false,
+      "root_cause_class": "runtime_state_loss",
+      "report": "SEPmd/phase2g/incidents/2026-09-16_PROBE1_WSSS_RUNTIME_STATE_LOSS.md"
+    },
+    {
+      "key": "probe2",
+      "probe_id": 2,
+      "auth": "AUTH-20260916-P2G03",
+      "budget": "P2G-S1-20260916-02",
+      "airport": "OMAA",
+      "status": "completed",
+      "duration_censored": false,
+      "reconciliation": "MATCH",
+      "scientific_valid": true,
+      "report": "SEPmd/phase2g/reports/2026-09-16_P2G02_OMAA_SUCCESS.md"
+    },
+    {
+      "key": "probe3",
+      "probe_id": 3,
+      "auth": "AUTH-20260917-P2G04",
+      "budget": "P2G-S1-20260917-03",
+      "airport": "MMUN",
+      "status": "failed",
+      "duration_censored": true,
+      "reconciliation": "UNRESOLVED",
+      "scientific_valid": false,
+      "root_cause_class": "runtime_infrastructure_interruption",
+      "report": "SEPmd/phase2g/incidents/2026-09-17_PROBE3_MMUN_RUNTIME_INTERRUPTION.md"
+    },
+    {
+      "key": "P2G05",
+      "auth": "AUTH-20260918-P2G05",
+      "prospective_budget": "P2G-S1-20260918-04",
+      "airport": "LKPR",
+      "status": "NOT_RUN",
+      "scientific_valid": null,
+      "provider_subscription_created": false,
+      "alert_credits_spent": 0,
+      "report": "SEPmd/phase2g/reports/2026-09-18_P2G05_LKPR_PRELAUNCH_REFUSAL.md"
+    },
+    {
+      "key": "P2G06",
+      "probe_id": 4,
+      "budget": "P2G-S1-20260921-05",
+      "airport": "WSSS",
+      "status": "failed",
+      "duration_censored": false,
+      "reconciliation": "MISMATCH",
+      "scientific_valid": false,
+      "external_credits": 220,
+      "internal_credits": 219,
+      "report": "SEPmd/phase2g/reports/2026-09-21_P2G06_WSSS_RECONSTRUCTION.md"
+    },
+    {
+      "key": "P2G07",
+      "probe_id": 5,
+      "budget": "P2G-S1-20260922-06",
+      "airport": "WSSS",
+      "status": "failed",
+      "duration_censored": true,
+      "reconciliation": "UNRESOLVED",
+      "scientific_valid": false,
+      "root_cause_class": "provider_control_plane_502",
+      "report": "SEPmd/phase2g/amendments/2026-09-22_P2G07_PROVIDER502_RECOVERY_AMENDMENT.md"
+    },
+    {
+      "key": "P2G08",
+      "probe_id": 6,
+      "budget": "P2G-S1-20260922-07",
+      "airport": "WSSS",
+      "status": "failed",
+      "duration_censored": true,
+      "reconciliation": "MATCH",
+      "scientific_valid": false,
+      "root_cause_class": "balance_502_plus_false_completion_path",
+      "report": "SEPmd/phase2g/amendments/2026-09-22_P2G08_BALANCE502_RECOVERY_AMENDMENT.md"
+    },
+    {
+      "key": "P2G09",
+      "probe_id": 7,
+      "budget": "P2G-S1-20260922-08",
+      "airport": "WSSS",
+      "status": "failed",
+      "duration_censored": true,
+      "reconciliation": "UNRESOLVED",
+      "scientific_valid": false,
+      "root_cause_class": "replit_workspace_process_reset",
+      "report": "SEPmd/phase2g/incidents/2026-09-22_P2G09_REPLIT_WORKSPACE_RESET.md"
+    },
+    {
+      "key": "P2G10",
+      "probe_id": 8,
+      "budget": "P2G-S1-20260923-09",
+      "airport": "WSSS",
+      "status": "failed",
+      "duration_censored": true,
+      "reconciliation": "UNRESOLVED",
+      "scientific_valid": false,
+      "root_cause_class": "github_replit_webhook_secret_mismatch",
+      "post_recovery_balance": 2093,
+      "active_billable_after_recovery": 0,
+      "report": "SEPmd/phase2g/incidents/2026-09-23_P2G10_GITHUB_REPLIT_WEBHOOK_SECRET_MISMATCH.md"
+    }
+  ],
+  "nonpaid_incidents": [
+    {
+      "key": "incident24",
+      "class": "stale_published_callback",
+      "provider_calls": 0,
+      "alert_credits_spent": 0,
+      "report": "SEPmd/phase2g/incidents/2026-09-23_INCIDENT24_STALE_PUBLISHED_CALLBACK.md"
+    },
+    {
+      "key": "incident25",
+      "class": "prepaid_item_sql_placeholder",
+      "provider_calls": 0,
+      "alert_credits_spent": 0,
+      "report": "SEPmd/phase2g/incidents/2026-09-23_INCIDENT25_PREPAID_ITEM_SQL_PLACEHOLDER.md"
+    }
+  ],
+  "compact6_candidates": [
+    {
+      "icao": "WSSS",
+      "state": "attempted_multiple_times"
+    },
+    {
+      "icao": "OMAA",
+      "state": "valid_completed_match"
+    },
+    {
+      "icao": "MMUN",
+      "state": "infrastructure_invalid_attempt"
+    },
+    {
+      "icao": "LKPR",
+      "state": "not_run_prelaunch_refusal_only"
+    },
+    {
+      "icao": "SKBO",
+      "state": "not_yet_run"
+    },
+    {
+      "icao": "YSSY",
+      "state": "not_yet_run"
+    }
+  ]
+}

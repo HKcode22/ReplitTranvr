@@ -21,6 +21,10 @@
 ### Historical failure register and regression matrix
 - `SEPmd/phase2g/FAILURE_REGISTER_AND_PREVENTION_MATRIX.md` — canonical cross-attempt failure history, root-cause certainty, corrective controls, residual risks, and regression coverage.
 - `tests/phase2g_historical_failure_regressions_v39.test.ts` — static guard that keeps the historical failure controls wired into the current source.
+- `artifacts/phase2g-historical-attempt-register-20260923.json` — machine-readable attempt inventory.
+- `SEPmd/phase2g/incidents/2026-09-16_PROBE1_WSSS_RUNTIME_STATE_LOSS.md` — first paid WSSS runtime-state-loss incident.
+- `SEPmd/phase2g/incidents/2026-09-17_PROBE3_MMUN_RUNTIME_INTERRUPTION.md` — MMUN infrastructure interruption.
+- `SEPmd/phase2g/reports/2026-09-18_P2G05_LKPR_PRELAUNCH_REFUSAL.md` — LKPR was never launched and must not be counted as a scientific failure.
 
 ### P2G06 WSSS failure/forensics
 - `SEPmd/V3.9_PHASE2G_P2G06_PLAIN_ENGLISH_FAILURE_REPORT_AND_COMPACT6_DECISION_20260921.md`
