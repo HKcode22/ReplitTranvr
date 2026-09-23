@@ -80,6 +80,22 @@ That missing cross-environment binding check allowed the paid owner to create a 
 7. Re-run the fresh callback/runtime verification after syncing the exact Thursday source HEAD.
 8. A published deployment is not required while the frozen same-app development callback contingency is explicitly selected and all of its exact runtime checks pass.
 
+## Post-incident controls added for Thursday
+
+The recovery path now closes the specific gaps exposed by P2G10:
+
+- a zero-provider, zero-credit GitHub-to-Replit webhook-secret binding check runs before paid admission;
+- the live Replit runtime and GitHub owner are also bound to the exact runtime database before paid ownership;
+- the paid gate repeats the cross-environment secret binding before its provider-read-only preflight;
+- the paid owner repeats runtime-health, database-binding, and webhook-secret checks immediately before provider creation;
+- webhook secrets are URL-encoded when constructing the provider callback path;
+- the independent watchdog triggers exact recovery if callback persistence fails, or if provider spend is positive while zero callback requests are observed across the frozen consecutive provider polls;
+- a temporary external-vs-internal credit gap after callbacks have begun is not treated as an early infrastructure failure; it remains subject to the frozen terminal MATCH/DELIVERY_GAP reconciliation rule;
+- the P2G10 failed row is preserved and excluded, and Thursday uses a fresh runtime, budget day, callback proof, and AUTH;
+- the same-app `.replit.dev` contingency remains valid without a republish, provided exact runtime/callback/database/secret checks pass.
+
+These controls are intended to make a one-character cross-environment secret typo fail before any billable provider subscription can be created.
+
 ## Scientific disposition
 
 P2G10 is **not** evidence of zero WSSS traffic or zero AeroDataBox notifications. Provider-account credits decreased while
