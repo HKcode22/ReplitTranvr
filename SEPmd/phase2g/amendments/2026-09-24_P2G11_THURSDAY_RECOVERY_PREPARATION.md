@@ -44,16 +44,16 @@ Before any Thursday authorization:
    - Alert credits: zero.
    - Do not commit the generated callback receipt after generation.
 
-4. **Cross-environment webhook-secret proof**
+4. **Cross-environment callback configuration proof**
    - Run `Phase2G Zero-Credit Callback Binding` from GitHub against the exact live Replit origin.
-   - The workflow must use the GitHub `phase2g-paid` webhook secret and receive PASS from the live Replit secret-binding endpoint.
-   - This check must consume zero provider calls, zero provider mutations, and zero Alert credits.
-   - A mismatch blocks the run before provider creation.
+   - The workflow must prove both: (a) the GitHub `phase2g-paid` webhook secret is accepted by the live Replit receiver, and (b) GitHub and Replit hold the exact same `V39_DATABASE_RUNTIME_URL`, using a challenge/HMAC proof that never prints the database URL.
+   - This check must consume zero provider calls, zero provider mutations, zero database mutations, and zero Alert credits.
+   - Either mismatch blocks the run before provider creation.
 
 5. **Paid gate recheck**
-   - The paid GitHub gate repeats the GitHub/Replit webhook-secret binding check before its provider-read-only preflight.
-   - The GitHub paid owner repeats the same binding check immediately before starting the provider-owning supervisor.
-   - Failure at either check is terminal for that dispatch and must not create a provider subscription.
+   - The paid GitHub gate repeats both the GitHub/Replit runtime-DB binding check and webhook-secret binding check before its provider-read-only preflight.
+   - The GitHub paid owner repeats both bindings immediately before starting the provider-owning supervisor.
+   - Failure at any binding check is terminal for that dispatch and must not create a provider subscription.
 
 6. **Live fail-fast protection**
    - Any callback persistence failure triggers exact recovery.
@@ -61,7 +61,10 @@ Before any Thursday authorization:
    - The independent watchdog remains incapable of creating a provider subscription.
    - The existing hard credit ceiling remains unchanged.
 
-7. **Fresh paid evidence**
+7. **URL-safe callback construction**
+   - Provider callback construction must URL-encode the webhook-secret path segment before subscription creation so a fresh high-entropy secret cannot break the callback URL through reserved URL characters.
+
+8. **Fresh paid evidence**
    - Use a new Thursday runtime artifact, new budget-day ID, and new AUTH artifact.
    - Do not reuse P2G10 runtime, budget day, callback receipt, preflight receipt, or AUTH.
    - The new AUTH must explicitly permit exactly one WSSS recovery attempt and preserve the no-automatic-retry rule.
