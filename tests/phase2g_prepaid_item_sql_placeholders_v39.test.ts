@@ -9,12 +9,10 @@ const source = readFileSync(
 
 describe("Phase-2G prepaid item SQL placeholders", () => {
   it("parameterizes every prepaid item column instead of emitting integer literals", () => {
-    expect(source).toContain(
-      'tuples.push(`($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8},$${offset + 9})`);',
-    );
+    const parameterized = 'tuples.push(`($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8},$${offset + 9})`);';
+    const integerLiterals = 'tuples.push(`(${offset + 1},${offset + 2},${offset + 3},${offset + 4},${offset + 5},${offset + 6},${offset + 7},${offset + 8},${offset + 9})`);';
 
-    expect(source).not.toContain(
-      'tuples.push(`(${offset + 1},${offset + 2},${offset + 3},${offset + 4},${offset + 5},${offset + 6},${offset + 7},${offset + 8},${offset + 9})`);',
-    );
+    expect(source).toContain(parameterized);
+    expect(source).not.toContain(integerLiterals);
   });
 });
