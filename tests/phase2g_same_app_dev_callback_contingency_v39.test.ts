@@ -55,5 +55,8 @@ describe("Phase-2G same-app development callback contingency", () => {
     expect(resolver).toContain("PASS_READY_TO_RESOLVE_SYNTHETIC_INCIDENTS");
     expect(resolver).toContain("PHASE2G_CONFIRM_SYNTHETIC_INCIDENT_RESOLUTION");
     expect(resolver).toContain("WHERE id IN (24,25) AND resolved=false");
+    expect(resolver).toContain("RETURNING id,resolved,resolved_at_utc");
+    expect(resolver).not.toContain("RETURNING id,resolved,resolved_at_utc\n        ORDER BY id");
+    expect(resolver).toContain("updatedRows = [...updated.rows].sort");
   });
 });
