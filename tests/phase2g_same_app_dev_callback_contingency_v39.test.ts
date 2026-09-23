@@ -39,9 +39,13 @@ describe("Phase-2G same-app development callback contingency", () => {
     expect(watchdog).toContain("GITHUB_ACTIONS_RUNTIME_REQUIRED");
     expect(localLauncher).toContain("REFUSED:DEPRECATED_LOCAL_STAGE1_LAUNCH_USE_GITHUB_ACTIONS");
     expect(workflow).toContain("same-app-development-contingency");
-    const callbackModeUseCount = workflow.split('--callback-mode "${{ inputs.callback_mode }}"').length - 1;
-    expect(callbackModeUseCount).toBe(3);
-    expect(workflow).toContain('--callback-base "${{ inputs.callback_base }}"             --callback-mode "${{ inputs.callback_mode }}"');
+    const gateBlock = workflow.slice(workflow.indexOf("  gate:"), workflow.indexOf("  owner:"));
+    const ownerBlock = workflow.slice(workflow.indexOf("  owner:"), workflow.indexOf("  safety-watchdog:"));
+    const watchdogBlock = workflow.slice(workflow.indexOf("  safety-watchdog:"));
+    expect(gateBlock.split('--callback-mode "${{ inputs.callback_mode }}"').length - 1).toBe(1);
+    expect(ownerBlock).toContain('--callback-base "${{ inputs.callback_base }}"             --callback-mode "${{ inputs.callback_mode }}"');
+    expect(ownerBlock.split('--callback-mode "${{ inputs.callback_mode }}"').length - 1).toBe(1);
+    expect(watchdogBlock.split('--callback-mode "${{ inputs.callback_mode }}"').length - 1).toBe(1);
   });
 
   it("does not weaken exact reconciliation or create an automatic retry", () => {
