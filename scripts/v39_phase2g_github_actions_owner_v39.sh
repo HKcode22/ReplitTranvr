@@ -133,6 +133,29 @@ echo "CALLBACK_BASE=$BASE"
 echo "CALLBACK_MODE=$CALLBACK_MODE"
 echo "PROVIDER_MUTATION=AUTHORIZED_ONLY_BY_EXISTING_AUTH"
 
+echo "GITHUB_REPLIT_WEBHOOK_SECRET_BINDING_CHECK=START"
+SECRET_BINDING_RESPONSE="$(curl --silent --show-error --fail-with-body --max-time 15 \
+  -X POST \
+  -H "x-v39-phase2g-webhook-secret: ${AERODATABOX_WEBHOOK_SECRET}" \
+  "${BASE}/__v39/phase2g/webhook-secret-match")" || {
+  echo "REFUSED:GITHUB_REPLIT_WEBHOOK_SECRET_BINDING_HTTP"
+  exit 2
+}
+SECRET_BINDING_RESPONSE="$SECRET_BINDING_RESPONSE" node --input-type=module <<'NODE'
+const response = JSON.parse(process.env.SECRET_BINDING_RESPONSE ?? "{}");
+if (
+  response?.schema !== "v39.phase2g-webhook-secret-match.v1" ||
+  response?.status !== "PASS" ||
+  response?.provider_call !== false ||
+  response?.provider_mutation !== false ||
+  Number(response?.alert_credits_spent) !== 0
+) {
+  console.error("REFUSED:GITHUB_REPLIT_WEBHOOK_SECRET_BINDING_CONTRACT");
+  process.exit(2);
+}
+NODE
+echo "GITHUB_REPLIT_WEBHOOK_SECRET_BINDING=PASS"
+
 export ADB_PREPROBE_ARTIFACT_PATH="$PREPROBE"
 export ADB_PREPROBE_ARTIFACT_SHA256="$PREPROBE_SHA"
 export ADB_PROBE_RUNTIME_ARTIFACT_PATH="$RUNTIME_FILE"
