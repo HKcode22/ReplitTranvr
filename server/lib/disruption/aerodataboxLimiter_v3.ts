@@ -492,7 +492,7 @@ export function defaultWebhookUrl(): string {
   } catch {
     // keep base as-is if unparseable
   }
-  const path = `/api/v1/webhooks/aerodatabox${secret ? `/${secret}` : ""}`;
+  const path = `/api/v1/webhooks/aerodatabox${secret ? `/${encodeURIComponent(secret)}` : ""}`;
   return `${base}${path}`;
 }
 
