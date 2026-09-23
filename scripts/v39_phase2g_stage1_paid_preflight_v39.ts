@@ -18,6 +18,7 @@ import {
   isP2g07Provider502RecoveryEligibleV39,
   isP2g08Balance502RecoveryEligibleV39,
   isP2g09HostResetRecoveryEligibleV39,
+  isP2g10SecretMismatchRecoveryEligibleV39,
   type Stage1AttemptEvidence,
 } from "./v39_probe_stage1_owner_v39";
 
@@ -297,10 +298,13 @@ async function main(): Promise<void> {
       recordedAtUtc: new Date(row.recorded_at).toISOString(),
     }));
 
-    nextCandidate = compact6.amendment.p2g09_hostreset_recovery_rerun?.authorized === true &&
-        isP2g09HostResetRecoveryEligibleV39(evidence)
+    nextCandidate = compact6.amendment.p2g10_secret_mismatch_recovery_rerun?.authorized === true &&
+        isP2g10SecretMismatchRecoveryEligibleV39(evidence)
       ? "WSSS"
-      : compact6.amendment.p2g08_balance502_recovery_rerun?.authorized === true &&
+      : compact6.amendment.p2g09_hostreset_recovery_rerun?.authorized === true &&
+          isP2g09HostResetRecoveryEligibleV39(evidence)
+        ? "WSSS"
+        : compact6.amendment.p2g08_balance502_recovery_rerun?.authorized === true &&
           isP2g08Balance502RecoveryEligibleV39(evidence)
         ? "WSSS"
         : compact6.amendment.p2g07_provider502_recovery_rerun?.authorized === true &&
