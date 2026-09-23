@@ -40,3 +40,9 @@ There are currently zero active/settling probes and zero open probe budget days.
 ## Execution-source protection
 
 No documentation commit in this branch changes the frozen Wednesday execution source. The Wednesday branch remains separate so documentation work does not silently change the Git HEAD that CI/runtime/AUTH evidence is intended to bind.
+
+## Incident 25 — zero-credit callback SQL placeholder defect
+
+The Wednesday same-app Development callback proof exposed a prepaid-item INSERT placeholder defect before any paid run. Incident 25 records the exact PostgreSQL UUID/integer type error. The source was corrected and regression-covered on `main`; a fresh zero-credit proof is required before incidents 24/25 can be resolved or any paid WSSS action can proceed.
+
+See `incidents/2026-09-23_INCIDENT25_PREPAID_ITEM_SQL_PLACEHOLDER.md`.
