@@ -38,6 +38,11 @@ async function main(): Promise<void> {
     receipt?.callback_origin === callbackBase &&
     String(receipt?.workspace_git_head ?? "").toLowerCase() === expectedHead &&
     receipt?.preexisting_incident_24_tolerated === true &&
+    receipt?.preexisting_incident_25_tolerated === true &&
+    Array.isArray(receipt?.preexisting_synthetic_incident_ids) &&
+    receipt.preexisting_synthetic_incident_ids.length === 2 &&
+    receipt.preexisting_synthetic_incident_ids[0] === 24 &&
+    receipt.preexisting_synthetic_incident_ids[1] === 25 &&
     receipt?.wrong_secret_rejected_404 === true &&
     receipt?.correct_secret_accepted_200 === true &&
     receipt?.persistence_verified === true &&
@@ -48,7 +53,7 @@ async function main(): Promise<void> {
     Number.isFinite(generated) &&
     ageMs >= -5 * 60_000 &&
     ageMs <= 2 * 60 * 60_000;
-  if (!validReceipt) throw new Error("REFUSED:CALLBACK_RECEIPT_NOT_VALID_FOR_INCIDENT24");
+  if (!validReceipt) throw new Error("REFUSED:CALLBACK_RECEIPT_NOT_VALID_FOR_SYNTHETIC_INCIDENTS");
 
   const incidents = await pool.query(
     `SELECT id,cause,occurred_at_utc,detail,resolved
@@ -56,14 +61,21 @@ async function main(): Promise<void> {
       WHERE resolved=false
       ORDER BY id ASC`,
   );
-  if (incidents.rows.length !== 1) throw new Error(`REFUSED:OPEN_INCIDENT_COUNT:${incidents.rows.length}`);
-  const inc = incidents.rows[0];
-  if (
-    Number(inc.id) !== 24 ||
-    String(inc.cause) !== "raw-persistence" ||
-    String(inc.detail?.mode ?? "") !== "prepaid_probe" ||
-    String(inc.detail?.error ?? "") !== "V39_PREPAID_RAW_RETENTION_HOURS_MUST_BE_INTEGER_1_TO_168"
-  ) throw new Error("REFUSED:INCIDENT24_IDENTITY_MISMATCH");
+  if (incidents.rows.length !== 2) throw new Error(`REFUSED:OPEN_INCIDENT_COUNT:${incidents.rows.length}`);
+  const byId = new Map(incidents.rows.map((row: any) => [Number(row.id), row]));
+  const inc24 = byId.get(24);
+  const inc25 = byId.get(25);
+  const incident24Exact =
+    !!inc24 &&
+    String(inc24.cause) === "raw-persistence" &&
+    String(inc24.detail?.mode ?? "") === "prepaid_probe" &&
+    String(inc24.detail?.error ?? "") === "V39_PREPAID_RAW_RETENTION_HOURS_MUST_BE_INTEGER_1_TO_168";
+  const incident25Exact =
+    !!inc25 &&
+    String(inc25.cause) === "raw-persistence" &&
+    String(inc25.detail?.mode ?? "") === "prepaid_probe" &&
+    String(inc25.detail?.error ?? "") === 'column "session_id" is of type uuid but expression is of type integer';
+  if (!incident24Exact || !incident25Exact) throw new Error("REFUSED:SYNTHETIC_INCIDENT_IDENTITY_MISMATCH");
 
   const active = await pool.query(
     `SELECT count(*)::int AS n FROM clean.adb_anchor_probe WHERE status IN ('probing','settling')`,
@@ -97,9 +109,9 @@ async function main(): Promise<void> {
 
   if (!apply) {
     console.log(JSON.stringify({
-      schema: "v39.phase2g-incident24-resolution.v1",
-      status: "PASS_READY_TO_RESOLVE_INCIDENT24",
-      incident_id: 24,
+      schema: "v39.phase2g-synthetic-callback-incident-resolution.v1",
+      status: "PASS_READY_TO_RESOLVE_SYNTHETIC_INCIDENTS",
+      incident_ids: [24, 25],
       provider_read_only_inventory_performed: true,
       provider_mutation: false,
       alert_credits_spent: 0,
@@ -108,24 +120,35 @@ async function main(): Promise<void> {
     }, null, 2));
     return;
   }
-  if (process.env.PHASE2G_CONFIRM_INCIDENT24_RESOLUTION !== "YES") {
-    throw new Error("REFUSED:SET_PHASE2G_CONFIRM_INCIDENT24_RESOLUTION=YES");
+  if (process.env.PHASE2G_CONFIRM_SYNTHETIC_INCIDENT_RESOLUTION !== "YES") {
+    throw new Error("REFUSED:SET_PHASE2G_CONFIRM_SYNTHETIC_INCIDENT_RESOLUTION=YES");
   }
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     const locked = await client.query(
-      `SELECT id,cause,detail,resolved FROM clean.adb_incident_stop WHERE id=24 FOR UPDATE`,
+      `SELECT id,cause,detail,resolved
+         FROM clean.adb_incident_stop
+        WHERE id IN (24,25)
+        ORDER BY id
+        FOR UPDATE`,
     );
-    const row = locked.rows[0];
-    if (
-      !row ||
-      row.resolved !== false ||
-      String(row.cause) !== "raw-persistence" ||
-      String(row.detail?.mode ?? "") !== "prepaid_probe" ||
-      String(row.detail?.error ?? "") !== "V39_PREPAID_RAW_RETENTION_HOURS_MUST_BE_INTEGER_1_TO_168"
-    ) throw new Error("REFUSED:INCIDENT24_CHANGED_BEFORE_APPLY");
+    if (locked.rows.length !== 2) throw new Error("REFUSED:SYNTHETIC_INCIDENTS_CHANGED_BEFORE_APPLY");
+    const lockedById = new Map(locked.rows.map((row: any) => [Number(row.id), row]));
+    const l24 = lockedById.get(24);
+    const l25 = lockedById.get(25);
+    const locked24Exact =
+      !!l24 && l24.resolved === false &&
+      String(l24.cause) === "raw-persistence" &&
+      String(l24.detail?.mode ?? "") === "prepaid_probe" &&
+      String(l24.detail?.error ?? "") === "V39_PREPAID_RAW_RETENTION_HOURS_MUST_BE_INTEGER_1_TO_168";
+    const locked25Exact =
+      !!l25 && l25.resolved === false &&
+      String(l25.cause) === "raw-persistence" &&
+      String(l25.detail?.mode ?? "") === "prepaid_probe" &&
+      String(l25.detail?.error ?? "") === 'column "session_id" is of type uuid but expression is of type integer';
+    if (!locked24Exact || !locked25Exact) throw new Error("REFUSED:SYNTHETIC_INCIDENTS_CHANGED_BEFORE_APPLY");
 
     const updated = await client.query(
       `UPDATE clean.adb_incident_stop
@@ -135,7 +158,10 @@ async function main(): Promise<void> {
                 jsonb_build_object(
                   'resolution',
                   jsonb_build_object(
-                    'classification','zero-credit-stale-published-callback-synthetic',
+                    'classification',CASE
+                      WHEN id=24 THEN 'zero-credit-stale-published-callback-synthetic'
+                      WHEN id=25 THEN 'zero-credit-prepaid-item-placeholder-bug-synthetic'
+                    END,
                     'replacement_callback_mode','same-app-development-contingency',
                     'replacement_callback_origin',$1::text,
                     'replacement_callback_receipt_sha256',$2::text,
@@ -145,17 +171,18 @@ async function main(): Promise<void> {
                     'historical_scientific_evidence_changed',false
                   )
                 )
-        WHERE id=24 AND resolved=false
-        RETURNING id,resolved,resolved_at_utc`,
+        WHERE id IN (24,25) AND resolved=false
+        RETURNING id,resolved,resolved_at_utc
+        ORDER BY id`,
       [callbackBase, receiptSha, expectedHead],
     );
-    if (updated.rowCount !== 1) throw new Error("REFUSED:INCIDENT24_UPDATE_COUNT");
+    if (updated.rowCount !== 2) throw new Error("REFUSED:SYNTHETIC_INCIDENT_UPDATE_COUNT");
     await client.query("COMMIT");
     const out = {
-      schema: "v39.phase2g-incident24-resolution.v1",
-      status: "PASS_INCIDENT24_RESOLVED",
-      incident_id: 24,
-      resolved_at_utc: updated.rows[0].resolved_at_utc,
+      schema: "v39.phase2g-synthetic-callback-incident-resolution.v1",
+      status: "PASS_SYNTHETIC_INCIDENTS_RESOLVED",
+      incident_ids: [24, 25],
+      resolved_at_utc: updated.rows.map((row: any) => ({ id: Number(row.id), resolved_at_utc: row.resolved_at_utc })),
       callback_origin: callbackBase,
       callback_receipt_sha256: receiptSha,
       expected_git_head: expectedHead,
@@ -166,7 +193,7 @@ async function main(): Promise<void> {
     };
     fs.mkdirSync("artifacts", { recursive: true });
     const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-    const outPath = path.join("artifacts", `phase2g-incident24-resolution-${stamp}.json`);
+    const outPath = path.join("artifacts", `phase2g-synthetic-callback-incident-resolution-${stamp}.json`);
     fs.writeFileSync(outPath, JSON.stringify(out, null, 2) + "\n", { flag: "wx" });
     console.log(JSON.stringify({ ...out, receipt_file: outPath, receipt_file_sha256: sha256(fs.readFileSync(outPath)) }, null, 2));
   } catch (error) {
@@ -178,7 +205,7 @@ async function main(): Promise<void> {
 }
 main().catch((error) => {
   console.error(JSON.stringify({
-    schema: "v39.phase2g-incident24-resolution.v1",
+    schema: "v39.phase2g-synthetic-callback-incident-resolution.v1",
     status: "REFUSED_OR_FAILED",
     provider_mutation: false,
     alert_credits_spent: 0,
