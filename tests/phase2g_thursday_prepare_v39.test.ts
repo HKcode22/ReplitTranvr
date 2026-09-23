@@ -17,7 +17,7 @@ describe("Thursday Phase2G preparation helper", () => {
     expect(text).not.toContain("v39_phase2g_github_actions_owner_v39.sh             --auth");
     expect(text).not.toContain("createSubscription(");
     expect(text).not.toContain("gh workflow run phase2g-paid-stage1.yml");
-    expect(text).toContain("gh workflow run phase2g-zero-credit-secret-binding.yml");
+    expect(text).toContain("gh workflow run phase2g-zero-credit-callback-binding.yml");
   });
 
   it("requires explicit confirmation before P2G10 DB adjudication and AUTH approval", () => {
