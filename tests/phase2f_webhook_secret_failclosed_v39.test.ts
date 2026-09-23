@@ -3,6 +3,7 @@ import { join } from "path";
 import { describe, expect, it } from "vitest";
 
 const routes = readFileSync(join(process.cwd(), "server", "routes_v3.ts"), "utf8");
+const limiter = readFileSync(join(process.cwd(), "server", "lib", "disruption", "aerodataboxLimiter_v3.ts"), "utf8");
 
 describe("Phase-2F webhook secret fail-closed contract", () => {
   it("refuses management endpoints when the deployment secret is absent", () => {
@@ -17,6 +18,11 @@ describe("Phase-2F webhook secret fail-closed contract", () => {
     expect(missingSecretRefusals.length).toBeGreaterThanOrEqual(3);
     expect(routes).not.toContain("if(secret&&(!req.params.secret||req.params.secret!==secret))");
     expect(routes).toContain('if(!req.params.secret||req.params.secret!==secret){res.status(404).json({error:"Not found"});return;}');
+  });
+
+  it("URL-encodes the webhook secret before embedding it in provider callback paths", () => {
+    expect(limiter).toContain('encodeURIComponent(secret)');
+    expect(limiter).not.toContain('secret ? `/${secret}`');
   });
 
   it("still rejects an incorrect management header with 403", () => {
