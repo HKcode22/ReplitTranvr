@@ -116,7 +116,7 @@ The P2G10 root cause and Thursday recovery requirements are recorded in:
 - `SEPmd/phase2g/amendments/2026-09-24_P2G11_THURSDAY_RECOVERY_PREPARATION.md`
 - `artifacts/phase2g-compact6-p2g10-secret-mismatch-recovery-freeze-20260923.json`
 
-New fail-closed controls include a live zero-credit GitHub/Replit webhook-secret binding endpoint, a standalone zero-credit GitHub binding workflow, a repeated owner-side secret check immediately before provider ownership, and a watchdog that triggers exact recovery on callback persistence failures or a persistent external/internal delivery gap.
+New fail-closed controls include a live zero-credit GitHub/Replit webhook-secret binding endpoint, a standalone zero-credit GitHub binding workflow, a repeated owner-side secret check immediately before provider ownership, and a watchdog that triggers exact recovery on callback persistence failures or persistent provider spend while zero callback requests are observed. A temporary external-vs-internal credit gap after callbacks have begun is left to the frozen terminal reconciliation rule rather than being used as an early-stop signal.
 
 ## Short Tuesday preparation helper
 
@@ -139,7 +139,7 @@ Before Thursday paid execution:
 - Replit and GitHub must share the exact final source HEAD;
 - the GitHub webhook secret must be accepted by the live Replit secret-binding endpoint in the zero-credit workflow;
 - the GitHub paid gate and paid owner must each repeat that secret binding check;
-- the independent watchdog must fail closed on callback persistence errors or a persistent provider-send/received-callback gap;
+- the independent watchdog must fail closed on callback persistence errors or persistent provider spend with zero observed callback requests; ordinary post-callback accounting lag is adjudicated only at terminal settlement;
 - no published Replit deployment is required while the frozen same-app development callback contingency is explicitly selected and passes all exact runtime checks.
 
 If the new recovery attempt fails, no further automatic WSSS retry is allowed.
