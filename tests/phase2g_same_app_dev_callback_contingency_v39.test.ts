@@ -60,6 +60,10 @@ describe("Phase-2G same-app development callback contingency", () => {
     expect(gateBlock).toContain("x-v39-phase2g-webhook-secret");
     expect(gateBlock).toContain("/__v39/phase2g/webhook-secret-match");
     expect(gateBlock).toContain("GITHUB_REPLIT_WEBHOOK_SECRET_BINDING=PASS");
+    expect(owner).toContain("GITHUB_REPLIT_WEBHOOK_SECRET_BINDING_CHECK=START");
+    expect(owner).toContain("x-v39-phase2g-webhook-secret");
+    expect(owner).toContain("/__v39/phase2g/webhook-secret-match");
+    expect(owner).toContain("GITHUB_REPLIT_WEBHOOK_SECRET_BINDING=PASS");
     expect(gateBlock.indexOf("Verify GitHub/Replit webhook-secret binding"))
       .toBeLessThan(gateBlock.indexOf("Generate fresh read-only paid preflight"));
   });
