@@ -414,7 +414,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
           runtimeFlightKey(flight),
           receivedAt,
         );
-        tuples.push(`(${offset + 1},${offset + 2},${offset + 3},${offset + 4},${offset + 5},${offset + 6},${offset + 7},${offset + 8},${offset + 9})`);
+        tuples.push(`($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8},$${offset + 9})`);
       }
       await client.query(
         `INSERT INTO clean.prepaid_probe_item_runtime
