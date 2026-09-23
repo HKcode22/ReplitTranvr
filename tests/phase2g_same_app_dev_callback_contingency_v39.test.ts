@@ -11,6 +11,7 @@ const watchdog = readFileSync(join(root, "scripts", "v39_phase2g_github_actions_
 const localLauncher = readFileSync(join(root, "scripts", "v39_phase2g_stage1_launch_logged_v39.sh"), "utf8");
 const resolver = readFileSync(join(root, "scripts", "v39_phase2g_resolve_incident24_v39.ts"), "utf8");
 const workflow = readFileSync(join(root, ".github", "workflows", "phase2g-paid-stage1.yml"), "utf8");
+const routes = readFileSync(join(root, "server", "routes_v3.ts"), "utf8");
 const freeze = JSON.parse(readFileSync(join(root, "artifacts", "phase2g-same-app-dev-callback-contingency-freeze-20260923.json"), "utf8"));
 
 describe("Phase-2G same-app development callback contingency", () => {
@@ -46,6 +47,21 @@ describe("Phase-2G same-app development callback contingency", () => {
     expect(ownerBlock).toContain('--callback-base "${{ inputs.callback_base }}"             --callback-mode "${{ inputs.callback_mode }}"');
     expect(ownerBlock.split('--callback-mode "${{ inputs.callback_mode }}"').length - 1).toBe(1);
     expect(watchdogBlock.split('--callback-mode "${{ inputs.callback_mode }}"').length - 1).toBe(1);
+  });
+
+  it("fails the GitHub gate closed when its webhook secret does not match the live Replit receiver", () => {
+    expect(routes).toContain('/__v39/phase2g/webhook-secret-match');
+    expect(routes).toContain('x-v39-phase2g-webhook-secret');
+    expect(routes).toContain('v39.phase2g-webhook-secret-match.v1');
+    expect(routes).toContain('timingSafeEqual(a, b)');
+    const gateBlock = workflow.slice(workflow.indexOf("  gate:"), workflow.indexOf("  owner:"));
+    expect(gateBlock).toContain('AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}');
+    expect(gateBlock).toContain("Verify GitHub/Replit webhook-secret binding");
+    expect(gateBlock).toContain("x-v39-phase2g-webhook-secret");
+    expect(gateBlock).toContain("/__v39/phase2g/webhook-secret-match");
+    expect(gateBlock).toContain("GITHUB_REPLIT_WEBHOOK_SECRET_BINDING=PASS");
+    expect(gateBlock.indexOf("Verify GitHub/Replit webhook-secret binding"))
+      .toBeLessThan(gateBlock.indexOf("Generate fresh read-only paid preflight"));
   });
 
   it("does not weaken exact reconciliation or create an automatic retry", () => {
