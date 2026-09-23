@@ -47,8 +47,12 @@ The subset comes only from the already-frozen pre-outcome shortlist.
 | 2 | OMAA | completed, MATCH | valid historical Stage-1 evidence |
 | 3 | MMUN | failed, censored, UNRESOLVED | infrastructure-invalid |
 | 4 | WSSS | failed, full-duration, MISMATCH | P2G06 accounting gate under old exact-equality rule |
+| 5 | WSSS | failed, censored, UNRESOLVED | P2G07 provider/control-plane cleanup failure; infrastructure-invalid |
+| 6 | WSSS | failed, censored, MATCH | P2G08 balance-control-plane failure; infrastructure-invalid |
+| 7 | WSSS | failed, censored, UNRESOLVED | P2G09 Replit development-host reset; infrastructure-invalid |
+| 8 | WSSS | failed, censored, UNRESOLVED | P2G10 GitHub/Replit webhook-secret mismatch; infrastructure-invalid |
 
-P2G06 remains historically failed. It is never rewritten to PASS.
+P2G06 remains historically failed. It is never rewritten to PASS. P2G07-P2G10 also remain failed/excluded and are never rewritten as scientific PASS evidence.
 
 ## P2G06 reconstructed facts
 
@@ -103,6 +107,17 @@ For now:
 
 Immediately before the Tuesday readiness pass, the paid launcher was re-audited against the static readiness gate. The static gate already rejected tracked, staged, and untracked changes under `server`, `scripts`, `migrations`, and `tests`, but the final paid launcher only checked tracked/staged diffs. The launcher now uses `git status --porcelain=v1 --untracked-files=all` over those protected paths and refuses any protected-source drift at launch time. A regression assertion was added to `tests/phase2g_stage1_persistent_launch_v39.test.ts`.
 
+## P2G10 / Thursday hardening
+
+The P2G10 root cause and Thursday recovery requirements are recorded in:
+
+- `SEPmd/phase2g/incidents/2026-09-23_P2G10_GITHUB_REPLIT_WEBHOOK_SECRET_MISMATCH.md`
+- `SEPmd/phase2g/incidents/2026-09-23_GITHUB_SECRET_REVEAL_WORKFLOW_SECURITY.md`
+- `SEPmd/phase2g/amendments/2026-09-24_P2G11_THURSDAY_RECOVERY_PREPARATION.md`
+- `artifacts/phase2g-compact6-p2g10-secret-mismatch-recovery-freeze-20260923.json`
+
+New fail-closed controls include a live zero-credit GitHub/Replit webhook-secret binding endpoint, a standalone zero-credit GitHub binding workflow, a repeated owner-side secret check immediately before provider ownership, and a watchdog that triggers exact recovery on callback persistence failures or a persistent external/internal delivery gap.
+
 ## Short Tuesday preparation helper
 
 To avoid long interactive shell pastes, use `scripts/v39_phase2g_tuesday_prepare_v39.sh`. It exposes guarded modes for status, static readiness, P2G06 adjudication dry-run/apply, and synthetic callback verification. It never launches a paid Stage-1 probe. The mutation mode requires an explicit `PHASE2G_CONFIRM_P2G06_APPLY=YES` environment confirmation.
@@ -110,10 +125,21 @@ To avoid long interactive shell pastes, use `scripts/v39_phase2g_tuesday_prepare
 ## Workspace owner modes
 
 Final readiness distinguishes the preferred Replit-managed Project process from the guarded detached fallback used only when the Replit UI does not expose usable workflow controls. The health/preflight/launcher/watchdog chain now requires a truthful explicit owner mode and refuses unlabeled processes.
-## Tuesday objective
+## Current recovery objective
 
-One and only one post-fix WSSS validation run may occur under the compact-6 amendment.
+P2G10 is infrastructure-invalid because GitHub Actions created the provider subscription with a webhook secret that did not match the live Replit receiver. The provider callback host and runtime-session binding were correct, provider credits were consumed, and zero callbacks were accepted.
 
-If that run succeeds, normal compact sequencing proceeds. The next unresolved compact candidate is then MMUN under its already-recorded bounded infrastructure-invalid rerun allowance.
+A Thursday WSSS recovery is **not automatic**. It is permitted only under the prospectively frozen P2G10 recovery amendment and a fresh Thursday runtime, budget day, callback proof, cross-environment secret-binding proof, paid preflight, and exact AUTH.
 
-If the WSSS validation fails, no automatic fourth WSSS attempt is allowed.
+Before Thursday paid execution:
+
+- P2G10 must remain failed/excluded;
+- its incident must be adjudicated and its budget day closed;
+- active billable subscriptions must be zero;
+- Replit and GitHub must share the exact final source HEAD;
+- the GitHub webhook secret must be accepted by the live Replit secret-binding endpoint in the zero-credit workflow;
+- the GitHub paid gate and paid owner must each repeat that secret binding check;
+- the independent watchdog must fail closed on callback persistence errors or a persistent provider-send/received-callback gap;
+- no published Replit deployment is required while the frozen same-app development callback contingency is explicitly selected and passes all exact runtime checks.
+
+If the new recovery attempt fails, no further automatic WSSS retry is allowed.
