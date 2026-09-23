@@ -22,7 +22,7 @@ describe("Phase-2G free independent-owner architecture", () => {
     expect(preflight).toContain('"same-app-development-contingency"');
     expect(preflight).toContain("development_callback_runtime_health_not_exact");
     expect(preflight).toContain('ownerExecutor !== "github-actions"');
-    expect(preflight).toContain('contract_mode: "legacy-live-prepaid-route"');
+    expect(preflight).toContain('const callbackContractMode = isDevContingency ? "same-app-development-contingency" : "legacy-live-prepaid-route"');
     expect(preflight).toContain("callback_verification_contract_invalid_or_stale");
   });
 
