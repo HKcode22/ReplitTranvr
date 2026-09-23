@@ -133,6 +133,33 @@ echo "CALLBACK_BASE=$BASE"
 echo "CALLBACK_MODE=$CALLBACK_MODE"
 echo "PROVIDER_MUTATION=AUTHORIZED_ONLY_BY_EXISTING_AUTH"
 
+if [[ "$CALLBACK_MODE" == "same-app-development-contingency" ]]; then
+  echo "GITHUB_REPLIT_RUNTIME_HEALTH_RECHECK=START"
+  RUNTIME_HEALTH="$(curl --silent --show-error --fail-with-body --max-time 15 "${BASE}/__v39/workspace-runtime")" || {
+    echo "REFUSED:GITHUB_REPLIT_RUNTIME_HEALTH_HTTP"
+    exit 2
+  }
+  RUNTIME_HEALTH="$RUNTIME_HEALTH" EXPECTED_HEAD="$EXPECTED_HEAD" node --input-type=module <<'NODE'
+const health = JSON.parse(process.env.RUNTIME_HEALTH ?? "{}");
+const expected = String(process.env.EXPECTED_HEAD ?? "").toLowerCase();
+if (
+  health?.schema !== "v39.phase2f-workspace-runtime.v1" ||
+  health?.status !== "PASS" ||
+  String(health?.git_head ?? "").toLowerCase() !== expected ||
+  health?.prepaid_route_registered !== true ||
+  Number(health?.retention_hours) !== 168 ||
+  health?.provider_mutation !== false ||
+  health?.runtime_owner_mode !== "replit-managed-project" ||
+  health?.managed_replit_workflow !== true ||
+  health?.published_deployment !== false
+) {
+  console.error("REFUSED:GITHUB_REPLIT_RUNTIME_HEALTH_NOT_EXACT");
+  process.exit(2);
+}
+NODE
+  echo "GITHUB_REPLIT_RUNTIME_HEALTH_RECHECK=PASS"
+fi
+
 echo "GITHUB_REPLIT_WEBHOOK_SECRET_BINDING_CHECK=START"
 SECRET_BINDING_RESPONSE="$(curl --silent --show-error --fail-with-body --max-time 15 \
   -X POST \
