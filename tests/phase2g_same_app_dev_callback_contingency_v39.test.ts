@@ -52,8 +52,8 @@ describe("Phase-2G same-app development callback contingency", () => {
     expect(verifier).toContain("const i25 = byId.get(25)");
     expect(verifier).toContain("incidents.rows.length === 2");
     expect(verifier).toContain('column "session_id" is of type uuid but expression is of type integer');
-    expect(resolver).toContain("PASS_READY_TO_RESOLVE_INCIDENT24");
-    expect(resolver).toContain("PHASE2G_CONFIRM_INCIDENT24_RESOLUTION");
-    expect(resolver).toContain("WHERE id=24 AND resolved=false");
+    expect(resolver).toContain("PASS_READY_TO_RESOLVE_SYNTHETIC_INCIDENTS");
+    expect(resolver).toContain("PHASE2G_CONFIRM_SYNTHETIC_INCIDENT_RESOLUTION");
+    expect(resolver).toContain("WHERE id IN (24,25) AND resolved=false");
   });
 });
