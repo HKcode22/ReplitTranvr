@@ -61,9 +61,27 @@ on:
         default: 'WSSS'
         type: string
       callback_base:
-        description: 'Stable published callback origin'
+        description: 'Callback origin; published by default, same-app replit.dev only under explicit contingency'
         required: true
         default: 'https://travnr.com'
+        type: string
+      callback_mode:
+        description: 'Callback infrastructure mode'
+        required: true
+        default: 'published'
+        type: choice
+        options:
+          - published
+          - same-app-development-contingency
+      callback_contingency_file:
+        description: 'Committed contingency artifact path; required only for same-app development contingency'
+        required: false
+        default: ''
+        type: string
+      callback_contingency_sha:
+        description: 'Contingency artifact SHA-256; required only for same-app development contingency'
+        required: false
+        default: ''
         type: string
       callback_verification_file:
         description: 'Committed fresh zero-credit live callback verification artifact'
@@ -132,7 +150,7 @@ jobs:
 
           OUT="${RUNNER_TEMP}/phase2g-stage1-paid-preflight.json"
 
-          npx tsx scripts/v39_phase2g_stage1_paid_preflight_v39.ts             --preprobe "${{ inputs.preprobe_file }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --expected-head "${{ inputs.expected_head }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --callback-verification "${{ inputs.callback_verification_file }}"             --callback-verification-sha "${{ inputs.callback_verification_sha }}"             --owner-executor github-actions             --out "$OUT"
+          npx tsx scripts/v39_phase2g_stage1_paid_preflight_v39.ts             --preprobe "${{ inputs.preprobe_file }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --expected-head "${{ inputs.expected_head }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --callback-mode "${{ inputs.callback_mode }}"             --callback-mode "${{ inputs.callback_mode }}"             --callback-contingency-file "${{ inputs.callback_contingency_file }}"             --callback-contingency-sha "${{ inputs.callback_contingency_sha }}"             --callback-verification "${{ inputs.callback_verification_file }}"             --callback-verification-sha "${{ inputs.callback_verification_sha }}"             --owner-executor github-actions             --out "$OUT"
 
           SHA="$(sha256sum "$OUT" | awk '{print $1}')"
           B64="$(base64 -w0 "$OUT")"
@@ -260,4 +278,4 @@ jobs:
           V39_DEFER_PROVIDER_CONTENT_CLEANUP: '1'
         run: |
           set -euo pipefail
-          npx tsx scripts/v39_phase2g_github_actions_watchdog_v39.ts             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-head "${{ inputs.expected_head }}"             --preflight "$PHASE2G_PREFLIGHT"             --preflight-sha "${{ needs.gate.outputs.preflight_sha }}"             --callback-base "${{ inputs.callback_base }}"
+          npx tsx scripts/v39_phase2g_github_actions_watchdog_v39.ts             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-head "${{ inputs.expected_head }}"             --preflight "$PHASE2G_PREFLIGHT"             --preflight-sha "${{ needs.gate.outputs.preflight_sha }}"             --callback-base "${{ inputs.callback_base }}"             --callback-mode "${{ inputs.callback_mode }}"
