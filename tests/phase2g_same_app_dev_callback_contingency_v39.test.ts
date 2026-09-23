@@ -39,8 +39,8 @@ describe("Phase-2G same-app development callback contingency", () => {
     expect(watchdog).toContain("GITHUB_ACTIONS_RUNTIME_REQUIRED");
     expect(localLauncher).toContain("REFUSED:DEPRECATED_LOCAL_STAGE1_LAUNCH_USE_GITHUB_ACTIONS");
     expect(workflow).toContain("same-app-development-contingency");
-    const callbackModeUses = workflow.match(/--callback-mode "\\$\\{\\{ inputs\\.callback_mode \\}\\}"/g) ?? [];
-    expect(callbackModeUses.length).toBe(3);
+    const callbackModeUseCount = workflow.split('--callback-mode "${{ inputs.callback_mode }}"').length - 1;
+    expect(callbackModeUseCount).toBe(3);
     expect(workflow).toContain('--callback-base "${{ inputs.callback_base }}"             --callback-mode "${{ inputs.callback_mode }}"');
   });
 
