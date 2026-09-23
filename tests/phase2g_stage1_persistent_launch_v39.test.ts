@@ -67,7 +67,7 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).toContain("probe_budget_day_already_has_probe_rows");
     expect(preflight).toContain("active_billable_subscriptions=");
     expect(preflight).toContain("callback_verification_contract_invalid_or_stale");
-    expect(preflight).toContain("published_callback_live_route_check_failed");
+    expect(preflight).toContain("callback_live_route_check_failed");
     expect(preflight).toContain("provider_balance_below_protected_floor");
   });
 
@@ -110,11 +110,13 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(runtimeHealth).toContain("replit-published-deployment");
   });
 
-  it("requires a stable non-development callback and refuses interactive workspace ownership", () => {
+  it("keeps local interactive ownership refused while allowing only the explicit GitHub-owned same-app development callback contingency", () => {
     expect(launcher).toContain("CALLBACK_BASE");
     expect(launcher).toContain("REFUSED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED_FOR_PAID_STAGE1");
     expect(launcher).toContain("REFUSED:INTERACTIVE_REPLIT_WORKSPACE_CANNOT_OWN_PAID_STAGE1");
-    expect(preflight).toContain("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED");
+    expect(preflight).toContain("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_REQUIRES_EXPLICIT_CONTINGENCY");
+    expect(preflight).toContain('"same-app-development-contingency"');
+    expect(preflight).toContain("development_callback_runtime_health_not_exact");
     expect(launcher).toContain('eplit-objstore-*) CORRECT_BUCKET="r${CURRENT_BUCKET}"');
     expect(launcher).toContain('V39_PROVIDER_BLOB_BUCKET_ID="$CORRECT_BUCKET"');
     expect(launcher).toContain('V39_PUBLIC_WEBHOOK_BASE_URL="$BASE"');
@@ -161,6 +163,9 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(githubWorkflow).toContain("needs.gate.outputs.preflight_sha");
     expect(githubWorkflow).toContain("callback_verification_file");
     expect(githubWorkflow).toContain("callback_verification_sha");
+    expect(githubWorkflow).toContain("callback_mode");
+    expect(githubWorkflow).toContain("callback_contingency_file");
+    expect(githubWorkflow).toContain("callback_contingency_sha");
     expect(githubWorkflow).not.toContain("--provider-blob-bucket-id");
     expect(githubWorkflow).not.toContain("V39_PHASE2G_CONTROL_SECRET");
     expect(githubWorkflow).toContain("V39_DEFER_PROVIDER_CONTENT_CLEANUP");
