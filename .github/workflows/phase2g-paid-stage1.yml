@@ -117,6 +117,7 @@ jobs:
     env:
       V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
     steps:
       - name: Checkout exact authorized source
         uses: actions/checkout@v4
@@ -137,12 +138,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY; do
+          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET; do
             if [[ -z "${!key:-}" ]]; then
               echo "::error::Missing required Phase2G gate secret: $key"
               exit 2
             fi
           done
+
+      - name: Verify GitHub/Replit webhook-secret binding
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESPONSE="$(curl --silent --show-error --fail-with-body --max-time 15 \
+            -X POST \
+            -H "x-v39-phase2g-webhook-secret: ${AERODATABOX_WEBHOOK_SECRET}" \
+            "${{ inputs.callback_base }}/__v39/phase2g/webhook-secret-match")"
+          node --input-type=module - "$RESPONSE" <<'NODE'
+          const response = JSON.parse(process.argv[2]);
+          if (
+            response?.schema !== "v39.phase2g-webhook-secret-match.v1" ||
+            response?.status !== "PASS" ||
+            response?.provider_call !== false ||
+            response?.provider_mutation !== false ||
+            Number(response?.alert_credits_spent) !== 0
+          ) {
+            console.error("GitHub/Replit webhook-secret binding check failed");
+            process.exit(2);
+          }
+          console.log("GITHUB_REPLIT_WEBHOOK_SECRET_BINDING=PASS");
+          NODE
 
       - name: Generate fresh read-only paid preflight
         id: preflight
