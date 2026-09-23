@@ -1,7 +1,7 @@
 # Phase 2G — Canonical Index and Timeline
 
-> Last organized: 2026-09-21 19:26 PDT / 2026-09-22 02:26 UTC
-> Branch: `phase2g-weekend-hardening-20260918`
+> Last organized: 2026-09-23
+> Canonical branch: `main`
 > Purpose: one place to find the current Phase-2G truth without moving or deleting historical files immediately before a paid run.
 
 ## Canonical hierarchy
@@ -17,6 +17,10 @@
 - `artifacts/phase2g-compact6-amendment-freeze-20260921.json`
 - Compact-6 amendment file SHA-256: `09092f8d4896af4bbea11fd13d177417aa8cb92538e0cebff5e5301f3e1c4500`.
 - This is an additive amendment. It does not rewrite the original preprobe artifact.
+
+### Historical failure register and regression matrix
+- `SEPmd/phase2g/FAILURE_REGISTER_AND_PREVENTION_MATRIX.md` — canonical cross-attempt failure history, root-cause certainty, corrective controls, residual risks, and regression coverage.
+- `tests/phase2g_historical_failure_regressions_v39.test.ts` — static guard that keeps the historical failure controls wired into the current source.
 
 ### P2G06 WSSS failure/forensics
 - `SEPmd/V3.9_PHASE2G_P2G06_PLAIN_ENGLISH_FAILURE_REPORT_AND_COMPACT6_DECISION_20260921.md`

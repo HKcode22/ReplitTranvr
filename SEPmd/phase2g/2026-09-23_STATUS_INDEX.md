@@ -1,6 +1,6 @@
 # Phase 2G — 2026-09-23 status index
 
-> Documentation branch only. The frozen Wednesday execution branch remains unchanged at `a97b6b685b0dadb21e197607871a74f6fc805d1c`.
+> **HISTORICAL SNAPSHOT.** This file records an intermediate Wednesday checkpoint and is no longer the current execution authority. For current truth use `SEPmd/phase2g/README.md`, `SEPmd/phase2g/FAILURE_REGISTER_AND_PREVENTION_MATRIX.md`, and the Thursday P2G11 preparation amendment. The canonical branch is now `main`.
 
 ## Current scientific status
 

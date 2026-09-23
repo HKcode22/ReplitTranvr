@@ -41,7 +41,8 @@ case "${1:-help}" in
       tests/phase2g_stage1_rerun_policy_v39.test.ts \
       tests/phase2g_compact6_reconciliation_v39.test.ts \
       tests/phase2g_zero_credit_callback_binding_v39.test.ts \
-      tests/phase2g_p2g10_secret_mismatch_adjudication_v39.test.ts
+      tests/phase2g_p2g10_secret_mismatch_adjudication_v39.test.ts \
+      tests/phase2g_historical_failure_regressions_v39.test.ts
     npx tsc --noEmit
     echo "THURSDAY_STATIC=PASS"
     ;;
