@@ -172,17 +172,17 @@ async function main(): Promise<void> {
                   )
                 )
         WHERE id IN (24,25) AND resolved=false
-        RETURNING id,resolved,resolved_at_utc
-        ORDER BY id`,
+        RETURNING id,resolved,resolved_at_utc`,
       [callbackBase, receiptSha, expectedHead],
     );
     if (updated.rowCount !== 2) throw new Error("REFUSED:SYNTHETIC_INCIDENT_UPDATE_COUNT");
     await client.query("COMMIT");
+    const updatedRows = [...updated.rows].sort((a: any, b: any) => Number(a.id) - Number(b.id));
     const out = {
       schema: "v39.phase2g-synthetic-callback-incident-resolution.v1",
       status: "PASS_SYNTHETIC_INCIDENTS_RESOLVED",
       incident_ids: [24, 25],
-      resolved_at_utc: updated.rows.map((row: any) => ({ id: Number(row.id), resolved_at_utc: row.resolved_at_utc })),
+      resolved_at_utc: updatedRows.map((row: any) => ({ id: Number(row.id), resolved_at_utc: row.resolved_at_utc })),
       callback_origin: callbackBase,
       callback_receipt_sha256: receiptSha,
       expected_git_head: expectedHead,
