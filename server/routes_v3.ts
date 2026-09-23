@@ -11,7 +11,7 @@
  * v39:phase6:pause so provider DELETE + frozen settlement remain single-owner.
  */
 import type { Express, Request, Response, NextFunction } from "express";
-import { createHash, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
 import type { InsertFlightDataPrePost } from "@shared/schema";
@@ -64,6 +64,33 @@ function phase2gWebhookSecretMatch(req: Request, res: Response): void {
     status: "PASS",
     provider_call: false,
     provider_mutation: false,
+    alert_credits_spent: 0,
+  });
+}
+function phase2gRuntimeDbBinding(req: Request, res: Response): void {
+  const runtimeUrl = String(process.env.V39_DATABASE_RUNTIME_URL ?? "").trim();
+  if (!runtimeUrl) { res.status(503).json({ error: "V39_DATABASE_RUNTIME_URL_NOT_CONFIGURED" }); return; }
+  const challenge = String(req.header("x-v39-phase2g-db-challenge") ?? "").trim();
+  const supplied = String(req.header("x-v39-phase2g-db-proof") ?? "").trim().toLowerCase();
+  if (!/^[A-Za-z0-9_.:-]{16,256}$/.test(challenge) || !/^[a-f0-9]{64}$/.test(supplied)) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const expected = createHmac("sha256", runtimeUrl)
+    .update(`phase2g-db-binding:${challenge}`)
+    .digest("hex");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(supplied);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  res.status(200).json({
+    schema: "v39.phase2g-runtime-db-binding.v1",
+    status: "PASS",
+    provider_call: false,
+    provider_mutation: false,
+    database_mutation: false,
     alert_credits_spent: 0,
   });
 }
@@ -166,6 +193,7 @@ async function recordIncident(cause:string,detail:unknown):Promise<void>{
 
 export function registerV3Routes(app:Express):void{
   app.post("/__v39/phase2g/webhook-secret-match",phase2gWebhookSecretMatch);
+  app.post("/__v39/phase2g/runtime-db-binding",phase2gRuntimeDbBinding);
   const prepaidWebhookIngress=async(req:Request,res:Response)=>{
     const secret=webhookSecret();
     if(!secret){res.status(503).json({error:"WEBHOOK_SECRET_NOT_CONFIGURED"});return;}
