@@ -45,7 +45,7 @@ Before any Thursday authorization:
    - Do not commit the generated callback receipt after generation.
 
 4. **Cross-environment webhook-secret proof**
-   - Run `Phase2G Zero-Credit Secret Binding` from GitHub against the exact live Replit origin.
+   - Run `Phase2G Zero-Credit Callback Binding` from GitHub against the exact live Replit origin.
    - The workflow must use the GitHub `phase2g-paid` webhook secret and receive PASS from the live Replit secret-binding endpoint.
    - This check must consume zero provider calls, zero provider mutations, and zero Alert credits.
    - A mismatch blocks the run before provider creation.
@@ -57,7 +57,7 @@ Before any Thursday authorization:
 
 6. **Live fail-fast protection**
    - Any callback persistence failure triggers exact recovery.
-   - A persistent external-provider-spend / internal-received-credit gap across three consecutive provider balance polls triggers exact recovery.
+   - A positive provider-spend signal with **zero callback requests observed** across three consecutive provider balance polls triggers exact recovery. A temporary external-vs-internal credit gap after callbacks have begun is **not** an early-stop signal; it is adjudicated only by the frozen terminal reconciliation rule.
    - The independent watchdog remains incapable of creating a provider subscription.
    - The existing hard credit ceiling remains unchanged.
 
