@@ -84,8 +84,14 @@ on:
         default: ''
         type: string
       callback_verification_file:
-        description: 'Committed fresh zero-credit live callback verification artifact'
-        required: true
+        description: 'Committed callback verification path; used for published mode'
+        required: false
+        default: ''
+        type: string
+      callback_verification_b64:
+        description: 'Fresh callback verification bytes as base64; required for same-app development contingency'
+        required: false
+        default: ''
         type: string
       callback_verification_sha:
         description: 'Callback verification artifact SHA-256'
@@ -141,6 +147,8 @@ jobs:
       - name: Generate fresh read-only paid preflight
         id: preflight
         shell: bash
+        env:
+          CALLBACK_VERIFICATION_B64: ${{ inputs.callback_verification_b64 }}
         run: |
           set -euo pipefail
           [[ "${GITHUB_SHA,,}" == "${{ inputs.expected_head }}" ]] || {
@@ -149,8 +157,27 @@ jobs:
           }
 
           OUT="${RUNNER_TEMP}/phase2g-stage1-paid-preflight.json"
+          CALLBACK_FILE="${{ inputs.callback_verification_file }}"
 
-          npx tsx scripts/v39_phase2g_stage1_paid_preflight_v39.ts             --preprobe "${{ inputs.preprobe_file }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --expected-head "${{ inputs.expected_head }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --callback-mode "${{ inputs.callback_mode }}"             --callback-mode "${{ inputs.callback_mode }}"             --callback-contingency-file "${{ inputs.callback_contingency_file }}"             --callback-contingency-sha "${{ inputs.callback_contingency_sha }}"             --callback-verification "${{ inputs.callback_verification_file }}"             --callback-verification-sha "${{ inputs.callback_verification_sha }}"             --owner-executor github-actions             --out "$OUT"
+          if [[ "${{ inputs.callback_mode }}" == "same-app-development-contingency" ]]; then
+            [[ -n "${CALLBACK_VERIFICATION_B64:-}" ]] || {
+              echo "::error::callback_verification_b64 is required for same-app development contingency"
+              exit 2
+            }
+            CALLBACK_FILE="${RUNNER_TEMP}/phase2g-live-callback-verification.json"
+            printf '%s' "$CALLBACK_VERIFICATION_B64" | base64 -d > "$CALLBACK_FILE"
+            [[ "$(sha256sum "$CALLBACK_FILE" | awk '{print $1}')" == "${{ inputs.callback_verification_sha }}" ]] || {
+              echo "::error::Callback verification base64 SHA mismatch"
+              exit 2
+            }
+          else
+            [[ -n "$CALLBACK_FILE" && -f "$CALLBACK_FILE" ]] || {
+              echo "::error::callback_verification_file is required for published mode"
+              exit 2
+            }
+          fi
+
+          npx tsx scripts/v39_phase2g_stage1_paid_preflight_v39.ts             --preprobe "${{ inputs.preprobe_file }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --expected-head "${{ inputs.expected_head }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --callback-mode "${{ inputs.callback_mode }}"             --callback-mode "${{ inputs.callback_mode }}"             --callback-contingency-file "${{ inputs.callback_contingency_file }}"             --callback-contingency-sha "${{ inputs.callback_contingency_sha }}"             --callback-verification "$CALLBACK_FILE"             --callback-verification-sha "${{ inputs.callback_verification_sha }}"             --owner-executor github-actions             --out "$OUT"
 
           SHA="$(sha256sum "$OUT" | awk '{print $1}')"
           B64="$(base64 -w0 "$OUT")"
