@@ -1,0 +1,25 @@
+{
+  "schema": "v39.phase2g-synthetic-callback-incident-resolution.v1",
+  "status": "PASS_SYNTHETIC_INCIDENTS_RESOLVED",
+  "incident_ids": [
+    24,
+    25
+  ],
+  "resolved_at_utc": [
+    {
+      "id": 24,
+      "resolved_at_utc": "2026-09-23T08:55:34.959Z"
+    },
+    {
+      "id": 25,
+      "resolved_at_utc": "2026-09-23T08:55:34.959Z"
+    }
+  ],
+  "callback_origin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+  "callback_receipt_sha256": "8524699fc202334a7f37a4ca237da98a4e873e7f4ce70aedcec15e97b389154c",
+  "expected_git_head": "43569ce355904071a69a10aed689f6a2f9d405ab",
+  "provider_read_only_inventory_performed": true,
+  "provider_mutation": false,
+  "alert_credits_spent": 0,
+  "historical_scientific_evidence_changed": false
+}
