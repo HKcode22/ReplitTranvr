@@ -58,6 +58,13 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).toContain("phase2g_settling_status_migration_missing");
   });
 
+  it("recognizes the exact P2G10 webhook-secret-mismatch recovery amendment without opening an automatic retry loop", () => {
+    expect(preflight).toContain("p2g10_secret_mismatch_recovery_rerun");
+    expect(preflight).toContain("isP2g10SecretMismatchRecoveryEligibleV39");
+    expect(preflight).toContain("next_candidate_mismatch");
+    expect(preflight).not.toContain("while (isP2g10SecretMismatchRecoveryEligibleV39");
+  });
+
   it("re-binds the exact approved AUTH, runtime, head, budget day, account and callback before launch", () => {
     expect(preflight).toContain("auth.sha256 !== expectedAuthSha");
     expect(preflight).toContain("auth_scope_mismatch");
