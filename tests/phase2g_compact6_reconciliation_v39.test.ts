@@ -7,6 +7,7 @@ import {
   loadPhase2gCompact6AmendmentV39,
   PHASE2G_COMPACT6_ARTIFACT_PATH,
   PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH,
+  PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
   classifyProbeReconciliationV39,
@@ -15,6 +16,7 @@ import {
 import {
   isP2g06PostfixWsssValidationEligibleV39,
   isP2g09HostResetRecoveryEligibleV39,
+  isP2g10SecretMismatchRecoveryEligibleV39,
   type Stage1AttemptEvidence,
 } from "../scripts/v39_probe_stage1_owner_v39";
 
@@ -102,6 +104,49 @@ describe("Phase2G compact-6 amendment", () => {
     expect(isP2g09HostResetRecoveryEligibleV39([
       ...evidence,
       attempt(8, "WSSS", "failed", true, "UNRESOLVED", "supervisor_child_exit_recovered"),
+    ])).toBe(false);
+  });
+
+  it("loads the P2G10 secret-mismatch recovery artifact with all new fail-closed gates", () => {
+    const preprobe = loadFrozenProbeArtifact(PREPROBE_PATH, PREPROBE_SHA);
+    const p = join(process.cwd(), PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH);
+    const raw = readFileSync(p, "utf8");
+    const loaded = loadPhase2gCompact6AmendmentV39({
+      expectedSha256: sha256(raw),
+      sourcePreprobeFileSha256: PREPROBE_SHA,
+      preprobe: preprobe.artifact,
+      path: p,
+    });
+    const recovery = loaded.amendment.p2g10_secret_mismatch_recovery_rerun;
+    expect(recovery?.authorized).toBe(true);
+    expect(recovery?.maximum_additional_attempts).toBe(1);
+    expect(recovery?.failed_probe_id).toBe(8);
+    expect(recovery?.requires_owner_executor).toBe("github-actions");
+    expect(recovery?.requires_live_callback_verification).toBe(true);
+    expect(recovery?.requires_cross_environment_webhook_secret_binding).toBe(true);
+    expect(recovery?.requires_owner_secret_recheck).toBe(true);
+    expect(recovery?.requires_zero_credit_secret_binding_workflow).toBe(true);
+    expect(recovery?.requires_delivery_gap_fail_fast_watchdog).toBe(true);
+    expect(recovery?.requires_zero_active_billable_at_launch).toBe(true);
+    expect(recovery?.no_further_automatic_wsss_retry).toBe(true);
+    expect(recovery?.outcome_metrics_not_used_to_authorize).toBe(true);
+  });
+
+  it("matches the P2G10 recovery only for the exact sixth WSSS attempt history", () => {
+    const evidence = [
+      attempt(1, "WSSS", "failed", true, "UNRESOLVED", "supervisor_child_exit_before_runtime_session"),
+      attempt(2, "OMAA", "completed", false, "MATCH", null),
+      attempt(3, "MMUN", "failed", true, "UNRESOLVED", "supervisor_child_exit_after_runtime_reset_recovered"),
+      attempt(4, "WSSS", "failed", false, "MISMATCH", "external_internal_credit_mismatch"),
+      attempt(5, "WSSS", "failed", true, "UNRESOLVED", "subscription_delete_failed"),
+      attempt(6, "WSSS", "failed", true, "MATCH", "balance_read_failed_after_retries"),
+      attempt(7, "WSSS", "failed", true, "UNRESOLVED", "supervisor_child_exit_recovered"),
+      attempt(8, "WSSS", "failed", true, "UNRESOLVED", "supervisor_child_exit_recovered"),
+    ];
+    expect(isP2g10SecretMismatchRecoveryEligibleV39(evidence)).toBe(true);
+    expect(isP2g10SecretMismatchRecoveryEligibleV39([
+      ...evidence,
+      attempt(9, "WSSS", "failed", true, "UNRESOLVED", "supervisor_child_exit_recovered"),
     ])).toBe(false);
   });
 
