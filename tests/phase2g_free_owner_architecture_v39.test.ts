@@ -14,11 +14,13 @@ const routes = readFileSync(join(root, "server", "routes_v3.ts"), "utf8");
 const replit = readFileSync(join(root, ".replit"), "utf8");
 
 describe("Phase-2G free independent-owner architecture", () => {
-  it("keeps Replit published Autoscale callback-only and excludes replit.dev from paid preflight", () => {
+  it("keeps published callback default and permits replit.dev only under explicit GitHub-owner contingency", () => {
     expect(replit).toContain('deploymentTarget = "autoscale"');
     expect(replit).toContain('V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment');
     expect(replit).toContain('V39_RUNTIME_DURABILITY_CLASS=autoscale');
-    expect(preflight).toContain("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED");
+    expect(preflight).toContain("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_REQUIRES_EXPLICIT_CONTINGENCY");
+    expect(preflight).toContain('"same-app-development-contingency"');
+    expect(preflight).toContain("development_callback_runtime_health_not_exact");
     expect(preflight).toContain('ownerExecutor !== "github-actions"');
     expect(preflight).toContain('contract_mode: "legacy-live-prepaid-route"');
     expect(preflight).toContain("callback_verification_contract_invalid_or_stale");
@@ -36,6 +38,8 @@ describe("Phase-2G free independent-owner architecture", () => {
     expect(workflow).toContain("gate:");
     expect(workflow).toContain("Generate fresh read-only paid preflight");
     expect(workflow).toContain("--owner-executor github-actions");
+    expect(workflow).toContain("callback_mode");
+    expect(workflow).toContain("callback_contingency_sha");
     expect(workflow).toContain("preflight_b64");
     expect(workflow).toContain("preflight_sha");
     expect(workflow).not.toContain("      preflight_file:");
