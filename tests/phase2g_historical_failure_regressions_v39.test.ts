@@ -37,7 +37,7 @@ describe("Phase2G historical failure regression matrix", () => {
     expect(verifier).toContain('healthJson?.schema === "v39.phase2f-workspace-runtime.v1"');
     expect(verifier).toContain('healthJson?.runtime_owner_mode === "replit-managed-project"');
     expect(verifier).toContain("healthJson?.managed_replit_workflow === true");
-    expect(verifier).toContain("String(healthJson?.git_head ?? "").toLowerCase() === expectedHead");
+    expect(verifier).toContain('String(healthJson?.git_head ?? "").toLowerCase() === expectedHead');
   });
 
   it("preserves reconciliation evidence before cleanup and refuses non-MATCH promotion", () => {
