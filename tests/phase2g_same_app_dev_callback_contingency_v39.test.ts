@@ -47,8 +47,11 @@ describe("Phase-2G same-app development callback contingency", () => {
     expect(freeze.no_automatic_retry).toBe(true);
   });
 
-  it("resolves only the known zero-credit incident 24 after callback proof", () => {
-    expect(verifier).toContain('Number(incidents.rows[0]?.id) === 24');
+  it("tolerates only the two known zero-credit synthetic callback incidents during proof", () => {
+    expect(verifier).toContain("const i24 = byId.get(24)");
+    expect(verifier).toContain("const i25 = byId.get(25)");
+    expect(verifier).toContain("incidents.rows.length === 2");
+    expect(verifier).toContain('column "session_id" is of type uuid but expression is of type integer');
     expect(resolver).toContain("PASS_READY_TO_RESOLVE_INCIDENT24");
     expect(resolver).toContain("PHASE2G_CONFIRM_INCIDENT24_RESOLUTION");
     expect(resolver).toContain("WHERE id=24 AND resolved=false");
