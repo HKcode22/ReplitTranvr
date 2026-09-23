@@ -40,6 +40,8 @@ describe("Phase-2G free independent-owner architecture", () => {
     expect(workflow).toContain("--owner-executor github-actions");
     expect(workflow).toContain("callback_mode");
     expect(workflow).toContain("callback_contingency_sha");
+    expect(workflow).toContain("callback_verification_b64");
+    expect(workflow).toContain('CALLBACK_FILE="${RUNNER_TEMP}/phase2g-live-callback-verification.json"');
     expect(workflow).toContain("preflight_b64");
     expect(workflow).toContain("preflight_sha");
     expect(workflow).not.toContain("      preflight_file:");
