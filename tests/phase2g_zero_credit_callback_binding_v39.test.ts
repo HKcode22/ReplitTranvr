@@ -33,6 +33,8 @@ describe("Phase2G zero-credit cross-environment callback binding", () => {
     const ownerScript = readFileSync(join(root, "scripts", "v39_phase2g_github_actions_owner_v39.sh"), "utf8");
     expect(gate).toContain("Verify GitHub/Replit runtime DB binding");
     expect(gate).toContain("Verify GitHub/Replit webhook-secret binding");
+    expect(ownerScript).toContain("GITHUB_REPLIT_RUNTIME_HEALTH_RECHECK=START");
+    expect(ownerScript).toContain("GITHUB_REPLIT_RUNTIME_HEALTH_RECHECK=PASS");
     expect(ownerScript).toContain("GITHUB_REPLIT_RUNTIME_DB_BINDING_CHECK=START");
     expect(ownerScript).toContain("GITHUB_REPLIT_RUNTIME_DB_BINDING=PASS");
     expect(ownerScript).toContain("GITHUB_REPLIT_WEBHOOK_SECRET_BINDING_CHECK=START");
