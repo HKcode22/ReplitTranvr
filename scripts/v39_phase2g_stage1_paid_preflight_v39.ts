@@ -129,16 +129,18 @@ async function main(): Promise<void> {
   const expectedIcaoRaw = optional("--expected-icao", "").trim().toUpperCase();
   const expectedIcao = expectedIcaoRaw || null;
   const callbackBase = required("--callback-base").replace(/\/+$/, "");
+  const callbackMode = optional("--callback-mode", "published").trim().toLowerCase();
+  const callbackContingencyPathRaw = optional("--callback-contingency-file", "");
+  const callbackContingencySha = optional("--callback-contingency-sha", "").toLowerCase();
   const ownerExecutor = required("--owner-executor").trim().toLowerCase();
-  if (ownerExecutor !== "github-actions") {
-    throw new Error("BLOCKED:OWNER_EXECUTOR_MUST_BE_GITHUB_ACTIONS");
-  }
-  if (!/^https:\/\/[^/]+$/i.test(callbackBase)) {
-    throw new Error("BLOCKED:CALLBACK_BASE_MUST_BE_HTTPS_ORIGIN");
-  }
-  if (/\.replit\.dev$/i.test(new URL(callbackBase).hostname)) {
-    throw new Error("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_NOT_ALLOWED");
-  }
+  if (ownerExecutor !== "github-actions") throw new Error("BLOCKED:OWNER_EXECUTOR_MUST_BE_GITHUB_ACTIONS");
+  if (!["published", "same-app-development-contingency"].includes(callbackMode)) throw new Error("BLOCKED:CALLBACK_MODE_INVALID");
+  if (!/^https:\/\/[^/]+$/i.test(callbackBase)) throw new Error("BLOCKED:CALLBACK_BASE_MUST_BE_HTTPS_ORIGIN");
+  const callbackHost = new URL(callbackBase).hostname.toLowerCase();
+  const isReplitDev = callbackHost.endsWith(".replit.dev");
+  const isDevContingency = callbackMode === "same-app-development-contingency";
+  if (isReplitDev && !isDevContingency) throw new Error("BLOCKED:INTERACTIVE_REPLIT_DEV_CALLBACK_REQUIRES_EXPLICIT_CONTINGENCY");
+  if (isDevContingency && !isReplitDev) throw new Error("BLOCKED:DEV_CONTINGENCY_REQUIRES_REPLIT_DEV_CALLBACK");
   if (expectedIcao && !/^[A-Z0-9]{4}$/.test(expectedIcao)) {
     throw new Error("BLOCKED:EXPECTED_ICAO_INVALID");
   }
@@ -147,6 +149,29 @@ async function main(): Promise<void> {
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("BLOCKED:AUTH_SHA_INVALID");
   if (!/^[a-f0-9]{64}$/.test(callbackVerificationSha)) throw new Error("BLOCKED:CALLBACK_VERIFICATION_SHA_INVALID");
   if (!/^[a-f0-9]{40}$/.test(expectedHead)) throw new Error("BLOCKED:EXPECTED_HEAD_INVALID");
+
+  let callbackContingency: any = null;
+  let callbackContingencyPath: string | null = null;
+  if (isDevContingency) {
+    if (!callbackContingencyPathRaw || !/^[a-f0-9]{64}$/.test(callbackContingencySha)) throw new Error("BLOCKED:DEV_CONTINGENCY_ARTIFACT_REQUIRED");
+    callbackContingencyPath = path.resolve(callbackContingencyPathRaw);
+    const raw = fs.readFileSync(callbackContingencyPath);
+    const actualSha = sha256(raw);
+    if (actualSha !== callbackContingencySha) throw new Error(`BLOCKED:DEV_CONTINGENCY_SHA_MISMATCH:${actualSha}`);
+    try { callbackContingency = JSON.parse(raw.toString("utf8")); } catch { throw new Error("BLOCKED:DEV_CONTINGENCY_INVALID_JSON"); }
+    const valid =
+      callbackContingency?.schema === "v39.phase2g-same-app-dev-callback-contingency.v1" &&
+      callbackContingency?.status === "FROZEN" &&
+      callbackContingency?.authorized === true &&
+      callbackContingency?.callback_kind === "same-app-replit-development" &&
+      callbackContingency?.owner_executor === "github-actions" &&
+      callbackContingency?.independent_watchdog_required === true &&
+      callbackContingency?.scientific_protocol_unchanged === true &&
+      callbackContingency?.exact_match_required === true &&
+      Number(callbackContingency?.stage1_target_minutes) === 120 &&
+      callbackContingency?.no_automatic_retry === true;
+    if (!valid) throw new Error("BLOCKED:DEV_CONTINGENCY_CONTRACT_INVALID");
+  }
 
   const currentHead = git(["rev-parse", "HEAD"]).toLowerCase();
   const blockers: string[] = [];
@@ -334,6 +359,28 @@ async function main(): Promise<void> {
 
   const origin = callbackBase;
   let callbackVerification: any = null;
+  let developmentRuntimeHealth: any = null;
+  let developmentRuntimeHealthExact = false;
+  if (isDevContingency) {
+    try {
+      const health = await getJson(`${origin}/__v39/workspace-runtime`);
+      developmentRuntimeHealth = health.json;
+      developmentRuntimeHealthExact =
+        health.status === 200 &&
+        health.json?.schema === "v39.phase2f-workspace-runtime.v1" &&
+        health.json?.status === "PASS" &&
+        String(health.json?.git_head ?? "").toLowerCase() === expectedHead &&
+        health.json?.prepaid_route_registered === true &&
+        Number(health.json?.retention_hours) === 168 &&
+        health.json?.provider_mutation === false &&
+        health.json?.runtime_owner_mode === "replit-managed-project" &&
+        health.json?.managed_replit_workflow === true &&
+        health.json?.published_deployment === false;
+      if (!developmentRuntimeHealthExact) blockers.push("development_callback_runtime_health_not_exact");
+    } catch (error) {
+      blockers.push(`development_callback_runtime_health_failed:${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   try {
     const callbackRaw = fs.readFileSync(callbackVerificationPath);
     const actualCallbackSha = sha256(callbackRaw);
@@ -346,11 +393,14 @@ async function main(): Promise<void> {
     blockers.push(`callback_verification_unreadable:${error instanceof Error ? error.message : String(error)}`);
   }
 
+  const callbackContractMode = isDevContingency ? "same-app-development-contingency" : "legacy-live-prepaid-route";
   let callback: Record<string, unknown> = {
     origin,
     reachable: false,
     exact_contract: false,
-    contract_mode: "legacy-live-prepaid-route",
+    contract_mode: callbackContractMode,
+    callback_mode: callbackMode,
+    callback_contingency_sha256: isDevContingency ? callbackContingencySha : null,
     callback_verification_sha256: callbackVerificationSha,
   };
 
@@ -364,6 +414,11 @@ async function main(): Promise<void> {
       callbackVerification.status === "PASS" &&
       callbackVerification.contract_mode === "live-prepaid-route-end-to-end" &&
       callbackVerification.callback_origin === origin &&
+      String(callbackVerification.callback_mode ?? "published") === callbackMode &&
+      (!isDevContingency || (
+        callbackVerification.callback_contingency_sha256 === callbackContingencySha &&
+        String(callbackVerification.workspace_git_head ?? "").toLowerCase() === expectedHead
+      )) &&
       callbackVerification.provider_called === false &&
       callbackVerification.provider_subscription_created === false &&
       Number(callbackVerification.alert_credits_spent) === 0 &&
@@ -394,24 +449,29 @@ async function main(): Promise<void> {
         origin,
         reachable: liveRouteHealthy,
         exact_contract: artifactContract && liveRouteHealthy,
-        contract_mode: "legacy-live-prepaid-route",
+        contract_mode: callbackContractMode,
+        callback_mode: callbackMode,
+        callback_contingency_sha256: isDevContingency ? callbackContingencySha : null,
         callback_verification_sha256: callbackVerificationSha,
         callback_verification_generated_at_utc: callbackVerification.generated_at_utc ?? null,
         wrong_secret_live_check_status: live.status,
         provider_blob_boundary_proven_by_callback_verification: artifactContract,
-        source_compatible_with_current_head: null,
+        source_compatible_with_current_head: isDevContingency ? developmentRuntimeHealthExact : null,
+        development_runtime_health: isDevContingency ? developmentRuntimeHealth : null,
       };
-      if (!liveRouteHealthy) blockers.push("published_callback_live_route_check_failed");
+      if (!liveRouteHealthy) blockers.push("callback_live_route_check_failed");
     } catch (error) {
       callback = {
         origin,
         reachable: false,
         exact_contract: false,
-        contract_mode: "legacy-live-prepaid-route",
+        contract_mode: callbackContractMode,
+        callback_mode: callbackMode,
+        callback_contingency_sha256: isDevContingency ? callbackContingencySha : null,
         callback_verification_sha256: callbackVerificationSha,
         error: error instanceof Error ? error.message : String(error),
       };
-      blockers.push("published_callback_live_route_check_failed");
+      blockers.push("callback_live_route_check_failed");
     }
   }
 
@@ -497,6 +557,13 @@ async function main(): Promise<void> {
       would_cross_utc_midnight_if_started_now: wouldCrossUtcMidnight,
     },
     owner_executor: ownerExecutor,
+    callback_mode: callbackMode,
+    callback_contingency: isDevContingency ? {
+      file: callbackContingencyPath ? path.relative(process.cwd(), callbackContingencyPath) : null,
+      sha256: callbackContingencySha,
+      schema: callbackContingency?.schema ?? null,
+      scientific_protocol_unchanged: callbackContingency?.scientific_protocol_unchanged === true,
+    } : null,
     callback,
     blockers,
     next: status === "PASS_READY_FOR_PAID_STAGE1"
