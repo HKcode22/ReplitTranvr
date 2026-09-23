@@ -101,8 +101,12 @@ export interface Phase2gCompact6AmendmentV39 {
     requires_live_callback_verification: true;
     requires_cross_environment_webhook_secret_binding: true;
     requires_owner_secret_recheck: true;
-    requires_zero_credit_secret_binding_workflow: true;
-    requires_delivery_gap_fail_fast_watchdog: true;
+    requires_cross_environment_runtime_db_binding: true;
+    requires_owner_runtime_health_recheck: true;
+    requires_owner_runtime_db_recheck: true;
+    requires_zero_credit_callback_binding_workflow: true;
+    requires_zero_callback_spend_fail_fast_watchdog: true;
+    requires_url_encoded_webhook_secret_path: true;
     requires_zero_active_billable_at_launch: true;
     no_further_automatic_wsss_retry: true;
     outcome_metrics_not_used_to_authorize: true;
@@ -318,8 +322,12 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     recoveryP2g10.requires_live_callback_verification !== true ||
     recoveryP2g10.requires_cross_environment_webhook_secret_binding !== true ||
     recoveryP2g10.requires_owner_secret_recheck !== true ||
-    recoveryP2g10.requires_zero_credit_secret_binding_workflow !== true ||
-    recoveryP2g10.requires_delivery_gap_fail_fast_watchdog !== true ||
+    recoveryP2g10.requires_cross_environment_runtime_db_binding !== true ||
+    recoveryP2g10.requires_owner_runtime_health_recheck !== true ||
+    recoveryP2g10.requires_owner_runtime_db_recheck !== true ||
+    recoveryP2g10.requires_zero_credit_callback_binding_workflow !== true ||
+    recoveryP2g10.requires_zero_callback_spend_fail_fast_watchdog !== true ||
+    recoveryP2g10.requires_url_encoded_webhook_secret_path !== true ||
     recoveryP2g10.requires_zero_active_billable_at_launch !== true ||
     recoveryP2g10.no_further_automatic_wsss_retry !== true ||
     recoveryP2g10.outcome_metrics_not_used_to_authorize !== true ||
