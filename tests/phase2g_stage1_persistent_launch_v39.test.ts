@@ -166,6 +166,8 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(githubWorkflow).toContain("callback_mode");
     expect(githubWorkflow).toContain("callback_contingency_file");
     expect(githubWorkflow).toContain("callback_contingency_sha");
+    expect(githubWorkflow).toContain("callback_verification_b64");
+    expect(githubWorkflow).toContain("Callback verification base64 SHA mismatch");
     expect(githubWorkflow).not.toContain("--provider-blob-bucket-id");
     expect(githubWorkflow).not.toContain("V39_PHASE2G_CONTROL_SECRET");
     expect(githubWorkflow).toContain("V39_DEFER_PROVIDER_CONTENT_CLEANUP");
