@@ -49,6 +49,24 @@ import {
 import { AIRPORT_CATALOG, AIRPORT_TIERS, tierForIcao } from "./lib/disruption/adbAirportCatalog_v3";
 
 function webhookSecret(): string | null { return process.env.AERODATABOX_WEBHOOK_SECRET || null; }
+function phase2gWebhookSecretMatch(req: Request, res: Response): void {
+  const expected = webhookSecret();
+  if (!expected) { res.status(503).json({ error: "WEBHOOK_SECRET_NOT_CONFIGURED" }); return; }
+  const supplied = String(req.header("x-v39-phase2g-webhook-secret") ?? "");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(supplied);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  res.status(200).json({
+    schema: "v39.phase2g-webhook-secret-match.v1",
+    status: "PASS",
+    provider_call: false,
+    provider_mutation: false,
+    alert_credits_spent: 0,
+  });
+}
 function phase2gControlGuard(req: Request, res: Response, next: NextFunction): void {
   const expected = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "").trim();
   const supplied = String(req.header("x-v39-phase2g-control-secret") ?? "");
@@ -147,6 +165,7 @@ async function recordIncident(cause:string,detail:unknown):Promise<void>{
 }
 
 export function registerV3Routes(app:Express):void{
+  app.post("/__v39/phase2g/webhook-secret-match",phase2gWebhookSecretMatch);
   const prepaidWebhookIngress=async(req:Request,res:Response)=>{
     const secret=webhookSecret();
     if(!secret){res.status(503).json({error:"WEBHOOK_SECRET_NOT_CONFIGURED"});return;}
