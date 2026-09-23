@@ -40,7 +40,7 @@ case "${1:-help}" in
       tests/phase2g_stage1_persistent_launch_v39.test.ts \
       tests/phase2g_stage1_rerun_policy_v39.test.ts \
       tests/phase2g_compact6_reconciliation_v39.test.ts \
-      tests/phase2g_zero_credit_secret_binding_workflow_v39.test.ts \
+      tests/phase2g_zero_credit_callback_binding_v39.test.ts \
       tests/phase2g_p2g10_secret_mismatch_adjudication_v39.test.ts
     npx tsc --noEmit
     echo "THURSDAY_STATIC=PASS"
@@ -134,7 +134,7 @@ case "${1:-help}" in
     echo "provider_call=false"
     echo "provider_mutation=false"
     echo "alert_credits_spent=0"
-    gh workflow run phase2g-zero-credit-secret-binding.yml \
+    gh workflow run phase2g-zero-credit-callback-binding.yml \
       --ref main \
       -f callback_base="https://${REPLIT_DEV_DOMAIN}" \
       -f expected_head="$(git rev-parse HEAD)"
