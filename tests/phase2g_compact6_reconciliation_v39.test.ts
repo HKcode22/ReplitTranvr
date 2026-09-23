@@ -125,8 +125,12 @@ describe("Phase2G compact-6 amendment", () => {
     expect(recovery?.requires_live_callback_verification).toBe(true);
     expect(recovery?.requires_cross_environment_webhook_secret_binding).toBe(true);
     expect(recovery?.requires_owner_secret_recheck).toBe(true);
-    expect(recovery?.requires_zero_credit_secret_binding_workflow).toBe(true);
-    expect(recovery?.requires_delivery_gap_fail_fast_watchdog).toBe(true);
+    expect(recovery?.requires_cross_environment_runtime_db_binding).toBe(true);
+    expect(recovery?.requires_owner_runtime_health_recheck).toBe(true);
+    expect(recovery?.requires_owner_runtime_db_recheck).toBe(true);
+    expect(recovery?.requires_zero_credit_callback_binding_workflow).toBe(true);
+    expect(recovery?.requires_zero_callback_spend_fail_fast_watchdog).toBe(true);
+    expect(recovery?.requires_url_encoded_webhook_secret_path).toBe(true);
     expect(recovery?.requires_zero_active_billable_at_launch).toBe(true);
     expect(recovery?.no_further_automatic_wsss_retry).toBe(true);
     expect(recovery?.outcome_metrics_not_used_to_authorize).toBe(true);
