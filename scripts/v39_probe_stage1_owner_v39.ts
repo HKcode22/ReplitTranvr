@@ -248,6 +248,23 @@ export function isP2g09HostResetRecoveryEligibleV39(
   );
 }
 
+export function isP2g10SecretMismatchRecoveryEligibleV39(
+  attempts: Stage1AttemptEvidence[],
+): boolean {
+  const wsss = attempts.filter((row) => row.icao.toUpperCase() === "WSSS");
+  if (wsss.length !== 6) return false;
+  const prior = wsss.slice(0, 5);
+  const sixth = wsss[5];
+  return (
+    isP2g09HostResetRecoveryEligibleV39(prior) &&
+    sixth.probeId === 8 &&
+    sixth.status === "failed" &&
+    sixth.durationCensored === true &&
+    sixth.reconciliationStatus === "UNRESOLVED" &&
+    sixth.stopReason === "supervisor_child_exit_recovered"
+  );
+}
+
 export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEvidence): boolean {
   if (attempt.status !== "failed") return false;
   if (attempt.durationCensored !== true) return false;
@@ -309,7 +326,11 @@ async function chooseNextStage1Target(
   allowP2g07Provider502Recovery: boolean,
   allowP2g08Balance502Recovery: boolean,
   allowP2g09HostResetRecovery: boolean,
+  allowP2g10SecretMismatchRecovery: boolean,
 ): Promise<{ icao: string; replacement: boolean } | null> {
+  if (allowP2g10SecretMismatchRecovery && isP2g10SecretMismatchRecoveryEligibleV39(evidence)) {
+    return { icao: "WSSS", replacement: false };
+  }
   if (allowP2g09HostResetRecovery && isP2g09HostResetRecoveryEligibleV39(evidence)) {
     return { icao: "WSSS", replacement: false };
   }
@@ -364,6 +385,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     compact6?.amendment.p2g07_provider502_recovery_rerun?.authorized === true,
     compact6?.amendment.p2g08_balance502_recovery_rerun?.authorized === true,
     compact6?.amendment.p2g09_hostreset_recovery_rerun?.authorized === true,
+    compact6?.amendment.p2g10_secret_mismatch_recovery_rerun?.authorized === true,
   );
 
   if (!next) {
