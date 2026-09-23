@@ -18,6 +18,7 @@ const zeroCreditWorkflow = read(".github/workflows/phase2g-zero-credit-callback-
 const placeholderRegression = read("tests/phase2g_prepaid_item_sql_placeholders_v39.test.ts");
 const register = read("SEPmd/phase2g/FAILURE_REGISTER_AND_PREVENTION_MATRIX.md");
 const omaa = read("SEPmd/phase2g/reports/2026-09-16_P2G02_OMAA_SUCCESS.md");
+const history = JSON.parse(read("artifacts/phase2g-historical-attempt-register-20260923.json"));
 
 describe("Phase2G historical failure regression matrix", () => {
   it("keeps the pre-Gate is_randomized NULL failure fixed", () => {
@@ -81,6 +82,22 @@ describe("Phase2G historical failure regression matrix", () => {
     expect(register).toContain("SKBO: not yet run");
     expect(register).toContain("YSSY: not yet run");
     expect(register).toContain("P2G10 / probe 8 WSSS");
+  });
+
+  it("keeps every known paid/prelaunch attempt present in the machine-readable register", () => {
+    const keys = new Set(history.attempts.map((attempt: any) => String(attempt.key)));
+    for (const key of ["pre-gate-20260819", "probe1", "probe2", "probe3", "P2G05", "P2G06", "P2G07", "P2G08", "P2G09", "P2G10"]) {
+      expect(keys.has(key)).toBe(true);
+    }
+    const candidates = Object.fromEntries(history.compact6_candidates.map((c: any) => [c.icao, c.state]));
+    expect(candidates).toMatchObject({
+      WSSS: "attempted_multiple_times",
+      OMAA: "valid_completed_match",
+      MMUN: "infrastructure_invalid_attempt",
+      LKPR: "not_run_prelaunch_refusal_only",
+      SKBO: "not_yet_run",
+      YSSY: "not_yet_run",
+    });
   });
 
   it("corrects the OMAA AUTH-label/probe-number documentation ambiguity", () => {
