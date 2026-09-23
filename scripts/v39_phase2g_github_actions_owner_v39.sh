@@ -156,6 +156,40 @@ if (
 NODE
 echo "GITHUB_REPLIT_WEBHOOK_SECRET_BINDING=PASS"
 
+echo "GITHUB_REPLIT_RUNTIME_DB_BINDING_CHECK=START"
+DB_CHALLENGE="phase2g-${GITHUB_RUN_ID:-unknown}-${EXPECTED_HEAD}-owner"
+DB_PROOF="$(DB_CHALLENGE="$DB_CHALLENGE" node --input-type=module <<'NODE'
+import { createHmac } from "node:crypto";
+const key = String(process.env.V39_DATABASE_RUNTIME_URL ?? "");
+const challenge = String(process.env.DB_CHALLENGE ?? "");
+if (!key || !challenge) process.exit(2);
+process.stdout.write(createHmac("sha256", key).update(`phase2g-db-binding:${challenge}`).digest("hex"));
+NODE
+)"
+DB_BINDING_RESPONSE="$(curl --silent --show-error --fail-with-body --max-time 15 \
+  -X POST \
+  -H "x-v39-phase2g-db-challenge: ${DB_CHALLENGE}" \
+  -H "x-v39-phase2g-db-proof: ${DB_PROOF}" \
+  "${BASE}/__v39/phase2g/runtime-db-binding")" || {
+  echo "REFUSED:GITHUB_REPLIT_RUNTIME_DB_BINDING_HTTP"
+  exit 2
+}
+DB_BINDING_RESPONSE="$DB_BINDING_RESPONSE" node --input-type=module <<'NODE'
+const response = JSON.parse(process.env.DB_BINDING_RESPONSE ?? "{}");
+if (
+  response?.schema !== "v39.phase2g-runtime-db-binding.v1" ||
+  response?.status !== "PASS" ||
+  response?.provider_call !== false ||
+  response?.provider_mutation !== false ||
+  response?.database_mutation !== false ||
+  Number(response?.alert_credits_spent) !== 0
+) {
+  console.error("REFUSED:GITHUB_REPLIT_RUNTIME_DB_BINDING_CONTRACT");
+  process.exit(2);
+}
+NODE
+echo "GITHUB_REPLIT_RUNTIME_DB_BINDING=PASS"
+
 export ADB_PREPROBE_ARTIFACT_PATH="$PREPROBE"
 export ADB_PREPROBE_ARTIFACT_SHA256="$PREPROBE_SHA"
 export ADB_PROBE_RUNTIME_ARTIFACT_PATH="$RUNTIME_FILE"
