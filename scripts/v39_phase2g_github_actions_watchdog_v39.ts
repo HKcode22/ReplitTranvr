@@ -11,7 +11,7 @@ import {
 const LIVE_CREDIT_LIMIT = 450;
 const POLL_MS = 30_000;
 const PROVIDER_POLL_MS = 120_000;
-const DELIVERY_GAP_CONSECUTIVE_PROVIDER_POLLS_LIMIT = 3;
+const NO_CALLBACK_SPEND_CONSECUTIVE_PROVIDER_POLLS_LIMIT = 3;
 const PROBE_APPEAR_TIMEOUT_MS = 10 * 60_000;
 const DEADLINE_CLEANUP_GRACE_MS = 5 * 60_000;
 const MAX_WATCH_MS = 150 * 60_000;
@@ -136,7 +136,7 @@ async function main(): Promise<void> {
   let nextProviderPoll = 0;
   let lastProviderBalance: number | null = null;
   let providerReadFailures = 0;
-  let deliveryGapProviderPolls = 0;
+  let noCallbackSpendProviderPolls = 0;
 
   while (Date.now() - started < MAX_WATCH_MS) {
     const probeR = await pool.query(
@@ -173,6 +173,7 @@ async function main(): Promise<void> {
 
     let internalCredits = 0;
     let callbackFailures = 0;
+    let callbackRequestsSeen = 0;
     if (sessionId) {
       const d = await pool.query(
         `SELECT COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::int AS credits
@@ -182,11 +183,12 @@ async function main(): Promise<void> {
       );
       internalCredits = Number(d.rows[0]?.credits ?? 0);
       const sessionCounters = await pool.query(
-        `SELECT callback_failures
+        `SELECT callback_requests_seen,callback_failures
            FROM clean.prepaid_probe_session_runtime
           WHERE session_id=$1::uuid`,
         [sessionId],
       );
+      callbackRequestsSeen = Number(sessionCounters.rows[0]?.callback_requests_seen ?? 0);
       callbackFailures = Number(sessionCounters.rows[0]?.callback_failures ?? 0);
     }
 
@@ -283,15 +285,22 @@ async function main(): Promise<void> {
             reason: `external_live_credit_limit_reached:${externalDelta}`,
           });
         }
-        if (externalDelta > internalCredits) {
-          deliveryGapProviderPolls += 1;
+        // Do not censor a scientifically valid run merely because provider SEND
+        // accounting is temporarily ahead of received/persisted credits. The
+        // frozen protocol adjudicates a positive external-vs-internal gap only
+        // after settlement. Fail early only when provider spend is positive
+        // while the application has observed zero callback requests across
+        // three consecutive provider polls: that is a transport/authentication
+        // failure signature, not a scientific yield signal.
+        if (externalDelta > 0 && callbackRequestsSeen === 0) {
+          noCallbackSpendProviderPolls += 1;
         } else {
-          deliveryGapProviderPolls = 0;
+          noCallbackSpendProviderPolls = 0;
         }
-        if (deliveryGapProviderPolls >= DELIVERY_GAP_CONSECUTIVE_PROVIDER_POLLS_LIMIT) {
+        if (noCallbackSpendProviderPolls >= NO_CALLBACK_SPEND_CONSECUTIVE_PROVIDER_POLLS_LIMIT) {
           await invokeRecovery({
             authId, authFile, authSha, budgetDay,
-            reason: `persistent_external_internal_delivery_gap:external=${externalDelta}:internal=${internalCredits}:polls=${deliveryGapProviderPolls}`,
+            reason: `persistent_provider_spend_without_callback_requests:external=${externalDelta}:polls=${noCallbackSpendProviderPolls}`,
           });
         }
       } else {
@@ -308,10 +317,11 @@ async function main(): Promise<void> {
       probe_status: status,
       session_bound: Boolean(sessionId),
       internal_credits: internalCredits,
+      callback_requests_seen: callbackRequestsSeen,
       callback_failures: callbackFailures,
       provider_balance_last_seen: lastProviderBalance,
       provider_read_failures: providerReadFailures,
-      delivery_gap_provider_polls: deliveryGapProviderPolls,
+      no_callback_spend_provider_polls: noCallbackSpendProviderPolls,
       window_end_utc: Number.isFinite(windowEndMs) ? new Date(windowEndMs).toISOString() : null,
       provider_mutation: false,
     }));
