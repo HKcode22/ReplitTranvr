@@ -1,0 +1,14 @@
+{
+  "authorizationId": "AUTH-20260923-P2G10",
+  "phaseGate": "Phase 2 / Gate 2 Stage 1",
+  "airportFilterWindow": "Gate2Stage1;preprobe_file_sha256=b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870;runtime_file_sha256=f74c86d38cceed06c7e436d498822bee0d670b65e08eefe07922c0f293ff3ac3;probe_budget_day_id=P2G-S1-20260923-09;stage1_amendment_sha256=665a0d9991fd0980639859671711f7bf11ef9cd11197d486182343ccbf939d6f;target_minutes=120",
+  "maxAlertCredits": 500,
+  "maxRestUnitsByCategory": null,
+  "startNotBeforeUtc": "2026-09-23T11:00:00.000Z",
+  "expiresAtUtc": "2026-09-23T13:30:00.000Z",
+  "cleanupOwner": "scripts/v39_phase2g_github_actions_owner_v39.sh",
+  "predecessorEvidenceIds": [
+    "RUN-20260915-D61659402642563B6FEDF2AAA981474838BF088B67526528426F9702509C9D1B",
+    "RUN-20260915-6AC2D792E24224EA3FC80C5E6B91156F70C0D190814F6DF12644C6FACF848196"
+  ]
+}
