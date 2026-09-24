@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { enforcePaidGuard, verifyAuthFile } from "./v39_paid_guard_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
@@ -28,7 +28,11 @@ function atomicWriteJson(file: string, value: unknown): void {
   fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", "utf8");
   fs.renameSync(tmp, file);
 }
-async function callbackHealthy(base: string): Promise<boolean> {
+async function callbackHealthy(
+  base: string,
+  expectedHead: string,
+  callbackMode: string,
+): Promise<boolean> {
   try {
     const wrongSecret = "phase2g-healthcheck-intentionally-wrong";
     const session = "00000000-0000-4000-8000-000000000000";
@@ -42,7 +46,84 @@ async function callbackHealthy(base: string): Promise<boolean> {
       },
     );
     const json: any = await response.json().catch(() => null);
-    return response.status === 404 && json?.error === "Not found";
+    if (response.status !== 404 || json?.error !== "Not found") return false;
+
+    // The published path has its own deployment contract. The Thursday
+    // same-app development contingency must continuously prove that the live
+    // Replit callback has not drifted after paid ownership began.
+    if (callbackMode !== "same-app-development-contingency") return true;
+
+    const healthResponse = await fetch(`${base}/__v39/workspace-runtime`, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(8_000),
+    });
+    const health: any = await healthResponse.json().catch(() => null);
+    if (
+      healthResponse.status !== 200 ||
+      health?.schema !== "v39.phase2f-workspace-runtime.v1" ||
+      health?.status !== "PASS" ||
+      String(health?.git_head ?? "").toLowerCase() !== expectedHead ||
+      health?.prepaid_route_registered !== true ||
+      Number(health?.retention_hours) !== 168 ||
+      health?.provider_mutation !== false ||
+      health?.runtime_owner_mode !== "replit-managed-project" ||
+      health?.managed_replit_workflow !== true ||
+      health?.published_deployment !== false
+    ) {
+      return false;
+    }
+
+    const githubWebhookSecret = String(process.env.AERODATABOX_WEBHOOK_SECRET ?? "");
+    const githubRuntimeDbUrl = String(process.env.V39_DATABASE_RUNTIME_URL ?? "");
+    if (!githubWebhookSecret || !githubRuntimeDbUrl) return false;
+
+    const secretResponse = await fetch(`${base}/__v39/phase2g/webhook-secret-match`, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "x-v39-phase2g-webhook-secret": githubWebhookSecret,
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    const secretJson: any = await secretResponse.json().catch(() => null);
+    if (
+      secretResponse.status !== 200 ||
+      secretJson?.schema !== "v39.phase2g-webhook-secret-match.v1" ||
+      secretJson?.status !== "PASS" ||
+      secretJson?.provider_call !== false ||
+      secretJson?.provider_mutation !== false ||
+      Number(secretJson?.alert_credits_spent) !== 0
+    ) {
+      return false;
+    }
+
+    const challenge = `phase2g-supervisor-${process.pid}-${Date.now()}-${expectedHead}`;
+    const proof = createHmac("sha256", githubRuntimeDbUrl)
+      .update(`phase2g-db-binding:${challenge}`)
+      .digest("hex");
+    const dbResponse = await fetch(`${base}/__v39/phase2g/runtime-db-binding`, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "x-v39-phase2g-db-challenge": challenge,
+        "x-v39-phase2g-db-proof": proof,
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    const dbJson: any = await dbResponse.json().catch(() => null);
+    if (
+      dbResponse.status !== 200 ||
+      dbJson?.schema !== "v39.phase2g-runtime-db-binding.v1" ||
+      dbJson?.status !== "PASS" ||
+      dbJson?.provider_call !== false ||
+      dbJson?.provider_mutation !== false ||
+      dbJson?.database_mutation !== false ||
+      Number(dbJson?.alert_credits_spent) !== 0
+    ) {
+      return false;
+    }
+
+    return true;
   } catch {
     return false;
   }
@@ -96,7 +177,7 @@ async function main(): Promise<void> {
   }
   const head = gitHead();
   if (head !== expectedHead) throw new Error(`SUPERVISOR_REFUSED:GIT_HEAD_MISMATCH:${head}`);
-  if (!(await callbackHealthy(callbackBase))) throw new Error("SUPERVISOR_REFUSED:CALLBACK_NOT_HEALTHY_AT_START");
+  if (!(await callbackHealthy(callbackBase, expectedHead, callbackMode))) throw new Error("SUPERVISOR_REFUSED:CALLBACK_OR_BINDING_NOT_HEALTHY_AT_START");
 
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logFd = fs.openSync(logPath, "a");
@@ -179,7 +260,7 @@ async function main(): Promise<void> {
     if (callbackCheckInFlight || child.exitCode !== null || child.killed) return;
     callbackCheckInFlight = true;
     try {
-      const healthy = await callbackHealthy(callbackBase);
+      const healthy = await callbackHealthy(callbackBase, expectedHead, callbackMode);
       callbackFailureCount = healthy ? 0 : callbackFailureCount + 1;
       if (!healthy) {
         fs.writeSync(logFd, `${JSON.stringify({

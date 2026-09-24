@@ -57,6 +57,7 @@ Before any Thursday authorization:
 
 6. **Live fail-fast protection**
    - Any callback persistence failure triggers exact recovery.
+   - While the same-app development contingency is active, the GitHub-owned supervisor revalidates the prepaid callback route, the exact live Replit Git HEAD/managed-runtime contract, the GitHub→Replit webhook-secret binding, and the runtime-database binding every 15 seconds. Three consecutive failed live-binding checks terminate the paid owner and invoke exact recovery. These checks make zero AeroDataBox provider calls/mutations, zero database mutations, and spend zero Alert credits.
    - A positive provider-spend signal with **zero callback requests observed** across three consecutive provider balance polls triggers exact recovery. A temporary external-vs-internal credit gap after callbacks have begun is **not** an early-stop signal; it is adjudicated only by the frozen terminal reconciliation rule.
    - The independent watchdog remains incapable of creating a provider subscription.
    - The existing hard credit ceiling remains unchanged.

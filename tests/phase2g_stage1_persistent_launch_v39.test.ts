@@ -257,6 +257,11 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(supervisor).toContain("const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3");
     expect(supervisor).toContain("callbackFailureCount >= CALLBACK_CONSECUTIVE_FAILURE_LIMIT");
     expect(supervisor).toContain('requestTermination("SIGTERM", "workspace_callback_unreachable_threshold")');
+    expect(supervisor).toContain("/__v39/workspace-runtime");
+    expect(supervisor).toContain("/__v39/phase2g/webhook-secret-match");
+    expect(supervisor).toContain("/__v39/phase2g/runtime-db-binding");
+    expect(supervisor).toContain('String(health?.git_head ?? "").toLowerCase() !== expectedHead');
+    expect(supervisor).toContain('createHmac("sha256", githubRuntimeDbUrl)');
     expect(supervisor).toContain("callback_watchdog_triggered");
   });
 
