@@ -259,7 +259,10 @@ export function createPrepaidSessionIdentityPersistenceV39(
         const exact = await client.query(
           `SELECT DISTINCT
                   flight_instance_id,
-                  initial_service_date::text
+                  initial_service_date::text,
+                  operating_flight_number,
+                  origin_icao,
+                  destination_icao
              FROM clean.prepaid_probe_item_runtime
             WHERE session_id=$1::uuid
               AND provider_flight_id=$2
@@ -278,11 +281,38 @@ export function createPrepaidSessionIdentityPersistenceV39(
         }
 
         if (exact.rows[0]) {
+          const prior = exact.rows[0];
+
+          const priorNumber =
+            String(prior.operating_flight_number ?? "")
+              .trim()
+              .replace(/^0+/, "");
+
+          const priorOrigin =
+            String(prior.origin_icao ?? "")
+              .trim()
+              .toUpperCase();
+
+          const priorDestination =
+            String(prior.destination_icao ?? "")
+              .trim()
+              .toUpperCase();
+
+          if (
+            priorNumber !== number ||
+            priorOrigin !== origin ||
+            priorDestination !== destination
+          ) {
+            throw prepaidWebhookIdentityAmbiguityErrorV39(
+              "provider flight id conflicts with retained prepaid flight identity",
+            );
+          }
+
           return {
             flightInstanceId:
-              String(exact.rows[0].flight_instance_id),
+              String(prior.flight_instance_id),
             initialServiceDate:
-              String(exact.rows[0].initial_service_date),
+              String(prior.initial_service_date),
           };
         }
 

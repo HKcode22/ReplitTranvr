@@ -54,6 +54,9 @@ describe("V3.9 prepaid session-local identity persistence", () => {
         rows: [{
           flight_instance_id: "leg:existing",
           initial_service_date: "2026-09-25",
+          operating_flight_number: "100",
+          origin_icao: "MMUN",
+          destination_icao: "KDFW",
         }],
       },
     ]);
@@ -73,6 +76,30 @@ describe("V3.9 prepaid session-local identity persistence", () => {
     expect(sql).toContain("clean.prepaid_probe_item_runtime");
     expect(sql).not.toContain("clean.webhook_flight_identity");
     expect(sql).not.toContain("clean.webhook_flight_schedule_version");
+  });
+
+  it("fails closed when a provider flight id conflicts with retained route identity", async () => {
+    const { client } = fakeClient([
+      {
+        rowCount: 1,
+        rows: [{
+          flight_instance_id: "leg:existing",
+          initial_service_date: "2026-09-25",
+          operating_flight_number: "100",
+          origin_icao: "MMUN",
+          destination_icao: "KJFK",
+        }],
+      },
+    ]);
+
+    const persistence =
+      createPrepaidSessionIdentityPersistenceV39(client, SESSION);
+
+    await expect(
+      persistence.resolveOrCreate(BASE_INPUT),
+    ).rejects.toMatchObject({
+      name: "WebhookIdentityAmbiguityError",
+    });
   });
 
   it("accepts the canonical candidate when provider id has no prior session identity", async () => {
