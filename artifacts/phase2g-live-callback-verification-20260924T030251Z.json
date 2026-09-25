@@ -1,0 +1,41 @@
+{
+  "schema": "v39.phase2g-live-callback-verification.v1",
+  "status": "PASS",
+  "callback_origin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+  "callback_mode": "same-app-development-contingency",
+  "callback_contingency_sha256": "48b82ac997d1bd116408b49166feef12c389a25a9d091c6225e555b521a037eb",
+  "workspace_git_head": "24a05471c66e7f548141c827b5821c5f4387b223",
+  "deployed_git_head_claimed": null,
+  "contract_mode": "live-prepaid-route-end-to-end",
+  "preexisting_incident_24_tolerated": false,
+  "preexisting_incident_25_tolerated": false,
+  "preexisting_synthetic_incident_ids": [],
+  "wrong_secret_rejected_404": true,
+  "correct_secret_accepted_200": true,
+  "persistence_verified": true,
+  "local_exact_session_cleanup_verified": true,
+  "provider_called": false,
+  "provider_subscription_created": false,
+  "alert_credits_spent": 0,
+  "session_id": "4849f635-a1c5-414f-9fa8-e2467bb0bc0d",
+  "before_cleanup": {
+    "sessions": 1,
+    "deliveries": 1,
+    "items": 1,
+    "blobs": 1,
+    "live_blobs": 1
+  },
+  "cleanup": {
+    "deleted_blobs": 1,
+    "deleted_runtime_rows": 3,
+    "verified_at_utc": "2026-09-24T03:02:51.637Z"
+  },
+  "after_cleanup": {
+    "sessions": 0,
+    "deliveries": 0,
+    "items": 0,
+    "live_blobs": 0,
+    "deleted_blobs": 1
+  },
+  "generated_at_utc": "2026-09-24T03:02:51.707Z"
+}
