@@ -48,11 +48,56 @@ describe("V3.9 prepaid probe PITR-safe runtime", () => {
     expect(sql).not.toMatch(/flight_number|aircraft_reg|callsign|latitude|longitude|raw_body\s+json|raw_payload\s+json/i);
   });
 
+  it("registers physical-flight migration 0060 after settling-state migration 0059", () => {
+    const db = readFileSync(join(process.cwd(), "server", "db.ts"), "utf8");
+    const prior = db.indexOf('"0059_phase2g_settling_state.sql"');
+    const physical = db.indexOf('"0060_phase2g_physical_flight_metrics.sql"');
+
+    expect(prior).toBeGreaterThan(-1);
+    expect(physical).toBeGreaterThan(prior);
+  });
+
   it("registers the unlogged migration after the blob metadata boundary", () => {
     const db = readFileSync(join(process.cwd(), "server", "db.ts"), "utf8");
     const blob = db.indexOf('"0054_provider_blob_storage_boundary.sql"');
     const runtime = db.indexOf('"0055_prepaid_probe_unlogged_runtime.sql"');
     expect(blob).toBeGreaterThan(-1);
     expect(runtime).toBeGreaterThan(blob);
+  });
+});
+
+describe("V3.9 physical-flight metric migration 0060", () => {
+  it("0060 preserves the existing UNLOGGED item surface and freezes codeshare resolution classes", () => {
+    const sql = readFileSync(
+      join(
+        process.cwd(),
+        "migrations",
+        "0060_phase2g_physical_flight_metrics.sql",
+      ),
+      "utf8",
+    );
+
+    // Extend the existing PITR-safe content class; do not invent another
+    // provider-plaintext runtime table.
+    expect(sql).toContain(
+      "ALTER TABLE clean.prepaid_probe_item_runtime",
+    );
+    expect(sql).not.toMatch(
+      /CREATE\s+(?:UNLOGGED\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?clean\.prepaid_probe_[a-z0-9_]+/i,
+    );
+
+    expect(sql).toContain(
+      "ADD COLUMN IF NOT EXISTS codeshare_resolution_status TEXT",
+    );
+    expect(sql).toContain("'resolved_operator'");
+    expect(sql).toContain("'resolved_marketing'");
+    expect(sql).toContain("'ambiguous_unknown'");
+
+    expect(sql).toContain(
+      "ADD COLUMN IF NOT EXISTS scheduled_gate_in_utc TIMESTAMPTZ",
+    );
+    expect(sql).toContain(
+      "ADD COLUMN IF NOT EXISTS metric_contract_version TEXT",
+    );
   });
 });

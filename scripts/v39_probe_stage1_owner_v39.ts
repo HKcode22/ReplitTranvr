@@ -121,7 +121,7 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1AttemptEv
             tail_chain_links_per_credit,stability,confirmed_unique_lower,
             confirmed_plus_ambiguous_upper,provider_content_safe_mode,
             confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit,
-            duration_censored,stop_reason,reconciliation_status,recorded_at
+            metric_contract_version,duration_censored,stop_reason,reconciliation_status,recorded_at
        FROM clean.adb_anchor_probe
       WHERE stage=1 AND preprobe_artifact_sha256=$1
       ORDER BY recorded_at ASC,probe_id ASC`,
@@ -136,6 +136,7 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1AttemptEv
       probeId: Number(x.probe_id),
       icao: String(x.icao).toUpperCase(),
       status: String(x.status),
+      metricContractVersion: x.metric_contract_version == null ? null : String(x.metric_contract_version),
       rowsPerHour: x.rows_per_hour == null ? null : Number(x.rows_per_hour),
       creditsSpent: safeRates ? 1 : (x.credits_spent == null ? null : Number(x.credits_spent)),
       uniqueFlightsPerCredit: x.unique_flights_per_credit == null ? null : Number(x.unique_flights_per_credit),

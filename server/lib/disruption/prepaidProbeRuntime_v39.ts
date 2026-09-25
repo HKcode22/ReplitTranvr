@@ -10,6 +10,11 @@ import {
   normalizeProviderBlobBucketIdV39,
 } from "./replitProviderBlobStore_v39";
 import { CODESHARE_CODE } from "./flightNotificationExtractor_v3";
+import { resolveWebhookFlightIdentity } from "./flightInstanceCanonical_v3";
+import type {
+  WebhookIdentityObservation,
+  WebhookIdentityPersistence,
+} from "./flightInstanceCanonical_v3";
 
 export type PrepaidProbeOwnerKindV39 = "phase2_safety_smoke" | "anchor_probe";
 export type PrepaidProbeSessionStateV39 = "armed" | "active" | "settling" | "completed" | "failed" | "abandoned";
@@ -184,6 +189,417 @@ function runtimeFlightKey(flight: any): string | null {
   const callsign = stringOrNull(flight?.callSign);
   if (!number && !providerId && !callsign) return null;
   return sha256(canonical({ number, providerId, depIcao, arrIcao, depScheduled, callsign }));
+}
+
+
+
+export interface PrepaidIdentityQueryClientV39 {
+  query(
+    text: string,
+    params?: unknown[],
+  ): Promise<{
+    rowCount: number | null;
+    rows: any[];
+  }>;
+}
+
+function prepaidWebhookIdentityAmbiguityErrorV39(
+  message: string,
+): Error {
+  const error = new Error(message);
+  error.name = "WebhookIdentityAmbiguityError";
+  return error;
+}
+
+/**
+ * Session-local Identity-v2 persistence for the prepaid safe path.
+ *
+ * This deliberately uses ONLY clean.prepaid_probe_item_runtime, which is
+ * UNLOGGED and purpose-deleted with the owning prepaid session. It must never
+ * call the default logged webhook identity persistence.
+ *
+ * The current observation itself is persisted later by the prepaid webhook
+ * transaction after resolveWebhookFlightIdentity() returns.
+ */
+export function createPrepaidSessionIdentityPersistenceV39(
+  client: PrepaidIdentityQueryClientV39,
+  sessionId: string,
+): WebhookIdentityPersistence {
+  const id = assertSessionId(sessionId);
+
+  return {
+    async resolveOrCreate(input) {
+      const providerId = input.providerFlightId?.trim() || null;
+      const callsign = input.callsign?.trim().toUpperCase() || null;
+
+      const carrier = input.operatingCarrier.trim().toUpperCase();
+      const number = input.operatingFlightNumber
+        .trim()
+        .replace(/^0+/, "");
+
+      const origin = input.originIcao.trim().toUpperCase();
+      const destination =
+        input.originalDestinationIcao.trim().toUpperCase();
+
+      /*
+       * Serialize identity decisions within one session/alias or route.
+       * This mirrors the normal resolver's concurrency protection while
+       * keeping all lookup state inside the UNLOGGED prepaid surface.
+       */
+      const lockKey = providerId
+        ? `prepaid-provider:${id}:${carrier}:${providerId}`
+        : `prepaid-route:${id}:${carrier}${number}|${origin}|${destination}`;
+
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtext($1))",
+        [lockKey],
+      );
+
+      if (providerId) {
+        const exact = await client.query(
+          `SELECT DISTINCT
+                  flight_instance_id,
+                  initial_service_date::text
+             FROM clean.prepaid_probe_item_runtime
+            WHERE session_id=$1::uuid
+              AND provider_flight_id=$2
+              AND operating_carrier=$3
+              AND flight_instance_id IS NOT NULL
+              AND identity_resolution_status='resolved'
+            ORDER BY flight_instance_id
+            LIMIT 2`,
+          [id, providerId, carrier],
+        );
+
+        if ((exact.rowCount ?? exact.rows.length) > 1) {
+          throw prepaidWebhookIdentityAmbiguityErrorV39(
+            "provider flight id maps to multiple prepaid session identities",
+          );
+        }
+
+        if (exact.rows[0]) {
+          return {
+            flightInstanceId:
+              String(exact.rows[0].flight_instance_id),
+            initialServiceDate:
+              String(exact.rows[0].initial_service_date),
+          };
+        }
+
+        return {
+          flightInstanceId: input.flightInstanceId,
+          initialServiceDate: input.initialServiceDate,
+        };
+      }
+
+      /*
+       * No-provider-ID observations need positive retained linkage evidence.
+       * The production resolver's frozen rule is:
+       *   - callsign match + <=12h => strong linkage;
+       *   - multiple strong matches => ambiguous;
+       *   - otherwise a same-service-date or <=12h nearby identity is
+       *     ambiguous between retime and a distinct physical leg.
+       */
+      const candidates = await client.query(
+        `SELECT DISTINCT ON (flight_instance_id)
+                flight_instance_id,
+                initial_service_date::text,
+                scheduled_gate_out_utc,
+                callsign
+           FROM clean.prepaid_probe_item_runtime
+          WHERE session_id=$1::uuid
+            AND provider_flight_id IS NULL
+            AND flight_instance_id IS NOT NULL
+            AND identity_resolution_status='resolved'
+            AND operating_carrier=$2
+            AND operating_flight_number=$3
+            AND origin_icao=$4
+            AND destination_icao=$5
+            AND initial_service_date BETWEEN
+                ($6::date - INTERVAL '1 day')
+                AND
+                ($6::date + INTERVAL '1 day')
+          ORDER BY flight_instance_id,received_at_utc ASC`,
+        [
+          id,
+          carrier,
+          number,
+          origin,
+          destination,
+          input.initialServiceDate,
+        ],
+      );
+
+      const currentMs = Date.parse(input.scheduledGateOutUtc);
+
+      const enriched = candidates.rows
+        .map((row: any) => {
+          const priorMs =
+            new Date(row.scheduled_gate_out_utc).getTime();
+
+          const deltaHours =
+            Number.isFinite(currentMs) &&
+            Number.isFinite(priorMs)
+              ? Math.abs(currentMs - priorMs) / 3_600_000
+              : Number.POSITIVE_INFINITY;
+
+          const priorCallsign =
+            typeof row.callsign === "string" &&
+            row.callsign.trim()
+              ? row.callsign.trim().toUpperCase()
+              : null;
+
+          return {
+            row,
+            deltaHours,
+            callsignMatch:
+              Boolean(callsign) &&
+              Boolean(priorCallsign) &&
+              callsign === priorCallsign,
+          };
+        });
+
+      const strong = enriched.filter(
+        (candidate) =>
+          candidate.callsignMatch &&
+          candidate.deltaHours <= 12,
+      );
+
+      if (strong.length > 1) {
+        throw prepaidWebhookIdentityAmbiguityErrorV39(
+          "multiple retained prepaid identities match the no-provider observation",
+        );
+      }
+
+      if (strong.length === 1) {
+        return {
+          flightInstanceId:
+            String(strong[0].row.flight_instance_id),
+          initialServiceDate:
+            String(strong[0].row.initial_service_date),
+        };
+      }
+
+      const ambiguousNearby = enriched.some(
+        (candidate) =>
+          String(candidate.row.initial_service_date) ===
+            input.initialServiceDate ||
+          candidate.deltaHours <= 12,
+      );
+
+      if (ambiguousNearby) {
+        throw prepaidWebhookIdentityAmbiguityErrorV39(
+          "no-provider prepaid schedule change is ambiguous between retime and distinct leg",
+        );
+      }
+
+      return {
+        flightInstanceId: input.flightInstanceId,
+        initialServiceDate: input.initialServiceDate,
+      };
+    },
+  };
+}
+
+export interface PrepaidIdentityObservationMappingV39 {
+  observation: WebhookIdentityObservation;
+  codeshareStatus: string | null;
+  aircraftReg: string | null;
+  scheduledGateInUtc: Date | null;
+  provisionalIdentityKey: string | null;
+}
+
+/**
+ * Pure AeroDataBox payload -> V3.9 canonical identity boundary.
+ *
+ * Field selection intentionally mirrors the normal webhook path:
+ *   airline IATA -> ICAO fallback
+ *   flight.number
+ *   departure/arrival ICAO
+ *   departure scheduled UTC
+ *   departure IANA timezone
+ *   provider flight.id as linkage evidence only
+ *   callsign
+ *
+ * The provisional key exists only to bound unresolved identity. It is not a
+ * canonical physical-flight ID and is never eligible for the confirmed lower
+ * bound.
+ */
+export function prepaidIdentityObservationFromFlightV39(
+  flight: any,
+): PrepaidIdentityObservationMappingV39 {
+  const operatingCarrier =
+    stringOrNull(flight?.airline?.iata) ??
+    stringOrNull(flight?.airline?.icao);
+
+  const operatingFlightNumber = stringOrNull(flight?.number);
+
+  const originIcao =
+    stringOrNull(flight?.departure?.airport?.icao)?.toUpperCase() ??
+    null;
+
+  const destinationIcao =
+    stringOrNull(flight?.arrival?.airport?.icao)?.toUpperCase() ??
+    null;
+
+  const scheduledGateOutRaw =
+    stringOrNull(flight?.departure?.scheduledTime?.utc);
+
+  const scheduledGateOut =
+    dateOrNull(scheduledGateOutRaw);
+
+  const scheduledGateIn =
+    dateOrNull(flight?.arrival?.scheduledTime?.utc);
+
+  const originTimeZone =
+    stringOrNull(flight?.departure?.airport?.timeZone);
+
+  const providerFlightId =
+    stringOrNull(flight?.id);
+
+  const callsign =
+    stringOrNull(flight?.callSign);
+
+  const codeshareStatus =
+    normalizeCodeshareStatus(flight?.codeshareStatus);
+
+  const aircraftReg =
+    stringOrNull(flight?.aircraft?.reg);
+
+  /*
+   * For unresolved observations the upper-bound key must:
+   *   - ignore mutable status/update timestamps;
+   *   - preserve a stable provider-native ID when present;
+   *   - otherwise distinguish materially different scheduled legs.
+   *
+   * A provider flight ID is linkage evidence, never canonical key material.
+   */
+  let provisionalIdentityKey: string | null = null;
+
+  if (providerFlightId) {
+    provisionalIdentityKey = `amb:${sha256(canonical({
+      providerFlightId,
+      operatingCarrier,
+      operatingFlightNumber,
+      originIcao,
+      destinationIcao,
+    }))}`;
+  } else if (operatingFlightNumber || callsign) {
+    provisionalIdentityKey = `amb:${sha256(canonical({
+      operatingCarrier,
+      operatingFlightNumber,
+      originIcao,
+      destinationIcao,
+      scheduledGateOutUtc:
+        scheduledGateOut?.toISOString() ??
+        scheduledGateOutRaw,
+      callsign,
+    }))}`;
+  }
+
+  return {
+    observation: {
+      operatingCarrier,
+      operatingFlightNumber,
+      originIcao,
+      originalDestinationIcao: destinationIcao,
+      scheduledGateOutUtc: scheduledGateOutRaw,
+      originTimeZone,
+
+      // Match the normal webhook boundary: provider supplied a scheduled UTC
+      // field. The canonical resolver independently rejects invalid timestamps.
+      scheduleVerified: scheduledGateOutRaw !== null,
+
+      providerFlightId,
+      providerRecordKey: providerFlightId,
+      callsign,
+    },
+    codeshareStatus,
+    aircraftReg,
+    scheduledGateInUtc: scheduledGateIn,
+    provisionalIdentityKey,
+  };
+}
+
+
+export type PrepaidCodeshareResolutionStatusV39 =
+  | "resolved_operator"
+  | "resolved_marketing"
+  | "ambiguous_unknown";
+
+export interface PrepaidResolvedFlightIdentityV39
+  extends PrepaidIdentityObservationMappingV39 {
+  codeshareResolutionStatus: PrepaidCodeshareResolutionStatusV39;
+  identityResolutionStatus: "resolved" | "quarantined";
+  flightInstanceId: string | null;
+  initialServiceDate: string | null;
+  identityReason: string | null;
+}
+
+/**
+ * Apply the V3.9 §7.2 codeshare boundary before physical identity resolution.
+ *
+ * - IsOperator may enter canonical physical-leg resolution.
+ * - IsCodeshared is a known marketing record and never creates a physical leg.
+ * - Unknown/missing classification remains explicitly ambiguous and never
+ *   enters the physical resolver.
+ */
+export async function resolvePrepaidFlightIdentityV39(
+  client: PrepaidIdentityQueryClientV39,
+  sessionId: string,
+  flight: any,
+): Promise<PrepaidResolvedFlightIdentityV39> {
+  const mapped = prepaidIdentityObservationFromFlightV39(flight);
+
+  if (mapped.codeshareStatus === "IsCodeshared") {
+    return {
+      ...mapped,
+      codeshareResolutionStatus: "resolved_marketing",
+      identityResolutionStatus: "quarantined",
+      flightInstanceId: null,
+      initialServiceDate: null,
+      identityReason: "provider classified record as marketing codeshare",
+    };
+  }
+
+  if (mapped.codeshareStatus !== "IsOperator") {
+    return {
+      ...mapped,
+      codeshareResolutionStatus: "ambiguous_unknown",
+      identityResolutionStatus: "quarantined",
+      flightInstanceId: null,
+      initialServiceDate: null,
+      identityReason: "provider codeshare state is unknown or unavailable",
+    };
+  }
+
+  const persistence =
+    createPrepaidSessionIdentityPersistenceV39(client, sessionId);
+
+  const identity = await resolveWebhookFlightIdentity(
+    mapped.observation,
+    persistence,
+  );
+
+  if (identity.status === "resolved") {
+    return {
+      ...mapped,
+      codeshareResolutionStatus: "resolved_operator",
+      identityResolutionStatus: "resolved",
+      flightInstanceId: identity.flightInstanceId,
+      initialServiceDate: identity.initialServiceDate,
+      identityReason: null,
+    };
+  }
+
+  return {
+    ...mapped,
+    codeshareResolutionStatus: "resolved_operator",
+    identityResolutionStatus: "quarantined",
+    flightInstanceId: null,
+    initialServiceDate: null,
+    identityReason: identity.reason,
+  };
 }
 
 export function prepaidProbeWebhookUrlV39(baseWebhookUrl: string, sessionId: string): string {
@@ -397,31 +813,96 @@ export async function persistPrepaidProbeWebhookV39(input: {
        evidence.costCredits, flights.length],
     );
     if (flights.length > 0) {
-      const values: unknown[] = [];
-      const tuples: string[] = [];
+      /*
+       * Resolve and persist sequentially inside this transaction.
+       *
+       * A later item in the same provider notification must be able to see
+       * the identity retained for an earlier item (provider-ID update/retime
+       * linkage). Do not resolve the whole delivery before inserting rows.
+       */
       for (let itemIndex = 0; itemIndex < flights.length; itemIndex += 1) {
         const flight = flights[itemIndex];
         const itemRaw = canonical(flight);
-        const offset = values.length;
-        values.push(
-          sessionId,
-          deliveryId,
-          itemIndex,
-          sha256(itemRaw),
-          stringOrNull(flight?.number),
-          stringOrNull(flight?.aircraft?.reg),
-          normalizeCodeshareStatus(flight?.codeshareStatus),
-          runtimeFlightKey(flight),
-          receivedAt,
+
+        const identity =
+          await resolvePrepaidFlightIdentityV39(client, sessionId, flight);
+
+        const operatingCarrier =
+          identity.observation.operatingCarrier
+            ?.trim()
+            .toUpperCase() || null;
+
+        const operatingFlightNumber =
+          identity.observation.operatingFlightNumber
+            ?.trim()
+            .replace(/^0+/, "") || null;
+
+        const originIcao =
+          identity.observation.originIcao
+            ?.trim()
+            .toUpperCase() || null;
+
+        const destinationIcao =
+          identity.observation.originalDestinationIcao
+            ?.trim()
+            .toUpperCase() || null;
+
+        await client.query(
+          `INSERT INTO clean.prepaid_probe_item_runtime
+           (session_id,
+            delivery_id,
+            item_index,
+            raw_item_sha256,
+            flight_number,
+            aircraft_reg,
+            codeshare_status,
+            runtime_flight_key,
+            provider_flight_id,
+            callsign,
+            operating_carrier,
+            operating_flight_number,
+            origin_icao,
+            destination_icao,
+            origin_time_zone,
+            scheduled_gate_out_utc,
+            scheduled_gate_in_utc,
+            flight_instance_id,
+            initial_service_date,
+            provisional_identity_key,
+            codeshare_resolution_status,
+            identity_resolution_status,
+            received_at_utc)
+           VALUES(
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
+             $13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
+           )`,
+          [
+            sessionId,
+            deliveryId,
+            itemIndex,
+            sha256(itemRaw),
+            stringOrNull(flight?.number),
+            identity.aircraftReg,
+            identity.codeshareStatus,
+            runtimeFlightKey(flight),
+            identity.observation.providerFlightId ?? null,
+            identity.observation.callsign ?? null,
+            operatingCarrier,
+            operatingFlightNumber,
+            originIcao,
+            destinationIcao,
+            identity.observation.originTimeZone ?? null,
+            identity.observation.scheduledGateOutUtc ?? null,
+            identity.scheduledGateInUtc,
+            identity.flightInstanceId,
+            identity.initialServiceDate,
+            identity.provisionalIdentityKey,
+            identity.codeshareResolutionStatus,
+            identity.identityResolutionStatus,
+            receivedAt,
+          ],
         );
-        tuples.push(`($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8},$${offset + 9})`);
       }
-      await client.query(
-        `INSERT INTO clean.prepaid_probe_item_runtime
-         (session_id,delivery_id,item_index,raw_item_sha256,flight_number,aircraft_reg,codeshare_status,runtime_flight_key,received_at_utc)
-         VALUES ${tuples.join(",")}`,
-        values,
-      );
     }
     if (subId) {
       const bind = await client.query(
@@ -464,76 +945,179 @@ export async function prepaidProbeInternalCreditsV39(sessionId: string): Promise
   return Number(result.rows[0]?.n ?? 0);
 }
 
-export async function prepaidProbeMetricsV39(sessionId: string, start: Date, end: Date): Promise<PrepaidProbeMetricsV39> {
+export async function prepaidProbeMetricsV39(
+  sessionId: string,
+  start: Date,
+  end: Date,
+): Promise<PrepaidProbeMetricsV39> {
   const id = assertSessionId(sessionId);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) throw new Error("PREPAID_PROBE_METRIC_WINDOW_INVALID");
-  const counts = await pool.query(
-    `SELECT count(*)::int AS rows,
-            count(DISTINCT flight_number)::int AS unique_flights,
-            count(DISTINCT CASE WHEN codeshare_status='IsOperator' THEN flight_number END)::int AS confirmed_lower,
-            count(DISTINCT CASE WHEN codeshare_status IS NULL OR codeshare_status='Unknown' THEN flight_number END)::int AS ambiguous_n
+
+  if (
+    !Number.isFinite(start.getTime()) ||
+    !Number.isFinite(end.getTime()) ||
+    end <= start
+  ) {
+    throw new Error("PREPAID_PROBE_METRIC_WINDOW_INVALID");
+  }
+
+  /*
+   * Scientific Stage-1/2 metrics are derived from the corrected physical-leg
+   * identity contract, not flight-number or runtime-key proxies.
+   *
+   * codeshare_resolution_status is the frozen analytic interpretation.
+   * The raw provider codeshare_status remains selected for auditability but
+   * does not override the normalized classification.
+   */
+  const itemRows = await pool.query(
+    `SELECT
+        received_at_utc,
+        flight_instance_id,
+        provisional_identity_key,
+        identity_resolution_status,
+        codeshare_status,
+        codeshare_resolution_status,
+        aircraft_reg,
+        origin_icao,
+        destination_icao,
+        scheduled_gate_out_utc,
+        scheduled_gate_in_utc
        FROM clean.prepaid_probe_item_runtime
-      WHERE session_id=$1 AND received_at_utc >= $2 AND received_at_utc < $3`,
+      WHERE session_id=$1
+        AND received_at_utc >= $2
+        AND received_at_utc < $3
+      ORDER BY received_at_utc,item_index`,
     [id, start, end],
   );
-  const chain = await pool.query(
-    `SELECT COALESCE(sum(links),0)::int AS links FROM (
-       SELECT GREATEST(count(DISTINCT flight_number)-1,0) AS links
-         FROM clean.prepaid_probe_item_runtime
-        WHERE session_id=$1 AND received_at_utc >= $2 AND received_at_utc < $3
-          AND aircraft_reg IS NOT NULL AND flight_number IS NOT NULL
-        GROUP BY aircraft_reg
-     ) x`,
-    [id, start, end],
-  );
-  const observations = await pool.query(
-    `SELECT extract(epoch FROM min(received_at_utc))*1000 AS event_ms
-       FROM clean.prepaid_probe_item_runtime
-      WHERE session_id=$1 AND received_at_utc >= $2 AND received_at_utc < $3
-        AND runtime_flight_key IS NOT NULL
-      GROUP BY runtime_flight_key`,
-    [id, start, end],
-  );
+
+  const physicalRows: PrepaidPhysicalMetricRowV39[] =
+    itemRows.rows.map((row: any) => {
+      const semanticCodeshare =
+        row.codeshare_resolution_status === "resolved_operator"
+          ? "IsOperator"
+          : row.codeshare_resolution_status === "resolved_marketing"
+            ? "IsCodeshared"
+            : row.codeshare_resolution_status === "ambiguous_unknown"
+              ? "Unknown"
+              : null;
+
+      const identityStatus =
+        row.identity_resolution_status === "resolved"
+          ? "resolved"
+          : row.identity_resolution_status === "quarantined"
+            ? "quarantined"
+            : null;
+
+      return {
+        receivedAtUtc: new Date(row.received_at_utc),
+        flightInstanceId:
+          typeof row.flight_instance_id === "string"
+            ? row.flight_instance_id
+            : null,
+        provisionalIdentityKey:
+          typeof row.provisional_identity_key === "string"
+            ? row.provisional_identity_key
+            : null,
+        identityResolutionStatus: identityStatus,
+        codeshareStatus: semanticCodeshare,
+        aircraftReg:
+          typeof row.aircraft_reg === "string"
+            ? row.aircraft_reg
+            : null,
+        originIcao:
+          typeof row.origin_icao === "string"
+            ? row.origin_icao
+            : null,
+        destinationIcao:
+          typeof row.destination_icao === "string"
+            ? row.destination_icao
+            : null,
+        scheduledGateOutUtc:
+          row.scheduled_gate_out_utc
+            ? new Date(row.scheduled_gate_out_utc)
+            : null,
+        scheduledGateInUtc:
+          row.scheduled_gate_in_utc
+            ? new Date(row.scheduled_gate_in_utc)
+            : null,
+      };
+    });
+
+  const physical =
+    summarizePrepaidPhysicalIdentityRowsV39(physicalRows);
+
+  /*
+   * Delivery/credit reconciliation remains unchanged. This is accounting
+   * evidence, not physical-flight scientific identity.
+   */
   const deliveries = await pool.query(
     `SELECT
         count(*)::int AS delivery_count,
         COALESCE(sum(notification_items),0)::int AS notification_items,
-        COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::int AS internal_credits,
-        count(*) FILTER (WHERE delivery_attempt_cost_credits IS NOT NULL)::int AS explicit_cost_count,
-        count(*) FILTER (WHERE delivery_attempt_cost_credits IS NULL)::int AS fallback_count,
+        COALESCE(
+          sum(
+            COALESCE(
+              delivery_attempt_cost_credits,
+              notification_items,
+              0
+            )
+          ),
+          0
+        )::int AS internal_credits,
+        count(*) FILTER (
+          WHERE delivery_attempt_cost_credits IS NOT NULL
+        )::int AS explicit_cost_count,
+        count(*) FILTER (
+          WHERE delivery_attempt_cost_credits IS NULL
+        )::int AS fallback_count,
         count(*) FILTER (
           WHERE delivery_attempt_cost_credits IS NOT NULL
             AND delivery_attempt_cost_credits <> notification_items
         )::int AS cost_item_disagreement_count
        FROM clean.prepaid_probe_delivery_runtime
-      WHERE session_id=$1 AND received_at_utc >= $2 AND received_at_utc < $3`,
+      WHERE session_id=$1
+        AND received_at_utc >= $2
+        AND received_at_utc < $3`,
     [id, start, end],
   );
+
   const sessionCounters = await pool.query(
-    `SELECT callback_requests_seen,callback_success_2xx,callback_failures
-       FROM clean.prepaid_probe_session_runtime WHERE session_id=$1`,
+    `SELECT
+        callback_requests_seen,
+        callback_success_2xx,
+        callback_failures
+       FROM clean.prepaid_probe_session_runtime
+      WHERE session_id=$1`,
     [id],
   );
-  const row = counts.rows[0] ?? {};
+
   const d = deliveries.rows[0] ?? {};
-  const s = sessionCounters.rows[0] ?? {};
+  const counters = sessionCounters.rows[0] ?? {};
+
   return {
-    rowsDelivered: Number(row.rows ?? 0),
-    uniqueFlights: Number(row.unique_flights ?? 0),
-    tailChainLinks: Number(chain.rows[0]?.links ?? 0),
+    rowsDelivered: itemRows.rows.length,
+    uniqueFlights: physical.uniqueFlights,
+    tailChainLinks: physical.tailChainLinks,
     internalSendCredits: Number(d.internal_credits ?? 0),
-    confirmedUniqueLower: Number(row.confirmed_lower ?? 0),
-    confirmedPlusAmbiguousUpper: Number(row.unique_flights ?? 0),
-    ambiguousUnknown: Number(row.ambiguous_n ?? 0),
-    firstObservationMs: observations.rows.map((r: any) => Number(r.event_ms)).filter((n: number) => Number.isFinite(n)),
+    confirmedUniqueLower: physical.confirmedUniqueLower,
+    confirmedPlusAmbiguousUpper:
+      physical.confirmedPlusAmbiguousUpper,
+    ambiguousUnknown: physical.ambiguousUnknown,
+    firstObservationMs: physical.firstObservationMs,
     deliveryCount: Number(d.delivery_count ?? 0),
-    notificationItemsReceived: Number(d.notification_items ?? 0),
-    explicitCostDeliveryCount: Number(d.explicit_cost_count ?? 0),
-    fallbackDeliveryCount: Number(d.fallback_count ?? 0),
-    costItemDisagreementCount: Number(d.cost_item_disagreement_count ?? 0),
-    callbackRequestsSeen: Number(s.callback_requests_seen ?? 0),
-    callbackSuccess2xx: Number(s.callback_success_2xx ?? 0),
-    callbackFailures: Number(s.callback_failures ?? 0),
+    notificationItemsReceived:
+      Number(d.notification_items ?? 0),
+    explicitCostDeliveryCount:
+      Number(d.explicit_cost_count ?? 0),
+    fallbackDeliveryCount:
+      Number(d.fallback_count ?? 0),
+    costItemDisagreementCount:
+      Number(d.cost_item_disagreement_count ?? 0),
+    callbackRequestsSeen:
+      Number(counters.callback_requests_seen ?? 0),
+    callbackSuccess2xx:
+      Number(counters.callback_success_2xx ?? 0),
+    callbackFailures:
+      Number(counters.callback_failures ?? 0),
   };
 }
 
@@ -720,5 +1304,189 @@ export async function cleanupPrepaidProbeSessionV39(
     deletedBlobs: Number(json.deleted_blobs),
     deletedRuntimeRows: Number(json.deleted_runtime_rows),
     verifiedAtUtc: new Date(String(json.verified_at_utc)).toISOString(),
+  };
+}
+
+/**
+ * Pure §9.1 physical-flight metric reducer.
+ *
+ * This consumes already-normalized transient UNLOGGED identity rows.
+ * It performs no I/O and contains no provider/account logic.
+ */
+export interface PrepaidPhysicalMetricRowV39 {
+  receivedAtUtc: Date;
+  flightInstanceId: string | null;
+  provisionalIdentityKey: string | null;
+  identityResolutionStatus: "resolved" | "quarantined" | null;
+  codeshareStatus: string | null;
+  aircraftReg: string | null;
+  originIcao: string | null;
+  destinationIcao: string | null;
+  scheduledGateOutUtc: Date | null;
+  scheduledGateInUtc: Date | null;
+}
+
+export interface PrepaidPhysicalMetricSummaryV39 {
+  uniqueFlights: number;
+  confirmedUniqueLower: number;
+  confirmedPlusAmbiguousUpper: number;
+  ambiguousUnknown: number;
+  tailChainLinks: number;
+  firstObservationMs: number[];
+}
+
+function prepaidMetricTokenV39(value: string | null): string | null {
+  const normalized = value?.trim().toUpperCase();
+  return normalized || null;
+}
+
+export function summarizePrepaidPhysicalIdentityRowsV39(
+  rows: readonly PrepaidPhysicalMetricRowV39[],
+): PrepaidPhysicalMetricSummaryV39 {
+  type ConfirmedLeg = {
+    firstObservationMs: number;
+    latestObservationMs: number;
+    latest: PrepaidPhysicalMetricRowV39;
+    registrations: Set<string>;
+  };
+
+  const confirmed = new Map<string, ConfirmedLeg>();
+  const ambiguous = new Set<string>();
+
+  for (const row of rows) {
+    const receivedMs = row.receivedAtUtc.getTime();
+    if (!Number.isFinite(receivedMs)) continue;
+
+    const physicalId = row.flightInstanceId?.trim() || null;
+
+    if (
+      row.identityResolutionStatus === "resolved" &&
+      physicalId !== null &&
+      row.codeshareStatus === "IsOperator"
+    ) {
+      const reg = prepaidMetricTokenV39(row.aircraftReg);
+      const prior = confirmed.get(physicalId);
+
+      if (!prior) {
+        confirmed.set(physicalId, {
+          firstObservationMs: receivedMs,
+          latestObservationMs: receivedMs,
+          latest: row,
+          registrations: new Set(reg ? [reg] : []),
+        });
+      } else {
+        prior.firstObservationMs = Math.min(
+          prior.firstObservationMs,
+          receivedMs,
+        );
+
+        if (reg) prior.registrations.add(reg);
+
+        if (receivedMs >= prior.latestObservationMs) {
+          prior.latestObservationMs = receivedMs;
+          prior.latest = row;
+        }
+      }
+
+      continue;
+    }
+
+    const provisional = row.provisionalIdentityKey?.trim() || null;
+    if (
+      provisional &&
+      row.codeshareStatus !== "IsCodeshared"
+    ) {
+      ambiguous.add(provisional);
+    }
+  }
+
+  const confirmedUniqueLower = confirmed.size;
+  const ambiguousUnknown = ambiguous.size;
+
+  /*
+   * Tail continuity is intentionally conservative:
+   * - confirmed physical identity only;
+   * - one stable verified registration throughout observations of that leg;
+   * - same tail;
+   * - prior destination == next origin;
+   * - non-negative gate-in -> gate-out turnaround <= 6h.
+   *
+   * Aircraft-registration conflicts exclude that leg from chaining.
+   */
+  const byRegistration = new Map<
+    string,
+    Array<{
+      origin: string;
+      destination: string;
+      gateOutMs: number;
+      gateInMs: number;
+    }>
+  >();
+
+  for (const leg of confirmed.values()) {
+    if (leg.registrations.size !== 1) continue;
+
+    const registration = [...leg.registrations][0];
+    const origin = prepaidMetricTokenV39(leg.latest.originIcao);
+    const destination = prepaidMetricTokenV39(
+      leg.latest.destinationIcao,
+    );
+    const gateOutMs =
+      leg.latest.scheduledGateOutUtc?.getTime() ?? Number.NaN;
+    const gateInMs =
+      leg.latest.scheduledGateInUtc?.getTime() ?? Number.NaN;
+
+    if (
+      !origin ||
+      !destination ||
+      !Number.isFinite(gateOutMs) ||
+      !Number.isFinite(gateInMs)
+    ) {
+      continue;
+    }
+
+    const list = byRegistration.get(registration) ?? [];
+    list.push({
+      origin,
+      destination,
+      gateOutMs,
+      gateInMs,
+    });
+    byRegistration.set(registration, list);
+  }
+
+  let tailChainLinks = 0;
+  const MAX_TURNAROUND_MS = 6 * 60 * 60 * 1000;
+
+  for (const legs of byRegistration.values()) {
+    legs.sort((a, b) => a.gateOutMs - b.gateOutMs);
+
+    for (let i = 1; i < legs.length; i += 1) {
+      const previous = legs[i - 1];
+      const next = legs[i];
+
+      const turnaroundMs = next.gateOutMs - previous.gateInMs;
+
+      if (
+        previous.destination === next.origin &&
+        turnaroundMs >= 0 &&
+        turnaroundMs <= MAX_TURNAROUND_MS
+      ) {
+        tailChainLinks += 1;
+      }
+    }
+  }
+
+  return {
+    // Nominal unique count is the conservative confirmed physical count.
+    uniqueFlights: confirmedUniqueLower,
+    confirmedUniqueLower,
+    confirmedPlusAmbiguousUpper:
+      confirmedUniqueLower + ambiguousUnknown,
+    ambiguousUnknown,
+    tailChainLinks,
+    firstObservationMs: [...confirmed.values()]
+      .map((x) => x.firstObservationMs)
+      .sort((a, b) => a - b),
   };
 }

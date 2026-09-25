@@ -27,6 +27,7 @@ import {
   verifyAuthFile,
 } from "./v39_paid_guard_v39";
 import type { AuthRecord } from "../server/lib/disruption/authRecord_v39";
+import { PREPAID_PROBE_METRIC_CONTRACT_V39 } from "../server/lib/disruption/prepaidProbeMetricContract_v39";
 
 const SCOPE = "Phase 2 / Gate 2 Stage 2";
 
@@ -59,7 +60,8 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvid
     `SELECT icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
             tail_chain_links_per_credit,stability,confirmed_unique_lower,
             confirmed_plus_ambiguous_upper,provider_content_safe_mode,
-            confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit
+            confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit,
+            metric_contract_version
        FROM clean.adb_anchor_probe
       WHERE stage=1 AND preprobe_artifact_sha256=$1
       ORDER BY recorded_at ASC`,
@@ -73,6 +75,7 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1ProbeEvid
     return {
       icao: String(x.icao).toUpperCase(),
       status: String(x.status),
+      metricContractVersion: x.metric_contract_version == null ? null : String(x.metric_contract_version),
       rowsPerHour: x.rows_per_hour == null ? null : Number(x.rows_per_hour),
       creditsSpent: safeRates ? 1 : (x.credits_spent == null ? null : Number(x.credits_spent)),
       uniqueFlightsPerCredit: x.unique_flights_per_credit == null ? null : Number(x.unique_flights_per_credit),
@@ -125,10 +128,11 @@ interface Stage2State {
   rowsPerHour: number | null;
   stability: number | null;
   stabilityStatus: string | null;
+  metricContractVersion: string | null;
 }
 async function readStage2State(preprobeHash: string): Promise<Stage2State[]> {
   const r = await pool.query(
-    `SELECT icao,status,rows_per_hour,stability,stability_status
+    `SELECT icao,status,rows_per_hour,stability,stability_status,metric_contract_version,metric_contract_version
        FROM clean.adb_anchor_probe
       WHERE stage=2 AND preprobe_artifact_sha256=$1
       ORDER BY recorded_at ASC`,
@@ -140,10 +144,13 @@ async function readStage2State(preprobeHash: string): Promise<Stage2State[]> {
     rowsPerHour: x.rows_per_hour == null ? null : Number(x.rows_per_hour),
     stability: x.stability == null ? null : Number(x.stability),
     stabilityStatus: x.stability_status == null ? null : String(x.stability_status),
+    metricContractVersion: x.metric_contract_version == null ? null : String(x.metric_contract_version),
   }));
 }
 function validStage2(x: Stage2State | undefined): boolean {
-  return !!x && x.status === "completed" && (x.rowsPerHour ?? -Infinity) >= 60 &&
+  return !!x &&
+    x.metricContractVersion === PREPAID_PROBE_METRIC_CONTRACT_V39 &&
+    x.status === "completed" && (x.rowsPerHour ?? -Infinity) >= 60 &&
     x.stability !== null && Number.isFinite(x.stability) && x.stabilityStatus === "PASS";
 }
 function terminalInvalidStage2(x: Stage2State | undefined): boolean {

@@ -5,6 +5,7 @@
 import { createHash } from "crypto";
 import { readFileSync } from "fs";
 import { anchorScore, carrierScore, geoScore, trafficScore } from "./adbAirportCatalog_v3";
+import { PREPAID_PROBE_METRIC_CONTRACT_V39 } from "./prepaidProbeMetricContract_v39";
 
 export interface FrozenProbeCandidate {
   icao: string;
@@ -29,6 +30,7 @@ export interface FrozenProbeArtifact {
 export interface Stage1ProbeEvidence {
   icao: string;
   status: string;
+  metricContractVersion: string | null;
   rowsPerHour: number | null;
   creditsSpent: number | null;
   uniqueFlightsPerCredit: number | null;
@@ -118,7 +120,9 @@ function hasValidBounds(r: Stage1ProbeEvidence): boolean {
     r.confirmedUniqueLower >= 0 && r.confirmedPlusAmbiguousUpper >= r.confirmedUniqueLower;
 }
 function baseProbeValid(r: Stage1ProbeEvidence | undefined): r is Stage1ProbeEvidence {
-  return !!r && r.status === "completed" && (r.rowsPerHour ?? -Infinity) >= CAPACITY_GATE &&
+  return !!r &&
+    r.metricContractVersion === PREPAID_PROBE_METRIC_CONTRACT_V39 &&
+    r.status === "completed" && (r.rowsPerHour ?? -Infinity) >= CAPACITY_GATE &&
     r.creditsSpent !== null && Number.isFinite(r.creditsSpent) && r.creditsSpent > 0 &&
     r.uniqueFlightsPerCredit !== null && Number.isFinite(r.uniqueFlightsPerCredit) &&
     r.tailChainLinksPerCredit !== null && Number.isFinite(r.tailChainLinksPerCredit) &&

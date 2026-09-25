@@ -41,6 +41,7 @@ function ev(
   return {
     icao,
     status,
+    metricContractVersion: "v39-physical-flight-instance-v1",
     rowsPerHour: status === "completed" ? 100 : null,
     creditsSpent: status === "completed" ? credits : null,
     uniqueFlightsPerCredit: status === "completed" ? lower / credits : null,
@@ -122,6 +123,14 @@ describe("V3.9 Stage-2 promotion", () => {
     expect(r.selected).toHaveLength(4);
     expect(r.replacementsNeeded).toBe(1);
     expect(r.nextReplacement).toBe("REP1");
+  });
+
+  it("refuses legacy rows without the corrected physical-flight metric contract", () => {
+    const a = artifact();
+    const rows = a.shortlist.map((c, i) => ev(c.icao, 100 - i));
+    for (const row of rows) row.metricContractVersion = null;
+    expect(() => selectStage2Top5(a, rows))
+      .toThrow(/REFUSED_REFERENCE_INVALID/);
   });
 
   it("capacity failure cannot be traded against score", () => {

@@ -38,6 +38,104 @@ describe("Phase-2 isolated prepaid production wiring", () => {
     expect(routes).toContain('/api/v1/webhooks/aerodatabox/:secret/prepaid/:sessionId');
   });
 
+  it("resolves and persists physical identity sequentially inside the prepaid item transaction", () => {
+    const runtime = read("server/lib/disruption/prepaidProbeRuntime_v39.ts");
+
+    const functionStart = runtime.indexOf(
+      "export async function persistPrepaidProbeWebhookV39",
+    );
+    const functionEnd = runtime.indexOf(
+      "export async function prepaidProbeInternalCreditsV39",
+      functionStart,
+    );
+
+    expect(functionStart).toBeGreaterThanOrEqual(0);
+    expect(functionEnd).toBeGreaterThan(functionStart);
+
+    const block = runtime.slice(functionStart, functionEnd);
+
+    const loop = block.indexOf(
+      "for (let itemIndex = 0; itemIndex < flights.length; itemIndex += 1)",
+    );
+    const resolve = block.indexOf(
+      "await resolvePrepaidFlightIdentityV39(client, sessionId, flight)",
+      loop,
+    );
+    const insert = block.indexOf(
+      "INSERT INTO clean.prepaid_probe_item_runtime",
+      resolve,
+    );
+
+    expect(loop).toBeGreaterThanOrEqual(0);
+    expect(resolve).toBeGreaterThan(loop);
+    expect(insert).toBeGreaterThan(resolve);
+
+    for (const column of [
+      "provider_flight_id",
+      "callsign",
+      "operating_carrier",
+      "operating_flight_number",
+      "origin_icao",
+      "destination_icao",
+      "origin_time_zone",
+      "scheduled_gate_out_utc",
+      "scheduled_gate_in_utc",
+      "flight_instance_id",
+      "initial_service_date",
+      "provisional_identity_key",
+      "codeshare_resolution_status",
+      "identity_resolution_status",
+    ]) {
+      expect(block).toContain(column);
+    }
+
+    expect(block).not.toContain("clean.webhook_flight_identity");
+    expect(block).not.toContain("clean.webhook_flight_schedule_version");
+  });
+
+  it("computes prepaid scientific metrics from physical identity rather than flight-number proxies", () => {
+    const runtime = read("server/lib/disruption/prepaidProbeRuntime_v39.ts");
+
+    const start = runtime.indexOf(
+      "export async function prepaidProbeMetricsV39",
+    );
+    const end = runtime.indexOf(
+      "export async function persistProbeReconciliationEvidenceV39",
+      start,
+    );
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+
+    const block = runtime.slice(start, end);
+
+    expect(block).toContain(
+      "summarizePrepaidPhysicalIdentityRowsV39",
+    );
+
+    for (const field of [
+      "flight_instance_id",
+      "provisional_identity_key",
+      "identity_resolution_status",
+      "codeshare_status",
+      "aircraft_reg",
+      "origin_icao",
+      "destination_icao",
+      "scheduled_gate_out_utc",
+      "scheduled_gate_in_utc",
+      "received_at_utc",
+    ]) {
+      expect(block).toContain(field);
+    }
+
+    expect(block).not.toMatch(
+      /count\s*\(\s*DISTINCT\s+flight_number/i,
+    );
+    expect(block).not.toMatch(
+      /GROUP\s+BY\s+runtime_flight_key/i,
+    );
+  });
+
   it("uses UNLOGGED prepaid tables and safe logged-provider-field constraints", () => {
     const runtimeMigration = read("migrations/0055_prepaid_probe_unlogged_runtime.sql");
     expect((runtimeMigration.match(/CREATE UNLOGGED TABLE/g) ?? [])).toHaveLength(3);

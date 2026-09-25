@@ -15,6 +15,7 @@ import {
   type ExecuteProbeResult,
 } from "./probeExecution_v39";
 import { runPrepaidLiveWindowV39 } from "./prepaidProbeWindow_v39";
+import { PREPAID_PROBE_METRIC_CONTRACT_V39 } from "./prepaidProbeMetricContract_v39";
 
 function completeBucketStability(
   start: Date,
@@ -113,11 +114,12 @@ async function reserveSafeProbe(input: ExecuteProbeInput, started: Date): Promis
     const inserted = await client.query(
       `INSERT INTO clean.adb_anchor_probe
        (stage,icao,region,window_start,window_end,window_hours,status,probe_budget_day_id,
-        reserved_credits,preprobe_artifact_sha256,provider_content_safe_mode)
-       VALUES($1,$2,$3,$4,$5,$6,'probing',$7,$8,$9,true)
+        reserved_credits,preprobe_artifact_sha256,provider_content_safe_mode,metric_contract_version)
+       VALUES($1,$2,$3,$4,$5,$6,'probing',$7,$8,$9,true,$10)
        RETURNING probe_id`,
       [input.stage, candidate.icao, candidate.region, started, targetEnd, targetMinutes / 60,
-       runtime.probeBudgetDayId, durableReservedExposure, input.artifacts.preprobeSha256],
+       runtime.probeBudgetDayId, durableReservedExposure, input.artifacts.preprobeSha256,
+       PREPAID_PROBE_METRIC_CONTRACT_V39],
     );
     await client.query("COMMIT");
     return Number(inserted.rows[0].probe_id);

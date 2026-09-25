@@ -67,6 +67,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0057_phase2d_tier_source_contract.sql",
   "0058_phase2g_reconciliation_evidence.sql",
   "0059_phase2g_settling_state.sql",
+  "0060_phase2g_physical_flight_metrics.sql",
 ];
 
 function explicitAutoCollectEnabled(): boolean {
