@@ -1,0 +1,14 @@
+{
+  "version": "v39-gate2-runtime-1",
+  "probeBudgetDayId": "P2G-S1-20260925-12",
+  "watchdogPollMs": 5000,
+  "minStabilityBuckets": 6,
+  "settlementInitialWaitSeconds": 30,
+  "settlementPollIntervalSeconds": 10,
+  "settlementStableReadCount": 3,
+  "settlementTimeoutSeconds": 600,
+  "unsettledBurstMarginCredits": 50,
+  "stage1ReservationCredits": 450,
+  "stage2ReservationCredits": 450,
+  "stage1AmendmentSha256": "52f63258c8cb5b3ad611f9db233b8fd485a33b9ccee0eb328f679d032508b76d"
+}
