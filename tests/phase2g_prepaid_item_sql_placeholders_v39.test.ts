@@ -8,11 +8,26 @@ const source = readFileSync(
 );
 
 describe("Phase-2G prepaid item SQL placeholders", () => {
-  it("parameterizes every prepaid item column instead of emitting integer literals", () => {
-    const parameterized = 'tuples.push(`($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8},$${offset + 9})`);';
-    const integerLiterals = 'tuples.push(`(${offset + 1},${offset + 2},${offset + 3},${offset + 4},${offset + 5},${offset + 6},${offset + 7},${offset + 8},${offset + 9})`);';
+  it("parameterizes every sequential prepaid item column", () => {
+    const insertStart = source.indexOf(
+      "`INSERT INTO clean.prepaid_probe_item_runtime",
+    );
+    expect(insertStart).toBeGreaterThanOrEqual(0);
 
-    expect(source).toContain(parameterized);
-    expect(source).not.toContain(integerLiterals);
+    const insertEnd = source.indexOf("`,", insertStart);
+    expect(insertEnd).toBeGreaterThan(insertStart);
+
+    const insertSql = source.slice(insertStart, insertEnd);
+
+    const placeholders = [...insertSql.matchAll(/\$(\d+)/g)].map(
+      (match) => Number(match[1]),
+    );
+
+    expect(placeholders).toEqual(
+      Array.from({ length: 23 }, (_, index) => index + 1),
+    );
+
+    expect(insertSql).not.toMatch(/\$\{[^}]+\}/);
+    expect(source).not.toContain("tuples.push(");
   });
 });
