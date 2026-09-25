@@ -132,7 +132,7 @@ interface Stage2State {
 }
 async function readStage2State(preprobeHash: string): Promise<Stage2State[]> {
   const r = await pool.query(
-    `SELECT icao,status,rows_per_hour,stability,stability_status,metric_contract_version,metric_contract_version
+    `SELECT icao,status,rows_per_hour,stability,stability_status,metric_contract_version
        FROM clean.adb_anchor_probe
       WHERE stage=2 AND preprobe_artifact_sha256=$1
       ORDER BY recorded_at ASC`,
