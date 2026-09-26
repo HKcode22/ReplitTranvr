@@ -311,3 +311,40 @@ For each substantive operator question that affects scientific interpretation, e
 4. identify source class (literature / provider / project protocol / engineering);
 5. record code/document implications;
 6. never silently revise historical answers—append a correction if later evidence changes the conclusion.
+
+
+---
+
+## Entry 2026-09-26 06:04 PDT — resolved WSSS/OMAA comparability decision after deeper audit
+
+### Question
+If WSSS and OMAA successfully ran, but their metrics used the legacy flight-number proxy while MMUN/future candidates use corrected physical-flight identity, do WSSS and OMAA actually need another measurement? Can Stage 2 solve it instead?
+
+### Resolved answer
+Yes, **if the project retains the current V3.9 §9.2 yield-reference normalization and common Stage-1 ranking**, WSSS and OMAA require one corrected two-hour measurement under the same physical-v2 contract before final ranking.
+
+This is not because their historical provider executions failed. They remain successful historical executions.
+
+The reason is measurement comparability:
+- WSSS P2G11 and OMAA P2G03 metrics were produced by legacy `DISTINCT flight_number` / runtime-key proxy logic;
+- future candidates use physical `flight_instance_id` semantics;
+- §9.2 normalizes candidate yield against WSSS primary / OMAA fallback components measured under the identical target-2h Stage-1 protocol;
+- the September 25 amendment prohibits mixing legacy NULL-contract metrics with physical-flight metrics for promotion.
+
+A four-hour Stage-2 measurement is not a substitute under the current protocol because:
+1. compact Stage 2 is conditional, not automatic for all six;
+2. a 4h exposure is not the binding identical 2h reference exposure in §9.2.
+
+### Scientific disposition
+The draft bounded sequence `WSSS → OMAA → MMUN` is therefore scientifically defensible as **contract-correction remeasurement**, not outcome-driven retry.
+
+Each receives at most one v2 correction attempt under the current draft. Historical runs remain immutable.
+
+### Correction of prior conversational guidance
+Earlier conversational guidance that WSSS/OMAA could simply remain untouched through final ranking was too permissive. It failed to fully combine:
+- the plan's physical-flight unit;
+- §9.2 common reference normalization;
+- the legacy metric SQL;
+- the September 25 non-mixing rule.
+
+This entry supersedes that earlier interpretation.
