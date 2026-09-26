@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   chooseNextPrimaryStage1TargetV39,
+  choosePhysicalIdentityV2RemeasurementTargetV39,
+  hasObsoleteCompletedPrimaryEvidenceV39,
   isInfrastructureInvalidStage1AttemptV39,
   isP2g07Provider502RecoveryEligibleV39,
   isP2g08Balance502RecoveryEligibleV39,
@@ -22,11 +24,13 @@ function attempt(
   stopReason: string | null,
   durationCensored: boolean,
   reconciliationStatus: string | null,
+  metricContractVersion: string | null = null,
 ): any {
   return {
     probeId,
     icao,
     status,
+    metricContractVersion,
     rowsPerHour: status === "completed" ? 100 : null,
     creditsSpent: status === "completed" ? 1 : null,
     uniqueFlightsPerCredit: status === "completed" ? 0.2 : null,
@@ -168,6 +172,226 @@ describe("Phase2G bounded infrastructure-invalid Stage1 rerun policy", () => {
       attempt(9, "WSSS", "failed", "supervisor_child_exit_recovered", true, "UNRESOLVED"),
     ];
     expect(isP2g10SecretMismatchRecoveryEligibleV39(afterSeventhWsss)).toBe(false);
+  });
+
+  describe("physical-identity-v2 bounded remeasurement", () => {
+    const recovery = {
+      authorized: true as const,
+      current_metric_contract: "v39-physical-flight-instance-v2" as const,
+      maximum_additional_attempts_per_candidate: 1 as const,
+      ordered_icaos: ["WSSS", "OMAA", "MMUN"] as const,
+      legacy_probe_requirements: [
+        {
+          icao: "WSSS" as const,
+          probe_id: 9,
+          expected_status: "completed" as const,
+          expected_duration_censored: false as const,
+          expected_reconciliation_status: "MATCH" as const,
+          expected_metric_contract_version: null,
+        },
+        {
+          icao: "OMAA" as const,
+          probe_id: 2,
+          expected_status: "completed" as const,
+          expected_duration_censored: false as const,
+          expected_reconciliation_status: "MATCH" as const,
+          expected_metric_contract_version: null,
+        },
+        {
+          icao: "MMUN" as const,
+          probe_id: 10,
+          expected_status: "completed" as const,
+          expected_duration_censored: false as const,
+          expected_reconciliation_status: "MATCH" as const,
+          expected_metric_contract_version:
+            "v39-physical-flight-instance-v1",
+        },
+      ],
+      exclude_legacy_from_v2_promotion: true as const,
+      requires_fresh_runtime_budget_auth: true as const,
+      outcome_metrics_not_used_to_authorize: true as const,
+      reason: "Exact contract-correction remeasurement after P2G13 identity-parity defect.",
+    };
+
+    function legacyEvidence() {
+      return [
+        attempt(2, "OMAA", "completed", null, false, "MATCH", null),
+        attempt(9, "WSSS", "completed", null, false, "MATCH", null),
+        attempt(
+          10,
+          "MMUN",
+          "completed",
+          null,
+          false,
+          "MATCH",
+          "v39-physical-flight-instance-v1",
+        ),
+      ];
+    }
+
+    it("remeasures in fixed WSSS then OMAA then MMUN order", () => {
+      const legacy = legacyEvidence();
+
+      expect(
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          legacy,
+        ),
+      ).toBe("WSSS");
+
+      const withWsss = [
+        ...legacy,
+        attempt(
+          11,
+          "WSSS",
+          "completed",
+          null,
+          false,
+          "MATCH",
+          "v39-physical-flight-instance-v2",
+        ),
+      ];
+      expect(
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          withWsss,
+        ),
+      ).toBe("OMAA");
+
+      const withOmaa = [
+        ...withWsss,
+        attempt(
+          12,
+          "OMAA",
+          "completed",
+          null,
+          false,
+          "MATCH",
+          "v39-physical-flight-instance-v2",
+        ),
+      ];
+      expect(
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          withOmaa,
+        ),
+      ).toBe("MMUN");
+
+      const withMmun = [
+        ...withOmaa,
+        attempt(
+          13,
+          "MMUN",
+          "completed",
+          null,
+          false,
+          "MATCH",
+          "v39-physical-flight-instance-v2",
+        ),
+      ];
+      expect(
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          withMmun,
+        ),
+      ).toBeNull();
+    });
+
+    it("counts any one v2 attempt as the bounded attempt even when it fails", () => {
+      const evidence = [
+        ...legacyEvidence(),
+        attempt(
+          11,
+          "WSSS",
+          "failed",
+          "provider_failure",
+          true,
+          "UNRESOLVED",
+          "v39-physical-flight-instance-v2",
+        ),
+      ];
+
+      expect(
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          evidence,
+        ),
+      ).toBe("OMAA");
+    });
+
+    it("refuses when the exact historical evidence does not match the freeze", () => {
+      const altered = legacyEvidence().map((row) => ({ ...row }));
+      altered.find((row) => row.probeId === 10)!.metricContractVersion = null;
+
+      expect(() =>
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          altered,
+        ),
+      ).toThrow(/LEGACY_EVIDENCE_MISMATCH:MMUN/);
+    });
+
+    it("refuses a second v2 attempt for the same recovery candidate", () => {
+      const evidence = [
+        ...legacyEvidence(),
+        attempt(
+          11,
+          "WSSS",
+          "failed",
+          "provider_failure",
+          true,
+          "UNRESOLVED",
+          "v39-physical-flight-instance-v2",
+        ),
+        attempt(
+          12,
+          "WSSS",
+          "completed",
+          null,
+          false,
+          "MATCH",
+          "v39-physical-flight-instance-v2",
+        ),
+      ];
+
+      expect(() =>
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          evidence,
+        ),
+      ).toThrow(/RECOVERY_RETRY_LIMIT:WSSS/);
+    });
+
+    it("refuses out-of-order v2 evidence instead of normalizing after the fact", () => {
+      const evidence = [
+        ...legacyEvidence(),
+        attempt(
+          11,
+          "OMAA",
+          "completed",
+          null,
+          false,
+          "MATCH",
+          "v39-physical-flight-instance-v2",
+        ),
+      ];
+
+      expect(() =>
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          evidence,
+        ),
+      ).toThrow(/RECOVERY_OUT_OF_ORDER:missing=WSSS:later=OMAA/);
+    });
+
+    it("detects obsolete completed compact-six evidence when no recovery is frozen", () => {
+      expect(
+        hasObsoleteCompletedPrimaryEvidenceV39(
+          shortlist,
+          legacyEvidence(),
+        ),
+      ).toBe(true);
+    });
   });
 
   it("does not rerun an ordinary scientific/provider failure as infrastructure-invalid", () => {
