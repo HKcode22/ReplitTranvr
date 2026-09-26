@@ -976,3 +976,143 @@ Therefore the MMUN defect does not prove that WSSS P2G11 infrastructure failed, 
 At the same time, final Stage-2 promotion must not silently pretend legacy WSSS/OMAA proxy metrics and corrected physical-flight metrics are mathematically identical.
 
 That later comparability decision remains separate from the immediate MMUN defect correction and Stage-1 progression.
+
+
+---
+
+## 29. P2G13 finalizer completion
+
+On 2026-09-26 the settling finalizer completed successfully after exact-session cleanup.
+
+Inputs:
+- probe_id = 10
+- session_id = e343329e-4966-482d-8e51-1b7867deed1c
+- budget = P2G-S1-20260925-12
+- cleanup receipt = artifacts/phase2g-exact-session-purpose-cleanup-P2G13-MMUN-1790425520168.json
+- cleanup receipt SHA-256 = 7b2721320868760b2d305b31905d0a7744028ce799d1573c1b6cb2aeea9a78b5
+- runtime SHA-256 = aad8e3f3b992b28d287b530cff201fc74055e42a42fe3d95e808c5f557afe19f
+
+Finalizer returned:
+
+~~~text
+status = PASS_COMPLETED_AND_BUDGET_CLOSED
+cleanup_verified_at_utc = 2026-09-26T12:25:20.109Z
+budget_closed_at_utc = 2026-09-26T12:59:53.053Z
+active_billable_subscriptions = 0
+reconciliation_status = MATCH
+provider_mutation = false
+alert_credits_spent_by_finalizer = 0
+finalized_at_utc = 2026-09-26T12:59:53.769Z
+receipt_file = artifacts/phase2g-settling-finalizer-probe10-1790427593769.json
+receipt_file_sha256 = 796240f07af575384b63b65c11b7264daeee8d40226daa0756320feddfb57593
+~~~
+
+Therefore P2G13 is operationally closed. Its scientific identity-metric disposition remains invalid/excluded; finalization does not retroactively make the v1 identity-derived metrics valid.
+
+---
+
+## 30. Distinct flight number versus distinct physical flight
+
+A **flight number** is a service label.
+
+Example:
+~~~text
+AA 100
+~~~
+
+The same flight number can appear on different dates and can be operated by different aircraft.
+
+A **physical flight instance/leg** is one actual scheduled movement:
+~~~text
+AA100
+2026-09-26
+KJFK -> KLAX
+scheduled gate-out 14:00 UTC
+~~~
+
+Tomorrow's AA100 is a different physical flight even though the public flight number is the same.
+
+Therefore:
+~~~text
+DISTINCT flight_number
+~~~
+asks:
+“How many different service labels did I see?”
+
+Whereas:
+~~~text
+DISTINCT flight_instance_id
+~~~
+asks:
+“How many different real scheduled flight legs did I identify?”
+
+Those counts can differ.
+
+A physical aircraft/tail is yet another concept. One aircraft registration can operate many physical flight legs and many public flight numbers over a day.
+
+---
+
+## 31. Normal versus prepaid resolver contents
+
+The normal and prepaid resolvers perform the same conceptual identity task but store evidence in different persistence environments.
+
+### Normal resolver persistence
+
+The normal resolver uses long-lived logged identity tables including:
+- clean.webhook_flight_identity
+- clean.webhook_flight_schedule_version
+
+These retain canonical identity relationships and schedule-version history for the broader application.
+
+Typical information includes:
+- provider linkage/alias;
+- operating carrier and flight number;
+- origin and original destination;
+- initial service date;
+- first/observed scheduled gate-out;
+- callsign/provider record linkage where available;
+- canonical flight_instance_id;
+- schedule/retime versions.
+
+### Prepaid Phase-2G persistence
+
+The prepaid resolver uses the session-local UNLOGGED paid-probe surface:
+- clean.prepaid_probe_item_runtime
+- associated session/delivery runtime tables.
+
+During the live paid probe it contains normalized callback information needed for the experiment, including fields such as:
+- flight number;
+- aircraft registration;
+- codeshare status;
+- provider flight ID when supplied;
+- callsign;
+- operating carrier/flight;
+- origin/destination;
+- scheduled times;
+- flight_instance_id;
+- provisional ambiguity key;
+- identity-resolution status;
+- received-at timestamp;
+- delivery/session linkage.
+
+The scientific concepts overlap, but the storage/lifetime differs.
+
+The prepaid data is purpose-limited and deleted after the probe; the normal canonical identity tables are long-lived application state.
+
+---
+
+## 32. Meaning of adb_anchor_probe
+
+In this repository, the prefix adb refers to **AeroDataBox**.
+
+clean.adb_anchor_probe is therefore the durable AeroDataBox anchor-probe results/attempt table.
+
+It does not mean “post-flight data.”
+
+Migration 0023 explicitly documents fields such as:
+- AeroDataBox subscription used for the probe;
+- provider balance before/after;
+- credits spent;
+- Stage 1/Stage 2 probe result fields.
+
+The table is the durable experiment ledger for anchor-probe attempts, while detailed provider payload/runtime rows live elsewhere and may be transient.
