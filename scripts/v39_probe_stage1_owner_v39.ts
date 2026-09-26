@@ -27,7 +27,12 @@ import type { AuthRecord } from "../server/lib/disruption/authRecord_v39";
 import {
   compact6EffectiveArtifactV39,
   loadPhase2gCompact6AmendmentV39,
+  type Phase2gCompact6AmendmentV39,
+  type Phase2gPhysicalIdentityV2RemeasurementV39,
 } from "../server/lib/disruption/phase2Compact6_v39";
+import {
+  PREPAID_PROBE_METRIC_CONTRACT_V39,
+} from "../server/lib/disruption/prepaidProbeMetricContract_v39";
 
 const SCOPE = "Phase 2 / Gate 2 Stage 1";
 const AUTH_CLEANUP_BUFFER_MS = 5 * 60_000;
@@ -266,6 +271,112 @@ export function isP2g10SecretMismatchRecoveryEligibleV39(
   );
 }
 
+function exactLegacyRequirementMatchesV39(
+  requirement: Phase2gPhysicalIdentityV2RemeasurementV39["legacy_probe_requirements"][number],
+  attempts: Stage1AttemptEvidence[],
+): boolean {
+  const matches = attempts.filter(
+    (row) =>
+      row.probeId === requirement.probe_id &&
+      row.icao.toUpperCase() === requirement.icao,
+  );
+  if (matches.length !== 1) return false;
+  const row = matches[0];
+  return (
+    row.status === requirement.expected_status &&
+    row.durationCensored === requirement.expected_duration_censored &&
+    row.reconciliationStatus === requirement.expected_reconciliation_status &&
+    row.metricContractVersion === requirement.expected_metric_contract_version
+  );
+}
+
+/**
+ * Prospective one-time recovery for the physical-identity contract correction.
+ *
+ * This is deliberately NOT a generic "rerun obsolete evidence" rule. The
+ * machine-readable compact amendment must name the exact historical rows and
+ * fixed candidate order. Each candidate gets at most one v2 attempt, regardless
+ * of that attempt's outcome, so the recovery cannot become an outcome-driven
+ * retry loop.
+ */
+export function choosePhysicalIdentityV2RemeasurementTargetV39(
+  recovery: Phase2gPhysicalIdentityV2RemeasurementV39 | undefined,
+  attempts: Stage1AttemptEvidence[],
+): "WSSS" | "OMAA" | "MMUN" | null {
+  if (!recovery?.authorized) return null;
+
+  if (
+    recovery.current_metric_contract !== PREPAID_PROBE_METRIC_CONTRACT_V39
+  ) {
+    throw new Error(
+      `REFUSED_IDENTITY_V2_RECOVERY_CONTRACT_MISMATCH:freeze=${recovery.current_metric_contract}:code=${PREPAID_PROBE_METRIC_CONTRACT_V39}`,
+    );
+  }
+
+  for (const requirement of recovery.legacy_probe_requirements) {
+    if (!exactLegacyRequirementMatchesV39(requirement, attempts)) {
+      throw new Error(
+        `REFUSED_IDENTITY_V2_RECOVERY_LEGACY_EVIDENCE_MISMATCH:${requirement.icao}:probe=${requirement.probe_id}`,
+      );
+    }
+  }
+
+  const currentAttempts = new Map<string, Stage1AttemptEvidence[]>();
+  for (const icao of recovery.ordered_icaos) {
+    currentAttempts.set(
+      icao,
+      attempts.filter(
+        (row) =>
+          row.icao.toUpperCase() === icao &&
+          row.metricContractVersion === PREPAID_PROBE_METRIC_CONTRACT_V39,
+      ),
+    );
+  }
+
+  for (const [icao, rows] of currentAttempts) {
+    if (
+      rows.length >
+      recovery.maximum_additional_attempts_per_candidate
+    ) {
+      throw new Error(
+        `REFUSED_IDENTITY_V2_RECOVERY_RETRY_LIMIT:${icao}:attempts=${rows.length}`,
+      );
+    }
+  }
+
+  for (let index = 0; index < recovery.ordered_icaos.length; index += 1) {
+    const icao = recovery.ordered_icaos[index];
+    const rows = currentAttempts.get(icao) ?? [];
+
+    if (rows.length === 0) {
+      const outOfOrder = recovery.ordered_icaos
+        .slice(index + 1)
+        .find((later) => (currentAttempts.get(later) ?? []).length > 0);
+      if (outOfOrder) {
+        throw new Error(
+          `REFUSED_IDENTITY_V2_RECOVERY_OUT_OF_ORDER:missing=${icao}:later=${outOfOrder}`,
+        );
+      }
+      return icao;
+    }
+  }
+
+  return null;
+}
+
+export function hasObsoleteCompletedPrimaryEvidenceV39(
+  shortlist: Array<{ icao: string }>,
+  attempts: Stage1AttemptEvidence[],
+): boolean {
+  const allowed = new Set(shortlist.map((row) => row.icao.toUpperCase()));
+  return attempts.some(
+    (row) =>
+      allowed.has(row.icao.toUpperCase()) &&
+      row.status === "completed" &&
+      row.metricContractVersion !== PREPAID_PROBE_METRIC_CONTRACT_V39,
+  );
+}
+
 export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEvidence): boolean {
   if (attempt.status !== "failed") return false;
   if (attempt.durationCensored !== true) return false;
@@ -320,38 +431,72 @@ export function chooseNextPrimaryStage1TargetV39(
   return null;
 }
 
-async function chooseNextStage1Target(
+export function chooseNextStage1TargetV39(
   artifactForSelection: LoadedProbeExecutionArtifacts["preprobe"],
   evidence: Stage1AttemptEvidence[],
-  allowP2g06PostfixWsssValidation: boolean,
-  allowP2g07Provider502Recovery: boolean,
-  allowP2g08Balance502Recovery: boolean,
-  allowP2g09HostResetRecovery: boolean,
-  allowP2g10SecretMismatchRecovery: boolean,
-): Promise<{ icao: string; replacement: boolean } | null> {
-  if (allowP2g10SecretMismatchRecovery && isP2g10SecretMismatchRecoveryEligibleV39(evidence)) {
+  amendment: Phase2gCompact6AmendmentV39 | null,
+): { icao: string; replacement: boolean } | null {
+  const identityRecovery = amendment?.physical_identity_v2_remeasurement;
+  if (identityRecovery?.authorized === true) {
+    const target = choosePhysicalIdentityV2RemeasurementTargetV39(
+      identityRecovery,
+      evidence,
+    );
+    if (target) return { icao: target, replacement: false };
+  } else if (
+    hasObsoleteCompletedPrimaryEvidenceV39(
+      artifactForSelection.shortlist,
+      evidence,
+    )
+  ) {
+    throw new Error(
+      "REFUSED_OBSOLETE_COMPLETED_METRIC_CONTRACT_REQUIRES_FROZEN_RECOVERY",
+    );
+  }
+
+  if (
+    amendment?.p2g10_secret_mismatch_recovery_rerun?.authorized === true &&
+    isP2g10SecretMismatchRecoveryEligibleV39(evidence)
+  ) {
     return { icao: "WSSS", replacement: false };
   }
-  if (allowP2g09HostResetRecovery && isP2g09HostResetRecoveryEligibleV39(evidence)) {
+  if (
+    amendment?.p2g09_hostreset_recovery_rerun?.authorized === true &&
+    isP2g09HostResetRecoveryEligibleV39(evidence)
+  ) {
     return { icao: "WSSS", replacement: false };
   }
-  if (allowP2g08Balance502Recovery && isP2g08Balance502RecoveryEligibleV39(evidence)) {
+  if (
+    amendment?.p2g08_balance502_recovery_rerun?.authorized === true &&
+    isP2g08Balance502RecoveryEligibleV39(evidence)
+  ) {
     return { icao: "WSSS", replacement: false };
   }
-  if (allowP2g07Provider502Recovery && isP2g07Provider502RecoveryEligibleV39(evidence)) {
+  if (
+    amendment?.p2g07_provider502_recovery_rerun?.authorized === true &&
+    isP2g07Provider502RecoveryEligibleV39(evidence)
+  ) {
     return { icao: "WSSS", replacement: false };
   }
-  if (allowP2g06PostfixWsssValidation && isP2g06PostfixWsssValidationEligibleV39(evidence)) {
+  if (
+    amendment !== null &&
+    isP2g06PostfixWsssValidationEligibleV39(evidence)
+  ) {
     return { icao: "WSSS", replacement: false };
   }
 
-  const nextPrimary = chooseNextPrimaryStage1TargetV39(artifactForSelection.shortlist, evidence);
+  const nextPrimary = chooseNextPrimaryStage1TargetV39(
+    artifactForSelection.shortlist,
+    evidence,
+  );
   if (nextPrimary) return { icao: nextPrimary, replacement: false };
 
   const promotion = selectStage2Top5(artifactForSelection, evidence);
   if (promotion.replacementsNeeded === 0) return null;
   if (!promotion.nextReplacement) {
-    throw new Error(`REFUSED_GATE2_UNSAT: ${promotion.replacementsNeeded} Stage-1-valid candidate(s) still needed but frozen replacements are exhausted`);
+    throw new Error(
+      `REFUSED_GATE2_UNSAT: ${promotion.replacementsNeeded} Stage-1-valid candidate(s) still needed but frozen replacements are exhausted`,
+    );
   }
   return { icao: promotion.nextReplacement, replacement: true };
 }
@@ -379,14 +524,10 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
         shortlist: compact6.effectiveShortlist,
       }
     : artifacts.preprobe;
-  const next = await chooseNextStage1Target(
+  const next = chooseNextStage1TargetV39(
     selectionArtifact,
     evidence,
-    compact6 !== null,
-    compact6?.amendment.p2g07_provider502_recovery_rerun?.authorized === true,
-    compact6?.amendment.p2g08_balance502_recovery_rerun?.authorized === true,
-    compact6?.amendment.p2g09_hostreset_recovery_rerun?.authorized === true,
-    compact6?.amendment.p2g10_secret_mismatch_recovery_rerun?.authorized === true,
+    compact6?.amendment ?? null,
   );
 
   if (!next) {

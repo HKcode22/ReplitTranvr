@@ -25,21 +25,36 @@ They are not interchangeable. In particular:
 | 6 | WSSS | P2G08 | `P2G-S1-20260922-07` | failed / censored / MATCH, excluded |
 | 7 | WSSS | P2G09 | `P2G-S1-20260922-08` | failed / censored / UNRESOLVED |
 | 8 | WSSS | P2G10 | `P2G-S1-20260923-09` | failed / censored / UNRESOLVED |
+| 9 | WSSS | `AUTH-20260924-P2G11` | `P2G-S1-20260924-10` | full-duration / MATCH / historical metric contract NULL; excluded from v2 normalization |
+| 10 | MMUN | `AUTH-20260925-P2G13` | `P2G-S1-20260925-12` | full-duration / MATCH provider execution; v1 identity-derived metrics scientifically invalid/excluded |
 
 The old OMAA report filename contains `P2G02`; its content is corrected to state that OMAA actually used AUTH P2G03.
 
 ## Candidate coverage truth
 
-The compact-6 set is WSSS, OMAA, MMUN, LKPR, SKBO, YSSY.
+The compact-6 set remains WSSS, OMAA, MMUN, LKPR, SKBO, YSSY.
 
-- WSSS: multiple attempts; all historical results listed below.
-- OMAA: one valid completed/MATCH result.
-- MMUN: one infrastructure-invalid failed/censored attempt.
-- LKPR: **never started as a paid Stage-1 probe**; P2G05 refused before paid preflight/provider action.
+Current contract-compatible truth:
+
+- WSSS: probe 9 completed operationally/MATCH but predates the physical-flight
+  metric contract (`metric_contract_version=NULL`); it is historical evidence,
+  not a v2 reference metric.
+- OMAA: probe 2 completed operationally/MATCH but likewise predates the
+  physical-flight metric contract; it is historical evidence, not a v2 fallback
+  reference metric.
+- MMUN: probe 3 is infrastructure-invalid; probe 10/P2G13 completed the provider
+  window/MATCH but its v1 prepaid identity implementation was scientifically
+  invalid. It is excluded from v2 scoring.
+- LKPR: **never started as a paid Stage-1 probe**; the historical P2G05 event was a
+  pre-launch refusal.
 - SKBO: not yet run.
 - YSSY: not yet run.
 
-A pre-launch refusal is not a scientific airport failure. An untouched candidate is not a failed candidate.
+The prospective v2 contract-correction remeasurement order is fixed as
+WSSS → OMAA → MMUN, one v2 attempt maximum per candidate, before normal
+sequencing resumes at LKPR. This recovery is authorized by contract
+incompatibility, not by observed yield.
+
 
 ## Failure/prevention matrix
 
@@ -59,6 +74,8 @@ A pre-launch refusal is not a scientific airport failure. An untouched candidate
 | Incident 25 | Prepaid-item INSERT placeholder/type ordering caused UUID/integer PostgreSQL failure during zero-credit synthetic callback. | Zero-credit infrastructure incident; caught before paid run. | Corrected SQL placeholder contract and dedicated regression test. | `tests/phase2g_prepaid_item_sql_placeholders_v39.test.ts`. |
 | P2G10 / probe 8 WSSS | GitHub environment webhook secret differed by one character from Replit secret. Provider callback host/session were correct; provider spent credits, but Replit rejected requests with 404 before callback accounting/persistence. | infrastructure-invalid failed/censored/UNRESOLVED; excluded. | Zero-provider GitHub→Replit secret-binding endpoint/workflow before paid admission; paid gate repeats it; owner repeats it immediately before provider ownership; GitHub/Replit runtime-DB binding; URL-encoded secret; the same-app supervisor continuously revalidates the exact HEAD, secret binding, and DB binding during the paid window; watchdog exact-recovers after persistent provider spend with zero callback requests. | P2G10 incident report; zero-credit binding workflow/tests; owner/watchdog regression tests. |
 | Secret-reveal diagnostic workflow | Temporary diagnostic workflow attempted to display transformed secrets. | Security/operations issue; no scientific effect. | Unsafe workflow removed; credentials rotated by operator; never print/transform secret values for display. | Security incident report. |
+| P2G11 / probe 9 WSSS | Full provider-safe two-hour WSSS run completed before the physical-flight identity metric implementation was introduced. | Operational MATCH preserved; historical metric contract NULL; not comparable to v2 and excluded from current yield-reference normalization. | Current promotion logic accepts only the current metric-contract constant; obsolete completed evidence fails closed unless the exact bounded v2 recovery freeze is present. | P2G11 GitHub run 35990540643; v2 recovery selector/tests. |
+| P2G13 / probe 10 MMUN | Prepaid no-provider identity persistence lacked the normal resolver's exact schedule-aware lookup. Later callsign/aircraft enrichment could quarantine an update of the same exact scheduled leg; provisional ambiguity key also included mutable callsign. | Provider collection full-duration/MATCH, but v1 identity-derived metrics are scientifically invalid and excluded. | Exact scheduled-leg reuse before fuzzy linkage; stable provisional scheduled-leg token across callsign enrichment; v2 metric contract; live-pattern regression tests; WSSS→OMAA→MMUN bounded v2 remeasurement; no automatic retry. | P2G13 adjudication report; `prepaid_identity_persistence_v39.test.ts`; `prepaid_identity_adapter_v39.test.ts`; `prepaid_physical_metrics_v39.test.ts`; migration 0061. |
 
 ## Residual risks that are contained but cannot be made impossible
 
@@ -66,7 +83,32 @@ A pre-launch refusal is not a scientific airport failure. An untouched candidate
 2. **Replit callback runtime loss** can still occur under the same-app contingency. GitHub ownership prevents lifecycle-owner loss from being the same failure domain, and callback-health/no-callback-spend guards stop exposure, but the public callback itself still depends on Replit.
 3. **Internet delivery gaps** can occur even with healthy code. The protocol preserves them as terminal `DELIVERY_GAP` rather than pretending missing payloads were observed.
 4. **Human secret/configuration mistakes** remain possible, but the GitHub→Replit zero-credit binding gate is specifically designed to block them before subscription creation.
-5. **No automatic retry after P2G11.** A future infrastructure failure must be adjudicated and separately authorized; the code must never silently consume another WSSS attempt.
+5. **No automatic retry after a v2 recovery attempt.** WSSS, OMAA and MMUN each have at most one prospectively frozen contract-correction v2 attempt; any later attempt requires separate adjudication. The code must never silently consume another attempt.
+
+## Current post-P2G13 non-negotiable prerequisites
+
+Before the first paid v2 recovery run:
+
+1. verify probe 10 exact-session cleanup/finalizer state, budget closure, zero
+   transient rows/live blobs, zero open incidents and zero active billable
+   subscriptions;
+2. exact repair HEAD is green through migration fresh/idempotent replay, schema,
+   TypeScript, offline/full tests, lint, registry, traceability, contradiction
+   scan, aggregate preflight and production build;
+3. freeze the machine-readable identity-v2 recovery artifact from the observed
+   historical state and hash-bind it into the runtime/AUTH chain;
+4. sync Replit callback runtime to the exact approved source HEAD and repeat
+   zero-credit callback/DB/webhook-secret binding;
+5. create a fresh weekday-matched runtime/budget and AUTH for the next fixed
+   recovery target;
+6. paid preflight must report the exact expected v2 target and no blockers;
+7. GitHub owner/watchdog remain the only prospective paid owner architecture;
+8. no weekend paid Stage-1 execution;
+9. no automatic retry if the v2 attempt fails.
+
+The fixed v2 recovery order is WSSS → OMAA → MMUN. Old P2G11 prerequisites
+below are retained as historical controls and do not override this current
+section.
 
 ## Thursday P2G11 non-negotiable prerequisites
 

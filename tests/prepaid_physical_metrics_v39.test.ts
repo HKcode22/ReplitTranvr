@@ -144,6 +144,46 @@ describe("V3.9 prepaid physical-flight Stage-1 metrics", () => {
     expect(result.uniqueFlights).toBe(1);
   });
 
+  it("uses late aircraft enrichment on a repeated resolved physical leg without recounting the flight", () => {
+    const result = summarizePrepaidPhysicalIdentityRowsV39([
+      row({
+        flightInstanceId: "leg:vb2102",
+        receivedAtUtc: new Date("2026-09-25T11:03:05Z"),
+        aircraftReg: null,
+        originIcao: "MMUN",
+        destinationIcao: "MMVR",
+        scheduledGateOutUtc: new Date("2026-09-25T11:00:00Z"),
+        scheduledGateInUtc: new Date("2026-09-25T12:20:00Z"),
+      }),
+      row({
+        flightInstanceId: "leg:vb2102",
+        receivedAtUtc: new Date("2026-09-25T12:02:55Z"),
+        aircraftReg: "XA-VXY",
+        originIcao: "MMUN",
+        destinationIcao: "MMVR",
+        scheduledGateOutUtc: new Date("2026-09-25T11:00:00Z"),
+        scheduledGateInUtc: new Date("2026-09-25T12:20:00Z"),
+      }),
+      row({
+        flightInstanceId: "leg:next",
+        receivedAtUtc: new Date("2026-09-25T12:30:00Z"),
+        aircraftReg: "XA-VXY",
+        originIcao: "MMVR",
+        destinationIcao: "MMUN",
+        scheduledGateOutUtc: new Date("2026-09-25T13:10:00Z"),
+        scheduledGateInUtc: new Date("2026-09-25T14:20:00Z"),
+      }),
+    ]);
+
+    expect(result.confirmedUniqueLower).toBe(2);
+    expect(result.confirmedPlusAmbiguousUpper).toBe(2);
+    expect(result.tailChainLinks).toBe(1);
+    expect(result.firstObservationMs).toEqual([
+      new Date("2026-09-25T11:03:05Z").getTime(),
+      new Date("2026-09-25T12:30:00Z").getTime(),
+    ]);
+  });
+
   it("counts a tail-chain link only for compatible physical legs within six hours", () => {
     const result = summarizePrepaidPhysicalIdentityRowsV39([
       row({
