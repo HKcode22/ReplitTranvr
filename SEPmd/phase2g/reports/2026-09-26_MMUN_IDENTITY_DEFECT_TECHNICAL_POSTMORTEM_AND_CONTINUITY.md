@@ -540,9 +540,9 @@ YSSY:
 
 ## 18. Immediate forward path
 
-P2G13 currently still needs final exact-session cleanup/finalization.
+P2G13 exact-session purpose cleanup was successfully applied on 2026-09-26.
 
-Latest read-only state:
+Pre-cleanup read-only state:
 
 ~~~text
 probe 10 status = settling
@@ -557,7 +557,7 @@ active billable subscriptions = 0
 budget day = OPEN
 ~~~
 
-Exact-session cleanup dry-run proved:
+Exact-session cleanup dry-run first proved:
 
 ~~~text
 mode = DRY_RUN
@@ -568,12 +568,37 @@ active billable subscriptions = 0
 provider mutation = false
 ~~~
 
-Next closure step:
-1. exact-session blob cleanup;
-2. preserve cleanup receipt and SHA;
-3. settling finalizer;
-4. close the budget day;
-5. independent final read-back.
+The exact-session apply then returned:
+
+~~~text
+mode = APPLY
+session_id = e343329e-4966-482d-8e51-1b7867deed1c
+label = P2G13-MMUN
+deletion_run_id = phase2g-purpose-P2G13-MMUN-20260926T122508362Z-a05bd7f9
+expected_live_blobs = 39
+deleted_blobs = 39
+deleted_runtime_rows = 0
+verified_at_utc = 2026-09-26T12:25:20.109Z
+final.sessions = 0
+final.deliveries = 0
+final.items = 0
+final.live_blobs = 0
+active_billable_subscriptions = 0
+provider_mutation = false
+subscription_mutation = false
+alert_credits_spent = 0
+evidence_file = artifacts/phase2g-exact-session-purpose-cleanup-P2G13-MMUN-1790425520168.json
+~~~
+
+Therefore the exact-session cleanup step is complete and provider-safe.
+
+Remaining closure steps:
+1. hash and preserve the cleanup receipt;
+2. run the settling finalizer for durable probe 10 using the exact cleanup receipt and the frozen runtime file;
+3. verify probe 10 transitions from settling to completed;
+4. verify runtime_cleanup_verified_at_utc is set;
+5. verify budget P2G-S1-20260925-12 transitions from OPEN to CLOSED;
+6. perform an independent final read-back.
 
 Before another paid MMUN:
 - exact schedule-leg reuse must be present;
@@ -667,3 +692,287 @@ MMUN P2G13:
 8. No weekend paid Stage-1 run; frozen Stage-1 class is weekday.
 9. After code changes, rerun exact offline CI and zero-credit GitHub/Replit binding.
 10. Keep final Stage-2 promotion blocked until metric comparability is prospectively resolved.
+
+---
+
+## 22. What “metric implementation” means
+
+A metric is a numerical measurement used by the experiment.
+
+Examples in Phase-2G include:
+- rows_per_hour;
+- unique_flights;
+- confirmed_unique_lower;
+- confirmed_plus_ambiguous_upper;
+- unique_flights_per_credit;
+- tail_chain_links;
+- tail_chain_links_per_credit;
+- stability.
+
+The **plan/specification** says what the experiment intends each metric to mean scientifically.
+
+The **metric implementation** is the actual TypeScript + SQL + arithmetic that converts webhook observations stored in the runtime tables into those numbers.
+
+Therefore the relationship is:
+
+~~~text
+scientific requirement in V3.9 plan
+        ↓
+implementation code / SQL
+        ↓
+database rows
+        ↓
+numerical metric values
+        ↓
+promotion/ranking decision
+~~~
+
+An implementation can run without crashing and still be scientifically imperfect if the SQL/code does not exactly represent the definition written in the plan.
+
+### 22.1 Legacy WSSS/OMAA implementation
+
+At the successful WSSS P2G11 commit and the earlier OMAA run, the core prepaid metric query used:
+
+~~~sql
+count(DISTINCT flight_number) AS unique_flights
+~~~
+
+and the confirmed operator lower count used:
+
+~~~sql
+count(
+  DISTINCT CASE
+    WHEN codeshare_status='IsOperator'
+    THEN flight_number
+  END
+) AS confirmed_lower
+~~~
+
+Tail-chain approximation grouped rows by aircraft_reg and counted distinct flight_number values.
+
+Stability/first-observation grouping used runtime_flight_key, whose hash included:
+
+~~~text
+flight number
+provider flight id
+departure ICAO
+arrival ICAO
+scheduled departure UTC
+callsign
+~~~
+
+This implementation was operationally stable enough to produce completed/MATCH WSSS and OMAA runs, but it is a **proxy implementation** of physical-flight identity. A public flight number is not guaranteed to be identical to one physical flight instance.
+
+### 22.2 Why the legacy implementation was not fully identical to the plan
+
+The September 25 physical-flight correction amendment states that the V3.9 protocol requires:
+- distinct physical flight instances;
+- bounded unresolved identity;
+- compatible verified tail-chain links;
+- no double counting of repeated updates.
+
+The legacy prepaid SQL primarily counted flight-number proxies. Therefore, strictly speaking, it did not implement the physical-flight requirement with the same precision as the later canonical flight_instance_id design.
+
+This is a **measurement-implementation limitation**, not evidence that the provider run itself failed.
+
+That distinction is critical:
+
+~~~text
+WSSS/OMAA collection execution        = successful
+WSSS/OMAA reconciliation              = successful
+legacy metric implementation precision = weaker than later physical-flight contract
+~~~
+
+### 22.3 Friday physical-flight implementation
+
+Commit da65e0e9a2672e5cbbb9d15dfae7f3afb96d3b27 introduced an explicit physical-flight metric contract and migration 0060.
+
+Instead of using only public flight-number proxies, it added fields such as:
+- operating_carrier;
+- operating_flight_number;
+- origin_icao;
+- destination_icao;
+- scheduled_gate_out_utc;
+- flight_instance_id;
+- initial_service_date;
+- provisional_identity_key;
+- identity_resolution_status;
+- provider_flight_id;
+- callsign;
+- aircraft registration.
+
+That was the correct direction because it implements the plan's intended scientific unit more directly.
+
+### 22.4 What went wrong in MMUN
+
+The new concept was correct; one adapter implementation was incomplete.
+
+The normal production resolver already had an exact schedule-aware lookup.
+
+The prepaid Phase-2G resolver omitted that exact lookup and moved directly into callsign/fuzzy matching when provider_flight_id was absent.
+
+Therefore a later enriched update could be treated as ambiguous even when all stable scheduled-leg fields were identical.
+
+This is an implementation bug, not a reason to remove physical-flight identity from the plan.
+
+### 22.5 What should be corrected
+
+The plan's physical-flight definition should remain.
+
+The implementation should be corrected so the prepaid resolver follows the same scientific identity semantics as the normal resolver while still using the transient UNLOGGED storage boundary required by Phase-2G.
+
+The implementation log/reporting should be amended to document:
+1. the legacy proxy implementation used by historical WSSS/OMAA;
+2. the September 25 physical-flight correction;
+3. the P2G13 exact-schedule parity defect;
+4. the repaired v2 behavior and regression tests;
+5. the fact that historical evidence is preserved rather than rewritten.
+
+---
+
+## 23. What “scheduled 11:00” means when the callback arrives at 12:02
+
+The time when a webhook is received is not the same as the flight's scheduled departure time.
+
+Example:
+
+~~~text
+scheduled_gate_out_utc = 11:00
+webhook received_at_utc = 12:02
+~~~
+
+This means the flight was scheduled to depart at 11:00, but AeroDataBox sent a later status/update message at 12:02.
+
+A flight can receive updates before departure, near departure, after departure, after landing, or when the provider learns additional metadata.
+
+So there is no contradiction in receiving a 12:02 callback whose flight's scheduled time is 11:00.
+
+---
+
+## 24. Why callsign or aircraft registration can be unknown first and known later
+
+Webhook payloads are snapshots of what the provider knows at that moment.
+
+An early observation can have:
+
+~~~text
+aircraft_reg = null
+callsign = null
+~~~
+
+because the provider has not yet associated those fields with the record, the upstream source has not published them, or the record is still being enriched.
+
+A later provider observation can include:
+
+~~~text
+aircraft_reg = XA-VXY
+callsign = VIV2102
+~~~
+
+without representing a different flight.
+
+That is exactly why identity cannot depend on mutable enrichment fields alone.
+
+---
+
+## 25. What a flight leg means
+
+A **flight leg** is one movement of one operating service from one origin airport to one destination airport.
+
+Example:
+
+~~~text
+MMUN -> MMVR
+scheduled departure 11:00
+~~~
+
+is one leg.
+
+If the same aircraft later flies:
+
+~~~text
+MMVR -> MMMX
+~~~
+
+that is a second leg.
+
+A single aircraft/tail can perform many legs in one day.
+
+A single public flight number can also be reused across dates and sometimes across multiple operational patterns.
+
+Therefore:
+
+~~~text
+aircraft/tail != flight number != physical flight leg
+~~~
+
+The project needs all three concepts for different purposes:
+- physical flight leg identity for unique-flight counting;
+- aircraft registration for tail-chain continuity;
+- public/operating flight number as one descriptive/linkage attribute.
+
+---
+
+## 26. What provider-identifying data and UNLOGGED/transient retention mean
+
+Provider-identifying data is normalized information derived from AeroDataBox payloads that can identify the specific provider flight observation, for example:
+- provider flight id;
+- flight number;
+- callsign;
+- aircraft registration;
+- detailed route/time fields;
+- normalized physical identity fields.
+
+Phase-2G deliberately keeps these detailed paid-callback fields in the transient prepaid runtime surface rather than the long-lived logged identity tables.
+
+In PostgreSQL, UNLOGGED means the table is not written to the normal write-ahead-log durability path. In this project it is also treated as session-scoped transient working state and purpose-deleted after the probe.
+
+The durable database keeps aggregate/evidence fields needed to prove the experiment, while raw provider blobs and detailed normalized runtime rows are deleted after purpose completion according to the retention/cleanup design.
+
+This is why exact old WSSS/OMAA provider item rows are no longer available for reprocessing with a newer metric algorithm.
+
+---
+
+## 27. Meaning of clean.adb_anchor_probe
+
+clean.adb_anchor_probe is the durable PostgreSQL table holding one row per paid anchor-probe attempt.
+
+A row stores experimental metadata and aggregate results such as:
+- probe_id;
+- ICAO;
+- stage;
+- status;
+- window start/end;
+- duration_censored;
+- stop_reason;
+- reconciliation_status;
+- aggregate metrics;
+- runtime session binding;
+- metric_contract_version;
+- cleanup/finalization state.
+
+Therefore probe 9 and probe 10 are database attempt IDs, not airport IDs or region IDs.
+
+---
+
+## 28. Accuracy statement after the deeper audit
+
+The technically precise historical statement is:
+
+~~~text
+OMAA and WSSS successfully completed their paid Stage-1 experimental executions
+and reconciled under the implementation that existed at the time.
+
+Their legacy scientific metric implementation used flight-number/runtime-key
+proxies and was not as exact as the physical-flight identity definition later
+implemented on September 25.
+
+MMUN P2G13 was the first paid run to exercise that new explicit physical-flight
+implementation and directly exposed a defect in the new prepaid identity adapter.
+~~~
+
+Therefore the MMUN defect does not prove that WSSS P2G11 infrastructure failed, and it does not justify describing WSSS as another failed attempt.
+
+At the same time, final Stage-2 promotion must not silently pretend legacy WSSS/OMAA proxy metrics and corrected physical-flight metrics are mathematically identical.
+
+That later comparability decision remains separate from the immediate MMUN defect correction and Stage-1 progression.
