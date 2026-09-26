@@ -46,20 +46,26 @@
 
 | ID | Requirement | Why | Source basis | Current status |
 |---|---|---|---|---|
-| SCI-COMP-001 | Candidates entering one common yield ranking must use a compatible metric definition. | Ratios/scores are not meaningful if numerator/reference measure different constructs. | General measurement validity; V3.9 §9.2 explicitly requires common yield components. | **REVIEW_REQUIRED:** WSSS/OMAA legacy NULL contract vs future physical-v2 candidates. |
+| SCI-COMP-001 | Candidates entering one common yield ranking must use a compatible metric definition. | Ratios/scores are not meaningful if numerator/reference measure different constructs. | General measurement validity; V3.9 §9.2 explicitly requires common yield components. | **REMEASUREMENT REQUIRED before final ranking under current formula:** WSSS/OMAA legacy NULL contract is not comparable to future physical-v2 candidates. |
 | SCI-COMP-002 | WSSS primary reference must be measured under the identical target-2h, 500-cap-censored reference protocol if current §9.2 normalization is retained. | Controls exposure/protocol differences. | Binding V3.9 §9.2. | Historical P2G11 is 2h but legacy metric implementation. Corrected-contract reference requirement unresolved. |
 | SCI-COMP-003 | OMAA fallback/diagnostic reference must be contract-compatible if it is used in normalization/ranking. | Same reason as WSSS. | V3.9 §9.2. | Historical OMAA is successful but legacy metric implementation. |
 | SCI-COMP-004 | Do not solve incompatibility after seeing remaining candidate outcomes. | Prevents outcome-driven rule selection. | Pre-specification/anti-bias project principle; NIST sampling planning supports pre-planned scheme. | Must freeze solution before remaining results can influence it. |
 
-### Current scientific decision required
+### Resolved current scientific decision
 
-Before final compact-six ranking, choose and freeze one of the following without using future outcomes:
+The project is retaining the current V3.9 §9.2 yield-reference normalization rather than redesigning the score after observing historical outcomes.
 
-**Option A — comparable remeasurement:** obtain corrected two-hour physical-v2 measurements for the historical Stage-1 rows whose yield metrics enter the common scoring/reference system.
+Therefore the current repair path requires one bounded corrected two-hour physical-v2 measurement for WSSS and OMAA before final common-contract ranking, followed by the corrected MMUN measurement under the same contract.
 
-**Option B — scoring/normalization amendment:** prospectively redesign the yield normalization so legacy metrics are not mixed with corrected physical metrics.
+The current draft recovery order is prospectively fixed as:
 
-No current evidence supports pretending the old and new metrics are identical.
+~~~text
+WSSS -> OMAA -> MMUN
+~~~
+
+This is contract-correction remeasurement, not a claim that historical WSSS/OMAA provider executions failed.
+
+No current evidence supports pretending legacy and physical-v2 metrics are identical.
 
 ---
 
@@ -175,7 +181,7 @@ All must be PASS on one exact source state:
 12. full V3.9/offline tests pass.
 13. lint/registry/traceability/contradiction scanner pass.
 14. production build passes.
-15. **Scientific comparability policy is explicitly frozen as either immediate remeasurement or deferred-before-ranking; draft branch must not silently force an unreviewed sequence.**
+15. **Scientific comparability policy is frozen: bounded WSSS -> OMAA -> MMUN physical-v2 contract-correction sequence before ordinary compact-six progression resumes.**
 16. exact approved Git HEAD synced to Replit.
 17. managed runtime reports exact HEAD and expected route/retention.
 18. fresh zero-credit callback proof.
