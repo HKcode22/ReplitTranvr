@@ -348,3 +348,42 @@ Earlier conversational guidance that WSSS/OMAA could simply remain untouched thr
 - the September 25 non-mixing rule.
 
 This entry supersedes that earlier interpretation.
+
+
+---
+
+## Entry 2026-09-26 06:42 PDT — does GitHub make infrastructure failure impossible?
+
+### Question
+Now that the two-hour owner/watchdog runs on GitHub Actions, is it impossible for an infrastructure issue to happen again?
+
+### Answer
+No. GitHub Actions removes or isolates several **specific historical failure modes**, but does not make the entire experiment infrastructure-proof.
+
+What GitHub ownership directly fixes or materially reduces:
+- Replit interactive shell exit no longer owns the two-hour paid lifecycle;
+- Replit workspace/process replacement no longer automatically kills the paid owner;
+- the owner and independent watchdog now live outside the callback-host process;
+- exact runtime/DB/secret binding can be rechecked from a separate failure domain;
+- exact provider recovery can still run even if the callback process is impaired.
+
+Residual infrastructure risks that still exist:
+- Replit callback runtime can be unavailable or replaced;
+- AeroDataBox control-plane/balance/delete endpoints can return 5xx or be unavailable;
+- internet/network/DNS/TLS delivery can fail;
+- database connectivity or PostgreSQL can fail;
+- GitHub Actions can be delayed, interrupted, or unavailable;
+- webhook/runtime secrets or configuration can drift;
+- provider subscription deletion can fail;
+- cloud/platform outages can affect either side.
+
+Therefore the correct statement is:
+
+~~~text
+GitHub Actions materially hardens the architecture and removes the old
+single-Replit-owner failure mode.
+
+It does not make infrastructure failure impossible.
+~~~
+
+The scientific rule remains: if infrastructure failure censors or compromises a paid measurement, preserve it as invalid/failed evidence and do not pretend it was a valid scientific probe.
