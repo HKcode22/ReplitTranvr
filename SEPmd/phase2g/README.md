@@ -1,6 +1,6 @@
 # Phase 2G — Canonical Index and Timeline
 
-> Last organized: 2026-09-23
+> Last organized: 2026-09-25/26
 > Canonical branch: `main`
 > Purpose: one place to find the current Phase-2G truth without moving or deleting historical files immediately before a paid run.
 
@@ -17,6 +17,18 @@
 - `artifacts/phase2g-compact6-amendment-freeze-20260921.json`
 - Compact-6 amendment file SHA-256: `09092f8d4896af4bbea11fd13d177417aa8cb92538e0cebff5e5301f3e1c4500`.
 - This is an additive amendment. It does not rewrite the original preprobe artifact.
+
+### Current physical-flight identity correction
+- P2G13 adjudication:
+  `SEPmd/phase2g/reports/2026-09-25_P2G13_MMUN_IDENTITY_CONTRACT_INVALID.md`
+- Prospective v2 amendment:
+  `SEPmd/phase2g/amendments/2026-09-25_PHYSICAL_FLIGHT_IDENTITY_V2_RECOVERY.md`
+- Current prospective metric contract:
+  `v39-physical-flight-instance-v2`
+- Historical NULL/v1 metric rows remain immutable but are excluded from v2
+  promotion normalization.
+- The machine-readable v2 recovery freeze is intentionally **not finalized**
+  until P2G13 exact-session cleanup/finalizer state is observed and verified.
 
 ### Historical failure register and regression matrix
 - `SEPmd/phase2g/FAILURE_REGISTER_AND_PREVENTION_MATRIX.md` — canonical cross-attempt failure history, root-cause certainty, corrective controls, residual risks, and regression coverage.
@@ -49,18 +61,43 @@ The subset comes only from the already-frozen pre-outcome shortlist.
 
 ## Current experiment status
 
-| Attempt | Airport | Result | Interpretation |
+| Durable probe | Airport | Result | Current scientific interpretation |
 |---:|---|---|---|
-| 1 | WSSS | failed, censored, UNRESOLVED | infrastructure-invalid |
-| 2 | OMAA | completed, MATCH | valid historical Stage-1 evidence |
-| 3 | MMUN | failed, censored, UNRESOLVED | infrastructure-invalid |
-| 4 | WSSS | failed, full-duration, MISMATCH | P2G06 accounting gate under old exact-equality rule |
-| 5 | WSSS | failed, censored, UNRESOLVED | P2G07 provider/control-plane cleanup failure; infrastructure-invalid |
-| 6 | WSSS | failed, censored, MATCH | P2G08 balance-control-plane failure; infrastructure-invalid |
-| 7 | WSSS | failed, censored, UNRESOLVED | P2G09 Replit development-host reset; infrastructure-invalid |
-| 8 | WSSS | failed, censored, UNRESOLVED | P2G10 GitHub/Replit webhook-secret mismatch; infrastructure-invalid |
+| 1 | WSSS | failed / censored / UNRESOLVED | infrastructure-invalid historical evidence |
+| 2 | OMAA | completed / uncensored / MATCH / metric contract NULL | operationally valid historical run; excluded from v2 normalization because it predates physical-flight metric contract |
+| 3 | MMUN | failed / censored / UNRESOLVED | infrastructure-invalid historical evidence |
+| 4 / P2G06 | WSSS | failed / full-duration / MISMATCH | historical accounting-gate failure; excluded |
+| 5 / P2G07 | WSSS | failed / censored / UNRESOLVED | provider/control-plane cleanup failure; excluded |
+| 6 / P2G08 | WSSS | failed / censored / MATCH | balance-control-plane failure; excluded |
+| 7 / P2G09 | WSSS | failed / censored / UNRESOLVED | development-host reset; excluded |
+| 8 / P2G10 | WSSS | failed / censored / UNRESOLVED | GitHub/Replit webhook-secret mismatch; excluded |
+| 9 / P2G11 | WSSS | full-duration / MATCH / metric contract NULL | provider execution succeeded, but metrics predate physical-flight contract; excluded from v2 normalization |
+| 10 / P2G13 | MMUN | full-duration / MATCH / v1 | provider execution succeeded; identity-parity defect makes v1 scientific metrics invalid/excluded |
 
-P2G06 remains historically failed. It is never rewritten to PASS. P2G07-P2G10 also remain failed/excluded and are never rewritten as scientific PASS evidence.
+### Current recovery objective
+
+The physical-flight correction is now versioned prospectively as
+`v39-physical-flight-instance-v2`.
+
+The old WSSS/OMAA reference metrics cannot be mixed with corrected v2 candidate
+metrics. The bounded comparable recovery order is fixed before observing v2
+outcomes:
+
+```text
+WSSS → OMAA → MMUN
+```
+
+Each candidate may consume at most one v2 contract-correction remeasurement,
+regardless of outcome. There is no automatic second attempt. Only after this
+bounded sequence is terminal may normal compact-six Stage-1 sequencing resume
+with LKPR → SKBO → YSSY.
+
+Before the first paid v2 run, P2G13 exact-session cleanup/finalizer state must be
+verified, the v2 recovery artifact must be frozen from observed state, and a
+fresh runtime/budget/AUTH/callback proof/paid preflight must bind the exact
+validated source HEAD.
+
+No weekend paid Stage-1 run is permitted.
 
 ## P2G06 reconstructed facts
 
