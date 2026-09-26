@@ -128,6 +128,43 @@ describe("V3.9 prepaid canonical-identity payload adapter", () => {
       .toBe(update.provisionalIdentityKey);
   });
 
+  it("keeps the provisional ambiguity identity stable when callsign appears later for the same scheduled leg", () => {
+    const base = {
+      number: "VB 2102",
+      codeshareStatus: 1,
+      airline: { iata: "VB" },
+      departure: {
+        airport: {
+          icao: "MMUN",
+          timeZone: "America/Cancun",
+        },
+        scheduledTime: {
+          utc: "2026-09-25T11:00:00Z",
+        },
+      },
+      arrival: {
+        airport: { icao: "MMVR" },
+      },
+    };
+
+    const first = prepaidIdentityObservationFromFlightV39({
+      ...base,
+      callSign: null,
+      aircraft: { reg: null },
+    });
+
+    const enriched = prepaidIdentityObservationFromFlightV39({
+      ...base,
+      callSign: "VIV2102",
+      aircraft: { reg: "XA-VXY" },
+    });
+
+    expect(first.provisionalIdentityKey)
+      .toBe(enriched.provisionalIdentityKey);
+    expect(first.provisionalIdentityKey)
+      .toMatch(/^amb:[a-f0-9]{64}$/);
+  });
+
   it("separates materially different scheduled legs in the provisional upper bound", () => {
     const make = (scheduled: string) =>
       prepaidIdentityObservationFromFlightV39({
