@@ -299,3 +299,174 @@ It is correct to say:
 “Chen & Li supports same-aircraft delay propagation as an important scientific feature; the 500-credit cap is our prospectively frozen engineering/budget control.”
 
 This distinction is required for academically defensible reporting.
+
+
+---
+
+## 13. Detailed comparison with the cited professor experiments
+
+### 13.1 Chen & Li 2019 (SDSU/Purdue) — what they actually did
+
+Source:
+https://junchen.sdsu.edu/proceedings/scitech_gnc19_Chen.pdf
+
+The study did not run airport webhook probes. It built a chained delay-prediction experiment from historical data.
+
+Data:
+- Bureau of Transportation Statistics airline on-time performance;
+- NOAA Local Climatological Data;
+- FAA Aviation System Performance Metrics;
+- flights connected to Chicago O'Hare (ORD);
+- July 2016 through June 2017;
+- 30 ORD-related airports selected by traffic;
+- weather, airport departure/arrival demand, schedule and delay information.
+
+Model/evaluation:
+- delay was represented using 15-minute delay groups;
+- random forest classifiers predicted departure and arrival delay groups;
+- SMOTE was used to address delayed/on-time class imbalance;
+- recursive feature elimination was used for feature selection;
+- five-fold cross-validation was used during feature selection;
+- the paper built a chained same-aircraft itinerary model using Late Arriving Aircraft Delay;
+- scheduled turnaround and previous arrival delay were used to propagate delay through the same aircraft's later legs;
+- an approximate minimum turnaround time was fitted from their data (28 minutes).
+
+What this supports in V3.9:
+- previous-flight/same-aircraft information matters;
+- tail/itinerary continuity is scientifically meaningful;
+- operational, weather and airport-demand variables are defensible features;
+- feature selection and benchmark/evaluation controls are appropriate.
+
+What it does NOT establish:
+- two-hour AeroDataBox Stage-1 probes;
+- four-hour Stage-2 probes;
+- six macro-regions;
+- the 500-credit limit;
+- WSSS as the reference;
+- our exact anchor-score weights.
+
+### 13.2 Zheng, Wei & Hu 2021 (SJSU-affiliated) — what they actually did
+
+Sources:
+https://www.mdpi.com/2226-4310/8/8/212
+https://scholarworks.sjsu.edu/faculty_rsca/2410/
+
+Data:
+- 3,705,093 Chinese flight records from 2016 before filtering;
+- flight-level origin/destination, dates, airline, aircraft type, **tail number**, scheduled and actual departure/arrival times;
+- METAR weather for the top 30 airports at 60-minute intervals;
+- after filtering, approximately 1,426,688 departure-delay records and 1,459,634 arrival-delay records were retained.
+
+Scientific design:
+- separate departure-delay and arrival-delay econometric models;
+- operation-related variables included previous delay, turnaround/block buffer, airport congestion, aircraft type and hub status;
+- time and weather variables were added;
+- ordinary least squares models with clustered standard errors were used;
+- sensitivity analyses examined aircraft utilization using:
+  - order of the flight within the aircraft's day;
+  - number of flights flown by the aircraft that day.
+
+What this strongly supports:
+- tail number is a scientifically important identity because delay propagates through the same aircraft;
+- “previous flight” requires knowing which actual leg preceded the current leg;
+- aircraft utilization/leg order can change propagation effects;
+- one public flight-number string is not enough to represent aircraft itinerary continuity.
+
+What it does NOT establish:
+- our exact physical-flight hash implementation;
+- our exact Stage-1 duration/cap;
+- our six-region shortlist.
+
+### 13.3 Zheng, Zou, Wei & Tian 2023 (SJSU-affiliated) — what they actually did
+
+Sources:
+https://www.mdpi.com/2226-4310/10/8/675
+https://scholarworks.sjsu.edu/faculty_rsca/4774/
+
+Data:
+- Flightradar24 trajectory records from January-June 2020;
+- DEN-SFO: 63 records for UA1497;
+- ORD-SFO: 136 records for UA2166;
+- individual trajectory points included timestamp, callsign/flight number, latitude, longitude, altitude, ground speed and heading.
+
+Method:
+1. reconstruct raw trajectories because raw points occurred at irregular spacing;
+2. create equal-distance trajectory sequences;
+3. find a similar historical trajectory;
+4. train LSTM models to predict remaining trajectory;
+5. train GBM models to predict ground speed;
+6. combine predicted path/speed to estimate terminal-boundary arrival and landing time.
+
+Validation/training details:
+- historical trajectories split into training/validation sets for LSTM hyperparameter search;
+- multiple LSTM models were trained to handle random initialization;
+- GBM hyperparameters were selected by grid search with five-fold procedures;
+- offline model training was separated from online ETA calculation.
+
+What this supports:
+- preserving trajectory-point sequences rather than reducing everything to one latest location;
+- separating AIRBORNE/POST prediction from PRE-DEPARTURE prediction;
+- explicit time/trajectory state and historical matching.
+
+What it does NOT establish:
+- the anchor-probe candidate ranking system;
+- Stage-1 2h or Stage-2 4h durations.
+
+---
+
+## 14. Why the V3.9 experiment does not literally replicate those papers
+
+V3.9 is a new applied data-collection and model-evaluation experiment built for:
+- AeroDataBox's current provider contract;
+- the project's credit budget;
+- multi-region data coverage;
+- as-known-at-cutoff predictive evaluation;
+- PRE and AIRBORNE prediction states;
+- repeatable paid-probe accounting and retention constraints.
+
+Therefore the correct scientific method is not to copy one paper line-for-line.
+
+Instead:
+1. identify findings/design principles that transfer to this problem;
+2. define the target population and prediction problem;
+3. prospectively operationalize those principles under this provider/data/budget environment;
+4. test that the implementation really measures the intended construct;
+5. preserve provenance and sensitivity limits.
+
+This is normal research synthesis, but it creates a responsibility to clearly mark which parts are literature-derived and which parts are project choices.
+
+---
+
+## 15. Trusting AI-generated experimental choices
+
+An AI-generated recommendation is not authoritative because it came from an AI.
+
+For project-specific choices, confidence should come from:
+- consistency with the scientific objective;
+- compatibility with established statistical principles;
+- pre-specification before outcomes;
+- sensitivity/robustness analysis;
+- external source verification;
+- code/test traceability;
+- observed live evidence;
+- willingness to revise when evidence exposes a mismatch.
+
+This project has already demonstrated why this distinction matters: the physical-flight goal was scientifically appropriate, but the first explicit prepaid implementation contained an exact-schedule parity defect. The correct response is to preserve the failure, repair the implementation, add regression tests and update the protocol evidence—not to assume the earlier AI/code decision was correct by authority.
+
+---
+
+## 16. Exact source-to-project mapping examples
+
+| Project element | External basis | Project-specific operationalization |
+|---|---|---|
+| same-aircraft propagation | Chen & Li 2019; Zheng et al. 2021 | tail-chain fields, previous-leg feature family, physical flight/tail identity |
+| aircraft utilization / leg order | Zheng et al. 2021 | preserve tail + flight-leg sequence, later historical features |
+| airborne ETA | Zheng et al. 2023 | PRE vs AIRBORNE state split; preserve trajectory points |
+| weather as predictor | Chen & Li 2019; Zheng et al. 2021 | as-known-at-cutoff METAR/TAF/weather joins |
+| stratified geographic coverage | NIST sampling principles | one compact candidate per frozen macro-region |
+| sample-size/cost tradeoff | NIST | 6-candidate compact design and finite provider budget |
+| exact 2h Stage-1 duration | no paper mandates it | project-standardized Stage-1 exposure |
+| exact 4h Stage-2 duration | no paper mandates it | project confirmation exposure, now conditional under compact amendment |
+| provider credit accounting | AeroDataBox docs | exact MATCH rule, watchdog, budget day |
+| retries disabled | AeroDataBox permits maxDeliveryRetries=0 | project chooses zero retries to make SEND/receipt accounting interpretable |
+| exact Git SHA/AUTH hashes | software reproducibility principles/project engineering | fail-closed execution binding |
