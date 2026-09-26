@@ -45,7 +45,7 @@ Current contract-compatible truth:
 - MMUN: probe 3 is infrastructure-invalid; probe 10/P2G13 completed the provider
   window/MATCH but its v1 prepaid identity implementation was scientifically
   invalid. It is excluded from v2 scoring.
-- LKPR: never started as a paid Stage-1 probe; the historical P2G05 event was a
+- LKPR: **never started as a paid Stage-1 probe**; the historical P2G05 event was a
   pre-launch refusal.
 - SKBO: not yet run.
 - YSSY: not yet run.
