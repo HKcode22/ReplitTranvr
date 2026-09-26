@@ -6,4 +6,4 @@
  * metrics for Stage-2 promotion or yield-reference normalization.
  */
 export const PREPAID_PROBE_METRIC_CONTRACT_V39 =
-  "v39-physical-flight-instance-v1" as const;
+  "v39-physical-flight-instance-v2" as const;
