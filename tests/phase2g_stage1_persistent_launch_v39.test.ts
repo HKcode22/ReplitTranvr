@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
 const preflight = readFileSync(join(root, "scripts", "v39_phase2g_stage1_paid_preflight_v39.ts"), "utf8");
+const stage1Owner = readFileSync(join(root, "scripts", "v39_probe_stage1_owner_v39.ts"), "utf8");
 const launcher = readFileSync(join(root, "scripts", "v39_phase2g_stage1_launch_logged_v39.sh"), "utf8");
 const detachedSpawner = readFileSync(join(root, "scripts", "v39_phase2g_spawn_detached_supervisor_v39.ts"), "utf8");
 const supervisor = readFileSync(join(root, "scripts", "v39_phase2g_stage1_logged_supervisor_v39.ts"), "utf8");
@@ -39,9 +40,10 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).not.toContain("DELETE FROM clean.");
   });
 
-  it("allows the hash-bound P2G07 recovery amendment in paid preflight without hard-wiring the old compact6 path", () => {
-    expect(preflight).toContain("isP2g07Provider502RecoveryEligibleV39");
-    expect(preflight).toContain("p2g07_provider502_recovery_rerun");
+  it("uses the shared Stage1 selector for P2G07 recovery without hard-wiring the old compact6 path", () => {
+    expect(preflight).toContain("chooseNextStage1TargetV39");
+    expect(stage1Owner).toContain("isP2g07Provider502RecoveryEligibleV39");
+    expect(stage1Owner).toContain("p2g07_provider502_recovery_rerun");
     expect(preflight).not.toContain("path: path.resolve(PHASE2G_COMPACT6_ARTIFACT_PATH)");
   });
 
@@ -52,17 +54,28 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(preflight).toContain("balance_stability_canary");
   });
 
-  it("recognizes only the prospective P2G09 host-reset recovery amendment", () => {
-    expect(preflight).toContain("p2g09_hostreset_recovery_rerun");
-    expect(preflight).toContain("isP2g09HostResetRecoveryEligibleV39");
+  it("keeps P2G09 host-reset recovery in the shared fail-closed selector", () => {
+    expect(preflight).toContain("chooseNextStage1TargetV39");
+    expect(stage1Owner).toContain("p2g09_hostreset_recovery_rerun");
+    expect(stage1Owner).toContain("isP2g09HostResetRecoveryEligibleV39");
     expect(preflight).toContain("phase2g_settling_status_migration_missing");
   });
 
-  it("recognizes the exact P2G10 webhook-secret-mismatch recovery amendment without opening an automatic retry loop", () => {
-    expect(preflight).toContain("p2g10_secret_mismatch_recovery_rerun");
-    expect(preflight).toContain("isP2g10SecretMismatchRecoveryEligibleV39");
+  it("keeps exact P2G10 recovery in the shared selector without opening an automatic retry loop", () => {
+    expect(preflight).toContain("chooseNextStage1TargetV39");
+    expect(stage1Owner).toContain("p2g10_secret_mismatch_recovery_rerun");
+    expect(stage1Owner).toContain("isP2g10SecretMismatchRecoveryEligibleV39");
     expect(preflight).toContain("next_candidate_mismatch");
-    expect(preflight).not.toContain("while (isP2g10SecretMismatchRecoveryEligibleV39");
+    expect(stage1Owner).not.toContain("while (isP2g10SecretMismatchRecoveryEligibleV39");
+  });
+
+  it("fails closed on obsolete completed metric contracts unless the bounded identity-v2 recovery is frozen", () => {
+    expect(preflight).toContain("metric_contract_version");
+    expect(preflight).toContain("confirmed_unique_lower_per_credit");
+    expect(preflight).toContain("confirmed_plus_ambiguous_upper_per_credit");
+    expect(stage1Owner).toContain("physical_identity_v2_remeasurement");
+    expect(stage1Owner).toContain("REFUSED_OBSOLETE_COMPLETED_METRIC_CONTRACT_REQUIRES_FROZEN_RECOVERY");
+    expect(stage1Owner).toContain("choosePhysicalIdentityV2RemeasurementTargetV39");
   });
 
   it("re-binds the exact approved AUTH, runtime, head, budget day, account and callback before launch", () => {
