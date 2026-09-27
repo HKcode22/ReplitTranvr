@@ -260,6 +260,22 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
         icao: candidate.icao,
       });
     },
+    externalStopCheck: async () => {
+      const control = await pool.query(
+        `SELECT status,stop_reason
+           FROM clean.adb_anchor_probe
+          WHERE probe_id=$1`,
+        [probeId],
+      );
+      if ((control.rowCount ?? control.rows.length) !== 1) {
+        return "durable_probe_control_row_missing";
+      }
+      const row = control.rows[0];
+      if (String(row.status) !== "failed") return null;
+      return row.stop_reason == null
+        ? "external_watchdog_stop"
+        : String(row.stop_reason);
+    },
   });
 
   if (
