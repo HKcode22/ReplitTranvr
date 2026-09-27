@@ -77,6 +77,15 @@ case "${1:-help}" in
     echo "alert_credits_spent=0"
     bash scripts/v39_phase2g_preflight_current_v39.sh
     ;;
+  scientific-health)
+    require_repo_state
+    verify_v2_freeze
+    echo "provider_call=false"
+    echo "provider_mutation=false"
+    echo "database_mutation=false"
+    npx tsx scripts/v39_phase2g_scientific_health_snapshot_v39.ts \
+      --probe-budget-day-id "$BUDGET"
+    ;;
   runtime)
     require_repo_state
     verify_v2_freeze
@@ -167,6 +176,7 @@ case "${1:-help}" in
 Usage:
   bash scripts/v39_phase2g_monday_wsss_v2_prepare_v39.sh static
   bash scripts/v39_phase2g_monday_wsss_v2_prepare_v39.sh readonly-preflight
+  bash scripts/v39_phase2g_monday_wsss_v2_prepare_v39.sh scientific-health
   bash scripts/v39_phase2g_monday_wsss_v2_prepare_v39.sh runtime
   bash scripts/v39_phase2g_monday_wsss_v2_prepare_v39.sh auth-draft
   PHASE2G_CONFIRM_AUTH_SHA=<exact_sha> bash scripts/v39_phase2g_monday_wsss_v2_prepare_v39.sh auth-approve
@@ -182,7 +192,7 @@ Monday target:
 Safety:
   - This helper has NO paid-launch mode.
   - static/runtime/auth-draft/auth-approve/zero-credit-binding create no provider subscription.
-  - readonly-preflight performs provider balance/subscription LIST reads only, makes no provider mutation, and spends 0 Alert credits.
+  - readonly-preflight performs provider balance/subscription LIST reads only, makes no provider mutation, and spends 0 Alert credits.\n  - scientific-health reads aggregate runtime science state only; it makes no provider call and no database mutation.
   - zero-credit-binding makes no AeroDataBox provider call and spends 0 Alert credits.
 EOF
     ;;
