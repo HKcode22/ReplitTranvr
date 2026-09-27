@@ -228,3 +228,21 @@ Every affected decision must state exactly which layer failed:
 - scientific measurement implementation;
 - comparability/protocol;
 - or evidence/retention.
+
+
+---
+
+## O. Live scientific-observability requirements — added 2026-09-27
+
+| ID | Requirement | Why | Status requirement |
+|---|---|---|---|
+| SCI-OBS-001 | Independent watchdog must emit aggregate scientific-health snapshots during a paid probe. | Infrastructure PASS is not sufficient to prove measurement behavior is sane. | Required before WSSS-v2. |
+| SCI-OBS-002 | Live monitor must detect resolved→later-quarantined exact-leg regression. | Direct P2G13 failure signature. | Hard fail-closed invariant. |
+| SCI-OBS-003 | One exact scheduled leg must not split across multiple physical IDs. | Prevent physical-flight overcount / identity corruption. | Hard fail-closed invariant. |
+| SCI-OBS-004 | One exact scheduled leg must not drift across multiple provisional identity keys. | Prevent mutable enrichment from changing ambiguity identity. | Hard fail-closed invariant. |
+| SCI-OBS-005 | Resolved rows require a physical ID; quarantined rows may not retain one. | Internal identity-state consistency. | Hard fail-closed invariant. |
+| SCI-OBS-006 | Active probe metric contract must equal the current physical-v2 contract. | Prevent code/schema/metric-version mismatch. | Hard fail-closed invariant. |
+| SCI-OBS-007 | Low yield, high ambiguity, low stability or missing provider metadata may not automatically terminate the probe. | Prevent outcome-driven censoring/selection bias. | Non-negotiable anti-bias rule. |
+| SCI-OBS-008 | Scientific watchdog logs must contain aggregate counts only, not row-level provider-identifying content. | Preserve retention/data-minimization boundary. | Required. |
+| SCI-OBS-009 | Scientific failure must persist a specific `scientific_contract_violation:<code>` stop reason. | Distinguish scientific failure from infrastructure failure. | Required. |
+| SCI-OBS-010 | Owner and scientific-watchdog evidence artifacts must be retained after success or failure. | Faster forensic review and continuity. | Required. |
