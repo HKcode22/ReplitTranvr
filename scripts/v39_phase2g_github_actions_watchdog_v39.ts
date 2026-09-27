@@ -11,6 +11,9 @@ import {
   readPhase2gScientificHealthV39,
   type Phase2gScientificHealthV39,
 } from "../server/lib/disruption/phase2gScientificHealth_v39";
+import {
+  PREPAID_PROBE_METRIC_CONTRACT_V39,
+} from "../server/lib/disruption/prepaidProbeMetricContract_v39";
 
 const LIVE_CREDIT_LIMIT = 450;
 const POLL_MS = 30_000;
@@ -205,8 +208,28 @@ async function main(): Promise<void> {
     probeSeenAt ??= Date.now();
     const probe = probeR.rows[0];
     const status = String(probe.status);
+    const metricContractVersion =
+      probe.metric_contract_version == null
+        ? null
+        : String(probe.metric_contract_version);
     const sessionId = probe.runtime_session_id ? String(probe.runtime_session_id) : null;
     const windowEndMs = Date.parse(String(probe.window_end));
+
+    if (
+      (status === "probing" || status === "settling") &&
+      metricContractVersion !== PREPAID_PROBE_METRIC_CONTRACT_V39
+    ) {
+      const durableStopReason =
+        "scientific_contract_violation:metric_contract_mismatch";
+      await invokeRecovery({
+        authId,
+        authFile,
+        authSha,
+        budgetDay,
+        reason: durableStopReason,
+        durableStopReason,
+      });
+    }
 
     let internalCredits = 0;
     let callbackFailures = 0;
@@ -240,10 +263,7 @@ async function main(): Promise<void> {
     if (sessionId) {
       scientificHealth = await readPhase2gScientificHealthV39(pool, {
         sessionId,
-        metricContractVersion:
-          probe.metric_contract_version == null
-            ? null
-            : String(probe.metric_contract_version),
+        metricContractVersion,
       });
       emitScientificHealth(scientificHealth);
 
