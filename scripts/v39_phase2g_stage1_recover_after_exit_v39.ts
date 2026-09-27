@@ -23,6 +23,11 @@ function required(name: string): string {
   if (!value) throw new Error(`MISSING:${name}`);
   return value;
 }
+function optional(name: string): string | null {
+  const i = process.argv.indexOf(name);
+  const value = i >= 0 ? String(process.argv[i + 1] ?? "").trim() : "";
+  return value || null;
+}
 function readAuth(authPath: string): { record: AuthRecord; sha256: string } {
   const raw = fs.readFileSync(authPath, "utf8");
   let record: AuthRecord;
@@ -60,7 +65,14 @@ async function main(): Promise<void> {
   const authPath = path.resolve(required("--auth-file"));
   const expectedAuthSha = required("--auth-sha").toLowerCase();
   const budgetDayId = required("--probe-budget-day-id");
+  const requestedStopReason = optional("--stop-reason");
   const deferCleanup = process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP === "1";
+  if (
+    requestedStopReason &&
+    !/^scientific_contract_violation:[a-z0-9_]{1,96}$/.test(requestedStopReason)
+  ) {
+    throw new Error("RECOVERY_REFUSED:STOP_REASON_NOT_ALLOWED");
+  }
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("RECOVERY_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("RECOVERY_REFUSED:AUTH_SHA_INVALID");
 
@@ -354,6 +366,10 @@ async function main(): Promise<void> {
         }
       }
     }
+  }
+
+  if (requestedStopReason) {
+    stopReason = requestedStopReason;
   }
 
   await markProbeFailed({ probeId, sessionId, stopReason, cleanupVerifiedAtUtc });
