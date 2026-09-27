@@ -408,3 +408,69 @@ OMAA-v2 -> MMUN-v2 -> LKPR -> SKBO -> YSSY
 ```
 
 No automatic retry is authorized for any v2 correction run.
+
+
+---
+
+## 14. Update — 2026-09-26 22:20 PDT — physical-v2 merged and Monday WSSS preparation active
+
+The clean physical-v2 repair PR #10 was marked ready and merged successfully.
+
+Merge commit:
+`5da68315151513275c62d72306e6e39894fe9e47`
+
+The previously missing machine-readable v2 recovery freeze was then discovered during Monday-readiness inspection and added prospectively before any v2 paid run:
+
+`artifacts/phase2g-compact6-identity-v2-recovery-freeze-20260925.json`
+
+Truthful freeze time inside the artifact:
+`2026-09-27T05:14:08.000Z`
+
+Artifact content SHA-256:
+`d8798dbc23d5bce45f62a255e98da0d00c5cbce9d669529fff6b34b2733d6741`
+
+The freeze binds:
+- WSSS historical probe 9 = completed / uncensored / MATCH / legacy NULL metric contract;
+- OMAA historical probe 2 = completed / uncensored / MATCH / legacy NULL metric contract;
+- MMUN probe 10 = completed / uncensored / MATCH / v39-physical-flight-instance-v1;
+- corrected contract = v39-physical-flight-instance-v2;
+- recovery order = WSSS -> OMAA -> MMUN;
+- maximum additional v2 attempts per candidate = 1;
+- fresh runtime / budget / AUTH required;
+- observed outcome metrics may not authorize the remeasurement.
+
+Monday preparation helper:
+`scripts/v39_phase2g_monday_wsss_v2_prepare_v39.sh`
+
+Fresh proposed Monday identifiers:
+- budget/runtime ID: `P2G-S1-20260928-13`;
+- AUTH ID: `AUTH-20260928-P2G14`;
+- AUTH file: `SEPmd/V3.9_PHASE2G_AUTH_20260928_P2G14.json`;
+- runtime file: `artifacts/phase2g-gate2-runtime-P2G-S1-20260928-13.json`;
+- eligible Stage-1 start class: Monday 2026-09-28, 11:00–13:00 UTC = 04:00–06:00 PDT;
+- preferred start: 11:00 UTC / 04:00 PDT;
+- target duration: 120 minutes;
+- protected Alert-credit ceiling: 500.
+
+The helper intentionally has NO paid-launch mode. It only supports:
+- static regression/type checking;
+- read-only provider/DB/runtime preflight;
+- fresh runtime generation;
+- AUTH draft;
+- explicit hash-confirmed AUTH approval;
+- zero-credit GitHub/Replit binding.
+
+Do not create or dispatch a paid WSSS subscription until:
+1. final current-main offline-safety is green;
+2. Replit is synced to the exact final main HEAD;
+3. migration 0061 is applied/replayed successfully;
+4. Monday helper static checks pass on Replit;
+5. read-only preflight has zero blockers;
+6. fresh runtime is created and its v2 amendment hash is exactly the value above;
+7. fresh zero-credit callback verification passes;
+8. GitHub/Replit webhook-secret and runtime-DB binding passes;
+9. AUTH is reviewed/approved by exact SHA;
+10. the fresh paid preflight says `PASS_READY_FOR_PAID_STAGE1`, blockers=[], next candidate exactly WSSS;
+11. no active billable subscriptions/open incidents/active probes exist.
+
+PR #9 remains closed/superseded. PR #10 is merged and is no longer the active execution pointer; main is authoritative.
