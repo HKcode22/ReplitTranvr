@@ -621,3 +621,47 @@ Before each paid run, the no-repeat checklist must cover:
 - exact source/runtime binding;
 - provider safety and cleanup ownership.
 
+
+
+---
+
+## Entry 2026-09-27 — can the live experiment logs detect scientific failures faster?
+
+### Question
+The historical runs required substantial post-run analysis to identify scientific failures. Can logging/scripts be strengthened so an operator can see during the live experiment whether the scientific measurement itself is behaving correctly, not merely whether callbacks/provider spending are healthy?
+
+### Answer
+Yes, and this is being implemented prospectively before WSSS-v2.
+
+The existing GitHub watchdog was primarily an infrastructure/accounting watchdog. It observed callback failures, provider balance, internal credits, deadline behavior and subscription safety.
+
+The new scientific-health layer reads the exact session's aggregate identity state every watchdog cycle and checks **measurement invariants**, not outcome quality.
+
+The monitor reports counts for resolved/quarantined identity, physical IDs, exact-leg repetition, ambiguity and tail enrichment. It does not copy row-level provider-identifying data into GitHub logs.
+
+### What automatically stops the run
+Only a hard measurement-contract violation can trigger recovery, such as:
+- one exact scheduled leg splitting into two physical IDs;
+- a previously resolved exact leg later becoming quarantined;
+- provisional identity drift for the same exact scheduled leg;
+- impossible resolved/quarantined row shapes;
+- wrong metric-contract version.
+
+### What does NOT stop the run
+The monitor is prohibited from stopping based on:
+- low flight yield;
+- low tail-chain yield;
+- high ambiguity;
+- low stability;
+- missing provider IDs/callsigns;
+- unfavorable score.
+
+Those are outcomes and using them to decide whether to continue would create outcome-dependent bias.
+
+### Evidence
+The watchdog emits both a concise human line and structured JSON every cycle, and stores aggregate snapshots in a retained GitHub Actions artifact.
+
+The operator also gets a provider-free manual `scientific-health` command.
+
+### Scientific rationale
+This is measurement-system monitoring. It strengthens detection of violations of the already-frozen measurand/identity contract without changing the scientific outcome rule or candidate scoring.
