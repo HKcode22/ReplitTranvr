@@ -15,6 +15,32 @@ export const PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-p2g09-hostreset-recovery-freeze-20260922.json";
 export const PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-p2g10-secret-mismatch-recovery-freeze-20260923.json";
+export const PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH =
+  "artifacts/phase2g-compact6-identity-v2-recovery-freeze-20260925.json";
+
+export type Phase2gIdentityV2RecoveryIcaoV39 =
+  | "WSSS"
+  | "OMAA"
+  | "MMUN";
+
+export interface Phase2gPhysicalIdentityV2RemeasurementV39 {
+  authorized: true;
+  current_metric_contract: "v39-physical-flight-instance-v2";
+  maximum_additional_attempts_per_candidate: 1;
+  ordered_icaos: Phase2gIdentityV2RecoveryIcaoV39[];
+  legacy_probe_requirements: Array<{
+    icao: Phase2gIdentityV2RecoveryIcaoV39;
+    probe_id: number;
+    expected_status: "completed";
+    expected_duration_censored: false;
+    expected_reconciliation_status: "MATCH";
+    expected_metric_contract_version: string | null;
+  }>;
+  exclude_legacy_from_v2_promotion: true;
+  requires_fresh_runtime_budget_auth: true;
+  outcome_metrics_not_used_to_authorize: true;
+  reason: string;
+}
 
 export interface Phase2gCompact6AmendmentV39 {
   schema_version: "v39-phase2g-compact6-amendment-1";
@@ -113,6 +139,7 @@ export interface Phase2gCompact6AmendmentV39 {
     authorization_basis: "github_replit_webhook_secret_mismatch_only";
     reason: string;
   };
+  physical_identity_v2_remeasurement?: Phase2gPhysicalIdentityV2RemeasurementV39;
   prospective_reconciliation_policy: {
     external_settled_spend_is_authoritative_denominator: true;
     delivery_completeness_floor: number;
@@ -160,7 +187,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
   const candidatePaths = input.path
     ? [input.path]
-    : [PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
+    : [PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
   let raw: string | null = null;
   let actual: string | null = null;
   for (const candidatePath of candidatePaths) {
@@ -335,6 +362,64 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   )) {
     throw new Error("REFUSED_COMPACT6_P2G10_RECOVERY_BOUND");
   }
+  const identityV2 = amendment.physical_identity_v2_remeasurement;
+  if (identityV2 !== undefined) {
+    const expectedOrder = ["WSSS", "OMAA", "MMUN"];
+    if (
+      identityV2.authorized !== true ||
+      identityV2.current_metric_contract !== "v39-physical-flight-instance-v2" ||
+      identityV2.maximum_additional_attempts_per_candidate !== 1 ||
+      identityV2.exclude_legacy_from_v2_promotion !== true ||
+      identityV2.requires_fresh_runtime_budget_auth !== true ||
+      identityV2.outcome_metrics_not_used_to_authorize !== true ||
+      !Array.isArray(identityV2.ordered_icaos) ||
+      identityV2.ordered_icaos.length !== expectedOrder.length ||
+      identityV2.ordered_icaos.some((icao, index) => icao !== expectedOrder[index]) ||
+      !Array.isArray(identityV2.legacy_probe_requirements) ||
+      identityV2.legacy_probe_requirements.length !== expectedOrder.length ||
+      !String(identityV2.reason ?? "").trim()
+    ) {
+      throw new Error("REFUSED_COMPACT6_IDENTITY_V2_RECOVERY_CONTRACT");
+    }
+
+    const expectedLegacy: Record<string, {
+      probeId: number;
+      metricContractVersion: string | null;
+    }> = {
+      WSSS: { probeId: 9, metricContractVersion: null },
+      OMAA: { probeId: 2, metricContractVersion: null },
+      MMUN: {
+        probeId: 10,
+        metricContractVersion: "v39-physical-flight-instance-v1",
+      },
+    };
+
+    const seen = new Set<string>();
+    for (const requirement of identityV2.legacy_probe_requirements) {
+      const icao = String(requirement.icao ?? "").toUpperCase();
+      const expected = expectedLegacy[icao];
+      if (
+        !expected ||
+        seen.has(icao) ||
+        Number(requirement.probe_id) !== expected.probeId ||
+        requirement.expected_status !== "completed" ||
+        requirement.expected_duration_censored !== false ||
+        requirement.expected_reconciliation_status !== "MATCH" ||
+        requirement.expected_metric_contract_version !==
+          expected.metricContractVersion
+      ) {
+        throw new Error(
+          `REFUSED_COMPACT6_IDENTITY_V2_LEGACY_REQUIREMENT:${icao || "<missing>"}`,
+        );
+      }
+      seen.add(icao);
+    }
+
+    if (expectedOrder.some((icao) => !seen.has(icao))) {
+      throw new Error("REFUSED_COMPACT6_IDENTITY_V2_LEGACY_SET");
+    }
+  }
+
   const policy = amendment.prospective_reconciliation_policy;
   if (
     policy.external_settled_spend_is_authoritative_denominator !== true ||
