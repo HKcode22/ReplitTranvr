@@ -60,6 +60,8 @@ case "${1:-help}" in
       tests/phase2g_zero_credit_callback_binding_v39.test.ts \
       tests/phase2g_historical_failure_regressions_v39.test.ts \
       tests/phase2g_boot_migration_v39.test.ts \
+      tests/phase2g_scientific_health_v39.test.ts \
+      tests/phase2g_scientific_observability_wiring_v39.test.ts \
       tests/prepaid_identity_adapter_v39.test.ts \
       tests/prepaid_identity_persistence_v39.test.ts \
       tests/prepaid_identity_resolution_v39.test.ts \
