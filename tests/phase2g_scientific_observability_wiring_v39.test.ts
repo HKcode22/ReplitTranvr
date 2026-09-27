@@ -32,6 +32,18 @@ describe("Phase2G scientific observability wiring", () => {
     expect(source).toContain("scientificHealth.hard_violations.length > 0");
   });
 
+  it("makes the paid owner honor a durable stop set by the independent watchdog", () => {
+    const liveWindow = read("server/lib/disruption/prepaidProbeWindow_v39.ts");
+    const execution = read("server/lib/disruption/probeExecutionPrepaid_v39.ts");
+
+    expect(liveWindow).toContain("externalStopCheck?:");
+    expect(liveWindow).toContain("externalStopRequested = true");
+    expect(liveWindow).toContain("external_watchdog_stop");
+    expect(execution).toContain("externalStopCheck: async () =>");
+    expect(execution).toContain("SELECT status,stop_reason");
+    expect(execution).toContain('String(row.status) !== "failed"');
+  });
+
   it("preserves scientific-health evidence in the paid workflow", () => {
     const workflow = read(".github/workflows/phase2g-paid-stage1.yml");
     expect(workflow).toContain("Preserve scientific-health evidence");
