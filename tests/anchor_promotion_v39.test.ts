@@ -41,7 +41,7 @@ function ev(
   return {
     icao,
     status,
-    metricContractVersion: "v39-physical-flight-instance-v1",
+    metricContractVersion: "v39-physical-flight-instance-v2",
     rowsPerHour: status === "completed" ? 100 : null,
     creditsSpent: status === "completed" ? credits : null,
     uniqueFlightsPerCredit: status === "completed" ? lower / credits : null,
