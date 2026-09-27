@@ -16,6 +16,7 @@ import {
 } from "./probeExecution_v39";
 import { runPrepaidLiveWindowV39 } from "./prepaidProbeWindow_v39";
 import { PREPAID_PROBE_METRIC_CONTRACT_V39 } from "./prepaidProbeMetricContract_v39";
+import { readPhase2gScientificHealthV39 } from "./phase2gScientificHealth_v39";
 
 function completeBucketStability(
   start: Date,
@@ -310,6 +311,42 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       durationCensored: result.durationCensored,
       stopReason: result.stopReason ?? "prepaid_probe_failed",
     };
+  }
+
+  if (cleanupDeferredSafely) {
+    const scientificHealth = await readPhase2gScientificHealthV39(pool, {
+      sessionId: result.runtimeSessionId,
+      metricContractVersion: PREPAID_PROBE_METRIC_CONTRACT_V39,
+    });
+    console.log(JSON.stringify({
+      schema: "v39.phase2g-terminal-scientific-health.v1",
+      probe_id: probeId,
+      icao: candidate.icao,
+      scientific_health: scientificHealth,
+      provider_call: false,
+      provider_mutation: false,
+      database_mutation: false,
+    }));
+    if (scientificHealth.hard_violations.length > 0) {
+      const stopReason =
+        `scientific_contract_violation:${scientificHealth.hard_violations[0]}`;
+      await markSafeFailure({
+        probeId,
+        runtimeSessionId: result.runtimeSessionId,
+        ended: result.windowEnd,
+        stopReason,
+        reconciliationStatus: result.reconciliationStatus,
+        cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+        durationCensored: result.durationCensored,
+      });
+      return {
+        probeId,
+        status: "failed",
+        creditsSpent: null,
+        durationCensored: result.durationCensored,
+        stopReason,
+      };
+    }
   }
 
   if (result.externalCredits === null || result.externalCredits < result.internalSendCredits) {
