@@ -181,7 +181,7 @@ Monday target:
 Safety:
   - This helper has NO paid-launch mode.
   - static/runtime/auth-draft/auth-approve/zero-credit-binding create no provider subscription.
-  - adjudicate-p2g10 performs provider LIST read only and exact DB closeout only.
+  - readonly-preflight performs provider balance/subscription LIST reads only, makes no provider mutation, and spends 0 Alert credits.
   - zero-credit-binding makes no AeroDataBox provider call and spends 0 Alert credits.
 EOF
     ;;
