@@ -323,8 +323,58 @@ export function createPrepaidSessionIdentityPersistenceV39(
       }
 
       /*
-       * No-provider-ID observations need positive retained linkage evidence.
-       * The production resolver's frozen rule is:
+       * Mirror the normal production resolver's schedule-aware alias before
+       * attempting fuzzy no-provider linkage. An observation for the exact
+       * same carrier/flight/route/service-date/scheduled gate-out is an update
+       * of the retained scheduled leg even when later callbacks enrich mutable
+       * linkage fields such as callsign or aircraft registration.
+       */
+      const exactSchedule = await client.query(
+        `SELECT DISTINCT
+                flight_instance_id,
+                initial_service_date::text
+           FROM clean.prepaid_probe_item_runtime
+          WHERE session_id=$1::uuid
+            AND provider_flight_id IS NULL
+            AND flight_instance_id IS NOT NULL
+            AND identity_resolution_status='resolved'
+            AND operating_carrier=$2
+            AND operating_flight_number=$3
+            AND origin_icao=$4
+            AND destination_icao=$5
+            AND initial_service_date=$6::date
+            AND scheduled_gate_out_utc=$7::timestamptz
+          ORDER BY flight_instance_id
+          LIMIT 2`,
+        [
+          id,
+          carrier,
+          number,
+          origin,
+          destination,
+          input.initialServiceDate,
+          input.scheduledGateOutUtc,
+        ],
+      );
+
+      if ((exactSchedule.rowCount ?? exactSchedule.rows.length) > 1) {
+        throw prepaidWebhookIdentityAmbiguityErrorV39(
+          "exact prepaid schedule identity maps to multiple physical legs",
+        );
+      }
+
+      if (exactSchedule.rows[0]) {
+        return {
+          flightInstanceId:
+            String(exactSchedule.rows[0].flight_instance_id),
+          initialServiceDate:
+            String(exactSchedule.rows[0].initial_service_date),
+        };
+      }
+
+      /*
+       * No-provider-ID schedule changes still require positive retained linkage
+       * evidence after the exact scheduled-leg check:
        *   - callsign match + <=12h => strong linkage;
        *   - multiple strong matches => ambiguous;
        *   - otherwise a same-service-date or <=12h nearby identity is
@@ -514,7 +564,11 @@ export function prepaidIdentityObservationFromFlightV39(
       originIcao,
       destinationIcao,
     }))}`;
-  } else if (operatingFlightNumber || callsign) {
+  } else if (operatingFlightNumber) {
+    /*
+     * Callsign is mutable enrichment and must not split the same scheduled leg
+     * into multiple ambiguity tokens when it appears or changes later.
+     */
     provisionalIdentityKey = `amb:${sha256(canonical({
       operatingCarrier,
       operatingFlightNumber,
@@ -523,7 +577,21 @@ export function prepaidIdentityObservationFromFlightV39(
       scheduledGateOutUtc:
         scheduledGateOut?.toISOString() ??
         scheduledGateOutRaw,
+    }))}`;
+  } else if (callsign) {
+    /*
+     * When the provider omits a public flight number entirely, callsign is the
+     * only remaining flight-level token available for the conservative upper
+     * bound. It remains non-canonical linkage evidence.
+     */
+    provisionalIdentityKey = `amb:${sha256(canonical({
+      operatingCarrier,
       callsign,
+      originIcao,
+      destinationIcao,
+      scheduledGateOutUtc:
+        scheduledGateOut?.toISOString() ??
+        scheduledGateOutRaw,
     }))}`;
   }
 
