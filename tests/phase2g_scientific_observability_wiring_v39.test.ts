@@ -24,6 +24,14 @@ describe("Phase2G scientific observability wiring", () => {
     expect(source).toContain("stopReason = requestedStopReason");
   });
 
+  it("adds an independent terminal scientific-health assertion in the paid owner", () => {
+    const source = read("server/lib/disruption/probeExecutionPrepaid_v39.ts");
+    expect(source).toContain("readPhase2gScientificHealthV39");
+    expect(source).toContain("v39.phase2g-terminal-scientific-health.v1");
+    expect(source).toContain("scientific_contract_violation:");
+    expect(source).toContain("scientificHealth.hard_violations.length > 0");
+  });
+
   it("preserves scientific-health evidence in the paid workflow", () => {
     const workflow = read(".github/workflows/phase2g-paid-stage1.yml");
     expect(workflow).toContain("Preserve scientific-health evidence");
