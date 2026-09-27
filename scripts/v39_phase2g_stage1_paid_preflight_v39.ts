@@ -13,12 +13,7 @@ import {
   loadPhase2gCompact6AmendmentV39,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
-  chooseNextPrimaryStage1TargetV39,
-  isP2g06PostfixWsssValidationEligibleV39,
-  isP2g07Provider502RecoveryEligibleV39,
-  isP2g08Balance502RecoveryEligibleV39,
-  isP2g09HostResetRecoveryEligibleV39,
-  isP2g10SecretMismatchRecoveryEligibleV39,
+  chooseNextStage1TargetV39,
   type Stage1AttemptEvidence,
 } from "./v39_probe_stage1_owner_v39";
 
@@ -274,45 +269,88 @@ async function main(): Promise<void> {
     const stage1Rows = await pool.query(
       `SELECT probe_id,icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
               tail_chain_links_per_credit,stability,confirmed_unique_lower,
-              confirmed_plus_ambiguous_upper,duration_censored,stop_reason,
+              confirmed_plus_ambiguous_upper,provider_content_safe_mode,
+              confirmed_unique_lower_per_credit,
+              confirmed_plus_ambiguous_upper_per_credit,
+              metric_contract_version,duration_censored,stop_reason,
               reconciliation_status,recorded_at
          FROM clean.adb_anchor_probe
         WHERE stage=1 AND preprobe_artifact_sha256=$1
         ORDER BY recorded_at ASC,probe_id ASC`,
       [binding.smoke.preprobe.fileSha256],
     );
-    const evidence: Stage1AttemptEvidence[] = stage1Rows.rows.map((row: any) => ({
-      probeId: Number(row.probe_id),
-      icao: String(row.icao).toUpperCase(),
-      status: String(row.status),
-      rowsPerHour: row.rows_per_hour == null ? null : Number(row.rows_per_hour),
-      creditsSpent: row.credits_spent == null ? null : Number(row.credits_spent),
-      uniqueFlightsPerCredit: row.unique_flights_per_credit == null ? null : Number(row.unique_flights_per_credit),
-      tailChainLinksPerCredit: row.tail_chain_links_per_credit == null ? null : Number(row.tail_chain_links_per_credit),
-      stability: row.stability == null ? null : Number(row.stability),
-      confirmedUniqueLower: row.confirmed_unique_lower == null ? null : Number(row.confirmed_unique_lower),
-      confirmedPlusAmbiguousUpper: row.confirmed_plus_ambiguous_upper == null ? null : Number(row.confirmed_plus_ambiguous_upper),
-      durationCensored: row.duration_censored === true,
-      stopReason: row.stop_reason == null ? null : String(row.stop_reason),
-      reconciliationStatus: row.reconciliation_status == null ? null : String(row.reconciliation_status),
-      recordedAtUtc: new Date(row.recorded_at).toISOString(),
-    }));
+    const evidence: Stage1AttemptEvidence[] = stage1Rows.rows.map((row: any) => {
+      const safe = row.provider_content_safe_mode === true;
+      const lowerRate =
+        row.confirmed_unique_lower_per_credit == null
+          ? null
+          : Number(row.confirmed_unique_lower_per_credit);
+      const upperRate =
+        row.confirmed_plus_ambiguous_upper_per_credit == null
+          ? null
+          : Number(row.confirmed_plus_ambiguous_upper_per_credit);
+      const safeRates =
+        safe &&
+        lowerRate !== null &&
+        upperRate !== null &&
+        Number.isFinite(lowerRate) &&
+        Number.isFinite(upperRate);
 
-    nextCandidate = compact6.amendment.p2g10_secret_mismatch_recovery_rerun?.authorized === true &&
-        isP2g10SecretMismatchRecoveryEligibleV39(evidence)
-      ? "WSSS"
-      : compact6.amendment.p2g09_hostreset_recovery_rerun?.authorized === true &&
-          isP2g09HostResetRecoveryEligibleV39(evidence)
-        ? "WSSS"
-        : compact6.amendment.p2g08_balance502_recovery_rerun?.authorized === true &&
-          isP2g08Balance502RecoveryEligibleV39(evidence)
-        ? "WSSS"
-        : compact6.amendment.p2g07_provider502_recovery_rerun?.authorized === true &&
-          isP2g07Provider502RecoveryEligibleV39(evidence)
-        ? "WSSS"
-        : isP2g06PostfixWsssValidationEligibleV39(evidence)
-        ? "WSSS"
-        : chooseNextPrimaryStage1TargetV39(compact6.effectiveShortlist, evidence);
+      return {
+        probeId: Number(row.probe_id),
+        icao: String(row.icao).toUpperCase(),
+        status: String(row.status),
+        metricContractVersion:
+          row.metric_contract_version == null
+            ? null
+            : String(row.metric_contract_version),
+        rowsPerHour:
+          row.rows_per_hour == null ? null : Number(row.rows_per_hour),
+        creditsSpent: safeRates
+          ? 1
+          : row.credits_spent == null
+            ? null
+            : Number(row.credits_spent),
+        uniqueFlightsPerCredit:
+          row.unique_flights_per_credit == null
+            ? null
+            : Number(row.unique_flights_per_credit),
+        tailChainLinksPerCredit:
+          row.tail_chain_links_per_credit == null
+            ? null
+            : Number(row.tail_chain_links_per_credit),
+        stability:
+          row.stability == null ? null : Number(row.stability),
+        confirmedUniqueLower: safeRates
+          ? lowerRate
+          : row.confirmed_unique_lower == null
+            ? null
+            : Number(row.confirmed_unique_lower),
+        confirmedPlusAmbiguousUpper: safeRates
+          ? upperRate
+          : row.confirmed_plus_ambiguous_upper == null
+            ? null
+            : Number(row.confirmed_plus_ambiguous_upper),
+        durationCensored: row.duration_censored === true,
+        stopReason:
+          row.stop_reason == null ? null : String(row.stop_reason),
+        reconciliationStatus:
+          row.reconciliation_status == null
+            ? null
+            : String(row.reconciliation_status),
+        recordedAtUtc: new Date(row.recorded_at).toISOString(),
+      };
+    });
+
+    const next = chooseNextStage1TargetV39(
+      {
+        ...binding.smoke.preprobe.artifact,
+        shortlist: compact6.effectiveShortlist,
+      },
+      evidence,
+      compact6.amendment,
+    );
+    nextCandidate = next?.icao ?? null;
 
     if (expectedIcao && nextCandidate !== expectedIcao) {
       blockers.push(`next_candidate_mismatch:expected=${expectedIcao}:actual=${nextCandidate ?? "<none>"}`);

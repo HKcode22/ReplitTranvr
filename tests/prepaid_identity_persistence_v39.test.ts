@@ -121,9 +121,63 @@ describe("V3.9 prepaid session-local identity persistence", () => {
     });
   });
 
+  it("reuses an exact no-provider scheduled leg when a later callback adds callsign enrichment", async () => {
+    const { client, queries } = fakeClient([
+      {
+        rowCount: 1,
+        rows: [{
+          flight_instance_id: "leg:mmun-vb2102",
+          initial_service_date: "2026-09-25",
+        }],
+      },
+    ]);
+
+    const persistence =
+      createPrepaidSessionIdentityPersistenceV39(client, SESSION);
+
+    await expect(
+      persistence.resolveOrCreate({
+        ...BASE_INPUT,
+        providerFlightId: null,
+        providerRecordKey: null,
+        callsign: "VIV2102",
+        operatingCarrier: "VB",
+        operatingFlightNumber: "VB 2102",
+        originIcao: "MMUN",
+        originalDestinationIcao: "MMVR",
+        initialServiceDate: "2026-09-25",
+        scheduledGateOutUtc: "2026-09-25T11:00:00Z",
+        flightInstanceId: "leg:new-candidate-must-not-be-used",
+      }),
+    ).resolves.toEqual({
+      flightInstanceId: "leg:mmun-vb2102",
+      initialServiceDate: "2026-09-25",
+    });
+
+    const exactLookup = queries.find((q) =>
+      q.sql.includes("scheduled_gate_out_utc=$7::timestamptz"),
+    );
+    expect(exactLookup).toBeDefined();
+    expect(exactLookup?.params).toEqual([
+      SESSION,
+      "VB",
+      "VB 2102",
+      "MMUN",
+      "MMVR",
+      "2026-09-25",
+      "2026-09-25T11:00:00Z",
+    ]);
+  });
+
   it("reuses a no-provider callsign-linked retime within twelve hours", async () => {
     const { client } = fakeClient([
       {
+        // Exact scheduled-leg lookup: no exact 15:00 observation retained.
+        rowCount: 0,
+        rows: [],
+      },
+      {
+        // Nearby/callsign linkage lookup: reuse the 10:00 physical leg.
         rowCount: 1,
         rows: [{
           flight_instance_id: "leg:retime-parent",
@@ -153,6 +207,11 @@ describe("V3.9 prepaid session-local identity persistence", () => {
 
   it("fails closed when a no-provider observation is ambiguous between nearby legs", async () => {
     const { client } = fakeClient([
+      {
+        // Exact scheduled-leg lookup: no exact 14:00 observation retained.
+        rowCount: 0,
+        rows: [],
+      },
       {
         rowCount: 2,
         rows: [
