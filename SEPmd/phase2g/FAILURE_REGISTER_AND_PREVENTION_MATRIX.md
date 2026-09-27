@@ -168,3 +168,10 @@ Do not record an airport as scientifically failed when execution stopped before 
 - **Hard guards:** metric mismatch, impossible identity row shapes, exact-leg identity split, resolved→quarantined regression, provisional-key drift.
 - **Anti-bias guard:** yield/stability/ambiguity values cannot trigger automatic termination.
 - **Evidence:** machine-readable JSONL + human-readable GitHub log + retained workflow artifact.
+
+
+### Independent watchdog recovery must stop the separate owner too
+- **Risk discovered during observability audit:** GitHub watchdog and owner run in separate jobs, so watchdog recovery cannot directly signal the owner process.
+- **Potential consequence without hardening:** provider subscription could be deleted safely while the owner continues its original exposure loop and later attempts terminal processing.
+- **Prevention:** recovery marks the exact durable probe row failed; the live owner polls that row on every local watchdog tick and exits promptly when it sees the durable failure.
+- **Evidence:** wiring regression asserts both sides of the durable stop handshake.
