@@ -234,3 +234,22 @@ It improves:
 
 The experimental objective remains:
 **zero recurrence of known failure classes, fail closed on newly detected contract violations, and never alter a run based on whether its scientific outcome is favorable.**
+
+
+---
+
+## 13. Cross-job durable stop handshake
+
+The paid owner and independent watchdog run on separate GitHub Actions runners. The watchdog cannot deliver a Unix signal directly to the owner process.
+
+Therefore fail-closed recovery now has a durable handshake:
+
+1. watchdog detects an infrastructure or scientific hard violation;
+2. exact recovery makes the provider subscription safe and marks the exact durable probe row `failed` with its stop reason;
+3. the live owner polls its own durable probe row on each local watchdog tick;
+4. when it observes `status='failed'`, it exits the exposure loop promptly;
+5. the owner preserves the durable stop reason, completes bounded settlement/accounting where possible, and cannot later convert that externally failed probe into a clean success.
+
+This prevents a recovered provider subscription from being safe while an unaware owner continues waiting toward the original two-hour deadline.
+
+The handshake is generic: it strengthens existing callback/infrastructure watchdog recovery as well as the new scientific-contract recovery.
