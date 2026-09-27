@@ -11,7 +11,7 @@ const migrationPool = new Pool({ connectionString: ownerConnectionString });
 export const db = drizzle(pool, { schema });
 export { pool, migrationPool };
 
-const BOOT_MIGRATIONS: readonly string[] = [
+export const BOOT_MIGRATIONS: readonly string[] = [
   "0002_agency_disruption_system.sql",
   "0003_travelers_health.sql",
   "0004_confirmation_alert.sql",
@@ -68,6 +68,7 @@ const BOOT_MIGRATIONS: readonly string[] = [
   "0058_phase2g_reconciliation_evidence.sql",
   "0059_phase2g_settling_state.sql",
   "0060_phase2g_physical_flight_metrics.sql",
+  "0061_phase2g_physical_flight_metrics_v2.sql",
 ];
 
 function explicitAutoCollectEnabled(): boolean {
