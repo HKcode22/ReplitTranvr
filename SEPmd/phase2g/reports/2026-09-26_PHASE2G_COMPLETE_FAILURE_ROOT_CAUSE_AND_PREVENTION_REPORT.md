@@ -594,3 +594,83 @@ Promotion eligibility:
 ~~~
 
 That prevents a provider-success/science-failure case like P2G13 from being mislabeled as either a complete success or a complete infrastructure failure.
+
+
+---
+
+## 24. 2026-09-27 pre-launch defect — migration 0061 existed but was not wired into production boot
+
+During Sunday WSSS-v2 readiness, the repository contained:
+
+`migrations/0061_phase2g_physical_flight_metrics_v2.sql`
+
+but `server/db.ts` still ended `BOOT_MIGRATIONS` at migration 0060.
+
+### Classification
+- paid experiment failure: no;
+- provider failure: no;
+- scientific result failure: no;
+- production schema-wiring/readiness defect: yes.
+
+### Why this could have caused a scientific failure
+The v2 TypeScript runtime could attempt to write `v39-physical-flight-instance-v2` while the live PostgreSQL constraint still accepted only NULL/v1.
+
+That would create a code/schema measurement-contract mismatch before or during a paid probe.
+
+### Prevention added
+- 0061 is now explicitly wired after 0060 in production boot migrations;
+- a regression test asserts that ordering;
+- the schema verifier proves the live constraint contains both v1 and v2;
+- the Monday targeted suite includes the boot-migration wiring test;
+- future migration readiness requires:
+  `migration file + production boot wiring + live schema verification`.
+
+This incident was caught before provider mutation and cost 0 Alert credits.
+
+---
+
+## 25. 2026-09-27 scientific-observability hardening
+
+### Problem discovered from P2G13
+Infrastructure/accounting logs were strong, but they did not make scientific identity failure visible quickly enough during the two-hour run.
+
+The P2G13 physical-identity problem required later SQL analysis to discover:
+- resolved→later-quarantined exact legs;
+- unstable provisional identity;
+- loss of late aircraft enrichment from the confirmed physical leg.
+
+### Prevention added prospectively
+The independent GitHub watchdog now reads aggregate scientific-health state approximately every 30 seconds.
+
+It emits:
+- structured `v39.phase2g-scientific-health.v1` JSON;
+- human-readable `SCIENTIFIC_HEALTH ...` summaries;
+- a JSONL workflow artifact retained after the run.
+
+The hard contract guards are:
+- wrong metric contract;
+- resolved row missing physical ID;
+- quarantined row retaining a physical ID;
+- resolved non-operator row;
+- exact scheduled leg split across multiple physical IDs;
+- resolved exact leg later becoming quarantined;
+- exact scheduled leg drifting across provisional keys.
+
+### Anti-bias rule
+Low yield, high ambiguity, poor stability, missing provider IDs, missing callsigns, or any unfavorable airport score are **diagnostic outcomes only** and cannot stop the paid run.
+
+Only violations of the pre-frozen measurement contract may trigger fail-closed recovery.
+
+### Durable classification
+Scientific watchdog recovery preserves a stop reason of the form:
+
+`scientific_contract_violation:<code>`
+
+so future reports do not confuse scientific measurement failure with infrastructure failure.
+
+### Manual inspection
+The operator can run:
+
+`bash scripts/v39_phase2g_monday_wsss_v2_prepare_v39.sh scientific-health`
+
+during the bound Monday probe for a provider-free/database-read-only scientific snapshot.
