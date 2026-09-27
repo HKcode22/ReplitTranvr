@@ -185,6 +185,21 @@ async function main(): Promise<void> {
       .every((x) => causeDef.includes(x));
     record("incident-cause-contract", causesOk, causesOk ? "all current incident classes accepted" : causeDef || "constraint missing");
 
+    const metricContractConstraint = await pool.query(
+      `SELECT pg_get_constraintdef(oid) AS def
+         FROM pg_constraint
+        WHERE conrelid='clean.adb_anchor_probe'::regclass
+          AND conname='adb_anchor_probe_metric_contract_check'`,
+    );
+    const metricContractDef = String(metricContractConstraint.rows[0]?.def ?? "");
+    record(
+      "phase2g-metric-contract-v2",
+      metricContractConstraint.rowCount === 1 &&
+        metricContractDef.includes("v39-physical-flight-instance-v1") &&
+        metricContractDef.includes("v39-physical-flight-instance-v2"),
+      metricContractDef || "metric-contract constraint missing",
+    );
+
     const safetyConstraint = await pool.query(
       `SELECT conname,pg_get_constraintdef(oid) AS def FROM pg_constraint
         WHERE conrelid='clean.adb_phase6_authorization'::regclass
