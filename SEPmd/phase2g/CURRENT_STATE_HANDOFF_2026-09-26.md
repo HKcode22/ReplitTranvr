@@ -2,8 +2,9 @@
 
 **Repository:** HKcode22/ReplitTranvr  
 **Canonical branch for visible continuity:** main  
-**Repair branch:** phase2g-mmun-identity-repair-20260925  
-**Draft PR:** #9  
+**Active repair branch:** phase2g-v2-recovery-rebased-20260926  
+**Active draft PR:** #10  
+**Superseded repair branch/PR:** phase2g-mmun-identity-repair-20260925 / PR #9 (closed, do not merge)  
 **Purpose:** this file is the single recovery point if chat context is lost. It records exactly where Phase 2G stands, what has happened, what has been fixed, what is still pending, and the next authorized scientific sequence.
 
 ---
@@ -351,8 +352,11 @@ Binding project sources:
 - SEPmd/phase2g/FAILURE_REGISTER_AND_PREVENTION_MATRIX.md
 
 Repair work:
-- branch phase2g-mmun-identity-repair-20260925
-- PR #9
+- active branch phase2g-v2-recovery-rebased-20260926
+- active draft PR #10
+- current repair candidate HEAD at 2026-09-26 20:07 PDT: b6ce99e6b626b4a56010a9e87af4b67b2b8ed28f
+- PR #10 was rebuilt from current main to avoid documentation conflicts; it is 0 commits behind main at creation
+- PR #9 is superseded/closed and must not be merged
 
 ---
 
@@ -373,3 +377,34 @@ If conversation context is lost:
 ## 12. Current one-sentence state
 
 **P2G13 MMUN is fully operationally closed but scientifically excluded; the repository is being repaired to physical-v2, and the next paid recovery sequence is one bounded corrected 2h WSSS-v2 measurement, then OMAA-v2, then MMUN-v2, followed by LKPR/SKBO/YSSY, with no weekend paid execution and no automatic retries.**
+
+
+---
+
+## 13. Update — 2026-09-26 20:07 PDT
+
+A clean repair branch was rebuilt from the then-current documented main state because the original PR #9 had diverged after permanent reports were added directly to main.
+
+Active repair path:
+- branch: `phase2g-v2-recovery-rebased-20260926`
+- draft PR: `#10`
+- repair candidate HEAD: `b6ce99e6b626b4a56010a9e87af4b67b2b8ed28f`
+- branch relationship at PR creation: ahead 18, behind 0;
+- intended diff: exactly 18 Plan/Log/amendment/migration/runtime/test files;
+- PR #9: closed as superseded.
+
+Current CI state at this update:
+- PR #10 `offline-safety`: IN PROGRESS.
+- No paid authorization should be frozen until the exact final repair HEAD is green and merged/frozen deliberately.
+
+Next paid scientific target remains:
+```text
+WSSS physical-v2 corrected 2h measurement
+```
+
+Only after valid WSSS-v2:
+```text
+OMAA-v2 -> MMUN-v2 -> LKPR -> SKBO -> YSSY
+```
+
+No automatic retry is authorized for any v2 correction run.
