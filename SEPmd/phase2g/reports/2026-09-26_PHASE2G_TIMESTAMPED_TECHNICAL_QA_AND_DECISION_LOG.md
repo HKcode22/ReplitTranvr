@@ -387,3 +387,237 @@ It does not make infrastructure failure impossible.
 ~~~
 
 The scientific rule remains: if infrastructure failure censors or compromises a paid measurement, preserve it as invalid/failed evidence and do not pretend it was a valid scientific probe.
+
+
+---
+
+## Entry 2026-09-26 20:01 PDT — were the failures missing from the Plan, missed by implementation, or only discoverable by live experimentation?
+
+### Question
+
+Were the Stage-1 failures things the Plan already anticipated but the implementation failed to follow, or were they failure modes that the Plan could not know until the experiment was actually run? Is the correct understanding that experimentation is iterative: we try to prevent known failures, but real runs can expose previously unknown assumptions/failure modes, after which the protocol and implementation are strengthened?
+
+### Answer
+
+**Both categories occurred. They must be separated.**
+
+#### Category A — the scientific/protocol requirement already existed, but implementation or test coverage did not fully satisfy it
+
+The clearest example is physical-flight identity.
+
+The binding V3.9 Plan already requires:
+- confirmed distinct physical `flight_instance_id` as the Stage-1 yield count unit;
+- retries/updates never create new flights;
+- retimes stay under the same physical identity unless positive evidence proves a distinct leg;
+- unresolved identity remains bounded rather than guessed.
+
+However, historical WSSS/OMAA Stage-1 code used flight-number/runtime-key proxies for portions of the metric calculation, and the first explicit prepaid physical-flight v1 resolver omitted one exact schedule-aware lookup already present in the normal production resolver.
+
+Therefore:
+- the **scientific idea was not missing**;
+- the **implementation was incomplete relative to the intended construct**;
+- the exact missing live regression case was not covered by tests.
+
+P2G13 MMUN exposed that gap using a real pattern:
+- no provider_flight_id;
+- same exact operating carrier/flight/route/service date/scheduled time;
+- first callback lacked callsign/aircraft;
+- later callback gained callsign/aircraft;
+- v1 prepaid resolver quarantined the later update instead of reusing the existing physical identity.
+
+This is best classified as a **measurement-implementation defect exposed by experimentation**.
+
+#### Category B — specific infrastructure/provider failure modes were not fully knowable until live operation
+
+Examples:
+- AeroDataBox control-plane HTTP 502 during balance/delete operations;
+- Replit development workspace/process replacement killing the paid owner;
+- cross-environment webhook-secret mismatch;
+- provider/internal one-credit delivery gap;
+- transient runtime-state loss.
+
+The Plan could and did require general fail-closed behavior, accounting, provenance, ownership, and cleanup, but it could not enumerate every exact cloud/provider/runtime failure signature in advance.
+
+These failures are operational discoveries. After each one, the project should convert the newly observed failure class into:
+- a regression test;
+- a preflight/gate;
+- a watchdog condition;
+- a durable evidence requirement;
+- or an architectural change.
+
+#### Category C — live results can expose that a project assumption or metric operationalization is weaker than intended
+
+The historical `COUNT(DISTINCT flight_number)` proxy is an example.
+
+The Plan's scientific target was a physical flight instance, but the legacy metric implementation used a simpler proxy. Once the project audited the implementation against the scientific construct, that discrepancy required correction.
+
+This is not the same as an airport “failing.” It is a **measurement-model refinement**.
+
+### Is this normal scientific/engineering experimentation?
+
+Yes.
+
+NIST's Engineering Statistics Handbook explicitly recommends a **sequential/iterative approach to design of experiments**, stating that it is often a mistake to expect one large experiment to provide all answers and that successive experiments commonly supply information used to design follow-up experiments.
+
+Sources:
+- NIST DOE steps / iterative approach:
+  https://www.itl.nist.gov/div898/handbook/pri/section1/pri14.htm
+- NIST iterative nature of experimentation:
+  https://www.itl.nist.gov/div898/handbook/pri/section2/pri223.htm
+- NIST confirmatory runs / unexpected results:
+  https://www.itl.nist.gov/div898/handbook/pri/section4/pri46.htm
+
+NIST also advises preserving raw data and recording what happens during experiments. The project's retention constraints prevent indefinite raw-provider retention, so the project compensates with durable reconciliation evidence, hashes, aggregate metrics, tombstones/cleanup receipts, and failure reports.
+
+### Important qualification
+
+Iterative experimentation does **not** mean changing rules after seeing an undesirable airport score.
+
+A scientifically acceptable follow-up must be triggered by a non-outcome reason such as:
+- measurement implementation violated the frozen construct;
+- infrastructure censored the exposure;
+- accounting completeness failed;
+- measurement methods are not comparable;
+- a predeclared uncertainty bound is too wide.
+
+The follow-up rule must be frozen before the corrected run's outcome is observed.
+
+---
+
+## Entry 2026-09-26 20:01 PDT — why can't legacy WSSS/OMAA metrics be mixed with corrected MMUN/LKPR metrics?
+
+### Question
+
+According to whom or what scientific/statistical principle is it wrong to compare or mix the WSSS/OMAA legacy metrics with the corrected physical-flight metric used for MMUN and later candidates? Is this mathematics, statistics, probability, measurement theory, or something else?
+
+### Binding repository answer
+
+The repository already records the non-mixing rule explicitly.
+
+The September 25 Physical-Flight Identity Metric Correction states:
+- the experiment requires distinct physical flight instances;
+- legacy prepaid metrics used flight-number/runtime-key proxies;
+- WSSS/OMAA historical metric_contract_version remains NULL;
+- those metrics **MUST NOT be mixed** with the corrected physical-flight contract for Stage-2 promotion or corrected anchor-yield normalization;
+- corrected historical metrics cannot be reconstructed exactly because transient provider payloads were purpose-deleted.
+
+The binding Plan §9.2 also defines WSSS as the primary yield reference and OMAA as fallback under the **identical target-2h protocol**, with component standardization:
+
+```text
+component_std = candidate_component / reference_component
+```
+
+for the same components:
+- unique physical flights per credit;
+- compatible tail-chain links per credit;
+- stability.
+
+### External scientific basis
+
+This rule is primarily a **measurement theory / metrology / experimental-design comparability** issue, with statistical consequences.
+
+The International Vocabulary of Metrology (JCGM/BIPM) defines:
+- **measurand** as the quantity intended to be measured;
+- measurement as requiring a defined quantity and a specified measurement procedure;
+- metrological comparability as comparability of measurement results traceable to the same reference.
+
+Sources:
+- VIM measurand:
+  https://jcgm.bipm.org/vim/en/2.3.html
+- VIM measurement:
+  https://jcgm.bipm.org/vim/en/2.1.html
+- VIM metrological comparability:
+  https://jcgm.bipm.org/vim/en/2.46.html
+- VIM reference value:
+  https://jcgm.bipm.org/vim/en/5.18.html
+
+NIST likewise emphasizes that changes in the measurement process can change bias/variability and that measurement-process control is needed to guarantee comparable results.
+
+Sources:
+- NIST measurement process control:
+  https://www.itl.nist.gov/div898/handbook/mpc/section2/mpc21.htm
+- NIST Measurement Process Characterization:
+  https://www.nist.gov/publications/nistsematech-engineering-statistics-handbook-chapter-2-measurement-process
+- NIST repeatability/reproducibility terminology:
+  https://www.nist.gov/pml/nist-technical-note-1297/nist-tn-1297-appendix-d1-terminology
+
+### Why the old/new ratio is not scientifically clean
+
+Legacy WSSS/OMAA asked approximately:
+
+```text
+How many distinct flight-number labels did I observe per credit?
+```
+
+Corrected v2 asks:
+
+```text
+How many confirmed distinct physical operating legs did I observe per credit?
+```
+
+These are related but not identical measurands/operational definitions.
+
+A mathematical ratio can still be calculated numerically, but the scientific interpretation is confounded because the numerator and denominator were produced by different measurement definitions.
+
+Analogy:
+
+```text
+candidate = unique PEOPLE per dollar
+reference = unique USERNAMES per dollar
+```
+
+Both are counts divided by dollars. Dividing one by the other yields a number, but it is not a clean comparison of the same construct.
+
+In experimental-design terms, **airport and measurement method become confounded**:
+- WSSS/OMAA → legacy proxy method;
+- MMUN/LKPR/SKBO/YSSY → physical-v2 method.
+
+If a score differs, one cannot tell cleanly whether the difference is due to airport/provider yield or due to the changed measurement method.
+
+That is why common-contract remeasurement is required if the current §9.2 reference-normalization formula is retained.
+
+### Why this is not merely probability
+
+Probability/statistics enter later when describing variability, uncertainty, sampling, stability and protected evaluation.
+
+The first-order problem here is **measurement validity and comparability**: are all candidates measuring the same scientific quantity with a compatible procedure?
+
+Statistics cannot repair a construct mismatch after the fact unless there is a validated bridge/calibration model between the old and new procedures. The deleted historical item-level WSSS/OMAA payloads prevent us from building that exact retrospective bridge now.
+
+---
+
+## Entry 2026-09-26 20:01 PDT — current bounded recovery decision and week objective
+
+### Decision
+
+Under the retained V3.9 §9.2 reference-normalization design, the corrected common-contract sequence is:
+
+```text
+WSSS v2
+→ OMAA v2
+→ MMUN v2
+→ LKPR
+→ SKBO
+→ YSSY
+```
+
+These WSSS/OMAA runs are **contract-correction remeasurements**, not claims that their historical provider executions failed.
+
+Each WSSS/OMAA/MMUN corrected-contract attempt is bounded by the frozen recovery policy; no automatic repeated attempts are authorized.
+
+### Week objective
+
+The engineering goal for the coming weekday sequence is to finish the necessary corrected Stage-1 regional measurements as efficiently as the frozen timing windows and provider budget permit, while refusing any run that is not ready.
+
+The objective is **zero repeat failures of already-known failure classes**.
+
+A guarantee of zero new failure classes is scientifically/operationally impossible because external providers/cloud systems and unknown implementation edge cases remain possible.
+
+Before each paid run, the no-repeat checklist must cover:
+- every historical infrastructure failure;
+- every reconciliation/accounting failure;
+- every scientific identity/metric failure;
+- metric-contract compatibility;
+- exact source/runtime binding;
+- provider safety and cleanup ownership.
+
