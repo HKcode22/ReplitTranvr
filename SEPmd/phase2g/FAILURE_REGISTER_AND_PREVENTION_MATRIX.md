@@ -175,3 +175,12 @@ Do not record an airport as scientifically failed when execution stopped before 
 - **Potential consequence without hardening:** provider subscription could be deleted safely while the owner continues its original exposure loop and later attempts terminal processing.
 - **Prevention:** recovery marks the exact durable probe row failed; the live owner polls that row on every local watchdog tick and exits promptly when it sees the durable failure.
 - **Evidence:** wiring regression asserts both sides of the durable stop handshake.
+
+
+### Replit source sync can indirectly mutate the DB through watch-mode restart
+- **Observed:** Git fast-forward itself executed no SQL, but imported server files changed while `tsx --watch server/index.ts` was already running.
+- **Observed consequence:** watch-managed child server restarted and boot-time `applyBootMigrations()` applied migration 0061.
+- **Risk:** a source-sync step can invalidate a planned “before migration” audit if the audit is performed after watched source changes.
+- **Prevention:** for future schema changes, capture the live DB before-state before touching watched server source; treat watched-source sync as potentially DB-mutating through induced restart; capture an after-state immediately afterward.
+- **Do not solve by killing the managed Replit workflow:** design the audit ordering around the managed process instead.
+- **Classification:** readiness/tooling side effect, not a paid experiment failure.
