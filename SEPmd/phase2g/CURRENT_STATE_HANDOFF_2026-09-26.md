@@ -498,3 +498,33 @@ The new watchdog design:
 - uploads scientific-health JSONL plus owner evidence artifacts.
 
 Before Monday runtime/AUTH creation, this observability branch must be green, merged, synced to Replit, and the live v2 schema must be verified.
+
+
+---
+
+## 16. Update — 2026-09-28 — provenance of live migration 0061
+
+Migration 0061 is already live in the Replit V3.9 database.
+
+It was not applied by the read-only audit and was not manually launched by the user.
+
+Evidence shows:
+- the managed `tsx --watch server/index.ts` supervisor was already running;
+- the Git fast-forward changed watched/imported server files;
+- the watcher restarted the server child at approximately 06:15:17 UTC;
+- boot migrations logged 0060 at 06:15:33.110Z and 0061 at 06:15:33.172Z;
+- Express began serving at 06:15:36.238Z.
+
+Live post-state:
+- metric contract constraint accepts NULL, v1 and v2;
+- probe 2 OMAA metric contract remains NULL;
+- probe 9 WSSS metric contract remains NULL;
+- probe 10 MMUN remains v1;
+- v2 probe rows = 0;
+- active/settling probes = 0;
+- open incidents = 0;
+- open budget days = 0;
+- prepaid runtime rows = 0.
+
+New procedure rule:
+source sync on Replit may induce database mutation through watch-mode application restart. Future schema before/after audits must capture the before-state prior to changing watched server source.
