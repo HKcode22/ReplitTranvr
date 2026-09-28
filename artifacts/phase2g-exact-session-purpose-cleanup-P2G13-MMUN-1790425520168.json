@@ -1,0 +1,21 @@
+{
+  "schema": "v39.phase2g-exact-session-purpose-cleanup.v1",
+  "mode": "APPLY",
+  "session_id": "e343329e-4966-482d-8e51-1b7867deed1c",
+  "label": "P2G13-MMUN",
+  "deletion_run_id": "phase2g-purpose-P2G13-MMUN-20260926T122508362Z-a05bd7f9",
+  "expected_live_blobs": 39,
+  "deleted_blobs": 39,
+  "deleted_runtime_rows": 0,
+  "verified_at_utc": "2026-09-26T12:25:20.109Z",
+  "final": {
+    "sessions": 0,
+    "deliveries": 0,
+    "items": 0,
+    "live_blobs": 0
+  },
+  "active_billable_subscriptions": 0,
+  "provider_mutation": false,
+  "subscription_mutation": false,
+  "alert_credits_spent": 0
+}
