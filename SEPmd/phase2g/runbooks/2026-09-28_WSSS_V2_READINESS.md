@@ -488,3 +488,27 @@ After the GitHub workflow ends, preserve/review:
 - provider/accounting reconciliation evidence.
 
 These artifacts are part of the WSSS-v2 scientific acceptance review.
+
+
+---
+
+## 22. Replit watch-mode source sync caveat
+
+During Sunday/Monday readiness it was confirmed that the managed Replit workspace can have a long-lived:
+
+`tsx --watch server/index.ts`
+
+supervisor already running.
+
+A Git fast-forward that changes imported server files can therefore:
+1. trigger the watcher;
+2. restart the child application;
+3. invoke `applyBootMigrations()` during server boot.
+
+Therefore:
+- do not assume a source sync is operationally database-read-only merely because Git itself does not execute SQL;
+- for future schema migrations, capture the live DB **before** changing watched source;
+- after a sync, inspect collector logs/process start time and capture the live DB **after** state;
+- do not kill/restart the managed Replit process merely to prevent this; preserve the managed lifecycle and plan audit ordering around it.
+
+For the physical-v2 readiness run, migration 0061 was applied by the automatic watch-managed server restart and the live DB was then verified to preserve probes 2/9/10 exactly.
