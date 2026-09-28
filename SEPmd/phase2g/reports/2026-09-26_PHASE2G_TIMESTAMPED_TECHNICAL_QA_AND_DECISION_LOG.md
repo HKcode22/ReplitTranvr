@@ -665,3 +665,37 @@ The operator also gets a provider-free manual `scientific-health` command.
 
 ### Scientific rationale
 This is measurement-system monitoring. It strengthens detection of violations of the already-frozen measurand/identity contract without changing the scientific outcome rule or candidate scoring.
+
+
+---
+
+## Entry 2026-09-28 — why was migration 0061 already live before the explicit migration step?
+
+### Question
+The live read-only audit showed the physical-v2 constraint was already present even though the user did not manually run the production migration script or click Run. How did migration 0061 become live?
+
+### Answer
+The Replit managed development workflow was already running under `tsx --watch server/index.ts`.
+
+The Git fast-forward changed imported server files, including the production boot-migration list. The watcher detected those source changes and automatically restarted the child `server/index.ts` process.
+
+`server/index.ts` calls `applyBootMigrations()` during startup, so the restarted child applied migration 0061.
+
+Persisted logs show:
+- 0060 applied at 06:15:33.110Z;
+- 0061 applied at 06:15:33.172Z;
+- Express serving at 06:15:36.238Z.
+
+Process evidence showed the long-lived watch supervisor began at 05:29 UTC while a new server child began at 06:15:17 UTC.
+
+### Important correction
+The statement `database_mutations=0` was accurate only for the direct Git command, not for the full operational effect of changing watched source while a managed server was active.
+
+Future readiness language must distinguish:
+- direct command mutation; and
+- induced runtime mutation caused by watch-mode restart.
+
+### Scientific impact
+None.
+
+Historical OMAA/WSSS/MMUN metric-contract values remained unchanged and there were no active probes, incidents, budgets or transient prepaid rows.
