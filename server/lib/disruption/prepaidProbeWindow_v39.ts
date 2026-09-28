@@ -34,6 +34,18 @@ export interface PrepaidLiveWindowInputV39 {
   watchdogPollMs: number;
   onSessionArmed?: (sessionId: string) => Promise<void>;
   /**
+   * Independent-owner/watchdog fail-closed handshake.
+   *
+   * The GitHub safety watchdog runs in a separate job and therefore cannot
+   * signal this process directly. It may mark the durable probe failed after
+   * exact provider recovery. This callback lets the live owner observe that
+   * durable stop request on its next local watchdog tick and stop exposure
+   * promptly instead of continuing toward the original deadline.
+   *
+   * Return a durable stop reason to stop; return null to continue.
+   */
+  externalStopCheck?: () => Promise<string | null>;
+  /**
    * When true, provider deletion/settlement/reconciliation complete here but
    * exact-session Replit Object Storage/runtime cleanup is deferred to a
    * post-stop Replit workspace finalizer. No provider exposure remains while
@@ -168,6 +180,12 @@ function validateInput(input: PrepaidLiveWindowInputV39): void {
   if (input.deferCleanup != null && typeof input.deferCleanup !== "boolean") {
     throw new Error("PREPAID_WINDOW_DEFER_CLEANUP_INVALID");
   }
+  if (
+    input.externalStopCheck != null &&
+    typeof input.externalStopCheck !== "function"
+  ) {
+    throw new Error("PREPAID_WINDOW_EXTERNAL_STOP_CHECK_INVALID");
+  }
 }
 
 /**
@@ -209,6 +227,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   let windowStart = new Date();
   let windowEnd = windowStart;
   let liveStopReason: string | null = null;
+  let externalStopRequested = false;
   let maxObservedUnsettledCreditGap = 0;
   let lastExternalCredits = 0;
   let nextProviderBalancePollAt = 0;
@@ -234,6 +253,16 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   const deadline = windowStart.getTime() + targetMs;
   while (Date.now() < deadline) {
     await sleep(Math.min(input.watchdogPollMs, Math.max(250, deadline - Date.now())));
+
+    if (input.externalStopCheck) {
+      const requestedReason = await input.externalStopCheck();
+      if (requestedReason) {
+        externalStopRequested = true;
+        liveStopReason = requestedReason;
+        break;
+      }
+    }
+
     const internal = await prepaidProbeInternalCreditsV39(session.sessionId);
 
     // The 5-second watchdog remains local and protects the soft cap from
@@ -278,7 +307,10 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     };
   }
 
-  await setPrepaidProbeSessionStateV39(session.sessionId, "settling");
+  await setPrepaidProbeSessionStateV39(
+    session.sessionId,
+    externalStopRequested ? "failed" : "settling",
+  );
   const settle = await runSettlement(input.settlement, async () => {
     const balance = await getBalance();
     return balance ? balance.creditsRemaining : null;
@@ -386,6 +418,33 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   }
 
   const durationCensored = windowEnd.getTime() < deadline;
+  if (externalStopRequested) {
+    const stopReason = liveStopReason ?? "external_watchdog_stop";
+    await setPrepaidProbeSessionStateV39(session.sessionId, "failed")
+      .catch(() => undefined);
+    const cleanup = await cleanupOrDefer(
+      session.sessionId,
+      `${input.deletionRunId}:external-stop`,
+    ).catch(() => null);
+
+    return {
+      status: "failed",
+      runtimeSessionId: session.sessionId,
+      windowStart,
+      windowEnd,
+      durationCensored: true,
+      stopReason,
+      reconciliationStatus,
+      externalCredits,
+      internalSendCredits: metrics.internalSendCredits,
+      maxObservedUnsettledCreditGap,
+      settlementReads: settle.readsUsed,
+      metrics,
+      cleanupVerifiedAtUtc: cleanup?.verifiedAtUtc ?? null,
+      subscriptionDeleted: true,
+    };
+  }
+
   if (durationCensored) {
     const stopReason = reconciliationStopReason ?? "duration_censored_before_target";
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);

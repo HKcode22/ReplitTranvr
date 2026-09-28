@@ -450,3 +450,41 @@ Read together:
 - binding `SEPmd/V3.9_IMPLEMENTATION_LOG.md`
 
 This runbook may not override those binding sources.
+
+
+---
+
+## 21. Live scientific-health observability
+
+Before WSSS-v2 is authorized, the scientific-observability hardening must be merged and green.
+
+During the paid run, the independent GitHub watchdog will emit a line similar to:
+
+~~~text
+SCIENTIFIC_HEALTH status=PASS_WITH_AMBIGUITY items=40 resolved=31 quarantined=9 physical_ids=28 exact_groups=29 repeated_exact_groups=7 identity_splits=0 resolved_then_quarantined=0 key_drift=0 late_tail_enrichment=3 violations=none
+~~~
+
+Required live hard-invariant values:
+- `identity_splits=0`;
+- `resolved_then_quarantined=0`;
+- `key_drift=0`;
+- no hard violation code;
+- metric contract = physical-v2.
+
+Ambiguity or low yield alone is not a failure and must not stop the run.
+
+The operator may independently inspect aggregate scientific health without provider calls:
+
+~~~bash
+cd ~/workspace
+bash scripts/v39_phase2g_monday_wsss_v2_prepare_v39.sh scientific-health
+~~~
+
+This command is database-read-only and provider-free.
+
+After the GitHub workflow ends, preserve/review:
+- owner log/status/heartbeat artifact;
+- scientific-health JSONL artifact;
+- provider/accounting reconciliation evidence.
+
+These artifacts are part of the WSSS-v2 scientific acceptance review.

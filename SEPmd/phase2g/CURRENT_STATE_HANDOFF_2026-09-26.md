@@ -474,3 +474,27 @@ Do not create or dispatch a paid WSSS subscription until:
 11. no active billable subscriptions/open incidents/active probes exist.
 
 PR #9 remains closed/superseded. PR #10 is merged and is no longer the active execution pointer; main is authoritative.
+
+
+---
+
+## 15. Update — 2026-09-27 — live scientific-health monitoring
+
+Sunday readiness identified two additional hardening needs before Monday:
+1. migration 0061 had to be wired into the production boot list;
+2. the live watchdog needed scientific measurement observability, not only infrastructure/accounting telemetry.
+
+The 0061 production boot-wiring defect was caught before paid execution and fixed through PR #11.
+
+A prospective scientific-observability amendment is now being reviewed on:
+- branch: `phase2g-scientific-observability-20260927`.
+
+The new watchdog design:
+- polls aggregate scientific identity state every ~30 seconds;
+- never logs raw provider-identifying row content;
+- never stops because of low/undesirable yield;
+- fails closed only for explicit measurement-contract violations;
+- preserves `scientific_contract_violation:<code>` as the durable stop reason;
+- uploads scientific-health JSONL plus owner evidence artifacts.
+
+Before Monday runtime/AUTH creation, this observability branch must be green, merged, synced to Replit, and the live v2 schema must be verified.

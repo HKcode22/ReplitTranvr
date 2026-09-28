@@ -7,6 +7,13 @@ import {
   getBalance,
   listSubscriptionsStrict,
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
+import {
+  readPhase2gScientificHealthV39,
+  type Phase2gScientificHealthV39,
+} from "../server/lib/disruption/phase2gScientificHealth_v39";
+import {
+  PREPAID_PROBE_METRIC_CONTRACT_V39,
+} from "../server/lib/disruption/prepaidProbeMetricContract_v39";
 
 const LIVE_CREDIT_LIMIT = 450;
 const POLL_MS = 30_000;
@@ -40,6 +47,7 @@ async function invokeRecovery(input: {
   authSha: string;
   budgetDay: string;
   reason: string;
+  durableStopReason?: string;
 }): Promise<never> {
   console.error(JSON.stringify({
     schema: "v39.phase2g-github-safety-watchdog.v1",
@@ -49,16 +57,21 @@ async function invokeRecovery(input: {
     probe_budget_day_id: input.budgetDay,
   }));
 
+  const recoveryArgs = [
+    "--import", "tsx",
+    "scripts/v39_phase2g_stage1_recover_after_exit_v39.ts",
+    "--auth", input.authId,
+    "--auth-file", input.authFile,
+    "--auth-sha", input.authSha,
+    "--probe-budget-day-id", input.budgetDay,
+  ];
+  if (input.durableStopReason) {
+    recoveryArgs.push("--stop-reason", input.durableStopReason);
+  }
+
   const recovery = spawnSync(
     process.execPath,
-    [
-      "--import", "tsx",
-      "scripts/v39_phase2g_stage1_recover_after_exit_v39.ts",
-      "--auth", input.authId,
-      "--auth-file", input.authFile,
-      "--auth-sha", input.authSha,
-      "--probe-budget-day-id", input.budgetDay,
-    ],
+    recoveryArgs,
     {
       cwd: process.cwd(),
       env: { ...process.env },
@@ -91,6 +104,10 @@ async function main(): Promise<void> {
   const preflightSha = required("--preflight-sha").toLowerCase();
   const callbackBase = required("--callback-base").replace(/\/+$/, "");
   const callbackMode = required("--callback-mode").trim().toLowerCase();
+  fs.mkdirSync("artifacts", { recursive: true });
+  const safeBudget = budgetDay.replace(/[^A-Za-z0-9_.-]/g, "_");
+  const scientificEvidencePath =
+    `artifacts/phase2g-scientific-health-${safeBudget}-${process.env.GITHUB_RUN_ID ?? "local"}.jsonl`;
 
   if (gitHead() !== expectedHead || String(process.env.GITHUB_SHA ?? "").toLowerCase() !== expectedHead) {
     throw new Error("WATCHDOG_REFUSED:GIT_HEAD_MISMATCH");
@@ -138,11 +155,34 @@ async function main(): Promise<void> {
   let providerReadFailures = 0;
   let noCallbackSpendProviderPolls = 0;
 
+  function emitScientificHealth(health: Phase2gScientificHealthV39): void {
+    const json = JSON.stringify(health);
+    console.log(json);
+    console.log(
+      [
+        "SCIENTIFIC_HEALTH",
+        `status=${health.status}`,
+        `items=${health.counts.totalItemRows}`,
+        `resolved=${health.counts.resolvedRows}`,
+        `quarantined=${health.counts.quarantinedRows}`,
+        `physical_ids=${health.counts.resolvedPhysicalIds}`,
+        `exact_groups=${health.counts.exactLegGroups}`,
+        `repeated_exact_groups=${health.counts.repeatedExactLegGroups}`,
+        `identity_splits=${health.counts.exactLegIdentitySplitGroups}`,
+        `resolved_then_quarantined=${health.counts.resolvedThenQuarantinedExactLegGroups}`,
+        `key_drift=${health.counts.exactLegProvisionalKeyDriftGroups}`,
+        `late_tail_enrichment=${health.counts.lateAircraftEnrichmentPhysicalIds}`,
+        `violations=${health.hard_violations.join(",") || "none"}`,
+      ].join(" "),
+    );
+    fs.appendFileSync(scientificEvidencePath, json + "\n", "utf8");
+  }
+
   while (Date.now() - started < MAX_WATCH_MS) {
     const probeR = await pool.query(
       `SELECT probe_id,icao,status,runtime_session_id,window_start,window_end,
               duration_censored,stop_reason,reconciliation_status,
-              runtime_cleanup_verified_at_utc
+              runtime_cleanup_verified_at_utc,metric_contract_version
          FROM clean.adb_anchor_probe
         WHERE stage=1 AND probe_budget_day_id=$1
         ORDER BY recorded_at DESC
@@ -168,8 +208,28 @@ async function main(): Promise<void> {
     probeSeenAt ??= Date.now();
     const probe = probeR.rows[0];
     const status = String(probe.status);
+    const metricContractVersion =
+      probe.metric_contract_version == null
+        ? null
+        : String(probe.metric_contract_version);
     const sessionId = probe.runtime_session_id ? String(probe.runtime_session_id) : null;
     const windowEndMs = Date.parse(String(probe.window_end));
+
+    if (
+      (status === "probing" || status === "settling") &&
+      metricContractVersion !== PREPAID_PROBE_METRIC_CONTRACT_V39
+    ) {
+      const durableStopReason =
+        "scientific_contract_violation:metric_contract_mismatch";
+      await invokeRecovery({
+        authId,
+        authFile,
+        authSha,
+        budgetDay,
+        reason: durableStopReason,
+        durableStopReason,
+      });
+    }
 
     let internalCredits = 0;
     let callbackFailures = 0;
@@ -197,6 +257,31 @@ async function main(): Promise<void> {
         authId, authFile, authSha, budgetDay,
         reason: `callback_persistence_failure_count:${callbackFailures}`,
       });
+    }
+
+    let scientificHealth: Phase2gScientificHealthV39 | null = null;
+    if (sessionId) {
+      scientificHealth = await readPhase2gScientificHealthV39(pool, {
+        sessionId,
+        metricContractVersion,
+      });
+      emitScientificHealth(scientificHealth);
+
+      if (
+        scientificHealth.hard_violations.length > 0 &&
+        (status === "probing" || status === "settling")
+      ) {
+        const code = scientificHealth.hard_violations[0];
+        const durableStopReason = `scientific_contract_violation:${code}`;
+        await invokeRecovery({
+          authId,
+          authFile,
+          authSha,
+          budgetDay,
+          reason: durableStopReason,
+          durableStopReason,
+        });
+      }
     }
 
     if (status === "completed") {
@@ -322,6 +407,9 @@ async function main(): Promise<void> {
       provider_balance_last_seen: lastProviderBalance,
       provider_read_failures: providerReadFailures,
       no_callback_spend_provider_polls: noCallbackSpendProviderPolls,
+      scientific_health_status: scientificHealth?.status ?? null,
+      scientific_hard_violations: scientificHealth?.hard_violations ?? [],
+      scientific_health_evidence_file: scientificEvidencePath,
       window_end_utc: Number.isFinite(windowEndMs) ? new Date(windowEndMs).toISOString() : null,
       provider_mutation: false,
     }));

@@ -148,3 +148,30 @@ Every future Stage-1 attempt must be added here, including:
 - corrective code/test reference.
 
 Do not record an airport as scientifically failed when execution stopped before paid launch or when a failure is demonstrably infrastructure-only.
+
+
+---
+
+## 2026-09-27 additions
+
+### Migration file present but production boot path omitted it
+- **Observed:** migration 0061 existed, but `BOOT_MIGRATIONS` stopped at 0060.
+- **Detected:** Sunday WSSS-v2 readiness before any paid action.
+- **Risk:** v2 application code with v1-only live DB constraint.
+- **Prevention:** explicit 0061 boot wiring + ordering regression + live schema constraint verifier.
+- **Permanent rule:** a migration is not ready until file + boot wiring + live-schema verification all pass.
+
+### Scientific identity failure was not obvious in live logs
+- **Observed:** P2G13 transport/accounting looked healthy while physical identity semantics were invalid.
+- **Risk:** spend a full probe before discovering a known measurement-contract violation.
+- **Prevention:** 30-second aggregate scientific-health monitoring in the independent GitHub watchdog.
+- **Hard guards:** metric mismatch, impossible identity row shapes, exact-leg identity split, resolved→quarantined regression, provisional-key drift.
+- **Anti-bias guard:** yield/stability/ambiguity values cannot trigger automatic termination.
+- **Evidence:** machine-readable JSONL + human-readable GitHub log + retained workflow artifact.
+
+
+### Independent watchdog recovery must stop the separate owner too
+- **Risk discovered during observability audit:** GitHub watchdog and owner run in separate jobs, so watchdog recovery cannot directly signal the owner process.
+- **Potential consequence without hardening:** provider subscription could be deleted safely while the owner continues its original exposure loop and later attempts terminal processing.
+- **Prevention:** recovery marks the exact durable probe row failed; the live owner polls that row on every local watchdog tick and exits promptly when it sees the durable failure.
+- **Evidence:** wiring regression asserts both sides of the durable stop handshake.
