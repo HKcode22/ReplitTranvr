@@ -56,9 +56,8 @@ on:
         required: true
         type: string
       expected_icao:
-        description: 'Frozen Stage1 ICAO'
+        description: 'Explicit frozen Stage1 ICAO; no candidate default is permitted'
         required: true
-        default: 'WSSS'
         type: string
       callback_base:
         description: 'Callback origin; published by default, same-app replit.dev only under explicit contingency'
