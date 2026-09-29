@@ -1,0 +1,16 @@
+{
+  "schema": "v39.phase2g-settling-probe-finalizer.v1",
+  "status": "PASS_COMPLETED_AND_BUDGET_CLOSED",
+  "probe_id": 11,
+  "session_id": "901ca702-8cdc-4ba0-bd20-2747f883ce86",
+  "probe_budget_day_id": "P2G-S1-20260928-13",
+  "cleanup_receipt": "artifacts/phase2g-exact-session-purpose-cleanup-P2G14-WSSS-v2-1790668686413.json",
+  "cleanup_receipt_sha256": "5f14d3c6c0df97eacc5742005fb4c3dd8414ad8dd0244864ad5b2d2656744c23",
+  "cleanup_verified_at_utc": "2026-09-29T07:58:06.351Z",
+  "budget_closed_at_utc": "2026-09-29T07:58:57.667Z",
+  "active_billable_subscriptions": 0,
+  "reconciliation_status": "MATCH",
+  "provider_mutation": false,
+  "alert_credits_spent_by_finalizer": 0,
+  "finalized_at_utc": "2026-09-29T07:58:58.688Z"
+}
