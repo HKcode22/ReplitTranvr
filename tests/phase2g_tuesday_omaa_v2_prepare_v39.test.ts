@@ -38,6 +38,11 @@ describe("Tuesday OMAA-v2 Phase2G preparation", () => {
     expect(helper).toContain("--stage2-reservation 450");
   });
 
+  it("treats the paid workflow directory as protected executable source", () => {
+    expect(helper).toContain("server scripts migrations tests .github/workflows");
+    expect(helper).toContain("REFUSED:PROTECTED_SOURCE_TREE_DIRTY");
+  });
+
   it("is zero-credit preparation only and contains no paid launch path", () => {
     expect(helper).toContain("This helper has NO paid-launch mode");
     expect(helper).not.toContain("gh workflow run phase2g-paid-stage1.yml");
