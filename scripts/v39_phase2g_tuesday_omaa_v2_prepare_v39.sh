@@ -25,7 +25,7 @@ require_repo_state() {
     exit 2
   }
   local protected
-  protected="$(git status --porcelain=v1 --untracked-files=all -- server scripts migrations tests)"
+  protected="$(git status --porcelain=v1 --untracked-files=all -- server scripts migrations tests .github/workflows)"
   [[ -z "$protected" ]] || {
     echo "REFUSED:PROTECTED_SOURCE_TREE_DIRTY"
     printf '%s\n' "$protected"
