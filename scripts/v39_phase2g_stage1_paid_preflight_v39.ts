@@ -51,6 +51,22 @@ function sha256(raw: Buffer | string): string {
 function git(args: string[]): string {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
 }
+function protectedSourceTreeSha256(ref: string): string {
+  const listing = execFileSync(
+    "git",
+    ["ls-tree", "-r", ref, "--", "server", "scripts", "migrations", "tests", ".github/workflows"],
+    { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
+  );
+  return sha256(listing);
+}
+function isAncestor(ancestor: string, descendant: string): boolean {
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 function gitFileAt(ref: string, file: string): string {
   return execFileSync("git", ["show", `${ref}:${file}`], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
 }
@@ -172,7 +188,7 @@ async function main(): Promise<void> {
   const currentHead = git(["rev-parse", "HEAD"]).toLowerCase();
   const blockers: string[] = [];
   if (currentHead !== expectedHead) blockers.push(`git_head_mismatch:${currentHead}`);
-  const protectedStatus = git(["status", "--porcelain=v1", "--untracked-files=all", "--", "server", "scripts", "migrations", "tests"]);
+  const protectedStatus = git(["status", "--porcelain=v1", "--untracked-files=all", "--", "server", "scripts", "migrations", "tests", ".github/workflows"]);
   if (protectedStatus.trim()) blockers.push("protected_source_tree_dirty");
 
   const binding = loadGate2RuntimeBindingV39({
@@ -183,10 +199,30 @@ async function main(): Promise<void> {
     smokeRuntimeFileSha256: smokeRuntimeSha,
     preprobePath,
   });
+  let sourceHeadIsAncestor = false;
+  let frozenProtectedSourceSha: string | null = null;
+  let currentProtectedSourceSha: string | null = null;
   if (!binding.runtime.sourceGitHead) {
     blockers.push("runtime_source_git_head_missing");
-  } else if (binding.runtime.sourceGitHead !== expectedHead) {
-    blockers.push(`runtime_source_git_head_mismatch:${binding.runtime.sourceGitHead}`);
+  } else if (!binding.runtime.sourceProtectedTreeSha256) {
+    blockers.push("runtime_source_protected_tree_sha_missing");
+  } else {
+    sourceHeadIsAncestor = isAncestor(binding.runtime.sourceGitHead, expectedHead);
+    if (!sourceHeadIsAncestor) {
+      blockers.push(`runtime_source_git_head_not_ancestor:${binding.runtime.sourceGitHead}`);
+    }
+    try {
+      frozenProtectedSourceSha = protectedSourceTreeSha256(binding.runtime.sourceGitHead);
+      currentProtectedSourceSha = protectedSourceTreeSha256(expectedHead);
+      if (frozenProtectedSourceSha !== binding.runtime.sourceProtectedTreeSha256) {
+        blockers.push(`runtime_frozen_protected_tree_mismatch:${frozenProtectedSourceSha}`);
+      }
+      if (currentProtectedSourceSha !== binding.runtime.sourceProtectedTreeSha256) {
+        blockers.push(`protected_source_drift_since_runtime_freeze:${currentProtectedSourceSha}`);
+      }
+    } catch (error) {
+      blockers.push(`protected_source_fingerprint_failed:${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   let compact6: ReturnType<typeof loadPhase2gCompact6AmendmentV39> | null = null;
@@ -579,6 +615,10 @@ async function main(): Promise<void> {
       evidence_id: binding.evidenceId,
       probe_budget_day_id: binding.runtime.probeBudgetDayId,
       source_git_head: binding.runtime.sourceGitHead ?? null,
+      source_git_head_is_ancestor_of_execution_head: sourceHeadIsAncestor,
+      source_protected_tree_sha256: binding.runtime.sourceProtectedTreeSha256 ?? null,
+      frozen_protected_tree_sha256: frozenProtectedSourceSha,
+      execution_protected_tree_sha256: currentProtectedSourceSha,
       stage1_reservation_credits: binding.runtime.stage1ReservationCredits,
       unsettled_burst_margin_credits: binding.runtime.unsettledBurstMarginCredits,
       stage1_amendment_sha256: binding.runtime.stage1AmendmentSha256,
