@@ -74,6 +74,7 @@ function main(): void {
     gate2_runtime_file_sha256: binding.runtimeFileSha256,
     gate2_runtime_binding_sha256: binding.bindingSha256,
     probe_budget_day_id: binding.runtime.probeBudgetDayId,
+    source_git_head: binding.runtime.sourceGitHead ?? null,
     auth_artifact_sha256: sha(raw),
     next: "Human reviews exact JSON/SHA, then runs the Phase-2G approval helper with --expected-sha",
   }, null, 2));
