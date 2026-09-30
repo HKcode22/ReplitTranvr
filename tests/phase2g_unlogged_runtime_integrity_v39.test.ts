@@ -46,9 +46,11 @@ describe("Phase2G UNLOGGED runtime integrity guards", () => {
     expect(execution).toContain("terminal_runtime_counts");
     expect(execution).toContain("terminalRuntimeMismatch");
     expect(execution).toContain("terminalDeliveries !== result.metrics.deliveryCount");
+    expect(execution).toContain("received_at_utc >= $2");
+    expect(execution).toContain("received_at_utc < $3");
     expect(execution).toContain("terminalItems !== result.metrics.rowsDelivered");
     expect(execution).toContain(
-      "scientificHealth.counts.resolvedPhysicalIds !==",
+      "terminalResolvedPhysicalIds !== result.metrics.confirmedUniqueLower",
     );
     expect(execution).toContain("runtime_state_loss:terminal_snapshot_mismatch");
   });
