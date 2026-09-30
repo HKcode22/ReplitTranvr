@@ -154,6 +154,11 @@ async function main(): Promise<void> {
   let lastProviderBalance: number | null = null;
   let providerReadFailures = 0;
   let noCallbackSpendProviderPolls = 0;
+  let lastInternalCredits: number | null = null;
+  let lastDeliveryCount: number | null = null;
+  let lastCallbackRequestsSeen: number | null = null;
+  let lastScientificItemRows: number | null = null;
+  let initialDatabasePostmasterStartUtc: string | null = null;
 
   function emitScientificHealth(health: Phase2gScientificHealthV39): void {
     const json = JSON.stringify(health);
@@ -215,6 +220,15 @@ async function main(): Promise<void> {
     const sessionId = probe.runtime_session_id ? String(probe.runtime_session_id) : null;
     const windowEndMs = Date.parse(String(probe.window_end));
 
+    const dbEpoch = await pool.query(
+      `SELECT pg_postmaster_start_time() AS postmaster_start_utc`,
+    );
+    const databasePostmasterStartUtc =
+      dbEpoch.rows[0]?.postmaster_start_utc == null
+        ? null
+        : new Date(dbEpoch.rows[0].postmaster_start_utc).toISOString();
+    initialDatabasePostmasterStartUtc ??= databasePostmasterStartUtc;
+
     if (
       (status === "probing" || status === "settling") &&
       metricContractVersion !== PREPAID_PROBE_METRIC_CONTRACT_V39
@@ -232,15 +246,20 @@ async function main(): Promise<void> {
     }
 
     let internalCredits = 0;
+    let deliveryCount = 0;
     let callbackFailures = 0;
     let callbackRequestsSeen = 0;
+    let runtimeSessionRowPresent = false;
     if (sessionId) {
       const d = await pool.query(
-        `SELECT COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::int AS credits
+        `SELECT
+           count(*)::int AS deliveries,
+           COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::int AS credits
            FROM clean.prepaid_probe_delivery_runtime
           WHERE session_id=$1::uuid`,
         [sessionId],
       );
+      deliveryCount = Number(d.rows[0]?.deliveries ?? 0);
       internalCredits = Number(d.rows[0]?.credits ?? 0);
       const sessionCounters = await pool.query(
         `SELECT callback_requests_seen,callback_failures
@@ -248,8 +267,42 @@ async function main(): Promise<void> {
           WHERE session_id=$1::uuid`,
         [sessionId],
       );
+      runtimeSessionRowPresent =
+        (sessionCounters.rowCount ?? sessionCounters.rows.length) === 1;
+
+      if (status === "probing" && !runtimeSessionRowPresent) {
+        const durableStopReason = "runtime_state_loss:session_row_missing";
+        await invokeRecovery({
+          authId,
+          authFile,
+          authSha,
+          budgetDay,
+          reason: durableStopReason,
+          durableStopReason,
+        });
+      }
+
       callbackRequestsSeen = Number(sessionCounters.rows[0]?.callback_requests_seen ?? 0);
       callbackFailures = Number(sessionCounters.rows[0]?.callback_failures ?? 0);
+
+      if (status === "probing") {
+        if (lastDeliveryCount !== null && deliveryCount < lastDeliveryCount) {
+          const durableStopReason = "runtime_state_loss:delivery_count_regressed";
+          await invokeRecovery({ authId, authFile, authSha, budgetDay, reason: durableStopReason, durableStopReason });
+        }
+        if (lastInternalCredits !== null && internalCredits < lastInternalCredits) {
+          const durableStopReason = "runtime_state_loss:internal_credit_regressed";
+          await invokeRecovery({ authId, authFile, authSha, budgetDay, reason: durableStopReason, durableStopReason });
+        }
+        if (lastCallbackRequestsSeen !== null && callbackRequestsSeen < lastCallbackRequestsSeen) {
+          const durableStopReason = "runtime_state_loss:callback_count_regressed";
+          await invokeRecovery({ authId, authFile, authSha, budgetDay, reason: durableStopReason, durableStopReason });
+        }
+      }
+
+      lastDeliveryCount = deliveryCount;
+      lastInternalCredits = internalCredits;
+      lastCallbackRequestsSeen = callbackRequestsSeen;
     }
 
     if (callbackFailures > 0) {
@@ -266,6 +319,23 @@ async function main(): Promise<void> {
         metricContractVersion,
       });
       emitScientificHealth(scientificHealth);
+
+      if (
+        status === "probing" &&
+        lastScientificItemRows !== null &&
+        scientificHealth.counts.totalItemRows < lastScientificItemRows
+      ) {
+        const durableStopReason = "runtime_state_loss:item_count_regressed";
+        await invokeRecovery({
+          authId,
+          authFile,
+          authSha,
+          budgetDay,
+          reason: durableStopReason,
+          durableStopReason,
+        });
+      }
+      lastScientificItemRows = scientificHealth.counts.totalItemRows;
 
       if (
         scientificHealth.hard_violations.length > 0 &&
@@ -402,6 +472,7 @@ async function main(): Promise<void> {
       probe_status: status,
       session_bound: Boolean(sessionId),
       internal_credits: internalCredits,
+      delivery_count: deliveryCount,
       callback_requests_seen: callbackRequestsSeen,
       callback_failures: callbackFailures,
       provider_balance_last_seen: lastProviderBalance,
@@ -410,6 +481,14 @@ async function main(): Promise<void> {
       scientific_health_status: scientificHealth?.status ?? null,
       scientific_hard_violations: scientificHealth?.hard_violations ?? [],
       scientific_health_evidence_file: scientificEvidencePath,
+      runtime_session_row_present: runtimeSessionRowPresent,
+      database_postmaster_start_utc: databasePostmasterStartUtc,
+      database_postmaster_start_changed:
+        Boolean(
+          initialDatabasePostmasterStartUtc &&
+          databasePostmasterStartUtc &&
+          initialDatabasePostmasterStartUtc !== databasePostmasterStartUtc
+        ),
       window_end_utc: Number.isFinite(windowEndMs) ? new Date(windowEndMs).toISOString() : null,
       provider_mutation: false,
     }));
