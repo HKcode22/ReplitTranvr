@@ -183,6 +183,11 @@ async function main(): Promise<void> {
     smokeRuntimeFileSha256: smokeRuntimeSha,
     preprobePath,
   });
+  if (!binding.runtime.sourceGitHead) {
+    blockers.push("runtime_source_git_head_missing");
+  } else if (binding.runtime.sourceGitHead !== expectedHead) {
+    blockers.push(`runtime_source_git_head_mismatch:${binding.runtime.sourceGitHead}`);
+  }
 
   let compact6: ReturnType<typeof loadPhase2gCompact6AmendmentV39> | null = null;
   if (binding.runtime.stage1AmendmentSha256) {
@@ -573,6 +578,7 @@ async function main(): Promise<void> {
       binding_sha256: binding.bindingSha256,
       evidence_id: binding.evidenceId,
       probe_budget_day_id: binding.runtime.probeBudgetDayId,
+      source_git_head: binding.runtime.sourceGitHead ?? null,
       stage1_reservation_credits: binding.runtime.stage1ReservationCredits,
       unsettled_burst_margin_credits: binding.runtime.unsettledBurstMarginCredits,
       stage1_amendment_sha256: binding.runtime.stage1AmendmentSha256,
