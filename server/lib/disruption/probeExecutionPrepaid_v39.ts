@@ -337,16 +337,30 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
            WHERE session_id=$1::uuid) AS sessions,
          (SELECT count(*)::int
             FROM clean.prepaid_probe_delivery_runtime
-           WHERE session_id=$1::uuid) AS deliveries,
+           WHERE session_id=$1::uuid
+             AND received_at_utc >= $2
+             AND received_at_utc < $3) AS deliveries,
          (SELECT count(*)::int
             FROM clean.prepaid_probe_item_runtime
-           WHERE session_id=$1::uuid) AS items`,
-      [result.runtimeSessionId],
+           WHERE session_id=$1::uuid
+             AND received_at_utc >= $2
+             AND received_at_utc < $3) AS items,
+         (SELECT count(DISTINCT flight_instance_id)::int
+            FROM clean.prepaid_probe_item_runtime
+           WHERE session_id=$1::uuid
+             AND received_at_utc >= $2
+             AND received_at_utc < $3
+             AND identity_resolution_status='resolved'
+             AND codeshare_resolution_status='resolved_operator'
+             AND flight_instance_id IS NOT NULL) AS resolved_physical_ids`,
+      [result.runtimeSessionId, result.windowStart, result.windowEnd],
     );
     const terminalCounts = terminalRuntime.rows[0] ?? {};
     const terminalSessions = Number(terminalCounts.sessions ?? -1);
     const terminalDeliveries = Number(terminalCounts.deliveries ?? -1);
     const terminalItems = Number(terminalCounts.items ?? -1);
+    const terminalResolvedPhysicalIds =
+      Number(terminalCounts.resolved_physical_ids ?? -1);
 
     const scientificHealth = await readPhase2gScientificHealthV39(pool, {
       sessionId: result.runtimeSessionId,
@@ -360,6 +374,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
         sessions: terminalSessions,
         deliveries: terminalDeliveries,
         items: terminalItems,
+        resolved_physical_ids: terminalResolvedPhysicalIds,
       },
       scientific_health: scientificHealth,
       provider_call: false,
@@ -371,9 +386,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       terminalSessions !== 1 ||
       terminalDeliveries !== result.metrics.deliveryCount ||
       terminalItems !== result.metrics.rowsDelivered ||
-      scientificHealth.counts.totalItemRows !== result.metrics.rowsDelivered ||
-      scientificHealth.counts.resolvedPhysicalIds !==
-        result.metrics.confirmedUniqueLower;
+      terminalResolvedPhysicalIds !== result.metrics.confirmedUniqueLower;
 
     if (terminalRuntimeMismatch) {
       const stopReason = "runtime_state_loss:terminal_snapshot_mismatch";
