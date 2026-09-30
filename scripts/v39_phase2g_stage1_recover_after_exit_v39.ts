@@ -67,9 +67,16 @@ async function main(): Promise<void> {
   const budgetDayId = required("--probe-budget-day-id");
   const requestedStopReason = optional("--stop-reason");
   const deferCleanup = process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP === "1";
+  const allowedScientificStopReason =
+    requestedStopReason != null &&
+    /^scientific_contract_violation:[a-z0-9_]{1,96}$/.test(requestedStopReason);
+  const allowedRuntimeStateLossStopReason =
+    requestedStopReason != null &&
+    /^runtime_state_loss:(session_row_missing|delivery_count_regressed|internal_credit_regressed|callback_count_regressed|item_count_regressed|terminal_snapshot_mismatch)$/.test(requestedStopReason);
   if (
     requestedStopReason &&
-    !/^scientific_contract_violation:[a-z0-9_]{1,96}$/.test(requestedStopReason)
+    !allowedScientificStopReason &&
+    !allowedRuntimeStateLossStopReason
   ) {
     throw new Error("RECOVERY_REFUSED:STOP_REASON_NOT_ALLOWED");
   }
