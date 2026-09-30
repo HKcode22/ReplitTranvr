@@ -77,6 +77,7 @@ case "${1:-help}" in
       tests/phase2g_scientific_health_v39.test.ts \
       tests/phase2g_scientific_observability_wiring_v39.test.ts \
       tests/phase2g_unlogged_runtime_integrity_v39.test.ts \
+      tests/phase2g_source_head_auth_binding_v39.test.ts \
       tests/prepaid_identity_adapter_v39.test.ts \
       tests/prepaid_identity_persistence_v39.test.ts \
       tests/prepaid_identity_resolution_v39.test.ts \
@@ -213,6 +214,7 @@ Safety:
   - static/runtime/auth-draft/auth-approve/zero-credit-binding spend 0 Alert credits.
   - readonly-preflight performs provider balance/subscription LIST reads only and spends 0 Alert credits.
   - The helper refuses if local main is not equal to origin/main.
+  - New Gate-2 runtime v2 binds the exact source Git HEAD into the runtime SHA and AUTH scope.
   - The final paid workflow must explicitly supply expected_icao=MMUN.
   - Do not launch MMUN unless WSSS-v2 and OMAA-v2 are terminal under the frozen recovery, all prior budgets are CLOSED, active/settling probes are 0, open incidents are 0, provider balance is sufficient, fresh callback binding is valid, and the exact paid preflight returns PASS_READY_FOR_PAID_STAGE1.
 EOF
