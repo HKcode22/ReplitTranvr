@@ -44,6 +44,8 @@ export interface ProbeRuntimeConfig {
   stage1ReservationCredits: number;
   stage2ReservationCredits: number;
   stage1AmendmentSha256: string | null;
+  /** Exact source commit bound into newly generated Gate-2 runtimes. Legacy v1 artifacts may omit it. */
+  sourceGitHead?: string | null;
 }
 
 export interface ProbeTimeClassConfig {
@@ -127,12 +129,21 @@ export function loadProbeRuntimeConfig(
     stage1AmendmentSha256: x.stage1AmendmentSha256 == null || String(x.stage1AmendmentSha256).trim() === ""
       ? null
       : String(x.stage1AmendmentSha256).trim().toLowerCase(),
+    sourceGitHead: x.sourceGitHead == null || String(x.sourceGitHead).trim() === ""
+      ? null
+      : String(x.sourceGitHead).trim().toLowerCase(),
   };
   if (!config.version || !/^[A-Za-z0-9_.:-]+$/.test(config.probeBudgetDayId)) {
     throw new Error("REFUSED: invalid probe runtime version/budget-day id");
   }
   if (config.stage1AmendmentSha256 !== null && !/^[a-f0-9]{64}$/.test(config.stage1AmendmentSha256)) {
     throw new Error("REFUSED: invalid stage1AmendmentSha256");
+  }
+  if (config.sourceGitHead !== null && config.sourceGitHead !== undefined && !/^[a-f0-9]{40}$/.test(config.sourceGitHead)) {
+    throw new Error("REFUSED: invalid sourceGitHead");
+  }
+  if (config.version === "v39-gate2-runtime-2" && !config.sourceGitHead) {
+    throw new Error("REFUSED: v39-gate2-runtime-2 requires sourceGitHead");
   }
   if (config.settlementStableReadCount < 3) {
     throw new Error("REFUSED: settlementStableReadCount must be >=3");
