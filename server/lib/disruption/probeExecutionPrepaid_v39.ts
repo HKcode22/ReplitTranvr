@@ -330,6 +330,24 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
   }
 
   if (cleanupDeferredSafely) {
+    const terminalRuntime = await pool.query(
+      `SELECT
+         (SELECT count(*)::int
+            FROM clean.prepaid_probe_session_runtime
+           WHERE session_id=$1::uuid) AS sessions,
+         (SELECT count(*)::int
+            FROM clean.prepaid_probe_delivery_runtime
+           WHERE session_id=$1::uuid) AS deliveries,
+         (SELECT count(*)::int
+            FROM clean.prepaid_probe_item_runtime
+           WHERE session_id=$1::uuid) AS items`,
+      [result.runtimeSessionId],
+    );
+    const terminalCounts = terminalRuntime.rows[0] ?? {};
+    const terminalSessions = Number(terminalCounts.sessions ?? -1);
+    const terminalDeliveries = Number(terminalCounts.deliveries ?? -1);
+    const terminalItems = Number(terminalCounts.items ?? -1);
+
     const scientificHealth = await readPhase2gScientificHealthV39(pool, {
       sessionId: result.runtimeSessionId,
       metricContractVersion: PREPAID_PROBE_METRIC_CONTRACT_V39,
@@ -338,11 +356,45 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
       schema: "v39.phase2g-terminal-scientific-health.v1",
       probe_id: probeId,
       icao: candidate.icao,
+      terminal_runtime_counts: {
+        sessions: terminalSessions,
+        deliveries: terminalDeliveries,
+        items: terminalItems,
+      },
       scientific_health: scientificHealth,
       provider_call: false,
       provider_mutation: false,
       database_mutation: false,
     }));
+
+    const terminalRuntimeMismatch =
+      terminalSessions !== 1 ||
+      terminalDeliveries !== result.metrics.deliveryCount ||
+      terminalItems !== result.metrics.rowsDelivered ||
+      scientificHealth.counts.totalItemRows !== result.metrics.rowsDelivered ||
+      scientificHealth.counts.resolvedPhysicalIds !==
+        result.metrics.confirmedUniqueLower;
+
+    if (terminalRuntimeMismatch) {
+      const stopReason = "runtime_state_loss:terminal_snapshot_mismatch";
+      await markSafeFailure({
+        probeId,
+        runtimeSessionId: result.runtimeSessionId,
+        ended: result.windowEnd,
+        stopReason,
+        reconciliationStatus: result.reconciliationStatus,
+        cleanupVerifiedAtUtc: result.cleanupVerifiedAtUtc,
+        durationCensored: result.durationCensored,
+      });
+      return {
+        probeId,
+        status: "failed",
+        creditsSpent: null,
+        durationCensored: result.durationCensored,
+        stopReason,
+      };
+    }
+
     if (scientificHealth.hard_violations.length > 0) {
       const stopReason =
         `scientific_contract_violation:${scientificHealth.hard_violations[0]}`;
