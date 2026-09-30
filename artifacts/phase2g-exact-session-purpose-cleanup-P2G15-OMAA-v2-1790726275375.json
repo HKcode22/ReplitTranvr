@@ -1,0 +1,21 @@
+{
+  "schema": "v39.phase2g-exact-session-purpose-cleanup.v1",
+  "mode": "APPLY",
+  "session_id": "533aeee7-ec5b-4999-af7a-6d48ab263816",
+  "label": "P2G15-OMAA-v2",
+  "deletion_run_id": "phase2g-purpose-P2G15-OMAA-v2-20260929T235745451Z-c0bc6bb5",
+  "expected_live_blobs": 30,
+  "deleted_blobs": 30,
+  "deleted_runtime_rows": 0,
+  "verified_at_utc": "2026-09-29T23:57:55.315Z",
+  "final": {
+    "sessions": 0,
+    "deliveries": 0,
+    "items": 0,
+    "live_blobs": 0
+  },
+  "active_billable_subscriptions": 0,
+  "provider_mutation": false,
+  "subscription_mutation": false,
+  "alert_credits_spent": 0
+}
