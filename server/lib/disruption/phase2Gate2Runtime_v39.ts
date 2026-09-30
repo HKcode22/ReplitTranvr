@@ -60,6 +60,9 @@ export function stage1AuthorizationScopeV39(binding: Gate2RuntimeBindingV39): st
     `runtime_file_sha256=${binding.runtimeFileSha256}`,
     `probe_budget_day_id=${binding.runtime.probeBudgetDayId}`,
   ];
+  if (binding.runtime.sourceGitHead) {
+    parts.push(`source_git_head=${binding.runtime.sourceGitHead}`);
+  }
   if (binding.runtime.stage1AmendmentSha256) {
     parts.push(`stage1_amendment_sha256=${binding.runtime.stage1AmendmentSha256}`);
   }
