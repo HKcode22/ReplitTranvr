@@ -34,6 +34,14 @@ function currentGitHead(): string {
   if (!/^[a-f0-9]{40}$/.test(head)) throw new Error("BLOCKED:SOURCE_GIT_HEAD_INVALID");
   return head;
 }
+function protectedSourceTreeSha256(ref: string): string {
+  const listing = execFileSync(
+    "git",
+    ["ls-tree", "-r", ref, "--", "server", "scripts", "migrations", "tests", ".github/workflows"],
+    { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
+  );
+  return sha(listing);
+}
 
 function main(): void {
   if (!existsSync(LEDGER)) throw new Error("BLOCKED:EVIDENCE_LEDGER_MISSING");
@@ -80,9 +88,11 @@ function main(): void {
   }
 
   const sourceGitHead = currentGitHead();
+  const sourceProtectedTreeSha256 = protectedSourceTreeSha256(sourceGitHead);
   const config = {
     version: "v39-gate2-runtime-2",
     sourceGitHead,
+    sourceProtectedTreeSha256,
     probeBudgetDayId,
     watchdogPollMs: smoke.smoke.watchdogPollMs,
     minStabilityBuckets,
@@ -118,6 +128,7 @@ function main(): void {
       `- GATE2_RUNTIME_BINDING_SHA256:${binding.bindingSha256}`,
       `- probe_budget_day_id: ${probeBudgetDayId}`,
       `- source_git_head: ${sourceGitHead}`,
+      `- source_protected_tree_sha256: ${sourceProtectedTreeSha256}`,
       `- min_stability_buckets: ${minStabilityBuckets}`,
       `- unsettled_burst_margin_credits: ${margin}`,
       `- stage1_reservation_credits: ${stage1ReservationCredits}`,
@@ -137,6 +148,7 @@ function main(): void {
     predecessor_smoke_evidence_id: smoke.evidenceId,
     probe_budget_day_id: probeBudgetDayId,
     source_git_head: sourceGitHead,
+    source_protected_tree_sha256: sourceProtectedTreeSha256,
     min_stability_buckets: minStabilityBuckets,
     unsettled_burst_margin_credits: margin,
     stage1_reservation_credits: stage1ReservationCredits,
