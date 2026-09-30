@@ -17,6 +17,10 @@ const paidPreflight = fs.readFileSync(
   "scripts/v39_phase2g_stage1_paid_preflight_v39.ts",
   "utf8",
 );
+const paidWorkflow = fs.readFileSync(
+  ".github/workflows/phase2g-paid-stage1.yml",
+  "utf8",
+);
 
 describe("Phase2G source-head authorization binding", () => {
   it("keeps legacy runtime artifacts readable while requiring a head on new v2 runtimes", () => {
@@ -38,6 +42,11 @@ describe("Phase2G source-head authorization binding", () => {
   it("puts the runtime-bound source HEAD inside the Stage1 authorization scope", () => {
     expect(gate2Binding).toContain("source_git_head=${binding.runtime.sourceGitHead}");
     expect(gate2Binding).toContain("source_protected_tree_sha256=${binding.runtime.sourceProtectedTreeSha256}");
+  });
+
+  it("fetches full Git history in every paid job so frozen source ancestry can be verified", () => {
+    expect(paidWorkflow.match(/fetch-depth: 0/g)?.length).toBe(3);
+    expect(paidWorkflow).not.toContain("fetch-depth: 1");
   });
 
   it("allows evidence-only descendant commits but refuses protected source drift", () => {
