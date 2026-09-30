@@ -44,8 +44,10 @@ export interface ProbeRuntimeConfig {
   stage1ReservationCredits: number;
   stage2ReservationCredits: number;
   stage1AmendmentSha256: string | null;
-  /** Exact source commit bound into newly generated Gate-2 runtimes. Legacy v1 artifacts may omit it. */
+  /** Source commit at the moment a new Gate-2 runtime is frozen. Legacy v1 artifacts may omit it. */
   sourceGitHead?: string | null;
+  /** SHA-256 fingerprint of tracked protected executable-source blobs/paths at sourceGitHead. */
+  sourceProtectedTreeSha256?: string | null;
 }
 
 export interface ProbeTimeClassConfig {
@@ -132,6 +134,9 @@ export function loadProbeRuntimeConfig(
     sourceGitHead: x.sourceGitHead == null || String(x.sourceGitHead).trim() === ""
       ? null
       : String(x.sourceGitHead).trim().toLowerCase(),
+    sourceProtectedTreeSha256: x.sourceProtectedTreeSha256 == null || String(x.sourceProtectedTreeSha256).trim() === ""
+      ? null
+      : String(x.sourceProtectedTreeSha256).trim().toLowerCase(),
   };
   if (!config.version || !/^[A-Za-z0-9_.:-]+$/.test(config.probeBudgetDayId)) {
     throw new Error("REFUSED: invalid probe runtime version/budget-day id");
@@ -142,8 +147,13 @@ export function loadProbeRuntimeConfig(
   if (config.sourceGitHead !== null && config.sourceGitHead !== undefined && !/^[a-f0-9]{40}$/.test(config.sourceGitHead)) {
     throw new Error("REFUSED: invalid sourceGitHead");
   }
-  if (config.version === "v39-gate2-runtime-2" && !config.sourceGitHead) {
-    throw new Error("REFUSED: v39-gate2-runtime-2 requires sourceGitHead");
+  if (config.sourceProtectedTreeSha256 !== null && config.sourceProtectedTreeSha256 !== undefined &&
+      !/^[a-f0-9]{64}$/.test(config.sourceProtectedTreeSha256)) {
+    throw new Error("REFUSED: invalid sourceProtectedTreeSha256");
+  }
+  if (config.version === "v39-gate2-runtime-2" &&
+      (!config.sourceGitHead || !config.sourceProtectedTreeSha256)) {
+    throw new Error("REFUSED: v39-gate2-runtime-2 requires sourceGitHead and sourceProtectedTreeSha256");
   }
   if (config.settlementStableReadCount < 3) {
     throw new Error("REFUSED: settlementStableReadCount must be >=3");
