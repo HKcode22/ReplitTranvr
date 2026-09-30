@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { createHash } from "crypto";
+import { execFileSync } from "child_process";
 import { dirname, join, resolve } from "path";
 import { loadPhase2SmokeHandoffV39 } from "../server/lib/disruption/phase2SmokeHandoff_v39";
 import { loadGate2RuntimeBindingV39 } from "../server/lib/disruption/phase2Gate2Runtime_v39";
@@ -27,6 +28,11 @@ function positiveInt(name: string): number {
 }
 function sha(raw: string): string {
   return createHash("sha256").update(raw, "utf8").digest("hex");
+}
+function currentGitHead(): string {
+  const head = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim().toLowerCase();
+  if (!/^[a-f0-9]{40}$/.test(head)) throw new Error("BLOCKED:SOURCE_GIT_HEAD_INVALID");
+  return head;
 }
 
 function main(): void {
@@ -73,8 +79,10 @@ function main(): void {
     throw new Error("REFUSED:GATE2_RESERVATION_PLUS_FROZEN_MARGIN_EXCEEDS_500");
   }
 
+  const sourceGitHead = currentGitHead();
   const config = {
-    version: "v39-gate2-runtime-1",
+    version: "v39-gate2-runtime-2",
+    sourceGitHead,
     probeBudgetDayId,
     watchdogPollMs: smoke.smoke.watchdogPollMs,
     minStabilityBuckets,
@@ -109,6 +117,7 @@ function main(): void {
       `- GATE2_RUNTIME_FILE_SHA256:${binding.runtimeFileSha256}`,
       `- GATE2_RUNTIME_BINDING_SHA256:${binding.bindingSha256}`,
       `- probe_budget_day_id: ${probeBudgetDayId}`,
+      `- source_git_head: ${sourceGitHead}`,
       `- min_stability_buckets: ${minStabilityBuckets}`,
       `- unsettled_burst_margin_credits: ${margin}`,
       `- stage1_reservation_credits: ${stage1ReservationCredits}`,
@@ -127,6 +136,7 @@ function main(): void {
     evidence_id: binding.evidenceId,
     predecessor_smoke_evidence_id: smoke.evidenceId,
     probe_budget_day_id: probeBudgetDayId,
+    source_git_head: sourceGitHead,
     min_stability_buckets: minStabilityBuckets,
     unsettled_burst_margin_credits: margin,
     stage1_reservation_credits: stage1ReservationCredits,
