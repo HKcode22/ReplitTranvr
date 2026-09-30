@@ -49,6 +49,15 @@ describe("Phase2G historical failure regression matrix", () => {
     expect(execution).toContain("result.durationCensored");
   });
 
+  it("fails closed on live UNLOGGED runtime loss instead of silently restarting the measurement state", () => {
+    expect(watchdog).toContain("runtime_state_loss:session_row_missing");
+    expect(watchdog).toContain("runtime_state_loss:item_count_regressed");
+    expect(watchdog).toContain("runtime_state_loss:callback_count_regressed");
+    expect(execution).toContain("terminalRuntimeMismatch");
+    expect(execution).toContain("runtime_state_loss:terminal_snapshot_mismatch");
+    expect(recovery).toContain("allowedRuntimeStateLossStopReason");
+  });
+
   it("keeps provider-502 handling bounded and censored windows fail-closed", () => {
     expect(window).toContain("deleteOwnedSubscriptionVerifiedV39");
     expect(window).toContain("balance_read_failed_after_retries");
