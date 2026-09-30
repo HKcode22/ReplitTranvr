@@ -69,6 +69,7 @@ export const BOOT_MIGRATIONS: readonly string[] = [
   "0059_phase2g_settling_state.sql",
   "0060_phase2g_physical_flight_metrics.sql",
   "0061_phase2g_physical_flight_metrics_v2.sql",
+  "0062_phase2g_delivery_gap_reconciliation_status.sql",
 ];
 
 function explicitAutoCollectEnabled(): boolean {
