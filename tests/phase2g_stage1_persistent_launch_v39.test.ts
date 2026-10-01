@@ -21,7 +21,7 @@ const routesV3 = readFileSync(join(root, "server", "routes_v3.ts"), "utf8");
 const exactCleanup = readFileSync(join(root, "scripts", "v39_phase2g_exact_session_purpose_cleanup_v39.ts"), "utf8");
 const settlingFinalizer = readFileSync(join(root, "scripts", "v39_phase2g_finalize_settling_probe_v39.ts"), "utf8");
 const liveCallbackVerify = readFileSync(join(root, "scripts", "v39_phase2g_verify_live_callback_v39.ts"), "utf8");
-const settlingMigration = readFileSync(join(root, "migrations", "0059_phase2g_settling_state.sql"), "utf8");
+const settlingMigration = readFileSync(join(root, "migrations", "baseline", "B0062__v39_schema_baseline_20261001.sql"), "utf8");
 
 describe("Phase-2G persistent paid Stage-1 launch contract", () => {
   it("keeps the paid preflight read-only and emits an immutable exact receipt", () => {
