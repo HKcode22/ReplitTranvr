@@ -149,7 +149,9 @@ describe("Phase 0B: production webhook ordering", () => {
 
   it("identity ledger is append-only and resolved/quarantined, never silently overwritten", () => {
     const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
-    expect(migration).toContain("resolution_status IN ('resolved','quarantined')");
+    expect(migration).toContain(
+      "ARRAY['resolved'::text, 'quarantined'::text]",
+    );
     expect(migration).toContain("trg_webhook_identity_resolution_immutable");
     const route = source("server/routes_v3.ts");
     expect(route).toMatch(/ON\s+CONFLICT\s*\(\s*delivery_id\s*,\s*item_index\s*\)\s+DO\s+NOTHING/i);
