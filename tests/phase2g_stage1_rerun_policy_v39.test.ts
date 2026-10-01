@@ -28,6 +28,9 @@ function attempt(
 ): any {
   return {
     probeId,
+    probeBudgetDayId: null,
+    runtimeSessionId: null,
+    durableReconciliation: null,
     icao,
     status,
     metricContractVersion,
@@ -293,6 +296,164 @@ describe("Phase2G bounded infrastructure-invalid Stage1 rerun policy", () => {
         choosePhysicalIdentityV2RemeasurementTargetV39(
           recovery,
           withMmun,
+        ),
+      ).toBeNull();
+    });
+
+    const p2g17Recovery = {
+      authorized: true as const,
+      maximum_additional_attempts: 1 as const,
+      failed_probe_id: 13 as const,
+      icao: "MMUN" as const,
+      expected_probe_budget_day_id: "P2G-S1-20260930-16" as const,
+      expected_runtime_session_id:
+        "5c0064eb-585a-4dfb-af4c-211f3bee3e94" as const,
+      expected_metric_contract_version:
+        "v39-physical-flight-instance-v2" as const,
+      expected_anchor_status: "failed" as const,
+      expected_anchor_reconciliation_status: "UNRESOLVED" as const,
+      expected_anchor_stop_reason: "supervisor_child_exit_recovered" as const,
+      durable_evidence_status: "DELIVERY_GAP" as const,
+      durable_external_spend_credits: 65 as const,
+      durable_internal_received_credits: 60 as const,
+      durable_delivery_gap_credits: 5 as const,
+      durable_delivery_completeness: 60 / 65,
+      durable_duration_censored: false as const,
+      durable_stop_reason: "external_internal_delivery_gap" as const,
+      durable_callback_requests_seen: 41 as const,
+      durable_callback_success_2xx: 41 as const,
+      durable_callback_failures: 0 as const,
+      excluded_from_final_scoring: true as const,
+      requires_fresh_runtime_budget_auth: true as const,
+      requires_matched_time_class: true as const,
+      no_automatic_retry_after_recovery_attempt: true as const,
+      outcome_metrics_not_used_to_authorize: true as const,
+      authorization_basis:
+        "p2g17_delivery_gap_and_finalization_schema_failure_only" as const,
+      reason: "Exact technical-invalid P2G17 recovery.",
+    };
+
+    function p2g17TechnicalInvalidAttempt() {
+      return {
+        ...attempt(
+          13,
+          "MMUN",
+          "failed",
+          "supervisor_child_exit_recovered",
+          false,
+          "UNRESOLVED",
+          "v39-physical-flight-instance-v2",
+        ),
+        probeBudgetDayId: "P2G-S1-20260930-16",
+        runtimeSessionId: "5c0064eb-585a-4dfb-af4c-211f3bee3e94",
+        durableReconciliation: {
+          runtimeSessionId: "5c0064eb-585a-4dfb-af4c-211f3bee3e94",
+          evidenceStatus: "DELIVERY_GAP",
+          externalSpendCredits: 65,
+          internalReceivedCredits: 60,
+          deliveryGapCredits: 5,
+          deliveryCompleteness: 60 / 65,
+          callbackRequestsSeen: 41,
+          callbackSuccess2xx: 41,
+          callbackFailures: 0,
+          durationCensored: false,
+          stopReason: "external_internal_delivery_gap",
+        },
+      };
+    }
+
+    function identityV2ThroughP2g17() {
+      return [
+        ...legacyEvidence(),
+        attempt(
+          11,
+          "WSSS",
+          "completed",
+          null,
+          false,
+          "MATCH",
+          "v39-physical-flight-instance-v2",
+        ),
+        attempt(
+          12,
+          "OMAA",
+          "completed",
+          null,
+          false,
+          "MATCH",
+          "v39-physical-flight-instance-v2",
+        ),
+        p2g17TechnicalInvalidAttempt(),
+      ];
+    }
+
+    it("treats only the exact frozen P2G17 DELIVERY_GAP row as non-consuming", () => {
+      expect(
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          identityV2ThroughP2g17(),
+          p2g17Recovery,
+        ),
+      ).toBe("MMUN");
+    });
+
+    it("refuses P2G17 recovery if durable settlement evidence is altered", () => {
+      const evidence = identityV2ThroughP2g17().map((row) => ({ ...row }));
+      const p2g17 = evidence.find((row) => row.probeId === 13)!;
+      p2g17.durableReconciliation = {
+        ...p2g17.durableReconciliation,
+        externalSpendCredits: 64,
+      };
+
+      expect(() =>
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          evidence,
+          p2g17Recovery,
+        ),
+      ).toThrow(/P2G17_MMUN_RECOVERY_EVIDENCE_MISMATCH/);
+    });
+
+    it("a valid but scientifically poor P2G17 recovery attempt consumes the authorization", () => {
+      const recovered = {
+        ...attempt(
+          14,
+          "MMUN",
+          "completed",
+          null,
+          false,
+          "MATCH",
+          "v39-physical-flight-instance-v2",
+        ),
+        rowsPerHour: 1,
+        stability: 0,
+      };
+
+      expect(
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          [...identityV2ThroughP2g17(), recovered],
+          p2g17Recovery,
+        ),
+      ).toBeNull();
+    });
+
+    it("a new technical failure after P2G17 does not automatically authorize a third MMUN attempt", () => {
+      const secondTechnicalFailure = attempt(
+        14,
+        "MMUN",
+        "failed",
+        "supervisor_child_exit_recovered",
+        true,
+        "UNRESOLVED",
+        "v39-physical-flight-instance-v2",
+      );
+
+      expect(
+        choosePhysicalIdentityV2RemeasurementTargetV39(
+          recovery,
+          [...identityV2ThroughP2g17(), secondTechnicalFailure],
+          p2g17Recovery,
         ),
       ).toBeNull();
     });
