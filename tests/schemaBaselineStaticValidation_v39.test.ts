@@ -20,6 +20,11 @@ describe("V3.9 generated baseline static validator", () => {
     expect(src).toContain("public_schema_assumption_missing");
   });
 
+  it("allows pg_dump restrict/unrestrict but rejects unknown psql meta commands", () => {
+    expect(src).toContain("restrict|unrestrict");
+    expect(src).toContain("unsupported_psql_meta_command");
+  });
+
   it("rejects ownership, privilege, database, and extension side effects", () => {
     for (const token of [
       "owner_statement", "grant_statement", "revoke_statement",
