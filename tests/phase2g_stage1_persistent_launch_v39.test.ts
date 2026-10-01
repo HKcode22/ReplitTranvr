@@ -69,10 +69,12 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(stage1Owner).not.toContain("while (isP2g10SecretMismatchRecoveryEligibleV39");
   });
 
-  it("fails closed on obsolete completed metric contracts unless the bounded identity-v2 recovery is frozen", () => {
-    expect(preflight).toContain("metric_contract_version");
-    expect(preflight).toContain("confirmed_unique_lower_per_credit");
-    expect(preflight).toContain("confirmed_plus_ambiguous_upper_per_credit");
+  it("fails closed on obsolete completed metric contracts through one shared durable evidence reader", () => {
+    expect(preflight).toContain("readStage1EvidenceV39");
+    expect(stage1Owner).toContain("metric_contract_version");
+    expect(stage1Owner).toContain("confirmed_unique_lower_per_credit");
+    expect(stage1Owner).toContain("confirmed_plus_ambiguous_upper_per_credit");
+    expect(stage1Owner).toContain("LEFT JOIN clean.adb_probe_reconciliation_evidence");
     expect(stage1Owner).toContain("physical_identity_v2_remeasurement");
     expect(stage1Owner).toContain("REFUSED_OBSOLETE_COMPLETED_METRIC_CONTRACT_REQUIRES_FROZEN_RECOVERY");
     expect(stage1Owner).toContain("choosePhysicalIdentityV2RemeasurementTargetV39");
