@@ -20,7 +20,9 @@ describe("V3.9 migration runner safety surface", () => {
     const ensurePos = engine.indexOf("await ensureHistorySurfaceV39(client)");
     expect(dryRunPos).toBeGreaterThanOrEqual(0);
     expect(ensurePos).toBeGreaterThan(dryRunPos);
-    expect(engine).toContain("to_regclass('v39_meta.schema_migration_history')");
+    expect(engine).toContain("to_regclass");
+    expect(engine).toContain("v39_meta.schema_migration_history");
+    expect(engine).toContain("migrationHistoryExistsV39");
   });
 
   it("uses one PostgreSQL advisory lock around migration ownership", () => {
