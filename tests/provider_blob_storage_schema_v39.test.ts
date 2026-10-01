@@ -2,16 +2,16 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const migration = () => readFileSync(join(process.cwd(), "migrations", "0054_provider_blob_storage_boundary.sql"), "utf8");
+const migration = () => readFileSync(join(process.cwd(), "migrations", "baseline", "B0062__v39_schema_baseline_20261001.sql"), "utf8");
 
 describe("V3.9 provider blob metadata-only schema", () => {
   it("stores only opaque blob metadata and bounded retention classes", () => {
     const sql = migration();
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS clean.provider_content_blob_ref");
+    expect(sql).toContain("CREATE TABLE clean.provider_content_blob_ref");
     expect(sql).toContain("raw_provider_content");
     expect(sql).toContain("live_fids_cache");
-    expect(sql).toContain("retention_hours BETWEEN 1 AND 168");
-    expect(sql).toContain("retention_hours BETWEEN 1 AND 24");
+    expect(sql).toContain("(retention_hours >= 1) AND (retention_hours <= 168)");
+    expect(sql).toContain("(retention_hours >= 1) AND (retention_hours <= 24)");
     expect(sql).toContain("content_sha256");
     expect(sql).toContain("content_bytes");
     expect(sql).not.toMatch(/flight_number|callsign|latitude|longitude|scheduled_gate|raw_body\s+JSON|raw_payload\s+JSON/i);
