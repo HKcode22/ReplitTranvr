@@ -185,6 +185,33 @@ async function readAppliedV39(client: PoolClient): Promise<AppliedMigrationV39[]
   }));
 }
 
+async function inspectProjectSchemaStateV39(client: PoolClient): Promise<{
+  cleanSchemaExists: boolean;
+  projectRelationCount: number;
+}> {
+  const q = await client.query(`
+    SELECT
+      (to_regnamespace('clean') IS NOT NULL) AS clean_schema_exists,
+      COUNT(*) FILTER (
+        WHERE n.nspname IN ('clean','public')
+          AND c.relkind IN ('r','p','v','m','S')
+      )::int AS project_relation_count
+    FROM pg_namespace n
+    LEFT JOIN pg_class c ON c.relnamespace=n.oid
+  `);
+  return {
+    cleanSchemaExists: Boolean(q.rows[0]?.clean_schema_exists),
+    projectRelationCount: Number(q.rows[0]?.project_relation_count ?? 0),
+  };
+}
+
+async function migrationHistoryExistsV39(client: PoolClient): Promise<boolean> {
+  const q = await client.query(
+    "SELECT to_regclass('v39_meta.schema_migration_history') AS relation",
+  );
+  return Boolean(q.rows[0]?.relation);
+}
+
 export interface RunSchemaMigrationsOptionsV39 {
   sourceSha?: string | null;
   executionId: string;
@@ -203,20 +230,32 @@ export async function runSchemaMigrationsV39(
     await client.query("SELECT pg_advisory_lock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID]);
     lockHeld = true;
     let appliedRows: AppliedMigrationV39[] = [];
+    const historyExists = await migrationHistoryExistsV39(client);
+
+    if (!historyExists) {
+      const state = await inspectProjectSchemaStateV39(client);
+      const nonEmptyProjectDatabase =
+        state.cleanSchemaExists || state.projectRelationCount > 0;
+
+      if (nonEmptyProjectDatabase) {
+        throw new Error(
+          "BASELINE_ADOPTION_REQUIRED: refusing to apply migrations to a non-empty " +
+          "project database without v39_meta.schema_migration_history",
+        );
+      }
+    } else {
+      appliedRows = await readAppliedV39(client);
+    }
 
     if (options.dryRun) {
-      const exists = await client.query(
-        "SELECT to_regclass('v39_meta.schema_migration_history') AS relation",
-      );
-      if (exists.rows[0]?.relation) {
-        appliedRows = await readAppliedV39(client);
-      }
       const pending = planPendingMigrationsV39(files, appliedRows);
       return { applied: [], pending: pending.map((m) => m.file), dryRun: true };
     }
 
     await ensureHistorySurfaceV39(client);
-    appliedRows = await readAppliedV39(client);
+    if (historyExists) {
+      appliedRows = await readAppliedV39(client);
+    }
     const pending = planPendingMigrationsV39(files, appliedRows);
     const applied: string[] = [];
     for (const migration of pending) {
