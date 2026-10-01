@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertAppliedChecksumsV39,
   parseMigrationFilenameV39,
+  requiresBaselineAdoptionV39,
   planPendingMigrationsV39,
   sha256TextV39,
   type AppliedMigrationV39,
@@ -58,6 +59,20 @@ describe("V3.9 durable schema migration planner", () => {
     expect(() => assertAppliedChecksumsV39([file], [{
       version: 63, kind: "VERSIONED", file: file.file, checksumSha256: "0".repeat(64),
     }])).toThrow(/MIGRATION_CHECKSUM_DRIFT/);
+  });
+
+  it("requires adoption for any non-empty project DB without migration history", () => {
+    expect(requiresBaselineAdoptionV39(false, true, 0)).toBe(true);
+    expect(requiresBaselineAdoptionV39(false, false, 1)).toBe(true);
+    expect(requiresBaselineAdoptionV39(false, true, 25)).toBe(true);
+  });
+
+  it("allows baseline creation only for an actually empty project DB", () => {
+    expect(requiresBaselineAdoptionV39(false, false, 0)).toBe(false);
+  });
+
+  it("does not require adoption once durable migration history exists", () => {
+    expect(requiresBaselineAdoptionV39(true, true, 25)).toBe(false);
   });
 
   it("rejects invalid filenames instead of silently executing them", () => {
