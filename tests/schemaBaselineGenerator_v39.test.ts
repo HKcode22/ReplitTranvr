@@ -13,6 +13,12 @@ describe("V3.9 baseline generator safety", () => {
     expect(src).toContain("--no-privileges");
   });
 
+  it("normalizes the standard pre-existing public schema", () => {
+    expect(src).toContain('awk \'$0 != "CREATE SCHEMA public;"\'');
+    expect(src).toContain("baseline still attempts to create pre-existing public schema");
+    expect(src).toContain("assumes_standard_public_schema_exists: true");
+  });
+
   it("refuses managed schema leakage", () => {
     expect(src).toContain("_system|drizzle|stripe");
     expect(src).toContain("managed schema leaked into project baseline");
