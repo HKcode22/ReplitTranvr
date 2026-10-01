@@ -101,7 +101,10 @@ describe("P2G17 MMUN technical-invalid recovery contract", () => {
 
     expect(helper).toContain(`EXPECTED_AMENDMENT_SHA="${expectedAmendmentSha}"`);
     expect(helper).toContain('BUDGET="P2G-S1-20261001-17"');
-    expect(helper).toContain('AUTH_ID="AUTH-20261001-P2G18"');
+    expect(helper).toContain('AUTH_ID="AUTH-20261001-P2G18H1"');
+    expect(helper).toContain(
+      'RUNTIME="artifacts/phase2g-gate2-runtime-P2G-S1-20261001-17-H1.json"',
+    );
     expect(helper).toContain('AUTH_START="2026-10-01T11:00:00Z"');
     expect(helper).toContain('AUTH_EXPIRES="2026-10-01T15:10:00Z"');
     expect(helper).toContain("adjudication-dry)");

@@ -9,6 +9,7 @@ const extractor = read("server/lib/disruption/flightNotificationExtractor_v3.ts"
 const baseline = read("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
 const execution = read("server/lib/disruption/probeExecutionPrepaid_v39.ts");
 const window = read("server/lib/disruption/prepaidProbeWindow_v39.ts");
+const limiter = read("server/lib/disruption/aerodataboxLimiter_v3.ts");
 const recovery = read("scripts/v39_phase2g_stage1_recover_after_exit_v39.ts");
 const verifier = read("scripts/v39_phase2g_verify_live_callback_v39.ts");
 const owner = read("scripts/v39_phase2g_github_actions_owner_v39.sh");
@@ -58,11 +59,36 @@ describe("Phase2G historical failure regression matrix", () => {
     expect(recovery).toContain("allowedRuntimeStateLossStopReason");
   });
 
-  it("keeps provider-502 handling bounded and censored windows fail-closed", () => {
+  it("keeps provider transport failures bounded and fail-closed", () => {
+    expect(limiter).toContain("ADB_HTTP_ATTEMPT_TIMEOUT_MS = 15_000");
+    expect(limiter).toContain("fetchWithAdbTimeout");
+    expect(limiter).toContain("listSubscriptionsStrictWithRetry");
+    expect(limiter).toContain("deleteSubscriptionVerifiedStrict");
+
     expect(window).toContain("deleteOwnedSubscriptionVerifiedV39");
+    expect(window).toContain("recoverAmbiguousSubscriptionCreateV39");
+    expect(window).toContain(
+      "subscription_create_failed_after_exact_reconciliation",
+    );
+    expect(window).toContain(
+      "const balance = await getBalanceWithTransientRetryV39();",
+    );
     expect(window).toContain("balance_read_failed_after_retries");
     expect(window).toContain("duration_censored_before_target");
-    expect(recovery).toContain("deleteSubscription(ownedProviderSubscriptionId)");
+
+    expect(recovery).toContain("listSubscriptionsStrictWithRetry");
+    expect(recovery).toContain("deleteSubscriptionVerifiedStrict");
+    expect(recovery).not.toContain(
+      "deleteSubscription(ownedProviderSubscriptionId)",
+    );
+  });
+
+  it("keeps the independent watchdog alive across owner start skew", () => {
+    expect(watchdog).toContain("NO_PROBE_YET_CONTINUING");
+    expect(watchdog).toContain(
+      "independent_watchdog_remains_alive_for_late_owner_start_protection",
+    );
+    expect(watchdog).not.toContain("NO_PROBE_CREATED_EXIT_SAFE");
   });
 
   it("keeps paid lifecycle ownership outside the Replit workspace failure domain", () => {

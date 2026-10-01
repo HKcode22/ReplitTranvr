@@ -159,6 +159,7 @@ async function main(): Promise<void> {
   let lastCallbackRequestsSeen: number | null = null;
   let lastScientificItemRows: number | null = null;
   let initialDatabasePostmasterStartUtc: string | null = null;
+  let noProbeTimeoutReported = false;
 
   function emitScientificHealth(health: Phase2gScientificHealthV39): void {
     const json = JSON.stringify(health);
@@ -196,16 +197,23 @@ async function main(): Promise<void> {
     );
 
     if (!probeR.rowCount) {
-      if (Date.now() - started > PROBE_APPEAR_TIMEOUT_MS) {
+      if (
+        Date.now() - started > PROBE_APPEAR_TIMEOUT_MS &&
+        !noProbeTimeoutReported
+      ) {
+        noProbeTimeoutReported = true;
+
         console.log(JSON.stringify({
           schema: "v39.phase2g-github-safety-watchdog.v1",
-          status: "NO_PROBE_CREATED_EXIT_SAFE",
+          status: "NO_PROBE_YET_CONTINUING",
           observed_at_utc: new Date().toISOString(),
           probe_budget_day_id: budgetDay,
           provider_mutation: false,
+          reason:
+            "independent_watchdog_remains_alive_for_late_owner_start_protection",
         }));
-        return;
       }
+
       await sleep(POLL_MS);
       continue;
     }

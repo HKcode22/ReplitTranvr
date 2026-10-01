@@ -12,6 +12,7 @@ const MIN_INTERVAL_MS = Number(process.env.ADB_API_MIN_INTERVAL_MS) > 0
   : 1000;
 const RATE_LIMIT_BACKOFF_MS = 1500;
 const RATE_LIMIT_MAX_RETRIES = 3;
+const ADB_HTTP_ATTEMPT_TIMEOUT_MS = 15_000;
 
 export type FidsRestCategory = "fids_base" | "fids_split" | "fids_retry" | "validation" | "outcome";
 export const FIDS_REST_UNITS_PER_ATTEMPT = 2;
@@ -27,6 +28,28 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function fetchWithAdbTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  if (init?.signal) return fetch(input, init);
+
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    ADB_HTTP_ATTEMPT_TIMEOUT_MS,
+  );
+
+  try {
+    return await fetch(input, {
+      ...(init ?? {}),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function throttledFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const slot = chain.then(async () => {
     const wait = Math.max(0, lastStartedAt + MIN_INTERVAL_MS - Date.now());
@@ -35,14 +58,14 @@ function throttledFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
   });
   chain = slot.catch(() => {});
   return slot.then(async () => {
-    let resp = await fetch(input, init);
+    let resp = await fetchWithAdbTimeout(input, init);
     let attempt = 0;
     while (resp.status === 429 && attempt < RATE_LIMIT_MAX_RETRIES) {
       const backoff = RATE_LIMIT_BACKOFF_MS * (attempt + 1);
       console.warn(`[adb-v3] rate-limited (429) — retrying in ${backoff}ms (attempt ${attempt + 1}/${RATE_LIMIT_MAX_RETRIES})`);
       await sleep(backoff);
       lastStartedAt = Date.now();
-      resp = await fetch(input, init);
+      resp = await fetchWithAdbTimeout(input, init);
       attempt++;
     }
     return resp;
@@ -313,6 +336,45 @@ export async function listSubscriptionsStrict(): Promise<WebhookSubscription[]> 
   return normalized;
 }
 
+/**
+ * Safety reader for paid probe ownership/recovery.
+ *
+ * A transient gateway failure must not be interpreted as either an empty
+ * account or an unrecoverable provider state. Retry only the free strict LIST
+ * operation; persistent uncertainty still fails closed.
+ */
+export async function listSubscriptionsStrictWithRetry(
+  opts?: {
+    maxAttempts?: number;
+    sleepImpl?: (ms: number) => Promise<void>;
+  },
+): Promise<WebhookSubscription[]> {
+  const maxAttempts = opts?.maxAttempts ?? 3;
+  const sleepImpl = opts?.sleepImpl ?? sleep;
+
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
+    throw new Error("R1_LIST_RETRY_ATTEMPTS_INVALID");
+  }
+
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await listSubscriptionsStrict();
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (attempt < maxAttempts) {
+      await sleepImpl(attempt === 1 ? 2_000 : 3_000);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("R1_LIST_UNAVAILABLE_AFTER_RETRIES");
+}
+
 export async function getSubscription(subscriptionId: string): Promise<WebhookSubscription | null> {
   try {
     const resp = await throttledFetch(
@@ -346,6 +408,78 @@ export async function deleteSubscription(subscriptionId: string): Promise<boolea
     console.error("[adb-v3] deleteSubscription transport/error (details redacted)");
     return false;
   }
+}
+
+/**
+ * Exact-id safety deletion.
+ *
+ * A DELETE response can be ambiguous during gateway/transport failure: the
+ * provider may already have removed the subscription. Always verify strict
+ * account state and retry only this exact known provider id.
+ */
+export async function deleteSubscriptionVerifiedStrict(
+  subscriptionId: string,
+  opts?: {
+    maxAttempts?: number;
+    verifyDelayMs?: number;
+    retryDelayMs?: number;
+    sleepImpl?: (ms: number) => Promise<void>;
+  },
+): Promise<boolean> {
+  const maxAttempts = opts?.maxAttempts ?? 3;
+  const verifyDelayMs = opts?.verifyDelayMs ?? 5_000;
+  const retryDelayMs = opts?.retryDelayMs ?? 10_000;
+  const sleepImpl = opts?.sleepImpl ?? sleep;
+
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 5) {
+    throw new Error("DELETE_VERIFICATION_MAX_ATTEMPTS_INVALID");
+  }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const before = await listSubscriptionsStrictWithRetry();
+
+      if (
+        !before.some(
+          (subscription) =>
+            subscription.id === subscriptionId &&
+            subscription.isActive,
+        )
+      ) {
+        return true;
+      }
+    } catch {
+      // Strict LIST uncertainty does not authorize success.
+    }
+
+    await deleteSubscription(subscriptionId);
+
+    if (verifyDelayMs > 0) {
+      await sleepImpl(verifyDelayMs);
+    }
+
+    try {
+      const after = await listSubscriptionsStrictWithRetry();
+
+      if (
+        !after.some(
+          (subscription) =>
+            subscription.id === subscriptionId &&
+            subscription.isActive,
+        )
+      ) {
+        return true;
+      }
+    } catch {
+      // Remain fail-closed and continue only within the bounded exact-id loop.
+    }
+
+    if (attempt < maxAttempts && retryDelayMs > 0) {
+      await sleepImpl(retryDelayMs);
+    }
+  }
+
+  return false;
 }
 
 export async function checkAirportFeeds(icao: string): Promise<AirportFeedsHealth | null> {

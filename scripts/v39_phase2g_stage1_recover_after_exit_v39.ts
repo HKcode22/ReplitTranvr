@@ -4,8 +4,8 @@ import path from "node:path";
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import {
   defaultWebhookUrl,
-  deleteSubscription,
-  listSubscriptionsStrict,
+  deleteSubscriptionVerifiedStrict,
+  listSubscriptionsStrictWithRetry,
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import {
   cleanupPrepaidProbeSessionV39,
@@ -168,7 +168,7 @@ async function main(): Promise<void> {
     const boundProviderSubscriptionId = row.provider_subscription_id ? String(row.provider_subscription_id) : null;
     stopReason = "supervisor_child_exit_recovered";
 
-    const before = await listSubscriptionsStrict();
+    const before = await listSubscriptionsStrictWithRetry();
     const activeBillableBefore = before.filter((subscription) => subscription.isActive && subscription.billingType !== "LifetimeBased");
     let ownedProviderSubscriptionId = boundProviderSubscriptionId;
 
@@ -210,17 +210,24 @@ async function main(): Promise<void> {
           throw new Error("RECOVERY_REFUSED:OWNED_ACTIVE_SUBSCRIPTION_NOT_CREDIT_BASED");
         }
         providerDeleteAttempted = true;
-        const deleted = await deleteSubscription(ownedProviderSubscriptionId);
-        if (!deleted) {
-          await openRecoveryIncident({ probeId, budgetDayId, reason: "owned_subscription_delete_failed" });
-          throw new Error("RECOVERY_FAILED:OWNED_SUBSCRIPTION_DELETE_FAILED");
+        providerDeleteVerified =
+          await deleteSubscriptionVerifiedStrict(
+            ownedProviderSubscriptionId,
+          );
+
+        if (!providerDeleteVerified) {
+          await openRecoveryIncident({
+            probeId,
+            budgetDayId,
+            reason:
+              "owned_subscription_delete_failed_after_verified_retries",
+          });
+          throw new Error(
+            "RECOVERY_FAILED:OWNED_SUBSCRIPTION_DELETE_NOT_VERIFIED",
+          );
         }
-      }
-      const after = await listSubscriptionsStrict();
-      providerDeleteVerified = !after.some((subscription) => subscription.id === ownedProviderSubscriptionId && subscription.isActive);
-      if (!providerDeleteVerified) {
-        await openRecoveryIncident({ probeId, budgetDayId, reason: "owned_subscription_still_active_after_delete" });
-        throw new Error("RECOVERY_FAILED:OWNED_SUBSCRIPTION_STILL_ACTIVE");
+      } else {
+        providerDeleteVerified = true;
       }
     } else {
       providerDeleteVerified = activeBillableBefore.length === 0;
@@ -261,7 +268,7 @@ async function main(): Promise<void> {
       }
     }
   } else {
-    const before = await listSubscriptionsStrict();
+    const before = await listSubscriptionsStrictWithRetry();
     const activeBillableBefore = before.filter(
       (subscription) => subscription.isActive && subscription.billingType !== "LifetimeBased",
     );
@@ -293,28 +300,22 @@ async function main(): Promise<void> {
       if (exactResetMatches.length === 1) {
         const ownedProviderSubscriptionId = exactResetMatches[0].id;
         providerDeleteAttempted = true;
-        const deleted = await deleteSubscription(ownedProviderSubscriptionId);
-        if (!deleted) {
-          await openRecoveryIncident({
-            probeId,
-            budgetDayId,
-            reason: "runtime_reset_owned_subscription_delete_failed",
-            durableSessionId,
-          });
-          throw new Error("RECOVERY_FAILED:RUNTIME_RESET_OWNED_SUBSCRIPTION_DELETE_FAILED");
-        }
-        const after = await listSubscriptionsStrict();
-        providerDeleteVerified = !after.some(
-          (subscription) => subscription.id === ownedProviderSubscriptionId && subscription.isActive,
-        );
+        providerDeleteVerified =
+          await deleteSubscriptionVerifiedStrict(
+            ownedProviderSubscriptionId,
+          );
+
         if (!providerDeleteVerified) {
           await openRecoveryIncident({
             probeId,
             budgetDayId,
-            reason: "runtime_reset_owned_subscription_still_active_after_delete",
+            reason:
+              "runtime_reset_owned_subscription_delete_failed_after_verified_retries",
             durableSessionId,
           });
-          throw new Error("RECOVERY_FAILED:RUNTIME_RESET_OWNED_SUBSCRIPTION_STILL_ACTIVE");
+          throw new Error(
+            "RECOVERY_FAILED:RUNTIME_RESET_OWNED_SUBSCRIPTION_DELETE_NOT_VERIFIED",
+          );
         }
         stopReason = "supervisor_child_exit_after_runtime_reset_recovered";
       } else if (activeBillableBefore.length > 0) {

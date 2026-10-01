@@ -1,9 +1,10 @@
 import {
   createSubscription,
   defaultWebhookUrl,
-  deleteSubscription,
+  deleteSubscriptionVerifiedStrict,
   getBalance,
-  listSubscriptionsStrict,
+  listSubscriptionsStrictWithRetry,
+  type WebhookSubscription,
 } from "./aerodataboxLimiter_v3";
 import { runSettlement, type SettlementConfig } from "./settlement_v3";
 import {
@@ -134,37 +135,42 @@ async function getBalanceWithTransientRetryV39(): Promise<Awaited<ReturnType<typ
   return null;
 }
 
-async function deleteOwnedSubscriptionVerifiedV39(subscriptionId: string): Promise<boolean> {
-  // DELETE is scoped to the exact provider id returned by createSubscription.
-  // A transient gateway error is ambiguous: the provider may have applied the
-  // delete even when our response is 5xx. Verify account state after every
-  // attempt and retry only this same exact id. LIST/DELETE are free operations.
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
-    try {
-      const before = await listSubscriptionsStrict();
-      if (!before.some((subscription) => subscription.id === subscriptionId && subscription.isActive)) {
-        return true;
-      }
-    } catch {
-      // Account read uncertainty does not authorize success; continue with the
-      // exact-id idempotent delete and verify again afterward.
-    }
+async function deleteOwnedSubscriptionVerifiedV39(
+  subscriptionId: string,
+): Promise<boolean> {
+  return deleteSubscriptionVerifiedStrict(subscriptionId);
+}
 
-    await deleteSubscription(subscriptionId);
-    await sleep(5_000);
+async function recoverAmbiguousSubscriptionCreateV39(
+  icao: string,
+  webhookUrl: string,
+): Promise<WebhookSubscription | null> {
+  // A failed/timeout POST response is ambiguous: the provider may have created
+  // the subscription even when the response did not reach us. Never issue a
+  // second POST blindly. Reconcile only an exact airport + deterministic
+  // callback match using free strict LIST reads.
+  await sleep(2_000);
 
-    try {
-      const after = await listSubscriptionsStrict();
-      if (!after.some((subscription) => subscription.id === subscriptionId && subscription.isActive)) {
-        return true;
-      }
-    } catch {
-      // Keep fail-closed and make at most the bounded exact-id retries.
-    }
+  const subscriptions = await listSubscriptionsStrictWithRetry();
 
-    if (attempt < 3) await sleep(10_000);
+  const exact = subscriptions.filter(
+    (subscription) =>
+      subscription.isActive &&
+      subscription.billingType === "CreditBased" &&
+      String(subscription.subject?.type ?? "") === "FlightByAirportIcao" &&
+      String(subscription.subject?.id ?? "").toUpperCase() ===
+        icao.toUpperCase() &&
+      String(subscription.subscriber?.type ?? "") === "WebHook" &&
+      String(subscription.subscriber?.id ?? "") === webhookUrl,
+  );
+
+  if (exact.length > 1) {
+    throw new Error(
+      "PREPAID_PROBE_CREATE_AMBIGUOUS_MULTIPLE_EXACT_SUBSCRIPTIONS",
+    );
   }
-  return false;
+
+  return exact[0] ?? null;
 }
 
 function validateInput(input: PrepaidLiveWindowInputV39): void {
@@ -233,18 +239,41 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   let nextProviderBalancePollAt = 0;
   let consecutiveFailedProviderBalancePolls = 0;
 
-  const sub = await createSubscription("FlightByAirportIcao", icao, {
+  let sub = await createSubscription("FlightByAirportIcao", icao, {
     url: webhookUrl,
     maxDeliveryRetries: 0,
   });
+
   if (!sub?.id) {
-    await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
-    const cleanup = await cleanupOrDefer(session.sessionId, `${input.deletionRunId}:create-failed`).catch(() => null);
+    sub = await recoverAmbiguousSubscriptionCreateV39(icao, webhookUrl);
+  }
+
+  if (!sub?.id) {
+    await setPrepaidProbeSessionStateV39(
+      session.sessionId,
+      "failed",
+    ).catch(() => undefined);
+
+    const cleanup = await cleanupOrDefer(
+      session.sessionId,
+      `${input.deletionRunId}:create-failed`,
+    ).catch(() => null);
+
     return {
-      status: "failed", runtimeSessionId: session.sessionId, windowStart, windowEnd: new Date(), durationCensored: true,
-      stopReason: "subscription_create_failed", reconciliationStatus: "UNRESOLVED", externalCredits: null,
-      internalSendCredits: 0, maxObservedUnsettledCreditGap, settlementReads: 0, metrics: null,
-      cleanupVerifiedAtUtc: cleanup?.verifiedAtUtc ?? null, subscriptionDeleted: false,
+      status: "failed",
+      runtimeSessionId: session.sessionId,
+      windowStart,
+      windowEnd: new Date(),
+      durationCensored: true,
+      stopReason: "subscription_create_failed_after_exact_reconciliation",
+      reconciliationStatus: "UNRESOLVED",
+      externalCredits: null,
+      internalSendCredits: 0,
+      maxObservedUnsettledCreditGap,
+      settlementReads: 0,
+      metrics: null,
+      cleanupVerifiedAtUtc: cleanup?.verifiedAtUtc ?? null,
+      subscriptionDeleted: false,
     };
   }
 
@@ -312,7 +341,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     externalStopRequested ? "failed" : "settling",
   );
   const settle = await runSettlement(input.settlement, async () => {
-    const balance = await getBalance();
+    const balance = await getBalanceWithTransientRetryV39();
     return balance ? balance.creditsRemaining : null;
   });
   if (settle.status !== "settled") {
