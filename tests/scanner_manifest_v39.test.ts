@@ -91,7 +91,7 @@ describe("TEST-028: repository manifest", () => {
     expect(paths).not.toContain("server/lib/disruption/experimentCalendar_v3.ts");
   });
 
-  it("lists current Phase-0 safety regression files and migration 0047", () => {
+  it("lists current Phase-0 safety regressions and the frozen B0062 schema authority", () => {
     const testPaths = V39_MANIFEST.filter((m) => m.type === "test").map((m) => m.path);
     for (const path of [
       "tests/provider_fids.test.ts",
@@ -101,7 +101,7 @@ describe("TEST-028: repository manifest", () => {
       "tests/phase6_safety_watchdog_v39.test.ts",
     ]) expect(testPaths).toContain(path);
     const migrationPaths = V39_MANIFEST.filter((m) => m.type === "migration").map((m) => m.path);
-    expect(migrationPaths).toContain("migrations/0047_phase6_frozen_safety_and_overshoot.sql");
+    expect(migrationPaths).toEqual([\n      "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",\n    ]);
   });
 
   it("raw ingress remains implemented but not self-certified by manifest booleans", () => {
