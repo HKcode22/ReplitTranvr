@@ -101,7 +101,9 @@ describe("TEST-028: repository manifest", () => {
       "tests/phase6_safety_watchdog_v39.test.ts",
     ]) expect(testPaths).toContain(path);
     const migrationPaths = V39_MANIFEST.filter((m) => m.type === "migration").map((m) => m.path);
-    expect(migrationPaths).toEqual([\n      "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",\n    ]);
+    expect(migrationPaths).toEqual([
+      "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",
+    ]);
   });
 
   it("raw ingress remains implemented but not self-certified by manifest booleans", () => {
