@@ -43,6 +43,7 @@ const inventorySha = sha256(inventoryRaw);
 if (manifest.schema !== "v39.schema-baseline-manifest.v1") errors.push("manifest_schema_mismatch");
 if (manifest.baseline_version !== 62) errors.push("baseline_version_mismatch");
 if (manifest.baseline_file !== path.basename(baselinePath)) errors.push("baseline_filename_mismatch");
+if (manifest.assumes_standard_public_schema_exists !== true) errors.push("public_schema_assumption_missing");
 if (manifest.baseline_sha256 !== baselineSha) errors.push("baseline_sha256_mismatch");
 if (manifest.live_schema_inventory_sha256 !== inventorySha) errors.push("inventory_sha256_mismatch");
 if (!/^[0-9a-f]{40}$/.test(String(manifest.source_git_head ?? ""))) errors.push("source_git_head_invalid");
@@ -87,6 +88,8 @@ for (const schema of ["_system", "drizzle", "stripe"]) {
   const re = new RegExp(`(^|[^A-Za-z0-9_])${schema.replace("_", "\\_")}\\.`, "m");
   if (re.test(baseline)) errors.push(`managed_schema_reference:${schema}`);
 }
+
+if (/^CREATE SCHEMA public;$/m.test(baseline)) errors.push("baseline_recreates_public_schema");
 
 const forbidden: Array<[string, RegExp]> = [
   ["owner_statement", /\bOWNER\s+TO\b/i],
