@@ -202,12 +202,22 @@ export async function runSchemaMigrationsV39(
   try {
     await client.query("SELECT pg_advisory_lock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID]);
     lockHeld = true;
-    await ensureHistorySurfaceV39(client);
-    const appliedRows = await readAppliedV39(client);
-    const pending = planPendingMigrationsV39(files, appliedRows);
+    let appliedRows: AppliedMigrationV39[] = [];
+
     if (options.dryRun) {
+      const exists = await client.query(
+        "SELECT to_regclass('v39_meta.schema_migration_history') AS relation",
+      );
+      if (exists.rows[0]?.relation) {
+        appliedRows = await readAppliedV39(client);
+      }
+      const pending = planPendingMigrationsV39(files, appliedRows);
       return { applied: [], pending: pending.map((m) => m.file), dryRun: true };
     }
+
+    await ensureHistorySurfaceV39(client);
+    appliedRows = await readAppliedV39(client);
+    const pending = planPendingMigrationsV39(files, appliedRows);
     const applied: string[] = [];
     for (const migration of pending) {
       await client.query("BEGIN");
