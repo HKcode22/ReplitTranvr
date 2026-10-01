@@ -251,7 +251,12 @@ describe("Phase2G execution source contract", () => {
     "utf8",
   );
   const migration = readFileSync(
-    join(process.cwd(), "migrations", "0058_phase2g_reconciliation_evidence.sql"),
+    join(
+      process.cwd(),
+      "migrations",
+      "baseline",
+      "B0062__v39_schema_baseline_20261001.sql",
+    ),
     "utf8",
   );
 
