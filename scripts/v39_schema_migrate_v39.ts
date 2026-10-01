@@ -11,6 +11,12 @@ async function main(): Promise<void> {
   if (!process.env.DATABASE_URL && !process.env.DATABASE_RUNTIME_URL) {
     throw new Error("DATABASE_URL/DATABASE_RUNTIME_URL not set");
   }
+  const apply = has("--apply");
+  const dryRunFlag = has("--dry-run");
+  if (apply && dryRunFlag) {
+    throw new Error("REFUSED: choose exactly one of --apply or --dry-run");
+  }
+
   const result = await runSchemaMigrationsV39(migrationPool, {
     executionId:
       "v39-migrate-" +
@@ -18,7 +24,7 @@ async function main(): Promise<void> {
       "-" +
       crypto.randomUUID().slice(0, 8),
     sourceSha: process.env.GITHUB_SHA ?? null,
-    dryRun: has("--dry-run"),
+    dryRun: !apply,
   });
   console.log(JSON.stringify({ schema: "v39.schema-migrate.v1", ...result }, null, 2));
 }
