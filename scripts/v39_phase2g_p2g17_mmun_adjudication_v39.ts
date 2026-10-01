@@ -30,11 +30,17 @@ function closeEnough(a: unknown, b: number): boolean {
 }
 function incidentBelongs(row: any): boolean {
   const detail = row?.detail ?? {};
-  const probeMatch = Number(detail.probeId ?? detail.probe_id ?? -1) === PROBE_ID;
-  const budgetMatch = String(detail.budgetDayId ?? detail.probeBudgetDayId ?? detail.probe_budget_day_id ?? "") === BUDGET_DAY;
-  const session = String(detail.sessionId ?? detail.runtimeSessionId ?? detail.runtime_session_id ?? "").toLowerCase();
-  const sessionMatch = session === SESSION_ID;
-  return probeMatch || (budgetMatch && sessionMatch) || sessionMatch;
+  return (
+    String(row?.cause ?? "") === "reconciliation" &&
+    Number(detail.probeId ?? detail.probe_id ?? -1) === PROBE_ID &&
+    String(
+      detail.budgetDayId ??
+        detail.probeBudgetDayId ??
+        detail.probe_budget_day_id ??
+        "",
+    ) === BUDGET_DAY &&
+    String(detail.kind ?? "") === "stage1_supervisor_recovery"
+  );
 }
 
 function verifyCleanup(cleanupFile: string): { path: string; sha256: string } {
