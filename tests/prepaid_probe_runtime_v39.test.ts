@@ -48,21 +48,44 @@ describe("V3.9 prepaid probe PITR-safe runtime", () => {
     expect(sql).not.toMatch(/flight_number|aircraft_reg|callsign|latitude|longitude|raw_body\s+json|raw_payload\s+json/i);
   });
 
-  it("registers physical-flight migration 0060 after settling-state migration 0059", () => {
-    const db = readFileSync(join(process.cwd(), "server", "db.ts"), "utf8");
-    const prior = db.indexOf('"0059_phase2g_settling_state.sql"');
-    const physical = db.indexOf('"0060_phase2g_physical_flight_metrics.sql"');
+  it("frozen baseline preserves settling and physical-flight metric contracts", () => {
+    const baseline = readFileSync(
+      join(
+        process.cwd(),
+        "migrations",
+        "baseline",
+        "B0062__v39_schema_baseline_20261001.sql",
+      ),
+      "utf8",
+    );
 
-    expect(prior).toBeGreaterThan(-1);
-    expect(physical).toBeGreaterThan(prior);
+    expect(baseline).toContain("'settling'::text");
+    expect(baseline).toContain("v39-physical-flight-instance-v1");
+    expect(baseline).toContain("v39-physical-flight-instance-v2");
+    expect(baseline).toContain("metric_contract_version");
   });
 
-  it("registers the unlogged migration after the blob metadata boundary", () => {
-    const db = readFileSync(join(process.cwd(), "server", "db.ts"), "utf8");
-    const blob = db.indexOf('"0054_provider_blob_storage_boundary.sql"');
-    const runtime = db.indexOf('"0055_prepaid_probe_unlogged_runtime.sql"');
-    expect(blob).toBeGreaterThan(-1);
-    expect(runtime).toBeGreaterThan(blob);
+  it("frozen baseline preserves blob metadata and all three UNLOGGED runtime tables", () => {
+    const baseline = readFileSync(
+      join(
+        process.cwd(),
+        "migrations",
+        "baseline",
+        "B0062__v39_schema_baseline_20261001.sql",
+      ),
+      "utf8",
+    );
+
+    expect(baseline).toContain("CREATE TABLE clean.provider_content_blob_ref");
+    expect(baseline).toContain(
+      "CREATE UNLOGGED TABLE clean.prepaid_probe_session_runtime",
+    );
+    expect(baseline).toContain(
+      "CREATE UNLOGGED TABLE clean.prepaid_probe_delivery_runtime",
+    );
+    expect(baseline).toContain(
+      "CREATE UNLOGGED TABLE clean.prepaid_probe_item_runtime",
+    );
   });
 });
 

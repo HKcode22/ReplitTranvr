@@ -135,20 +135,27 @@ describe("Phase 0O: executable command surface", () => {
     }
   });
 
-  it("production boot registry includes the current schema through 0046", () => {
+  it("production boot uses the frozen baseline containing the Phase-0 closure schema", () => {
     const db = source("server/db.ts");
-    for (const file of [
-      "0037_phase6_sampling_decision_state.sql",
-      "0038_phase6_parent_segment_lifecycle.sql",
-      "0039_phase6_authorization_and_admission.sql",
-      "0040_phase6_calendar_execution_fields.sql",
-      "0041_phase6_start_admission_tolerance.sql",
-      "0042_webhook_identity_resolution_ledger.sql",
-      "0043_phase6_start_time_guard.sql",
-      "0044_webhook_attempt_provenance.sql",
-      "0045_incident_stop_persistence_cause.sql",
-      "0046_subscription_create_uncertainty_stop.sql",
-    ]) expect(db).toContain(file);
+    const baseline = source(
+      "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",
+    );
+
+    expect(db).toContain("runSchemaMigrationsV39");
+    expect(db).not.toContain("BOOT_MIGRATIONS");
+
+    for (const marker of [
+      "adb_sampling_draw",
+      "adb_collection_segments",
+      "adb_phase6_authorization",
+      "start_admission_tolerance_seconds",
+      "webhook_identity_resolution",
+      "trg_guard_phase6_parent_start_time",
+      "subscription_create_outcome_unknown",
+      "trg_probe_create_uncertainty_stop",
+    ]) {
+      expect(baseline).toContain(marker);
+    }
   });
 });
 

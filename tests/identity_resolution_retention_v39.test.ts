@@ -5,13 +5,20 @@ import { join } from "node:path";
 const source = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
 describe("V3.9 identity-resolution retention transition", () => {
-  it("boots migration 0052 and keeps delete/general mutation forbidden", () => {
+  it("durable boot baseline preserves identity-expiry shape and immutability trigger", () => {
     const db = source("server/db.ts");
+    const baseline = source(
+      "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",
+    );
     const migration = source("migrations/0052_identity_resolution_scope_expiry.sql");
-    expect(db).toContain('"0052_identity_resolution_scope_expiry.sql"');
-    expect(migration).toContain("provider_identity_expired_at_utc");
+
+    expect(db).toContain("runSchemaMigrationsV39");
+    expect(baseline).toContain("provider_identity_expired_at_utc");
+    expect(baseline).toContain("trg_webhook_identity_resolution_immutable");
     expect(migration).toContain("IF TG_OP='DELETE'");
-    expect(migration).toContain("webhook identity resolution ledger is append-only except one-way provider identity expiry");
+    expect(migration).toContain(
+      "webhook identity resolution ledger is append-only except one-way provider identity expiry",
+    );
   });
 
   it("allows only the one-way resolved identity-field nullification", () => {

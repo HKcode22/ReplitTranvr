@@ -5,13 +5,17 @@ import { join } from "node:path";
 const source = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
 describe("V3.9 provider account/subscription retention owner", () => {
-  it("boots migration 0051 and creates one-way expiry guards", () => {
+  it("durable boot baseline preserves one-way provider-account expiry guards", () => {
     const db = source("server/db.ts");
+    const baseline = source(
+      "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",
+    );
     const migration = source("migrations/0051_provider_account_scope_expiry.sql");
-    expect(db).toContain('"0051_provider_account_scope_expiry.sql"');
-    expect(migration).toContain("provider_account_expired_at_utc");
-    expect(migration).toContain("trg_adb_collection_batches_provider_account_guard");
-    expect(migration).toContain("trg_adb_anchor_probe_provider_account_guard");
+
+    expect(db).toContain("runSchemaMigrationsV39");
+    expect(baseline).toContain("provider_account_expired_at_utc");
+    expect(baseline).toContain("trg_adb_collection_batches_provider_account_guard");
+    expect(baseline).toContain("trg_adb_anchor_probe_provider_account_guard");
     expect(migration).toContain("expired V3.9 provider account scope cannot be restored");
     expect(migration).toContain("NEW.credits_spent IS NOT NULL");
   });

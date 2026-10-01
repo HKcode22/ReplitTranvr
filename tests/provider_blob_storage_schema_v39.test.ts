@@ -27,8 +27,20 @@ describe("V3.9 provider blob metadata-only schema", () => {
     expect(sql).toContain("NEW.content_sha256 IS NOT DISTINCT FROM OLD.content_sha256");
   });
 
-  it("registers the migration in the production boot sequence", () => {
+  it("durable boot baseline contains the provider blob metadata boundary", () => {
     const db = readFileSync(join(process.cwd(), "server", "db.ts"), "utf8");
-    expect(db).toContain('"0054_provider_blob_storage_boundary.sql"');
+    const baseline = readFileSync(
+      join(
+        process.cwd(),
+        "migrations",
+        "baseline",
+        "B0062__v39_schema_baseline_20261001.sql",
+      ),
+      "utf8",
+    );
+
+    expect(db).toContain("runSchemaMigrationsV39");
+    expect(baseline).toContain("CREATE TABLE clean.provider_content_blob_ref");
+    expect(baseline).toContain("guard_provider_content_blob_ref");
   });
 });

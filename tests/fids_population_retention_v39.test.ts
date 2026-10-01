@@ -5,12 +5,16 @@ import { join } from "node:path";
 const source = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
 describe("V3.9 FIDS normalized-population retention", () => {
-  it("boots migration 0053 and creates a random durable research membership", () => {
+  it("durable boot baseline contains the normalized research membership schema", () => {
     const db = source("server/db.ts");
+    const baseline = source(
+      "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",
+    );
     const migration = source("migrations/0053_fids_population_research_membership.sql");
-    expect(db).toContain('"0053_fids_population_research_membership.sql"');
-    expect(migration).toContain("population_member_id UUID NOT NULL DEFAULT gen_random_uuid()");
-    expect(migration).toContain("CREATE TABLE IF NOT EXISTS clean.population_research_membership");
+
+    expect(db).toContain("runSchemaMigrationsV39");
+    expect(baseline).toContain("CREATE TABLE clean.population_research_membership");
+    expect(baseline).toContain("population_member_id uuid DEFAULT gen_random_uuid()");
     expect(migration).not.toContain("flight_number TEXT");
     expect(migration).not.toContain("canonical_flight_instance_id TEXT");
   });

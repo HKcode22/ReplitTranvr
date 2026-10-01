@@ -37,11 +37,28 @@ describe("Phase 2D sampling-frame schema contract", () => {
     expect(migration).not.toMatch(/DELETE\s+FROM\s+clean\.adb_sampling_frame/i);
   });
 
-  it("keeps 0057 in the production boot migration order", () => {
-    expect(dbOwner).toContain('"0056_prepaid_probe_safe_evidence.sql"');
-    expect(dbOwner).toContain('"0057_phase2d_tier_source_contract.sql"');
-    expect(dbOwner.indexOf('"0057_phase2d_tier_source_contract.sql"'))
-      .toBeGreaterThan(dbOwner.indexOf('"0056_prepaid_probe_safe_evidence.sql"'));
+  it("durable boot baseline preserves the final v2 tier-source contract", () => {
+    const baseline = readFileSync(
+      join(
+        root,
+        "migrations",
+        "baseline",
+        "B0062__v39_schema_baseline_20261001.sql",
+      ),
+      "utf8",
+    );
+
+    expect(dbOwner).toContain("runSchemaMigrationsV39");
+    expect(dbOwner).not.toContain("BOOT_MIGRATIONS");
+    expect(baseline).toContain("adb_sampling_frame_tier_source_check_v2");
+    for (const value of [
+      "curated",
+      "unclassified",
+      "traffic_reference",
+      "missing_reference",
+    ]) {
+      expect(baseline).toContain(`'${value}'::text`);
+    }
   });
 
   it("requires explicit production owner authorization and never falls back to DATABASE_URL", () => {

@@ -127,10 +127,18 @@ describe("V3.9 Phase-6 SEND-aware safety arithmetic", () => {
 });
 
 describe("V3.9 Phase-6 production wiring static boundaries", () => {
-  it("boot registry reaches 0047 and starts the safety owner only after migrations", () => {
+  it("durable baseline carries Phase-6 safety schema and starts the safety owner only after migrations", () => {
     const db = src("server/db.ts");
-    expect(db).toContain("0047_phase6_frozen_safety_and_overshoot.sql");
-    expect(db.indexOf("0047_phase6_frozen_safety_and_overshoot.sql"))
+    const baseline = src(
+      "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",
+    );
+
+    expect(db).toContain("runSchemaMigrationsV39");
+    expect(baseline).toContain("adb_phase6_settlement_evidence");
+    expect(baseline).toContain("daily_soft_stop_margin_credits");
+    expect(baseline).toContain("unsettled_burst_margin_credits");
+    expect(baseline).toContain("hard_cap_overshoot");
+    expect(db.indexOf("runSchemaMigrationsV39"))
       .toBeLessThan(db.indexOf("startPhase6SafetyWatchdog"));
   });
 
