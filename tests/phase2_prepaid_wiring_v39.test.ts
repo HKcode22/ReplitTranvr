@@ -138,7 +138,7 @@ describe("Phase-2 isolated prepaid production wiring", () => {
 
   it("uses UNLOGGED prepaid tables and safe logged-provider-field constraints", () => {
     const runtimeMigration = read("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
-    expect((runtimeMigration.match(/CREATE UNLOGGED TABLE clean\\.prepaid_probe_/g) ?? [])).toHaveLength(3);
+    expect((runtimeMigration.match(/CREATE UNLOGGED TABLE clean\.prepaid_probe_/g) ?? [])).toHaveLength(3);
     const safeMigration = runtimeMigration;
     expect(safeMigration).toContain("adb_anchor_probe_safe_provider_fields_null");
     expect(safeMigration).toContain("subscription_id IS NULL");
