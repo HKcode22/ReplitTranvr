@@ -194,7 +194,7 @@ describe("Phase 0P: probe budget-day semantics", () => {
   });
 
   it("ambiguous provider CREATE outcomes have database incident-stop triggers", () => {
-    const migration = source("migrations/0046_subscription_create_uncertainty_stop.sql");
+    const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     expect(migration).toContain("subscription_create_outcome_unknown");
     expect(migration).toContain("trg_probe_create_uncertainty_stop");
     expect(migration).toContain("trg_phase6_create_uncertainty_stop");
