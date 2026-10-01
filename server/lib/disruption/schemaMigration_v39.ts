@@ -1,1 +1,243 @@
-import crypto from "node:crypto";\nimport fs from "node:fs/promises";\nimport path from "node:path";\nimport type { Pool, PoolClient } from "pg";\n\nexport type MigrationKindV39 = "BASELINE" | "VERSIONED";\n\nexport interface MigrationFileV39 {\n  file: string;\n  fullPath: string;\n  version: number;\n  kind: MigrationKindV39;\n  checksumSha256: string;\n  sql: string;\n}\n\nexport interface AppliedMigrationV39 {\n  version: number;\n  kind: MigrationKindV39;\n  file: string;\n  checksumSha256: string;\n}\n\nconst FILE_RE = /^([BV])(\d{4,})__(.+)\.sql$/;\nconst LOCK_CLASS_ID = 39001;\nconst LOCK_OBJECT_ID = 62001;\n\nexport function sha256TextV39(value: string): string {\n  return crypto.createHash("sha256").update(value, "utf8").digest("hex");\n}\n\nexport function parseMigrationFilenameV39(file: string): {\n  kind: MigrationKindV39;\n  version: number;\n} {\n  const m = FILE_RE.exec(file);\n  if (!m) {\n    throw new Error(\n      `Invalid V3.9 migration filename "${file}". Expected B####__name.sql or V####__name.sql`,\n    );\n  }\n  return {\n    kind: m[1] === "B" ? "BASELINE" : "VERSIONED",\n    version: Number(m[2]),\n  };\n}\n\nexport function chooseBaselineV39(files: readonly MigrationFileV39[]): MigrationFileV39 | null {\n  const baselines = files\n    .filter((m) => m.kind === "BASELINE")\n    .sort((a, b) => b.version - a.version);\n  return baselines[0] ?? null;\n}\n\nexport function assertUniqueMigrationVersionsV39(files: readonly MigrationFileV39[]): void {\n  const seen = new Map<string, string>();\n  for (const m of files) {\n    const key = `${m.kind}:${m.version}`;\n    const prior = seen.get(key);\n    if (prior) {\n      throw new Error(`Duplicate ${m.kind} migration version ${m.version}: ${prior} and ${m.file}`);\n    }\n    seen.set(key, m.file);\n  }\n}\n\nexport function assertAppliedChecksumsV39(\n  available: readonly MigrationFileV39[],\n  applied: readonly AppliedMigrationV39[],\n): void {\n  const byIdentity = new Map(\n    available.map((m) => [`${m.kind}:${m.version}`, m] as const),\n  );\n  for (const row of applied) {\n    const current = byIdentity.get(`${row.kind}:${row.version}`);\n    if (!current) continue;\n    if (current.checksumSha256 !== row.checksumSha256) {\n      throw new Error(\n        `MIGRATION_CHECKSUM_DRIFT: ${row.kind} ${row.version} ${row.file} ` +\n        `recorded=${row.checksumSha256} current=${current.checksumSha256}`,\n      );\n    }\n  }\n}\n\nexport function planPendingMigrationsV39(\n  files: readonly MigrationFileV39[],\n  applied: readonly AppliedMigrationV39[],\n): MigrationFileV39[] {\n  assertUniqueMigrationVersionsV39(files);\n  assertAppliedChecksumsV39(files, applied);\n\n  const appliedKeys = new Set(applied.map((m) => `${m.kind}:${m.version}`));\n  const appliedBaseline = applied\n    .filter((m) => m.kind === "BASELINE")\n    .sort((a, b) => b.version - a.version)[0] ?? null;\n\n  const pending: MigrationFileV39[] = [];\n  if (!appliedBaseline) {\n    const baseline = chooseBaselineV39(files);\n    if (baseline && !appliedKeys.has(`BASELINE:${baseline.version}`)) pending.push(baseline);\n  }\n\n  const effectiveBaselineVersion =\n    appliedBaseline?.version ?? pending.find((m) => m.kind === "BASELINE")?.version ?? 0;\n\n  for (const m of files.filter((x) => x.kind === "VERSIONED").sort((a, b) => a.version - b.version)) {\n    if (m.version <= effectiveBaselineVersion) continue;\n    if (appliedKeys.has(`VERSIONED:${m.version}`)) continue;\n    pending.push(m);\n  }\n  return pending;\n}\n\nasync function readSqlDirectoryV39(\n  dir: string,\n  expectedKind: MigrationKindV39,\n): Promise<MigrationFileV39[]> {\n  let names: string[] = [];\n  try {\n    names = await fs.readdir(dir);\n  } catch (error: any) {\n    if (error?.code === "ENOENT") return [];\n    throw error;\n  }\n  const out: MigrationFileV39[] = [];\n  for (const file of names.filter((x) => x.endsWith(".sql")).sort()) {\n    const parsed = parseMigrationFilenameV39(file);\n    if (parsed.kind !== expectedKind) {\n      throw new Error(`Migration kind/path mismatch: ${file} is ${parsed.kind} but lives in ${dir}`);\n    }\n    const fullPath = path.join(dir, file);\n    const sql = await fs.readFile(fullPath, "utf8");\n    out.push({\n      file,\n      fullPath,\n      version: parsed.version,\n      kind: parsed.kind,\n      checksumSha256: sha256TextV39(sql),\n      sql,\n    });\n  }\n  return out;\n}\n\nexport async function loadMigrationFilesV39(\n  root = path.resolve(process.cwd(), "migrations"),\n): Promise<MigrationFileV39[]> {\n  const [baseline, current] = await Promise.all([\n    readSqlDirectoryV39(path.join(root, "baseline"), "BASELINE"),\n    readSqlDirectoryV39(path.join(root, "current"), "VERSIONED"),\n  ]);\n  const all = [...baseline, ...current];\n  assertUniqueMigrationVersionsV39(all);\n  return all;\n}\n\nasync function ensureHistorySurfaceV39(client: PoolClient): Promise<void> {\n  await client.query("CREATE SCHEMA IF NOT EXISTS v39_meta");\n  await client.query(`\n    CREATE TABLE IF NOT EXISTS v39_meta.schema_migration_history (\n      version INTEGER NOT NULL,\n      kind TEXT NOT NULL CHECK (kind IN (\'BASELINE\',\'VERSIONED\')),\n      file TEXT NOT NULL,\n      checksum_sha256 TEXT NOT NULL CHECK (checksum_sha256 ~ \'^[0-9a-f]{64}$\'),\n      source_sha TEXT,\n      execution_id TEXT NOT NULL,\n      applied_at_utc TIMESTAMPTZ NOT NULL DEFAULT now(),\n      PRIMARY KEY (kind, version)\n    )\n  `);\n}\n\nasync function readAppliedV39(client: PoolClient): Promise<AppliedMigrationV39[]> {\n  const q = await client.query(`\n    SELECT version, kind, file, checksum_sha256\n    FROM v39_meta.schema_migration_history\n    ORDER BY version, kind\n  `);\n  return q.rows.map((r: any) => ({\n    version: Number(r.version),\n    kind: String(r.kind) as MigrationKindV39,\n    file: String(r.file),\n    checksumSha256: String(r.checksum_sha256),\n  }));\n}\n\nexport interface RunSchemaMigrationsOptionsV39 {\n  sourceSha?: string | null;\n  executionId: string;\n  migrationsRoot?: string;\n  dryRun?: boolean;\n}\n\nexport async function runSchemaMigrationsV39(\n  migrationPool: Pool,\n  options: RunSchemaMigrationsOptionsV39,\n): Promise<{ applied: string[]; pending: string[]; dryRun: boolean }> {\n  const files = await loadMigrationFilesV39(options.migrationsRoot);\n  const client = await migrationPool.connect();\n  let lockHeld = false;\n  try {\n    await client.query("SELECT pg_advisory_lock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID]);\n    lockHeld = true;\n    await ensureHistorySurfaceV39(client);\n    const appliedRows = await readAppliedV39(client);\n    const pending = planPendingMigrationsV39(files, appliedRows);\n    if (options.dryRun) {\n      return { applied: [], pending: pending.map((m) => m.file), dryRun: true };\n    }\n    const applied: string[] = [];\n    for (const migration of pending) {\n      await client.query("BEGIN");\n      try {\n        await client.query(migration.sql);\n        await client.query(\n          `INSERT INTO v39_meta.schema_migration_history\n             (version,kind,file,checksum_sha256,source_sha,execution_id)\n           VALUES ($1,$2,$3,$4,$5,$6)`,\n          [\n            migration.version,\n            migration.kind,\n            migration.file,\n            migration.checksumSha256,\n            options.sourceSha ?? null,\n            options.executionId,\n          ],\n        );\n        await client.query("COMMIT");\n        applied.push(migration.file);\n      } catch (error) {\n        await client.query("ROLLBACK").catch(() => undefined);\n        throw error;\n      }\n    }\n    return { applied, pending: [], dryRun: false };\n  } finally {\n    if (lockHeld) {\n      await client.query("SELECT pg_advisory_unlock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID]).catch(() => undefined);\n    }\n    client.release();\n  }\n}
+import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
+import type { Pool, PoolClient } from "pg";
+
+export type MigrationKindV39 = "BASELINE" | "VERSIONED";
+
+export interface MigrationFileV39 {
+  file: string;
+  fullPath: string;
+  version: number;
+  kind: MigrationKindV39;
+  checksumSha256: string;
+  sql: string;
+}
+
+export interface AppliedMigrationV39 {
+  version: number;
+  kind: MigrationKindV39;
+  file: string;
+  checksumSha256: string;
+}
+
+const FILE_RE = /^([BV])(\d{4,})__(.+)\.sql$/;
+const LOCK_CLASS_ID = 39001;
+const LOCK_OBJECT_ID = 62001;
+
+export function sha256TextV39(value: string): string {
+  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+export function parseMigrationFilenameV39(file: string): {
+  kind: MigrationKindV39;
+  version: number;
+} {
+  const m = FILE_RE.exec(file);
+  if (!m) {
+    throw new Error(
+      `Invalid V3.9 migration filename "${file}". Expected B####__name.sql or V####__name.sql`,
+    );
+  }
+  return {
+    kind: m[1] === "B" ? "BASELINE" : "VERSIONED",
+    version: Number(m[2]),
+  };
+}
+
+export function chooseBaselineV39(files: readonly MigrationFileV39[]): MigrationFileV39 | null {
+  const baselines = files
+    .filter((m) => m.kind === "BASELINE")
+    .sort((a, b) => b.version - a.version);
+  return baselines[0] ?? null;
+}
+
+export function assertUniqueMigrationVersionsV39(files: readonly MigrationFileV39[]): void {
+  const seen = new Map<string, string>();
+  for (const m of files) {
+    const key = `${m.kind}:${m.version}`;
+    const prior = seen.get(key);
+    if (prior) {
+      throw new Error(`Duplicate ${m.kind} migration version ${m.version}: ${prior} and ${m.file}`);
+    }
+    seen.set(key, m.file);
+  }
+}
+
+export function assertAppliedChecksumsV39(
+  available: readonly MigrationFileV39[],
+  applied: readonly AppliedMigrationV39[],
+): void {
+  const byIdentity = new Map(
+    available.map((m) => [`${m.kind}:${m.version}`, m] as const),
+  );
+  for (const row of applied) {
+    const current = byIdentity.get(`${row.kind}:${row.version}`);
+    if (!current) continue;
+    if (current.checksumSha256 !== row.checksumSha256) {
+      throw new Error(
+        `MIGRATION_CHECKSUM_DRIFT: ${row.kind} ${row.version} ${row.file} ` +
+        `recorded=${row.checksumSha256} current=${current.checksumSha256}`,
+      );
+    }
+  }
+}
+
+export function planPendingMigrationsV39(
+  files: readonly MigrationFileV39[],
+  applied: readonly AppliedMigrationV39[],
+): MigrationFileV39[] {
+  assertUniqueMigrationVersionsV39(files);
+  assertAppliedChecksumsV39(files, applied);
+
+  const appliedKeys = new Set(applied.map((m) => `${m.kind}:${m.version}`));
+  const appliedBaseline = applied
+    .filter((m) => m.kind === "BASELINE")
+    .sort((a, b) => b.version - a.version)[0] ?? null;
+
+  const pending: MigrationFileV39[] = [];
+  if (!appliedBaseline) {
+    const baseline = chooseBaselineV39(files);
+    if (baseline && !appliedKeys.has(`BASELINE:${baseline.version}`)) pending.push(baseline);
+  }
+
+  const effectiveBaselineVersion =
+    appliedBaseline?.version ?? pending.find((m) => m.kind === "BASELINE")?.version ?? 0;
+
+  for (const m of files.filter((x) => x.kind === "VERSIONED").sort((a, b) => a.version - b.version)) {
+    if (m.version <= effectiveBaselineVersion) continue;
+    if (appliedKeys.has(`VERSIONED:${m.version}`)) continue;
+    pending.push(m);
+  }
+  return pending;
+}
+
+async function readSqlDirectoryV39(
+  dir: string,
+  expectedKind: MigrationKindV39,
+): Promise<MigrationFileV39[]> {
+  let names: string[] = [];
+  try {
+    names = await fs.readdir(dir);
+  } catch (error: any) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+  const out: MigrationFileV39[] = [];
+  for (const file of names.filter((x) => x.endsWith(".sql")).sort()) {
+    const parsed = parseMigrationFilenameV39(file);
+    if (parsed.kind !== expectedKind) {
+      throw new Error(`Migration kind/path mismatch: ${file} is ${parsed.kind} but lives in ${dir}`);
+    }
+    const fullPath = path.join(dir, file);
+    const sql = await fs.readFile(fullPath, "utf8");
+    out.push({
+      file,
+      fullPath,
+      version: parsed.version,
+      kind: parsed.kind,
+      checksumSha256: sha256TextV39(sql),
+      sql,
+    });
+  }
+  return out;
+}
+
+export async function loadMigrationFilesV39(
+  root = path.resolve(process.cwd(), "migrations"),
+): Promise<MigrationFileV39[]> {
+  const [baseline, current] = await Promise.all([
+    readSqlDirectoryV39(path.join(root, "baseline"), "BASELINE"),
+    readSqlDirectoryV39(path.join(root, "current"), "VERSIONED"),
+  ]);
+  const all = [...baseline, ...current];
+  assertUniqueMigrationVersionsV39(all);
+  return all;
+}
+
+async function ensureHistorySurfaceV39(client: PoolClient): Promise<void> {
+  await client.query("CREATE SCHEMA IF NOT EXISTS v39_meta");
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS v39_meta.schema_migration_history (
+      version INTEGER NOT NULL,
+      kind TEXT NOT NULL CHECK (kind IN (\'BASELINE\',\'VERSIONED\')),
+      file TEXT NOT NULL,
+      checksum_sha256 TEXT NOT NULL CHECK (checksum_sha256 ~ \'^[0-9a-f]{64}$\'),
+      source_sha TEXT,
+      execution_id TEXT NOT NULL,
+      applied_at_utc TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (kind, version)
+    )
+  `);
+}
+
+async function readAppliedV39(client: PoolClient): Promise<AppliedMigrationV39[]> {
+  const q = await client.query(`
+    SELECT version, kind, file, checksum_sha256
+    FROM v39_meta.schema_migration_history
+    ORDER BY version, kind
+  `);
+  return q.rows.map((r: any) => ({
+    version: Number(r.version),
+    kind: String(r.kind) as MigrationKindV39,
+    file: String(r.file),
+    checksumSha256: String(r.checksum_sha256),
+  }));
+}
+
+export interface RunSchemaMigrationsOptionsV39 {
+  sourceSha?: string | null;
+  executionId: string;
+  migrationsRoot?: string;
+  dryRun?: boolean;
+}
+
+export async function runSchemaMigrationsV39(
+  migrationPool: Pool,
+  options: RunSchemaMigrationsOptionsV39,
+): Promise<{ applied: string[]; pending: string[]; dryRun: boolean }> {
+  const files = await loadMigrationFilesV39(options.migrationsRoot);
+  const client = await migrationPool.connect();
+  let lockHeld = false;
+  try {
+    await client.query("SELECT pg_advisory_lock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID]);
+    lockHeld = true;
+    await ensureHistorySurfaceV39(client);
+    const appliedRows = await readAppliedV39(client);
+    const pending = planPendingMigrationsV39(files, appliedRows);
+    if (options.dryRun) {
+      return { applied: [], pending: pending.map((m) => m.file), dryRun: true };
+    }
+    const applied: string[] = [];
+    for (const migration of pending) {
+      await client.query("BEGIN");
+      try {
+        await client.query(migration.sql);
+        await client.query(
+          `INSERT INTO v39_meta.schema_migration_history
+             (version,kind,file,checksum_sha256,source_sha,execution_id)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [
+            migration.version,
+            migration.kind,
+            migration.file,
+            migration.checksumSha256,
+            options.sourceSha ?? null,
+            options.executionId,
+          ],
+        );
+        await client.query("COMMIT");
+        applied.push(migration.file);
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    }
+    return { applied, pending: [], dryRun: false };
+  } finally {
+    if (lockHeld) {
+      await client.query("SELECT pg_advisory_unlock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID]).catch(() => undefined);
+    }
+    client.release();
+  }
+}
