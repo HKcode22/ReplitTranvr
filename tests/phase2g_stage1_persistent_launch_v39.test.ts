@@ -337,7 +337,11 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(recovery).toContain("RECOVERY_REFUSED:MULTIPLE_ACTIVE_RUNTIME_SESSIONS");
     expect(recovery).toContain('subscription.billingType === "CreditBased"');
     expect(recovery).toContain("RECOVERY_REFUSED:UNBOUND_SESSION_ACTIVE_BILLABLE_NOT_EXACTLY_OWNED");
-    expect(recovery).toContain("deleteSubscription(ownedProviderSubscriptionId)");
+    expect(recovery).toContain("listSubscriptionsStrictWithRetry");
+    expect(recovery).toContain("deleteSubscriptionVerifiedStrict");
+    expect(recovery).not.toContain(
+      "deleteSubscription(ownedProviderSubscriptionId)",
+    );
     expect(recovery).not.toContain("for (const subscription of activeBillableBefore)");
   });
 
