@@ -1,0 +1,24 @@
+{
+  "schema": "v39.schema-baseline-manifest.v1",
+  "baseline_version": 62,
+  "baseline_file": "B0062__v39_schema_baseline_20261001.sql",
+  "baseline_sha256": "d23d08926c9622276d9421b41362635a6a0b03d97f5b87e481f73f488185c314",
+  "live_schema_inventory_file": "artifacts/database-baseline/live-schema-inventory-20261001.json",
+  "live_schema_inventory_sha256": "e5af8e8006d9c012e0b31565b02869a8b0dae02a324ba63f279ea7b0019e4086",
+  "source_git_head": "5d643cf3d87d54d3a6e7fc2717d3021470a71133",
+  "included_schemas": [
+    "clean",
+    "public"
+  ],
+  "excluded_managed_schemas": [
+    "_system",
+    "drizzle",
+    "stripe"
+  ],
+  "assumes_standard_public_schema_exists": true,
+  "schema_only": true,
+  "owner_statements_included": false,
+  "privilege_statements_included": false,
+  "line_count": 6981,
+  "generated_at_utc": "2026-10-01T02:28:58.492Z"
+}

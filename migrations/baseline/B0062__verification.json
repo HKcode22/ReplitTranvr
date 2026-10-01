@@ -1,0 +1,69 @@
+{
+  "schema": "v39.schema-baseline-verification.v1",
+  "baseline_version": 62,
+  "baseline_file": "B0062__v39_schema_baseline_20261001.sql",
+  "baseline_sha256": "d23d08926c9622276d9421b41362635a6a0b03d97f5b87e481f73f488185c314",
+  "baseline_generation_source_sha": "5d643cf3d87d54d3a6e7fc2717d3021470a71133",
+  "node_engine_verification_source_sha": "f58dd20dcfa577713909b6aefad9186a63c0e10c",
+  "live_inventory_sha256": "e5af8e8006d9c012e0b31565b02869a8b0dae02a324ba63f279ea7b0019e4086",
+  "node_rebuilt_inventory_sha256": "db5481f4b6f54e14838b7f90d52630a257aea2c64873272bcab660bd7eed30da",
+  "results": {
+    "static_baseline_validation": "PASS",
+    "live_pre_adoption_guard": "PASS",
+    "node_engine_baseline_apply": "PASS",
+    "baseline_history_mode": "APPLIED",
+    "restart_noop": "PASS",
+    "rebuilt_core_inventory": "PASS_CORE_V39_SCHEMA_INVENTORY",
+    "exact_project_schema_comparison": "PASS_EXACT_PROJECT_SCHEMA_MATCH",
+    "disposable_database_cleanup": "PASS",
+    "live_schema_mutations": 0,
+    "provider_calls": 0
+  },
+  "runtime_table_persistence": {
+    "prepaid_probe_delivery_runtime": "UNLOGGED",
+    "prepaid_probe_item_runtime": "UNLOGGED",
+    "prepaid_probe_session_runtime": "UNLOGGED"
+  },
+  "structural_sections": {
+    "relations": {
+      "live_sha256": "30a2fa59af20826c3463b2f764e763964e82f5ae901cc15c095d0422018125c0",
+      "rebuilt_sha256": "30a2fa59af20826c3463b2f764e763964e82f5ae901cc15c095d0422018125c0",
+      "equal": true
+    },
+    "columns": {
+      "live_sha256": "fe3773a214d5d6d64fe513b0bcfa951ab90da82dbc223bfc7f80f258bfdb42d5",
+      "rebuilt_sha256": "fe3773a214d5d6d64fe513b0bcfa951ab90da82dbc223bfc7f80f258bfdb42d5",
+      "equal": true
+    },
+    "constraints": {
+      "live_sha256": "bba0c2ae729d4230a7596088f28cd63032500badf48d7b4fbd144381489ee56e",
+      "rebuilt_sha256": "bba0c2ae729d4230a7596088f28cd63032500badf48d7b4fbd144381489ee56e",
+      "equal": true
+    },
+    "indexes": {
+      "live_sha256": "7da383a6197519e1d7d3aded09899159e5fcf68d9b1194f493ead253da21571a",
+      "rebuilt_sha256": "7da383a6197519e1d7d3aded09899159e5fcf68d9b1194f493ead253da21571a",
+      "equal": true
+    },
+    "triggers": {
+      "live_sha256": "a9f32d76e993a030cb6d63c9d3feec0ca53d98ec82a67e93393b23175df872db",
+      "rebuilt_sha256": "a9f32d76e993a030cb6d63c9d3feec0ca53d98ec82a67e93393b23175df872db",
+      "equal": true
+    },
+    "functions": {
+      "live_sha256": "0c4a570f9753a59adf54c359c79b68a10d86adffbfef4b7c174d61f0b02c055d",
+      "rebuilt_sha256": "0c4a570f9753a59adf54c359c79b68a10d86adffbfef4b7c174d61f0b02c055d",
+      "equal": true
+    },
+    "sequences": {
+      "live_sha256": "33aa02028f1c4c0cf1651cd528cfa80e787428eabeec74b57b1dad5877772324",
+      "rebuilt_sha256": "33aa02028f1c4c0cf1651cd528cfa80e787428eabeec74b57b1dad5877772324",
+      "equal": true
+    },
+    "user_defined_types": {
+      "live_sha256": "a6c2c2664609d476ecd02d0f0efa87f3033be0bf41dd1099a83fbb5bce42c118",
+      "rebuilt_sha256": "a6c2c2664609d476ecd02d0f0efa87f3033be0bf41dd1099a83fbb5bce42c118",
+      "equal": true
+    }
+  }
+}
