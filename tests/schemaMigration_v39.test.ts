@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertAppliedChecksumsV39,
+  executableSqlFromMigrationFileV39,
   parseMigrationFilenameV39,
   requiresBaselineAdoptionV39,
   planPendingMigrationsV39,
@@ -73,6 +74,24 @@ describe("V3.9 durable schema migration planner", () => {
 
   it("does not require adoption once durable migration history exists", () => {
     expect(requiresBaselineAdoptionV39(true, true, 25)).toBe(false);
+  });
+
+  it("strips known pg_dump psql control lines without changing SQL content", () => {
+    const raw = [
+      "\\restrict abc123",
+      "CREATE TABLE clean.example(id integer);",
+      "\\unrestrict abc123",
+      "",
+    ].join("\n");
+    expect(executableSqlFromMigrationFileV39(raw)).toBe(
+      "CREATE TABLE clean.example(id integer);\n",
+    );
+  });
+
+  it("refuses unknown psql meta commands", () => {
+    expect(() =>
+      executableSqlFromMigrationFileV39("\\connect otherdb\nSELECT 1;"),
+    ).toThrow(/UNSUPPORTED_PSQL_META_COMMAND/);
   });
 
   it("rejects invalid filenames instead of silently executing them", () => {
