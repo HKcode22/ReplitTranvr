@@ -10,7 +10,7 @@ describe("V3.9 provider account/subscription retention owner", () => {
     const baseline = source(
       "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",
     );
-    const migration = source("migrations/0051_provider_account_scope_expiry.sql");
+    const migration = baseline;
 
     expect(db).toContain("runSchemaMigrationsV39");
     expect(baseline).toContain("provider_account_expired_at_utc");
