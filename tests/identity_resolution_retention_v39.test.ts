@@ -10,7 +10,7 @@ describe("V3.9 identity-resolution retention transition", () => {
     const baseline = source(
       "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",
     );
-    const migration = source("migrations/0052_identity_resolution_scope_expiry.sql");
+    const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
 
     expect(db).toContain("runSchemaMigrationsV39");
     expect(baseline).toContain("provider_identity_expired_at_utc");
@@ -22,7 +22,7 @@ describe("V3.9 identity-resolution retention transition", () => {
   });
 
   it("allows only the one-way resolved identity-field nullification", () => {
-    const migration = source("migrations/0052_identity_resolution_scope_expiry.sql");
+    const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     expect(migration).toContain("NEW.flight_instance_id IS NULL");
     expect(migration).toContain("NEW.initial_service_date IS NULL");
     expect(migration).toContain("NEW.provider_identity_expired_at_utc IS NOT NULL");
