@@ -1,0 +1,36 @@
+{
+  "schema": "v39.phase2g-p2g17-mmun-adjudication.v1",
+  "status": "P2G17_TECHNICAL_INVALID_ADJUDICATED_AND_BUDGET_CLOSED",
+  "probe_id": 13,
+  "icao": "MMUN",
+  "probe_budget_day_id": "P2G-S1-20260930-16",
+  "runtime_session_id": "5c0064eb-585a-4dfb-af4c-211f3bee3e94",
+  "metric_contract_version": "v39-physical-flight-instance-v2",
+  "anchor_status_preserved": "failed",
+  "anchor_reconciliation_status_preserved": "UNRESOLVED",
+  "durable_reconciliation_status": "DELIVERY_GAP",
+  "durable_external_spend_credits": 65,
+  "durable_internal_received_credits": 60,
+  "durable_delivery_gap_credits": 5,
+  "durable_delivery_completeness": 0.9230769230769231,
+  "durable_duration_censored": false,
+  "cleanup_receipt": {
+    "path": "artifacts/phase2g-exact-session-purpose-cleanup-P2G17-MMUN-20260930-1790817643233.json",
+    "sha256": "7a1fb4622e4adffbda4ba88a04c2243cf702504414d78c7a1bfd862eafe1fd2e"
+  },
+  "incident_ids": [
+    27
+  ],
+  "provider_read_only_check_performed": true,
+  "provider_mutation_performed": false,
+  "alert_credits_spent": 0,
+  "database_mutation_performed": true,
+  "applied_at_utc": "2026-10-01T04:30:01.109Z",
+  "database_mutation_scope": [
+    "resolve_only_P2G17_scoped_open_incidents",
+    "close_only_P2G17_budget_day"
+  ],
+  "failed_probe_preserved": true,
+  "durable_reconciliation_evidence_preserved": true,
+  "next": "Freeze a fresh MMUN matched-time runtime/budget/AUTH bound to the P2G17 recovery amendment; do not reuse the P2G17 budget or AUTH."
+}
