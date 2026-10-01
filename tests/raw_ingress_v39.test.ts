@@ -48,7 +48,7 @@ describe("TEST-006: raw durability/hash identity", () => {
   });
 
   it("attempt-provenance migration keeps all provider-native fields separate", () => {
-    const migration = source("migrations/0044_webhook_attempt_provenance.sql");
+    const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     for (const field of [
       "notification_id",
       "provider_notification_generated_utc",
@@ -148,7 +148,7 @@ describe("Phase 0B: production webhook ordering", () => {
   });
 
   it("identity ledger is append-only and resolved/quarantined, never silently overwritten", () => {
-    const migration = source("migrations/0042_webhook_identity_resolution_ledger.sql");
+    const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     expect(migration).toContain("resolution_status IN ('resolved','quarantined')");
     expect(migration).toContain("trg_webhook_identity_resolution_immutable");
     const route = source("server/routes_v3.ts");
