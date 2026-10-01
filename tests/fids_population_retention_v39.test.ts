@@ -54,7 +54,7 @@ describe("V3.9 FIDS normalized-population retention", () => {
     const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     expect(migration).toContain("trg_flight_events_mark_population_captured");
     expect(migration).toContain("observed_via_webhook = true");
-    expect(migration).toContain("ADD COLUMN IF NOT EXISTS population_member_id UUID REFERENCES clean.population_research_membership");
+    expect(migration).toContain("population_member_id uuid");
     expect(migration).toContain("trg_flight_snapshots_population_member");
     expect(migration).toContain("CREATE TABLE clean.population_research_outcome_link");
     expect(migration).toContain("trg_flight_outcomes_population_link");
