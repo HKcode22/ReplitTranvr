@@ -91,6 +91,13 @@ for (const schema of ["_system", "drizzle", "stripe"]) {
 
 if (/^CREATE SCHEMA public;$/m.test(baseline)) errors.push("baseline_recreates_public_schema");
 
+for (const line of baseline.split(/\r?\n/)) {
+  if (/^\\(?:restrict|unrestrict)\b/.test(line)) continue;
+  if (/^\\/.test(line)) {
+    errors.push(`unsupported_psql_meta_command:${line.split(/\s+/)[0]}`);
+  }
+}
+
 const forbidden: Array<[string, RegExp]> = [
   ["owner_statement", /\bOWNER\s+TO\b/i],
   ["grant_statement", /^\s*GRANT\b/im],
