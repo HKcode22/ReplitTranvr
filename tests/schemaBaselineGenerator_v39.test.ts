@@ -1,10 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 const src = readFileSync(join(process.cwd(), "scripts", "v39_generate_schema_baseline_v39.sh"), "utf8");
 
 describe("V3.9 baseline generator safety", () => {
+  it("is valid bash syntax", () => {
+    expect(() => execFileSync("bash", ["-n", join(process.cwd(), "scripts", "v39_generate_schema_baseline_v39.sh")])).not.toThrow();
+  });
   it("scopes pg_dump to project-owned clean and public schemas", () => {
     expect(src).toContain("--schema=clean");
     expect(src).toContain("--schema=public");
