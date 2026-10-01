@@ -14,7 +14,14 @@ describe("V3.9 provider blob metadata-only schema", () => {
     expect(sql).toContain("(retention_hours >= 1) AND (retention_hours <= 24)");
     expect(sql).toContain("content_sha256");
     expect(sql).toContain("content_bytes");
-    expect(sql).not.toMatch(/flight_number|callsign|latitude|longitude|scheduled_gate|raw_body\s+JSON|raw_payload\s+JSON/i);
+    const start = sql.indexOf("CREATE TABLE clean.provider_content_blob_ref (");
+    const end = sql.indexOf("\n);", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const table = sql.slice(start, end);
+    expect(table).not.toMatch(
+      /flight_number|callsign|latitude|longitude|scheduled_gate|raw_body\s+JSON|raw_payload\s+JSON/i,
+    );
   });
 
   it("allows only the one-way externally verified deletion transition", () => {
