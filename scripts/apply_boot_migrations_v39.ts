@@ -1,40 +1,47 @@
 /**
- * Phase-0 migration applier — runs the app's OWN applyBootMigrations().
+ * Production V3.9 boot-migration harness.
  *
- * This is the exact code path the production server runs on boot
- * (server/db.ts → applyBootMigrations → BOOT_MIGRATIONS in order).
- * Using it (instead of a copy) proves the real boot path works.
+ * Calls the exact same applyBootMigrations() function used by server/index.ts.
+ * The function now delegates to the durable baseline/versioned migration
+ * engine and never replays the retired root-level 0002-0062 legacy chain.
  *
- * SAFE BY CONSTRUCTION: every statement in the listed files uses
- * IF NOT EXISTS / guarded DO blocks, per the header comment in db.ts.
- * The runner stops at the first failing file (same as boot).
- *
- * Usage (Replit shell, or any machine that can reach DATABASE_URL):
+ * Safe CI usage:
  *   export ADB_AUTO_COLLECT=0
- *   export DATABASE_URL="<from secrets — never paste into chat/logs/git>"
  *   npx tsx scripts/apply_boot_migrations_v39.ts
- *
- * Exit 0 = every file applied. Nonzero = first failing file + error.
  */
 
 import { applyBootMigrations, migrationPool, pool } from "../server/db";
 
 async function main(): Promise<void> {
-  if (!process.env.DATABASE_URL) {
-    console.error("DATABASE_URL not set — refusing to run.");
+  if (!process.env.DATABASE_URL && !process.env.DATABASE_RUNTIME_URL) {
+    console.error(
+      "DATABASE_URL/DATABASE_RUNTIME_URL not set — refusing to run.",
+    );
     process.exit(2);
   }
-  console.log(`migration-apply started_at_utc=${new Date().toISOString()}`);
+
+  console.log(
+    `migration-apply started_at_utc=${new Date().toISOString()} engine=durable-v39`,
+  );
+
   try {
     await applyBootMigrations();
   } catch (err: any) {
-    console.error(`migration-apply FAILED: ${err?.message ?? err}`);
+    console.error(
+      `migration-apply FAILED: ${err?.message ?? err}`,
+    );
     process.exit(1);
   } finally {
     await pool.end().catch(() => undefined);
     await migrationPool.end().catch(() => undefined);
   }
-  console.log(`migration-apply finished_at_utc=${new Date().toISOString()} result=PASS`);
+
+  console.log(
+    `migration-apply finished_at_utc=${new Date().toISOString()} result=PASS`,
+  );
 }
 
-main().catch((e) => { console.error("migration-apply crashed:", e?.message ?? e); process.exit(1); });
+main().catch((e) => {
+  console.error("migration-apply crashed:", e?.message ?? e);
+  process.exit(1);
+});

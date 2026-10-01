@@ -39,6 +39,7 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v4
@@ -52,13 +53,47 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Provision repository base schema
-        run: npx drizzle-kit push --force
-
-      - name: Apply production boot migrations — fresh V3.9 layer
+      - name: Apply production boot migrations — fresh B0062 bootstrap
         run: npx tsx scripts/apply_boot_migrations_v39.ts
 
-      - name: Apply production boot migrations — idempotence replay
+      - name: Verify durable B0062 history
+        shell: bash
+        run: |
+          set -euo pipefail
+          row="$(
+            psql "$DATABASE_URL" -X -A -t -F '|' -v ON_ERROR_STOP=1 -c "
+              SELECT
+                version || '|' ||
+                kind || '|' ||
+                file || '|' ||
+                installation_mode
+              FROM v39_meta.schema_migration_history
+              WHERE kind='BASELINE' AND version=62;
+            "
+          )"
+          echo "$row"
+          test "$row" = "62|BASELINE|B0062__v39_schema_baseline_20261001.sql|APPLIED"
+
+      - name: Apply production boot migrations — restart no-op
+        run: npx tsx scripts/apply_boot_migrations_v39.ts
+
+      - name: Verify durable runner has zero pending migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$(npx tsx scripts/v39_schema_migrate_v39.ts --dry-run)"
+          echo "$out"
+          node --input-type=module - "$out" <<'NODE'
+          const j = JSON.parse(process.argv[2]);
+          if (j.dryRun !== true) process.exit(1);
+          if (!Array.isArray(j.applied) || j.applied.length !== 0) process.exit(1);
+          if (!Array.isArray(j.pending) || j.pending.length !== 0) process.exit(1);
+          NODE
+
+      - name: Reconcile Drizzle application schema
+        run: npx drizzle-kit push --force
+
+      - name: Verify production boot remains no-op after Drizzle reconciliation
         run: npx tsx scripts/apply_boot_migrations_v39.ts
 
       - name: Verify current schema and triggers

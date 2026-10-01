@@ -261,14 +261,15 @@ app.use((req, res, next) => {
     );
   }
 
-  // Apply additive boot-time migrations (Agency Disruption Monitoring
-  // tables). Idempotent and isolated from the consumer schema — never
-  // alters or drops existing tables. Logged failures here are fatal
-  // because the agency routes registered below depend on these tables.
+  // Run the durable V3.9 schema migration engine before agency routes are
+  // registered. Existing live databases must already carry an ADOPTED
+  // baseline history row; fresh databases receive B0062 once. Any migration
+  // failure is fatal because the routes below depend on the verified schema.
   try {
     await applyBootMigrations();
   } catch (err: any) {
     console.error("Boot migrations failed:", err?.message || err);
+    throw err;
   }
 
   // v3 — AeroDataBox Flight Alert webhook + subscription management
