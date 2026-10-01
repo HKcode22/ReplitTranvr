@@ -6,7 +6,7 @@ const root = process.cwd();
 const read = (p: string) => readFileSync(join(root, p), "utf8");
 
 const extractor = read("server/lib/disruption/flightNotificationExtractor_v3.ts");
-const migration22 = read("migrations/0022_collection_v39_design_probability.sql");
+const baseline = read("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
 const execution = read("server/lib/disruption/probeExecutionPrepaid_v39.ts");
 const window = read("server/lib/disruption/prepaidProbeWindow_v39.ts");
 const recovery = read("scripts/v39_phase2g_stage1_recover_after_exit_v39.ts");
@@ -23,7 +23,7 @@ const history = JSON.parse(read("artifacts/phase2g-historical-attempt-register-2
 describe("Phase2G historical failure regression matrix", () => {
   it("keeps the pre-Gate is_randomized NULL failure fixed", () => {
     expect(extractor).toContain("isRandomized: ctx.sampling?.isRandomized ?? false");
-    expect(migration22).toContain("is_randomized BOOLEAN NOT NULL DEFAULT false");
+    expect(baseline).toContain("is_randomized boolean DEFAULT false NOT NULL");
   });
 
   it("keeps runtime-reset ownership recoverable without bulk deletion", () => {
