@@ -185,6 +185,14 @@ async function readAppliedV39(client: PoolClient): Promise<AppliedMigrationV39[]
   }));
 }
 
+export function requiresBaselineAdoptionV39(
+  historyExists: boolean,
+  cleanSchemaExists: boolean,
+  projectRelationCount: number,
+): boolean {
+  return !historyExists && (cleanSchemaExists || projectRelationCount > 0);
+}
+
 async function inspectProjectSchemaStateV39(client: PoolClient): Promise<{
   cleanSchemaExists: boolean;
   projectRelationCount: number;
@@ -234,10 +242,11 @@ export async function runSchemaMigrationsV39(
 
     if (!historyExists) {
       const state = await inspectProjectSchemaStateV39(client);
-      const nonEmptyProjectDatabase =
-        state.cleanSchemaExists || state.projectRelationCount > 0;
-
-      if (nonEmptyProjectDatabase) {
+      if (requiresBaselineAdoptionV39(
+        historyExists,
+        state.cleanSchemaExists,
+        state.projectRelationCount,
+      )) {
         throw new Error(
           "BASELINE_ADOPTION_REQUIRED: refusing to apply migrations to a non-empty " +
           "project database without v39_meta.schema_migration_history",
