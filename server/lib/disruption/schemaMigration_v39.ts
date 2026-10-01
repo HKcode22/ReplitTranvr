@@ -165,6 +165,143 @@ async function ensureHistorySurfaceV39(client: PoolClient): Promise<void> {
       checksum_sha256 TEXT NOT NULL CHECK (checksum_sha256 ~ \'^[0-9a-f]{64}$\'),
       source_sha TEXT,
       execution_id TEXT NOT NULL,
+      installation_mode TEXT NOT NULL DEFAULT 'APPLIED'
+        CHECK (installation_mode IN ('APPLIED','ADOPTED')),
+      evidence_sha256 TEXT
+        CHECK (evidence_sha256 IS NULL OR evidence_sha256 ~ '^[0-9a-f]{64}
+      PRIMARY KEY (kind, version)
+    )
+  `);
+}
+
+async function readAppliedV39(client: PoolClient): Promise<AppliedMigrationV39[]> {
+  const q = await client.query(`
+    SELECT version, kind, file, checksum_sha256
+    FROM v39_meta.schema_migration_history
+    ORDER BY version, kind
+  `);
+  return q.rows.map((r: any) => ({
+    version: Number(r.version),
+    kind: String(r.kind) as MigrationKindV39,
+    file: String(r.file),
+    checksumSha256: String(r.checksum_sha256),
+  }));
+}
+
+export function requiresBaselineAdoptionV39(
+  historyExists: boolean,
+  cleanSchemaExists: boolean,
+  projectRelationCount: number,
+): boolean {
+  return !historyExists && (cleanSchemaExists || projectRelationCount > 0);
+}
+
+async function inspectProjectSchemaStateV39(client: PoolClient): Promise<{
+  cleanSchemaExists: boolean;
+  projectRelationCount: number;
+}> {
+  const q = await client.query(`
+    SELECT
+      (to_regnamespace('clean') IS NOT NULL) AS clean_schema_exists,
+      COUNT(*) FILTER (
+        WHERE n.nspname IN ('clean','public')
+          AND c.relkind IN ('r','p','v','m','S')
+      )::int AS project_relation_count
+    FROM pg_namespace n
+    LEFT JOIN pg_class c ON c.relnamespace=n.oid
+  `);
+  return {
+    cleanSchemaExists: Boolean(q.rows[0]?.clean_schema_exists),
+    projectRelationCount: Number(q.rows[0]?.project_relation_count ?? 0),
+  };
+}
+
+async function migrationHistoryExistsV39(client: PoolClient): Promise<boolean> {
+  const q = await client.query(
+    "SELECT to_regclass('v39_meta.schema_migration_history') AS relation",
+  );
+  return Boolean(q.rows[0]?.relation);
+}
+
+export interface RunSchemaMigrationsOptionsV39 {
+  sourceSha?: string | null;
+  executionId: string;
+  migrationsRoot?: string;
+  dryRun?: boolean;
+}
+
+export async function runSchemaMigrationsV39(
+  migrationPool: Pool,
+  options: RunSchemaMigrationsOptionsV39,
+): Promise<{ applied: string[]; pending: string[]; dryRun: boolean }> {
+  const files = await loadMigrationFilesV39(options.migrationsRoot);
+  const client = await migrationPool.connect();
+  let lockHeld = false;
+  try {
+    await client.query("SELECT pg_advisory_lock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID]);
+    lockHeld = true;
+    let appliedRows: AppliedMigrationV39[] = [];
+    const historyExists = await migrationHistoryExistsV39(client);
+
+    if (!historyExists) {
+      const state = await inspectProjectSchemaStateV39(client);
+      if (requiresBaselineAdoptionV39(
+        historyExists,
+        state.cleanSchemaExists,
+        state.projectRelationCount,
+      )) {
+        throw new Error(
+          "BASELINE_ADOPTION_REQUIRED: refusing to apply migrations to a non-empty " +
+          "project database without v39_meta.schema_migration_history",
+        );
+      }
+    } else {
+      appliedRows = await readAppliedV39(client);
+    }
+
+    if (options.dryRun) {
+      const pending = planPendingMigrationsV39(files, appliedRows);
+      return { applied: [], pending: pending.map((m) => m.file), dryRun: true };
+    }
+
+    await ensureHistorySurfaceV39(client);
+    if (historyExists) {
+      appliedRows = await readAppliedV39(client);
+    }
+    const pending = planPendingMigrationsV39(files, appliedRows);
+    const applied: string[] = [];
+    for (const migration of pending) {
+      await client.query("BEGIN");
+      try {
+        await client.query(migration.sql);
+        await client.query(
+          `INSERT INTO v39_meta.schema_migration_history
+             (version,kind,file,checksum_sha256,source_sha,execution_id,installation_mode)
+           VALUES ($1,$2,$3,$4,$5,$6,'APPLIED')`,
+          [
+            migration.version,
+            migration.kind,
+            migration.file,
+            migration.checksumSha256,
+            options.sourceSha ?? null,
+            options.executionId,
+          ],
+        );
+        await client.query("COMMIT");
+        applied.push(migration.file);
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    }
+    return { applied, pending: [], dryRun: false };
+  } finally {
+    if (lockHeld) {
+      await client.query("SELECT pg_advisory_unlock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID]).catch(() => undefined);
+    }
+    client.release();
+  }
+}),
       applied_at_utc TIMESTAMPTZ NOT NULL DEFAULT now(),
       PRIMARY KEY (kind, version)
     )
@@ -295,6 +432,105 @@ export async function runSchemaMigrationsV39(
   } finally {
     if (lockHeld) {
       await client.query("SELECT pg_advisory_unlock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID]).catch(() => undefined);
+    }
+    client.release();
+  }
+}
+
+export interface AdoptBaselineOptionsV39 {
+  sourceSha?: string | null;
+  executionId: string;
+  expectedBaselineSha256: string;
+  evidenceSha256?: string | null;
+  migrationsRoot?: string;
+}
+
+export async function adoptExistingBaselineV39(
+  migrationPool: Pool,
+  options: AdoptBaselineOptionsV39,
+): Promise<{
+  status: "ADOPTED" | "ALREADY_ADOPTED";
+  baseline: string;
+  checksumSha256: string;
+}> {
+  const files = await loadMigrationFilesV39(options.migrationsRoot);
+  const baseline = chooseBaselineV39(files);
+  if (!baseline) {
+    throw new Error("BASELINE_ADOPTION_REFUSED: no baseline migration is available");
+  }
+  if (baseline.checksumSha256 !== options.expectedBaselineSha256) {
+    throw new Error(
+      "BASELINE_ADOPTION_REFUSED: expected baseline checksum does not match file",
+    );
+  }
+
+  const client = await migrationPool.connect();
+  let lockHeld = false;
+  try {
+    await client.query("SELECT pg_advisory_lock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID]);
+    lockHeld = true;
+
+    const state = await inspectProjectSchemaStateV39(client);
+    if (!state.cleanSchemaExists || state.projectRelationCount <= 0) {
+      throw new Error(
+        "BASELINE_ADOPTION_REFUSED: adoption is only for an existing non-empty project database",
+      );
+    }
+
+    const historyExists = await migrationHistoryExistsV39(client);
+    if (historyExists) {
+      const applied = await readAppliedV39(client);
+      const existing = applied.find(
+        (row) => row.kind === "BASELINE" && row.version === baseline.version,
+      );
+      if (
+        existing &&
+        existing.file === baseline.file &&
+        existing.checksumSha256 === baseline.checksumSha256
+      ) {
+        return {
+          status: "ALREADY_ADOPTED",
+          baseline: baseline.file,
+          checksumSha256: baseline.checksumSha256,
+        };
+      }
+      throw new Error(
+        "BASELINE_ADOPTION_REFUSED: migration history already exists without the exact expected baseline",
+      );
+    }
+
+    await client.query("BEGIN");
+    try {
+      await ensureHistorySurfaceV39(client);
+      await client.query(
+        `INSERT INTO v39_meta.schema_migration_history
+           (version,kind,file,checksum_sha256,source_sha,execution_id,installation_mode,evidence_sha256)
+         VALUES ($1,'BASELINE',$2,$3,$4,$5,'ADOPTED',$6)`,
+        [
+          baseline.version,
+          baseline.file,
+          baseline.checksumSha256,
+          options.sourceSha ?? null,
+          options.executionId,
+          options.evidenceSha256 ?? null,
+        ],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    }
+
+    return {
+      status: "ADOPTED",
+      baseline: baseline.file,
+      checksumSha256: baseline.checksumSha256,
+    };
+  } finally {
+    if (lockHeld) {
+      await client
+        .query("SELECT pg_advisory_unlock($1,$2)", [LOCK_CLASS_ID, LOCK_OBJECT_ID])
+        .catch(() => undefined);
     }
     client.release();
   }
