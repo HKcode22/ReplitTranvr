@@ -319,6 +319,40 @@ async function main(): Promise<void> {
     ORDER BY n.nspname,p.proname,arguments
   `);
 
+  const sequences = await pool.query(`
+    SELECT
+      sequence_schema,
+      sequence_name,
+      data_type,
+      start_value,
+      minimum_value,
+      maximum_value,
+      increment
+    FROM information_schema.sequences
+    WHERE sequence_schema NOT IN ('pg_catalog','information_schema')
+    ORDER BY sequence_schema,sequence_name
+  `);
+
+  const userTypes = await pool.query(`
+    SELECT
+      n.nspname AS schema_name,
+      t.typname AS type_name,
+      t.typtype AS type_kind,
+      CASE
+        WHEN t.typtype='e' THEN (
+          SELECT json_agg(e.enumlabel ORDER BY e.enumsortorder)
+          FROM pg_enum e
+          WHERE e.enumtypid=t.oid
+        )
+        ELSE NULL
+      END AS enum_values
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid=t.typnamespace
+    WHERE n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')
+      AND t.typtype IN ('e','d')
+    ORDER BY n.nspname,t.typname
+  `);
+
   const cleanTables = new Set(
     relations.rows
       .filter((r: any) => r.schema_name === "clean" && ["r","p"].includes(String(r.relkind)))
@@ -397,6 +431,8 @@ async function main(): Promise<void> {
     indexes: indexes.rows,
     triggers: triggers.rows,
     functions: functions.rows,
+    sequences: sequences.rows,
+    user_defined_types: userTypes.rows,
   };
 
   const raw = JSON.stringify(report, null, 2) + "\n";
