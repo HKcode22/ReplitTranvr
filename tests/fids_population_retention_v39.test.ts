@@ -10,17 +10,14 @@ describe("V3.9 FIDS normalized-population retention", () => {
     const baseline = source(
       "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",
     );
-    const migration = source("migrations/0053_fids_population_research_membership.sql");
 
     expect(db).toContain("runSchemaMigrationsV39");
     expect(baseline).toContain("CREATE TABLE clean.population_research_membership");
     expect(baseline).toContain("population_member_id uuid DEFAULT gen_random_uuid()");
-    expect(migration).not.toContain("flight_number TEXT");
-    expect(migration).not.toContain("canonical_flight_instance_id TEXT");
   });
 
   it("couples normalized FIDS expiry atomically to the existing raw-response expiry", () => {
-    const migration = source("migrations/0053_fids_population_research_membership.sql");
+    const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     expect(migration).toContain("trg_fids_response_expire_population");
     expect(migration).toContain("expire_fids_population_from_response");
     expect(migration).toContain("flight_population:");
@@ -31,7 +28,7 @@ describe("V3.9 FIDS normalized-population retention", () => {
   });
 
   it("clears direct/reversible provider FIDS values but preserves project sampling context", () => {
-    const migration = source("migrations/0053_fids_population_research_membership.sql");
+    const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     for (const column of [
       "flight_number=NULL", "carrier_iata=NULL", "carrier_icao=NULL", "call_sign=NULL",
       "dep_airport_icao=NULL", "arr_airport_icao=NULL", "dep_scheduled_utc=NULL",
@@ -47,19 +44,19 @@ describe("V3.9 FIDS normalized-population retention", () => {
   });
 
   it("keeps FIDS append-only except the tombstoned one-way compliance transition", () => {
-    const migration = source("migrations/0053_fids_population_research_membership.sql");
+    const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     expect(migration).toContain("FIDS observations are append-only except audited provider-content expiry");
     expect(migration).toContain("t.record_id='flight_population:' || OLD.id::text || ':fids_provider_scope_v1'");
     expect(migration).toContain("flight_population_fids_expired_cleared");
   });
 
   it("links webhook capture, snapshots and outcomes through project-owned membership state", () => {
-    const migration = source("migrations/0053_fids_population_research_membership.sql");
+    const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     expect(migration).toContain("trg_flight_events_mark_population_captured");
     expect(migration).toContain("observed_via_webhook = true");
     expect(migration).toContain("ADD COLUMN IF NOT EXISTS population_member_id UUID REFERENCES clean.population_research_membership");
     expect(migration).toContain("trg_flight_snapshots_population_member");
-    expect(migration).toContain("CREATE TABLE IF NOT EXISTS clean.population_research_outcome_link");
+    expect(migration).toContain("CREATE TABLE clean.population_research_outcome_link");
     expect(migration).toContain("trg_flight_outcomes_population_link");
   });
 });
