@@ -153,7 +153,7 @@ describe("V3.9 Phase-6 production wiring static boundaries", () => {
   });
 
   it("0047 distinguishes soft margin from unsettled reserve and requires settlement evidence", () => {
-    const migration = src("migrations/0047_phase6_frozen_safety_and_overshoot.sql");
+    const migration = src("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     expect(migration).toContain("daily_soft_stop_margin_credits");
     expect(migration).toContain("unsettled_burst_margin_credits");
     expect(migration).toContain("adb_phase6_soft_margin_covers_unsettled");
