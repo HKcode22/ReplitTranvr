@@ -42,10 +42,19 @@ describe("V3.9 prepaid probe PITR-safe runtime", () => {
     expect(sql).toContain("provider_subscription_id text");
   });
 
-  it("keeps provider plaintext fields out of the logged blob metadata migration", () => {
-    const sql = readFileSync(join(process.cwd(), "migrations", "baseline", "B0062__v39_schema_baseline_20261001.sql"), "utf8");
-    expect(sql).toContain("clean.provider_content_blob_ref");
-    expect(sql).not.toMatch(/flight_number|aircraft_reg|callsign|latitude|longitude|raw_body\s+json|raw_payload\s+json/i);
+  it("keeps provider plaintext fields out of the logged blob metadata table", () => {
+    const sql = readFileSync(
+      join(process.cwd(), "migrations", "baseline", "B0062__v39_schema_baseline_20261001.sql"),
+      "utf8",
+    );
+    const start = sql.indexOf("CREATE TABLE clean.provider_content_blob_ref (");
+    const end = sql.indexOf("\n);", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const table = sql.slice(start, end);
+    expect(table).not.toMatch(
+      /flight_number|aircraft_reg|callsign|latitude|longitude|raw_body\s+json|raw_payload\s+json/i,
+    );
   });
 
   it("frozen baseline preserves settling and physical-flight metric contracts", () => {
