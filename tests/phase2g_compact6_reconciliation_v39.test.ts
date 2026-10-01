@@ -35,6 +35,9 @@ function attempt(
 ): Stage1AttemptEvidence {
   return {
     probeId,
+    probeBudgetDayId: null,
+    runtimeSessionId: null,
+    durableReconciliation: null,
     icao,
     status,
     rowsPerHour: status === "completed" ? 100 : null,
