@@ -15,8 +15,9 @@ describe("V3.9 baseline adoption safety", () => {
 
   it("marks adopted baseline separately from applied migrations", () => {
     expect(engine).toContain("installation_mode");
-    expect(engine).toContain("'ADOPTED'");
-    expect(engine).toContain("'APPLIED'");
+    expect(engine).toMatch(/ADOPTED/);
+    expect(engine).toMatch(/APPLIED/);
+    expect(engine).toContain("MigrationInstallationModeV39");
   });
 
   it("records evidence hash and never executes baseline SQL during adoption", () => {
