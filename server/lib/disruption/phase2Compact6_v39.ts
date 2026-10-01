@@ -17,11 +17,43 @@ export const PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-p2g10-secret-mismatch-recovery-freeze-20260923.json";
 export const PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-identity-v2-recovery-freeze-20260925.json";
+export const PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH =
+  "artifacts/phase2g-compact6-p2g17-mmun-delivery-gap-recovery-freeze-20261001.json";
 
 export type Phase2gIdentityV2RecoveryIcaoV39 =
   | "WSSS"
   | "OMAA"
   | "MMUN";
+
+export interface Phase2gP2g17MmunDeliveryGapRecoveryV39 {
+  authorized: true;
+  maximum_additional_attempts: 1;
+  failed_probe_id: 13;
+  icao: "MMUN";
+  expected_probe_budget_day_id: "P2G-S1-20260930-16";
+  expected_runtime_session_id: "5c0064eb-585a-4dfb-af4c-211f3bee3e94";
+  expected_metric_contract_version: "v39-physical-flight-instance-v2";
+  expected_anchor_status: "failed";
+  expected_anchor_reconciliation_status: "UNRESOLVED";
+  expected_anchor_stop_reason: "supervisor_child_exit_recovered";
+  durable_evidence_status: "DELIVERY_GAP";
+  durable_external_spend_credits: 65;
+  durable_internal_received_credits: 60;
+  durable_delivery_gap_credits: 5;
+  durable_delivery_completeness: number;
+  durable_duration_censored: false;
+  durable_stop_reason: "external_internal_delivery_gap";
+  durable_callback_requests_seen: 41;
+  durable_callback_success_2xx: 41;
+  durable_callback_failures: 0;
+  excluded_from_final_scoring: true;
+  requires_fresh_runtime_budget_auth: true;
+  requires_matched_time_class: true;
+  no_automatic_retry_after_recovery_attempt: true;
+  outcome_metrics_not_used_to_authorize: true;
+  authorization_basis: "p2g17_delivery_gap_and_finalization_schema_failure_only";
+  reason: string;
+}
 
 export interface Phase2gPhysicalIdentityV2RemeasurementV39 {
   authorized: true;
@@ -140,6 +172,7 @@ export interface Phase2gCompact6AmendmentV39 {
     reason: string;
   };
   physical_identity_v2_remeasurement?: Phase2gPhysicalIdentityV2RemeasurementV39;
+  p2g17_mmun_delivery_gap_recovery_rerun?: Phase2gP2g17MmunDeliveryGapRecoveryV39;
   prospective_reconciliation_policy: {
     external_settled_spend_is_authoritative_denominator: true;
     delivery_completeness_floor: number;
@@ -187,7 +220,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
   const candidatePaths = input.path
     ? [input.path]
-    : [PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
+    : [PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
   let raw: string | null = null;
   let actual: string | null = null;
   for (const candidatePath of candidatePaths) {
@@ -362,6 +395,42 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   )) {
     throw new Error("REFUSED_COMPACT6_P2G10_RECOVERY_BOUND");
   }
+  const p2g17 = amendment.p2g17_mmun_delivery_gap_recovery_rerun;
+  if (p2g17 !== undefined) {
+    const completeness = 60 / 65;
+    if (
+      p2g17.authorized !== true ||
+      p2g17.maximum_additional_attempts !== 1 ||
+      p2g17.failed_probe_id !== 13 ||
+      p2g17.icao !== "MMUN" ||
+      p2g17.expected_probe_budget_day_id !== "P2G-S1-20260930-16" ||
+      p2g17.expected_runtime_session_id !== "5c0064eb-585a-4dfb-af4c-211f3bee3e94" ||
+      p2g17.expected_metric_contract_version !== "v39-physical-flight-instance-v2" ||
+      p2g17.expected_anchor_status !== "failed" ||
+      p2g17.expected_anchor_reconciliation_status !== "UNRESOLVED" ||
+      p2g17.expected_anchor_stop_reason !== "supervisor_child_exit_recovered" ||
+      p2g17.durable_evidence_status !== "DELIVERY_GAP" ||
+      p2g17.durable_external_spend_credits !== 65 ||
+      p2g17.durable_internal_received_credits !== 60 ||
+      p2g17.durable_delivery_gap_credits !== 5 ||
+      Math.abs(p2g17.durable_delivery_completeness - completeness) > 1e-12 ||
+      p2g17.durable_duration_censored !== false ||
+      p2g17.durable_stop_reason !== "external_internal_delivery_gap" ||
+      p2g17.durable_callback_requests_seen !== 41 ||
+      p2g17.durable_callback_success_2xx !== 41 ||
+      p2g17.durable_callback_failures !== 0 ||
+      p2g17.excluded_from_final_scoring !== true ||
+      p2g17.requires_fresh_runtime_budget_auth !== true ||
+      p2g17.requires_matched_time_class !== true ||
+      p2g17.no_automatic_retry_after_recovery_attempt !== true ||
+      p2g17.outcome_metrics_not_used_to_authorize !== true ||
+      p2g17.authorization_basis !== "p2g17_delivery_gap_and_finalization_schema_failure_only" ||
+      !String(p2g17.reason ?? "").trim()
+    ) {
+      throw new Error("REFUSED_COMPACT6_P2G17_MMUN_RECOVERY_CONTRACT");
+    }
+  }
+
   const identityV2 = amendment.physical_identity_v2_remeasurement;
   if (identityV2 !== undefined) {
     const expectedOrder = ["WSSS", "OMAA", "MMUN"];
