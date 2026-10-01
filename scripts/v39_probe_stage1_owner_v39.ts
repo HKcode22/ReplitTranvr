@@ -28,6 +28,7 @@ import {
   compact6EffectiveArtifactV39,
   loadPhase2gCompact6AmendmentV39,
   type Phase2gCompact6AmendmentV39,
+  type Phase2gP2g17MmunDeliveryGapRecoveryV39,
   type Phase2gPhysicalIdentityV2RemeasurementV39,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
@@ -112,24 +113,56 @@ function assertStage1AuthCoversTargetWindow(record: AuthRecord, now = new Date()
  * bounds on a synthetic denominator of 1. This is algebraically identical to
  * count/credits ratios and never recreates the deleted provider account value.
  */
+export interface Stage1DurableReconciliationEvidenceV39 {
+  runtimeSessionId: string;
+  evidenceStatus: string;
+  externalSpendCredits: number | null;
+  internalReceivedCredits: number;
+  deliveryGapCredits: number | null;
+  deliveryCompleteness: number | null;
+  callbackRequestsSeen: number;
+  callbackSuccess2xx: number;
+  callbackFailures: number;
+  durationCensored: boolean;
+  stopReason: string | null;
+}
+
 export interface Stage1AttemptEvidence extends Stage1ProbeEvidence {
   probeId: number;
+  probeBudgetDayId: string | null;
+  runtimeSessionId: string | null;
   durationCensored: boolean;
   stopReason: string | null;
   reconciliationStatus: string | null;
+  durableReconciliation: Stage1DurableReconciliationEvidenceV39 | null;
   recordedAtUtc: string;
 }
 
-async function readStage1Evidence(preprobeHash: string): Promise<Stage1AttemptEvidence[]> {
+export async function readStage1EvidenceV39(preprobeHash: string): Promise<Stage1AttemptEvidence[]> {
   const r = await pool.query(
-    `SELECT probe_id,icao,status,rows_per_hour,credits_spent,unique_flights_per_credit,
-            tail_chain_links_per_credit,stability,confirmed_unique_lower,
-            confirmed_plus_ambiguous_upper,provider_content_safe_mode,
-            confirmed_unique_lower_per_credit,confirmed_plus_ambiguous_upper_per_credit,
-            metric_contract_version,duration_censored,stop_reason,reconciliation_status,recorded_at
-       FROM clean.adb_anchor_probe
-      WHERE stage=1 AND preprobe_artifact_sha256=$1
-      ORDER BY recorded_at ASC,probe_id ASC`,
+    `SELECT
+            p.probe_id,p.icao,p.status,p.rows_per_hour,p.credits_spent,p.unique_flights_per_credit,
+            p.tail_chain_links_per_credit,p.stability,p.confirmed_unique_lower,
+            p.confirmed_plus_ambiguous_upper,p.provider_content_safe_mode,
+            p.confirmed_unique_lower_per_credit,p.confirmed_plus_ambiguous_upper_per_credit,
+            p.metric_contract_version,p.probe_budget_day_id,p.runtime_session_id,
+            p.duration_censored,p.stop_reason,p.reconciliation_status,p.recorded_at,
+            e.runtime_session_id AS durable_runtime_session_id,
+            e.evidence_status AS durable_evidence_status,
+            e.external_spend_credits AS durable_external_spend_credits,
+            e.internal_received_credits AS durable_internal_received_credits,
+            e.delivery_gap_credits AS durable_delivery_gap_credits,
+            e.delivery_completeness AS durable_delivery_completeness,
+            e.callback_requests_seen AS durable_callback_requests_seen,
+            e.callback_success_2xx AS durable_callback_success_2xx,
+            e.callback_failures AS durable_callback_failures,
+            e.duration_censored AS durable_duration_censored,
+            e.stop_reason AS durable_stop_reason
+       FROM clean.adb_anchor_probe p
+       LEFT JOIN clean.adb_probe_reconciliation_evidence e
+         ON e.probe_id=p.probe_id
+      WHERE p.stage=1 AND p.preprobe_artifact_sha256=$1
+      ORDER BY p.recorded_at ASC,p.probe_id ASC`,
     [preprobeHash],
   );
   return r.rows.map((x: any) => {
@@ -139,6 +172,8 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1AttemptEv
     const safeRates = safe && lowerRate !== null && upperRate !== null && Number.isFinite(lowerRate) && Number.isFinite(upperRate);
     return {
       probeId: Number(x.probe_id),
+      probeBudgetDayId: x.probe_budget_day_id == null ? null : String(x.probe_budget_day_id),
+      runtimeSessionId: x.runtime_session_id == null ? null : String(x.runtime_session_id).toLowerCase(),
       icao: String(x.icao).toUpperCase(),
       status: String(x.status),
       metricContractVersion: x.metric_contract_version == null ? null : String(x.metric_contract_version),
@@ -152,6 +187,19 @@ async function readStage1Evidence(preprobeHash: string): Promise<Stage1AttemptEv
       durationCensored: x.duration_censored === true,
       stopReason: x.stop_reason == null ? null : String(x.stop_reason),
       reconciliationStatus: x.reconciliation_status == null ? null : String(x.reconciliation_status),
+      durableReconciliation: x.durable_evidence_status == null ? null : {
+        runtimeSessionId: String(x.durable_runtime_session_id).toLowerCase(),
+        evidenceStatus: String(x.durable_evidence_status),
+        externalSpendCredits: x.durable_external_spend_credits == null ? null : Number(x.durable_external_spend_credits),
+        internalReceivedCredits: Number(x.durable_internal_received_credits),
+        deliveryGapCredits: x.durable_delivery_gap_credits == null ? null : Number(x.durable_delivery_gap_credits),
+        deliveryCompleteness: x.durable_delivery_completeness == null ? null : Number(x.durable_delivery_completeness),
+        callbackRequestsSeen: Number(x.durable_callback_requests_seen),
+        callbackSuccess2xx: Number(x.durable_callback_success_2xx),
+        callbackFailures: Number(x.durable_callback_failures),
+        durationCensored: x.durable_duration_censored === true,
+        stopReason: x.durable_stop_reason == null ? null : String(x.durable_stop_reason),
+      },
       recordedAtUtc: new Date(x.recorded_at).toISOString(),
     };
   });
@@ -290,6 +338,38 @@ function exactLegacyRequirementMatchesV39(
   );
 }
 
+export function exactP2g17MmunTechnicalInvalidMatchesV39(
+  recovery: Phase2gP2g17MmunDeliveryGapRecoveryV39,
+  row: Stage1AttemptEvidence,
+): boolean {
+  const durable = row.durableReconciliation;
+  if (!durable) return false;
+  return (
+    row.probeId === recovery.failed_probe_id &&
+    row.icao.toUpperCase() === recovery.icao &&
+    row.probeBudgetDayId === recovery.expected_probe_budget_day_id &&
+    row.runtimeSessionId === recovery.expected_runtime_session_id &&
+    row.metricContractVersion === recovery.expected_metric_contract_version &&
+    row.status === recovery.expected_anchor_status &&
+    row.reconciliationStatus === recovery.expected_anchor_reconciliation_status &&
+    row.stopReason === recovery.expected_anchor_stop_reason &&
+    durable.runtimeSessionId === recovery.expected_runtime_session_id &&
+    durable.evidenceStatus === recovery.durable_evidence_status &&
+    durable.externalSpendCredits === recovery.durable_external_spend_credits &&
+    durable.internalReceivedCredits === recovery.durable_internal_received_credits &&
+    durable.deliveryGapCredits === recovery.durable_delivery_gap_credits &&
+    durable.deliveryCompleteness !== null &&
+    Math.abs(
+      durable.deliveryCompleteness - recovery.durable_delivery_completeness,
+    ) <= 1e-12 &&
+    durable.durationCensored === recovery.durable_duration_censored &&
+    durable.stopReason === recovery.durable_stop_reason &&
+    durable.callbackRequestsSeen === recovery.durable_callback_requests_seen &&
+    durable.callbackSuccess2xx === recovery.durable_callback_success_2xx &&
+    durable.callbackFailures === recovery.durable_callback_failures
+  );
+}
+
 /**
  * Prospective one-time recovery for the physical-identity contract correction.
  *
@@ -302,6 +382,7 @@ function exactLegacyRequirementMatchesV39(
 export function choosePhysicalIdentityV2RemeasurementTargetV39(
   recovery: Phase2gPhysicalIdentityV2RemeasurementV39 | undefined,
   attempts: Stage1AttemptEvidence[],
+  technicalInvalidRecovery?: Phase2gP2g17MmunDeliveryGapRecoveryV39,
 ): "WSSS" | "OMAA" | "MMUN" | null {
   if (!recovery?.authorized) return null;
 
@@ -333,25 +414,51 @@ export function choosePhysicalIdentityV2RemeasurementTargetV39(
     );
   }
 
+  let technicalInvalidProbeId: number | null = null;
+  if (technicalInvalidRecovery?.authorized === true) {
+    const matches = attempts.filter((row) =>
+      exactP2g17MmunTechnicalInvalidMatchesV39(
+        technicalInvalidRecovery,
+        row,
+      ),
+    );
+    if (matches.length !== 1) {
+      throw new Error(
+        `REFUSED_P2G17_MMUN_RECOVERY_EVIDENCE_MISMATCH:matches=${matches.length}`,
+      );
+    }
+    technicalInvalidProbeId = technicalInvalidRecovery.failed_probe_id;
+  }
+
+  const consumingAttempts = new Map<string, Stage1AttemptEvidence[]>();
   for (const [icao, rows] of currentAttempts) {
+    const consuming = rows.filter(
+      (row) =>
+        !(
+          technicalInvalidProbeId !== null &&
+          icao === "MMUN" &&
+          row.probeId === technicalInvalidProbeId
+        ),
+    );
+    consumingAttempts.set(icao, consuming);
     if (
-      rows.length >
+      consuming.length >
       recovery.maximum_additional_attempts_per_candidate
     ) {
       throw new Error(
-        `REFUSED_IDENTITY_V2_RECOVERY_RETRY_LIMIT:${icao}:attempts=${rows.length}`,
+        `REFUSED_IDENTITY_V2_RECOVERY_RETRY_LIMIT:${icao}:attempts=${consuming.length}`,
       );
     }
   }
 
   for (let index = 0; index < recovery.ordered_icaos.length; index += 1) {
     const icao = recovery.ordered_icaos[index];
-    const rows = currentAttempts.get(icao) ?? [];
+    const rows = consumingAttempts.get(icao) ?? [];
 
     if (rows.length === 0) {
       const outOfOrder = recovery.ordered_icaos
         .slice(index + 1)
-        .find((later) => (currentAttempts.get(later) ?? []).length > 0);
+        .find((later) => (consumingAttempts.get(later) ?? []).length > 0);
       if (outOfOrder) {
         throw new Error(
           `REFUSED_IDENTITY_V2_RECOVERY_OUT_OF_ORDER:missing=${icao}:later=${outOfOrder}`,
@@ -441,6 +548,7 @@ export function chooseNextStage1TargetV39(
     const target = choosePhysicalIdentityV2RemeasurementTargetV39(
       identityRecovery,
       evidence,
+      amendment?.p2g17_mmun_delivery_gap_recovery_rerun,
     );
     if (target) return { icao: target, replacement: false };
   } else if (
@@ -510,7 +618,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
   }
   const approved = verifiedStage1Auth(argv, binding);
   assertStage1AuthCoversTargetWindow(approved.record);
-  const evidence = await readStage1Evidence(artifacts.preprobeSha256);
+  const evidence = await readStage1EvidenceV39(artifacts.preprobeSha256);
   const compact6 = artifacts.runtime.stage1AmendmentSha256
     ? loadPhase2gCompact6AmendmentV39({
         expectedSha256: artifacts.runtime.stage1AmendmentSha256,
