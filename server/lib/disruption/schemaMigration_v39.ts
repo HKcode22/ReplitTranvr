@@ -128,6 +128,20 @@ export function planPendingMigrationsV39(
   return pending;
 }
 
+export function executableSqlFromMigrationFileV39(rawSql: string): string {
+  const out: string[] = [];
+  for (const line of rawSql.split(/\r?\n/)) {
+    if (/^\\(?:restrict|unrestrict)\b/.test(line)) continue;
+    if (/^\\/.test(line)) {
+      throw new Error(
+        `UNSUPPORTED_PSQL_META_COMMAND: ${line.split(/\s+/)[0]}`,
+      );
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
 async function readSqlDirectoryV39(
   dir: string,
   expectedKind: MigrationKindV39,
@@ -149,14 +163,14 @@ async function readSqlDirectoryV39(
       );
     }
     const fullPath = path.join(dir, file);
-    const sql = await fs.readFile(fullPath, "utf8");
+    const rawSql = await fs.readFile(fullPath, "utf8");
     out.push({
       file,
       fullPath,
       version: parsed.version,
       kind: parsed.kind,
-      checksumSha256: sha256TextV39(sql),
-      sql,
+      checksumSha256: sha256TextV39(rawSql),
+      sql: executableSqlFromMigrationFileV39(rawSql),
     });
   }
   return out;
