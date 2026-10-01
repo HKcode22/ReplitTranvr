@@ -6,7 +6,7 @@ const source = (path: string) => readFileSync(join(process.cwd(), path), "utf8")
 
 describe("V3.9 raw-item canonical ID retention", () => {
   it("protects the canonical short-ID copy with the one-way raw-item expiry guard", () => {
-    const migration = source("migrations/0050_provider_content_scope_expiry.sql");
+    const migration = source("migrations/baseline/B0062__v39_schema_baseline_20261001.sql");
     expect(migration).toContain("NEW.canonical_flight_instance_id IS NOT NULL");
   });
 
