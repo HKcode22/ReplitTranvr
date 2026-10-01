@@ -15,6 +15,11 @@ describe("V3.9 generated baseline static validator", () => {
     expect(src).toContain("managed_schema_reference");
   });
 
+  it("rejects a baseline that recreates the standard public schema", () => {
+    expect(src).toContain("baseline_recreates_public_schema");
+    expect(src).toContain("public_schema_assumption_missing");
+  });
+
   it("rejects ownership, privilege, database, and extension side effects", () => {
     for (const token of [
       "owner_statement", "grant_statement", "revoke_statement",
