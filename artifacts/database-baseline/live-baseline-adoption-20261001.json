@@ -1,0 +1,34 @@
+{
+  "schema": "v39.schema-baseline-live-adoption.v1",
+  "source_git_sha": "d0739c63a49b432fb9796ff78e2501e5186a0df6",
+  "baseline_sha256": "d23d08926c9622276d9421b41362635a6a0b03d97f5b87e481f73f488185c314",
+  "verification_evidence_sha256": "b2690b2193c54d0a4a15858abdabd59382daf95c814706bce4bd8c4bf38ac768",
+  "installation_mode": "ADOPTED",
+  "baseline_sql_executed_on_live": false,
+  "allowed_database_mutation": [
+    "CREATE SCHEMA v39_meta",
+    "CREATE TABLE v39_meta.schema_migration_history",
+    "INSERT BASELINE 62 ADOPTED history row"
+  ],
+  "provider_calls": 0,
+  "pre_adoption_inventory_sha256": "5df153855cd3784c66b161d05da75fd8e4392b0b0d8b2f91d40a467da07155a5",
+  "post_adoption_inventory_sha256": "3ad74b8e324f08e40dc498f6a7fbcf8fa14242d10efe063efea4ee1878e74c39",
+  "history_row": {
+    "version": 62,
+    "kind": "BASELINE",
+    "file": "B0062__v39_schema_baseline_20261001.sql",
+    "checksum_sha256": "d23d08926c9622276d9421b41362635a6a0b03d97f5b87e481f73f488185c314",
+    "source_sha": "d0739c63a49b432fb9796ff78e2501e5186a0df6",
+    "execution_id": "v39-baseline-adopt-20261001025444529-b2e6d5ab",
+    "installation_mode": "ADOPTED",
+    "evidence_sha256": "b2690b2193c54d0a4a15858abdabd59382daf95c814706bce4bd8c4bf38ac768",
+    "applied_at_utc": "2026-10-01T02:54:45.151067+00:00"
+  },
+  "verification": {
+    "pre_adoption_exact_schema_match": "PASS",
+    "pre_adoption_runner_guard": "PASS",
+    "history_row": "PASS",
+    "post_adoption_runner_noop": "PASS",
+    "post_adoption_exact_schema_match": "PASS"
+  }
+}
