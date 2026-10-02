@@ -6,6 +6,7 @@ import { loadFrozenProbeArtifact } from "../server/lib/disruption/anchorPromotio
 import {
   loadPhase2gCompact6AmendmentV39,
   PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH,
+  PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
   chooseEarlyPilotScopeTargetV39,
@@ -19,10 +20,7 @@ const PREPROBE_PATH = join(
 );
 const PREPROBE_SHA =
   "b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870";
-const SCOPE_PATH = join(
-  process.cwd(),
-  PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH,
-);
+
 const sha256 = (raw: string) =>
   createHash("sha256").update(raw, "utf8").digest("hex");
 
@@ -76,17 +74,18 @@ function baseline(): Stage1AttemptEvidence[] {
   ];
 }
 
-function loadScope() {
+function loadScope(artifactPath: string) {
   const preprobe = loadFrozenProbeArtifact(
     PREPROBE_PATH,
     PREPROBE_SHA,
   );
-  const raw = readFileSync(SCOPE_PATH, "utf8");
+  const fullPath = join(process.cwd(), artifactPath);
+  const raw = readFileSync(fullPath, "utf8");
   const loaded = loadPhase2gCompact6AmendmentV39({
     expectedSha256: sha256(raw),
     sourcePreprobeFileSha256: PREPROBE_SHA,
     preprobe: preprobe.artifact,
-    path: SCOPE_PATH,
+    path: fullPath,
   });
   if (!loaded.amendment.early_pilot_scope_reduction) {
     throw new Error("scope reduction missing");
@@ -94,77 +93,128 @@ function loadScope() {
   return loaded.amendment.early_pilot_scope_reduction;
 }
 
-describe("Phase2G early-pilot scope reduction", () => {
-  it("is hash-bound and freezes YSSY then SKBO while deferring LKPR", () => {
-    const scope = loadScope();
-    expect(scope.authorized).toBe(true);
-    expect(scope.ordered_new_targets).toEqual(["YSSY", "SKBO"]);
-    expect(scope.deferred_icaos).toEqual(["LKPR"]);
-    expect(scope.phase6_anchor_pool_if_both_valid).toEqual([
-      "WSSS",
-      "OMAA",
+describe("Phase2G early-pilot scope correction", () => {
+  it("retains immutable v1 YSSY-first evidence readability", () => {
+    const scope = loadScope(
+      PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH,
+    );
+
+    expect(scope.scope_version).toBe(
+      "v39-phase2g-early-pilot-scope-reduction-1",
+    );
+    expect(scope.ordered_new_targets).toEqual([
       "YSSY",
       "SKBO",
     ]);
-    expect(scope.outcome_informed_scope_change).toBe(true);
-    expect(scope.target_selection_uses_preoutcome_frozen_attributes).toBe(
-      true,
+  });
+
+  it("freezes SKBO first and explicitly blocks YSSY in v2", () => {
+    const scope = loadScope(
+      PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH,
     );
-    expect(scope.no_automatic_retry_after_new_target).toBe(true);
+
+    expect(scope.scope_version).toBe(
+      "v39-phase2g-early-pilot-scope-reduction-2",
+    );
+    expect(scope.ordered_new_targets).toEqual([
+      "SKBO",
+      "YSSY",
+    ]);
+
+    if (
+      scope.scope_version !==
+      "v39-phase2g-early-pilot-scope-reduction-2"
+    ) {
+      throw new Error("expected v2 scope");
+    }
+
+    expect(scope.target_execution_authorized).toEqual({
+      SKBO: true,
+      YSSY: false,
+    });
+    expect(
+      scope.yssy_local_time_protocol_required,
+    ).toBe(true);
   });
 
-  it("selects YSSY from the exact completed WSSS/OMAA/MMUN baseline", () => {
-    const scope = loadScope();
-    expect(
-      chooseEarlyPilotScopeTargetV39(scope, baseline()),
-    ).toBe("YSSY");
-  });
+  it("selects SKBO from the exact completed baseline", () => {
+    const scope = loadScope(
+      PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH,
+    );
 
-  it("selects SKBO after one scientifically valid YSSY attempt", () => {
-    const scope = loadScope();
     expect(
-      chooseEarlyPilotScopeTargetV39(scope, [
-        ...baseline(),
-        validAttempt(15, "YSSY", 80),
-      ]),
+      chooseEarlyPilotScopeTargetV39(
+        scope,
+        baseline(),
+      ),
     ).toBe("SKBO");
   });
 
-  it("closes the reduced Stage-1 sequence after valid YSSY and SKBO", () => {
-    const scope = loadScope();
-    expect(
-      chooseEarlyPilotScopeTargetV39(scope, [
-        ...baseline(),
-        validAttempt(15, "YSSY", 80),
-        validAttempt(16, "SKBO", 70),
-      ]),
-    ).toBeNull();
+  it("refuses YSSY after valid SKBO until a new protocol is frozen", () => {
+    const scope = loadScope(
+      PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH,
+    );
+
+    expect(() =>
+      chooseEarlyPilotScopeTargetV39(
+        scope,
+        [
+          ...baseline(),
+          validAttempt(15, "SKBO", 80),
+        ],
+      ),
+    ).toThrow(
+      "REFUSED_EARLY_PILOT_TARGET_EXECUTION_NOT_AUTHORIZED:YSSY",
+    );
   });
 
-  it("does not automatically retry or skip a failed YSSY attempt", () => {
-    const scope = loadScope();
-    const failed = validAttempt(15, "YSSY", 0);
+  it("does not automatically retry or skip failed SKBO", () => {
+    const scope = loadScope(
+      PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH,
+    );
+    const failed = validAttempt(
+      15,
+      "SKBO",
+      0,
+    );
     failed.status = "failed";
     failed.durationCensored = true;
     failed.reconciliationStatus = "UNRESOLVED";
-    failed.stopReason = "supervisor_child_exit_recovered";
+    failed.stopReason =
+      "supervisor_child_exit_recovered";
     failed.durableReconciliation = null;
 
     expect(() =>
-      chooseEarlyPilotScopeTargetV39(scope, [
-        ...baseline(),
-        failed,
-      ]),
-    ).toThrow("REFUSED_EARLY_PILOT_TARGET_REQUIRES_MANUAL_REVIEW:YSSY");
+      chooseEarlyPilotScopeTargetV39(
+        scope,
+        [
+          ...baseline(),
+          failed,
+        ],
+      ),
+    ).toThrow(
+      "REFUSED_EARLY_PILOT_TARGET_REQUIRES_MANUAL_REVIEW:SKBO",
+    );
   });
 
-  it("fails closed if the frozen baseline capacity classification changes", () => {
-    const scope = loadScope();
+  it("fails closed if baseline MMUN capacity classification changes", () => {
+    const scope = loadScope(
+      PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH,
+    );
     const wrong = baseline();
-    wrong[2] = validAttempt(14, "MMUN", 61);
+    wrong[2] = validAttempt(
+      14,
+      "MMUN",
+      61,
+    );
 
     expect(() =>
-      chooseEarlyPilotScopeTargetV39(scope, wrong),
-    ).toThrow("REFUSED_EARLY_PILOT_BASELINE_CAPACITY_MISMATCH:MMUN");
+      chooseEarlyPilotScopeTargetV39(
+        scope,
+        wrong,
+      ),
+    ).toThrow(
+      "REFUSED_EARLY_PILOT_BASELINE_CAPACITY_MISMATCH:MMUN",
+    );
   });
 });
