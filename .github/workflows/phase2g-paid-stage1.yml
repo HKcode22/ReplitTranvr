@@ -118,6 +118,17 @@ jobs:
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
       AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
     steps:
+      - name: Refuse stale execution head
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.expected_head }}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::expected_head must equal current workflow-dispatch main SHA"
+            echo "expected_head=${{ inputs.expected_head }}"
+            echo "workflow_sha=${GITHUB_SHA}"
+            exit 2
+          fi
+
       - name: Checkout exact authorized source
         uses: actions/checkout@v4
         with:
@@ -267,6 +278,17 @@ jobs:
       AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
       V39_DEFER_PROVIDER_CONTENT_CLEANUP: '1'
     steps:
+      - name: Refuse stale execution head
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.expected_head }}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::expected_head must equal current workflow-dispatch main SHA"
+            echo "expected_head=${{ inputs.expected_head }}"
+            echo "workflow_sha=${GITHUB_SHA}"
+            exit 2
+          fi
+
       - name: Checkout exact authorized source
         uses: actions/checkout@v4
         with:
@@ -335,6 +357,17 @@ jobs:
       AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
       V39_DEFER_PROVIDER_CONTENT_CLEANUP: '1'
     steps:
+      - name: Refuse stale execution head
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.expected_head }}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::expected_head must equal current workflow-dispatch main SHA"
+            echo "expected_head=${{ inputs.expected_head }}"
+            echo "workflow_sha=${GITHUB_SHA}"
+            exit 2
+          fi
+
       - name: Checkout exact authorized source
         uses: actions/checkout@v4
         with:
