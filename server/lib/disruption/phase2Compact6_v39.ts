@@ -21,6 +21,8 @@ export const PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-p2g17-mmun-delivery-gap-recovery-freeze-20261001.json";
 export const PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-early-pilot-scope-reduction-freeze-20261002.json";
+export const PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH =
+  "artifacts/phase2g-early-pilot-scope-operating-hours-correction-freeze-20261002.json";
 
 export type Phase2gIdentityV2RecoveryIcaoV39 =
   | "WSSS"
@@ -78,7 +80,9 @@ export interface Phase2gPhysicalIdentityV2RemeasurementV39 {
 
 export interface Phase2gEarlyPilotScopeReductionV39 {
   authorized: true;
-  scope_version: "v39-phase2g-early-pilot-scope-reduction-1";
+  scope_version:
+    | "v39-phase2g-early-pilot-scope-reduction-1"
+    | "v39-phase2g-early-pilot-scope-reduction-2";
   original_compact6_question_superseded_for_early_pilot: true;
   original_history_immutable: true;
   outcome_informed_scope_change: true;
@@ -98,9 +102,19 @@ export interface Phase2gEarlyPilotScopeReductionV39 {
     expected_stop_reason: null;
     expected_capacity_gate: "pass" | "fail";
   }>;
-  ordered_new_targets: ["YSSY", "SKBO"];
+  ordered_new_targets:
+    | ["YSSY", "SKBO"]
+    | ["SKBO", "YSSY"];
   deferred_icaos: ["LKPR"];
   phase6_anchor_pool_if_both_valid: ["WSSS", "OMAA", "YSSY", "SKBO"];
+  target_execution_authorized?: {
+    SKBO: true;
+    YSSY: false;
+  };
+  yssy_local_time_protocol_required?: true;
+  yssy_matched_utc_window_local_time?: "21:00-23:00 Australia/Sydney on 2026-10-02";
+  yssy_curfew_local_time?: "23:00-06:00 Australia/Sydney";
+  yssy_execution_block_reason?: string;
   phase6_mid_regional_region_balancing_required: true;
   claims_limited_to_realized_frame: true;
   frozen_preoutcome_target_attributes: {
@@ -279,7 +293,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
   const candidatePaths = input.path
     ? [input.path]
-    : [PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
+    : [PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH, PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
   let raw: string | null = null;
   let actual: string | null = null;
   for (const candidatePath of candidatePaths) {
@@ -557,7 +571,10 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     ] as const;
     if (
       scope.authorized !== true ||
-      scope.scope_version !== "v39-phase2g-early-pilot-scope-reduction-1" ||
+      ![
+        "v39-phase2g-early-pilot-scope-reduction-1",
+        "v39-phase2g-early-pilot-scope-reduction-2",
+      ].includes(scope.scope_version) ||
       scope.original_compact6_question_superseded_for_early_pilot !== true ||
       scope.original_history_immutable !== true ||
       scope.outcome_informed_scope_change !== true ||
@@ -573,8 +590,6 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       scope.baseline_completed_probes.length !== expectedBaseline.length ||
       !Array.isArray(scope.ordered_new_targets) ||
       scope.ordered_new_targets.length !== 2 ||
-      scope.ordered_new_targets[0] !== "YSSY" ||
-      scope.ordered_new_targets[1] !== "SKBO" ||
       !Array.isArray(scope.deferred_icaos) ||
       scope.deferred_icaos.length !== 1 ||
       scope.deferred_icaos[0] !== "LKPR" ||
@@ -584,6 +599,28 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     ) {
       throw new Error("REFUSED_COMPACT6_EARLY_PILOT_SCOPE_CONTRACT");
     }
+
+    if (scope.scope_version === "v39-phase2g-early-pilot-scope-reduction-1") {
+      if (scope.ordered_new_targets.join(",") !== "YSSY,SKBO") {
+        throw new Error("REFUSED_COMPACT6_EARLY_PILOT_V1_ORDER");
+      }
+    } else {
+      if (
+        scope.ordered_new_targets.join(",") !== "SKBO,YSSY" ||
+        scope.target_execution_authorized?.SKBO !== true ||
+        scope.target_execution_authorized?.YSSY !== false ||
+        scope.yssy_local_time_protocol_required !== true ||
+        scope.yssy_matched_utc_window_local_time !==
+          "21:00-23:00 Australia/Sydney on 2026-10-02" ||
+        scope.yssy_curfew_local_time !== "23:00-06:00 Australia/Sydney" ||
+        !String(scope.yssy_execution_block_reason ?? "").trim()
+      ) {
+        throw new Error(
+          "REFUSED_COMPACT6_EARLY_PILOT_V2_OPERATING_HOURS_CONTRACT",
+        );
+      }
+    }
+
     for (let index = 0; index < expectedBaseline.length; index += 1) {
       const actual = scope.baseline_completed_probes[index];
       const expected = expectedBaseline[index];
@@ -591,7 +628,8 @@ export function loadPhase2gCompact6AmendmentV39(input: {
         actual?.icao !== expected.icao ||
         actual?.probe_id !== expected.probeId ||
         actual?.expected_status !== "completed" ||
-        actual?.expected_metric_contract_version !== "v39-physical-flight-instance-v2" ||
+        actual?.expected_metric_contract_version !==
+          "v39-physical-flight-instance-v2" ||
         actual?.expected_reconciliation_status !== "MATCH" ||
         actual?.expected_duration_censored !== false ||
         actual?.expected_stop_reason !== null ||
@@ -600,17 +638,27 @@ export function loadPhase2gCompact6AmendmentV39(input: {
         throw new Error("REFUSED_COMPACT6_EARLY_PILOT_BASELINE_CONTRACT");
       }
     }
+
     const attrs = scope.frozen_preoutcome_target_attributes;
     if (
       attrs?.YSSY?.region !== "Oceania" ||
       attrs?.YSSY?.traffic_metric_value !== 141036 ||
       attrs?.YSSY?.route_degree !== 92 ||
+      attrs?.YSSY?.effective_carriers !== 6.271787234431572 ||
+      attrs?.YSSY?.international_share !== 0.2854093990186903 ||
+      attrs?.YSSY?.domestic_share !== 0.7145906009813097 ||
       attrs?.SKBO?.region !== "South America" ||
       attrs?.SKBO?.traffic_metric_value !== 91600 ||
       attrs?.SKBO?.route_degree !== 95 ||
+      attrs?.SKBO?.effective_carriers !== 4.37275360257945 ||
+      attrs?.SKBO?.international_share !== 0.42748908296943233 ||
+      attrs?.SKBO?.domestic_share !== 0.5725109170305677 ||
       attrs?.LKPR?.region !== "Europe" ||
       attrs?.LKPR?.traffic_metric_value !== 67100 ||
-      attrs?.LKPR?.route_degree !== 170
+      attrs?.LKPR?.route_degree !== 170 ||
+      attrs?.LKPR?.effective_carriers !== 18.068460919791526 ||
+      attrs?.LKPR?.international_share !== 0.9707302533532042 ||
+      attrs?.LKPR?.domestic_share !== 0.029269746646795824
     ) {
       throw new Error("REFUSED_COMPACT6_EARLY_PILOT_FROZEN_ATTRIBUTE_CONTRACT");
     }
