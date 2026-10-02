@@ -349,6 +349,7 @@ Safety:
   - SKBO cannot be launched until this corrected amendment is on main, the exact main commit is deployed/restarted on the managed Replit runtime, callback binding passes, a fresh runtime and AUTH are approved, and the paid preflight returns PASS_READY_FOR_PAID_STAGE1.
   - YSSY remains explicitly blocked until a separately frozen local-operating-hours-aware protocol exists.
   - No automatic retry is authorized for SKBO by the corrected early-pilot scope amendment.
+  - Do not reuse the superseded YSSY AUTH-20261002-P2G19 or budget P2G-S1-20261002-18.
   - Do not reuse MMUN runtime, budget, or AUTH.
 EOF
     ;;
