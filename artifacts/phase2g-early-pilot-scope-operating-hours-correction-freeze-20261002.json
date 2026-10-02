@@ -1,0 +1,304 @@
+{
+  "schema_version": "v39-phase2g-compact6-amendment-1",
+  "status": "READY_FROZEN_COMPACT6_AMENDMENT",
+  "frozen_at_utc": "2026-10-02T09:10:00.000Z",
+  "source_preprobe_file_sha256": "b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870",
+  "source_stage1_candidate_count": 12,
+  "effective_stage1_candidate_count": 6,
+  "candidate_icaos": [
+    "WSSS",
+    "OMAA",
+    "MMUN",
+    "LKPR",
+    "SKBO",
+    "YSSY"
+  ],
+  "candidate_regions": {
+    "WSSS": "Asia-Pacific",
+    "OMAA": "Gulf/Africa",
+    "MMUN": "North America",
+    "LKPR": "Europe",
+    "SKBO": "South America",
+    "YSSY": "Oceania"
+  },
+  "selection_rule": "one_preoutcome_frozen_shortlist_candidate_per_macro_region_preserving_WSSS_OMAA_references",
+  "p2g06_historical_probe_id": 4,
+  "p2g06_historical_status": "failed",
+  "p2g06_historical_reconciliation_status": "MISMATCH",
+  "p2g06_historical_stop_reason": "external_internal_credit_mismatch",
+  "p2g06_reconstructed_external_credits": 220,
+  "p2g06_reconstructed_internal_credits": 219,
+  "p2g06_reconstructed_delivery_gap_credits": 1,
+  "p2g06_excluded_from_final_scoring": true,
+  "wsss_postfix_validation_rerun": {
+    "authorized": true,
+    "maximum_additional_attempts": 1,
+    "reason": "P2G06 exposed a previously uninstrumented provider-SEND versus received-callback reconciliation gap; validate the corrected prospective evidence path without retroactively reclassifying P2G06 or calibrating an acceptance tolerance from it."
+  },
+  "p2g07_provider502_recovery_rerun": {
+    "authorized": true,
+    "maximum_additional_attempts": 1,
+    "failed_probe_id": 5,
+    "failed_status": "failed",
+    "failed_reconciliation_status": "UNRESOLVED",
+    "failed_stop_reason": "subscription_delete_failed",
+    "excluded_from_final_scoring": true,
+    "requires_fresh_runtime_budget_auth": true,
+    "authorization_basis": "provider_502_and_orphan_subscription_safety_failure_only",
+    "outcome_metrics_not_used_to_authorize": true,
+    "reason": "P2G07 was terminated by provider HTTP 502 failures during the authoritative balance read and exact subscription deletion path. The provider subscription remained active after the child exited until an exact-ID manual deletion was verified. This is an infrastructure/provider-safety failure, not a scientific result. One recovery attempt is prospectively authorized with unchanged WSSS target duration, frozen time class, exact reconciliation rule, and credit cap; P2G07 remains failed and excluded from scoring."
+  },
+  "prospective_reconciliation_policy": {
+    "external_settled_spend_is_authoritative_denominator": true,
+    "delivery_completeness_floor": 1,
+    "nonzero_delivery_gap_is_terminal_not_scoreable": true,
+    "internal_greater_than_external_is_hard_mismatch": true,
+    "cost_item_disagreement_is_hard_mismatch": true,
+    "unresolved_settlement_is_hard_failure": true,
+    "applies_only_to_attempts_started_after_this_freeze": true
+  },
+  "stage2_policy": {
+    "mode": "conditional_confirmation_only",
+    "automatic_five_four_hour_confirmations": false,
+    "triggers": [
+      "fewer_than_five_valid_compact_stage1_candidates",
+      "candidate_fails_60_rows_per_hour_capacity_gate",
+      "final_five_membership_not_invariant_under_recorded_identity_bounds",
+      "both_WSSS_and_OMAA_invalid_as_yield_reference",
+      "fifth_vs_sixth_membership_not_robust"
+    ],
+    "result_label_without_triggered_stage2": "compact Stage-1-selected anchor pool"
+  },
+  "anti_bias": {
+    "candidate_subset_chosen_from_preoutcome_frozen_shortlist": true,
+    "no_retroactive_P2G06_pass": true,
+    "no_unbounded_WSSS_retry": true,
+    "no_p2g06_calibrated_reconciliation_tolerance": true
+  },
+  "p2g08_balance502_recovery_rerun": {
+    "authorized": true,
+    "maximum_additional_attempts": 1,
+    "failed_probe_id": 6,
+    "failed_status": "failed",
+    "failed_duration_censored": true,
+    "failed_reconciliation_status": "MATCH",
+    "failed_stop_reason": "balance_read_failed_after_retries",
+    "excluded_from_final_scoring": true,
+    "requires_fresh_runtime_budget_auth": true,
+    "requires_balance_stability_canary": true,
+    "minimum_consecutive_balance_reads": 3,
+    "no_further_automatic_wsss_retry": true,
+    "outcome_metrics_not_used_to_authorize": true,
+    "reason": "P2G08 was censored by repeated AeroDataBox balance-control-plane HTTP 502 responses before the 120-minute target. Provider subscription cleanup completed, final accounting reconciled exactly, and no scientific/yield outcome is used to justify this retry. One final same-day recovery is permitted only on the post-P2G08 code that decouples the 5-second local watchdog from 60-second provider balance polling, fails every censored window closed, and passes a three-read pre-launch balance stability canary."
+  },
+  "p2g09_hostreset_recovery_rerun": {
+    "authorized": true,
+    "maximum_additional_attempts": 1,
+    "failed_probe_id": 7,
+    "failed_status": "failed",
+    "failed_duration_censored": true,
+    "failed_reconciliation_status": "UNRESOLVED",
+    "failed_stop_reason": "supervisor_child_exit_recovered",
+    "excluded_from_final_scoring": true,
+    "requires_fresh_runtime_budget_auth": true,
+    "requires_owner_executor": "github-actions",
+    "requires_live_callback_verification": true,
+    "requires_deferred_cleanup_state_machine": true,
+    "requires_zero_active_billable_at_launch": true,
+    "no_further_automatic_wsss_retry": true,
+    "outcome_metrics_not_used_to_authorize": true,
+    "authorization_basis": "replit_development_runtime_host_reset_only",
+    "reason": "P2G09 was healthy and collecting callbacks before the Replit Development Sandbox/process environment was replaced, killing the Stage-1 supervisor and child while the external provider subscription and callback path remained active. The attempt was recovered fail-closed, exact subscription deletion was verified, probe 7 was adjudicated failed/censored/UNRESOLVED, its budget was closed, and its metrics are excluded from scoring. One new infrastructure-recovery attempt is prospectively authorized only after the paid lifecycle owner is moved to GitHub Actions, the existing travnr.com prepaid callback route passes a zero-credit end-to-end verification, the deferred-cleanup settling state machine is installed/tested, and a fresh runtime, budget, and AUTH are frozen. WSSS outcome metrics are not used to justify this retry."
+  },
+  "p2g10_secret_mismatch_recovery_rerun": {
+    "authorized": true,
+    "maximum_additional_attempts": 1,
+    "failed_probe_id": 8,
+    "failed_status": "failed",
+    "failed_duration_censored": true,
+    "failed_reconciliation_status": "UNRESOLVED",
+    "failed_stop_reason": "supervisor_child_exit_recovered",
+    "excluded_from_final_scoring": true,
+    "requires_fresh_runtime_budget_auth": true,
+    "requires_owner_executor": "github-actions",
+    "requires_live_callback_verification": true,
+    "requires_cross_environment_webhook_secret_binding": true,
+    "requires_owner_secret_recheck": true,
+    "requires_zero_active_billable_at_launch": true,
+    "no_further_automatic_wsss_retry": true,
+    "outcome_metrics_not_used_to_authorize": true,
+    "authorization_basis": "github_replit_webhook_secret_mismatch_only",
+    "reason": "P2G10 created the intended WSSS credit-based subscription, but the GitHub Actions webhook secret differed from the live Replit receiver secret by operator configuration error. The provider callback host and session binding were correct, provider credits were consumed, and the Replit receiver accepted zero callbacks. Exact provider deletion and runtime cleanup were verified, probe 8 remains failed/censored/UNRESOLVED and excluded from scoring. One Thursday infrastructure-recovery attempt is prospectively permitted only with a fresh runtime, budget and AUTH, exact GitHub/Replit webhook-secret and runtime-database bindings proven by a zero-credit callback-binding workflow, immediate owner-side runtime-health/database/secret rechecks before provider creation, URL-safe webhook-secret callback construction, the existing GitHub-owned lifecycle, live callback verification, zero active billable subscriptions, and a fail-fast watchdog for callback persistence failures or persistent provider spend with zero observed callback requests. No P2G10 outcome metric is used to justify the retry.",
+    "requires_cross_environment_runtime_db_binding": true,
+    "requires_owner_runtime_health_recheck": true,
+    "requires_owner_runtime_db_recheck": true,
+    "requires_zero_credit_callback_binding_workflow": true,
+    "requires_zero_callback_spend_fail_fast_watchdog": true,
+    "requires_url_encoded_webhook_secret_path": true
+  },
+  "freeze_revision": "early-pilot-operating-hours-correction-skbo-first-20261002",
+  "physical_identity_v2_remeasurement": {
+    "authorized": true,
+    "current_metric_contract": "v39-physical-flight-instance-v2",
+    "maximum_additional_attempts_per_candidate": 1,
+    "ordered_icaos": [
+      "WSSS",
+      "OMAA",
+      "MMUN"
+    ],
+    "legacy_probe_requirements": [
+      {
+        "icao": "WSSS",
+        "probe_id": 9,
+        "expected_status": "completed",
+        "expected_duration_censored": false,
+        "expected_reconciliation_status": "MATCH",
+        "expected_metric_contract_version": null
+      },
+      {
+        "icao": "OMAA",
+        "probe_id": 2,
+        "expected_status": "completed",
+        "expected_duration_censored": false,
+        "expected_reconciliation_status": "MATCH",
+        "expected_metric_contract_version": null
+      },
+      {
+        "icao": "MMUN",
+        "probe_id": 10,
+        "expected_status": "completed",
+        "expected_duration_censored": false,
+        "expected_reconciliation_status": "MATCH",
+        "expected_metric_contract_version": "v39-physical-flight-instance-v1"
+      }
+    ],
+    "exclude_legacy_from_v2_promotion": true,
+    "requires_fresh_runtime_budget_auth": true,
+    "outcome_metrics_not_used_to_authorize": true,
+    "reason": "Prospective contract-correction remeasurement after P2G13 exposed a prepaid physical-flight identity parity defect and legacy WSSS/OMAA metrics were found non-comparable to the corrected physical-flight contract under retained V3.9 section 9.2 normalization."
+  },
+  "p2g17_mmun_delivery_gap_recovery_rerun": {
+    "authorized": true,
+    "maximum_additional_attempts": 1,
+    "failed_probe_id": 13,
+    "icao": "MMUN",
+    "expected_probe_budget_day_id": "P2G-S1-20260930-16",
+    "expected_runtime_session_id": "5c0064eb-585a-4dfb-af4c-211f3bee3e94",
+    "expected_metric_contract_version": "v39-physical-flight-instance-v2",
+    "expected_anchor_status": "failed",
+    "expected_anchor_reconciliation_status": "UNRESOLVED",
+    "expected_anchor_stop_reason": "supervisor_child_exit_recovered",
+    "durable_evidence_status": "DELIVERY_GAP",
+    "durable_external_spend_credits": 65,
+    "durable_internal_received_credits": 60,
+    "durable_delivery_gap_credits": 5,
+    "durable_delivery_completeness": 0.9230769230769231,
+    "durable_duration_censored": false,
+    "durable_stop_reason": "external_internal_delivery_gap",
+    "durable_callback_requests_seen": 41,
+    "durable_callback_success_2xx": 41,
+    "durable_callback_failures": 0,
+    "excluded_from_final_scoring": true,
+    "requires_fresh_runtime_budget_auth": true,
+    "requires_matched_time_class": true,
+    "no_automatic_retry_after_recovery_attempt": true,
+    "outcome_metrics_not_used_to_authorize": true,
+    "authorization_basis": "p2g17_delivery_gap_and_finalization_schema_failure_only",
+    "reason": "P2G17 MMUN-v2 completed the intended two-hour collection window and retained scientifically healthy identity-v2 observations, but authoritative provider settlement was 65 Alert credits while received callback accounting was 60, producing a nonzero five-credit delivery gap under the prospectively frozen exact-reconciliation rule. The durable reconciliation evidence records DELIVERY_GAP with full duration and 41/41 successful callback requests. A separate schema-finalization defect then caused the anchor row to be supervisor-recovered as failed/UNRESOLVED. P2G17 remains immutable, technically invalid, excluded from scoring, and its outcome metrics are not used to justify recovery. Exactly one matched-time MMUN-v2 recovery attempt may be authorized only with a fresh runtime, budget day and AUTH after exact cleanup/adjudication; the recovery attempt consumes this authorization regardless of scientific outcome, and no automatic subsequent retry is permitted."
+  },
+  "early_pilot_scope_reduction": {
+    "authorized": true,
+    "scope_version": "v39-phase2g-early-pilot-scope-reduction-2",
+    "original_compact6_question_superseded_for_early_pilot": true,
+    "original_history_immutable": true,
+    "outcome_informed_scope_change": true,
+    "target_selection_uses_preoutcome_frozen_attributes": true,
+    "requires_fresh_runtime_budget_auth_per_target": true,
+    "no_automatic_retry_after_new_target": true,
+    "original_stage2_auto_requirement_retired_for_early_pilot": true,
+    "phase2g_complete_after_valid_new_targets": true,
+    "capacity_gate_rows_per_hour": 60,
+    "baseline_completed_probes": [
+      {
+        "icao": "WSSS",
+        "probe_id": 11,
+        "expected_status": "completed",
+        "expected_metric_contract_version": "v39-physical-flight-instance-v2",
+        "expected_reconciliation_status": "MATCH",
+        "expected_duration_censored": false,
+        "expected_stop_reason": null,
+        "expected_capacity_gate": "pass"
+      },
+      {
+        "icao": "OMAA",
+        "probe_id": 12,
+        "expected_status": "completed",
+        "expected_metric_contract_version": "v39-physical-flight-instance-v2",
+        "expected_reconciliation_status": "MATCH",
+        "expected_duration_censored": false,
+        "expected_stop_reason": null,
+        "expected_capacity_gate": "pass"
+      },
+      {
+        "icao": "MMUN",
+        "probe_id": 14,
+        "expected_status": "completed",
+        "expected_metric_contract_version": "v39-physical-flight-instance-v2",
+        "expected_reconciliation_status": "MATCH",
+        "expected_duration_censored": false,
+        "expected_stop_reason": null,
+        "expected_capacity_gate": "fail"
+      }
+    ],
+    "ordered_new_targets": [
+      "SKBO",
+      "YSSY"
+    ],
+    "deferred_icaos": [
+      "LKPR"
+    ],
+    "phase6_anchor_pool_if_both_valid": [
+      "WSSS",
+      "OMAA",
+      "YSSY",
+      "SKBO"
+    ],
+    "phase6_mid_regional_region_balancing_required": true,
+    "claims_limited_to_realized_frame": true,
+    "frozen_preoutcome_target_attributes": {
+      "YSSY": {
+        "region": "Oceania",
+        "traffic_metric_value": 141036,
+        "route_degree": 92,
+        "effective_carriers": 6.271787234431572,
+        "international_share": 0.2854093990186903,
+        "domestic_share": 0.7145906009813097
+      },
+      "SKBO": {
+        "region": "South America",
+        "traffic_metric_value": 91600,
+        "route_degree": 95,
+        "effective_carriers": 4.37275360257945,
+        "international_share": 0.42748908296943233,
+        "domestic_share": 0.5725109170305677
+      },
+      "LKPR": {
+        "region": "Europe",
+        "traffic_metric_value": 67100,
+        "route_degree": 170,
+        "effective_carriers": 18.068460919791526,
+        "international_share": 0.9707302533532042,
+        "domestic_share": 0.029269746646795824
+      }
+    },
+    "reason": "Superseding prospective operating-hours correction before any YSSY or SKBO outcome. The prior early-pilot scope correctly identified YSSY and SKBO as missing domestic/mixed regimes, but deeper prelaunch review found that the frozen 11:00-13:00 UTC class maps to 21:00-23:00 at Sydney on 2026-10-02, ending at Sydney Airport's legally enforced 23:00-06:00 curfew. That creates a structural local-time/yield confound for the 60 rows/hour feasibility gate. SKBO remains selected from pre-outcome frozen attributes and is authorized first under the existing UTC class. YSSY is retained but execution-blocked pending a separately frozen local-operating-hours-aware protocol. Historical WSSS/OMAA/MMUN evidence remains immutable; LKPR remains deferred; reconciliation, physical-identity, callback, cleanup, budget, and no-automatic-retry controls remain unchanged.",
+    "target_execution_authorized": {
+      "SKBO": true,
+      "YSSY": false
+    },
+    "yssy_local_time_protocol_required": true,
+    "yssy_matched_utc_window_local_time": "21:00-23:00 Australia/Sydney on 2026-10-02",
+    "yssy_curfew_local_time": "23:00-06:00 Australia/Sydney",
+    "yssy_execution_block_reason": "The frozen 11:00-13:00 UTC Stage-1 window maps to 21:00-23:00 local time at YSSY on 2026-10-02 and terminates exactly at the Sydney 23:00 curfew boundary. YSSY is deferred until a separate prospective local-operating-hours-aware protocol is frozen; no YSSY paid launch is authorized by this amendment."
+  }
+}
