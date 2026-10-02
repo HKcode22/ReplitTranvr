@@ -28,6 +28,7 @@ import {
   compact6EffectiveArtifactV39,
   loadPhase2gCompact6AmendmentV39,
   type Phase2gCompact6AmendmentV39,
+  type Phase2gEarlyPilotScopeReductionV39,
   type Phase2gP2g17MmunDeliveryGapRecoveryV39,
   type Phase2gPhysicalIdentityV2RemeasurementV39,
 } from "../server/lib/disruption/phase2Compact6_v39";
@@ -503,6 +504,89 @@ export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEv
  * This rule is symmetric across every frozen primary candidate and does not
  * change the two-hour/time-class/cap/score protocol.
  */
+export function chooseEarlyPilotScopeTargetV39(
+  scope: Phase2gEarlyPilotScopeReductionV39,
+  attempts: Stage1AttemptEvidence[],
+): "YSSY" | "SKBO" | null {
+  for (const requirement of scope.baseline_completed_probes) {
+    const matches = attempts.filter(
+      (row) =>
+        row.probeId === requirement.probe_id &&
+        row.icao.toUpperCase() === requirement.icao,
+    );
+    if (matches.length !== 1) {
+      throw new Error(
+        `REFUSED_EARLY_PILOT_BASELINE_EVIDENCE_MISMATCH:${requirement.icao}:probe=${requirement.probe_id}:matches=${matches.length}`,
+      );
+    }
+    const row = matches[0];
+    const durable = row.durableReconciliation;
+    if (
+      row.status !== requirement.expected_status ||
+      row.metricContractVersion !== requirement.expected_metric_contract_version ||
+      row.reconciliationStatus !== requirement.expected_reconciliation_status ||
+      row.durationCensored !== requirement.expected_duration_censored ||
+      row.stopReason !== requirement.expected_stop_reason ||
+      durable?.evidenceStatus !== "MATCH" ||
+      durable.deliveryGapCredits !== 0 ||
+      durable.deliveryCompleteness !== 1 ||
+      durable.callbackFailures !== 0 ||
+      durable.durationCensored !== false ||
+      durable.stopReason !== null
+    ) {
+      throw new Error(
+        `REFUSED_EARLY_PILOT_BASELINE_STATE_MISMATCH:${requirement.icao}:probe=${requirement.probe_id}`,
+      );
+    }
+    const capacityPass =
+      row.rowsPerHour !== null &&
+      Number.isFinite(row.rowsPerHour) &&
+      row.rowsPerHour >= scope.capacity_gate_rows_per_hour;
+    if (
+      (requirement.expected_capacity_gate === "pass" && !capacityPass) ||
+      (requirement.expected_capacity_gate === "fail" && capacityPass)
+    ) {
+      throw new Error(
+        `REFUSED_EARLY_PILOT_BASELINE_CAPACITY_MISMATCH:${requirement.icao}:rows_per_hour=${row.rowsPerHour}`,
+      );
+    }
+  }
+
+  for (const target of scope.ordered_new_targets) {
+    const rows = attempts.filter((row) => row.icao.toUpperCase() === target);
+    if (rows.length === 0) return target;
+
+    if (rows.length !== 1) {
+      throw new Error(
+        `REFUSED_EARLY_PILOT_TARGET_ATTEMPT_COUNT:${target}:attempts=${rows.length}`,
+      );
+    }
+
+    const row = rows[0];
+    const durable = row.durableReconciliation;
+    const scientificallyValid =
+      row.status === "completed" &&
+      row.metricContractVersion === PREPAID_PROBE_METRIC_CONTRACT_V39 &&
+      row.durationCensored === false &&
+      row.stopReason === null &&
+      row.reconciliationStatus === "MATCH" &&
+      durable?.evidenceStatus === "MATCH" &&
+      durable.deliveryGapCredits === 0 &&
+      durable.deliveryCompleteness === 1 &&
+      durable.callbackFailures === 0 &&
+      durable.durationCensored === false &&
+      durable.stopReason === null;
+
+    if (!scientificallyValid) {
+      throw new Error(
+        `REFUSED_EARLY_PILOT_TARGET_REQUIRES_MANUAL_REVIEW:${target}:probe=${row.probeId}:status=${row.status}:reconciliation=${row.reconciliationStatus ?? "<null>"}`,
+      );
+    }
+  }
+
+  return null;
+}
+
 export function chooseNextPrimaryStage1TargetV39(
   shortlist: Array<{ icao: string }>,
   attempts: Stage1AttemptEvidence[],
@@ -591,6 +675,15 @@ export function chooseNextStage1TargetV39(
     isP2g06PostfixWsssValidationEligibleV39(evidence)
   ) {
     return { icao: "WSSS", replacement: false };
+  }
+
+  const earlyPilotScope = amendment?.early_pilot_scope_reduction;
+  if (earlyPilotScope?.authorized === true) {
+    const target = chooseEarlyPilotScopeTargetV39(
+      earlyPilotScope,
+      evidence,
+    );
+    return target ? { icao: target, replacement: false } : null;
   }
 
   const nextPrimary = chooseNextPrimaryStage1TargetV39(
