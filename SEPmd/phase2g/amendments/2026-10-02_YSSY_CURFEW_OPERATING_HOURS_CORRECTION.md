@@ -54,6 +54,11 @@ Official source:
 
 The existing UTC class maps to approximately 06:00–08:00 Bogotá local time on 2026-10-02. This is not claimed to be a universal local-time match; SKBO remains an exploratory early-pilot feasibility measurement under the frozen UTC class.
 
+Aerocivil's published El Dorado capacity declaration provides an independent operational sanity check for this UTC period: the 11:00–14:59 UTC arrival band allocates 25 regular arrivals per hour (plus other categories), and the overlapping departure bands allocate 30 regular departures per hour. This does not guarantee AeroDataBox webhook yield, but it confirms that the planned SKBO window is an active airport operating period rather than a closure/curfew boundary.
+
+Official source:
+- Aerocivil El Dorado capacity declaration: https://www.aerocivil.gov.co/prensa/noticias/Pages/Declaracion-de-capacidad-Aeropuerto-Internacional-El-Dorado-Temporada-Summer-2024--Desde-el-31-de-Marzo-2024-hasta-el-26-de.aspx
+
 ## 4. Existing YSSY authorization
 
 The following YSSY artifacts were created and approved before this operating-hours issue was found:
