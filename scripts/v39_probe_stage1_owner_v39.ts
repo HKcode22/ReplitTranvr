@@ -494,15 +494,15 @@ export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEv
 }
 
 /**
- * Scientific sequencing rule for primary Stage-1 candidates:
- * - preserve every original attempt row;
- * - a completed/non-infrastructure terminal result is terminal;
- * - one and only one rerun is permitted after a verified infrastructure-invalid
- *   first attempt;
- * - a second failed attempt is terminal for sequencing, preventing retry bias.
+ * Prospective early-pilot scope selector.
  *
- * This rule is symmetric across every frozen primary candidate and does not
- * change the two-hour/time-class/cap/score protocol.
+ * Historical WSSS/OMAA/MMUN evidence remains immutable. New scope targets are
+ * one-shot: a failed or scientifically invalid attempt is never automatically
+ * retried or skipped.
+ *
+ * Scope v2 additionally blocks YSSY execution until a separately frozen
+ * local-operating-hours-aware protocol resolves the Sydney curfew/time-class
+ * confound.
  */
 export function chooseEarlyPilotScopeTargetV39(
   scope: Phase2gEarlyPilotScopeReductionV39,
@@ -554,7 +554,19 @@ export function chooseEarlyPilotScopeTargetV39(
 
   for (const target of scope.ordered_new_targets) {
     const rows = attempts.filter((row) => row.icao.toUpperCase() === target);
-    if (rows.length === 0) return target;
+    if (rows.length === 0) {
+      if (
+        scope.scope_version ===
+          "v39-phase2g-early-pilot-scope-reduction-2" &&
+        target === "YSSY" &&
+        scope.target_execution_authorized?.YSSY !== true
+      ) {
+        throw new Error(
+          `REFUSED_EARLY_PILOT_TARGET_EXECUTION_NOT_AUTHORIZED:YSSY:${scope.yssy_execution_block_reason ?? "local_time_protocol_required"}`,
+        );
+      }
+      return target;
+    }
 
     if (rows.length !== 1) {
       throw new Error(
