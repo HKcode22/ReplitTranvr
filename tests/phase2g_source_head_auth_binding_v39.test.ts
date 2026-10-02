@@ -49,6 +49,18 @@ describe("Phase2G source-head authorization binding", () => {
     expect(paidWorkflow).not.toContain("fetch-depth: 1");
   });
 
+  it("refuses replay of an authorization against a stale execution head", () => {
+    expect(
+      paidWorkflow.match(/Refuse stale execution head/g)?.length,
+    ).toBe(3);
+    expect(paidWorkflow).toContain(
+      '[[ "${{ inputs.expected_head }}" != "${GITHUB_SHA}" ]]',
+    );
+    expect(paidWorkflow).toContain(
+      "expected_head must equal current workflow-dispatch main SHA",
+    );
+  });
+
   it("allows evidence-only descendant commits but refuses protected source drift", () => {
     expect(paidPreflight).toContain("runtime_source_git_head_missing");
     expect(paidPreflight).toContain("runtime_source_protected_tree_sha_missing");
