@@ -95,3 +95,18 @@ Finalizer:
 - SHA-256: `cbc6bddd9e02dd160ba9eff54b06e5880114b20a22b2483d83a968b78ff2203b`
 
 No paid YSSY launch is recorded by this evidence file.
+
+
+## Supersession before paid launch
+
+A deeper prelaunch operating-hours audit found that the authorized 11:00-13:00 UTC YSSY window maps to 21:00-23:00 Australia/Sydney on 2026-10-02 and terminates at Sydney Airport's legally enforced 23:00 curfew boundary.
+
+No P2G19 YSSY paid launch occurred.
+
+The runtime `P2G-S1-20261002-18` and AUTH `AUTH-20261002-P2G19` are therefore preserved as **SUPERSEDED_UNUSED** evidence and must not be reused.
+
+The superseding prospective scope places SKBO first and blocks YSSY paid execution until a separately frozen local-operating-hours-aware protocol exists.
+
+See:
+- `SEPmd/phase2g/amendments/2026-10-02_YSSY_CURFEW_OPERATING_HOURS_CORRECTION.md`
+- `artifacts/phase2g-early-pilot-scope-operating-hours-correction-freeze-20261002.json`
