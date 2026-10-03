@@ -4,6 +4,10 @@ import type {
   FrozenProbeArtifact,
   FrozenProbeCandidate,
 } from "./anchorPromotion_v39";
+import {
+  loadYssyOperatingHoursProtocolV39,
+  PHASE2G_YSSY_LOCAL_OPERATING_HOURS_PROTOCOL_ARTIFACT_PATH,
+} from "./yssyOperatingHours_v39";
 
 export const PHASE2G_COMPACT6_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-amendment-freeze-20260921.json";
@@ -23,6 +27,8 @@ export const PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH =
   "artifacts/phase2g-compact6-early-pilot-scope-reduction-freeze-20261002.json";
 export const PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH =
   "artifacts/phase2g-early-pilot-scope-operating-hours-correction-freeze-20261002.json";
+export const PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH =
+  "artifacts/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json";
 
 export type Phase2gIdentityV2RecoveryIcaoV39 =
   | "WSSS"
@@ -82,7 +88,8 @@ export interface Phase2gEarlyPilotScopeReductionV39 {
   authorized: true;
   scope_version:
     | "v39-phase2g-early-pilot-scope-reduction-1"
-    | "v39-phase2g-early-pilot-scope-reduction-2";
+    | "v39-phase2g-early-pilot-scope-reduction-2"
+    | "v39-phase2g-early-pilot-scope-reduction-3";
   original_compact6_question_superseded_for_early_pilot: true;
   original_history_immutable: true;
   outcome_informed_scope_change: true;
@@ -107,14 +114,20 @@ export interface Phase2gEarlyPilotScopeReductionV39 {
     | ["SKBO", "YSSY"];
   deferred_icaos: ["LKPR"];
   phase6_anchor_pool_if_both_valid: ["WSSS", "OMAA", "YSSY", "SKBO"];
-  target_execution_authorized?: {
-    SKBO: true;
-    YSSY: false;
-  };
+  target_execution_authorized?:
+    | { SKBO: true; YSSY: false }
+    | { SKBO: true; YSSY: true };
   yssy_local_time_protocol_required?: true;
   yssy_matched_utc_window_local_time?: "21:00-23:00 Australia/Sydney on 2026-10-02";
   yssy_curfew_local_time?: "23:00-06:00 Australia/Sydney";
   yssy_execution_block_reason?: string;
+  yssy_local_operating_hours_protocol_file?: string;
+  yssy_local_operating_hours_protocol_sha256?: string;
+  yssy_selected_stage1_utc_slot_hour?: 4;
+  yssy_stage1_eligible_start_tolerance_hours?: 1;
+  yssy_local_timezone?: "Australia/Sydney";
+  yssy_minimum_curfew_boundary_buffer_minutes?: 300;
+  yssy_execution_authorization_basis?: string;
   phase6_mid_regional_region_balancing_required: true;
   claims_limited_to_realized_frame: true;
   frozen_preoutcome_target_attributes: {
@@ -293,7 +306,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
   const candidatePaths = input.path
     ? [input.path]
-    : [PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH, PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
+    : [PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH, PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH, PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
   let raw: string | null = null;
   let actual: string | null = null;
   for (const candidatePath of candidatePaths) {
@@ -574,6 +587,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       ![
         "v39-phase2g-early-pilot-scope-reduction-1",
         "v39-phase2g-early-pilot-scope-reduction-2",
+        "v39-phase2g-early-pilot-scope-reduction-3",
       ].includes(scope.scope_version) ||
       scope.original_compact6_question_superseded_for_early_pilot !== true ||
       scope.original_history_immutable !== true ||
@@ -604,7 +618,9 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       if (scope.ordered_new_targets.join(",") !== "YSSY,SKBO") {
         throw new Error("REFUSED_COMPACT6_EARLY_PILOT_V1_ORDER");
       }
-    } else {
+    } else if (
+      scope.scope_version === "v39-phase2g-early-pilot-scope-reduction-2"
+    ) {
       if (
         scope.ordered_new_targets.join(",") !== "SKBO,YSSY" ||
         scope.target_execution_authorized?.SKBO !== true ||
@@ -617,6 +633,41 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       ) {
         throw new Error(
           "REFUSED_COMPACT6_EARLY_PILOT_V2_OPERATING_HOURS_CONTRACT",
+        );
+      }
+    } else {
+      if (
+        scope.ordered_new_targets.join(",") !== "SKBO,YSSY" ||
+        scope.target_execution_authorized?.SKBO !== true ||
+        scope.target_execution_authorized?.YSSY !== true ||
+        scope.yssy_local_time_protocol_required !== true ||
+        scope.yssy_curfew_local_time !== "23:00-06:00 Australia/Sydney" ||
+        scope.yssy_local_operating_hours_protocol_file !==
+          PHASE2G_YSSY_LOCAL_OPERATING_HOURS_PROTOCOL_ARTIFACT_PATH ||
+        !/^[a-f0-9]{64}$/.test(
+          String(scope.yssy_local_operating_hours_protocol_sha256 ?? ""),
+        ) ||
+        scope.yssy_selected_stage1_utc_slot_hour !== 4 ||
+        scope.yssy_stage1_eligible_start_tolerance_hours !== 1 ||
+        scope.yssy_local_timezone !== "Australia/Sydney" ||
+        scope.yssy_minimum_curfew_boundary_buffer_minutes !== 300 ||
+        !String(scope.yssy_execution_authorization_basis ?? "").trim()
+      ) {
+        throw new Error(
+          "REFUSED_COMPACT6_EARLY_PILOT_V3_YSSY_PROTOCOL_CONTRACT",
+        );
+      }
+      const yssyProtocol = loadYssyOperatingHoursProtocolV39({
+        expectedSha256:
+          scope.yssy_local_operating_hours_protocol_sha256,
+        path: scope.yssy_local_operating_hours_protocol_file,
+      });
+      if (
+        yssyProtocol.protocol.parent_scope_sha256 !==
+        "3f9d4a55d5cc933726bb045c735935fa90cda85b9e972c745ca9c93feb39932b"
+      ) {
+        throw new Error(
+          "REFUSED_COMPACT6_EARLY_PILOT_V3_YSSY_PARENT_SCOPE_MISMATCH",
         );
       }
     }
