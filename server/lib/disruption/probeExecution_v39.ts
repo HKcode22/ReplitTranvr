@@ -488,6 +488,11 @@ export interface ExecuteProbeInput {
   allowReplacement: boolean;
   artifacts: LoadedProbeExecutionArtifacts;
   authMaxAlertCredits: number;
+  /**
+   * A prospectively frozen, hash-validated time-class override. Ordinary
+   * probes leave this unset and retain the immutable preprobe class.
+   */
+  timeClassOverride?: ProbeTimeClassConfig;
 }
 export interface ExecuteProbeResult {
   probeId: number;
@@ -545,7 +550,11 @@ export async function executeProbe(
 ): Promise<ExecuteProbeResult> {
   await assertIncidentClear();
   const started = deps.now();
-  assertProbeTimeClass(input.stage, started, input.artifacts.preprobe.probeTimeClass);
+  assertProbeTimeClass(
+    input.stage,
+    started,
+    input.timeClassOverride ?? input.artifacts.preprobe.probeTimeClass,
+  );
   const candidate = requireFrozenCandidate(input.artifacts.preprobe, input.icao, input.allowReplacement);
   await ensureProbeBudgetDay(input.artifacts.runtime);
   await assertR1Clean(deps);

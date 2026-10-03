@@ -211,7 +211,11 @@ async function markProbeBudgetDayMismatch(dayId: string, detail: Record<string, 
 export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<ExecuteProbeResult> {
   await assertIncidentClear();
   const started = new Date();
-  assertProbeTimeClass(input.stage, started, input.artifacts.preprobe.probeTimeClass);
+  assertProbeTimeClass(
+    input.stage,
+    started,
+    input.timeClassOverride ?? input.artifacts.preprobe.probeTimeClass,
+  );
   const candidate = requireFrozenCandidate(input.artifacts.preprobe, input.icao, input.allowReplacement);
   await ensureProbeBudgetDay(input.artifacts.runtime);
   await assertR1Clean();

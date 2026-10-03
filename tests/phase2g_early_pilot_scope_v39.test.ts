@@ -7,6 +7,7 @@ import {
   loadPhase2gCompact6AmendmentV39,
   PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH,
   PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH,
+  PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
   chooseEarlyPilotScopeTargetV39,
@@ -166,6 +167,52 @@ describe("Phase2G early-pilot scope correction", () => {
     ).toThrow(
       "REFUSED_EARLY_PILOT_TARGET_EXECUTION_NOT_AUTHORIZED:YSSY",
     );
+  });
+
+  it("binds the v3 YSSY protocol and selects YSSY after valid SKBO", () => {
+    const scope = loadScope(
+      PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH,
+    );
+
+    expect(scope.scope_version).toBe(
+      "v39-phase2g-early-pilot-scope-reduction-3",
+    );
+    expect(scope.target_execution_authorized).toEqual({
+      SKBO: true,
+      YSSY: true,
+    });
+    expect(
+      scope.yssy_local_operating_hours_protocol_sha256,
+    ).toBe(
+      "ad6224fb7fc83de42021c9f75a705892c7130614f4a72276b47fa2c246dd4991",
+    );
+
+    expect(
+      chooseEarlyPilotScopeTargetV39(
+        scope,
+        [
+          ...baseline(),
+          validAttempt(15, "SKBO", 150.4977007295722),
+        ],
+      ),
+    ).toBe("YSSY");
+  });
+
+  it("marks the reduced early-pilot target sequence complete after valid YSSY", () => {
+    const scope = loadScope(
+      PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH,
+    );
+
+    expect(
+      chooseEarlyPilotScopeTargetV39(
+        scope,
+        [
+          ...baseline(),
+          validAttempt(15, "SKBO", 150.4977007295722),
+          validAttempt(16, "YSSY", 80),
+        ],
+      ),
+    ).toBeNull();
   });
 
   it("does not automatically retry or skip failed SKBO", () => {
