@@ -659,8 +659,8 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       }
       const yssyProtocol = loadYssyOperatingHoursProtocolV39({
         expectedSha256:
-          scope.yssy_local_operating_hours_protocol_sha256,
-        path: scope.yssy_local_operating_hours_protocol_file,
+          scope.yssy_local_operating_hours_protocol_sha256!,
+        path: scope.yssy_local_operating_hours_protocol_file!,
       });
       if (
         yssyProtocol.protocol.parent_scope_sha256 !==
