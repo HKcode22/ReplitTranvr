@@ -33,6 +33,12 @@ import {
   type Phase2gPhysicalIdentityV2RemeasurementV39,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
+  assertYssyStage1StartV39,
+  loadYssyOperatingHoursProtocolV39,
+  yssyStage1TimeClassV39,
+} from "../server/lib/disruption/yssyOperatingHours_v39";
+import type { ProbeTimeClassConfig } from "../server/lib/disruption/probeExecution_v39";
+import {
   PREPAID_PROBE_METRIC_CONTRACT_V39,
 } from "../server/lib/disruption/prepaidProbeMetricContract_v39";
 
@@ -556,8 +562,8 @@ export function chooseEarlyPilotScopeTargetV39(
     const rows = attempts.filter((row) => row.icao.toUpperCase() === target);
     if (rows.length === 0) {
       if (
-        scope.scope_version ===
-          "v39-phase2g-early-pilot-scope-reduction-2" &&
+        scope.scope_version !==
+          "v39-phase2g-early-pilot-scope-reduction-1" &&
         target === "YSSY" &&
         scope.target_execution_authorized?.YSSY !== true
       ) {
@@ -743,6 +749,33 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     compact6?.amendment ?? null,
   );
 
+  let stage1TimeClassOverride: ProbeTimeClassConfig | undefined;
+  if (next?.icao === "YSSY") {
+    const scope = compact6?.amendment.early_pilot_scope_reduction;
+    if (
+      scope?.scope_version !==
+        "v39-phase2g-early-pilot-scope-reduction-3" ||
+      scope.target_execution_authorized?.YSSY !== true ||
+      !scope.yssy_local_operating_hours_protocol_file ||
+      !scope.yssy_local_operating_hours_protocol_sha256
+    ) {
+      throw new Error(
+        "REFUSED_YSSY_STAGE1_PROTOCOL_NOT_MACHINE_AUTHORIZED",
+      );
+    }
+
+    const loadedYssy = loadYssyOperatingHoursProtocolV39({
+      expectedSha256:
+        scope.yssy_local_operating_hours_protocol_sha256,
+      path: scope.yssy_local_operating_hours_protocol_file,
+    });
+    assertYssyStage1StartV39(new Date(), loadedYssy.protocol);
+    stage1TimeClassOverride = yssyStage1TimeClassV39(
+      loadedYssy.protocol,
+      artifacts.preprobe.probeTimeClass,
+    );
+  }
+
   if (!next) {
     const promotion = selectStage2Top5(selectionArtifact, evidence);
     console.log(JSON.stringify({
@@ -780,6 +813,7 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
     allowReplacement: next.replacement,
     artifacts,
     authMaxAlertCredits: approved.ceiling,
+    timeClassOverride: stage1TimeClassOverride,
   });
   const deferredCleanup = process.env.V39_DEFER_PROVIDER_CONTENT_CLEANUP === "1";
   const safeTerminal =
