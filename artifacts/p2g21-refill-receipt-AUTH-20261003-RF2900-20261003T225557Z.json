@@ -1,0 +1,54 @@
+{
+  "schema": "v39.authorized-refill-receipt.v1",
+  "status": "PASS_EXACT_REFILL_CONFIRMED",
+  "generated_at_utc": "2026-10-03T22:56:01.802Z",
+  "authorization": {
+    "authorization_id": "AUTH-20261003-RF2900",
+    "auth_artifact_sha256": "fb016d51f578120e856b409412a0cb2c4375d451dc2de2e5220d31e1e1db9576",
+    "exact_authorized_refill_credits": 1201
+  },
+  "provider_owner": {
+    "exit_code": 0,
+    "log_file": "artifacts/p2g21-refill-owner-AUTH-20261003-RF2900-20261003T225557Z.log",
+    "automatic_retry_permitted": false
+  },
+  "pre_state": {
+    "observed_at_utc": "2026-10-03T22:55:58.000Z",
+    "alert_balance": 1699,
+    "last_refilled_utc": "2026-10-02 08:42",
+    "last_deducted_utc": "2026-10-02 12:59",
+    "api_units_limit": 60000,
+    "api_units_remaining": 59204,
+    "api_units_reset_at_utc": "2026-10-04T02:21:21.000Z",
+    "subscriptions_returned": 0,
+    "active_billable_subscriptions": 0
+  },
+  "post_state": {
+    "observed_at_utc": "2026-10-03T22:56:00.000Z",
+    "alert_balance": 2900,
+    "last_refilled_utc": "2026-10-03 22:56",
+    "last_deducted_utc": "2026-10-02 12:59",
+    "api_units_limit": 60000,
+    "api_units_remaining": 58003,
+    "api_units_reset_at_utc": "2026-10-04T02:21:21.000Z",
+    "subscriptions_returned": 0,
+    "active_billable_subscriptions": 0
+  },
+  "reconciliation": {
+    "alert_balance_delta": 1201,
+    "expected_alert_balance_delta": 1201,
+    "api_units_consumed": 1201,
+    "expected_api_units_consumed": 1201,
+    "target_alert_balance": 2900,
+    "balance_pass": true,
+    "api_unit_pass": true,
+    "subscription_exclusivity_pass": true,
+    "provider_cycle_reset_unchanged": true
+  },
+  "safety": {
+    "stage1_launched": false,
+    "subscription_created": false,
+    "database_mutation": false,
+    "automatic_retry": false
+  }
+}

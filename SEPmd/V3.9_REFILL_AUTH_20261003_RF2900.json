@@ -1,0 +1,13 @@
+{
+  "authorizationId": "AUTH-20261003-RF2900",
+  "phaseGate": "refill",
+  "airportFilterWindow": "AeroDataBox Flight-Alert balance refill exactly 1201 credits; observed_before=1699; target_balance=2900; observed_api_units_remaining=59204; api_cycle_reset=2026-10-04T02:21:21.000Z; no subscription mutation; P2G21 Stage-1 authorization unchanged",
+  "maxAlertCredits": 1201,
+  "maxRestUnitsByCategory": null,
+  "startNotBeforeUtc": "2026-10-03T22:26:24.000Z",
+  "expiresAtUtc": "2026-10-04T02:05:00.000Z",
+  "cleanupOwner": "operator",
+  "predecessorEvidenceIds": [
+    "RUN-20260915-146A30DCF2C15AB95BF21E24D2425C856595FC5DD9B8E07006971C88A5457EAC"
+  ]
+}
