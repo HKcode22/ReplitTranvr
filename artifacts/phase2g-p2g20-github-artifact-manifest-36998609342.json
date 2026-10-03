@@ -1,0 +1,41 @@
+{
+  "schema": "v39.phase2g-github-artifact-preservation-manifest.v1",
+  "run_id": 36998609342,
+  "execution_head": "00b1692811ce02ad05ddc3a8eaaa80c3fbf93d4a",
+  "owner_artifact": {
+    "artifact_id": 11228145113,
+    "name": "phase2g-owner-evidence-36998609342",
+    "zip_sha256": "e031760642ffc6966d0ea4e155344b6c6e55eabee60dcc6148639238510abab9",
+    "preserved_files": [
+      {
+        "path": "artifacts/phase2g-github-owner-AUTH-20261002-P2G20-20261002T110149Z.heartbeat.json",
+        "sha256": "551be8fab756e573d6ad1f7c312f7ac768f4364b99fa4a9380dd20eef4bf6a5e"
+      },
+      {
+        "path": "artifacts/phase2g-github-owner-AUTH-20261002-P2G20-20261002T110149Z.log",
+        "sha256": "dc2bf16c1743e2a15cedc833e40bfb6ad664a406f2e21f5c08e9bf666ab0f522"
+      },
+      {
+        "path": "artifacts/phase2g-github-owner-AUTH-20261002-P2G20-20261002T110149Z.status.json",
+        "sha256": "bf1f72b51966b38ee4c38123d7885dfd7ee246a7b0013574386885a0e6086d1a"
+      }
+    ]
+  },
+  "scientific_health_artifact": {
+    "artifact_id": 11227601762,
+    "name": "phase2g-scientific-health-36998609342",
+    "zip_sha256": "4d005afb9794da5440a40a8930ebfd4300f38ae49519c6ac5c273acac1b3519e",
+    "contained_file": "phase2g-scientific-health-P2G-S1-20261002-19-36998609342.jsonl",
+    "contained_file_sha256": "2f8391bcfc44fcbfd59558d4ba2ffd7aa983ca88b4a52904d6613b18656435b8",
+    "note": "Full JSONL remains in the GitHub Actions artifact; the terminal scientific-health record is also preserved verbatim in the repository owner log."
+  },
+  "cleanup_receipt": {
+    "path": "artifacts/phase2g-exact-session-purpose-cleanup-p2g20-skbo-final-1790994952836.json",
+    "sha256": "acdbc3d09c9fcfd3324f74e40ea330269f0177354ebf8a871f999d1e2b0031fc"
+  },
+  "finalizer_receipt": {
+    "path": "artifacts/phase2g-settling-finalizer-probe15-1790995064509.json",
+    "sha256": "84a96b7c28e97a419987262d5d32771c9c29fb99b3931e1bdd7d8f765b32380d"
+  },
+  "preserved_at_utc": "2026-10-03T03:00:00.000Z"
+}
