@@ -16,6 +16,12 @@ import {
   chooseNextStage1TargetV39,
   readStage1EvidenceV39,
 } from "./v39_probe_stage1_owner_v39";
+import {
+  loadYssyOperatingHoursProtocolV39,
+  yssyStage1TimeClassStatusV39,
+  yssyStage1TimeClassV39,
+  type Phase2gYssyOperatingHoursProtocolV39,
+} from "../server/lib/disruption/yssyOperatingHours_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const TARGET_MINUTES = 120;
@@ -226,6 +232,8 @@ async function main(): Promise<void> {
   }
 
   let compact6: ReturnType<typeof loadPhase2gCompact6AmendmentV39> | null = null;
+  let yssyProtocol: Phase2gYssyOperatingHoursProtocolV39 | null = null;
+  let yssyProtocolSha: string | null = null;
   if (binding.runtime.stage1AmendmentSha256) {
     try {
       compact6 = loadPhase2gCompact6AmendmentV39({
@@ -323,6 +331,35 @@ async function main(): Promise<void> {
 
     if (expectedIcao && nextCandidate !== expectedIcao) {
       blockers.push(`next_candidate_mismatch:expected=${expectedIcao}:actual=${nextCandidate ?? "<none>"}`);
+    }
+
+    if (nextCandidate === "YSSY") {
+      const scope = compact6.amendment.early_pilot_scope_reduction;
+      if (
+        scope?.scope_version !==
+          "v39-phase2g-early-pilot-scope-reduction-3" ||
+        scope.target_execution_authorized?.YSSY !== true ||
+        !scope.yssy_local_operating_hours_protocol_file ||
+        !scope.yssy_local_operating_hours_protocol_sha256
+      ) {
+        blockers.push(
+          "yssy_local_operating_hours_protocol_not_authorized",
+        );
+      } else {
+        try {
+          const loadedYssy = loadYssyOperatingHoursProtocolV39({
+            expectedSha256:
+              scope.yssy_local_operating_hours_protocol_sha256,
+            path: scope.yssy_local_operating_hours_protocol_file,
+          });
+          yssyProtocol = loadedYssy.protocol;
+          yssyProtocolSha = loadedYssy.fileSha256;
+        } catch (error) {
+          blockers.push(
+            `yssy_local_operating_hours_protocol_invalid:${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
     }
   } else if (expectedIcao) {
     blockers.push("expected_icao_requires_stage1_amendment");
@@ -489,8 +526,23 @@ async function main(): Promise<void> {
   const now = new Date();
   const tc = binding.smoke.preprobe.artifact.probeTimeClass;
   const currentClass = utcWeekdayClass(now);
-  const hour = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
-  const timeClassEligible = currentClass === tc.stage1WeekdayClass && circularHourDistance(hour, tc.stage1UtcSlotHour) <= 1;
+  const hour =
+    now.getUTCHours() +
+    now.getUTCMinutes() / 60 +
+    now.getUTCSeconds() / 3600;
+  const effectiveTimeClass = yssyProtocol
+    ? yssyStage1TimeClassV39(yssyProtocol, tc)
+    : tc;
+  const yssyTimeStatus = yssyProtocol
+    ? yssyStage1TimeClassStatusV39(now, yssyProtocol)
+    : null;
+  const timeClassEligible = yssyTimeStatus
+    ? yssyTimeStatus.eligible
+    : currentClass === effectiveTimeClass.stage1WeekdayClass &&
+      circularHourDistance(
+        hour,
+        effectiveTimeClass.stage1UtcSlotHour,
+      ) <= 1;
   const safeLatestStartMs = expiresMs - (TARGET_MINUTES + AUTH_CLEANUP_BUFFER_MINUTES) * 60_000;
   const authStarted = Number.isFinite(startMs) && now.getTime() >= startMs;
   const authNotExpired = Number.isFinite(expiresMs) && now.getTime() <= expiresMs;
@@ -567,10 +619,19 @@ async function main(): Promise<void> {
       open_probe_budget_days: openBudgetDays.length,
     },
     frozen_stage1_time_class: {
-      utc_slot_hour: tc.stage1UtcSlotHour,
-      weekday_class: tc.stage1WeekdayClass,
+      source: yssyProtocol
+        ? "yssy-local-operating-hours-protocol"
+        : "preprobe-reference-freeze",
+      utc_slot_hour: effectiveTimeClass.stage1UtcSlotHour,
+      weekday_class: effectiveTimeClass.stage1WeekdayClass,
       eligible_now: timeClassEligible,
       would_cross_utc_midnight_if_started_now: wouldCrossUtcMidnight,
+      yssy_protocol_sha256: yssyProtocolSha,
+      yssy_timezone: yssyProtocol?.timezone ?? null,
+      yssy_local_weekday_class:
+        yssyTimeStatus?.localWeekdayClass ?? null,
+      yssy_target_window_outside_curfew:
+        yssyTimeStatus?.targetWindowOutsideCurfew ?? null,
     },
     owner_executor: ownerExecutor,
     callback_mode: callbackMode,
