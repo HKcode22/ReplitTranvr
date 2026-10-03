@@ -1,0 +1,73 @@
+{
+  "schema": "v39.phase2g-yssy-local-operating-hours-protocol.v1",
+  "status": "FROZEN_PROSPECTIVE_NO_PAID_AUTHORIZATION",
+  "frozen_at_utc": "2026-10-03T03:10:37.000Z",
+  "target_icao": "YSSY",
+  "outcome_data_used_to_choose_protocol": false,
+  "yssy_paid_outcomes_observed_before_freeze": false,
+  "parent_scope_file": "artifacts/phase2g-early-pilot-scope-operating-hours-correction-freeze-20261002.json",
+  "parent_scope_sha256": "3f9d4a55d5cc933726bb045c735935fa90cda85b9e972c745ca9c93feb39932b",
+  "timezone": "Australia/Sydney",
+  "curfew": {
+    "start_local": "23:00",
+    "end_local": "06:00",
+    "legal_time_basis": "New South Wales local time",
+    "official_department_source": "https://www.infrastructure.gov.au/infrastructure-transport-vehicles/aviation/aviation-safety/aircraft-noise/airport-curfews/sydney/overview",
+    "legislation_source": "https://www.legislation.gov.au/Latest/C2015C00154"
+  },
+  "dst_reference": {
+    "nsw_daylight_saving_2026_starts_local": "2026-10-04T02:00:00+10:00",
+    "official_source": "https://www.nsw.gov.au/about-nsw/daylight-saving"
+  },
+  "phase6_utc_slot_basis_hours": [
+    0,
+    4,
+    8,
+    12,
+    16,
+    20
+  ],
+  "selection_rule": "choose_phase6_slot_maximizing_minimum_distance_from_the_23_00_06_00_curfew_boundaries_across_both_AEST_and_AEDT_for_the_entire_plus_or_minus_1_hour_stage1_start_class",
+  "selected_stage1_utc_slot_hour": 4,
+  "eligible_start_tolerance_hours": 1,
+  "target_minutes": 120,
+  "preferred_start_utc_hhmm": "03:00",
+  "preferred_window_utc": "03:00-05:00",
+  "preferred_window_local_aest": "13:00-15:00",
+  "preferred_window_local_aedt": "14:00-16:00",
+  "full_eligible_class_local_aest": "13:00-17:00",
+  "full_eligible_class_local_aedt": "14:00-18:00",
+  "minimum_curfew_boundary_buffer_minutes_across_aest_aedt_and_full_eligible_class": 300,
+  "utc_midnight_crossing_for_full_eligible_class": false,
+  "weekday_rule": {
+    "local_weekday_required": true,
+    "utc_weekday_required": true,
+    "reason": "For the selected UTC class the YSSY local calendar date equals the UTC calendar date in both AEST and AEDT, so both weekday checks can be required without conflict."
+  },
+  "unchanged_controls": {
+    "metric_contract_version": "v39-physical-flight-instance-v2",
+    "capacity_gate_rows_per_hour": 60,
+    "min_stability_buckets": 6,
+    "exact_reconciliation_required": true,
+    "external_settled_spend_authoritative": true,
+    "delivery_completeness_required": 1,
+    "stage1_reservation_credits": 450,
+    "unsettled_burst_margin_credits": 50,
+    "protected_residual_floor_credits": 1000,
+    "max_alert_credits": 500,
+    "deferred_exact_session_cleanup": true,
+    "independent_github_watchdog": true,
+    "outcome_driven_stop_forbidden": true,
+    "automatic_retry_for_yssy": false
+  },
+  "execution_authorized": false,
+  "requires_machine_implementation_before_authorization": true,
+  "requires_full_offline_safety_before_authorization": true,
+  "requires_fresh_runtime_budget_auth": true,
+  "requires_fresh_callback_and_runtime_binding": true,
+  "superseded_identifiers_must_not_be_reused": {
+    "authorization_id": "AUTH-20261002-P2G19",
+    "probe_budget_day_id": "P2G-S1-20261002-18"
+  },
+  "next_step": "Implement this frozen YSSY time-class contract in the amendment loader, selector/preflight, tests, and a fresh no-paid-launch preparation helper; then run full offline safety before creating any new runtime or authorization."
+}
