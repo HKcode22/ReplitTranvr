@@ -1,0 +1,21 @@
+{
+  "schema": "v39.phase2g-exact-session-purpose-cleanup.v1",
+  "mode": "APPLY",
+  "session_id": "06ae005c-34ca-4478-af17-1c5d11b42d6e",
+  "label": "P2G22-YSSY-DELIVERY-GAP",
+  "deletion_run_id": "phase2g-purpose-P2G22-YSSY-DELIVERY-GAP-20261006T114144967Z-2965a6c9",
+  "expected_live_blobs": 56,
+  "deleted_blobs": 56,
+  "deleted_runtime_rows": 0,
+  "verified_at_utc": "2026-10-06T11:41:59.246Z",
+  "final": {
+    "sessions": 0,
+    "deliveries": 0,
+    "items": 0,
+    "live_blobs": 0
+  },
+  "active_billable_subscriptions": 0,
+  "provider_mutation": false,
+  "subscription_mutation": false,
+  "alert_credits_spent": 0
+}
