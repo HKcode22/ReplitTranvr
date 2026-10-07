@@ -181,16 +181,53 @@ app.post(
   }
 );
 
-app.use(
-  express.json({
-    limit: "2mb",
-    verify: (req, _res, buf) => {
-      req.rawBody = buf;
-    },
-  }),
-);
+/*
+ * Phase-2G prepaid callbacks own their body-parser boundary
+ * inside routes_v3. Skipping both global parsers here makes
+ * malformed/oversized/non-JSON callback failures observable
+ * by the prepaid runtime session instead of failing before
+ * prepaid telemetry can see them.
+ */
+const PHASE2G_PREPAID_WEBHOOK_PATH_V39 =
+  /^\/api\/v1\/webhooks\/aerodatabox\/[^/]+\/prepaid\/[^/]+\/?$/;
 
-app.use(express.urlencoded({ extended: false }));
+function isPhase2gPrepaidWebhookPathV39(
+  req: express.Request,
+): boolean {
+  return PHASE2G_PREPAID_WEBHOOK_PATH_V39.test(
+    req.path,
+  );
+}
+
+const globalJsonParser = express.json({
+  limit: "2mb",
+  verify: (req, _res, buf) => {
+    req.rawBody = buf;
+  },
+});
+
+app.use((req, res, next) => {
+  if (isPhase2gPrepaidWebhookPathV39(req)) {
+    next();
+    return;
+  }
+
+  globalJsonParser(req, res, next);
+});
+
+const globalUrlencodedParser =
+  express.urlencoded({
+    extended: false,
+  });
+
+app.use((req, res, next) => {
+  if (isPhase2gPrepaidWebhookPathV39(req)) {
+    next();
+    return;
+  }
+
+  globalUrlencodedParser(req, res, next);
+});
 
 // Attach a Sentry scope per request so any captureException — whether it
 // comes from a route handler, an async chain, or the global error

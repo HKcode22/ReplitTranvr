@@ -118,6 +118,187 @@ export function classifyProbeReconciliationV39(input: {
   return { status: "MISMATCH", deliveryGapCredits, deliveryCompleteness };
 }
 
+/*
+ * After provider deletion and authoritative external-balance settlement,
+ * allow already-sent webhook deliveries to drain into the exact prepaid
+ * session before final reconciliation.
+ *
+ * The quiet period is derived exclusively from the already-frozen settlement
+ * cadence:
+ *
+ *   initialWaitSeconds
+ *   + (stableReadCount - 1) * pollIntervalSeconds
+ *
+ * No reconciliation tolerance is introduced. This only proves that the
+ * internal callback/accounting ledger has stopped changing before the exact
+ * external-vs-internal comparison is made.
+ */
+export async function waitForPrepaidProbeAccountingQuiescenceV39(
+  config: SettlementConfig,
+  readMetrics: () => Promise<PrepaidProbeMetricsV39>,
+  opts?: {
+    sleep?: (ms: number) => Promise<void>;
+    nowMs?: () => number;
+  },
+): Promise<
+  | {
+      status: "quiescent";
+      metrics: PrepaidProbeMetricsV39;
+      readsUsed: number;
+      quietWindowMs: number;
+    }
+  | {
+      status: "unresolved";
+      reason: "timeout" | "reader_failed";
+      readsUsed: number;
+      quietWindowMs: number;
+    }
+> {
+  const stableNeeded = Math.max(
+    3,
+    Math.floor(config.stableReadCount),
+  );
+
+  const quietWindowMs =
+    config.initialWaitSeconds * 1000 +
+    (stableNeeded - 1) *
+      config.pollIntervalSeconds *
+      1000;
+
+  if (
+    !Number.isFinite(quietWindowMs) ||
+    quietWindowMs < 0 ||
+    !Number.isFinite(config.timeoutSeconds) ||
+    config.timeoutSeconds <= 0
+  ) {
+    throw new Error(
+      "PREPAID_ACCOUNTING_QUIESCENCE_CONFIG_INVALID",
+    );
+  }
+
+  const sleep =
+    opts?.sleep ??
+    ((ms: number) =>
+      new Promise<void>((resolve) =>
+        setTimeout(resolve, ms),
+      ));
+
+  const nowMs =
+    opts?.nowMs ??
+    (() => Date.now());
+
+  const startedAt = nowMs();
+
+  const deadline =
+    startedAt +
+    config.timeoutSeconds * 1000;
+
+  let lastSignature: string | null = null;
+  let equalCount = 0;
+  let readsUsed = 0;
+
+  /*
+   * Quiet time must be measured from the most recent
+   * accounting change, not merely from drain start.
+   */
+  let stableSinceMs: number | null = null;
+
+  for (;;) {
+    if (nowMs() >= deadline) {
+      return {
+        status: "unresolved",
+        reason: "timeout",
+        readsUsed,
+        quietWindowMs,
+      };
+    }
+
+    let metrics: PrepaidProbeMetricsV39;
+
+    try {
+      metrics = await readMetrics();
+    } catch {
+      return {
+        status: "unresolved",
+        reason: "reader_failed",
+        readsUsed,
+        quietWindowMs,
+      };
+    }
+
+    readsUsed += 1;
+
+    /*
+     * Only accounting/callback state participates in the drain
+     * signature. Scientific rows remain independently bounded to
+     * [windowStart,windowEnd).
+     */
+    const signature = JSON.stringify({
+      internalSendCredits:
+        metrics.internalSendCredits,
+
+      deliveryCount:
+        metrics.deliveryCount,
+
+      notificationItemsReceived:
+        metrics.notificationItemsReceived,
+
+      explicitCostDeliveryCount:
+        metrics.explicitCostDeliveryCount,
+
+      fallbackDeliveryCount:
+        metrics.fallbackDeliveryCount,
+
+      costItemDisagreementCount:
+        metrics.costItemDisagreementCount,
+
+      callbackRequestsSeen:
+        metrics.callbackRequestsSeen,
+
+      callbackSuccess2xx:
+        metrics.callbackSuccess2xx,
+
+      callbackFailures:
+        metrics.callbackFailures,
+    });
+
+    const observedAtMs = nowMs();
+
+    if (
+      lastSignature !== null &&
+      signature === lastSignature
+    ) {
+      equalCount += 1;
+    } else {
+      equalCount = 1;
+      stableSinceMs = observedAtMs;
+    }
+
+    lastSignature = signature;
+
+    const quietElapsed =
+      stableSinceMs === null
+        ? 0
+        : observedAtMs - stableSinceMs;
+
+    if (
+      equalCount >= stableNeeded &&
+      quietElapsed >= quietWindowMs
+    ) {
+      return {
+        status: "quiescent",
+        metrics,
+        readsUsed,
+        quietWindowMs,
+      };
+    }
+
+    await sleep(
+      config.pollIntervalSeconds * 1000,
+    );
+  }
+}
+
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const LIVE_PROVIDER_BALANCE_POLL_MS_V39 = 60_000;
@@ -239,6 +420,16 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   let nextProviderBalancePollAt = 0;
   let consecutiveFailedProviderBalancePolls = 0;
 
+  /*
+   * AeroDataBox Alert balance is account-wide.
+   * During this owned exposure it must never increase.
+   *
+   * An increase means refill/foreign-account contamination,
+   * not "negative spend" that may be clamped to zero.
+   */
+  let lastObservedProviderBalance =
+    input.balanceBefore;
+
   let sub = await createSubscription("FlightByAirportIcao", icao, {
     url: webhookUrl,
     maxDeliveryRetries: 0,
@@ -302,11 +493,76 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       nextProviderBalancePollAt = Date.now() + LIVE_PROVIDER_BALANCE_POLL_MS_V39;
       if (balance) {
         consecutiveFailedProviderBalancePolls = 0;
-        lastExternalCredits = Math.max(0, input.balanceBefore - balance.creditsRemaining);
+
+        const currentProviderBalance =
+          Number(balance.creditsRemaining);
+
+        if (
+          !Number.isInteger(currentProviderBalance) ||
+          currentProviderBalance < 0
+        ) {
+          liveStopReason =
+            "provider_balance_invalid_during_probe";
+          break;
+        }
+
+        if (
+          currentProviderBalance >
+          lastObservedProviderBalance
+        ) {
+          liveStopReason =
+            "provider_balance_increased_during_probe";
+          break;
+        }
+
+        lastObservedProviderBalance =
+          currentProviderBalance;
+
+        lastExternalCredits =
+          input.balanceBefore -
+          currentProviderBalance;
+
         maxObservedUnsettledCreditGap = Math.max(
           maxObservedUnsettledCreditGap,
-          Math.max(0, internal - lastExternalCredits),
+          Math.max(
+            0,
+            internal - lastExternalCredits,
+          ),
         );
+
+        /*
+         * R1 is continuous, not admission-only.
+         *
+         * Exactly one active CreditBased subscription must
+         * exist and it must be the subscription owned by
+         * this exact runtime session.
+         */
+        try {
+          const subscriptions =
+            await listSubscriptionsStrictWithRetry();
+
+          const activeBillable =
+            subscriptions.filter(
+              (candidate) =>
+                candidate.isActive &&
+                candidate.billingType ===
+                  "CreditBased",
+            );
+
+          if (
+            activeBillable.length !== 1 ||
+            String(activeBillable[0]?.id ?? "") !==
+              String(sub.id)
+          ) {
+            liveStopReason =
+              "provider_subscription_isolation_lost";
+            break;
+          }
+        } catch {
+          liveStopReason =
+            "provider_subscription_inventory_read_failed";
+          break;
+        }
       } else {
         consecutiveFailedProviderBalancePolls += 1;
         if (consecutiveFailedProviderBalancePolls >= LIVE_PROVIDER_BALANCE_FAILED_POLL_LIMIT_V39) {
@@ -336,17 +592,61 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     };
   }
 
+  /*
+   * Provider exposure is already deleted here, but callbacks
+   * sent before DELETE may still be in flight.
+   *
+   * Every stop path therefore remains callback-accepting in
+   * `settling` until settlement + accounting quiescence have
+   * completed. The later terminal branch changes the session
+   * to `failed` when the stopped attempt is adjudicated.
+   */
   await setPrepaidProbeSessionStateV39(
     session.sessionId,
-    externalStopRequested ? "failed" : "settling",
+    "settling",
   );
-  const settle = await runSettlement(input.settlement, async () => {
-    const balance = await getBalanceWithTransientRetryV39();
-    return balance ? balance.creditsRemaining : null;
-  });
+  let settlementBalanceIncreased = false;
+  let lastSettlementProviderBalance =
+    lastObservedProviderBalance;
+
+  const settle = await runSettlement(
+    input.settlement,
+    async () => {
+      const balance =
+        await getBalanceWithTransientRetryV39();
+
+      if (!balance) return null;
+
+      const currentProviderBalance =
+        Number(balance.creditsRemaining);
+
+      if (
+        !Number.isInteger(currentProviderBalance) ||
+        currentProviderBalance < 0
+      ) {
+        return null;
+      }
+
+      if (
+        currentProviderBalance >
+        lastSettlementProviderBalance
+      ) {
+        settlementBalanceIncreased = true;
+        return null;
+      }
+
+      lastSettlementProviderBalance =
+        currentProviderBalance;
+
+      return currentProviderBalance;
+    },
+  );
   if (settle.status !== "settled") {
     const metrics = await prepaidProbeMetricsV39(session.sessionId, windowStart, windowEnd);
-    const stopReason = `settlement_unresolved:${settle.reason}`;
+    const stopReason =
+      settlementBalanceIncreased
+        ? "provider_balance_increased_during_settlement"
+        : `settlement_unresolved:${settle.reason}`;
     if (input.ownerKind === "anchor_probe") {
       if (!Number.isInteger(input.ownerProbeId) || !input.ownerProbeId || ![1, 2].includes(Number(input.stage))) {
         throw new Error("PREPAID_PROBE_RECONCILIATION_OWNER_METADATA_REQUIRED");
@@ -383,9 +683,233 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     };
   }
 
-  const externalCredits = Math.max(0, input.balanceBefore - settle.stableBalance);
-  const metrics = await prepaidProbeMetricsV39(session.sessionId, windowStart, windowEnd);
-  maxObservedUnsettledCreditGap = Math.max(maxObservedUnsettledCreditGap, Math.max(0, metrics.internalSendCredits - externalCredits));
+  /*
+   * These conditions invalidate account-wide external
+   * spend attribution. Let already-sent callbacks drain,
+   * preserve aggregate evidence, but never classify/score
+   * this attempt as MATCH.
+   */
+  const accountContaminationReasons =
+    new Set<string>([
+      "provider_balance_invalid_during_probe",
+      "provider_balance_increased_during_probe",
+      "provider_subscription_isolation_lost",
+      "provider_subscription_inventory_read_failed",
+    ]);
+
+  if (
+    liveStopReason !== null &&
+    accountContaminationReasons.has(
+      liveStopReason,
+    )
+  ) {
+    const accountingDrain =
+      await waitForPrepaidProbeAccountingQuiescenceV39(
+        input.settlement,
+        () =>
+          prepaidProbeMetricsV39(
+            session.sessionId,
+            windowStart,
+            windowEnd,
+          ),
+      );
+
+    const metrics =
+      accountingDrain.status === "quiescent"
+        ? accountingDrain.metrics
+        : await prepaidProbeMetricsV39(
+            session.sessionId,
+            windowStart,
+            windowEnd,
+          );
+
+    const stopReason =
+      accountingDrain.status === "quiescent"
+        ? liveStopReason
+        : `${liveStopReason}:accounting_quiescence_unresolved`;
+
+    if (input.ownerKind === "anchor_probe") {
+      if (
+        !Number.isInteger(input.ownerProbeId) ||
+        !input.ownerProbeId ||
+        ![1, 2].includes(Number(input.stage))
+      ) {
+        throw new Error(
+          "PREPAID_PROBE_RECONCILIATION_OWNER_METADATA_REQUIRED",
+        );
+      }
+
+      await persistProbeReconciliationEvidenceV39({
+        probeId: input.ownerProbeId,
+        runtimeSessionId: session.sessionId,
+        stage: input.stage as 1 | 2,
+        icao,
+        evidenceStatus: "UNRESOLVED",
+        externalSpendCredits: null,
+        metrics,
+        settlementReads: settle.readsUsed,
+        maxObservedUnsettledCreditGap,
+        deliveryCompletenessFloor:
+          PROBE_DELIVERY_COMPLETENESS_FLOOR_V39,
+        windowStartUtc: windowStart,
+        windowEndUtc: windowEnd,
+        durationCensored:
+          windowEnd.getTime() < deadline,
+        stopReason,
+      });
+    }
+
+    await setPrepaidProbeSessionStateV39(
+      session.sessionId,
+      "failed",
+    ).catch(() => undefined);
+
+    const cleanup = await cleanupOrDefer(
+      session.sessionId,
+      `${input.deletionRunId}:account-contamination`,
+    ).catch(() => null);
+
+    return {
+      status: "failed",
+      runtimeSessionId: session.sessionId,
+      windowStart,
+      windowEnd,
+      durationCensored:
+        windowEnd.getTime() < deadline,
+      stopReason,
+      reconciliationStatus: "UNRESOLVED",
+      externalCredits: null,
+      internalSendCredits:
+        metrics.internalSendCredits,
+      maxObservedUnsettledCreditGap,
+      settlementReads: settle.readsUsed,
+      metrics,
+      cleanupVerifiedAtUtc:
+        cleanup?.verifiedAtUtc ?? null,
+      subscriptionDeleted: true,
+    };
+  }
+
+  const externalCredits =
+    input.balanceBefore - settle.stableBalance;
+
+  if (externalCredits < 0) {
+    throw new Error(
+      "PREPAID_PROBE_NEGATIVE_EXTERNAL_SPEND_IMPOSSIBLE",
+    );
+  }
+
+  /*
+   * Provider spend is now settled, but an already-sent webhook may still
+   * be in flight. Require the exact session accounting/callback state to
+   * become quiescent before the final exact reconciliation.
+   */
+  const accountingDrain =
+    await waitForPrepaidProbeAccountingQuiescenceV39(
+      input.settlement,
+      () =>
+        prepaidProbeMetricsV39(
+          session.sessionId,
+          windowStart,
+          windowEnd,
+        ),
+    );
+
+  if (accountingDrain.status !== "quiescent") {
+    const metrics =
+      await prepaidProbeMetricsV39(
+        session.sessionId,
+        windowStart,
+        windowEnd,
+      );
+
+    const stopReason =
+      `accounting_quiescence_unresolved:${accountingDrain.reason}`;
+
+    if (input.ownerKind === "anchor_probe") {
+      if (
+        !Number.isInteger(input.ownerProbeId) ||
+        !input.ownerProbeId ||
+        ![1, 2].includes(Number(input.stage))
+      ) {
+        throw new Error(
+          "PREPAID_PROBE_RECONCILIATION_OWNER_METADATA_REQUIRED",
+        );
+      }
+
+      /*
+       * Reconciliation is deliberately UNRESOLVED here.
+       * The schema requires external spend to remain null for
+       * UNRESOLVED evidence. Do not classify or score this attempt.
+       */
+      await persistProbeReconciliationEvidenceV39({
+        probeId: input.ownerProbeId,
+        runtimeSessionId: session.sessionId,
+        stage: input.stage as 1 | 2,
+        icao,
+        evidenceStatus: "UNRESOLVED",
+        externalSpendCredits: null,
+        metrics,
+        settlementReads: settle.readsUsed,
+        maxObservedUnsettledCreditGap,
+        deliveryCompletenessFloor:
+          PROBE_DELIVERY_COMPLETENESS_FLOOR_V39,
+        windowStartUtc: windowStart,
+        windowEndUtc: windowEnd,
+        durationCensored:
+          windowEnd.getTime() < deadline,
+        stopReason,
+      });
+    }
+
+    await setPrepaidProbeSessionStateV39(
+      session.sessionId,
+      "failed",
+    ).catch(() => undefined);
+
+    const cleanup = await cleanupOrDefer(
+      session.sessionId,
+      `${input.deletionRunId}:accounting-quiescence-unresolved`,
+    ).catch(() => null);
+
+    return {
+      status: "failed",
+      runtimeSessionId: session.sessionId,
+      windowStart,
+      windowEnd,
+      durationCensored:
+        windowEnd.getTime() < deadline,
+      stopReason,
+      reconciliationStatus: "UNRESOLVED",
+      externalCredits: null,
+      internalSendCredits:
+        metrics.internalSendCredits,
+      maxObservedUnsettledCreditGap,
+      settlementReads:
+        settle.readsUsed,
+      metrics,
+      cleanupVerifiedAtUtc:
+        cleanup?.verifiedAtUtc ?? null,
+      subscriptionDeleted: true,
+    };
+  }
+
+  /*
+   * Use the exact final quiescent snapshot directly.
+   * Do not issue another independent accounting query that could
+   * reopen a race between the drain proof and classification.
+   */
+  const metrics = accountingDrain.metrics;
+
+  maxObservedUnsettledCreditGap =
+    Math.max(
+      maxObservedUnsettledCreditGap,
+      Math.max(
+        0,
+        metrics.internalSendCredits -
+          externalCredits,
+      ),
+    );
 
   // V3.9 §3.2 makes settled provider spend authoritative and explicitly
   // warns that a billed SEND can be absent from the received callback ledger.
@@ -470,6 +994,42 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       settlementReads: settle.readsUsed,
       metrics,
       cleanupVerifiedAtUtc: cleanup?.verifiedAtUtc ?? null,
+      subscriptionDeleted: true,
+    };
+  }
+
+  if (liveStopReason !== null) {
+    const stopReason =
+      reconciliationStopReason ??
+      liveStopReason;
+
+    await setPrepaidProbeSessionStateV39(
+      session.sessionId,
+      "failed",
+    ).catch(() => undefined);
+
+    const cleanup = await cleanupOrDefer(
+      session.sessionId,
+      `${input.deletionRunId}:local-stop`,
+    ).catch(() => null);
+
+    return {
+      status: "failed",
+      runtimeSessionId: session.sessionId,
+      windowStart,
+      windowEnd,
+      durationCensored:
+        windowEnd.getTime() < deadline,
+      stopReason,
+      reconciliationStatus,
+      externalCredits,
+      internalSendCredits:
+        metrics.internalSendCredits,
+      maxObservedUnsettledCreditGap,
+      settlementReads: settle.readsUsed,
+      metrics,
+      cleanupVerifiedAtUtc:
+        cleanup?.verifiedAtUtc ?? null,
       subscriptionDeleted: true,
     };
   }

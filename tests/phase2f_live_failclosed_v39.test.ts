@@ -19,15 +19,39 @@ describe("V3.9 Phase-2F live fail-closed invariants", () => {
     expect(preflight).toBeLessThan(create);
   });
 
-  it("never substitutes zero external spend for an unreadable live balance", () => {
+  it("never hides provider balance uncertainty or increases behind a zero clamp", () => {
     const text = source();
-    const balance = text.indexOf("const balance = await getBalanceWithTransientRetryV39();");
-    const refusal = text.indexOf('liveStopReason = "balance_read_failed_after_retries"', balance);
-    const external = text.indexOf("const externalCredits = Math.max", balance);
+    const balance = text.indexOf(
+      "const balance = await getBalanceWithTransientRetryV39();",
+    );
+    const refusal = text.indexOf(
+      'liveStopReason = "balance_read_failed_after_retries"',
+      balance,
+    );
+    const external = text.indexOf(
+      "input.balanceBefore - settle.stableBalance",
+      balance,
+    );
 
     expect(balance).toBeGreaterThan(-1);
     expect(refusal).toBeGreaterThan(balance);
     expect(external).toBeGreaterThan(refusal);
+
+    expect(text).not.toContain(
+      "Math.max(0, input.balanceBefore - balance.creditsRemaining)",
+    );
+
+    expect(text).not.toContain(
+      "const externalCredits = Math.max",
+    );
+
+    expect(text).toContain(
+      "provider_balance_increased_during_probe",
+    );
+
+    expect(text).toContain(
+      "provider_balance_increased_during_settlement",
+    );
   });
 
   it("keeps deletion after the live watchdog and before settlement", () => {

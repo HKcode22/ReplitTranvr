@@ -189,6 +189,10 @@ describe("Phase2G live scientific-health classification", () => {
     const health = await readPhase2gScientificHealthV39(client as any, {
       sessionId: "00000000-0000-4000-8000-000000000008",
       metricContractVersion: "v39-physical-flight-instance-v2",
+      windowStartUtc:
+        new Date("2026-09-28T10:00:00.000Z"),
+      windowEndUtc:
+        new Date("2026-09-28T12:00:00.000Z"),
       observedAtUtc: "2026-09-28T12:00:00.000Z",
     });
 

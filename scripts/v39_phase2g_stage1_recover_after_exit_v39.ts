@@ -70,15 +70,42 @@ async function main(): Promise<void> {
   const allowedScientificStopReason =
     requestedStopReason != null &&
     /^scientific_contract_violation:[a-z0-9_]{1,96}$/.test(requestedStopReason);
+
   const allowedRuntimeStateLossStopReason =
     requestedStopReason != null &&
     /^runtime_state_loss:(session_row_missing|delivery_count_regressed|internal_credit_regressed|callback_count_regressed|item_count_regressed|terminal_snapshot_mismatch)$/.test(requestedStopReason);
+
+  /*
+   * Exact cross-owner contract with
+   * v39_phase2g_github_actions_watchdog_v39.ts.
+   *
+   * Keep this list closed. A newly invented durable provider
+   * stop reason must be deliberately added here and tested
+   * before the watchdog can rely on recovery for it.
+   */
+  const providerSafetyStopReasons = new Set([
+    "provider_balance_invalid_during_probe",
+    "provider_balance_increased_during_probe",
+    "provider_balance_read_failed_after_retries",
+    "provider_subscription_inventory_read_failed",
+    "provider_subscription_isolation_lost",
+  ]);
+
+  const allowedProviderSafetyStopReason =
+    requestedStopReason != null &&
+    providerSafetyStopReasons.has(
+      requestedStopReason,
+    );
+
   if (
     requestedStopReason &&
     !allowedScientificStopReason &&
-    !allowedRuntimeStateLossStopReason
+    !allowedRuntimeStateLossStopReason &&
+    !allowedProviderSafetyStopReason
   ) {
-    throw new Error("RECOVERY_REFUSED:STOP_REASON_NOT_ALLOWED");
+    throw new Error(
+      "RECOVERY_REFUSED:STOP_REASON_NOT_ALLOWED",
+    );
   }
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("RECOVERY_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("RECOVERY_REFUSED:AUTH_SHA_INVALID");
@@ -233,12 +260,19 @@ async function main(): Promise<void> {
       providerDeleteVerified = activeBillableBefore.length === 0;
     }
 
-    // The exact provider subscription is now verified inactive. Transition the
-    // surviving runtime owner out of active before any raw/runtime cleanup so
-    // the published cleanup bridge can refuse premature evidence deletion.
+    /*
+     * Exact provider deletion is now verified, so paid exposure
+     * has ended. Keep the surviving runtime session in `settling`
+     * rather than `failed`: a provider callback sent before DELETE
+     * may still arrive afterward.
+     *
+     * The durable anchor probe is marked failed separately below.
+     * Local/deferred runtime cleanup remains responsible for the
+     * final transient-session closure.
+     */
     await pool.query(
       `UPDATE clean.prepaid_probe_session_runtime
-          SET state='failed'
+          SET state='settling'
         WHERE session_id=$1::uuid
           AND owner_kind='anchor_probe'
           AND owner_probe_id=$2

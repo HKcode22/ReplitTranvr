@@ -30,6 +30,25 @@ async function bodyJson(response: Response): Promise<any | null> {
   try { return JSON.parse(text); } catch { return null; }
 }
 
+/*
+ * Keep every prospective verifier of the prepaid callback
+ * on the same acceptance contract.
+ *
+ * Provider response limit: 10 seconds.
+ * Internal admission budget: 8 seconds.
+ */
+const ADB_WEBHOOK_RESPONSE_LIMIT_MS = 10_000;
+const PHASE2G_CALLBACK_ADMISSION_BUDGET_MS = 8_000;
+
+if (
+  PHASE2G_CALLBACK_ADMISSION_BUDGET_MS >=
+  ADB_WEBHOOK_RESPONSE_LIMIT_MS
+) {
+  throw new Error(
+    "REFUSED:CALLBACK_ADMISSION_BUDGET_HAS_NO_SAFETY_MARGIN",
+  );
+}
+
 async function main(): Promise<void> {
   const base = resolveBase();
   const contractMode = String(process.env.V39_CALLBACK_CONTRACT_MODE ?? "workspace-health").trim().toLowerCase();
@@ -128,16 +147,74 @@ async function main(): Promise<void> {
   };
 
   try {
-    const response = await fetch(
-      `${base}/api/v1/webhooks/aerodatabox/${encodeURIComponent(secret)}/prepaid/${session.sessionId}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(20_000),
-      },
-    );
-    const responseJson = await bodyJson(response);
+    const responseStartedAt =
+      process.hrtime.bigint();
+
+    let response: Response;
+
+    try {
+      response = await fetch(
+        `${base}/api/v1/webhooks/aerodatabox/${encodeURIComponent(secret)}/prepaid/${session.sessionId}`,
+        {
+          method: "POST",
+          headers: {
+            "content-type":
+              "application/json",
+            accept:
+              "application/json",
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(
+            PHASE2G_CALLBACK_ADMISSION_BUDGET_MS,
+          ),
+        },
+      );
+    } catch (error: any) {
+      const elapsedMs =
+        Number(
+          process.hrtime.bigint() -
+          responseStartedAt,
+        ) / 1_000_000;
+
+      const errorName =
+        String(error?.name ?? "");
+
+      if (
+        errorName === "TimeoutError" ||
+        errorName === "AbortError"
+      ) {
+        throw new Error(
+          `REFUSED:WORKSPACE_PREPAID_CALLBACK_LATENCY_BUDGET_EXCEEDED:` +
+          `elapsed_ms=${Math.round(elapsedMs)}:` +
+          `budget_ms=${PHASE2G_CALLBACK_ADMISSION_BUDGET_MS}`,
+        );
+      }
+
+      throw new Error(
+        `REFUSED:WORKSPACE_PREPAID_CALLBACK_TRANSPORT_FAILURE:` +
+        `${errorName || "unknown"}`,
+      );
+    }
+
+    const callbackLatencyMs =
+      Number(
+        process.hrtime.bigint() -
+        responseStartedAt,
+      ) / 1_000_000;
+
+    if (
+      callbackLatencyMs >
+      PHASE2G_CALLBACK_ADMISSION_BUDGET_MS
+    ) {
+      throw new Error(
+        `REFUSED:WORKSPACE_PREPAID_CALLBACK_LATENCY_BUDGET_EXCEEDED:` +
+        `elapsed_ms=${Math.round(callbackLatencyMs)}:` +
+        `budget_ms=${PHASE2G_CALLBACK_ADMISSION_BUDGET_MS}`,
+      );
+    }
+
+    const responseJson =
+      await bodyJson(response);
     if (
       response.status !== 200 ||
       responseJson?.received !== true ||
@@ -230,6 +307,17 @@ async function main(): Promise<void> {
       legacyLiveRouteBehaviorVerified: contractMode === "legacy-live-prepaid-route",
       wrongSecretRejected404: true,
       exactSecretAccepted200: true,
+      providerWebhookResponseLimitMs:
+        ADB_WEBHOOK_RESPONSE_LIMIT_MS,
+      callbackAdmissionBudgetMs:
+        PHASE2G_CALLBACK_ADMISSION_BUDGET_MS,
+      callbackEndToEndLatencyMs:
+        Math.round(
+          callbackLatencyMs * 1000,
+        ) / 1000,
+      callbackSafetyMarginMs:
+        ADB_WEBHOOK_RESPONSE_LIMIT_MS -
+        PHASE2G_CALLBACK_ADMISSION_BUDGET_MS,
       publicHttpsIngress: true,
       retentionHours: 168,
       bucketPrefix: "replit-objstore",

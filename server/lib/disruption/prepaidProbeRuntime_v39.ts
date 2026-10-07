@@ -779,6 +779,33 @@ export async function recordPrepaidProbeCallbackFailureV39(sessionId: string): P
   );
 }
 
+/**
+ * Record an HTTP callback that reached the exact prepaid
+ * ingress but failed before persistPrepaidProbeWebhookV39()
+ * could increment callback_requests_seen itself.
+ *
+ * Increment request+failure together so parser failures are
+ * visible to the owner/watchdog accounting invariant.
+ */
+export async function recordPrepaidProbeIngressFailureV39(
+  sessionId: string,
+): Promise<boolean> {
+  const id = assertSessionId(sessionId);
+
+  const result = await pool.query(
+    `UPDATE clean.prepaid_probe_session_runtime
+        SET callback_requests_seen=callback_requests_seen+1,
+            callback_failures=callback_failures+1
+      WHERE session_id=$1
+        AND expires_at_utc>now()
+        AND state IN ('armed','active','settling')
+      RETURNING session_id`,
+    [id],
+  );
+
+  return result.rowCount === 1;
+}
+
 export async function prepaidProbeSessionExistsV39(sessionId: string): Promise<boolean> {
   const id = assertSessionId(sessionId);
   const result = await pool.query(
@@ -1005,8 +1032,16 @@ export async function persistPrepaidProbeWebhookV39(input: {
     if (subId) {
       const bind = await client.query(
         `UPDATE clean.prepaid_probe_session_runtime
-            SET provider_subscription_id=COALESCE(provider_subscription_id,$2),state='active',last_delivery_at_utc=$3
-          WHERE session_id=$1 AND (provider_subscription_id IS NULL OR provider_subscription_id=$2)
+            SET
+              provider_subscription_id=COALESCE(provider_subscription_id,$2),
+              state=CASE
+                WHEN state='armed' THEN 'active'
+                ELSE state
+              END,
+              last_delivery_at_utc=$3
+          WHERE session_id=$1
+            AND state IN ('armed','active','settling')
+            AND (provider_subscription_id IS NULL OR provider_subscription_id=$2)
           RETURNING session_id`,
         [sessionId, subId, receivedAt],
       );
@@ -1144,8 +1179,16 @@ export async function prepaidProbeMetricsV39(
     summarizePrepaidPhysicalIdentityRowsV39(physicalRows);
 
   /*
-   * Delivery/credit reconciliation remains unchanged. This is accounting
-   * evidence, not physical-flight scientific identity.
+   * Scientific observations above remain strictly bounded to [start,end).
+   *
+   * Delivery/credit reconciliation has a different aperture: AeroDataBox
+   * external spend is measured across the complete owned subscription
+   * lifecycle through verified deletion and settlement. Therefore the
+   * matching internal SEND/callback ledger must also include every delivery
+   * owned by this exact runtime session, including a delivery received near
+   * the start/end boundary while the subscription is still settling.
+   *
+   * Do NOT apply the scientific observation window to accounting evidence.
    */
   const deliveries = await pool.query(
     `SELECT
@@ -1172,10 +1215,8 @@ export async function prepaidProbeMetricsV39(
             AND delivery_attempt_cost_credits <> notification_items
         )::int AS cost_item_disagreement_count
        FROM clean.prepaid_probe_delivery_runtime
-      WHERE session_id=$1
-        AND received_at_utc >= $2
-        AND received_at_utc < $3`,
-    [id, start, end],
+      WHERE session_id=$1`,
+    [id],
   );
 
   const sessionCounters = await pool.query(

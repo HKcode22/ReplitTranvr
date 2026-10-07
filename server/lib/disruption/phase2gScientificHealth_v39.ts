@@ -151,9 +151,24 @@ export async function readPhase2gScientificHealthV39(
   input: {
     sessionId: string;
     metricContractVersion: string | null;
+    windowStartUtc: Date;
+    windowEndUtc: Date;
     observedAtUtc?: string;
   },
 ): Promise<Phase2gScientificHealthV39> {
+  const start = input.windowStartUtc;
+  const end = input.windowEndUtc;
+
+  if (
+    !Number.isFinite(start.getTime()) ||
+    !Number.isFinite(end.getTime()) ||
+    end <= start
+  ) {
+    throw new Error(
+      "PHASE2G_SCIENTIFIC_HEALTH_WINDOW_INVALID",
+    );
+  }
+
   const summary = await client.query(
     `SELECT
        count(*)::int AS total_item_rows,
@@ -197,8 +212,10 @@ export async function readPhase2gScientificHealthV39(
            AND codeshare_resolution_status IS DISTINCT FROM 'resolved_operator'
        )::int AS resolved_rows_nonoperator
      FROM clean.prepaid_probe_item_runtime
-     WHERE session_id=$1::uuid`,
-    [input.sessionId],
+     WHERE session_id=$1::uuid
+       AND received_at_utc >= $2
+       AND received_at_utc < $3`,
+    [input.sessionId, start, end],
   );
 
   const exact = await client.query(
@@ -216,6 +233,8 @@ export async function readPhase2gScientificHealthV39(
          provisional_identity_key
        FROM clean.prepaid_probe_item_runtime
        WHERE session_id=$1::uuid
+       AND received_at_utc >= $2
+       AND received_at_utc < $3
          AND codeshare_resolution_status='resolved_operator'
          AND operating_carrier IS NOT NULL
          AND operating_flight_number IS NOT NULL
@@ -275,7 +294,7 @@ export async function readPhase2gScientificHealthV39(
          WHERE provisional_key_count > 1
        )::int AS provisional_key_drift_groups
      FROM grouped`,
-    [input.sessionId],
+    [input.sessionId, start, end],
   );
 
   const enrichment = await client.query(
@@ -286,6 +305,8 @@ export async function readPhase2gScientificHealthV39(
          bool_or(aircraft_reg IS NOT NULL) AS saw_present_aircraft
        FROM clean.prepaid_probe_item_runtime
        WHERE session_id=$1::uuid
+       AND received_at_utc >= $2
+       AND received_at_utc < $3
          AND identity_resolution_status='resolved'
          AND codeshare_resolution_status='resolved_operator'
          AND flight_instance_id IS NOT NULL
@@ -295,7 +316,7 @@ export async function readPhase2gScientificHealthV39(
        WHERE saw_missing_aircraft AND saw_present_aircraft
      )::int AS late_aircraft_enrichment_physical_ids
      FROM physical`,
-    [input.sessionId],
+    [input.sessionId, start, end],
   );
 
   const s = summary.rows[0] ?? {};

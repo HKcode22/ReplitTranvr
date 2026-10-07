@@ -10,7 +10,13 @@
  * must use the exact v39:phase6:start owner; emergency stop must use
  * v39:phase6:pause so provider DELETE + frozen settlement remain single-owner.
  */
-import type { Express, Request, Response, NextFunction } from "express";
+import {
+  json,
+  type Express,
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -36,6 +42,7 @@ import {
   cleanupPrepaidProbeSessionLocalV39,
   persistPrepaidProbeWebhookV39,
   recordPrepaidProbeCallbackFailureV39,
+  recordPrepaidProbeIngressFailureV39,
 } from "./lib/disruption/prepaidProbeRuntime_v39";
 import { verifyAuthRecord, approvedArtifactHashesFromLedger, sha256HexString, type AuthRecord } from "./lib/disruption/authRecord_v39";
 import { v39Pool as pool } from "./lib/disruption/db_v39";
@@ -125,6 +132,33 @@ function managementMutationGuard(expectedScope: string) {
     try {
       const incident = await pool.query(`SELECT cause,occurred_at_utc FROM clean.adb_incident_stop WHERE resolved=false ORDER BY occurred_at_utc DESC LIMIT 1`);
       if (incident.rowCount) { res.status(423).json({ error:`REFUSED_INCIDENT_STOP: ${incident.rows[0].cause} at ${incident.rows[0].occurred_at_utc}` }); return; }
+
+      /*
+       * Provider Alert balance and billable subscription
+       * inventory are account-wide. Manual management
+       * mutations must never race a probing/settling owner.
+       */
+      const activeProbe = await pool.query(
+        `SELECT probe_id,icao,status
+           FROM clean.adb_anchor_probe
+          WHERE status IN ('probing','settling')
+          ORDER BY recorded_at DESC
+          LIMIT 1`,
+      );
+
+      if (activeProbe.rowCount) {
+        const row = activeProbe.rows[0];
+
+        res.status(423).json({
+          error:
+            `REFUSED_PROVIDER_MUTATION_DURING_LIVE_PROBE:` +
+            `probe=${row.probe_id}:` +
+            `icao=${row.icao}:` +
+            `status=${row.status}`,
+        });
+
+        return;
+      }
     } catch (error: any) {
       res.status(503).json({ error:`REFUSED_INCIDENT_LEDGER_UNAVAILABLE: ${error?.message ?? error}` }); return;
     }
@@ -194,14 +228,57 @@ async function recordIncident(cause:string,detail:unknown):Promise<void>{
 export function registerV3Routes(app:Express):void{
   app.post("/__v39/phase2g/webhook-secret-match",phase2gWebhookSecretMatch);
   app.post("/__v39/phase2g/runtime-db-binding",phase2gRuntimeDbBinding);
+
+  /*
+   * Dedicated prepaid callback parser.
+   *
+   * The global body parsers intentionally skip this exact
+   * route family so parser failures can reach the prepaid
+   * error boundary below.
+   */
+  const prepaidJsonParser = json({
+    limit: "2mb",
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    },
+  });
+
   const prepaidWebhookIngress=async(req:Request,res:Response)=>{
     const secret=webhookSecret();
     if(!secret){res.status(503).json({error:"WEBHOOK_SECRET_NOT_CONFIGURED"});return;}
     if(!req.params.secret||req.params.secret!==secret){res.status(404).json({error:"Not found"});return;}
     const sessionId=String(req.params.sessionId??"").trim();
+    const startedAt=Date.now();
+
+    if (!req.is("application/json")) {
+      const counted =
+        await recordPrepaidProbeIngressFailureV39(
+          sessionId,
+        ).catch(() => false);
+
+      await recordIncident(
+        "prepaid-ingress-content-type",
+        {
+          mode: "prepaid_probe",
+          sessionId,
+          counted,
+        },
+      );
+
+      console.error(
+        `[adb-v3-prepaid] invalid content-type session=${sessionId}`,
+      );
+
+      res.status(415).json({
+        error:
+          "Prepaid probe requires application/json",
+      });
+      return;
+    }
+
     try{
       const persisted=await persistPrepaidProbeWebhookV39({sessionId,body:req.body??{},receivedAtUtc:new Date()});
-      console.log(`[adb-v3-prepaid] session=${sessionId} items=${persisted.itemCount} duplicate=${persisted.duplicate}`);
+      console.log(`[adb-v3-prepaid] session=${sessionId} items=${persisted.itemCount} duplicate=${persisted.duplicate} ms=${Date.now()-startedAt}`);
       res.status(200).json({received:true,items:persisted.itemCount,duplicate:persisted.duplicate});
     }catch(err:any){
       console.error("[adb-v3-prepaid] durable persistence failed — returning 5xx (provider details redacted)");
@@ -248,7 +325,125 @@ export function registerV3Routes(app:Express):void{
     }
   };
 
-  app.post("/api/v1/webhooks/aerodatabox/:secret/prepaid/:sessionId",prepaidWebhookIngress);
+  app.post(
+    "/api/v1/webhooks/aerodatabox/:secret/prepaid/:sessionId",
+    prepaidJsonParser,
+    prepaidWebhookIngress,
+  );
+
+  /*
+   * Dedicated parser-error boundary for the prepaid route.
+   *
+   * Wrong-secret requests must not be able to poison a
+   * legitimate runtime session's callback counters.
+   */
+  app.use(
+    async (
+      err: any,
+      req: Request,
+      res: Response,
+      next: NextFunction,
+    ) => {
+      const pathOnly =
+        String(
+          req.originalUrl ??
+          req.url ??
+          "",
+        ).split("?")[0];
+
+      const match =
+        /^\/api\/v1\/webhooks\/aerodatabox\/([^/]+)\/prepaid\/([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i
+          .exec(pathOnly);
+
+      if (!match) {
+        next(err);
+        return;
+      }
+
+      const expected = webhookSecret();
+
+      if (!expected) {
+        res.status(503).json({
+          error:
+            "WEBHOOK_SECRET_NOT_CONFIGURED",
+        });
+        return;
+      }
+
+      let supplied: string;
+
+      try {
+        supplied =
+          decodeURIComponent(match[1]);
+      } catch {
+        res.status(404).json({
+          error: "Not found",
+        });
+        return;
+      }
+
+      const expectedBytes =
+        Buffer.from(expected);
+
+      const suppliedBytes =
+        Buffer.from(supplied);
+
+      if (
+        expectedBytes.length !==
+          suppliedBytes.length ||
+        !timingSafeEqual(
+          expectedBytes,
+          suppliedBytes,
+        )
+      ) {
+        res.status(404).json({
+          error: "Not found",
+        });
+        return;
+      }
+
+      const sessionId =
+        match[2].toLowerCase();
+
+      const counted =
+        await recordPrepaidProbeIngressFailureV39(
+          sessionId,
+        ).catch(() => false);
+
+      const tooLarge =
+        err?.type === "entity.too.large" ||
+        Number(err?.status) === 413;
+
+      const status =
+        tooLarge ? 413 : 400;
+
+      await recordIncident(
+        "prepaid-ingress-json-parser",
+        {
+          mode: "prepaid_probe",
+          sessionId,
+          counted,
+          parser_type:
+            String(
+              err?.type ??
+              "unknown",
+            ).slice(0, 80),
+          http_status: status,
+        },
+      );
+
+      console.error(
+        `[adb-v3-prepaid] JSON ingress failure session=${sessionId} status=${status}`,
+      );
+
+      res.status(status).json({
+        error:
+          tooLarge
+            ? "Prepaid probe payload too large"
+            : "Prepaid probe JSON invalid",
+      });
+    },
+  );
 
   // Phase-2G remote cleanup bridge. The GitHub-hosted Stage-1 owner has the
   // authoritative 120-minute clock/provider control, while raw provider blobs

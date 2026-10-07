@@ -6,20 +6,30 @@
  *
  * Usage: npx tsx scripts/v39_preflight_consistency.ts
  *
- * Required output:
- *   CURRENT_CONTRADICTIONS = 0
+ * This script is a lexical diagnostic scanner.
  *
- * Classification for every match:
- *   VALID_FINAL | MEASURE→FREEZE | DEFERRED | HISTORICAL/SUPERSEDED | CURRENT_CONTRADICTION
+ * It does not by itself prove complete document closure.
+ *
+ * Classification for every lexical match:
+ *   VALID_FINAL | MEASURE→FREEZE | DEFERRED |
+ *   HISTORICAL/SUPERSEDED | NEEDS_REVIEW
  */
 
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 
+/*
+ * Current authority follows the active execution documents:
+ *
+ *   1. Plan §§0–21 = normative executable contract.
+ *   2. Active Implementation Log §§0–35 = derived runbook.
+ *
+ * An older archived registry reference is not treated as a
+ * third current authority and is not recreated here.
+ */
 const NORMATIVE_FILES = [
   'V3.9_DataCollectPlan_f.8.md',
   'V3.9_IMPLEMENTATION_LOG.md',
-  'V39_CANONICAL_RULE_REGISTRY.yaml',
 ];
 
 const STALE_TERMS = [
@@ -107,12 +117,16 @@ function classifyMatch(term: string, line: string, file: string): string {
 
 function scan(): MatchResult[] {
   const results: MatchResult[] = [];
-  // The binding plan/log live in SEPmd/; the canonical rule registry yaml is
-  // retained under archiveOld/AugMDnotes/. Resolve each file explicitly.
+  /*
+   * Current authoritative scanner inputs both live in SEPmd/.
+   * Missing declared authority is fatal rather than silently
+   * skipped.
+   */
   const basePaths: Record<string, string> = {
-    'V3.9_DataCollectPlan_f.8.md': join(process.cwd(), 'SEPmd'),
-    'V3.9_IMPLEMENTATION_LOG.md': join(process.cwd(), 'SEPmd'),
-    'V39_CANONICAL_RULE_REGISTRY.yaml': join(process.cwd(), 'archiveOld', 'AugMDnotes'),
+    'V3.9_DataCollectPlan_f.8.md':
+      join(process.cwd(), 'SEPmd'),
+    'V3.9_IMPLEMENTATION_LOG.md':
+      join(process.cwd(), 'SEPmd'),
   };
 
   for (const fileName of NORMATIVE_FILES) {
@@ -121,8 +135,9 @@ function scan(): MatchResult[] {
     try {
       content = readFileSync(filePath, 'utf-8');
     } catch {
-      console.error(`Cannot read ${filePath}`);
-      continue;
+      throw new Error(
+        `SCANNER_REFUSED:MISSING_NORMATIVE_FILE:${filePath}`,
+      );
     }
 
     const lines = content.split('\n');
@@ -169,34 +184,59 @@ function main() {
     }
   }
 
-  const contradictions = results.filter(r => r.classification === 'CURRENT_CONTRADICTION');
-  const needsReview = results.filter(r => r.classification === 'NEEDS_REVIEW');
+  const needsReview =
+    results.filter(
+      (result) =>
+        result.classification ===
+        'NEEDS_REVIEW',
+    );
 
   console.log(`\n=== SUMMARY ===`);
   console.log(`Total matches: ${results.length}`);
-  console.log(`VALID_FINAL: ${groups['VALID_FINAL']?.length || 0}`);
-  console.log(`MEASURE→FREEZE: ${groups['MEASURE→FREEZE']?.length || 0}`);
-  console.log(`DEFERRED: ${groups['DEFERRED']?.length || 0}`);
-  console.log(`HISTORICAL/SUPERSEDED: ${groups['HISTORICAL/SUPERSEDED']?.length || 0}`);
-  console.log(`CURRENT_CONTRADICTIONS: ${contradictions.length}`);
-  console.log(`NEEDS_REVIEW: ${needsReview.length}`);
-
-  if (contradictions.length > 0) {
-    console.log('\n❌ CURRENT_CONTRADICTIONS > 0 — BLOCKED');
-    for (const c of contradictions) {
-      console.log(`  ${c.file}:${c.line} [${c.term}] ${c.context}`);
-    }
-    process.exit(1);
-  }
+  console.log(
+    `VALID_FINAL: ${groups['VALID_FINAL']?.length || 0}`,
+  );
+  console.log(
+    `MEASURE→FREEZE: ${groups['MEASURE→FREEZE']?.length || 0}`,
+  );
+  console.log(
+    `DEFERRED: ${groups['DEFERRED']?.length || 0}`,
+  );
+  console.log(
+    `HISTORICAL/SUPERSEDED: ` +
+    `${groups['HISTORICAL/SUPERSEDED']?.length || 0}`,
+  );
+  console.log(
+    `NEEDS_REVIEW: ${needsReview.length}`,
+  );
 
   if (needsReview.length > 0) {
-    console.log('\n⚠️  NEEDS_REVIEW items — review before FREEZE');
-    for (const n of needsReview) {
-      console.log(`  ${n.file}:${n.line} [${n.term}] ${n.context.substring(0, 80)}`);
+    console.log(
+      '\n⚠️  NEEDS_REVIEW lexical items — diagnostic only',
+    );
+
+    for (const item of needsReview) {
+      console.log(
+        `  ${item.file}:${item.line} ` +
+        `[${item.term}] ` +
+        `${item.context.substring(0, 80)}`,
+      );
     }
   }
 
-  console.log('\n✅ CURRENT_CONTRADICTIONS = 0 — PASS');
+  console.log(
+    '\nSCANNER_MODE=LEXICAL_DIAGNOSTIC_ONLY',
+  );
+
+  console.log(
+    `SCANNER_NEEDS_REVIEW=${needsReview.length}`,
+  );
+
+  console.log(
+    needsReview.length > 0
+      ? 'SCANNER_CLOSURE=NOT_PROVEN_BY_THIS_TOOL'
+      : 'SCANNER_CLOSURE=NO_LEXICAL_REVIEW_ITEMS',
+  );
 }
 
 main();

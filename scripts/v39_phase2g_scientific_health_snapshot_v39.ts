@@ -14,6 +14,7 @@ async function main(): Promise<void> {
 
   const probeR = await pool.query(
     `SELECT probe_id,icao,status,runtime_session_id,metric_contract_version,
+            window_start,window_end,
             duration_censored,stop_reason,reconciliation_status
        FROM clean.adb_anchor_probe
       WHERE stage=1 AND probe_budget_day_id=$1
@@ -64,6 +65,10 @@ async function main(): Promise<void> {
       probe.metric_contract_version == null
         ? null
         : String(probe.metric_contract_version),
+    windowStartUtc:
+      new Date(probe.window_start),
+    windowEndUtc:
+      new Date(probe.window_end),
   });
 
   console.log(JSON.stringify({

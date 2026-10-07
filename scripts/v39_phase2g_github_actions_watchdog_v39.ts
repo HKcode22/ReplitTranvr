@@ -6,6 +6,7 @@ import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import {
   getBalance,
   listSubscriptionsStrict,
+  listSubscriptionsStrictWithRetry,
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import {
   readPhase2gScientificHealthV39,
@@ -18,6 +19,16 @@ import {
 const LIVE_CREDIT_LIMIT = 450;
 const POLL_MS = 30_000;
 const PROVIDER_POLL_MS = 120_000;
+
+/*
+ * Independent provider-account visibility must be
+ * fail-closed after a bounded loss of visibility.
+ *
+ * One transient balance-read failure is tolerated.
+ * Three consecutive provider polling failures trigger
+ * the independent recovery path.
+ */
+const PROVIDER_READ_FAILURE_LIMIT = 3;
 const NO_CALLBACK_SPEND_CONSECUTIVE_PROVIDER_POLLS_LIMIT = 3;
 const PROBE_APPEAR_TIMEOUT_MS = 10 * 60_000;
 const DEADLINE_CLEANUP_GRACE_MS = 5 * 60_000;
@@ -258,6 +269,7 @@ async function main(): Promise<void> {
     let callbackFailures = 0;
     let callbackRequestsSeen = 0;
     let runtimeSessionRowPresent = false;
+    let providerSubscriptionId: string | null = null;
     if (sessionId) {
       const d = await pool.query(
         `SELECT
@@ -270,7 +282,10 @@ async function main(): Promise<void> {
       deliveryCount = Number(d.rows[0]?.deliveries ?? 0);
       internalCredits = Number(d.rows[0]?.credits ?? 0);
       const sessionCounters = await pool.query(
-        `SELECT callback_requests_seen,callback_failures
+        `SELECT
+           callback_requests_seen,
+           callback_failures,
+           provider_subscription_id
            FROM clean.prepaid_probe_session_runtime
           WHERE session_id=$1::uuid`,
         [sessionId],
@@ -290,8 +305,26 @@ async function main(): Promise<void> {
         });
       }
 
-      callbackRequestsSeen = Number(sessionCounters.rows[0]?.callback_requests_seen ?? 0);
-      callbackFailures = Number(sessionCounters.rows[0]?.callback_failures ?? 0);
+      callbackRequestsSeen =
+        Number(
+          sessionCounters.rows[0]
+            ?.callback_requests_seen ?? 0,
+        );
+
+      callbackFailures =
+        Number(
+          sessionCounters.rows[0]
+            ?.callback_failures ?? 0,
+        );
+
+      providerSubscriptionId =
+        sessionCounters.rows[0]
+          ?.provider_subscription_id == null
+          ? null
+          : String(
+              sessionCounters.rows[0]
+                .provider_subscription_id,
+            );
 
       if (status === "probing") {
         if (lastDeliveryCount !== null && deliveryCount < lastDeliveryCount) {
@@ -322,10 +355,18 @@ async function main(): Promise<void> {
 
     let scientificHealth: Phase2gScientificHealthV39 | null = null;
     if (sessionId) {
-      scientificHealth = await readPhase2gScientificHealthV39(pool, {
-        sessionId,
-        metricContractVersion,
-      });
+      scientificHealth =
+        await readPhase2gScientificHealthV39(
+          pool,
+          {
+            sessionId,
+            metricContractVersion,
+            windowStartUtc:
+              new Date(probe.window_start),
+            windowEndUtc:
+              new Date(probe.window_end),
+          },
+        );
       emitScientificHealth(scientificHealth);
 
       if (
@@ -439,9 +480,101 @@ async function main(): Promise<void> {
     if (Date.now() >= nextProviderPoll) {
       const balance = await getBalance();
       if (balance) {
-        lastProviderBalance = Number(balance.creditsRemaining);
+        const currentProviderBalance =
+          Number(balance.creditsRemaining);
+
         providerReadFailures = 0;
-        const externalDelta = Math.max(0, baseline - lastProviderBalance);
+
+        if (
+          !Number.isInteger(currentProviderBalance) ||
+          currentProviderBalance < 0
+        ) {
+          await invokeRecovery({
+            authId,
+            authFile,
+            authSha,
+            budgetDay,
+            reason:
+              "provider_balance_invalid_during_probe",
+            durableStopReason:
+              "provider_balance_invalid_during_probe",
+          });
+        }
+
+        if (
+          currentProviderBalance > baseline ||
+          (
+            lastProviderBalance !== null &&
+            currentProviderBalance >
+              lastProviderBalance
+          )
+        ) {
+          await invokeRecovery({
+            authId,
+            authFile,
+            authSha,
+            budgetDay,
+            reason:
+              `provider_balance_increased_during_probe:` +
+              `baseline=${baseline}:` +
+              `previous=${lastProviderBalance}:` +
+              `current=${currentProviderBalance}`,
+            durableStopReason:
+              "provider_balance_increased_during_probe",
+          });
+        }
+
+        lastProviderBalance =
+          currentProviderBalance;
+
+        const externalDelta =
+          baseline - currentProviderBalance;
+
+        if (providerSubscriptionId) {
+          let subscriptions;
+
+          try {
+            subscriptions =
+              await listSubscriptionsStrictWithRetry();
+          } catch {
+            await invokeRecovery({
+              authId,
+              authFile,
+              authSha,
+              budgetDay,
+              reason:
+                "provider_subscription_inventory_read_failed",
+              durableStopReason:
+                "provider_subscription_inventory_read_failed",
+            });
+          }
+
+          const activeBillable =
+            subscriptions.filter(
+              (candidate) =>
+                candidate.isActive &&
+                candidate.billingType ===
+                  "CreditBased",
+            );
+
+          if (
+            activeBillable.length !== 1 ||
+            String(activeBillable[0]?.id ?? "") !==
+              providerSubscriptionId
+          ) {
+            await invokeRecovery({
+              authId,
+              authFile,
+              authSha,
+              budgetDay,
+              reason:
+                "provider_subscription_isolation_lost",
+              durableStopReason:
+                "provider_subscription_isolation_lost",
+            });
+          }
+        }
+
         if (externalDelta >= LIVE_CREDIT_LIMIT) {
           await invokeRecovery({
             authId, authFile, authSha, budgetDay,
@@ -468,8 +601,27 @@ async function main(): Promise<void> {
         }
       } else {
         providerReadFailures += 1;
+
+        if (
+          providerReadFailures >=
+          PROVIDER_READ_FAILURE_LIMIT
+        ) {
+          await invokeRecovery({
+            authId,
+            authFile,
+            authSha,
+            budgetDay,
+            reason:
+              `provider_balance_read_failed_after_retries:` +
+              `consecutive_polls=${providerReadFailures}`,
+            durableStopReason:
+              "provider_balance_read_failed_after_retries",
+          });
+        }
       }
-      nextProviderPoll = Date.now() + PROVIDER_POLL_MS;
+
+      nextProviderPoll =
+        Date.now() + PROVIDER_POLL_MS;
     }
 
     console.log(JSON.stringify({

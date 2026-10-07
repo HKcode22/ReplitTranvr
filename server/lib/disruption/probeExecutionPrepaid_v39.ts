@@ -341,9 +341,7 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
            WHERE session_id=$1::uuid) AS sessions,
          (SELECT count(*)::int
             FROM clean.prepaid_probe_delivery_runtime
-           WHERE session_id=$1::uuid
-             AND received_at_utc >= $2
-             AND received_at_utc < $3) AS deliveries,
+           WHERE session_id=$1::uuid) AS deliveries,
          (SELECT count(*)::int
             FROM clean.prepaid_probe_item_runtime
            WHERE session_id=$1::uuid
@@ -369,6 +367,8 @@ export async function executePrepaidProbeV39(input: ExecuteProbeInput): Promise<
     const scientificHealth = await readPhase2gScientificHealthV39(pool, {
       sessionId: result.runtimeSessionId,
       metricContractVersion: PREPAID_PROBE_METRIC_CONTRACT_V39,
+      windowStartUtc: result.windowStart,
+      windowEndUtc: result.windowEnd,
     });
     console.log(JSON.stringify({
       schema: "v39.phase2g-terminal-scientific-health.v1",
