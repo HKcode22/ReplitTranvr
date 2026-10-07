@@ -1,0 +1,16 @@
+{
+  "version": "v39-gate2-runtime-2",
+  "sourceGitHead": "a4db302d6970cb654ade5e713038654b17f63d36",
+  "sourceProtectedTreeSha256": "3ffac36546756771a5850aa83f4166c04f6d8885ef72d629039c1c5f3147d5f0",
+  "probeBudgetDayId": "P2G-S1-20261008-22",
+  "watchdogPollMs": 5000,
+  "minStabilityBuckets": 6,
+  "settlementInitialWaitSeconds": 30,
+  "settlementPollIntervalSeconds": 10,
+  "settlementStableReadCount": 3,
+  "settlementTimeoutSeconds": 600,
+  "unsettledBurstMarginCredits": 50,
+  "stage1ReservationCredits": 450,
+  "stage2ReservationCredits": 450,
+  "stage1AmendmentSha256": "589d7e3fbb1467c6bba7bb9b82784612e023cf5df482cc7daf1acd593987712c"
+}
