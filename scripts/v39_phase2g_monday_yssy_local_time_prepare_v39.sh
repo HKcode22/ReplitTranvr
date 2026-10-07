@@ -172,6 +172,7 @@ case "${1:-help}" in
     echo "provider_mutations=0"
     echo "database_mutations=0"
 
+    AMENDMENT="$AMENDMENT" \
     node --import tsx --input-type=module <<'NODE'
 import {
   loadFrozenProbeArtifact,
@@ -191,7 +192,10 @@ import { readFileSync } from "node:fs";
 
 const preprobePath="artifacts/preprobe-reference-freeze-record.json";
 const preprobeSha="b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870";
-const amendmentPath="artifacts/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json";
+const amendmentPath=process.env.AMENDMENT;
+if (!amendmentPath) {
+  throw new Error("REFUSED:P2G23_AMENDMENT_ENV_MISSING");
+}
 const amendmentSha=createHash("sha256")
   .update(readFileSync(amendmentPath))
   .digest("hex");
@@ -256,7 +260,7 @@ const activeBillable=subscriptions.filter(
 
 const balance=evidence.balance.creditsRemaining;
 console.log(JSON.stringify({
-  schema:"p2g21.yssy.account-readonly.v1",
+  schema:"p2g23.yssy-recovery.account-readonly.v1",
   observed_at_utc:evidence.quota.observedAtUtc,
   alert_balance:balance,
   api_units_limit:evidence.quota.apiUnitsLimit,

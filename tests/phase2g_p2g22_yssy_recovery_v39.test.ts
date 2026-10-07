@@ -271,6 +271,36 @@ describe(
   "P2G22 bounded YSSY manual recovery",
   () => {
     it(
+      "binds the P2G23 helper selector to the authoritative recovery amendment variable",
+      () => {
+        const helper =
+          readFileSync(
+            join(
+              process.cwd(),
+              "scripts/v39_phase2g_monday_yssy_local_time_prepare_v39.sh",
+            ),
+            "utf8",
+          );
+
+        expect(helper).toContain(
+          'AMENDMENT="artifacts/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json"',
+        );
+
+        expect(helper).toContain(
+          'AMENDMENT="$AMENDMENT" \\',
+        );
+
+        expect(helper).toContain(
+          "const amendmentPath=process.env.AMENDMENT;",
+        );
+
+        expect(helper).not.toContain(
+          'const amendmentPath="artifacts/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json";',
+        );
+      },
+    );
+
+    it(
       "keeps the original v3 scope fail-closed without a recovery freeze",
       () => {
         const loaded =
