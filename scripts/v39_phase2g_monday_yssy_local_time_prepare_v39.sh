@@ -11,16 +11,16 @@ SMOKE="artifacts/v39-phase2-safety-smoke-AUTH-20260915-P2F095554-20260915T100325
 SMOKE_RUNTIME="artifacts/phase2f-smoke-runtime-20260915T095554Z.json"
 SMOKE_RUNTIME_SHA="58dbadb53bedc27dbaa236d020e21e7059470dd5ba0d10594475c5af2429d232"
 
-AMENDMENT="artifacts/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json"
-EXPECTED_AMENDMENT_GIT_BLOB="4effbc0017fc636d086b84d23d8a86f433e5cfc2"
+AMENDMENT="artifacts/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json"
+EXPECTED_AMENDMENT_GIT_BLOB="914614c088b72f9e0ab8a99f4546c77bdf896826"
 
 EXPECTED_ICAO="YSSY"
-RUNTIME="artifacts/phase2g-gate2-runtime-P2G-S1-20261005-20.json"
-BUDGET="P2G-S1-20261005-20"
-AUTH="SEPmd/V3.9_PHASE2G_AUTH_20261005_P2G21.json"
-AUTH_ID="AUTH-20261005-P2G21"
-AUTH_START="2026-10-05T03:00:00Z"
-AUTH_EXPIRES="2026-10-05T07:10:00Z"
+RUNTIME="artifacts/phase2g-gate2-runtime-P2G-S1-20261008-22.json"
+BUDGET="P2G-S1-20261008-22"
+AUTH="SEPmd/V3.9_PHASE2G_AUTH_20261008_P2G23.json"
+AUTH_ID="AUTH-20261008-P2G23"
+AUTH_START="2026-10-08T03:00:00Z"
+AUTH_EXPIRES="2026-10-08T07:10:00Z"
 
 require_repo_state() {
   [[ "$(git branch --show-current)" == "main" ]] || {
@@ -78,6 +78,7 @@ import fs from "node:fs";
 const p=process.argv[2];
 const j=JSON.parse(fs.readFileSync(p,"utf8"));
 const s=j?.early_pilot_scope_reduction;
+const r=j?.p2g22_yssy_delivery_gap_recovery_rerun;
 if (
   j?.status !== "READY_FROZEN_COMPACT6_AMENDMENT" ||
   s?.authorized !== true ||
@@ -97,7 +98,36 @@ if (
   s?.yssy_selected_stage1_utc_slot_hour !== 4 ||
   s?.yssy_stage1_eligible_start_tolerance_hours !== 1 ||
   s?.yssy_local_timezone !== "Australia/Sydney" ||
-  s?.yssy_minimum_curfew_boundary_buffer_minutes !== 300
+  s?.yssy_minimum_curfew_boundary_buffer_minutes !== 300 ||
+  r?.authorized !== true ||
+  r?.maximum_additional_attempts !== 1 ||
+  r?.failed_probe_id !== 16 ||
+  r?.icao !== "YSSY" ||
+  r?.expected_probe_budget_day_id !== "P2G-S1-20261006-21" ||
+  r?.expected_runtime_session_id !==
+    "06ae005c-34ca-4478-af17-1c5d11b42d6e" ||
+  r?.expected_metric_contract_version !==
+    "v39-physical-flight-instance-v2" ||
+  r?.expected_anchor_status !== "failed" ||
+  r?.expected_anchor_reconciliation_status !== "DELIVERY_GAP" ||
+  r?.expected_anchor_stop_reason !==
+    "external_internal_delivery_gap" ||
+  r?.durable_external_spend_credits !== 260 ||
+  r?.durable_internal_received_credits !== 259 ||
+  r?.durable_delivery_gap_credits !== 1 ||
+  r?.historical_attempt_immutable !== true ||
+  r?.excluded_from_final_scoring !== true ||
+  r?.requires_fresh_runtime_budget_auth !== true ||
+  r?.requires_matched_time_class !== true ||
+  r?.requires_zero_credit_callback_binding !== true ||
+  r?.requires_fresh_live_callback_verification !== true ||
+  r?.exact_reconciliation_required !== true ||
+  r?.delivery_gap_tolerance_credits !== 0 ||
+  r?.no_automatic_retry_after_recovery_attempt !== true ||
+  r?.outcome_metrics_not_used_to_authorize !== true ||
+  r?.historical_root_cause_claimed !== false ||
+  r?.authorization_basis !==
+    "p2g22_yssy_exact_delivery_gap_manual_review_only"
 ) {
   console.error("REFUSED:EARLY_PILOT_SCOPE_CONTRACT");
   process.exit(2);
@@ -127,11 +157,11 @@ case "${1:-help}" in
     require_repo_state
     verify_scope_freeze
 
-    npx vitest run       tests/phase2g_early_pilot_scope_v39.test.ts       tests/phase2g_yssy_operating_hours_v39.test.ts       tests/phase2g_compact6_reconciliation_v39.test.ts       tests/phase2g_p2g17_mmun_recovery_v39.test.ts       tests/phase2g_stage1_persistent_launch_v39.test.ts       tests/phase2g_stage1_rerun_policy_v39.test.ts       tests/phase2g_source_head_auth_binding_v39.test.ts       tests/phase2g_zero_credit_callback_binding_v39.test.ts       tests/phase2g_historical_failure_regressions_v39.test.ts       tests/phase2g_boot_migration_v39.test.ts       tests/phase2g_scientific_health_v39.test.ts       tests/phase2g_scientific_observability_wiring_v39.test.ts       tests/phase2g_unlogged_runtime_integrity_v39.test.ts       tests/prepaid_identity_adapter_v39.test.ts       tests/prepaid_identity_persistence_v39.test.ts       tests/prepaid_identity_resolution_v39.test.ts       tests/prepaid_physical_metrics_v39.test.ts       tests/anchor_promotion_v39.test.ts
+    npx vitest run       tests/phase2g_p2g22_yssy_recovery_v39.test.ts       tests/phase2g_early_pilot_scope_v39.test.ts       tests/phase2g_yssy_operating_hours_v39.test.ts       tests/phase2g_compact6_reconciliation_v39.test.ts       tests/phase2g_p2g17_mmun_recovery_v39.test.ts       tests/phase2g_stage1_persistent_launch_v39.test.ts       tests/phase2g_stage1_rerun_policy_v39.test.ts       tests/phase2g_source_head_auth_binding_v39.test.ts       tests/phase2g_zero_credit_callback_binding_v39.test.ts       tests/phase2g_historical_failure_regressions_v39.test.ts       tests/phase2g_boot_migration_v39.test.ts       tests/phase2g_scientific_health_v39.test.ts       tests/phase2g_scientific_observability_wiring_v39.test.ts       tests/phase2g_unlogged_runtime_integrity_v39.test.ts       tests/prepaid_identity_adapter_v39.test.ts       tests/prepaid_identity_persistence_v39.test.ts       tests/prepaid_identity_resolution_v39.test.ts       tests/prepaid_physical_metrics_v39.test.ts       tests/anchor_promotion_v39.test.ts
 
     npx tsc --noEmit
 
-    echo "MONDAY_YSSY_LOCAL_TIME_STATIC=PASS"
+    echo "P2G23_YSSY_LOCAL_TIME_STATIC=PASS"
     ;;
 
   selector)
@@ -185,7 +215,7 @@ try {
   );
 
   const report={
-    schema:"p2g21.yssy.scope-selector.v1",
+    schema:"p2g23.yssy-recovery.scope-selector.v1",
     scope_sha256:amendmentSha,
     next,
     expected:{icao:"YSSY",replacement:false},
@@ -274,8 +304,8 @@ NODE
 
     npx tsx scripts/v39_prepare_gate2_runtime_v39.ts       --preprobe "$PREPROBE"       --smoke "$SMOKE"       --smoke-runtime-file "$SMOKE_RUNTIME"       --smoke-runtime-sha "$SMOKE_RUNTIME_SHA"       --out "$RUNTIME"       --probe-budget-day-id "$BUDGET"       --min-stability-buckets 6       --stage1-reservation 450       --stage2-reservation 450       --stage1-amendment-file "$AMENDMENT"
 
-    echo "MONDAY_YSSY_RUNTIME_SHA=$(sha256sum "$RUNTIME" | awk '{print $1}')"
-    echo "MONDAY_YSSY_SCOPE_SHA=$(sha256sum "$AMENDMENT" | awk '{print $1}')"
+    echo "P2G23_YSSY_RUNTIME_SHA=$(sha256sum "$RUNTIME" | awk '{print $1}')"
+    echo "P2G23_YSSY_SCOPE_SHA=$(sha256sum "$AMENDMENT" | awk '{print $1}')"
     ;;
 
   auth-draft)
@@ -297,7 +327,7 @@ NODE
 
     npx tsx scripts/v39_prepare_phase2g_auth_v39.ts       --auth "$AUTH_ID"       --alert-ceiling 500       --start "$AUTH_START"       --expires "$AUTH_EXPIRES"       --cleanup-owner "scripts/v39_phase2g_github_actions_owner_v39.sh"       --out "$AUTH"       --runtime-file "$RUNTIME"       --runtime-sha "$runtime_sha"       --smoke "$SMOKE"       --smoke-runtime-file "$SMOKE_RUNTIME"       --smoke-runtime-sha "$SMOKE_RUNTIME_SHA"       --preprobe "$PREPROBE"
 
-    echo "MONDAY_YSSY_AUTH_SHA=$(sha256sum "$AUTH" | awk '{print $1}')"
+    echo "P2G23_YSSY_AUTH_SHA=$(sha256sum "$AUTH" | awk '{print $1}')"
     echo "DRAFT_ONLY_NOT_AUTHORIZED=true"
     ;;
 
@@ -351,13 +381,13 @@ Usage:
   PHASE2G_CONFIRM_AUTH_SHA=<exact_sha> bash scripts/v39_phase2g_monday_yssy_local_time_prepare_v39.sh auth-approve
   bash scripts/v39_phase2g_monday_yssy_local_time_prepare_v39.sh zero-credit-binding
 
-Monday YSSY target:
+P2G23 YSSY recovery target:
   - Expected candidate: YSSY.
   - Scientific contract: v39-physical-flight-instance-v2.
   - Prospective corrected scope: SKBO completed; YSSY is next under the separately frozen local-operating-hours protocol; LKPR deferred.
   - Stage-1 class: weekday in UTC and Australia/Sydney, centered at 04:00 UTC (eligible +/-1h).
-  - 2026-10-05 eligible start class: 03:00-05:00 UTC.
-  - Preferred start: 03:00 UTC = 14:00 AEDT at YSSY on 2026-10-05.
+  - 2026-10-08 eligible start class: 03:00-05:00 UTC.
+  - Preferred start: 03:00 UTC = 14:00 AEDT at YSSY on 2026-10-08.
   - Target duration: 120 minutes.
   - Stage-1 reservation: 450 Alert credits.
   - Unsettled margin: 50 Alert credits.
@@ -369,9 +399,9 @@ Safety:
   - The selector/time-class implementation must pass full V3.9 Offline Safety before runtime/AUTH creation.
   - static/selector/runtime/auth-draft/auth-approve/zero-credit-binding spend 0 Alert credits.
   - account-readonly and readonly-preflight use provider LIST/GET reads only.
-  - YSSY cannot be launched until the v3 scope and frozen local-time protocol are on main, the exact main commit is deployed/restarted on the managed Replit runtime, callback binding passes, a fresh runtime and AUTH are approved, and the paid preflight returns PASS_READY_FOR_PAID_STAGE1.
+  - YSSY cannot be launched until the v3 scope plus exact P2G22 manual-recovery freeze and frozen local-time protocol are on main, the exact main commit is deployed/restarted on the managed Replit runtime, callback binding passes, a fresh runtime and AUTH are approved, and the paid preflight returns PASS_READY_FOR_PAID_STAGE1.
   - The YSSY local-operating-hours protocol is frozen, but paid execution still requires fresh runtime/AUTH and final paid preflight.
-  - No automatic retry is authorized for YSSY by the corrected early-pilot scope.
+  - P2G22 remains failed/non-scoreable; exactly one manual recovery is authorized by the separate P2G22 freeze, and no further retry is authorized.
   - Do not reuse superseded AUTH-20261002-P2G19 or budget P2G-S1-20261002-18.
   - Do not reuse MMUN runtime, budget, or AUTH.
 EOF

@@ -29,6 +29,8 @@ export const PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH =
   "artifacts/phase2g-early-pilot-scope-operating-hours-correction-freeze-20261002.json";
 export const PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH =
   "artifacts/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json";
+export const PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH =
+  "artifacts/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json";
 
 export type Phase2gIdentityV2RecoveryIcaoV39 =
   | "WSSS"
@@ -62,6 +64,47 @@ export interface Phase2gP2g17MmunDeliveryGapRecoveryV39 {
   no_automatic_retry_after_recovery_attempt: true;
   outcome_metrics_not_used_to_authorize: true;
   authorization_basis: "p2g17_delivery_gap_and_finalization_schema_failure_only";
+  reason: string;
+}
+
+export interface Phase2gP2g22YssyDeliveryGapRecoveryV39 {
+  authorized: true;
+  maximum_additional_attempts: 1;
+  failed_probe_id: 16;
+  icao: "YSSY";
+  expected_probe_budget_day_id: "P2G-S1-20261006-21";
+  expected_runtime_session_id: "06ae005c-34ca-4478-af17-1c5d11b42d6e";
+  expected_metric_contract_version: "v39-physical-flight-instance-v2";
+  expected_anchor_status: "failed";
+  expected_anchor_reconciliation_status: "DELIVERY_GAP";
+  expected_anchor_stop_reason: "external_internal_delivery_gap";
+  durable_evidence_status: "DELIVERY_GAP";
+  durable_external_spend_credits: 260;
+  durable_internal_received_credits: 259;
+  durable_delivery_gap_credits: 1;
+  durable_delivery_completeness: number;
+  durable_duration_censored: false;
+  durable_stop_reason: "external_internal_delivery_gap";
+  durable_callback_requests_seen: 56;
+  durable_callback_success_2xx: 56;
+  durable_callback_failures: 0;
+  admin_close_artifact: string;
+  admin_close_sha256: string;
+  cleanup_receipt: string;
+  cleanup_receipt_sha256: string;
+  historical_attempt_immutable: true;
+  excluded_from_final_scoring: true;
+  requires_fresh_runtime_budget_auth: true;
+  requires_matched_time_class: true;
+  requires_zero_credit_callback_binding: true;
+  requires_fresh_live_callback_verification: true;
+  exact_reconciliation_required: true;
+  delivery_gap_tolerance_credits: 0;
+  no_automatic_retry_after_recovery_attempt: true;
+  outcome_metrics_not_used_to_authorize: true;
+  historical_root_cause_claimed: false;
+  authorization_basis:
+    "p2g22_yssy_exact_delivery_gap_manual_review_only";
   reason: string;
 }
 
@@ -258,6 +301,7 @@ export interface Phase2gCompact6AmendmentV39 {
   };
   physical_identity_v2_remeasurement?: Phase2gPhysicalIdentityV2RemeasurementV39;
   p2g17_mmun_delivery_gap_recovery_rerun?: Phase2gP2g17MmunDeliveryGapRecoveryV39;
+  p2g22_yssy_delivery_gap_recovery_rerun?: Phase2gP2g22YssyDeliveryGapRecoveryV39;
   early_pilot_scope_reduction?: Phase2gEarlyPilotScopeReductionV39;
   prospective_reconciliation_policy: {
     external_settled_spend_is_authoritative_denominator: true;
@@ -306,7 +350,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
   const candidatePaths = input.path
     ? [input.path]
-    : [PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH, PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH, PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
+    : [PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH, PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH, PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH, PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
   let raw: string | null = null;
   let actual: string | null = null;
   for (const candidatePath of candidatePaths) {
@@ -514,6 +558,104 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       !String(p2g17.reason ?? "").trim()
     ) {
       throw new Error("REFUSED_COMPACT6_P2G17_MMUN_RECOVERY_CONTRACT");
+    }
+  }
+
+  const p2g22 =
+    amendment.p2g22_yssy_delivery_gap_recovery_rerun;
+
+  if (p2g22 !== undefined) {
+    const completeness = 259 / 260;
+
+    const adminClosePath =
+      "artifacts/phase2g-p2g22-yssy-final-admin-close-20261007T004620179Z.json";
+
+    const cleanupPath =
+      "artifacts/phase2g-exact-session-purpose-cleanup-P2G22-YSSY-DELIVERY-GAP-1791286919308.json";
+
+    if (
+      p2g22.authorized !== true ||
+      p2g22.maximum_additional_attempts !== 1 ||
+      p2g22.failed_probe_id !== 16 ||
+      p2g22.icao !== "YSSY" ||
+      p2g22.expected_probe_budget_day_id !==
+        "P2G-S1-20261006-21" ||
+      p2g22.expected_runtime_session_id !==
+        "06ae005c-34ca-4478-af17-1c5d11b42d6e" ||
+      p2g22.expected_metric_contract_version !==
+        "v39-physical-flight-instance-v2" ||
+      p2g22.expected_anchor_status !== "failed" ||
+      p2g22.expected_anchor_reconciliation_status !==
+        "DELIVERY_GAP" ||
+      p2g22.expected_anchor_stop_reason !==
+        "external_internal_delivery_gap" ||
+      p2g22.durable_evidence_status !== "DELIVERY_GAP" ||
+      p2g22.durable_external_spend_credits !== 260 ||
+      p2g22.durable_internal_received_credits !== 259 ||
+      p2g22.durable_delivery_gap_credits !== 1 ||
+      Math.abs(
+        p2g22.durable_delivery_completeness -
+        completeness,
+      ) > 1e-12 ||
+      p2g22.durable_duration_censored !== false ||
+      p2g22.durable_stop_reason !==
+        "external_internal_delivery_gap" ||
+      p2g22.durable_callback_requests_seen !== 56 ||
+      p2g22.durable_callback_success_2xx !== 56 ||
+      p2g22.durable_callback_failures !== 0 ||
+      p2g22.admin_close_artifact !== adminClosePath ||
+      p2g22.admin_close_sha256 !==
+        "687c059cba08b2bfe0c09c46aa940a6bc817760e8136d5581b06fb23912b73b6" ||
+      p2g22.cleanup_receipt !== cleanupPath ||
+      p2g22.cleanup_receipt_sha256 !==
+        "4d6c0679d49ddfd440456b9e847aec3a1b6e3554714cebef13bd5e7b0578cdd6" ||
+      p2g22.historical_attempt_immutable !== true ||
+      p2g22.excluded_from_final_scoring !== true ||
+      p2g22.requires_fresh_runtime_budget_auth !== true ||
+      p2g22.requires_matched_time_class !== true ||
+      p2g22.requires_zero_credit_callback_binding !== true ||
+      p2g22.requires_fresh_live_callback_verification !== true ||
+      p2g22.exact_reconciliation_required !== true ||
+      p2g22.delivery_gap_tolerance_credits !== 0 ||
+      p2g22.no_automatic_retry_after_recovery_attempt !==
+        true ||
+      p2g22.outcome_metrics_not_used_to_authorize !== true ||
+      p2g22.historical_root_cause_claimed !== false ||
+      p2g22.authorization_basis !==
+        "p2g22_yssy_exact_delivery_gap_manual_review_only" ||
+      !String(p2g22.reason ?? "").trim()
+    ) {
+      throw new Error(
+        "REFUSED_COMPACT6_P2G22_YSSY_RECOVERY_CONTRACT",
+      );
+    }
+
+    if (
+      !existsSync(adminClosePath) ||
+      sha256(
+        readFileSync(
+          adminClosePath,
+          "utf8",
+        ),
+      ) !== p2g22.admin_close_sha256
+    ) {
+      throw new Error(
+        "REFUSED_COMPACT6_P2G22_ADMIN_CLOSE_BINDING",
+      );
+    }
+
+    if (
+      !existsSync(cleanupPath) ||
+      sha256(
+        readFileSync(
+          cleanupPath,
+          "utf8",
+        ),
+      ) !== p2g22.cleanup_receipt_sha256
+    ) {
+      throw new Error(
+        "REFUSED_COMPACT6_P2G22_CLEANUP_BINDING",
+      );
     }
   }
 

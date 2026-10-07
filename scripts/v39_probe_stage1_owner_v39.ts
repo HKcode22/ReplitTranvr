@@ -30,6 +30,7 @@ import {
   type Phase2gCompact6AmendmentV39,
   type Phase2gEarlyPilotScopeReductionV39,
   type Phase2gP2g17MmunDeliveryGapRecoveryV39,
+  type Phase2gP2g22YssyDeliveryGapRecoveryV39,
   type Phase2gPhysicalIdentityV2RemeasurementV39,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
@@ -499,6 +500,77 @@ export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEv
   return reason.startsWith("supervisor_child_exit");
 }
 
+function isScientificallyValidEarlyPilotAttemptV39(
+  row: Stage1AttemptEvidence,
+): boolean {
+  const durable = row.durableReconciliation;
+
+  return (
+    row.status === "completed" &&
+    row.metricContractVersion ===
+      PREPAID_PROBE_METRIC_CONTRACT_V39 &&
+    row.durationCensored === false &&
+    row.stopReason === null &&
+    row.reconciliationStatus === "MATCH" &&
+    durable?.evidenceStatus === "MATCH" &&
+    durable.deliveryGapCredits === 0 &&
+    durable.deliveryCompleteness === 1 &&
+    durable.callbackFailures === 0 &&
+    durable.durationCensored === false &&
+    durable.stopReason === null
+  );
+}
+
+function exactP2g22YssyRecoveryFailureMatchesV39(
+  recovery:
+    Phase2gP2g22YssyDeliveryGapRecoveryV39,
+  row: Stage1AttemptEvidence,
+): boolean {
+  const durable = row.durableReconciliation;
+
+  return (
+    row.probeId === recovery.failed_probe_id &&
+    row.icao.toUpperCase() === recovery.icao &&
+    row.probeBudgetDayId ===
+      recovery.expected_probe_budget_day_id &&
+    row.runtimeSessionId ===
+      recovery.expected_runtime_session_id &&
+    row.metricContractVersion ===
+      recovery.expected_metric_contract_version &&
+    row.status === recovery.expected_anchor_status &&
+    row.reconciliationStatus ===
+      recovery.expected_anchor_reconciliation_status &&
+    row.stopReason ===
+      recovery.expected_anchor_stop_reason &&
+    row.durationCensored === false &&
+    durable?.runtimeSessionId ===
+      recovery.expected_runtime_session_id &&
+    durable.evidenceStatus ===
+      recovery.durable_evidence_status &&
+    durable.externalSpendCredits ===
+      recovery.durable_external_spend_credits &&
+    durable.internalReceivedCredits ===
+      recovery.durable_internal_received_credits &&
+    durable.deliveryGapCredits ===
+      recovery.durable_delivery_gap_credits &&
+    durable.deliveryCompleteness !== null &&
+    Math.abs(
+      durable.deliveryCompleteness -
+      recovery.durable_delivery_completeness,
+    ) <= 1e-12 &&
+    durable.callbackRequestsSeen ===
+      recovery.durable_callback_requests_seen &&
+    durable.callbackSuccess2xx ===
+      recovery.durable_callback_success_2xx &&
+    durable.callbackFailures ===
+      recovery.durable_callback_failures &&
+    durable.durationCensored ===
+      recovery.durable_duration_censored &&
+    durable.stopReason ===
+      recovery.durable_stop_reason
+  );
+}
+
 /**
  * Prospective early-pilot scope selector.
  *
@@ -513,6 +585,8 @@ export function isInfrastructureInvalidStage1AttemptV39(attempt: Stage1AttemptEv
 export function chooseEarlyPilotScopeTargetV39(
   scope: Phase2gEarlyPilotScopeReductionV39,
   attempts: Stage1AttemptEvidence[],
+  yssyRecovery?:
+    Phase2gP2g22YssyDeliveryGapRecoveryV39,
 ): "YSSY" | "SKBO" | null {
   for (const requirement of scope.baseline_completed_probes) {
     const matches = attempts.filter(
@@ -560,6 +634,72 @@ export function chooseEarlyPilotScopeTargetV39(
 
   for (const target of scope.ordered_new_targets) {
     const rows = attempts.filter((row) => row.icao.toUpperCase() === target);
+
+    if (
+      target === "YSSY" &&
+      yssyRecovery?.authorized === true
+    ) {
+      const historical =
+        rows.filter(
+          (row) =>
+            row.probeId ===
+            yssyRecovery.failed_probe_id,
+        );
+
+      if (
+        historical.length !== 1 ||
+        !exactP2g22YssyRecoveryFailureMatchesV39(
+          yssyRecovery,
+          historical[0],
+        )
+      ) {
+        throw new Error(
+          `REFUSED_EARLY_PILOT_YSSY_RECOVERY_EVIDENCE_MISMATCH:` +
+          `matches=${historical.length}`,
+        );
+      }
+
+      const recoveryAttempts =
+        rows.filter(
+          (row) =>
+            row.probeId !==
+            yssyRecovery.failed_probe_id,
+        );
+
+      if (recoveryAttempts.length === 0) {
+        return "YSSY";
+      }
+
+      if (
+        recoveryAttempts.length >
+        yssyRecovery.maximum_additional_attempts
+      ) {
+        throw new Error(
+          `REFUSED_EARLY_PILOT_YSSY_RECOVERY_RETRY_LIMIT:` +
+          `attempts=${recoveryAttempts.length}`,
+        );
+      }
+
+      const recoveryAttempt =
+        recoveryAttempts[0];
+
+      if (
+        !isScientificallyValidEarlyPilotAttemptV39(
+          recoveryAttempt,
+        )
+      ) {
+        throw new Error(
+          `REFUSED_EARLY_PILOT_YSSY_RECOVERY_CONSUMED:` +
+          `probe=${recoveryAttempt.probeId}:` +
+          `status=${recoveryAttempt.status}:` +
+          `reconciliation=` +
+          `${recoveryAttempt.reconciliationStatus ?? "<null>"}`,
+        );
+      }
+
+      continue;
+    }
+
     if (rows.length === 0) {
       if (
         scope.scope_version !==
@@ -581,21 +721,12 @@ export function chooseEarlyPilotScopeTargetV39(
     }
 
     const row = rows[0];
-    const durable = row.durableReconciliation;
-    const scientificallyValid =
-      row.status === "completed" &&
-      row.metricContractVersion === PREPAID_PROBE_METRIC_CONTRACT_V39 &&
-      row.durationCensored === false &&
-      row.stopReason === null &&
-      row.reconciliationStatus === "MATCH" &&
-      durable?.evidenceStatus === "MATCH" &&
-      durable.deliveryGapCredits === 0 &&
-      durable.deliveryCompleteness === 1 &&
-      durable.callbackFailures === 0 &&
-      durable.durationCensored === false &&
-      durable.stopReason === null;
 
-    if (!scientificallyValid) {
+    if (
+      !isScientificallyValidEarlyPilotAttemptV39(
+        row,
+      )
+    ) {
       throw new Error(
         `REFUSED_EARLY_PILOT_TARGET_REQUIRES_MANUAL_REVIEW:${target}:probe=${row.probeId}:status=${row.status}:reconciliation=${row.reconciliationStatus ?? "<null>"}`,
       );
@@ -700,6 +831,7 @@ export function chooseNextStage1TargetV39(
     const target = chooseEarlyPilotScopeTargetV39(
       earlyPilotScope,
       evidence,
+      amendment?.p2g22_yssy_delivery_gap_recovery_rerun,
     );
     return target ? { icao: target, replacement: false } : null;
   }
