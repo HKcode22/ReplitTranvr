@@ -1,0 +1,54 @@
+{
+  "schema": "v39.phase2g-p2g22-yssy-final-admin-close.v1",
+  "status": "FAILED_ATTEMPT_ADMINISTRATIVELY_CLOSED",
+  "scientific_disposition": "FAILED_EXACT_RECONCILIATION_DELIVERY_GAP",
+  "scientific_acceptance": false,
+  "rerun_authorized": false,
+  "applied_at_utc": "2026-10-07T00:46:20.120Z",
+  "source_canonical_main": "a29412d1f50e9f4d69dc5376aadb93577e6470f2",
+  "source_local_head": "ccf859a4901fb2d37da1ae9c030755a30656d8f1",
+  "cleanup_receipt": "artifacts/phase2g-exact-session-purpose-cleanup-P2G22-YSSY-DELIVERY-GAP-1791286919308.json",
+  "cleanup_receipt_sha256": "4d6c0679d49ddfd440456b9e847aec3a1b6e3554714cebef13bd5e7b0578cdd6",
+  "guardrail_sha256": "459ff3a2e1c645bced3b495443c40a9bdb31b77024a5f282965f5ea04598a37b",
+  "probe_id": 16,
+  "session_id": "06ae005c-34ca-4478-af17-1c5d11b42d6e",
+  "probe_budget_day_id": "P2G-S1-20261006-21",
+  "incident_resolved": {
+    "id": 28,
+    "resolved": true,
+    "resolved_at_utc": "2026-10-07T00:46:18.724Z"
+  },
+  "budget": {
+    "state": "CLOSED",
+    "cap_credits": 500,
+    "created_at": "2026-10-06T03:05:00.129Z",
+    "closed_at": "2026-10-07T00:46:18.724Z",
+    "conservative_exposure_credits": 500
+  },
+  "preserved_failure": {
+    "probe_status": "failed",
+    "reconciliation_status": "DELIVERY_GAP",
+    "evidence_status": "DELIVERY_GAP",
+    "external_spend_credits": 260,
+    "internal_received_credits": 259,
+    "delivery_gap_credits": 1,
+    "duration_censored": false,
+    "stop_reason": "external_internal_delivery_gap",
+    "metric_contract_version": "v39-physical-flight-instance-v2"
+  },
+  "cleanup_state": {
+    "live_blobs": 0,
+    "deletion_verified_blobs": 56,
+    "runtime_sessions": 0,
+    "runtime_deliveries": 0,
+    "runtime_items": 0
+  },
+  "mutation_scope": {
+    "incident_resolution_only": true,
+    "budget_close_only": true,
+    "probe_mutated": false,
+    "reconciliation_mutated": false,
+    "provider_mutated": false,
+    "blob_mutated": false
+  }
+}
