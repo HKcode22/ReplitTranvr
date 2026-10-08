@@ -8,6 +8,7 @@ import { listSubscriptionsStrict } from "../server/lib/disruption/aerodataboxLim
 import {
   assertPhase2gCleanupBlobCountsV39,
   assertPhase2gCleanupJournalMatchV39,
+  resolvePhase2gRecoverySubscriptionV39,
 } from "../server/lib/disruption/phase2gCleanupReplay_v39";
 import {
   signPhase2gCleanupAttestationV39,
@@ -44,7 +45,7 @@ async function main(): Promise<void> {
   // Post-owner mode discovers only one exact settling/MATCH probe for the
   // approved frozen budget. Never guess a session or clean a failed probe.
   const autoFromBudget = process.argv.includes("--auto-from-budget");
-  if (autoFromBudget && ["--session", "--probe-id", "--expected-live-blobs"].some(
+  if (autoFromBudget && ["--session", "--probe-id", "--expected-live-blobs", "--recovery-provider-subscription-id"].some(
     (arg) => process.argv.includes(arg),
   )) throw new Error("REFUSED:AUTO_DISCOVERY_MIXED_WITH_MANUAL_EXACT_SCOPE");
   let session = autoFromBudget ? "" : required("--session").toLowerCase();
@@ -56,6 +57,10 @@ async function main(): Promise<void> {
   const expectedHead = required("--expected-head").toLowerCase();
   const runtimeFile = required("--runtime-file");
   const runtimeSha = required("--runtime-sha").toLowerCase();
+  const manualRecoverySubscriptionId =
+    process.argv.includes("--recovery-provider-subscription-id")
+      ? required("--recovery-provider-subscription-id")
+      : null;
   const apply = process.argv.includes("--apply");
   if (process.env.GITHUB_ACTIONS !== "true" ||
       process.env.GITHUB_REPOSITORY !== "HKcode22/ReplitTranvr") {
@@ -159,11 +164,14 @@ async function main(): Promise<void> {
   const priorJournal = journalQ.rows[0] ?? null;
   const hasRuntime = owner.session_id != null;
 
-  const providerSubscriptionId = String(
-    owner.provider_subscription_id ??
-    owner.probe_subscription_id ??
-    "",
-  ).trim();
+  const providerSubscriptionId =
+    resolvePhase2gRecoverySubscriptionV39({
+      hasRuntime,
+      journalState: priorJournal?.state ?? null,
+      runtimeSubscriptionId: owner.provider_subscription_id ?? null,
+      probeSubscriptionId: owner.probe_subscription_id ?? null,
+      manualRecoverySubscriptionId,
+    });
 
   if (
     owner.stage !== 1 ||
@@ -254,6 +262,35 @@ async function main(): Promise<void> {
     Number(count.rows[0]?.live ?? -1) !== expectedLive
   ) {
     throw new Error("REFUSED:PREEXISTING_DELETION_WITHOUT_JOURNAL");
+  }
+
+  // A VERIFIED replay has lost its UNLOGGED runtime identity.
+  // Bind the manually supplied ID to the journal's immutable
+  // original scope before performing any provider-inventory read.
+  if (priorJournal?.state === "VERIFIED" && !hasRuntime) {
+    const now = new Date();
+    const scope: Phase2gCleanupAttestationV39 = {
+      schema: "v39.phase2g-provider-inactive-cleanup-attestation.v1",
+      callback_origin: callback,
+      session_id: session,
+      probe_id: probeId,
+      probe_budget_day_id: budget,
+      icao,
+      provider_subscription_id: providerSubscriptionId,
+      deletion_run_id: deletionRunId,
+      expected_live_blobs: expectedLive,
+      active_billable_subscriptions: 0,
+      provider_inventory_checked_at_utc: now.toISOString(),
+      expires_at_utc: new Date(now.getTime() + 90000).toISOString(),
+    };
+
+    try {
+      assertPhase2gCleanupJournalMatchV39(scope, priorJournal);
+    } catch {
+      throw new Error(
+        "REFUSED:VERIFIED_RECOVERY_ORIGINAL_SCOPE_HASH_MISMATCH",
+      );
+    }
   }
 
   // Two independent account-wide provider inventories; never treat an API error

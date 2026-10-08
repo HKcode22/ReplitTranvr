@@ -4,6 +4,7 @@ import {
   phase2gCleanupScopeHashV39,
   assertPhase2gCleanupJournalMatchV39,
   assertPhase2gCleanupBlobCountsV39,
+  resolvePhase2gRecoverySubscriptionV39,
 } from "../server/lib/disruption/phase2gCleanupReplay_v39";
 import type {
   Phase2gCleanupAttestationV39,
@@ -102,4 +103,78 @@ describe("Phase2G GitHub exact-run recovery", () => {
       3,
     )).toThrow(/BLOB_SET_MISMATCH/);
   });
+  it("requires the original ID for verified recovery", () => {
+    const input = {
+      hasRuntime: false,
+      journalState: "VERIFIED",
+      runtimeSubscriptionId: null,
+      probeSubscriptionId: null,
+      manualRecoverySubscriptionId: null,
+    };
+
+    expect(() =>
+      resolvePhase2gRecoverySubscriptionV39(input),
+    ).toThrow(/VERIFIED_RECOVERY_SUBSCRIPTION_REQUIRED/);
+
+    expect(() =>
+      resolvePhase2gRecoverySubscriptionV39({
+        ...input,
+        manualRecoverySubscriptionId: "synthetic-sub",
+        journalState: "STARTED",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      resolvePhase2gRecoverySubscriptionV39({
+        ...input,
+        manualRecoverySubscriptionId: "synthetic-sub",
+        hasRuntime: true,
+      }),
+    ).toThrow();
+
+    const recovered =
+      resolvePhase2gRecoverySubscriptionV39({
+        ...input,
+        manualRecoverySubscriptionId: "synthetic-sub",
+      });
+
+    expect(recovered).toBe(proof.provider_subscription_id);
+
+    const verifiedJournal = {
+      session_id: proof.session_id,
+      probe_id: proof.probe_id,
+      deletion_run_id: proof.deletion_run_id,
+      request_sha256: phase2gCleanupScopeHashV39(proof),
+      expected_live_blobs: 3,
+      state: "VERIFIED",
+      deleted_blobs: 3,
+      deleted_runtime_rows: 1,
+      verified_at_utc: "2026-10-08T20:05:00Z",
+    };
+
+    expect(assertPhase2gCleanupJournalMatchV39(
+      { ...proof, provider_subscription_id: recovered },
+      verifiedJournal,
+    )).toBe("VERIFIED");
+
+    expect(() => assertPhase2gCleanupJournalMatchV39(
+      { ...proof, provider_subscription_id: "wrong-sub" },
+      verifiedJournal,
+    )).toThrow(/SCOPE_CONFLICT/);
+  });
+
+  it("checks recovered identity before provider inventory", () => {
+    expect(owner).toContain(
+      "resolvePhase2gRecoverySubscriptionV39({",
+    );
+    const guard = owner.indexOf(
+      "REFUSED:VERIFIED_RECOVERY_ORIGINAL_SCOPE_HASH_MISMATCH",
+    );
+    const inventory = owner.indexOf(
+      "const subs = await listSubscriptionsStrict()",
+    );
+    expect(guard).toBeGreaterThan(-1);
+    expect(inventory).toBeGreaterThan(guard);
+  });
+
 });

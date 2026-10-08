@@ -60,8 +60,10 @@ import {
   type Phase2gCleanupAttestationV39,
 } from "../server/lib/disruption/phase2gCleanupAttestation_v39";
 
-import { phase2gCleanupScopeHashV39 } from
-  "../server/lib/disruption/phase2gCleanupReplay_v39";
+import {
+  phase2gCleanupScopeHashV39,
+  resolvePhase2gRecoverySubscriptionV39,
+} from "../server/lib/disruption/phase2gCleanupReplay_v39";
 
 const enabled =
   process.env.P2G_HTTP_PG_TEST === "1" &&
@@ -378,4 +380,39 @@ suite("Phase2G real signed HTTP cleanup", () => {
     expect(storage.deleteCalls).toBe(1);
     console.log("CONFLICTING_REPLAY_REFUSED=PASS");
   });
+  it("replays a verified journal with recovered identity", async () => {
+    const recoveredId =
+      resolvePhase2gRecoverySubscriptionV39({
+        hasRuntime: false,
+        journalState: "VERIFIED",
+        runtimeSubscriptionId: null,
+        probeSubscriptionId: null,
+        manualRecoverySubscriptionId: SUB,
+      });
+
+    const claim = {
+      ...proof(),
+      provider_subscription_id: recoveredId,
+    };
+
+    const signature =
+      signPhase2gCleanupAttestationV39(claim, KEY);
+
+    const result = await post(claim, signature);
+
+    expect(
+      result.status,
+      JSON.stringify(result.body),
+    ).toBe(200);
+
+    expect(result.body).toMatchObject({
+      status: "PASS",
+      recovery_replay: true,
+      deleted_blobs: 1,
+    });
+
+    expect(storage.deleteCalls).toBe(1);
+    console.log("MANUAL_VERIFIED_REPLAY=PASS");
+  });
+
 });

@@ -75,3 +75,49 @@ export function assertPhase2gCleanupBlobCountsV39(
     throw new Error("PHASE2G_CLEANUP_REPLAY_BLOB_SET_MISMATCH");
   }
 }
+
+/**
+ * Recover a VERIFIED session only with its original subscription
+ * identity, supplied from previously preserved trusted evidence.
+ * Journal-scope verification occurs separately before provider reads.
+ */
+export function resolvePhase2gRecoverySubscriptionV39(input: {
+  hasRuntime: boolean;
+  journalState: string | null;
+  runtimeSubscriptionId: string | null;
+  probeSubscriptionId: string | null;
+  manualRecoverySubscriptionId: string | null;
+}): string {
+  const runtime = String(input.runtimeSubscriptionId ?? "").trim();
+  const probe = String(input.probeSubscriptionId ?? "").trim();
+  const manual = String(input.manualRecoverySubscriptionId ?? "").trim();
+
+  const verifiedWithoutRuntime =
+    !input.hasRuntime && input.journalState === "VERIFIED";
+
+  if (manual && !verifiedWithoutRuntime) {
+    throw new Error("REFUSED:MANUAL_RECOVERY_NOT_VERIFIED");
+  }
+
+  if (!input.hasRuntime && !verifiedWithoutRuntime) {
+    throw new Error("REFUSED:RECOVERY_RUNTIME_AND_JOURNAL_MISSING");
+  }
+
+  if (verifiedWithoutRuntime && !manual) {
+    throw new Error("REFUSED:VERIFIED_RECOVERY_SUBSCRIPTION_REQUIRED");
+  }
+
+  if (runtime && probe && runtime !== probe) {
+    throw new Error("REFUSED:PROVIDER_SUBSCRIPTION_IDENTITY_CONFLICT");
+  }
+
+  const resolved = verifiedWithoutRuntime
+    ? manual
+    : (runtime || probe);
+
+  if (!/^[A-Za-z0-9_.:-]{1,200}$/.test(resolved)) {
+    throw new Error("REFUSED:RECOVERY_SUBSCRIPTION_ID_INVALID");
+  }
+
+  return resolved;
+}

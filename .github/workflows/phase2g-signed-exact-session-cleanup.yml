@@ -34,6 +34,11 @@ on:
         description: 'Exact count from the shared DB at cleanup preflight'
         required: true
         type: string
+      recovery_provider_subscription_id:
+        description: 'For manual VERIFIED replay only: original ID from preserved cleanup intent'
+        required: false
+        default: ''
+        type: string
       callback_base:
         description: 'Published callback origin'
         required: true
@@ -70,6 +75,7 @@ jobs:
       BUDGET_DAY: ${{ inputs.budget_day }}
       EXPECTED_ICAO: ${{ inputs.icao }}
       EXPECTED_LIVE_BLOBS: ${{ inputs.expected_live_blobs }}
+      RECOVERY_PROVIDER_SUBSCRIPTION_ID: ${{ inputs.recovery_provider_subscription_id }}
       CALLBACK_BASE: ${{ inputs.callback_base }}
       RUNTIME_FILE: ${{ inputs.runtime_file }}
       RUNTIME_SHA: ${{ inputs.runtime_sha }}
@@ -111,6 +117,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          RECOVERY_ARGS=()
+          if [[ -n "${RECOVERY_PROVIDER_SUBSCRIPTION_ID:-}" ]]; then
+            RECOVERY_ARGS+=(
+              --recovery-provider-subscription-id
+              "$RECOVERY_PROVIDER_SUBSCRIPTION_ID"
+            )
+          fi
           npx tsx scripts/v39_phase2g_github_signed_cleanup_v39.ts \
             --probe-id "$PROBE_ID" \
             --session "$SESSION_ID" \
@@ -121,6 +134,7 @@ jobs:
             --expected-head "$EXPECTED_HEAD" \
             --runtime-file "$RUNTIME_FILE" \
             --runtime-sha "$RUNTIME_SHA" \
+            "${RECOVERY_ARGS[@]}" \
             --apply
 
       - name: Preserve cleanup and finalization evidence
