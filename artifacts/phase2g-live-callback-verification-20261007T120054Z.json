@@ -1,0 +1,45 @@
+{
+  "schema": "v39.phase2g-live-callback-verification.v1",
+  "status": "PASS",
+  "callback_origin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+  "callback_mode": "same-app-development-contingency",
+  "callback_contingency_sha256": "48b82ac997d1bd116408b49166feef12c389a25a9d091c6225e555b521a037eb",
+  "workspace_git_head": "a3b84082d2b68be0d6d4912d5e96716e3bd75cb9",
+  "deployed_git_head_claimed": null,
+  "contract_mode": "live-prepaid-route-end-to-end",
+  "preexisting_incident_24_tolerated": false,
+  "preexisting_incident_25_tolerated": false,
+  "preexisting_synthetic_incident_ids": [],
+  "wrong_secret_rejected_404": true,
+  "correct_secret_accepted_200": true,
+  "provider_webhook_response_limit_ms": 10000,
+  "callback_admission_budget_ms": 8000,
+  "callback_end_to_end_latency_ms": 2315.447,
+  "callback_safety_margin_ms": 2000,
+  "persistence_verified": true,
+  "local_exact_session_cleanup_verified": true,
+  "provider_called": false,
+  "provider_subscription_created": false,
+  "alert_credits_spent": 0,
+  "session_id": "c0a1dde4-be0e-4a9d-99e0-6ad2511b6c84",
+  "before_cleanup": {
+    "sessions": 1,
+    "deliveries": 1,
+    "items": 1,
+    "blobs": 1,
+    "live_blobs": 1
+  },
+  "cleanup": {
+    "deleted_blobs": 1,
+    "deleted_runtime_rows": 3,
+    "verified_at_utc": "2026-10-07T12:00:54.830Z"
+  },
+  "after_cleanup": {
+    "sessions": 0,
+    "deliveries": 0,
+    "items": 0,
+    "live_blobs": 0,
+    "deleted_blobs": 1
+  },
+  "generated_at_utc": "2026-10-07T12:00:54.892Z"
+}

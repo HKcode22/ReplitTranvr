@@ -1,0 +1,21 @@
+{
+  "schema": "v39.phase2g-exact-session-purpose-cleanup.v1",
+  "mode": "APPLY",
+  "session_id": "cb90e45e-ae7b-4bb4-85fe-7f3e56bd8880",
+  "label": "P2G23-YSSY-CALLBACK-OUTAGE",
+  "deletion_run_id": "phase2g-purpose-P2G23-YSSY-CALLBACK-OUTAGE-20261008T045545625Z-190cc581",
+  "expected_live_blobs": 48,
+  "deleted_blobs": 48,
+  "deleted_runtime_rows": 0,
+  "verified_at_utc": "2026-10-08T04:55:58.515Z",
+  "final": {
+    "sessions": 0,
+    "deliveries": 0,
+    "items": 0,
+    "live_blobs": 0
+  },
+  "active_billable_subscriptions": 0,
+  "provider_mutation": false,
+  "subscription_mutation": false,
+  "alert_credits_spent": 0
+}

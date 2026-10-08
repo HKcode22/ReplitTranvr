@@ -1,0 +1,113 @@
+{
+  "schema": "v39.phase2g-stage1-paid-preflight.v1",
+  "status": "PASS_WAIT_FOR_AUTH_START",
+  "mutation_performed": false,
+  "provider_paid_action_performed": false,
+  "deployment_performed": false,
+  "generated_at_utc": "2026-10-08T02:31:04.054Z",
+  "git_head": "a3b84082d2b68be0d6d4912d5e96716e3bd75cb9",
+  "expected_git_head": "a3b84082d2b68be0d6d4912d5e96716e3bd75cb9",
+  "auth": {
+    "authorization_id": "AUTH-20261008-P2G23",
+    "file": "SEPmd/V3.9_PHASE2G_AUTH_20261008_P2G23.json",
+    "sha256": "d7696e68b777601a446cb7ee2dd57612663ac3ead37c3ec34a91f44d7bede66f",
+    "start_not_before_utc": "2026-10-08T03:00:00.000Z",
+    "expires_at_utc": "2026-10-08T07:10:00.000Z",
+    "max_alert_credits": 500,
+    "protected_exposure_credits": 500,
+    "safe_latest_start_utc": "2026-10-08T05:05:00.000Z",
+    "approved_in_ledger": true
+  },
+  "gate2_runtime": {
+    "file": "artifacts/phase2g-gate2-runtime-P2G-S1-20261008-22.json",
+    "file_sha256": "d6dffb2e689d63a7a716e1966527a8bae54897ad340bc1205078d7b04dd3e85d",
+    "binding_sha256": "82d496575f4f0628e0b12c04d487e94aa2c6731bebebd987ce11f4a1d6636e99",
+    "evidence_id": "RUN-20260915-82D496575F4F0628E0B12C04D487E94AA2C6731BEBEBD987CE11F4A1D6636E99",
+    "probe_budget_day_id": "P2G-S1-20261008-22",
+    "source_git_head": "a4db302d6970cb654ade5e713038654b17f63d36",
+    "source_git_head_is_ancestor_of_execution_head": true,
+    "source_protected_tree_sha256": "3ffac36546756771a5850aa83f4166c04f6d8885ef72d629039c1c5f3147d5f0",
+    "frozen_protected_tree_sha256": "3ffac36546756771a5850aa83f4166c04f6d8885ef72d629039c1c5f3147d5f0",
+    "execution_protected_tree_sha256": "3ffac36546756771a5850aa83f4166c04f6d8885ef72d629039c1c5f3147d5f0",
+    "stage1_reservation_credits": 450,
+    "unsettled_burst_margin_credits": 50,
+    "stage1_amendment_sha256": "589d7e3fbb1467c6bba7bb9b82784612e023cf5df482cc7daf1acd593987712c",
+    "compact6_validated": true,
+    "next_candidate": "YSSY",
+    "expected_icao": "YSSY"
+  },
+  "provider": {
+    "credits_remaining": 2640,
+    "protected_floor_after_authorized_exposure": 1000,
+    "active_billable_subscriptions": 0,
+    "balance_stability_canary": [
+      {
+        "read": 1,
+        "creditsRemaining": 2640
+      },
+      {
+        "read": 2,
+        "creditsRemaining": 2640
+      },
+      {
+        "read": 3,
+        "creditsRemaining": 2640
+      }
+    ]
+  },
+  "database": {
+    "open_incidents": 0,
+    "active_or_settling_probes": 0,
+    "same_budget_day_probe_rows": 0,
+    "open_probe_budget_days": 0
+  },
+  "frozen_stage1_time_class": {
+    "source": "yssy-local-operating-hours-protocol",
+    "utc_slot_hour": 4,
+    "weekday_class": "weekday",
+    "eligible_now": false,
+    "would_cross_utc_midnight_if_started_now": false,
+    "yssy_protocol_sha256": "ad6224fb7fc83de42021c9f75a705892c7130614f4a72276b47fa2c246dd4991",
+    "yssy_timezone": "Australia/Sydney",
+    "yssy_local_weekday_class": "weekday",
+    "yssy_target_window_outside_curfew": true
+  },
+  "owner_executor": "github-actions",
+  "callback_mode": "same-app-development-contingency",
+  "callback_contingency": {
+    "file": "artifacts/phase2g-same-app-dev-callback-contingency-freeze-20260923.json",
+    "sha256": "48b82ac997d1bd116408b49166feef12c389a25a9d091c6225e555b521a037eb",
+    "schema": "v39.phase2g-same-app-dev-callback-contingency.v1",
+    "scientific_protocol_unchanged": true
+  },
+  "callback": {
+    "origin": "https://95ac2e69-854d-460f-8e9d-8e4711aef739-00-265uxlvlm69md.kirk.replit.dev",
+    "reachable": true,
+    "exact_contract": true,
+    "contract_mode": "same-app-development-contingency",
+    "callback_mode": "same-app-development-contingency",
+    "callback_contingency_sha256": "48b82ac997d1bd116408b49166feef12c389a25a9d091c6225e555b521a037eb",
+    "callback_verification_sha256": "0e821b8886b4ddd16c74738768704f4bd4f8ceff9ddfedcbbe14b05896b74fc7",
+    "callback_verification_generated_at_utc": "2026-10-07T12:00:54.892Z",
+    "wrong_secret_live_check_status": 404,
+    "provider_blob_boundary_proven_by_callback_verification": true,
+    "source_compatible_with_current_head": true,
+    "development_runtime_health": {
+      "schema": "v39.phase2f-workspace-runtime.v1",
+      "status": "PASS",
+      "git_head": "a3b84082d2b68be0d6d4912d5e96716e3bd75cb9",
+      "route_owner": "server/index.ts+server/routes_v3.ts",
+      "prepaid_route_registered": true,
+      "retention_hours": 168,
+      "bucket_prefix": "replit-objstore",
+      "provider_mutation": false,
+      "runtime_owner_mode": "replit-managed-project",
+      "managed_replit_workflow": true,
+      "detached_workspace_server": false,
+      "published_deployment": false,
+      "runtime_durability_class": null
+    }
+  },
+  "blockers": [],
+  "next": "Wait until AUTH start/time-class opens, rerun this preflight, then launch only on PASS_READY_FOR_PAID_STAGE1."
+}
