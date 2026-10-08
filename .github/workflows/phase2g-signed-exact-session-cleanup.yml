@@ -1,0 +1,150 @@
+name: Phase2G Signed Exact-Session Cleanup
+
+# Manual only. This workflow contains provider account READS and a narrowly
+# scoped, audited scientific cleanup mutation. It cannot create subscriptions,
+# refill credits, or authorize new paid probes.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type APPLY_SIGNED_CLEANUP_EXACT_SESSION'
+        required: true
+        type: string
+      expected_head:
+        description: 'SHA of workflow branch and matching published receiver'
+        required: true
+        type: string
+      probe_id:
+        description: 'Exact settling Stage1 probe ID'
+        required: true
+        type: string
+      session:
+        description: 'Exact runtime session UUID'
+        required: true
+        type: string
+      budget_day:
+        description: 'Exact frozen Stage1 budget day'
+        required: true
+        type: string
+      icao:
+        description: 'Expected ICAO (YSSY)'
+        required: true
+        type: string
+      expected_live_blobs:
+        description: 'Exact count from the shared DB at cleanup preflight'
+        required: true
+        type: string
+      recovery_provider_subscription_id:
+        description: 'For manual VERIFIED replay only: original ID from preserved cleanup intent'
+        required: false
+        default: ''
+        type: string
+      callback_base:
+        description: 'Published callback origin'
+        required: true
+        type: string
+      runtime_file:
+        description: 'Committed Gate2 runtime artifact path'
+        required: true
+        type: string
+      runtime_sha:
+        description: 'Exact SHA256 of Gate2 runtime artifact'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2g-paid-stage1-global
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: ${{ inputs.confirm == 'APPLY_SIGNED_CLEANUP_EXACT_SESSION' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: phase2g-paid
+    env:
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      V39_PHASE2G_CLEANUP_SIGNING_KEY: ${{ secrets.V39_PHASE2G_CLEANUP_SIGNING_KEY }}
+      EXPECTED_HEAD: ${{ inputs.expected_head }}
+      PROBE_ID: ${{ inputs.probe_id }}
+      SESSION_ID: ${{ inputs.session }}
+      BUDGET_DAY: ${{ inputs.budget_day }}
+      EXPECTED_ICAO: ${{ inputs.icao }}
+      EXPECTED_LIVE_BLOBS: ${{ inputs.expected_live_blobs }}
+      RECOVERY_PROVIDER_SUBSCRIPTION_ID: ${{ inputs.recovery_provider_subscription_id }}
+      CALLBACK_BASE: ${{ inputs.callback_base }}
+      RUNTIME_FILE: ${{ inputs.runtime_file }}
+      RUNTIME_SHA: ${{ inputs.runtime_sha }}
+      ADB_AUTO_COLLECT: 'false'
+    steps:
+      - name: Refuse unauthorized or stale source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_HEAD" == "$GITHUB_SHA" ]] || {
+            echo "::error::Expected source differs from this workflow branch SHA"
+            exit 2
+          }
+          [[ "${#V39_PHASE2G_CLEANUP_SIGNING_KEY}" -ge 32 ]] || {
+            echo "::error::GitHub cleanup control secret missing"
+            exit 2
+          }
+          [[ -n "$AERODATABOX_API_KEY" && -n "$V39_DATABASE_RUNTIME_URL" ]] || {
+            echo "::error::Missing required GitHub-only credentials"
+            exit 2
+          }
+
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_head }}
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Reverify provider inactivity and clean exact settled session
+        shell: bash
+        run: |
+          set -euo pipefail
+          RECOVERY_ARGS=()
+          if [[ -n "${RECOVERY_PROVIDER_SUBSCRIPTION_ID:-}" ]]; then
+            RECOVERY_ARGS+=(
+              --recovery-provider-subscription-id
+              "$RECOVERY_PROVIDER_SUBSCRIPTION_ID"
+            )
+          fi
+          npx tsx scripts/v39_phase2g_github_signed_cleanup_v39.ts \
+            --probe-id "$PROBE_ID" \
+            --session "$SESSION_ID" \
+            --budget-day "$BUDGET_DAY" \
+            --icao "$EXPECTED_ICAO" \
+            --expected-live-blobs "$EXPECTED_LIVE_BLOBS" \
+            --callback-base "$CALLBACK_BASE" \
+            --expected-head "$EXPECTED_HEAD" \
+            --runtime-file "$RUNTIME_FILE" \
+            --runtime-sha "$RUNTIME_SHA" \
+            "${RECOVERY_ARGS[@]}" \
+            --apply
+
+      - name: Preserve cleanup and finalization evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2g-signed-cleanup-${{ github.run_id }}
+          path: |
+            artifacts/phase2g-signed-cleanup-intent-probe*.json
+            artifacts/phase2g-signed-purpose-cleanup-probe*.json
+            artifacts/phase2g-settling-finalizer-probe*.json
+          if-no-files-found: warn
+          retention-days: 30

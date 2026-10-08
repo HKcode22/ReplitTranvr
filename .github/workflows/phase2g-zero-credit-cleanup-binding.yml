@@ -1,0 +1,126 @@
+name: Phase2G Zero-Credit Cleanup Key Binding
+
+# Independent post-deployment identity check. Never requests a provider key,
+# accesses the scientific DB, starts a subscription or purges any blob.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: 'Exact GitHub source and published runtime commit SHA'
+        required: true
+        type: string
+      callback_base:
+        description: 'Published dedicated callback HTTPS origin'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: phase2g-paid
+    env:
+      V39_PHASE2G_CLEANUP_SIGNING_KEY: ${{ secrets.V39_PHASE2G_CLEANUP_SIGNING_KEY }}
+      CALLBACK_ORIGIN: ${{ inputs.callback_base }}
+      EXPECTED_HEAD: ${{ inputs.expected_head }}
+      ADB_AUTO_COLLECT: 'false'
+    steps:
+      - name: Require exact source and cleanup-only credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_HEAD" == "$GITHUB_SHA" ]] || {
+            echo "::error::Callback commit differs from checked-out GitHub source"
+            exit 2
+          }
+          [[ "${#V39_PHASE2G_CLEANUP_SIGNING_KEY}" -ge 32 ]] || {
+            echo "::error::Cleanup signing key missing or too short"
+            exit 2
+          }
+          [[ "$CALLBACK_ORIGIN" =~ ^https://[^/]+$ && "$CALLBACK_ORIGIN" != *.replit.dev ]] || {
+            echo "::error::Expected one published HTTPS callback origin"
+            exit 2
+          }
+
+      - name: Verify deployed callback source SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          JSON="$(curl --silent --show-error --fail-with-body --max-time 15 "$CALLBACK_ORIGIN/__v39/workspace-runtime")"
+          JSON="$JSON" node --input-type=module <<'NODE'
+          const h = JSON.parse(process.env.JSON ?? "{}");
+          if (h.schema !== "v39.phase2f-workspace-runtime.v1" ||
+              h.status !== "PASS" ||
+              h.git_head !== process.env.EXPECTED_HEAD ||
+              h.published_deployment !== true ||
+              h.runtime_owner_mode !== "replit-published-deployment") {
+            console.error("CLEANUP_KEY_DEPLOYED_RUNTIME=FAIL");
+            process.exit(2);
+          }
+          console.log("CLEANUP_KEY_DEPLOYED_RUNTIME=PASS");
+          NODE
+
+      - name: Verify good and bad cleanup HMAC without storage mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          NONCE="phase2g-cleanup-safety-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          PROOF="$(NONCE="$NONCE" node --input-type=module <<'NODE'
+          import { createHmac } from "node:crypto";
+          process.stdout.write(
+            createHmac("sha256", process.env.V39_PHASE2G_CLEANUP_SIGNING_KEY)
+              .update(`phase2g-cleanup-control-key-binding:${process.env.CALLBACK_ORIGIN}:${process.env.NONCE}`)
+              .digest("hex")
+          );
+          NODE
+          )"
+
+          GOOD="$(curl --silent --show-error --fail-with-body --max-time 15 \
+            -X POST \
+            -H "x-v39-phase2g-cleanup-nonce: $NONCE" \
+            -H "x-v39-phase2g-cleanup-key-proof: $PROOF" \
+            "$CALLBACK_ORIGIN/__v39/phase2g/cleanup-control-match")"
+          GOOD="$GOOD" node --input-type=module <<'NODE'
+          const v = JSON.parse(process.env.GOOD ?? "{}");
+          if (v.schema !== "v39.phase2g-cleanup-control-key-match.v1" ||
+              v.status !== "PASS" ||
+              v.provider_call !== false ||
+              v.provider_mutation !== false ||
+              v.database_mutation !== false ||
+              Number(v.alert_credits_spent) !== 0) {
+            console.error("CLEANUP_KEY_CORRECT_HMAC=FAIL"); process.exit(2);
+          }
+          console.log("CLEANUP_KEY_CORRECT_HMAC=PASS");
+          NODE
+
+          BAD_STATUS="$(curl --silent --show-error --max-time 15 \
+            -o /dev/null -w '%{http_code}' \
+            -X POST \
+            -H "x-v39-phase2g-cleanup-nonce: $NONCE" \
+            -H "x-v39-phase2g-cleanup-key-proof: $(printf '%064d' 0)" \
+            "$CALLBACK_ORIGIN/__v39/phase2g/cleanup-control-match")"
+          [[ "$BAD_STATUS" == "404" ]] || {
+            echo "::error::Wrong cleanup HMAC was not rejected"
+            exit 2
+          }
+          echo "CLEANUP_KEY_WRONG_HMAC_REJECTED=PASS"
+
+          # Never send a correctly signed cleanup claim or touch a real session.
+          MISSING_STATUS="$(curl --silent --show-error --max-time 15 \
+            -o /dev/null -w '%{http_code}' \
+            -X POST -H 'Content-Type: application/json' -d '{}' \
+            "$CALLBACK_ORIGIN/__v39/phase2g/runtime-cleanup")"
+          [[ "$MISSING_STATUS" == "403" ]] || {
+            echo "::error::Unsigned remote cleanup was not rejected"
+            exit 2
+          }
+          echo "UNSIGNED_RUNTIME_CLEANUP_REJECTED=PASS"
+          echo "PROVIDER_CALLS=0"
+          echo "PROVIDER_MUTATIONS=0"
+          echo "DATABASE_QUERIES=0"
+          echo "DATABASE_MUTATIONS=0"
+          echo "BLOB_MUTATIONS=0"
+          echo "ALERT_CREDITS_SPENT=0"
