@@ -116,7 +116,7 @@ jobs:
       V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
       AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
-      V39_PHASE2G_CONTROL_SECRET: ${{ secrets.V39_PHASE2G_CONTROL_SECRET }}
+      V39_PHASE2G_CLEANUP_SIGNING_KEY: ${{ secrets.V39_PHASE2G_CLEANUP_SIGNING_KEY }}
     steps:
       - name: Refuse stale execution head
         shell: bash
@@ -148,7 +148,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET V39_PHASE2G_CONTROL_SECRET; do
+          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET V39_PHASE2G_CLEANUP_SIGNING_KEY; do
             if [[ -z "${!key:-}" ]]; then
               echo "::error::Missing required Phase2G gate secret: $key"
               exit 2
@@ -296,7 +296,7 @@ jobs:
           NONCE="phase2g-cleanup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           PROOF="$(NONCE="$NONCE" node --input-type=module <<'NODE'
           import { createHmac } from "node:crypto";
-          const key = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "");
+          const key = String(process.env.V39_PHASE2G_CLEANUP_SIGNING_KEY ?? "");
           const nonce = String(process.env.NONCE ?? "");
           const origin = String(process.env.CALLBACK_ORIGIN ?? "");
           if (key.length < 32 || !nonce || !/^https:\/\/[^/]+$/.test(origin)) process.exit(2);
@@ -458,7 +458,7 @@ jobs:
         if: ${{ always() && steps.run_owner.outcome != 'skipped' }}
         shell: bash
         env:
-          V39_PHASE2G_CONTROL_SECRET: ${{ secrets.V39_PHASE2G_CONTROL_SECRET }}
+          V39_PHASE2G_CLEANUP_SIGNING_KEY: ${{ secrets.V39_PHASE2G_CLEANUP_SIGNING_KEY }}
           EXACT_BUDGET: ${{ inputs.budget_day }}
           EXACT_ICAO: ${{ inputs.expected_icao }}
           EXACT_RUNTIME_FILE: ${{ inputs.runtime_file }}
@@ -467,7 +467,7 @@ jobs:
           EXACT_HEAD: ${{ inputs.expected_head }}
         run: |
           set -euo pipefail
-          [[ "${#V39_PHASE2G_CONTROL_SECRET}" -ge 32 ]] || {
+          [[ "${#V39_PHASE2G_CLEANUP_SIGNING_KEY}" -ge 32 ]] || {
             echo "::error::GitHub cleanup secret missing; no cleanup performed"
             exit 2
           }
