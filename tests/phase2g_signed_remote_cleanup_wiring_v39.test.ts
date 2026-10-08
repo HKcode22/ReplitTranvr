@@ -16,7 +16,7 @@ describe("Phase2G fail-closed signed GitHub remote cleanup wiring", () => {
   it("requires a signed attestation; bearer-only legacy guard cannot clean up", () => {
     expect(routes).toContain("verifyPhase2gCleanupAttestationV39(");
     expect(routes).toContain('req.header("x-v39-phase2g-cleanup-proof")');
-    expect(routes).toContain("V39_PHASE2G_CONTROL_SECRET");
+    expect(routes).toContain("V39_PHASE2G_CLEANUP_SIGNING_KEY");
     expect(routes).toContain("V39_PHASE2G_CALLBACK_ORIGIN");
     expect(routes).not.toContain("phase2gControlGuard");
     expect(cleanup).toContain("phase2gCleanupProofGuard");
