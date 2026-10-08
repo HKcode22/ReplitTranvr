@@ -493,8 +493,10 @@ export function registerV3Routes(app:Express):void{
     const deletionRunId = proof.deletion_run_id;
     const owner = await pool.query(
       `SELECT p.probe_id,p.status,p.stage,p.provider_content_safe_mode,
-              p.probe_budget_day_id,p.icao,
+              p.probe_budget_day_id,p.icao,p.reconciliation_status,
+              p.duration_censored,p.stop_reason,
               r.state AS runtime_state,
+              r.last_delivery_at_utc AS runtime_last_delivery_at_utc,
               r.provider_subscription_id AS runtime_provider_subscription_id
          FROM clean.adb_anchor_probe p
          JOIN clean.prepaid_probe_session_runtime r
@@ -515,12 +517,21 @@ export function registerV3Routes(app:Express):void{
     const row = owner.rows[0];
     const runtimeState = String(row.runtime_state ?? "");
     const probeStatus = String(row.status ?? "");
-    if (!["settling", "failed"].includes(runtimeState) ||
-        !["settling", "failed"].includes(probeStatus) ||
+    if (runtimeState !== "settling" ||
+        probeStatus !== "settling" ||
+        String(row.reconciliation_status ?? "") !== "MATCH" ||
+        row.duration_censored !== false ||
+        row.stop_reason != null ||
         String(row.probe_budget_day_id ?? "") !== proof.probe_budget_day_id ||
         String(row.icao ?? "").toUpperCase() !== proof.icao ||
         String(row.runtime_provider_subscription_id ?? "") !== proof.provider_subscription_id) {
       res.status(409).json({ error: "EXACT_STAGE1_SESSION_PROOF_MISMATCH_OR_UNSAFE_STATE" });
+      return;
+    }
+
+    const lastDeliveryMs = Date.parse(String(row.runtime_last_delivery_at_utc ?? ""));
+    if (!Number.isFinite(lastDeliveryMs) || Date.now() - lastDeliveryMs < 30_000) {
+      res.status(409).json({ error: "EXACT_STAGE1_CALLBACK_QUIESCENCE_NOT_PROVEN" });
       return;
     }
 
