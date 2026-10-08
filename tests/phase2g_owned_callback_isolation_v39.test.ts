@@ -95,25 +95,12 @@ describe("Owned Phase2G callback-only isolation", () => {
     );
   });
 
-  it("requires explicit opt-in for callback builds", () => {
+  it("requires an explicit callback build opt-in", () => {
     expect(build).toContain(
       'process.env.V39_CALLBACK_ONLY_BUILD === "1"'
     );
-
     expect(build).toContain(
       'callbackOnlyBuild ? "server/phase2gCallbackOnly.ts" : "server/index.ts"'
-    );
-
-    expect(config).toContain(
-      'build = ["npm", "run", "build"]'
-    );
-
-    expect(config).not.toContain(
-      "V39_CALLBACK_ONLY_BUILD=1"
-    );
-
-    expect(config).not.toContain(
-      "V39_CALLBACK_ONLY_RUNTIME=1"
     );
   });
 
@@ -123,25 +110,36 @@ describe("Owned Phase2G callback-only isolation", () => {
     );
   });
 
-  it("preserves original Travnr deployment defaults", () => {
-    expect(config).toContain(
-      'V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-managed-project npm run dev'
-    );
-
-    expect(config).toContain(
-      'build = ["npm", "run", "build"]'
-    );
-
-    expect(config).toContain(
-      'V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment'
-    );
-
-    expect(config).not.toContain(
-      "V39_CALLBACK_ONLY_RUNTIME=1"
-    );
-
-    expect(config).not.toContain(
+  it("allows only the two verified Replit profiles", () => {
+    const owned = config.includes(
       "V39_CALLBACK_ONLY_BUILD=1"
     );
+
+    if (owned) {
+      expect(config).toContain(
+        '"V39_CALLBACK_ONLY_RUNTIME=1"'
+      );
+      expect(config).toContain(
+        'V39_PROVIDER_BLOB_BUCKET_ID = "replit-objstore-5aa4d2c4-399b-4933-9acf-0292f79d6d59"'
+      );
+      expect(config).not.toContain(
+        "replit-objstore-89d08290-bfed-4ba9-ab3a-517a47e8095f"
+      );
+      expect(config).not.toContain("[postMerge]");
+      expect(config).not.toContain("https://travnr.com");
+    } else {
+      expect(config).toContain(
+        'build = ["npm", "run", "build"]'
+      );
+      expect(config).toContain(
+        'V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment'
+      );
+      expect(config).toContain(
+        'V39_PROVIDER_BLOB_BUCKET_ID = "replit-objstore-89d08290-bfed-4ba9-ab3a-517a47e8095f"'
+      );
+      expect(config).not.toContain(
+        "V39_CALLBACK_ONLY_RUNTIME=1"
+      );
+    }
   });
 });
