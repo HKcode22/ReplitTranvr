@@ -116,6 +116,7 @@ jobs:
       V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
       AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+      V39_PHASE2G_CONTROL_SECRET: ${{ secrets.V39_PHASE2G_CONTROL_SECRET }}
     steps:
       - name: Refuse stale execution head
         shell: bash
@@ -147,7 +148,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET; do
+          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET V39_PHASE2G_CONTROL_SECRET; do
             if [[ -z "${!key:-}" ]]; then
               echo "::error::Missing required Phase2G gate secret: $key"
               exit 2
@@ -284,6 +285,43 @@ jobs:
             process.exit(2);
           }
           console.log("GITHUB_REPLIT_WEBHOOK_SECRET_BINDING=PASS");
+          NODE
+
+      - name: Verify GitHub/Replit exact cleanup control-key binding
+        shell: bash
+        env:
+          CALLBACK_ORIGIN: ${{ inputs.callback_base }}
+        run: |
+          set -euo pipefail
+          NONCE="phase2g-cleanup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          PROOF="$(NONCE="$NONCE" node --input-type=module <<'NODE'
+          import { createHmac } from "node:crypto";
+          const key = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "");
+          const nonce = String(process.env.NONCE ?? "");
+          const origin = String(process.env.CALLBACK_ORIGIN ?? "");
+          if (key.length < 32 || !nonce || !/^https:\/\/[^/]+$/.test(origin)) process.exit(2);
+          process.stdout.write(createHmac("sha256", key)
+            .update(`phase2g-cleanup-control-key-binding:${origin}:${nonce}`)
+            .digest("hex"));
+          NODE
+          )"
+          RESPONSE="$(curl --silent --show-error --fail-with-body --max-time 15 \
+            -X POST \
+            -H "x-v39-phase2g-cleanup-nonce: ${NONCE}" \
+            -H "x-v39-phase2g-cleanup-key-proof: ${PROOF}" \
+            "${CALLBACK_ORIGIN}/__v39/phase2g/cleanup-control-match")"
+          node --input-type=module - "$RESPONSE" <<'NODE'
+          const x = JSON.parse(process.argv[2]);
+          if (x?.schema !== "v39.phase2g-cleanup-control-key-match.v1" ||
+              x?.status !== "PASS" ||
+              x?.provider_call !== false ||
+              x?.provider_mutation !== false ||
+              x?.database_mutation !== false ||
+              Number(x?.alert_credits_spent) !== 0) {
+            console.error("GITHUB_REPLIT_CLEANUP_CONTROL_BINDING=FAIL");
+            process.exit(2);
+          }
+          console.log("GITHUB_REPLIT_CLEANUP_CONTROL_BINDING=PASS");
           NODE
 
       - name: Generate fresh read-only paid preflight
