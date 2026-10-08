@@ -14,6 +14,12 @@ import { startTestFlightSeeder } from './lib/disruption/testFlightSeeder';
 import { installConsoleTee } from './lib/disruption/logFile';
 import { registerWorkspaceRuntimeHealthV39 } from './lib/disruption/workspaceRuntimeHealth_v39';
 
+if (process.env.V39_CALLBACK_ONLY_RUNTIME === "1") {
+  throw new Error(
+    "REFUSED:FULL_APP_BINARY_IN_CALLBACK_ONLY_MODE",
+  );
+}
+
 // Persist every console line to logs/collector.log so collection logs
 // survive Shell refreshes / restarts (tail -f logs/collector.log).
 installConsoleTee();

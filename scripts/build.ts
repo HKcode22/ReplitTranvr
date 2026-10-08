@@ -45,6 +45,7 @@ function resolveBuildGitHead(): string {
 
 async function buildAll() {
   const buildGitHead = resolveBuildGitHead();
+  const callbackOnlyBuild = process.env.V39_CALLBACK_ONLY_BUILD === "1";
   console.log(`V39 build git head: ${buildGitHead}`);
   await rm("dist", { recursive: true, force: true });
 
@@ -60,7 +61,7 @@ async function buildAll() {
   const externals = allDeps.filter((dep) => !allowlist.includes(dep));
 
   await esbuild({
-    entryPoints: ["server/index.ts"],
+    entryPoints: [callbackOnlyBuild ? "server/phase2gCallbackOnly.ts" : "server/index.ts"],
     platform: "node",
     bundle: true,
     format: "esm",
