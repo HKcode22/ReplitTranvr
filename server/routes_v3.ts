@@ -102,6 +102,35 @@ function phase2gRuntimeDbBinding(req: Request, res: Response): void {
     alert_credits_spent: 0,
   });
 }
+function phase2gCleanupControlKeyMatch(req: Request, res: Response): void {
+  const secret = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "").trim();
+  const origin = String(process.env.V39_PHASE2G_CALLBACK_ORIGIN ?? "").trim();
+  if (secret.length < 32 || !/^https:\/\/[^/]+$/.test(origin)) {
+    res.status(503).json({ error: "PHASE2G_CLEANUP_AUTH_NOT_CONFIGURED" });
+    return;
+  }
+  const nonce = String(req.header("x-v39-phase2g-cleanup-nonce") ?? "").trim();
+  const supplied = String(req.header("x-v39-phase2g-cleanup-key-proof") ?? "").trim().toLowerCase();
+  if (!/^[A-Za-z0-9_.:-]{16,256}$/.test(nonce) || !/^[a-f0-9]{64}$/.test(supplied)) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const expected = createHmac("sha256", secret)
+    .update(`phase2g-cleanup-control-key-binding:${origin}:${nonce}`)
+    .digest("hex");
+  if (!timingSafeEqual(Buffer.from(expected), Buffer.from(supplied))) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  res.status(200).json({
+    schema: "v39.phase2g-cleanup-control-key-match.v1",
+    status: "PASS",
+    provider_call: false,
+    provider_mutation: false,
+    database_mutation: false,
+    alert_credits_spent: 0,
+  });
+}
 function phase2gCleanupProofGuard(req: Request, res: Response, next: NextFunction): void {
   const secret = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "").trim();
   const expectedOrigin = String(process.env.V39_PHASE2G_CALLBACK_ORIGIN ?? "").trim();
@@ -236,6 +265,7 @@ async function recordIncident(cause:string,detail:unknown):Promise<void>{
 export function registerV3Routes(app:Express):void{
   app.post("/__v39/phase2g/webhook-secret-match",phase2gWebhookSecretMatch);
   app.post("/__v39/phase2g/runtime-db-binding",phase2gRuntimeDbBinding);
+  app.post("/__v39/phase2g/cleanup-control-match",phase2gCleanupControlKeyMatch);
 
   /*
    * Dedicated prepaid callback parser.
