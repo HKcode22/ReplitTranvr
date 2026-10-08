@@ -71,7 +71,6 @@ on:
         type: choice
         options:
           - published
-          - same-app-development-contingency
       callback_contingency_file:
         description: 'Committed contingency artifact path; required only for same-app development contingency'
         required: false
@@ -154,6 +153,85 @@ jobs:
               exit 2
             fi
           done
+
+      - name: Require exact published callback runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE="${{ inputs.callback_base }}"
+          MODE="${{ inputs.callback_mode }}"
+
+          if [[ "$MODE" != "published" ]]; then
+            echo "::error::Paid Stage1 requires callback_mode=published"
+            exit 2
+          fi
+
+          [[ "$BASE" =~ ^https://[^/]+$ ]] || {
+            echo "::error::callback_base must be one HTTPS origin"
+            exit 2
+          }
+
+          HOST="${BASE#https://}"
+
+          if [[ "$HOST" == *.replit.dev ]]; then
+            echo "::error::.replit.dev is forbidden for paid Stage1"
+            exit 2
+          fi
+
+          HEALTH="$(
+            curl \
+              --silent \
+              --show-error \
+              --fail-with-body \
+              --max-time 15 \
+              "${BASE}/__v39/workspace-runtime"
+          )"
+
+          node --input-type=module \
+            - "$HEALTH" "${{ inputs.expected_head }}" <<'NODE'
+          const health =
+            JSON.parse(process.argv[2]);
+
+          const expected =
+            String(process.argv[3] ?? "")
+              .toLowerCase();
+
+          const durability =
+            String(
+              health?.runtime_durability_class ?? ""
+            ).toLowerCase();
+
+          if (
+            health?.schema !==
+              "v39.phase2f-workspace-runtime.v1" ||
+            health?.status !== "PASS" ||
+            String(
+              health?.git_head ?? ""
+            ).toLowerCase() !== expected ||
+            health?.prepaid_route_registered !== true ||
+            Number(health?.retention_hours) !== 168 ||
+            health?.provider_mutation !== false ||
+            health?.runtime_owner_mode !==
+              "replit-published-deployment" ||
+            health?.managed_replit_workflow !== false ||
+            health?.published_deployment !== true ||
+            !["autoscale", "reserved-vm"]
+              .includes(durability)
+          ) {
+            console.error(
+              "PUBLISHED_RUNTIME_BINDING=FAIL"
+            );
+            console.error(
+              JSON.stringify(health, null, 2)
+            );
+            process.exit(2);
+          }
+
+          console.log(
+            "PUBLISHED_RUNTIME_BINDING=PASS"
+          );
+          NODE
 
       - name: Verify GitHub/Replit runtime DB binding
         shell: bash

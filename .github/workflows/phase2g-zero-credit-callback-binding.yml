@@ -50,9 +50,12 @@ jobs:
             health?.prepaid_route_registered !== true ||
             Number(health?.retention_hours) !== 168 ||
             health?.provider_mutation !== false ||
-            health?.runtime_owner_mode !== "replit-managed-project" ||
-            health?.managed_replit_workflow !== true ||
-            health?.published_deployment !== false
+            health?.runtime_owner_mode !== "replit-published-deployment" ||
+            health?.managed_replit_workflow !== false ||
+            health?.published_deployment !== true ||
+            !["autoscale", "reserved-vm"].includes(
+              String(health?.runtime_durability_class ?? "").toLowerCase()
+            )
           ) {
             console.error("LIVE_RUNTIME_BINDING=FAIL");
             process.exit(2);

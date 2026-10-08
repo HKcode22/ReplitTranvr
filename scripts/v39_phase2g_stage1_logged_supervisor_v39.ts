@@ -48,10 +48,16 @@ async function callbackHealthy(
     const json: any = await response.json().catch(() => null);
     if (response.status !== 404 || json?.error !== "Not found") return false;
 
-    // The published path has its own deployment contract. The Thursday
-    // same-app development contingency must continuously prove that the live
-    // Replit callback has not drifted after paid ownership began.
-    if (callbackMode !== "same-app-development-contingency") return true;
+    /*
+     * Both supported callback modes must continuously prove their
+     * exact runtime identity during paid ownership.  A published
+     * deployment is not trusted merely because the route returns 404.
+     */
+    const publishedMode = callbackMode === "published";
+    const developmentMode =
+      callbackMode === "same-app-development-contingency";
+
+    if (!publishedMode && !developmentMode) return false;
 
     const healthResponse = await fetch(`${base}/__v39/workspace-runtime`, {
       headers: { accept: "application/json" },
@@ -66,9 +72,21 @@ async function callbackHealthy(
       health?.prepaid_route_registered !== true ||
       Number(health?.retention_hours) !== 168 ||
       health?.provider_mutation !== false ||
-      health?.runtime_owner_mode !== "replit-managed-project" ||
-      health?.managed_replit_workflow !== true ||
-      health?.published_deployment !== false
+      health?.runtime_owner_mode !==
+        (publishedMode
+          ? "replit-published-deployment"
+          : "replit-managed-project") ||
+      health?.managed_replit_workflow !==
+        (publishedMode ? false : true) ||
+      health?.published_deployment !== publishedMode ||
+      (
+        publishedMode &&
+        !["autoscale", "reserved-vm"].includes(
+          String(
+            health?.runtime_durability_class ?? ""
+          ).toLowerCase()
+        )
+      )
     ) {
       return false;
     }

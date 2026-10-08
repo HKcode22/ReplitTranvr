@@ -429,6 +429,54 @@ async function main(): Promise<void> {
       blockers.push(`development_callback_runtime_health_failed:${error instanceof Error ? error.message : String(error)}`);
     }
   }
+  if (!isDevContingency) {
+    try {
+      const health =
+        await getJson(
+          `${origin}/__v39/workspace-runtime`,
+        );
+
+      const durability =
+        String(
+          health.json?.runtime_durability_class ?? "",
+        ).toLowerCase();
+
+      const publishedRuntimeExact =
+        health.status === 200 &&
+        health.json?.schema ===
+          "v39.phase2f-workspace-runtime.v1" &&
+        health.json?.status === "PASS" &&
+        String(
+          health.json?.git_head ?? "",
+        ).toLowerCase() === expectedHead &&
+        health.json?.prepaid_route_registered === true &&
+        Number(
+          health.json?.retention_hours,
+        ) === 168 &&
+        health.json?.provider_mutation === false &&
+        health.json?.runtime_owner_mode ===
+          "replit-published-deployment" &&
+        health.json?.managed_replit_workflow === false &&
+        health.json?.published_deployment === true &&
+        ["autoscale", "reserved-vm"]
+          .includes(durability);
+
+      if (!publishedRuntimeExact) {
+        blockers.push(
+          "published_callback_runtime_health_not_exact",
+        );
+      }
+    } catch (error) {
+      blockers.push(
+        `published_callback_runtime_health_failed:${
+          error instanceof Error
+            ? error.message
+            : String(error)
+        }`,
+      );
+    }
+  }
+
   try {
     const callbackRaw = fs.readFileSync(callbackVerificationPath);
     const actualCallbackSha = sha256(callbackRaw);
