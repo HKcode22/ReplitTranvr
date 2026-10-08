@@ -37,11 +37,17 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{1
 const nonce = (prefix: string) => `${prefix}-${randomUUID()}`;
 
 async function main(): Promise<void> {
-  const session = required("--session").toLowerCase();
-  const probeId = Number(required("--probe-id"));
+  // Post-owner mode discovers only one exact settling/MATCH probe for the
+  // approved frozen budget. Never guess a session or clean a failed probe.
+  const autoFromBudget = process.argv.includes("--auto-from-budget");
+  if (autoFromBudget && ["--session", "--probe-id", "--expected-live-blobs"].some(
+    (arg) => process.argv.includes(arg),
+  )) throw new Error("REFUSED:AUTO_DISCOVERY_MIXED_WITH_MANUAL_EXACT_SCOPE");
+  let session = autoFromBudget ? "" : required("--session").toLowerCase();
+  let probeId = autoFromBudget ? 0 : Number(required("--probe-id"));
   const budget = required("--budget-day");
   const icao = required("--icao").toUpperCase();
-  const expectedLive = Number(required("--expected-live-blobs"));
+  let expectedLive = autoFromBudget ? -1 : Number(required("--expected-live-blobs"));
   const callback = required("--callback-base");
   const expectedHead = required("--expected-head").toLowerCase();
   const runtimeFile = required("--runtime-file");
@@ -52,10 +58,10 @@ async function main(): Promise<void> {
     throw new Error("REFUSED:GITHUB_ACTIONS_OWNER_REQUIRED");
   }
   if (!apply) throw new Error("REFUSED:EXPLICIT_APPLY_FLAG_REQUIRED");
-  if (!uuid.test(session) || !Number.isSafeInteger(probeId) || probeId <= 0 ||
+  if ((!autoFromBudget && (!uuid.test(session) || !Number.isSafeInteger(probeId) || probeId <= 0 ||
+        !Number.isSafeInteger(expectedLive) || expectedLive < 0 || expectedLive > 1000)) ||
       !/^P2G-S1-\d{8}-\d{1,5}$/.test(budget) ||
       !/^[A-Z]{4}$/.test(icao) ||
-      !Number.isSafeInteger(expectedLive) || expectedLive < 0 || expectedLive > 1000 ||
       !/^[a-f0-9]{40}$/.test(expectedHead) || !/^[a-f0-9]{64}$/.test(runtimeSha)) {
     throw new Error("REFUSED:INVALID_EXACT_SCOPE");
   }
@@ -81,6 +87,39 @@ async function main(): Promise<void> {
       health?.published_deployment !== true ||
       health?.runtime_owner_mode !== "replit-published-deployment") {
     throw new Error("REFUSED:PUBLISHED_CALLBACK_SOURCE_MISMATCH");
+  }
+
+  if (autoFromBudget) {
+    const candidates = await pool.query(
+      `SELECT probe_id,runtime_session_id FROM clean.adb_anchor_probe
+       WHERE probe_budget_day_id=$1 AND icao=$2 AND stage=1
+         AND status='settling' AND reconciliation_status='MATCH'
+         AND duration_censored=false AND stop_reason IS NULL
+         AND provider_content_safe_mode=true
+         AND runtime_cleanup_verified_at_utc IS NULL`,
+      [budget, icao],
+    );
+    if (candidates.rowCount !== 1) {
+      throw new Error("REFUSED:AUTO_DISCOVERY_REQUIRES_ONE_EXACT_SETTLING_MATCH");
+    }
+    probeId = Number(candidates.rows[0].probe_id);
+    session = String(candidates.rows[0].runtime_session_id ?? "").toLowerCase();
+    if (!Number.isSafeInteger(probeId) || probeId <= 0 || !uuid.test(session)) {
+      throw new Error("REFUSED:AUTO_DISCOVERY_INVALID_PROBE_SESSION");
+    }
+    const blobs = await pool.query(
+      `SELECT count(*)::int AS n FROM clean.provider_content_blob_ref
+       WHERE source_kind='webhook' AND source_record_id LIKE $1
+         AND deletion_verified_at_utc IS NULL`,
+      [`prepaid:${session}:%`],
+    );
+    expectedLive = Number(blobs.rows[0]?.n ?? -1);
+    if (!Number.isSafeInteger(expectedLive) || expectedLive < 0 || expectedLive > 1000) {
+      throw new Error("REFUSED:AUTO_DISCOVERY_LIVE_BLOBS_INVALID");
+    }
+    console.log("AUTO_DISCOVERY_EXACT_SETTLING_MATCH=PASS");
+    console.log("AUTO_DISCOVERED_PROBE_ID=" + probeId);
+    console.log("AUTO_DISCOVERED_LIVE_BLOBS=" + expectedLive);
   }
 
   const r = await pool.query(
