@@ -194,6 +194,35 @@ async function main(): Promise<void> {
   };
   const signature = signPhase2gCleanupAttestationV39(claim, secret, inventoryAt);
 
+  // Preserve an auditable non-secret request intent BEFORE sending a destructive
+  // cleanup request. If Replit deletes the blob but GitHub loses the HTTP
+  // response, this exact deletion_run_id lets a human reconcile durable blob
+  // tombstones without inventing a successful cleanup receipt.
+  const intent = {
+    schema: "v39.phase2g-signed-cleanup-intent.v1",
+    status: "PREPARED_NOT_PROOF_OF_DELETION",
+    session_id: session,
+    probe_id: probeId,
+    probe_budget_day_id: budget,
+    icao,
+    provider_subscription_id: claim.provider_subscription_id,
+    expected_live_blobs: expectedLive,
+    deletion_run_id: claim.deletion_run_id,
+    provider_inventory_reads: 2,
+    active_billable_subscriptions: 0,
+    provider_inventory_checked_at_utc: claim.provider_inventory_checked_at_utc,
+    attestation_expires_at_utc: claim.expires_at_utc,
+    callback_origin: callback,
+    source_git_head: expectedHead,
+    provider_mutation: false,
+    secret_or_hmac_written: false,
+  };
+  fs.mkdirSync("artifacts", { recursive: true });
+  const intentFile = path.join("artifacts", `phase2g-signed-cleanup-intent-probe${probeId}-${Date.now()}.json`);
+  fs.writeFileSync(intentFile, JSON.stringify(intent, null, 2) + "\n", { flag: "wx" });
+  console.log("PHASE2G_CLEANUP_INTENT_FILE=" + intentFile);
+  console.log("PHASE2G_CLEANUP_INTENT_SHA256=" + sha256(fs.readFileSync(intentFile)));
+
   const res = await fetch(callback + "/__v39/phase2g/runtime-cleanup", {
     method: "POST",
     headers: {
