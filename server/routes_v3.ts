@@ -103,7 +103,7 @@ function phase2gRuntimeDbBinding(req: Request, res: Response): void {
   });
 }
 function phase2gCleanupControlKeyMatch(req: Request, res: Response): void {
-  const secret = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "").trim();
+  const secret = String(process.env.V39_PHASE2G_CLEANUP_SIGNING_KEY ?? "").trim();
   const origin = String(process.env.V39_PHASE2G_CALLBACK_ORIGIN ?? "").trim();
   if (secret.length < 32 || !/^https:\/\/[^/]+$/.test(origin)) {
     res.status(503).json({ error: "PHASE2G_CLEANUP_AUTH_NOT_CONFIGURED" });
@@ -132,7 +132,7 @@ function phase2gCleanupControlKeyMatch(req: Request, res: Response): void {
   });
 }
 function phase2gCleanupProofGuard(req: Request, res: Response, next: NextFunction): void {
-  const secret = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "").trim();
+  const secret = String(process.env.V39_PHASE2G_CLEANUP_SIGNING_KEY ?? "").trim();
   const expectedOrigin = String(process.env.V39_PHASE2G_CALLBACK_ORIGIN ?? "").trim();
   if (secret.length < 32 || !expectedOrigin) {
     res.status(503).json({ error: "PHASE2G_CLEANUP_AUTH_NOT_CONFIGURED" });
