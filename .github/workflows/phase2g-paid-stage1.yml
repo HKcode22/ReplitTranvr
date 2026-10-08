@@ -60,9 +60,9 @@ on:
         required: true
         type: string
       callback_base:
-        description: 'Callback origin; published by default, same-app replit.dev only under explicit contingency'
+        description: 'Dedicated hk84164 published callback origin for Phase2G paid Stage1'
         required: true
-        default: 'https://travnr.com'
+        default: 'https://replit-tranvr--hk84164.replit.app'
         type: string
       callback_mode:
         description: 'Callback infrastructure mode'
@@ -165,6 +165,13 @@ jobs:
 
           if [[ "$MODE" != "published" ]]; then
             echo "::error::Paid Stage1 requires callback_mode=published"
+            exit 2
+          fi
+
+          EXPECTED_CALLBACK_ORIGIN="https://replit-tranvr--hk84164.replit.app"
+
+          if [[ "$BASE" != "$EXPECTED_CALLBACK_ORIGIN" ]]; then
+            echo "::error::Paid Stage1 requires the dedicated hk84164 callback receiver"
             exit 2
           fi
 

@@ -6,6 +6,10 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
 import { listSubscriptionsStrict } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import {
+  assertPhase2gCleanupBlobCountsV39,
+  assertPhase2gCleanupJournalMatchV39,
+} from "../server/lib/disruption/phase2gCleanupReplay_v39";
+import {
   signPhase2gCleanupAttestationV39,
   type Phase2gCleanupAttestationV39,
 } from "../server/lib/disruption/phase2gCleanupAttestation_v39";
@@ -109,8 +113,7 @@ async function main(): Promise<void> {
     }
     const blobs = await pool.query(
       `SELECT count(*)::int AS n FROM clean.provider_content_blob_ref
-       WHERE source_kind='webhook' AND source_record_id LIKE $1
-         AND deletion_verified_at_utc IS NULL`,
+       WHERE source_kind='webhook' AND source_record_id LIKE $1`,
       [`prepaid:${session}:%`],
     );
     expectedLive = Number(blobs.rows[0]?.n ?? -1);
@@ -126,10 +129,11 @@ async function main(): Promise<void> {
     `SELECT p.probe_id,p.probe_budget_day_id,p.icao,p.status,p.stage,
             p.provider_content_safe_mode,p.reconciliation_status,
             p.duration_censored,p.stop_reason,p.runtime_cleanup_verified_at_utc,
+            p.subscription_id AS probe_subscription_id,
             s.session_id,s.state AS session_state,
             s.provider_subscription_id,s.last_delivery_at_utc
        FROM clean.adb_anchor_probe p
-       JOIN clean.prepaid_probe_session_runtime s
+       LEFT JOIN clean.prepaid_probe_session_runtime s
          ON s.session_id=p.runtime_session_id
         AND s.owner_kind='anchor_probe'
         AND s.owner_probe_id=p.probe_id
@@ -140,30 +144,116 @@ async function main(): Promise<void> {
   );
   if (r.rowCount !== 1) throw new Error("REFUSED:PROBE_AND_RUNTIME_NOT_EXACT");
   const owner = r.rows[0];
-  if (owner.stage !== 1 ||
-      owner.provider_content_safe_mode !== true ||
-      owner.status !== "settling" ||
-      owner.session_state !== "settling" ||
-      owner.reconciliation_status !== "MATCH" ||
-      owner.duration_censored !== false ||
-      owner.stop_reason != null ||
-      owner.runtime_cleanup_verified_at_utc != null ||
-      !String(owner.provider_subscription_id ?? "").trim()) {
+
+  const journalQ = await pool.query(
+    `SELECT session_id,probe_id,deletion_run_id,request_sha256,
+            expected_live_blobs,state,deleted_blobs,
+            deleted_runtime_rows,verified_at_utc
+       FROM clean.phase2g_cleanup_journal_v39
+      WHERE session_id=$1::uuid`,
+    [session],
+  );
+  if (journalQ.rowCount !== 0 && journalQ.rowCount !== 1) {
+    throw new Error("REFUSED:AMBIGUOUS_CLEANUP_JOURNAL");
+  }
+  const priorJournal = journalQ.rows[0] ?? null;
+  const hasRuntime = owner.session_id != null;
+
+  const providerSubscriptionId = String(
+    owner.provider_subscription_id ??
+    owner.probe_subscription_id ??
+    "",
+  ).trim();
+
+  if (
+    owner.stage !== 1 ||
+    owner.provider_content_safe_mode !== true ||
+    owner.status !== "settling" ||
+    owner.reconciliation_status !== "MATCH" ||
+    owner.duration_censored !== false ||
+    owner.stop_reason != null ||
+    owner.runtime_cleanup_verified_at_utc != null ||
+    !providerSubscriptionId ||
+    (hasRuntime
+      ? owner.session_state !== "settling"
+      : priorJournal?.state !== "VERIFIED")
+  ) {
     throw new Error("REFUSED:PROBE_NOT_SAFE_TO_PURPOSE_CLEAN");
   }
-  const lastDeliveryMs = Date.parse(String(owner.last_delivery_at_utc ?? ""));
-  if (!Number.isFinite(lastDeliveryMs) || Date.now() - lastDeliveryMs < 30_000) {
-    throw new Error("REFUSED:CALLBACK_SETTLING_QUIESCENCE_30S_NOT_PROVEN");
+
+  if (
+    owner.provider_subscription_id != null &&
+    owner.probe_subscription_id != null &&
+    String(owner.provider_subscription_id) !==
+      String(owner.probe_subscription_id)
+  ) {
+    throw new Error("REFUSED:PROVIDER_SUBSCRIPTION_IDENTITY_CONFLICT");
   }
 
+  if (priorJournal?.state === "VERIFIED" && hasRuntime) {
+    throw new Error("REFUSED:VERIFIED_JOURNAL_RUNTIME_PRESENT");
+  }
+
+  if (hasRuntime) {
+    const lastDeliveryMs = Date.parse(
+      String(owner.last_delivery_at_utc ?? ""),
+    );
+    if (
+      !Number.isFinite(lastDeliveryMs) ||
+      Date.now() - lastDeliveryMs < 30_000
+    ) {
+      throw new Error(
+        "REFUSED:CALLBACK_SETTLING_QUIESCENCE_30S_NOT_PROVEN",
+      );
+    }
+  }
+
+  if (priorJournal && (
+    Number(priorJournal.probe_id) !== probeId ||
+    Number(priorJournal.expected_live_blobs) !== expectedLive ||
+    !["STARTED", "VERIFIED"].includes(String(priorJournal.state)) ||
+    !/^[A-Za-z0-9_.:\\-]{8,160}$/.test(
+      String(priorJournal.deletion_run_id ?? ""),
+    )
+  )) {
+    throw new Error("REFUSED:EXACT_CLEANUP_JOURNAL_SCOPE_MISMATCH");
+  }
+
+  const deletionRunId = priorJournal
+    ? String(priorJournal.deletion_run_id)
+    : nonce("phase2g-github-cleanup");
+
   const count = await pool.query(
-    `SELECT count(*)::int AS n FROM clean.provider_content_blob_ref
-     WHERE source_kind='webhook' AND source_record_id LIKE $1
-       AND deletion_verified_at_utc IS NULL`,
-    [`prepaid:${session}:%`],
+    `SELECT
+       count(*)::int AS total,
+       count(*) FILTER (
+         WHERE deletion_verified_at_utc IS NULL
+       )::int AS live,
+       count(*) FILTER (
+         WHERE deletion_verified_at_utc IS NOT NULL
+           AND deletion_run_id=$2
+       )::int AS verified_for_run
+     FROM clean.provider_content_blob_ref
+     WHERE source_kind='webhook'
+       AND source_record_id LIKE $1`,
+    [`prepaid:${session}:%`, deletionRunId],
   );
-  if (Number(count.rows[0]?.n ?? -1) !== expectedLive) {
+
+  try {
+    assertPhase2gCleanupBlobCountsV39(
+      count.rows[0] ?? {},
+      expectedLive,
+      priorJournal?.state === "VERIFIED",
+    );
+  } catch {
     throw new Error("REFUSED:LIVE_BLOB_COUNT_CHANGED");
+  }
+
+  if (
+    !priorJournal &&
+    Number(count.rows[0]?.live ?? -1) !== expectedLive
+  ) {
+    throw new Error("REFUSED:PREEXISTING_DELETION_WITHOUT_JOURNAL");
   }
 
   // Two independent account-wide provider inventories; never treat an API error
@@ -185,14 +275,26 @@ async function main(): Promise<void> {
     probe_id: probeId,
     probe_budget_day_id: budget,
     icao,
-    provider_subscription_id: String(owner.provider_subscription_id),
-    deletion_run_id: nonce("phase2g-github-cleanup"),
+    provider_subscription_id: providerSubscriptionId,
+    deletion_run_id: deletionRunId,
     expected_live_blobs: expectedLive,
     active_billable_subscriptions: 0,
     provider_inventory_checked_at_utc: inventoryAt.toISOString(),
     expires_at_utc: new Date(inventoryAt.getTime() + 90000).toISOString(),
   };
-  const signature = signPhase2gCleanupAttestationV39(claim, secret, inventoryAt);
+  if (priorJournal) {
+    try {
+      assertPhase2gCleanupJournalMatchV39(claim, priorJournal);
+    } catch {
+      throw new Error("REFUSED:EXACT_CLEANUP_JOURNAL_SCOPE_CONFLICT");
+    }
+  }
+
+  const signature = signPhase2gCleanupAttestationV39(
+    claim,
+    secret,
+    inventoryAt,
+  );
 
   // Preserve an auditable non-secret request intent BEFORE sending a destructive
   // cleanup request. If Replit deletes the blob but GitHub loses the HTTP

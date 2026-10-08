@@ -771,12 +771,24 @@ export async function setPrepaidProbeSessionStateV39(sessionId: string, state: P
 
 export async function recordPrepaidProbeCallbackFailureV39(sessionId: string): Promise<void> {
   const id = assertSessionId(sessionId);
-  await pool.query(
+
+  // The callback persistence transaction rolls back its provisional
+  // request counter on failure. Record the failed request and failure
+  // together after that rollback; do not count a successful callback.
+  const counted = await pool.query(
     `UPDATE clean.prepaid_probe_session_runtime
-        SET callback_failures=callback_failures+1
-      WHERE session_id=$1`,
+        SET callback_requests_seen=callback_requests_seen+1,
+            callback_failures=callback_failures+1
+      WHERE session_id=$1
+      RETURNING session_id`,
     [id],
   );
+  if (counted.rowCount !== 1) {
+    throw new Error(
+      "PREPAID_PROBE_CALLBACK_FAILURE_FALLBACK_NOT_RECORDED",
+    );
+  }
+
 }
 
 /**
@@ -858,23 +870,39 @@ export async function persistPrepaidProbeWebhookV39(input: {
   const sessionId = assertSessionId(input.sessionId);
   const receivedAt = input.receivedAtUtc ?? new Date();
   if (!Number.isFinite(receivedAt.getTime())) throw new Error("PREPAID_PROBE_RECEIVED_AT_INVALID");
-  const session = await pool.query(
-    `SELECT provider_subscription_id,state,expires_at_utc
-       FROM clean.prepaid_probe_session_runtime
-      WHERE session_id=$1`,
-    [sessionId],
-  );
+  let failureSavepointOpen = false;
+  const client = await pool.connect();
+  let store: ReturnType<typeof createRequiredProviderBlobStoreV39> | null = null;
+  let blob: ProviderBlobRefV39 | null = null;
+  try {
+    await client.query("BEGIN");
+
+    // Serialize admission, duplicate detection, raw blob persistence,
+    // and all runtime writes for this exact session.
+    const session = await client.query(
+      `SELECT provider_subscription_id,state,expires_at_utc
+         FROM clean.prepaid_probe_session_runtime
+        WHERE session_id=$1
+        FOR UPDATE`,
+      [sessionId],
+    );
   if (session.rowCount !== 1) throw new Error("PREPAID_PROBE_SESSION_NOT_FOUND_OR_CRASH_RESET");
   const state = String(session.rows[0].state ?? "");
   if (!["armed", "active", "settling"].includes(state)) throw new Error(`PREPAID_PROBE_SESSION_NOT_ACCEPTING:${state}`);
   if (new Date(session.rows[0].expires_at_utc).getTime() <= receivedAt.getTime()) throw new Error("PREPAID_PROBE_SESSION_EXPIRED");
 
-  await pool.query(
+  await client.query(
     `UPDATE clean.prepaid_probe_session_runtime
         SET callback_requests_seen=callback_requests_seen+1
       WHERE session_id=$1`,
     [sessionId],
   );
+
+  // The row lock and request increment precede this savepoint.
+  // A payload failure can roll back its writes without releasing
+  // that lock or losing its request count.
+  await client.query("SAVEPOINT phase2g_callback_payload");
+  failureSavepointOpen = true;
 
   const subId = providerSubscriptionId(input.body);
   const boundSub = session.rows[0].provider_subscription_id ? String(session.rows[0].provider_subscription_id) : null;
@@ -885,19 +913,20 @@ export async function persistPrepaidProbeWebhookV39(input: {
   const bodySha256 = sha256(rawBytes);
   const evidence = providerDeliveryEvidence(input.body);
   const deliveryId = deliveryIdFor(sessionId, bodySha256, evidence);
-  const prior = await pool.query(
+  const prior = await client.query(
     `SELECT blob_ref_id,raw_body_sha256 FROM clean.prepaid_probe_delivery_runtime
       WHERE session_id=$1 AND delivery_id=$2`,
     [sessionId, deliveryId],
   );
   if (prior.rowCount) {
     if (String(prior.rows[0].raw_body_sha256) !== bodySha256) throw new Error("PREPAID_PROBE_DUPLICATE_HASH_CONFLICT");
-    await pool.query(
+    await client.query(
       `UPDATE clean.prepaid_probe_session_runtime
           SET callback_success_2xx=callback_success_2xx+1
         WHERE session_id=$1`,
       [sessionId],
     );
+    await client.query("COMMIT");
     return { deliveryId, blobRefId: String(prior.rows[0].blob_ref_id), itemCount: Array.isArray(input.body?.flights) ? input.body.flights.length : Array.isArray(input.body) ? input.body.length : 0, duplicate: true };
   }
 
@@ -906,8 +935,8 @@ export async function persistPrepaidProbeWebhookV39(input: {
     : Array.isArray(input.body?.flights)
       ? input.body.flights
       : [];
-  const store = createRequiredProviderBlobStoreV39();
-  const blob: ProviderBlobRefV39 = await persistProviderBlobBeforeAckV39({
+  store = createRequiredProviderBlobStoreV39();
+  blob = await persistProviderBlobBeforeAckV39({
     store,
     bytes: rawBytes,
     contentClass: "raw_provider_content",
@@ -915,9 +944,6 @@ export async function persistPrepaidProbeWebhookV39(input: {
     now: receivedAt,
   });
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
     await client.query(
       `INSERT INTO clean.provider_content_blob_ref
        (blob_ref_id,storage_kind,contract_version,object_name,content_class,content_sha256,content_bytes,
@@ -1058,10 +1084,64 @@ export async function persistPrepaidProbeWebhookV39(input: {
     await client.query("COMMIT");
     return { deliveryId, blobRefId: blob.blobRefId, itemCount: flights.length, duplicate: false };
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    try {
-      await deleteProviderBlobAtExpiryV39({ store, ref: blob, now: new Date(), allowEarlyDelete: true });
-    } catch { /* fail original request; orphan cleanup/expiry job still has opaque path in the thrown context only */ }
+    let failureRecordedUnderLock = false;
+
+    if (failureSavepointOpen) {
+      try {
+        await client.query(
+          "ROLLBACK TO SAVEPOINT phase2g_callback_payload",
+        );
+
+        const counted = await client.query(
+          `UPDATE clean.prepaid_probe_session_runtime
+              SET callback_failures=callback_failures+1
+            WHERE session_id=$1
+            RETURNING session_id`,
+          [sessionId],
+        );
+
+        if (counted.rowCount !== 1) {
+          throw new Error(
+            "PREPAID_PROBE_FAILURE_ACCOUNTING_SESSION_MISSING",
+          );
+        }
+
+        // Request and failure become visible together.
+        // The session lock is released only at COMMIT.
+        await client.query("COMMIT");
+        failureRecordedUnderLock = true;
+      } catch {
+        await client.query("ROLLBACK").catch(
+          () => undefined,
+        );
+      }
+    } else {
+      await client.query("ROLLBACK").catch(
+        () => undefined,
+      );
+    }
+
+    if (
+      failureRecordedUnderLock &&
+      error !== null &&
+      typeof error === "object"
+    ) {
+      (error as { phase2gFailureRecorded?: boolean })
+        .phase2gFailureRecorded = true;
+    }
+    if (store && blob) {
+      try {
+        await deleteProviderBlobAtExpiryV39({
+          store,
+          ref: blob,
+          now: new Date(),
+          allowEarlyDelete: true,
+        });
+      } catch {
+        // Preserve the original failure. Orphan recovery remains
+        // a separate required release-hardening task.
+      }
+    }
     throw error;
   } finally {
     client.release();
@@ -1341,42 +1421,224 @@ export interface PrepaidProbeCleanupResultV39 {
 export async function cleanupPrepaidProbeSessionLocalV39(
   sessionId: string,
   deletionRunId: string,
+  verifyAfterLock?: (client: PrepaidIdentityQueryClientV39) => Promise<void>,
+  journal?: {
+    probeId: number;
+    expectedLiveBlobs: number;
+    requestSha256: string;
+  },
 ): Promise<PrepaidProbeCleanupResultV39> {
   const id = assertSessionId(sessionId);
-  if (!String(deletionRunId ?? "").trim()) throw new Error("PREPAID_PROBE_DELETION_RUN_ID_REQUIRED");
-  const store = createRequiredProviderBlobStoreV39();
-  const blobs = await pool.query(
-    `SELECT blob_ref_id,storage_kind,contract_version,object_name,content_class,content_sha256,content_bytes,
-            persisted_at_utc,expires_at_utc,retention_hours,deletion_verified_at_utc
-       FROM clean.provider_content_blob_ref
-      WHERE source_kind='webhook' AND source_record_id LIKE $1
-      ORDER BY persisted_at_utc,blob_ref_id`,
-    [`prepaid:${id}:%`],
-  );
-  let deletedBlobs = 0;
-  for (const row of blobs.rows) {
-    if (row.deletion_verified_at_utc) continue;
-    const ref = blobRefFromRow(row);
-    const deleted = await deleteProviderBlobAtExpiryV39({ store, ref, now: new Date(), allowEarlyDelete: true });
-    const update = await pool.query(
-      `UPDATE clean.provider_content_blob_ref
-          SET deleted_at_utc=$2,deletion_verified_at_utc=$2,deletion_run_id=$3
-        WHERE blob_ref_id=$1 AND deletion_verified_at_utc IS NULL
-        RETURNING blob_ref_id`,
-      [deleted.blobRefId, deleted.deletedAtUtc, deletionRunId],
-    );
-    if (update.rowCount !== 1) throw new Error(`PREPAID_PROBE_BLOB_TOMBSTONE_UPDATE_FAILED:${deleted.blobRefId}`);
-    deletedBlobs += 1;
+  if (!String(deletionRunId ?? "").trim()) {
+    throw new Error("PREPAID_PROBE_DELETION_RUN_ID_REQUIRED");
   }
 
   const client = await pool.connect();
+  let deletedBlobs = 0;
   let deletedRuntimeRows = 0;
+
   try {
     await client.query("BEGIN");
-    const items = await client.query(`DELETE FROM clean.prepaid_probe_item_runtime WHERE session_id=$1`, [id]);
-    const deliveries = await client.query(`DELETE FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1`, [id]);
-    const sessions = await client.query(`DELETE FROM clean.prepaid_probe_session_runtime WHERE session_id=$1`, [id]);
-    deletedRuntimeRows = (items.rowCount ?? 0) + (deliveries.rowCount ?? 0) + (sessions.rowCount ?? 0);
+    await client.query("SET LOCAL lock_timeout = '5s'");
+
+    // Same row lock as persistPrepaidProbeWebhookV39.
+    // This blocks cleanup until an admitted callback releases
+    // its transaction and prevents new callbacks overtaking cleanup.
+    const locked = await client.query(
+      `SELECT session_id,state
+         FROM clean.prepaid_probe_session_runtime
+        WHERE session_id=$1
+        FOR UPDATE`,
+      [id],
+    );
+    if (locked.rowCount !== 1) {
+      throw new Error("PREPAID_PROBE_CLEANUP_SESSION_NOT_FOUND");
+    }
+
+    // For signed cleanup, all scientific conditions must be rechecked
+    // within this very transaction before irreversible deletion.
+    if (verifyAfterLock) {
+      await verifyAfterLock(client);
+    }
+
+    if (journal) {
+      if (
+        !Number.isSafeInteger(journal.probeId) ||
+        journal.probeId <= 0 ||
+        !Number.isSafeInteger(journal.expectedLiveBlobs) ||
+        journal.expectedLiveBlobs < 0 ||
+        journal.expectedLiveBlobs > 1000 ||
+        !/^[a-f0-9]{64}$/.test(journal.requestSha256)
+      ) {
+        throw new Error("PHASE2G_CLEANUP_JOURNAL_SCOPE_INVALID");
+      }
+
+      // Independent committed INSERT: survives a rollback of the
+      // session's eventual deletion transaction.
+      await pool.query(
+        `INSERT INTO clean.phase2g_cleanup_journal_v39
+           (session_id,probe_id,deletion_run_id,
+            request_sha256,expected_live_blobs,state)
+         VALUES($1,$2,$3,$4,$5,'STARTED')
+         ON CONFLICT (session_id) DO NOTHING`,
+        [id, journal.probeId, deletionRunId,
+         journal.requestSha256, journal.expectedLiveBlobs],
+      );
+
+      const existing = await pool.query(
+        `SELECT probe_id,deletion_run_id,request_sha256,
+                expected_live_blobs,state
+           FROM clean.phase2g_cleanup_journal_v39
+          WHERE session_id=$1`,
+        [id],
+      );
+
+      const row = existing.rows[0];
+
+      if (
+        existing.rowCount !== 1 ||
+        Number(row.probe_id) !== journal.probeId ||
+        String(row.deletion_run_id) !== deletionRunId ||
+        String(row.request_sha256) !== journal.requestSha256 ||
+        Number(row.expected_live_blobs) !== journal.expectedLiveBlobs ||
+        String(row.state) !== "STARTED"
+      ) {
+        throw new Error("PHASE2G_CLEANUP_JOURNAL_CONFLICT");
+      }
+    }
+
+    const store = createRequiredProviderBlobStoreV39();
+    const blobs = await client.query(
+      `SELECT blob_ref_id,storage_kind,contract_version,object_name,
+              content_class,content_sha256,content_bytes,
+              persisted_at_utc,expires_at_utc,retention_hours,
+              deletion_verified_at_utc,deletion_run_id
+         FROM clean.provider_content_blob_ref
+        WHERE source_kind='webhook' AND source_record_id LIKE $1
+        ORDER BY persisted_at_utc,blob_ref_id`,
+      [`prepaid:${id}:%`],
+    );
+
+    for (const row of blobs.rows) {
+      if (row.deletion_verified_at_utc) {
+        // A restarted run may encounter previously committed tombstones.
+        // Never accept another deletion run's evidence.
+        if (journal) {
+          if (
+            String(row.deletion_run_id ?? "") !== deletionRunId ||
+            await store.exists(String(row.object_name))
+          ) {
+            throw new Error(
+              "PHASE2G_CLEANUP_RESUME_TOMBSTONE_INVALID",
+            );
+          }
+        }
+        continue;
+      }
+
+      const ref = blobRefFromRow(row);
+      const deleted = await deleteProviderBlobAtExpiryV39({
+        store,
+        ref,
+        now: new Date(),
+        allowEarlyDelete: true,
+      });
+
+      // Commit this verified deletion tombstone independently of the
+      // later UNLOGGED runtime-row deletion transaction.
+      // The session row lock remains held by client.
+      // If runtime cleanup rolls back, this logged tombstone survives.
+      const updated = await pool.query(
+        `UPDATE clean.provider_content_blob_ref
+            SET deleted_at_utc=$2,
+                deletion_verified_at_utc=$2,
+                deletion_run_id=$3
+          WHERE blob_ref_id=$1
+            AND deletion_verified_at_utc IS NULL
+          RETURNING blob_ref_id`,
+        [deleted.blobRefId, deleted.deletedAtUtc, deletionRunId],
+      );
+
+      if (updated.rowCount !== 1) {
+        throw new Error(
+          `PREPAID_PROBE_BLOB_TOMBSTONE_UPDATE_FAILED:${deleted.blobRefId}`,
+        );
+      }
+      deletedBlobs += 1;
+    }
+
+    if (journal) {
+      const counts = await pool.query(
+        `SELECT count(*)::int AS total,
+                count(*) FILTER (
+                  WHERE deletion_verified_at_utc IS NOT NULL
+                    AND deletion_run_id=$2
+                )::int AS verified,
+                count(*) FILTER (
+                  WHERE deletion_verified_at_utc IS NULL
+                )::int AS live
+           FROM clean.provider_content_blob_ref
+          WHERE source_kind='webhook'
+            AND source_record_id LIKE $1`,
+        [`prepaid:${id}:%`, deletionRunId],
+      );
+
+      const c = counts.rows[0];
+      if (
+        Number(c?.total) !== journal.expectedLiveBlobs ||
+        Number(c?.verified) !== journal.expectedLiveBlobs ||
+        Number(c?.live) !== 0
+      ) {
+        throw new Error(
+          "PHASE2G_CLEANUP_JOURNAL_BLOB_VERIFICATION_FAILED",
+        );
+      }
+    }
+
+    const items = await client.query(
+      `DELETE FROM clean.prepaid_probe_item_runtime WHERE session_id=$1`,
+      [id],
+    );
+    const deliveries = await client.query(
+      `DELETE FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1`,
+      [id],
+    );
+    const sessions = await client.query(
+      `DELETE FROM clean.prepaid_probe_session_runtime WHERE session_id=$1`,
+      [id],
+    );
+
+    if (sessions.rowCount !== 1) {
+      throw new Error("PREPAID_PROBE_CLEANUP_SESSION_DELETE_FAILED");
+    }
+
+    deletedRuntimeRows =
+      (items.rowCount ?? 0) +
+      (deliveries.rowCount ?? 0) +
+      (sessions.rowCount ?? 0);
+
+    if (journal) {
+      // VERIFIED and runtime deletion commit atomically.
+      const finalized = await client.query(
+        `UPDATE clean.phase2g_cleanup_journal_v39
+            SET state='VERIFIED',
+                deleted_blobs=$4,
+                deleted_runtime_rows=$5,
+                verified_at_utc=clock_timestamp()
+          WHERE session_id=$1
+            AND deletion_run_id=$2
+            AND request_sha256=$3
+            AND state='STARTED'
+          RETURNING session_id`,
+        [id, deletionRunId, journal.requestSha256,
+         journal.expectedLiveBlobs, deletedRuntimeRows],
+      );
+
+      if (finalized.rowCount !== 1) {
+        throw new Error("PHASE2G_CLEANUP_JOURNAL_FINALIZE_FAILED");
+      }
+    }
+
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
@@ -1384,19 +1646,39 @@ export async function cleanupPrepaidProbeSessionLocalV39(
   } finally {
     client.release();
   }
+
   const verify = await pool.query(
     `SELECT
-       (SELECT count(*) FROM clean.prepaid_probe_item_runtime WHERE session_id=$1)::int AS items,
-       (SELECT count(*) FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1)::int AS deliveries,
-       (SELECT count(*) FROM clean.prepaid_probe_session_runtime WHERE session_id=$1)::int AS sessions,
-       (SELECT count(*) FROM clean.provider_content_blob_ref WHERE source_kind='webhook' AND source_record_id LIKE $2 AND deletion_verified_at_utc IS NULL)::int AS live_blobs`,
+       (SELECT count(*) FROM clean.prepaid_probe_item_runtime
+          WHERE session_id=$1)::int AS items,
+       (SELECT count(*) FROM clean.prepaid_probe_delivery_runtime
+          WHERE session_id=$1)::int AS deliveries,
+       (SELECT count(*) FROM clean.prepaid_probe_session_runtime
+          WHERE session_id=$1)::int AS sessions,
+       (SELECT count(*) FROM clean.provider_content_blob_ref
+          WHERE source_kind='webhook'
+            AND source_record_id LIKE $2
+            AND deletion_verified_at_utc IS NULL)::int AS live_blobs`,
     [id, `prepaid:${id}:%`],
   );
+
   const v = verify.rows[0];
-  if (Number(v.items) || Number(v.deliveries) || Number(v.sessions) || Number(v.live_blobs)) {
-    throw new Error(`PREPAID_PROBE_CLEANUP_VERIFICATION_FAILED:${JSON.stringify(v)}`);
+  if (
+    Number(v.items) ||
+    Number(v.deliveries) ||
+    Number(v.sessions) ||
+    Number(v.live_blobs)
+  ) {
+    throw new Error(
+      `PREPAID_PROBE_CLEANUP_VERIFICATION_FAILED:${JSON.stringify(v)}`,
+    );
   }
-  return { deletedBlobs, deletedRuntimeRows, verifiedAtUtc: new Date().toISOString() };
+
+  return {
+    deletedBlobs: journal ? journal.expectedLiveBlobs : deletedBlobs,
+    deletedRuntimeRows,
+    verifiedAtUtc: new Date().toISOString(),
+  };
 }
 
 export async function cleanupPrepaidProbeSessionV39(

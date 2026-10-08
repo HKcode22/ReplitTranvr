@@ -38,7 +38,14 @@ describe("Phase2G fail-closed signed GitHub remote cleanup wiring", () => {
     expect(cleanup).toContain("proof.probe_budget_day_id");
     expect(cleanup).toContain("proof.expected_live_blobs");
     expect(cleanup.indexOf("EXACT_STAGE1_LIVE_BLOB_COUNT_MISMATCH"))
-      .toBeLessThan(cleanup.indexOf("cleanupPrepaidProbeSessionLocalV39(sessionId, deletionRunId)"));
+      .toBeLessThan(cleanup.indexOf("cleanupPrepaidProbeSessionLocalV39("));
+    expect(cleanup).toContain("FOR UPDATE OF r,p");
+    expect(cleanup).toContain(
+      "EXACT_STAGE1_LOCKED_PROOF_MISMATCH",
+    );
+    expect(cleanup).toContain(
+      "EXACT_STAGE1_LOCKED_BLOB_COUNT_MISMATCH",
+    );
     expect(receiver).toContain('"/__v39/phase2g/runtime-cleanup"');
   });
   it("keeps provider account access only in the GitHub-side signer", () => {
