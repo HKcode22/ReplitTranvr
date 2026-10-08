@@ -490,6 +490,9 @@ jobs:
             artifacts/phase2g-github-owner-*.log
             artifacts/phase2g-github-owner-*.status.json
             artifacts/phase2g-github-owner-*.heartbeat.json
+            artifacts/phase2g-signed-cleanup-intent-probe*.json
+            artifacts/phase2g-signed-purpose-cleanup-probe*.json
+            artifacts/phase2g-settling-finalizer-probe*.json
           if-no-files-found: warn
           retention-days: 30
 
