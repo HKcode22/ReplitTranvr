@@ -63,7 +63,7 @@ jobs:
     env:
       V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
-      V39_PHASE2G_CONTROL_SECRET: ${{ secrets.V39_PHASE2G_CONTROL_SECRET }}
+      V39_PHASE2G_CLEANUP_SIGNING_KEY: ${{ secrets.V39_PHASE2G_CLEANUP_SIGNING_KEY }}
       EXPECTED_HEAD: ${{ inputs.expected_head }}
       PROBE_ID: ${{ inputs.probe_id }}
       SESSION_ID: ${{ inputs.session }}
@@ -83,7 +83,7 @@ jobs:
             echo "::error::Expected source differs from this workflow branch SHA"
             exit 2
           }
-          [[ "${#V39_PHASE2G_CONTROL_SECRET}" -ge 32 ]] || {
+          [[ "${#V39_PHASE2G_CLEANUP_SIGNING_KEY}" -ge 32 ]] || {
             echo "::error::GitHub cleanup control secret missing"
             exit 2
           }
