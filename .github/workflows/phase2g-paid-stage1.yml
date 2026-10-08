@@ -60,9 +60,9 @@ on:
         required: true
         type: string
       callback_base:
-        description: 'Callback origin; published by default, same-app replit.dev only under explicit contingency'
+        description: 'Dedicated hk84164 published callback origin for Phase2G paid Stage1'
         required: true
-        default: 'https://travnr.com'
+        default: 'https://replit-tranvr--hk84164.replit.app'
         type: string
       callback_mode:
         description: 'Callback infrastructure mode'
@@ -116,6 +116,7 @@ jobs:
       V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
       AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+      V39_PHASE2G_CLEANUP_SIGNING_KEY: ${{ secrets.V39_PHASE2G_CLEANUP_SIGNING_KEY }}
     steps:
       - name: Refuse stale execution head
         shell: bash
@@ -147,7 +148,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET; do
+          for key in V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET V39_PHASE2G_CLEANUP_SIGNING_KEY; do
             if [[ -z "${!key:-}" ]]; then
               echo "::error::Missing required Phase2G gate secret: $key"
               exit 2
@@ -164,6 +165,13 @@ jobs:
 
           if [[ "$MODE" != "published" ]]; then
             echo "::error::Paid Stage1 requires callback_mode=published"
+            exit 2
+          fi
+
+          EXPECTED_CALLBACK_ORIGIN="https://replit-tranvr--hk84164.replit.app"
+
+          if [[ "$BASE" != "$EXPECTED_CALLBACK_ORIGIN" ]]; then
+            echo "::error::Paid Stage1 requires the dedicated hk84164 callback receiver"
             exit 2
           fi
 
@@ -286,6 +294,43 @@ jobs:
           console.log("GITHUB_REPLIT_WEBHOOK_SECRET_BINDING=PASS");
           NODE
 
+      - name: Verify GitHub/Replit exact cleanup control-key binding
+        shell: bash
+        env:
+          CALLBACK_ORIGIN: ${{ inputs.callback_base }}
+        run: |
+          set -euo pipefail
+          NONCE="phase2g-cleanup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          PROOF="$(NONCE="$NONCE" node --input-type=module <<'NODE'
+          import { createHmac } from "node:crypto";
+          const key = String(process.env.V39_PHASE2G_CLEANUP_SIGNING_KEY ?? "");
+          const nonce = String(process.env.NONCE ?? "");
+          const origin = String(process.env.CALLBACK_ORIGIN ?? "");
+          if (key.length < 32 || !nonce || !/^https:\/\/[^/]+$/.test(origin)) process.exit(2);
+          process.stdout.write(createHmac("sha256", key)
+            .update(`phase2g-cleanup-control-key-binding:${origin}:${nonce}`)
+            .digest("hex"));
+          NODE
+          )"
+          RESPONSE="$(curl --silent --show-error --fail-with-body --max-time 15 \
+            -X POST \
+            -H "x-v39-phase2g-cleanup-nonce: ${NONCE}" \
+            -H "x-v39-phase2g-cleanup-key-proof: ${PROOF}" \
+            "${CALLBACK_ORIGIN}/__v39/phase2g/cleanup-control-match")"
+          node --input-type=module - "$RESPONSE" <<'NODE'
+          const x = JSON.parse(process.argv[2]);
+          if (x?.schema !== "v39.phase2g-cleanup-control-key-match.v1" ||
+              x?.status !== "PASS" ||
+              x?.provider_call !== false ||
+              x?.provider_mutation !== false ||
+              x?.database_mutation !== false ||
+              Number(x?.alert_credits_spent) !== 0) {
+            console.error("GITHUB_REPLIT_CLEANUP_CONTROL_BINDING=FAIL");
+            process.exit(2);
+          }
+          console.log("GITHUB_REPLIT_CLEANUP_CONTROL_BINDING=PASS");
+          NODE
+
       - name: Generate fresh read-only paid preflight
         id: preflight
         shell: bash
@@ -406,10 +451,42 @@ jobs:
           done
 
       - name: Run exact paid Stage1 owner
+        id: run_owner
         shell: bash
         run: |
           set -euo pipefail
           bash scripts/v39_phase2g_github_actions_owner_v39.sh             --auth "${{ inputs.auth_id }}"             --auth-file "${{ inputs.auth_file }}"             --auth-sha "${{ inputs.auth_sha }}"             --runtime-file "${{ inputs.runtime_file }}"             --runtime-sha "${{ inputs.runtime_sha }}"             --preprobe "${{ inputs.preprobe_file }}"             --preprobe-sha "${{ inputs.preprobe_sha }}"             --smoke "${{ inputs.smoke_file }}"             --smoke-runtime-file "${{ inputs.smoke_runtime_file }}"             --smoke-runtime-sha "${{ inputs.smoke_runtime_sha }}"             --preflight "$PHASE2G_PREFLIGHT"             --preflight-sha "${{ needs.gate.outputs.preflight_sha }}"             --expected-head "${{ inputs.expected_head }}"             --probe-budget-day-id "${{ inputs.budget_day }}"             --expected-icao "${{ inputs.expected_icao }}"             --callback-base "${{ inputs.callback_base }}"             --callback-mode "${{ inputs.callback_mode }}"
+
+      # Cleanup cannot start until the GitHub owner has stopped. A previous
+      # failure does not authorize deletion: the sender verifies an exact
+      # uncensored settling/MATCH probe, account-wide inactive subscriptions,
+      # and callback quiescence before signing a 90s attestation.
+      - name: GitHub-signed exact-session cleanup and settling finalization
+        if: ${{ always() && steps.run_owner.outcome != 'skipped' }}
+        shell: bash
+        env:
+          V39_PHASE2G_CLEANUP_SIGNING_KEY: ${{ secrets.V39_PHASE2G_CLEANUP_SIGNING_KEY }}
+          EXACT_BUDGET: ${{ inputs.budget_day }}
+          EXACT_ICAO: ${{ inputs.expected_icao }}
+          EXACT_RUNTIME_FILE: ${{ inputs.runtime_file }}
+          EXACT_RUNTIME_SHA: ${{ inputs.runtime_sha }}
+          EXACT_CALLBACK: ${{ inputs.callback_base }}
+          EXACT_HEAD: ${{ inputs.expected_head }}
+        run: |
+          set -euo pipefail
+          [[ "${#V39_PHASE2G_CLEANUP_SIGNING_KEY}" -ge 32 ]] || {
+            echo "::error::GitHub cleanup secret missing; no cleanup performed"
+            exit 2
+          }
+          npx tsx scripts/v39_phase2g_github_signed_cleanup_v39.ts \
+            --auto-from-budget \
+            --budget-day "$EXACT_BUDGET" \
+            --icao "$EXACT_ICAO" \
+            --callback-base "$EXACT_CALLBACK" \
+            --expected-head "$EXACT_HEAD" \
+            --runtime-file "$EXACT_RUNTIME_FILE" \
+            --runtime-sha "$EXACT_RUNTIME_SHA" \
+            --apply
 
       - name: Preserve owner evidence artifacts
         if: always()
@@ -420,6 +497,9 @@ jobs:
             artifacts/phase2g-github-owner-*.log
             artifacts/phase2g-github-owner-*.status.json
             artifacts/phase2g-github-owner-*.heartbeat.json
+            artifacts/phase2g-signed-cleanup-intent-probe*.json
+            artifacts/phase2g-signed-purpose-cleanup-probe*.json
+            artifacts/phase2g-settling-finalizer-probe*.json
           if-no-files-found: warn
           retention-days: 30
 
