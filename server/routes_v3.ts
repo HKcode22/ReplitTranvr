@@ -46,6 +46,7 @@ import {
 } from "./lib/disruption/prepaidProbeRuntime_v39";
 import { verifyAuthRecord, approvedArtifactHashesFromLedger, sha256HexString, type AuthRecord } from "./lib/disruption/authRecord_v39";
 import { v39Pool as pool } from "./lib/disruption/db_v39";
+import { verifyPhase2gCleanupAttestationV39 } from "./lib/disruption/phase2gCleanupAttestation_v39";
 import {
   getCollectionStatus,
   getDiagnostics,
@@ -101,17 +102,24 @@ function phase2gRuntimeDbBinding(req: Request, res: Response): void {
     alert_credits_spent: 0,
   });
 }
-function phase2gControlGuard(req: Request, res: Response, next: NextFunction): void {
-  const expected = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "").trim();
-  const supplied = String(req.header("x-v39-phase2g-control-secret") ?? "");
-  if (!expected) { res.status(503).json({ error: "PHASE2G_CONTROL_SECRET_NOT_CONFIGURED" }); return; }
-  const a = Buffer.from(expected);
-  const b = Buffer.from(supplied);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    res.status(403).json({ error: "Forbidden" });
+function phase2gCleanupProofGuard(req: Request, res: Response, next: NextFunction): void {
+  const secret = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "").trim();
+  const expectedOrigin = String(process.env.V39_PHASE2G_CALLBACK_ORIGIN ?? "").trim();
+  if (secret.length < 32 || !expectedOrigin) {
+    res.status(503).json({ error: "PHASE2G_CLEANUP_AUTH_NOT_CONFIGURED" });
     return;
   }
-  next();
+  try {
+    verifyPhase2gCleanupAttestationV39(
+      req.body,
+      String(req.header("x-v39-phase2g-cleanup-proof") ?? ""),
+      secret,
+      expectedOrigin,
+    );
+    next();
+  } catch {
+    res.status(403).json({ error: "Forbidden" });
+  }
 }
 function managementGuard(req: Request, res: Response, next: NextFunction): void {
   const secret = webhookSecret();
@@ -445,70 +453,56 @@ export function registerV3Routes(app:Express):void{
     },
   );
 
-  // Phase-2G remote cleanup bridge. The GitHub-hosted Stage-1 owner has the
-  // authoritative 120-minute clock/provider control, while raw provider blobs
-  // remain in Replit Object Storage. This endpoint performs only exact
-  // session-scoped blob/runtime cleanup and cannot create/delete subscriptions.
-  app.post("/__v39/phase2g/runtime-cleanup", phase2gControlGuard, async (req,res) => {
-    const sessionId = String(req.body?.sessionId ?? "").trim().toLowerCase();
-    const deletionRunId = String(req.body?.deletionRunId ?? "").trim();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
-      res.status(400).json({ error: "SESSION_ID_INVALID" });
-      return;
-    }
-    if (!deletionRunId || deletionRunId.length > 200) {
-      res.status(400).json({ error: "DELETION_RUN_ID_INVALID" });
-      return;
-    }
+  // GitHub alone verifies the provider account and signs a fresh, exact-session
+  // provider-INACTIVE attestation. This receiver holds no AeroDataBox API key.
+  // Fail closed on missing signature/configuration, stale assertions, runtime
+  // state loss, mismatched probe ownership or unexpected live blob counts.
+  app.post("/__v39/phase2g/runtime-cleanup", phase2gCleanupProofGuard, async (req,res) => {
+    const proof = req.body as import("./lib/disruption/phase2gCleanupAttestation_v39").Phase2gCleanupAttestationV39;
+    const sessionId = proof.session_id;
+    const deletionRunId = proof.deletion_run_id;
     const owner = await pool.query(
       `SELECT p.probe_id,p.status,p.stage,p.provider_content_safe_mode,
-              r.state AS runtime_state
+              p.probe_budget_day_id,p.icao,
+              r.state AS runtime_state,
+              r.provider_subscription_id AS runtime_provider_subscription_id
          FROM clean.adb_anchor_probe p
-         LEFT JOIN clean.prepaid_probe_session_runtime r
+         JOIN clean.prepaid_probe_session_runtime r
            ON r.session_id=p.runtime_session_id
           AND r.owner_kind='anchor_probe'
           AND r.owner_probe_id=p.probe_id
           AND r.stage=1
         WHERE p.runtime_session_id=$1::uuid
+          AND p.probe_id=$2::int
           AND p.stage=1
-          AND p.provider_content_safe_mode=true
-        ORDER BY p.probe_id DESC`,
-      [sessionId],
+          AND p.provider_content_safe_mode=true`,
+      [sessionId, proof.probe_id],
     );
     if (owner.rowCount !== 1) {
       res.status(409).json({ error: "EXACT_STAGE1_SESSION_OWNER_NOT_FOUND" });
       return;
     }
-    const runtimeState = owner.rows[0].runtime_state == null
-      ? null
-      : String(owner.rows[0].runtime_state);
-    const durableProbeStatus = String(owner.rows[0].status ?? "");
-    const stateAllowsCleanup =
-      runtimeState === "settling" ||
-      runtimeState === "failed" ||
-      (runtimeState === null && durableProbeStatus === "failed");
-    if (!stateAllowsCleanup) {
-      res.status(409).json({
-        error: `RUNTIME_CLEANUP_REFUSED_STATE:${runtimeState ?? "missing"}:probe=${durableProbeStatus || "missing"}`,
-      });
+    const row = owner.rows[0];
+    const runtimeState = String(row.runtime_state ?? "");
+    const probeStatus = String(row.status ?? "");
+    if (!["settling", "failed"].includes(runtimeState) ||
+        !["settling", "failed"].includes(probeStatus) ||
+        String(row.probe_budget_day_id ?? "") !== proof.probe_budget_day_id ||
+        String(row.icao ?? "").toUpperCase() !== proof.icao ||
+        String(row.runtime_provider_subscription_id ?? "") !== proof.provider_subscription_id) {
+      res.status(409).json({ error: "EXACT_STAGE1_SESSION_PROOF_MISMATCH_OR_UNSAFE_STATE" });
       return;
     }
 
-    // Blob/runtime evidence may be deleted only after every billable provider
-    // subscription is verified inactive. This endpoint never deletes provider
-    // subscriptions itself.
-    let activeBillable: any[];
-    try {
-      const subscriptions = await listSubscriptionsStrict();
-      activeBillable = subscriptions.filter(
-        (subscription) => subscription.isActive && subscription.billingType !== "LifetimeBased",
-      );
-    } catch {
-      res.status(503).json({ error: "RUNTIME_CLEANUP_PROVIDER_STATE_UNAVAILABLE" });
-      return;
-    }
-    if (activeBillable.length !== 0) {
-      res.status(409).json({ error: `RUNTIME_CLEANUP_ACTIVE_BILLABLE:${activeBillable.length}` });
+    const live = await pool.query(
+      `SELECT count(*)::int AS n FROM clean.provider_content_blob_ref
+        WHERE source_kind='webhook'
+          AND source_record_id LIKE $1
+          AND deletion_verified_at_utc IS NULL`,
+      [`prepaid:${sessionId}:%`],
+    );
+    if (Number(live.rows[0]?.n ?? -1) !== proof.expected_live_blobs) {
+      res.status(409).json({ error: "EXACT_STAGE1_LIVE_BLOB_COUNT_MISMATCH" });
       return;
     }
 
@@ -518,19 +512,21 @@ export function registerV3Routes(app:Express):void{
         schema: "v39.phase2g-runtime-cleanup.v1",
         status: "PASS",
         session_id: sessionId,
-        probe_id: Number(owner.rows[0].probe_id),
+        probe_id: Number(row.probe_id),
         deleted_blobs: cleaned.deletedBlobs,
         deleted_runtime_rows: cleaned.deletedRuntimeRows,
         verified_at_utc: cleaned.verifiedAtUtc,
+        provider_inactive_attestation_verified: true,
+        provider_call: false,
         provider_mutation: false,
       });
-    } catch (error:any) {
-      console.error("[phase2g-runtime-cleanup] failed:", error?.message ?? error);
+    } catch (error: any) {
+      console.error("[phase2g-runtime-cleanup] failed:", error?.name ?? "unknown");
       res.status(500).json({
         schema: "v39.phase2g-runtime-cleanup.v1",
         status: "FAIL",
         session_id: sessionId,
-        error: String(error?.message ?? "cleanup failed").slice(0,240),
+        error: "REMOTE_CLEANUP_FAILED",
         provider_mutation: false,
       });
     }
