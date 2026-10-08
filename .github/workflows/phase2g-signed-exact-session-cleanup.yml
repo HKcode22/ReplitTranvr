@@ -129,6 +129,7 @@ jobs:
         with:
           name: phase2g-signed-cleanup-${{ github.run_id }}
           path: |
+            artifacts/phase2g-signed-cleanup-intent-probe*.json
             artifacts/phase2g-signed-purpose-cleanup-probe*.json
             artifacts/phase2g-settling-finalizer-probe*.json
           if-no-files-found: warn
