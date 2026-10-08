@@ -70,7 +70,7 @@ async function main(): Promise<void> {
   if (gitHead !== expectedHead || process.env.GITHUB_SHA !== expectedHead) {
     throw new Error("REFUSED:CHECKOUT_SOURCE_HEAD_MISMATCH");
   }
-  const secret = String(process.env.V39_PHASE2G_CONTROL_SECRET ?? "");
+  const secret = String(process.env.V39_PHASE2G_CLEANUP_SIGNING_KEY ?? "");
   if (secret.length < 32 || !process.env.AERODATABOX_API_KEY) {
     throw new Error("REFUSED:GITHUB_ONLY_CLEANUP_CREDENTIALS_MISSING");
   }
