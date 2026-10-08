@@ -27,7 +27,13 @@ describe("Phase2G fail-closed signed GitHub remote cleanup wiring", () => {
     expect(cleanup).toContain("r.owner_probe_id=p.probe_id");
     expect(cleanup).toContain("p.probe_id=$2::int");
     expect(cleanup).toContain("p.provider_content_safe_mode=true");
-    expect(cleanup).toContain('["settling", "failed"].includes(runtimeState)');
+    expect(cleanup).toContain('runtimeState !== "settling"');
+    expect(cleanup).toContain('probeStatus !== "settling"');
+    expect(cleanup).toContain('String(row.reconciliation_status ?? "") !== "MATCH"');
+    expect(cleanup).toContain("row.duration_censored !== false");
+    expect(cleanup).toContain("row.stop_reason != null");
+    expect(cleanup).toContain("EXACT_STAGE1_CALLBACK_QUIESCENCE_NOT_PROVEN");
+    expect(cleanup).toContain("runtime_last_delivery_at_utc");
     expect(cleanup).toContain("runtime_provider_subscription_id");
     expect(cleanup).toContain("proof.probe_budget_day_id");
     expect(cleanup).toContain("proof.expected_live_blobs");
