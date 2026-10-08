@@ -53,6 +53,24 @@ describe("Phase2G fail-closed signed GitHub remote cleanup wiring", () => {
     expect(sender).not.toContain("deleteSubscription(");
     expect(sender).not.toContain("refillBalance(");
   });
+  it("persists non-secret cleanup intent before issuing the irreversible HTTPS cleanup request", () => {
+    const intent = sender.indexOf('schema: "v39.phase2g-signed-cleanup-intent.v1"');
+    const write = sender.indexOf("fs.writeFileSync(intentFile");
+    const post = sender.indexOf('fetch(callback + "/__v39/phase2g/runtime-cleanup"');
+    expect(intent).toBeGreaterThan(-1);
+    expect(write).toBeGreaterThan(intent);
+    expect(post).toBeGreaterThan(write);
+    expect(sender).toContain('status: "PREPARED_NOT_PROOF_OF_DELETION"');
+    expect(sender).toContain("secret_or_hmac_written: false");
+    const payload = sender.slice(intent, write);
+    expect(payload).not.toContain("signature");
+    expect(payload).not.toContain("secret:");
+    const paid = readFileSync(join(root, ".github/workflows/phase2g-paid-stage1.yml"), "utf8");
+    const standalone = readFileSync(join(root, ".github/workflows/phase2g-signed-exact-session-cleanup.yml"), "utf8");
+    expect(paid).toContain("artifacts/phase2g-signed-cleanup-intent-probe*.json");
+    expect(paid).toContain("artifacts/phase2g-settling-finalizer-probe*.json");
+    expect(standalone).toContain("artifacts/phase2g-signed-cleanup-intent-probe*.json");
+  });
   it("reuses the existing hash-checked finalizer rather than marking failures completed", () => {
     expect(sender).toContain("v39_phase2g_finalize_settling_probe_v39.ts");
     expect(sender).toContain('schema: "v39.phase2g-exact-session-purpose-cleanup.v1"');
