@@ -7,6 +7,7 @@ on:
     paths:
       - tests/phase2g_p2g24_callback_health_behavior_v39.test.cjs
       - .github/workflows/phase2g-p2g24-offline-fault-injection.yml
+      - scripts/v39_p2g24_readonly_blob_integrity_audit.ts
   workflow_dispatch:
 
 permissions:
@@ -45,5 +46,14 @@ jobs:
             tests/phase2g_published_callback_only_v39.test.ts \
             tests/phase2g_watchdog_recovery_contract_v39.test.ts \
             tests/phase2g_zero_credit_callback_binding_v39.test.ts
+      - name: Compile read-only blob auditor without touching database or storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx esbuild scripts/v39_p2g24_readonly_blob_integrity_audit.ts \
+            --bundle --platform=node --format=esm --packages=external \
+            --outfile=/tmp/p2g24-blob-readonly-auditor.mjs
+          node --check /tmp/p2g24-blob-readonly-auditor.mjs
+          echo 'BLOB_AUDITOR_EXECUTED=false'
       - name: Typecheck server
         run: npm run v39:typecheck
