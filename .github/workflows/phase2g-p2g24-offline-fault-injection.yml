@@ -1,0 +1,49 @@
+name: Phase2G P2G24 Offline Fault Injection
+
+on:
+  push:
+    branches:
+      - phase2g-p2g24-github-observer-20261009
+    paths:
+      - tests/phase2g_p2g24_callback_health_behavior_v39.test.cjs
+      - .github/workflows/phase2g-p2g24-offline-fault-injection.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-fault-injection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # No provider key, paid probe authorization, deployment token,
+      # database URL or webhook secret is connected to this job.
+      CI: "true"
+    steps:
+      - name: Checkout only the isolated incident investigation branch
+        uses: actions/checkout@v4
+      - name: Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install pinned dependencies (no audit)
+        run: npm ci --no-audit --no-fund
+      - name: Execute real callbackHealthy under 18 network-isolated scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/phase2g_p2g24_callback_health_behavior_v39.test.cjs
+          echo "PAID_PROVIDER_CALLS=0"
+          echo "SCIENTIFIC_DATABASE_QUERIES=0"
+          echo "DEPLOYMENT_CHANGES=0"
+      - name: Run existing receiver regressions
+        run: |
+          npx vitest run \
+            tests/phase2g_p2g24_callback_receiver_health_v39.test.ts \
+            tests/phase2g_published_callback_only_v39.test.ts \
+            tests/phase2g_watchdog_recovery_contract_v39.test.ts \
+            tests/phase2g_zero_credit_callback_binding_v39.test.ts
+      - name: Typecheck server
+        run: npm run v39:typecheck
