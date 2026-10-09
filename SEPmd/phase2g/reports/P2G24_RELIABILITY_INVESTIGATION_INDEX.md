@@ -40,3 +40,12 @@ A pass for continuous/sparse HTTP tests does **not** prove actual paid webhook i
 - Required next true end-to-end proof: approved disposable signed synthetic webhook (NO AeroDataBox), verify 2xx only after persistent object and DB reference, failure/retry/idempotency semantics; **needs separate fixture design and authorization**.
 
 This register is evidence-based, versioned and intentionally records remaining uncertainty. It should be updated with exact GitHub run evidence and Replit platform incident response, rather than assumed success.
+
+
+## Read-only raw object verification: prepared, NOT executed
+
+- Source: [`scripts/v39_p2g24_readonly_blob_integrity_audit.ts`](../../../scripts/v39_p2g24_readonly_blob_integrity_audit.ts) (resolve from repository root if relative navigation differs).
+- **Run #37994341372** of the [offline test workflow](https://github.com/HKcode22/ReplitTranvr/actions/runs/37994341372) passed compilation of this auditor, 18 callback-health assertions, pre-existing receiver regressions and typecheck. It **did not** execute the auditor or read live production objects.
+- Script is scoped to probe 18 / P2G24 exact UUID, requires durable failed/censored/UNRESOLVED record and exactly 30 undeleted refs; reads DB under `BEGIN TRANSACTION READ ONLY`; downloads raw object bytes only with explicit `--verify-objects`; compares SHA-256 and size but never prints provider content, object names or secrets. It does not delete or write DB state.
+- Actual live object integrity remains **unverified** until this is run in an appropriately authorized environment, before the earliest object expiry on October 16 UTC.
+- Preserved cross-airport scientific-health snapshot ZIPs and active 130-minute observer ZIP in a separate locally generated `P2G24_GitHub_Evidence_Backup_20261009.zip`. The GitHub Actions originals remain accessible in their cited run artifacts until retention expiry.
