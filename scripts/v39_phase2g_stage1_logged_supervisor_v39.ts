@@ -28,11 +28,38 @@ function atomicWriteJson(file: string, value: unknown): void {
   fs.writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", "utf8");
   fs.renameSync(tmp, file);
 }
+/**
+ * Sanitized diagnostic outcome: never log secrets, response bodies, the real
+ * signed webhook URL, database connection strings or raw error messages.
+ * Keep the existing 15s polling/three-strike fail-closed safety policy.
+ */
+type CallbackHealthResultV39 = {
+  healthy: boolean;
+  check: string;
+  reason: string;
+  http_status: number | null;
+  elapsed_ms: number;
+};
+
 async function callbackHealthy(
   base: string,
   expectedHead: string,
   callbackMode: string,
-): Promise<boolean> {
+): Promise<CallbackHealthResultV39> {
+  const started = Date.now();
+  let check = "wrong_secret_route";
+  const result = (
+    healthy: boolean,
+    reason: string,
+    httpStatus: number | null = null,
+  ): CallbackHealthResultV39 => ({
+    healthy,
+    check: healthy ? "all_checks" : check,
+    reason,
+    http_status: httpStatus,
+    elapsed_ms: Date.now() - started,
+  });
+
   try {
     const wrongSecret = "phase2g-healthcheck-intentionally-wrong";
     const session = "00000000-0000-4000-8000-000000000000";
@@ -46,19 +73,18 @@ async function callbackHealthy(
       },
     );
     const json: any = await response.json().catch(() => null);
-    if (response.status !== 404 || json?.error !== "Not found") return false;
+    if (response.status !== 404 || json?.error !== "Not found") {
+      return result(false, "route_contract_mismatch", response.status);
+    }
 
-    /*
-     * Both supported callback modes must continuously prove their
-     * exact runtime identity during paid ownership.  A published
-     * deployment is not trusted merely because the route returns 404.
-     */
     const publishedMode = callbackMode === "published";
     const developmentMode =
       callbackMode === "same-app-development-contingency";
+    if (!publishedMode && !developmentMode) {
+      return result(false, "invalid_callback_mode");
+    }
 
-    if (!publishedMode && !developmentMode) return false;
-
+    check = "published_runtime";
     const healthResponse = await fetch(`${base}/__v39/workspace-runtime`, {
       headers: { accept: "application/json" },
       signal: AbortSignal.timeout(8_000),
@@ -82,18 +108,19 @@ async function callbackHealthy(
       (
         publishedMode &&
         !["autoscale", "reserved-vm"].includes(
-          String(
-            health?.runtime_durability_class ?? ""
-          ).toLowerCase()
+          String(health?.runtime_durability_class ?? "").toLowerCase()
         )
       )
     ) {
-      return false;
+      return result(false, "runtime_contract_or_http_mismatch", healthResponse.status);
     }
 
+    check = "webhook_secret_binding";
     const githubWebhookSecret = String(process.env.AERODATABOX_WEBHOOK_SECRET ?? "");
     const githubRuntimeDbUrl = String(process.env.V39_DATABASE_RUNTIME_URL ?? "");
-    if (!githubWebhookSecret || !githubRuntimeDbUrl) return false;
+    if (!githubWebhookSecret || !githubRuntimeDbUrl) {
+      return result(false, "missing_github_binding_environment");
+    }
 
     const secretResponse = await fetch(`${base}/__v39/phase2g/webhook-secret-match`, {
       method: "POST",
@@ -112,9 +139,10 @@ async function callbackHealthy(
       secretJson?.provider_mutation !== false ||
       Number(secretJson?.alert_credits_spent) !== 0
     ) {
-      return false;
+      return result(false, "secret_binding_contract_or_http_mismatch", secretResponse.status);
     }
 
+    check = "runtime_db_binding";
     const challenge = `phase2g-supervisor-${process.pid}-${Date.now()}-${expectedHead}`;
     const proof = createHmac("sha256", githubRuntimeDbUrl)
       .update(`phase2g-db-binding:${challenge}`)
@@ -138,12 +166,18 @@ async function callbackHealthy(
       dbJson?.database_mutation !== false ||
       Number(dbJson?.alert_credits_spent) !== 0
     ) {
-      return false;
+      return result(false, "database_binding_contract_or_http_mismatch", dbResponse.status);
     }
 
-    return true;
-  } catch {
-    return false;
+    return result(true, "ok", 200);
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    return result(
+      false,
+      name === "TimeoutError" || name === "AbortError"
+        ? "request_timeout"
+        : "network_or_request_error",
+    );
   }
 }
 
@@ -195,7 +229,15 @@ async function main(): Promise<void> {
   }
   const head = gitHead();
   if (head !== expectedHead) throw new Error(`SUPERVISOR_REFUSED:GIT_HEAD_MISMATCH:${head}`);
-  if (!(await callbackHealthy(callbackBase, expectedHead, callbackMode))) throw new Error("SUPERVISOR_REFUSED:CALLBACK_OR_BINDING_NOT_HEALTHY_AT_START");
+  const initialCallbackHealth = await callbackHealthy(callbackBase, expectedHead, callbackMode);
+  if (!initialCallbackHealth.healthy) {
+    console.error(JSON.stringify({
+      schema: "v39.phase2g-stage1-callback-health-diagnostic.v1",
+      phase: "prelaunch",
+      ...initialCallbackHealth,
+    }));
+    throw new Error("SUPERVISOR_REFUSED:CALLBACK_OR_BINDING_NOT_HEALTHY_AT_START");
+  }
 
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logFd = fs.openSync(logPath, "a");
@@ -278,13 +320,14 @@ async function main(): Promise<void> {
     if (callbackCheckInFlight || child.exitCode !== null || child.killed) return;
     callbackCheckInFlight = true;
     try {
-      const healthy = await callbackHealthy(callbackBase, expectedHead, callbackMode);
-      callbackFailureCount = healthy ? 0 : callbackFailureCount + 1;
-      if (!healthy) {
+      const callbackHealth = await callbackHealthy(callbackBase, expectedHead, callbackMode);
+      callbackFailureCount = callbackHealth.healthy ? 0 : callbackFailureCount + 1;
+      if (!callbackHealth.healthy) {
         fs.writeSync(logFd, `${JSON.stringify({
           schema: "v39.phase2g-stage1-callback-watchdog.v1",
           observed_at_utc: new Date().toISOString(),
           healthy: false,
+          ...callbackHealth,
           consecutive_failures: callbackFailureCount,
           failure_limit: CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
         })}\n`);
