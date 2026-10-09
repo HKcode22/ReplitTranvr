@@ -32,6 +32,12 @@ export const PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH =
 export const PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH =
   "artifacts/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json";
 
+export const PHASE2G_P2G23_YSSY_FROZEN_PATH =
+  "artifacts/phase2g-early-pilot-yssy-p2g23-recovery-freeze-20261009.json";
+
+export const PHASE2G_P2G23_YSSY_CANDIDATE_PATH =
+  "artifacts/phase2g-early-pilot-yssy-p2g23-recovery-candidate-20261009.json";
+
 export type Phase2gIdentityV2RecoveryIcaoV39 =
   | "WSSS"
   | "OMAA"
@@ -105,6 +111,53 @@ export interface Phase2gP2g22YssyDeliveryGapRecoveryV39 {
   historical_root_cause_claimed: false;
   authorization_basis:
     "p2g22_yssy_exact_delivery_gap_manual_review_only";
+  reason: string;
+}
+
+export interface Phase2gP2g23YssyRecoveryV39 {
+  authorized: true;
+  maximum_additional_attempts: 1;
+  failed_probe_id: 17;
+  icao: "YSSY";
+  expected_probe_budget_day_id: string;
+  expected_runtime_session_id: string;
+  expected_metric_contract_version: "v39-physical-flight-instance-v2";
+  expected_anchor_status: "failed";
+  expected_anchor_reconciliation_status: "UNRESOLVED";
+  expected_anchor_stop_reason: "supervisor_child_exit_recovered";
+  expected_duration_censored: true;
+  expected_durable_reconciliation_absent: true;
+  recorded_failure_class: "replit_development_callback_unreachable";
+  historical_external_spend_credits: 221;
+  historical_internal_received_credits: 205;
+  historical_delivery_gap_credits: 16;
+  p2g23_closeout_file: string;
+  p2g23_closeout_sha256: string;
+  p2g23_reconstruction_file: string;
+  p2g23_reconstruction_sha256: string;
+  p2g23_manifest_file: string;
+  p2g23_manifest_sha256: string;
+  p2g23_cleanup_file: string;
+  p2g23_cleanup_sha256: string;
+  parent_amendment_sha256: string;
+  project_lead_decision_file: string;
+  project_lead_decision_sha256: string;
+  historical_attempts_immutable: true;
+  historical_attempts_excluded_from_scoring: true;
+  outcome_metrics_not_used_to_authorize: true;
+  historical_root_cause_fully_proven: false;
+  requires_new_source_bound_gate2: true;
+  requires_fresh_runtime_budget_auth: true;
+  requires_receiver_reliability_verification: true;
+  requires_synthetic_signed_cleanup_proof: true;
+  requires_zero_active_billable: true;
+  requires_matched_time_class: true;
+  requires_exact_reconciliation: true;
+  delivery_gap_tolerance_credits: 0;
+  no_automatic_retry_after_recovery_attempt: true;
+  paid_launch_authorized_now: false;
+  authorization_basis:
+    "p2g23_recorded_callback_infrastructure_failure_only";
   reason: string;
 }
 
@@ -204,6 +257,7 @@ export interface Phase2gEarlyPilotScopeReductionV39 {
 
 export interface Phase2gCompact6AmendmentV39 {
   schema_version: "v39-phase2g-compact6-amendment-1";
+  freeze_revision?: string;
   status: "READY_FROZEN_COMPACT6_AMENDMENT";
   frozen_at_utc: string;
   source_preprobe_file_sha256: string;
@@ -302,6 +356,7 @@ export interface Phase2gCompact6AmendmentV39 {
   physical_identity_v2_remeasurement?: Phase2gPhysicalIdentityV2RemeasurementV39;
   p2g17_mmun_delivery_gap_recovery_rerun?: Phase2gP2g17MmunDeliveryGapRecoveryV39;
   p2g22_yssy_delivery_gap_recovery_rerun?: Phase2gP2g22YssyDeliveryGapRecoveryV39;
+  p2g23_yssy_infrastructure_recovery_rerun?: Phase2gP2g23YssyRecoveryV39;
   early_pilot_scope_reduction?: Phase2gEarlyPilotScopeReductionV39;
   prospective_reconciliation_policy: {
     external_settled_spend_is_authoritative_denominator: true;
@@ -350,7 +405,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
   const candidatePaths = input.path
     ? [input.path]
-    : [PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH, PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH, PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH, PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
+    : [PHASE2G_P2G23_YSSY_FROZEN_PATH, PHASE2G_P2G23_YSSY_CANDIDATE_PATH, PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH, PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH, PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH, PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
   let raw: string | null = null;
   let actual: string | null = null;
   for (const candidatePath of candidatePaths) {
@@ -656,6 +711,187 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       throw new Error(
         "REFUSED_COMPACT6_P2G22_CLEANUP_BINDING",
       );
+    }
+  }
+
+
+  // P2G23 candidate: strictly hash-bound but not paid-executable.
+  const p23 = amendment.p2g23_yssy_infrastructure_recovery_rerun;
+
+  if (p23 !== undefined) {
+    const parentPath =
+      PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH;
+    const closePath =
+      "artifacts/phase2g-p2g23-yssy-callback-outage-final-closeout-20261008.json";
+    const decisionPath =
+      "artifacts/phase2g-p2g23-project-lead-approval-20261009.json";
+
+    if (
+      ![
+        "early-pilot-yssy-p2g23-technical-recovery-candidate-20261009",
+        "early-pilot-yssy-p2g23-technical-recovery-frozen-20261009",
+      ].includes(amendment.freeze_revision ?? "") ||
+      p2g22 === undefined ||
+      p23.authorized !== true ||
+      p23.maximum_additional_attempts !== 1 ||
+      p23.failed_probe_id !== 17 ||
+      p23.icao !== "YSSY" ||
+      p23.expected_probe_budget_day_id !== "P2G-S1-20261008-22" ||
+      p23.expected_runtime_session_id !==
+        "cb90e45e-ae7b-4bb4-85fe-7f3e56bd8880" ||
+      p23.expected_metric_contract_version !==
+        "v39-physical-flight-instance-v2" ||
+      p23.expected_anchor_status !== "failed" ||
+      p23.expected_anchor_reconciliation_status !== "UNRESOLVED" ||
+      p23.expected_anchor_stop_reason !==
+        "supervisor_child_exit_recovered" ||
+      p23.expected_duration_censored !== true ||
+      p23.expected_durable_reconciliation_absent !== true ||
+      p23.recorded_failure_class !==
+        "replit_development_callback_unreachable" ||
+      p23.historical_external_spend_credits !== 221 ||
+      p23.historical_internal_received_credits !== 205 ||
+      p23.historical_delivery_gap_credits !== 16 ||
+      p23.parent_amendment_sha256 !==
+        "589d7e3fbb1467c6bba7bb9b82784612e023cf5df482cc7daf1acd593987712c" ||
+      p23.project_lead_decision_file !== decisionPath ||
+      p23.project_lead_decision_sha256 !==
+        "d677c72d833421d8b0d0b60edb07efc821fba2ce49657715b3d88351d52903e7" ||
+      p23.p2g23_closeout_file !== closePath ||
+      p23.historical_attempts_immutable !== true ||
+      p23.historical_attempts_excluded_from_scoring !== true ||
+      p23.outcome_metrics_not_used_to_authorize !== true ||
+      p23.historical_root_cause_fully_proven !== false ||
+      p23.requires_new_source_bound_gate2 !== true ||
+      p23.requires_fresh_runtime_budget_auth !== true ||
+      p23.requires_receiver_reliability_verification !== true ||
+      p23.requires_synthetic_signed_cleanup_proof !== true ||
+      p23.requires_zero_active_billable !== true ||
+      p23.requires_matched_time_class !== true ||
+      p23.requires_exact_reconciliation !== true ||
+      p23.delivery_gap_tolerance_credits !== 0 ||
+      p23.no_automatic_retry_after_recovery_attempt !== true ||
+      p23.paid_launch_authorized_now !== false ||
+      p23.authorization_basis !==
+        "p2g23_recorded_callback_infrastructure_failure_only" ||
+      !String(p23.reason ?? "").trim()
+    ) {
+      throw new Error("REFUSED_COMPACT6_P2G23_RECOVERY_CONTRACT");
+    }
+
+    const verifiedJson = (
+      path: string,
+      expectedSha: string,
+    ): any => {
+      if (
+        !existsSync(path) ||
+        sha256(readFileSync(path, "utf8")) !== expectedSha
+      ) {
+        throw new Error(
+          `REFUSED_COMPACT6_P2G23_RECEIPT_HASH:${path}`,
+        );
+      }
+      return JSON.parse(readFileSync(path, "utf8"));
+    };
+
+    const parentOriginal = verifiedJson(
+      parentPath, p23.parent_amendment_sha256,
+    );
+
+    // The new freeze must be additive: no other science changes.
+    const restored = JSON.parse(JSON.stringify(amendment));
+    delete restored.p2g23_yssy_infrastructure_recovery_rerun;
+    restored.freeze_revision = parentOriginal.freeze_revision;
+    restored.frozen_at_utc = parentOriginal.frozen_at_utc;
+
+    if (
+      JSON.stringify(restored) !== JSON.stringify(parentOriginal)
+    ) {
+      throw new Error(
+        "REFUSED_P2G23_NON_ADDITIVE_SCIENCE_CHANGE",
+      );
+    }
+    const lead = verifiedJson(
+      decisionPath, p23.project_lead_decision_sha256,
+    );
+    const close = verifiedJson(
+      closePath, p23.p2g23_closeout_sha256,
+    );
+
+    if (
+      lead.schema !== "v39.phase2g-project-lead-p2g23-recovery-decision.v1" ||
+      lead.status !== "PROJECT_LEAD_APPROVED_CONDITIONAL_RECOVERY" ||
+      lead.maximum_additional_attempts !== 1 ||
+      lead.target !== "YSSY" ||
+      lead.paid_launch_authorized_now !== false ||
+      lead.provider_mutation_authorized_now !== false ||
+      lead.original_amendment_sha256 !== p23.parent_amendment_sha256 ||
+      lead.p2g23_closeout_sha256 !== p23.p2g23_closeout_sha256 ||
+      close.probe_id !== 17 ||
+      close.icao !== "YSSY" ||
+      close.budget_day !== p23.expected_probe_budget_day_id ||
+      close.session_id !== p23.expected_runtime_session_id ||
+      close.status !==
+        "FAILED_CENSORED_ATTEMPT_PRESERVED_AND_ADMIN_CLOSED" ||
+      close.scientific_acceptance !== false ||
+      close.duration_censored !== true ||
+      close.reconciliation_status !== "UNRESOLVED" ||
+      close.stop_reason !== "supervisor_child_exit_recovered" ||
+      close.failure_class !==
+        "replit_development_callback_unreachable" ||
+      close.external_credits_spent !== 221 ||
+      close.durable_received_credits !== 205 ||
+      close.external_minus_received !== 16 ||
+      close.automatic_retry_authorized !== false ||
+      close.prior_authorization_reusable !== false ||
+      close.reconstruction_file !== p23.p2g23_reconstruction_file ||
+      close.reconstruction_sha256 !== p23.p2g23_reconstruction_sha256 ||
+      close.manifest_file !== p23.p2g23_manifest_file ||
+      close.manifest_sha256 !== p23.p2g23_manifest_sha256 ||
+      close.cleanup_file !== p23.p2g23_cleanup_file ||
+      close.cleanup_sha256 !== p23.p2g23_cleanup_sha256
+    ) {
+      throw new Error("REFUSED_COMPACT6_P2G23_HISTORICAL_BINDING");
+    }
+
+    const reconstruction = verifiedJson(
+      p23.p2g23_reconstruction_file,
+      p23.p2g23_reconstruction_sha256,
+    );
+    const manifest = verifiedJson(
+      p23.p2g23_manifest_file,
+      p23.p2g23_manifest_sha256,
+    );
+    const cleanup = verifiedJson(
+      p23.p2g23_cleanup_file,
+      p23.p2g23_cleanup_sha256,
+    );
+
+    if (
+      reconstruction.sessionId !== p23.expected_runtime_session_id ||
+      reconstruction.payloadsReconstructed !== 48 ||
+      reconstruction.shaVerified !== 48 ||
+      reconstruction.productionRuleInternalSendCredits !== 205 ||
+      reconstruction.externalCredits !== 221 ||
+      reconstruction.reconciliationDeltaExternalMinusInternal !== 16 ||
+      reconstruction.exactReconciliationMatch !== false ||
+      manifest.session_id !== p23.expected_runtime_session_id ||
+      manifest.blob_count !== 48 ||
+      manifest.external_credits !== 221 ||
+      manifest.reconstructed_received_credits !== 205 ||
+      manifest.missing_send_credits !== 16 ||
+      !Array.isArray(manifest.rows) ||
+      manifest.rows.length !== 48 ||
+      cleanup.session_id !== p23.expected_runtime_session_id ||
+      cleanup.deleted_blobs !== 48 ||
+      cleanup.final?.live_blobs !== 0 ||
+      cleanup.final?.sessions !== 0 ||
+      cleanup.final?.deliveries !== 0 ||
+      cleanup.final?.items !== 0 ||
+      cleanup.active_billable_subscriptions !== 0 ||
+      cleanup.provider_mutation !== false
+    ) {
+      throw new Error("REFUSED_COMPACT6_P2G23_RECEIPT_CONTENT");
     }
   }
 

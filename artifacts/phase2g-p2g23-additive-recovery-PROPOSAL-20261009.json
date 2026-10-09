@@ -1,0 +1,42 @@
+{
+  "schema": "v39.phase2g-p2g23-additive-recovery-proposal.v1",
+  "status": "DRAFT_NOT_FROZEN",
+  "independent_scientific_review_approved": false,
+  "machine_execution_enabled": false,
+  "paid_launch_authorized": false,
+  "original_amendment": {
+    "path": "artifacts/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json",
+    "sha256": "589d7e3fbb1467c6bba7bb9b82784612e023cf5df482cc7daf1acd593987712c",
+    "unchanged": true
+  },
+  "historical_p2g23": {
+    "closeout_path": "artifacts/phase2g-p2g23-yssy-callback-outage-final-closeout-20261008.json",
+    "closeout_sha256": "85c2bf94e6f5d0aea0f1fc576a19cc99c22e4d4bf265bd3133fadbe419a38350",
+    "probe_id": 17,
+    "scientifically_scoreable": false,
+    "duration_censored": true,
+    "reconciliation_status": "UNRESOLVED",
+    "recorded_failure_class": "replit_development_callback_unreachable",
+    "root_cause_fully_proven": false,
+    "reconciliation_source": "preserved_reconstruction_not_durable_table"
+  },
+  "prospective_proposal": {
+    "maximum_new_attempts_if_later_approved": 1,
+    "target": "YSSY",
+    "time_class_utc_slot": 4,
+    "duration_minutes": 120,
+    "metric_contract": "v39-physical-flight-instance-v2",
+    "delivery_gap_tolerance_credits": 0,
+    "stage1_reservation_credits": 450,
+    "unsettled_margin_credits": 50,
+    "protected_floor_credits": 1000,
+    "all_prior_failures_immutable": true,
+    "no_automatic_retry": true,
+    "fresh_budget_gate2_auth_required": true,
+    "independent_receiver_verification_required": true,
+    "signed_cleanup_synthetic_proof_required": true,
+    "provider_inactivity_check_required": true,
+    "outcome_driven_retry_prohibited": true
+  },
+  "review_decision": null
+}

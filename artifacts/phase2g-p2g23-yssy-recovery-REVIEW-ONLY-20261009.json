@@ -1,0 +1,65 @@
+{
+  "schema": "v39.phase2g-p2g23-recovery-review-draft.v1",
+  "status": "DRAFT_NOT_FROZEN",
+  "authorized": false,
+  "paid_launch_authorized": false,
+  "machine_selector_enabled": false,
+  "automated_retry_allowed": false,
+  "original_parent_amendment": {
+    "path": "artifacts/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json",
+    "sha256": "589d7e3fbb1467c6bba7bb9b82784612e023cf5df482cc7daf1acd593987712c",
+    "immutable": true
+  },
+  "p2g23_closeout": {
+    "path": "artifacts/phase2g-p2g23-yssy-callback-outage-final-closeout-20261008.json",
+    "sha256": "85c2bf94e6f5d0aea0f1fc576a19cc99c22e4d4bf265bd3133fadbe419a38350",
+    "probe_id": 17,
+    "budget_day": "P2G-S1-20261008-22",
+    "session_id": "cb90e45e-ae7b-4bb4-85fe-7f3e56bd8880",
+    "historical_status": "FAILED_CENSORED_ATTEMPT_PRESERVED_AND_ADMIN_CLOSED",
+    "reconciliation_status": "UNRESOLVED",
+    "duration_censored": true,
+    "recorded_failure_class": "replit_development_callback_unreachable",
+    "external_credits": 221,
+    "internal_credits": 205,
+    "delivery_gap": 16,
+    "immutable": true,
+    "scientifically_scoreable": false
+  },
+  "p2g23_receipts": {
+    "reconstruction_file": {
+      "path": "artifacts/phase2g-p2g23-yssy-reconstruction-20261008T044128Z.json",
+      "sha256": "0fbe5cf1ecc1497e72132f1f897fffd31f3ce105de97179a2ac4ec732b154d52"
+    },
+    "manifest_file": {
+      "path": "artifacts/phase2g-p2g23-yssy-callback-outage-blob-manifest-20261008.json",
+      "sha256": "b85d8828f7d2c83208a70d05f8c8c3d49b9353c20ab91894d06a6adfb7ba5b4c"
+    },
+    "cleanup_file": {
+      "path": "artifacts/phase2g-exact-session-purpose-cleanup-P2G23-YSSY-CALLBACK-OUTAGE-1791435358585.json",
+      "sha256": "8d5b4518e0b21578a4cb5c813a9c98caba70bfa0834f85cccfd205b487463098"
+    }
+  },
+  "prospective_scope_for_review": {
+    "maximum_additional_attempts_if_approved": 1,
+    "target_icao": "YSSY",
+    "metric_contract": "v39-physical-flight-instance-v2",
+    "time_class_utc_slot": 4,
+    "duration_minutes": 120,
+    "exact_reconciliation_required": true,
+    "delivery_gap_tolerance_credits": 0,
+    "stage1_reservation_credits": 450,
+    "unsettled_margin_credits": 50,
+    "protected_residual_floor_credits": 1000,
+    "existing_failures_reclassified": false,
+    "historical_root_cause_proven": false,
+    "outcome_metrics_used_for_retry_decision": false,
+    "no_further_automatic_retry": true
+  },
+  "independent_review": {
+    "approved": false,
+    "decision": null,
+    "reviewer": null,
+    "approval_record_sha256": null
+  }
+}
