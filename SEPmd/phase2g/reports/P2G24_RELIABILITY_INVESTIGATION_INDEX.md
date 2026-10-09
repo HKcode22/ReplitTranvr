@@ -18,8 +18,9 @@
 2. [2,600-check artifact audit, latency outliers and SHA-256s](2026-10-09_P2G24_130M_OBSERVER_ARTIFACT_LATENCY_AUDIT.md).
 3. [Machine-readable evidence checksum manifest](P2G24_ZERO_CREDIT_130M_OBSERVER_EVIDENCE_MANIFEST.json).
 4. [Cross-airport scientific-health load/status comparison](2026-10-09_P2G24_CROSS_AIRPORT_SCIENTIFIC_HEALTH_COMPARISON.md).
-5. [Phase 6 reliability gates and unresolved hypotheses](../P2G24_CALLBACK_HARDENING_AND_PHASE6_GATES_20261009.md).
-6. [Replit platform incident/support request (sanitized)](2026-10-09_P2G24_REPLIT_PLATFORM_INCIDENT_REQUEST.md).
+5. [P2G22 distinct 260/259 delivery-gap failure and existing regression coverage](2026-10-09_P2G22_DELIVERY_GAP_ROOT_CAUSE_CLASS.md).
+6. [Phase 6 reliability gates and unresolved hypotheses](../P2G24_CALLBACK_HARDENING_AND_PHASE6_GATES_20261009.md).
+7. [Replit platform incident/support request (sanitized)](2026-10-09_P2G24_REPLIT_PLATFORM_INCIDENT_REQUEST.md).
 
 ## Controlled tests
 
