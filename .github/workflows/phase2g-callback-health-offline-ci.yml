@@ -1,0 +1,79 @@
+name: Phase2G Callback Health Offline CI
+
+on:
+  push:
+    branches:
+      - phase2g-p2g24-callback-health-diagnostics-20261009
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-callback-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # This job has NO connected secrets, database URL, provider API key,
+      # deployment credentials, or paid-probe workflow dispatch.
+      V39_CALLBACK_ONLY_BUILD: "1"
+    steps:
+      - name: Checkout repair source only
+        uses: actions/checkout@v4
+      - name: Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies without audit
+        run: npm ci --no-audit --no-fund
+      - name: Focused callback and recovery regression suite
+        run: |
+          npx vitest run \
+            tests/phase2g_p2g24_callback_receiver_health_v39.test.ts \
+            tests/phase2g_published_callback_only_v39.test.ts \
+            tests/phase2g_watchdog_recovery_contract_v39.test.ts \
+            tests/phase2g_historical_failure_regressions_v39.test.ts \
+            tests/phase2g_zero_credit_callback_binding_v39.test.ts
+      - name: Offline TypeScript verification
+        run: npm run v39:typecheck
+      - name: Build callback-only published server without provider credentials
+        run: npm run v39:build
+      - name: Local-only startup probe and route isolation
+        shell: bash
+        env:
+          V39_CALLBACK_ONLY_RUNTIME: "1"
+          V39_WORKSPACE_RUNTIME_OWNER_MODE: replit-published-deployment
+          V39_RUNTIME_DURABILITY_CLASS: autoscale
+          V39_PROVIDER_BLOB_MODE: required
+          V39_PROVIDER_BLOB_BUCKET_ID: replit-objstore-offline-regression-only
+          V39_DATABASE_RUNTIME_URL: postgresql://ignored:ignored@127.0.0.1:1/unreachable
+          AERODATABOX_WEBHOOK_SECRET: offline-non-secret-placeholder-more-than-32-chars
+          ADB_AUTO_COLLECT: "false"
+          PORT: "5091"
+        run: |
+          set -euo pipefail
+          node dist/index.mjs > /tmp/phase2g-callback-smoke.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          ready=0
+          for i in {1..30}; do
+            if curl --silent --show-error --max-time 2 --output /tmp/phase2g-root.json \
+                 http://127.0.0.1:5091/ 2>/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != 1 ]]; then
+            echo "::error::Callback-only root did not start"
+            exit 1
+          fi
+          node -e 'let x=require("/tmp/phase2g-root.json"); if(x.status!=="ok" || x.provider_call!==false || x.provider_mutation!==false)process.exit(1)'
+          status="$(curl --silent --output /dev/null --write-out "%{http_code}" http://127.0.0.1:5091/private)"
+          [[ "$status" == "404" ]] || { echo "::error::Unexpected exposed route: $status"; exit 1; }
+          echo "CALLBACK_ROOT_HTTP_200=PASS"
+          echo "PRIVATE_ROUTES_ISOLATED=PASS"
+          echo "LIVE_PROVIDER_CALLS=0"
+          echo "LIVE_DATABASE_CONNECTIONS=0"
+          echo "DEPLOYMENT_MUTATIONS=0"
