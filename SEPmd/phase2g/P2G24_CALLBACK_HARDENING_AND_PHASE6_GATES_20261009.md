@@ -78,3 +78,16 @@ Also preserve original Replit local observer evidence: started `2026-10-09T10:34
 ## Change control
 
 Branch used for investigation: `phase2g-p2g24-github-observer-20261009`. Exact observer run was produced by commit `3f95098ed3e29713ce40fca113b7a8bd3707296b` (prior to documentation commits). Paid Stage-1 workflow and original published receiver remain unchanged by this document. Offline test changes are to be reviewed in isolation; merging callback-only `.replit` settings into the original full Travnr app is out of scope. No Replit Agent.
+
+
+## External platform evidence (official Replit documentation; not incident-specific proof)
+
+- Replit documents that **Autoscale** deployments add servers when busy and **scale to zero when idle**; it recommends **Reserved VM** for always-on API servers (fixed monthly cost). Source: https://docs.replit.com/features/publishing/deployment-types (consulted 2026-10-09). This gives a credible *class* of startup/idle hazards but does **not** establish that Autoscale initiated P2G24's specific 04:58 instance transition.
+- Replit's Monitoring documentation covers HTTP status/latency, app uptime, CPU/RAM and deployment logs, reporting **30-day deployment-log retention** at the time of review. Source: https://docs.replit.com/features/publishing/monitoring-a-deployment (consulted 2026-10-09). Retrieve the deployment instance/startup window before retention expires; do **not** engage Replit Agent.
+- Changing the dedicated receiver to Reserved VM may improve always-on behavior but changes hosting cost and operating assumptions. **No deployment-type change has been made or authorized.** It cannot by itself prove end-to-end webhook persistence or provider accounting.
+
+## Verified executed regression additions (2026-10-09)
+
+- [GitHub offline fault injection #37993249895](https://github.com/HKcode22/ReplitTranvr/actions/runs/37993249895) completed **successfully**. Tests execute the extracted real `callbackHealthy` implementation under mocked fetch, assert stage/reason/HTTP status, and exercise the expected HMAC proof; also run existing receiver regressions and TypeScript checks. No provider API key, scientific DB URL or deployment credential was supplied to the offline CI job.
+- Source test: `tests/phase2g_p2g24_callback_health_behavior_v39.test.cjs`. This is **health-decision unit behavior**, not a genuine paid owner/probe or actual provider callback delivery.
+- [Raw-observation latency audit and hashes](reports/2026-10-09_P2G24_130M_OBSERVER_ARTIFACT_LATENCY_AUDIT.md) demonstrates 11/2,600 individual request latencies >1,000ms (max 5,166ms) even while 100% health contracts passed. [Machine-readable evidence manifest](reports/P2G24_ZERO_CREDIT_130M_OBSERVER_EVIDENCE_MANIFEST.json) records checksums, timings and per-stage percentiles; underlying raw artifact remains [run #37920862702](https://github.com/HKcode22/ReplitTranvr/actions/runs/37920862702).
