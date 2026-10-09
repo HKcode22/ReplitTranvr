@@ -67,7 +67,7 @@ Also preserve original Replit local observer evidence: started `2026-10-09T10:34
 - [ ] Confirm exact P2G24 root-cause chain or provide formally reviewed mitigation for unobservable platform replacement
 - [ ] Prove idle-to-wake and restart behavior under representative conditions
 - [ ] Prove actual webhook durable ingest and idempotency, not just health routes
-- [ ] Prove P2G24 30 underlying object bytes/checksums or formally classify missing evidence; respect Oct 16 expiry
+- [x] P2G24 operator read-only audit verified 30/30 referenced raw objects match SHA-256 and byte length on 2026-10-09 (object preservation/expiry still open; does NOT prove delivery completeness); see [audit report](reports/2026-10-09_P2G22_P2G24_OPERATOR_READONLY_AUDIT.md)
 - [ ] Separately analyze P2G22 scientific exit code 1 after full duration
 - [ ] Prove preserved reconciled physical-flight-instance identity and credit delivery math, including transient failures and restart
 - [ ] Check daily provider budget/floor, fresh subscription isolation, and retention limits
