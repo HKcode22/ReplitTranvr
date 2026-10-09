@@ -22,7 +22,7 @@ Artifacts are zipped JSONL status snapshots, typically every ~30s. Counts shown 
 | SKBO | **130** | 114 | 16 | 78 | 2026-10-02 12:02:30 UTC |
 | YSSY P2G24 | **132** | 132 | 0 | 80 | 2026-10-09 04:59:24 UTC |
 | OMAA | **51** | 47 | 4 | 28 | 2026-09-29 12:04:35 UTC |
-| MMUN | **11** | 11 | 0 | approx. 8 | 2026-10-01 12:02:07 UTC |
+| MMUN | **11** | 11 | 0 | **7** | 2026-10-01 12:02:07 UTC |
 
 **Interpretation:** The known item volume for YSSY (~132 by end of its censored hour) is comparable to SKBO (~130) and **below** WSSS (~158), both successful owner runs. Thus a simple explanation that “YSSY failed because it carried uniquely more observed item rows than other airports” is not supported. This **does not** rule out differences in peak concurrency, raw callback payload size, provider retry burst timing, backend load, unique routes or event-specific code paths; none of those metrics was established by these snapshots.
 
@@ -36,7 +36,7 @@ Artifacts are zipped JSONL status snapshots, typically every ~30s. Counts shown 
 | MMUN | GitHub owner success | PASS_WITH_AMBIGUITY | 46 | 45 | 1 | 28 | 0 |
 | **YSSY P2G24** | **GitHub owner failed/censored** | **PASS** | **132** | **132** | **0** | **80** | **0** |
 
-*Actual machine status for MMUN is `PASS_WITH_AMBIGUITY`; table cell corrected below to disambiguate the typographic string. The counts do not prove every full probe later reconciled, even for successful GitHub owner jobs.*
+*The counts and last scientific-health statuses do not prove every full probe later reconciled, even for successful GitHub owner jobs.*
 
 **Crucial distinction:** `v39.phase2g-scientific-health.v1.status=PASS` in a one-minute scientific-health sample means the instantaneous physical-flight-instance identity gates had no hard violation *at that moment*. It is **not** a completed two-hour paid collection verdict. P2G24 remained `clean.adb_anchor_probe.status=failed`, `duration_censored=true`, `reconciliation_status=UNRESOLVED`, and missing UNLOGGED runtime in subsequent read-only audit. Do not relabel it successful.
 
