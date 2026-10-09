@@ -61,6 +61,20 @@ const controlRoutes = new Set([
   "/__v39/phase2g/runtime-cleanup",
 ]);
 
+/*
+ * Platform startup/readiness check. Replit's deployment health probe requests
+ * GET /. Keep this endpoint public, small and independent of Neon/provider
+ * availability. All provider-content and control routes remain allowlisted.
+ */
+app.get("/", (_req, res) => {
+  res.status(200).json({
+    status: "ok",
+    service: "phase2g-callback-only",
+    provider_call: false,
+    provider_mutation: false,
+  });
+});
+
 app.use((req, res, next) => {
   const allowed =
     (
