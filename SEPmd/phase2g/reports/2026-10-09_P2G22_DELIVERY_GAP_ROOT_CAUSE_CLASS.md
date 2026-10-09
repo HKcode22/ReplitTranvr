@@ -46,3 +46,15 @@ Do not mutate the evidence, force `MATCH`, write new fake delivery records, or r
 **Keep separate hard gates for** (1) receiver lifecycle/reachability, (2) provider-to-internal credits and delivery reconciliation, (3) durable raw webhook persistence and recovery, (4) physical-flight-instance scientific identity validity, and (5) prepaid budget/subscription safety. A green 130-minute health monitor closes none of those other gates by itself.
 
 Primary references: [P2G24 incident](2026-10-09_P2G24_CALLBACK_INCIDENT_AND_130M_OBSERVATION.md), [Phase6 blockers](../P2G24_CALLBACK_HARDENING_AND_PHASE6_GATES_20261009.md), [GitHub blocking issue #28](https://github.com/HKcode22/ReplitTranvr/issues/28).
+
+## Historical 260/259 explicitly frozen in repository test fixtures
+
+Subsequent source audit located **existing tests** that already encode P2G22's exact durable historical ledger, so these are **not** new or missing regression tests:
+
+- [`tests/phase2g_p2g22_yssy_recovery_v39.test.ts`](https://github.com/HKcode22/ReplitTranvr/blob/phase2g-p2g24-github-observer-20261009/tests/phase2g_p2g22_yssy_recovery_v39.test.ts) models probe 16, budget `P2G-S1-20261006-21`, runtime session `06ae005c-34ca-4478-af17-1c5d11b42d6e`, outcome `failed`/`durationCensored=false`, `reconciliationStatus=DELIVERY_GAP`, stop `external_internal_delivery_gap`, **externalSpendCredits=260**, **internalReceivedCredits=259**, **deliveryGapCredits=1**, **deliveryCompleteness=259/260**, **callbackRequestsSeen=56**, **callbackSuccess2xx=56**, **callbackFailures=0**. These values are **frozen historical fixture assertions**, not a fresh production database query conducted in this audit. Verify the original durable `clean.adb_probe_reconciliation_evidence` record when accessing a read-only database.
+- [`tests/phase2g_yssy_260_259_regression_v39.test.ts`](https://github.com/HKcode22/ReplitTranvr/blob/phase2g-p2g24-github-observer-20261009/tests/phase2g_yssy_260_259_regression_v39.test.ts) already tests 260/260 eventual success after pending callback, authentic 260/259 as `DELIVERY_GAP` and rejection of a one-credit tolerance.
+- The recovery fixture explicitly expects `historical_root_cause_claimed=false` and `delivery_gap_tolerance_credits=0`. Thus **classification and a late-callback test existed, but no conclusive root-cause claim was made**, and this investigation must not invent one.
+
+**Important counterexample:** 56/56 callback attempts observed as 2xx in the fixture do not prove the external provider made only 56 delivery attempts nor explain a missing credited notification. The discrepancy could involve an unobserved failed delivery, delay, provider credit accounting, or another cause; additional durable/provider evidence required.
+
+The correct specific conclusion is **known one-credit reconciliation discrepancy with already-hardened classifier and synthetic test, still causally unproven**, not that the 259 scientific item rows alone prove 259 credits.
