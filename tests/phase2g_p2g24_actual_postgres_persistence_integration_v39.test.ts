@@ -1283,8 +1283,33 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(rawMap.get(receipt.rawKey)?.bytes).toEqual(sourceBytes);
     const firstEdgeUtc=receipt.firstEdgeReceivedAtUtc;
     const originalFetch=globalThis.fetch;
-    let bridgeCalls=0;
+    let bridgeCalls=0,confirmationCalls=0;
     globalThis.fetch=(async(url,options)=>{
+      if(String(url)==="https://sandbox.bridge.invalid/__p2g-sandbox-confirm"){
+        confirmationCalls++;
+        const proof=JSON.parse(String(options?.body??""));
+        expect(proof).toMatchObject({
+          v:1,sessionId:SESSION,receiptId:receipt.id,
+          providerAttemptId:"bridge:1",sourceSha256:sourceSha,
+          edgeReceivedAtUtc:firstEdgeUtc
+        });
+        const headers=options?.headers as Record<string,string>;
+        expect(await verifyEdgeProvenanceV1(proof,signing,
+          headers["x-p2g-edge-provenance-hmac"],{
+            sessionId:SESSION,receiptId:receipt.id,sourceSha256:sourceSha
+          })).toBe(true);
+        const now=await state.pool!.query(
+          "SELECT count(*)::int AS n FROM clean.prepaid_probe_item_runtime "+
+          "WHERE session_id=$1",[SESSION]
+        );
+        const current=now.rows[0].n===1;
+        return new Response(JSON.stringify({
+          v:1,currentlyPersisted:current,
+          sessionId:SESSION,receiptId:receipt.id,
+          providerAttemptId:"bridge:1",sourceSha256:sourceSha,
+          originalEdgeReceivedAtUtc:firstEdgeUtc
+        }),{status:current?200:503});
+      }
       if(String(url)!=="https://sandbox.bridge.invalid/__p2g-sandbox-verify")
         throw new Error("SYNTHETIC_BRIDGE_EXTERNAL_NETWORK_REFUSED");
       bridgeCalls++;
@@ -1340,10 +1365,13 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       );
       const lost=await count();
       expect(lost).toMatchObject({logged:1,unlogged:0});
-      // The signed edge record AND "processed" marker still exist. Replaying
-      // this Queue entry alone ACKs, but DOES NOT recreate PostgreSQL items.
+      // Signed edge and marker remain, but current DB evidence is GONE.
+      // A historical marker CANNOT authorize another ACK without a fresh
+      // source-bound read-only SQL continuity proof.
       await syntheticEdgeConsume(batch,env);
-      expect(ack).toHaveBeenCalledTimes(2);
+      expect(ack).toHaveBeenCalledTimes(1);
+      expect(retry).toHaveBeenCalledTimes(1);
+      expect(confirmationCalls).toBe(1);
       expect(bridgeCalls).toBe(1);
       const scienceRows=await state.pool!.query(
         "SELECT count(*)::int AS n FROM clean.prepaid_probe_item_runtime "+
@@ -1353,6 +1381,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       expect(firstEdgeUtc).toMatch(/Z$/);
       console.log("P13_EDGE_SOURCE_BYTES_SURVIVED_DB_RESET=true");
       console.log("P13_PROCESSED_EDGE_MARKER_NOT_SUFFICIENT_FOR_SQL_RECOVERY=true");
+      console.log("P12_EDGE_QUEUE_RETRY_ON_CURRENT_SQL_LOSS=true");
       console.log("P13_REAL_PROVIDER_SOURCE_VERIFIED=false");
       console.log("P13_SCIENTIFIC_RECOVERY_AUTHORIZED=false");
     }finally{globalThis.fetch=originalFetch;}
