@@ -23,6 +23,7 @@ export const FREE_TIER_MODEL=Object.freeze({
   // Keep 20% of account-wide operations unallocated for unknown other queues
   // and extra reads/retries. This is a MODEL reservation, not enforced by CF.
   dailyOpsUseThreshold:8_000,
+  maxProviderSpendCredits:500,
   maxDegradedMinutes:35,
   maxPendingMessages:500,
   exposureMinutes:120,
@@ -75,6 +76,8 @@ export class ZeroCostQueueModel{
       // Same-attempt at-least-once replay is not a new provider SEND.
       return true;
     }
+    if(this.uniqueCredits+attempt.billedCredits>this.limits.maxProviderSpendCredits)
+      return this.fail("PROVIDER_CREDIT_CEILING");
     if(this.usedOps+this.limits.reservedQueueOperationsPerAttempt >
        this.limits.dailyOpsUseThreshold)return this.fail("SHARED_FREE_TIER_QUOTA_GUARD");
     this.entries.set(attempt.attemptId,{...attempt,queuedMinute:nowMinute});
