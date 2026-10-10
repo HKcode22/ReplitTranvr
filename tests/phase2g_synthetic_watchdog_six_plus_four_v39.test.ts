@@ -178,6 +178,30 @@ describe("P15 six-primary + four-conditional-backup checks; never provider retri
       });
     }
   });
+  it("healthy GET must NOT hide a confirmed physically missing flight or expired original source",()=>{
+    for(const missing of [
+      {originalPhysicalFlightV2Continuity:false},
+      {durableQueueAvailable:false},
+      {fullOriginalBytesReadBackVerified:false}
+    ]){
+      const r=run(["healthy"],missing);
+      expect(r.stopOwner).toBe(true);
+      expect(r.stopAtIndex).toBe(0);
+      expect(r.scientificAdjudication)
+        .toBe("PENDING_OR_CENSORED_NOT_AUTOMATIC_PASS");
+    }
+  });
+  it("healthy check without independently verified source remains pending rather than granting science",()=>{
+    const r=run(["healthy"],{
+      sourceEvidenceIndependentlyAuthenticated:false
+    });
+    expect(r).toMatchObject({
+      stopOwner:false,stopAtIndex:null,
+      state:"MONITOR_ONLY",
+      reasons:["HEALTH_OK_SCIENCE_STILL_NOT_ATTESTED"],
+      paidLaunchAuthorized:false
+    });
+  });
   it("hard identity/secret/build/db contract mismatch stops IMMEDIATELY, not after six attempts",()=>{
     for(const health of [
       "bad_secret","wrong_build","wrong_subscriber_owner",
