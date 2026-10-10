@@ -17,46 +17,75 @@ export class SyntheticDualQueueAdmissionV2 {
   private readonly inflight=new Map<string,Promise<DualSourceMessageV2>>();
   constructor(private readonly queue:SyntheticQueuePortV2){}
   get locallyRememberedAttempts(){return this.committed.size;}
+
+  /**
+   * Reserve a candidate attempt SYNCHRONOUSLY before the first async HMAC
+   * or SHA operation. Previously, concurrent calls raced during WebCrypto,
+   * allowing a later call to win and overwrite the intended first edge UTC.
+   *
+   * This quick parse is only for scheduling. Full signed source validation,
+   * duplicate JSON-key refusal and limits still happen BEFORE queue.send().
+   */
+  private candidateKey(input:Parameters<typeof createSyntheticDualSourceMessageV2>[0]):string{
+    let body:unknown;
+    try{
+      if(!(input.rawBytes instanceof Uint8Array))throw new Error("bad raw");
+      body=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(input.rawBytes));
+    }catch{throw new Error("SOURCE_JSON_INVALID_UTF8_OR_SYNTAX");}
+    if(!body||typeof body!=="object"||Array.isArray(body))
+      throw new Error("SOURCE_PINNED_ATTEMPT_CONTRACT_INVALID");
+    const o=body as Record<string,any>,notice=o.id,sub=o.subscription?.id,
+      seq=o.deliveryAttempt?.seqNo;
+    if(typeof input.sessionId!=="string"||
+       typeof sub!=="string"||sub!==input.expectedProviderSubscriptionId||
+       typeof notice!=="string"||notice.length===0||
+       !Number.isSafeInteger(seq)||seq<0)
+      throw new Error("SOURCE_PINNED_ATTEMPT_CONTRACT_INVALID");
+    return JSON.stringify([input.sessionId,sub,notice,seq]);
+  }
+
   async admit(input:Parameters<typeof createSyntheticDualSourceMessageV2>[0]):Promise<{
     ackAfterQueueAcceptance:true;
     duplicate:boolean;
     receipt:DualSourceMessageV2["receipt"];
   }>{
-    const message=await createSyntheticDualSourceMessageV2(input);
-    // Queue account Free max is 128KB inclusive of internal metadata;
-    // enforce a conservative 120KB on the full JSON serialized message,
-    // not just original provider body.
-    const serialized=new TextEncoder().encode(JSON.stringify(message));
-    if(serialized.length>120_000)throw new Error("SOURCE_QUEUE_SERIALIZED_OVERFLOW");
-    const k=message.receipt.attemptKey;
-    const compare=(old:DualSourceMessageV2)=>{
-      if(old.receipt.wireSha256!==message.receipt.wireSha256 ||
-         old.receipt.canonicalSha256!==message.receipt.canonicalSha256 ||
-         old.receipt.syntheticCostCredits!==message.receipt.syntheticCostCredits)
+    const candidate=this.candidateKey(input); // happens before any await
+    const previous=this.committed.get(candidate);
+    const active=this.inflight.get(candidate);
+    const created=createSyntheticDualSourceMessageV2(input);
+    const compare=(old:DualSourceMessageV2,fresh:DualSourceMessageV2)=>{
+      if(old.receipt.attemptKey!==fresh.receipt.attemptKey||
+         old.receipt.wireSha256!==fresh.receipt.wireSha256||
+         old.receipt.canonicalSha256!==fresh.receipt.canonicalSha256||
+         old.receipt.syntheticCostCredits!==fresh.receipt.syntheticCostCredits)
         throw new Error("SOURCE_ATTEMPT_CONFLICT_REFUSED");
     };
-    const previous=this.committed.get(k);
     if(previous){
-      compare(previous);
+      const fresh=await created;compare(previous,fresh);
       return {ackAfterQueueAcceptance:true,duplicate:true,receipt:previous.receipt};
     }
-    const inflight=this.inflight.get(k);
-    if(inflight){
-      const settled=await inflight;
-      compare(settled);
-      return {ackAfterQueueAcceptance:true,duplicate:true,receipt:settled.receipt};
+    if(active){
+      const [old,fresh]=await Promise.all([active,created]);
+      compare(old,fresh);
+      return {ackAfterQueueAcceptance:true,duplicate:true,receipt:old.receipt};
     }
-    const p=(async()=>{
-      await this.queue.send(message); // NO HTTP 200 until true Queue acceptance
-      this.committed.set(k,message);
+    const processing=(async()=>{
+      const message=await created;
+      // Conservative 120 KB cap includes the ENTIRE queue envelope.
+      const serialized=new TextEncoder().encode(JSON.stringify(message));
+      if(serialized.length>120_000)
+        throw new Error("SOURCE_QUEUE_SERIALIZED_OVERFLOW");
+      await this.queue.send(message);
+      this.committed.set(candidate,message);
       return message;
     })();
-    this.inflight.set(k,p);
-    try {
-      const success=await p;
-      return {ackAfterQueueAcceptance:true,duplicate:false,receipt:success.receipt};
+    this.inflight.set(candidate,processing);
+    try{
+      const done=await processing;
+      return {ackAfterQueueAcceptance:true,duplicate:false,receipt:done.receipt};
     }finally{
-      if(this.inflight.get(k)===p)this.inflight.delete(k);
+      if(this.inflight.get(candidate)===processing)
+        this.inflight.delete(candidate);
     }
   }
 }
