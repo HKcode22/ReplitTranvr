@@ -45,7 +45,7 @@ describe("P15 six-primary + four-conditional-backup checks; never provider retri
     const v=run([...failures(6),"healthy"]);
     expect(v).toMatchObject({
       state:"HEALTH_RECOVERED_AUDIT_PENDING",
-      stopOwner:false,healthRecoveredAfterTransient:true,
+      stopOwner:false,recoveredHealth:true,
       maximumObservedConsecutiveFailures:6,enteredContingency:false,
       publicationApproved:false
     });
@@ -65,7 +65,7 @@ describe("P15 six-primary + four-conditional-backup checks; never provider retri
     expect(v).toMatchObject({
       stopOwner:false,enteredContingency:true,
       contingencyChecksUsed:3,
-      healthRecoveredAfterTransient:true,
+      recoveredHealth:true,
       state:"HEALTH_RECOVERED_AUDIT_PENDING",
       scientificAdjudication:"PENDING_OR_CENSORED_NOT_AUTOMATIC_PASS"
     });
@@ -249,7 +249,7 @@ describe("P15 six-primary + four-conditional-backup checks; never provider retri
     const v=run([...failures(6),"healthy",...failures(6),"healthy"]);
     expect(v).toMatchObject({
       stopOwner:false,maximumObservedConsecutiveFailures:6,
-      healthRecoveredAfterTransient:true,
+      recoveredHealth:true,
       state:"HEALTH_RECOVERED_AUDIT_PENDING",
       providerRetriesChanged:false,paidLaunchAuthorized:false
     });
