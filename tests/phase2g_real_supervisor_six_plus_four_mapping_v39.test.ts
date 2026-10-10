@@ -88,11 +88,13 @@ async function realCallback(f:Failure={}){
       V39_DATABASE_RUNTIME_URL:DATABASE
     }}
   };
-  const cb=vm.runInNewContext(CODE+"\ncallbackHealthy;",sandbox,{timeout:1500})
-    as ((base:string,head:string,mode:string)=>Promise<{
-      healthy:boolean;check:string;reason:string;http_status:number|null;
-      elapsed_ms:number;
-    }>);
+  type Checker = (base:string,head:string,mode:string)=>Promise<{
+    healthy:boolean;check:string;reason:string;http_status:number|null;
+    elapsed_ms:number;
+  }>;
+  const cb:Checker = vm.runInNewContext(
+    CODE+"\ncallbackHealthy;",sandbox,{timeout:1500}
+  ) as Checker;
   const result=await cb("https://offline.invalid",HEAD,"published");
   return {result,calls,classification:
     classifyActualSupervisorHealthForSixPlusFourV39(result)};
