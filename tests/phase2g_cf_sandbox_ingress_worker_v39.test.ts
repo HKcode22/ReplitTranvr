@@ -167,6 +167,15 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     globalThis.fetch=vi.fn(async(url,options)=>{
       sent.push({url:String(url),headers:options?.headers,body:options?.body});
       const receipt=JSON.parse(new TextDecoder().decode(h.map.get(h.messages[0].receiptKey)!.data));
+      if(String(url).endsWith("/__p2g-sandbox-confirm")){
+        const p=JSON.parse(String(options?.body??""));
+        return new Response(JSON.stringify({
+          v:1,currentlyPersisted:true,sessionId:p.sessionId,
+          providerAttemptId:p.providerAttemptId,receiptId:p.receiptId,
+          sourceSha256:p.sourceSha256,
+          originalEdgeReceivedAtUtc:p.edgeReceivedAtUtc
+        }),{status:200});
+      }
       return new Response(JSON.stringify({persisted:true,sourceSha256:receipt.sourceSha256}),{
         status:200,headers:{"content-type":"application/json"}
       });
@@ -190,7 +199,9 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
       expect(signed).toBe(true);
       expect(h.map.size).toBe(3); // processed marker
       await consume(batch,h.env);
-      expect(sent).toHaveLength(1);
+      expect(ack).toHaveBeenCalledTimes(2);
+      expect(sent).toHaveLength(2);
+      expect(sent[1].url).toBe("https://sandbox.mock.invalid/__p2g-sandbox-confirm");
     }finally{globalThis.fetch=oldFetch;}
   });
 
