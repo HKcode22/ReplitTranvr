@@ -156,7 +156,11 @@ export function evaluateSyntheticSixPlusFourWatchdogV39(input:{
       "BACKLOG_NOT_BOUNDED_OR_EXPIRED"
     ]);
     if(hard||(r!==null&&scientificHard.has(r))){
-      index=i;stopOwner=true;state="STOP_HARD_CONTRACT";
+      index=i;stopOwner=true;
+      state=hard||r==="ATTEMPT_OR_BILLING_GAP"||
+        r==="OWNER_OR_PROVIDER_SUBSCRIPTION_NOT_ATTESTED"||
+        r==="FROZEN_BUDGET_AT_RISK"?
+        "STOP_HARD_CONTRACT":"STOP_SAFE_NO_PROOF";
       reasons.add(hard?"HARD_CALLBACK_CONTRACT_INVALID":r!);break;
     }
     if(s.health==="healthy"){
