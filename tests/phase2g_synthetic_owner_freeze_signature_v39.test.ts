@@ -120,8 +120,10 @@ describe("P13 signed GitHub owner/session freeze — isolated synthetic Ed25519"
     }
   });
   it("rejects 119m exposure, unsigned fake science config, changed budget, any provider retry or false emulator flag",()=>{
+    expect(()=>signed(change(freeze(),{
+      windowEndUtc:"2026-10-12T04:59:00.000Z"
+    }))).toThrow("OWNER_FREEZE_TIME_OR_DURATION_INVALID");
     for(const changes of [
-      {windowEndUtc:"2026-10-12T04:59:00.000Z"},
       {physicalFlightContract:"unreviewed-metric"},
       {providerCreditCeiling:501},
       {maxDeliveryRetries:1},
