@@ -63,6 +63,11 @@ describe("P13 test-only Postgres continuity and fail-closed recovery gate",()=>{
     ]));
     expect(r.mandatoryCensor).toBe(true);
   });
+  it("catches retained orphan LOGGED blobs when every UNLOGGED row disappears",()=>{
+    const a=observed();a.sessionRows=0;a.deliveryRows=0;a.itemRows=0;
+    a.linkedDeliveryBlobRefs=0; // Four old LOGGED refs remain!
+    refusal(a,frozen(),"RAW_BLOB_LINKAGE_INCOMPLETE");
+  });
   it("refuses unmatched logged references even when total counts align",()=>{
     const a=observed();a.linkedDeliveryBlobRefs=3;
     refusal(a,frozen(),"RAW_BLOB_LINKAGE_INCOMPLETE");
