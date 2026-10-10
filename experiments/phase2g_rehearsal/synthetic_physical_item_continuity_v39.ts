@@ -28,7 +28,8 @@ export type SyntheticPhysicalItemContinuityV39=Readonly<{
   mandatoryCensor:boolean;
   expectedItemCount:number;
   observedItemCount:number;
-  confirmedOperatorPhysicalCount:number;
+  confirmedOperatorObservationRows:number;
+  confirmedUniqueOperatorFlightCount:number;
   sourceBuckets:number[];
   errors:string[];
   scientificRunAuthorized:false;
@@ -127,20 +128,32 @@ export function compareSyntheticPhysicalItemContinuityV39(input:{
     if(!observed.has(k))add("MISSING_PHYSICAL_ITEM_AFTER_CRASH");
   if(expected.size!==observed.size)
     add("PHYSICAL_ITEM_LEDGER_COUNT_DIFFERENT");
-  let confirmed=0;
+  let confirmedRows=0;
+  const distinctConfirmed=new Map<string,SyntheticPhysicalItemWitnessV39>();
   for(const item of expected.values()){
     if(item.identityResolutionStatus==="resolved"&&
        item.codeshareResolutionStatus==="resolved_operator"&&
-       !!item.flightInstanceId)confirmed++;
-    else if(item.identityResolutionStatus==="resolved"||
-            item.codeshareResolutionStatus==="resolved_operator")
+       !!item.flightInstanceId){
+      confirmedRows++;
+      const old=distinctConfirmed.get(item.flightInstanceId);
+      if(old&&(
+        old.operatingCarrier!==item.operatingCarrier||
+        old.operatingFlightNumber!==item.operatingFlightNumber||
+        old.originIcao!==item.originIcao||
+        old.destinationIcao!==item.destinationIcao||
+        old.initialServiceDate!==item.initialServiceDate
+      ))add("PHYSICAL_ID_REUSED_FOR_INCOMPATIBLE_SERVICE");
+      else distinctConfirmed.set(item.flightInstanceId,item);
+    }else if(item.identityResolutionStatus==="resolved"||
+             item.codeshareResolutionStatus==="resolved_operator")
       add("PHYSICAL_V2_OPERATOR_PROOF_INCOMPLETE");
   }
   return {
     itemEvidenceConsistent:errors.size===0,
     mandatoryCensor:errors.size!==0,
     expectedItemCount:expected.size,observedItemCount:observed.size,
-    confirmedOperatorPhysicalCount:confirmed,
+    confirmedOperatorObservationRows:confirmedRows,
+    confirmedUniqueOperatorFlightCount:distinctConfirmed.size,
     sourceBuckets:bucket,errors:[...errors].sort(),
     scientificRunAuthorized:false,automaticRestorationAuthorized:false
   };
