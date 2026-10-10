@@ -104,8 +104,8 @@ describe("Phase2G no-Cloudflare synthetic first-edge dual-hash Queue admission",
     const f=fixture();
     // Escaped control characters inflate the Queues JSON envelope.
     const base=JSON.parse(wire());
-    base.padding="\n".repeat(29_000);
-    await expect(f.gate.admit(source(JSON.stringify(base),t1)))
+    base.padding="\n".repeat(45_000);
+    await expect(f.gate.admit({...source(JSON.stringify(base),t1),maxWireBytes:120_000}))
       .rejects.toThrow("SOURCE_QUEUE_SERIALIZED_OVERFLOW");
     expect(f.messages).toHaveLength(0);
   });
