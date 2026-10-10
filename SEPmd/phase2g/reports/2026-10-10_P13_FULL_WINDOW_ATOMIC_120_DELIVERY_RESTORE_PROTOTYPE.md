@@ -1,6 +1,6 @@
 # P13 full-window atomic reconstruction — deterministic 120-delivery YSSY stress fixture
 
-**Status at initial authoring: isolated implementation and integration CI under review, NOT PAID READY.** Date: October 10, 2026. **Strictly disposable PostgreSQL16, no AeroDataBox API calls, no credits, no Replit deployment and no Cloudflare account changes.** The implementation is under `experiments/phase2g_rehearsal/` on the investigation branch, not under the live V3.9 paid owner.
+**Status: full-window isolated tests VERIFIED GREEN, NOT PAID READY.** Date: October 10, 2026. **Strictly disposable PostgreSQL16, no AeroDataBox API calls, no credits, no Replit deployment and no Cloudflare account changes.** The implementation is under `experiments/phase2g_rehearsal/` on the investigation branch, not under the live V3.9 paid owner.
 
 ## Purpose and test boundaries
 
@@ -19,7 +19,9 @@ Extends the earlier P13 **one original delivery with two physical flights** quar
 
 The connected CI workflow `.github/workflows/phase2g-p2g24-offline-fault-injection.yml` runs 321 offline regressions and the disposable V3.9 PostgreSQL integration cases; the new full-window case increases the latter to 42 when passing. Other CI confirms a truly unclean PostgreSQL16 SIGKILL resets UNLOGGED and preserves LOGGED ownership evidence. The new test uses a **TRUNCATE to simulate lost runtime state** (its accompanying existing real SIGKILL test independently proves PG UNLOGGED crash behavior).
 
-**Do not claim this work passed based only on earlier runs.** Attach the exact current CI SHA, offline/integration counts and both job conclusions only after completion. Any failing run remains failing evidence; fix and rerun without replacing historical failure traces.
+**[Verified GitHub Actions #38093195638](https://github.com/HKcode22/ReplitTranvr/actions/runs/38093195638), tested code SHA `997fe577ab11162b8f96d3dc2151113fae066f55` — BOTH JOBS COMPLETED SUCCESS.** Evidence: **321/321 offline Vitest in 31 suites; 42/42 actual disposable V3.9/PostgreSQL16 integration cases**, plus separate real PostgreSQL SIGKILL/UNLOGGED reset proving retained LOGGED owner binding. The full-window integration logs explicitly report `P13_FULL_WINDOW_8X15_SOURCE_UTC_RESTORED=true`, `P13_FULL_WINDOW_120_PHYSICAL_V2_ROWS_RESTORED=true`, `P13_FULL_WINDOW_NEW_LOGGED_BLOBS=0`, `P13_FULL_WINDOW_ATOMIC_MISSING_ITEM_ROLLBACK=true`, `P13_FULL_WINDOW_STAYS_QUARANTINED=true`, `P13_FULL_WINDOW_REAL_SENDER_AUTHENTICATED=false`, and `P13_FULL_WINDOW_PAID_GO_AUTHORIZED=false`.
+
+**Failure history retained:** Prior attempts [#38092925445](https://github.com/HKcode22/ReplitTranvr/actions/runs/38092925445) and [#38093040019](https://github.com/HKcode22/ReplitTranvr/actions/runs/38093040019) failed correctly rather than silently PASSing, first because leftover LOGGED test fixture records broke the strict 120 source inventory and then because PostgreSQL `DATE` formatting broke the strict physical-v2 witness type. The test now isolates only its disposable LOGGED fixture tables and normalizes journal dates to `YYYY-MM-DD`; the strict source-inventory and identity validators were **not relaxed**.
 
 ## Scientific and operational limitations
 
