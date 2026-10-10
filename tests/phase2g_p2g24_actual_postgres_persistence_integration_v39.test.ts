@@ -2056,6 +2056,13 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       "session_id uuid NOT NULL,attempt_key text NOT NULL,signed_record jsonb NOT NULL,"+
       "PRIMARY KEY(session_id,attempt_key))"
     );
+    // This suite deliberately reuses ONE disposable session ID across tests.
+    // Earlier P13 cases left LOGGED fixture records for other test attempts.
+    // Isolate the full-window fixture rather than making recovery accept extras.
+    await state.pool!.query(
+      "TRUNCATE p2g_science_recovery_fixture.signed_source_item_journal,"+
+      "p2g_science_recovery_fixture.exact_runtime_snapshot"
+    );
     const start=Date.parse("2026-10-12T03:00:00.000Z");
     const at=(n:number)=>new Date(start+n*60000).toISOString();
     const ownerFrozenRunSha256="9".repeat(64);
