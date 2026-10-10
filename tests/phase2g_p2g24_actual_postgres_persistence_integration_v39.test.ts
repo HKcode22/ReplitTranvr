@@ -55,6 +55,9 @@ import {signSyntheticOwnerFreezeV39,verifySyntheticOwnerFreezeV39,syntheticOwner
 import {makeSyntheticTwoStageOwnerV39} from "../experiments/phase2g_rehearsal/synthetic_two_stage_owner_protocol_v39";
 import {recordSyntheticTwoStageOwnerBindingV39} from "../experiments/phase2g_rehearsal/disposable_two_stage_owner_journal_v39";
 import {compareSyntheticPhysicalItemContinuityV39,type SyntheticPhysicalItemWitnessV39} from "../experiments/phase2g_rehearsal/synthetic_physical_item_continuity_v39";
+import {ingest as syntheticEdgeIngest,consume as syntheticEdgeConsume,type Env as SyntheticEdgeEnv} from "../experiments/phase2g_cf_sandbox_ingress/worker";
+import {verifyEdgeProvenanceV1} from "../experiments/phase2g_cf_sandbox_ingress/provenance";
+import {createHash as offlineShaHash} from "node:crypto";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -1199,6 +1202,157 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     console.log("P15_ACTUAL_OPERATOR_PHYSICAL_V2_ITEM_LOST_AFTER_UNLOGGED_RESET=true");
     console.log("P15_REAL_SOURCE_ITEMS_INDEPENDENTLY_ATTESTED=false");
     console.log("P15_PAID_RECOVERY_AUTHORIZED=false");
+  });
+
+  it("P09-P13 synthetic R2 edge -> real V3.9 disposable SQL -> UNLOGGED loss: receipt survives but science MUST censor",async()=>{
+    const secret="synthetic-bridge-"+"q".repeat(40);
+    const signing="synthetic-bridge-signing-"+"k".repeat(48);
+    const rawPayload=JSON.stringify(sample({
+      id:"synthetic-edge-real-v39-bridge-001",
+      flights:[{
+        id:"synthetic-yssy-flight-bridge-001",number:"QF709",
+        codeshareStatus:"IsOperator",
+        airline:{iata:"QF",icao:"QFA"},
+        departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+          scheduledTime:{utc:"2026-10-12T03:45:00.000Z"}},
+        arrival:{airport:{icao:"YMEL"},
+          scheduledTime:{utc:"2026-10-12T05:15:00.000Z"}}
+      }]
+    }),null,2);
+    const sourceBytes=new TextEncoder().encode(rawPayload);
+    const sourceSha=offlineShaHash("sha256").update(sourceBytes).digest("hex");
+    const rawMap=new Map<string,{bytes:Uint8Array;etag:string}>();
+    const queued:{receiptKey:string}[]=[];
+    const env:SyntheticEdgeEnv={
+      EDGE_EXECUTION_MODE:"synthetic-only",
+      EDGE_TEST_SECRET:secret,
+      EDGE_ALLOW_SYNTHETIC_RELAY:"1",
+      EDGE_SANDBOX_RECEIVER_ORIGIN:"https://sandbox.bridge.invalid",
+      EDGE_TEST_RECEIVER_PATH_SECRET:"p".repeat(40),
+      EDGE_PROVENANCE_SIGNING_KEY:signing,
+      RAW:{
+        async put(key,value,options){
+          if(options?.onlyIf?.etagDoesNotMatch==="*"&&rawMap.has(key))
+            return null;
+          if(options?.onlyIf?.etagMatches&&
+             rawMap.get(key)?.etag!==options.onlyIf.etagMatches)
+            return null;
+          const bytes=typeof value==="string"?
+            new TextEncoder().encode(value):
+            new Uint8Array(value);
+          const etag=offlineShaHash("sha256").update(bytes).digest("hex");
+          rawMap.set(key,{bytes:new Uint8Array(bytes),etag});
+          return {key,etag,size:bytes.length};
+        },
+        async get(key){
+          const entry=rawMap.get(key);
+          if(!entry)return null;
+          return {
+            key,etag:entry.etag,size:entry.bytes.length,
+            text:async()=>new TextDecoder().decode(entry.bytes),
+            arrayBuffer:async()=>entry.bytes.slice().buffer
+          };
+        },
+        async head(key){
+          const entry=rawMap.get(key);
+          return entry?{key,etag:entry.etag,size:entry.bytes.length}:null;
+        },
+        async list(){
+          return {objects:[],truncated:false};
+        }
+      },
+      DELIVERY_QUEUE:{async send(msg){queued.push(msg)}}
+    };
+    const edgeUrl="https://sandbox.edge.invalid/api/v1/webhooks/aerodatabox/"+
+      secret+"/prepaid/"+SESSION;
+    const sourceAck=await syntheticEdgeIngest(new Request(edgeUrl,{
+      method:"POST",headers:{
+        "content-type":"application/json",
+        "x-p2g-synthetic-attempt-id":"bridge:1"
+      },body:rawPayload
+    }),env);
+    expect(sourceAck.status).toBe(200);
+    expect(queued).toHaveLength(1);
+    const receiptKey=queued[0].receiptKey;
+    const receiptRaw=rawMap.get(receiptKey)!;
+    const receipt=JSON.parse(new TextDecoder().decode(receiptRaw.bytes));
+    expect(receipt.sourceSha256).toBe(sourceSha);
+    expect(rawMap.get(receipt.rawKey)?.bytes).toEqual(sourceBytes);
+    const firstEdgeUtc=receipt.firstEdgeReceivedAtUtc;
+    const originalFetch=globalThis.fetch;
+    let bridgeCalls=0;
+    globalThis.fetch=(async(url,options)=>{
+      if(String(url)!=="https://sandbox.bridge.invalid/__p2g-sandbox-verify")
+        throw new Error("SYNTHETIC_BRIDGE_EXTERNAL_NETWORK_REFUSED");
+      bridgeCalls++;
+      const headers=options?.headers as Record<string,string>;
+      const proof=await verifyEdgeProvenanceV1({
+        v:1,sessionId:SESSION,
+        receiptId:receipt.id,providerAttemptId:"bridge:1",
+        sourceSha256:sourceSha,edgeReceivedAtUtc:firstEdgeUtc
+      },signing,headers["x-p2g-edge-provenance-hmac"],{
+        sessionId:SESSION,receiptId:receipt.id,sourceSha256:sourceSha
+      });
+      expect(proof).toBe(true);
+      expect(headers["x-p2g-edge-received-at"]).toBe(firstEdgeUtc);
+      const posted=await originalFetch(localOrigin+actualPath,{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:options?.body as BodyInit
+      });
+      const success=posted.status===200&&(await count()).unlogged===1;
+      return new Response(JSON.stringify({
+        persisted:success,sourceSha256:sourceSha
+      }),{status:success?200:503});
+    }) as typeof fetch;
+    const ack=vi.fn(),retry=vi.fn();
+    const batch={messages:[{body:queued[0],ack,retry}]};
+    try{
+      await syntheticEdgeConsume(batch,env);
+      expect(ack).toHaveBeenCalledTimes(1);
+      expect(retry).not.toHaveBeenCalled();
+      expect(bridgeCalls).toBe(1);
+      const before=await count();
+      expect(before).toMatchObject({logged:1,unlogged:1});
+      const items=await state.pool!.query(
+        "SELECT flight_instance_id,operating_carrier,origin_icao,"+
+        "destination_icao FROM clean.prepaid_probe_item_runtime WHERE session_id=$1",
+        [SESSION]
+      );
+      expect(items.rowCount).toBe(1);
+      expect(items.rows[0]).toMatchObject({
+        operating_carrier:"QF",origin_icao:"YSSY",destination_icao:"YMEL"
+      });
+      expect(items.rows[0].flight_instance_id).toEqual(expect.any(String));
+      const processedKey=receiptKey.replace("/index/","/processed/");
+      expect(rawMap.has(processedKey)).toBe(true);
+      const sourceReadback=rawMap.get(receipt.rawKey)!;
+      expect(offlineShaHash("sha256").update(sourceReadback.bytes)
+        .digest("hex")).toBe(sourceSha);
+      // A disposable UNLOGGED reset simulates the relevant part of a
+      // PostgreSQL crash, NOT actual Replit, Cloudflare or provider failure.
+      await state.pool!.query(
+        "TRUNCATE clean.prepaid_probe_item_runtime,"+
+        "clean.prepaid_probe_delivery_runtime,"+
+        "clean.prepaid_probe_session_runtime"
+      );
+      const lost=await count();
+      expect(lost).toMatchObject({logged:1,unlogged:0});
+      // The signed edge record AND "processed" marker still exist. Replaying
+      // this Queue entry alone ACKs, but DOES NOT recreate PostgreSQL items.
+      await syntheticEdgeConsume(batch,env);
+      expect(ack).toHaveBeenCalledTimes(2);
+      expect(bridgeCalls).toBe(1);
+      const scienceRows=await state.pool!.query(
+        "SELECT count(*)::int AS n FROM clean.prepaid_probe_item_runtime "+
+        "WHERE session_id=$1",[SESSION]
+      );
+      expect(scienceRows.rows[0].n).toBe(0);
+      expect(firstEdgeUtc).toMatch(/Z$/);
+      console.log("P13_EDGE_SOURCE_BYTES_SURVIVED_DB_RESET=true");
+      console.log("P13_PROCESSED_EDGE_MARKER_NOT_SUFFICIENT_FOR_SQL_RECOVERY=true");
+      console.log("P13_REAL_PROVIDER_SOURCE_VERIFIED=false");
+      console.log("P13_SCIENTIFIC_RECOVERY_AUTHORIZED=false");
+    }finally{globalThis.fetch=originalFetch;}
   });
 
 });
