@@ -375,6 +375,7 @@ export async function scanUnfinished(e:Env):Promise<{scanned:number,requeued:num
   // next invocation resumes after the LAST successfully scanned page.
   for(let page=0;page<3;page++){
     const pageErrorsBefore=errors;
+    let pageHasUnmaturedSource=false;
     // Preserve the cursor at the start of this page until all its sources
     // have been checked. Never skip malformed/undeliverable source receipts.
     let result:Awaited<ReturnType<Env["RAW"]["list"]>>;
@@ -404,7 +405,13 @@ export async function scanUnfinished(e:Env):Promise<{scanned:number,requeued:num
           errors++;continue;
         }
         // Recent receipts may still be in-flight with first queue send.
-        if(age<60_000)continue;
+        if(age<60_000){
+          // Deliberately defer a recently indexed notification, but DON'T
+          // move the scanner cursor beyond it. The original enqueue could
+          // have failed during a crash and would otherwise be skipped.
+          pageHasUnmaturedSource=true;
+          continue;
+        }
         const marker=await checkedProcessedMarker(e,processedKey,item.key,r);
         if(marker==="verified"){
           // A processed marker is durable at the edge, NOT an active DB
@@ -423,7 +430,9 @@ export async function scanUnfinished(e:Env):Promise<{scanned:number,requeued:num
         requeued++;
       }catch{errors++;}
     }
-    if(errors!==pageErrorsBefore){
+    if(errors!==pageErrorsBefore||pageHasUnmaturedSource){
+      // A young source is pending rather than corrupt: do not count it as
+      // an error, but never checkpoint past its unverified Queue admission.
       // Later retries may duplicate successful sends (at-least-once),
       // but cannot silently skip the failed source on this page.
       break;
