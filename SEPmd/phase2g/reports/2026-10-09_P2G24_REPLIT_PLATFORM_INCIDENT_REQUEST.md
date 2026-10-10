@@ -46,3 +46,10 @@ The paid YSSY session was terminated safely, subscription cleanup attempted; sci
 - [Blocking GitHub issue #28](https://github.com/HKcode22/ReplitTranvr/issues/28)
 
 Platform documentation: https://docs.replit.com/features/publishing/deployment-types and https://docs.replit.com/features/publishing/monitoring-a-deployment (accessed 2026-10-09).
+
+
+## New log evidence / IMPORTANT LOCAL-TIME CORRECTION (2026-10-09)
+
+The Replit Cloud UI appears to display its log timestamps in **Pacific local time**, as verified by exact alignment with independent GitHub request timestamps converted from UTC. Consequently the original **2026-10-09 04:58:21 UTC** suspected instance transition is **Thursday October 8 at 9:58:21 PM PDT**. Please retrieve **Oct 8 9:57–10:01 PM PDT** in the Replit log UI; the later published logs labelled Oct 9 11:04–17:18 were a *different observation window*. Ask Replit Support to confirm whether displayed log timestamps follow browser locale and provide instance reason codes in UTC.
+
+The later submitted log excerpt has **five system SIGTERM lines, four explicit application restarts and 41 transient pre-listen healthcheck `/` failures**. Two observed GitHub root probe latencies of **5391ms** and **3254ms** closely align with those subsequent app startups, demonstrating the relevance of cold-start timing but not proving the original failure's cause. Full evidence: [platform lifecycle / observer timestamp correlation](2026-10-09_P2G24_REPLIT_LIFECYCLE_COLD_START_GITHUB_CORRELATION.md).
