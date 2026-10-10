@@ -40,3 +40,20 @@ These requirements make a dual-hash *prospective versioned* incoming receipt des
 - Finish independent final wall-clock 120-minute no-credit R0 baseline and R1–R11 fault rehearsals after all prerequisites; any host deployment is separately permissioned.
 
 **Decision:** Keep the dual-hash pipeline and metadata guard in the experimental namespace, not imported by current paid callback/owner code. Historical artifacts unchanged; no production merge/release. 
+
+## Two-store non-atomicity explicitly quantified (new TEST-ONLY safety model)
+
+The offline scenario model `experiments/phase2g_rehearsal/dual_store_receipt_fault_matrix_v39.ts` and 10 tests `tests/phase2g_dual_store_receipt_fault_matrix_v39.test.ts` now produce explicit, **non-success statuses** for each of:
+
+- Queue full-payload committed, logged receipt metadata fails -> queued bytes remain but original sender is **not** confirmed 2xx; replay and receipt completion are required
+- Logged receipt metadata committed, Queue fails -> **ghost** hash-only record without raw source, never scientific evidence
+- Process SIGKILL after either first commit -> first-system-only state must be repaired/censored, not passed
+- Both committed but sender never received 2xx, or owner crashed before responding -> cannot claim sender ACK; supplier-billed behavior remains independently unknown
+- Both committed but latency >10s -> upstream timeout, despite eventually successful SQL
+- Queue 24h expiry with metadata still retained -> raw source unavailable, no scientific success
+- Either service entirely unavailable before first commit -> source not admitted
+- Baseline both accepted within independent sender budget -> only INFRASTRUCTURE receipt accepted; **scientific 120m continuity is never inferred by this model**.
+
+The 10/10 isolated tests passed on [GitHub CI #38051620243](https://github.com/HKcode22/ReplitTranvr/actions/runs/38051620243), together with the now **129/129 offline tests** and the existing SQL crash suite. This demonstrates correct *failure detection/classification*, not a fix for cross-service atomicity or actual hosting reliability.
+
+**Outstanding design decision:** a truly independent durable first-receipt ledger is needed with an explicitly reviewed failure-recovery state machine, but adding a second required external commit to synchronous ingress may itself violate the 10s provider ACK deadline. No Cloudflare resource creation or paid cloud plan is authorized. Validate cost and real sender timings **before** exposing billable Stage-1 traffic.
