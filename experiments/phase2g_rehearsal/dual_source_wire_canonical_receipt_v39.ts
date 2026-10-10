@@ -15,6 +15,9 @@ const decoder = new TextDecoder("utf-8",{fatal:true});
 const HASH=/^[a-f0-9]{64}$/;
 const ID=/^[A-Za-z0-9_.:-]{1,160}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const token=(x:unknown):x is string=>typeof x==="string"&&ID.test(x);
+const uuid=(x:unknown):x is string=>typeof x==="string"&&UUID.test(x);
+const hash64=(x:unknown):x is string=>typeof x==="string"&&HASH.test(x);
 
 export type DualSourceReceiptV2 = Readonly<{
   schema:"v39.phase2g-synthetic-wire-and-canonical-receipt.v2";
@@ -44,7 +47,7 @@ export type DualSourceMessageV2 = Readonly<{
 }>;
 
 function iso(s:string):boolean{
-  return /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(s)&&
+  return typeof s==="string"&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(s)&&
     Number.isFinite(Date.parse(s));
 }
 async function sha(input:Uint8Array|string):Promise<string>{
@@ -132,15 +135,15 @@ function requireObject(o:unknown):Record<string,any>{
 function validateReceipt(r:DualSourceReceiptV2):void{
   if(r.schema!=="v39.phase2g-synthetic-wire-and-canonical-receipt.v2"||
      r.mode!=="synthetic-only"||r.v!==2||
-     !UUID.test(r.sessionId)||
-     !ID.test(r.providerSubscriptionId)||
-     !ID.test(r.notificationId)||
+     !uuid(r.sessionId)||
+     !token(r.providerSubscriptionId)||
+     !token(r.notificationId)||
      !Number.isSafeInteger(r.attemptSeqNo)||r.attemptSeqNo<0||
      !Number.isSafeInteger(r.syntheticCostCredits)||r.syntheticCostCredits<0||
      !iso(r.providerAttemptUtc)||!iso(r.providerGeneratedUtc)||
      !iso(r.firstEdgeReceivedAtUtc)||
      !Number.isSafeInteger(r.wireBytes)||r.wireBytes<1||
-     ![r.wireSha256,r.canonicalSha256,r.attemptKey,r.receiptId].every(x=>HASH.test(x)))
+     ![r.wireSha256,r.canonicalSha256,r.attemptKey,r.receiptId].every(hash64))
     throw new Error("SOURCE_RECEIPT_SCHEMA_INVALID");
 }
 
@@ -164,7 +167,7 @@ async function macHex(secret:string,msg:string):Promise<string>{
   return [...new Uint8Array(sig)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 function equalHash(x:string,y:string):boolean{
-  if(!HASH.test(x)||!HASH.test(y))return false;
+  if(!hash64(x)||!hash64(y))return false;
   let diff=0;
   for(let i=0;i<64;i++)diff|=x.charCodeAt(i)^y.charCodeAt(i);
   return diff===0;
@@ -178,7 +181,7 @@ export async function createSyntheticDualSourceMessageV2(input:{
   privateEdgeSigningKey:string;
   maxWireBytes?:number;
 }):Promise<DualSourceMessageV2>{
-  if(!UUID.test(input.sessionId)||!ID.test(input.expectedProviderSubscriptionId)||
+  if(!uuid(input.sessionId)||!token(input.expectedProviderSubscriptionId)||
      !iso(input.trustedReceivedAtUtc))throw new Error("SOURCE_TRUSTED_CONTEXT_INVALID");
   const ceiling=input.maxWireBytes??60_000;
   if(!Number.isSafeInteger(ceiling)||ceiling<1||ceiling>120_000)
@@ -194,7 +197,7 @@ export async function createSyntheticDualSourceMessageV2(input:{
   const notice=obj.id,providerSub=obj.subscription?.id,
     att=obj.deliveryAttempt,attemptSeq=att?.seqNo,cost=att?.costCredits,
     attemptTime=att?.timestampUtc,generatedTime=obj.timestampUtc;
-  if(!ID.test(notice)||!ID.test(providerSub)||providerSub!==input.expectedProviderSubscriptionId||
+  if(!token(notice)||!token(providerSub)||providerSub!==input.expectedProviderSubscriptionId||
      !Number.isSafeInteger(attemptSeq)||attemptSeq<0||
      !Number.isSafeInteger(cost)||cost<0||
      typeof attemptTime!=="string"||!iso(attemptTime)||
