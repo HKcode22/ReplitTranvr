@@ -51,3 +51,23 @@ Here `canonical` sorts JSON object keys. Consequently `clean.provider_content_bl
 - Final **120-minute wall-clock no-credit rehearsal** has not run and requires isolated staging, verified $0 additional cost, and user approval for any cloud deployment.
 
 **Current decision: PAID YSSY Stage-1 NO-GO.** Keep draft PR #27 and incident issue #28 as evidence; no `main` merge until prospective science/security review.
+
+## High-priority P05/P06 extension: independent synthetic sender deadline vs actual V3.9 route
+
+[CI #38050244217](https://github.com/HKcode22/ReplitTranvr/actions/runs/38050244217) COMPLETED SUCCESS. Both jobs passed: **99/99** offline Vitest, **29/29** real PostgreSQL/actual-route integration tests, 18 standalone callback-health scenarios, typecheck and disposable SIGKILL→UNLOGGED reset.
+
+**Adversarial test:** 22 distinct fictional callbacks were posted simultaneously to the **actual** V3.9 prepaid parser/handler on disposable loopback HTTP. Each object-storage upload was artificially delayed **550 ms**, and the exact-session SQL lock serialized the requests. The fake sender enforced its **own** `AbortSignal.timeout(10_000)`; the database pool had a 22-second acquisition timeout for this fixture only.
+
+```
+SYNTHETIC_ACTUAL_ROUTE_SENDS=22
+SYNTHETIC_SENDER_OBSERVED_200=18
+SYNTHETIC_INTERNAL_COMMITTED=22
+SENDER_SERVER_ACK_DIVERGENCE_EXPOSED=true
+EXTERNAL_PROVIDER_CALLS=0
+STORAGE_BACKEND=in_memory_fake
+REAL_REPLIT_LATENCY_PROVEN=false
+```
+
+All **22** distinct notifications durably committed under the *fake storage* contract, but only **18** timely HTTP 200 responses were observed independently by the synthetic sender. **Four timeouts** show that a V3.9 internal delivery-success counter can disagree with a sender's record of timely acknowledgments without any failed SQL transaction. This is a synthetic architecture risk, not evidence that an actual AeroDataBox sender billed/retried those four notifications, nor an explanation of P2G22's historical **260 external /259 internal** (which is the reverse-direction mismatch). The correct decision remains NO-GO if actual provider records and internal scientific ledger are inconsistent.
+
+**Technical implications:** A bounded pool wait alone is inadequate. The prospective upstream durable frontdoor must authenticate source, persist the complete original bytes **before** returning 2xx to the source, track original receipt time, separate source/sender ACK evidence from later Replit processing, support idempotent at-least-once relay without extra provider calls/credits, and fail closed on queue quota or expiry. Scientific session loss after UNLOGGED crash requires an independent, prospective control-plane recovery contract or censoring. An actual Replit/real storage network latency and published Autoscale lifespan test are still missing; this fixture cannot prove actual paid reliability. No Cloudflare provisioning, billable API, production deployment or scientific DB mutation was conducted.
