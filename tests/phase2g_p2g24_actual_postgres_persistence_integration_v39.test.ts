@@ -1916,6 +1916,67 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
         client,expected,journalKey,snapshotKey,
         originalWire:raw,originalCanonicalBlob:blob!
       };
+      const sourceId="prepaid:"+SESSION+":"+originally.deliveryId;
+      // A configured 168h period is useless after the source object expires.
+      const exp=await state.pool!.query(
+        "SELECT expires_at_utc FROM clean.provider_content_blob_ref "+
+        "WHERE source_kind='webhook' AND source_record_id=$1",[sourceId]
+      );
+      expect(exp.rowCount).toBe(1);
+      await state.pool!.query(
+        "UPDATE clean.provider_content_blob_ref "+
+        "SET expires_at_utc='2020-01-01T00:00:00Z' "+
+        "WHERE source_kind='webhook' AND source_record_id=$1",[sourceId]
+      );
+      await expect(restoreSyntheticExactRuntimeFromJournalV39(opts))
+        .rejects.toThrow("P13_EXACT_RESTORE_ORIGINAL_BLOB_RETENTION_EXPIRED");
+      expect(await count()).toEqual({logged:1,unlogged:0});
+      await state.pool!.query(
+        "UPDATE clean.provider_content_blob_ref SET expires_at_utc=$1 "+
+        "WHERE source_kind='webhook' AND source_record_id=$2",
+        [exp.rows[0].expires_at_utc,sourceId]
+      );
+
+      // Even a same-hash second LOGGED ref for the same original delivery
+      // makes the replay authority ambiguous: NEVER choose arbitrarily.
+      const secondRef="77777777-7777-4777-8777-777777777777";
+      const duplicate=await state.pool!.query(
+        "INSERT INTO clean.provider_content_blob_ref("+
+        "blob_ref_id,storage_kind,contract_version,object_name,"+
+        "content_class,content_sha256,content_bytes,source_kind,"+
+        "source_record_id,persisted_at_utc,retention_hours,expires_at_utc) "+
+        "SELECT $1::uuid,storage_kind,contract_version,object_name,"+
+        "content_class,content_sha256,content_bytes,source_kind,"+
+        "source_record_id,persisted_at_utc,retention_hours,expires_at_utc "+
+        "FROM clean.provider_content_blob_ref "+
+        "WHERE source_kind='webhook' AND source_record_id=$2",
+        [secondRef,sourceId]
+      );
+      expect(duplicate.rowCount).toBe(1);
+      await expect(restoreSyntheticExactRuntimeFromJournalV39(opts))
+        .rejects.toThrow("P13_EXACT_RESTORE_ORIGINAL_BLOB_NOT_UNIQUE");
+      expect(await count()).toEqual({logged:2,unlogged:0});
+      // Only delete the synthetic injected duplicate in disposable PG.
+      await state.pool!.query(
+        "DELETE FROM clean.provider_content_blob_ref WHERE blob_ref_id=$1::uuid",
+        [secondRef]
+      );
+      expect(await count()).toEqual({logged:1,unlogged:0});
+
+      // A surviving active runtime owner may still accept callbacks, so
+      // restore must NOT attach to or overwrite such an unsafe session.
+      await state.pool!.query(
+        "INSERT INTO clean.prepaid_probe_session_runtime("+
+        "session_id,provider_subscription_id,state,expires_at_utc) "+
+        "VALUES($1,$2,'active','2099-01-01T00:00:00Z')",
+        [SESSION,SUB]
+      );
+      await expect(restoreSyntheticExactRuntimeFromJournalV39(opts))
+        .rejects.toThrow("P13_EXACT_RESTORE_PARTIAL_OR_CONFLICTING_RUNTIME");
+      await state.pool!.query(
+        "DELETE FROM clean.prepaid_probe_session_runtime WHERE session_id=$1",
+        [SESSION]
+      );
       await expect(restoreSyntheticExactRuntimeFromJournalV39({
         ...opts,expected:{
           ...expected,ownerFrozenRunSha256:"0".repeat(64)
@@ -1975,6 +2036,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       console.log("P13_DISPOSABLE_QUARANTINED_REPLAY_LOGGED_BLOB_ADDED=0");
       console.log("P13_DISPOSABLE_QUARANTINED_REPLAY_IDEMPOTENT=true");
       console.log("P13_DISPOSABLE_QUARANTINED_REPLAY_CALLBACK_RESTARTED=false");
+      console.log("P13_QUARANTINED_REPLAY_REJECTS_EXPIRED_DUPLICATE_AND_ACTIVE_OWNER=true");
       console.log("P13_REAL_PROVIDER_PROVENANCE_ATTESTED=false");
       console.log("P13_PAID_REPLAY_AUTHORIZED=false");
     }finally{client.release();}
