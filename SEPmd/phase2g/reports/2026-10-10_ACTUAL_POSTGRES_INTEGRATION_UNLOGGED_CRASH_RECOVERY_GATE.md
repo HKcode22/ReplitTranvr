@@ -45,3 +45,18 @@ Therefore:
 4. Apply the previously drafted bounded Stage-1 prospective retry amendment, approve exact source/build hashes, GitHub owner/watchdog integration and appropriate callback destination only **after all safety and scientific review gates pass**.
 
 **Cost/action:** 0 AeroDataBox provider calls; 0 Cloudflare resources activated, 0 R2/Queues Workers; 0 scientific DB mutations; 0 Replit deployment changes. Tests use standard GitHub-hosted disposable CI on a public repository. Draft PR #27 unchanged in deployment status.
+
+## Follow-on result: local real HTTP synthetic requests + real PostgreSQL (11/11 tests)
+
+[CI run #38037635428](https://github.com/HKcode22/ReplitTranvr/actions/runs/38037635428), source `5c4ad57fc0d5abb60f8c442b6a9f3e3b47c56c28`: **BOTH jobs SUCCESS**. Same 84/84 Vitest offline suite +18 standalone callbacks, compile and typecheck. PostgreSQL job expanded to **11/11** true SQL-backed persistence tests; actual SIGKILL/restart confirms `BEFORE=1|1`, `AFTER=1|0`.
+
+Four new tests spin up a disposable loopback-only Express HTTP listener and call the real `persistPrepaidProbeWebhookV39` with isolated PostgreSQL and in-memory mock object storage:
+
+1. Synthetic ~21 KB JSON HTTP POST responds 200 **only after** blob readback and committed logged/unlogged SQL.
+2. Injected 220 ms blob upload delay delays HTTP 200 by at least ~190 ms. This establishes correct **ACK ordering** at the mock boundary, **NOT** real provider/Replit P95/P99 latency.
+3. Two identical, concurrent HTTP POSTs are serialized by PostgreSQL session row locking; both receive 200, but only **one** unique delivery and blob reference are persisted. Callback request/success counters record two 2xx requests appropriately.
+4. Injected blob-storage failure causes HTTP 503, zero committed delivery records, and one failure count.
+
+**Limits:** The synthetic HTTP listener copies the minimal route/persistence behavior; it does not use the actual published Replit callback-only route/middleware; blob storage is in memory rather than real Replit Object Storage. No full nonempty physical-v2 flight record was processed, no cloud network/SLO was tested, and no actual production/frozen scientific replay after crash was achieved. No paid API calls, scientific DB changes, deployments, Cloudflare creation, or R2 usage.
+
+**Next missing gate:** Test a full synthetic *actual published-handler-equivalent* secret-authenticated route with nonempty provider flight records and real storage latency in an isolated environment; check P95/P99 and request timeouts against the provider SLA. Then prove source-time-authenticated queue replay under actual UNLOGGED reset, including independent signed session and attempt ledger; absent that proof, fail closed rather than mark the Stage-1 probe complete.
