@@ -1,5 +1,8 @@
 # P15 – Six primary callback health checks plus four conditional recovery checks
 
+> **SUPERSEDED AS PREFERRED CANDIDATE (2026-10-10):** The prospective test preference is now **SIX primary + SIX conditional backup health checks (12 maximum)**. See [6+6 draft amendment](../amendments/DRAFT_2026-10-10_YSSY_STAGE1_SIX_PRIMARY_SIX_BACKUP_WATCHDOG.md). This 6+4 record is retained as the test/control baseline; **neither proposal is approved for paid use**, and the actual deployed three-strike watchdog is unchanged.
+
+
 **Date:** 2026-10-10. **Status: ISOLATED IMPLEMENTATION PROTOTYPE / PROSPECTIVE SCIENCE REVIEW ONLY.**
 **Paid-live recommendation: NO-GO.** This is not a source-of-truth modification to V3.9 F.8, not a new authorization, and not a deployed change.
 
