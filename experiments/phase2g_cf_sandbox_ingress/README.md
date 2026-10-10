@@ -34,3 +34,8 @@ Full RFC: SEPmd/phase2g/amendments/DRAFT_2026-10-10_PHASE2G_STAGE1_DURABLE_FAILO
 Phase2G gate: SEPmd/phase2g/reports/2026-10-09_YSSY_STAGE1_SUNDAY_PDT_CONTINGENCY_AND_RETRY_GATE.md
 Issue: https://github.com/HKcode22/ReplitTranvr/issues/28
 Cloudflare references: https://developers.cloudflare.com/r2/api/workers/workers-api-reference/ ; https://developers.cloudflare.com/queues/configuration/batching-retries/
+## Signed source-time provenance — sandbox added
+
+- Portable WebCrypto HMAC helper: experiments/phase2g_cf_sandbox_ingress/provenance.ts; mandatory 48+ character test key; version, exact session, receipt ID, provider-attempt ID, source body SHA-256, original UTC edge time are covered. Tampering with any of these changes the signature.
+- Synthetic queue relay now signs immutable receipt metadata into an x-p2g-edge-provenance-hmac header before sending ONLY to the disposable sandbox verification route, and refuses relay if the key is missing. Replit production prepaid callback still DOES NOT trust or recognize this header; implementation of verified provenance and time-window semantics there remains a future separately reviewed change.
+- GitHub offline CI #38020081900 PASSED: 53 Vitest tests in 10 files (including 8 Worker-interface and 6 HMAC provenance tests), 18 independent callback-health scenarios, auditor compile and project typecheck. R2, Queues and external HTTP were simulated: this proves code-level tests, NOT deployment-level reliability.
