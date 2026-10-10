@@ -3,6 +3,19 @@
 **Date:** 2026-10-10. **Status: ISOLATED IMPLEMENTATION PROTOTYPE / PROSPECTIVE SCIENCE REVIEW ONLY.**
 **Paid-live recommendation: NO-GO.** This is not a source-of-truth modification to V3.9 F.8, not a new authorization, and not a deployed change.
 
+## Verified CI checkpoint — actual source commit 21cfff48b8fd4ef0885e57c27999023f24caec83
+
+[GitHub Actions #38087817211](https://github.com/HKcode22/ReplitTranvr/actions/runs/38087817211) **COMPLETED SUCCESS IN BOTH JOBS** with **28 offline Vitest suites / 251 of 251 tests passing**, 18 separately isolated actual health-function cases, TypeScript typecheck and **36/36 real V3.9 localhost disposable PostgreSQL tests**. Dedicated isolated PostgreSQL 16 SIGKILL/reset check again confirmed UNLOGGED state disappearance while the one LOGGED synthetic owner binding survived. All traffic was to localhost / synthetic senders, with NO actual paid AeroDataBox calls/credits, cloud-resource provisioning, Replit publish, scientific database writes or `main` merge. This is GitHub Actions quota usage, not a real $0 hosted 120-minute rehearsal.
+
+**The adversarial integration tests caught and corrected two meaningful false-safe cases before this green result:**
+
+- A known missing signed provider-emulator billable attempt could be masked by a less specific "independent sender watermark unverified" classification and a recovered HEALTHY GET, leaving the hypothetical owner running. The `ATTEMPT_OR_BILLING_GAP` veto now takes precedence and stops at the first observation even when GET returns 200.
+- A healthy endpoint could previously leave known missing original bytes, irreconcilable physical-v2 identity or expired durable backlog categorized as monitoring recovery rather than hard scientific loss. These evidence-failure states now stop immediately; *mere lack of independent verification* without a known loss remains audit-pending on healthy samples, but cannot justify outage grace.
+
+**Additional three tests** bind the six-plus-four candidate to independently signed **synthetic** sender and edge HMAC attempt evidence. Matching signed identities alone are still insufficient without separately declared 168-hour raw-byte durability; with it the 6+4 candidate can recover in the synthetic policy test, never scientifically approve payment or completion. A deliberately missing billed attempt causes an immediate veto. Combined new six-plus-four cases amount to **26** tests beyond previous baseline 225 (23 in the 6+4 model tests, 3 in the signed-evidence integration test).
+
+**Crucial limit:** These test fixtures are *not* a production-verifiable independent AeroDataBox sender ledger, hosted durability, or a representative 120-minute wall-clock simulation. The signed sender is an emulator and source/retention flags are declared by the test. The current paid supervisor `CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3` is **unchanged** and unmerged. The six primary plus four conditional backup policy is a **selected prospective design**, NOT a ready-to-enable live service option.
+
 ## User-preferred policy
 
 When the *GitHub-owned supervisor's callback health monitor* encounters transient Replit HTTP/network unavailability, compare a **six-check PRIMARY health window plus four additional CONTINGENCY checks**. Preserve the full frozen 120-minute Stage-1 observation window and provider `maxDeliveryRetries=0`.
