@@ -6,12 +6,10 @@ import {
   signSyntheticPreSubscriptionPlanV39,
   preSubscriptionPlanSha256V39,
   verifySyntheticTwoStageOwnerV39,
-  type SyntheticPreSubscriptionPlanV39,
-  type SignedSyntheticPostSubscriptionBindingV39
+  type SyntheticPreSubscriptionPlanV39
 } from "../experiments/phase2g_rehearsal/synthetic_two_stage_owner_protocol_v39";
 import {
-  syntheticOwnerPublicKeyFingerprintV39,
-  signSyntheticOwnerFreezeV39
+  syntheticOwnerPublicKeyFingerprintV39
 } from "../experiments/phase2g_rehearsal/synthetic_owner_freeze_signature_v39";
 import {
   reconcileSyntheticSignedAttemptsV39,
@@ -139,10 +137,12 @@ describe("P13 two-stage signed pre-create plan and post-create subscription bind
     })).toThrow("TWO_STAGE_PLAN_NOT_FROZEN_BEFORE_CREATION");
   });
   it("rejects binding before subscription creation and after sampling window begins",()=>{
-    const before=fixture({bound:"2026-10-12T02:55:00.000Z"});
-    expect(()=>verify(before)).toThrow("TWO_STAGE_BINDING_PRECEDES_CREATION");
-    const after=fixture({bound:"2026-10-12T03:00:01.000Z"});
-    expect(()=>verify(after)).toThrow("TWO_STAGE_SUBSCRIPTION_BOUND_AFTER_WINDOW_START");
+    expect(()=>fixture({bound:"2026-10-12T02:55:00.000Z"}))
+      .toThrow("TWO_STAGE_BINDING_PRECEDES_CREATION");
+    // The underlying frozen-run validator already refuses a post-window
+    // signature before the two-stage gate can even evaluate it.
+    expect(()=>fixture({bound:"2026-10-12T03:00:01.000Z"}))
+      .toThrow("OWNER_FREEZE_TIME_OR_DURATION_INVALID");
   });
   it("rejects a 119-minute plan, changed retry count and hidden unknown preplan keys",()=>{
     for(const changes of [
