@@ -94,7 +94,7 @@ export async function ingest(request:Request,e:Env):Promise<Response>{
     return json({accepted:false,error:"NOT_ACTIVATED_FOR_PROVIDER"},503);
   }
   if(request.method!=="POST")return json({error:"POST_REQUIRED"},405);
-  const url=new URL(request.url);
+  // Preserve source arrival at the edge, not delayed R2/queue completion.\n  const firstReceivedAtUtc=new Date().toISOString();\n  const url=new URL(request.url);
   const match=/^\/api\/v1\/webhooks\/aerodatabox\/([^/]+)\/prepaid\/([^/]+)$/.exec(url.pathname);
   if(!match)return json({error:"NOT_FOUND"},404);
   if(!(await equalSecrets(decodeURIComponent(match[1]),e.EDGE_TEST_SECRET??"")))
@@ -133,7 +133,7 @@ export async function ingest(request:Request,e:Env):Promise<Response>{
 
     const candidate:Receipt={
       v:1,id:attemptHash,sessionId,attemptId,sourceSha256,rawKey,
-      firstEdgeReceivedAtUtc:new Date().toISOString(),rawBytes:bytes.byteLength
+      firstEdgeReceivedAtUtc,rawBytes:bytes.byteLength
     };
     const created=await e.RAW.put(receiptKey,JSON.stringify(candidate),{
       onlyIf:{etagDoesNotMatch:"*"},httpMetadata:{contentType:"application/json"}
