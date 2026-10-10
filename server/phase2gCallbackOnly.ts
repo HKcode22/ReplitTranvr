@@ -4,6 +4,7 @@ import express, {
   type NextFunction,
 } from "express";
 import { createServer } from "node:http";
+import {observePrepaidHttpTransportV39} from "./lib/disruption/phase2gPrepaidHttpTransportTelemetry_v39";
 import { registerV3Routes } from "./routes_v3";
 import {
   registerWorkspaceRuntimeHealthV39,
@@ -96,6 +97,16 @@ app.use((req, res, next) => {
     return;
   }
 
+  next();
+});
+
+// Passive diagnostics: surface slow/aborted actual prepaid POST responses,
+// without exposing the URL-path secret, flight payload or subscription ID.
+// This neither changes subscription/ACK behavior nor makes provider calls.
+app.use((req,res,next)=>{
+  if(req.method==="POST"&&prepaidPath.test(req.path)){
+    observePrepaidHttpTransportV39(res);
+  }
   next();
 });
 
