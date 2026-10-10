@@ -17,10 +17,11 @@ function harness(){
   let failPut=false,failSend=false,corruptRaw=false,consumerCalls=0;
   const enc=new TextEncoder();
   const bucket={
-    async put(key:string,value:string|ArrayBuffer|Uint8Array,opt?:{onlyIf?:{etagDoesNotMatch?:string}}){
+    async put(key:string,value:string|ArrayBuffer|Uint8Array,opt?:{onlyIf?:{etagDoesNotMatch?:string;etagMatches?:string}}){
       events.push("put:"+key.split("/")[1]);
       if(failPut)throw new Error("FAKE_R2_FAIL");
       if(opt?.onlyIf?.etagDoesNotMatch==="*"&&map.has(key))return null;
+      if(opt?.onlyIf?.etagMatches&&map.get(key)?.etag!==opt.onlyIf.etagMatches)return null;
       const data=typeof value==="string"?enc.encode(value):new Uint8Array(value);
       const etag=createHash("md5").update(data).digest("hex");
       map.set(key,{data:new Uint8Array(data),etag});
@@ -41,8 +42,18 @@ function harness(){
     },
     async list(opts?:{prefix?:string;cursor?:string;limit?:number}){
       const items=[...map.keys()].filter(k=>k.startsWith(opts?.prefix??"")).sort();
-      return {objects:items.map(key=>({key,etag:map.get(key)!.etag,size:map.get(key)!.data.length})),
-        truncated:false,cursor:undefined};
+      // Local deterministic mock pagination: opaque Cloudflare cursors are
+      // simulated using the last seen object key, never sent to real R2.
+      const available=opts?.cursor?items.filter(key=>key>opts.cursor!):items;
+      const limit=opts?.limit??1000;
+      const page=available.slice(0,limit);
+      const truncated=available.length>page.length;
+      return {
+        objects:page.map(key=>({
+          key,etag:map.get(key)!.etag,size:map.get(key)!.data.length
+        })),
+        truncated,cursor:truncated?page.at(-1):undefined
+      };
     },
   };
   const env:Env={
@@ -318,6 +329,68 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
       expect(ack).toHaveBeenCalledTimes(2);
       expect(fetched).toHaveBeenCalledTimes(1);
     }finally{globalThis.fetch=oldFetch;}
+  });
+
+  it("P12 351 receipt indexes: restarted bounded scanner advances its R2 cursor beyond first 300 processed, finds last orphan",async()=>{
+    const h=harness();
+    const bodyBytes=new TextEncoder().encode(raw);
+    const sourceSha256=createHash("sha256").update(bodyBytes).digest("hex");
+    const rawKey="p2g-sandbox/raw/"+sourceSha256+".json";
+    await h.bucket.put(rawKey,bodyBytes);
+    const indexKeys:string[]=[];
+    const firstEdgeReceivedAtUtc=new Date(Date.now()-300_000).toISOString();
+    for(let i=0;i<351;i++){
+      const attemptId="attempt-"+String(i).padStart(4,"0");
+      const id=createHash("sha256").update(session+"\n"+attemptId).digest("hex");
+      const receiptKey="p2g-sandbox/index/"+id+".json";
+      indexKeys.push(receiptKey);
+      await h.bucket.put(receiptKey,JSON.stringify({
+        v:1,id,sourceSha256,sessionId:session,
+        attemptId,firstEdgeReceivedAtUtc,rawKey,rawBytes:bodyBytes.length
+      }));
+    }
+    indexKeys.sort();
+    // First 350 signed synthetic source receipts are already processed.
+    // Lexically last one is an orphan after crash-before-Queue-enqueue.
+    for(const key of indexKeys.slice(0,350)){
+      const id=key.slice("p2g-sandbox/index/".length,-5);
+      await h.bucket.put(key.replace("/index/","/processed/"),
+        JSON.stringify({
+          v:1,receiptKey:key,receiptId:id,sourceSha256,
+          firstEdgeReceivedAtUtc,receiverDurablyPersisted:true,
+          processedAtUtc:new Date().toISOString()
+        }));
+    }
+    const first=await scanUnfinished(h.env);
+    expect(first).toEqual({scanned:300,requeued:0,errors:0});
+    expect(h.messages).toHaveLength(0);
+    const cursorKey="p2g-sandbox/control/scanner-cursor-v1.json";
+    const progress=JSON.parse(new TextDecoder().decode(h.map.get(cursorKey)!.data));
+    expect(progress.v).toBe(1);
+    expect(progress.cursor).toBeTruthy();
+    const second=await scanUnfinished(h.env);
+    expect(second).toEqual({scanned:51,requeued:1,errors:0});
+    expect(h.messages).toEqual([{receiptKey:indexKeys[350]}]);
+    const final=JSON.parse(new TextDecoder().decode(h.map.get(cursorKey)!.data));
+    expect(final.cursor).toBe(null);
+  });
+
+  it("P12 corrupt durable scan cursor refuses to falsely advance/announce recovery",async()=>{
+    const h=harness();
+    await h.bucket.put("p2g-sandbox/control/scanner-cursor-v1.json",
+      JSON.stringify({v:1,cursor:{"forged":true},observedAtUtc:"not UTC"}));
+    expect(await scanUnfinished(h.env))
+      .toEqual({scanned:0,requeued:0,errors:1});
+    expect(h.messages).toHaveLength(0);
+  });
+
+  it("P12 uncommitted R2 checkpoint write signals error and cannot claim fully durable scanner cursor",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    h.putFail(true);
+    const s=await scanUnfinished(h.env);
+    expect(s).toMatchObject({scanned:1,requeued:0,errors:1});
+    expect(h.map.has("p2g-sandbox/control/scanner-cursor-v1.json")).toBe(false);
   });
 
 });
