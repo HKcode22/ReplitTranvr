@@ -613,7 +613,8 @@ export async function restoreSyntheticCompleteWindowV39(
         identityResolutionStatus:r.identity_resolution_status,
         codeshareResolutionStatus:r.codeshare_resolution_status,
         flightInstanceId:r.flight_instance_id,
-        initialServiceDate:r.initial_service_date,
+        initialServiceDate:r.initial_service_date===null?null:
+          new Date(r.initial_service_date).toISOString().slice(0,10),
         operatingCarrier:r.operating_carrier,
         operatingFlightNumber:r.operating_flight_number,
         originIcao:r.origin_icao,destinationIcao:r.destination_icao,
@@ -632,7 +633,9 @@ export async function restoreSyntheticCompleteWindowV39(
     if(!itemsAudit.itemEvidenceConsistent||
        itemsAudit.errors.length!==0||
        itemsAudit.observedItemCount!==expectedItemRows.length)
-      throw Error("P13_WINDOW_POST_RESTORE_PHYSICAL_V2_INCONSISTENT");
+      throw Error("P13_WINDOW_POST_RESTORE_PHYSICAL_V2_INCONSISTENT:"+
+        itemsAudit.errors.join(",")+":expected="+
+        itemsAudit.expectedItemCount+":observed="+itemsAudit.observedItemCount);
     await c.query("COMMIT");
     return {
       attemptsRecovered:120,
