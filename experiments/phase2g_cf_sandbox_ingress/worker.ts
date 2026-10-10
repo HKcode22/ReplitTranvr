@@ -136,7 +136,7 @@ export async function ingest(request:Request,e:Env):Promise<Response>{
 
     const candidate:Receipt={
       v:1,id:attemptHash,sessionId,attemptId,sourceSha256,rawKey,
-      firstEdgeReceivedAtUtc,rawBytes:bytes.byteLength
+      firstEdgeReceivedAtUtc:firstReceivedAtUtc,rawBytes:bytes.byteLength
     };
     const created=await e.RAW.put(receiptKey,JSON.stringify(candidate),{
       onlyIf:{etagDoesNotMatch:"*"},httpMetadata:{contentType:"application/json"}
