@@ -155,6 +155,25 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     expect((await ingest(h.request(),h.env)).status).toBe(503);
   });
 
+  it("P09 invalid UTF-8 and top-level arrays never get durable source ACK, R2 writes or Queue messages",async()=>{
+    const h=harness();
+    const array=await ingest(h.request({body:'[{"id":"not-an-envelope"}]'}),h.env);
+    expect(array.status).toBe(400);
+    const malformed=new Uint8Array([
+      0x7b,0x22,0x6b,0x22,0x3a,0x22,0xc3,0x28,0x22,0x7d
+    ]);
+    // JS replacement decoding would turn this into valid JSON with a
+    // REPLACEMENT CHARACTER, breaking original-wire/source parity.
+    const invalid=await ingest(new Request(testUrl,{
+      method:"POST",headers:{
+        "content-type":"application/json",
+        "x-p2g-synthetic-attempt-id":"n1:0"
+      },body:malformed
+    }),h.env);
+    expect(invalid.status).toBe(400);
+    expect(h.map.size).toBe(0);
+    expect(h.messages).toHaveLength(0);
+  });
   it("queue consumer retries safely until authenticated sandbox receiver acknowledges persisted hash",async()=>{
     const h=harness();
     expect((await ingest(h.request(),h.env)).status).toBe(200);
