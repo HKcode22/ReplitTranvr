@@ -165,12 +165,44 @@ export async function ingest(request:Request,e:Env):Promise<Response>{
   }
 }
 
+type ProcessedReceiptMarker = {
+  v:1;
+  receiptKey:string;
+  receiptId:string;
+  sourceSha256:string;
+  firstEdgeReceivedAtUtc:string;
+  receiverDurablyPersisted:true;
+  processedAtUtc:string;
+};
+/**
+ * An existing R2 key is NOT sufficient proof that a source notification was
+ * durably relayed. Verify its EXACT immutable receipt identity and readback
+ * before ack() or skipping the signed test receiver.
+ *
+ * In-memory sandbox only, never source authority for real paid science.
+ */
+async function checkedProcessedMarker(
+  e:Env,processedKey:string,receiptKey:string,r:Receipt
+):Promise<"missing"|"verified"|"corrupt">{
+  const marker=await e.RAW.get(processedKey);
+  if(!marker)return "missing";
+  try{
+    const m=parse<Partial<ProcessedReceiptMarker>>(await marker.text());
+    if(m?.v!==1||m.receiptKey!==receiptKey||m.receiptId!==r.id||
+       m.sourceSha256!==r.sourceSha256||
+       m.firstEdgeReceivedAtUtc!==r.firstEdgeReceivedAtUtc||
+       m.receiverDurablyPersisted!==true||
+       !m.processedAtUtc||!Number.isFinite(Date.parse(m.processedAtUtc)))
+      return "corrupt";
+    return "verified";
+  }catch{return "corrupt";}
+}
+
 async function relayReceipt(e:Env,receiptKey:string):Promise<"done"|"retry">{
   if(e.EDGE_EXECUTION_MODE!=="synthetic-only"||
      e.EDGE_ALLOW_SYNTHETIC_RELAY!=="1")return "retry";
   if(!/^p2g-sandbox\/index\/[0-9a-f]{64}\.json$/.test(receiptKey))return "retry";
   const processedKey=receiptKey.replace("/index/","/processed/");
-  if(await e.RAW.head(processedKey))return "done";
   const index=await e.RAW.get(receiptKey);
   if(!index)return "retry";
   const r=parse<Receipt>(await index.text());
@@ -181,6 +213,9 @@ async function relayReceipt(e:Env,receiptKey:string):Promise<"done"|"retry">{
   if(!raw||raw.size!==r.rawBytes)return "retry";
   const body=new Uint8Array(await raw.arrayBuffer());
   if(await digest(body)!==r.sourceSha256)return "retry";
+  const markerState=await checkedProcessedMarker(e,processedKey,receiptKey,r);
+  if(markerState==="verified")return "done";
+  if(markerState==="corrupt")return "retry";
 
   // Hard guard: A REAL prepaid callback route is NOT an acceptable sandbox
   // destination. Only a dedicated /__p2g-sandbox-verify test endpoint, which
@@ -215,11 +250,19 @@ async function relayReceipt(e:Env,receiptKey:string):Promise<"done"|"retry">{
   if(response.status!==200)return "retry";
   const answer=await response.json().catch(()=>null) as null | {persisted?:boolean;sourceSha256?:string};
   if(!answer?.persisted||answer.sourceSha256!==r.sourceSha256)return "retry";
-  // Only ACK the queue when a durable commit is explicitly attested by
-  // disposable TEST receiver, and processed-marker write succeeds.
-  await e.RAW.put(processedKey,JSON.stringify({
-    sourceSha256:r.sourceSha256,processedAtUtc:new Date().toISOString()
-  }));
+  // Only ACK the queue when the disposable TEST receiver claims a full
+  // durable commit AND the R2 processed marker itself is read back and
+  // compared to this exact immutable source identity. Receiver's ACK is
+  // a TEST ASSERTION, not real authenticated PostgreSQL scientific recovery.
+  const marker:ProcessedReceiptMarker={
+    v:1,receiptKey,receiptId:r.id,sourceSha256:r.sourceSha256,
+    firstEdgeReceivedAtUtc:r.firstEdgeReceivedAtUtc,
+    receiverDurablyPersisted:true,processedAtUtc:new Date().toISOString()
+  };
+  const committed=await e.RAW.put(processedKey,JSON.stringify(marker));
+  if(!committed||
+     await checkedProcessedMarker(e,processedKey,receiptKey,r)!=="verified")
+    return "retry";
   return "done";
 }
 
@@ -250,7 +293,20 @@ export async function scanUnfinished(e:Env):Promise<{scanned:number,requeued:num
         const r=parse<Receipt>(await index.text());
         const age=Date.now()-Date.parse(r.firstEdgeReceivedAtUtc);
         if(!Number.isFinite(age)||age<60_000)continue;
-        if(await e.RAW.head(processedKey))continue;
+        if(r.v!==1||r.id!==item.key.split("/").at(-1)?.slice(0,-5)||
+           !goodSession(r.sessionId)||!safeAttempt(r.attemptId)||
+           !/^p2g-sandbox\/raw\/[0-9a-f]{64}\.json$/.test(r.rawKey)||
+           !/^[0-9a-f]{64}$/.test(r.sourceSha256)){
+          errors++;continue;
+        }
+        const marker=await checkedProcessedMarker(e,processedKey,item.key,r);
+        if(marker==="verified")continue;
+        if(marker==="corrupt"){errors++;continue;}
+        const raw=await e.RAW.get(r.rawKey);
+        if(!raw||raw.size!==r.rawBytes||
+           await digest(new Uint8Array(await raw.arrayBuffer()))!==r.sourceSha256){
+          errors++;continue;
+        }
         await e.DELIVERY_QUEUE.send({receiptKey:item.key});
         requeued++;
       }catch{errors++;}
