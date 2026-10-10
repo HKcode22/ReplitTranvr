@@ -13,7 +13,9 @@ on:
       - experiments/phase2g_durable_ingress_offline_prototype_v39.ts
       - tests/phase2g_durable_ingress_offline_prototype_v39.test.ts
       - experiments/phase2g_cf_sandbox_ingress/worker.ts
+      - experiments/phase2g_cf_sandbox_ingress/provenance.ts
       - tests/phase2g_cf_sandbox_ingress_worker_v39.test.ts
+      - tests/phase2g_cf_sandbox_provenance_hmac_v39.test.ts
       - tests/phase2g_yssy_zero_billable_delivery_retries_v39.test.ts
   workflow_dispatch:
 
@@ -53,6 +55,7 @@ jobs:
             tests/phase2g_yssy_oct12_stage1_calendar_v39.test.ts \
             tests/phase2g_durable_ingress_offline_prototype_v39.test.ts \
             tests/phase2g_cf_sandbox_ingress_worker_v39.test.ts \
+            tests/phase2g_cf_sandbox_provenance_hmac_v39.test.ts \
             tests/phase2g_yssy_zero_billable_delivery_retries_v39.test.ts \
             tests/phase2g_p2g24_callback_receiver_health_v39.test.ts \
             tests/phase2g_published_callback_only_v39.test.ts \
