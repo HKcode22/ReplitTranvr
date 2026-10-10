@@ -98,7 +98,17 @@ beforeAll(async()=>{
     "delivery_attempt_utc timestamptz,",
     "delivery_attempt_cost_credits numeric CHECK(",
     "delivery_attempt_cost_credits IS NULL OR delivery_attempt_cost_credits <= 1),",
-    "notification_items integer,PRIMARY KEY(session_id,delivery_id))"
+    "notification_items integer,PRIMARY KEY(session_id,delivery_id))",
+    "; CREATE UNLOGGED TABLE clean.prepaid_probe_item_runtime(",
+    "session_id uuid NOT NULL,delivery_id text NOT NULL,item_index integer NOT NULL,",
+    "raw_item_sha256 text,flight_number text,aircraft_reg text,codeshare_status text,",
+    "runtime_flight_key text,provider_flight_id text,callsign text,operating_carrier text,",
+    "operating_flight_number text,origin_icao text,destination_icao text,",
+    "origin_time_zone text,scheduled_gate_out_utc timestamptz,",
+    "scheduled_gate_in_utc timestamptz,flight_instance_id text,",
+    "initial_service_date date,provisional_identity_key text,",
+    "codeshare_resolution_status text,identity_resolution_status text,",
+    "received_at_utc timestamptz,PRIMARY KEY(session_id,delivery_id,item_index))"
   ].join(" "));
   const app=express();
   app.use(express.json({limit:"2mb"}));
@@ -125,7 +135,7 @@ beforeAll(async()=>{
 beforeEach(async()=>{
   state.blobs.clear();state.failUpload=false;state.uploadDelayMs=0;state.events.length=0;
   await state.pool!.query(
-    "TRUNCATE clean.provider_content_blob_ref,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime");
+    "TRUNCATE clean.provider_content_blob_ref,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime,clean.prepaid_probe_item_runtime");
   await state.pool!.query(
     "INSERT INTO clean.prepaid_probe_session_runtime(session_id,provider_subscription_id,state,expires_at_utc) VALUES($1,$2,'active','2099-01-01T00:00:00Z')",
     [SESSION,SUB]);
@@ -253,6 +263,60 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(response.status).toBe(503);
     expect(await count()).toEqual({logged:0,unlogged:0});
     expect(await session()).toEqual({requests:1,successes:0,failures:1});
+  });
+
+  it("persists 3 nonempty fictional Sydney flight items under actual PostgreSQL; UNKNOWN remains quarantined",async()=>{
+    const flights=[0,1,2].map(i=>({
+      id:"sandbox-flight-"+i,number:"QF"+(400+i),
+      codeshareStatus:"Unknown",
+      airline:{iata:"QF",icao:"QFA"},
+      departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+        scheduledTime:{utc:"2026-10-12T03:40:00.000Z"}},
+      arrival:{airport:{icao:"YMML"},
+        scheduledTime:{utc:"2026-10-12T05:15:00.000Z"}},
+      aircraft:{reg:"VH-FIK"},
+      callSign:"QFA"+(400+i)
+    }));
+    const result=await persistPrepaidProbeWebhookV39({sessionId:SESSION,
+      body:sample({flights})});
+    expect(result.itemCount).toBe(3);
+    const rows=await state.pool!.query(
+      "SELECT item_index,origin_icao,destination_icao,identity_resolution_status,codeshare_resolution_status,flight_instance_id FROM clean.prepaid_probe_item_runtime ORDER BY item_index");
+    expect(rows.rows).toHaveLength(3);
+    expect(rows.rows.map(x=>x.item_index)).toEqual([0,1,2]);
+    expect(rows.rows.every(x=>x.origin_icao==="YSSY"&&x.destination_icao==="YMML")).toBe(true);
+    expect(rows.rows.every(x=>x.identity_resolution_status==="quarantined" && x.flight_instance_id===null)).toBe(true);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(await session()).toEqual({requests:1,successes:1,failures:0});
+    // This exercises nonempty item SQL; NOT operator physical-v2 identity.
+  });
+
+  it("demonstrates session lock HOL blocking when duplicate POST overlaps slow fake storage",async()=>{
+    state.uploadDelayMs=450;
+    const body=JSON.stringify(sample({syntheticPadding:"x".repeat(5_700)}));
+    const firstStart=performance.now();
+    const first=fetch(localOrigin+"/__synthetic__/prepaid/"+SESSION,{
+      method:"POST",headers:{"content-type":"application/json"},body
+    });
+    // Wait until first callback owns the transaction and enters blob upload.
+    const waitStart=Date.now();
+    while(!state.events.includes("UPLOAD") && Date.now()-waitStart<2000)
+      await new Promise(r=>setTimeout(r,5));
+    expect(state.events).toContain("UPLOAD");
+    const secondStart=performance.now();
+    const second=fetch(localOrigin+"/__synthetic__/prepaid/"+SESSION,{
+      method:"POST",headers:{"content-type":"application/json"},body
+    });
+    const [a,b]=await Promise.all([first,second]);
+    const finish=performance.now();
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    const outputs=await Promise.all([a.json(),b.json()]);
+    expect(outputs.filter(x=>x.duplicate)).toHaveLength(1);
+    expect(finish-secondStart).toBeGreaterThanOrEqual(300);
+    expect(finish-firstStart).toBeGreaterThanOrEqual(420);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    // Demonstrates head-of-line blocking. Not a measured provider SLO.
   });
 
 });
