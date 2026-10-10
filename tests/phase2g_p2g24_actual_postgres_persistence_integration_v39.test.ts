@@ -47,6 +47,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
 }));
 import {persistPrepaidProbeWebhookV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import {registerV3Routes} from "../server/routes_v3";
+import {createSyntheticDualSourceMessageV2,verifySyntheticDualSourceMessageV2} from "../experiments/phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -671,5 +672,38 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       await stressPool.end();
     }
   },40_000);
+
+  it("actual V3.9 stored blob SHA exactly matches signed V2 canonical SHA while wire SHA remains distinct",async()=>{
+    const sourceBody='{\n  "flights":[],"subscription":{"id":"'+SUB+'"}, '+
+      '"timestampUtc":"2026-10-12T03:01:00.000Z", "id":"cross-layer-dual-001",'+
+      '"deliveryAttempt":{"seqNo":0,"costCredits":1,"timestampUtc":"2026-10-12T03:01:01.000Z"}\n}';
+    const signing="synthetic-test-edge-key-"+ "h".repeat(60);
+    const dual=await createSyntheticDualSourceMessageV2({
+      rawBytes:new TextEncoder().encode(sourceBody),
+      sessionId:SESSION,expectedProviderSubscriptionId:SUB,
+      trustedReceivedAtUtc:"2026-10-12T03:01:02.000Z",
+      privateEdgeSigningKey:signing
+    });
+    const attested=await verifySyntheticDualSourceMessageV2({
+      message:dual,privateEdgeSigningKey:signing,
+      expectedSessionId:SESSION,expectedProviderSubscriptionId:SUB,
+      trustedNowUtc:"2026-10-12T03:01:03.000Z"
+    });
+    expect(attested.verified).toBe(true);
+    const response=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:sourceBody
+    });
+    expect(response.status).toBe(200);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    const result=await state.pool!.query(
+      "SELECT content_sha256, content_bytes FROM clean.provider_content_blob_ref"
+    );
+    expect(result.rows[0].content_sha256).toBe(dual.receipt.canonicalSha256);
+    expect(result.rows[0].content_sha256).not.toBe(dual.receipt.wireSha256);
+    // This proves data-digest compatibility but NOT live signed-edge ingress:
+    // actual V3.9 handler currently has no authenticated V2 envelope.
+    expect(new TextDecoder().decode([...state.blobs.values()][0])).not.toBe(sourceBody);
+  });
 
 });
