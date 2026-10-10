@@ -1,3 +1,4 @@
+import { verifyEdgeProvenanceV1 } from "../experiments/phase2g_cf_sandbox_ingress/provenance";
 import {describe,it,expect,vi} from "vitest";
 import {
  ingest,consume,scanUnfinished,type Env
@@ -48,7 +49,8 @@ function harness(){
     RAW:bucket,DELIVERY_QUEUE:{async send(v){events.push("queue:send");if(failSend)throw new Error("FAKE_QUEUE");messages.push(v)}},
     EDGE_EXECUTION_MODE:"synthetic-only",EDGE_TEST_SECRET:secret,EDGE_TEST_DIAGNOSTICS:"1",
     EDGE_ALLOW_SYNTHETIC_RELAY:"0",EDGE_SANDBOX_RECEIVER_ORIGIN:"https://sandbox.mock.invalid",
-    EDGE_TEST_RECEIVER_PATH_SECRET:"t".repeat(40)
+    EDGE_TEST_RECEIVER_PATH_SECRET:"t".repeat(40),
+    EDGE_PROVENANCE_SIGNING_KEY:"k".repeat(64)
   };
   function request(options?:{attempt?:string;body?:string;secret?:string;method?:string;type?:string}){
     const url=testUrl.replace("/"+secret+"/","/"+(options?.secret??secret)+"/");
@@ -148,7 +150,18 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
       expect(ack).toHaveBeenCalledTimes(1);
       expect(sent).toHaveLength(1);
       expect(sent[0].url).toBe("https://sandbox.mock.invalid/__p2g-sandbox-verify");
-      expect((sent[0].headers as Record<string,string>)["x-p2g-edge-received-at"]).toBeTruthy();
+      const headers=sent[0].headers as Record<string,string>;
+      expect(headers["x-p2g-edge-received-at"]).toBeTruthy();
+      const receipt=JSON.parse(new TextDecoder().decode(h.map.get(h.messages[0].receiptKey)!.data));
+      const signed=await verifyEdgeProvenanceV1({
+        v:1,sessionId:receipt.sessionId,receiptId:receipt.id,
+        providerAttemptId:receipt.attemptId,
+        sourceSha256:receipt.sourceSha256,
+        edgeReceivedAtUtc:receipt.firstEdgeReceivedAtUtc
+      },"k".repeat(64),headers["x-p2g-edge-provenance-hmac"],{
+        sessionId:receipt.sessionId,receiptId:receipt.id,sourceSha256:receipt.sourceSha256
+      });
+      expect(signed).toBe(true);
       expect(h.map.size).toBe(3); // processed marker
       await consume(batch,h.env);
       expect(sent).toHaveLength(1);
