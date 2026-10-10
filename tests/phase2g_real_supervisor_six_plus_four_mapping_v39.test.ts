@@ -89,10 +89,10 @@ async function realCallback(f:Failure={}){
     }}
   };
   const cb=vm.runInNewContext(CODE+"\ncallbackHealthy;",sandbox,{timeout:1500})
-    as (base:string,head:string,mode:string)=>Promise<{
+    as ((base:string,head:string,mode:string)=>Promise<{
       healthy:boolean;check:string;reason:string;http_status:number|null;
       elapsed_ms:number;
-    }>;
+    }>);
   const result=await cb("https://offline.invalid",HEAD,"published");
   return {result,calls,classification:
     classifyActualSupervisorHealthForSixPlusFourV39(result)};
