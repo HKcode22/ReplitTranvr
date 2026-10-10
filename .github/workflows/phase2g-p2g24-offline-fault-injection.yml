@@ -46,6 +46,7 @@ on:
       - tests/phase2g_dual_store_receipt_fault_matrix_v39.test.ts
       - experiments/phase2g_rehearsal/postgres_continuity_guard_v39.ts
       - experiments/phase2g_rehearsal/disposable_replay_blob_ambiguity_v39.ts
+      - experiments/phase2g_rehearsal/disposable_exact_science_restore_v39.ts
       - experiments/phase2g_rehearsal/synthetic_120min_science_recovery_audit_v39.ts
       - tests/phase2g_synthetic_120min_science_recovery_audit_v39.test.ts
       - tests/phase2g_postgres_continuity_guard_v39.test.ts
