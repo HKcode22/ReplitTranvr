@@ -60,7 +60,7 @@ import {verifyEdgeProvenanceV1} from "../experiments/phase2g_cf_sandbox_ingress/
 import {createHash as offlineShaHash} from "node:crypto";
 import {signSyntheticScienceRecoveryFrameV39,writeSyntheticLoggedScienceJournalV39,reviewSyntheticLoggedScienceJournalV39,type SyntheticScienceJournalFrameV39} from "../experiments/phase2g_rehearsal/disposable_logged_science_recovery_journal_v39";
 import {auditDisposableCrashReplayBlobRefsV39} from "../experiments/phase2g_rehearsal/disposable_replay_blob_ambiguity_v39";
-import {recordSyntheticExactRuntimeSnapshotV39,restoreSyntheticExactRuntimeFromJournalV39} from "../experiments/phase2g_rehearsal/disposable_exact_science_restore_v39";
+import {recordSyntheticExactRuntimeSnapshotV39,restoreSyntheticExactRuntimeFromJournalV39,restoreSyntheticCompleteWindowV39} from "../experiments/phase2g_rehearsal/disposable_exact_science_restore_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -2041,5 +2041,228 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       console.log("P13_PAID_REPLAY_AUTHORIZED=false");
     }finally{client.release();}
   });
+
+  it("P13 one atomic FULL YSSY 120-minute reconstruction: 120 source attempts, 8x15 UTC bins, 120 physical-v2 rows, zero extra blobs and permanent quarantine",async()=>{
+    await state.pool!.query(
+      "CREATE SCHEMA IF NOT EXISTS p2g_science_recovery_fixture"
+    );
+    await state.pool!.query(
+      "CREATE TABLE IF NOT EXISTS p2g_science_recovery_fixture.signed_source_item_journal("+
+      "session_id uuid NOT NULL,attempt_key text NOT NULL,signed_record jsonb NOT NULL,"+
+      "PRIMARY KEY(session_id,attempt_key))"
+    );
+    await state.pool!.query(
+      "CREATE TABLE IF NOT EXISTS p2g_science_recovery_fixture.exact_runtime_snapshot("+
+      "session_id uuid NOT NULL,attempt_key text NOT NULL,signed_record jsonb NOT NULL,"+
+      "PRIMARY KEY(session_id,attempt_key))"
+    );
+    const start=Date.parse("2026-10-12T03:00:00.000Z");
+    const at=(n:number)=>new Date(start+n*60000).toISOString();
+    const ownerFrozenRunSha256="9".repeat(64);
+    const snapshotKey="p13-fixture-snapshot-full-window-"+"s".repeat(64);
+    const journalKey="p13-fixture-journal-full-window-"+"j".repeat(64);
+    const senderKey="p13-independent-fixture-sender-"+"e".repeat(64);
+    const expectedBase={
+      sessionId:SESSION,providerSubscriptionId:SUB,ownerFrozenRunSha256
+    };
+    const attempts:ReturnType<typeof signSyntheticSenderFrameV39>["frame"]["attempts"][number][]=[];
+    const entries:{
+      attemptKey:string;
+      originalWire:Uint8Array;
+      originalCanonicalBlob:Uint8Array;
+    }[]=[];
+    const snapshots:any[]=[];
+    for(let i=0;i<120;i++){
+      const wire=JSON.stringify(sample({
+        id:"synthetic-window-yssy-source-"+String(i).padStart(3,"0"),
+        timestampUtc:at(i),
+        deliveryAttempt:{
+          seqNo:0,costCredits:1,timestampUtc:at(i)
+        },
+        flights:[{
+          id:"p13-window-physical-"+i,
+          number:"QF"+(700+i),codeshareStatus:"IsOperator",
+          airline:{iata:"QF",icao:"QFA"},
+          departure:{airport:{icao:"YSS",timeZone:"Australia/Sydney",icao_alt:"YSSY",icao:"YSSY"},
+            scheduledTime:{utc:at(i)}},
+          arrival:{airport:{icao:"YMEL"},
+            scheduledTime:{utc:at(i+80)}}
+        }]
+      }));
+      const body=JSON.parse(wire);
+      const raw=new TextEncoder().encode(wire);
+      const original=await persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body,receivedAtUtc:new Date(at(i))
+      });
+      expect(original.itemCount).toBe(1);
+      const items=await state.pool!.query(
+        "SELECT * FROM clean.prepaid_probe_item_runtime "+
+        "WHERE session_id=$1 AND delivery_id=$2",
+        [SESSION,original.deliveryId]
+      );
+      expect(items.rowCount).toBe(1);
+      const p=items.rows[0];
+      expect(p.origin_icao).toBe("YSSY");
+      expect(p.identity_resolution_status).toBe("resolved");
+      expect(p.codeshare_resolution_status).toBe("resolved_operator");
+      const witnessed:SyntheticPhysicalItemWitnessV39={
+        sessionId:SESSION,deliveryId:original.deliveryId,
+        itemIndex:Number(p.item_index),rawItemSha256:p.raw_item_sha256,
+        originalEdgeReceivedUtc:at(i),
+        identityResolutionStatus:p.identity_resolution_status,
+        codeshareResolutionStatus:p.codeshare_resolution_status,
+        flightInstanceId:p.flight_instance_id,
+        initialServiceDate:p.initial_service_date,
+        operatingCarrier:p.operating_carrier,
+        operatingFlightNumber:p.operating_flight_number,
+        originIcao:p.origin_icao,destinationIcao:p.destination_icao,
+        scheduledGateOutUtc:p.scheduled_gate_out_utc?
+          new Date(p.scheduled_gate_out_utc).toISOString():null
+      };
+      const attemptKey=offlineShaHash("sha256")
+        .update("p13-window-attempt-"+i).digest("hex");
+      const sourceSha=offlineShaHash("sha256").update(raw).digest("hex");
+      const logged=await state.pool!.query(
+        "SELECT object_name,content_sha256 FROM clean.provider_content_blob_ref "+
+        "WHERE source_kind='webhook' AND source_record_id=$1",
+        ["prepaid:"+SESSION+":"+original.deliveryId]
+      );
+      expect(logged.rowCount).toBe(1);
+      const canonicalBlob=state.blobs.get(logged.rows[0].object_name);
+      expect(canonicalBlob).toBeDefined();
+      const frame:SyntheticScienceJournalFrameV39={
+        schema:"v39.synthetic-logged-science-recovery.v1",
+        ...expectedBase,
+        windowStartUtc:at(0),windowEndUtc:at(120),
+        attemptKey,sourceWireSha256:sourceSha,
+        firstEdgeReceivedUtc:at(i),syntheticCostCredits:1,
+        items:[witnessed]
+      };
+      const signed=signSyntheticScienceRecoveryFrameV39(frame,journalKey);
+      const expected={...expectedBase,attemptKey};
+      await writeSyntheticLoggedScienceJournalV39({
+        client:state.pool!,signed,fixtureKey:journalKey,
+        originalRawBytes:raw,expected
+      });
+      const snapshot=await recordSyntheticExactRuntimeSnapshotV39({
+        client:state.pool!,expected,journal:signed,
+        journalKey,snapshotKey,originalWire:raw,
+        originalCanonicalBlob:canonicalBlob!
+      });
+      snapshots.push(snapshot);
+      entries.push({attemptKey,originalWire:raw,
+        originalCanonicalBlob:canonicalBlob!});
+      const rawBodyHash=await state.pool!.query(
+        "SELECT raw_body_sha256 FROM clean.prepaid_probe_delivery_runtime "+
+        "WHERE session_id=$1 AND delivery_id=$2",
+        [SESSION,original.deliveryId]
+      );
+      attempts.push({
+        attemptKey,notificationId:body.id,attemptSeqNo:0,
+        providerAttemptUtc:at(i),providerGeneratedUtc:at(i),
+        wireSha256:sourceSha,
+        canonicalSha256:String(rawBodyHash.rows[0].raw_body_sha256),
+        syntheticCostCredits:1,
+        senderResponseStatus:200,senderResponseElapsedMs:230
+      });
+    }
+    expect(await count()).toEqual({logged:120,unlogged:120});
+    const signedSender=signSyntheticSenderFrameV39({
+      schema:"v39.phase2g-synthetic-independent-sender.v1",
+      mode:"synthetic-only",...expectedBase,
+      windowStartUtc:at(0),windowEndUtc:at(120),
+      attempts
+    },senderKey);
+    await state.pool!.query(
+      "TRUNCATE clean.prepaid_probe_item_runtime,"+
+      "clean.prepaid_probe_delivery_runtime,"+
+      "clean.prepaid_probe_session_runtime"
+    );
+    expect(await count()).toEqual({logged:120,unlogged:0});
+    const opts={
+      expectedSessionId:SESSION,expectedSubscriptionId:SUB,
+      expectedOwnerFrozenRunSha256:ownerFrozenRunSha256,
+      signedSender,senderKey,journalKey,snapshotKey,entries
+    };
+    const client=await state.pool!.connect();
+    try{
+      // A missing late receipt must NOT leave the first 119 recovered:
+      const last=entries[119];
+      await state.pool!.query(
+        "DELETE FROM p2g_science_recovery_fixture.exact_runtime_snapshot "+
+        "WHERE session_id=$1 AND attempt_key=$2",[SESSION,last.attemptKey]
+      );
+      await expect(restoreSyntheticCompleteWindowV39({
+        ...opts,client
+      })).rejects.toThrow("P13_WINDOW_DURABLE_INVENTORY_INCOMPLETE_OR_EXTRA");
+      expect(await count()).toEqual({logged:120,unlogged:0});
+      await state.pool!.query(
+        "INSERT INTO p2g_science_recovery_fixture.exact_runtime_snapshot "+
+        "(session_id,attempt_key,signed_record) VALUES($1,$2,$3::jsonb)",
+        [SESSION,last.attemptKey,JSON.stringify(snapshots[119])]
+      );
+      // A changed original item cannot be rescued by the same 120-item count.
+      await expect(restoreSyntheticCompleteWindowV39({
+        ...opts,client,entries:entries.map((v,i)=>i===61?{
+          ...v,originalWire:new TextEncoder().encode("bad original")
+        }:v)
+      })).rejects.toThrow();
+      expect(await count()).toEqual({logged:120,unlogged:0});
+      const restored=await restoreSyntheticCompleteWindowV39({...opts,client});
+      expect(restored).toMatchObject({
+        attemptsRecovered:120,
+        originalEightFifteenMinuteBuckets:[15,15,15,15,15,15,15,15],
+        originalCreditsReconciled:120,
+        physicalObservationRowsRestored:120,
+        existingLoggedSourceRefs:120,
+        newLoggedSourceRefs:0,
+        retainedOriginalTimestamps:true,
+        quarantined:true,idempotent:false,
+        independentRealSenderProvenanceVerified:false,
+        scientificallyCertified:false,paidRunAuthorized:false,
+        automaticPaidReplayAuthorized:false
+      });
+      expect(await count()).toEqual({logged:120,unlogged:120});
+      const bins=await state.pool!.query(
+        "SELECT floor(extract(epoch FROM (received_at_utc-$2::timestamptz))/900)::int AS bin,"+
+        "count(*)::int AS n FROM clean.prepaid_probe_item_runtime "+
+        "WHERE session_id=$1 GROUP BY bin ORDER BY bin",[SESSION,at(0)]
+      );
+      expect(bins.rows.map(x=>x.n)).toEqual([15,15,15,15,15,15,15,15]);
+      expect(bins.rows.map(x=>x.bin)).toEqual([0,1,2,3,4,5,6,7]);
+      const quarantine=await state.pool!.query(
+        "SELECT state,callback_success_2xx FROM "+
+        "clean.prepaid_probe_session_runtime WHERE session_id=$1",[SESSION]
+      );
+      expect(quarantine.rows[0]).toMatchObject({
+        state:"quarantined",callback_success_2xx:0
+      });
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body:sample(),
+        receivedAtUtc:new Date(at(2))
+      })).rejects.toThrow("PREPAID_PROBE_SESSION_NOT_ACCEPTING");
+      const twice=await restoreSyntheticCompleteWindowV39({...opts,client});
+      expect(twice).toMatchObject({
+        idempotent:true,newLoggedSourceRefs:0,
+        physicalObservationRowsRestored:120
+      });
+      expect(await count()).toEqual({logged:120,unlogged:120});
+      await state.pool!.query(
+        "DELETE FROM clean.prepaid_probe_item_runtime "+
+        "WHERE session_id=$1 AND item_index=0 AND delivery_id=$2",
+        [SESSION,snapshots[70].snapshot.delivery.delivery_id]
+      );
+      await expect(restoreSyntheticCompleteWindowV39({...opts,client}))
+        .rejects.toThrow("P13_WINDOW_PARTIAL_OR_ACTIVE_RUNTIME_FORBIDDEN");
+      expect(await count()).toEqual({logged:120,unlogged:120});
+      console.log("P13_FULL_WINDOW_8X15_SOURCE_UTC_RESTORED=true");
+      console.log("P13_FULL_WINDOW_120_PHYSICAL_V2_ROWS_RESTORED=true");
+      console.log("P13_FULL_WINDOW_NEW_LOGGED_BLOBS=0");
+      console.log("P13_FULL_WINDOW_ATOMIC_MISSING_ITEM_ROLLBACK=true");
+      console.log("P13_FULL_WINDOW_STAYS_QUARANTINED=true");
+      console.log("P13_FULL_WINDOW_REAL_SENDER_AUTHENTICATED=false");
+      console.log("P13_FULL_WINDOW_PAID_GO_AUTHORIZED=false");
+    }finally{client.release();}
+  },120000);
 
 });
