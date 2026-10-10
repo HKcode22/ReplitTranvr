@@ -68,6 +68,19 @@ export type SixPlusFourDecisionV39=Readonly<{
   publicationApproved:false;
 }>;
 
+/** Shared evaluator intentionally preserves the prior 6+4 control for regression comparison. */
+export type SixPlusSixDecisionV39=Omit<SixPlusFourDecisionV39,
+  "mode"|"contingencyFailureChecks"|"maximumConsecutiveChecks"|"state">&Readonly<{
+  mode:"synthetic-six-plus-six";
+  contingencyFailureChecks:6;
+  maximumConsecutiveChecks:12;
+  state:SixPlusFourDecisionV39["state"]|"STOP_AT_TWELVE";
+}>;
+type SixPlusNInputV39=Readonly<{
+  mode:"synthetic-only";pollMs:15000;primaryChecks:6;
+  backupChecks:4|6;samples:readonly SixPlusFourSampleV39[];
+}>;
+
 const ALL=new Set<SixPlusFourHealthV39>([
   "healthy","transient_timeout","transient_network_error",
   "transient_http_502_503_504","bad_secret","wrong_build",
@@ -111,22 +124,19 @@ function evidenceReason(x:SixPlusFourEvidenceV39):string|null{
     return "SOURCE_WATERMARK_STALE_DURING_OUTAGE";
   return null;
 }
-export function evaluateSyntheticSixPlusFourWatchdogV39(input:{
-  mode:"synthetic-only";
-  pollMs:15000;
-  primaryChecks:6;
-  backupChecks:4;
-  samples:readonly SixPlusFourSampleV39[];
-}):SixPlusFourDecisionV39{
+function evaluateSyntheticBoundedSixPlusNWatchdogV39(
+  input:SixPlusNInputV39
+):SixPlusFourDecisionV39|SixPlusSixDecisionV39{
   if(!input||input.mode!=="synthetic-only"||input.pollMs!==15000||
-     input.primaryChecks!==6||input.backupChecks!==4||
+     input.primaryChecks!==6||![4,6].includes(input.backupChecks)||
      !Array.isArray(input.samples)||input.samples.length===0||
      input.samples.length>10_000)
-    throw new Error("SIX_PLUS_FOUR_FROZEN_COMPARISON_INVALID");
+    throw new Error("SIX_PLUS_N_FROZEN_COMPARISON_INVALID");
+  const maxConsecutive=6+input.backupChecks;
 
   let count=0,peak=0,index:number|null=null,stopOwner=false,
     enteredContingency=false,recoveredHealth=false,contingencyChecksUsed=0;
-  let state:SixPlusFourDecisionV39["state"]="MONITOR_ONLY";
+  let state:SixPlusFourDecisionV39["state"]|SixPlusSixDecisionV39["state"]="MONITOR_ONLY";
   const reasons=new Set<string>();
 
   for(let i=0;i<input.samples.length;i++){
@@ -139,7 +149,7 @@ export function evaluateSyntheticSixPlusFourWatchdogV39(input:{
          e.frozenCreditCeiling,e.independentEstimatedUpperBoundSpend,
          e.currentEvidenceAgeSeconds
        ].every(integer)||e.providerMaxDeliveryRetries!==0)
-      throw new Error("SIX_PLUS_FOUR_INVALID_EVIDENCE_OR_RETRY_CONTRACT");
+      throw new Error("SIX_PLUS_N_INVALID_EVIDENCE_OR_RETRY_CONTRACT");
     const hard=s.health!=="healthy"&&!SOFT.has(s.health);
     const r=evidenceReason(e);
     // Confirmed loss/contract violations are never "just a few bad GETs".
@@ -179,22 +189,28 @@ export function evaluateSyntheticSixPlusFourWatchdogV39(input:{
     }
     if(count<=6){
       state="PRIMARY_GRACE";
-    }else if(count<=9){
+    }else if(count<maxConsecutive){
       enteredContingency=true;
       contingencyChecksUsed=count-6;
       state="CONTINGENCY_DEGRADED_BUT_DURABLE";
     }else{
       enteredContingency=true;
-      contingencyChecksUsed=4;
-      index=i;stopOwner=true;state="STOP_AT_TEN";
-      reasons.add("TEN_CONSECUTIVE_HEALTH_FAILURES");
+      contingencyChecksUsed=input.backupChecks;
+      index=i;stopOwner=true;
+      state=input.backupChecks===4?"STOP_AT_TEN":"STOP_AT_TWELVE";
+      reasons.add(input.backupChecks===4?
+        "TEN_CONSECUTIVE_HEALTH_FAILURES":
+        "TWELVE_CONSECUTIVE_HEALTH_FAILURES");
       break;
     }
   }
 
   return {
-    mode:"synthetic-six-plus-four",primaryFailureChecks:6,
-    contingencyFailureChecks:4,maximumConsecutiveChecks:10,
+    mode:input.backupChecks===4?
+      "synthetic-six-plus-four":"synthetic-six-plus-six",
+    primaryFailureChecks:6,
+    contingencyFailureChecks:input.backupChecks,
+    maximumConsecutiveChecks:maxConsecutive,
     observedChecks:index===null?input.samples.length:index+1,
     maximumObservedConsecutiveFailures:peak,
     stopOwner,stopAtIndex:index,enteredContingency,contingencyChecksUsed,
@@ -203,4 +219,26 @@ export function evaluateSyntheticSixPlusFourWatchdogV39(input:{
     paidLaunchAuthorized:false,providerRetriesChanged:false,
     liveSupervisorModified:false,publicationApproved:false
   };
+}
+
+/** Historical 6+4 comparison contract; frozen and retained as a control. */
+export function evaluateSyntheticSixPlusFourWatchdogV39(input:{
+  mode:"synthetic-only";pollMs:15000;primaryChecks:6;backupChecks:4;
+  samples:readonly SixPlusFourSampleV39[];
+}):SixPlusFourDecisionV39{
+  if(!input||input.backupChecks!==4)
+    throw new Error("SIX_PLUS_FOUR_FROZEN_COMPARISON_INVALID");
+  return evaluateSyntheticBoundedSixPlusNWatchdogV39(input)
+    as SixPlusFourDecisionV39;
+}
+
+/** New selected prospective 6+6 synthetic sensitivity test — never paid. */
+export function evaluateSyntheticSixPlusSixWatchdogV39(input:{
+  mode:"synthetic-only";pollMs:15000;primaryChecks:6;backupChecks:6;
+  samples:readonly SixPlusFourSampleV39[];
+}):SixPlusSixDecisionV39{
+  if(!input||input.backupChecks!==6)
+    throw new Error("SIX_PLUS_SIX_FROZEN_COMPARISON_INVALID");
+  return evaluateSyntheticBoundedSixPlusNWatchdogV39(input)
+    as SixPlusSixDecisionV39;
 }
