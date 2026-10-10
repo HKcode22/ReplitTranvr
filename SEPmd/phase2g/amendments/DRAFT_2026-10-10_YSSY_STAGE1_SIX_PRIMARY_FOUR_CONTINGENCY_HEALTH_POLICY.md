@@ -1,5 +1,8 @@
 # DRAFT prospective YSSY Stage-1 6+4 supervisor-health policy amendment
 
+> **SUPERSEDED AS PREFERRED CANDIDATE (2026-10-10):** The prospective test preference is now **SIX primary + SIX conditional backup health checks (12 maximum)**. See [6+6 draft amendment](DRAFT_2026-10-10_YSSY_STAGE1_SIX_PRIMARY_SIX_BACKUP_WATCHDOG.md). This 6+4 record is retained as the test/control baseline; **neither proposal is approved for paid use**, and the actual deployed three-strike watchdog is unchanged.
+
+
 **State:** PROPOSAL ONLY / not adopted by any paid owner, not approved, not authoritative. Prepared 2026-10-10. This amendment does NOT create a fresh budget-day authorization, change prior P2G22/23/24 results, or grant permission to create/modify AeroDataBox subscriptions. Paid YSSY remains NO-GO pending all unchanged Phase 2G scientific and operational readiness gates.
 
 ## 1. Purpose and exact scope
