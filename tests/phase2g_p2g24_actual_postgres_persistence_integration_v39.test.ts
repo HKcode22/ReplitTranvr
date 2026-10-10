@@ -1682,4 +1682,83 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     }finally{journalClient.release();}
   });
 
+  it("P13 alternate disposable replay via actual V3.9 persistence with ORIGINAL frozen UTC reconstructs scientific item time but still duplicates LOGGED original source metadata",async()=>{
+    const wire=JSON.stringify(sample({
+      id:"synthetic-p13-recovery-original-utc",
+      flights:[{
+        id:"p13-original-utc-QF713",number:"QF713",
+        codeshareStatus:"IsOperator",
+        airline:{iata:"QF",icao:"QFA"},
+        departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+          scheduledTime:{utc:"2026-10-12T03:55:00.000Z"}},
+        arrival:{airport:{icao:"YMEL"},
+          scheduledTime:{utc:"2026-10-12T05:20:00.000Z"}}
+      }]
+    }));
+    const original=new Date("2026-10-12T03:09:12.000Z");
+    // Existing actual lower-level V3.9 persistence accepts receivedAtUtc.
+    // This is a LOCAL DISPOSABLE proof only, NOT a public signed-edge API.
+    const before=await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:JSON.parse(wire),receivedAtUtc:original
+    });
+    expect(before.itemCount).toBe(1);
+    const originalRows=await state.pool!.query(
+      "SELECT delivery_id,raw_item_sha256,flight_instance_id,"+
+      "received_at_utc FROM clean.prepaid_probe_item_runtime "+
+      "WHERE session_id=$1",[SESSION]
+    );
+    expect(originalRows.rowCount).toBe(1);
+    expect(new Date(originalRows.rows[0].received_at_utc).toISOString())
+      .toBe(original.toISOString());
+    await state.pool!.query(
+      "TRUNCATE clean.prepaid_probe_session_runtime,"+
+      "clean.prepaid_probe_delivery_runtime,"+
+      "clean.prepaid_probe_item_runtime"
+    );
+    expect(await count()).toEqual({logged:1,unlogged:0});
+    // Synthetic-only rearm, strictly forbidden for an unknown real paid
+    // owner/subscription without frozen approval and independent source proof.
+    await state.pool!.query(
+      "INSERT INTO clean.prepaid_probe_session_runtime("+
+      "session_id,provider_subscription_id,state,expires_at_utc)"+
+      " VALUES($1,$2,'active','2099-01-01T00:00:00Z')",[SESSION,SUB]
+    );
+    const replay=await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:JSON.parse(wire),
+      receivedAtUtc:new Date(original.toISOString())
+    });
+    expect(replay.itemCount).toBe(1);
+    expect(replay.deliveryId).toBe(before.deliveryId);
+    const restored=await state.pool!.query(
+      "SELECT delivery_id,raw_item_sha256,flight_instance_id,"+
+      "received_at_utc FROM clean.prepaid_probe_item_runtime "+
+      "WHERE session_id=$1",[SESSION]
+    );
+    expect(restored.rowCount).toBe(1);
+    expect(restored.rows[0].delivery_id).toBe(originalRows.rows[0].delivery_id);
+    expect(restored.rows[0].raw_item_sha256).toBe(
+      originalRows.rows[0].raw_item_sha256
+    );
+    expect(restored.rows[0].flight_instance_id).toBe(
+      originalRows.rows[0].flight_instance_id
+    );
+    expect(new Date(restored.rows[0].received_at_utc).toISOString())
+      .toBe(original.toISOString());
+    // The necessary original UTC can be explicitly restored, but V3.9
+    // produces ANOTHER retained LOGGED blob reference for the same delivery.
+    // It must never be treated as a second billable provider delivery.
+    expect(await count()).toEqual({logged:2,unlogged:1});
+    const refs=await state.pool!.query(
+      "SELECT source_record_id FROM clean.provider_content_blob_ref "+
+      "WHERE source_kind='webhook' ORDER BY source_record_id"
+    );
+    expect(refs.rowCount).toBe(2);
+    expect(refs.rows[0].source_record_id)
+      .toBe(refs.rows[1].source_record_id);
+    console.log("P13_ACTUAL_LOWER_LEVEL_V39_SOURCE_UTC_RECONSTRUCTIBLE=true");
+    console.log("P13_ACTUAL_LOWER_LEVEL_V39_BLOB_REF_DUPLICATION_UNRESOLVED=true");
+    console.log("P13_REAL_INDEPENDENT_SOURCE_AUTHENTICATION=false");
+    console.log("P13_REAL_PAID_REPLAY_AUTHORIZED=false");
+  });
+
 });
