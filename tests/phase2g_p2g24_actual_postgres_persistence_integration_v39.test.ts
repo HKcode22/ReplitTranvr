@@ -613,4 +613,63 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(await session()).toEqual({requests:2,successes:2,failures:0});
   });
 
+  it("ACTUAL route: 10s independent sender timeouts can precede later durable SQL commits",async()=>{
+    // Stress envelope is intentionally artificial: 22 distinct prepaid
+    // notifications arrive concurrently; each fake object upload takes
+    // 550ms while V3.9 holds the session row lock. This is not evidence
+    // P2G24 saw this traffic, and no real sender/provider is contacted.
+    const original=state.pool!;
+    const stressPool=new Pool({
+      connectionString:process.env.P2G_FIXTURE_POSTGRES_URL!,
+      connectionTimeoutMillis:22_000,max:3
+    });
+    state.pool=stressPool;
+    try {
+      state.uploadDelayMs=550;
+      const n=22;
+      const start=performance.now();
+      const senderResults=await Promise.all(Array.from({length:n},async(_,i)=>{
+        try {
+          const response=await fetch(localOrigin+actualPath,{
+            method:"POST",headers:{"content-type":"application/json"},
+            body:JSON.stringify(sample({id:"actual-route-sender-deadline-"+i})),
+            signal:AbortSignal.timeout(10_000)
+          });
+          return {ack:response.status===200,status:response.status};
+        }catch{
+          return {ack:false,status:0};
+        }
+      }));
+      const ackedBySyntheticSender=senderResults.filter(x=>x.ack).length;
+      expect(ackedBySyntheticSender).toBeGreaterThan(0);
+      expect(ackedBySyntheticSender).toBeLessThan(n);
+      // The server does not automatically reverse an already committed
+      // transaction merely because the external HTTP caller timed out.
+      let internal=0;
+      const deadline=Date.now()+17_000;
+      while(Date.now()<deadline){
+        const x=await count();
+        internal=x.unlogged;
+        if(internal===n)break;
+        await new Promise(r=>setTimeout(r,80));
+      }
+      expect(internal).toBe(n);
+      expect(await count()).toEqual({logged:n,unlogged:n});
+      const metrics=await session();
+      expect(metrics.successes).toBe(n);
+      expect(metrics.requests).toBe(n);
+      console.log("SYNTHETIC_ACTUAL_ROUTE_SENDS="+n);
+      console.log("SYNTHETIC_SENDER_OBSERVED_200="+ackedBySyntheticSender);
+      console.log("SYNTHETIC_INTERNAL_COMMITTED="+internal);
+      console.log("EXTERNAL_PROVIDER_CALLS=0");
+      console.log("STORAGE_BACKEND=in_memory_fake");
+      console.log("REAL_REPLIT_LATENCY_PROVEN=false");
+      console.log("SENDER_SERVER_ACK_DIVERGENCE_EXPOSED="+(ackedBySyntheticSender!==internal));
+      expect(performance.now()-start).toBeGreaterThan(10_000);
+    }finally{
+      state.pool=original;
+      await stressPool.end();
+    }
+  },40_000);
+
 });
