@@ -140,3 +140,36 @@ jobs:
           echo 'SCIENTIFIC_DATABASE_QUERIES=0'
           echo 'CLOUDFLARE_RESOURCES=0'
           echo 'REPLIT_DEPLOYMENTS=0'
+      - name: Prove actual disposable PostgreSQL SIGKILL clears UNLOGGED only
+        shell: bash
+        env:
+          PG_TEST_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          test -n "$PG_TEST_CONTAINER_ID"
+          IMAGE="$(docker inspect --format '{{.Config.Image}}' "$PG_TEST_CONTAINER_ID")"
+          test "$IMAGE" = "postgres:16"
+          docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "CREATE SCHEMA p2g_unlogged_crash_fixture" >/dev/null
+          docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "CREATE TABLE p2g_unlogged_crash_fixture.logged_receipt (id int PRIMARY KEY); CREATE UNLOGGED TABLE p2g_unlogged_crash_fixture.unlogged_session (id int PRIMARY KEY); INSERT INTO p2g_unlogged_crash_fixture.logged_receipt VALUES (1); INSERT INTO p2g_unlogged_crash_fixture.unlogged_session VALUES (1);" >/dev/null
+          BEFORE="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT (SELECT count(*) FROM p2g_unlogged_crash_fixture.logged_receipt)::text || '|' || (SELECT count(*) FROM p2g_unlogged_crash_fixture.unlogged_session)::text")"
+          test "$BEFORE" = "1|1"
+          echo "BEFORE_UNCLEAN_STOP_LOGGED_AND_UNLOGGED=$BEFORE"
+          # Crash ONLY this isolated CI PostgreSQL service, never Replit.
+          docker kill --signal=KILL "$PG_TEST_CONTAINER_ID" >/dev/null
+          docker start "$PG_TEST_CONTAINER_ID" >/dev/null
+          READY=0
+          for i in $(seq 1 45); do
+            if docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT 1" >/dev/null 2>&1; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          test "$READY" = 1
+          AFTER="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT (SELECT count(*) FROM p2g_unlogged_crash_fixture.logged_receipt)::text || '|' || (SELECT count(*) FROM p2g_unlogged_crash_fixture.unlogged_session)::text")"
+          echo "AFTER_UNCLEAN_RESTART_LOGGED_AND_UNLOGGED=$AFTER"
+          test "$AFTER" = "1|0"
+          echo "ACTUAL_UNLOGGED_CRASH_RESET=CONFIRMED"
+          echo "PROVIDER_CALLS=0"
+          echo "SCIENTIFIC_DB_QUERIES=0"
+          echo "CLOUDFLARE_CALLS=0"
