@@ -2,6 +2,10 @@
 
 **2026-10-10. TEST/REVIEW ONLY. NO provider calls/credits, no live owner edit, no Replit publish, no scientific database operation, no cloud provisioning. Current paid YSSY Stage 1 NO-GO.**
 
+## Verified isolated regression outcome (2026-10-10)
+
+[GitHub Actions #38086206907](https://github.com/HKcode22/ReplitTranvr/actions/runs/38086206907) completed with **both jobs SUCCESS** at code commit `7123384baafdc1f5ca809471d4120ee4ca7e8a8d`: **27 offline Vitest suites, 225/225 passing**, **36/36 actual V3.9 loopback/disposable PostgreSQL integration tests**, network-isolated callback health and server TypeScript, and real disposable PostgreSQL SIGKILL/UNLOGGED-reset (the LOGGED signed owner binding survives). These are 19 new watchdog/independent-source tests relative to the previous 206 offline total. The report-only documentation commit is separate and was not part of the tested code revision. No live owner changes or paid provider calls.
+
 ## One essential distinction
 
 - The **existing owner callback HEALTH supervisor** in `scripts/v39_phase2g_stage1_logged_supervisor_v39.ts` invokes four sequential authenticated health checks, polls every `CALLBACK_POLL_MS=15_000`, resets `callbackFailureCount=0` upon a healthy check, and triggers `workspace_callback_unreachable_threshold` SIGTERM at **3 consecutive failures**. Checks have independent 8-second request timeouts, so 3, 6 or 10 samples do **not** correspond to guaranteed exact 45/90/150 seconds of real downtime. The script does **not** prove that arbitrary-flight webhook POSTs were delivered merely because it got a healthy result.
