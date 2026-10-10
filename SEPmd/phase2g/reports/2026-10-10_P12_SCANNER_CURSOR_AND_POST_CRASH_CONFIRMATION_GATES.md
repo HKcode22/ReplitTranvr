@@ -30,10 +30,18 @@ The new `/__p2g-sandbox-confirm` interface exists only as a mocked test contract
 
 The test-only Worker still refuses actual provider mode and restricts delivery to its `/__p2g-sandbox-verify` endpoint. **Never point it at a real prepaid subscription**, and never loosen actual frozen `maxDeliveryRetries=0`.
 
+## Latest verified CI
+
+**[GitHub Actions #38094195851](https://github.com/HKcode22/ReplitTranvr/actions/runs/38094195851)**, tested source commit `6f3eff4f706c0b0be3cc1c6f73aa2af928fa2f52`: **BOTH jobs COMPLETED SUCCESS**, with **329/329 offline Vitest tests across 31 suites**, **42/42 actual V3.9 loopback/disposable PostgreSQL16 integration tests**, and an isolated real PostgreSQL SIGKILL proving that UNLOGGED rows disappear while one LOGGED owner binding survives. The SQL integration emits `P12_EDGE_QUEUE_RETRY_ON_CURRENT_SQL_LOSS=true`. No provider requests, provider credits, actual cloud resource provisioning, live Replit publish, paid supervisor changes, production science database updates or main-branch merge.
+
+Additional positive/negative regressions after the previous 326+42 checkpoint verify: current SQL row exists → second Queue message read-only confirms/ACKs with **no second raw V3.9 POST**; erase disposable UNLOGGED state → same R2 processed marker requires retry and does not ACK; forged current-state receipt ID → retry; current-state missing while scanner sees a valid processed marker → scanner holds cursor; 101st receipt younger than 60s at end of second page → **defer without checkpointing beyond it**, then once age matures requeue the exact original. Synthetic edge also rejects malformed UTF-8 and JSON arrays before any durable-write/2xx response.
+
+Failed intermediate runs remain visible and should not be reclassified as successful. They exposed old test expectations that assumed a processed marker could ACK without current-state revalidation; those tests were corrected to check the separate read-only confirmation request and new state-loss behavior.
+
 ## Test and release check
 
 - Offline Worker tests now include a second-page corrupt receipt, later Queue outage recovery, forged index identity, historical processed marker with missing current downstream DB state, forged positive current-state response, and 351-source checkpoint coverage. The local SQL bridge also checks that the same processed marker surviving UNLOGGED loss leads to retry rather than ACK.
-- CI must be **COMPLETED SUCCESS in both jobs** before this report can assert full validation. Current test-only implementation is on `phase2g-p2g24-github-observer-20261009`; previous run [#38093708703](https://github.com/HKcode22/ReplitTranvr/actions/runs/38093708703) validated the page-atomic scanner and forged index contract, before adding current-state confirmations. Record exact final run SHA and passing case counts separately once verified.
+- The current exact CI validation is recorded above. Earlier [#38093708703](https://github.com/HKcode22/ReplitTranvr/actions/runs/38093708703) independently validated the page-atomic scanner before later processed-marker confirmation and recent-receipt checkpoint regressions were added.
 
 ## Real P09–P20 paid blockers
 
