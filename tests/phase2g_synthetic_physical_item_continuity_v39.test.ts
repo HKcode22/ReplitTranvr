@@ -52,11 +52,34 @@ describe("Phase2G synthetic physical-v2 post-crash per-item exact science compar
     expect(r).toMatchObject({
       itemEvidenceConsistent:true,mandatoryCensor:false,
       expectedItemCount:120,observedItemCount:120,
-      confirmedOperatorPhysicalCount:120,
+      confirmedOperatorObservationRows:120,
+      confirmedUniqueOperatorFlightCount:120,
       sourceBuckets:[15,15,15,15,15,15,15,15],
       errors:[],scientificRunAuthorized:false,
       automaticRestorationAuthorized:false
     });
+  });
+  it("120 observations for ONE repeat physical-v2 ID count as one unique flight",()=>{
+    const v=fixture();
+    const reference=v.expectedWitnesses[0];
+    v.expectedWitnesses=v.expectedWitnesses.map(x=>({
+      ...x,flightInstanceId:reference.flightInstanceId,
+      operatingFlightNumber:reference.operatingFlightNumber
+    }));
+    v.observedRuntimeRows=v.expectedWitnesses.map(x=>({...x}));
+    const r=check(v);
+    expect(r.itemEvidenceConsistent).toBe(true);
+    expect(r.confirmedOperatorObservationRows).toBe(120);
+    expect(r.confirmedUniqueOperatorFlightCount).toBe(1);
+    expect(r.scientificRunAuthorized).toBe(false);
+  });
+  it("one physical-v2 ID cannot describe incompatible operator/route/service without quarantine",()=>{
+    const v=fixture();
+    v.expectedWitnesses[1]={...v.expectedWitnesses[1],
+      flightInstanceId:v.expectedWitnesses[0].flightInstanceId
+    };
+    v.observedRuntimeRows[1]={...v.expectedWitnesses[1]};
+    censored(v,"PHYSICAL_ID_REUSED_FOR_INCOMPATIBLE_SERVICE");
   });
   it("post-crash empty UNLOGGED items with retained source witnesses MUST censor",()=>{
     const v=fixture();v.observedRuntimeRows=[];
