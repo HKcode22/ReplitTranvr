@@ -60,6 +60,7 @@ on:
       - tests/phase2g_signed_attempt_watchdog_corroboration_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_watchdog_six_plus_four_v39.ts
       - tests/phase2g_synthetic_watchdog_six_plus_four_v39.test.ts
+      - tests/phase2g_synthetic_watchdog_six_plus_six_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_real_health_6plus4_adapter_v39.ts
       - tests/phase2g_real_supervisor_six_plus_four_mapping_v39.test.ts
   workflow_dispatch:
@@ -120,6 +121,7 @@ jobs:
             tests/phase2g_synthetic_watchdog_tolerance_gate_v39.test.ts \
             tests/phase2g_signed_attempt_watchdog_corroboration_v39.test.ts \
             tests/phase2g_synthetic_watchdog_six_plus_four_v39.test.ts \
+            tests/phase2g_synthetic_watchdog_six_plus_six_v39.test.ts \
             tests/phase2g_real_supervisor_six_plus_four_mapping_v39.test.ts \
             tests/phase2g_p2g24_callback_receiver_health_v39.test.ts \
             tests/phase2g_published_callback_only_v39.test.ts \
