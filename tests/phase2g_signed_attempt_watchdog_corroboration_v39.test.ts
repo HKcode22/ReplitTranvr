@@ -4,7 +4,7 @@ import {
   reconcileSyntheticSignedAttemptsV39
 } from "../experiments/phase2g_rehearsal/signed_attempt_reconciliation_v39";
 import {createSyntheticDualSourceMessageV2} from "../experiments/phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
-import {evaluateSyntheticSixPlusFourWatchdogV39} from "../experiments/phase2g_rehearsal/synthetic_watchdog_six_plus_four_v39";
+import {evaluateSyntheticSixPlusFourWatchdogV39,evaluateSyntheticSixPlusSixWatchdogV39} from "../experiments/phase2g_rehearsal/synthetic_watchdog_six_plus_four_v39";
 import {
   evaluateSyntheticWatchdogToleranceV39,
   type SimulatedDurableIngressEvidenceV39
@@ -232,6 +232,76 @@ describe("P15 signed synthetic attempt ledger is not independently durable recei
     expect(policy).toMatchObject({
       stopOwner:true,stopAtIndex:0,
       reasons:["ATTEMPT_OR_BILLING_GAP"],
+      scientificAdjudication:"PENDING_OR_CENSORED_NOT_AUTOMATIC_PASS"
+    });
+  });
+
+  it("6+6: signed synthetic sender/edge attempt gap forces immediate stop even if monitoring GET turns healthy",async()=>{
+    const audit=await signedFixture(true);
+    expect(audit.attemptEvidenceConsistent).toBe(false);
+    expect(audit.errors).toContain("BILLED_SENDER_ATTEMPT_MISSING_AT_EDGE");
+    const e=evidence(audit.attemptEvidenceConsistent,true);
+    const p=evaluateSyntheticSixPlusSixWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:6,
+      samples:[{health:"healthy",evidence:{
+        sourceEvidenceIndependentlyAuthenticated:e.independentSenderLedgerVerified,
+        currentSenderWatermarkComplete:e.allSenderAttemptsAtWatermarkMatchedToEdge,
+        senderAttemptCount:e.senderAttemptCount,
+        durableExactAttemptCount:e.durableEdgeAttemptCount,
+        senderAttemptCredits:e.externalSyntheticCredits,
+        durableExactAttemptCredits:e.durableEdgeSyntheticCredits,
+        unambiguousFirstEdgeUtcAndWireSha:e.immutableFirstEdgeUtcAndWireShaVerified,
+        fullOriginalBytesReadBackVerified:e.durableFullRawBytesAndRetention168hVerified,
+        rawRetentionHours:168,
+        originalPhysicalFlightV2Continuity:e.scientificPhysicalV2EvidenceComplete,
+        elapsedScientificBinsThroughWatermarkVerified:true,
+        signedOwnerAndSubscriptionMatch:e.ownerFrozenBindingVerified,
+        oneActiveOwnerLease:e.subscriberLeaseUnique,
+        unloggedRecoverySourceComplete:e.unloggedScientificStateKnownSafe,
+        durableQueueAvailable:true,queueBacklogAgeSeconds:0,
+        queueRetentionSeconds:e.queueTimeToLiveSeconds,
+        providerMaxDeliveryRetries:0,
+        frozenCreditCeiling:500,independentEstimatedUpperBoundSpend:20,
+        currentEvidenceAgeSeconds:0
+      }}]
+    });
+    expect(p).toMatchObject({
+      stopOwner:true,stopAtIndex:0,
+      state:"STOP_HARD_CONTRACT",reasons:["ATTEMPT_OR_BILLING_GAP"],
+      paidLaunchAuthorized:false
+    });
+  });
+  it("6+6: signed matching synthetic attempts do not suffice WITHOUT full raw 168h first-ingress readback",async()=>{
+    const audit=await signedFixture();
+    expect(audit.attemptEvidenceConsistent).toBe(true);
+    const e=evidence(audit.attemptEvidenceConsistent,false);
+    const p=evaluateSyntheticSixPlusSixWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:6,
+      samples:[{health:"transient_timeout",evidence:{
+        sourceEvidenceIndependentlyAuthenticated:e.independentSenderLedgerVerified,
+        currentSenderWatermarkComplete:e.allSenderAttemptsAtWatermarkMatchedToEdge,
+        senderAttemptCount:e.senderAttemptCount,
+        durableExactAttemptCount:e.durableEdgeAttemptCount,
+        senderAttemptCredits:e.externalSyntheticCredits,
+        durableExactAttemptCredits:e.durableEdgeSyntheticCredits,
+        unambiguousFirstEdgeUtcAndWireSha:e.immutableFirstEdgeUtcAndWireShaVerified,
+        fullOriginalBytesReadBackVerified:e.durableFullRawBytesAndRetention168hVerified,
+        rawRetentionHours:0,
+        originalPhysicalFlightV2Continuity:e.scientificPhysicalV2EvidenceComplete,
+        elapsedScientificBinsThroughWatermarkVerified:true,
+        signedOwnerAndSubscriptionMatch:e.ownerFrozenBindingVerified,
+        oneActiveOwnerLease:e.subscriberLeaseUnique,
+        unloggedRecoverySourceComplete:e.unloggedScientificStateKnownSafe,
+        durableQueueAvailable:true,queueBacklogAgeSeconds:0,
+        queueRetentionSeconds:e.queueTimeToLiveSeconds,
+        providerMaxDeliveryRetries:0,
+        frozenCreditCeiling:500,independentEstimatedUpperBoundSpend:20,
+        currentEvidenceAgeSeconds:0
+      }}]
+    });
+    expect(p).toMatchObject({
+      stopOwner:true,stopAtIndex:0,state:"STOP_SAFE_NO_PROOF",
+      reasons:["ORIGINAL_RAW_SOURCE_OR_UTC_NOT_DURABLE"],
       scientificAdjudication:"PENDING_OR_CENSORED_NOT_AUTOMATIC_PASS"
     });
   });
