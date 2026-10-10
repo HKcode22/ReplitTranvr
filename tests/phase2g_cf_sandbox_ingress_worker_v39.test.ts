@@ -194,4 +194,130 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     const b=await scanUnfinished(h.env);
     expect(b).toEqual({scanned:0,requeued:0,errors:0});
   });
+  it("P09/P12 forged processed marker NEVER makes Queue ACK or skips true source retry",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    const receiptKey=h.messages[0].receiptKey;
+    const processedKey=receiptKey.replace("/index/","/processed/");
+    await h.bucket.put(processedKey,JSON.stringify({
+      sourceSha256:"f".repeat(64),processedAtUtc:new Date().toISOString()
+    }));
+    h.env.EDGE_ALLOW_SYNTHETIC_RELAY="1";
+    const ack=vi.fn(),retry=vi.fn();
+    const oldFetch=globalThis.fetch;
+    const fetchMock=vi.fn(async()=>new Response(JSON.stringify({
+      persisted:true,sourceSha256:"f".repeat(64)
+    }),{status:200}));
+    globalThis.fetch=fetchMock as typeof fetch;
+    try{
+      await consume({messages:[{body:h.messages[0],ack,retry}]},h.env);
+      expect(ack).not.toHaveBeenCalled();
+      expect(retry).toHaveBeenCalledTimes(1);
+      expect(fetchMock).not.toHaveBeenCalled();
+    }finally{globalThis.fetch=oldFetch;}
+  });
+
+  it("P09/P12 processed marker must not conceal loss of original raw bytes",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    const receiptKey=h.messages[0].receiptKey;
+    const idx=JSON.parse(new TextDecoder().decode(h.map.get(receiptKey)!.data));
+    await h.bucket.put(receiptKey.replace("/index/","/processed/"),
+      JSON.stringify({
+        v:1,receiptKey,receiptId:idx.id,
+        sourceSha256:idx.sourceSha256,
+        firstEdgeReceivedAtUtc:idx.firstEdgeReceivedAtUtc,
+        receiverDurablyPersisted:true,processedAtUtc:new Date().toISOString()
+      })
+    );
+    h.map.delete(idx.rawKey);
+    const ack=vi.fn(),retry=vi.fn();
+    await consume({messages:[{body:h.messages[0],ack,retry}]},h.env);
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(ack).not.toHaveBeenCalled();
+  });
+
+  it("P09/P12 receiver 200 with matching SHA does not Queue ACK if processed marker durability fails",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    h.env.EDGE_ALLOW_SYNTHETIC_RELAY="1";
+    h.putFail(true); // force R2 failure only AFTER source ingress succeeded
+    const idx=JSON.parse(new TextDecoder().decode(h.map.get(h.messages[0].receiptKey)!.data));
+    const ack=vi.fn(),retry=vi.fn();
+    const oldFetch=globalThis.fetch;
+    globalThis.fetch=vi.fn(async()=>new Response(JSON.stringify({
+      persisted:true,sourceSha256:idx.sourceSha256
+    }),{status:200})) as typeof fetch;
+    try{
+      await consume({messages:[{body:h.messages[0],ack,retry}]},h.env);
+      expect(ack).not.toHaveBeenCalled();
+      expect(retry).toHaveBeenCalledTimes(1);
+      expect(h.map.has(h.messages[0].receiptKey.replace("/index/","/processed/")))
+        .toBe(false);
+    }finally{globalThis.fetch=oldFetch;}
+  });
+
+  it("P09/P12 scanner treats a mismatched processed marker as error, never an accepted complete receipt",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    const key=h.messages[0].receiptKey;
+    const receipt=JSON.parse(new TextDecoder().decode(h.map.get(key)!.data));
+    receipt.firstEdgeReceivedAtUtc=new Date(Date.now()-300_000).toISOString();
+    await h.bucket.put(key,JSON.stringify(receipt));
+    await h.bucket.put(key.replace("/index/","/processed/"),
+      JSON.stringify({v:1,receiptKey:key,receiptId:receipt.id,
+        sourceSha256:"0".repeat(64),
+        firstEdgeReceivedAtUtc:receipt.firstEdgeReceivedAtUtc,
+        processedAtUtc:new Date().toISOString(),receiverDurablyPersisted:true}));
+    const before=h.messages.length;
+    const stats=await scanUnfinished(h.env);
+    expect(stats).toMatchObject({scanned:1,requeued:0,errors:1});
+    expect(h.messages.length).toBe(before);
+  });
+
+  it("P09/P12 scanner refuses to requeue durable metadata when original raw object has vanished",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    const key=h.messages[0].receiptKey;
+    const receipt=JSON.parse(new TextDecoder().decode(h.map.get(key)!.data));
+    receipt.firstEdgeReceivedAtUtc=new Date(Date.now()-300_000).toISOString();
+    await h.bucket.put(key,JSON.stringify(receipt));
+    h.map.delete(receipt.rawKey);
+    const before=h.messages.length;
+    const stats=await scanUnfinished(h.env);
+    expect(stats).toMatchObject({scanned:1,requeued:0,errors:1});
+    expect(h.messages.length).toBe(before);
+  });
+
+  it("P09/P12 verified processed marker survives duplicate Queue relay without second sandbox receiver POST",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    h.env.EDGE_ALLOW_SYNTHETIC_RELAY="1";
+    const receipt=JSON.parse(new TextDecoder().decode(h.map.get(h.messages[0].receiptKey)!.data));
+    const ack=vi.fn(),retry=vi.fn();
+    const oldFetch=globalThis.fetch;
+    const fetched=vi.fn(async()=>new Response(JSON.stringify({
+      persisted:true,sourceSha256:receipt.sourceSha256
+    }),{status:200}));
+    globalThis.fetch=fetched as typeof fetch;
+    try{
+      const batch={messages:[{body:h.messages[0],ack,retry}]};
+      await consume(batch,h.env);
+      expect(ack).toHaveBeenCalledTimes(1);
+      expect(retry).not.toHaveBeenCalled();
+      const markerKey=h.messages[0].receiptKey.replace("/index/","/processed/");
+      const marker=JSON.parse(new TextDecoder().decode(h.map.get(markerKey)!.data));
+      expect(marker).toMatchObject({
+        v:1,receiptKey:h.messages[0].receiptKey,
+        receiptId:receipt.id,
+        sourceSha256:receipt.sourceSha256,
+        firstEdgeReceivedAtUtc:receipt.firstEdgeReceivedAtUtc,
+        receiverDurablyPersisted:true
+      });
+      await consume(batch,h.env);
+      expect(ack).toHaveBeenCalledTimes(2);
+      expect(fetched).toHaveBeenCalledTimes(1);
+    }finally{globalThis.fetch=oldFetch;}
+  });
+
 });
