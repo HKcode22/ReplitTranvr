@@ -503,6 +503,24 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     const done=JSON.parse(new TextDecoder().decode(h.map.get(checkpointKey)!.data));
     expect(done.cursor).toBe(null);
   });
+  it("P12 a young deferred source on the last scanner page cannot be bypassed after crash-before-Queue; matured original requeues",async()=>{
+    const h=harness(),data=await seedTwoScannerPages(h);
+    const last=data.indexKeys[100];
+    const saved=new TextDecoder().decode(h.map.get(last)!.data);
+    const young=JSON.parse(saved);
+    young.firstEdgeReceivedAtUtc=new Date().toISOString();
+    await h.bucket.put(last,JSON.stringify(young));
+    const first=await withCurrentSyntheticConfirm(()=>scanUnfinished(h.env));
+    expect(first).toEqual({scanned:101,requeued:0,errors:0});
+    const checkpointKey="p2g-sandbox/control/scanner-cursor-v1.json";
+    const checkpoint=JSON.parse(new TextDecoder().decode(
+      h.map.get(checkpointKey)!.data));
+    expect(checkpoint.cursor).toBe(data.indexKeys[99]);
+    await h.bucket.put(last,saved);
+    const second=await withCurrentSyntheticConfirm(()=>scanUnfinished(h.env));
+    expect(second).toEqual({scanned:1,requeued:1,errors:0});
+    expect(h.messages).toEqual([{receiptKey:last}]);
+  });
   it("P12 a real Queue send failure on the last page preserves its checkpoint until the Queue recovers",async()=>{
     const h=harness(),data=await seedTwoScannerPages(h);
     h.sendFail(true);
