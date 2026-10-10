@@ -31,6 +31,10 @@
 
 ## CI verification
 
-New test and source committed on investigation branch. Record exact CI run and result only after **all jobs complete**. Existing live supervisor: 15s poll, 3 consecutive failures; proposed 6 primary + 6 backup only tested in an isolated candidate; AeroDataBox `maxDeliveryRetries=0`. PR #27 remains draft, none merged/deployed.
+[Verified GitHub Actions #38090544067](https://github.com/HKcode22/ReplitTranvr/actions/runs/38090544067), tested source commit `68c3b680af5fa77cd67fda53976cbbbf28b87f2e`, **COMPLETED SUCCESS, BOTH JOBS**: **301/301 offline tests in 30 suites, 38/38 actual V3.9/disposable PostgreSQL16 integration cases**, isolated actual PostgreSQL SIGKILL showing UNLOGGED loss with one LOGGED owner binding surviving. No paid provider API or live scientific DB / Replit / Cloudflare resource mutation.
+
+The journal was subsequently strengthened to recompute the **actual V3.9 per-item canonical JSON SHA-256 from the complete original raw wire flights array**, not just trust a properly signed row. This checks that every signed `raw_item_sha256` matches its original `flights[itemIndex]` and that no flight is omitted or duplicated. The new tests reject a valid HMAC attached to a forged flight hash or an omitted item, and the CI logs confirm `P13_ACTUAL_V39_CANONICAL_FLIGHT_SOURCE_SHA_BOUND=true`. The fixture key/source remains synthetic and no actual independent provider data are verified.
+
+A separate [actual connected Cloudflare read-only P10 preflight](2026-10-10_P10_ACTUAL_CONNECTED_CLOUDFLARE_ACCOUNT_READONLY_BLOCKER.md) found zero configured Queues and R2 currently disabled (API code 10042). Therefore there is no provisioned external Queue+R2 backup in the connected account. Existing live supervisor: 15s poll, 3 consecutive failures; proposed 6 primary + 6 backup only tested in an isolated candidate; AeroDataBox `maxDeliveryRetries=0`. PR #27 remains draft, none merged/deployed.
 
 **YSSY Stage-1 paid status: NO-GO** for Sunday Oct 11 at 8 PM PDT absent all hard gates and an explicitly approved prospective bounded paid retry. A passing synthetic journal only advances the evidence foundation.
