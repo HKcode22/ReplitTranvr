@@ -9,6 +9,7 @@ on:
       - .github/workflows/phase2g-p2g24-offline-fault-injection.yml
       - scripts/v39_p2g24_readonly_blob_integrity_audit.ts
       - tests/phase2g_p2g24_prepaid_persistence_fault_injection_v39.test.ts
+      - tests/phase2g_yssy_oct12_stage1_calendar_v39.test.ts
   workflow_dispatch:
 
 permissions:
@@ -44,6 +45,7 @@ jobs:
         run: |
           npx vitest run \
             tests/phase2g_p2g24_prepaid_persistence_fault_injection_v39.test.ts \
+            tests/phase2g_yssy_oct12_stage1_calendar_v39.test.ts \
             tests/phase2g_p2g24_callback_receiver_health_v39.test.ts \
             tests/phase2g_published_callback_only_v39.test.ts \
             tests/phase2g_watchdog_recovery_contract_v39.test.ts \
