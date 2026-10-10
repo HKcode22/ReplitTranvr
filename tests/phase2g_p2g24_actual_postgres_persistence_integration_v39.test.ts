@@ -2119,7 +2119,8 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
         identityResolutionStatus:p.identity_resolution_status,
         codeshareResolutionStatus:p.codeshare_resolution_status,
         flightInstanceId:p.flight_instance_id,
-        initialServiceDate:p.initial_service_date,
+        initialServiceDate:p.initial_service_date===null?null:
+          new Date(p.initial_service_date).toISOString().slice(0,10),
         operatingCarrier:p.operating_carrier,
         operatingFlightNumber:p.operating_flight_number,
         originIcao:p.origin_icao,destinationIcao:p.destination_icao,
