@@ -31,7 +31,7 @@ export function modelDualStoreEdgeFailureV39(input:{
   senderDeadlineMs?:number;
   queueRetentionMinutes?:number;
   elapsedToRecoveryMinutes?:number;
-}):TwoStoreResultV39>{
+}):TwoStoreResultV39{
   const deadline=input.senderDeadlineMs??10_000;
   const retention=input.queueRetentionMinutes??1440;
   const recovery=input.elapsedToRecoveryMinutes??0;
