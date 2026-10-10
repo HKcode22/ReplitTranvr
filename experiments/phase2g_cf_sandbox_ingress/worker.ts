@@ -28,7 +28,7 @@ type R2Item = {
 type R2Head = Pick<R2Item, "key" | "etag" | "size" | "customMetadata">;
 type R2Store = {
   put(key: string, data: string | ArrayBuffer | Uint8Array, options?: {
-    onlyIf?: { etagDoesNotMatch?: string };
+    onlyIf?: { etagDoesNotMatch?: string; etagMatches?:string };
     customMetadata?: Record<string,string>;
     httpMetadata?: {contentType?:string};
   }): Promise<R2Head | null>;
@@ -275,30 +275,74 @@ export async function consume(batch:QueueBatch,e:Env):Promise<void>{
   }
 }
 
+/**
+ * Durable scan cursor: a scanner that blindly re-lists the FIRST 300 index
+ * records on every invocation can permanently starve later orphaned source
+ * notifications. Synthetic R2 checkpoint restores forward progress across
+ * invocations/worker replacement. Still NOT a production/outage-safe queue.
+ *
+ * Checkpoint uses R2 compare-and-swap; concurrent scanners may requeue a
+ * receipt redundantly (at-least-once), but must never silently claim that
+ * an uncommitted cursor advanced. No provider traffic or live bindings.
+ */
+const scannerCursorKey="p2g-sandbox/control/scanner-cursor-v1.json";
+type ScannerCheckpoint={
+  v:1;cursor:string|null;observedAtUtc:string
+};
+async function getScannerCursor(e:Env):Promise<{
+  cursor:string|undefined;etag:string|undefined;
+}>{
+  const stored=await e.RAW.get(scannerCursorKey);
+  if(!stored)return {cursor:undefined,etag:undefined};
+  const state=parse<ScannerCheckpoint>(await stored.text());
+  const validCursor=state?.cursor===null||
+    (typeof state.cursor==="string"&&state.cursor.length>0&&
+     state.cursor.length<=4096);
+  if(state?.v!==1||!validCursor||
+     !Number.isFinite(Date.parse(state.observedAtUtc))||
+     typeof stored.etag!=="string"||!stored.etag)
+    throw new Error("UNTRUSTED_SCAN_CURSOR_CHECKPOINT");
+  return {
+    cursor:state.cursor===null?undefined:state.cursor,
+    etag:stored.etag
+  };
+}
 /** Outbox recovery if index persisted but crash occurred before queue ACK. */
 export async function scanUnfinished(e:Env):Promise<{scanned:number,requeued:number,errors:number}>{
   if(e.EDGE_EXECUTION_MODE!=="synthetic-only")return {scanned:0,requeued:0,errors:0};
-  let cursor: string|undefined,scanned=0,requeued=0,errors=0;
-  // Bounded scan by design; no unbounded request bill or infinite cursor walk.
+  let scanned=0,requeued=0,errors=0;
+  let previous:{cursor:string|undefined;etag:string|undefined};
+  try{previous=await getScannerCursor(e);}
+  catch{return {scanned:0,requeued:0,errors:1};}
+  let cursor=previous.cursor;
+  let finished=false;
+  // Bounded page count remains 3 x 100. Unlike the old code, the
+  // next invocation resumes after the LAST successfully scanned page.
   for(let page=0;page<3;page++){
-    const result=await e.RAW.list({prefix:"p2g-sandbox/index/",limit:100,cursor});
+    let result:Awaited<ReturnType<Env["RAW"]["list"]>>;
+    try{
+      result=await e.RAW.list({
+        prefix:"p2g-sandbox/index/",limit:100,cursor
+      });
+    }catch{errors++;break;}
     for(const item of result.objects){
       scanned++;
       const processedKey=item.key.replace("/index/","/processed/");
       try{
-        // Index must already be mature before recovering, so immediate upload
-        // has a chance to enqueue normally. Scan only if object age is known.
         const index=await e.RAW.get(item.key);
-        if(!index)continue;
+        if(!index){errors++;continue;}
         const r=parse<Receipt>(await index.text());
         const age=Date.now()-Date.parse(r.firstEdgeReceivedAtUtc);
-        if(!Number.isFinite(age)||age<60_000)continue;
+        if(!Number.isFinite(age)||age<0){errors++;continue;}
         if(r.v!==1||r.id!==item.key.split("/").at(-1)?.slice(0,-5)||
            !goodSession(r.sessionId)||!safeAttempt(r.attemptId)||
+           r.id!==await digestText(r.sessionId+"\n"+r.attemptId)||
            !/^p2g-sandbox\/raw\/[0-9a-f]{64}\.json$/.test(r.rawKey)||
            !/^[0-9a-f]{64}$/.test(r.sourceSha256)){
           errors++;continue;
         }
+        // Recent receipts may still be in-flight with first queue send.
+        if(age<60_000)continue;
         const marker=await checkedProcessedMarker(e,processedKey,item.key,r);
         if(marker==="verified")continue;
         if(marker==="corrupt"){errors++;continue;}
@@ -311,9 +355,36 @@ export async function scanUnfinished(e:Env):Promise<{scanned:number,requeued:num
         requeued++;
       }catch{errors++;}
     }
-    if(!result.truncated||!result.cursor)break;
+    if(!result.truncated){
+      finished=true;
+      cursor=undefined;
+      break;
+    }
+    if(!result.cursor||result.cursor===cursor){
+      errors++;break;
+    }
     cursor=result.cursor;
   }
+  // Fail closed on an unpersisted progress checkpoint. This is NOT a
+  // guarantee of uninterrupted recovery: if the cursor write fails, next
+  // run re-scans safely and eventual coverage must be separately audited.
+  const checkpoint:ScannerCheckpoint={
+    v:1,cursor:finished?null:(cursor??null),
+    observedAtUtc:new Date().toISOString()
+  };
+  try{
+    const saved=await e.RAW.put(scannerCursorKey,
+      JSON.stringify(checkpoint),{
+        onlyIf:previous.etag?
+          {etagMatches:previous.etag}:{etagDoesNotMatch:"*"}
+      });
+    if(!saved)errors++;
+    else{
+      const confirmed=await e.RAW.get(scannerCursorKey);
+      if(!confirmed||await confirmed.text()!==JSON.stringify(checkpoint))
+        errors++;
+    }
+  }catch{errors++;}
   return {scanned,requeued,errors};
 }
 
