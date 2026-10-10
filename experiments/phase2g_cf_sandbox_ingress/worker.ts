@@ -208,7 +208,14 @@ async function relayReceipt(e:Env,receiptKey:string):Promise<"done"|"retry">{
   const r=parse<Receipt>(await index.text());
   if(r.v!==1||r.id!==receiptKey.split("/").at(-1)?.slice(0,-5)||
      !goodSession(r.sessionId)||!safeAttempt(r.attemptId)||
-     !/^p2g-sandbox\/raw\/[0-9a-f]{64}\.json$/.test(r.rawKey))return "retry";
+     r.id!==await digestText(r.sessionId+"\n"+r.attemptId)||
+     !/^p2g-sandbox\/raw\/[0-9a-f]{64}\.json$/.test(r.rawKey)||
+     r.rawKey!=="p2g-sandbox/raw/"+r.sourceSha256+".json"||
+     !Number.isSafeInteger(r.rawBytes)||r.rawBytes<=0||
+     r.rawBytes>maxBytes(e)||
+     !Number.isFinite(Date.parse(r.firstEdgeReceivedAtUtc))||
+     new Date(r.firstEdgeReceivedAtUtc).toISOString()!==r.firstEdgeReceivedAtUtc)
+    return "retry";
   const raw=await e.RAW.get(r.rawKey);
   if(!raw||raw.size!==r.rawBytes)return "retry";
   const body=new Uint8Array(await raw.arrayBuffer());
@@ -319,6 +326,9 @@ export async function scanUnfinished(e:Env):Promise<{scanned:number,requeued:num
   // Bounded page count remains 3 x 100. Unlike the old code, the
   // next invocation resumes after the LAST successfully scanned page.
   for(let page=0;page<3;page++){
+    const pageErrorsBefore=errors;
+    // Preserve the cursor at the start of this page until all its sources
+    // have been checked. Never skip malformed/undeliverable source receipts.
     let result:Awaited<ReturnType<Env["RAW"]["list"]>>;
     try{
       result=await e.RAW.list({
@@ -338,7 +348,11 @@ export async function scanUnfinished(e:Env):Promise<{scanned:number,requeued:num
            !goodSession(r.sessionId)||!safeAttempt(r.attemptId)||
            r.id!==await digestText(r.sessionId+"\n"+r.attemptId)||
            !/^p2g-sandbox\/raw\/[0-9a-f]{64}\.json$/.test(r.rawKey)||
-           !/^[0-9a-f]{64}$/.test(r.sourceSha256)){
+           !/^[0-9a-f]{64}$/.test(r.sourceSha256)||
+           r.rawKey!=="p2g-sandbox/raw/"+r.sourceSha256+".json"||
+           !Number.isSafeInteger(r.rawBytes)||r.rawBytes<=0||
+           r.rawBytes>maxBytes(e)||
+           new Date(r.firstEdgeReceivedAtUtc).toISOString()!==r.firstEdgeReceivedAtUtc){
           errors++;continue;
         }
         // Recent receipts may still be in-flight with first queue send.
@@ -354,6 +368,11 @@ export async function scanUnfinished(e:Env):Promise<{scanned:number,requeued:num
         await e.DELIVERY_QUEUE.send({receiptKey:item.key});
         requeued++;
       }catch{errors++;}
+    }
+    if(errors!==pageErrorsBefore){
+      // Later retries may duplicate successful sends (at-least-once),
+      // but cannot silently skip the failed source on this page.
+      break;
     }
     if(!result.truncated){
       finished=true;
