@@ -59,6 +59,7 @@ import {ingest as syntheticEdgeIngest,consume as syntheticEdgeConsume,type Env a
 import {verifyEdgeProvenanceV1} from "../experiments/phase2g_cf_sandbox_ingress/provenance";
 import {createHash as offlineShaHash} from "node:crypto";
 import {signSyntheticScienceRecoveryFrameV39,writeSyntheticLoggedScienceJournalV39,reviewSyntheticLoggedScienceJournalV39,type SyntheticScienceJournalFrameV39} from "../experiments/phase2g_rehearsal/disposable_logged_science_recovery_journal_v39";
+import {auditDisposableCrashReplayBlobRefsV39} from "../experiments/phase2g_rehearsal/disposable_replay_blob_ambiguity_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -1708,6 +1709,18 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       "WHERE session_id=$1",[SESSION]
     );
     expect(originalRows.rowCount).toBe(1);
+    const frozenDeliveryId=String(originalRows.rows[0].delivery_id);
+    const pristine=await auditDisposableCrashReplayBlobRefsV39({
+      client:state.pool!,frozenSessionId:SESSION,
+      expectedLogicalDeliveryIds:[frozenDeliveryId]
+    });
+    expect(pristine.errors).toEqual([]);
+    expect(pristine).toMatchObject({
+      distinctDeliveryIds:1,loggedBlobReferenceRows:1,
+      recoveredUnloggedDeliveryRows:1,
+      duplicateLogicalSourceIds:0,orphanedSourceIds:0,
+      replayCanBeTrusted:false,paidRunAuthorized:false
+    });
     expect(new Date(originalRows.rows[0].received_at_utc).toISOString())
       .toBe(original.toISOString());
     await state.pool!.query(
@@ -1716,6 +1729,15 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       "clean.prepaid_probe_item_runtime"
     );
     expect(await count()).toEqual({logged:1,unlogged:0});
+    const orphan=await auditDisposableCrashReplayBlobRefsV39({
+      client:state.pool!,frozenSessionId:SESSION,
+      expectedLogicalDeliveryIds:[frozenDeliveryId]
+    });
+    expect(orphan.errors).toContain("P13_LOGGED_SOURCE_REF_ORPHANED_AFTER_CRASH");
+    expect(orphan).toMatchObject({
+      loggedBlobReferenceRows:1,recoveredUnloggedDeliveryRows:0,
+      orphanedSourceIds:1,duplicateLogicalSourceIds:0
+    });
     // Synthetic-only rearm, strictly forbidden for an unknown real paid
     // owner/subscription without frozen approval and independent source proof.
     await state.pool!.query(
@@ -1755,6 +1777,19 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(refs.rowCount).toBe(2);
     expect(refs.rows[0].source_record_id)
       .toBe(refs.rows[1].source_record_id);
+    const duplicated=await auditDisposableCrashReplayBlobRefsV39({
+      client:state.pool!,frozenSessionId:SESSION,
+      expectedLogicalDeliveryIds:[frozenDeliveryId]
+    });
+    expect(duplicated.errors).toContain(
+      "P13_REPLAY_DUPLICATED_LOGGED_SOURCE_REF"
+    );
+    expect(duplicated).toMatchObject({
+      distinctDeliveryIds:1,loggedBlobReferenceRows:2,
+      recoveredUnloggedDeliveryRows:1,duplicateLogicalSourceIds:1,
+      conflictingBlobShaIds:0,orphanedSourceIds:0,
+      replayCanBeTrusted:false,scientificPassAuthorized:false
+    });
     console.log("P13_ACTUAL_LOWER_LEVEL_V39_SOURCE_UTC_RECONSTRUCTIBLE=true");
     console.log("P13_ACTUAL_LOWER_LEVEL_V39_BLOB_REF_DUPLICATION_UNRESOLVED=true");
     console.log("P13_REAL_INDEPENDENT_SOURCE_AUTHENTICATION=false");
