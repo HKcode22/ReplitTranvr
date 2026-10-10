@@ -393,4 +393,101 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     expect(h.map.has("p2g-sandbox/control/scanner-cursor-v1.json")).toBe(false);
   });
 
+  async function seedTwoScannerPages(h:ReturnType<typeof harness>){
+    const rawBytes=new TextEncoder().encode(raw);
+    const sourceSha256=createHash("sha256").update(rawBytes).digest("hex");
+    const rawKey="p2g-sandbox/raw/"+sourceSha256+".json";
+    await h.bucket.put(rawKey,rawBytes);
+    const indexKeys:string[]=[];
+    const receivedAt=new Date(Date.now()-5*60_000).toISOString();
+    for(let i=0;i<101;i++){
+      const attemptId="scanner-page-"+String(i).padStart(3,"0");
+      const id=createHash("sha256").update(session+"\n"+attemptId).digest("hex");
+      const receiptKey="p2g-sandbox/index/"+id+".json";
+      indexKeys.push(receiptKey);
+      await h.bucket.put(receiptKey,JSON.stringify({
+        v:1,id,sourceSha256,sessionId:session,attemptId,
+        firstEdgeReceivedAtUtc:receivedAt,rawKey,rawBytes:rawBytes.length
+      }));
+    }
+    indexKeys.sort();
+    for(const key of indexKeys.slice(0,100)){
+      const id=key.slice("p2g-sandbox/index/".length,-5);
+      await h.bucket.put(key.replace("/index/","/processed/"),
+        JSON.stringify({
+          v:1,receiptKey:key,receiptId:id,sourceSha256,
+          firstEdgeReceivedAtUtc:receivedAt,
+          receiverDurablyPersisted:true,
+          processedAtUtc:new Date().toISOString()
+        }));
+    }
+    return {indexKeys,rawKey,sourceSha256};
+  }
+  it("P12 scanner NEVER checkpoints beyond a malformed late-page source; fixed receipt is retried rather than stranded",async()=>{
+    const h=harness(),data=await seedTwoScannerPages(h);
+    const last=data.indexKeys[100];
+    const saved=new TextDecoder().decode(h.map.get(last)!.data);
+    const altered=JSON.parse(saved);
+    altered.rawKey="p2g-sandbox/raw/"+"0".repeat(64)+".json";
+    await h.bucket.put(last,JSON.stringify(altered));
+    const damaged=await scanUnfinished(h.env);
+    expect(damaged).toMatchObject({scanned:101,requeued:0,errors:1});
+    const checkpointKey="p2g-sandbox/control/scanner-cursor-v1.json";
+    const checkpoint=JSON.parse(
+      new TextDecoder().decode(h.map.get(checkpointKey)!.data)
+    );
+    expect(checkpoint.cursor).toBe(data.indexKeys[99]);
+    expect(h.messages).toHaveLength(0);
+    await h.bucket.put(last,saved);
+    const repaired=await scanUnfinished(h.env);
+    expect(repaired).toEqual({scanned:1,requeued:1,errors:0});
+    expect(h.messages).toEqual([{receiptKey:last}]);
+    const done=JSON.parse(new TextDecoder().decode(h.map.get(checkpointKey)!.data));
+    expect(done.cursor).toBe(null);
+  });
+  it("P12 a real Queue send failure on the last page preserves its checkpoint until the Queue recovers",async()=>{
+    const h=harness(),data=await seedTwoScannerPages(h);
+    h.sendFail(true);
+    const failed=await scanUnfinished(h.env);
+    expect(failed).toMatchObject({scanned:101,requeued:0,errors:1});
+    const checkpointKey="p2g-sandbox/control/scanner-cursor-v1.json";
+    const checkpoint=JSON.parse(
+      new TextDecoder().decode(h.map.get(checkpointKey)!.data)
+    );
+    expect(checkpoint.cursor).toBe(data.indexKeys[99]);
+    h.sendFail(false);
+    const recovered=await scanUnfinished(h.env);
+    expect(recovered).toEqual({scanned:1,requeued:1,errors:0});
+    expect(h.messages).toEqual([{receiptKey:data.indexKeys[100]}]);
+  });
+  it("P12 Queue consumer refuses a synthetic forged receipt index whose ID does not hash from its session + attempt or whose raw object key differs",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    const key=h.messages[0].receiptKey;
+    const original=new TextDecoder().decode(h.map.get(key)!.data);
+    const r=JSON.parse(original);
+    const fetched=vi.fn();
+    const oldFetch=globalThis.fetch;
+    globalThis.fetch=fetched as typeof fetch;
+    h.env.EDGE_ALLOW_SYNTHETIC_RELAY="1";
+    try{
+      r.attemptId="changed-attempt";
+      await h.bucket.put(key,JSON.stringify(r));
+      const ack=vi.fn(),retry=vi.fn();
+      await consume({messages:[{body:{receiptKey:key},ack,retry}]},h.env);
+      expect(retry).toHaveBeenCalledOnce();
+      expect(ack).not.toHaveBeenCalled();
+      expect(fetched).not.toHaveBeenCalled();
+      await h.bucket.put(key,original);
+      r.attemptId="n1:0";
+      r.rawKey="p2g-sandbox/raw/"+"0".repeat(64)+".json";
+      await h.bucket.put(key,JSON.stringify(r));
+      const ack2=vi.fn(),retry2=vi.fn();
+      await consume({messages:[{body:{receiptKey:key},ack:ack2,retry:retry2}]},h.env);
+      expect(retry2).toHaveBeenCalledOnce();
+      expect(ack2).not.toHaveBeenCalled();
+      expect(fetched).not.toHaveBeenCalled();
+    }finally{globalThis.fetch=oldFetch;}
+  });
+
 });
