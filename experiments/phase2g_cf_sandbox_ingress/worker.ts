@@ -198,6 +198,47 @@ async function checkedProcessedMarker(
   }catch{return "corrupt";}
 }
 
+/**
+ * A historical R2 processed marker can survive while Replit UNLOGGED
+ * scientific rows disappear. NEVER use the marker alone to ACK a Queue
+ * redelivery or to permanently skip a scanned receipt. Require a fresh,
+ * separately authenticated, read-only database observation from a TEST-ONLY
+ * sandbox endpoint; NOT a substitute for an independent real provider ledger.
+ *
+ * The sandbox receiver endpoint is intentionally NOT deployed by this code.
+ * Until deployed equivalently in permitted staging this returns false.
+ */
+async function confirmCurrentDisposableScience(e:Env,r:Receipt):Promise<boolean>{
+  const origin=e.EDGE_SANDBOX_RECEIVER_ORIGIN??"";
+  const token=e.EDGE_TEST_RECEIVER_PATH_SECRET??"";
+  const signingKey=e.EDGE_PROVENANCE_SIGNING_KEY??"";
+  if(!/^https:\/\/[a-z0-9.-]+$/i.test(origin)||
+     token.length<32||signingKey.length<48)
+    return false;
+  const proof={
+    v:1 as const,sessionId:r.sessionId,receiptId:r.id,
+    providerAttemptId:r.attemptId,sourceSha256:r.sourceSha256,
+    edgeReceivedAtUtc:r.firstEdgeReceivedAtUtc
+  };
+  const signature=await signEdgeProvenanceV1(proof,signingKey);
+  const response=await fetch(origin+"/__p2g-sandbox-confirm",{
+    method:"POST",headers:{
+      "content-type":"application/json",
+      "x-p2g-sandbox-auth":token,
+      "x-p2g-edge-provenance-hmac":signature
+    },
+    body:JSON.stringify(proof),
+    signal:AbortSignal.timeout(8000),redirect:"error"
+  });
+  if(response.status!==200)return false;
+  const answer=await response.json().catch(()=>null) as Record<string,unknown>|null;
+  return answer?.v===1&&answer.currentlyPersisted===true&&
+    answer.sessionId===r.sessionId&&
+    answer.providerAttemptId===r.attemptId&&
+    answer.receiptId===r.id&&answer.sourceSha256===r.sourceSha256&&
+    answer.originalEdgeReceivedAtUtc===r.firstEdgeReceivedAtUtc;
+}
+
 async function relayReceipt(e:Env,receiptKey:string):Promise<"done"|"retry">{
   if(e.EDGE_EXECUTION_MODE!=="synthetic-only"||
      e.EDGE_ALLOW_SYNTHETIC_RELAY!=="1")return "retry";
@@ -221,7 +262,11 @@ async function relayReceipt(e:Env,receiptKey:string):Promise<"done"|"retry">{
   const body=new Uint8Array(await raw.arrayBuffer());
   if(await digest(body)!==r.sourceSha256)return "retry";
   const markerState=await checkedProcessedMarker(e,processedKey,receiptKey,r);
-  if(markerState==="verified")return "done";
+  if(markerState==="verified"){
+    // Re-check CURRENT downstream scientific persistence. An old marker
+    // after UNLOGGED loss is not proof of a currently committed delivery.
+    return await confirmCurrentDisposableScience(e,r)?"done":"retry";
+  }
   if(markerState==="corrupt")return "retry";
 
   // Hard guard: A REAL prepaid callback route is NOT an acceptable sandbox
@@ -358,7 +403,13 @@ export async function scanUnfinished(e:Env):Promise<{scanned:number,requeued:num
         // Recent receipts may still be in-flight with first queue send.
         if(age<60_000)continue;
         const marker=await checkedProcessedMarker(e,processedKey,item.key,r);
-        if(marker==="verified")continue;
+        if(marker==="verified"){
+          // A processed marker is durable at the edge, NOT an active DB
+          // continuity proof. Failed read-only confirmation blocks cursor
+          // advancement and never drops this historical receipt.
+          if(!await confirmCurrentDisposableScience(e,r))errors++;
+          continue;
+        }
         if(marker==="corrupt"){errors++;continue;}
         const raw=await e.RAW.get(r.rawKey);
         if(!raw||raw.size!==r.rawBytes||
