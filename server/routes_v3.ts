@@ -299,6 +299,24 @@ export function registerV3Routes(app:Express):void{
    * route family so parser failures can reach the prepaid
    * error boundary below.
    */
+  /**
+   * Reject unauthenticated prepaid POST BEFORE attempting JSON parsing.
+   * Previously Express parsed up to 2MB before the secret comparison.
+   * Keep the existing ingress secret check as defense in depth.
+   */
+  const prepaidEarlySecretGuard=(req:Request,res:Response,next:NextFunction):void=>{
+    const expected=webhookSecret();
+    if(!expected){res.status(503).json({error:"WEBHOOK_SECRET_NOT_CONFIGURED"});return;}
+    const supplied=String(req.params.secret??"");
+    const a=Buffer.from(expected);
+    const b=Buffer.from(supplied);
+    if(a.length!==b.length||!timingSafeEqual(a,b)){
+      res.status(404).json({error:"Not found"});
+      return;
+    }
+    next();
+  };
+
   const prepaidJsonParser = json({
     limit: "2mb",
     verify: (req, _res, buf) => {
@@ -394,6 +412,7 @@ export function registerV3Routes(app:Express):void{
 
   app.post(
     "/api/v1/webhooks/aerodatabox/:secret/prepaid/:sessionId",
+    prepaidEarlySecretGuard,
     prepaidJsonParser,
     prepaidWebhookIngress,
   );
