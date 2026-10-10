@@ -374,7 +374,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     });
   });
 
-  it("conflicting provider ID cannot silently merge two distinct operated flight numbers",async()=>{
+  it("conflicting provider ID is persisted as evidence but quarantined, never merged as physical ID",async()=>{
     const leg=(number:string)=>({
       id:"synthetic-reused-provider-id",number,
       codeshareStatus:"IsOperator",airline:{iata:"QF"},
@@ -385,17 +385,25 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     await persistPrepaidProbeWebhookV39({
       sessionId:SESSION,body:sample({id:"first-leg",flights:[leg("QF700")]})
     });
-    // Provider ID linkage is NOT permission to merge a materially different
-    // operated flight. The rejection must rollback the entire new notification.
-    await expect(persistPrepaidProbeWebhookV39({
+    // V3.9 intentionally persists the raw notification but quarantines its
+    // conflicting item. That is safer than silently merging two physical
+    // flights AND preserves evidence for later review.
+    const second=await persistPrepaidProbeWebhookV39({
       sessionId:SESSION,body:sample({id:"conflicting-leg",flights:[leg("QF701")]})
-    })).rejects.toThrow();
-    expect(await count()).toEqual({logged:1,unlogged:1});
+    });
+    expect(second.duplicate).toBe(false);
+    expect(await count()).toEqual({logged:2,unlogged:2});
     const q=await state.pool!.query(
-      "SELECT flight_instance_id,identity_resolution_status FROM clean.prepaid_probe_item_runtime"
+      "SELECT flight_number,flight_instance_id,identity_resolution_status,codeshare_resolution_status FROM clean.prepaid_probe_item_runtime ORDER BY flight_number"
     );
-    expect(q.rows).toHaveLength(1);
+    expect(q.rows).toHaveLength(2);
+    expect(q.rows[0].flight_number).toBe("QF700");
     expect(q.rows[0].identity_resolution_status).toBe("resolved");
+    expect(q.rows[0].flight_instance_id).toMatch(/^.+$/);
+    expect(q.rows[1].flight_number).toBe("QF701");
+    expect(q.rows[1].identity_resolution_status).toBe("quarantined");
+    expect(q.rows[1].flight_instance_id).toBeNull();
+    expect(q.rows[1].codeshare_resolution_status).toBe("resolved_operator");
   });
 
   it("demonstrates session lock HOL blocking when duplicate POST overlaps slow fake storage",async()=>{
