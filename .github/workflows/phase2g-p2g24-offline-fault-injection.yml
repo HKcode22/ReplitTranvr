@@ -50,6 +50,7 @@ on:
       - tests/phase2g_synthetic_owner_freeze_signature_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_two_stage_owner_protocol_v39.ts
       - tests/phase2g_synthetic_two_stage_owner_protocol_v39.test.ts
+      - experiments/phase2g_rehearsal/disposable_two_stage_owner_journal_v39.ts
   workflow_dispatch:
 
 permissions:
@@ -205,6 +206,14 @@ jobs:
           echo "DUAL_HASH_METADATA_AFTER_UNCLEAN_RESTART=$RECEIPT_ROW"
           test "$RECEIPT_ROW" = "1|2026-10-12 03:01:02.000|64|64|64"
           echo "DUAL_HASH_FIRST_RECEIPT_RESTART_SURVIVAL=CONFIRMED"
+          # The signed two-stage test inserted EXACTLY ONE LOGGED binding in
+          # an entirely disposable fixture schema. It must survive crash;
+          # this proves only local SQL feasibility, never provider uniqueness.
+          OWNER_ROWS="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT count(*)::int FROM p2g_two_stage_fixture.owner_bindings")"
+          test "$OWNER_ROWS" = "1"
+          echo "TWO_STAGE_LOGGED_OWNER_BINDING_AFTER_UNCLEAN_RESTART=$OWNER_ROWS"
+          echo "REAL_PROVIDER_SUBSCRIPTION_CREATION_PROVEN=false"
+
 
           echo "PROVIDER_CALLS=0"
           echo "SCIENTIFIC_DB_QUERIES=0"
