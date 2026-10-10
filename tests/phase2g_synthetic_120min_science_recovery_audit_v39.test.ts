@@ -229,6 +229,65 @@ describe("P13 signed synthetic TWO-HOUR all-eight-bin source-to-recovery truth a
       "P13_SENDER_JOURNAL_TOTAL_CREDIT_GAP"
     ]));
   });
+  it("sender can sign the original wire SHA but cannot relabel its notification identity",()=>{
+    const f=makeFixture();
+    const attempts=f.signedSyntheticSender.frame.attempts.map((a,i)=>
+      i===20?{...a,notificationId:"synthetic-invented-identifier"}:a
+    );
+    f.signedSyntheticSender=signSyntheticSenderFrameV39({
+      ...f.signedSyntheticSender.frame,attempts
+    },SENDER_KEY);
+    expect(audit(f).errors).toContain(
+      "P13_SENDER_JOURNAL_NOTIFICATION_ID_MISMATCH"
+    );
+  });
+  it("sender cannot sign invented canonical JSON hash when the raw original wire is unchanged",()=>{
+    const f=makeFixture();
+    const attempts=f.signedSyntheticSender.frame.attempts.map((a,i)=>
+      i===24?{...a,canonicalSha256:"a".repeat(64)}:a
+    );
+    f.signedSyntheticSender=signSyntheticSenderFrameV39({
+      ...f.signedSyntheticSender.frame,attempts
+    },SENDER_KEY);
+    expect(audit(f).errors).toContain(
+      "P13_CANONICAL_PAYLOAD_SHA_MISMATCH"
+    );
+  });
+  it("sender-generated original UTC must match the timestamp embedded in the original source wire",()=>{
+    const f=makeFixture();
+    const attempts=f.signedSyntheticSender.frame.attempts.map((a,i)=>
+      i===33?{...a,providerGeneratedUtc:at(i+1)}:a
+    );
+    f.signedSyntheticSender=signSyntheticSenderFrameV39({
+      ...f.signedSyntheticSender.frame,attempts
+    },SENDER_KEY);
+    expect(audit(f).errors).toContain(
+      "P13_PROVIDER_SOURCE_GENERATED_TIME_MISMATCH"
+    );
+  });
+  it("increasing provider retry sequence violates frozen zero-retry provider contract despite 6+6 health tolerance",()=>{
+    const f=makeFixture();
+    const attempts=f.signedSyntheticSender.frame.attempts.map((a,i)=>
+      i===47?{...a,attemptSeqNo:1}:a
+    );
+    f.signedSyntheticSender=signSyntheticSenderFrameV39({
+      ...f.signedSyntheticSender.frame,attempts
+    },SENDER_KEY);
+    expect(audit(f).errors).toEqual(expect.arrayContaining([
+      "P13_ZERO_PROVIDER_DELIVERY_RETRY_CONTRACT_BROKEN",
+      "P13_ORIGINAL_WIRE_ATTEMPT_OR_CREDIT_MISMATCH"
+    ]));
+  });
+  it("a full-minute edge delay is not temporally consistent with a 230ms sender ACK",()=>{
+    const f=makeFixture(),frame=f.entries[51].signed.frame;
+    resign(f,51,{
+      ...frame,firstEdgeReceivedUtc:at(52),
+      items:frame.items.map(x=>({...x,originalEdgeReceivedUtc:at(52)}))
+    });
+    expect(audit(f).errors).toContain(
+      "P13_SENDER_EDGE_UTC_CAUSALITY_MISMATCH"
+    );
+  });
   it("invalid synthetic sender HMAC cannot be dismissed as merely missing an item",()=>{
     const f=makeFixture();f.signedSyntheticSender={
       ...f.signedSyntheticSender,signature:"0".repeat(64)
