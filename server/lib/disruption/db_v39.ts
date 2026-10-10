@@ -20,7 +20,7 @@ function requireV39RuntimeUrl(): string {
  * storage, transaction, platform cold-start or provider network delivery.
  */
 export function v39PoolConnectionTimeoutMillis(
-  env: { V39_CALLBACK_ONLY_RUNTIME?: string } = process.env,
+  env: NodeJS.ProcessEnv = process.env,
 ): number {
   return env.V39_CALLBACK_ONLY_RUNTIME === "1" ? 4000 : 0;
 }
