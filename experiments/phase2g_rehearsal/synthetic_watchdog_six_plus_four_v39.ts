@@ -28,7 +28,8 @@ export type SixPlusFourEvidenceV39=Readonly<{
   fullOriginalBytesReadBackVerified:boolean;
   rawRetentionHours:number;
   originalPhysicalFlightV2Continuity:boolean;
-  originalEightFifteenMinuteBinsReconstructible:boolean;
+  /** Validate elapsed 15m buckets only; future bins do not yet exist. */
+  elapsedScientificBinsThroughWatermarkVerified:boolean;
   signedOwnerAndSubscriptionMatch:boolean;
   oneActiveOwnerLease:boolean;
   unloggedRecoverySourceComplete:boolean;
@@ -91,7 +92,7 @@ function evidenceReason(x:SixPlusFourEvidenceV39):string|null{
      !x.fullOriginalBytesReadBackVerified||x.rawRetentionHours<168)
     return "ORIGINAL_RAW_SOURCE_OR_UTC_NOT_DURABLE";
   if(!x.originalPhysicalFlightV2Continuity||
-     !x.originalEightFifteenMinuteBinsReconstructible||
+     !x.elapsedScientificBinsThroughWatermarkVerified||
      !x.unloggedRecoverySourceComplete)
     return "ORIGINAL_SCIENTIFIC_IDENTITY_NOT_RECONSTRUCTIBLE";
   if(!x.durableQueueAvailable||
