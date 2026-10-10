@@ -1167,7 +1167,8 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     const beforeDecision=compareSyntheticPhysicalItemContinuityV39(input);
     expect(beforeDecision).toMatchObject({
       expectedItemCount:1,observedItemCount:1,
-      confirmedOperatorPhysicalCount:1,
+      confirmedOperatorObservationRows:1,
+      confirmedUniqueOperatorFlightCount:1,
       mandatoryCensor:true,scientificRunAuthorized:false
     });
     expect(beforeDecision.errors).toContain(
