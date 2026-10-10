@@ -60,6 +60,7 @@ import {verifyEdgeProvenanceV1} from "../experiments/phase2g_cf_sandbox_ingress/
 import {createHash as offlineShaHash} from "node:crypto";
 import {signSyntheticScienceRecoveryFrameV39,writeSyntheticLoggedScienceJournalV39,reviewSyntheticLoggedScienceJournalV39,type SyntheticScienceJournalFrameV39} from "../experiments/phase2g_rehearsal/disposable_logged_science_recovery_journal_v39";
 import {auditDisposableCrashReplayBlobRefsV39} from "../experiments/phase2g_rehearsal/disposable_replay_blob_ambiguity_v39";
+import {recordSyntheticExactRuntimeSnapshotV39,restoreSyntheticExactRuntimeFromJournalV39} from "../experiments/phase2g_rehearsal/disposable_exact_science_restore_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -1794,6 +1795,189 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     console.log("P13_ACTUAL_LOWER_LEVEL_V39_BLOB_REF_DUPLICATION_UNRESOLVED=true");
     console.log("P13_REAL_INDEPENDENT_SOURCE_AUTHENTICATION=false");
     console.log("P13_REAL_PAID_REPLAY_AUTHORIZED=false");
+  });
+
+  it("P13 ATOMIC quarantined exact V3.9 multi-flight restore reuses ONE LOGGED original blob and never resumes paid callbacks",async()=>{
+    await state.pool!.query(
+      "CREATE SCHEMA IF NOT EXISTS p2g_science_recovery_fixture"
+    );
+    await state.pool!.query(
+      "CREATE TABLE IF NOT EXISTS p2g_science_recovery_fixture.signed_source_item_journal("+
+      "session_id uuid NOT NULL,attempt_key text NOT NULL,signed_record jsonb NOT NULL,"+
+      "PRIMARY KEY(session_id,attempt_key))"
+    );
+    await state.pool!.query(
+      "CREATE TABLE IF NOT EXISTS p2g_science_recovery_fixture.exact_runtime_snapshot("+
+      "session_id uuid NOT NULL,attempt_key text NOT NULL,signed_record jsonb NOT NULL,"+
+      "PRIMARY KEY(session_id,attempt_key))"
+    );
+    const wire=JSON.stringify(sample({
+      id:"synthetic-atomic-yssy-two-flights",
+      flights:[
+        {id:"p13-original-QF740",number:"QF740",
+          codeshareStatus:"IsOperator",
+          airline:{iata:"QF",icao:"QFA"},
+          departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+            scheduledTime:{utc:"2026-10-12T03:40:00.000Z"}},
+          arrival:{airport:{icao:"YMEL"},
+            scheduledTime:{utc:"2026-10-12T05:10:00.000Z"}}},
+        {id:"p13-original-QF741",number:"QF741",
+          codeshareStatus:"IsOperator",
+          airline:{iata:"QF",icao:"QFA"},
+          departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+            scheduledTime:{utc:"2026-10-12T03:48:00.000Z"}},
+          arrival:{airport:{icao:"YMEL"},
+            scheduledTime:{utc:"2026-10-12T05:15:00.000Z"}}}
+      ]
+    }),null,2);
+    const raw=new TextEncoder().encode(wire);
+    const received="2026-10-12T03:06:11.000Z";
+    const originally=await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:JSON.parse(wire),receivedAtUtc:new Date(received)
+    });
+    expect(originally.itemCount).toBe(2);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    const delivery=await state.pool!.query(
+      "SELECT * FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1",[SESSION]
+    );
+    const origItems=await state.pool!.query(
+      "SELECT * FROM clean.prepaid_probe_item_runtime WHERE session_id=$1 ORDER BY item_index",
+      [SESSION]
+    );
+    expect(delivery.rowCount).toBe(1);
+    expect(origItems.rowCount).toBe(2);
+    const clone=(x:any)=>JSON.parse(JSON.stringify(x));
+    const normalizeBefore=origItems.rows.map(clone);
+    const refs=await state.pool!.query(
+      "SELECT object_name,content_sha256 FROM clean.provider_content_blob_ref "+
+      "WHERE source_kind='webhook' AND source_record_id=$1",
+      ["prepaid:"+SESSION+":"+originally.deliveryId]
+    );
+    expect(refs.rowCount).toBe(1);
+    const blob=state.blobs.get(refs.rows[0].object_name);
+    expect(blob).toBeDefined();
+    const witnessed:SyntheticPhysicalItemWitnessV39[]=origItems.rows.map(p=>({
+      sessionId:SESSION,deliveryId:p.delivery_id,
+      itemIndex:Number(p.item_index),rawItemSha256:p.raw_item_sha256,
+      originalEdgeReceivedUtc:received,
+      identityResolutionStatus:p.identity_resolution_status,
+      codeshareResolutionStatus:p.codeshare_resolution_status,
+      flightInstanceId:p.flight_instance_id,
+      initialServiceDate:p.initial_service_date,
+      operatingCarrier:p.operating_carrier,
+      operatingFlightNumber:p.operating_flight_number,
+      originIcao:p.origin_icao,destinationIcao:p.destination_icao,
+      scheduledGateOutUtc:p.scheduled_gate_out_utc?
+        new Date(p.scheduled_gate_out_utc).toISOString():null
+    }));
+    expect(witnessed.every(w=>w.identityResolutionStatus==="resolved"&&
+      w.codeshareResolutionStatus==="resolved_operator")).toBe(true);
+    const frame:SyntheticScienceJournalFrameV39={
+      schema:"v39.synthetic-logged-science-recovery.v1",
+      sessionId:SESSION,providerSubscriptionId:SUB,
+      ownerFrozenRunSha256:"6".repeat(64),
+      windowStartUtc:"2026-10-12T03:00:00.000Z",
+      windowEndUtc:"2026-10-12T05:00:00.000Z",
+      attemptKey:"restore:exact:two:operator",sourceWireSha256:
+        offlineShaHash("sha256").update(raw).digest("hex"),
+      firstEdgeReceivedUtc:received,syntheticCostCredits:1,
+      items:witnessed
+    };
+    const journalKey="p13-synthetic-science-journal-key-"+"s".repeat(64);
+    const snapshotKey="p13-synthetic-complete-row-snapshot-key-"+"k".repeat(64);
+    const signed=signSyntheticScienceRecoveryFrameV39(frame,journalKey);
+    const expected={
+      sessionId:SESSION,providerSubscriptionId:SUB,
+      ownerFrozenRunSha256:frame.ownerFrozenRunSha256,
+      attemptKey:frame.attemptKey
+    };
+    const client=await state.pool!.connect();
+    try{
+      await writeSyntheticLoggedScienceJournalV39({
+        client,signed,fixtureKey:journalKey,
+        originalRawBytes:raw,expected
+      });
+      const snap=await recordSyntheticExactRuntimeSnapshotV39({
+        client,expected,journal:signed,journalKey,
+        snapshotKey,originalWire:raw,originalCanonicalBlob:blob!
+      });
+      expect(snap.snapshot.items).toHaveLength(2);
+      expect(snap.snapshot.delivery.received_at_utc).toBe(received);
+      const logCount=await count();
+      expect(logCount.logged).toBe(1);
+
+      await state.pool!.query(
+        "TRUNCATE clean.prepaid_probe_item_runtime,"+
+        "clean.prepaid_probe_delivery_runtime,"+
+        "clean.prepaid_probe_session_runtime"
+      );
+      expect(await count()).toEqual({logged:1,unlogged:0});
+      const opts={
+        client,expected,journalKey,snapshotKey,
+        originalWire:raw,originalCanonicalBlob:blob!
+      };
+      await expect(restoreSyntheticExactRuntimeFromJournalV39({
+        ...opts,expected:{
+          ...expected,ownerFrozenRunSha256:"0".repeat(64)
+        }
+      })).rejects.toThrow();
+      await expect(restoreSyntheticExactRuntimeFromJournalV39({
+        ...opts,originalWire:new TextEncoder().encode("forged wire")
+      })).rejects.toThrow();
+      expect(await count()).toEqual({logged:1,unlogged:0});
+      const recovered=await restoreSyntheticExactRuntimeFromJournalV39(opts);
+      expect(recovered).toMatchObject({
+        rowsRestored:2,existingOriginalBlobReferences:1,
+        duplicateBlobReferencesCreated:0,
+        restoredSessionState:"quarantined",
+        idempotent:false,originalEdgeUtc:received,
+        paidCollectionResumed:false,
+        independentRealProviderSourceVerified:false,
+        scientificPassAuthorized:false,
+        automatedPaidRecoveryAuthorized:false
+      });
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      const rows=await state.pool!.query(
+        "SELECT * FROM clean.prepaid_probe_item_runtime "+
+        "WHERE session_id=$1 ORDER BY item_index",[SESSION]
+      );
+      expect(rows.rows.map(clone)).toEqual(normalizeBefore);
+      expect(rows.rows.every(p=>
+        new Date(p.received_at_utc).toISOString()===received
+      )).toBe(true);
+      const s=await state.pool!.query(
+        "SELECT state,callback_success_2xx FROM "+
+        "clean.prepaid_probe_session_runtime WHERE session_id=$1",[SESSION]
+      );
+      expect(s.rows[0]).toMatchObject({
+        state:"quarantined",callback_success_2xx:0
+      });
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body:JSON.parse(wire),
+        receivedAtUtc:new Date(received)
+      })).rejects.toThrow("PREPAID_PROBE_SESSION_NOT_ACCEPTING");
+      const again=await restoreSyntheticExactRuntimeFromJournalV39(opts);
+      expect(again).toMatchObject({
+        idempotent:true,rowsRestored:2,
+        duplicateBlobReferencesCreated:0
+      });
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      // Any post-recovery item corruption disables idempotent acceptance.
+      await client.query(
+        "UPDATE clean.prepaid_probe_item_runtime "+
+        "SET raw_item_sha256=$1 WHERE session_id=$2 AND item_index=0",
+        ["f".repeat(64),SESSION]
+      );
+      await expect(restoreSyntheticExactRuntimeFromJournalV39(opts))
+        .rejects.toThrow("P13_EXACT_RESTORE_PARTIAL_OR_CONFLICTING_RUNTIME");
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      console.log("P13_DISPOSABLE_QUARANTINED_REPLAY_EXACT_ITEM_UTC=true");
+      console.log("P13_DISPOSABLE_QUARANTINED_REPLAY_LOGGED_BLOB_ADDED=0");
+      console.log("P13_DISPOSABLE_QUARANTINED_REPLAY_IDEMPOTENT=true");
+      console.log("P13_DISPOSABLE_QUARANTINED_REPLAY_CALLBACK_RESTARTED=false");
+      console.log("P13_REAL_PROVIDER_PROVENANCE_ATTESTED=false");
+      console.log("P13_PAID_REPLAY_AUTHORIZED=false");
+    }finally{client.release();}
   });
 
 });
