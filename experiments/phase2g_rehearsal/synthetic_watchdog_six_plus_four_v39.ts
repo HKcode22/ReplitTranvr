@@ -82,12 +82,15 @@ const integer=(v:unknown)=>typeof v==="number"&&
 function evidenceReason(x:SixPlusFourEvidenceV39):string|null{
   if(!x.signedOwnerAndSubscriptionMatch||!x.oneActiveOwnerLease)
     return "OWNER_OR_PROVIDER_SUBSCRIPTION_NOT_ATTESTED";
-  if(!x.sourceEvidenceIndependentlyAuthenticated||
-     !x.currentSenderWatermarkComplete)
-    return "SENDER_WATERMARK_NOT_INDEPENDENTLY_ATTESTED";
+  // A KNOWN signed-source count or billed-credit gap must win over a
+  // simultaneous missing/stale watermark classification. A green health
+  // endpoint must never suppress this hard violation.
   if(x.senderAttemptCount!==x.durableExactAttemptCount||
      x.senderAttemptCredits!==x.durableExactAttemptCredits)
     return "ATTEMPT_OR_BILLING_GAP";
+  if(!x.sourceEvidenceIndependentlyAuthenticated||
+     !x.currentSenderWatermarkComplete)
+    return "SENDER_WATERMARK_NOT_INDEPENDENTLY_ATTESTED";
   if(!x.unambiguousFirstEdgeUtcAndWireSha||
      !x.fullOriginalBytesReadBackVerified||x.rawRetentionHours<168)
     return "ORIGINAL_RAW_SOURCE_OR_UTC_NOT_DURABLE";
