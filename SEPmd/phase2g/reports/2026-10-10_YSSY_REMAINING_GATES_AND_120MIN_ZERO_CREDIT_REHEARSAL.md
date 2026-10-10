@@ -94,3 +94,13 @@ Repository commit and exact build SHA, owner/watchdog version, published deploym
 - **P20 final full hosted 120-minute rehearsal remains NOT RUN.** Do not prematurely mark P04–P20 PASS just because these test functions pass. Cost and non-contamination boundaries remain binding.
 
 **Current no-paid-run decision remains NO-GO**, pending further end-to-end and prospective authorization.
+
+## P04/P05 progress, October 10 (actual production route — still not hosted)
+
+- [CI run #38050244217](https://github.com/HKcode22/ReplitTranvr/actions/runs/38050244217) **GREEN**: **29 real SQL/actual prepaid-route tests, 99 offline regression tests**, 18 standalone health tests, typecheck, actual disposable PostgreSQL UNLOGGED crash proof. This tests `registerV3Routes` with its REAL prepaid parser+handler+error boundary over localhost, but NOT `server/phase2gCallbackOnly.ts` published lifecycle nor real Replit app/object storage.
+- Actual prepaid-route wrong-secret pre-JSON guard implemented in draft, plus tests for valid delivery, 404, 400, 413, 415, 500, duplicate dedupe and false ACK refusal.
+- **NEW P04/P11 unresolved source fidelity:** parser captures wire body buffer, but persistence stores canonicalized object JSON. Original wire SHA differs from stored canonical SHA for valid noncanonical wire JSON. Dual original-wire-vs-canonical hash versioning requires prospective science/privacy review before any Queue cutover, and historical object hashes MUST remain unchanged.
+- **NEW P05/P06 adversarial signal:** 22 concurrent fake sends at 550ms fake blob latency under 10s independent sender deadline caused **18 sender-observed timely 200s vs 22 internal SQL commits**. Real provider/Replit network behavior NOT measured. Internal commit alone cannot assert remote sender received acknowledgment; e.g. an actual provider 260 external/259 internal gap is NOT explained by this opposite-direction fake-sender scenario.
+- Detailed evidence and explicit limits: [actual route, canonical-wire and sender deadline report](2026-10-10_ACTUAL_PREPAID_ROUTE_AND_WIRE_BYTES_SCIENCE_GAP.md).
+
+**P04 remains partially completed** pending real callback-only startup/allowlist and published-equivalent storage and provider authenticated delivery. **P05/P06 remain blocked on hosting-equivalent POST latency, tail contention and durable upstream receipt**. Final real-time 120-minute R0/R1–R11 rehearsal remains NOT RUN and must never use an active scientific session.
