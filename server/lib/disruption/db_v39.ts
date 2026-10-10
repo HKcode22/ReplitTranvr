@@ -10,8 +10,28 @@ function requireV39RuntimeUrl(): string {
   return url;
 }
 
+/**
+ * A callback must not wait indefinitely for a SQL connection during
+ * Replit or PostgreSQL outages. Scoped to the published callback-only
+ * process, leaving scientific CLI/GitHub owner pool semantics unchanged.
+ *
+ * A 4s acquisition timeout is deliberately below the provider's observed
+ * ~10s HTTP response envelope. It bounds only pool acquisition, not object
+ * storage, transaction, platform cold-start or provider network delivery.
+ */
+export function v39PoolConnectionTimeoutMillis(
+  env: Pick<NodeJS.ProcessEnv, "V39_CALLBACK_ONLY_RUNTIME"> = process.env,
+): number {
+  return env.V39_CALLBACK_ONLY_RUNTIME === "1" ? 4000 : 0;
+}
+
 export function getV39Pool(): Pool {
-  if (!runtimePool) runtimePool = new Pool({ connectionString: requireV39RuntimeUrl() });
+  if (!runtimePool) {
+    runtimePool = new Pool({
+      connectionString: requireV39RuntimeUrl(),
+      connectionTimeoutMillis: v39PoolConnectionTimeoutMillis(),
+    });
+  }
   return runtimePool;
 }
 
