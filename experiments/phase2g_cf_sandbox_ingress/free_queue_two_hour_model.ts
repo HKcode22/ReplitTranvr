@@ -17,8 +17,10 @@ export const FREE_TIER_MODEL=Object.freeze({
   workerRequestsPerDay:100_000,
   queueOperationsPerDay:10_000,
   queueRetentionMinutes:24*60,
-  // Conservative cap below 128KB (metadata + queue serialization overhead).
-  maxRawMessageBytes:112_000,
+  // 128 KB Cloudflare queue maximum includes envelope and internal metadata.
+  // Reserve generous room for JSON/base64 expansion until REAL serialization
+  // is measured against each source payload and approved prelaunch.
+  maxRawMessageBytes:60_000,
   reservedQueueOperationsPerAttempt:4,
   // Keep 20% of account-wide operations unallocated for unknown other queues
   // and extra reads/retries. This is a MODEL reservation, not enforced by CF.
