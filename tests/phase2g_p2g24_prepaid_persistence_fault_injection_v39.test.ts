@@ -11,7 +11,7 @@ const fake = vi.hoisted(() => ({
   poolQuery: vi.fn(),
   uploads: new Map<string, Uint8Array>(),
   events: [] as string[],
-  injected: { deliveryInsertError: false, uploadError: false, corruptRead: false },
+  injected: { deliveryInsertError: false, uploadError: false, corruptRead: false, sessionLost: false },
   session: { requests: 0, successes: 0, failures: 0 },
   deliveries: new Map<string, {blob:string,sha:string}>(),
   savedMetadata: 0,
@@ -69,6 +69,7 @@ function setupDb() {
       if(q==="ROLLBACK TO SAVEPOINT phase2g_callback_payload"){fake.events.push("PAYLOAD_ROLLBACK");return ok;}
       if(q.includes("FROM clean.prepaid_probe_session_runtime")&&q.includes("FOR UPDATE")) {
         fake.events.push("SESSION_LOCK");
+        if(fake.injected.sessionLost)return {rowCount:0,rows:[]};
         return {rowCount:1,rows:[{state:"active",provider_subscription_id:"offline-sub",expires_at_utc:"2099-01-01T00:00:00Z"}]};
       }
       if(q.includes("SET callback_requests_seen=callback_requests_seen+1")){
@@ -115,7 +116,7 @@ beforeEach(()=>{
   fake.deliveries.clear();
   fake.savedMetadata=0;
   fake.deleteCalls=0;
-  fake.injected={deliveryInsertError:false,uploadError:false,corruptRead:false};
+  fake.injected={deliveryInsertError:false,uploadError:false,corruptRead:false,sessionLost:false};
   fake.session={requests:0,successes:0,failures:0};
   setupDb();
 });
@@ -147,6 +148,17 @@ describe("P2G24 offline actual prepaid persistence failure injection",()=>{
     expect(fake.savedMetadata).toBe(1);
     expect(fake.session).toEqual({requests:2,successes:2,failures:0});
     expect(fake.poolQuery).not.toHaveBeenCalled();
+  });
+
+  it("lost UNLOGGED session refuses delivery without recording a false scientific success",async()=>{
+    fake.injected.sessionLost=true;
+    await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body:baseBody}))
+      .rejects.toThrow("PREPAID_PROBE_SESSION_NOT_FOUND_OR_CRASH_RESET");
+    expect(fake.session.successes).toBe(0);
+    expect(fake.deliveries.size).toBe(0);
+    expect(fake.uploads.size).toBe(0);
+    expect(fake.events).toContain("ROLLBACK");
+    expect(fake.events).not.toContain("OBJECT_UPLOAD");
   });
 
   it("injected object upload failure never increments callback_success_2xx",async()=>{
