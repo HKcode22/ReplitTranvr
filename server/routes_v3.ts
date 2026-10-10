@@ -119,7 +119,7 @@ async function phase2gDbLivePreflight(req:Request,res:Response):Promise<void> {
     challenge:String(req.header("x-v39-phase2g-db-live-challenge")??"").trim(),
     suppliedProof:String(req.header("x-v39-phase2g-db-live-proof")??"").trim().toLowerCase(),
     selectOne:async()=>{
-      const result=await pool.query({text:"SELECT 1 AS connected",query_timeout:3000});
+      const result=await pool.query("SELECT 1 AS connected");
       return {rows:result.rows};
     }
   });
