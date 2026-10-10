@@ -157,7 +157,8 @@ async function originalBlob(client:Pick<PoolClient,"query">,
   if(delivery.raw_body_sha256!==content)
     throw Error("P13_EXACT_RESTORE_DELIVERY_CANONICAL_SHA_CONFLICT");
   const rows=await client.query(
-    "SELECT blob_ref_id,content_sha256,content_bytes,source_record_id "+
+    "SELECT blob_ref_id,content_sha256,content_bytes,source_record_id,"+
+    "retention_hours,persisted_at_utc,expires_at_utc "+
     "FROM clean.provider_content_blob_ref "+
     "WHERE source_kind='webhook' AND source_record_id=$1 FOR SHARE",
     ["prepaid:"+frame.sessionId+":"+String(delivery.delivery_id)]
@@ -169,6 +170,13 @@ async function originalBlob(client:Pick<PoolClient,"query">,
      r.content_sha256!==content||
      Number(r.content_bytes)!==originalCanonicalBlob.length)
     throw Error("P13_EXACT_RESTORE_ORIGINAL_BLOB_MISMATCH");
+  const persisted=new Date(r.persisted_at_utc).getTime();
+  const expires=new Date(r.expires_at_utc).getTime();
+  if(!Number.isFinite(persisted)||!Number.isFinite(expires)||
+     Number(r.retention_hours)<168||
+     expires-persisted<168*60*60*1000||
+     expires<=Date.now())
+    throw Error("P13_EXACT_RESTORE_ORIGINAL_BLOB_RETENTION_EXPIRED");
 }
 function values(row:Record<string,unknown>,cols:readonly string[]){
   return cols.map(col=>row[col]);
