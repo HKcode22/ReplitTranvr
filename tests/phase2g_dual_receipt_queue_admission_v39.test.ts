@@ -75,6 +75,46 @@ describe("Phase2G no-Cloudflare synthetic first-edge dual-hash Queue admission",
     expect(a.receipt.firstEdgeReceivedAtUtc).toBe(t1);
     expect(b.receipt.firstEdgeReceivedAtUtc).toBe(t1);
   });
+  it("repeated parallel competing arrivals preserve the first invoked timestamp despite async signing",async()=>{
+    for(let i=0;i<20;i++){
+      const f=fixture();f.setDelay(1);
+      const [a,b]=await Promise.all([
+        f.gate.admit(source(wire("same-"+i),t1)),
+        f.gate.admit(source(wire("same-"+i),t2))
+      ]);
+      expect([a.duplicate,b.duplicate]).toEqual([false,true]);
+      expect(f.send).toHaveBeenCalledOnce();
+      expect(f.messages).toHaveLength(1);
+      expect(f.messages[0].receipt.firstEdgeReceivedAtUtc).toBe(t1);
+      expect(a.receipt.firstEdgeReceivedAtUtc).toBe(t1);
+      expect(b.receipt.firstEdgeReceivedAtUtc).toBe(t1);
+    }
+  });
+  it("parallel same-attempt different-wire cannot smuggle a conflicting body behind the first in-flight receipt",async()=>{
+    const f=fixture();f.setDelay(20);
+    const pretty=JSON.stringify(JSON.parse(wire("conflict")),null,2);
+    const first=f.gate.admit(source(wire("conflict"),t1));
+    const second=f.gate.admit(source(pretty,t2));
+    const a=await first;
+    expect(a.duplicate).toBe(false);
+    await expect(second).rejects.toThrow("SOURCE_ATTEMPT_CONFLICT_REFUSED");
+    expect(f.messages).toHaveLength(1);
+    expect(f.messages[0].receipt.firstEdgeReceivedAtUtc).toBe(t1);
+  });
+  it("parallel callers never ACK when the first Queue admission fails; next attempt may retry cleanly",async()=>{
+    const f=fixture();f.setFail(true);f.setDelay(5);
+    const results=await Promise.allSettled([
+      f.gate.admit(source(wire("queue-fail"),t1)),
+      f.gate.admit(source(wire("queue-fail"),t2))
+    ]);
+    expect(results.every(x=>x.status==="rejected")).toBe(true);
+    expect(f.messages).toHaveLength(0);
+    expect(f.gate.locallyRememberedAttempts).toBe(0);
+    f.setFail(false);
+    const later=await f.gate.admit(source(wire("queue-fail"),t2));
+    expect(later.duplicate).toBe(false);
+    expect(f.messages).toHaveLength(1);
+  });
   it("same attempt with different source wire format is NOT silently admitted",async()=>{
     const f=fixture();const pretty=JSON.stringify(JSON.parse(wire()),null,2);
     await f.gate.admit(source(wire()));
