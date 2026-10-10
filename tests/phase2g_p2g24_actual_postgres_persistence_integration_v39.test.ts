@@ -54,6 +54,7 @@ import {signSyntheticSenderFrameV39,reconcileSyntheticSignedAttemptsV39} from ".
 import {signSyntheticOwnerFreezeV39,verifySyntheticOwnerFreezeV39,syntheticOwnerPublicKeyFingerprintV39} from "../experiments/phase2g_rehearsal/synthetic_owner_freeze_signature_v39";
 import {makeSyntheticTwoStageOwnerV39} from "../experiments/phase2g_rehearsal/synthetic_two_stage_owner_protocol_v39";
 import {recordSyntheticTwoStageOwnerBindingV39} from "../experiments/phase2g_rehearsal/disposable_two_stage_owner_journal_v39";
+import {compareSyntheticPhysicalItemContinuityV39,type SyntheticPhysicalItemWitnessV39} from "../experiments/phase2g_rehearsal/synthetic_physical_item_continuity_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -1107,6 +1108,96 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     }
     // Intentionally leave this FICTIONAL fixture row in the disposable CI
     // Postgres service for the real SIGKILL/restart step to query.
+  });
+
+  it("P15 physical-v2 item loss after disposable UNLOGGED reset mandates scientific censor",async()=>{
+    const leg={
+      id:"synthetic-provider-leg-crash-001",number:"QF702",
+      codeshareStatus:"IsOperator",
+      airline:{iata:"QF",icao:"QFA"},
+      departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+        scheduledTime:{utc:"2026-10-12T03:40:00.000Z"}},
+      arrival:{airport:{icao:"YMEL"},
+        scheduledTime:{utc:"2026-10-12T05:15:00.000Z"}},
+      aircraft:{reg:"VH-CRS"},callSign:"QFA702"
+    };
+    const response=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(sample({id:"synthetic-operator-physical-crash-001",flights:[leg]}))
+    });
+    expect(response.status).toBe(200);
+    const sql="SELECT session_id::text,delivery_id,item_index,raw_item_sha256,"+
+      "received_at_utc,identity_resolution_status,codeshare_resolution_status,"+
+      "flight_instance_id,initial_service_date::text,operating_carrier,"+
+      "operating_flight_number,origin_icao,destination_icao,scheduled_gate_out_utc "+
+      "FROM clean.prepaid_probe_item_runtime WHERE session_id=$1";
+    const before=await state.pool!.query(sql,[SESSION]);
+    expect(before.rowCount).toBe(1);
+    const row=before.rows[0];
+    expect(row).toMatchObject({
+      identity_resolution_status:"resolved",
+      codeshare_resolution_status:"resolved_operator",
+      operating_carrier:"QF",origin_icao:"YSSY",
+      destination_icao:"YMEL",initial_service_date:"2026-10-12"
+    });
+    expect(row.flight_instance_id).toEqual(expect.any(String));
+    const item:SyntheticPhysicalItemWitnessV39={
+      sessionId:row.session_id,deliveryId:row.delivery_id,
+      itemIndex:Number(row.item_index),rawItemSha256:row.raw_item_sha256,
+      // Replit SQL processing UTC, NOT authenticated original edge UTC.
+      originalEdgeReceivedUtc:new Date(row.received_at_utc).toISOString(),
+      identityResolutionStatus:row.identity_resolution_status,
+      codeshareResolutionStatus:row.codeshare_resolution_status,
+      flightInstanceId:row.flight_instance_id,
+      initialServiceDate:row.initial_service_date,
+      operatingCarrier:row.operating_carrier,
+      operatingFlightNumber:row.operating_flight_number,
+      originIcao:row.origin_icao,destinationIcao:row.destination_icao,
+      scheduledGateOutUtc:row.scheduled_gate_out_utc?
+        new Date(row.scheduled_gate_out_utc).toISOString():null
+    };
+    const start=new Date(Date.parse(item.originalEdgeReceivedUtc)-60000).toISOString();
+    const endUtc=new Date(Date.parse(start)+7200000).toISOString();
+    const input={
+      frozenSessionId:SESSION,windowStartUtc:start,windowEndUtc:endUtc,
+      independentSourceEvidenceAuthenticated:false,
+      independentOwnerFreezeAuthenticated:false,
+      expectedWitnesses:[item],observedRuntimeRows:[item]
+    };
+    const beforeDecision=compareSyntheticPhysicalItemContinuityV39(input);
+    expect(beforeDecision).toMatchObject({
+      expectedItemCount:1,observedItemCount:1,
+      confirmedOperatorPhysicalCount:1,
+      mandatoryCensor:true,scientificRunAuthorized:false
+    });
+    expect(beforeDecision.errors).toContain(
+      "SOURCE_ITEM_WITNESS_NOT_INDEPENDENTLY_AUTHENTICATED"
+    );
+    // Disposable state removal; this test is NOT an actual DB SIGKILL.
+    await state.pool!.query(
+      "TRUNCATE clean.prepaid_probe_item_runtime,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime"
+    );
+    const after=await state.pool!.query(sql,[SESSION]);
+    expect(after.rowCount).toBe(0);
+    const logged=await state.pool!.query(
+      "SELECT count(*)::int AS n FROM clean.provider_content_blob_ref"
+    );
+    expect(logged.rows[0].n).toBe(1);
+    const result=compareSyntheticPhysicalItemContinuityV39({
+      ...input,observedRuntimeRows:[]
+    });
+    expect(result).toMatchObject({
+      expectedItemCount:1,observedItemCount:0,mandatoryCensor:true,
+      scientificRunAuthorized:false,automaticRestorationAuthorized:false
+    });
+    expect(result.errors).toEqual(expect.arrayContaining([
+      "MISSING_PHYSICAL_ITEM_AFTER_CRASH",
+      "PHYSICAL_ITEM_LEDGER_COUNT_DIFFERENT",
+      "SOURCE_ITEM_WITNESS_NOT_INDEPENDENTLY_AUTHENTICATED"
+    ]));
+    console.log("P15_ACTUAL_OPERATOR_PHYSICAL_V2_ITEM_LOST_AFTER_UNLOGGED_RESET=true");
+    console.log("P15_REAL_SOURCE_ITEMS_INDEPENDENTLY_ATTESTED=false");
+    console.log("P15_PAID_RECOVERY_AUTHORIZED=false");
   });
 
 });
