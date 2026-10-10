@@ -228,8 +228,7 @@ export function evaluateSyntheticSixPlusFourWatchdogV39(input:{
 }):SixPlusFourDecisionV39{
   if(!input||input.backupChecks!==4)
     throw new Error("SIX_PLUS_FOUR_FROZEN_COMPARISON_INVALID");
-  return evaluateSyntheticBoundedSixPlusNWatchdogV39(input)
-    as SixPlusFourDecisionV39;
+  return (evaluateSyntheticBoundedSixPlusNWatchdogV39(input)) as SixPlusFourDecisionV39;
 }
 
 /** New selected prospective 6+6 synthetic sensitivity test — never paid. */
@@ -239,6 +238,5 @@ export function evaluateSyntheticSixPlusSixWatchdogV39(input:{
 }):SixPlusSixDecisionV39{
   if(!input||input.backupChecks!==6)
     throw new Error("SIX_PLUS_SIX_FROZEN_COMPARISON_INVALID");
-  return evaluateSyntheticBoundedSixPlusNWatchdogV39(input)
-    as SixPlusSixDecisionV39;
+  return (evaluateSyntheticBoundedSixPlusNWatchdogV39(input)) as SixPlusSixDecisionV39;
 }
