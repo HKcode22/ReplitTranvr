@@ -228,7 +228,19 @@ export function evaluateSyntheticSixPlusFourWatchdogV39(input:{
 }):SixPlusFourDecisionV39{
   if(!input||input.backupChecks!==4)
     throw new Error("SIX_PLUS_FOUR_FROZEN_COMPARISON_INVALID");
-  return (evaluateSyntheticBoundedSixPlusNWatchdogV39(input)) as SixPlusFourDecisionV39;
+  try{
+    return (evaluateSyntheticBoundedSixPlusNWatchdogV39(input)) as SixPlusFourDecisionV39;
+  }catch(err){
+    // Preserve the existing 6+4 public test/error contract unchanged
+    // while adding a separately named 6+6 sensitivity comparator.
+    if(err instanceof Error &&
+       err.message==="SIX_PLUS_N_FROZEN_COMPARISON_INVALID")
+      throw new Error("SIX_PLUS_FOUR_FROZEN_COMPARISON_INVALID");
+    if(err instanceof Error &&
+       err.message==="SIX_PLUS_N_INVALID_EVIDENCE_OR_RETRY_CONTRACT")
+      throw new Error("SIX_PLUS_FOUR_INVALID_EVIDENCE_OR_RETRY_CONTRACT");
+    throw err;
+  }
 }
 
 /** New selected prospective 6+6 synthetic sensitivity test — never paid. */
