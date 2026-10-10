@@ -136,7 +136,8 @@ describe("P13 signed synthetic TWO-HOUR all-eight-bin source-to-recovery truth a
     expect(r.errors).toEqual(expect.arrayContaining([
       "P13_FROZEN_120_ATTEMPT_TEST_PLAN_INCOMPLETE",
       "P13_JOURNAL_ATTEMPT_NOT_IN_SENDER_LEDGER",
-      "P13_SENDER_JOURNAL_TOTAL_CREDIT_GAP"
+      "P13_SENDER_JOURNAL_ATTEMPT_CARDINALITY_MISMATCH",
+      "P13_ORIGINAL_EIGHT_15MIN_SOURCE_BUCKETS_INCOMPLETE"
     ]));
   });
   it("one missing durable journal receipt yields a signed-sender gap and incomplete source bucket",()=>{
