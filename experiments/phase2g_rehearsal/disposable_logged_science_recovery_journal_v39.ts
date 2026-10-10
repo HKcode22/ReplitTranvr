@@ -171,6 +171,28 @@ export function verifySignedSyntheticScienceRecoveryV39(
 }
 
 /**
+ * Pure synthetic original-wire journal proof usable by a frozen 120-minute
+ * test manifest without a DB connection. Signer is local fixture ONLY.
+ * Does not prove there are no UNOBSERVED provider attempts.
+ */
+export function verifySyntheticScienceJournalWithOriginalWireV39(input:{
+  signed:SignedSyntheticScienceJournalV39;
+  fixtureKey:string;
+  expected:Pick<SyntheticScienceJournalFrameV39,
+    "sessionId"|"providerSubscriptionId"|"ownerFrozenRunSha256"|"attemptKey">;
+  originalRawBytes:Uint8Array;
+}):SyntheticScienceJournalFrameV39{
+  const frame=verifySignedSyntheticScienceRecoveryV39(
+    input.signed,input.fixtureKey,input.expected
+  );
+  if(sha(input.originalRawBytes)!==frame.sourceWireSha256)
+    throw new Error("P13_JOURNAL_ORIGINAL_SOURCE_BYTES_MISMATCH");
+  if(!completeOriginalWireItemBinding(input.originalRawBytes,frame))
+    throw new Error("P13_JOURNAL_FLIGHT_ITEMS_NOT_BOUND_TO_SOURCE_WIRE");
+  return frame;
+}
+
+/**
  * Journal row is append-only by logical (session,attempt), inside a disposable
  * LOGGED table intentionally created by its calling test, never by this API.
  * Verify identical write on retry and refuse a conflicting attempt.
@@ -184,13 +206,7 @@ export async function writeSyntheticLoggedScienceJournalV39(input:{
     "sessionId"|"providerSubscriptionId"|"ownerFrozenRunSha256"|"attemptKey">;
 }):Promise<{inserted:boolean;sourceWireSha256:string;originalEdgeUtc:string}>{
   onlyFixture();
-  const f=verifySignedSyntheticScienceRecoveryV39(
-    input.signed,input.fixtureKey,input.expected
-  );
-  if(sha(input.originalRawBytes)!==f.sourceWireSha256)
-    throw new Error("P13_JOURNAL_ORIGINAL_SOURCE_BYTES_MISMATCH");
-  if(!completeOriginalWireItemBinding(input.originalRawBytes,f))
-    throw new Error("P13_JOURNAL_FLIGHT_ITEMS_NOT_BOUND_TO_SOURCE_WIRE");
+  const f=verifySyntheticScienceJournalWithOriginalWireV39(input);
   const encoded=JSON.stringify(input.signed);
   const insert=await input.client.query(
     "INSERT INTO "+TABLE+"(session_id,attempt_key,signed_record)"+
