@@ -52,6 +52,8 @@ import {recordSyntheticSignedReceiptMetadataV2} from "../experiments/phase2g_reh
 import {readDisposablePostgresContinuitySnapshotV39,assessSyntheticPostgresContinuityV39} from "../experiments/phase2g_rehearsal/postgres_continuity_guard_v39";
 import {signSyntheticSenderFrameV39,reconcileSyntheticSignedAttemptsV39} from "../experiments/phase2g_rehearsal/signed_attempt_reconciliation_v39";
 import {signSyntheticOwnerFreezeV39,verifySyntheticOwnerFreezeV39,syntheticOwnerPublicKeyFingerprintV39} from "../experiments/phase2g_rehearsal/synthetic_owner_freeze_signature_v39";
+import {makeSyntheticTwoStageOwnerV39} from "../experiments/phase2g_rehearsal/synthetic_two_stage_owner_protocol_v39";
+import {recordSyntheticTwoStageOwnerBindingV39} from "../experiments/phase2g_rehearsal/disposable_two_stage_owner_journal_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -1005,6 +1007,106 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       console.log("P13_LOGGED_BLOBS_WITH_MISSING_UNLOGGED_LEDGER_CENSORED=true");
       console.log("REAL_PROVIDER_CALLS=0");
     }finally{client.release();}
+  });
+
+  it("P13 two-stage LOGGED journal rejects re-binding one frozen plan to a second subscription and survives future crash",async()=>{
+    const {generateKeyPairSync}=await import("node:crypto");
+    const pair=generateKeyPairSync("ed25519");
+    const pem=pair.publicKey.export({format:"pem",type:"spki"}).toString();
+    const pin=syntheticOwnerPublicKeyFingerprintV39(pem);
+    await state.pool!.query(
+      "CREATE SCHEMA IF NOT EXISTS p2g_two_stage_fixture"
+    );
+    await state.pool!.query(
+      "CREATE TABLE IF NOT EXISTS p2g_two_stage_fixture.owner_bindings("+
+      "plan_sha256 text PRIMARY KEY,subscription_id text UNIQUE NOT NULL,"+
+      "create_attempt_sha256 text UNIQUE NOT NULL,"+
+      "post_freeze_sha256 text NOT NULL,signed_binding_sha256 text NOT NULL,"+
+      "bound_at_utc timestamptz NOT NULL)"
+    );
+    const plan={
+      schema:"v39.phase2g.synthetic-owner-freeze.v1" as const,
+      mode:"synthetic-only" as const,
+      owner:"github-actions-emulator" as const,
+      stage:"Phase2G-Stage1" as const,
+      sessionId:SESSION,
+      providerSubscriptionId:null,
+      phase:"pre_subscription" as const,
+      frozenAtUtc:"2026-10-12T02:54:00.000Z",
+      frozenPlanSha256:"a".repeat(64),
+      frozenImplementationSha256:"b".repeat(64),
+      ownerCommitSha:"c".repeat(40),
+      receiverCommitSha:"d".repeat(40),
+      databasePostmasterStartUtc:"2026-10-10T01:00:00.000Z",
+      windowStartUtc:"2026-10-12T03:00:00.000Z",
+      windowEndUtc:"2026-10-12T05:00:00.000Z",
+      airportIcao:"YSSY" as const,
+      physicalFlightContract:"v39-physical-flight-instance-v2" as const,
+      sampleBucketMinutes:15 as const,
+      maxDeliveryRetries:0 as const,
+      providerCreditCeiling:500 as const,
+      stage1ReserveCredits:450 as const,
+      protectedAccountFloorCredits:1000 as const,
+      providerEmulatorOnly:true as const
+    };
+    const created="2026-10-12T02:56:00.000Z";
+    const bound="2026-10-12T02:57:00.000Z";
+    const attemptSha="6".repeat(64);
+    const sub="synthetic-unique-journal-sub-001";
+    const signed=makeSyntheticTwoStageOwnerV39({
+      plan,subscriptionId:sub,providerCreatedAtUtc:created,
+      boundAtUtc:bound,createAttemptSha256:attemptSha,
+      ownerPrivateKey:pair.privateKey
+    });
+    const verification={
+      ...signed,
+      trustedOwnerPublicKeyPem:pem,pinnedOwnerPublicKeySha256:pin,
+      independentlyExpectedPlan:plan,
+      independentlyReportedSubscriptionId:sub,
+      independentlyReportedCreateAttemptSha256:attemptSha,
+      independentlyReportedCreatedAtUtc:created
+    };
+    const clients=await Promise.all([state.pool!.connect(),state.pool!.connect()]);
+    try{
+      // Duplicate concurrent journals must collapse to one LOGGED row.
+      const accepted=await Promise.all(clients.map(client=>
+        recordSyntheticTwoStageOwnerBindingV39({client,verification})
+      ));
+      expect(accepted.map(x=>x.duplicate).sort()).toEqual([false,true]);
+      expect(accepted.every(x=>x.paidLaunchAuthorized===false&&
+        x.productionSubscriptionUniquenessProven===false)).toBe(true);
+      const afterFirst=await clients[0].query(
+        "SELECT count(*)::int AS total FROM p2g_two_stage_fixture.owner_bindings"
+      );
+      expect(afterFirst.rows[0].total).toBe(1);
+      const conflict=makeSyntheticTwoStageOwnerV39({
+        plan,subscriptionId:"synthetic-unexpected-second-sub",
+        providerCreatedAtUtc:created,boundAtUtc:bound,
+        createAttemptSha256:"7".repeat(64),ownerPrivateKey:pair.privateKey
+      });
+      const badVerification={
+        ...conflict,trustedOwnerPublicKeyPem:pem,pinnedOwnerPublicKeySha256:pin,
+        independentlyExpectedPlan:plan,
+        independentlyReportedSubscriptionId:"synthetic-unexpected-second-sub",
+        independentlyReportedCreateAttemptSha256:"7".repeat(64),
+        independentlyReportedCreatedAtUtc:created
+      };
+      await expect(recordSyntheticTwoStageOwnerBindingV39({
+        client:clients[0],verification:badVerification
+      })).rejects.toThrow("TWO_STAGE_IMMUTABLE_JOURNAL_CONFLICT");
+      const afterConflict=await clients[0].query(
+        "SELECT count(*)::int AS total, min(subscription_id) AS sub "+
+        "FROM p2g_two_stage_fixture.owner_bindings"
+      );
+      expect(afterConflict.rows[0]).toMatchObject({total:1,sub});
+      console.log("TWO_STAGE_LOGGED_SINGLE_PLAN_BINDING=1");
+      console.log("TWO_STAGE_SECOND_SUBSCRIPTION_REFUSED=true");
+      console.log("TWO_STAGE_REAL_PROVIDER_CREATE_NOT_PROVEN=true");
+    }finally{
+      for(const client of clients)client.release();
+    }
+    // Intentionally leave this FICTIONAL fixture row in the disposable CI
+    // Postgres service for the real SIGKILL/restart step to query.
   });
 
 });
