@@ -46,7 +46,7 @@ function harness(){
   };
   const env:Env={
     RAW:bucket,DELIVERY_QUEUE:{async send(v){events.push("queue:send");if(failSend)throw new Error("FAKE_QUEUE");messages.push(v)}},
-    EDGE_EXECUTION_MODE:"synthetic-only",EDGE_TEST_SECRET:secret,
+    EDGE_EXECUTION_MODE:"synthetic-only",EDGE_TEST_SECRET:secret,EDGE_TEST_DIAGNOSTICS:"1",
     EDGE_ALLOW_SYNTHETIC_RELAY:"0",EDGE_SANDBOX_RECEIVER_ORIGIN:"https://sandbox.mock.invalid",
     EDGE_TEST_RECEIVER_PATH_SECRET:"t".repeat(40)
   };
@@ -69,7 +69,7 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
   it("HTTP 200 occurs only AFTER verified immutable raw, index and durable queue send",async()=>{
     const h=harness();
     const response=await ingest(h.request(),h.env);
-    expect(response.status).toBe(200);
+    expect(response.status,await response.clone().text()).toBe(200);
     const result=await response.json() as {receiptId:string;durablyEnqueued:boolean;duplicate:boolean};
     expect(result.durablyEnqueued).toBe(true);
     expect(result.duplicate).toBe(false);
