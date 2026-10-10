@@ -50,6 +50,7 @@ export type Env = {
   EDGE_SANDBOX_RECEIVER_ORIGIN?:string;
   EDGE_TEST_RECEIVER_PATH_SECRET?:string;
   EDGE_MAX_BYTES?:string;
+  EDGE_TEST_DIAGNOSTICS?:string;
 };
 type Receipt = {
   v:1;
@@ -153,10 +154,12 @@ export async function ingest(request:Request,e:Env):Promise<Response>{
     // Always enqueue even on duplicate; at-least-once delivery is intentional.
     await e.DELIVERY_QUEUE.send({receiptKey});
     return json({accepted:true,receiptId:attemptHash,durablyEnqueued:true,duplicate:created===null});
-  }catch{
+  }catch(error){
     // A raw/index object may remain. A scheduled scanner can recover it.
     // Never 2xx unless BOTH durability and enqueue have been confirmed.
-    return json({accepted:false,error:"STORE_OR_QUEUE_UNAVAILABLE"},503);
+    return json({accepted:false,error:"STORE_OR_QUEUE_UNAVAILABLE",
+      ...(e.EDGE_TEST_DIAGNOSTICS==="1"?{testOnlyErrorName: error instanceof Error?error.name:"unknown"}:{})
+    },503);
   }
 }
 
