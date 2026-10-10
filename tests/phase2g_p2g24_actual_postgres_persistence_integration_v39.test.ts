@@ -46,9 +46,12 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
 import {persistPrepaidProbeWebhookV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import {registerV3Routes} from "../server/routes_v3";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
+const TEST_ONLY_CALLBACK_SECRET="p2g-fixture-"+ "x".repeat(40);
+const actualPath="/api/v1/webhooks/aerodatabox/"+TEST_ONLY_CALLBACK_SECRET+"/prepaid/"+SESSION;
 let localHttpServer:ReturnType<typeof createServer>|null=null;
 let localOrigin="";
 const sample=(additional:Record<string,unknown>={})=>({
@@ -79,6 +82,7 @@ beforeAll(async()=>{
   state.pool=new Pool({connectionString:u.toString(),connectionTimeoutMillis:3000,max:3});
   const id=await state.pool.query("SELECT current_database() AS db");
   if(id.rows[0].db!=="p2g_stage1_fixture")throw Error("FIXTURE_ID_MISMATCH");
+  process.env.AERODATABOX_WEBHOOK_SECRET=TEST_ONLY_CALLBACK_SECRET;
   await state.pool.query("CREATE SCHEMA clean");
   await state.pool.query([
     "CREATE UNLOGGED TABLE clean.prepaid_probe_session_runtime(",
@@ -108,10 +112,19 @@ beforeAll(async()=>{
     "scheduled_gate_in_utc timestamptz,flight_instance_id text,",
     "initial_service_date date,provisional_identity_key text,",
     "codeshare_resolution_status text,identity_resolution_status text,",
-    "received_at_utc timestamptz,PRIMARY KEY(session_id,delivery_id,item_index))"
+    "received_at_utc timestamptz,PRIMARY KEY(session_id,delivery_id,item_index))",
+    "; CREATE TABLE clean.adb_incident_stop (cause text NOT NULL, occurred_at_utc timestamptz NOT NULL, detail jsonb, resolved boolean NOT NULL)"
   ].join(" "));
   const app=express();
-  app.use(express.json({limit:"2mb"}));
+  // Same prepaid parser bypass as server/phase2gCallbackOnly.ts. This allows
+  // registerV3Routes() to execute its ACTUAL strict 2MB parser and error guard.
+  const ordinaryJson=express.json({limit:"2mb"});
+  app.use((req,res,next)=>{
+    if(/^\/api\/v1\/webhooks\/aerodatabox\/[^/]+\/prepaid\/[^/]+\/?$/.test(req.path)){
+      next();return;
+    }
+    ordinaryJson(req,res,next);
+  });
   app.post("/__synthetic__/prepaid/:sessionId",async(req,res)=>{
     if(req.params.sessionId!==SESSION){
       res.status(404).json({error:"TEST_SESSION_NOT_FOUND"});return;
@@ -126,6 +139,9 @@ beforeAll(async()=>{
       res.status(503).json({error:"TEST_PERSISTENCE_UNAVAILABLE"});
     }
   });
+  // Attaches the EXACT production V3.9 prepaid parser, ingress and incident
+  // failure handlers to our isolated loopback-only fixture app.
+  registerV3Routes(app);
   localHttpServer=createServer(app);
   await new Promise<void>(resolve=>localHttpServer!.listen(0,"127.0.0.1",resolve));
   const address=localHttpServer.address();
@@ -142,6 +158,7 @@ beforeEach(async()=>{
 });
 afterAll(async()=>{
   if(localHttpServer)await new Promise<void>((resolve,reject)=>localHttpServer!.close(err=>err?reject(err):resolve()));
+  delete process.env.AERODATABOX_WEBHOOK_SECRET;
   if(state.pool){
     await state.pool.query("DROP SCHEMA IF EXISTS clean CASCADE").catch(()=>{});
     await state.pool.end();
@@ -492,5 +509,74 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       await slowPool.end();
     }
   },30_000);
+
+  it("ACTUAL V3.9 secret-gated prepaid HTTP parser ACKs only committed bytes/SQL",async()=>{
+    const r=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(sample({id:"real-route-success",syntheticPadding:"x".repeat(5_500)}))
+    });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toMatchObject({received:true,items:0,duplicate:false});
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(await session()).toEqual({requests:1,successes:1,failures:0});
+    expect(state.events.slice(0,2)).toEqual(["UPLOAD","READBACK"]);
+  });
+  it("ACTUAL route returns 404 on wrong path secret without poisoning session counter",async()=>{
+    const r=await fetch(localOrigin+actualPath.replace(TEST_ONLY_CALLBACK_SECRET,"incorrect-secret"),{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(sample({id:"bad-secret"}))
+    });
+    expect(r.status).toBe(404);
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(await session()).toEqual({requests:0,successes:0,failures:0});
+  });
+  it("ACTUAL parser rejects malformed JSON with 400, counts ingress failure and never ACKs",async()=>{
+    const r=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:'{"notification":"malformed",'
+    });
+    expect(r.status).toBe(400);
+    expect(await r.json()).toMatchObject({error:"Prepaid probe JSON invalid"});
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(await session()).toEqual({requests:1,successes:0,failures:1});
+  });
+  it("ACTUAL parser rejects excessive 2MB body with HTTP 413 before persistence",async()=>{
+    const r=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({body:"x".repeat(2_200_000)})
+    });
+    expect(r.status).toBe(413);
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(await session()).toEqual({requests:1,successes:0,failures:1});
+  });
+  it("ACTUAL route invalid content-type is HTTP 415 and counted as failure",async()=>{
+    const r=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"text/plain"},body:"not-json"
+    });
+    expect(r.status).toBe(415);
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(await session()).toEqual({requests:1,successes:0,failures:1});
+  });
+  it("ACTUAL route storage failure returns HTTP 500 with no false credit or blob",async()=>{
+    state.failUpload=true;
+    const r=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(sample({id:"real-route-storage-fail"}))
+    });
+    expect(r.status).toBe(500);
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(await session()).toEqual({requests:1,successes:0,failures:1});
+  });
+  it("ACTUAL route simultaneous duplicate delivery ACKs twice but stores once",async()=>{
+    const body=JSON.stringify(sample({id:"real-route-duplicate"}));
+    const responses=await Promise.all([1,2].map(()=>fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},body
+    })));
+    expect(responses.map(r=>r.status)).toEqual([200,200]);
+    const answers=await Promise.all(responses.map(r=>r.json()));
+    expect(answers.filter(x=>x.duplicate)).toHaveLength(1);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(await session()).toEqual({requests:2,successes:2,failures:0});
+  });
 
 });
