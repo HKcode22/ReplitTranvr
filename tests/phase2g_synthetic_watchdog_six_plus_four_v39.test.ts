@@ -13,7 +13,7 @@ const good=():SixPlusFourEvidenceV39=>({
   unambiguousFirstEdgeUtcAndWireSha:true,
   fullOriginalBytesReadBackVerified:true,rawRetentionHours:168,
   originalPhysicalFlightV2Continuity:true,
-  originalEightFifteenMinuteBinsReconstructible:true,
+  elapsedScientificBinsThroughWatermarkVerified:true,
   signedOwnerAndSubscriptionMatch:true,oneActiveOwnerLease:true,
   unloggedRecoverySourceComplete:true,
   durableQueueAvailable:true,
@@ -133,7 +133,7 @@ describe("P15 six-primary + four-conditional-backup checks; never provider retri
   it("flight identity, 8 original bins and lost UNLOGGED state require scientific proof",()=>{
     for(const overrides of [
       {originalPhysicalFlightV2Continuity:false},
-      {originalEightFifteenMinuteBinsReconstructible:false},
+      {elapsedScientificBinsThroughWatermarkVerified:false},
       {unloggedRecoverySourceComplete:false}
     ]){
       expect(run(failures(10),overrides)).toMatchObject({
