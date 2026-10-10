@@ -58,6 +58,7 @@ import {compareSyntheticPhysicalItemContinuityV39,type SyntheticPhysicalItemWitn
 import {ingest as syntheticEdgeIngest,consume as syntheticEdgeConsume,type Env as SyntheticEdgeEnv} from "../experiments/phase2g_cf_sandbox_ingress/worker";
 import {verifyEdgeProvenanceV1} from "../experiments/phase2g_cf_sandbox_ingress/provenance";
 import {createHash as offlineShaHash} from "node:crypto";
+import {signSyntheticScienceRecoveryFrameV39,writeSyntheticLoggedScienceJournalV39,reviewSyntheticLoggedScienceJournalV39,type SyntheticScienceJournalFrameV39} from "../experiments/phase2g_rehearsal/disposable_logged_science_recovery_journal_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -1353,6 +1354,176 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       console.log("P13_REAL_PROVIDER_SOURCE_VERIFIED=false");
       console.log("P13_SCIENTIFIC_RECOVERY_AUTHORIZED=false");
     }finally{globalThis.fetch=originalFetch;}
+  });
+
+  it("P13 LOGGED signed physical-v2 science journal survives UNLOGGED loss, detects missing items, rejects owner/source tamper",async()=>{
+    await state.pool!.query(
+      "CREATE SCHEMA IF NOT EXISTS p2g_science_recovery_fixture"
+    );
+    await state.pool!.query(
+      "CREATE TABLE IF NOT EXISTS p2g_science_recovery_fixture.signed_source_item_journal("+
+      "session_id uuid NOT NULL,attempt_key text NOT NULL,signed_record jsonb NOT NULL,"+
+      "PRIMARY KEY(session_id,attempt_key))"
+    );
+    const wire=JSON.stringify(sample({
+      id:"synthetic-logged-science-physical-yssy-001",
+      flights:[{
+        id:"p13-journal-operator-flight-001",number:"QF710",
+        codeshareStatus:"IsOperator",
+        airline:{iata:"QF",icao:"QFA"},
+        departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+          scheduledTime:{utc:"2026-10-12T03:55:00.000Z"}},
+        arrival:{airport:{icao:"YMEL"},
+          scheduledTime:{utc:"2026-10-12T05:20:00.000Z"}}
+      }]
+    }),null,2);
+    const originalRawBytes=new TextEncoder().encode(wire);
+    const sourceWireSha256=offlineShaHash("sha256")
+      .update(originalRawBytes).digest("hex");
+    const sent=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:wire
+    });
+    expect(sent.status).toBe(200);
+    const query=
+      "SELECT session_id::text,delivery_id,item_index,raw_item_sha256,"+
+      "identity_resolution_status,codeshare_resolution_status,"+
+      "flight_instance_id,initial_service_date::text,operating_carrier,"+
+      "operating_flight_number,origin_icao,destination_icao,scheduled_gate_out_utc "+
+      "FROM clean.prepaid_probe_item_runtime WHERE session_id=$1";
+    const result=await state.pool!.query(query,[SESSION]);
+    expect(result.rowCount).toBe(1);
+    const p=result.rows[0];
+    const firstEdgeReceivedUtc="2026-10-12T03:02:14.000Z";
+    const item:SyntheticPhysicalItemWitnessV39={
+      sessionId:p.session_id,deliveryId:p.delivery_id,itemIndex:Number(p.item_index),
+      rawItemSha256:p.raw_item_sha256,
+      // Authenticated original edge time NOT captured by live V3.9.
+      // This is a synthetic independent frozen fixture timestamp ONLY.
+      originalEdgeReceivedUtc:firstEdgeReceivedUtc,
+      identityResolutionStatus:p.identity_resolution_status,
+      codeshareResolutionStatus:p.codeshare_resolution_status,
+      flightInstanceId:p.flight_instance_id,
+      initialServiceDate:p.initial_service_date,
+      operatingCarrier:p.operating_carrier,
+      operatingFlightNumber:p.operating_flight_number,
+      originIcao:p.origin_icao,destinationIcao:p.destination_icao,
+      scheduledGateOutUtc:p.scheduled_gate_out_utc?
+        new Date(p.scheduled_gate_out_utc).toISOString():null
+    };
+    expect(item.flightInstanceId).toEqual(expect.any(String));
+    expect(item.identityResolutionStatus).toBe("resolved");
+    expect(item.codeshareResolutionStatus).toBe("resolved_operator");
+    const ownerFrozenRunSha256="1".repeat(64);
+    const frame:SyntheticScienceJournalFrameV39={
+      schema:"v39.synthetic-logged-science-recovery.v1",
+      sessionId:SESSION,providerSubscriptionId:SUB,
+      ownerFrozenRunSha256,
+      windowStartUtc:"2026-10-12T03:00:00.000Z",
+      windowEndUtc:"2026-10-12T05:00:00.000Z",
+      attemptKey:"journal:operator:1",
+      sourceWireSha256,firstEdgeReceivedUtc,
+      syntheticCostCredits:1,items:[item]
+    };
+    const expected={
+      sessionId:SESSION,providerSubscriptionId:SUB,
+      ownerFrozenRunSha256,attemptKey:frame.attemptKey
+    };
+    const fixtureKey="p13-test-only-recovery-signing-key-"+"k".repeat(64);
+    const signed=signSyntheticScienceRecoveryFrameV39(frame,fixtureKey);
+    const sql=await state.pool!.connect();
+    try{
+      const options={client:sql,signed,fixtureKey,originalRawBytes,expected};
+      const first=await writeSyntheticLoggedScienceJournalV39(options);
+      expect(first).toMatchObject({
+        inserted:true,sourceWireSha256,
+        originalEdgeUtc:firstEdgeReceivedUtc
+      });
+      const duplicate=await writeSyntheticLoggedScienceJournalV39(options);
+      expect(duplicate.inserted).toBe(false);
+      const verified=await reviewSyntheticLoggedScienceJournalV39({
+        client:sql,fixtureKey,expected,originalRawBytes,observedRuntimeRows:[item]
+      });
+      expect(verified).toMatchObject({
+        journalCryptographicallyConsistent:true,
+        originalWireBytesMatched:true,
+        sourceAndItemContinuityConsistent:false,
+        expectedItems:1,runtimeItems:1,
+        uniquePhysicalOperatorFlights:1,
+        scientificallyCertified:false,paidRunAuthorized:false,
+        automaticReplayAuthorized:false
+      });
+      expect(verified.errors).toContain(
+        "SOURCE_ITEM_WITNESS_NOT_INDEPENDENTLY_AUTHENTICATED"
+      );
+      // Exact same attempt cannot bind to a different flight/service.
+      const altered=signSyntheticScienceRecoveryFrameV39({
+        ...frame,items:[{...item,operatingFlightNumber:"QF999"}]
+      },fixtureKey);
+      await expect(writeSyntheticLoggedScienceJournalV39({
+        ...options,signed:altered
+      })).rejects.toThrow("P13_LOGGED_SCIENCE_ATTEMPT_IDENTITY_CONFLICT");
+      // Even the correct signed journal cannot prove bytes that vanished.
+      const missingWire=await reviewSyntheticLoggedScienceJournalV39({
+        client:sql,fixtureKey,expected,
+        originalRawBytes:new TextEncoder().encode("damaged original"),
+        observedRuntimeRows:[item]
+      });
+      expect(missingWire.originalWireBytesMatched).toBe(false);
+      expect(missingWire.errors).toContain(
+        "P13_RECOVERY_WIRE_SOURCE_UNAVAILABLE_OR_CHANGED"
+      );
+      await sql.query(
+        "TRUNCATE clean.prepaid_probe_session_runtime,"+
+        "clean.prepaid_probe_delivery_runtime,"+
+        "clean.prepaid_probe_item_runtime"
+      );
+      const lostRuntime=await sql.query(query,[SESSION]);
+      expect(lostRuntime.rowCount).toBe(0);
+      const journalSurvival=await sql.query(
+        "SELECT count(*)::int AS n FROM "+
+        "p2g_science_recovery_fixture.signed_source_item_journal "+
+        "WHERE session_id=$1",[SESSION]
+      );
+      expect(journalSurvival.rows[0].n).toBe(1);
+      const after=await reviewSyntheticLoggedScienceJournalV39({
+        client:sql,fixtureKey,expected,originalRawBytes,observedRuntimeRows:[]
+      });
+      expect(after).toMatchObject({
+        journalCryptographicallyConsistent:true,
+        originalWireBytesMatched:true,sourceAndItemContinuityConsistent:false,
+        expectedItems:1,runtimeItems:0,
+        uniquePhysicalOperatorFlights:1,
+        scientificallyCertified:false,paidRunAuthorized:false,
+        automaticReplayAuthorized:false
+      });
+      expect(after.errors).toEqual(expect.arrayContaining([
+        "MISSING_PHYSICAL_ITEM_AFTER_CRASH",
+        "PHYSICAL_ITEM_LEDGER_COUNT_DIFFERENT",
+        "P13_REAL_PROVIDER_ATTEMPT_ACCOUNTING_NOT_ATTESTED"
+      ]));
+      // Invalid signature/owner binding is independently rejected.
+      await expect(reviewSyntheticLoggedScienceJournalV39({
+        client:sql,fixtureKey,expected:{
+          ...expected,ownerFrozenRunSha256:"0".repeat(64)
+        },originalRawBytes,observedRuntimeRows:[]
+      })).rejects.toThrow("P13_LOGGED_SCIENCE_JOURNAL_TAMPERED_OR_WRONG_OWNER");
+      await sql.query(
+        "UPDATE p2g_science_recovery_fixture.signed_source_item_journal "+
+        "SET signed_record=jsonb_set(signed_record,'{frame,items,0,rawItemSha256}',"+
+        "to_jsonb($1::text)) WHERE session_id=$2 AND attempt_key=$3",
+        ["f".repeat(64),SESSION,frame.attemptKey]
+      );
+      await expect(reviewSyntheticLoggedScienceJournalV39({
+        client:sql,fixtureKey,expected,originalRawBytes,observedRuntimeRows:[]
+      })).rejects.toThrow("P13_LOGGED_SCIENCE_JOURNAL_TAMPERED_OR_WRONG_OWNER");
+      console.log("P13_LOGGED_SIGNED_PHYSICAL_V2_JOURNAL_AFTER_UNLOGGED_RESET=1");
+      console.log("P13_ORIGINAL_WIRE_SHA_AND_FIRST_EDGE_UTC_PRESERVED_TEST_ONLY=true");
+      console.log("P13_TAMPER_AND_OWNER_BINDING_DETECTED=true");
+      console.log("P13_REAL_SCIENTIFIC_RECONSTRUCTION_PROVEN=false");
+      console.log("P13_REAL_PROVIDER_ATTEMPTS_INDEPENDENTLY_VERIFIED=false");
+      console.log("P13_PAID_AUTO_RECOVERY_AUTHORIZED=false");
+    }finally{sql.release();}
   });
 
 });
