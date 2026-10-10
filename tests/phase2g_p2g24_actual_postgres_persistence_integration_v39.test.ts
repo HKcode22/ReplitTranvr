@@ -319,32 +319,63 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     // Demonstrates head-of-line blocking. Not a measured provider SLO.
   });
 
-  it("reveals provider-timeout exposure from burst of distinct callbacks serialized behind slow object readback",async()=>{
-    // Deliberately pessimistic synthetic case: 18 distinct SENDs arriving
-    // concurrently, each mock network storage readback awaiting 600ms.
-    // The SAME session row is locked during external storage roundtrip.
-    // This detects architectural head-of-line blocking; NOT a claim
-    // that P2G24 received such a burst or that real storage takes 600ms.
+  it("PROVES short DB pool wait produces 503 and unrecorded provider attempts under a burst",async()=>{
+    // Negative result, not a readiness PASS: the disposable PostgreSQL pool
+    // currently has max=3 and acquisition timeout=3s. Queueing 18 distinct
+    // SENDs behind 600ms fake storage creates a mix of HTTP 200 and 503.
+    // 503 provider attempts would be billable but NOT observed internally
+    // when maxDeliveryRetries=0.
     state.uploadDelayMs=600;
     const n=18;
-    const started=performance.now();
-    const posts=Array.from({length:n},(_,i)=>fetch(
+    const responses=await Promise.all(Array.from({length:n},(_,i)=>fetch(
       localOrigin+"/__synthetic__/prepaid/"+SESSION,{
         method:"POST",headers:{"content-type":"application/json"},
-        body:JSON.stringify(sample({
-          id:"burst-synthetic-"+i,
-          deliveryAttempt:{seqNo:0,costCredits:1,timestampUtc:"2026-10-12T03:01:01Z"}
-        }))
+        body:JSON.stringify(sample({id:"burst-short-timeout-"+i}))
       }
-    ));
-    const responses=await Promise.all(posts);
-    const elapsed=performance.now()-started;
-    expect(responses.every(r=>r.status===200)).toBe(true);
-    expect(elapsed).toBeGreaterThan(10_000);
-    expect(await count()).toEqual({logged:n,unlogged:n});
-    expect(await session()).toEqual({requests:n,successes:n,failures:0});
-    // This successful offline test is a PROVEN SYNTHETIC >10s exposure;
-    // it must NOT be interpreted as a paid-launch PASS/latency compliance.
+    )));
+    const good=responses.filter(r=>r.status===200).length;
+    const unavailable=responses.filter(r=>r.status===503).length;
+    expect(good).toBeGreaterThan(0);
+    expect(unavailable).toBeGreaterThan(0);
+    expect(good+unavailable).toBe(n);
+    expect(await count()).toEqual({logged:good,unlogged:good});
+    const metrics=await session();
+    expect(metrics.successes).toBe(good);
+    expect(metrics.requests).toBe(good);
+    // Fail-fast is useful to bound resource stalls, not a substitute
+    // for independent durable ingress or provider retry.
   },25_000);
+
+  it("PROVES long DB acquisition wait can return 200 AFTER a ~10s sender deadline",async()=>{
+    // Contrasting synthetic experiment: allow full pool waits, while holding
+    // per-session row lock across 600ms simulated object-store upload.
+    // Every callback eventually commits, but the last ACK arrives too late
+    // for an upstream sender with a ~10s response deadline.
+    const original=state.pool!;
+    const slowPool=new Pool({
+      connectionString:process.env.P2G_FIXTURE_POSTGRES_URL!,
+      connectionTimeoutMillis:20_000,max:3
+    });
+    state.pool=slowPool;
+    try {
+      state.uploadDelayMs=600;
+      const n=18;
+      const started=performance.now();
+      const responses=await Promise.all(Array.from({length:n},(_,i)=>fetch(
+        localOrigin+"/__synthetic__/prepaid/"+SESSION,{
+          method:"POST",headers:{"content-type":"application/json"},
+          body:JSON.stringify(sample({id:"burst-long-timeout-"+i}))
+        }
+      )));
+      const elapsed=performance.now()-started;
+      expect(responses.every(r=>r.status===200)).toBe(true);
+      expect(elapsed).toBeGreaterThan(10_000);
+      expect(await count()).toEqual({logged:n,unlogged:n});
+      expect(await session()).toEqual({requests:n,successes:n,failures:0});
+    } finally {
+      state.pool=original;
+      await slowPool.end();
+    }
+  },30_000);
 
 });
