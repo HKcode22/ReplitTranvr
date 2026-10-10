@@ -143,9 +143,19 @@ export function evaluateSyntheticSixPlusFourWatchdogV39(input:{
     const hard=s.health!=="healthy"&&!SOFT.has(s.health);
     const r=evidenceReason(e);
     // Confirmed loss/contract violations are never "just a few bad GETs".
-    if(hard||r==="ATTEMPT_OR_BILLING_GAP"||
-       r==="OWNER_OR_PROVIDER_SUBSCRIPTION_NOT_ATTESTED"||
-       r==="FROZEN_BUDGET_AT_RISK"){
+    // Irrefutable corruption, missing original bytes, expiry, cost exposure
+    // and ownership conflicts are hard vetoes EVEN IF health returns 200.
+    // Merely not-yet-attested sender watermark can remain audit-pending
+    // during a healthy interval, but cannot justify outage grace.
+    const scientificHard=new Set([
+      "ATTEMPT_OR_BILLING_GAP",
+      "OWNER_OR_PROVIDER_SUBSCRIPTION_NOT_ATTESTED",
+      "FROZEN_BUDGET_AT_RISK",
+      "ORIGINAL_RAW_SOURCE_OR_UTC_NOT_DURABLE",
+      "ORIGINAL_SCIENTIFIC_IDENTITY_NOT_RECONSTRUCTIBLE",
+      "BACKLOG_NOT_BOUNDED_OR_EXPIRED"
+    ]);
+    if(hard||(r!==null&&scientificHard.has(r))){
       index=i;stopOwner=true;state="STOP_HARD_CONTRACT";
       reasons.add(hard?"HARD_CALLBACK_CONTRACT_INVALID":r!);break;
     }
