@@ -4,6 +4,7 @@ import {
   reconcileSyntheticSignedAttemptsV39
 } from "../experiments/phase2g_rehearsal/signed_attempt_reconciliation_v39";
 import {createSyntheticDualSourceMessageV2} from "../experiments/phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
+import {evaluateSyntheticSixPlusFourWatchdogV39} from "../experiments/phase2g_rehearsal/synthetic_watchdog_six_plus_four_v39";
 import {
   evaluateSyntheticWatchdogToleranceV39,
   type SimulatedDurableIngressEvidenceV39
@@ -122,4 +123,117 @@ describe("P15 signed synthetic attempt ledger is not independently durable recei
     expect(p.wouldStopAtHealthIndex).toBe(0);
     expect(p.errors).toContain("KNOWN_SOURCE_DELIVERY_GAP");
   });
+  it("6+4 signed sender and edge identities match, but absent real 168h raw-byte storage denies any grace",async()=>{
+    const audit=await signedFixture();
+    expect(audit.attemptEvidenceConsistent).toBe(true);
+    const e=evidence(audit.attemptEvidenceConsistent,false);
+    const policy=evaluateSyntheticSixPlusFourWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:4,
+      samples:Array.from({length:10},()=>({
+        health:"transient_timeout" as const,
+        evidence:{
+          sourceEvidenceIndependentlyAuthenticated:e.independentSenderLedgerVerified,
+          currentSenderWatermarkComplete:e.allSenderAttemptsAtWatermarkMatchedToEdge,
+          senderAttemptCount:e.senderAttemptCount,
+          durableExactAttemptCount:e.durableEdgeAttemptCount,
+          senderAttemptCredits:e.externalSyntheticCredits,
+          durableExactAttemptCredits:e.durableEdgeSyntheticCredits,
+          unambiguousFirstEdgeUtcAndWireSha:e.immutableFirstEdgeUtcAndWireShaVerified,
+          fullOriginalBytesReadBackVerified:e.durableFullRawBytesAndRetention168hVerified,
+          rawRetentionHours:e.durableFullRawBytesAndRetention168hVerified?168:0,
+          originalPhysicalFlightV2Continuity:e.scientificPhysicalV2EvidenceComplete,
+          elapsedScientificBinsThroughWatermarkVerified:true,
+          signedOwnerAndSubscriptionMatch:e.ownerFrozenBindingVerified,
+          oneActiveOwnerLease:e.subscriberLeaseUnique,
+          unloggedRecoverySourceComplete:e.unloggedScientificStateKnownSafe,
+          durableQueueAvailable:true,queueBacklogAgeSeconds:0,
+          queueRetentionSeconds:e.queueTimeToLiveSeconds,
+          providerMaxDeliveryRetries:0 as const,
+          frozenCreditCeiling:500,independentEstimatedUpperBoundSpend:20,
+          currentEvidenceAgeSeconds:0
+        }
+      }))
+    });
+    expect(policy).toMatchObject({
+      stopOwner:true,stopAtIndex:0,state:"STOP_SAFE_NO_PROOF",
+      reasons:["ORIGINAL_RAW_SOURCE_OR_UTC_NOT_DURABLE"],
+      publicationApproved:false
+    });
+  });
+  it("6+4 no-provider demonstration may reach backup check eight only with declared source durability; no scientific PASS",async()=>{
+    const audit=await signedFixture();
+    expect(audit.attemptEvidenceConsistent).toBe(true);
+    const e=evidence(audit.attemptEvidenceConsistent,true);
+    const policy=evaluateSyntheticSixPlusFourWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:4,
+      samples:[...Array.from({length:8},()=> "transient_timeout" as const),"healthy" as const].map(
+        health=>({health,evidence:{
+          sourceEvidenceIndependentlyAuthenticated:e.independentSenderLedgerVerified,
+          currentSenderWatermarkComplete:e.allSenderAttemptsAtWatermarkMatchedToEdge,
+          senderAttemptCount:e.senderAttemptCount,
+          durableExactAttemptCount:e.durableEdgeAttemptCount,
+          senderAttemptCredits:e.externalSyntheticCredits,
+          durableExactAttemptCredits:e.durableEdgeSyntheticCredits,
+          unambiguousFirstEdgeUtcAndWireSha:e.immutableFirstEdgeUtcAndWireShaVerified,
+          fullOriginalBytesReadBackVerified:e.durableFullRawBytesAndRetention168hVerified,
+          rawRetentionHours:168,
+          originalPhysicalFlightV2Continuity:e.scientificPhysicalV2EvidenceComplete,
+          elapsedScientificBinsThroughWatermarkVerified:true,
+          signedOwnerAndSubscriptionMatch:e.ownerFrozenBindingVerified,
+          oneActiveOwnerLease:e.subscriberLeaseUnique,
+          unloggedRecoverySourceComplete:e.unloggedScientificStateKnownSafe,
+          durableQueueAvailable:true,queueBacklogAgeSeconds:0,
+          queueRetentionSeconds:e.queueTimeToLiveSeconds,
+          providerMaxDeliveryRetries:0 as const,
+          frozenCreditCeiling:500,independentEstimatedUpperBoundSpend:20,
+          currentEvidenceAgeSeconds:0
+        }})
+      )
+    });
+    expect(policy).toMatchObject({
+      stopOwner:false,enteredContingency:true,contingencyChecksUsed:2,
+      recoveredHealth:true,
+      state:"HEALTH_RECOVERED_AUDIT_PENDING",
+      scientificAdjudication:"PENDING_OR_CENSORED_NOT_AUTOMATIC_PASS",
+      paidLaunchAuthorized:false
+    });
+  });
+  it("6+4 cannot overlook one sender-not-at-edge billed attempt while extending health grace",async()=>{
+    const audit=await signedFixture(true);
+    expect(audit.attemptEvidenceConsistent).toBe(false);
+    expect(audit.errors).toContain("BILLED_SENDER_ATTEMPT_MISSING_AT_EDGE");
+    const e=evidence(audit.attemptEvidenceConsistent,true);
+    const policy=evaluateSyntheticSixPlusFourWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:4,
+      samples:[{
+        health:"healthy" as const,evidence:{
+          sourceEvidenceIndependentlyAuthenticated:e.independentSenderLedgerVerified,
+          currentSenderWatermarkComplete:e.allSenderAttemptsAtWatermarkMatchedToEdge,
+          senderAttemptCount:e.senderAttemptCount,
+          durableExactAttemptCount:e.durableEdgeAttemptCount,
+          senderAttemptCredits:e.externalSyntheticCredits,
+          durableExactAttemptCredits:e.durableEdgeSyntheticCredits,
+          unambiguousFirstEdgeUtcAndWireSha:e.immutableFirstEdgeUtcAndWireShaVerified,
+          fullOriginalBytesReadBackVerified:e.durableFullRawBytesAndRetention168hVerified,
+          rawRetentionHours:168,
+          originalPhysicalFlightV2Continuity:e.scientificPhysicalV2EvidenceComplete,
+          elapsedScientificBinsThroughWatermarkVerified:true,
+          signedOwnerAndSubscriptionMatch:e.ownerFrozenBindingVerified,
+          oneActiveOwnerLease:e.subscriberLeaseUnique,
+          unloggedRecoverySourceComplete:e.unloggedScientificStateKnownSafe,
+          durableQueueAvailable:true,queueBacklogAgeSeconds:0,
+          queueRetentionSeconds:e.queueTimeToLiveSeconds,
+          providerMaxDeliveryRetries:0 as const,
+          frozenCreditCeiling:500,independentEstimatedUpperBoundSpend:20,
+          currentEvidenceAgeSeconds:0
+        }
+      }]
+    });
+    expect(policy).toMatchObject({
+      stopOwner:true,stopAtIndex:0,
+      reasons:["ATTEMPT_OR_BILLING_GAP"],
+      scientificAdjudication:"PENDING_OR_CENSORED_NOT_AUTOMATIC_PASS"
+    });
+  });
+
 });
