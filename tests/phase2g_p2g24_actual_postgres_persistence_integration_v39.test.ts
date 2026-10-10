@@ -48,6 +48,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
 import {persistPrepaidProbeWebhookV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import {registerV3Routes} from "../server/routes_v3";
 import {createSyntheticDualSourceMessageV2,verifySyntheticDualSourceMessageV2} from "../experiments/phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
+import {recordSyntheticSignedReceiptMetadataV2} from "../experiments/phase2g_rehearsal/disposable_logged_source_receipt_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -704,6 +705,75 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     // This proves data-digest compatibility but NOT live signed-edge ingress:
     // actual V3.9 handler currently has no authenticated V2 envelope.
     expect(new TextDecoder().decode([...state.blobs.values()][0])).not.toBe(sourceBody);
+  });
+
+  it("synthetic signed first-edge receipt survives durable SQL insert, duplicate/restart conflict and original time freeze",async()=>{
+    // THIS table is disposable and LOGGED; it contains only HMAC-blinded
+    // attempt ID + cryptographic hashes + first trusted UTC, NO raw body or
+    // plaintext provider subscription/notification IDs.
+    await state.pool!.query("CREATE SCHEMA IF NOT EXISTS p2g_dual_receipt_crash_fixture");
+    await state.pool!.query(
+      "CREATE TABLE IF NOT EXISTS p2g_dual_receipt_crash_fixture.receipt_metadata("+
+      "attempt_hmac text PRIMARY KEY,wire_sha256 text NOT NULL,"+
+      "canonical_sha256 text NOT NULL,first_edge_received_utc timestamptz NOT NULL,"+
+      "receipt_sha256 text NOT NULL)"
+    );
+    const syntheticBody=JSON.stringify(sample({id:"offline-signed-control-001"}));
+    const edgeKey="fixture-edge-key-"+ "a".repeat(64);
+    const blindKey="fixture-blinding-key-"+ "b".repeat(64);
+    const base={
+      rawBytes:new TextEncoder().encode(syntheticBody),sessionId:SESSION,
+      expectedProviderSubscriptionId:SUB,
+      privateEdgeSigningKey:edgeKey,
+      trustedReceivedAtUtc:"2026-10-12T03:01:02.000Z"
+    };
+    const msg=await createSyntheticDualSourceMessageV2(base);
+    const client=await state.pool!.connect();
+    try{
+      const options={
+        client,message:msg,privateEdgeSigningKey:edgeKey,
+        persistentAttemptBlindKey:blindKey,
+        sessionId:SESSION,providerSubscriptionId:SUB,
+        trustedNowUtc:"2026-10-12T03:03:00.000Z",queueAccepted:true
+      };
+      const first=await recordSyntheticSignedReceiptMetadataV2(options);
+      expect(first).toMatchObject({
+        savedFirstEdgeUtc:"2026-10-12T03:01:02.000Z",
+        duplicate:false,wireSha256:msg.receipt.wireSha256,
+        canonicalSha256:msg.receipt.canonicalSha256
+      });
+      const later=await createSyntheticDualSourceMessageV2({
+        ...base,trustedReceivedAtUtc:"2026-10-12T03:02:10.000Z"
+      });
+      const replay=await recordSyntheticSignedReceiptMetadataV2({
+        ...options,message:later
+      });
+      expect(replay.duplicate).toBe(true);
+      expect(replay.savedFirstEdgeUtc).toBe(first.savedFirstEdgeUtc);
+      const modified=await createSyntheticDualSourceMessageV2({
+        ...base,rawBytes:new TextEncoder().encode(JSON.stringify(JSON.parse(syntheticBody),null,2))
+      });
+      await expect(recordSyntheticSignedReceiptMetadataV2({
+        ...options,message:modified
+      })).rejects.toThrow("DURABLE_SOURCE_ATTEMPT_CONFLICT");
+      await expect(recordSyntheticSignedReceiptMetadataV2({
+        ...options,queueAccepted:false
+      })).rejects.toThrow("DURABLE_QUEUE_ADMISSION_NOT_PROVEN");
+      const rows=await state.pool!.query(
+        "SELECT attempt_hmac,wire_sha256,canonical_sha256,first_edge_received_utc,"+
+        "receipt_sha256 FROM p2g_dual_receipt_crash_fixture.receipt_metadata"
+      );
+      expect(rows.rows).toHaveLength(1);
+      expect(rows.rows[0].attempt_hmac).toMatch(/^[a-f0-9]{64}$/);
+      expect(rows.rows[0].wire_sha256).toBe(first.wireSha256);
+      expect(new Date(rows.rows[0].first_edge_received_utc).toISOString())
+        .toBe(first.savedFirstEdgeUtc);
+      const stored=JSON.stringify(rows.rows[0]);
+      expect(stored).not.toContain(SUB);
+      expect(stored).not.toContain("offline-signed-control-001");
+    }finally{client.release();}
+    // Deliberately leave this non-provider synthetic metadata row for the
+    // following disposable PostgreSQL SIGKILL/restart CI step to verify.
   });
 
 });
