@@ -1,6 +1,14 @@
 import {createHash,createHmac,timingSafeEqual} from "node:crypto";
 import type {PoolClient} from "pg";
 import {
+  verifySyntheticSenderFrameV39,
+  type SignedSyntheticSenderFrameV39
+} from "./signed_attempt_reconciliation_v39";
+import {
+  compareSyntheticPhysicalItemContinuityV39,
+  type SyntheticPhysicalItemWitnessV39
+} from "./synthetic_physical_item_continuity_v39";
+import {
   verifySyntheticScienceJournalWithOriginalWireV39,
   type SignedSyntheticScienceJournalV39,
   type SyntheticScienceJournalFrameV39
@@ -341,6 +349,292 @@ export async function restoreSyntheticExactRuntimeFromJournalV39(input:{
     };
   }catch(error){
     await client.query("ROLLBACK").catch(()=>undefined);
+    throw error;
+  }
+}
+
+
+/**
+ * P13 full-window fixture ONLY: 120 signed synthetic source attempts in eight
+ * 15-minute buckets, restored in ONE transaction after ALL receipts and the
+ * complete LOGGED source inventory have been independently cross-checked.
+ *
+ * The 120 attempts/15-per-bin fixture is NOT an F.8 provider flight-count
+ * acceptance threshold. A real experiment may have sparse/uneven arrivals.
+ * This is an intentionally high-coverage deterministic crash-replay stress
+ * design, not an authorization to fabricate data for empty intervals.
+ *
+ * Full-row LOGGED fixtures are PROHIBITED in production V3.9 PITR. No branch
+ * of this function calls AeroDataBox or enters a billable active state.
+ */
+export type SyntheticCompleteWindowInputV39=Readonly<{
+  client:PoolClient;
+  signedSender:SignedSyntheticSenderFrameV39;
+  senderKey:string;
+  journalKey:string;
+  snapshotKey:string;
+  expectedSessionId:string;
+  expectedSubscriptionId:string;
+  expectedOwnerFrozenRunSha256:string;
+  entries:readonly Readonly<{
+    attemptKey:string;
+    originalWire:Uint8Array;
+    originalCanonicalBlob:Uint8Array;
+  }>[];
+}>;
+export type SyntheticCompleteWindowResultV39=Readonly<{
+  attemptsRecovered:120;
+  originalEightFifteenMinuteBuckets:readonly number[];
+  originalCreditsReconciled:120;
+  physicalObservationRowsRestored:number;
+  existingLoggedSourceRefs:120;
+  newLoggedSourceRefs:0;
+  retainedOriginalTimestamps:true;
+  quarantined:true;
+  idempotent:boolean;
+  independentRealSenderProvenanceVerified:false;
+  scientificallyCertified:false;
+  paidRunAuthorized:false;
+  automaticPaidReplayAuthorized:false;
+}>;
+const retainedWitness=(frame:SyntheticScienceJournalFrameV39):
+  SyntheticPhysicalItemWitnessV39[]=>[...frame.items];
+const srcOriginal=(body:Uint8Array)=>{
+  try{return JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(body))}
+  catch{throw Error("P13_WINDOW_ORIGINAL_WIRE_JSON_INVALID")}
+};
+function rejectUnexpected(when:boolean,code:string){
+  if(when)throw Error(code);
+}
+export async function restoreSyntheticCompleteWindowV39(
+  input:SyntheticCompleteWindowInputV39
+):Promise<SyntheticCompleteWindowResultV39>{
+  fixtureOnly();
+  if(!Array.isArray(input.entries)||input.entries.length!==120)
+    throw Error("P13_WINDOW_NOT_EXACT_120_SYNTHETIC_ATTEMPTS");
+  const sender=verifySyntheticSenderFrameV39({
+    signed:input.signedSender,
+    independentSenderKey:input.senderKey,
+    expectedSessionId:input.expectedSessionId,
+    expectedProviderSubscriptionId:input.expectedSubscriptionId,
+    expectedOwnerFrozenRunSha256:input.expectedOwnerFrozenRunSha256
+  });
+  if(sender.attempts.length!==120)
+    throw Error("P13_WINDOW_INCOMPLETE_INDEPENDENT_SYNTHETIC_SENDER");
+  const senderByKey=new Map(sender.attempts.map(a=>[a.attemptKey,a]));
+  const keys=new Set<string>();
+  for(const entry of input.entries){
+    rejectUnexpected(keys.has(entry.attemptKey)||!senderByKey.has(entry.attemptKey),
+      "P13_WINDOW_ATTEMPT_UNKNOWN_OR_DUPLICATED");
+    keys.add(entry.attemptKey);
+  }
+  const c=input.client;
+  await c.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+  try{
+    await c.query("SELECT pg_advisory_xact_lock(hashtext($1)::bigint)",[
+      sender.sessionId
+    ]);
+    const jr=await c.query(
+      "SELECT attempt_key,signed_record FROM "+SCHEMA+
+      ".signed_source_item_journal WHERE session_id=$1 FOR SHARE",
+      [sender.sessionId]
+    );
+    const snap=await c.query(
+      "SELECT attempt_key,signed_record FROM "+SCHEMA+
+      ".exact_runtime_snapshot WHERE session_id=$1 FOR SHARE",
+      [sender.sessionId]
+    );
+    if(jr.rowCount!==120||snap.rowCount!==120)
+      throw Error("P13_WINDOW_DURABLE_INVENTORY_INCOMPLETE_OR_EXTRA");
+    const jm=new Map<string,SignedSyntheticScienceJournalV39>(
+      jr.rows.map(r=>[String(r.attempt_key),r.signed_record])
+    );
+    const sm=new Map<string,SignedSyntheticFullSnapshotV39>(
+      snap.rows.map(r=>[String(r.attempt_key),r.signed_record])
+    );
+    if(jm.size!==120||sm.size!==120)
+      throw Error("P13_WINDOW_DURABLE_INVENTORY_DUPLICATED");
+    const bounds=[Date.parse(sender.windowStartUtc),
+      Date.parse(sender.windowEndUtc)];
+    const bins=Array<number>(8).fill(0);
+    let totalCredits=0;
+    const originals:Readonly<{
+      full:SyntheticFullSnapshotV39;
+      frame:SyntheticScienceJournalFrameV39;
+    }>[]=[];
+    const allWitnesses:SyntheticPhysicalItemWitnessV39[]=[];
+    const frozenDeliveries=new Set<string>();
+    // All independent evidence and all surviving blob refs are checked
+    // BEFORE the very first potentially reconstructive write.
+    for(const e of input.entries){
+      const a=senderByKey.get(e.attemptKey)!;
+      const signed=jm.get(e.attemptKey);
+      const snapshot=sm.get(e.attemptKey);
+      if(!signed||!snapshot)
+        throw Error("P13_WINDOW_SOURCE_OR_SNAPSHOT_MISSING");
+      const expected={
+        sessionId:sender.sessionId,
+        providerSubscriptionId:sender.providerSubscriptionId,
+        ownerFrozenRunSha256:sender.ownerFrozenRunSha256,
+        attemptKey:e.attemptKey
+      };
+      const frame=verifySyntheticScienceJournalWithOriginalWireV39({
+        signed,fixtureKey:input.journalKey,expected,
+        originalRawBytes:e.originalWire
+      });
+      const full=checkedSnapshot(snapshot,input.snapshotKey,frame,signed.mac);
+      if(frame.windowStartUtc!==sender.windowStartUtc||
+         frame.windowEndUtc!==sender.windowEndUtc)
+        throw Error("P13_WINDOW_BOUNDS_CHANGED");
+      if(frame.sourceWireSha256!==a.wireSha256||
+         frame.syntheticCostCredits!==a.syntheticCostCredits||
+         a.syntheticCostCredits!==1||a.attemptSeqNo!==0)
+        throw Error("P13_WINDOW_SOURCE_IDENTITY_OR_CREDITS_MISMATCH");
+      const body=srcOriginal(e.originalWire);
+      if(body?.id!==a.notificationId||
+         body?.subscription?.id!==sender.providerSubscriptionId||
+         body?.timestampUtc!==a.providerGeneratedUtc||
+         body?.deliveryAttempt?.seqNo!==a.attemptSeqNo||
+         body?.deliveryAttempt?.costCredits!==a.syntheticCostCredits||
+         digest(canonical(body))!==a.canonicalSha256)
+        throw Error("P13_WINDOW_ORIGINAL_WIRE_SENDER_CONFLICT");
+      const eventUtc=Date.parse(frame.firstEdgeReceivedUtc);
+      const attemptUtc=Date.parse(a.providerAttemptUtc);
+      if(!Number.isFinite(eventUtc)||eventUtc<bounds[0]||
+         eventUtc>=bounds[1]||
+         eventUtc<attemptUtc-2000||
+         eventUtc>attemptUtc+a.senderResponseElapsedMs+2000||
+         a.senderResponseStatus!==200||
+         a.senderResponseElapsedMs>10000)
+        throw Error("P13_WINDOW_ORIGINAL_EDGE_OR_SENDER_ACK_INVALID");
+      bins[Math.floor((eventUtc-bounds[0])/900000)]++;
+      totalCredits+=frame.syntheticCostCredits;
+      const deliveryId=String(full.delivery.delivery_id);
+      if(frame.items.some(w=>w.deliveryId!==deliveryId)||
+         frozenDeliveries.has(deliveryId))
+        throw Error("P13_WINDOW_DUPLICATE_OR_WRONG_SOURCE_DELIVERY");
+      frozenDeliveries.add(deliveryId);
+      await originalBlob(c,frame,full.delivery,
+        e.originalWire,e.originalCanonicalBlob);
+      originals.push({full,frame});
+      allWitnesses.push(...retainedWitness(frame));
+    }
+    if(totalCredits!==120||!bins.every(x=>x===15))
+      throw Error("P13_WINDOW_EIGHT_BUCKET_OR_CREDIT_TOTAL_INVALID");
+    const blobInventory=await c.query(
+      "SELECT source_record_id FROM clean.provider_content_blob_ref "+
+      "WHERE source_kind='webhook' AND "+
+      "left(source_record_id,length($1::text))=$1::text FOR SHARE",
+      ["prepaid:"+sender.sessionId+":"]
+    );
+    if(blobInventory.rowCount!==120)
+      throw Error("P13_WINDOW_EXTRA_OR_MISSING_LOGGED_ORIGINAL");
+    for(const r of blobInventory.rows){
+      const key=String(r.source_record_id)
+        .slice(("prepaid:"+sender.sessionId+":").length);
+      if(!frozenDeliveries.has(key))
+        throw Error("P13_WINDOW_UNREGISTERED_LOGGED_DELIVERY");
+    }
+    const current=await stateOf(c,sender.sessionId);
+    const expectedDeliveryRows=originals.map(o=>o.full.delivery)
+      .sort((a,b)=>String(a.delivery_id).localeCompare(String(b.delivery_id)));
+    const expectedItemRows=originals.flatMap(o=>o.full.items)
+      .sort((a,b)=>String(a.delivery_id).localeCompare(String(b.delivery_id))||
+                   Number(a.item_index)-Number(b.item_index));
+    const deliverySql="SELECT * FROM clean.prepaid_probe_delivery_runtime "+
+      "WHERE session_id=$1 ORDER BY delivery_id";
+    const itemSql="SELECT * FROM clean.prepaid_probe_item_runtime "+
+      "WHERE session_id=$1 ORDER BY delivery_id,item_index";
+    const canonicalRows=(rows:readonly Record<string,unknown>[])=>canonical(
+      rows.map(norm));
+    const exact=(deliveries:readonly Record<string,unknown>[],
+      items:readonly Record<string,unknown>[])=>{
+      return canonicalRows(deliveries)===canonicalRows(expectedDeliveryRows)&&
+        canonicalRows(items)===canonicalRows(expectedItemRows);
+    };
+    let idempotent=false;
+    if(current.session.rowCount||current.delivery.rowCount||current.items.rowCount){
+      if(current.session.rowCount!==1||
+         current.session.rows[0].state!=="quarantined"||
+         current.delivery.rowCount!==120||
+         current.items.rowCount!==expectedItemRows.length)
+        throw Error("P13_WINDOW_PARTIAL_OR_ACTIVE_RUNTIME_FORBIDDEN");
+      const existingDelivery=(await c.query(deliverySql,[sender.sessionId])).rows;
+      const existingItems=(await c.query(itemSql,[sender.sessionId])).rows;
+      if(!exact(existingDelivery,existingItems))
+        throw Error("P13_WINDOW_RESTORED_ROWS_CHANGED");
+      idempotent=true;
+    }else{
+      await c.query(
+        "INSERT INTO clean.prepaid_probe_session_runtime("+
+        "session_id,provider_subscription_id,state,expires_at_utc,"+
+        "callback_requests_seen,callback_success_2xx,callback_failures) "+
+        "VALUES($1,$2,'quarantined',$3,0,0,0)",
+        [sender.sessionId,sender.providerSubscriptionId,sender.windowEndUtc]
+      );
+      for(const o of originals){
+        await c.query(insertSql("prepaid_probe_delivery_runtime",colsDelivery),
+          values(o.full.delivery,colsDelivery));
+        for(const item of o.full.items)
+          await c.query(insertSql("prepaid_probe_item_runtime",colsItem),
+            values(item,colsItem));
+      }
+    }
+    const after=await stateOf(c,sender.sessionId);
+    if(after.session.rowCount!==1||
+       after.session.rows[0].state!=="quarantined"||
+       after.delivery.rowCount!==120||
+       after.items.rowCount!==expectedItemRows.length)
+      throw Error("P13_WINDOW_POST_RESTORE_ROWS_MISSING");
+    const restoredDelivery=(await c.query(deliverySql,[sender.sessionId])).rows;
+    const restoredItems=(await c.query(itemSql,[sender.sessionId])).rows;
+    if(!exact(restoredDelivery,restoredItems))
+      throw Error("P13_WINDOW_POST_RESTORE_EXACT_ROWS_CHANGED");
+    const observedWitnesses:SyntheticPhysicalItemWitnessV39[]=
+      restoredItems.map(r=>({
+        sessionId:String(r.session_id),deliveryId:String(r.delivery_id),
+        itemIndex:Number(r.item_index),
+        rawItemSha256:String(r.raw_item_sha256),
+        originalEdgeReceivedUtc:new Date(r.received_at_utc).toISOString(),
+        identityResolutionStatus:r.identity_resolution_status,
+        codeshareResolutionStatus:r.codeshare_resolution_status,
+        flightInstanceId:r.flight_instance_id,
+        initialServiceDate:r.initial_service_date,
+        operatingCarrier:r.operating_carrier,
+        operatingFlightNumber:r.operating_flight_number,
+        originIcao:r.origin_icao,destinationIcao:r.destination_icao,
+        scheduledGateOutUtc:r.scheduled_gate_out_utc?
+          new Date(r.scheduled_gate_out_utc).toISOString():null
+      }));
+    const itemsAudit=compareSyntheticPhysicalItemContinuityV39({
+      frozenSessionId:sender.sessionId,
+      windowStartUtc:sender.windowStartUtc,
+      windowEndUtc:sender.windowEndUtc,
+      independentSourceEvidenceAuthenticated:true,
+      independentOwnerFreezeAuthenticated:true,
+      expectedWitnesses:allWitnesses,
+      observedRuntimeRows:observedWitnesses
+    });
+    if(!itemsAudit.itemEvidenceConsistent||
+       itemsAudit.errors.length!==0||
+       itemsAudit.observedItemCount!==expectedItemRows.length)
+      throw Error("P13_WINDOW_POST_RESTORE_PHYSICAL_V2_INCONSISTENT");
+    await c.query("COMMIT");
+    return {
+      attemptsRecovered:120,
+      originalEightFifteenMinuteBuckets:bins,
+      originalCreditsReconciled:120,
+      physicalObservationRowsRestored:expectedItemRows.length,
+      existingLoggedSourceRefs:120,newLoggedSourceRefs:0,
+      retainedOriginalTimestamps:true,quarantined:true,
+      idempotent,
+      independentRealSenderProvenanceVerified:false,
+      scientificallyCertified:false,
+      paidRunAuthorized:false,
+      automaticPaidReplayAuthorized:false
+    };
+  }catch(error){
+    await c.query("ROLLBACK").catch(()=>undefined);
     throw error;
   }
 }
