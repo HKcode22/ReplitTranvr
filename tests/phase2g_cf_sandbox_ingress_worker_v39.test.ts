@@ -594,4 +594,55 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     }finally{globalThis.fetch=old;}
   });
 
+  it("P12 scanner does not erase historical source when marked processed but CURRENT SQL is missing; later confirmation safely advances",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    const receiptKey=h.messages[0].receiptKey;
+    const index=JSON.parse(new TextDecoder().decode(h.map.get(receiptKey)!.data));
+    index.firstEdgeReceivedAtUtc=new Date(Date.now()-5*60_000).toISOString();
+    await h.bucket.put(receiptKey,JSON.stringify(index));
+    await h.bucket.put(receiptKey.replace("/index/","/processed/"),
+      JSON.stringify({
+        v:1,receiptKey,receiptId:index.id,
+        sourceSha256:index.sourceSha256,
+        firstEdgeReceivedAtUtc:index.firstEdgeReceivedAtUtc,
+        receiverDurablyPersisted:true,
+        processedAtUtc:new Date().toISOString()
+      }));
+    const prior=globalThis.fetch;
+    let currentlyPersisted=false;
+    let confirmations=0;
+    globalThis.fetch=vi.fn(async(url,init)=>{
+      if(String(url)!=="https://sandbox.mock.invalid/__p2g-sandbox-confirm")
+        throw Error("P12_FAKE_EXTERNAL_REQUEST_REFUSED");
+      confirmations++;
+      const p=JSON.parse(String(init?.body??""));
+      expect(p).toMatchObject({
+        sessionId:session,receiptId:index.id,
+        providerAttemptId:index.attemptId,
+        sourceSha256:index.sourceSha256,
+        edgeReceivedAtUtc:index.firstEdgeReceivedAtUtc
+      });
+      return new Response(JSON.stringify({
+        v:1,currentlyPersisted,
+        sessionId:p.sessionId,receiptId:p.receiptId,
+        providerAttemptId:p.providerAttemptId,
+        sourceSha256:p.sourceSha256,
+        originalEdgeReceivedAtUtc:p.edgeReceivedAtUtc
+      }),{status:200});
+    }) as typeof fetch;
+    try{
+      const missing=await scanUnfinished(h.env);
+      expect(missing).toEqual({scanned:1,requeued:0,errors:1});
+      const checkpointKey="p2g-sandbox/control/scanner-cursor-v1.json";
+      expect(JSON.parse(new TextDecoder().decode(
+        h.map.get(checkpointKey)!.data)).cursor).toBe(null);
+      currentlyPersisted=true;
+      const confirmed=await scanUnfinished(h.env);
+      expect(confirmed).toEqual({scanned:1,requeued:0,errors:0});
+      expect(confirmations).toBe(2);
+      expect(h.messages).toHaveLength(1);
+    }finally{globalThis.fetch=prior;}
+  });
+
 });
