@@ -1,3 +1,5 @@
+import express from "express";
+import {createServer} from "node:http";
 import {beforeAll,afterAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {Pool} from "pg";
 
@@ -10,7 +12,7 @@ import {Pool} from "pg";
 const state=vi.hoisted(()=>({
   pool:null as null|Pool,
   blobs:new Map<string,Uint8Array>(),
-  failUpload:false,events:[] as string[]
+  failUpload:false,uploadDelayMs:0,events:[] as string[]
 }));
 vi.mock("../server/lib/disruption/db_v39",()=>({
   v39Pool:{
@@ -26,6 +28,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
     uploadBytes:async(key:string,bytes:Uint8Array)=>{
       state.events.push("UPLOAD");
       if(state.failUpload)throw Error("SYNTHETIC_BLOB_FAILURE");
+      if(state.uploadDelayMs>0)await new Promise(r=>setTimeout(r,state.uploadDelayMs));
       state.blobs.set(key,new Uint8Array(bytes));
     },
     exists:async(key:string)=>state.blobs.has(key),
@@ -46,6 +49,8 @@ import {persistPrepaidProbeWebhookV39} from "../server/lib/disruption/prepaidPro
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
+let localHttpServer:ReturnType<typeof createServer>|null=null;
+let localOrigin="";
 const sample=(additional:Record<string,unknown>={})=>({
   id:"synthetic-postgres-delivery-1",subscription:{id:SUB},
   timestampUtc:"2026-10-12T03:01:00Z",
@@ -95,9 +100,30 @@ beforeAll(async()=>{
     "delivery_attempt_cost_credits IS NULL OR delivery_attempt_cost_credits <= 1),",
     "notification_items integer,PRIMARY KEY(session_id,delivery_id))"
   ].join(" "));
+  const app=express();
+  app.use(express.json({limit:"2mb"}));
+  app.post("/__synthetic__/prepaid/:sessionId",async(req,res)=>{
+    if(req.params.sessionId!==SESSION){
+      res.status(404).json({error:"TEST_SESSION_NOT_FOUND"});return;
+    }
+    try{
+      const done=await persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body:req.body,receivedAtUtc:new Date()
+      });
+      res.status(200).json({received:true,duplicate:done.duplicate});
+    }catch{
+      // This is a disposable test-only HTTP wrapper, NOT the production route.
+      res.status(503).json({error:"TEST_PERSISTENCE_UNAVAILABLE"});
+    }
+  });
+  localHttpServer=createServer(app);
+  await new Promise<void>(resolve=>localHttpServer!.listen(0,"127.0.0.1",resolve));
+  const address=localHttpServer.address();
+  if(!address||typeof address==="string")throw Error("LOCAL_HTTP_TEST_PORT_FAILED");
+  localOrigin="http://127.0.0.1:"+address.port;
 },20000);
 beforeEach(async()=>{
-  state.blobs.clear();state.failUpload=false;state.events.length=0;
+  state.blobs.clear();state.failUpload=false;state.uploadDelayMs=0;state.events.length=0;
   await state.pool!.query(
     "TRUNCATE clean.provider_content_blob_ref,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime");
   await state.pool!.query(
@@ -105,6 +131,7 @@ beforeEach(async()=>{
     [SESSION,SUB]);
 });
 afterAll(async()=>{
+  if(localHttpServer)await new Promise<void>((resolve,reject)=>localHttpServer!.close(err=>err?reject(err):resolve()));
   if(state.pool){
     await state.pool.query("DROP SCHEMA IF EXISTS clean CASCADE").catch(()=>{});
     await state.pool.end();
@@ -175,4 +202,57 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(q.rows[0].content_bytes).toBeGreaterThan(21000);
     expect(await count()).toEqual({logged:1,unlogged:1});
   });
+  it("real loopback HTTP 200 follows ACTUAL SQL COMMIT with YSSY-sized synthetic JSON",async()=>{
+    const input=sample({syntheticPadding:"x".repeat(21_000)});
+    const response=await fetch(localOrigin+"/__synthetic__/prepaid/"+SESSION,{
+      method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(input)
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({received:true,duplicate:false});
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(await session()).toEqual({requests:1,successes:1,failures:0});
+    expect(state.events.slice(0,2)).toEqual(["UPLOAD","READBACK"]);
+    expect(state.blobs.size).toBe(1);
+  });
+
+  it("HTTP success waits for a deliberately slow synthetic blob write",async()=>{
+    state.uploadDelayMs=220;
+    const started=performance.now();
+    const response=await fetch(localOrigin+"/__synthetic__/prepaid/"+SESSION,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(sample({syntheticPadding:"x".repeat(5_500)}))
+    });
+    const elapsed=performance.now()-started;
+    expect(elapsed).toBeGreaterThanOrEqual(190);
+    expect(response.status).toBe(200);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    // This checks ACK ORDERING, NOT latency at real Replit storage or P99.
+  });
+
+  it("simultaneous duplicate HTTP POSTs commit one unique delivery under real SQL lock",async()=>{
+    const body=JSON.stringify(sample({syntheticPadding:"x".repeat(1_700)}));
+    const responses=await Promise.all([1,2].map(()=>fetch(
+      localOrigin+"/__synthetic__/prepaid/"+SESSION,{
+        method:"POST",headers:{"content-type":"application/json"},body
+      }
+    )));
+    expect(responses.map(r=>r.status)).toEqual([200,200]);
+    const outcomes=await Promise.all(responses.map(r=>r.json() as Promise<{duplicate:boolean}>));
+    expect(outcomes.filter(v=>v.duplicate)).toHaveLength(1);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(await session()).toEqual({requests:2,successes:2,failures:0});
+    expect(state.blobs.size).toBe(1);
+  });
+
+  it("HTTP server never acknowledges a synthetic blob failure as a successful provider receipt",async()=>{
+    state.failUpload=true;
+    const response=await fetch(localOrigin+"/__synthetic__/prepaid/"+SESSION,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(sample())
+    });
+    expect(response.status).toBe(503);
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(await session()).toEqual({requests:1,successes:0,failures:1});
+  });
+
 });
