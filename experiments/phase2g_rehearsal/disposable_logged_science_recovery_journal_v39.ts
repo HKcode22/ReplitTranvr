@@ -51,6 +51,43 @@ const TABLE="p2g_science_recovery_fixture.signed_source_item_journal";
 const sha=(v:Uint8Array)=>createHash("sha256").update(v).digest("hex");
 const date=(v:unknown):v is string=>typeof v==="string"&&
   UTC.test(v)&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
+/**
+ * The actual V3.9 persistPrepaidProbeWebhookV39 item hash is
+ * sha256(canonical(flights[i])) with sorted JSON object keys. A merely
+ * signed SQL-derived witness is not enough: bind EVERY item to the exact
+ * immutable wire source before considering it a reconstruction candidate.
+ * No payload is sent, persisted or exposed outside the disposable fixture.
+ */
+function v39Canonical(value:unknown):string{
+  if(value===null||typeof value!=="object")return JSON.stringify(value);
+  if(Array.isArray(value))
+    return "["+value.map(v39Canonical).join(",")+"]";
+  const obj=value as Record<string,unknown>;
+  return "{"+Object.keys(obj).sort().map(k=>
+    JSON.stringify(k)+":"+v39Canonical(obj[k])
+  ).join(",")+"}";
+}
+function completeOriginalWireItemBinding(
+  bytes:Uint8Array,f:SyntheticScienceJournalFrameV39
+):boolean{
+  try{
+    const json=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
+    const flights=Array.isArray(json)?json:
+      Array.isArray(json?.flights)?json.flights:[];
+    if(flights.length!==f.items.length)return false;
+    const seen=new Set<number>();
+    for(const item of f.items){
+      if(!Number.isSafeInteger(item.itemIndex)||item.itemIndex<0||
+         item.itemIndex>=flights.length||seen.has(item.itemIndex))
+        return false;
+      seen.add(item.itemIndex);
+      const computed=createHash("sha256")
+        .update(v39Canonical(flights[item.itemIndex])).digest("hex");
+      if(item.rawItemSha256!==computed)return false;
+    }
+    return seen.size===flights.length;
+  }catch{return false;}
+}
 function onlyFixture(){
   if(process.env.P2G_DISPOSABLE_POSTGRES!=="YES"||
      process.env.AERODATABOX_API_KEY||process.env.V39_DATABASE_RUNTIME_URL)
@@ -152,6 +189,8 @@ export async function writeSyntheticLoggedScienceJournalV39(input:{
   );
   if(sha(input.originalRawBytes)!==f.sourceWireSha256)
     throw new Error("P13_JOURNAL_ORIGINAL_SOURCE_BYTES_MISMATCH");
+  if(!completeOriginalWireItemBinding(input.originalRawBytes,f))
+    throw new Error("P13_JOURNAL_FLIGHT_ITEMS_NOT_BOUND_TO_SOURCE_WIRE");
   const encoded=JSON.stringify(input.signed);
   const insert=await input.client.query(
     "INSERT INTO "+TABLE+"(session_id,attempt_key,signed_record)"+
@@ -202,6 +241,8 @@ export async function reviewSyntheticLoggedScienceJournalV39(input:{
   }catch{throw new Error("P13_LOGGED_SCIENCE_JOURNAL_TAMPERED_OR_WRONG_OWNER")}
   const wireOk=sha(input.originalRawBytes)===f.sourceWireSha256;
   if(!wireOk)errors.add("P13_RECOVERY_WIRE_SOURCE_UNAVAILABLE_OR_CHANGED");
+  if(!completeOriginalWireItemBinding(input.originalRawBytes,f))
+    errors.add("P13_RECOVERY_FLIGHT_ITEMS_NOT_IN_ORIGINAL_WIRE");
   const comparison=compareSyntheticPhysicalItemContinuityV39({
     frozenSessionId:f.sessionId,
     windowStartUtc:f.windowStartUtc,windowEndUtc:f.windowEndUtc,
