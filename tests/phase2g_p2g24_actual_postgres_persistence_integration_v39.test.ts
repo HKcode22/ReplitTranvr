@@ -291,6 +291,113 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     // This exercises nonempty item SQL; NOT operator physical-v2 identity.
   });
 
+  it("confirmed IsOperator YSSY physical flight persists a real flight-instance-v2 ID",async()=>{
+    const leg={
+      id:"synthetic-provider-leg-210",number:"QF421",
+      codeshareStatus:"IsOperator",
+      airline:{iata:"QF",icao:"QFA"},
+      departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+        scheduledTime:{utc:"2026-10-12T03:40:00.000Z"}},
+      arrival:{airport:{icao:"YMEL"},
+        scheduledTime:{utc:"2026-10-12T05:15:00.000Z"}},
+      aircraft:{reg:"VH-SYN"},callSign:"QFA421"
+    };
+    const r=await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:sample({id:"operator-initial",flights:[leg]})
+    });
+    expect(r.itemCount).toBe(1);
+    const rows=await state.pool!.query(
+      "SELECT flight_instance_id,initial_service_date::text,codeshare_resolution_status,identity_resolution_status,origin_icao FROM clean.prepaid_probe_item_runtime"
+    );
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]).toMatchObject({
+      codeshare_resolution_status:"resolved_operator",
+      identity_resolution_status:"resolved",
+      origin_icao:"YSSY",
+      initial_service_date:"2026-10-12"
+    });
+    expect(rows.rows[0].flight_instance_id).toMatch(/^.+$/);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+  });
+
+  it("retimed update of the same operator provider leg preserves original physical identity",async()=>{
+    const leg=(at:string,arrival:string)=>({
+      id:"synthetic-provider-leg-520",number:"QF520",
+      codeshareStatus:"IsOperator",airline:{iata:"QF"},
+      departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+        scheduledTime:{utc:at}},
+      arrival:{airport:{icao:"YMML"},scheduledTime:{utc:arrival}},
+      callSign:"QFA520"
+    });
+    await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:sample({
+        id:"operator-original",flights:[leg("2026-10-12T03:40:00Z","2026-10-12T05:10:00Z")]
+      })
+    });
+    await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:sample({
+        id:"operator-retimed",timestampUtc:"2026-10-12T03:09:00Z",
+        flights:[leg("2026-10-12T04:20:00Z","2026-10-12T05:50:00Z")]
+      })
+    });
+    const rows=await state.pool!.query(
+      "SELECT flight_instance_id,initial_service_date::text,identity_resolution_status,scheduled_gate_out_utc FROM clean.prepaid_probe_item_runtime ORDER BY scheduled_gate_out_utc"
+    );
+    expect(rows.rows).toHaveLength(2);
+    expect(rows.rows[0].identity_resolution_status).toBe("resolved");
+    expect(rows.rows[1].identity_resolution_status).toBe("resolved");
+    expect(rows.rows[0].flight_instance_id).toBe(rows.rows[1].flight_instance_id);
+    expect(rows.rows[0].initial_service_date).toBe(rows.rows[1].initial_service_date);
+    expect(await count()).toEqual({logged:2,unlogged:2});
+  });
+
+  it("marketing codeshare cannot create a second confirmed physical leg",async()=>{
+    const leg={
+      id:"fictional-marketing-leg",number:"AA555",
+      codeshareStatus:"IsCodeshared",
+      airline:{iata:"AA"},
+      departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+        scheduledTime:{utc:"2026-10-12T03:40:00Z"}},
+      arrival:{airport:{icao:"YMML"},scheduledTime:{utc:"2026-10-12T05:10:00Z"}}
+    };
+    await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:sample({id:"marketing-only",flights:[leg]})
+    });
+    const q=await state.pool!.query(
+      "SELECT codeshare_resolution_status,identity_resolution_status,flight_instance_id FROM clean.prepaid_probe_item_runtime"
+    );
+    expect(q.rows).toHaveLength(1);
+    expect(q.rows[0]).toMatchObject({
+      codeshare_resolution_status:"resolved_marketing",
+      identity_resolution_status:"quarantined",
+      flight_instance_id:null
+    });
+  });
+
+  it("conflicting provider ID cannot silently merge two distinct operated flight numbers",async()=>{
+    const leg=(number:string)=>({
+      id:"synthetic-reused-provider-id",number,
+      codeshareStatus:"IsOperator",airline:{iata:"QF"},
+      departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+        scheduledTime:{utc:"2026-10-12T03:40:00Z"}},
+      arrival:{airport:{icao:"YMML"},scheduledTime:{utc:"2026-10-12T05:10:00Z"}}
+    });
+    await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:sample({id:"first-leg",flights:[leg("QF700")]})
+    });
+    // Provider ID linkage is NOT permission to merge a materially different
+    // operated flight. The rejection must rollback the entire new notification.
+    await expect(persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:sample({id:"conflicting-leg",flights:[leg("QF701")]})
+    })).rejects.toThrow();
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    const q=await state.pool!.query(
+      "SELECT flight_instance_id,identity_resolution_status FROM clean.prepaid_probe_item_runtime"
+    );
+    expect(q.rows).toHaveLength(1);
+    expect(q.rows[0].identity_resolution_status).toBe("resolved");
+  });
+
   it("demonstrates session lock HOL blocking when duplicate POST overlaps slow fake storage",async()=>{
     state.uploadDelayMs=450;
     const body=JSON.stringify(sample({syntheticPadding:"x".repeat(5_700)}));
