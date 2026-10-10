@@ -567,6 +567,30 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(await count()).toEqual({logged:0,unlogged:0});
     expect(await session()).toEqual({requests:1,successes:0,failures:1});
   });
+  it("detects CURRENT byte-fidelity gap: accepted wire JSON differs from stored canonicalized bytes",async()=>{
+    // This is a forensic/scientific contract characterization, not permission
+    // to change historical P2G raw blob hashes or deduplication material.
+    const wire='{\n  "flights": [],  "subscription": {"id":"'+SUB+
+      '"}, "timestampUtc":"2026-10-12T03:01:00Z", '+
+      '"id":"noncanonical-wire-001", "deliveryAttempt":{"seqNo":0,"costCredits":1}\n}';
+    const response=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},body:wire
+    });
+    expect(response.status).toBe(200);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(state.blobs.size).toBe(1);
+    const stored=[...state.blobs.values()][0];
+    expect(new TextDecoder().decode(stored)).not.toBe(wire);
+    const {createHash}=await import("node:crypto");
+    const originalSha=createHash("sha256").update(wire).digest("hex");
+    const storedSha=createHash("sha256").update(stored).digest("hex");
+    const meta=await state.pool!.query("SELECT content_sha256 FROM clean.provider_content_blob_ref");
+    expect(meta.rows[0].content_sha256).toBe(storedSha);
+    expect(meta.rows[0].content_sha256).not.toBe(originalSha);
+    // The *semantic* JSON is preserved, but exact source bytes are not.
+    // A future independently durable edge backup must explicitly bind
+    // both source-wire SHA and historical canonical-JSON SHA if approved.
+  });
   it("ACTUAL route simultaneous duplicate delivery ACKs twice but stores once",async()=>{
     const body=JSON.stringify(sample({id:"real-route-duplicate"}));
     const responses=await Promise.all([1,2].map(()=>fetch(localOrigin+actualPath,{
