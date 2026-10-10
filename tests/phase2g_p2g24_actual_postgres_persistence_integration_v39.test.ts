@@ -530,6 +530,16 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(await count()).toEqual({logged:0,unlogged:0});
     expect(await session()).toEqual({requests:0,successes:0,failures:0});
   });
+  it("ACTUAL route rejects wrong-secret malformed JSON BEFORE parser; no DB counters poisoned",async()=>{
+    const response=await fetch(localOrigin+actualPath.replace(TEST_ONLY_CALLBACK_SECRET,"wrong-credential"),{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:'{"intentionally": "malformed",'
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({error:"Not found"});
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(await session()).toEqual({requests:0,successes:0,failures:0});
+  });
   it("ACTUAL parser rejects malformed JSON with 400, counts ingress failure and never ACKs",async()=>{
     const r=await fetch(localOrigin+actualPath,{
       method:"POST",headers:{"content-type":"application/json"},
