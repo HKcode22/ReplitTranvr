@@ -11,18 +11,21 @@ function requireV39RuntimeUrl(): string {
 }
 
 /**
- * A callback must not wait indefinitely for a SQL connection during
- * Replit or PostgreSQL outages. Scoped to the published callback-only
- * process, leaving scientific CLI/GitHub owner pool semantics unchanged.
+ * EXPERIMENTAL ONLY: changing PostgreSQL pool acquisition timeout can
+ * turn delayed deliveries into immediate non-2xx failures when provider
+ * retries are disabled. A 2026-10-10 real-Postgres burst fixture showed
+ * both failure modes. Keep DEFAULT=0 (original deployment behavior) until
+ * independent durable frontdoor + prospective science approval are proven.
  *
- * A 4s acquisition timeout is deliberately below the provider's observed
- * ~10s HTTP response envelope. It bounds only pool acquisition, not object
- * storage, transaction, platform cold-start or provider network delivery.
+ * This is a feature-gated candidate, NOT a standalone reliability fix.
  */
 export function v39PoolConnectionTimeoutMillis(
   env: NodeJS.ProcessEnv = process.env,
 ): number {
-  return env.V39_CALLBACK_ONLY_RUNTIME === "1" ? 4000 : 0;
+  const enabled =
+    env.V39_CALLBACK_ONLY_RUNTIME === "1" &&
+    env.V39_CALLBACK_DB_ACQUIRE_TIMEOUT_APPROVED === "1";
+  return enabled ? 4000 : 0;
 }
 
 export function getV39Pool(): Pool {
