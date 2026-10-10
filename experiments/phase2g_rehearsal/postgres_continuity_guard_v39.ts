@@ -100,8 +100,12 @@ export function assessSyntheticPostgresContinuityV39(
   if(!whole(snapshot.loggedRawBlobRefs)||
      snapshot.loggedRawBlobRefs!==baseline.expectedDeliveryRows)
     reasons.add("RAW_BLOB_METADATA_COUNT_MISMATCH");
+  // After an UNLOGGED reset, LOGGED raw refs survive but their matching
+  // delivery rows vanish. A naive joined-row check of zero == zero would
+  // otherwise miss these orphaned refs.
   if(!whole(snapshot.linkedDeliveryBlobRefs)||
-     snapshot.linkedDeliveryBlobRefs!==snapshot.deliveryRows)
+     snapshot.linkedDeliveryBlobRefs!==snapshot.deliveryRows||
+     snapshot.linkedDeliveryBlobRefs!==snapshot.loggedRawBlobRefs)
     reasons.add("RAW_BLOB_LINKAGE_INCOMPLETE");
   if(!baseline.independentOwnerSessionBindingVerified)
     reasons.add("OWNER_SESSION_BINDING_UNVERIFIED");
