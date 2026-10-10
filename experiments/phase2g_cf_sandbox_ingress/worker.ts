@@ -1,3 +1,4 @@
+import { signEdgeProvenanceV1 } from "./provenance";
 /**
  * PHASE 2G Stage-1 — isolated Cloudflare Workers + R2 + Queues candidate.
  *
@@ -49,6 +50,7 @@ export type Env = {
   EDGE_TEST_SECRET?:string;
   EDGE_SANDBOX_RECEIVER_ORIGIN?:string;
   EDGE_TEST_RECEIVER_PATH_SECRET?:string;
+  EDGE_PROVENANCE_SIGNING_KEY?:string;
   EDGE_MAX_BYTES?:string;
   EDGE_TEST_DIAGNOSTICS?:string;
 };
@@ -188,6 +190,13 @@ async function relayReceipt(e:Env,receiptKey:string):Promise<"done"|"retry">{
   const path="/__p2g-sandbox-verify";
   const token=e.EDGE_TEST_RECEIVER_PATH_SECRET??"";
   if(token.length<32)return "retry";
+  const signingKey=e.EDGE_PROVENANCE_SIGNING_KEY??"";
+  if(signingKey.length<48)return "retry";
+  const signature=await signEdgeProvenanceV1({
+    v:1,sessionId:r.sessionId,receiptId:r.id,
+    providerAttemptId:r.attemptId,sourceSha256:r.sourceSha256,
+    edgeReceivedAtUtc:r.firstEdgeReceivedAtUtc
+  },signingKey);
   const response=await fetch(origin+path,{
     method:"POST",
     headers:{
@@ -195,7 +204,9 @@ async function relayReceipt(e:Env,receiptKey:string):Promise<"done"|"retry">{
       "x-p2g-sandbox-auth":token,
       "x-p2g-edge-received-at":r.firstEdgeReceivedAtUtc,
       "x-p2g-edge-source-sha256":r.sourceSha256,
-      "x-p2g-edge-receipt-id":r.id
+      "x-p2g-edge-receipt-id":r.id,
+      "x-p2g-edge-provider-attempt-id":r.attemptId,
+      "x-p2g-edge-provenance-hmac":signature
     },
     body,
     signal:AbortSignal.timeout(8000),
