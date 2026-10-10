@@ -115,8 +115,11 @@ export async function ingest(request:Request,e:Env):Promise<Response>{
   const bytes=new Uint8Array(await request.arrayBuffer());
   if(!bytes.byteLength||bytes.byteLength>max)return json({error:"BODY_TOO_LARGE"},413);
   try{
-    const v=parse<unknown>(new TextDecoder().decode(bytes));
-    if(typeof v!=="object"||v===null)return json({error:"INVALID_JSON_OBJECT"},400);
+    // Reject lossy UTF-8 decoding and top-level arrays BEFORE raw write and
+    // 2xx; downstream V3.9 requires an object and exact source-byte proof.
+    const v=parse<unknown>(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
+    if(typeof v!=="object"||v===null||Array.isArray(v))
+      return json({error:"INVALID_JSON_OBJECT"},400);
   }catch{return json({error:"INVALID_JSON"},400)}
 
   const sourceSha256=await digest(bytes);
