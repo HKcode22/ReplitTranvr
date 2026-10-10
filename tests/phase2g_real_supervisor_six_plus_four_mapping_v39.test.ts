@@ -9,6 +9,7 @@ import {
 } from "../experiments/phase2g_rehearsal/synthetic_real_health_6plus4_adapter_v39";
 import {
   evaluateSyntheticSixPlusFourWatchdogV39,
+  evaluateSyntheticSixPlusSixWatchdogV39,
   type SixPlusFourEvidenceV39
 } from "../experiments/phase2g_rehearsal/synthetic_watchdog_six_plus_four_v39";
 
@@ -243,6 +244,51 @@ describe("P15 6+4 adapter executes REAL supervisor health function offline",()=>
     expect(r).toMatchObject({
       stopOwner:true,stopAtIndex:0,
       reasons:["ORIGINAL_RAW_SOURCE_OR_UTC_NOT_DURABLE"]
+    });
+  });
+  it("REAL four-stage callback checks: eleven published 503 then healthy is 6+6 contingency recovery, never science PASS",async()=>{
+    const outcomes=[];
+    for(let i=0;i<11;i++)outcomes.push((await realCallback({
+      stage:"published_runtime",status:503
+    })).classification);
+    outcomes.push((await realCallback()).classification);
+    const r=evaluateSyntheticSixPlusSixWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:6,
+      samples:outcomes.map(health=>({health,evidence:verified()}))
+    });
+    expect(r).toMatchObject({
+      mode:"synthetic-six-plus-six",stopOwner:false,
+      maximumObservedConsecutiveFailures:11,
+      enteredContingency:true,contingencyChecksUsed:5,recoveredHealth:true,
+      state:"HEALTH_RECOVERED_AUDIT_PENDING",
+      scientificAdjudication:"PENDING_OR_CENSORED_NOT_AUTOMATIC_PASS",
+      paidLaunchAuthorized:false
+    });
+  });
+  it("REAL four-stage callback: twelve published 503 checks require bounded owner stop",async()=>{
+    const outcomes=[];
+    for(let i=0;i<12;i++)outcomes.push((await realCallback({
+      stage:"published_runtime",status:503
+    })).classification);
+    const r=evaluateSyntheticSixPlusSixWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:6,
+      samples:outcomes.map(health=>({health,evidence:verified()}))
+    });
+    expect(r).toMatchObject({
+      stopOwner:true,stopAtIndex:11,
+      state:"STOP_AT_TWELVE",contingencyChecksUsed:6
+    });
+  });
+  it("REAL HTTP 200 wrong GitHub build always wins over twelve nominally available checks",async()=>{
+    const wrong=(await realCallback({
+      stage:"published_runtime",patch:{git_head:"0".repeat(40)}
+    })).classification;
+    const r=evaluateSyntheticSixPlusSixWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:6,
+      samples:[{health:wrong,evidence:verified()}]
+    });
+    expect(r).toMatchObject({
+      stopOwner:true,stopAtIndex:0,state:"STOP_HARD_CONTRACT"
     });
   });
   it("an arbitrary unknown future diagnostic is fail-closed, not silently a transient timeout",()=>{
