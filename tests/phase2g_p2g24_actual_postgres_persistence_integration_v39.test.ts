@@ -51,6 +51,7 @@ import {createSyntheticDualSourceMessageV2,verifySyntheticDualSourceMessageV2} f
 import {recordSyntheticSignedReceiptMetadataV2} from "../experiments/phase2g_rehearsal/disposable_logged_source_receipt_v39";
 import {readDisposablePostgresContinuitySnapshotV39,assessSyntheticPostgresContinuityV39} from "../experiments/phase2g_rehearsal/postgres_continuity_guard_v39";
 import {signSyntheticSenderFrameV39,reconcileSyntheticSignedAttemptsV39} from "../experiments/phase2g_rehearsal/signed_attempt_reconciliation_v39";
+import {signSyntheticOwnerFreezeV39,verifySyntheticOwnerFreezeV39,syntheticOwnerPublicKeyFingerprintV39} from "../experiments/phase2g_rehearsal/synthetic_owner_freeze_signature_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -918,6 +919,92 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     console.log("ACTUAL_V39_ORIGINAL_EDGE_UTC_IN_SQL=false");
     console.log("P13_P14_EXACT_CREDITS_WITH_TIMESTAMP_DIVERGENCE_CENSORED=true");
     console.log("PAID_PROVIDER_CALLS=0");
+  });
+
+  it("P13 signed owner freeze cannot turn surviving raw metadata into a valid recovered session",async()=>{
+    // All keys, data and tables are ephemeral test-only; no real signed
+    // owner authority and no provider-signed delivery evidence.
+    const {generateKeyPairSync}=await import("node:crypto");
+    const keys=generateKeyPairSync("ed25519");
+    const publicKey=keys.publicKey.export({type:"spki",format:"pem"}).toString();
+    const pin=syntheticOwnerPublicKeyFingerprintV39(publicKey);
+    const response=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(sample({id:"signed-owner-v39-local-sql-only"}))
+    });
+    expect(response.status).toBe(200);
+    const client=await state.pool!.connect();
+    try{
+      const before=await readDisposablePostgresContinuitySnapshotV39(client,SESSION);
+      expect(before).toMatchObject({
+        sessionRows:1,deliveryRows:1,loggedRawBlobRefs:1,
+        linkedDeliveryBlobRefs:1
+      });
+      const now=Date.now(),start=new Date(now+60_000).toISOString();
+      const owner={
+        schema:"v39.phase2g.synthetic-owner-freeze.v1" as const,
+        mode:"synthetic-only" as const,
+        owner:"github-actions-emulator" as const,
+        stage:"Phase2G-Stage1" as const,
+        sessionId:SESSION,providerSubscriptionId:SUB,
+        frozenPlanSha256:"a".repeat(64),
+        frozenImplementationSha256:"b".repeat(64),
+        ownerCommitSha:"c".repeat(40),receiverCommitSha:"d".repeat(40),
+        databasePostmasterStartUtc:before.postmasterStartUtc,
+        signedAtUtc:new Date(now).toISOString(),
+        windowStartUtc:start,
+        windowEndUtc:new Date(Date.parse(start)+7_200_000).toISOString(),
+        airportIcao:"YSSY" as const,
+        physicalFlightContract:"v39-physical-flight-instance-v2" as const,
+        sampleBucketMinutes:15 as const,maxDeliveryRetries:0 as const,
+        providerCreditCeiling:500 as const,stage1ReserveCredits:450 as const,
+        protectedAccountFloorCredits:1000 as const,
+        providerEmulatorOnly:true as const
+      };
+      const signed=signSyntheticOwnerFreezeV39(owner,keys.privateKey);
+      const valid=verifySyntheticOwnerFreezeV39({
+        signed,trustedOwnerPublicKeyPem:publicKey,
+        pinnedOwnerPublicKeySha256:pin,expectedIndependentFreeze:owner
+      });
+      expect(valid.ownerSignatureVerified).toBe(true);
+      expect(valid.productionOwnerAuthority).toBe(false);
+      expect(valid.scientificRecoveryAuthorized).toBe(false);
+      const safeBefore=assessSyntheticPostgresContinuityV39(before,{
+        frozenPostmasterStartUtc:valid.freeze.databasePostmasterStartUtc,
+        expectedDeliveryRows:1,expectedItemRows:0,
+        independentOwnerSessionBindingVerified:valid.ownerSignatureVerified,
+        independentAttemptAccountingVerified:false
+      });
+      expect(safeBefore.reasons).toContain("ATTEMPT_ACCOUNTING_UNVERIFIED");
+      expect(safeBefore.mandatoryCensor).toBe(true);
+      // Actual PostgreSQL disposable UNLOGGED reset; the LOGGED raw evidence
+      // persists, and a correctly signed owner fixture is NOT enough.
+      await client.query(
+        "TRUNCATE clean.prepaid_probe_item_runtime,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime"
+      );
+      const after=await readDisposablePostgresContinuitySnapshotV39(client,SESSION);
+      expect(after).toMatchObject({
+        sessionRows:0,deliveryRows:0,loggedRawBlobRefs:1,
+        linkedDeliveryBlobRefs:0
+      });
+      const decision=assessSyntheticPostgresContinuityV39(after,{
+        frozenPostmasterStartUtc:valid.freeze.databasePostmasterStartUtc,
+        expectedDeliveryRows:1,expectedItemRows:0,
+        independentOwnerSessionBindingVerified:valid.ownerSignatureVerified,
+        independentAttemptAccountingVerified:false
+      });
+      expect(decision).toMatchObject({
+        mandatoryCensor:true,scientificRunAuthorized:false,
+        automaticRestoreAllowed:false
+      });
+      expect(decision.reasons).toEqual(expect.arrayContaining([
+        "UNLOGGED_SESSION_UNAVAILABLE","DELIVERY_LEDGER_INCOMPLETE",
+        "RAW_BLOB_LINKAGE_INCOMPLETE","ATTEMPT_ACCOUNTING_UNVERIFIED"
+      ]));
+      console.log("SIGNED_OWNER_FIXTURE_CANNOT_AUTHORIZE_RECOVERY=true");
+      console.log("P13_LOGGED_BLOBS_WITH_MISSING_UNLOGGED_LEDGER_CENSORED=true");
+      console.log("REAL_PROVIDER_CALLS=0");
+    }finally{client.release();}
   });
 
 });
