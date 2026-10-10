@@ -1433,6 +1433,20 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     const signed=signSyntheticScienceRecoveryFrameV39(frame,fixtureKey);
     const sql=await state.pool!.connect();
     try{
+      // Even an HMAC signed by our synthetic fixture key must not bind an
+      // invented flight-item SHA to unchanged, real V3.9 source-wire bytes.
+      const forgedItemSource=signSyntheticScienceRecoveryFrameV39({
+        ...frame,items:[{...item,rawItemSha256:"e".repeat(64)}]
+      },fixtureKey);
+      await expect(writeSyntheticLoggedScienceJournalV39({
+        client:sql,signed:forgedItemSource,fixtureKey,originalRawBytes,expected
+      })).rejects.toThrow("P13_JOURNAL_FLIGHT_ITEMS_NOT_BOUND_TO_SOURCE_WIRE");
+      const omittedItem=signSyntheticScienceRecoveryFrameV39({
+        ...frame,items:[]
+      },fixtureKey);
+      await expect(writeSyntheticLoggedScienceJournalV39({
+        client:sql,signed:omittedItem,fixtureKey,originalRawBytes,expected
+      })).rejects.toThrow("P13_JOURNAL_FLIGHT_ITEMS_NOT_BOUND_TO_SOURCE_WIRE");
       const options={client:sql,signed,fixtureKey,originalRawBytes,expected};
       const first=await writeSyntheticLoggedScienceJournalV39(options);
       expect(first).toMatchObject({
@@ -1520,6 +1534,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       console.log("P13_LOGGED_SIGNED_PHYSICAL_V2_JOURNAL_AFTER_UNLOGGED_RESET=1");
       console.log("P13_ORIGINAL_WIRE_SHA_AND_FIRST_EDGE_UTC_PRESERVED_TEST_ONLY=true");
       console.log("P13_TAMPER_AND_OWNER_BINDING_DETECTED=true");
+      console.log("P13_ACTUAL_V39_CANONICAL_FLIGHT_SOURCE_SHA_BOUND=true");
       console.log("P13_REAL_SCIENTIFIC_RECONSTRUCTION_PROVEN=false");
       console.log("P13_REAL_PROVIDER_ATTEMPTS_INDEPENDENTLY_VERIFIED=false");
       console.log("P13_PAID_AUTO_RECOVERY_AUTHORIZED=false");
