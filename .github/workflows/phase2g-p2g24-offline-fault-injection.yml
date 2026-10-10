@@ -29,6 +29,7 @@ on:
       - tests/phase2g_p2g24_prepublish_real_db_prelaunch_v39.test.ts
       - server/lib/disruption/phase2gPrepaidHttpTransportTelemetry_v39.ts
       - tests/phase2g_p2g24_prepaid_transport_diagnostics_v39.test.ts
+      - tests/phase2g_p2g24_actual_postgres_persistence_integration_v39.test.ts
       - tests/phase2g_yssy_zero_billable_delivery_retries_v39.test.ts
   workflow_dispatch:
 
@@ -94,3 +95,48 @@ jobs:
           echo 'QUEUE_SIZE_AUDITOR_EXECUTED=false'
       - name: Typecheck server
         run: npm run v39:typecheck
+
+  disposable-postgres-persistence:
+    name: Ephemeral PostgreSQL V3.9 persistence fault integration (no paid credentials)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: p2g_fixture
+          POSTGRES_PASSWORD: fixture_only_password
+          POSTGRES_DB: p2g_stage1_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U p2g_fixture -d p2g_stage1_fixture"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      P2G_DISPOSABLE_POSTGRES: "YES"
+      P2G_FIXTURE_POSTGRES_URL: postgresql://p2g_fixture:fixture_only_password@127.0.0.1:5432/p2g_stage1_fixture
+      # Deliberately NO V39_DATABASE_RUNTIME_URL, AERODATABOX_API_KEY,
+      # Cloudflare tokens, Replit secrets or scientific DB credentials.
+      CI: "true"
+    steps:
+      - name: Checkout isolated branch only
+        uses: actions/checkout@v4
+      - name: Install Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked test dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run actual V3.9 persistence against disposable PostgreSQL 16
+        run: |
+          set -euo pipefail
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          test -z "${AERODATABOX_API_KEY:-}"
+          npx vitest run tests/phase2g_p2g24_actual_postgres_persistence_integration_v39.test.ts
+          echo 'AERODATABOX_PROVIDER_CALLS=0'
+          echo 'SCIENTIFIC_DATABASE_QUERIES=0'
+          echo 'CLOUDFLARE_RESOURCES=0'
+          echo 'REPLIT_DEPLOYMENTS=0'
