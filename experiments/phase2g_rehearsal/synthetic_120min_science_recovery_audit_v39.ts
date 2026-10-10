@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import {
   verifySyntheticSenderFrameV39,
   type SignedSyntheticSenderFrameV39
@@ -37,6 +38,17 @@ export type SyntheticWindowRecoveryAuditV39=Readonly<{
   scientificPassAuthorized:false;
   automaticRecoveryAuthorized:false;
 }>;
+const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
+/** Exact sorted-key canonical JSON semantics used by V3.9. */
+function canonical(v:unknown):string{
+  if(v===null||typeof v!=="object")return JSON.stringify(v);
+  if(Array.isArray(v))
+    return "["+v.map(canonical).join(",")+"]";
+  const obj=v as Record<string,unknown>;
+  return "{"+Object.keys(obj).sort().map(k=>
+    JSON.stringify(k)+":"+canonical(obj[k])
+  ).join(",")+"}";
+}
 export function auditSynthetic120MinuteScienceRecoveryV39(input:{
   signedSyntheticSender:SignedSyntheticSenderFrameV39;
   independentFixtureSenderKey:string;
@@ -72,6 +84,8 @@ export function auditSynthetic120MinuteScienceRecoveryV39(input:{
     expectedCredits+=attempt.syntheticCostCredits;
     if(attempt.syntheticCostCredits!==1)
       add("P13_SYNTHETIC_SENDER_PER_ATTEMPT_CREDIT_INVALID");
+    if(attempt.attemptSeqNo!==0)
+      add("P13_ZERO_PROVIDER_DELIVERY_RETRY_CONTRACT_BROKEN");
     if(attempt.senderResponseStatus!==200||
        attempt.senderResponseElapsedMs>10_000)
       add("P13_ORIGINAL_SENDER_ACK_NOT_TIMELY");
@@ -111,11 +125,36 @@ export function auditSynthetic120MinuteScienceRecoveryV39(input:{
       add("P13_JOURNAL_FROZEN_WINDOW_CHANGED");
     if(v.sourceWireSha256!==a.wireSha256)
       add("P13_SENDER_VS_SCIENCE_WIRE_SHA_MISMATCH");
+    // A signed sender manifest with a wire SHA may still claim a different
+    // notification ID, canonical payload, attempt sequence or subscription.
+    // Cross-check these fields INSIDE the immutable original wire bytes.
+    try{
+      const json=JSON.parse(new TextDecoder("utf-8",{fatal:true})
+        .decode(entry.originalWire));
+      if(json?.id!==a.notificationId||
+         v.items.some(item=>item.deliveryId!==a.notificationId))
+        add("P13_SENDER_JOURNAL_NOTIFICATION_ID_MISMATCH");
+      if(json?.subscription?.id!==f.providerSubscriptionId)
+        add("P13_ORIGINAL_WIRE_PROVIDER_SUBSCRIPTION_MISMATCH");
+      if(sha(canonical(json))!==a.canonicalSha256)
+        add("P13_CANONICAL_PAYLOAD_SHA_MISMATCH");
+      if(json?.deliveryAttempt?.seqNo!==a.attemptSeqNo||
+         json?.deliveryAttempt?.costCredits!==a.syntheticCostCredits)
+        add("P13_ORIGINAL_WIRE_ATTEMPT_OR_CREDIT_MISMATCH");
+      if(json?.timestampUtc!==a.providerGeneratedUtc)
+        add("P13_PROVIDER_SOURCE_GENERATED_TIME_MISMATCH");
+    }catch{add("P13_ORIGINAL_WIRE_JSON_CONTENT_INVALID");}
     if(v.syntheticCostCredits!==a.syntheticCostCredits)
       add("P13_SENDER_VS_SCIENCE_COST_GAP");
     observedCredits+=v.syntheticCostCredits;
     const ms=Date.parse(v.firstEdgeReceivedUtc);
     const from=Date.parse(f.windowStartUtc),end=Date.parse(f.windowEndUtc);
+    // Original edge receive must be temporally possible for the sender's
+    // *same* attempt. 2s is synthetic clock-skew allowance only.
+    const delta=ms-Date.parse(a.providerAttemptUtc);
+    if(!Number.isFinite(delta)||delta< -2000||
+       delta>a.senderResponseElapsedMs+2000)
+      add("P13_SENDER_EDGE_UTC_CAUSALITY_MISMATCH");
     if(ms<from||ms>=end)
       add("P13_SOURCE_FIRST_EDGE_OUTSIDE_FROZEN_WINDOW");
     else buckets[Math.floor((ms-from)/900000)]++;
