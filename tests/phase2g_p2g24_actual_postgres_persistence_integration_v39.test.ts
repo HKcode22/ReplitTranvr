@@ -49,6 +49,7 @@ import {persistPrepaidProbeWebhookV39} from "../server/lib/disruption/prepaidPro
 import {registerV3Routes} from "../server/routes_v3";
 import {createSyntheticDualSourceMessageV2,verifySyntheticDualSourceMessageV2} from "../experiments/phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
 import {recordSyntheticSignedReceiptMetadataV2} from "../experiments/phase2g_rehearsal/disposable_logged_source_receipt_v39";
+import {readDisposablePostgresContinuitySnapshotV39,assessSyntheticPostgresContinuityV39} from "../experiments/phase2g_rehearsal/postgres_continuity_guard_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -774,6 +775,57 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     }finally{client.release();}
     // Deliberately leave this non-provider synthetic metadata row for the
     // following disposable PostgreSQL SIGKILL/restart CI step to verify.
+  });
+
+  it("P13 read-only continuity guard refuses synthetic UNLOGGED loss while LOGGED raw refs survive",async()=>{
+    const body=sample({id:"preflight-postgres-reset-001"});
+    const response=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(body)
+    });
+    expect(response.status).toBe(200);
+    const client=await state.pool!.connect();
+    try{
+      const healthy=await readDisposablePostgresContinuitySnapshotV39(client,SESSION);
+      expect(healthy).toMatchObject({
+        sessionRows:1,deliveryRows:1,itemRows:0,
+        loggedRawBlobRefs:1,linkedDeliveryBlobRefs:1
+      });
+      const baseline={
+        frozenPostmasterStartUtc:healthy.postmasterStartUtc,
+        expectedDeliveryRows:1,expectedItemRows:0,
+        independentOwnerSessionBindingVerified:true,
+        independentAttemptAccountingVerified:true
+      };
+      const early=assessSyntheticPostgresContinuityV39(healthy,baseline);
+      expect(early.continuityPreflightPassed).toBe(true);
+      expect(early.scientificRunAuthorized).toBe(false);
+      // Disposable-only simulated UNLOGGED reset; a separate CI step does an
+      // actual isolated postgres SIGKILL/restart, never touching production.
+      await client.query("TRUNCATE clean.prepaid_probe_item_runtime,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime");
+      const after=await readDisposablePostgresContinuitySnapshotV39(client,SESSION);
+      expect(after).toMatchObject({
+        sessionRows:0,deliveryRows:0,itemRows:0,
+        loggedRawBlobRefs:1,linkedDeliveryBlobRefs:0
+      });
+      const decision=assessSyntheticPostgresContinuityV39(after,baseline);
+      expect(decision).toMatchObject({
+        continuityPreflightPassed:false,mandatoryCensor:true,
+        scientificRunAuthorized:false,automaticRestoreAllowed:false
+      });
+      expect(decision.reasons).toEqual(expect.arrayContaining([
+        "UNLOGGED_SESSION_UNAVAILABLE","DELIVERY_LEDGER_INCOMPLETE",
+        "RAW_BLOB_LINKAGE_INCOMPLETE"
+      ]));
+      // Even an apparently reconstructed ledger is NOT enough after a
+      // changed server lifecycle; it requires a prospectively signed recovery.
+      const recreated=assessSyntheticPostgresContinuityV39({
+        ...healthy,postmasterStartUtc:"2026-10-12T02:00:00.000Z"
+      },baseline);
+      expect(recreated.reasons).toContain("DATABASE_LIFECYCLE_CHANGED_NO_AUTO_RESTORE");
+      console.log("P13_SYNTHETIC_POSTGRES_UNLOGGED_LOSS_CENSORED=true");
+      console.log("P13_PRODUCTION_RECOVERY_AUTHORIZED=false");
+    }finally{client.release();}
   });
 
 });
