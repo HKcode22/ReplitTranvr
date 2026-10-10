@@ -2083,7 +2083,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
           id:"p13-window-physical-"+i,
           number:"QF"+(700+i),codeshareStatus:"IsOperator",
           airline:{iata:"QF",icao:"QFA"},
-          departure:{airport:{icao:"YSS",timeZone:"Australia/Sydney",icao_alt:"YSSY",icao:"YSSY"},
+          departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
             scheduledTime:{utc:at(i)}},
           arrival:{airport:{icao:"YMEL"},
             scheduledTime:{utc:at(i+80)}}
