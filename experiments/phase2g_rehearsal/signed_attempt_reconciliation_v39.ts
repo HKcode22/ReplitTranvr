@@ -67,8 +67,9 @@ const H=/^[a-f0-9]{64}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ID=/^[A-Za-z0-9_.:-]{1,160}$/;
 const iso=(v:unknown):v is string=>typeof v==="string"&&
-  /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v)&&
-  Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
+  /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(v)&&
+  Number.isFinite(Date.parse(v))&&
+  new Date(Date.parse(v)).toISOString().slice(0,19)===v.slice(0,19);
 const digest=(v:unknown):v is string=>typeof v==="string"&&H.test(v);
 const key=(v:unknown):v is string=>typeof v==="string"&&ID.test(v);
 const credit=(v:unknown):v is number=>Number.isSafeInteger(v)&&
@@ -206,10 +207,14 @@ export async function reconcileSyntheticSignedAttemptsV39(input:{
   }
   for(const a of f.attempts){
     if(!edges.has(a.attemptKey))add("BILLED_SENDER_ATTEMPT_MISSING_AT_EDGE");
-    if(a.providerAttemptUtc<f.windowStartUtc||
-       a.providerAttemptUtc>=f.windowEndUtc)
+    if(Date.parse(a.providerAttemptUtc)<from||
+       Date.parse(a.providerAttemptUtc)>=end)
       add("SENDER_ATTEMPT_OUTSIDE_FROZEN_WINDOW");
-    if(a.senderResponseStatus!==200||
+    // Current Stage-1 remains maxDeliveryRetries=0. A prospective retry
+    // amendment needs its OWN separately frozen contract.
+    if(a.attemptSeqNo!==0)
+      add("PROVIDER_RETRY_NOT_AUTHORIZED_BY_FROZEN_STAGE1");
+    if(a.senderResponseStatus<200||a.senderResponseStatus>=300||
        a.senderResponseElapsedMs>10000)
       add("SENDER_TIMELY_ACK_NOT_PROVEN");
   }
