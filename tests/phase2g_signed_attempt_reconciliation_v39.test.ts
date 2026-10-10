@@ -70,7 +70,9 @@ async function fixture(n=3):Promise<Fixture>{
     }))
   };
 }
-const cloneFrame=(v:Fixture)=>JSON.parse(JSON.stringify(v.sender.frame)) as SyntheticSenderFrameV39;
+type Mutable<T>=T extends readonly (infer U)[] ? Mutable<U>[] :
+  T extends object ? {-readonly [K in keyof T]:Mutable<T[K]>} : T;
+const cloneFrame=(v:Fixture)=>JSON.parse(JSON.stringify(v.sender.frame)) as Mutable<SyntheticSenderFrameV39>;
 const run=(v:Fixture)=>reconcileSyntheticSignedAttemptsV39({
   signedSender:v.sender,independentSenderKey:SENDERKEY,
   edgeSigningKey:EDGEKEY,
