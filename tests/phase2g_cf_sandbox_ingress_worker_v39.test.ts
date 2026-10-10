@@ -78,6 +78,21 @@ function harness(){
   };
 }
 
+async function withCurrentSyntheticConfirm<T>(fn:()=>Promise<T>):Promise<T>{
+  const old=globalThis.fetch;
+  globalThis.fetch=vi.fn(async(url,init)=>{
+    if(String(url)!=="https://sandbox.mock.invalid/__p2g-sandbox-confirm")
+      throw Error("P12_TEST_OUTSIDE_SYNTHETIC_CONFIRMATION_REFUSED");
+    const p=JSON.parse(String(init?.body??""));
+    return new Response(JSON.stringify({
+      v:1,currentlyPersisted:true,sessionId:p.sessionId,
+      providerAttemptId:p.providerAttemptId,receiptId:p.receiptId,
+      sourceSha256:p.sourceSha256,
+      originalEdgeReceivedAtUtc:p.edgeReceivedAtUtc
+    }),{status:200});
+  }) as typeof fetch;
+  try{return await fn()}finally{globalThis.fetch=old;}
+}
 describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO LIVE DEPLOY)",()=>{
   it("HTTP 200 occurs only AFTER verified immutable raw, index and durable queue send",async()=>{
     const h=harness();
@@ -300,16 +315,28 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     expect(h.messages.length).toBe(before);
   });
 
-  it("P09/P12 verified processed marker survives duplicate Queue relay without second sandbox receiver POST",async()=>{
+  it("P09/P12 processed marker needs FRESH read-only SQL confirmation without a second source POST",async()=>{
     const h=harness();
     expect((await ingest(h.request(),h.env)).status).toBe(200);
     h.env.EDGE_ALLOW_SYNTHETIC_RELAY="1";
     const receipt=JSON.parse(new TextDecoder().decode(h.map.get(h.messages[0].receiptKey)!.data));
     const ack=vi.fn(),retry=vi.fn();
     const oldFetch=globalThis.fetch;
-    const fetched=vi.fn(async()=>new Response(JSON.stringify({
-      persisted:true,sourceSha256:receipt.sourceSha256
-    }),{status:200}));
+    const fetched=vi.fn(async(url,init)=>{
+      if(String(url).endsWith("/__p2g-sandbox-confirm")){
+        const p=JSON.parse(String(init?.body??""));
+        return new Response(JSON.stringify({
+          v:1,currentlyPersisted:true,
+          sessionId:p.sessionId,receiptId:p.receiptId,
+          providerAttemptId:p.providerAttemptId,
+          sourceSha256:p.sourceSha256,
+          originalEdgeReceivedAtUtc:p.edgeReceivedAtUtc
+        }),{status:200});
+      }
+      return new Response(JSON.stringify({
+        persisted:true,sourceSha256:receipt.sourceSha256
+      }),{status:200});
+    });
     globalThis.fetch=fetched as typeof fetch;
     try{
       const batch={messages:[{body:h.messages[0],ack,retry}]};
@@ -327,7 +354,8 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
       });
       await consume(batch,h.env);
       expect(ack).toHaveBeenCalledTimes(2);
-      expect(fetched).toHaveBeenCalledTimes(1);
+      expect(fetched).toHaveBeenCalledTimes(2);
+      expect(String(fetched.mock.calls[1][0])).toContain("/__p2g-sandbox-confirm");
     }finally{globalThis.fetch=oldFetch;}
   });
 
@@ -361,14 +389,14 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
           processedAtUtc:new Date().toISOString()
         }));
     }
-    const first=await scanUnfinished(h.env);
+    const first=await withCurrentSyntheticConfirm(()=>scanUnfinished(h.env));
     expect(first).toEqual({scanned:300,requeued:0,errors:0});
     expect(h.messages).toHaveLength(0);
     const cursorKey="p2g-sandbox/control/scanner-cursor-v1.json";
     const progress=JSON.parse(new TextDecoder().decode(h.map.get(cursorKey)!.data));
     expect(progress.v).toBe(1);
     expect(progress.cursor).toBeTruthy();
-    const second=await scanUnfinished(h.env);
+    const second=await withCurrentSyntheticConfirm(()=>scanUnfinished(h.env));
     expect(second).toEqual({scanned:51,requeued:1,errors:0});
     expect(h.messages).toEqual([{receiptKey:indexKeys[350]}]);
     const final=JSON.parse(new TextDecoder().decode(h.map.get(cursorKey)!.data));
@@ -430,7 +458,7 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     const altered=JSON.parse(saved);
     altered.rawKey="p2g-sandbox/raw/"+"0".repeat(64)+".json";
     await h.bucket.put(last,JSON.stringify(altered));
-    const damaged=await scanUnfinished(h.env);
+    const damaged=await withCurrentSyntheticConfirm(()=>scanUnfinished(h.env));
     expect(damaged).toMatchObject({scanned:101,requeued:0,errors:1});
     const checkpointKey="p2g-sandbox/control/scanner-cursor-v1.json";
     const checkpoint=JSON.parse(
@@ -439,7 +467,7 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     expect(checkpoint.cursor).toBe(data.indexKeys[99]);
     expect(h.messages).toHaveLength(0);
     await h.bucket.put(last,saved);
-    const repaired=await scanUnfinished(h.env);
+    const repaired=await withCurrentSyntheticConfirm(()=>scanUnfinished(h.env));
     expect(repaired).toEqual({scanned:1,requeued:1,errors:0});
     expect(h.messages).toEqual([{receiptKey:last}]);
     const done=JSON.parse(new TextDecoder().decode(h.map.get(checkpointKey)!.data));
@@ -448,7 +476,7 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
   it("P12 a real Queue send failure on the last page preserves its checkpoint until the Queue recovers",async()=>{
     const h=harness(),data=await seedTwoScannerPages(h);
     h.sendFail(true);
-    const failed=await scanUnfinished(h.env);
+    const failed=await withCurrentSyntheticConfirm(()=>scanUnfinished(h.env));
     expect(failed).toMatchObject({scanned:101,requeued:0,errors:1});
     const checkpointKey="p2g-sandbox/control/scanner-cursor-v1.json";
     const checkpoint=JSON.parse(
@@ -456,7 +484,7 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     );
     expect(checkpoint.cursor).toBe(data.indexKeys[99]);
     h.sendFail(false);
-    const recovered=await scanUnfinished(h.env);
+    const recovered=await withCurrentSyntheticConfirm(()=>scanUnfinished(h.env));
     expect(recovered).toEqual({scanned:1,requeued:1,errors:0});
     expect(h.messages).toEqual([{receiptKey:data.indexKeys[100]}]);
   });
@@ -488,6 +516,71 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
       expect(ack2).not.toHaveBeenCalled();
       expect(fetched).not.toHaveBeenCalled();
     }finally{globalThis.fetch=oldFetch;}
+  });
+
+  it("P12 historical R2 processed marker CANNOT ACK after receiver loses current SQL state",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    const idx=h.messages[0].receiptKey;
+    const receipt=JSON.parse(new TextDecoder().decode(h.map.get(idx)!.data));
+    await h.bucket.put(idx.replace("/index/","/processed/"),
+      JSON.stringify({
+        v:1,receiptKey:idx,receiptId:receipt.id,
+        sourceSha256:receipt.sourceSha256,
+        firstEdgeReceivedAtUtc:receipt.firstEdgeReceivedAtUtc,
+        receiverDurablyPersisted:true,
+        processedAtUtc:new Date().toISOString()
+      }));
+    h.env.EDGE_ALLOW_SYNTHETIC_RELAY="1";
+    const old=globalThis.fetch;
+    const fetchCall=vi.fn(async()=>new Response(JSON.stringify({
+      v:1,currentlyPersisted:false
+    }),{status:200}));
+    globalThis.fetch=fetchCall as typeof fetch;
+    try{
+      const ack=vi.fn(),retry=vi.fn();
+      await consume({messages:[{body:h.messages[0],ack,retry}]},h.env);
+      expect(ack).not.toHaveBeenCalled();
+      expect(retry).toHaveBeenCalledOnce();
+      expect(fetchCall).toHaveBeenCalledOnce();
+      expect(String(fetchCall.mock.calls[0][0]))
+        .toBe("https://sandbox.mock.invalid/__p2g-sandbox-confirm");
+      const original=JSON.parse(new TextDecoder().decode(h.map.get(idx)!.data));
+      original.firstEdgeReceivedAtUtc=new Date(Date.now()-300000).toISOString();
+      await h.bucket.put(idx,JSON.stringify(original));
+      // Marker timestamp now conflicts: source cannot be certified.
+      const scanned=await scanUnfinished(h.env);
+      expect(scanned.errors).toBeGreaterThan(0);
+    }finally{globalThis.fetch=old;}
+  });
+  it("P12 a forged positive current SQL response with wrong receipt ID cannot trigger ACK",async()=>{
+    const h=harness();
+    expect((await ingest(h.request(),h.env)).status).toBe(200);
+    const idx=h.messages[0].receiptKey;
+    const receipt=JSON.parse(new TextDecoder().decode(h.map.get(idx)!.data));
+    await h.bucket.put(idx.replace("/index/","/processed/"),
+      JSON.stringify({
+        v:1,receiptKey:idx,receiptId:receipt.id,
+        sourceSha256:receipt.sourceSha256,
+        firstEdgeReceivedAtUtc:receipt.firstEdgeReceivedAtUtc,
+        receiverDurablyPersisted:true,
+        processedAtUtc:new Date().toISOString()
+      }));
+    h.env.EDGE_ALLOW_SYNTHETIC_RELAY="1";
+    const old=globalThis.fetch;
+    globalThis.fetch=vi.fn(async()=>new Response(JSON.stringify({
+      v:1,currentlyPersisted:true,
+      sessionId:session,receiptId:"f".repeat(64),
+      providerAttemptId:receipt.attemptId,
+      sourceSha256:receipt.sourceSha256,
+      originalEdgeReceivedAtUtc:receipt.firstEdgeReceivedAtUtc
+    }),{status:200})) as typeof fetch;
+    try{
+      const ack=vi.fn(),retry=vi.fn();
+      await consume({messages:[{body:h.messages[0],ack,retry}]},h.env);
+      expect(ack).not.toHaveBeenCalled();
+      expect(retry).toHaveBeenCalledOnce();
+    }finally{globalThis.fetch=old;}
   });
 
 });
