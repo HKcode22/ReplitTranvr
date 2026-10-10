@@ -220,16 +220,30 @@ export async function recordSyntheticExactRuntimeSnapshotV39(input:{
     signed:input.journal,fixtureKey:input.journalKey,
     expected:input.expected,originalRawBytes:input.originalWire
   });
-  const state=await stateOf(input.client,f.sessionId);
-  if(state.delivery.rowCount!==1||state.items.rowCount!==f.items.length)
+  // A window has MULTIPLE delivery IDs in the same source session.
+  // Select the exact signed delivery, not the entire session's items.
+  const deliveryIds=new Set(f.items.map(x=>x.deliveryId));
+  if(deliveryIds.size!==1||f.items.length===0)
+    throw Error("P13_SNAPSHOT_SINGLE_DELIVERY_REQUIRED");
+  const id=[...deliveryIds][0];
+  const delivery=await input.client.query(
+    "SELECT * FROM clean.prepaid_probe_delivery_runtime "+
+    "WHERE session_id=$1 AND delivery_id=$2",[f.sessionId,id]
+  );
+  const items=await input.client.query(
+    "SELECT * FROM clean.prepaid_probe_item_runtime "+
+    "WHERE session_id=$1 AND delivery_id=$2 ORDER BY item_index",
+    [f.sessionId,id]
+  );
+  if(delivery.rowCount!==1||items.rowCount!==f.items.length)
     throw Error("P13_SNAPSHOT_SOURCE_RUNTIME_NOT_COMPLETE");
-  const d=norm(state.delivery.rows[0]);
+  const d=norm(delivery.rows[0]);
   const snap:SyntheticFullSnapshotV39={
     schema:"v39.synthetic-exact-runtime-snapshot.v1",
     sessionId:f.sessionId,attemptKey:f.attemptKey,
     ownerFrozenRunSha256:f.ownerFrozenRunSha256,
     signedJournalMac:input.journal.mac,
-    delivery:d,items:state.items.rows.map(norm)
+    delivery:d,items:items.rows.map(norm)
   };
   const signed=signSyntheticExactRuntimeSnapshotV39(snap,input.snapshotKey);
   checkedSnapshot(signed,input.snapshotKey,f,input.journal.mac);
