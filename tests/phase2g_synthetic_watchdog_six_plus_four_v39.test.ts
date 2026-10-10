@@ -70,6 +70,42 @@ describe("P15 six-primary + four-conditional-backup checks; never provider retri
       scientificAdjudication:"PENDING_OR_CENSORED_NOT_AUTOMATIC_PASS"
     });
   });
+  it("contingency is revoked at seventh check if the edge watermark becomes stale",()=>{
+    const samples=failures(9).map((health,i)=>({
+      health,evidence:{
+        ...good(),
+        currentEvidenceAgeSeconds:i===6?31:0
+      }
+    }));
+    const r=evaluateSyntheticSixPlusFourWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:4,
+      samples
+    });
+    expect(r).toMatchObject({
+      stopOwner:true,stopAtIndex:6,
+      maximumObservedConsecutiveFailures:7,
+      state:"STOP_SAFE_NO_PROOF",
+      reasons:["SOURCE_WATERMARK_STALE_DURING_OUTAGE"]
+    });
+    expect(r.scientificAdjudication)
+      .toBe("PENDING_OR_CENSORED_NOT_AUTOMATIC_PASS");
+  });
+  it("during contingency a newly missing original item stops without waiting for ten",()=>{
+    const samples=failures(10).map((health,i)=>({
+      health,evidence:{
+        ...good(),originalPhysicalFlightV2Continuity:i<7
+      }
+    }));
+    const r=evaluateSyntheticSixPlusFourWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:4,
+      samples
+    });
+    expect(r).toMatchObject({
+      stopOwner:true,stopAtIndex:7,
+      state:"STOP_SAFE_NO_PROOF",
+      reasons:["ORIGINAL_SCIENTIFIC_IDENTITY_NOT_RECONSTRUCTIBLE"]
+    });
+  });
   it("tenth failure is bounded STOP at index nine, not infinite retry",()=>{
     const v=run([...failures(10),"healthy"]);
     expect(v).toMatchObject({
