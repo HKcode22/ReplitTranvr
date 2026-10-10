@@ -57,6 +57,7 @@ const prepaidPath =
 const controlRoutes = new Set([
   "/__v39/phase2g/webhook-secret-match",
   "/__v39/phase2g/runtime-db-binding",
+  "/__v39/phase2g/db-live-preflight",
   "/__v39/phase2g/cleanup-control-match",
   "/__v39/phase2g/runtime-cleanup",
 ]);
