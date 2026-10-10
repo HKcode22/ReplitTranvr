@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { enforcePaidGuard, verifyAuthFile } from "./v39_paid_guard_v39";
+import {verifyStage1PublishedDatabaseLiveV39} from "./phase2gStage1PublishedDatabaseLivePreflight_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const CALLBACK_POLL_MS = 15_000;
@@ -237,6 +238,22 @@ async function main(): Promise<void> {
       ...initialCallbackHealth,
     }));
     throw new Error("SUPERVISOR_REFUSED:CALLBACK_OR_BINDING_NOT_HEALTHY_AT_START");
+  }
+
+  // A matching database URL is a configuration check, not a live connection.
+  // Require actual read-only PostgreSQL SELECT success from the published
+  // receiver before opening the log or spawning the paid Stage1 owner.
+  // This is deliberately NOT added to the every-15s failure watchdog.
+  const dbLive = await verifyStage1PublishedDatabaseLiveV39({
+    base:callbackBase, githubRuntimeDbUrl:String(process.env.V39_DATABASE_RUNTIME_URL??"")
+  });
+  if (!dbLive.healthy) {
+    console.error(JSON.stringify({
+      schema:"v39.phase2g-stage1-callback-health-diagnostic.v1",
+      phase:"prelaunch_db_connectivity",
+      ...dbLive
+    }));
+    throw new Error("SUPERVISOR_REFUSED:PUBLISHED_DATABASE_NOT_CONNECTING");
   }
 
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
