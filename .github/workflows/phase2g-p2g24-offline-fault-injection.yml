@@ -10,6 +10,8 @@ on:
       - scripts/v39_p2g24_readonly_blob_integrity_audit.ts
       - tests/phase2g_p2g24_prepaid_persistence_fault_injection_v39.test.ts
       - tests/phase2g_yssy_oct12_stage1_calendar_v39.test.ts
+      - experiments/phase2g_durable_ingress_offline_prototype_v39.ts
+      - tests/phase2g_durable_ingress_offline_prototype_v39.test.ts
       - tests/phase2g_yssy_zero_billable_delivery_retries_v39.test.ts
   workflow_dispatch:
 
@@ -47,6 +49,7 @@ jobs:
           npx vitest run \
             tests/phase2g_p2g24_prepaid_persistence_fault_injection_v39.test.ts \
             tests/phase2g_yssy_oct12_stage1_calendar_v39.test.ts \
+            tests/phase2g_durable_ingress_offline_prototype_v39.test.ts \
             tests/phase2g_yssy_zero_billable_delivery_retries_v39.test.ts \
             tests/phase2g_p2g24_callback_receiver_health_v39.test.ts \
             tests/phase2g_published_callback_only_v39.test.ts \
