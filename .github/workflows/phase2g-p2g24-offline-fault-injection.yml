@@ -39,6 +39,7 @@ on:
       - tests/phase2g_dual_wire_canonical_source_receipt_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_dual_receipt_queue_admission_v39.ts
       - tests/phase2g_dual_receipt_queue_admission_v39.test.ts
+      - experiments/phase2g_rehearsal/disposable_logged_source_receipt_v39.ts
   workflow_dispatch:
 
 permissions:
@@ -182,6 +183,14 @@ jobs:
           echo "AFTER_UNCLEAN_RESTART_LOGGED_AND_UNLOGGED=$AFTER"
           test "$AFTER" = "1|0"
           echo "ACTUAL_UNLOGGED_CRASH_RESET=CONFIRMED"
+          # Original synthetic first-receipt timestamp + blinded digests were
+          # written in the preceding actual V3.9 disposable PG integration.
+          # They MUST survive a genuine unclean restart unlike UNLOGGED rows.
+          RECEIPT_ROW="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT count(*)::text || '|' || to_char(min(first_edge_received_utc) AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS.MS') || '|' || min(length(attempt_hmac))::text || '|' || min(length(wire_sha256))::text || '|' || min(length(canonical_sha256))::text FROM p2g_dual_receipt_crash_fixture.receipt_metadata")"
+          echo "DUAL_HASH_METADATA_AFTER_UNCLEAN_RESTART=$RECEIPT_ROW"
+          test "$RECEIPT_ROW" = "1|2026-10-12 03:01:02.000|64|64|64"
+          echo "DUAL_HASH_FIRST_RECEIPT_RESTART_SURVIVAL=CONFIRMED"
+
           echo "PROVIDER_CALLS=0"
           echo "SCIENTIFIC_DB_QUERIES=0"
           echo "CLOUDFLARE_CALLS=0"
