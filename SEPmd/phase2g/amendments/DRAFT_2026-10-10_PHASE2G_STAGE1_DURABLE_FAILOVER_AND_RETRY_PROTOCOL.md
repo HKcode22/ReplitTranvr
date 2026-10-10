@@ -129,3 +129,18 @@ Using Cloudflare *only as a candidate*:
 **Current state: DESIGN ONLY.** No cloud account provisioned, no queue, no new webhook URL, no paid retry, no change to owner watchdog, no new authorization, no Replit deployment. The guarantee sought is *stronger recoverability with bounded fail-closed handling*, **not absolute certainty that two hours will never fail**.
 
 Supporting: [Stage-1 run contingency](../reports/2026-10-09_YSSY_STAGE1_SUNDAY_PDT_CONTINGENCY_AND_RETRY_GATE.md), [zero-credit synthetic integration protocol](../reports/2026-10-09_P2G24_NEXT_SYNTHETIC_INGRESS_FAULT_PROTOCOL.md), [Replit support report](../reports/2026-10-10_REPLIT_SUPPORT_564568_AUTOSCALE_NO_RETRY_YSSY_STAGE1_RISK.md).
+
+
+## Offline protocol simulation — verified CI result
+
+[GitHub Actions #38018975560](https://github.com/HKcode22/ReplitTranvr/actions/runs/38018975560) **completed SUCCESS** on this isolated investigation branch (no real provider credentials or deployment). The seven new `vitest` offline tests import `experiments/phase2g_durable_ingress_offline_prototype_v39.ts` and validate:
+
+1. Raw receipt/manifest write precedes durable queue pointer and any HTTP 200.
+2. Duplicate source/relay retry preserves the first edge-receipt timestamp and same receipt ID.
+3. Object-store fault fails HTTP 503 and does not enqueue.
+4. Queue fault after durable bytes fails 503, preserves raw bytes, and later retry reuses the original receipt ID.
+5. Rejected auth, invalid session/timestamp and >2 MiB input do not enter storage.
+6. Provider retry attempt changes the provider-attempt ID and source ledger; same-attempt relay retries do not create extra provider attempt IDs.
+7. Replit failure with healthy edge/store/queue may be classified `DEGRADED_BUT_DURABLE`; raw-store/queue failure or queue staleness fails closed.
+
+These are **logic contract tests only**. They use mocked in-memory store/queue and do NOT prove production Worker, R2, Queues, real POST, R2/queue atomicity, signed metadata, SQL replay, scientific timestamp equivalence or restart survival. None of the code is imported by the published application or accepted as a paid launch gate.
