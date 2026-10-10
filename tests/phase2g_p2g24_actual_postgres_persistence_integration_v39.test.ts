@@ -50,6 +50,7 @@ import {registerV3Routes} from "../server/routes_v3";
 import {createSyntheticDualSourceMessageV2,verifySyntheticDualSourceMessageV2} from "../experiments/phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
 import {recordSyntheticSignedReceiptMetadataV2} from "../experiments/phase2g_rehearsal/disposable_logged_source_receipt_v39";
 import {readDisposablePostgresContinuitySnapshotV39,assessSyntheticPostgresContinuityV39} from "../experiments/phase2g_rehearsal/postgres_continuity_guard_v39";
+import {signSyntheticSenderFrameV39,reconcileSyntheticSignedAttemptsV39} from "../experiments/phase2g_rehearsal/signed_attempt_reconciliation_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const SUB="synthetic-owned-subscription";
@@ -826,6 +827,97 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       console.log("P13_SYNTHETIC_POSTGRES_UNLOGGED_LOSS_CENSORED=true");
       console.log("P13_PRODUCTION_RECOVERY_AUTHORIZED=false");
     }finally{client.release();}
+  });
+
+  it("P13/P14 actual V3.9 route cannot claim original independent edge UTC from Replit processing time",async()=>{
+    // Synthetic signed source arrives at the edge one minute earlier than the
+    // actual local HTTP processing. Real V3.9 currently stores the REPLIT
+    // processing time; its SQL row does not have the signed first-edge UTC.
+    // A valid object SHA and identical credits must NOT pass source provenance.
+    const now=Date.now();
+    const srcUtc=new Date(now-90_000).toISOString();
+    const fakeAttemptUtc=new Date(now-91_000).toISOString();
+    const windowStart=new Date(now-3_600_000).toISOString();
+    const windowEnd=new Date(now+3_600_000).toISOString();
+    const body=sample({
+      id:"v39-edge-clock-gap-001",
+      timestampUtc:fakeAttemptUtc,
+      deliveryAttempt:{seqNo:0,costCredits:1,timestampUtc:fakeAttemptUtc}
+    });
+    const wire=JSON.stringify(body);
+    const source=await createSyntheticDualSourceMessageV2({
+      rawBytes:new TextEncoder().encode(wire),
+      sessionId:SESSION,expectedProviderSubscriptionId:SUB,
+      trustedReceivedAtUtc:srcUtc,
+      privateEdgeSigningKey:"offline-edge-".padEnd(64,"e")
+    });
+    const t0=performance.now();
+    const response=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},body:wire
+    });
+    const sendDurationMs=performance.now()-t0;
+    expect(response.status).toBe(200);
+    const rows=await state.pool!.query(
+      "SELECT d.raw_body_sha256,d.received_at_utc,"+
+      " d.delivery_attempt_cost_credits,b.content_sha256,b.object_name "+
+      "FROM clean.prepaid_probe_delivery_runtime d "+
+      "JOIN clean.provider_content_blob_ref b ON b.blob_ref_id=d.blob_ref_id "+
+      "WHERE d.session_id=$1",[SESSION]
+    );
+    expect(rows.rows).toHaveLength(1);
+    const row=rows.rows[0];
+    const bytes=state.blobs.get(row.object_name);
+    expect(bytes).toBeDefined();
+    const {createHash}=await import("node:crypto");
+    const verifiedCanonicalSha=createHash("sha256").update(bytes!).digest("hex");
+    expect(row.raw_body_sha256).toBe(source.receipt.canonicalSha256);
+    expect(row.content_sha256).toBe(verifiedCanonicalSha);
+    expect(row.content_sha256).toBe(source.receipt.canonicalSha256);
+    const signedSender=signSyntheticSenderFrameV39({
+      schema:"v39.phase2g-synthetic-independent-sender.v1",
+      mode:"synthetic-only",
+      sessionId:SESSION,providerSubscriptionId:SUB,
+      ownerFrozenRunSha256:"a".repeat(64),
+      windowStartUtc:windowStart,windowEndUtc:windowEnd,
+      attempts:[{
+        attemptKey:source.receipt.attemptKey,
+        notificationId:source.receipt.notificationId,
+        attemptSeqNo:source.receipt.attemptSeqNo,
+        providerAttemptUtc:source.receipt.providerAttemptUtc,
+        providerGeneratedUtc:source.receipt.providerGeneratedUtc,
+        wireSha256:source.receipt.wireSha256,
+        canonicalSha256:source.receipt.canonicalSha256,
+        syntheticCostCredits:source.receipt.syntheticCostCredits,
+        senderResponseStatus:response.status,
+        senderResponseElapsedMs:sendDurationMs
+      }]
+    },"offline-sender-".padEnd(64,"s"));
+    const result=await reconcileSyntheticSignedAttemptsV39({
+      signedSender,independentSenderKey:"offline-sender-".padEnd(64,"s"),
+      edgeSigningKey:"offline-edge-".padEnd(64,"e"),
+      expectedSessionId:SESSION,expectedProviderSubscriptionId:SUB,
+      expectedOwnerFrozenRunSha256:"a".repeat(64),
+      trustedAuditUtc:new Date().toISOString(),
+      signedEdgeReceipts:[source],
+      committedInternal:[{
+        attemptKey:source.receipt.attemptKey,
+        canonicalSha256:row.raw_body_sha256,
+        rawObjectReadbackSha256:verifiedCanonicalSha,
+        // Use the ACTUAL SQL timestamp, not source's independently
+        // signed edge time, to expose today's scientific provenance gap.
+        originalEdgeReceivedUtc:new Date(row.received_at_utc).toISOString(),
+        syntheticCostCredits:Number(row.delivery_attempt_cost_credits)
+      }]
+    });
+    expect(result).toMatchObject({
+      attemptedCredits:1,edgeCredits:1,internallyCommittedCredits:1,
+      attemptEvidenceConsistent:false,scientificCompletionAuthorized:false,
+      automaticRecoveryAuthorized:false
+    });
+    expect(result.errors).toContain("INTERNAL_ORIGINAL_SOURCE_UTC_SHIFTED");
+    console.log("ACTUAL_V39_ORIGINAL_EDGE_UTC_IN_SQL=false");
+    console.log("P13_P14_EXACT_CREDITS_WITH_TIMESTAMP_DIVERGENCE_CENSORED=true");
+    console.log("PAID_PROVIDER_CALLS=0");
   });
 
 });
