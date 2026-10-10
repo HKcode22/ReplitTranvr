@@ -1356,6 +1356,13 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       const sourceReadback=rawMap.get(receipt.rawKey)!;
       expect(offlineShaHash("sha256").update(sourceReadback.bytes)
         .digest("hex")).toBe(sourceSha);
+      // A historical processed marker can be confirmed while SQL CURRENTLY
+      // exists, with no second provider raw-payload POST or duplicate blob.
+      await syntheticEdgeConsume(batch,env);
+      expect(ack).toHaveBeenCalledTimes(2);
+      expect(confirmationCalls).toBe(1);
+      expect(bridgeCalls).toBe(1);
+      expect(await count()).toMatchObject({logged:1,unlogged:1});
       // A disposable UNLOGGED reset simulates the relevant part of a
       // PostgreSQL crash, NOT actual Replit, Cloudflare or provider failure.
       await state.pool!.query(
@@ -1369,9 +1376,9 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       // A historical marker CANNOT authorize another ACK without a fresh
       // source-bound read-only SQL continuity proof.
       await syntheticEdgeConsume(batch,env);
-      expect(ack).toHaveBeenCalledTimes(1);
+      expect(ack).toHaveBeenCalledTimes(2);
       expect(retry).toHaveBeenCalledTimes(1);
-      expect(confirmationCalls).toBe(1);
+      expect(confirmationCalls).toBe(2);
       expect(bridgeCalls).toBe(1);
       const scienceRows=await state.pool!.query(
         "SELECT count(*)::int AS n FROM clean.prepaid_probe_item_runtime "+
