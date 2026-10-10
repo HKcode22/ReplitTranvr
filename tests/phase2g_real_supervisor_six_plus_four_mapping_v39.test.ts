@@ -196,6 +196,53 @@ describe("P15 6+4 adapter executes REAL supervisor health function offline",()=>
     });
     expect(h.classification).toBe("webhook_contract_violation");
   });
+  it("nine actual offline Replit HTTP 503 checks followed by real health recovery exercise the FOUR backup checks",async()=>{
+    const outcomes=[];
+    for(let i=0;i<9;i++)outcomes.push((await realCallback({
+      stage:"published_runtime",status:503
+    })).classification);
+    outcomes.push((await realCallback()).classification);
+    const result=evaluateSyntheticSixPlusFourWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:4,
+      samples:outcomes.map(health=>({health,evidence:verified()}))
+    });
+    expect(result).toMatchObject({
+      stopOwner:false,enteredContingency:true,
+      contingencyChecksUsed:3,recoveredHealth:true,
+      maximumObservedConsecutiveFailures:9,
+      state:"HEALTH_RECOVERED_AUDIT_PENDING",
+      scientificAdjudication:"PENDING_OR_CENSORED_NOT_AUTOMATIC_PASS",
+      paidLaunchAuthorized:false
+    });
+  });
+  it("ten actual offline Replit HTTP 503 health outcomes STOP at bounded tenth check",async()=>{
+    const outcomes=[];
+    for(let i=0;i<10;i++)outcomes.push((await realCallback({
+      stage:"published_runtime",status:503
+    })).classification);
+    const r=evaluateSyntheticSixPlusFourWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:4,
+      samples:outcomes.map(health=>({health,evidence:verified()}))
+    });
+    expect(r).toMatchObject({
+      stopOwner:true,stopAtIndex:9,
+      maximumObservedConsecutiveFailures:10,
+      state:"STOP_AT_TEN",contingencyChecksUsed:4
+    });
+  });
+  it("real Replit HTTP 503 with missing independent original bytes never earns six extra tries",async()=>{
+    const h=await realCallback({stage:"published_runtime",status:503});
+    const r=evaluateSyntheticSixPlusFourWatchdogV39({
+      mode:"synthetic-only",pollMs:15000,primaryChecks:6,backupChecks:4,
+      samples:[{health:h.classification,evidence:{
+        ...verified(),fullOriginalBytesReadBackVerified:false
+      }}]
+    });
+    expect(r).toMatchObject({
+      stopOwner:true,stopAtIndex:0,
+      reasons:["ORIGINAL_RAW_SOURCE_OR_UTC_NOT_DURABLE"]
+    });
+  });
   it("an arbitrary unknown future diagnostic is fail-closed, not silently a transient timeout",()=>{
     expect(classifyActualSupervisorHealthForSixPlusFourV39({
       healthy:false,check:"unknown-new-check",reason:"request_timeout",
