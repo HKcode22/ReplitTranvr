@@ -46,3 +46,13 @@ Code at `server/lib/disruption/prepaidProbeRuntime_v39.ts` **begins a SQL transa
 **No-go remains the scientifically correct state until gates pass.** A 120-minute probe can fail despite all endpoint checks if it loses a billable notification. The goal is making that failure less likely and detectable without making the study falsely pass.
 
 Related: [stage1 runbook](2026-10-09_YSSY_STAGE1_SUNDAY_PDT_CONTINGENCY_AND_RETRY_GATE.md), [real PostgreSQL crash gate](2026-10-10_ACTUAL_POSTGRES_INTEGRATION_UNLOGGED_CRASH_RECOVERY_GATE.md), [zero-cost backup feasibility](2026-10-10_CLOUDFLARE_ZERO_CHARGE_FREE_QUEUE_ONLY_PHASE2G_FEASIBILITY.md).
+
+## Final fixed and retested draft HEAD after observing both failure modes
+
+[GitHub Actions #38046121842](https://github.com/HKcode22/ReplitTranvr/actions/runs/38046121842) completed **SUCCESS** after the experimental timeout was disabled by default: **89/89** offline Vitest, **15/15** actual disposable PostgreSQL integration, 18 callback health checks, server typecheck and actual PostgreSQL SIGKILL UNLOGGED check.
+
+- Short-acquisition adversarial burst: observed HTTP 503 for some of 18 synthetic sends under 3-second acquisition and 600ms fake external object I/O; *only 200-acknowledged requests* reached the internal ledger. A short wait limit reduces hang duration but does not guarantee source delivery.
+- Long-acquisition adversarial burst: all 18 eventually committed, synthetic wall-clock completion **11,015ms** in the final run (previous green run **10,958ms**), beyond the evaluated ~10-second sender response deadline; at-most-once internal DB delivery does not prove a remote sender saw 200.
+- The drafted `V39_CALLBACK_DB_ACQUIRE_TIMEOUT_APPROVED=1` requires explicit opt-in alongside `V39_CALLBACK_ONLY_RUNTIME=1`. **Default remains original unlimited pool acquisition wait** even if draft code were deployed. DO NOT set approval flag before durable front-door + scientific contract review. Neither default nor opt-in eliminates this architecture-level tradeoff.
+
+Real YSSY P2G24 data do not prove an 18-webhook simultaneous burst or 600ms per blob upload; these are controlled worst-case probes. Preventive priority is an **ACK-after-durable ingress outside Replit** and bounded independent replay, with verified original arrival-time evidence, not arbitrary timeout changes.
