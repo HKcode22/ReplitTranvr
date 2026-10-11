@@ -28,7 +28,7 @@ Added `P11/P13 real V3.9 HTTP route freezes Node-observed arrival BEFORE slow JS
 - Retries identical original with a forged year-2099 header: no second delivery/LOGGED blob, `duplicate:true`, original `received_at_utc` remains identical and unchanged.
 - Real PostgreSQL fixture includes existing source hash/readback, item and financial tests. The separate real SIGKILL case demonstrates LOGGED refs survive and UNLOGGED science is lost. No external provider or production DB access.
 
-**CI [#38119519940](https://github.com/HKcode22/ReplitTranvr/actions/runs/38119519940)** at code SHA `3ea891e9b0b854e6e00d268c25a5a7e71d13f901` was pending as this report was authored. The report must be updated after both jobs finish and failures, if any, are addressed.
+**VERIFIED [GitHub Actions #38119519940](https://github.com/HKcode22/ReplitTranvr/actions/runs/38119519940)** at exact tested SOURCE SHA `3ea891e9b0b854e6e00d268c25a5a7e71d13f901`: BOTH JOBS SUCCESS; **646/646 offline tests (62 suites)** and **95/95 actual disposable PostgreSQL16 integration tests**, including live-chunked HTTP output `P11_NODE_RECEIVER_FIRST_OBSERVED_BEFORE_PARSER_DONE=true` and `P11_UNTRUSTED_RECEIPT_TIME_HEADERS_IGNORED=true`. True PG SIGKILL confirms LOGGED=1,UNLOGGED=0. This is still only Node receiver-observed time, not an independent original AeroDataBox sender timestamp or a published app deploy.
 
 ## Important limits / next action
 
