@@ -42,3 +42,10 @@ Exact source revision `1fdd5f2304caca0b8dbb8457b4ba1336ea043deb` passed [GitHub 
 Older intermediate red CI commits were **fixed**, not dismissed: initial overly strict journal cost/item signability blocked negative integration tampering fixtures; retaining signed-journal tamper inputs and enforcing flight-credit equality in the independent source/original-wire review restored all 45 integration tests. Another independent pre-run sender fixture required explicit independent edge/internal observed synthetic credit fields; its compatibility test was updated and now passes. All fixes remain offline on draft PR #27.
 
 No original provider sender log, current deployed revision identity, full hosted two-hour rehearsal, or 168-hour independently persisted upstream source receipts were proven by these tests. The live three-strike watchdog remains the only enforceable limit; selecting 6+6 is not a source witness or permission to run.
+
+
+## Additional P17 edge case (draft)
+
+`tests/phase2g_synthetic_120min_science_recovery_audit_v39.test.ts` now asserts a synthetic signed receipt with `flights:[]` and `deliveryAttempt.costCredits:0` keeps its source attempt and original 15-minute bucket, while **no invented physical-flight observation** appears and the total source/journal credits decrease by one. The audit still sets `scientificPassAuthorized=false` and `paidLaunchAuthorized=false` even when synthetic records match.
+
+Source commit: `8682a681103f9a3d7bca336ad1e4659bf5c60c50`, [Actions #38104194255](https://github.com/HKcode22/ReplitTranvr/actions/runs/38104194255). Do not count as verified until its **two jobs complete SUCCESS**. Earlier fully green source `1fdd5f2304caca0b8dbb8457b4ba1336ea043deb`: 465/465 offline and 45/45 disposable real PG.
