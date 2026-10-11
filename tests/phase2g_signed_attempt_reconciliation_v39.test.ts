@@ -96,6 +96,9 @@ describe("P13/P14 independently signed SYNTHETIC provider-attempt accounting",()
     expect(r).toMatchObject({
       attemptedCredits:3,edgeCredits:3,internallyCommittedCredits:3,
       senderAttemptCount:3,verifiedEdgeAttemptCount:3,internalAttemptCount:3,
+      senderMatchedEdgeAttemptCount:3,
+      fullyCorroboratedAttemptCount:3,
+      fullyCorroboratedFlightItemCredits:3,
       attemptEvidenceConsistent:true,errors:[],
       scientificCompletionAuthorized:false,automaticRecoveryAuthorized:false
     });
@@ -136,6 +139,8 @@ describe("P13/P14 independently signed SYNTHETIC provider-attempt accounting",()
     const result=await run(v);
     expect(result).toMatchObject({
       senderAttemptCount:3,verifiedEdgeAttemptCount:3,internalAttemptCount:3,
+      senderMatchedEdgeAttemptCount:3,fullyCorroboratedAttemptCount:3,
+      fullyCorroboratedFlightItemCredits:7,
       attemptedCredits:7,edgeCredits:7,internallyCommittedCredits:7,
       attemptEvidenceConsistent:true,errors:[],
       scientificCompletionAuthorized:false,
@@ -188,6 +193,9 @@ describe("P13/P14 independently signed SYNTHETIC provider-attempt accounting",()
       internalAttemptCount:259,
       senderAttemptsNotVerifiedAtEdge:1,
       senderCreditsNotVerifiedAtEdge:1,
+      senderMatchedEdgeAttemptCount:259,
+      fullyCorroboratedAttemptCount:259,
+      fullyCorroboratedFlightItemCredits:259,
       senderMatchedEdgeAttemptsMissingInternal:0,
       senderMatchedEdgeCreditsMissingInternal:0,
       internalAttemptsWithoutMatchingSenderAndEdge:0,
@@ -201,6 +209,9 @@ describe("P13/P14 independently signed SYNTHETIC provider-attempt accounting",()
       attemptedCredits:260,edgeCredits:260,internallyCommittedCredits:259,
       senderAttemptsNotVerifiedAtEdge:0,
       senderCreditsNotVerifiedAtEdge:0,
+      senderMatchedEdgeAttemptCount:260,
+      fullyCorroboratedAttemptCount:259,
+      fullyCorroboratedFlightItemCredits:259,
       senderMatchedEdgeAttemptsMissingInternal:1,
       senderMatchedEdgeCreditsMissingInternal:1,
       internalAttemptsWithoutMatchingSenderAndEdge:0,
@@ -238,9 +249,29 @@ describe("P13/P14 independently signed SYNTHETIC provider-attempt accounting",()
       senderAttemptsNotVerifiedAtEdge:0,
       senderMatchedEdgeAttemptsMissingInternal:1,
       senderMatchedEdgeCreditsMissingInternal:5,
+      fullyCorroboratedAttemptCount:2,
+      fullyCorroboratedFlightItemCredits:2,
       attemptEvidenceConsistent:false
     });
     expect(x.scientificCompletionAuthorized).toBe(false);
+  });
+  it("P14 matching attempt IDs but wrong item-credit claim are not end-to-end corroborated",async()=>{
+    const v=await fixture();
+    v.internal[1]={...v.internal[1],syntheticCostCredits:0};
+    const r=await run(v);
+    expect(r).toMatchObject({
+      attemptedCredits:3,edgeCredits:3,internallyCommittedCredits:2,
+      senderMatchedEdgeAttemptCount:3,
+      fullyCorroboratedAttemptCount:2,
+      fullyCorroboratedFlightItemCredits:2,
+      senderMatchedEdgeAttemptsMissingInternal:0,
+      senderMatchedEdgeCreditsMissingInternal:0,
+      attemptEvidenceConsistent:false
+    });
+    expect(r.errors).toEqual(expect.arrayContaining([
+      "INTERNAL_PROVIDER_ATTEMPT_COST_MISMATCH",
+      "SYNTHETIC_BILLED_CREDIT_GAP"
+    ]));
   });
   it("P14 unrelated signed edge source cannot inflate trustworthy sender-correlated eight-bin coverage",async()=>{
     const v=await fixture(3);
