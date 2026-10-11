@@ -124,6 +124,18 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
     expect(p.consecutiveFailures).toBe(3);
     expect(p.recoveredHealthAwaitingScienceAudit).toBe(true);
   });
+  it("effective 6+6 has independent monotonic wall timer even if HTTP poll chain stalls",()=>{
+    const source=readFileSync(join(process.cwd(),
+      "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
+    expect(source).toContain("let episodeDeadline:NodeJS.Timeout|null=null");
+    expect(source).toContain("const armEpisodeDeadline=()=>");
+    expect(source).toContain("STAGE1_SIX_PLUS_SIX_WALL_MS_V39-");
+    expect(source).toContain("STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39-");
+    expect(source).toContain('requestTermination("SIGTERM","workspace_callback_six_plus_six_monotonic_outage_limit")');
+    expect(source).toContain("episodeDeadline.unref()");
+    expect(source).toContain("armEpisodeDeadline();");
+    expect(source).toContain("clearEpisodeDeadline();");
+  });
   it("actual paid supervisor's four-stage callback health has independent 40-second kill timer with guaranteed cleanup",()=>{
     const source=readFileSync(join(process.cwd(),
       "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
