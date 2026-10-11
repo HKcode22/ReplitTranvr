@@ -257,6 +257,13 @@ async function main(): Promise<void> {
     `SELECT
        to_regclass('clean.adb_probe_reconciliation_evidence') IS NOT NULL AS evidence_table,
        to_regclass('clean.phase2g_prepaid_source_intent_v39') IS NOT NULL AS source_intent_v0064_table,
+        EXISTS (
+          SELECT 1 FROM pg_trigger tg
+          WHERE tg.tgrelid=to_regclass('clean.phase2g_prepaid_source_intent_v39')
+            AND tg.tgname='trg_p2g_prepaid_source_intent_v39'
+            AND tg.tgfoid=to_regprocedure('clean.guard_p2g_prepaid_source_intent_v39()')
+            AND tg.tgenabled='O'
+        ) AS source_intent_v0064_guard_trigger,
        EXISTS (
          SELECT 1 FROM information_schema.columns
           WHERE table_schema='clean'
@@ -273,6 +280,8 @@ async function main(): Promise<void> {
   );
   if (migrationCheck.rows[0]?.source_intent_v0064_table !== true)
     blockers.push("v0064_logged_original_source_pending_intent_migration_missing");
+  if (migrationCheck.rows[0]?.source_intent_v0064_guard_trigger !== true)
+    blockers.push("v0064_logged_original_source_immutability_guard_missing_or_disabled");
   if (migrationCheck.rows[0]?.evidence_table !== true) blockers.push("phase2g_reconciliation_evidence_table_missing");
   if (migrationCheck.rows[0]?.callback_counter !== true) blockers.push("phase2g_callback_counter_migration_missing");
   if (migrationCheck.rows[0]?.settling_status !== true) blockers.push("phase2g_settling_status_migration_missing");
