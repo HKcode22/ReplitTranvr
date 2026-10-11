@@ -1,0 +1,47 @@
+# P06 — real prepaid receiver, LOGGED PENDING original intent BEFORE ambiguous App Storage upload
+
+**October 11, 2026 UTC. Draft PR #27 / isolated investigation branch ONLY. Not a production deployment, migration, provider subscription or 6+6 activation. No Replit Shell, paid AeroDataBox calls, real scientific database mutations, Cloudflare, new hosting or historical blob copies/deletions.**
+
+## Previously open original-source problem
+
+In the real V3.9 prepaid callback, a new original blob upload might succeed at Replit App Storage, but the storage reply, visibility check, or SHA readback can fail. The existing shared provider-blob helper's **default** error path performs a best-effort delete. A prior paid-receiver opt-in (P06 failed-source LOGGED journal) protects an original only after upload **returns a verified ProviderBlobRef** and later scientific SQL fails. It cannot describe/retain an original if the storage operation throws earlier.
+
+The existing B0062 `clean.provider_content_blob_ref` table cannot honestly represent a non-verified original using its ordinary content-ref semantics. Simply disabling cleanup without a committed reference leaves a hidden orphan with unknown retention. The new work provides a separate **metadata-only PENDING journal** and a strictly gated no-delete upload path in actual callback source, **without claiming that PENDING means provider bytes were received**.
+
+## New draft forward-only migration V0064 — NOT APPLIED LIVE
+
+`migrations/current/V0064__phase2g_prepaid_source_pending_intent_v39.sql` creates a **LOGGED** metadata-only `clean.phase2g_prepaid_source_intent_v39` keyed by (session UUID, internal delivery ID). Each row contains only the canonical source SHA/byte count, opaque blob UUID/object name, **Node-first-observed UTC**, exactly 168-hour source-retention timestamp and state `PENDING` or `VERIFIED`. It contains NO provider original byte body, flight data, secrets, paid subscription ids, sender bill or independent first-edge witness.
+
+The migration constrains exact SHA-256 shape, canonical opaque object name/UUID correspondence, bounded bytes, exactly 168-hour source interval and the `PENDING`/verification-timestamp relationship. A trigger forbids UPDATE of identity/retention, DELETE and non-`PENDING→VERIFIED` transitions. No cleanup/deletion/reaper or production migration is authorized by this draft. Presence of PENDING only means **SQL reserved expected source metadata**; it is not a signed provider send, not proof App Storage accepted bytes, and not normalized scientific data.
+
+## Real receiver implementation (three separate opt-in flags, DEFAULT OFF)
+
+New `server/lib/disruption/prepaidSourceIntent_v39.ts` and opt-in call from actual `server/lib/disruption/prepaidProbeRuntime_v39.ts`. Activates only with **all three**:
+- `V39_CALLBACK_ONLY_RUNTIME=1`
+- `V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED=1`
+- `V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED=1`
+
+No flags are set or changed in published Replit. An approved callback first validates the existing session/owner/subscription under its current `FOR UPDATE` lock. It then uses a separate PostgreSQL autocommit query to reserve and **durably commit** a unique LOGGED PENDING record **BEFORE attempting App Storage upload**. A random opaque original UUID and first Node-received time are frozen. No foreign key to UNLOGGED session state permits the PENDING metadata to survive an UNLOGGED reset.
+
+The common `persistProviderBlobBeforeAckV39` helper now accepts optional `failureCleanup: 'delete'|'retain'`; **legacy default is unchanged**. Only the guarded path with a pre-existing LOGGED PENDING record requests `retain`, so an upload that remotely succeeds but loses its response or SHA readback does **not** immediately delete potentially irreplaceable source bytes. Failure returns non-2xx, rolls back the science transaction, and preserves failure accounting plus the independent PENDING metadata. PENDING is NOT turned into a successful source/ACK simply because its DB entry exists.
+
+For an exact reattempt, the same session/delivery ID and SHA must match existing metadata and be unexpired. The receiver never overwrites the previously reserved object. It downloads exact bytes and checks SHA, length, byte-for-byte canonical source, then advances `PENDING→VERIFIED` once via an independent SQL COMMIT (or rechecks an already VERIFIED source). If the object is missing/changed, fail closed with NO upload, ACK or invented flight-item count. Success returns the original opaque ref and first Node-observed time. The ordinary actual physical-flight-v2 SQL resolver plus delivery/items/owner-success transaction must still **COMMIT before 2xx**. Source-only VERIFIED cannot acknowledge a provider event. The existing optional failed-science LOGGED journal handles subsequent SQL failure without deleting the verified source.
+
+**Important existing limitations**: all of this happens while holding the existing session `FOR UPDATE` lock. In fact the extra independent durable SQL operations may add latency. This round is a **custody/crash prerequisite**, not P06 first-original throughput/10s SLA fix. It is not an independent first-hop: a provider webhook that Replit Autoscale never delivered to Node has no PENDING record. The stored bytes are canonicalized parsed JSON, not authenticated literal HTTP wire. Actual Replit bucket durability, write-once generation/retention, provider retries/sent/billed item credits, authorized 168h cleanup, complete real paid flight-v2 rehydration, and public hosted 22-distinct-original 10-second ACK all still need independent proof.
+
+## Verification (disposable only)
+
+The exact V0064 migration was executed in disposable PostgreSQL16 during integration tests; the **actual paid callback source** was exercised with injected fake object storage:
+1. First blob upload saves bytes, then throws a **lost successful response**. Verify LOGGED PENDING persists, no B0062 confirmed original/UNLOGGED science, failure counter, original object retained with no DELETE and NO 2xx; a later retry fetches the **same blob without new upload**, advances to VERIFIED, commits actual normalized flight items and preserves the first Node UTC; further retry is an ordinary duplicate.
+2. First blob upload succeeds but its readback times out. LOGGED PENDING remains and storage bytes are not deleted; if original later disappears, retry rejects and no extra upload/2xx or source-receipt claim occurs.
+3. The exact actual PostgreSQL migration prevents tampering with source UUID/URI, extending source-retention expiry, deleting PENDING, or updating VERIFIED a second time.
+4. Flags are verified to require ALL THREE simultaneously, and the default legacy path remains in all previous regression tests.
+5. Standard true ephemeral PostgreSQL SIGKILL still confirms LOGGED=1/UNLOGGED=0. **Additional CI step now inserts a V0064 PENDING row before real PostgreSQL SIGKILL, checking `P06_V0064_LOGGED_PENDING_AFTER_TRUE_SIGKILL=1|PENDING` after restart.** That only proves SQL durable PENDING metadata, not original source byte durability at Replit.
+
+Initial actual callback suite [GitHub Actions #38129131673](https://github.com/HKcode22/ReplitTranvr/actions/runs/38129131673) at `3772b4e9b601cd68842b6dd9c8a2dd91771c4ba2`: **BOTH jobs SUCCESS, 659/659 offline across 63 suites and 118/118 actual disposable PostgreSQL integrations**, existing generic true SIGKILL LOGGED=1/UNLOGGED=0. Additional direct V0064 specific real SIGKILL source proof is pending in subsequent CI after workflow SHA `a35e6ff9c454eef926430c8052eb80f6ee2b4633`; do not claim verified until completed.
+
+## Release decision: paid NO-GO
+
+This is draft code and a draft DB migration, not applied to the original paid Replit receiver. There is **no evidence** from this test that a provider request never reaching Node would survive, that a deleted bucket original can be reconstructed from SHA, that the published Replit app has new code, or that the historical external 260/internal 259 discrepancy is explained. Moving distinct-original external storage operations outside the SQL row lock still requires a coordinated owner/attempt journal, partial SQL science exactly-once accounting, formal raw-source retention/cleanup and hosted latency tests, with explicit operator authorization. Existing 6+6 bounded health-check preference does not waive first-hop custody or legitimize claiming full F.8 population coverage.
+
+See [earlier actual failure-ref source retention](2026-10-11_P06_ACTUAL_CALLBACK_FAILED_ORIGINAL_LOGGED_SOURCE_JOURNAL_AND_RETRY_REUSE.md), [fixture-only original admission/expiry/UUID CAS](2026-10-11_P06_NEW_ORIGINAL_FROZEN_RETENTION_UUID_CAS_AND_TIMESTAMP_PRECISION.md), [P14 real object item-credit audit not yet executed](2026-10-11_P14_REAL_SAVED_ORIGINAL_30_BLOB_ITEM_CREDIT_READONLY_AUDIT_READY.md), [current P01-P20 readiness ledger](2026-10-10_P01_P20_SUNDAY_YSSY_RELEASE_LEDGER_AND_ZERO_CREDIT_COMMANDS.md), [GitHub issue #28](https://github.com/HKcode22/ReplitTranvr/issues/28).
