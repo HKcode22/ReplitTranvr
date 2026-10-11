@@ -1,3 +1,4 @@
+import { assertNoDuplicateJsonObjectKeysV2 } from "../phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
 import { signEdgeProvenanceV1 } from "./provenance";
 /**
  * PHASE 2G Stage-1 — isolated Cloudflare Workers + R2 + Queues candidate.
@@ -117,9 +118,13 @@ export async function ingest(request:Request,e:Env):Promise<Response>{
   try{
     // Reject lossy UTF-8 decoding and top-level arrays BEFORE raw write and
     // 2xx; downstream V3.9 requires an object and exact source-byte proof.
-    const v=parse<unknown>(new TextDecoder("utf-8",{fatal:true}).decode(bytes));
+    const originalWireJson=new TextDecoder("utf-8",{fatal:true}).decode(bytes);
+    const v=parse<unknown>(originalWireJson);
     if(typeof v!=="object"||v===null||Array.isArray(v))
       return json({error:"INVALID_JSON_OBJECT"},400);
+    // JSON.parse overwrites duplicate fields: refuse before durable ACK.
+    // Decode escaped key spellings before comparing (e.g. id vs \\u0069d).
+    assertNoDuplicateJsonObjectKeysV2(originalWireJson);
   }catch{return json({error:"INVALID_JSON"},400)}
 
   const sourceSha256=await digest(bytes);
