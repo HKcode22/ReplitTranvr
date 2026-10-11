@@ -66,6 +66,7 @@ on:
       - experiments/phase2g_rehearsal/synthetic_six_primary_six_emergency_v39.ts
       - tests/phase2g_synthetic_six_primary_six_emergency_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_multi_episode_six_plus_six_v39.ts
+      - experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39.ts
       - tests/phase2g_synthetic_multi_episode_six_plus_six_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_short_vs_three_minute_gap_impact_v39.ts
       - tests/phase2g_synthetic_short_vs_three_minute_gap_impact_v39.test.ts
