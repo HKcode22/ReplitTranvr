@@ -204,6 +204,88 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(await count()).toEqual({logged:1,unlogged:1});
     expect(await session()).toEqual({requests:2,successes:2,failures:0});
   });
+  it("P04 lost-200 retry rechecks original object bytes after prior committed ACK; no second blob uploaded",async()=>{
+    const body=sample({id:"p04-lost-200-real-duplicate"});
+    const first=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+    expect(first.duplicate).toBe(false);
+    state.events.length=0;
+    const second=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+    expect(second).toMatchObject({
+      deliveryId:first.deliveryId,blobRefId:first.blobRefId,duplicate:true
+    });
+    expect(state.events).toEqual(["READBACK"]);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(await session()).toEqual({requests:2,successes:2,failures:0});
+  });
+  it("P04/P09 missing raw object MUST NOT ACK a matching paid duplicate; original receipt and failure accounting remain",async()=>{
+    const body=sample({id:"p04-source-missing-on-duplicate"});
+    await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+    expect(state.blobs.size).toBe(1);
+    state.blobs.clear();
+    const r=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(body)
+    });
+    expect(r.status).toBe(500);
+    expect(state.events).toContain("READBACK");
+    expect(state.events).not.toContain("DELETE");
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(await session()).toEqual({requests:2,successes:1,failures:1});
+  });
+  it("P04/P09 changed stored bytes must fail closed on duplicate; same body/hash/identity is NOT enough",async()=>{
+    const body=sample({id:"p04-corrupted-source-on-duplicate"});
+    await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+    const [[key]]=[Array.from(state.blobs.keys())];
+    const old=state.blobs.get(key)!;
+    state.blobs.set(key,new Uint8Array(old.map((v,i)=>
+      i===Math.floor(old.length/2)?v^1:v)));
+    const r=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(body)
+    });
+    expect(r.status).toBe(500);
+    expect(await session()).toEqual({requests:2,successes:1,failures:1});
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(state.blobs.size).toBe(1);
+  });
+  it("P04/P09 tampered or missing LOGGED original blob reference cannot yield a duplicate HTTP 200",async()=>{
+    for(const violation of ["wrong-source-record-id","wrong-content-sha","no-logged-ref"]){
+      await state.pool!.query(
+        "TRUNCATE clean.provider_content_blob_ref,"+
+        "clean.prepaid_probe_delivery_runtime,"+
+        "clean.prepaid_probe_session_runtime,"+
+        "clean.prepaid_probe_item_runtime"
+      );
+      await state.pool!.query(
+        "INSERT INTO clean.prepaid_probe_session_runtime(session_id,provider_subscription_id,state,expires_at_utc) VALUES($1,$2,'active','2099-01-01T00:00:00Z')",
+        [SESSION,SUB]
+      );
+      state.blobs.clear();
+      const body=sample({id:"p04-log-ref-"+violation});
+      await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+      if(violation==="wrong-source-record-id")
+        await state.pool!.query(
+          "UPDATE clean.provider_content_blob_ref SET source_record_id='wrong-source'"
+        );
+      else if(violation==="wrong-content-sha")
+        await state.pool!.query(
+          "UPDATE clean.provider_content_blob_ref SET content_sha256=$1",
+          ["f".repeat(64)]
+        );
+      else
+        await state.pool!.query("DELETE FROM clean.provider_content_blob_ref");
+      const r=await fetch(localOrigin+actualPath,{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify(body)
+      });
+      expect(r.status,violation).toBe(500);
+      expect(await session(),violation).toEqual({
+        requests:2,successes:1,failures:1
+      });
+      expect((await count()).unlogged,violation).toBe(1);
+    }
+  });
+
   it("actual deliberately injected SQL constraint failure after blob upload rolls back metadata and does not ACK",async()=>{
     // Do NOT use a fictional <=1 credit cap: the actual baseline allows
     // 5 credits for a 5-flight provider notification. Inject a unique
