@@ -11,7 +11,9 @@
  * object names, source record ids, secrets or payload bytes.
  */
 import { createHash } from "node:crypto";
-import {summarizePreservedOriginalItemEvidenceV39,type PreservedOriginalSourceV39}
+import {summarizePreservedOriginalItemEvidenceV39,
+  summarizeCurrentRuntimeLinksForPreservedSourcesV39,
+  type PreservedOriginalSourceV39}
   from "./v39_p2g24_saved_original_item_evidence_v39.ts";
 import { v39Pool } from "../server/lib/disruption/db_v39.ts";
 import { createRequiredProviderBlobStoreV39 } from "../server/lib/disruption/replitProviderBlobStore_v39.ts";
@@ -139,6 +141,27 @@ try {
       summarizePreservedOriginalItemEvidenceV39(verifiedSources):null;
     if(verifyItems&&creditEvidence===null)
       throw Error("READ_ONLY_AUDIT_P14_ALL_ORIGINAL_CONTENT_REQUIRED");
+    // UNLOGGED rows may have disappeared after a genuine database reset.
+    // Query current state only; never infer what WAS present before restart.
+    const rows=verifyItems?await client.query(
+      "SELECT blob_ref_id,raw_body_sha256,notification_items,"+
+      "delivery_attempt_cost_credits "+
+      "FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1",
+      [SESSION]
+    ):null;
+    const runtimeCrossReference=verifyItems?
+      summarizeCurrentRuntimeLinksForPreservedSourcesV39(
+        blobs.map(b=>({
+          blobRefId:String(b.blob_ref_id),
+          contentSha256:b.content_sha256
+        })),
+        (rows?.rows??[]).map(row=>({
+          blobRefId:String(row.blob_ref_id),
+          rawBodySha256:String(row.raw_body_sha256),
+          notificationItems:row.notification_items,
+          deliveryAttemptCostCredits:row.delivery_attempt_cost_credits
+        }))
+      ):null;
     console.log(JSON.stringify({
       schema:"v39.phase2g-p2g24-blob-integrity-audit.v1",
       mode:"VERIFY_OBJECTS_READ_ONLY",
@@ -150,7 +173,10 @@ try {
       earliest_expiry_utc:firstExpiry,
       latest_expiry_utc:lastExpiry,
       failures:errors,
-      ...(verifyItems?{item_credit_evidence:creditEvidence}:{}),
+      ...(verifyItems?{
+        item_credit_evidence:creditEvidence,
+        current_unlogged_runtime_cross_reference:runtimeCrossReference
+      }:{}),
       provider_calls:0,database_mutations:0,object_storage_mutations:0
     },null,2));
     if(verified!==EXPECTED_REFS)process.exitCode=2;
