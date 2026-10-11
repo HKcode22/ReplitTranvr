@@ -226,6 +226,9 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
         callbackRequestsSeen:1,callbackSuccess2xx:1,callbackFailures:0,
         sessionRows:1,runtimeSessionMissing:false,
         deliveryRows:1,deliveryItemCount:0,deliveryAttemptCostClaims:1,
+        deliveriesWithMissingExplicitCredit:0,
+        deliveriesWithLocalCostItemMismatch:1,
+        locallyClaimedCreditReconciliationNeedsReview:true,
         perBinDeliveryRows:[1,0,0,0,0,0,0,0],
         perBinNotificationItems:[0,0,0,0,0,0,0,0],
         receivedDeliveriesOutsideFrozenWindow:0,
@@ -263,6 +266,9 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       expect(o.callbackRequestsSeen).toBe(3);
       expect(o.callbackSuccess2xx).toBe(3);
       expect(o.deliveryAttemptCostClaims).toBe(3);
+      expect(o.deliveriesWithMissingExplicitCredit).toBe(0);
+      expect(o.deliveriesWithLocalCostItemMismatch).toBe(3);
+      expect(o.locallyClaimedCreditReconciliationNeedsReview).toBe(true);
       expect(o.perBinDeliveryRows).toEqual([1,0,0,0,0,0,0,1]);
       expect(o.receivedDeliveriesOutsideFrozenWindow).toBe(1);
       expect(o.persistedBinDeliveryCount).toBe(2);
