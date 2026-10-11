@@ -521,6 +521,20 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
     }
     expect(st.closedOutageEnvelopeMs).toBe(150_000);
   });
+  it("green health at precisely 180s cumulative exposure cannot bypass science-stop fence",()=>{
+    let state=initialStage1WatchdogStateV39();
+    for(const [ms,health] of [
+      [0,transient],[120_000,healthy],[135_000,transient],[195_000,healthy]
+    ] as const){
+      const r=advanceStage1WatchdogV39({
+        mode:"six-plus-six",previous:state,health,nowMonotonicMs:ms
+      });state=r.state;
+      if(ms===195_000){
+        expect(r.action).toBe("STOP_OWNER");
+        expect(r.reason).toBe("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED");
+      }else expect(r.action).toBe("MONITOR");
+    }
+  });
   it("two disjoint incidents cannot exceed 180s cumulative without any witness",()=>{
     let st=initialStage1WatchdogStateV39();
     for(const [ms,health] of [
