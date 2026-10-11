@@ -610,7 +610,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
   });
 
 
-  it("P08 real V3.9 persistence emits only redacted pool/lock/blob/identity/COMMIT stage timings",async()=>{
+  it("P08 real V3.9 persistence emits only redacted source-prep/pool/lock/blob/identity/COMMIT timings",async()=>{
     const events:PrepaidStageTimingV39[]=[];
     const unsubscribe=subscribePrepaidStageTimingV39(e=>events.push(e));
     try{
@@ -624,7 +624,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       expect(response.status).toBe(200);
       expect(await count()).toEqual({logged:1,unlogged:1});
       expect(events.map(e=>e.stage)).toEqual([
-        "db_pool_acquire","db_session_lock","original_blob_upload_readback",
+        "source_prepare","db_pool_acquire","db_session_lock","original_blob_upload_readback",
         "physical_item_sql","final_sql_commit"
       ]);
       expect(events.every(e=>e.outcome==="completed")).toBe(true);
@@ -643,7 +643,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       expect(duplicate.status).toBe(200);
       expect((await duplicate.json()).duplicate).toBe(true);
       expect(events.map(e=>e.stage)).toEqual([
-        "db_pool_acquire","db_session_lock","duplicate_original_blob_readback",
+        "source_prepare","db_pool_acquire","db_session_lock","duplicate_original_blob_readback",
         "final_sql_commit"
       ]);
       expect(await count()).toEqual({logged:1,unlogged:1});
