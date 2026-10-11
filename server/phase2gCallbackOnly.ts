@@ -4,6 +4,8 @@ import express, {
   type NextFunction,
 } from "express";
 import { createServer } from "node:http";
+import {subscribe} from "node:diagnostics_channel";
+import {PHASE2G_PREPAID_STAGE_CHANNEL_V39} from "./lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {observePrepaidHttpTransportV39} from "./lib/disruption/phase2gPrepaidHttpTransportTelemetry_v39";
 import { registerV3Routes } from "./routes_v3";
 import {
@@ -48,6 +50,25 @@ if (
   throw new Error("CALLBACK_OWNER_MODE_INVALID");
 }
 
+// Opt-in only: a single published-compatible host can emit sanitized
+// per-stage timing in its logs during an approved zero-provider rehearsal.
+// No raw payload, session, subscription, blob identity, URI or SQL text.
+if(process.env.V39_PREPAID_STAGE_TELEMETRY==="1"){
+  subscribe(PHASE2G_PREPAID_STAGE_CHANNEL_V39,(event)=>{
+    const e=event as Record<string,unknown>;
+    const allowed=new Set([
+      "db_pool_acquire","db_session_lock","original_blob_upload_readback",
+      "duplicate_original_blob_readback","physical_item_sql","final_sql_commit"
+    ]);
+    if(!allowed.has(String(e?.stage??""))||
+       !Number.isFinite(e?.elapsed_ms)||
+       !["completed","failed"].includes(String(e?.outcome??"")))
+      return;
+    console.log("V39_PREPAID_STAGE_V1",JSON.stringify({
+      stage:e.stage,elapsed_ms:e.elapsed_ms,outcome:e.outcome
+    }));
+  });
+}
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
