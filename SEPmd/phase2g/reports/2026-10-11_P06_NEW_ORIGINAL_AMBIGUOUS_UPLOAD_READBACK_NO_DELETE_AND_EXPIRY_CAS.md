@@ -31,7 +31,7 @@ Extended the same actual PostgreSQL16 fixture integration suite with these indep
 
 The existing tests still demonstrate 22 independent mock original uploads run without holding DB connections in this experimental variant, exact distinct synthetic attempts are not automatically collapsed into one billable event, and real V3.9 callback paths retain their separately-tested SQL COMMIT-before-2xx rule. P13 quarantined physical-v2 replay also remains synthetic and never proves a provider first-edge UTC.
 
-**Latest CI** [GitHub Actions #38122281477](https://github.com/HKcode22/ReplitTranvr/actions/runs/38122281477), exact code SHA `fc432037bb9fcb5f42d8a2f18857b287305e752b`, pending verification during original creation; update only after both job conclusions are checked.
+**VERIFIED [GitHub Actions #38122281477](https://github.com/HKcode22/ReplitTranvr/actions/runs/38122281477)** at exact tested code SHA `fc432037bb9fcb5f42d8a2f18857b287305e752b`: **BOTH JOBS SUCCESS, 659/659 offline tests (63 suites), 106/106 real disposable PostgreSQL16 integration tests**. Separate true unclean PostgreSQL restart confirms `AFTER_UNCLEAN_RESTART_LOGGED_AND_UNLOGGED=1|0` and `ACTUAL_UNLOGGED_CRASH_RESET=CONFIRMED`. The new failures are injected using a fake object store; this does not establish how actual Replit App Storage reports ambiguous upload or deletion.
 
 ## Unresolved blockers before changing paid new-original concurrency
 
