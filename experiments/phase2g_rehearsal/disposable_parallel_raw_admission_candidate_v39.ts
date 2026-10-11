@@ -96,8 +96,8 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
     INSERT INTO clean.p2g_synthetic_raw_admission_intent
       (session_id,synthetic_attempt_hmac,source_sha256,
        original_opaque_blob_uuid,original_opaque_blob_path,
-       owner_token,state,source_retention_until)
-    VALUES ($1,$2,$3,$4,$5,$6,'PENDING',clock_timestamp()+interval '168 hours')
+       owner_token,state,source_retention_until,created_utc)
+    VALUES ($1,$2,$3,$4,$5,$6,'PENDING',NOW()+interval '168 hours',NOW())
     ON CONFLICT DO NOTHING
     RETURNING owner_token
   `,[arg.sessionId,arg.syntheticAttemptHmac,contentHash,uuid,objectName,owner]);
