@@ -210,6 +210,126 @@ afterAll(async()=>{
     await state.pool.end();
   }
 });
+
+describe("P06 proposal: release DB connection during original blob I/O; DISPOSABLE ONLY",()=>{
+  const key=(name:string)=>offlineShaHash("sha256").update("synthetic-attempt-"+name).digest("hex");
+  const bytes=(name:string)=>new TextEncoder().encode(JSON.stringify(sample({
+    id:"isolated-proposal-"+name,syntheticSource:"no-provider-flights"})));
+  const fakeStore=(uploadDelayMs=0)=>{
+    let uploads=0;
+    return {
+      uploads:()=>uploads,
+      store:{
+        uploadBytes:async(k:string,v:Uint8Array)=>{
+          uploads++;
+          if(uploadDelayMs)await new Promise(r=>setTimeout(r,uploadDelayMs));
+          state.blobs.set(k,new Uint8Array(v));
+        },
+        downloadBytes:async(k:string)=>{
+          const v=state.blobs.get(k);
+          if(!v)throw Error("P06_TEST_ORIGINAL_MISSING");
+          return new Uint8Array(v);
+        },
+        exists:async(k:string)=>state.blobs.has(k),
+        delete:async(k:string)=>{state.blobs.delete(k);}
+      }
+    };
+  };
+  const submit=(id:string,store:ReturnType<typeof fakeStore>["store"],
+    pool:Pool=state.pool!,timeout=2000,data=bytes(id))=>
+      runDisposableParallelRawAdmissionV39({
+        mode:"P2G_DISPOSABLE_ONLY",pool,store,sessionId:SESSION,
+        syntheticAttemptHmac:key(id),exactOriginalSyntheticBytes:data,
+        maxPendingWaitMs:timeout
+      });
+  it("P06 original verified upload holds NO pooled connection; exact committed original metadata before ACK",async()=>{
+    let uploading=false;
+    const fake=fakeStore(450);
+    const original=fake.store.uploadBytes;
+    fake.store.uploadBytes=async(k,b)=>{uploading=true;return original(k,b);};
+    const pending=submit("free-connection",fake.store);
+    const max=Date.now()+1500;
+    while(!uploading&&Date.now()<max)
+      await new Promise(r=>setTimeout(r,5));
+    expect(uploading).toBe(true);
+    const started=performance.now();
+    await state.pool!.query("SELECT 1 AS ok");
+    expect(performance.now()-started).toBeLessThan(300);
+    const result=await pending;
+    expect(result).toMatchObject({
+      outcome:"COMMITTED_SOURCE_RECEIPT",pgCommitted:true,
+      sourceBlobBytesVerified:true,safeToReturn2xxToSyntheticSender:true,
+      realPaidLaunchAuthorized:false,originalF8ScientificPassAuthorized:false
+    });
+    expect(fake.uploads()).toBe(1);
+    const rows=await state.pool!.query("SELECT state,original_opaque_blob_path FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0].state).toBe("COMMITTED");
+    expect(state.blobs.has(rows.rows[0].original_opaque_blob_path)).toBe(true);
+  },10000);
+  it("P06 completed exact original duplicate is verified, not uploaded or billed again",async()=>{
+    const fake=fakeStore();
+    await submit("duplicate",fake.store);
+    expect((await submit("duplicate",fake.store)).outcome).toBe("VERIFIED_DUPLICATE");
+    expect(fake.uploads()).toBe(1);
+    await expect(submit("duplicate",fake.store,state.pool!,0,bytes("MUTATED")))
+      .rejects.toThrow("P06_CANDIDATE_ATTEMPT_HASH_CONFLICT_NO_ACK");
+    expect(state.blobs.size).toBe(1);
+  });
+  it("P06 22 independent uploads in parallel on 3-connection PostgreSQL pool, without 10s serial upload-lock",async()=>{
+    const fake=fakeStore(550),n=22,t0=performance.now();
+    const results=await Promise.all(Array.from({length:n},(_,i)=>
+      submit("parallel-"+i,fake.store)));
+    const elapsed=performance.now()-t0;
+    expect(results.every(x=>x.safeToReturn2xxToSyntheticSender)).toBe(true);
+    expect(fake.uploads()).toBe(n);
+    const q=await state.pool!.query("SELECT count(*)::int AS n FROM clean.p2g_synthetic_raw_admission_intent WHERE state='COMMITTED'");
+    expect(q.rows[0].n).toBe(n);
+    expect(state.blobs.size).toBe(n);
+    console.log("P06_PROPOSAL_DISPOSABLE_PARALLEL_22_ELAPSED_MS="+Math.round(elapsed));
+    console.log("P06_PROPOSAL_PROVIDER_SENDS=0");
+    console.log("P06_PROPOSAL_ORIGINAL_INDEPENDENT_INGRESS=false");
+    expect(elapsed).toBeLessThan(10_000);
+  },20000);
+  it("P06 upload FAIL: LOGGED intent stays PENDING and duplicate is NOT falsely ACKed",async()=>{
+    const fake=fakeStore();
+    fake.store.uploadBytes=async()=>{throw Error("SYNTHETIC_UPLOADER_DOWN");};
+    await expect(submit("failed-source",fake.store))
+      .rejects.toThrow("SYNTHETIC_UPLOADER_DOWN");
+    const q=await state.pool!.query("SELECT state FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(q.rows[0].state).toBe("PENDING");
+    expect(state.blobs.size).toBe(0);
+    const pending=await submit("failed-source",fake.store,state.pool!,0);
+    expect(pending.outcome).toBe("PENDING_NOT_ACKNOWLEDGED");
+    expect(pending.safeToReturn2xxToSyntheticSender).toBe(false);
+  });
+  it("P06 failed final SQL after upload retains orphan original and refuses synthetic 2xx",async()=>{
+    const fake=fakeStore();
+    const broken={
+      query:(sql:string,args?:unknown[])=>{
+        if(sql.includes("UPDATE clean.p2g_synthetic_raw_admission_intent"))
+          return Promise.reject(Error("SIMULATED_AMBIGUOUS_FINAL_SQL"));
+        return state.pool!.query(sql,args as any[]);
+      }
+    } as unknown as Pool;
+    await expect(submit("ambiguous",fake.store,broken))
+      .rejects.toThrow("SIMULATED_AMBIGUOUS_FINAL_SQL");
+    expect(state.blobs.size).toBe(1);
+    expect((await submit("ambiguous",fake.store,state.pool!,0)).safeToReturn2xxToSyntheticSender)
+      .toBe(false);
+    const q=await state.pool!.query("SELECT state FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(q.rows[0].state).toBe("PENDING");
+  });
+  it("P06 fail-closed: production credentials or wrong mode never admit source",async()=>{
+    const fake=fakeStore();
+    await expect(runDisposableParallelRawAdmissionV39({
+      mode:"DISABLED" as any,pool:state.pool!,store:fake.store,
+      sessionId:SESSION,syntheticAttemptHmac:key("bad"),
+      exactOriginalSyntheticBytes:bytes("bad")
+    })).rejects.toThrow("P06_CANDIDATE_NON_DISPOSABLE_INPUT_REFUSED");
+  });
+});
+
 describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtures",()=>{
   it("P06/P15 observer actual V3.9 session/delivery schema in READ ONLY transaction",async()=>{
     await persistPrepaidProbeWebhookV39({
