@@ -26,3 +26,12 @@ Earlier actual-route + disposable PostgreSQL16 tests showed two structurally opp
 5. Actual supervisor's 6+6 selected mode remains **pre-launch refused** because independent full original sender source/billable attempt verifier is missing. The proposed user-approved 6-primary +6-emergency per distinct outage with whole-run accumulated error exposure is a separate scientific/risk amendment, not currently enacted. Existing baseline 3-health-failure default stays in place.
 
 **Status:** dedicated P08 stage instrumentation and disposable stress evidence work is now on draft; **the full P05/P06/P08 and YSSY paid release gates remain BLOCK/HIGH and the paid experiment is NO-GO.**
+
+
+## First verified stress timing (actual PG16 + FAKE 550ms storage; NOT published Replit)
+
+[Actual-burst CI #38109530008](https://github.com/HKcode22/ReplitTranvr/actions/runs/38109530008), exactly tested commit `be4f9364deb3484c361a68ff0d1e95054bcab205`: **BOTH jobs SUCCESS, 554/554 offline (54 suites) +61/61 real disposable PG integration tests**. During the same existing actual HTTP 22-notification stress scenario, the independent synthetic sender recorded **17 timely HTTP 200/22 sender sends**, while the callback ultimately **committed all 22 internal rows**. Logged measurements were **PostgreSQL session row-lock P50 1108.39ms, P95 1111.38ms, P99 1111.49ms**, and FAKE blob stage P95 550.98ms. This is **not** a fixed measured Replit performance guarantee and does not explain historical missing original provider 260/259. It proves ACK-vs-commit divergence can occur even when actual SQL eventually completes.
+
+**Updated next instrumentation:** Pool-acquisition P50/P95/P99 have now been added to the same existing 22-send fixture; this distinguishes waiting for one of 3 connections from waiting for the shared session row lock. [Latest source-level CI #38109642815](https://github.com/HKcode22/ReplitTranvr/actions/runs/38109642815), exact tested source `add5845ae521e9275b62d49d62e2c1897ffef945`, is the required final check of that extension; DO NOT CLAIM latest metrics passed before both jobs show green.
+
+The negative stress result reinforces priority ordering: visible stage timing first, then design a reduced-lock/durable-admission path and test it end-to-end **only if source-before-ACK safety and replay remain preserved**, rather than arbitrarily increasing pool wait or relaxing the scientific ledger.
