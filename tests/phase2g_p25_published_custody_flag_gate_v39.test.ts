@@ -29,6 +29,17 @@ describe("P25 production callback source-custody feature-gate binding, no provid
     expect(block).not.toContain("AERODATABOX_WEBHOOK_SECRET");
     expect(block).not.toContain("V39_PROVIDER_BLOB_BUCKET_ID");
   });
+  it("historical incident #30 audit is read-only and never promotes a missing UNLOGGED session to cleanup proof",()=>{
+    const handoff=readFileSync("SEPmd/phase2g/reports/2026-10-11_P25_YSSY_LAST_MILE_READONLY_OPERATOR_HANDOFF.md","utf8");
+    expect(handoff).toContain("runtime_missing_is_not_cleanup_proof:runtime.rowCount===0");
+    expect(handoff).toContain("cleanup_journal_table_present:journalExist.rows[0]?.present===true");
+    expect(handoff).toContain("incident30_administrative_clearance_authorized:false");
+    expect(handoff).toContain("historical_blob_early_deletion_authorized:false");
+    expect(handoff).toContain("paid_yssy_go_authorized:false");
+    expect(handoff).toContain("allowEarlyDelete:true");
+    const recovery=readFileSync("server/lib/disruption/prepaidProbeRuntime_v39.ts","utf8");
+    expect(recovery).toContain("allowEarlyDelete: true");
+  });
   it("paid preflight also checks actually present LOGGED V0064 schema",()=>{
     expect(preflight).toContain("health.json?.prepaid_source_custody_ready === true");
     expect(preflight).toContain("source_intent_v0064_table");
