@@ -69,6 +69,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
 import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
 import {subscribePrepaidStageTimingV39,type PrepaidStageTimingV39} from "../server/lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {readReadOnlyPgSnapshotV39} from "../scripts/v39_phase2g_independent_pg_delivery_readonly_observer";
 import {registerV3Routes} from "../server/routes_v3";
@@ -157,6 +158,7 @@ beforeAll(async()=>{
     "received_at_utc timestamptz,PRIMARY KEY(session_id,delivery_id,item_index))",
     "; CREATE TABLE clean.adb_incident_stop (cause text NOT NULL, occurred_at_utc timestamptz NOT NULL, detail jsonb, resolved boolean NOT NULL)"
   ].join(" "));
+  await state.pool.query(DISPOSABLE_ADMISSION_INTENT_DDL_V39);
   const app=express();
   // Same prepaid parser bypass as server/phase2gCallbackOnly.ts. This allows
   // registerV3Routes() to execute its ACTUAL strict 2MB parser and error guard.
@@ -195,7 +197,7 @@ beforeEach(async()=>{
   state.downloadDelayMs=0;state.commitAckLost="none";
   state.events.length=0;
   await state.pool!.query(
-    "TRUNCATE clean.provider_content_blob_ref,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime,clean.prepaid_probe_item_runtime");
+    "TRUNCATE clean.provider_content_blob_ref,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime,clean.prepaid_probe_item_runtime,clean.p2g_synthetic_raw_admission_intent");
   await state.pool!.query(
     "INSERT INTO clean.prepaid_probe_session_runtime(session_id,provider_subscription_id,state,expires_at_utc) VALUES($1,$2,'active','2099-01-01T00:00:00Z')",
     [SESSION,SUB]);
