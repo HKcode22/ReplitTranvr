@@ -258,7 +258,8 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
     const result=await pending;
     expect(result).toMatchObject({
       outcome:"COMMITTED_SOURCE_RECEIPT",pgCommitted:true,
-      sourceBlobBytesVerified:true,safeToReturn2xxToSyntheticSender:true,
+      sourceBlobBytesVerified:true,safeToReturn2xxToSyntheticSender:false,
+      normalizedPhysicalFlightV2ScienceCommitted:false,
       realPaidLaunchAuthorized:false,originalF8ScientificPassAuthorized:false
     });
     expect(fake.uploads()).toBe(1);
@@ -281,7 +282,7 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
     const results=await Promise.all(Array.from({length:n},(_,i)=>
       submit("parallel-"+i,fake.store)));
     const elapsed=performance.now()-t0;
-    expect(results.every(x=>x.safeToReturn2xxToSyntheticSender)).toBe(true);
+    expect(results.every(x=>x.safeToReturn2xxToSyntheticSender===false)).toBe(true);
     expect(fake.uploads()).toBe(n);
     const q=await state.pool!.query("SELECT count(*)::int AS n FROM clean.p2g_synthetic_raw_admission_intent WHERE state='COMMITTED'");
     expect(q.rows[0].n).toBe(n);
@@ -356,7 +357,7 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
     expect(q.rows[0].state).toBe("COMMITTED");
     const retry=await submit("lost-reply",fake.store);
     expect(retry.outcome).toBe("VERIFIED_DUPLICATE");
-    expect(retry.safeToReturn2xxToSyntheticSender).toBe(true);
+    expect(retry.safeToReturn2xxToSyntheticSender).toBe(false);
     expect(fake.uploads()).toBe(1);
   });
   it("P06 distinct billable attempt HMACs are never deduped merely for having identical original bytes",async()=>{
