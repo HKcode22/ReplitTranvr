@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "crypto";
 import { v39Pool as pool } from "./db_v39";
-import {timePrepaidStageV39} from "./phase2gPrepaidStageTelemetry_v39";
+import {timePrepaidStageV39,timePrepaidSyncStageV39} from "./phase2gPrepaidStageTelemetry_v39";
 import {
   deleteProviderBlobAtExpiryV39,
   persistProviderBlobBeforeAckV39,
@@ -913,7 +913,8 @@ export async function persistPrepaidProbeWebhookV39(input: {
   // outside the pooled SQL connection and session-wide row lock.
   // JSON has already passed the prepaid request's structural parser guard.
   // This leaves admission/identity/dedup/failure accounting unchanged.
-  const prepared=preparePrepaidProbeSourceV39(sessionId,input.body);
+  const prepared=timePrepaidSyncStageV39("source_prepare",()=>
+    preparePrepaidProbeSourceV39(sessionId,input.body));
   const {rawBytes,bodySha256,evidence,deliveryId,flights,itemRawSha256s}=
     prepared;
   let failureSavepointOpen = false;
