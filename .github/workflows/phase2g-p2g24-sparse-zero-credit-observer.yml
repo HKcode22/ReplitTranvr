@@ -1,0 +1,100 @@
+name: Phase2G P2G24 Sparse Zero-Credit 146m Observer
+
+on:
+  push:
+    branches:
+      - phase2g-p2g24-github-observer-20261009
+    paths:
+      - .github/workflows/phase2g-p2g24-sparse-zero-credit-observer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2g-p2g24-sparse-zero-credit-146m
+  cancel-in-progress: false
+
+jobs:
+  sparse-monitor:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase2g-p2g24-github-observer-20261009'
+    runs-on: ubuntu-latest
+    timeout-minutes: 165
+    environment: phase2g-paid
+    env:
+      AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+    steps:
+      - name: Probe six widely separated idle-to-wake checkpoints (NO paid provider)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import { createHmac } from "node:crypto";
+          const BASE="https://replit-tranvr--hk84164.replit.app";
+          const HEAD="5de44ba66d59c26d9e5ef3b339b7f729ca2f3653";
+          const SCHEDULE_MINUTES=[0,29,59,88,117,146];
+          const SECRET=String(process.env.AERODATABOX_WEBHOOK_SECRET??"");
+          const DB=String(process.env.V39_DATABASE_RUNTIME_URL??"");
+          const PATH="sparse-evidence";
+          fs.mkdirSync(PATH,{recursive:true});
+          const CSV=PATH+"/requests.csv",JSONFILE=PATH+"/summary.json";
+          fs.writeFileSync(CSV,"check_start_utc,check_end_utc,scheduled_minute,check,http_status,latency_ms,result,reason\n");
+          const START=Date.now();let bad=0,attempted=0;const stages=["root_health","wrong_secret_route","published_runtime","webhook_secret_binding","runtime_db_binding"];
+          const log=x=>console.log(JSON.stringify(x));
+          if(!SECRET||!DB||SECRET==="phase2g-healthcheck-intentionally-wrong"){
+            const status={state:"REFUSED_MISSING_OR_UNSAFE_BINDING",provider_calls:0,provider_mutations:0,database_queries:0,database_mutations:0};
+            fs.writeFileSync(JSONFILE,JSON.stringify(status,null,2)+"\n");log(status);process.exit(2);
+          }
+          async function request(stage,path,init,validator,minute){
+            const began=Date.now(), isoStart=new Date(began).toISOString();let status=0,reason="ok";
+            try{
+              const r=await fetch(BASE+path,{...init,signal:AbortSignal.timeout(8_000)});
+              status=r.status;
+              const payload=await r.json().catch(()=>null);
+              if(!validator(status,payload))reason="contract_or_http_mismatch";
+            }catch(e){
+              const n=e instanceof Error?e.name:"";
+              reason=n==="TimeoutError"||n==="AbortError"?"request_timeout":"network_or_request_error";
+            }
+            const ms=Date.now()-began,outcome=reason==="ok"?"PASS":"FAIL";
+            fs.appendFileSync(CSV,[isoStart,new Date().toISOString(),minute,stage,status,ms,outcome,reason].join(",")+"\n");
+            attempted++;if(outcome==="FAIL")bad++;
+            return{check:stage,http:status,ms,result:outcome,reason};
+          }
+          const goodRuntime=(s,x)=>s===200&&x?.schema==="v39.phase2f-workspace-runtime.v1"&&x?.status==="PASS"&&x?.git_head===HEAD&&x?.prepaid_route_registered===true&&Number(x?.retention_hours)===168&&x?.provider_mutation===false&&x?.runtime_owner_mode==="replit-published-deployment"&&x?.managed_replit_workflow===false&&x?.published_deployment===true&&["autoscale","reserved-vm"].includes(String(x?.runtime_durability_class??"").toLowerCase());
+          const goodBind=(s,x,schema,isDb)=>s===200&&x?.schema===schema&&x?.status==="PASS"&&x?.provider_call===false&&x?.provider_mutation===false&&(!isDb||x?.database_mutation===false)&&Number(x?.alert_credits_spent)===0;
+          log({event:"P2G24_SPARSE_MONITOR_START",at_utc:new Date(START).toISOString(),scheduled_minutes:SCHEDULE_MINUTES,git_run_id:process.env.GITHUB_RUN_ID,expected_head:HEAD,requests_between_checkpoints:0,provider_calls:0,database_queries:0});
+          for(let i=0;i<SCHEDULE_MINUTES.length;i++){
+            const minute=SCHEDULE_MINUTES[i];
+            const wait=Math.max(0,START+minute*60000-Date.now());
+            if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
+            const actualStart=Date.now();
+            const nonce="p2g24-sparse-"+process.env.GITHUB_RUN_ID+"-"+minute+"-"+actualStart;
+            const mac=createHmac("sha256",DB).update("phase2g-db-binding:"+nonce).digest("hex");
+            const outcomes=[
+              await request("root_health","/",{headers:{accept:"application/json"}},(s,x)=>s===200&&x?.status==="ok"&&x?.service==="phase2g-callback-only"&&x?.provider_call===false&&x?.provider_mutation===false,minute),
+              await request("wrong_secret_route","/api/v1/webhooks/aerodatabox/phase2g-healthcheck-intentionally-wrong/prepaid/00000000-0000-4000-8000-000000000000",{method:"POST",headers:{"content-type":"application/json",accept:"application/json"},body:"{}"},(s,x)=>s===404&&x?.error==="Not found",minute),
+              await request("published_runtime","/__v39/workspace-runtime",{headers:{accept:"application/json"}},goodRuntime,minute),
+              await request("webhook_secret_binding","/__v39/phase2g/webhook-secret-match",{method:"POST",headers:{accept:"application/json","x-v39-phase2g-webhook-secret":SECRET}},(s,x)=>goodBind(s,x,"v39.phase2g-webhook-secret-match.v1",false),minute),
+              await request("runtime_db_binding","/__v39/phase2g/runtime-db-binding",{method:"POST",headers:{accept:"application/json","x-v39-phase2g-db-challenge":nonce,"x-v39-phase2g-db-proof":mac}},(s,x)=>goodBind(s,x,"v39.phase2g-runtime-db-binding.v1",true),minute)
+            ];
+            log({event:"P2G24_SPARSE_CHECKPOINT",scheduled_minute:minute,actual_elapsed_minutes:Number(((actualStart-START)/60000).toFixed(3)),at_utc:new Date(actualStart).toISOString(),total_failed_checks:bad,outcomes});
+          }
+          const duration=(Date.now()-START)/60000;
+          const complete=duration>=146&&attempted===SCHEDULE_MINUTES.length*stages.length;
+          const out={state:complete&&bad===0?"PASS_SPARSE_146_MIN":"FAIL_OR_INCOMPLETE",started_at_utc:new Date(START).toISOString(),finished_at_utc:new Date().toISOString(),duration_minutes:Number(duration.toFixed(3)),scheduled_minutes:SCHEDULE_MINUTES,completed_checkpoints:attempted/stages.length,attempted_checks:attempted,failed_checks:bad,provider_calls:0,provider_mutations:0,database_queries:0,database_mutations:0,limits:"sparse requests may not guarantee truly idle autoscale if other traffic/monitoring is present"};
+          fs.writeFileSync(JSONFILE,JSON.stringify(out,null,2)+"\n");
+          log({event:"P2G24_SPARSE_MONITOR_FINISHED",...out});
+          if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,"### P2G24 sparse/idle-to-wake observer\n\n- Status: "+out.state+"\n- Cycles: "+out.completed_checkpoints+"\n- Failed checks: "+bad+"\n- Paid provider calls: 0\n- Assumption: other traffic may prevent true Autoscale idle.\n");
+          if(out.state!=="PASS_SPARSE_146_MIN")process.exitCode=1;
+          NODE
+      - name: Preserve sparse-observation timing and status evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2g-p2g24-sparse-observer-evidence
+          path: sparse-evidence/
+          if-no-files-found: warn
+          retention-days: 30

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "crypto";
 import { v39Pool as pool } from "./db_v39";
+import {timePrepaidStageV39} from "./phase2gPrepaidStageTelemetry_v39";
 import {
   deleteProviderBlobAtExpiryV39,
   persistProviderBlobBeforeAckV39,
@@ -91,8 +92,14 @@ function nonnegativeIntOrNull(value: unknown): number | null {
 
 function nonnegativeNumberOrNull(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? n : null;
+  // AeroDataBox's Flight Alert deliveryAttempt.costCredits is an int64
+  // count of billable FLIGHT ITEMS, not a fractional per-POST amount.
+  // Reject non-integer/unsafe/type-coerced claims instead of letting numeric
+  // rounding or an implicit fallback silently alter reconciliation evidence.
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error("PREPAID_PROBE_PROVIDER_CREDIT_COUNT_INVALID");
+  }
+  return value;
 }
 
 function normalizeCodeshareStatus(value: unknown): string | null {
@@ -871,7 +878,11 @@ export async function persistPrepaidProbeWebhookV39(input: {
   const receivedAt = input.receivedAtUtc ?? new Date();
   if (!Number.isFinite(receivedAt.getTime())) throw new Error("PREPAID_PROBE_RECEIVED_AT_INVALID");
   let failureSavepointOpen = false;
-  const client = await pool.connect();
+  // A lost PostgreSQL COMMIT response does not prove rollback. Until the
+  // result is known, retain the original Replit blob: deleting it could
+  // destroy source evidence of a transaction that actually committed.
+  let sourceCommitOutcomeUnknown = false;
+  const client = await timePrepaidStageV39("db_pool_acquire",()=>pool.connect());
   let store: ReturnType<typeof createRequiredProviderBlobStoreV39> | null = null;
   let blob: ProviderBlobRefV39 | null = null;
   try {
@@ -879,13 +890,13 @@ export async function persistPrepaidProbeWebhookV39(input: {
 
     // Serialize admission, duplicate detection, raw blob persistence,
     // and all runtime writes for this exact session.
-    const session = await client.query(
+    const session = await timePrepaidStageV39("db_session_lock",()=>client.query(
       `SELECT provider_subscription_id,state,expires_at_utc
          FROM clean.prepaid_probe_session_runtime
         WHERE session_id=$1
         FOR UPDATE`,
       [sessionId],
-    );
+    ));
   if (session.rowCount !== 1) throw new Error("PREPAID_PROBE_SESSION_NOT_FOUND_OR_CRASH_RESET");
   const state = String(session.rows[0].state ?? "");
   if (!["armed", "active", "settling"].includes(state)) throw new Error(`PREPAID_PROBE_SESSION_NOT_ACCEPTING:${state}`);
@@ -914,20 +925,74 @@ export async function persistPrepaidProbeWebhookV39(input: {
   const evidence = providerDeliveryEvidence(input.body);
   const deliveryId = deliveryIdFor(sessionId, bodySha256, evidence);
   const prior = await client.query(
-    `SELECT blob_ref_id,raw_body_sha256 FROM clean.prepaid_probe_delivery_runtime
-      WHERE session_id=$1 AND delivery_id=$2`,
+    `SELECT d.blob_ref_id,d.raw_body_sha256,
+            r.blob_ref_id AS logged_blob_ref_id,
+            r.storage_kind,r.contract_version,r.object_name,r.content_class,
+            r.content_sha256,r.content_bytes,r.source_kind,r.source_record_id,
+            r.retention_hours,r.expires_at_utc
+       FROM clean.prepaid_probe_delivery_runtime d
+       LEFT JOIN clean.provider_content_blob_ref r
+         ON r.blob_ref_id=d.blob_ref_id
+      WHERE d.session_id=$1 AND d.delivery_id=$2`,
     [sessionId, deliveryId],
   );
   if (prior.rowCount) {
-    if (String(prior.rows[0].raw_body_sha256) !== bodySha256) throw new Error("PREPAID_PROBE_DUPLICATE_HASH_CONFLICT");
+    const previous = prior.rows[0];
+    if (String(previous.raw_body_sha256) !== bodySha256)
+      throw new Error("PREPAID_PROBE_DUPLICATE_HASH_CONFLICT");
+    // A previous COMMIT is NOT evidence that the raw object still exists.
+    // If Replit App Storage lost or changed it after a first 200 / a lost
+    // 200 response, a retry must never receive another false successful ACK.
+    // Verify the original LOGGED reference AND unchanged original bytes
+    // under the same UNLOGGED session row lock. Do not upload a new object
+    // or extend the original 168h retention on a duplicate.
+    if (String(previous.logged_blob_ref_id ?? "") !==
+          String(previous.blob_ref_id) ||
+        previous.storage_kind !== "replit_app_storage" ||
+        previous.contract_version !== "provider-blob-contract-v39@1.0.0" ||
+        previous.content_class !== "raw_provider_content" ||
+        previous.source_kind !== "webhook" ||
+        previous.source_record_id !==
+          `prepaid:${sessionId}:${deliveryId}` ||
+        previous.content_sha256 !== bodySha256 ||
+        Number(previous.content_bytes) !== rawBytes.byteLength ||
+        Number(previous.retention_hours) !== 168 ||
+        !Number.isFinite(new Date(previous.expires_at_utc).getTime()) ||
+        new Date(previous.expires_at_utc).getTime() <= receivedAt.getTime() ||
+        typeof previous.object_name !== "string" ||
+        !new RegExp("^v39/provider/raw_provider_content/[0-9a-f]{2}/[0-9a-f-]{36}[.]blob$").test(previous.object_name) ||
+        !previous.object_name.endsWith(
+          `/${String(previous.blob_ref_id).toLowerCase()}.blob`
+        ))
+      throw new Error("PREPAID_PROBE_DUPLICATE_LOGGED_SOURCE_REF_INVALID");
+    // A DB row can outlive the bytes due to bucket deletion, corruption or
+    // service availability. Read-back failure must roll back this ACK and
+    // preserve explicit callback failure accounting under the session lock.
+    store = createRequiredProviderBlobStoreV39();
+    let readBack:Uint8Array;
+    try {
+      readBack = await timePrepaidStageV39("duplicate_original_blob_readback",()=>store!.downloadBytes(previous.object_name));
+    } catch {
+      throw new Error("PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_UNREADABLE");
+    }
+    if (readBack.byteLength !== rawBytes.byteLength ||
+        sha256(readBack) !== bodySha256 ||
+        !Buffer.from(readBack).equals(rawBytes))
+      throw new Error("PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_CHANGED");
     await client.query(
       `UPDATE clean.prepaid_probe_session_runtime
           SET callback_success_2xx=callback_success_2xx+1
         WHERE session_id=$1`,
       [sessionId],
     );
-    await client.query("COMMIT");
-    return { deliveryId, blobRefId: String(prior.rows[0].blob_ref_id), itemCount: Array.isArray(input.body?.flights) ? input.body.flights.length : Array.isArray(input.body) ? input.body.length : 0, duplicate: true };
+    await timePrepaidStageV39("final_sql_commit",()=>client.query("COMMIT"));
+    return {
+      deliveryId,blobRefId:String(previous.blob_ref_id),
+      itemCount:Array.isArray(input.body?.flights) ?
+        input.body.flights.length : Array.isArray(input.body) ?
+          input.body.length : 0,
+      duplicate:true
+    };
   }
 
   const flights: any[] = Array.isArray(input.body)
@@ -936,13 +1001,13 @@ export async function persistPrepaidProbeWebhookV39(input: {
       ? input.body.flights
       : [];
   store = createRequiredProviderBlobStoreV39();
-  blob = await persistProviderBlobBeforeAckV39({
-    store,
+  blob = await timePrepaidStageV39("original_blob_upload_readback",()=>persistProviderBlobBeforeAckV39({
+    store:store!,
     bytes: rawBytes,
     contentClass: "raw_provider_content",
     retentionHours: resolvePrepaidRawRetentionHoursV39(),
     now: receivedAt,
-  });
+  }));
 
     await client.query(
       `INSERT INTO clean.provider_content_blob_ref
@@ -963,6 +1028,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
        evidence.notificationGeneratedUtc, evidence.attemptSeqNo, evidence.attemptUtc,
        evidence.costCredits, flights.length],
     );
+    await timePrepaidStageV39("physical_item_sql",async()=>{
     if (flights.length > 0) {
       /*
        * Resolve and persist sequentially inside this transaction.
@@ -1055,6 +1121,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
         );
       }
     }
+    });
     if (subId) {
       const bind = await client.query(
         `UPDATE clean.prepaid_probe_session_runtime
@@ -1081,7 +1148,9 @@ export async function persistPrepaidProbeWebhookV39(input: {
         WHERE session_id=$1`,
       [sessionId],
     );
-    await client.query("COMMIT");
+    sourceCommitOutcomeUnknown = true;
+    await timePrepaidStageV39("final_sql_commit",()=>client.query("COMMIT"));
+    sourceCommitOutcomeUnknown = false;
     return { deliveryId, blobRefId: blob.blobRefId, itemCount: flights.length, duplicate: false };
   } catch (error) {
     let failureRecordedUnderLock = false;
@@ -1129,7 +1198,11 @@ export async function persistPrepaidProbeWebhookV39(input: {
       (error as { phase2gFailureRecorded?: boolean })
         .phase2gFailureRecorded = true;
     }
-    if (store && blob) {
+    if (store && blob && !sourceCommitOutcomeUnknown) {
+      // Safe only before the source transaction attempted COMMIT. A COMMIT
+      // error can mean the server committed and the reply was lost.
+      // Retain that original blob for explicit read-only reconciliation;
+      // never convert a possible committed source into permanent data loss.
       try {
         await deleteProviderBlobAtExpiryV39({
           store,
@@ -1148,14 +1221,33 @@ export async function persistPrepaidProbeWebhookV39(input: {
   }
 }
 
+/**
+ * pg NUMERIC is transmitted as a decimal string. Do NOT use ::int on sums:
+ * PostgreSQL can round fractional NUMERIC values and produce a fabricated
+ * match against billable external flight-item credits.
+ *
+ * The per-attempt sender ledger remains independently unverified.
+ */
+export function assertExactPrepaidCreditTotalV39(raw:unknown):number{
+  if(typeof raw!=="string"&&typeof raw!=="number")
+    throw Error("PREPAID_CREDIT_TOTAL_NOT_NUMERIC");
+  const text=String(raw).trim();
+  if(!/^(?:0|[1-9][0-9]*)(?:\.0+)?$/.test(text))
+    throw Error("PREPAID_CREDIT_TOTAL_NOT_EXACT_NONNEGATIVE_INTEGER");
+  const value=Number(text);
+  if(!Number.isSafeInteger(value)||value<0)
+    throw Error("PREPAID_CREDIT_TOTAL_OUTSIDE_SAFE_INTEGER");
+  return value;
+}
+
 export async function prepaidProbeInternalCreditsV39(sessionId: string): Promise<number> {
   const id = assertSessionId(sessionId);
   const result = await pool.query(
-    `SELECT COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::int AS n
+    `SELECT COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0) AS n
        FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1`,
     [id],
   );
-  return Number(result.rows[0]?.n ?? 0);
+  return assertExactPrepaidCreditTotalV39(result.rows[0]?.n);
 }
 
 export async function prepaidProbeMetricsV39(
@@ -1283,7 +1375,7 @@ export async function prepaidProbeMetricsV39(
             )
           ),
           0
-        )::int AS internal_credits,
+        ) AS internal_credits,
         count(*) FILTER (
           WHERE delivery_attempt_cost_credits IS NOT NULL
         )::int AS explicit_cost_count,
@@ -1316,7 +1408,7 @@ export async function prepaidProbeMetricsV39(
     rowsDelivered: itemRows.rows.length,
     uniqueFlights: physical.uniqueFlights,
     tailChainLinks: physical.tailChainLinks,
-    internalSendCredits: Number(d.internal_credits ?? 0),
+    internalSendCredits: assertExactPrepaidCreditTotalV39(d.internal_credits),
     confirmedUniqueLower: physical.confirmedUniqueLower,
     confirmedPlusAmbiguousUpper:
       physical.confirmedPlusAmbiguousUpper,

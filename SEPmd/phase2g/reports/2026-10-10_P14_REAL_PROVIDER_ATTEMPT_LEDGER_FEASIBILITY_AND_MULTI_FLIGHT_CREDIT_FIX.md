@@ -1,0 +1,35 @@
+# P14 — Real provider billable delivery ledger: documented API limits and multi-flight credit fix
+
+**October 10, 2026 — User-selected 6+6 Stage-1 candidate remains test-only for actual paid extension. No AeroDataBox billable requests, Cloudflare provisioning, Replit republish, paid owner activation, actual scientific database write or `main` merge.**
+
+## Official source reviewed: OpenAPI Direct v1.15.4.0 (October 10 retrieval)
+
+- [Official AeroDataBox OpenAPI 1.15.4.0](https://doc.aerodatabox.com/docs/openapi-direct-v1.json), [API specification landing page](https://aerodatabox.com/api-spec), [2026 flight-alert credit guide](https://aerodatabox.com/flight-alert-api-2026/).
+- **One AeroDataBox credit is charged for EACH FLIGHT ITEM in a webhook**, not for the HTTP request itself. Example: one delivery containing five flight items costs **five credits**, but counts as **one delivery attempt**. When a failed provider delivery is sent and charged, `maxDeliveryRetries=0` remains frozen to avoid additional paid attempts. Do not confuse notification count, billable item count, or unique V3.9 physical-v2 flights.
+- The webhook `FlightNotificationContract` includes an ID (stable across retries), `flights`, `subscription`, `timestampUtc`, and `deliveryAttempt` cost/sequence/time. The embedded `balance` is **an expected pre-send balance** and the vendor explicitly warns it can differ from the final value when multiple notification groups are generated concurrently.
+- The documented public APIs include `GET /subscriptions/balance` and `GET /subscriptions/webhook` and `GET /subscriptions/webhook/{subscriptionId}`. **I could not identify a published endpoint for querying a complete historical per-delivery attempted-send ledger** (including attempts billed when the receiver never saw the POST). This is an absence of documentation, **not proof the provider is incapable of supplying an audited ledger** through support, a separate endpoint, or a customer account export.
+- `GET /subscriptions/balance` is **account-wide across all provider webhook subscriptions**. The difference between a before/after balance is NOT inherently attributable to one YSSY owner when there is other subscription traffic, interleaved refills, out-of-order notifications, or pending deduction. It cannot independently reconstruct individual unknown lost attempt IDs.
+- **AERO API SENT ATTEMPTS ARE BEST EFFORT**. A provider POST dropped during an Autoscale cold start is not automatically buffered/retried by Replit. A green callback GET / longer 6+6 watchdog cannot prove a lost provider-attempt's full wire body or physical-v2 identity.
+
+## Code changes in isolated investigation PR #27
+
+- `experiments/phase2g_rehearsal/signed_attempt_reconciliation_v39.ts`: synthetic signed sender ledger credit validator previously accepted only `0|1`. Changed to a **nonnegative safe integer** so one signed multi-flight delivery can cost >1 without being confused with the notification-attempt count.
+- `experiments/phase2g_rehearsal/dual_source_wire_canonical_receipt_v39.ts`: if a synthetic original payload includes a nonempty `flights` array, the claimed `deliveryAttempt.costCredits` must match the original number of flight items, or source fixture creation fails. (Legacy older zero-flight synthetic test fixtures remain backward compatible; production webhook-origin authenticity is not inferred.)
+- `tests/phase2g_signed_attempt_reconciliation_v39.test.ts`: synthetic **three attempted webhooks, seven credits**: one notification contains five flight items, still counts as **one** send attempt; corroborates the exact sender/edge/internal credits and rejects one-credit internal miscount despite all attempted notification counts matching.
+- `tests/phase2g_dual_wire_canonical_source_receipt_v39.test.ts`: one five-flight event with five claimed credits accepted, a five-flight event with one or six claimed credits rejected. Source wire/canonical SHA and signed edge receipts remain synthetic; no claim of real AeroDataBox attestation.
+
+## P14 provider verification request (ready for official vendor contact)
+
+> We are a university research team using AeroDataBox Flight Alert airport webhook subscriptions. The January 31, 2026 guide and OpenAPI v1.15.4.0 confirm credits are charged per flight item **when an attempt is sent**, even if delivery is unsuccessful, and an embedded pre-send balance is not an exact final ledger. Is there a **per-subscription historical attempted-notification ledger/export** that exposes original notification ID, delivery attempt number, generated UTC, attempt UTC, number of flight items/credits billed, target callback URL (or hashed equivalent), response code and sender-side timeout? Can it include **charged attempts for which the recipient never received an HTTP POST**? If not, can support provide a **timestamped subscription-scoped audit/export** for an exact two-hour UTC window, and can it authenticate the result? This is required to audit a 260 billed-credit vs 259 internally observed-credit gap without falsely certifying science. We do not need customer account tokens in the response.
+
+Vendor's [official contact form](https://aerodatabox.com/contact) may be used by the account owner; no email address for direct outbound contact is invented here, and the request has **not** been submitted.
+
+## Hard final release implications
+
+**P14 is OPEN until independently authenticated sender-side attempt and billed-item evidence can be obtained or scientific method amended prospectively with an explicit, defensible unobserved-delivery/censoring policy.** Do not pretend a local HMAC emulator or global account balance makes sender-side attempt IDs complete. If real provider exports are unavailable, this experiment's current **zero missing paid source** release gate may be impossible to certify under Replit Autoscale without eliminating drops and explicitly addressing unknown attempts.
+
+**P09/P10/P12/P13 also OPEN in live infrastructure**: genuine separately durable before-2xx original ingress with retained raw bytes >=168h, exact signed first edge UTC, deployed Queue+storage and current DB epoch/physical item confirmation, production-safe full-window recovery without normalized provider flight rows in LOGGED tables. Connected Cloudflare account latest read-only: **zero Queues**, **R2 disabled** (10042), **billing endpoints inaccessible** (10000). Vendor published Cloudflare free allocations cannot stand in for verified account cost headroom.
+
+**P15 six primary + six contingent checks** has already been wired into the real paid supervisor's *isolated source branch*, but no real independent provider/source verifier is deployed so the candidate still **fails closed by check three** instead of blindly granting 12; no real paid config changed. **P20** zero-provider hosted 120-minute wall-clock rehearsal and scientific prospective release authorization are outstanding.
+
+**YSSY Sunday October 11 20:00–22:00 PDT remains paid NO-GO** on this evidence; the code correction reduces one source of potential accounting error but not the essential missing independent chain of custody.

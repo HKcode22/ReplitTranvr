@@ -4,6 +4,8 @@ import express, {
   type NextFunction,
 } from "express";
 import { createServer } from "node:http";
+import {subscribePrepaidStageTimingV39} from "./lib/disruption/phase2gPrepaidStageTelemetry_v39";
+import {observePrepaidHttpTransportV39} from "./lib/disruption/phase2gPrepaidHttpTransportTelemetry_v39";
 import { registerV3Routes } from "./routes_v3";
 import {
   registerWorkspaceRuntimeHealthV39,
@@ -47,6 +49,25 @@ if (
   throw new Error("CALLBACK_OWNER_MODE_INVALID");
 }
 
+// Opt-in only: a single published-compatible host can emit sanitized
+// per-stage timing in its logs during an approved zero-provider rehearsal.
+// No raw payload, session, subscription, blob identity, URI or SQL text.
+if(process.env.V39_PREPAID_STAGE_TELEMETRY==="1"){
+  subscribePrepaidStageTimingV39((event)=>{
+    const e=event as Record<string,unknown>;
+    const allowed=new Set([
+      "db_pool_acquire","db_session_lock","original_blob_upload_readback",
+      "duplicate_original_blob_readback","physical_item_sql","final_sql_commit"
+    ]);
+    if(!allowed.has(String(e?.stage??""))||
+       !Number.isFinite(e?.elapsed_ms)||
+       !["completed","failed"].includes(String(e?.outcome??"")))
+      return;
+    console.log("V39_PREPAID_STAGE_V1",JSON.stringify({
+      stage:e.stage,elapsed_ms:e.elapsed_ms,outcome:e.outcome
+    }));
+  });
+}
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
@@ -57,6 +78,7 @@ const prepaidPath =
 const controlRoutes = new Set([
   "/__v39/phase2g/webhook-secret-match",
   "/__v39/phase2g/runtime-db-binding",
+  "/__v39/phase2g/db-live-preflight",
   "/__v39/phase2g/cleanup-control-match",
   "/__v39/phase2g/runtime-cleanup",
 ]);
@@ -95,6 +117,16 @@ app.use((req, res, next) => {
     return;
   }
 
+  next();
+});
+
+// Passive diagnostics: surface slow/aborted actual prepaid POST responses,
+// without exposing the URL-path secret, flight payload or subscription ID.
+// This neither changes subscription/ACK behavior nor makes provider calls.
+app.use((req,res,next)=>{
+  if(req.method==="POST"&&prepaidPath.test(req.path)){
+    observePrepaidHttpTransportV39(res);
+  }
   next();
 });
 

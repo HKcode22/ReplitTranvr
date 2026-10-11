@@ -3,9 +3,18 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { enforcePaidGuard, verifyAuthFile } from "./v39_paid_guard_v39";
+import { armStage1PaidOwnerTerminationBoundV39, stage1PaidOwnerExitVerdictV39, type PaidOwnerTerminationEscalationV39 } from "./v39_phase2g_paid_owner_termination_bound_v39";
+import {verifyStage1PublishedDatabaseLiveV39} from "./phase2gStage1PublishedDatabaseLivePreflight_v39";
+import {
+  advanceStage1WatchdogV39,initialStage1WatchdogStateV39,
+  type Stage1CallbackWatchdogModeV39
+} from "./v39_phase2g_stage1_watchdog_6plus6_policy_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const CALLBACK_POLL_MS = 15_000;
+// Four distinct endpoint checks may each require up to 8s of network time.
+// A hung aggregate check must never suspend owner supervision indefinitely.
+const CALLBACK_HEALTH_CYCLE_HARD_DEADLINE_MS = 40_000;
 const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3;
 
 function required(name: string): string {
@@ -31,7 +40,9 @@ function atomicWriteJson(file: string, value: unknown): void {
 /**
  * Sanitized diagnostic outcome: never log secrets, response bodies, the real
  * signed webhook URL, database connection strings or raw error messages.
- * Keep the existing 15s polling/three-strike fail-closed safety policy.
+ * Default retains the existing 15s polling/three-strike fail-closed policy.
+ * Explicit opt-in six-plus-six mode NEVER extends without separately verified
+ * independent sender/source/credits evidence (not yet deployed).
  */
 type CallbackHealthResultV39 = {
   healthy: boolean;
@@ -195,6 +206,23 @@ async function main(): Promise<void> {
   const heartbeatPath = path.resolve(required("--heartbeat"));
   const expectedIcao = required("--expected-icao").toUpperCase();
   const ownerExecutor = required("--owner-executor").trim().toLowerCase();
+  const requestedWatchdogMode =
+    process.env.V39_PHASE2G_CALLBACK_WATCHDOG_POLICY ?? "legacy-three";
+  if(!["legacy-three","six-plus-six-candidate"].includes(requestedWatchdogMode))
+    throw new Error("SUPERVISOR_REFUSED:UNKNOWN_WATCHDOG_POLICY");
+  const callbackWatchdogMode =
+    requestedWatchdogMode as Stage1CallbackWatchdogModeV39;
+  // IMPORTANT: the live production bridge does not yet authenticate a true
+  // source/provider attempted-credit ledger independently of this host.
+  // No user env variable can fake trusted evidence for extended grace.
+  // In addition to the per-check fail-closed 3-strike controller,
+  // explicitly REFUSE a new paid launch that claims 6+6 protection when
+  // the authenticated independent source+credit witness bridge is absent.
+  // Do this before enforcePaidGuard(), live health calls or child spawn;
+  // user ENV cannot assert a trusted witness into existence.
+  if(callbackWatchdogMode==="six-plus-six-candidate"){
+    throw new Error("SUPERVISOR_REFUSED:SIX_PLUS_SIX_AUTHENTICATED_VERIFIER_NOT_DEPLOYED");
+  }
 
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("SUPERVISOR_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("SUPERVISOR_REFUSED:AUTH_SHA_INVALID");
@@ -239,6 +267,22 @@ async function main(): Promise<void> {
     throw new Error("SUPERVISOR_REFUSED:CALLBACK_OR_BINDING_NOT_HEALTHY_AT_START");
   }
 
+  // A matching database URL is a configuration check, not a live connection.
+  // Require actual read-only PostgreSQL SELECT success from the published
+  // receiver before opening the log or spawning the paid Stage1 owner.
+  // This is deliberately NOT added to the every-15s failure watchdog.
+  const dbLive = await verifyStage1PublishedDatabaseLiveV39({
+    base:callbackBase, githubRuntimeDbUrl:String(process.env.V39_DATABASE_RUNTIME_URL??"")
+  });
+  if (!dbLive.healthy) {
+    console.error(JSON.stringify({
+      schema:"v39.phase2g-stage1-callback-health-diagnostic.v1",
+      phase:"prelaunch_db_connectivity",
+      ...dbLive
+    }));
+    throw new Error("SUPERVISOR_REFUSED:PUBLISHED_DATABASE_NOT_CONNECTING");
+  }
+
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logFd = fs.openSync(logPath, "a");
   const startedAtUtc = new Date().toISOString();
@@ -255,6 +299,8 @@ async function main(): Promise<void> {
     expected_icao: expectedIcao,
     owner_executor: ownerExecutor,
     callback_mode: callbackMode,
+    callback_watchdog_policy: callbackWatchdogMode,
+    callback_watchdog_source_proof_implemented: false,
     callback_base: callbackBase,
     log_path: path.relative(process.cwd(), logPath),
     heartbeat_path: path.relative(process.cwd(), heartbeatPath),
@@ -266,6 +312,7 @@ async function main(): Promise<void> {
   // The owner is spawned directly after the paid guard. It independently
   // re-verifies the same AUTH, while direct parentage lets the supervisor
   // signal the real paid owner before fail-closed recovery.
+  const ownerSpawnMonotonicMs = performance.now();
   const child = spawn(
     process.execPath,
     ["--import", "tsx", "scripts/v39_probe_stage1_owner_v39.ts", "--auth", authId, "--auth-file", authFile, "--icao", expectedIcao],
@@ -277,8 +324,10 @@ async function main(): Promise<void> {
   );
 
   let terminationSignal: NodeJS.Signals | null = null;
+  let forcedOwnerKillDeadline: PaidOwnerTerminationEscalationV39 | null = null;
   let callbackWatchdogTriggered = false;
   let callbackFailureCount = 0;
+  let watchdogState = initialStage1WatchdogStateV39();
   let callbackCheckInFlight = false;
   const requestTermination = (signal: NodeJS.Signals, reason: string): void => {
     terminationSignal = signal;
@@ -291,6 +340,25 @@ async function main(): Promise<void> {
     })}\n`);
     fs.fsyncSync(logFd);
     if (!child.killed) child.kill("SIGTERM");
+    // Sending SIGTERM is NOT proof the owner has exited. If the child hangs,
+    // force its local OS process to exit within a bounded grace period so
+    // the supervisor's existing fail-closed provider recovery can execute.
+    if (!forcedOwnerKillDeadline) {
+      forcedOwnerKillDeadline = armStage1PaidOwnerTerminationBoundV39({
+        childStillRunning:()=>child.pid!==undefined&&
+          child.exitCode===null&&child.signalCode===null,
+        forceKillChild:()=>{
+          fs.writeSync(logFd, `${JSON.stringify({
+            schema:"v39.phase2g-stage1-supervisor-escalation.v1",
+            observed_at_utc:new Date().toISOString(),
+            action:"sigkill_unresponsive_local_paid_child_then_recover",
+            reason:"paid_child_unresponsive_after_sigterm_grace"
+          })}\n`);
+          fs.fsyncSync(logFd);
+          child.kill("SIGKILL");
+        }
+      });
+    }
   };
   process.on("SIGTERM", () => requestTermination("SIGTERM", "supervisor_sigterm"));
   process.on("SIGINT", () => requestTermination("SIGINT", "supervisor_sigint"));
@@ -308,6 +376,9 @@ async function main(): Promise<void> {
       git_head: head,
       probe_budget_day_id: budgetDayId,
       callback_consecutive_failures: callbackFailureCount,
+      callback_watchdog_policy: callbackWatchdogMode,
+      callback_watchdog_science_audit_pending:
+        watchdogState.recoveredHealthAwaitingScienceAudit,
       callback_watchdog_triggered: callbackWatchdogTriggered,
       log_path: path.relative(process.cwd(), logPath),
     });
@@ -319,25 +390,63 @@ async function main(): Promise<void> {
   const callbackWatchdog = setInterval(async () => {
     if (callbackCheckInFlight || child.exitCode !== null || child.killed) return;
     callbackCheckInFlight = true;
+    // Independently terminate the paid owner if the entire sequential
+    // four-endpoint health cycle stalls. This timer does NOT depend on the
+    // async fetch chain completing, and never changes provider retry count.
+    const healthCycleDeadline = setTimeout(() => {
+      if (callbackWatchdogTriggered || child.exitCode !== null || child.killed) return;
+      callbackWatchdogTriggered = true;
+      requestTermination("SIGTERM", "workspace_callback_health_cycle_hard_timeout");
+    }, CALLBACK_HEALTH_CYCLE_HARD_DEADLINE_MS);
+    healthCycleDeadline.unref();
     try {
       const callbackHealth = await callbackHealthy(callbackBase, expectedHead, callbackMode);
-      callbackFailureCount = callbackHealth.healthy ? 0 : callbackFailureCount + 1;
-      if (!callbackHealth.healthy) {
+      const previousCount = watchdogState.consecutiveFailures;
+      const decision = advanceStage1WatchdogV39({
+        mode:callbackWatchdogMode,previous:watchdogState,
+        health:callbackHealth,nowMonotonicMs:performance.now(),
+        // No source/provider witness supplied. The candidate cannot extend
+        // the original three-strike limit until verified evidence exists.
+        evidence:undefined
+      });
+      watchdogState = decision.state;
+      callbackFailureCount = watchdogState.consecutiveFailures;
+      if (!callbackHealth.healthy || (previousCount > 0 && callbackHealth.healthy)) {
         fs.writeSync(logFd, `${JSON.stringify({
           schema: "v39.phase2g-stage1-callback-watchdog.v1",
           observed_at_utc: new Date().toISOString(),
-          healthy: false,
           ...callbackHealth,
           consecutive_failures: callbackFailureCount,
-          failure_limit: CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
+          // The requested candidate has a nominal 12-check ceiling, but
+          // independent source/credit verification is UNIMPLEMENTED here.
+          // Never advertise an effective 12-check paid safety allowance.
+          failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
+          requested_failure_limit:callbackWatchdogMode==="legacy-three" ?
+            CALLBACK_CONSECUTIVE_FAILURE_LIMIT : 12,
+          effective_failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
+          conditional_extension_authorized:false,
+          policy:callbackWatchdogMode,
+          phase:decision.phase,
+          decision_reason:decision.reason,
+          signed_original_source_verified:decision.independentSourceProvenForThisCheck,
+          science_audit_pending:watchdogState.recoveredHealthAwaitingScienceAudit,
+          scientific_pass_authorized:false
         })}\n`);
         fs.fsyncSync(logFd);
       }
-      if (callbackFailureCount >= CALLBACK_CONSECUTIVE_FAILURE_LIMIT && !callbackWatchdogTriggered) {
+      if (decision.action==="STOP_OWNER" && !callbackWatchdogTriggered) {
         callbackWatchdogTriggered = true;
         requestTermination("SIGTERM", "workspace_callback_unreachable_threshold");
       }
+    } catch (_watchdogInternalFailure) {
+      // Callback monitor failures must NEVER escape an async setInterval and
+      // orphan the paid owner. The source/secret details are not logged.
+      if (!callbackWatchdogTriggered) {
+        callbackWatchdogTriggered = true;
+        requestTermination("SIGTERM", "workspace_watchdog_internal_failure");
+      }
     } finally {
+      clearTimeout(healthCycleDeadline);
       callbackCheckInFlight = false;
     }
   }, CALLBACK_POLL_MS);
@@ -351,13 +460,23 @@ async function main(): Promise<void> {
 
   const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null; spawnError: string | null }>((resolve) => {
     let spawnError: string | null = null;
-    child.once("error", (error) => { spawnError = error.message; });
-    child.once("exit", (code, signal) => resolve({ code, signal, spawnError }));
+    // Node guarantees close after an error or exit; exit itself can be absent
+    // when spawn fails. Never put a raw OS error message into paid evidence.
+    child.once("error", () => { spawnError = "child_spawn_or_process_error"; });
+    child.once("close", (code, signal) => resolve({ code, signal, spawnError }));
   });
+  forcedOwnerKillDeadline?.cancel();
   clearInterval(heartbeat);
   clearInterval(callbackWatchdog);
 
-  const childPassed = exit.code === 0 && !exit.signal && !exit.spawnError;
+  const ownerElapsedMonotonicMs = performance.now() - ownerSpawnMonotonicMs;
+  const exitVerdict = stage1PaidOwnerExitVerdictV39({
+    ...exit,
+    elapsedMonotonicMs: ownerElapsedMonotonicMs,
+    terminationRequested: terminationSignal !== null,
+    watchdogTriggered: callbackWatchdogTriggered,
+  });
+  const childPassed = exitVerdict.passed;
   fs.writeSync(logFd, `${JSON.stringify({
     schema: "v39.command-evidence.v1",
     command: "v39:probe:stage1",
@@ -365,6 +484,7 @@ async function main(): Promise<void> {
     owner: "scripts/v39_probe_stage1_owner_v39.ts",
     evidenceId: null,
     status: childPassed ? "PASS" : "FAIL",
+    exit_verdict_reason: exitVerdict.reason,
     exitCode: exit.code ?? 1,
     error: exit.spawnError,
   })}\n`);
@@ -412,8 +532,14 @@ async function main(): Promise<void> {
     child_exit_code: exit.code,
     child_signal: exit.signal,
     child_spawn_error: exit.spawnError,
+    child_exit_verdict_reason: exitVerdict.reason,
+    child_wall_elapsed_ms: Math.round(ownerElapsedMonotonicMs),
     termination_signal_seen_by_supervisor: terminationSignal,
     callback_watchdog_triggered: callbackWatchdogTriggered,
+    callback_watchdog_policy: callbackWatchdogMode,
+    callback_watchdog_source_proof_implemented: false,
+    callback_watchdog_science_audit_pending:
+      watchdogState.recoveredHealthAwaitingScienceAudit,
     callback_consecutive_failures_at_exit: callbackFailureCount,
     recovery_attempted: recoveryAttempted,
     recovery_exit_code: recoveryExitCode,

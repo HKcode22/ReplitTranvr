@@ -44,8 +44,10 @@ import {
   recordPrepaidProbeCallbackFailureV39,
   recordPrepaidProbeIngressFailureV39,
 } from "./lib/disruption/prepaidProbeRuntime_v39";
+import { assertPrepaidOriginalJsonStructureV39 } from "./lib/disruption/prepaidOriginalJsonStructure_v39";
 import { verifyAuthRecord, approvedArtifactHashesFromLedger, sha256HexString, type AuthRecord } from "./lib/disruption/authRecord_v39";
 import { v39Pool as pool } from "./lib/disruption/db_v39";
+import {verifyReadOnlyDbLivePreflightV39} from "./lib/disruption/phase2gDbLivePreflight_v39";
 import { verifyPhase2gCleanupAttestationV39 } from "./lib/disruption/phase2gCleanupAttestation_v39";
 import {
   assertPhase2gCleanupBlobCountsV39,
@@ -106,6 +108,24 @@ function phase2gRuntimeDbBinding(req: Request, res: Response): void {
     database_mutation: false,
     alert_credits_spent: 0,
   });
+}
+/**
+ * A guarded SELECT-only prelaunch check, separate from the every-15s
+ * HMAC-only database binding probe. Prevents a paid Stage1 owner from
+ * starting when the URL matches but PostgreSQL is actually unavailable.
+ */
+async function phase2gDbLivePreflight(req:Request,res:Response):Promise<void> {
+  const attestation=await verifyReadOnlyDbLivePreflightV39({
+    runtimeUrl:String(process.env.V39_DATABASE_RUNTIME_URL??"").trim(),
+    challenge:String(req.header("x-v39-phase2g-db-live-challenge")??"").trim(),
+    suppliedProof:String(req.header("x-v39-phase2g-db-live-proof")??"").trim().toLowerCase(),
+    selectOne:async()=>{
+      const result=await pool.query("SELECT 1 AS connected");
+      return {rows:result.rows};
+    }
+  });
+  res.setHeader("cache-control","no-store");
+  res.status(attestation.http).json(attestation.body);
 }
 function phase2gCleanupControlKeyMatch(req: Request, res: Response): void {
   const secret = String(process.env.V39_PHASE2G_CLEANUP_SIGNING_KEY ?? "").trim();
@@ -270,6 +290,7 @@ async function recordIncident(cause:string,detail:unknown):Promise<void>{
 export function registerV3Routes(app:Express):void{
   app.post("/__v39/phase2g/webhook-secret-match",phase2gWebhookSecretMatch);
   app.post("/__v39/phase2g/runtime-db-binding",phase2gRuntimeDbBinding);
+  app.post("/__v39/phase2g/db-live-preflight",phase2gDbLivePreflight);
   app.post("/__v39/phase2g/cleanup-control-match",phase2gCleanupControlKeyMatch);
 
   /*
@@ -279,9 +300,32 @@ export function registerV3Routes(app:Express):void{
    * route family so parser failures can reach the prepaid
    * error boundary below.
    */
+  /**
+   * Reject unauthenticated prepaid POST BEFORE attempting JSON parsing.
+   * Previously Express parsed up to 2MB before the secret comparison.
+   * Keep the existing ingress secret check as defense in depth.
+   */
+  const prepaidEarlySecretGuard=(req:Request,res:Response,next:NextFunction):void=>{
+    const expected=webhookSecret();
+    if(!expected){res.status(503).json({error:"WEBHOOK_SECRET_NOT_CONFIGURED"});return;}
+    const supplied=String(req.params.secret??"");
+    const a=Buffer.from(expected);
+    const b=Buffer.from(supplied);
+    if(a.length!==b.length||!timingSafeEqual(a,b)){
+      res.status(404).json({error:"Not found"});
+      return;
+    }
+    next();
+  };
+
   const prepaidJsonParser = json({
     limit: "2mb",
     verify: (req, _res, buf) => {
+      // Never let JSON.parse silently overwrite provider attempt, flight
+      // identity or billable item-credit keys (including escaped aliases).
+      // This checks real received bytes BEFORE the canonicalizing store,
+      // but is NOT an independently authenticated original-wire archive.
+      assertPrepaidOriginalJsonStructureV39(buf);
       req.rawBody = buf;
     },
   });
@@ -374,6 +418,7 @@ export function registerV3Routes(app:Express):void{
 
   app.post(
     "/api/v1/webhooks/aerodatabox/:secret/prepaid/:sessionId",
+    prepaidEarlySecretGuard,
     prepaidJsonParser,
     prepaidWebhookIngress,
   );

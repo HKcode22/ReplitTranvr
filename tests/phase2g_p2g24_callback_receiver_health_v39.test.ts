@@ -57,7 +57,7 @@ describe("P2G24 published callback startup and diagnostics hardening", () => {
       'requestTermination("SIGTERM", "workspace_callback_unreachable_threshold")',
     );
     expect(supervisor).toContain(
-      "callbackFailureCount = callbackHealth.healthy ? 0 : callbackFailureCount + 1",
+      "callbackFailureCount = watchdogState.consecutiveFailures",
     );
   });
 });

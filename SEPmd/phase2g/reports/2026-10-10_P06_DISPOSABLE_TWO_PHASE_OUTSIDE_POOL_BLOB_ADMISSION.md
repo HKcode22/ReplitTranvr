@@ -1,0 +1,53 @@
+# P06 — experimental two-phase original-blob admission without holding database connections
+
+Prepared Oct 10, 2026 PDT, on isolated draft `phase2g-p2g24-github-observer-20261009`. **NOT production-safe, NOT published, NOT merged, not a paid 6+6 enabler. No live AeroDataBox provider traffic, no credits, production DB write, Replit publishing, Cloudflare or third Replit account.**
+
+## Motivation, exact baseline
+
+[Prior negative CI #38109642815](https://github.com/HKcode22/ReplitTranvr/actions/runs/38109642815) actual V3.9 local HTTP callback + disposable PostgreSQL16, max3 connections, 22 concurrent fake provider notifications, simulated 550ms object-storage stage, independent sender 10-second timeout: **17 of 22 timely sender HTTP 200 vs 22 eventually committed**. SQL pool-acquisition P50 4.465s / P95 10.013s / P99 10.569s, session row-lock P95 1.115s, fake blob stage P95 0.551s. Test is **not** live Replit or original provider evidence. Current V3.9 holds `SELECT ... FOR UPDATE` on entire session during slow object-store upload/read-back; merely enlarging pool acquisition timeout or 6+6 GET health checks cannot fix this POST queue.
+
+## Newly implemented, proof-of-concept ONLY
+
+`experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39.ts` provides a different **synthetic** source admission protocol, exercised through the real PostgreSQL16 fixture, but **NEVER imported by the actual paid V3.9 callback**:
+
+1. Accept only `P2G_DISPOSABLE_POSTGRES=YES` with NO live scientific DB URL/API key; independently verify PostgreSQL database named `p2g_stage1_fixture`, source length ≤64KiB, valid synthetic attempt HMAC and session UUID.
+2. Atomically create one short-lived **LOGGED** opaque PENDING intent per synthetic attempt, storing SHA256, future 168-hour retention, immutable private object UUID/path and owner token; never store raw provider JSON/flight identifiers. Commit the `INSERT ... ON CONFLICT DO NOTHING` SQL before uploading any blob; release the database connection.
+3. While **no pooled SQL connection or long SQL row lock is held**, persist exact original synthetic bytes through the existing `persistProviderBlobBeforeAckV39` upload/visibility/download/SHA/byte-readback primitive (using simulated Replit storage only).
+4. Finalize the PENDING intent using a short atomic PostgreSQL UPDATE to COMMITTED; only then permit a **synthetic** 2xx verdict. An uncommitted/failed update or ambiguous SQL outcome never automatically authorizes 2xx, and the uploaded original is conservatively retained.
+5. If another same-attempt callback observes PENDING, it must wait within a bounded duration or return `PENDING_NOT_ACKNOWLEDGED`; it may **never** ACK based on a hash alone. If COMMITTED, first download original object and verify exact bytes; only then return duplicate 2xx. Same synthetic attempt HMAC with different source SHA fails closed; same bytes from distinct synthetic attempt HMACs are **distinct** original send attempts, never silently merged.
+6. Every return has `realPaidLaunchAuthorized:false`, `originalF8ScientificPassAuthorized:false`, `originalProviderAttemptWitnessVerified:false`. This design still does NOT provide an AeroDataBox sender-authenticated ledger or independent HTTPS front door.
+
+## Verified disposable performance and fault evidence
+
+[GitHub Actions #38110468563](https://github.com/HKcode22/ReplitTranvr/actions/runs/38110468563), tested revision `ed3a3b3acaea8195ad108a68392a918803211117`, **BOTH jobs PASS: 554/554 offline tests across 54 suites + 72/72 actual disposable PostgreSQL16 integration tests**; real PostgreSQL SIGKILL continues to confirm UNLOGGED state loss. Nine incremental real-PG tests verify the candidate (six initial, three additional).
+
+**Experimental result:** 22 independent synthetic source attempts sharing a PostgreSQL pool of maximum three connections and fake object-storage operations delayed 550ms all reached COMMITTED in **562ms total observed wall-clock** on that CI run. The former actual V3.9 prepaid HTTP route under comparable artificial 22-way backlog had 17/22 or 18/22 timely sender HTTP 200s and 22 eventual SQL commits, with 10-second sender deadline. **The two-phase function is not an HTTP route, doesn't implement the flight-identity SQL, and its 562ms does NOT establish provider-observed timely 2xx, production P99, or valid provider billable event accounting.** The latency comparison is an isolated optimization hypothesis only.
+
+Real PostgreSQL confirms that during the candidate's 450ms original upload **another query can promptly acquire a free connection**; no pooled SQL connection or session-row lock is held across that upload. It also proves a second concurrent callback returns PENDING without 2xx until the first verified original completes, later retries can verify the original without another upload, source hash conflicts fail closed, distinct attempts with identical bytes remain separate, and neither a storage failure nor an ambiguous SQL completion fabricates a receipt. If UPDATE actually executes but its SQL reply is lost, the original remains present and a subsequent retry can verify the resulting COMMITTED intent. These fault tests are isolated and do not prove crash recovery.
+
+## P13/P16 new bounded read-only orphan/source integrity recovery audit
+
+Added `auditDisposableRawAdmissionIntentsV39` to the same experimental source. It queries at most 100 intent records inside `BEGIN TRANSACTION READ ONLY` against **only** the fixture database and then independently downloads each known opaque original source object to SHA256-verify the actual bytes. It reports **aggregate-only** counts: PENDING/COMMITTED, present-and-hash-verified source, missing/unreadable source, changed source, and expired metadata. It intentionally exposes **no session ID, provider identity, original source bytes, object key, HMAC or per-flight payload**. Every return forcibly denies automatic replay, deletion, 2xx acknowledgment, science PASS and paid launch. If the original uploader crashed before the blob upload, PENDING+missing source is still unrecoverable with only a hash; an uploaded but uncommitted blob must also **not** be falsely called an independently witnessed original provider delivery.
+
+Three additional **actual disposable PostgreSQL16** tests verify PENDING+original present after uncertain finalization, PENDING+original absent after upload failure, COMMITTED+original readable, COMMITTED+corrupted original, expired intent with no automatic delete, and audit fails closed outside disposable mode. None writes or deletes any source from the recovery auditor.
+
+[**Latest fully verified Actions #38110674335**](https://github.com/HKcode22/ReplitTranvr/actions/runs/38110674335), exact tested source `563b617878cd30b5fde51d54f1c4363f0468eae0`: **BOTH jobs SUCCESS — 554/554 offline tests (54 suites) +75/75 actual disposable PostgreSQL16 integration tests**. The 22-way candidate fake-storage benchmark recorded **563ms** total in this second CI run (previous **562ms**, not a provider HTTP benchmark); PostgreSQL SIGKILL still confirms UNLOGGED runtime loss. P06 and P13/P16 are not release-complete: this is **a read-only audit** of artificial candidates, not a crash-safe replay/cleanup implementation for original production source.
+
+## Fault tests, and remaining failures
+
+The actual disposable PostgreSQL test suite adds tests for: pool availability **during** delayed upload, 22 distinct simultaneous raw attempts with simulated 550ms blob latency, idempotent duplicate without double upload, concurrent PENDING no false ACK, same attempt/body hash conflict, blob-upload failure leaving PENDING, both nonexecuted and executed-but-reply-lost final SQL, same original bytes from distinct attempts **not** deduped, and refusal of non-disposable input/environment.
+
+**Critically, even if these tests pass, it would be unsafe to wire this to paid production.** Before approval, the implementation must demonstrate in a truly isolated hosted test:
+
+- **No source loss after crash between intent creation and actual blob upload.** The DB intent has ONLY opaque hash and path, not the original bytes. If the Replit process dies before upload and upstream sender will not retry, the original source cannot be reconstructed from the intent; therefore this candidate **does not solve the platform outage problem**.
+- **Cleanup, privacy and retention:** abandoned LOGGED PENDING rows and raw App Storage orphans need original HMAC binding, auditable 168h expiry, positive/negative readback checks, restart recovery, bounded retention and policy-compliant hard deletion. Current candidate does **not** implement cleanup/replay.
+- **Atomic unique source and science:** final committed source intent is NOT equivalent to existing `provider_content_blob_ref` LOGGED source row or physical flight v2 UNLOGGED item rows, exact billing credits, valid scientific eight UTC bins and owner/one-subscription freeze. Those integrations need separate correctness/fault tests.
+- **No blind ACK during incomplete science:** eventual SQL receipt must be independently reconciled to AeroDataBox sent/attempt ledger, payer credits and expected original sources. Local SQL counters do not prove unseen POSTs weren't sent.
+- **Original source custody before 2xx**, real published receiver remote send ACK <10s/P99 and real object-storage availability, concurrent duplicate failure isolation, PostgreSQL SIGKILL loss of UNLOGGED session, unknown COMMIT outcomes, stop/cleanup races, rolling deployment and production-vs-draft SHA.
+- **Overload backpressure:** synthetic 22-way burst may be faster because fake memory object I/O is parallel; actual Replit object-storage throttles, global connections, network, cold start, quotas, storage cost and real 1.8/5.8/21.7 KB blob distributions are unknown.
+
+### Release gates
+
+**P06 is NOT closed** by an experimental design or speed result. The current production source path is unchanged. Any future adoption needs a monotonic originally-durable receive journal with replay after process death, an auditable orphan cleanup protocol and true two-hour signed-source no-paid hosted rehearsal BEFORE changing 6+6, publishing, or launching. Prior P2G22 external 260 vs internal 259 remains unresolved. If a candidate cannot meet first-hop delivery guarantees, do NOT substitute it for the original source-preserving code.
+
+**Current YSSY paid verdict: NO-GO.**
