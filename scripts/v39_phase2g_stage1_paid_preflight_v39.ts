@@ -256,6 +256,7 @@ async function main(): Promise<void> {
   const migrationCheck = await pool.query(
     `SELECT
        to_regclass('clean.adb_probe_reconciliation_evidence') IS NOT NULL AS evidence_table,
+       to_regclass('clean.phase2g_prepaid_source_intent_v39') IS NOT NULL AS source_intent_v0064_table,
        EXISTS (
          SELECT 1 FROM information_schema.columns
           WHERE table_schema='clean'
@@ -270,6 +271,8 @@ async function main(): Promise<void> {
             AND pg_get_constraintdef(oid) ILIKE '%settling%'
        ) AS settling_status`,
   );
+  if (migrationCheck.rows[0]?.source_intent_v0064_table !== true)
+    blockers.push("v0064_logged_original_source_pending_intent_migration_missing");
   if (migrationCheck.rows[0]?.evidence_table !== true) blockers.push("phase2g_reconciliation_evidence_table_missing");
   if (migrationCheck.rows[0]?.callback_counter !== true) blockers.push("phase2g_callback_counter_migration_missing");
   if (migrationCheck.rows[0]?.settling_status !== true) blockers.push("phase2g_settling_status_migration_missing");
