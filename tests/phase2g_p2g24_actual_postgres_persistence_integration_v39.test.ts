@@ -68,7 +68,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   }),
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
-import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39,prepaidDuplicatePrelockReadbackApprovedV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39,auditDisposableRawAdmissionIntentsV39,recordVerifiedDisposablePendingOriginalRecoveryV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
 import {previewDisposablePendingPhysicalV2ReplayV39} from "../experiments/phase2g_rehearsal/disposable_pending_physical_v2_replay_preview_v39";
 import {rehydrateSyntheticQuarantinedPhysicalV2V39} from "../experiments/phase2g_rehearsal/disposable_quarantined_physical_v2_rehydrate_v39";
@@ -1293,6 +1293,98 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(await count()).toEqual({logged:1,unlogged:1});
     expect(await session()).toEqual({requests:2,successes:2,failures:0});
   });
+  it("P06 opt-in duplicate prelock feature is DISABLED without both exact callback and approval flags",()=>{
+    expect(prepaidDuplicatePrelockReadbackApprovedV39({} as NodeJS.ProcessEnv))
+      .toBe(false);
+    expect(prepaidDuplicatePrelockReadbackApprovedV39({
+      V39_PREPAID_DUPLICATE_PRELOCK_APPROVED:"1"
+    } as NodeJS.ProcessEnv)).toBe(false);
+    expect(prepaidDuplicatePrelockReadbackApprovedV39({
+      V39_CALLBACK_ONLY_RUNTIME:"1"
+    } as NodeJS.ProcessEnv)).toBe(false);
+    expect(prepaidDuplicatePrelockReadbackApprovedV39({
+      V39_CALLBACK_ONLY_RUNTIME:"1",
+      V39_PREPAID_DUPLICATE_PRELOCK_APPROVED:"1"
+    } as NodeJS.ProcessEnv)).toBe(true);
+  });
+  it("P06 true disposable PG opt-in duplicate reads ORIGINAL outside session lock yet ACKs only after locked revalidation",async()=>{
+    const body=sample({id:"p06-fastpath-real-pg-safe-original"});
+    const first=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+    const originalFlag=process.env.V39_CALLBACK_ONLY_RUNTIME;
+    const originalApproval=process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED;
+    process.env.V39_CALLBACK_ONLY_RUNTIME="1";
+    process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED="1";
+    try{
+      state.events.length=0;state.downloadDelayMs=800;
+      let finished=false;
+      const duplicate=persistPrepaidProbeWebhookV39({sessionId:SESSION,body})
+        .finally(()=>{finished=true;});
+      const deadline=Date.now()+2000;
+      while(!state.events.includes("READBACK")&&Date.now()<deadline)
+        await new Promise(r=>setTimeout(r,4));
+      expect(state.events).toContain("READBACK");
+      expect(finished).toBe(false);
+      // If the duplicate had acquired the UNLOGGED session lock before
+      // readback, a disposable second connection NOWAIT would fail 55P03.
+      const c=await state.pool!.connect();
+      try{
+        await c.query("BEGIN");
+        const unlocked=await c.query(
+          "SELECT session_id FROM clean.prepaid_probe_session_runtime "+
+          "WHERE session_id=$1 FOR UPDATE NOWAIT",[SESSION]);
+        expect(unlocked.rowCount).toBe(1);
+        await c.query("COMMIT");
+      }catch(error){await c.query("ROLLBACK").catch(()=>undefined);throw error;}
+      finally{c.release();}
+      const accepted=await duplicate;
+      expect(accepted).toMatchObject({
+        duplicate:true,deliveryId:first.deliveryId,blobRefId:first.blobRefId
+      });
+      expect(state.events).toEqual(["READBACK"]);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(await session()).toEqual({requests:2,successes:2,failures:0});
+      expect(state.blobs.size).toBe(1);
+    }finally{
+      state.downloadDelayMs=0;
+      if(originalFlag===undefined)delete process.env.V39_CALLBACK_ONLY_RUNTIME;
+      else process.env.V39_CALLBACK_ONLY_RUNTIME=originalFlag;
+      if(originalApproval===undefined)delete process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED;
+      else process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED=originalApproval;
+    }
+  },15000);
+  it("P06 prelock duplicate cannot ACK if LOGGED original source ref mutates during readback",async()=>{
+    const body=sample({id:"p06-prelock-race-changed-original-ref"});
+    await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+    const priorCallback=process.env.V39_CALLBACK_ONLY_RUNTIME;
+    const priorApproval=process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED;
+    process.env.V39_CALLBACK_ONLY_RUNTIME="1";
+    process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED="1";
+    try{
+      state.events.length=0;
+      state.downloadDelayMs=500;
+      const duplicate=persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+      const deadline=Date.now()+2000;
+      while(!state.events.includes("READBACK")&&Date.now()<deadline)
+        await new Promise(r=>setTimeout(r,4));
+      expect(state.events).toContain("READBACK");
+      await state.pool!.query(
+        "UPDATE clean.provider_content_blob_ref "+
+        "SET source_record_id='synthetic-corrupted-original-ref'"
+      );
+      await expect(duplicate).rejects.toThrow(
+        "PREPAID_PROBE_DUPLICATE_LOGGED_SOURCE_REF_INVALID"
+      );
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(await session()).toEqual({requests:2,successes:1,failures:1});
+      expect(state.blobs.size).toBe(1);
+    }finally{
+      state.downloadDelayMs=0;
+      if(priorCallback===undefined)delete process.env.V39_CALLBACK_ONLY_RUNTIME;
+      else process.env.V39_CALLBACK_ONLY_RUNTIME=priorCallback;
+      if(priorApproval===undefined)delete process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED;
+      else process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED=priorApproval;
+    }
+  },15000);
   it("P05 duplicate callback HTTP response waits for original-source readback; extra latency remains measurable",async()=>{
     const body=sample({id:"p05-delayed-duplicate-readback"});
     await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
