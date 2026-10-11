@@ -34,7 +34,7 @@ export type P20LocalWallclockResultV39=Readonly<{
   receiverUniqueOriginals:number;
   receiverRejectedDuringOutage:number;
   sourceReceiptsVerified:number;
-  eightOriginalUtcBins:readonly number[];
+  eightElapsedWindowBins:readonly number[];
   originalSpoolAuditPassed:boolean;
   allLocallySentSourcesReplayedExactly:boolean;
   localRuntimeResult:"PASS_LOCAL_ONLY"|"FAIL_OR_CENSORED";
@@ -137,6 +137,7 @@ export async function runP20SyntheticLocalWallclockV39(args:Readonly<{
       sourceManifest.set(hash(id),{sha:hash(payload),bin});
       binCounts[bin]++;
       try{
+        const sendStarted=performance.now();
         const response=await fetch(edge.url,{
           method:"POST",headers:{
             "content-type":"application/json",
@@ -146,12 +147,20 @@ export async function runP20SyntheticLocalWallclockV39(args:Readonly<{
         });
         const body=await response.json() as any;
         if(response.status===202&&body?.durable===true&&
-           body?.rawSha256===hash(payload))senderGood++;
+           body?.attemptHash===hash(id)&&
+           body?.rawSha256===hash(payload)&&
+           performance.now()-sendStarted<=10000)senderGood++;
         else senderBad++;
       }catch{senderBad++;}
       // Every source is first stored by the fixed ingress; the backend may
       // be down while the sender sees 202. No direct sender->backend retry.
       await spool.replayToLocalReceivers([receiverUrl]);
+      if(isFull&&i>0&&i%15===0)
+        process.stdout.write(JSON.stringify({
+          schema:"v39.p20-local-only-progress.v1",elapsedMinutes:i,
+          senderAttempts:i+1,senderTimely202:senderGood,
+          paidProviderCalls:0,paidAuthorization:false
+        })+"\\n");
     }
     await sleep(started+args.durationMs-performance.now());
     unavailable=false;
@@ -183,7 +192,7 @@ export async function runP20SyntheticLocalWallclockV39(args:Readonly<{
       receiverUniqueOriginals:seen.size,
       receiverRejectedDuringOutage:backendRejected,
       sourceReceiptsVerified:audit.verifiedOriginalReceiptCount,
-      eightOriginalUtcBins:binCounts,
+      eightElapsedWindowBins:binCounts,
       originalSpoolAuditPassed:audit.allOriginalReceiptsVerified,
       allLocallySentSourcesReplayedExactly:matched&&seen.size===args.sourceCount,
       localRuntimeResult:ok?"PASS_LOCAL_ONLY":"FAIL_OR_CENSORED",
