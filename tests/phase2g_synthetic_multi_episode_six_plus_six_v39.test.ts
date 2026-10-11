@@ -33,7 +33,7 @@ describe("P15 repeated 6-primary +6-emergency separate outage vs whole-run error
     const pending=step(s,75000,"FULLY_HEALTHY");
     expect(pending.phase).toBe("RECOVERY_PENDING");
     expect(pending.state.consecutiveFailures).toBe(4);
-    const recovered=step(pending.state,90000,"FULLY_HEALTHY");
+    const recovered=step(pending.state,90000,"FULLY_HEALTHY",true);
     expect(recovered.reason).toContain("FRESH_EPISODE_CHECKS");
     expect(recovered.state.consecutiveFailures).toBe(0);
     expect(recovered.state.episodeCount).toBe(1);
@@ -109,12 +109,33 @@ describe("P15 repeated 6-primary +6-emergency separate outage vs whole-run error
     expect(third.action).toBe("STOP_OWNER");
     expect(third.reason).toBe("FROZEN_MAX_OUTAGE_EPISODES_EXCEEDED");
   });
-  it("unresolved provider science truth remains explicitly unverified after GET-only recovery",()=>{
+  it("two green GETs do NOT reset the 6+6 counter without a verified sender/source recovery witness",()=>{
+    let s=start(0);
+    for(const time of [15000,30000,45000])s=step(s,time).state;
+    s=step(s,60000,"FULLY_HEALTHY").state;
+    const out=step(s,75000,"FULLY_HEALTHY");
+    expect(out.reason).toBe("GREEN_GETS_ALONE_CANNOT_RESET_SOURCE_UNVERIFIED_EPISODE");
+    expect(out.phase).toBe("RECOVERY_PENDING");
+    expect(out.state.consecutiveFailures).toBe(3);
+    expect(out.state.episodeCount).toBe(1);
+    expect(out.state.historicalMissingSourceStillUnproven).toBe(true);
+    expect(out.originalF8SciencePassAuthorized).toBe(false);
+    const relapse=step(out.state,90000);
+    expect(relapse.phase).toBe("PRIMARY");
+    expect(relapse.state.consecutiveFailures).toBe(4);
+    expect(relapse.state.episodeCount).toBe(1);
+    // No automatic fresh 180s risk budget, even with intermittent 200 GETs.
+    expect(relapse.currentFaultEnvelopeMs).toBe(90000);
+  });
+  it("signed independent source recovery AFTER two green GETs closes exactly one episode",()=>{
     let s=start(0);
     s=step(s,15000).state;
     s=step(s,30000,"FULLY_HEALTHY").state;
-    const out=step(s,45000,"FULLY_HEALTHY");
-    expect(out.state.historicalMissingSourceStillUnproven).toBe(true);
+    const out=step(s,45000,"FULLY_HEALTHY",true);
+    expect(out.reason).toBe("SOURCE_VERIFIED_EPISODE_CLOSED_FRESH_SIX_PLUS_SIX_NEXT_OUTAGE");
+    expect(out.state.episodeCount).toBe(1);
+    expect(out.state.consecutiveFailures).toBe(0);
+    expect(out.state.cumulativeFaultEnvelopeMs).toBe(45000);
     expect(out.originalF8SciencePassAuthorized).toBe(false);
   });
   it("hard secret/runtime/identity contract failure bypasses primary tolerance",()=>{
