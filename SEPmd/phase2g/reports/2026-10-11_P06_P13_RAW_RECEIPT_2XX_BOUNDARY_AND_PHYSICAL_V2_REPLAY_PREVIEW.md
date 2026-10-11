@@ -25,3 +25,20 @@ Existing real PostgreSQL16 integration fixture extended with five cases for: exa
 This is progress on **recovery safety and exact source-to-mapper contract**, not the yet unbuilt crash-safe live end-to-end replay. The next real milestone is an **idempotent, quarantined, scientifically faithful physical-v2 replay to disposable actual UNLOGGED tables with authenticated item/time/source ledgers**, then source custody and deployed receiver changes only after safe, cost-reviewed release gate.
 
 [Issue #28](https://github.com/HKcode22/ReplitTranvr/issues/28), [P01–P20 tracker](2026-10-10_P01_P20_SUNDAY_YSSY_RELEASE_LEDGER_AND_ZERO_CREDIT_COMMANDS.md), [prior P13/P16 verified recovery](2026-10-11_P13_P16_DISPOSABLE_ORIGINAL_PENDING_RECOVERY_AND_STALE_BLOB_AUDIT.md). **[New CI #38118098397](https://github.com/HKcode22/ReplitTranvr/actions/runs/38118098397) is pending/being verified at time of original report creation; do not claim it passed until both jobs finish.**
+
+
+## Verification — finished at exact code SHA
+
+**[GitHub Actions #38118098397](https://github.com/HKcode22/ReplitTranvr/actions/runs/38118098397)**, tested code `8d3e7e20031e8c7a6f8030561caabbf2c37a77e1`, **both jobs SUCCESS**:
+- **641/641 offline tests** across 62 suites
+- **87/87 real disposable PostgreSQL16 integration tests**, including five new recovery source-to-actual-physical-v2 mapping preview cases
+- Unclean server SIGKILL again recorded `AFTER_UNCLEAN_RESTART_LOGGED_AND_UNLOGGED=1|0`.
+
+The 87 real PostgreSQL tests mock the external original-blob storage, and the preview's production V3.9 mapping is **read-only**. No actual F.8 scientific UNLOGGED rehydration, provider signed source or real billable credits were verified. The earlier disposable synthetic raw admission had incorrectly tagged its **raw only** committed receipt as permitting an HTTP 2xx; that flag has now been closed to **false for all provisional receipt statuses**, with separate explicit `normalizedPhysicalFlightV2ScienceCommitted:false`. This blocks the unsafe inference without changing production webhook handling.
+
+### Continued engineering work before source recovery can alter scientific rows
+
+- Require a frozen original-owner/session/UTC bin source ledger with independent sender item IDs/costs, not merely a hash or test HMAC. For unknown sender attempts, keep completeness unknown and received-only data clearly bounded.
+- Implement an idempotent quarantined atomic exact physical-v2 replay into DISPOSABLE UNLOGGED tables using the real resolver, preventing multiple objects/duplicate billing and preserving original source evidence. **This is not done by the current preview.**
+- Verify crash/COMMIT uncertainty, original source 168h lifecycle, privacy-conscious cleanup, and public Replit Autoscale original HTTP POST admission under a 10s upstream sender deadline.
+- Only then independently attest/deploy release code with explicit operator authorization. Do not start paid YSSY, switch main, or request further Replit compute while its free allowance indicates 100% used.
