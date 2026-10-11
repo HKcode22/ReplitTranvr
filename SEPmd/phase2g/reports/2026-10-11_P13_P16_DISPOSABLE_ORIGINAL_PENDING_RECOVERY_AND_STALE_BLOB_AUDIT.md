@@ -41,3 +41,15 @@ This is a **disposable-only experiment**; no physical-v2 SQL transformation or o
 **Correct next architecture:** the future live interface must offer a durable original-byte admission guarantee before any possible 2xx, privacy-compliant lifecycle and cleanup/expiry, short SQL session-lock scope, atomic exact attempted-original/source identities, idempotent rehydration of physical-flight-v2 in UNLOGGED tables, and a defensible uncertainty ledger for missing provider sends. Mere success of this test is **not** a YSSY GO. The user's Oct10 Replit screenshot shows free allowance 100% used; do not schedule or recommend a further two-hour Replit Shell test without cost review.
 
 Cross-references: [P05/P06 actual receiver prep optimization](2026-10-11_P05_P06_REAL_PREPAID_RECEIVER_PRELOCK_SOURCE_PREPARATION.md), [P01–P20 readiness ledger](2026-10-10_P01_P20_SUNDAY_YSSY_RELEASE_LEDGER_AND_ZERO_CREDIT_COMMANDS.md), [user/assistant decision and partial-science acceptance](../decisions/2026-10-11_YSSY_6PLUS6_SCIENTIFIC_MISSINGNESS_DECISION_RECORD.md), [P2G24 issue #28](https://github.com/HKcode22/ReplitTranvr/issues/28).
+
+
+## Final exact CI checkpoint — verified
+
+**[GitHub Actions #38117718758](https://github.com/HKcode22/ReplitTranvr/actions/runs/38117718758)**, exact tested source commit `3f3e0a0d589cb79bcb7af5a4c723505e41677752`, **both jobs SUCCESS**:
+- **641/641 offline tests** in **62 suites**
+- **82/82 actual disposable PostgreSQL16 integration tests**, six newly added P13 source-recovery/first-timestamp/stale-blob scenarios
+- Real unclean PostgreSQL SIGKILL still confirms `AFTER_UNCLEAN_RESTART_LOGGED_AND_UNLOGGED=1|0`
+
+The new fixture recovery timestamp is now `COALESCE(recovery_original_verified_utc,clock_timestamp())`; a repeated exact SHA readback preserves the first verified timestamp rather than altering the historical recovery witness. A subsequent audit independently re-downloads stored original bytes, so this timestamp never substitutes for actual present and matching content.
+
+These 82/82 tests include *real SQL* through PostgreSQL16 but mock the external object store; they do NOT demonstrate surviving Replit Autoscale cold-start, live provider callback, production App Storage readback, source attempt attribution, external billing, or a deployed replay. Candidate remains intentionally fixture-only and not invoked from the current paid callback.
