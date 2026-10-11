@@ -1,3 +1,4 @@
+import { assertNoDuplicateJsonObjectKeysV2 } from "../phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
 import {signEdgeProvenanceV1} from "./provenance";
 
 /**
@@ -72,7 +73,7 @@ export async function queueOnlyIngest(r:Request,e:QueueOnlyEnv):Promise<Response
   const sessionId=match[2];
   const providerAttemptId=r.headers.get("x-p2g-synthetic-attempt-id")??"";
   if(!isSession(sessionId)||!isAttempt(providerAttemptId))return response(400,"INVALID_SYNTHETIC_ID");
-  if(!(r.headers.get("content-type")??"").startsWith("application/json"))
+  if((r.headers.get("content-type")??"").split(";")[0].trim().toLowerCase()!=="application/json")
     return response(415,"JSON_REQUIRED");
   const rawBytes=new Uint8Array(await r.arrayBuffer());
   if(!rawBytes.length||rawBytes.length>127000)return response(413,"QUEUE_SIZE_LIMIT");
@@ -82,6 +83,8 @@ export async function queueOnlyIngest(r:Request,e:QueueOnlyEnv):Promise<Response
     const parsed=JSON.parse(rawBody);
     if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))
       return response(400,"INVALID_JSON");
+    // Block duplicate wire JSON keys before an upstream synthetic ACK.
+    assertNoDuplicateJsonObjectKeysV2(rawBody);
   }catch{return response(400,"INVALID_JSON");}
   const rawSha256=await sha(rawBytes);
   const receiptId=await sha(te.encode(sessionId+"\n"+providerAttemptId+"\n"+rawSha256));
