@@ -68,6 +68,34 @@ describe("Phase2G free-only queue Worker, synthetic-only and no R2",()=>{
     expect((await queueOnlyIngest(missing,h.env)).status).toBe(400);
     expect(h.queued).toHaveLength(0);
   });
+
+  it("P09 Queue-only source rejects duplicate or escaped-equivalent credit and identity keys before Queue ACK",async()=>{
+    const h=setup();
+    for(const body of [
+      '{"id":"first","id":"second","flights":[]}',
+      '{"id":"first","\\u0069d":"second","flights":[]}',
+      '{"deliveryAttempt":{"costCredits":1,"costCredits":2}}',
+      '{"flights":[{"operatingId":"A","operatingId":"B"}]}'
+    ]){
+      const request=new Request(url,{method:"POST",headers:{
+        "content-type":"application/json",
+        "x-p2g-synthetic-attempt-id":"fixture:0"
+      },body});
+      expect((await queueOnlyIngest(request,h.env)).status,body).toBe(400);
+    }
+    expect(h.queued).toHaveLength(0);
+  });
+  it("P09 Queue-only refuses misleading application/json suffix media types",async()=>{
+    const h=setup();
+    for(const type of ["application/jsonx","application/json-evil","application/json+anything"]){
+      const request=new Request(url,{method:"POST",headers:{
+        "content-type":type,"x-p2g-synthetic-attempt-id":"fixture:0"
+      },body:raw});
+      expect((await queueOnlyIngest(request,h.env)).status,type).toBe(415);
+    }
+    expect(h.queued).toHaveLength(0);
+  });
+
   it("does not ACK queued message while Replit receiver is unavailable",async()=>{
     const h=setup();await queueOnlyIngest(msg(h.env),h.env);
     const ack=vi.fn(),retry=vi.fn();
