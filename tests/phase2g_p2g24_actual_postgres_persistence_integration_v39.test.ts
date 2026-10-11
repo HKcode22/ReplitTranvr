@@ -1020,6 +1020,8 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       connectionTimeoutMillis:22_000,max:3
     });
     state.pool=stressPool;
+    const stageSamples:PrepaidStageTimingV39[]=[];
+    const unsubscribeStage=subscribePrepaidStageTimingV39(e=>stageSamples.push(e));
     try {
       state.uploadDelayMs=550;
       const n=22;
@@ -1061,8 +1063,31 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       console.log("STORAGE_BACKEND=in_memory_fake");
       console.log("REAL_REPLIT_LATENCY_PROVEN=false");
       console.log("SENDER_SERVER_ACK_DIVERGENCE_EXPOSED="+(ackedBySyntheticSender!==internal));
+      // These are ACTUAL V3.9 SQL stages with real disposable PostgreSQL,
+      // but fake in-memory 550ms blob storage. Metrics do NOT prove live
+      // Replit / AeroDataBox provider P99, nor independent ingress.
+      const durations=(stage:PrepaidStageTimingV39["stage"])=>
+        stageSamples.filter(e=>e.stage===stage&&e.outcome==="completed")
+          .map(e=>e.elapsed_ms).sort((a,b)=>a-b);
+      const percentile=(numbers:number[],p:number)=>
+        numbers[Math.ceil(p*numbers.length)-1];
+      const locks=durations("db_session_lock");
+      const blobs=durations("original_blob_upload_readback");
+      expect(locks).toHaveLength(n);
+      expect(blobs).toHaveLength(n);
+      expect(percentile(locks,0.95)).toBeGreaterThan(500);
+      expect(percentile(blobs,0.95)).toBeGreaterThanOrEqual(500);
+      expect(stageSamples.filter(e=>e.stage==="final_sql_commit")).toHaveLength(n);
+      expect(JSON.stringify(stageSamples)).not.toContain(TEST_ONLY_CALLBACK_SECRET);
+      expect(JSON.stringify(stageSamples)).not.toContain(SESSION);
+      console.log("SYNTHETIC_DISPOSABLE_PG_SESSION_LOCK_P50_MS="+percentile(locks,0.5));
+      console.log("SYNTHETIC_DISPOSABLE_PG_SESSION_LOCK_P95_MS="+percentile(locks,0.95));
+      console.log("SYNTHETIC_DISPOSABLE_PG_SESSION_LOCK_P99_MS="+percentile(locks,0.99));
+      console.log("SYNTHETIC_FAKE_BLOB_P95_MS="+percentile(blobs,0.95));
+      console.log("REAL_REPLIT_P99_PROVEN=false");
       expect(performance.now()-start).toBeGreaterThan(10_000);
     }finally{
+      unsubscribeStage();
       state.pool=original;
       await stressPool.end();
     }
