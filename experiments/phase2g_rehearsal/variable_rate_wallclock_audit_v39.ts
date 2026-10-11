@@ -79,6 +79,10 @@ export function assessP20VariableRateRehearsalV39(
      !Array.isArray(f.observedEdgeAttempts)||
      !Array.isArray(f.observedInternalAttempts))
     throw new Error("P20_REHEARSAL_ATTEMPT_ARRAYS_REQUIRED");
+  // A perfect healthcheck-only soak is NOT proof the webhook path works.
+  // One or more synthetic callback attempts must actually be exercised.
+  if(f.preplannedSenderAttempts.length===0)
+    bad("P20_NO_SYNTHETIC_CALLBACK_PATH_EXERCISED");
   const minutes=new Set<number>(),minuteBins=Array<number>(8).fill(0);
   for(const m of f.minutes??[]){
     if(!whole(m.minute)||m.minute>=120||minutes.has(m.minute)){
