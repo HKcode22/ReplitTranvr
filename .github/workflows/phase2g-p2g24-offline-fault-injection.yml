@@ -59,6 +59,8 @@ on:
       - tests/phase2g_yssy_bounded_loss_scientific_adjudication_v39.test.ts
       - scripts/v39_phase2g_independent_pg_delivery_readonly_observer.ts
       - tests/phase2g_independent_pg_delivery_readonly_observer_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_three_replit_failover_feasibility_v39.ts
+      - tests/phase2g_synthetic_three_replit_failover_feasibility_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_120min_acceptance_v39.ts
       - experiments/phase2g_rehearsal/synthetic_120min_irregular_trace_v39.ts
       - tests/phase2g_synthetic_120min_irregular_trace_v39.test.ts
@@ -160,6 +162,7 @@ jobs:
             tests/phase2g_yssy_zero_billable_delivery_retries_v39.test.ts \
             tests/phase2g_yssy_bounded_loss_scientific_adjudication_v39.test.ts \
             tests/phase2g_independent_pg_delivery_readonly_observer_v39.test.ts \
+            tests/phase2g_synthetic_three_replit_failover_feasibility_v39.test.ts \
             tests/phase2g_yssy_synthetic_120min_acceptance_v39.test.ts \
             tests/phase2g_synthetic_120min_irregular_trace_v39.test.ts \
             tests/phase2g_synthetic_120min_science_recovery_audit_v39.test.ts \
