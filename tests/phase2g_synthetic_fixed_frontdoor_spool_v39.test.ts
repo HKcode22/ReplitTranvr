@@ -164,6 +164,34 @@ describe("P09/P18 one fixed source-spooling front door (actual LOCAL HTTP + fsyn
     expect(receiverRecords.size).toBe(1);
     expect(original.attempts).toBe(2); // two POSTs, one original row
   });
+  it.each([0,65537])(
+    "bulk replay refuses tampered original source receipts with out-of-contract byte count %s",
+    async (size)=>{
+      // Direct get() already rejects these, but replayToLocalReceivers()
+      // enumerates readAll(): both paths must apply identical bounds.
+      const attempt="invalid-source-size-"+size;
+      const id=sha(attempt);
+      const bytes=Buffer.alloc(size,65);
+      await writeFile(join(root,"raw",id+".bin"),bytes);
+      await writeFile(join(root,"receipts",id+".json"),JSON.stringify({
+        schema:"v39.synthetic-fixed-frontdoor-receipt.v1",
+        attemptHash:id,rawSha256:createHash("sha256").update(bytes).digest("hex"),
+        rawBytes:size
+      }));
+      await expect(spool.get(attempt)).rejects.toThrow(
+        "SYNTHETIC_FRONTDOOR_RECEIPT_TAMPERED");
+      await expect(spool.readAll()).rejects.toThrow(
+        "SYNTHETIC_FRONTDOOR_RECEIPT_TAMPERED");
+      const receiver=await receive("accept");
+      await expect(spool.replayToLocalReceivers([receiver.url]))
+        .rejects.toThrow("SYNTHETIC_FRONTDOOR_RECEIPT_TAMPERED");
+      expect(receiverRecords.size).toBe(0);
+      const audit=await spool.auditCrashRecoveryReadOnly();
+      expect(audit.corruptedOriginalReceiptCount).toBe(1);
+      expect(audit.allOriginalReceiptsVerified).toBe(false);
+      expect(audit.paidLaunchAuthorized).toBe(false);
+    }
+  );
   it("tampered ORIGINAL source fails closed, no replay or deletion",async()=>{
     const edge=await createSyntheticFixedFrontdoorHttpV39({spool,token});
     opened.push(edge.server);
