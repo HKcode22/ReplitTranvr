@@ -2527,4 +2527,32 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     console.log("P14_PAID_YSSY_GO_AUTHORIZED=false");
   });
 
+  it("P14 V3.9 rejects fractional, negative, string-coerced, or unsafe-int provider credits instead of silently rounding source evidence",async()=>{
+    for(const [i,cost] of [1.5,-2,"5",Number.MAX_SAFE_INTEGER+1].entries()){
+      const claim=sample({
+        id:"synthetic-p14-invalid-credits-"+i,
+        deliveryAttempt:{
+          seqNo:0,costCredits:cost,
+          timestampUtc:"2026-10-12T03:05:01.000Z"
+        },
+        flights:[{
+          id:"synthetic-p14-invalid-item-"+i,
+          number:"QF899",codeshareStatus:"IsOperator",
+          airline:{iata:"QF",icao:"QFA"},
+          departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+            scheduledTime:{utc:"2026-10-12T03:40:00.000Z"}},
+          arrival:{airport:{icao:"YMEL"},
+            scheduledTime:{utc:"2026-10-12T05:40:00.000Z"}}
+        }]
+      });
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body:claim,
+        receivedAtUtc:new Date("2026-10-12T03:05:02.000Z")
+      })).rejects.toThrow("PREPAID_PROBE_PROVIDER_CREDIT_COUNT_INVALID");
+      expect(await count()).toMatchObject({logged:0,unlogged:0});
+    }
+    console.log("P14_REAL_V39_NONINTEGER_CREDITS_REFUSED_BEFORE_SOURCE_ACK=true");
+    console.log("P14_REAL_PROVIDER_ATTEMPT_LEDGER_VERIFIED=false");
+  });
+
 });
