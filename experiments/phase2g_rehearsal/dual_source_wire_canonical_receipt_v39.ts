@@ -203,6 +203,12 @@ export async function createSyntheticDualSourceMessageV2(input:{
      typeof attemptTime!=="string"||!iso(attemptTime)||
      typeof generatedTime!=="string"||!iso(generatedTime))
      throw new Error("SOURCE_PINNED_ATTEMPT_CONTRACT_INVALID");
+  // AeroDataBox Flight Alert billing is per FLIGHT ITEM, not per webhook.
+  // For a nonempty synthetic flight array a stated credit cost must equal
+  // that array length. Empty legacy emulator envelopes remain isolated test
+  // fixtures; production sender-cost provenance is still unverified.
+  if(Array.isArray(obj.flights)&&obj.flights.length>0&&cost!==obj.flights.length)
+    throw new Error("SOURCE_FLIGHT_ITEM_CREDIT_COUNT_MISMATCH");
   const wireSha256=await sha(input.rawBytes);
   const canonicalSha256=await sha(legacyV39CanonicalJsonV2(obj));
   const attemptKey=await sha([
