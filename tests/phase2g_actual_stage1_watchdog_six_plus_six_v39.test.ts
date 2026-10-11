@@ -1,6 +1,7 @@
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
 import {describe,it,expect} from "vitest";
+import ts from "typescript";
 import {
   advanceStage1WatchdogV39,
   initialStage1WatchdogStateV39,
@@ -90,6 +91,35 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
     expect(source).toContain("callback_watchdog_source_proof_implemented: false");
     expect(source).toContain("evidence:undefined");
     expect(source).toContain('const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3');
+  });
+  it("actual paid supervisor's four-stage callback health has independent 40-second kill timer with guaranteed cleanup",()=>{
+    const source=readFileSync(join(process.cwd(),
+      "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
+    const ast=ts.createSourceFile("supervisor.ts",source,
+      ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+    let watchdog:ts.CallExpression|undefined;
+    function visit(n:ts.Node):void{
+      if(ts.isVariableDeclaration(n)&&n.name.getText(ast)==="callbackWatchdog"&&
+         n.initializer&&ts.isCallExpression(n.initializer)&&
+         n.initializer.expression.getText(ast)==="setInterval")
+        watchdog=n.initializer;
+      ts.forEachChild(n,visit);
+    }
+    visit(ast);
+    expect(watchdog).toBeDefined();
+    const src=watchdog!.getText(ast);
+    expect(source).toContain("CALLBACK_HEALTH_CYCLE_HARD_DEADLINE_MS = 40_000");
+    expect(src).toContain("const healthCycleDeadline = setTimeout(");
+    expect(src).toContain('requestTermination("SIGTERM", "workspace_callback_health_cycle_hard_timeout")');
+    expect(src).toContain("healthCycleDeadline.unref()");
+    expect(src).toContain("clearTimeout(healthCycleDeadline)");
+    expect(src).toContain("callbackCheckInFlight = false");
+    expect(src).toContain("if (callbackCheckInFlight || child.exitCode !== null || child.killed) return");
+    expect(src).toContain("advanceStage1WatchdogV39({");
+    // A scheduled timeout cannot be replaced by checking elapsed time only
+    // after a potentially hung callbackHealthy() promise resolves.
+    expect(src.indexOf("const healthCycleDeadline = setTimeout("))
+      .toBeLessThan(src.indexOf("await callbackHealthy("));
   });
   it("legacy default stops at THIRD consecutive 503 even with no source proof",()=>{
     const r=observe({mode:"legacy-three",failures:4});
