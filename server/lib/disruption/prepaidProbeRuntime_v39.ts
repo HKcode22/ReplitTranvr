@@ -877,6 +877,10 @@ export async function persistPrepaidProbeWebhookV39(input: {
   const receivedAt = input.receivedAtUtc ?? new Date();
   if (!Number.isFinite(receivedAt.getTime())) throw new Error("PREPAID_PROBE_RECEIVED_AT_INVALID");
   let failureSavepointOpen = false;
+  // A lost PostgreSQL COMMIT response does not prove rollback. Until the
+  // result is known, retain the original Replit blob: deleting it could
+  // destroy source evidence of a transaction that actually committed.
+  let sourceCommitOutcomeUnknown = false;
   const client = await pool.connect();
   let store: ReturnType<typeof createRequiredProviderBlobStoreV39> | null = null;
   let blob: ProviderBlobRefV39 | null = null;
@@ -1141,7 +1145,9 @@ export async function persistPrepaidProbeWebhookV39(input: {
         WHERE session_id=$1`,
       [sessionId],
     );
+    sourceCommitOutcomeUnknown = true;
     await client.query("COMMIT");
+    sourceCommitOutcomeUnknown = false;
     return { deliveryId, blobRefId: blob.blobRefId, itemCount: flights.length, duplicate: false };
   } catch (error) {
     let failureRecordedUnderLock = false;
@@ -1189,7 +1195,11 @@ export async function persistPrepaidProbeWebhookV39(input: {
       (error as { phase2gFailureRecorded?: boolean })
         .phase2gFailureRecorded = true;
     }
-    if (store && blob) {
+    if (store && blob && !sourceCommitOutcomeUnknown) {
+      // Safe only before the source transaction attempted COMMIT. A COMMIT
+      // error can mean the server committed and the reply was lost.
+      // Retain that original blob for explicit read-only reconciliation;
+      // never convert a possible committed source into permanent data loss.
       try {
         await deleteProviderBlobAtExpiryV39({
           store,
