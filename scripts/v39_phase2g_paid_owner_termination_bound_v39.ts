@@ -44,12 +44,15 @@ export function armStage1PaidOwnerTerminationBoundV39(input:Readonly<{
 /** A clean OS exit is not proof of scientific completion if supervision stopped
  * the paid owner. Treat every explicit shutdown/watchdog stop as failed and
  * enter the existing exact-session recovery/settlement path. */
+export const STAGE1_PAID_OWNER_MIN_MONOTONIC_MS_V39 = 120 * 60_000 as const;
+
 export function stage1PaidOwnerExitVerdictV39(input: Readonly<{
   code: number | null;
   signal: NodeJS.Signals | null;
   spawnError: string | null;
   terminationRequested: boolean;
   watchdogTriggered: boolean;
+  elapsedMonotonicMs: number;
 }>): { passed: boolean; reason: string } {
   if (input.watchdogTriggered)
     return { passed: false, reason: "WATCHDOG_INTERRUPTED_OWNER" };
@@ -61,5 +64,8 @@ export function stage1PaidOwnerExitVerdictV39(input: Readonly<{
     return { passed: false, reason: "OWNER_TERMINATED_BY_SIGNAL" };
   if (input.code !== 0)
     return { passed: false, reason: "OWNER_NOT_CLEAN_ZERO_EXIT" };
+  if (!Number.isFinite(input.elapsedMonotonicMs) ||
+      input.elapsedMonotonicMs < STAGE1_PAID_OWNER_MIN_MONOTONIC_MS_V39)
+    return { passed: false, reason: "OWNER_UNDER_120_MINUTES" };
   return { passed: true, reason: "CLEAN_ZERO_EXIT_NO_SUPERVISOR_ABORT" };
 }
