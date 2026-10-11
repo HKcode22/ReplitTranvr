@@ -53,6 +53,10 @@ describe("P20 120m realistic variable-rate rehearsal evidence, no provider/no ho
     expect(r.scientificPassAuthorized).toBe(false);
     expect(r.wallClockHostContinuityProven).toBe(false);
   });
+  it("rejects a 120-minute GET-only soak without even one synthetic callback",()=>{
+    const a=fixture([]);
+    rejects(a,"P20_NO_SYNTHETIC_CALLBACK_PATH_EXERCISED");
+  });
   it("accepts zero callbacks in one 15m interval without inventing science data",()=>{
     const smaller=fixture([0,1,45,61,80,92,119]);
     const r=assessP20VariableRateRehearsalV39(smaller);
