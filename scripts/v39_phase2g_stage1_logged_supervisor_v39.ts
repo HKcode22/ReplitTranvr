@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { enforcePaidGuard, verifyAuthFile } from "./v39_paid_guard_v39";
-import { armStage1PaidOwnerTerminationBoundV39, type PaidOwnerTerminationEscalationV39 } from "./v39_phase2g_paid_owner_termination_bound_v39";
+import { armStage1PaidOwnerTerminationBoundV39, stage1PaidOwnerExitVerdictV39, type PaidOwnerTerminationEscalationV39 } from "./v39_phase2g_paid_owner_termination_bound_v39";
 import {verifyStage1PublishedDatabaseLiveV39} from "./phase2gStage1PublishedDatabaseLivePreflight_v39";
 import {
   advanceStage1WatchdogV39,initialStage1WatchdogStateV39,
@@ -347,7 +347,7 @@ async function main(): Promise<void> {
             observed_at_utc:new Date().toISOString(),
             action:"sigkill_unresponsive_local_paid_child_then_recover",
             reason:"paid_child_unresponsive_after_sigterm_grace"
-          })}\\n`);
+          })}\n`);
           fs.fsyncSync(logFd);
           child.kill("SIGKILL");
         }
@@ -454,14 +454,21 @@ async function main(): Promise<void> {
 
   const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null; spawnError: string | null }>((resolve) => {
     let spawnError: string | null = null;
-    child.once("error", (error) => { spawnError = error.message; });
-    child.once("exit", (code, signal) => resolve({ code, signal, spawnError }));
+    // Node guarantees close after an error or exit; exit itself can be absent
+    // when spawn fails. Never put a raw OS error message into paid evidence.
+    child.once("error", () => { spawnError = "child_spawn_or_process_error"; });
+    child.once("close", (code, signal) => resolve({ code, signal, spawnError }));
   });
   forcedOwnerKillDeadline?.cancel();
   clearInterval(heartbeat);
   clearInterval(callbackWatchdog);
 
-  const childPassed = exit.code === 0 && !exit.signal && !exit.spawnError;
+  const exitVerdict = stage1PaidOwnerExitVerdictV39({
+    ...exit,
+    terminationRequested: terminationSignal !== null,
+    watchdogTriggered: callbackWatchdogTriggered,
+  });
+  const childPassed = exitVerdict.passed;
   fs.writeSync(logFd, `${JSON.stringify({
     schema: "v39.command-evidence.v1",
     command: "v39:probe:stage1",
@@ -469,6 +476,7 @@ async function main(): Promise<void> {
     owner: "scripts/v39_probe_stage1_owner_v39.ts",
     evidenceId: null,
     status: childPassed ? "PASS" : "FAIL",
+    exit_verdict_reason: exitVerdict.reason,
     exitCode: exit.code ?? 1,
     error: exit.spawnError,
   })}\n`);
@@ -516,6 +524,7 @@ async function main(): Promise<void> {
     child_exit_code: exit.code,
     child_signal: exit.signal,
     child_spawn_error: exit.spawnError,
+    child_exit_verdict_reason: exitVerdict.reason,
     termination_signal_seen_by_supervisor: terminationSignal,
     callback_watchdog_triggered: callbackWatchdogTriggered,
     callback_watchdog_policy: callbackWatchdogMode,
