@@ -233,6 +233,65 @@ describe("P09/P18 one fixed source-spooling front door (actual LOCAL HTTP + fsyn
     expect((await spool.get("after-truncated"))?.rawSha256)
       .toBe(createHash("sha256").update(raw("after-truncated")).digest("hex"));
   });
+  it("P17/P20 VIRTUAL 120-minute source manifest stays exact across 8 bins and two 3-minute primary outages",async()=>{
+    // Deterministically simulate UTC time stamps ONLY. HTTP test itself
+    // completes quickly and does NOT prove a 120-minute published service.
+    const pinned=await createSyntheticFixedFrontdoorHttpV39({spool,token});
+    opened.push(pinned.server);
+    const primaryDown=await receive("unavailable");
+    const warmStandby=await receive("accept");
+    const startUtc=Date.parse("2026-10-12T03:00:00.000Z");
+    const manifest=new Map<string,{bin:number;original:Buffer}>();
+    const perBin=new Array<number>(8).fill(0);
+    let inFirstOutage=0,inSecondOutage=0;
+    for(let bin=0;bin<8;bin++){
+      for(let i=0;i<16;i++){
+        const minute=bin*15+Math.min(14,Math.floor(i*15/16));
+        const id="virtual-2h-"+bin+"-"+i;
+        const original=Buffer.from(JSON.stringify({
+          schema:"SYNTHETIC-ONLY-NOT-AERODATABOX",
+          generatedAtUtc:new Date(startUtc+minute*60_000).toISOString(),
+          syntheticSourceAttempt:id,
+          syntheticFlightDelayMinutes:(i*17+bin*11)%145,
+          physicalFlightId:"SYNTHETIC-"+bin+"-"+i,
+          bin
+        }));
+        manifest.set(sha(id),{bin,original});
+        if(minute>=29&&minute<32)inFirstOutage++;
+        if(minute>=89&&minute<92)inSecondOutage++;
+        const posted=await sender(pinned.url,id,original);
+        expect(posted.status).toBe(202);
+        perBin[bin]++;
+      }
+    }
+    expect(perBin).toEqual(Array(8).fill(16));
+    expect(inFirstOutage).toBeGreaterThan(0);
+    expect(inSecondOutage).toBeGreaterThan(0);
+    const received=await spool.readAll();
+    expect(received).toHaveLength(128);
+    const reconstructed=new Array<number>(8).fill(0);
+    for(const {receipt,original} of received){
+      const submitted=manifest.get(receipt.attemptHash);
+      expect(submitted).toBeDefined();
+      expect(Buffer.from(original).equals(submitted!.original)).toBe(true);
+      expect(receipt.rawSha256).toBe(createHash("sha256").update(original).digest("hex"));
+      reconstructed[submitted!.bin]++;
+    }
+    expect(reconstructed).toEqual(perBin);
+    const delivered=await spool.replayToLocalReceivers([primaryDown.url,warmStandby.url]);
+    expect(delivered).toMatchObject({
+      considered:128,forwarded:128,rejectedOrUnavailable:0,
+      originalProviderWitnessVerified:false,paidLaunchAuthorized:false
+    });
+    expect(receiverRecords.size).toBe(128);
+    expect((await spool.replayToLocalReceivers([warmStandby.url])).skippedAlreadyAcknowledged).toBe(128);
+    console.log("SYNTHETIC_VIRTUAL_120_MINUTES_PRESERVED=120");
+    console.log("SYNTHETIC_VIRTUAL_8_BINS_SOURCE_COUNTS="+reconstructed.join(","));
+    console.log("SYNTHETIC_VIRTUAL_TWO_3MIN_BACKEND_OUTAGES=true");
+    console.log("SYNTHETIC_VIRTUAL_ORIGINAL_SOURCE_ITEMS=128");
+    console.log("REAL_120MIN_HOSTED_REHEARSAL_PERFORMED=false");
+    console.log("AERODATABOX_EXTERNAL_SOURCE_WITNESS=false");
+  },30000);
   it("22 concurrent real loopback sender POSTs persist distinct original bytes then drain deterministically",async()=>{
     const edge=await createSyntheticFixedFrontdoorHttpV39({spool,token});
     opened.push(edge.server);
