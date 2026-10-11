@@ -916,6 +916,8 @@ type PrepaidDuplicatePreflightV39=Readonly<{
   contractVersion:string;
   contentClass:string;
   sourceKind:string;
+  /** Monotonic process-local timestamp; never sourced from webhook headers. */
+  verifiedAtMonotonicMs:number;
 }>;
 /**
  * Only for previously committed identities, NOT newly submitted originals.
@@ -976,7 +978,8 @@ async function readPrepaidDuplicateOutsideLockV39(input:{
       expiresAtUtc:new Date(x.expires_at_utc).toISOString(),
       retentionHours:Number(x.retention_hours),
       storageKind:x.storage_kind,contractVersion:x.contract_version,
-      contentClass:x.content_class,sourceKind:x.source_kind
+      contentClass:x.content_class,sourceKind:x.source_kind,
+      verifiedAtMonotonicMs:performance.now()
     };
   }catch{
     // The ordinary path still checks the original under the lock and
@@ -1119,7 +1122,15 @@ export async function persistPrepaidProbeWebhookV39(input: {
       preflight.sourceKind===previous.source_kind;
     if(preflight!==null&&!preflightMatches)
       throw new Error("PREPAID_PROBE_DUPLICATE_PRELOCK_SOURCE_REF_CHANGED");
-    if(!preflightMatches){
+    // Preflight is a SNAPSHOT, not an immutable object version token.
+    // A large session-lock wait widens the TOCTOU gap. Re-read current
+    // original bytes under the lock if source verification is stale; never
+    // turn an old successful remote readback into a later false 2xx.
+    const preflightFresh=preflightMatches&&
+      Number.isFinite(preflight!.verifiedAtMonotonicMs)&&
+      performance.now()-preflight!.verifiedAtMonotonicMs>=0&&
+      performance.now()-preflight!.verifiedAtMonotonicMs<=200;
+    if(!preflightFresh){
       // Legacy path for disabled preflight, unknown deliveries, failed
       // readback, missing metadata or storage failure. Keep the lock,
       // byte/SHA checks and failure accounting exactly as before.
