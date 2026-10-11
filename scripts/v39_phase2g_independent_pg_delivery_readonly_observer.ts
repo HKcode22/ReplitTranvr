@@ -31,6 +31,8 @@ export function summarizeReadOnlyPgObservationsV39(input:{
   callbackRequestsSeen:number;callbackSuccess2xx:number;
   callbackFailures:number;deliveryRows:number;
   deliveryItemCount:number;deliveryAttemptCostClaims:number;
+  deliveriesWithMissingExplicitCredit:number;
+  deliveriesWithLocalCostItemMismatch:number;
   perBinNotificationItems:readonly number[];
   perBinDeliveryRows:readonly number[];
 }){
@@ -39,9 +41,14 @@ export function summarizeReadOnlyPgObservationsV39(input:{
     [...input.perBinNotificationItems,...input.perBinDeliveryRows,
       input.callbackRequestsSeen,input.callbackSuccess2xx,
       input.callbackFailures,input.deliveryRows,input.deliveryItemCount,
-      input.deliveryAttemptCostClaims,input.sessionRows]
+      input.deliveryAttemptCostClaims,input.sessionRows,
+      input.deliveriesWithMissingExplicitCredit,
+      input.deliveriesWithLocalCostItemMismatch]
       .some(v=>!Number.isSafeInteger(v)||v<0))
     throw Error("READONLY_OBSERVER_INVALID_DB_COUNTERS");
+  if(input.deliveriesWithMissingExplicitCredit>input.deliveryRows||
+     input.deliveriesWithLocalCostItemMismatch>input.deliveryRows)
+    throw Error("READONLY_OBSERVER_LOCAL_CREDIT_COUNTERS_INVALID");
   if(input.perBinDeliveryRows.reduce((a,b)=>a+b,0)>input.deliveryRows||
      input.perBinNotificationItems.reduce((a,b)=>a+b,0)>input.deliveryItemCount)
     throw Error("READONLY_OBSERVER_BINS_EXCEED_RECEIVED_TOTALS");
@@ -56,6 +63,10 @@ export function summarizeReadOnlyPgObservationsV39(input:{
     prospectivePaidSixPlusSixEnabled:false as const,
     ...input,
     runtimeSessionMissing:input.sessionRows!==1,
+    locallyClaimedCreditReconciliationNeedsReview:
+      input.deliveriesWithMissingExplicitCredit>0||
+      input.deliveriesWithLocalCostItemMismatch>0||
+      input.deliveryAttemptCostClaims!==input.deliveryItemCount,
     receivedDeliveriesOutsideFrozenWindow:
       input.deliveryRows-input.perBinDeliveryRows.reduce((a,b)=>a+b,0),
     persistedBinItemCount:
@@ -83,7 +94,10 @@ export async function readReadOnlyPgSnapshotV39(
     const delivery=await reader.query(`
       SELECT count(*)::int AS n,
         COALESCE(sum(notification_items),0)::bigint AS items,
-        COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::bigint AS claimed_cost
+        COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::bigint AS claimed_cost,
+        count(*) FILTER (WHERE delivery_attempt_cost_credits IS NULL)::int AS cost_missing,
+        count(*) FILTER (WHERE delivery_attempt_cost_credits IS NOT NULL
+          AND delivery_attempt_cost_credits IS DISTINCT FROM notification_items)::int AS cost_item_mismatch
       FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1
     `,[input.sessionId]);
     const bins=await reader.query(`
@@ -114,6 +128,8 @@ export async function readReadOnlyPgSnapshotV39(
       deliveryRows:Number(delivery.rows[0].n),
       deliveryItemCount:Number(delivery.rows[0].items),
       deliveryAttemptCostClaims:Number(delivery.rows[0].claimed_cost),
+      deliveriesWithMissingExplicitCredit:Number(delivery.rows[0].cost_missing),
+      deliveriesWithLocalCostItemMismatch:Number(delivery.rows[0].cost_item_mismatch),
       perBinNotificationItems:itemRows,
       perBinDeliveryRows:deliveryRows,
     });
