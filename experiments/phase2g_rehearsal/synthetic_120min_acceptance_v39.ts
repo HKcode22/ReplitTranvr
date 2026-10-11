@@ -1,5 +1,10 @@
 /**
- * Phase2G synthetic 120-minute rehearsal acceptance contract.
+ * LEGACY ILLUSTRATIVE MOCK-MANIFEST CHECKER ONLY. The fixed 120 attempts
+ * and exactly 15 webhook callbacks per 15-minute bin below are TEST FIXTURE
+ * SHAPES, NOT F.8 §9.2 scientific first-physical-flight yield and not a
+ * faithful empirical webhook load. Never use a V1 green result as a final
+ * rehearsal GO. The independently frozen irregular-traffic and physical-v2
+ * acceptance candidate is synthetic_120min_irregular_trace_v39.ts (V2).
  *
  * Pure offline validator; does NOT drive provider calls, publish to Replit,
  * create Cloudflare resources, inspect customer data, or authorize a paid run.
