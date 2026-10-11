@@ -44,6 +44,7 @@ import {
   recordPrepaidProbeCallbackFailureV39,
   recordPrepaidProbeIngressFailureV39,
 } from "./lib/disruption/prepaidProbeRuntime_v39";
+import { assertPrepaidOriginalJsonStructureV39 } from "./lib/disruption/prepaidOriginalJsonStructure_v39";
 import { verifyAuthRecord, approvedArtifactHashesFromLedger, sha256HexString, type AuthRecord } from "./lib/disruption/authRecord_v39";
 import { v39Pool as pool } from "./lib/disruption/db_v39";
 import {verifyReadOnlyDbLivePreflightV39} from "./lib/disruption/phase2gDbLivePreflight_v39";
@@ -320,6 +321,11 @@ export function registerV3Routes(app:Express):void{
   const prepaidJsonParser = json({
     limit: "2mb",
     verify: (req, _res, buf) => {
+      // Never let JSON.parse silently overwrite provider attempt, flight
+      // identity or billable item-credit keys (including escaped aliases).
+      // This checks real received bytes BEFORE the canonicalizing store,
+      // but is NOT an independently authenticated original-wire archive.
+      assertPrepaidOriginalJsonStructureV39(buf);
       req.rawBody = buf;
     },
   });
