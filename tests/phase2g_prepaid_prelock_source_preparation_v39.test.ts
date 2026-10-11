@@ -72,7 +72,7 @@ describe("P05/P06 production prepaid source prep moves deterministic SHA workloa
     const fragment=source.slice(fn,source.indexOf("/**\n * pg NUMERIC",fn));
     const prepared=fragment.indexOf("preparePrepaidProbeSourceV39(sessionId,input.body)");
     const connect=fragment.indexOf("pool.connect()");
-    const lock=fragment.indexOf("FOR UPDATE");
+    const lock=fragment.indexOf("FOR UPDATE`",connect);
     const commit=fragment.lastIndexOf('client.query("COMMIT")');
     expect(fn).toBeGreaterThan(0);
     expect(prepared).toBeGreaterThanOrEqual(0);
