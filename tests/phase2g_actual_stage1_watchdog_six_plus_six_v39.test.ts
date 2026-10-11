@@ -226,6 +226,32 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
       health:transient,nowMonotonicMs:4000,evidence:knownProof()
     })).toThrow("P15_WATCHDOG_INVALID_OR_NONMONOTONIC_STATE");
   });
+  it("return to healthy after 1 failure but WITHOUT original source proof never grants candidate extension or scientific PASS",()=>{
+    const r=observe({failures:1,recover:true});
+    expect(r.steps).toHaveLength(2);
+    expect(r.last).toMatchObject({
+      action:"STOP_OWNER",
+      reason:"RECOVERED_HEALTH_WITH_UNVERIFIED_SCIENTIFIC_SOURCE",
+      state:{terminated:true}
+    });
+    noPaid(r.last);
+  });
+  it("a healthy-looking response after 180s cannot bypass bounded 6+6 wall-clock censorship",()=>{
+    const prior=advanceStage1WatchdogV39({
+      mode:"six-plus-six-candidate",
+      previous:initialStage1WatchdogStateV39(),
+      health:transient,nowMonotonicMs:1000,evidence:knownProof()
+    });
+    const recovered=advanceStage1WatchdogV39({
+      mode:"six-plus-six-candidate",
+      previous:prior.state,health:healthy,
+      nowMonotonicMs:181000,evidence:knownProof()
+    });
+    expect(recovered).toMatchObject({
+      action:"STOP_OWNER",reason:"SIX_PLUS_SIX_WALL_CLOCK_MAX_EXCEEDED"
+    });
+    noPaid(recovered);
+  });
   it("six plus six never mutates provider retries, bills credits or grants paid owner authority",()=>{
     const r=observe({failures:10,proof:knownProof()});
     expect(r.last.action).toBe("MONITOR");
