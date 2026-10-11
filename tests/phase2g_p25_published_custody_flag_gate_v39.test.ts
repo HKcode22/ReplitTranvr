@@ -43,6 +43,10 @@ describe("P25 production callback source-custody feature-gate binding, no provid
   it("paid preflight also checks actually present LOGGED V0064 schema",()=>{
     expect(preflight).toContain("health.json?.prepaid_source_custody_ready === true");
     expect(preflight).toContain("source_intent_v0064_table");
+    expect(preflight).toContain("source_intent_v0064_guard_trigger");
+    expect(preflight).toContain("v0064_logged_original_source_immutability_guard_missing_or_disabled");
+    expect(preflight).toContain("tg.tgfoid=to_regprocedure('clean.guard_p2g_prepaid_source_intent_v39()')");
+    expect(preflight).toContain("tg.tgenabled='O'");
     expect(preflight).toContain("v0064_logged_original_source_pending_intent_migration_missing");
     expect(preflight).toContain("open_incidents=");
   });
