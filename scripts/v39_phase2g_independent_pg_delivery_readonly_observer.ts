@@ -42,6 +42,9 @@ export function summarizeReadOnlyPgObservationsV39(input:{
       input.deliveryAttemptCostClaims,input.sessionRows]
       .some(v=>!Number.isSafeInteger(v)||v<0))
     throw Error("READONLY_OBSERVER_INVALID_DB_COUNTERS");
+  if(input.perBinDeliveryRows.reduce((a,b)=>a+b,0)>input.deliveryRows||
+     input.perBinNotificationItems.reduce((a,b)=>a+b,0)>input.deliveryItemCount)
+    throw Error("READONLY_OBSERVER_BINS_EXCEED_RECEIVED_TOTALS");
   return {
     schema:"v39.phase2g-readonly-db-independent-observation.v1" as const,
     observationSource:"POSTGRESQL_ONLY_NOT_PROVIDER_SENDER" as const,
@@ -51,37 +54,39 @@ export function summarizeReadOnlyPgObservationsV39(input:{
     missingRate:null as null,
     scientificCompletenessVerified:false as const,
     prospectivePaidSixPlusSixEnabled:false as const,
-    ...input
+    ...input,
+    runtimeSessionMissing:input.sessionRows!==1,
+    receivedDeliveriesOutsideFrozenWindow:
+      input.deliveryRows-input.perBinDeliveryRows.reduce((a,b)=>a+b,0),
+    persistedBinItemCount:
+      input.perBinNotificationItems.reduce((a,b)=>a+b,0),
+    persistedBinDeliveryCount:
+      input.perBinDeliveryRows.reduce((a,b)=>a+b,0),
   };
 }
-async function main():Promise<void>{
-  const input={
-    sessionId:arg("--session-id").toLowerCase(),
-    startUtc:arg("--window-start"),
-    endUtc:arg("--window-end")
-  };
+/**
+ * Executes ONLY SELECTs using caller's already-established consistent
+ * READ-ONLY transaction (tested against actual disposable V3.9 PG schema).
+ * Neither a provider-sent ledger nor Replit raw original object reader.
+ */
+export async function readReadOnlyPgSnapshotV39(
+  reader:{query:(sql:string,parameters?:any[])=>Promise<{rows:any[];rowCount:number|null}>},
+  input:{sessionId:string;startUtc:string;endUtc:string}
+){
   assertReadOnlyPgObservationArgsV39(input);
-  const url=String(process.env.V39_DATABASE_RUNTIME_URL??"").trim();
-  if(!url)throw Error("READONLY_OBSERVER_RUNTIME_DB_URL_REQUIRED");
-  const pool=new Pool({connectionString:url,connectionTimeoutMillis:3000,max:1});
-  let client:Awaited<ReturnType<typeof pool.connect>>|null=null;
-  try{
-    client=await pool.connect();
-    await client.query("BEGIN TRANSACTION READ ONLY");
-    await client.query("SET LOCAL statement_timeout = '5000ms'");
-    const life=await client.query(
+    const life=await reader.query(
       "SELECT pg_postmaster_start_time() AS postmaster_start_utc");
-    const session=await client.query(`
+    const session=await reader.query(`
       SELECT callback_requests_seen,callback_success_2xx,callback_failures
       FROM clean.prepaid_probe_session_runtime WHERE session_id=$1
     `,[input.sessionId]);
-    const delivery=await client.query(`
+    const delivery=await reader.query(`
       SELECT count(*)::int AS n,
         COALESCE(sum(notification_items),0)::bigint AS items,
         COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::bigint AS claimed_cost
       FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1
     `,[input.sessionId]);
-    const bins=await client.query(`
+    const bins=await reader.query(`
       SELECT floor(extract(epoch FROM (received_at_utc-$2::timestamptz))/900)::int AS bin,
         count(*)::int AS deliveries,
         COALESCE(sum(notification_items),0)::bigint AS items
@@ -91,7 +96,6 @@ async function main():Promise<void>{
         AND received_at_utc < $3::timestamptz
       GROUP BY bin
     `,[input.sessionId,input.startUtc,input.endUtc]);
-    await client.query("COMMIT");
     const deliveryRows=Array(8).fill(0),itemRows=Array(8).fill(0);
     for(const r of bins.rows){
       const i=Number(r.bin);
@@ -113,6 +117,26 @@ async function main():Promise<void>{
       perBinNotificationItems:itemRows,
       perBinDeliveryRows:deliveryRows,
     });
+
+  return observation;
+}
+async function main():Promise<void>{
+  const input={
+    sessionId:arg("--session-id").toLowerCase(),
+    startUtc:arg("--window-start"),
+    endUtc:arg("--window-end")
+  };
+  assertReadOnlyPgObservationArgsV39(input);
+  const url=String(process.env.V39_DATABASE_RUNTIME_URL??"").trim();
+  if(!url)throw Error("READONLY_OBSERVER_RUNTIME_DB_URL_REQUIRED");
+  const pool=new Pool({connectionString:url,connectionTimeoutMillis:3000,max:1});
+  let client:Awaited<ReturnType<typeof pool.connect>>|null=null;
+  try{
+    client=await pool.connect();
+    await client.query("BEGIN TRANSACTION READ ONLY");
+    await client.query("SET LOCAL statement_timeout = '5000ms'");
+    const observation=await readReadOnlyPgSnapshotV39(client,input);
+    await client.query("COMMIT");
     // No URL, host, password, webhook path, raw body or provider secret.
     process.stdout.write(JSON.stringify({
       ...observation,sessionFingerprint:hash(input.sessionId).slice(0,16),
