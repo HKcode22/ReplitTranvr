@@ -1,3 +1,4 @@
+import {readBoundedSourceWireV39,SourceWireBodyErrorV39} from "./bounded_wire_body";
 import { assertNoDuplicateJsonObjectKeysV2 } from "../phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
 import { signEdgeProvenanceV1 } from "./provenance";
 /**
@@ -111,10 +112,17 @@ export async function ingest(request:Request,e:Env):Promise<Response>{
     return json({error:"TEST_ATTEMPT_OR_SESSION_INVALID"},400);
   if((request.headers.get("content-type")??"").split(";")[0].trim().toLowerCase()!=="application/json")
     return json({error:"CONTENT_TYPE"},415);
-  const max=maxBytes(e),length=Number(request.headers.get("content-length")??"0");
-  if(Number.isFinite(length)&&length>max)return json({error:"BODY_TOO_LARGE"},413);
-  const bytes=new Uint8Array(await request.arrayBuffer());
-  if(!bytes.byteLength||bytes.byteLength>max)return json({error:"BODY_TOO_LARGE"},413);
+  const max=maxBytes(e);
+  let bytes:Uint8Array;
+  try{
+    bytes=await readBoundedSourceWireV39(request,max);
+  }catch(error){
+    if(error instanceof SourceWireBodyErrorV39)
+      return json({error:error.reason},
+        error.reason==="SOURCE_WIRE_TOO_LARGE"?413:400);
+    throw error;
+  }
+  if(!bytes.byteLength)return json({error:"BODY_TOO_LARGE"},413);
   try{
     // Reject lossy UTF-8 decoding and top-level arrays BEFORE raw write and
     // 2xx; downstream V3.9 requires an object and exact source-byte proof.
