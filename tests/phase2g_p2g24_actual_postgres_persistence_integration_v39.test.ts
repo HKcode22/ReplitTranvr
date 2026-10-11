@@ -1071,8 +1071,11 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
           .map(e=>e.elapsed_ms).sort((a,b)=>a-b);
       const percentile=(numbers:number[],p:number)=>
         numbers[Math.ceil(p*numbers.length)-1];
+      const connections=durations("db_pool_acquire");
       const locks=durations("db_session_lock");
       const blobs=durations("original_blob_upload_readback");
+      expect(connections).toHaveLength(n);
+      expect(percentile(connections,0.95)).toBeGreaterThan(5_000);
       expect(locks).toHaveLength(n);
       expect(blobs).toHaveLength(n);
       expect(percentile(locks,0.95)).toBeGreaterThan(500);
@@ -1080,6 +1083,9 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       expect(stageSamples.filter(e=>e.stage==="final_sql_commit")).toHaveLength(n);
       expect(JSON.stringify(stageSamples)).not.toContain(TEST_ONLY_CALLBACK_SECRET);
       expect(JSON.stringify(stageSamples)).not.toContain(SESSION);
+      console.log("SYNTHETIC_DISPOSABLE_PG_POOL_ACQUIRE_P50_MS="+percentile(connections,0.5));
+      console.log("SYNTHETIC_DISPOSABLE_PG_POOL_ACQUIRE_P95_MS="+percentile(connections,0.95));
+      console.log("SYNTHETIC_DISPOSABLE_PG_POOL_ACQUIRE_P99_MS="+percentile(connections,0.99));
       console.log("SYNTHETIC_DISPOSABLE_PG_SESSION_LOCK_P50_MS="+percentile(locks,0.5));
       console.log("SYNTHETIC_DISPOSABLE_PG_SESSION_LOCK_P95_MS="+percentile(locks,0.95));
       console.log("SYNTHETIC_DISPOSABLE_PG_SESSION_LOCK_P99_MS="+percentile(locks,0.99));
