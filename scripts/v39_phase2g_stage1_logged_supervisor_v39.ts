@@ -4,6 +4,10 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { enforcePaidGuard, verifyAuthFile } from "./v39_paid_guard_v39";
 import {verifyStage1PublishedDatabaseLiveV39} from "./phase2gStage1PublishedDatabaseLivePreflight_v39";
+import {
+  advanceStage1WatchdogV39,initialStage1WatchdogStateV39,
+  type Stage1CallbackWatchdogModeV39
+} from "./v39_phase2g_stage1_watchdog_6plus6_policy_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const CALLBACK_POLL_MS = 15_000;
@@ -32,7 +36,9 @@ function atomicWriteJson(file: string, value: unknown): void {
 /**
  * Sanitized diagnostic outcome: never log secrets, response bodies, the real
  * signed webhook URL, database connection strings or raw error messages.
- * Keep the existing 15s polling/three-strike fail-closed safety policy.
+ * Default retains the existing 15s polling/three-strike fail-closed policy.
+ * Explicit opt-in six-plus-six mode NEVER extends without separately verified
+ * independent sender/source/credits evidence (not yet deployed).
  */
 type CallbackHealthResultV39 = {
   healthy: boolean;
@@ -196,6 +202,18 @@ async function main(): Promise<void> {
   const heartbeatPath = path.resolve(required("--heartbeat"));
   const expectedIcao = required("--expected-icao").toUpperCase();
   const ownerExecutor = required("--owner-executor").trim().toLowerCase();
+  const requestedWatchdogMode =
+    process.env.V39_PHASE2G_CALLBACK_WATCHDOG_POLICY ?? "legacy-three";
+  if(!["legacy-three","six-plus-six-candidate"].includes(requestedWatchdogMode))
+    throw new Error("SUPERVISOR_REFUSED:UNKNOWN_WATCHDOG_POLICY");
+  const callbackWatchdogMode =
+    requestedWatchdogMode as Stage1CallbackWatchdogModeV39;
+  // IMPORTANT: the live production bridge does not yet authenticate a true
+  // source/provider attempted-credit ledger independently of this host.
+  // No user env variable can fake trusted evidence for extended grace.
+  // Candidate mode therefore fails closed by its third failed check until
+  // a separately reviewed, deployed verifier is integrated prospectively.
+
 
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("SUPERVISOR_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("SUPERVISOR_REFUSED:AUTH_SHA_INVALID");
@@ -272,6 +290,8 @@ async function main(): Promise<void> {
     expected_icao: expectedIcao,
     owner_executor: ownerExecutor,
     callback_mode: callbackMode,
+    callback_watchdog_policy: callbackWatchdogMode,
+    callback_watchdog_source_proof_implemented: false,
     callback_base: callbackBase,
     log_path: path.relative(process.cwd(), logPath),
     heartbeat_path: path.relative(process.cwd(), heartbeatPath),
@@ -296,6 +316,7 @@ async function main(): Promise<void> {
   let terminationSignal: NodeJS.Signals | null = null;
   let callbackWatchdogTriggered = false;
   let callbackFailureCount = 0;
+  let watchdogState = initialStage1WatchdogStateV39();
   let callbackCheckInFlight = false;
   const requestTermination = (signal: NodeJS.Signals, reason: string): void => {
     terminationSignal = signal;
@@ -325,6 +346,9 @@ async function main(): Promise<void> {
       git_head: head,
       probe_budget_day_id: budgetDayId,
       callback_consecutive_failures: callbackFailureCount,
+      callback_watchdog_policy: callbackWatchdogMode,
+      callback_watchdog_science_audit_pending:
+        watchdogState.recoveredHealthAwaitingScienceAudit,
       callback_watchdog_triggered: callbackWatchdogTriggered,
       log_path: path.relative(process.cwd(), logPath),
     });
@@ -338,19 +362,34 @@ async function main(): Promise<void> {
     callbackCheckInFlight = true;
     try {
       const callbackHealth = await callbackHealthy(callbackBase, expectedHead, callbackMode);
-      callbackFailureCount = callbackHealth.healthy ? 0 : callbackFailureCount + 1;
-      if (!callbackHealth.healthy) {
+      const previousCount = watchdogState.consecutiveFailures;
+      const decision = advanceStage1WatchdogV39({
+        mode:callbackWatchdogMode,previous:watchdogState,
+        health:callbackHealth,nowMonotonicMs:performance.now(),
+        // No source/provider witness supplied. The candidate cannot extend
+        // the original three-strike limit until verified evidence exists.
+        evidence:undefined
+      });
+      watchdogState = decision.state;
+      callbackFailureCount = watchdogState.consecutiveFailures;
+      if (!callbackHealth.healthy || (previousCount > 0 && callbackHealth.healthy)) {
         fs.writeSync(logFd, `${JSON.stringify({
           schema: "v39.phase2g-stage1-callback-watchdog.v1",
           observed_at_utc: new Date().toISOString(),
-          healthy: false,
           ...callbackHealth,
           consecutive_failures: callbackFailureCount,
-          failure_limit: CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
+          failure_limit:callbackWatchdogMode==="legacy-three" ?
+            CALLBACK_CONSECUTIVE_FAILURE_LIMIT : 12,
+          policy:callbackWatchdogMode,
+          phase:decision.phase,
+          decision_reason:decision.reason,
+          signed_original_source_verified:decision.independentSourceProvenForThisCheck,
+          science_audit_pending:watchdogState.recoveredHealthAwaitingScienceAudit,
+          scientific_pass_authorized:false
         })}\n`);
         fs.fsyncSync(logFd);
       }
-      if (callbackFailureCount >= CALLBACK_CONSECUTIVE_FAILURE_LIMIT && !callbackWatchdogTriggered) {
+      if (decision.action==="STOP_OWNER" && !callbackWatchdogTriggered) {
         callbackWatchdogTriggered = true;
         requestTermination("SIGTERM", "workspace_callback_unreachable_threshold");
       }
@@ -431,6 +470,10 @@ async function main(): Promise<void> {
     child_spawn_error: exit.spawnError,
     termination_signal_seen_by_supervisor: terminationSignal,
     callback_watchdog_triggered: callbackWatchdogTriggered,
+    callback_watchdog_policy: callbackWatchdogMode,
+    callback_watchdog_source_proof_implemented: false,
+    callback_watchdog_science_audit_pending:
+      watchdogState.recoveredHealthAwaitingScienceAudit,
     callback_consecutive_failures_at_exit: callbackFailureCount,
     recovery_attempted: recoveryAttempted,
     recovery_exit_code: recoveryExitCode,
