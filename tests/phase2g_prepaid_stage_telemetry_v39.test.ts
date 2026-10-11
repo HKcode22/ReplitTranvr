@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {PHASE2G_PREPAID_STAGE_CHANNEL_V39,
-  recordPrepaidStageTimingV39,timePrepaidStageV39,
+  recordPrepaidStageTimingV39,timePrepaidStageV39,timePrepaidSyncStageV39,
   subscribePrepaidStageTimingV39,
   type PrepaidStageTimingV39
 } from "../server/lib/disruption/phase2gPrepaidStageTelemetry_v39";
@@ -50,6 +50,40 @@ describe("P08 actual prepaid stage diagnostics: only timing, bounded labels and 
       await expect(timePrepaidStageV39("db_pool_acquire",async()=>17))
         .resolves.toBe(17);
     }finally{unsubscribe();}
+  });
+  it("source_prepare measurements are redacted, happen synchronously and preserve data",()=>{
+    const events:PrepaidStageTimingV39[]=[];
+    const stop=subscribePrepaidStageTimingV39(x=>events.push(x));
+    try{
+      const fakeRawSecret="FAKE_PREPAID_ORIGINAL_DO_NOT_LOG";
+      const prep=timePrepaidSyncStageV39("source_prepare",()=>
+        ({source:fakeRawSecret,bytes:Buffer.from(fakeRawSecret)}));
+      expect(prep.source).toBe(fakeRawSecret);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        stage:"source_prepare",outcome:"completed",
+        provider_calls:0,database_mutations_by_telemetry:0,
+        independent_original_source_proven:false
+      });
+      expect(events[0].elapsed_ms).toBeGreaterThanOrEqual(0);
+      expect(JSON.stringify(events)).not.toContain(fakeRawSecret);
+    }finally{stop();}
+  });
+  it("source preparation failures and throwing observers never mask original errors",()=>{
+    const events:PrepaidStageTimingV39[]=[];
+    const stops=[
+      subscribePrepaidStageTimingV39(x=>events.push(x)),
+      subscribePrepaidStageTimingV39(()=>{throw Error("METRIC_ONLY_FAILURE");})
+    ];
+    try{
+      const original=Error("TEST_INVALID_CANONICAL_SOURCE");
+      expect(()=>timePrepaidSyncStageV39("source_prepare",()=>{throw original;}))
+        .toThrow(original);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({stage:"source_prepare",outcome:"failed"});
+      expect(JSON.stringify(events)).not.toContain(original.message);
+      expect(timePrepaidSyncStageV39("source_prepare",()=>47)).toBe(47);
+    }finally{for(const stop of stops)stop();}
   });
   it("refuses invalid stage names and impossible timing values",()=>{
     expect(()=>recordPrepaidStageTimingV39("secrets" as any,1,"completed"))
