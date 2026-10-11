@@ -10,6 +10,7 @@ import {
   STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39,
   STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39,
   STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39,
+  STAGE1_SIX_PLUS_SIX_WALL_MS_V39,
   type Stage1CallbackWatchdogModeV39
 } from "./v39_phase2g_stage1_watchdog_6plus6_policy_v39";
 
@@ -331,6 +332,7 @@ async function main(): Promise<void> {
   let callbackFailureCount = 0;
   let watchdogState = initialStage1WatchdogStateV39();
   let callbackCheckInFlight = false;
+  let episodeDeadline:NodeJS.Timeout|null=null;
   const requestTermination = (signal: NodeJS.Signals, reason: string): void => {
     terminationSignal = signal;
     fs.writeSync(logFd, `${JSON.stringify({
@@ -366,6 +368,39 @@ async function main(): Promise<void> {
   process.on("SIGINT", () => requestTermination("SIGINT", "supervisor_sigint"));
   process.on("SIGHUP", () => requestTermination("SIGHUP", "supervisor_sighup"));
 
+  // A timer independent of the HTTP poll chain enforces the *earliest*
+  // remaining 6+6 single-episode AND whole-run cumulative exposure wall.
+  // The normal 15s state machine remains authoritative for count, identity,
+  // hard mismatches and science audit. No timer extends the owner life.
+  const clearEpisodeDeadline=()=>{
+    if(episodeDeadline!==null){clearTimeout(episodeDeadline);episodeDeadline=null;}
+  };
+  const armEpisodeDeadline=()=>{
+    clearEpisodeDeadline();
+    if(callbackWatchdogTriggered||
+       watchdogState.consecutiveFailures===0||
+       watchdogState.firstFailureMonotonicMs===null)return;
+    const remainingEpisode=
+      STAGE1_SIX_PLUS_SIX_WALL_MS_V39-
+      (performance.now()-watchdogState.firstFailureMonotonicMs);
+    const remainingCumulative=
+      STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39-
+      watchdogState.closedOutageEnvelopeMs-
+      (performance.now()-watchdogState.firstFailureMonotonicMs);
+    const remaining=Math.min(remainingEpisode,remainingCumulative);
+    if(!Number.isFinite(remaining)||remaining<=0){
+      callbackWatchdogTriggered=true;
+      requestTermination("SIGTERM","workspace_callback_six_plus_six_monotonic_outage_limit");
+      return;
+    }
+    episodeDeadline=setTimeout(()=>{
+      if(callbackWatchdogTriggered||child.exitCode!==null||child.killed||
+         watchdogState.consecutiveFailures===0)return;
+      callbackWatchdogTriggered=true;
+      requestTermination("SIGTERM","workspace_callback_six_plus_six_monotonic_outage_limit");
+    },Math.max(1,Math.ceil(remaining)));
+    episodeDeadline.unref();
+  };
   const writeHeartbeat = (): void => {
     atomicWriteJson(heartbeatPath, {
       schema: "v39.phase2g-stage1-heartbeat.v1",
@@ -416,6 +451,9 @@ async function main(): Promise<void> {
       });
       watchdogState = decision.state;
       callbackFailureCount = watchdogState.consecutiveFailures;
+      // Cancel on genuinely complete health verification, otherwise
+      // independently bound a stuck/fewer-than-12-polls partial outage.
+      armEpisodeDeadline();
       if (!callbackHealth.healthy || (previousCount > 0 && callbackHealth.healthy)) {
         fs.writeSync(logFd, `${JSON.stringify({
           schema: "v39.phase2g-stage1-callback-watchdog.v1",
@@ -475,6 +513,7 @@ async function main(): Promise<void> {
   forcedOwnerKillDeadline?.cancel();
   clearInterval(heartbeat);
   clearInterval(callbackWatchdog);
+  clearEpisodeDeadline();
 
   const ownerElapsedMonotonicMs = performance.now() - ownerSpawnMonotonicMs;
   const exitVerdict = stage1PaidOwnerExitVerdictV39({
