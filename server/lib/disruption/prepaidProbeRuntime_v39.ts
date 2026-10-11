@@ -957,7 +957,7 @@ async function readPrepaidDuplicateOutsideLockV39(input:{
       !Number.isFinite(expiry)||
       expiry<=input.receivedAtUtc.getTime()||
       typeof x.object_name!=="string"||
-      !/^v39\\/provider\\/raw_provider_content\\/[0-9a-f]{2}\\/[0-9a-f-]{36}\\.blob$/.test(x.object_name)||
+      !/^v39\/provider\/raw_provider_content\/[0-9a-f]{2}\/[0-9a-f-]{36}\.blob$/.test(x.object_name)||
       !x.object_name.endsWith(
         `/${String(x.blob_ref_id).toLowerCase()}.blob`))
       return null;
