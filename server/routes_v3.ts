@@ -305,7 +305,13 @@ export function registerV3Routes(app:Express):void{
    * Previously Express parsed up to 2MB before the secret comparison.
    * Keep the existing ingress secret check as defense in depth.
    */
+  // P11/P13: first time THIS Node receiver sees the matching prepaid route,
+  // after upstream reverse-proxy forwarding. This is neither an independent
+  // provider sent-time nor an authenticated provider/edge ingress timestamp.
+  // Keep the value scoped to the request; never accept time from HTTP headers.
+  const prepaidReceiverObservedUtc=new WeakMap<Request,Date>();
   const prepaidEarlySecretGuard=(req:Request,res:Response,next:NextFunction):void=>{
+    const receiverObservedUtc=new Date();
     const expected=webhookSecret();
     if(!expected){res.status(503).json({error:"WEBHOOK_SECRET_NOT_CONFIGURED"});return;}
     const supplied=String(req.params.secret??"");
@@ -315,6 +321,7 @@ export function registerV3Routes(app:Express):void{
       res.status(404).json({error:"Not found"});
       return;
     }
+    prepaidReceiverObservedUtc.set(req,receiverObservedUtc);
     next();
   };
 
@@ -364,7 +371,15 @@ export function registerV3Routes(app:Express):void{
     }
 
     try{
-      const persisted=await persistPrepaidProbeWebhookV39({sessionId,body:req.body??{},receivedAtUtc:new Date()});
+      const receivedAtUtc=prepaidReceiverObservedUtc.get(req);
+      if(!receivedAtUtc||!Number.isFinite(receivedAtUtc.getTime()))
+        throw Error("PREPAID_RECEIVER_OBSERVED_UTC_MISSING");
+      // Do not shift first Node-receiver time after body parsing, waiting
+      // for a SQL connection, App Storage upload/readback or row lock.
+      // The timestamp remains receiver-observed only, not source-signed.
+      const persisted=await persistPrepaidProbeWebhookV39({
+        sessionId,body:req.body??{},receivedAtUtc
+      });
       console.log(`[adb-v3-prepaid] session=${sessionId} items=${persisted.itemCount} duplicate=${persisted.duplicate} ms=${Date.now()-startedAt}`);
       res.status(200).json({received:true,items:persisted.itemCount,duplicate:persisted.duplicate});
     }catch(err:any){
