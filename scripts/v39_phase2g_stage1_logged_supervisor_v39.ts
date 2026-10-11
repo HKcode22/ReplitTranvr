@@ -377,6 +377,9 @@ async function main(): Promise<void> {
       probe_budget_day_id: budgetDayId,
       callback_consecutive_failures: callbackFailureCount,
       callback_watchdog_policy: callbackWatchdogMode,
+      // Aggregate episode/risk counters; no secrets, source IDs or flights.
+      callback_outage_episodes_observed:watchdogState.outageEpisodeCount,
+      callback_closed_outage_envelope_ms:watchdogState.closedOutageEnvelopeMs,
       callback_watchdog_science_audit_pending:
         watchdogState.recoveredHealthAwaitingScienceAudit,
       callback_watchdog_triggered: callbackWatchdogTriggered,
@@ -417,6 +420,8 @@ async function main(): Promise<void> {
           observed_at_utc: new Date().toISOString(),
           ...callbackHealth,
           consecutive_failures: callbackFailureCount,
+          outage_episodes_observed:watchdogState.outageEpisodeCount,
+          closed_outage_envelope_ms:watchdogState.closedOutageEnvelopeMs,
           // The requested candidate has a nominal 12-check ceiling, but
           // independent source/credit verification is UNIMPLEMENTED here.
           // Never advertise an effective 12-check paid safety allowance.
