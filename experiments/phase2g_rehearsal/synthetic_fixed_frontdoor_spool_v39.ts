@@ -137,7 +137,8 @@ export class SyntheticFixedFrontdoorSpoolV39{
       try{r=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(bytes));}
       catch{throw Error("SYNTHETIC_FRONTDOOR_RECEIPT_CORRUPT");}
       if(r.schema!=="v39.synthetic-fixed-frontdoor-receipt.v1"||r.attemptHash!==id||
-         !HASH.test(r.rawSha256)||!Number.isSafeInteger(r.rawBytes))
+         !HASH.test(r.rawSha256)||!Number.isSafeInteger(r.rawBytes)||
+         r.rawBytes<1||r.rawBytes>65536)
         throw Error("SYNTHETIC_FRONTDOOR_RECEIPT_TAMPERED");
       const original=await readMaybe(this.file("raw",id,"bin"));
       if(!original||sha(original)!==r.rawSha256||original.byteLength!==r.rawBytes)
