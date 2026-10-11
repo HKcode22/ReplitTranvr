@@ -113,8 +113,7 @@ function frameProjection(f:SyntheticScienceJournalFrameV39):string{
      Date.parse(f.firstEdgeReceivedUtc)>=Date.parse(f.windowEndUtc)||
      !Number.isSafeInteger(f.syntheticCostCredits)||
      f.syntheticCostCredits<0||f.syntheticCostCredits>2000||
-     !Array.isArray(f.items)||f.items.length>2000||
-     f.syntheticCostCredits!==f.items.length)
+     !Array.isArray(f.items)||f.items.length>2000)
     throw new Error("P13_LOGGED_SCIENCE_FRAME_INVALID");
   // Original evidence and V3.9 processing timestamps are NOT interchangeable.
   const keys=new Set<string>();
