@@ -1847,6 +1847,151 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     }
   });
 
+  it("P06 PENDING original journal requires THREE exact flags, including verified-source failure custody",()=>{
+    expect(prepaidSourcePendingIntentApprovedV39({} as NodeJS.ProcessEnv)).toBe(false);
+    expect(prepaidSourcePendingIntentApprovedV39({
+      V39_CALLBACK_ONLY_RUNTIME:"1",
+      V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED:"1"
+    } as NodeJS.ProcessEnv)).toBe(false);
+    expect(prepaidSourcePendingIntentApprovedV39({
+      V39_CALLBACK_ONLY_RUNTIME:"1",
+      V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED:"1",
+      V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED:"1"
+    } as NodeJS.ProcessEnv)).toBe(true);
+  });
+  it("P06 REAL receiver LOST upload response AFTER bytes stored: LOGGED PENDING persists; retry verifies same object, first UTC, no double upload",async()=>{
+    const saved=[
+      process.env.V39_CALLBACK_ONLY_RUNTIME,
+      process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED,
+      process.env.V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED
+    ];
+    process.env.V39_CALLBACK_ONLY_RUNTIME="1";
+    process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED="1";
+    process.env.V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED="1";
+    const first=new Date("2026-10-12T03:07:12.345Z");
+    const body=sample({id:"p06-pending-upload-reply-lost",flights:[{
+      id:"fake-flight-one",number:"QF951",codeshareStatus:"Unknown"
+    }]});
+    try{
+      state.failUploadAfterWriteOnce=true;
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body,receivedAtUtc:first
+      })).rejects.toThrow("P06_SYNTHETIC_LOST_UPLOAD_RESPONSE_AFTER_BYTES_SAVED");
+      const pending=await state.pool!.query(
+        "SELECT state,source_sha256,object_name,source_retention_until,"+
+        "first_node_received_utc FROM clean.phase2g_prepaid_source_intent_v39"
+      );
+      expect(pending.rowCount).toBe(1);
+      expect(pending.rows[0].state).toBe("PENDING");
+      expect(new Date(pending.rows[0].first_node_received_utc).toISOString())
+        .toBe(first.toISOString());
+      expect(state.blobs.has(pending.rows[0].object_name)).toBe(true);
+      expect(state.events).not.toContain("DELETE");
+      expect(await count()).toEqual({logged:0,unlogged:0});
+      expect(await session()).toEqual({requests:1,successes:0,failures:1});
+      const later=new Date("2026-10-12T03:16:00.000Z");
+      const retry=await persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body,receivedAtUtc:later
+      });
+      expect(retry).toMatchObject({duplicate:false,itemCount:1});
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+      expect(state.blobs.size).toBe(1);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect((await state.pool!.query(
+        "SELECT state FROM clean.phase2g_prepaid_source_intent_v39"
+      )).rows[0].state).toBe("VERIFIED");
+      const science=await state.pool!.query(
+        "SELECT received_at_utc FROM clean.prepaid_probe_item_runtime"
+      );
+      expect(science.rowCount).toBe(1);
+      expect(new Date(science.rows[0].received_at_utc).toISOString())
+        .toBe(first.toISOString());
+      expect(await session()).toEqual({requests:2,successes:1,failures:1});
+      const third=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+      expect(third.duplicate).toBe(true);
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+    }finally{
+      for(const [name,value] of [
+        ["V39_CALLBACK_ONLY_RUNTIME",saved[0]],
+        ["V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",saved[1]],
+        ["V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",saved[2]]
+      ] as const){
+        if(value===undefined)delete process.env[name];
+        else process.env[name]=value;
+      }
+    }
+  },15000);
+  it("P06 REAL receiver readback timeout after stored bytes leaves auditable PENDING; missing original on retry FAILS closed",async()=>{
+    const saved=[
+      process.env.V39_CALLBACK_ONLY_RUNTIME,
+      process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED,
+      process.env.V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED
+    ];
+    process.env.V39_CALLBACK_ONLY_RUNTIME="1";
+    process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED="1";
+    process.env.V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED="1";
+    const body=sample({id:"p06-pending-readback-timeout"});
+    try{
+      state.failDownloadOnce=true;
+      await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body}))
+        .rejects.toThrow("P06_SYNTHETIC_LOST_DOWNLOAD_RESPONSE_AFTER_UPLOAD");
+      expect(state.events).not.toContain("DELETE");
+      expect(state.blobs.size).toBe(1);
+      expect(await count()).toEqual({logged:0,unlogged:0});
+      expect((await state.pool!.query(
+        "SELECT state FROM clean.phase2g_prepaid_source_intent_v39"
+      )).rows[0].state).toBe("PENDING");
+      state.blobs.clear();
+      await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body}))
+        .rejects.toThrow("P06_PREPAID_SOURCE_PENDING_ORIGINAL_NOT_READABLE_NO_ACK");
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+      expect(await count()).toEqual({logged:0,unlogged:0});
+      expect(await session()).toEqual({requests:2,successes:0,failures:2});
+      expect((await state.pool!.query(
+        "SELECT state FROM clean.phase2g_prepaid_source_intent_v39"
+      )).rows[0].state).toBe("PENDING");
+    }finally{
+      for(const [name,value] of [
+        ["V39_CALLBACK_ONLY_RUNTIME",saved[0]],
+        ["V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",saved[1]],
+        ["V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",saved[2]]
+      ] as const){
+        if(value===undefined)delete process.env[name];
+        else process.env[name]=value;
+      }
+    }
+  });
+  it("P06 real LOGGED source-intent metadata rejects tampered UUID/path, expiry and hard deletion at PostgreSQL trigger",async()=>{
+    const name="phase2g_prepaid_source_intent_v39";
+    const id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    await state.pool!.query(
+      "INSERT INTO clean."+name+"("+
+      "session_id,delivery_id,source_sha256,source_bytes,"+
+      "blob_ref_id,object_name,first_node_received_utc,source_retention_until) "+
+      "VALUES($1,'fixture-log-only',$2,10,$3::uuid,$4,"+
+      "'2026-10-12T03:02:00Z'::timestamptz,"+
+      "'2026-10-19T03:02:00Z'::timestamptz)",
+      [SESSION,"a".repeat(64),id,
+        "v39/provider/raw_provider_content/aa/"+id+".blob"]
+    );
+    await expect(state.pool!.query(
+      "UPDATE clean."+name+" SET source_retention_until="+
+      "source_retention_until+interval '1 minute'"
+    )).rejects.toThrow(/immutable|retention/);
+    await expect(state.pool!.query(
+      "DELETE FROM clean."+name
+    )).rejects.toThrow(/deletion forbidden/);
+    await state.pool!.query(
+      "UPDATE clean."+name+" SET state='VERIFIED',verified_at_utc=now()"
+    );
+    await expect(state.pool!.query(
+      "UPDATE clean."+name+" SET verified_at_utc=now()"
+    )).rejects.toThrow(/only permits/);
+    expect((await state.pool!.query(
+      "SELECT state FROM clean."+name
+    )).rows[0].state).toBe("VERIFIED");
+  });
   it("P06 failed original source custody is OFF without both explicit, separate env approvals",()=>{
     expect(prepaidFailedSourceJournalApprovedV39({} as NodeJS.ProcessEnv)).toBe(false);
     expect(prepaidFailedSourceJournalApprovedV39({
