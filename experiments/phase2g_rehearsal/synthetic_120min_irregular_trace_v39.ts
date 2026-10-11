@@ -198,7 +198,7 @@ export function evaluateSyntheticIrregularTwoHourTraceV39(input:{
   check(observed.size===planned.size&&[...planned.keys()].every(k=>observed.has(k)),
     "P20_SYNTHETIC_SENDER_EDGE_OR_SQL_DELIVERY_MISSING");
   const sourceItems=new Set<string>();
-  const first=new Map<string,number>();
+  const first=new Map<string,{sourceUtcMs:number;bucket:number}>();
   for(const i of input.observedPhysicalItems){
     const key=i?.attemptId+":"+i?.itemIndex;
     check(id(i?.attemptId)&&uint(i?.itemIndex)&&
@@ -218,11 +218,16 @@ export function evaluateSyntheticIrregularTwoHourTraceV39(input:{
     const stamp=time(attempt.originalEdgeReceivedUtc);
     if(!Number.isFinite(stamp)||stamp<from||stamp>=end)continue;
     const bucket=Math.floor((stamp-from)/900000);
-    if(!first.has(i.flightInstanceId))first.set(i.flightInstanceId,bucket);
-    // Repeated retime/update for same flight stays ONE distinct first flight.
+    // Replay order is NOT event time. Choose the earliest VERIFIED original
+    // edge receipt among qualifying operator observations of each physical
+    // flight, even when late Queue retries arrive in reverse order.
+    const old=first.get(i.flightInstanceId);
+    if(!old||stamp<old.sourceUtcMs){
+      first.set(i.flightInstanceId,{sourceUtcMs:stamp,bucket});
+    }
   }
   const actualPhysical=Array.from({length:8},()=>[] as string[]);
-  for(const [fid,bucket] of first)actualPhysical[bucket].push(fid);
+  for(const [fid,witness] of first)actualPhysical[witness.bucket].push(fid);
   for(let i=0;i<8;i++){
     const exp=[...p.expectedFirstPhysicalIdsBy15m[i]].sort();
     const got=actualPhysical[i].sort();
