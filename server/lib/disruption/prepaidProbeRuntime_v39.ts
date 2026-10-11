@@ -1222,8 +1222,11 @@ export async function persistPrepaidProbeWebhookV39(input: {
       admission.release();
     }
     if(reservation){
-      store=createRequiredProviderBlobStoreV39();
       try{
+        // Store initialization itself may fail (missing bucket config,
+        // exhausted client resources). Admission has ALREADY committed the
+        // request count; route fallback must not count that request again.
+        store=createRequiredProviderBlobStoreV39();
         stagedOutsideLock=await timePrepaidStageV39(
           "original_blob_upload_readback",()=>
             persistReservedPrepaidSourceIntentV39({
