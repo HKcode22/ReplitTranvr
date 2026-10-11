@@ -34,7 +34,7 @@ describe("P15 repeated 6-primary +6-emergency separate outage vs whole-run error
     expect(pending.phase).toBe("RECOVERY_PENDING");
     expect(pending.state.consecutiveFailures).toBe(4);
     const recovered=step(pending.state,90000,"FULLY_HEALTHY",true);
-    expect(recovered.reason).toContain("FRESH_EPISODE_CHECKS");
+    expect(recovered.reason).toBe("SOURCE_VERIFIED_EPISODE_CLOSED_FRESH_SIX_PLUS_SIX_NEXT_OUTAGE");
     expect(recovered.state.consecutiveFailures).toBe(0);
     expect(recovered.state.episodeCount).toBe(1);
     expect(recovered.state.cumulativeFaultEnvelopeMs).toBe(90000);
