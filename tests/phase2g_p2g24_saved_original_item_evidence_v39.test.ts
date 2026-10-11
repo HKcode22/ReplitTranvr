@@ -1,7 +1,9 @@
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {summarizePreservedOriginalItemEvidenceV39} from
-  "../scripts/v39_p2g24_saved_original_item_evidence_v39";
+import {
+  summarizePreservedOriginalItemEvidenceV39,
+  summarizeCurrentRuntimeLinksForPreservedSourcesV39
+} from "../scripts/v39_p2g24_saved_original_item_evidence_v39";
 const sha=(v:Uint8Array)=>createHash("sha256").update(v).digest("hex");
 const canon=(v:any):string=>v===null||typeof v!=="object"?
   JSON.stringify(v):Array.isArray(v)?
@@ -118,6 +120,67 @@ describe("P14 real-stored canonical original item/credit evidence safety",()=>{
       sourceObjectsWithoutExplicitCostClaim:1,
       independentUpstreamBilledFlightItemCredits:null
     });
+  });
+  it("P14 real LOGGED saved originals and PRESENT UNLOGGED receipts match only on exact blob reference and SHA",()=>{
+    const a={blobRefId:"synthetic-blob-ref-A",contentSha256:"a".repeat(64)};
+    const b={blobRefId:"synthetic-blob-ref-B",contentSha256:"b".repeat(64)};
+    const x=summarizeCurrentRuntimeLinksForPreservedSourcesV39([a,b],[
+      {blobRefId:a.blobRefId,rawBodySha256:a.contentSha256,
+        notificationItems:5,deliveryAttemptCostCredits:"5"}
+    ]);
+    expect(x).toMatchObject({
+      savedLoggedOriginalReferences:2,currentUnloggedDeliveryRows:1,
+      exactCurrentOriginalRefAndShaMatches:1,
+      savedLoggedRefsWithoutCurrentUnloggedDelivery:1,
+      currentUnloggedDeliveriesWithoutSavedLoggedRef:0,
+      currentUnloggedDeliveriesWithSourceShaConflict:0,
+      currentUnloggedDeliveriesInvalidItemCount:0,
+      currentUnloggedDeliveriesInvalidCostClaim:0,
+      missingCurrentUnloggedRowsDoNotProveMissingUpstreamSends:true,
+      afterCrashHistoricalRuntimeCannotBeInferred:true,
+      independentProviderAttemptAndBillLedgerPresent:false,
+      actualHistorical260259CauseKnown:false,canAuthorizePaidLaunch:false
+    });
+    expect(JSON.stringify(x)).not.toContain(a.blobRefId);
+  });
+  it("P14 UNLOGGED crash reset may leave zero current runtime rows without implying zero original provider deliveries",()=>{
+    const result=summarizeCurrentRuntimeLinksForPreservedSourcesV39([
+      {blobRefId:"synthetic-LOGGED-survives",contentSha256:"a".repeat(64)}
+    ],[]);
+    expect(result).toMatchObject({
+      savedLoggedOriginalReferences:1,currentUnloggedDeliveryRows:0,
+      savedLoggedRefsWithoutCurrentUnloggedDelivery:1,
+      exactCurrentOriginalRefAndShaMatches:0,
+      missingCurrentUnloggedRowsDoNotProveMissingUpstreamSends:true
+    });
+  });
+  it("P14 orphan UNLOGGED record, SHA conflict and item-credit mismatch remain distinct",()=>{
+    const result=summarizeCurrentRuntimeLinksForPreservedSourcesV39([
+      {blobRefId:"A",contentSha256:"a".repeat(64)}
+    ],[
+      {blobRefId:"A",rawBodySha256:"b".repeat(64),
+        notificationItems:5,deliveryAttemptCostCredits:"4"},
+      {blobRefId:"OTHER",rawBodySha256:"c".repeat(64),
+        notificationItems:-1,deliveryAttemptCostCredits:"0.5"}
+    ]);
+    expect(result).toMatchObject({
+      exactCurrentOriginalRefAndShaMatches:0,
+      currentUnloggedDeliveriesWithoutSavedLoggedRef:1,
+      currentUnloggedDeliveriesWithSourceShaConflict:1,
+      currentUnloggedDeliveriesWithItemCreditDisagreement:1,
+      currentUnloggedDeliveriesInvalidItemCount:1,
+      currentUnloggedDeliveriesInvalidCostClaim:1,
+      actualHistorical260259CauseKnown:false
+    });
+  });
+  it("P14 refuses duplicated saved refs or duplicated runtime identity rather than double-counting",()=>{
+    const a={blobRefId:"synthetic-A",contentSha256:"a".repeat(64)};
+    const row={blobRefId:"synthetic-A",rawBodySha256:"a".repeat(64),
+      notificationItems:1,deliveryAttemptCostCredits:"1"};
+    expect(()=>summarizeCurrentRuntimeLinksForPreservedSourcesV39([a,a],[row]))
+      .toThrow("P14_RUNTIME_LINK_SAVED_REF_DUPLICATE_OR_INVALID");
+    expect(()=>summarizeCurrentRuntimeLinksForPreservedSourcesV39([a],[row,row]))
+      .toThrow("P14_RUNTIME_LINK_RUNTIME_DUPLICATE_OR_INVALID");
   });
   it("does not allow missing/empty or non-object original records",()=>{
     expect(()=>summarizePreservedOriginalItemEvidenceV39([]))
