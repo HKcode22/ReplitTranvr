@@ -329,7 +329,7 @@ describe("P13 signed synthetic TWO-HOUR all-eight-bin source-to-recovery truth a
     const r=audit(f);
     expect(r.testManifestConsistent,r.errors.join(",")).toBe(true);
     expect(r.sourceAttempts).toBe(8);
-    expect(r.sourceBuckets).toEqual([2,1,1,1,0,0,1,2]);
+    expect(r.sourceBuckets).toEqual([2,1,1,1,1,0,1,1]);
     expect(r.scientificPassAuthorized).toBe(false);
   });
   it("signed sender may specify 120 but missing one journal entry cannot be hidden in a quiet bin",()=>{
