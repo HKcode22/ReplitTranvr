@@ -178,6 +178,18 @@ export function advanceStage1WatchdogV39(input:Readonly<{
     return stop("HARD_CALLBACK_CONTRACT_OR_IDENTITY_VIOLATION",
       p.consecutiveFailures,p.firstFailureMonotonicMs);
   if(kind==="HEALTHY"){
+    if(mode==="six-plus-six-candidate"&&p.consecutiveFailures>0){
+      // A green GET after a long outage is NOT an original-webhook ledger.
+      // Recovery beyond the bounded wall time or without independently
+      // verified exact source/credits is a terminal scientific veto.
+      const wallElapsed=now-(p.firstFailureMonotonicMs??now);
+      if(wallElapsed>=STAGE1_SIX_PLUS_SIX_WALL_MS_V39)
+        return stop("SIX_PLUS_SIX_WALL_CLOCK_MAX_EXCEEDED",
+          p.consecutiveFailures,p.firstFailureMonotonicMs);
+      if(independentOutageWitnessReasonV39(input.evidence))
+        return stop("RECOVERED_HEALTH_WITH_UNVERIFIED_SCIENTIFIC_SOURCE",
+          p.consecutiveFailures,p.firstFailureMonotonicMs);
+    }
     return {
       mode,action:"MONITOR",phase:"HEALTHY",
       reason:p.consecutiveFailures?
