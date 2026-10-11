@@ -48,3 +48,12 @@ All three runtime environment variable *names* needed for DB/bucket/webhook key 
 ## Future conversation instructions
 
 FETCH THIS DOCUMENT plus P01–P20 ledger, issue #28 and latest actual verified CI head to recover shared user/assistant decisions. Do not quietly revert to a categorical 180-second science rejection, quietly label a 260/259 accounting difference a known physical flight lost, or quietly enable 6+6 in the paid supervisor. Preserve this record in the existing isolated draft PR branch; no merge to main without release review.
+
+
+## Verified implementation checkpoint — P17 received-subset analysis
+
+- `experiments/phase2g_rehearsal/observed_subset_descriptive_scope_v39.ts` adds a PURE, conditional eight-UTC-bin, properly quarantined confirmed-physical-flight-v2 **received-only runway departure-delay mean**. It accepts negative delays (early departures), handles genuine zero-traffic bins, enforces byte/SHA and measured metric/clock/DB epoch evidence flags, excludes quarantined flight identities, and does NOT infer unseen upstream sender counts.
+- A 30-second, 60-second, 120-second, 180-second and 300-second health-uncertainty test gives the **same conditional descriptive scope** for identical verified received rows. This is a model of scientific usefulness of *received records*, NOT an authorization to keep a PAID owner running beyond the 180s operational 6+6 cap.
+- If real original source-identifier/physical-v2/UTC/metric/byte-readback/dedup/DB-epoch evidence is missing, the candidate becomes `INVALID_OBSERVED_DATA`. A zero received confirmed-flight yield becomes `NO_OBSERVED_CONFIRMED_YIELD`. Never create sample items for empty bins.
+- The new model reports `independentProviderMissingItems:null` **unconditionally**, even if a caller forges apparent upstream counters; provider wire authenticity and F.8/source/paid authorization are always false. For full or quantitatively censored source inference use the separate source-bound `yssy_bounded_loss_scientific_adjudication_v39.ts` and gap sensitivity evaluator.
+- **GitHub Actions [#38115130386](https://github.com/HKcode22/ReplitTranvr/actions/runs/38115130386) at exact code SHA `f13f8e5bbbaaa2eb96dff6d7a18339308f7ddeef`: BOTH jobs SUCCESS, 628/628 offline tests in 60 suites, 76/76 real disposable V3.9 PostgreSQL16, true unclean restart confirms LOGGED=1 and UNLOGGED=0.** No real provider calls, live scientific DB mutation, cloud account creation or paid 6+6 activation.
