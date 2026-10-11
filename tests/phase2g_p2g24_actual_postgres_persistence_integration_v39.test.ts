@@ -1,5 +1,5 @@
 import express from "express";
-import {createServer} from "node:http";
+import {createServer,request as httpRequest} from "node:http";
 import {beforeAll,afterAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {Pool} from "pg";
 
@@ -2099,6 +2099,63 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     }finally{client.release();}
   });
 
+  it("P11/P13 real V3.9 HTTP route freezes Node-observed arrival BEFORE slow JSON body transfer, never trusts timestamp headers",async()=>{
+    // This sends the ACTUAL prepaid route a chunked body: Express receives
+    // the headers/first chunk, then its JSON parser awaits the second chunk.
+    // Original Node route receipt UTC must be captured by early secret guard,
+    // not freshly assigned after the slow body parser resolves.
+    const wire=JSON.stringify(sample({id:"node-route-first-observed-before-body-complete"}));
+    const split=Math.max(1,Math.floor(wire.length/3));
+    const headerSpoof="2000-01-01T00:00:00.000Z";
+    const beforeHeadersMs=Date.now();
+    let secondChunkStartedAtMs=0;
+    const status=await new Promise<number>((resolve,reject)=>{
+      const req=httpRequest(localOrigin+actualPath,{
+        method:"POST",headers:{
+          "content-type":"application/json",
+          "x-v39-first-edge-received-at-utc":headerSpoof
+        }
+      },res=>{
+        res.resume();
+        res.on("end",()=>resolve(res.statusCode??0));
+        res.on("error",reject);
+      });
+      req.on("error",reject);
+      req.write(wire.slice(0,split));
+      setTimeout(()=>{
+        secondChunkStartedAtMs=Date.now();
+        req.end(wire.slice(split));
+      },850);
+    });
+    expect(status).toBe(200);
+    const q=await state.pool!.query(
+      "SELECT received_at_utc FROM clean.prepaid_probe_delivery_runtime "+
+      "WHERE session_id=$1",[SESSION]);
+    expect(q.rows).toHaveLength(1);
+    const recordedMs=new Date(q.rows[0].received_at_utc).getTime();
+    expect(recordedMs).toBeGreaterThanOrEqual(beforeHeadersMs-100);
+    expect(secondChunkStartedAtMs-recordedMs).toBeGreaterThan(300);
+    expect(recordedMs).not.toBe(Date.parse(headerSpoof));
+    // Repeating the same original may ACK as a verified duplicate, but the
+    // first persisted Node-observed time MUST never drift to retry time.
+    const duplicate=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{
+        "content-type":"application/json",
+        "x-v39-first-edge-received-at-utc":"2099-12-31T23:59:59.000Z"
+      },body:wire
+    });
+    expect(duplicate.status).toBe(200);
+    expect((await duplicate.json()).duplicate).toBe(true);
+    const after=await state.pool!.query(
+      "SELECT received_at_utc FROM clean.prepaid_probe_delivery_runtime "+
+      "WHERE session_id=$1",[SESSION]);
+    expect(after.rows).toHaveLength(1);
+    expect(new Date(after.rows[0].received_at_utc).getTime()).toBe(recordedMs);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    console.log("P11_NODE_RECEIVER_FIRST_OBSERVED_BEFORE_PARSER_DONE=true");
+    console.log("P11_INDEPENDENT_PROVIDER_ORIGINAL_EDGE_UTC_PROVEN=false");
+    console.log("P11_UNTRUSTED_RECEIPT_TIME_HEADERS_IGNORED=true");
+  },15000);
   it("P13/P14 actual V3.9 route cannot claim original independent edge UTC from Replit processing time",async()=>{
     // Synthetic signed source arrives at the edge one minute earlier than the
     // actual local HTTP processing. Real V3.9 currently stores the REPLIT
