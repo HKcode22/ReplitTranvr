@@ -294,6 +294,102 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
     console.log("P06_PROPOSAL_ORIGINAL_INDEPENDENT_INGRESS=false");
     expect(elapsed).toBeLessThan(10_000);
   },20000);
+  it("P06 fixture readback transient ERROR after successful upload preserves recoverable original PENDING, NEVER deletes it",async()=>{
+    const fake=fakeStore();
+    let first=true,deletes=0;
+    const download=fake.store.downloadBytes;
+    fake.store.downloadBytes=async(k:string)=>{
+      if(first){first=false;throw Error("SYNTHETIC_REMOTE_READBACK_TIMEOUT_AFTER_UPLOAD");}
+      return download(k);
+    };
+    fake.store.delete=async()=>{deletes++;};
+    await expect(submit("readback-timeout-retained",fake.store))
+      .rejects.toThrow("SYNTHETIC_REMOTE_READBACK_TIMEOUT_AFTER_UPLOAD");
+    const intent=await state.pool!.query(
+      "SELECT state,original_opaque_blob_path,recovery_original_verified_utc,"+
+      "source_retention_until,created_utc FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(intent.rows).toHaveLength(1);
+    expect(intent.rows[0].state).toBe("PENDING");
+    expect(intent.rows[0].recovery_original_verified_utc).toBeNull();
+    expect(state.blobs.has(intent.rows[0].original_opaque_blob_path)).toBe(true);
+    expect(deletes).toBe(0);
+    expect((await submit("readback-timeout-retained",fake.store,state.pool!,0))
+      .safeToReturn2xxToSyntheticSender).toBe(false);
+    const evidence=await verifyPending("readback-timeout-retained",fake.store);
+    expect(evidence).toMatchObject({
+      outcome:"ORIGINAL_PRESENT_VERIFIED_STILL_PENDING",
+      originalBytesProvenAtObservation:true,sourceRecoveryTimestampRecorded:true,
+      canAcknowledge:false,canReplayScience:false,canDeleteOriginal:false
+    });
+    expect(new Date(intent.rows[0].source_retention_until).getTime()-
+      new Date(intent.rows[0].created_utc).getTime()).toBe(168*3_600_000);
+    expect(state.blobs.size).toBe(1);
+  });
+  it("P06 fixture after-upload corrupted readback keeps original for manual audit; cannot convert to committed or ACK",async()=>{
+    const fake=fakeStore();
+    let corrupted=true,deletes=0;
+    const download=fake.store.downloadBytes;
+    fake.store.downloadBytes=async(k:string)=>{
+      if(corrupted)return new TextEncoder().encode("SYNTHETIC_CORRUPT_READBACK");
+      return download(k);
+    };
+    fake.store.delete=async()=>{deletes++;};
+    await expect(submit("readback-corrupt-no-delete",fake.store))
+      .rejects.toThrow("P06_PENDING_ORIGINAL_READBACK_UNVERIFIED_NO_ACK");
+    expect(deletes).toBe(0);
+    expect(state.blobs.size).toBe(1);
+    expect((await state.pool!.query(
+      "SELECT state FROM clean.p2g_synthetic_raw_admission_intent"
+    )).rows[0].state).toBe("PENDING");
+    corrupted=false;
+    const v=await verifyPending("readback-corrupt-no-delete",fake.store);
+    expect(v).toMatchObject({
+      outcome:"ORIGINAL_PRESENT_VERIFIED_STILL_PENDING",
+      canAcknowledge:false,canDeleteOriginal:false
+    });
+  });
+  it("P06 fixture cannot commit original after expiry while upload was in progress; retains orphan and never ACKs",async()=>{
+    const fake=fakeStore();
+    const upload=fake.store.uploadBytes;
+    let started=false;
+    fake.store.uploadBytes=async(k:string,v:Uint8Array)=>{
+      started=true;
+      await new Promise(r=>setTimeout(r,400));
+      return upload(k,v);
+    };
+    const pending=submit("expires-mid-flight",fake.store);
+    const deadline=Date.now()+2500;
+    while(!started&&Date.now()<deadline)
+      await new Promise(r=>setTimeout(r,5));
+    expect(started).toBe(true);
+    await state.pool!.query(
+      "UPDATE clean.p2g_synthetic_raw_admission_intent "+
+      "SET source_retention_until=clock_timestamp()-interval '1 minute'");
+    await expect(pending).rejects.toThrow(
+      "P06_CANDIDATE_ORIGINAL_COMMIT_UNCERTAIN_NO_ACK");
+    const q=await state.pool!.query(
+      "SELECT state,original_opaque_blob_path FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(q.rows[0].state).toBe("PENDING");
+    expect(state.blobs.has(q.rows[0].original_opaque_blob_path)).toBe(true);
+    await expect(submit("expires-mid-flight",fake.store,state.pool!,0))
+      .rejects.toThrow("P06_CANDIDATE_ORIGINAL_RETENTION_EXPIRED_NO_ACK");
+    expect(fake.uploads()).toBe(1);
+  },10000);
+  it("P06 fixture refuses COMMITTED duplicate whose 168h source retention expired; no second write/ACK",async()=>{
+    const fake=fakeStore();
+    expect((await submit("committed-expired-no-dup",fake.store)).outcome)
+      .toBe("COMMITTED_SOURCE_RECEIPT");
+    await state.pool!.query(
+      "UPDATE clean.p2g_synthetic_raw_admission_intent "+
+      "SET source_retention_until=clock_timestamp()-interval '1 minute'");
+    await expect(submit("committed-expired-no-dup",fake.store))
+      .rejects.toThrow("P06_CANDIDATE_ORIGINAL_RETENTION_EXPIRED_NO_ACK");
+    expect(fake.uploads()).toBe(1);
+    expect(state.blobs.size).toBe(1);
+    expect((await state.pool!.query(
+      "SELECT state FROM clean.p2g_synthetic_raw_admission_intent"
+    )).rows[0].state).toBe("COMMITTED");
+  });
   it("P06 upload FAIL: LOGGED intent stays PENDING and duplicate is NOT falsely ACKed",async()=>{
     const fake=fakeStore();
     fake.store.uploadBytes=async()=>{throw Error("SYNTHETIC_UPLOADER_DOWN");};
