@@ -378,8 +378,14 @@ async function main(): Promise<void> {
           observed_at_utc: new Date().toISOString(),
           ...callbackHealth,
           consecutive_failures: callbackFailureCount,
-          failure_limit:callbackWatchdogMode==="legacy-three" ?
+          // The requested candidate has a nominal 12-check ceiling, but
+          // independent source/credit verification is UNIMPLEMENTED here.
+          // Never advertise an effective 12-check paid safety allowance.
+          failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
+          requested_failure_limit:callbackWatchdogMode==="legacy-three" ?
             CALLBACK_CONSECUTIVE_FAILURE_LIMIT : 12,
+          effective_failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
+          conditional_extension_authorized:false,
           policy:callbackWatchdogMode,
           phase:decision.phase,
           decision_reason:decision.reason,
