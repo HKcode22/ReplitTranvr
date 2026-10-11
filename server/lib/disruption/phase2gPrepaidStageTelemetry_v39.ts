@@ -11,10 +11,10 @@
 export const PHASE2G_PREPAID_STAGE_CHANNEL_V39=
   "v39.phase2g-prepaid-stage.v1";
 export type PrepaidStageV39=
-  "db_pool_acquire"|"db_session_lock"|"original_blob_upload_readback"|
+  "source_prepare"|"db_pool_acquire"|"db_session_lock"|"original_blob_upload_readback"|
   "duplicate_original_blob_readback"|"physical_item_sql"|"final_sql_commit";
 const permittedStages=new Set<PrepaidStageV39>([
-  "db_pool_acquire","db_session_lock","original_blob_upload_readback",
+  "source_prepare","db_pool_acquire","db_session_lock","original_blob_upload_readback",
   "duplicate_original_blob_readback","physical_item_sql",
   "final_sql_commit"
 ]);
@@ -53,6 +53,26 @@ export function recordPrepaidStageTimingV39(
       // Unlike diagnostics_channel, one failing observer cannot schedule an
       // uncaught exception that terminates the actual webhook process.
     }
+  }
+}
+
+/**
+ * P05/P06: Time already authenticated JSON canonical source/item preparation.
+ * Synchronous by design; does not acquire SQL or persist any original source.
+ * Redacted stage name + elapsed_ms only; never emit parsed source content.
+ */
+export function timePrepaidSyncStageV39<T>(
+  stage:PrepaidStageV39,action:()=>T
+):T{
+  const started=performance.now();
+  let outcome:"completed"|"failed"="failed";
+  try{
+    const result=action();
+    outcome="completed";
+    return result;
+  }finally{
+    try{recordPrepaidStageTimingV39(stage,performance.now()-started,outcome);}
+    catch{/* metrics must never alter provider processing */}
   }
 }
 
