@@ -49,3 +49,14 @@ The user-agreed proposed **6 primary +6 independently source-verified emergency 
 ## Evidence status clarification
 
 The Replit Agent's code/run findings are **a read-only AI inspection**, not a cryptographically signed independent attestation; therefore label all deployment code parity conclusions preliminary until reproducible SHA/version/binding verification. Actual GitHub original source excerpts directly confirm current draft's `req.rawBody` versus `canonical(input.body)` distinction.
+
+
+## Verified continuous-integration evidence for backup gate and literal original HTTP format
+
+[**GitHub Actions #38112738722**](https://github.com/HKcode22/ReplitTranvr/actions/runs/38112738722), **exact tested source** `ef7006ff543494b05cf3dc974a4bd1d301ca29c5`: both CI jobs SUCCESS, **580/580 offline regressions in 56 suites +76/76 actual disposable V3.9 PostgreSQL16 integrations**, real database SIGKILL still confirms `UNLOGGED` state reset. Neither the root GitHub project nor public Replit deployments were modified, paid queried or republished.
+
+12 pure off-line `tests/phase2g_published_backup_parity_gate_v39.test.ts` tests demonstrate fail closed on the actually **reported** Travnr published build's missing physical-v2, unverified revision/callback secret/database/bucket parity, source literal-wire custody not proven, frontdoor/one-subscription/replay/source ledgers absent, and no full hosted 120min rehearsal. A hypothetically fully operator-attested source pair can be considered for **an isolated no-AeroDataBox-credit hosted rehearsal**, but the gate always returns paid GO and 6+6 **false**.
+
+One new actual V3.9 HTTP+PostgreSQL integration test provides a stronger observation than static inspection: a synthetically transmitted pretty-printed JSON body is parsed and persisted; the stored source blob is exact **canonicalized JSON with the same parsed object**, but differs from the sender's literal HTTP bytes in length/hash/content ordering. CI explicitly printed `ACTUAL_V39_ORIGINAL_WIRE_BYTE_ARCHIVE=NOT_IMPLEMENTED` and `ACTUAL_V39_CANONICAL_PARSED_JSON_BLOB=CONFIRMED`. **No provider original flight observation was modified.** This is a current draft-source behavior test, not an independent attestation of the currently deployed primary build.
+
+Consequence: unless the original F.8 science and contractual definition expressly treats canonical JSON as sufficient original source, do not claim byte-for-byte preservation or use the current canonicalized blob as a literal signed wire receipt. Any future production change must be tested for duplicate source identity/retention, replays and historical compatibility; it was **NOT** implemented in production here.
