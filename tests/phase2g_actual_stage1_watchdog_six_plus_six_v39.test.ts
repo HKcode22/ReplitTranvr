@@ -39,7 +39,9 @@ const knownProof=():Stage1IndependentlyVerifiedOutageWitnessV39=>({
   currentEvidenceAgeSeconds:2,
   queueBacklogAgeSeconds:22,queueRetentionSeconds:6000,
   providerMaxDeliveryRetries:0,
-  projectedWorstCaseTotalCredits:500,frozenCreditCeiling:500
+  projectedWorstCaseTotalCredits:500,frozenCreditCeiling:500,
+  frozenMaxOutageEpisodes:2,
+  frozenMaxCumulativeOutageEnvelopeMs:360_000
 });
 function observe(input:{
   mode?:Stage1CallbackWatchdogModeV39;
@@ -342,6 +344,70 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
       action:"STOP_OWNER",reason:"SIX_PLUS_SIX_WALL_CLOCK_MAX_EXCEEDED"
     });
     noPaid(recovered);
+  });
+  it("P15 real controller does not mint unlimited new 6+6 on independently recovered episodes",()=>{
+    let s=initialStage1WatchdogStateV39();
+    const proof={...knownProof(),frozenMaxOutageEpisodes:1};
+    const f1=advanceStage1WatchdogV39({
+      mode:"six-plus-six-candidate",previous:s,health:transient,
+      nowMonotonicMs:0,evidence:proof
+    });s=f1.state;
+    expect(s.outageEpisodeCount).toBe(1);
+    const recovered=advanceStage1WatchdogV39({
+      mode:"six-plus-six-candidate",previous:s,health:healthy,
+      nowMonotonicMs:15_000,evidence:proof
+    });s=recovered.state;
+    expect(recovered.action).toBe("MONITOR");
+    expect(s.closedOutageEnvelopeMs).toBe(15_000);
+    const second=advanceStage1WatchdogV39({
+      mode:"six-plus-six-candidate",previous:s,health:transient,
+      nowMonotonicMs:30_000,evidence:proof
+    });
+    expect(second.action).toBe("STOP_OWNER");
+    expect(second.reason).toBe("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED");
+    expect(second.scientificPassAuthorized).toBe(false);
+    expect(second.paidLaunchAuthorized).toBe(false);
+  });
+  it("P15 whole-run cumulative fault envelope is preserved after a signed healthy recovery",()=>{
+    let s=initialStage1WatchdogStateV39();
+    const proof={...knownProof(),frozenMaxOutageEpisodes:3,
+      frozenMaxCumulativeOutageEnvelopeMs:30_000};
+    for(const [at,health] of [
+      [0,transient],[15_000,healthy],[30_000,transient],
+      [45_000,transient]
+    ] as const){
+      const out=advanceStage1WatchdogV39({
+        mode:"six-plus-six-candidate",previous:s,health,
+        nowMonotonicMs:at,evidence:proof
+      });s=out.state;
+      expect(out.action).toBe("MONITOR");
+    }
+    expect(s.closedOutageEnvelopeMs).toBe(15_000);
+    const exceeded=advanceStage1WatchdogV39({
+      mode:"six-plus-six-candidate",previous:s,health:transient,
+      nowMonotonicMs:60_000,evidence:proof
+    });
+    expect(exceeded.action).toBe("STOP_OWNER");
+    expect(exceeded.reason).toBe("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED");
+  });
+  it("P15 unsigned, absent or unreasonable risk limits cannot act as an independent source witness",()=>{
+    for(const invalid of [
+      {frozenMaxOutageEpisodes:undefined},
+      {frozenMaxOutageEpisodes:0},
+      {frozenMaxOutageEpisodes:101},
+      {frozenMaxCumulativeOutageEnvelopeMs:undefined},
+      {frozenMaxCumulativeOutageEnvelopeMs:0},
+      {frozenMaxCumulativeOutageEnvelopeMs:Number.MAX_SAFE_INTEGER}
+    ]){
+      const p={...knownProof(),...invalid} as Stage1IndependentlyVerifiedOutageWitnessV39;
+      expect(independentOutageWitnessReasonV39(p)).toBe(
+        "SOURCE_WITNESS_SCHEMA_OR_PROVIDER_RETRY_CONTRACT_INVALID");
+      const out=advanceStage1WatchdogV39({
+        mode:"six-plus-six-candidate",previous:initialStage1WatchdogStateV39(),
+        health:transient,nowMonotonicMs:0,evidence:p
+      });
+      expect(out.action).toBe("STOP_OWNER");
+    }
   });
   it("six plus six never mutates provider retries, bills credits or grants paid owner authority",()=>{
     const r=observe({failures:10,proof:knownProof()});
