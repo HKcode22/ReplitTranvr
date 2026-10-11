@@ -115,8 +115,10 @@ beforeAll(async()=>{
     "raw_body_sha256 text,provider_subscription_id text,received_at_utc timestamptz,",
     "provider_notification_generated_utc timestamptz,delivery_attempt_seq_no integer,",
     "delivery_attempt_utc timestamptz,",
+    // Match the real B0062 baseline: an airport webhook may bill for
+    // several flight items in one attempted delivery, NOT 0-or-1 only.
     "delivery_attempt_cost_credits numeric CHECK(",
-    "delivery_attempt_cost_credits IS NULL OR delivery_attempt_cost_credits <= 1),",
+    "delivery_attempt_cost_credits IS NULL OR delivery_attempt_cost_credits >= 0),",
     "notification_items integer,PRIMARY KEY(session_id,delivery_id))",
     "; CREATE UNLOGGED TABLE clean.prepaid_probe_item_runtime(",
     "session_id uuid NOT NULL,delivery_id text NOT NULL,item_index integer NOT NULL,",
