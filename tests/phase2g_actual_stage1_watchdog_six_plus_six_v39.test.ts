@@ -28,6 +28,9 @@ const knownProof=():Stage1IndependentlyVerifiedOutageWitnessV39=>({
   oneActiveOwner:true,
   senderAttemptCount:260,originalSourceAttemptCount:260,
   senderBilledCredits:260,originalSourceAttributedCredits:260,
+  eachSenderAttemptMatchedByImmutableIdentity:true,
+  eachSenderAttemptFlightItemCreditsMatched:true,
+  noUnattributedOrDuplicateBillableAttempts:true,
   sourceUtcAndWireShaVerified:true,fullOriginalBytesReadBack:true,
   rawRetentionHours:168,everyPhysicalFlightV2Reconstructible:true,
   originalElapsed15mBucketsPreserved:true,
@@ -198,6 +201,38 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
     const r=observe({failures:5,proof});
     expect(r.steps).toHaveLength(1);
     expect(r.last.reason).toBe("SOURCE_WITNESS_PROVIDER_ATTEMPT_OR_CREDIT_GAP");
+  });
+  it("P14 same overall count and credit total STILL stops for offsetting per-attempt 5/4 vs 4/5",()=>{
+    const proof={...knownProof(),
+      senderAttemptCount:2,originalSourceAttemptCount:2,
+      senderBilledCredits:9,originalSourceAttributedCredits:9,
+      // Synthetic signed sender: item credits [5,4]
+      // Synthetic receipt/readback:  item credits [4,5]
+      eachSenderAttemptFlightItemCreditsMatched:false
+    };
+    expect(independentOutageWitnessReasonV39(proof))
+      .toBe("SOURCE_WITNESS_PER_ATTEMPT_ITEM_CREDITS_OR_IDENTITY_GAP");
+    const result=observe({failures:9,proof});
+    expect(result.steps).toHaveLength(1);
+    expect(result.last).toMatchObject({
+      action:"STOP_OWNER",reason:"SOURCE_WITNESS_PER_ATTEMPT_ITEM_CREDITS_OR_IDENTITY_GAP",
+      scientificPassAuthorized:false,paidLaunchAuthorized:false
+    });
+  });
+  it("P15 summary-equal duplicated, forged or missing attempt identities cannot extend the 3-strike limit",()=>{
+    for(const wrong of [
+      {eachSenderAttemptMatchedByImmutableIdentity:false},
+      {noUnattributedOrDuplicateBillableAttempts:false},
+      {eachSenderAttemptMatchedByImmutableIdentity:undefined},
+      {eachSenderAttemptFlightItemCreditsMatched:undefined}
+    ]){
+      const proof={...knownProof(),...wrong} as Stage1IndependentlyVerifiedOutageWitnessV39;
+      const result=observe({failures:4,proof});
+      expect(result.steps).toHaveLength(1);
+      expect(result.last).toMatchObject({
+        action:"STOP_OWNER",reason:"SOURCE_WITNESS_PER_ATTEMPT_ITEM_CREDITS_OR_IDENTITY_GAP"
+      });
+    }
   });
   it("billing mismatch at same attempt count stops immediately",()=>{
     const r=observe({failures:5,proof:{
