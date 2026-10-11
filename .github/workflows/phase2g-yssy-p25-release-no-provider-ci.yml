@@ -50,6 +50,15 @@ jobs:
             tests/phase2g_p2g23_frozen_recovery_selector_v39.test.ts \
             tests/phase2g_source_head_auth_binding_v39.test.ts
           echo "PAID_OPERATIONS=NONE"
+      - name: Verify historical immutable P2G23 and draft P25 amendment SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum artifacts/phase2g-early-pilot-yssy-p2g23-recovery-freeze-20261009.json
+          sha256sum artifacts/phase2g-early-pilot-yssy-p25-draft-20261011.json
+          sha256sum artifacts/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json
+          echo "P2G25_PROJECT_LEAD_APPROVED=false"
+          echo "P2G25_PAID_MUTATION_AUTHORIZED=false"
       - name: Create SHA-bound source/calendar zero-credit receipt
         shell: bash
         run: |
