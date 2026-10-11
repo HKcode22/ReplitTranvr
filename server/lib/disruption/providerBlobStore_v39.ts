@@ -96,6 +96,12 @@ export async function persistProviderBlobBeforeAckV39(input: {
   retentionHours: number;
   now: Date;
   uuid?: string;
+  /**
+   * DEFAULT is legacy best-effort delete. 'retain' is permitted ONLY where
+   * an immutable LOGGED PENDING intent was committed BEFORE attempting I/O.
+   * Retention without a source journal can create an untracked orphan.
+   */
+  failureCleanup?: "delete" | "retain";
 }): Promise<ProviderBlobRefV39> {
   if (!Number.isFinite(input.now.getTime())) throw new Error("PROVIDER_BLOB_NOW_INVALID");
   if (!(input.bytes instanceof Uint8Array)) throw new Error("PROVIDER_BLOB_BYTES_INVALID");
@@ -115,7 +121,13 @@ export async function persistProviderBlobBeforeAckV39(input: {
       throw new Error("PROVIDER_BLOB_ROUNDTRIP_MISMATCH");
     }
   } catch (error) {
-    try { await input.store.delete(objectName); } catch { /* best-effort cleanup; caller still fails closed */ }
+    // This callback can be AFTER an upload that actually succeeded even
+    // when its network reply or readback failed. A LOGGED PENDING journal
+    // must retain that possibly recoverable source rather than delete it.
+    if(input.failureCleanup!=="retain"){
+      try { await input.store.delete(objectName); }
+      catch { /* original error remains authoritative */ }
+    }
     throw error;
   }
   const persistedAtUtc = input.now.toISOString();
