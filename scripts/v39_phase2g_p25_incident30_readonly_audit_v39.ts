@@ -35,7 +35,14 @@ async function main():Promise<void>{
       SELECT to_regclass('clean.prepaid_probe_session_runtime') IS NOT NULL AS runtime_present,
              to_regclass('clean.phase2g_cleanup_journal_v39') IS NOT NULL AS cleanup_journal_present,
              to_regclass('clean.provider_content_blob_ref') IS NOT NULL AS blob_ref_present,
-             to_regclass('clean.phase2g_prepaid_source_intent_v39') IS NOT NULL AS v0064_present
+             to_regclass('clean.phase2g_prepaid_source_intent_v39') IS NOT NULL AS v0064_present,
+             EXISTS (
+               SELECT 1 FROM pg_trigger tg
+               WHERE tg.tgrelid=to_regclass('clean.phase2g_prepaid_source_intent_v39')
+                 AND tg.tgname='trg_p2g_prepaid_source_intent_v39'
+                 AND tg.tgfoid=to_regprocedure('clean.guard_p2g_prepaid_source_intent_v39()')
+                 AND tg.tgenabled='O'
+             ) AS v0064_guard_trigger_enabled
     `);
     const present=presence.rows[0]??{};
     const runtime=present.runtime_present===true?await client.query(`
@@ -69,6 +76,7 @@ async function main():Promise<void>{
       historical_incident:incident.rows[0]??null,
       historical_probe:probe.rows[0]??null,
       has_v0064_source_intent:present.v0064_present===true,
+      v0064_source_immutability_trigger_enabled:present.v0064_guard_trigger_enabled===true,
       runtime_table_present:present.runtime_present===true,
       runtime_session_rows:runtime?.rows??null,
       missing_unlogged_runtime_is_not_cleanup_proof:runtime?.rowCount===0,
