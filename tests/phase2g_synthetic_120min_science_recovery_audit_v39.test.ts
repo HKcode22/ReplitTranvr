@@ -380,17 +380,30 @@ describe("P13 signed synthetic TWO-HOUR all-eight-bin source-to-recovery truth a
       scientificPassAuthorized:false
     });
   });
-  it("a signed but incorrect multi-flight cost is rejected against original wire item count",()=>{
+  it("signed sender and signed journal can agree on zero cost yet still violate original 1-flight wire",()=>{
     const f=makeFixture();
     const i=3;
-    const old=JSON.parse(new TextDecoder().decode(f.entries[i].originalWire));
-    old.deliveryAttempt.costCredits=0;
-    const bytes=new TextEncoder().encode(JSON.stringify(old));
-    const frame=f.entries[i].signed.frame;
-    // A zero-credit journal cannot sign one physical item anymore.
-    expect(()=>signSyntheticScienceRecoveryFrameV39({
-      ...frame,sourceWireSha256:digest(bytes),syntheticCostCredits:0
-    },JOURNAL_KEY)).toThrow("P13_LOGGED_SCIENCE_FRAME_INVALID");
+    const raw=JSON.parse(new TextDecoder().decode(f.entries[i].originalWire));
+    raw.deliveryAttempt.costCredits=0;
+    const bytes=new TextEncoder().encode(JSON.stringify(raw));
+    const prior=f.entries[i].signed.frame;
+    f.entries[i]={
+      originalWire:bytes,
+      signed:signSyntheticScienceRecoveryFrameV39({
+        ...prior,sourceWireSha256:digest(bytes),syntheticCostCredits:0
+      },JOURNAL_KEY)
+    };
+    const a=f.signedSyntheticSender.frame.attempts[i];
+    f.signedSyntheticSender=signSyntheticSenderFrameV39({
+      ...f.signedSyntheticSender.frame,
+      attempts:f.signedSyntheticSender.frame.attempts.map((x,k)=>
+        k===i?{...a,wireSha256:digest(bytes),
+          canonicalSha256:digest(canonical(raw)),syntheticCostCredits:0}:x)
+    },SENDER_KEY);
+    const r=audit(f);
+    expect(r.testManifestConsistent).toBe(false);
+    expect(r.errors).toContain("P13_ORIGINAL_FLIGHT_ITEM_CREDIT_COUNT_MISMATCH");
+    expect(r.scientificPassAuthorized).toBe(false);
   });
 
 });
