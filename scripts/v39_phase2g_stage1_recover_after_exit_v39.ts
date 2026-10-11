@@ -248,6 +248,19 @@ async function main(): Promise<void> {
     }
 
     if (ownedProviderSubscriptionId) {
+      // A second unrelated billable subscription means isolation was lost.
+      // Never delete an owned one and then report "billing stopped" while
+      // another subscription is still active on this shared provider key.
+      const foreign=activeBillableBefore.filter(subscription=>
+        subscription.id!==ownedProviderSubscriptionId);
+      if(foreign.length){
+        await openRecoveryIncident({
+          probeId,budgetDayId,
+          reason:"foreign_active_billable_during_exact_owned_cleanup",
+          activeForeignBillableCount:foreign.length
+        });
+        throw new Error("RECOVERY_REFUSED:FOREIGN_ACTIVE_BILLABLE_SUBSCRIPTION");
+      }
       const owned = before.find((subscription) => subscription.id === ownedProviderSubscriptionId);
       if (owned?.isActive) {
         const expectedSubscriberId = prepaidProbeWebhookUrlV39(
@@ -287,6 +300,22 @@ async function main(): Promise<void> {
       }
     } else {
       providerDeleteVerified = activeBillableBefore.length === 0;
+    }
+    if(providerDeleteVerified){
+      // A successful exact-ID DELETE is necessary, not a census of the
+      // entire account. Verify provider inventory has NO remaining active
+      // billable subscriptions before recording final cleanup success.
+      const inventoryAfter=await listSubscriptionsStrictWithRetry();
+      const residual=inventoryAfter.filter(s=>
+        s.isActive&&s.billingType!=="LifetimeBased");
+      if(residual.length){
+        await openRecoveryIncident({
+          probeId,budgetDayId,
+          reason:"billable_subscription_remained_after_exact_owner_cleanup",
+          activeResidualBillableCount:residual.length
+        });
+        throw new Error("RECOVERY_REFUSED:RESIDUAL_ACTIVE_BILLABLE_AFTER_DELETE");
+      }
     }
     if(!providerDeleteVerified){
       await openRecoveryIncident({
@@ -368,6 +397,16 @@ async function main(): Promise<void> {
       }
       if (exactResetMatches.length === 1) {
         const ownedProviderSubscriptionId = exactResetMatches[0].id;
+        const foreign=activeBillableBefore.filter(s=>
+          s.id!==ownedProviderSubscriptionId);
+        if(foreign.length){
+          await openRecoveryIncident({
+            probeId,budgetDayId,durableSessionId,
+            reason:"runtime_reset_has_foreign_active_billable_subscriptions",
+            activeForeignBillableCount:foreign.length
+          });
+          throw new Error("RECOVERY_REFUSED:RUNTIME_RESET_FOREIGN_ACTIVE_BILLABLE");
+        }
         providerDeleteAttempted = true;
         providerDeleteVerified =
           await deleteSubscriptionVerifiedStrict(
@@ -385,6 +424,17 @@ async function main(): Promise<void> {
           throw new Error(
             "RECOVERY_FAILED:RUNTIME_RESET_OWNED_SUBSCRIPTION_DELETE_NOT_VERIFIED",
           );
+        }
+        const after=await listSubscriptionsStrictWithRetry();
+        const residual=after.filter(s=>s.isActive&&
+          s.billingType!=="LifetimeBased");
+        if(residual.length){
+          await openRecoveryIncident({
+            probeId,budgetDayId,durableSessionId,
+            reason:"runtime_reset_residual_active_billable_after_delete",
+            activeResidualBillableCount:residual.length
+          });
+          throw new Error("RECOVERY_REFUSED:RUNTIME_RESET_RESIDUAL_ACTIVE_BILLABLE");
         }
         stopReason = "supervisor_child_exit_after_runtime_reset_recovered";
       } else if (activeBillableBefore.length > 0) {
