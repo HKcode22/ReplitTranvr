@@ -894,6 +894,98 @@ export function preparePrepaidProbeSourceV39(
 }
 
 /**
+ * P06 duplicate-only optimization, deliberately OFF for deployed paid owner.
+ * This changes no new-original admission path; it is not an independent edge
+ * or a way to avoid original-source custody/credit accounting requirements.
+ */
+export function prepaidDuplicatePrelockReadbackApprovedV39(
+  env:NodeJS.ProcessEnv=process.env
+):boolean{
+  return env.V39_CALLBACK_ONLY_RUNTIME==="1"&&
+    env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED==="1";
+}
+type PrepaidDuplicatePreflightV39=Readonly<{
+  blobRefId:string;
+  objectName:string;
+  sourceRecordId:string;
+  contentSha256:string;
+  contentBytes:number;
+  expiresAtUtc:string;
+  retentionHours:number;
+  storageKind:string;
+  contractVersion:string;
+  contentClass:string;
+  sourceKind:string;
+}>;
+/**
+ * Only for previously committed identities, NOT newly submitted originals.
+ * If ANY preflight step fails, deliberately fall back to normal locked-path
+ * processing so failure accounting/duplicate conflict remain authoritative.
+ * This function NEVER ACKs and NEVER writes either storage system.
+ */
+async function readPrepaidDuplicateOutsideLockV39(input:{
+  sessionId:string;deliveryId:string;expectedBodySha256:string;
+  expectedRawBytes:Uint8Array;receivedAtUtc:Date;
+}):Promise<PrepaidDuplicatePreflightV39|null>{
+  if(!prepaidDuplicatePrelockReadbackApprovedV39())return null;
+  try{
+    const result=await pool.query(`
+      SELECT d.blob_ref_id,d.raw_body_sha256,
+             r.blob_ref_id AS logged_blob_ref_id,
+             r.object_name,r.source_record_id,r.content_sha256,
+             r.content_bytes,r.expires_at_utc,r.retention_hours,
+             r.storage_kind,r.contract_version,r.content_class,r.source_kind
+        FROM clean.prepaid_probe_delivery_runtime d
+        JOIN clean.provider_content_blob_ref r
+          ON r.blob_ref_id=d.blob_ref_id
+       WHERE d.session_id=$1 AND d.delivery_id=$2
+    `,[input.sessionId,input.deliveryId]);
+    if(result.rowCount!==1)return null;
+    const x=result.rows[0];
+    const expiry=Number(new Date(x.expires_at_utc).getTime());
+    if(String(x.blob_ref_id)!==String(x.logged_blob_ref_id)||
+      x.raw_body_sha256!==input.expectedBodySha256||
+      x.content_sha256!==input.expectedBodySha256||
+      Number(x.content_bytes)!==input.expectedRawBytes.byteLength||
+      x.storage_kind!=="replit_app_storage"||
+      x.contract_version!=="provider-blob-contract-v39@1.0.0"||
+      x.content_class!=="raw_provider_content"||
+      x.source_kind!=="webhook"||
+      x.source_record_id!==
+        `prepaid:${input.sessionId}:${input.deliveryId}`||
+      Number(x.retention_hours)!==168||
+      !Number.isFinite(expiry)||
+      expiry<=input.receivedAtUtc.getTime()||
+      typeof x.object_name!=="string"||
+      !/^v39\\/provider\\/raw_provider_content\\/[0-9a-f]{2}\\/[0-9a-f-]{36}\\.blob$/.test(x.object_name)||
+      !x.object_name.endsWith(
+        `/${String(x.blob_ref_id).toLowerCase()}.blob`))
+      return null;
+    const store=createRequiredProviderBlobStoreV39();
+    const bytes=await timePrepaidStageV39(
+      "duplicate_original_blob_readback",()=>
+        store.downloadBytes(x.object_name));
+    if(bytes.byteLength!==input.expectedRawBytes.byteLength||
+      sha256(bytes)!==input.expectedBodySha256||
+      !Buffer.from(bytes).equals(Buffer.from(input.expectedRawBytes)))
+      return null;
+    return {
+      blobRefId:String(x.blob_ref_id),objectName:x.object_name,
+      sourceRecordId:x.source_record_id,contentSha256:x.content_sha256,
+      contentBytes:Number(x.content_bytes),
+      expiresAtUtc:new Date(x.expires_at_utc).toISOString(),
+      retentionHours:Number(x.retention_hours),
+      storageKind:x.storage_kind,contractVersion:x.contract_version,
+      contentClass:x.content_class,sourceKind:x.source_kind
+    };
+  }catch{
+    // The ordinary path still checks the original under the lock and
+    // accounts for any failure. A preflight cannot manufacture a success.
+    return null;
+  }
+}
+
+/**
  * PITR-safe prepaid webhook persistence.
  *
  * Raw bytes are durably round-trip verified in App Storage BEFORE this returns.
@@ -917,6 +1009,14 @@ export async function persistPrepaidProbeWebhookV39(input: {
     preparePrepaidProbeSourceV39(sessionId,input.body));
   const {rawBytes,bodySha256,evidence,deliveryId,flights,itemRawSha256s}=
     prepared;
+  // On an approved duplicate-only callback, do the slow unchanged-original
+  // storage readback before acquiring the per-session FOR UPDATE lock.
+  // Even a successful readback MUST be revalidated under the actual SQL lock.
+  // Default remains disabled and a new delivery always takes the old path.
+  const preflight=await readPrepaidDuplicateOutsideLockV39({
+    sessionId,deliveryId,expectedBodySha256:bodySha256,
+    expectedRawBytes:rawBytes,receivedAtUtc:receivedAt
+  });
   let failureSavepointOpen = false;
   // A lost PostgreSQL COMMIT response does not prove rollback. Until the
   // result is known, retain the original Replit blob: deleting it could
@@ -1000,20 +1100,41 @@ export async function persistPrepaidProbeWebhookV39(input: {
           `/${String(previous.blob_ref_id).toLowerCase()}.blob`
         ))
       throw new Error("PREPAID_PROBE_DUPLICATE_LOGGED_SOURCE_REF_INVALID");
-    // A DB row can outlive the bytes due to bucket deletion, corruption or
-    // service availability. Read-back failure must roll back this ACK and
-    // preserve explicit callback failure accounting under the session lock.
-    store = createRequiredProviderBlobStoreV39();
-    let readBack:Uint8Array;
-    try {
-      readBack = await timePrepaidStageV39("duplicate_original_blob_readback",()=>store!.downloadBytes(previous.object_name));
-    } catch {
-      throw new Error("PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_UNREADABLE");
+    // Prechecked duplicate bytes are NEVER sufficient by themselves.
+    // Recheck every immutable LOGGED source-ref attribute under the session
+    // row lock. If it changed while object storage was being downloaded,
+    // fail closed instead of trusting the earlier external readback.
+    const preflightMatches=preflight!==null&&
+      preflight.blobRefId===String(previous.blob_ref_id)&&
+      preflight.objectName===previous.object_name&&
+      preflight.sourceRecordId===previous.source_record_id&&
+      preflight.contentSha256===previous.content_sha256&&
+      preflight.contentBytes===Number(previous.content_bytes)&&
+      preflight.expiresAtUtc===
+        new Date(previous.expires_at_utc).toISOString()&&
+      preflight.retentionHours===Number(previous.retention_hours)&&
+      preflight.storageKind===previous.storage_kind&&
+      preflight.contractVersion===previous.contract_version&&
+      preflight.contentClass===previous.content_class&&
+      preflight.sourceKind===previous.source_kind;
+    if(preflight!==null&&!preflightMatches)
+      throw new Error("PREPAID_PROBE_DUPLICATE_PRELOCK_SOURCE_REF_CHANGED");
+    if(!preflightMatches){
+      // Legacy path for disabled preflight, unknown deliveries, failed
+      // readback, missing metadata or storage failure. Keep the lock,
+      // byte/SHA checks and failure accounting exactly as before.
+      store = createRequiredProviderBlobStoreV39();
+      let readBack:Uint8Array;
+      try {
+        readBack = await timePrepaidStageV39("duplicate_original_blob_readback",()=>store!.downloadBytes(previous.object_name));
+      } catch {
+        throw new Error("PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_UNREADABLE");
+      }
+      if (readBack.byteLength !== rawBytes.byteLength ||
+          sha256(readBack) !== bodySha256 ||
+          !Buffer.from(readBack).equals(rawBytes))
+        throw new Error("PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_CHANGED");
     }
-    if (readBack.byteLength !== rawBytes.byteLength ||
-        sha256(readBack) !== bodySha256 ||
-        !Buffer.from(readBack).equals(rawBytes))
-      throw new Error("PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_CHANGED");
     await client.query(
       `UPDATE clean.prepaid_probe_session_runtime
           SET callback_success_2xx=callback_success_2xx+1
