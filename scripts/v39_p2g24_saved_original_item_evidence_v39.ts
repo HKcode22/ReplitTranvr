@@ -115,3 +115,76 @@ export function summarizePreservedOriginalItemEvidenceV39(
     providerCalls:0,databaseReads:0,databaseMutations:0,storageMutations:0
   };
 }
+
+
+/**
+ * Join real already-preserved LOGGED blob-ref metadata to CURRENT UNLOGGED
+ * delivery records, without manufacturing historic rows after an UNLOGGED
+ * reset. Neither an unmatched ref nor a missing UNLOGGED row proves an
+ * original upstream AeroDataBox send was lost or a billable item vanished.
+ */
+export type CurrentRuntimeSourceRowV39=Readonly<{
+  blobRefId:string;rawBodySha256:string;
+  notificationItems:unknown;deliveryAttemptCostCredits:unknown;
+}>;
+export function summarizeCurrentRuntimeLinksForPreservedSourcesV39(
+  savedRefs:readonly Readonly<{blobRefId:string;contentSha256:string}>[],
+  runtime:readonly CurrentRuntimeSourceRowV39[]
+){
+  const ids=new Map<string,string>();
+  if(savedRefs.length===0||savedRefs.length>1000||runtime.length>1000)
+    throw Error("P14_RUNTIME_LINK_SOURCE_COUNT_INVALID");
+  for(const s of savedRefs){
+    if(typeof s.blobRefId!=="string"||!HEX.test(s.contentSha256)||
+       ids.has(s.blobRefId))
+      throw Error("P14_RUNTIME_LINK_SAVED_REF_DUPLICATE_OR_INVALID");
+    ids.set(s.blobRefId,s.contentSha256);
+  }
+  let exact=0,unmatched=0,shaMismatch=0,invalidItems=0;
+  let invalidCredit=0,costItemMismatch=0;
+  const found=new Set<string>();
+  for(const row of runtime){
+    if(typeof row.blobRefId!=="string"||
+      typeof row.rawBodySha256!=="string"||
+      found.has(row.blobRefId))
+      throw Error("P14_RUNTIME_LINK_RUNTIME_DUPLICATE_OR_INVALID");
+    found.add(row.blobRefId);
+    const expected=ids.get(row.blobRefId);
+    if(expected===undefined)unmatched++;
+    else if(expected!==row.rawBodySha256)shaMismatch++;
+    else exact++;
+    const items=Number(row.notificationItems);
+    if(!Number.isSafeInteger(items)||items<0)invalidItems++;
+    const credit=row.deliveryAttemptCostCredits;
+    if(credit!==null&&credit!==undefined){
+      const n=Number(credit);
+      // PG NUMERIC can be a string; accept exact decimal integer only.
+      if(!Number.isSafeInteger(n)||n<0||
+        typeof credit==="string"&&!/^(0|[1-9][0-9]*)$/.test(credit))
+        invalidCredit++;
+      else if(Number.isSafeInteger(items)&&n!==items)
+        costItemMismatch++;
+    }
+  }
+  return {
+    schema:"v39.p14-preserved-logged-to-current-unlogged-links.v1" as const,
+    savedLoggedOriginalReferences:savedRefs.length,
+    currentUnloggedDeliveryRows:runtime.length,
+    exactCurrentOriginalRefAndShaMatches:exact,
+    savedLoggedRefsWithoutCurrentUnloggedDelivery:
+      savedRefs.length-[...found].filter(id=>ids.has(id)).length,
+    currentUnloggedDeliveriesWithoutSavedLoggedRef:unmatched,
+    currentUnloggedDeliveriesWithSourceShaConflict:shaMismatch,
+    currentUnloggedDeliveriesInvalidItemCount:invalidItems,
+    currentUnloggedDeliveriesInvalidCostClaim:invalidCredit,
+    currentUnloggedDeliveriesWithItemCreditDisagreement:costItemMismatch,
+    sourceOfTimeAndItemCredits:"CURRENT_DATABASE_ROWS_ONLY" as const,
+    missingCurrentUnloggedRowsDoNotProveMissingUpstreamSends:true as const,
+    afterCrashHistoricalRuntimeCannotBeInferred:true as const,
+    independentProviderAttemptAndBillLedgerPresent:false as const,
+    actualHistorical260259CauseKnown:false as const,
+    canAuthorizePaidLaunch:false as const,
+    databaseMutations:0 as const,objectStorageMutations:0 as const,
+    providerCalls:0 as const
+  };
+}
