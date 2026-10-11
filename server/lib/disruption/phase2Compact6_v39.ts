@@ -187,6 +187,15 @@ export interface Phase2gP2g25YssyRecoveryV39 {
   unsettled_margin_credits:50;
   protected_account_floor_credits:1000;
   provider_max_delivery_retries:0;
+  stage1_supervisor_health_policy:"six-plus-six";
+  health_primary_checks:6;
+  health_contingency_checks:6;
+  health_poll_interval_seconds:15;
+  health_single_outage_wall_limit_seconds:180;
+  health_whole_run_max_episodes:2;
+  health_whole_run_cumulative_limit_seconds:180;
+  health_recovery_does_not_certify_sender_completeness:true;
+  health_recovery_requires_final_credit_and_source_science_audit:true;
   no_automatic_retry_after_this_attempt:true;
   no_retroactive_historical_science_promotion:true;
   requires_new_source_bound_runtime_auth:true;
@@ -965,6 +974,14 @@ export function loadPhase2gCompact6AmendmentV39(input: {
        p25.unsettled_margin_credits!==50||
        p25.protected_account_floor_credits!==1000||
        p25.provider_max_delivery_retries!==0||
+       p25.stage1_supervisor_health_policy!=="six-plus-six"||
+       p25.health_primary_checks!==6||p25.health_contingency_checks!==6||
+       p25.health_poll_interval_seconds!==15||
+       p25.health_single_outage_wall_limit_seconds!==180||
+       p25.health_whole_run_max_episodes!==2||
+       p25.health_whole_run_cumulative_limit_seconds!==180||
+       p25.health_recovery_does_not_certify_sender_completeness!==true||
+       p25.health_recovery_requires_final_credit_and_source_science_audit!==true||
        p25.no_automatic_retry_after_this_attempt!==true||
        p25.no_retroactive_historical_science_promotion!==true||
        p25.requires_new_source_bound_runtime_auth!==true||
@@ -995,6 +1012,11 @@ export function loadPhase2gCompact6AmendmentV39(input: {
        decision.status!=="PROJECT_LEAD_APPROVED_ONE_RECOVERY"||
        decision.target!=="YSSY"||decision.max_alert_credits!==500||
        decision.max_additional_attempts!==1||
+       decision.stage1_supervisor_health_policy!=="six-plus-six"||
+       decision.health_single_outage_wall_limit_seconds!==180||
+       decision.health_whole_run_cumulative_limit_seconds!==180||
+       decision.health_whole_run_max_episodes!==2||
+       decision.health_recovery_scientific_audit_required!==true||
        decision.previous_failed_probes_immutable!==true||
        decision.provider_mutation_authorized_now!==false||
        decision.requires_fresh_auth_approval!==true||
