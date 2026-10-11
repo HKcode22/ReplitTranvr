@@ -72,6 +72,13 @@ try{
  await c.query("BEGIN TRANSACTION READ ONLY");
  const q=await c.query(`
  SELECT to_regclass('clean.phase2g_prepaid_source_intent_v39') IS NOT NULL AS has_v0064_source_intent,
+        EXISTS (
+          SELECT 1 FROM pg_trigger tg
+          WHERE tg.tgrelid=to_regclass('clean.phase2g_prepaid_source_intent_v39')
+            AND tg.tgname='trg_p2g_prepaid_source_intent_v39'
+            AND tg.tgfoid=to_regprocedure('clean.guard_p2g_prepaid_source_intent_v39()')
+            AND tg.tgenabled='O'
+        ) AS has_v0064_guard_trigger,
         to_regclass('clean.provider_content_blob_ref') IS NOT NULL AS has_logged_blobs,
         to_regclass('clean.prepaid_probe_session_runtime') IS NOT NULL AS has_session_runtime,
         to_regclass('clean.adb_anchor_probe') IS NOT NULL AS has_probe_registry
@@ -81,6 +88,7 @@ try{
   "SELECT count(*)::int AS n FROM clean.adb_anchor_probe WHERE status IN ('probing','settling')"
  ):null;
  const schemaGatePass=q.rows[0]?.has_v0064_source_intent===true&&
+   q.rows[0]?.has_v0064_guard_trigger===true&&
    q.rows[0]?.has_logged_blobs===true&&
    q.rows[0]?.has_session_runtime===true&&hasProbe&&
    active?.rows[0]?.n===0;
@@ -101,7 +109,7 @@ try{
 NODE
 ```
 
-This check NEVER applies V0064. It prints `current_schema_gate_pass=false` and exits nonzero if V0064 or any other required schema/probe condition fails; a zero exit status is still only a diagnostic and **not paid GO**. If `has_v0064_source_intent=false`, enable no PENDING-source feature flags; freeze exact reviewed migrations and preflight first. If it is present, that still does not mean the published older receiver includes the P06 code.
+This check NEVER applies V0064. It prints `current_schema_gate_pass=false` and exits nonzero if V0064, its enabled immutability trigger, or any other required schema/probe condition fails; a zero exit status is still only a diagnostic and **not paid GO**. If `has_v0064_source_intent=false`, enable no PENDING-source feature flags; freeze exact reviewed migrations and preflight first. If it is present, that still does not mean the published older receiver includes the P06 code.
 
 ## 4. The actual existing signed synthetic POST after a reviewed release — NOT safe to run until parity and schema confirmed
 
