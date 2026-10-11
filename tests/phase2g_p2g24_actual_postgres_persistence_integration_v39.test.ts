@@ -939,6 +939,29 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
       "SELECT state FROM clean.p2g_synthetic_raw_admission_intent"
     )).rows[0].state).toBe("PENDING");
   });
+  it("P13 changed LOGGED original content size or retention metadata refuses duplicate replay despite intact synthetic bytes",async()=>{
+    const fake=fakeStore();
+    await createRecoveredQuarantineSource("tampered-blob-ref",
+      sample({id:"synthetic-metadata-ref",flights:[operatorLeg()]}),fake.store);
+    await actualQuarantineReplay("tampered-blob-ref",fake.store);
+    const original=await state.pool!.query(
+      "SELECT content_bytes,expires_at_utc FROM clean.provider_content_blob_ref");
+    expect(original.rowCount).toBe(1);
+    await state.pool!.query(
+      "UPDATE clean.provider_content_blob_ref SET content_bytes=content_bytes+1");
+    await expect(actualQuarantineReplay("tampered-blob-ref",fake.store))
+      .rejects.toThrow("P13_REHYDRATE_LOGGED_ORIGINAL_REF_CONFLICT");
+    await state.pool!.query(
+      "UPDATE clean.provider_content_blob_ref SET content_bytes=$1,"+
+      "expires_at_utc=expires_at_utc+interval '1 hour'",
+      [original.rows[0].content_bytes]);
+    await expect(actualQuarantineReplay("tampered-blob-ref",fake.store))
+      .rejects.toThrow("P13_REHYDRATE_LOGGED_ORIGINAL_REF_CONFLICT");
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect((await state.pool!.query(
+      "SELECT callback_success_2xx,state FROM clean.prepaid_probe_session_runtime"
+    )).rows[0]).toMatchObject({callback_success_2xx:0,state:"quarantined"});
+  });
   it("P13 quarantined replay rejects original JSON duplicate cost key, unknown subscription or production credentials",async()=>{
     const fake=fakeStore();
     const wire='{"id":"fake","subscription":{"id":"'+SUB+
