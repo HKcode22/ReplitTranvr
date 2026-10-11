@@ -60,7 +60,7 @@ jobs:
             database_reads:0,database_mutations:0,
             signed_nonempty_external_post_verified:false,
             stage1_retry_approval_verified:false,
-            6plus6_paid_activation_verified:false,
+            six_plus_six_paid_activation_verified:false,
             paid_yssy_launch_go:false
           };
           fs.writeFileSync(outPath,JSON.stringify(result,null,2)+'\n',{flag:'wx'});
