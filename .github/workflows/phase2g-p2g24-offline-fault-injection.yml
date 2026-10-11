@@ -47,6 +47,8 @@ on:
       - tests/phase2g_p2g24_db_pool_acquisition_bound_v39.test.ts
       - tests/phase2g_yssy_zero_billable_delivery_retries_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_120min_acceptance_v39.ts
+      - experiments/phase2g_rehearsal/synthetic_120min_irregular_trace_v39.ts
+      - tests/phase2g_synthetic_120min_irregular_trace_v39.test.ts
       - tests/phase2g_yssy_synthetic_120min_acceptance_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_120min_science_recovery_audit_v39.ts
       - tests/phase2g_synthetic_120min_science_recovery_audit_v39.test.ts
@@ -140,6 +142,7 @@ jobs:
             tests/phase2g_p2g24_prepaid_transport_diagnostics_v39.test.ts \
             tests/phase2g_yssy_zero_billable_delivery_retries_v39.test.ts \
             tests/phase2g_yssy_synthetic_120min_acceptance_v39.test.ts \
+            tests/phase2g_synthetic_120min_irregular_trace_v39.test.ts \
             tests/phase2g_synthetic_120min_science_recovery_audit_v39.test.ts \
             tests/phase2g_variable_rate_wallclock_audit_v39.test.ts \
             tests/phase2g_dual_wire_canonical_source_receipt_v39.test.ts \
