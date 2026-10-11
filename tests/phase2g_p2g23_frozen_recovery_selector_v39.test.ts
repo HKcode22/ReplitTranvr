@@ -334,3 +334,74 @@ describe("P2G23 final bounded recovery", () => {
     );
   });
 });
+
+describe("P2G25 distinct prospective YSSY one-recovery only, fail closed",()=>{
+  const path="artifacts/phase2g-early-pilot-yssy-p25-draft-20261011.json";
+  const proposed=JSON.parse(readFileSync(path,"utf8"));
+  const draft=proposed.p2g25_yssy_published_infrastructure_recovery_rerun;
+  const signedOnlyForSelector={
+    ...draft,authorized:true,
+    approval_status:"PROJECT_LEAD_APPROVED_ONE_RECOVERY"
+  };
+  const p18=():Stage1AttemptEvidence=>({
+    ...valid(18,"YSSY",0),
+    probeBudgetDayId:"P2G-S1-20261009-23",
+    runtimeSessionId:"6267293e-75a0-42a7-b977-89543f200ebc",
+    status:"failed",durationCensored:true,
+    reconciliationStatus:"UNRESOLVED",
+    stopReason:"supervisor_child_exit_recovered",
+    durableReconciliation:null,
+    rowsPerHour:null
+  });
+  it("the committed proposal CANNOT authorize its own paid subscription",()=>{
+    expect(draft.authorized).toBe(false);
+    expect(draft.approval_status).toBe("DRAFT_NOT_AUTHORIZED");
+    expect(()=>load(path)).toThrow(
+      "REFUSED_P2G25_NEW_PROSPECTIVE_RETRY_NOT_APPROVED"
+    );
+  });
+  it("pure one-shot selector can choose YSSY only with explicit prospective approval and exact immutable probe18",()=>{
+    const prior=[...history(),p18()];
+    expect(chooseEarlyPilotScopeTargetV39(
+      scope,prior,old,next,signedOnlyForSelector
+    )).toBe("YSSY");
+    expect(()=>chooseEarlyPilotScopeTargetV39(
+      scope,prior,old,next
+    )).toThrow("REFUSED_P2G23_RECOVERY_CONSUMED");
+  });
+  it("an infrastructure-invalid P25 attempt CONSUMES the single extra chance",()=>{
+    const prior=[...history(),p18()];
+    const failed={
+      ...valid(19,"YSSY"),status:"failed",
+      durationCensored:true,reconciliationStatus:"UNRESOLVED",
+      stopReason:"supervisor_child_exit_recovered",
+      durableReconciliation:null
+    };
+    expect(()=>chooseEarlyPilotScopeTargetV39(
+      scope,[...prior,failed],old,next,signedOnlyForSelector
+    )).toThrow("REFUSED_P2G25_RETRY_CONSUMED_AND_INVALID");
+    expect(()=>chooseEarlyPilotScopeTargetV39(
+      scope,[...prior,failed,valid(20,"YSSY")],old,next,signedOnlyForSelector
+    )).toThrow("REFUSED_P2G25_ONLY_ONE_ADDITIONAL_ATTEMPT_ALLOWED");
+  });
+  it("a future fully matched P25 outcome closes target without additional spending",()=>{
+    const prior=[...history(),p18()];
+    expect(chooseEarlyPilotScopeTargetV39(
+      scope,[...prior,valid(19,"YSSY")],old,next,signedOnlyForSelector
+    )).toBeNull();
+  });
+  it("refuses exact probe18 session/budget or settlement changes",()=>{
+    for(const fault of [
+      {runtimeSessionId:"00000000-0000-4000-8000-000000000000"},
+      {probeBudgetDayId:"wrong"},
+      {durationCensored:false},
+      {reconciliationStatus:"MATCH"},
+      {durableReconciliation:valid(18,"YSSY").durableReconciliation}
+    ]){
+      expect(()=>chooseEarlyPilotScopeTargetV39(
+        scope,[...history(),{...p18(),...fault}],
+        old,next,signedOnlyForSelector
+      )).toThrow("REFUSED_P2G25_PROBE18_DATABASE_FINGERPRINT_MISMATCH");
+    }
+  });
+});
