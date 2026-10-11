@@ -114,14 +114,18 @@ export function advanceHypotheticalMultipleOutagesV39(input:{
     const signedSource=q.originalSenderItemCreditWitnessVerified&&
       q.originalSourceAndEightBinsRecoverable;
     const streak=before.healthyRecoveryStreak+1;
-    // A genuinely verified sender-source continuity can justify an
-    // immediate recovered episode. GET-only recovery requires two healthy
-    // cycles (half-open -> closed); the data remain scientifically CENSORED.
-    if(!signedSource&&streak<2)
-      return result({...stateBase,healthyRecoveryStreak:streak,
+    // GET-only recovery must NOT mint a fresh 6+6 allowance, even after
+    // several green GETs. Green GETs do not authenticate original sender
+    // attempts or item credits. Remain in the SAME outage until an
+    // independent source witness covers the recovered episode.
+    // One independently verified witness can close a recovered episode.
+    if(!signedSource)
+      return result({...stateBase,healthyRecoveryStreak:Math.min(streak,2),
         historicalMissingSourceStillUnproven:true},
         "RECOVERY_PENDING","RECOVERY_CONFIRMATION",
-        "FIRST_HEALTHY_GET_NOT_YET_STABLE_OR_SOURCE_VERIFIED");
+        streak<2?
+          "FIRST_HEALTHY_GET_NOT_YET_STABLE_OR_SOURCE_VERIFIED":
+          "GREEN_GETS_ALONE_CANNOT_RESET_SOURCE_UNVERIFIED_EPISODE");
     const span=currentEnvelope;
     const finalized=before.cumulativeFaultEnvelopeMs+span;
     return result({
@@ -133,9 +137,8 @@ export function advanceHypotheticalMultipleOutagesV39(input:{
       closedEpisodeFaultEnvelopeMs:[...before.closedEpisodeFaultEnvelopeMs,span],
       historicalMissingSourceStillUnproven:
         before.historicalMissingSourceStillUnproven||!signedSource
-    },"NORMAL","MONITOR",signedSource?
-      "SOURCE_VERIFIED_EPISODE_CLOSED_FRESH_SIX_PLUS_SIX_NEXT_OUTAGE":
-      "HEALTH_ONLY_RECOVERED_SCIENCE_STILL_UNVERIFIED_FRESH_EPISODE_CHECKS");
+    },"NORMAL","MONITOR",
+      "SOURCE_VERIFIED_EPISODE_CLOSED_FRESH_SIX_PLUS_SIX_NEXT_OUTAGE");
   }
   // Only transient health failure reaches here.
   const isNewEpisode=before.firstFailedAtMs===null;
