@@ -537,6 +537,48 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
       canAcknowledge:false,sourceRecoveryTimestampRecorded:false
     });
   });
+  it("P13 REAL PG audit identifies recovered evidence that later DISAPPEARED or CHANGED; no stale receipt accepted",async()=>{
+    const fake=fakeStore();
+    const broken={query:(sql:string,params?:unknown[])=>{
+      if(sql.includes("UPDATE clean.p2g_synthetic_raw_admission_intent"))
+        return Promise.reject(Error("SYNTHETIC_SQL_CRASH_BEFORE_SOURCE_COMMIT"));
+      return state.pool!.query(sql,params as any[]);
+    }} as unknown as Pool;
+    for(const name of ["recovered-then-lost","recovered-then-changed"]){
+      await expect(submit(name,fake.store,broken))
+        .rejects.toThrow("SYNTHETIC_SQL_CRASH_BEFORE_SOURCE_COMMIT");
+      expect((await verifyPending(name,fake.store)).outcome)
+        .toBe("ORIGINAL_PRESENT_VERIFIED_STILL_PENDING");
+    }
+    const records=await state.pool!.query(
+      "SELECT synthetic_attempt_hmac,original_opaque_blob_path,state,recovery_original_verified_utc FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(records.rows).toHaveLength(2);
+    expect(records.rows.every(x=>x.state==="PENDING"&&x.recovery_original_verified_utc!==null))
+      .toBe(true);
+    const lost=records.rows.find(x=>x.synthetic_attempt_hmac===key("recovered-then-lost"))!;
+    const changed=records.rows.find(x=>x.synthetic_attempt_hmac===key("recovered-then-changed"))!;
+    state.blobs.delete(lost.original_opaque_blob_path);
+    state.blobs.set(changed.original_opaque_blob_path,new TextEncoder().encode("TAMPERED_POST_RECOVERY"));
+    const actual=await auditDisposableRawAdmissionIntentsV39({
+      mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store:fake.store,now:new Date()
+    });
+    expect(actual).toMatchObject({
+      scanned:2,pending:2,committed:0,
+      pendingRecoveryPreviouslyVerified:2,
+      pendingRecoveryThenMissingOrUnreadable:1,
+      pendingRecoveryThenChanged:1,
+      pendingOriginalMissingOrUnreadable:1,
+      pendingOriginalChanged:1,
+      canAutoAcknowledge:false,canAutoReplay:false,canAutoDelete:false,
+      originalProviderSourceCompletenessVerified:false,paidLaunchAuthorized:false
+    });
+    expect((await submit("recovered-then-lost",fake.store,state.pool!,0))
+      .safeToReturn2xxToSyntheticSender).toBe(false);
+    expect((await submit("recovered-then-changed",fake.store,state.pool!,0))
+      .safeToReturn2xxToSyntheticSender).toBe(false);
+    expect(JSON.stringify(actual)).not.toContain(SESSION);
+    expect(JSON.stringify(actual)).not.toContain(SUB);
+  });
   it("P13 recovery rejects invalid mode and actual-production environment even when PG is disposable",async()=>{
     const fake=fakeStore();
     await expect(recordVerifiedDisposablePendingOriginalRecoveryV39({
