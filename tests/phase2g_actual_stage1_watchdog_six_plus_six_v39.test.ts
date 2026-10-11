@@ -80,6 +80,17 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
     expect(source).toContain("source_proof_implemented: false");
     expect(source).not.toContain("process.env.V39_P2G_TRUSTED_WITNESS_JSON");
   });
+  it("real paid supervisor NEVER advertises twelve effective checks without a deployed independent verifier",()=>{
+    const source=readFileSync(join(process.cwd(),
+      "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
+    expect(source).toContain("failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT");
+    expect(source).toContain("requested_failure_limit:callbackWatchdogMode");
+    expect(source).toContain("effective_failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT");
+    expect(source).toContain("conditional_extension_authorized:false");
+    expect(source).toContain("callback_watchdog_source_proof_implemented: false");
+    expect(source).toContain("evidence:undefined");
+    expect(source).toContain('const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3');
+  });
   it("legacy default stops at THIRD consecutive 503 even with no source proof",()=>{
     const r=observe({mode:"legacy-three",failures:4});
     expect(r.steps).toHaveLength(3);
