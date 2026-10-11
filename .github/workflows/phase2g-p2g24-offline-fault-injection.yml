@@ -6,6 +6,11 @@ on:
       - phase2g-p2g24-github-observer-20261009
     paths:
       - tests/phase2g_p2g24_callback_health_behavior_v39.test.cjs
+      - tests/phase2g_yssy_260_259_regression_v39.test.ts
+      - tests/phase2g_unlogged_runtime_integrity_v39.test.ts
+      - tests/phase2g_paid_callback_origin_v39.test.ts
+      - tests/phase2g_prepaid_ingress_latency_hardening_v39.test.ts
+      - tests/phase2g_pre_yssy_closed_loop_hardening_v39.test.ts
       - tests/phase2g_p2g24_callback_receiver_health_v39.test.ts
       - .github/workflows/phase2g-p2g24-offline-fault-injection.yml
       - scripts/v39_p2g24_readonly_blob_integrity_audit.ts
@@ -110,6 +115,11 @@ jobs:
         run: |
           npx vitest run \
             tests/phase2g_p2g24_prepaid_persistence_fault_injection_v39.test.ts \
+            tests/phase2g_yssy_260_259_regression_v39.test.ts \
+            tests/phase2g_unlogged_runtime_integrity_v39.test.ts \
+            tests/phase2g_paid_callback_origin_v39.test.ts \
+            tests/phase2g_prepaid_ingress_latency_hardening_v39.test.ts \
+            tests/phase2g_pre_yssy_closed_loop_hardening_v39.test.ts \
             tests/phase2g_yssy_oct12_stage1_calendar_v39.test.ts \
             tests/phase2g_durable_ingress_offline_prototype_v39.test.ts \
             tests/phase2g_cf_sandbox_ingress_worker_v39.test.ts \
