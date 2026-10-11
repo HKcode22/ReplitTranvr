@@ -33,6 +33,13 @@ export type P20LocalWallclockResultV39=Readonly<{
   syntheticSenderFailedOrLate:number;
   receiverUniqueOriginals:number;
   receiverRejectedDuringOutage:number;
+  // Real elapsed monotonic duration and 503 proof for EACH injected outage.
+  // Without these an otherwise successful full replay could falsely PASS
+  // despite never actually exercising both injected backend outages.
+  injectedReceiverOutageCount:number;
+  injectedReceiverOutageSeconds:readonly number[];
+  receiverRejectionsByOutage:readonly number[];
+  injectedOutageContractVerified:boolean;
   sourceReceiptsVerified:number;
   eightElapsedWindowBins:readonly number[];
   originalSpoolAuditPassed:boolean;
@@ -79,6 +86,10 @@ export async function runP20SyntheticLocalWallclockV39(args:Readonly<{
   const sourceManifest=new Map<string,{sha:string;bin:number}>();
   const binCounts=Array(8).fill(0) as number[];
   let unavailable=false;
+  let outageEpisodeStartMs:number|null=null;
+  let activeOutageIndex=-1;
+  const completedOutageSeconds:number[]=[];
+  const rejectionsByOutage:number[]=[];
   const started=performance.now();
   try{
     root=await mkdtemp(join(tmpdir(),"p2g-wallclock-synthetic-"));
@@ -124,8 +135,21 @@ export async function runP20SyntheticLocalWallclockV39(args:Readonly<{
       const fraction=i/args.sourceCount;
       // Exactly two real 3m backend outages in full 120m mode.
       // Short smoke compresses faults only; never call it a two-hour test.
-      unavailable=(fraction>=.25&&fraction<.275)||
+      const nextUnavailable=(fraction>=.25&&fraction<.275)||
         (fraction>=.75&&fraction<.775);
+      const now=performance.now();
+      if(nextUnavailable&&!unavailable){
+        activeOutageIndex=rejectionsByOutage.length;
+        rejectionsByOutage.push(0);
+        outageEpisodeStartMs=now;
+      }else if(!nextUnavailable&&unavailable){
+        if(outageEpisodeStartMs===null)
+          throw Error("P20_OUTAGE_START_MONOTONIC_MISSING");
+        completedOutageSeconds.push((now-outageEpisodeStartMs)/1000);
+        outageEpisodeStartMs=null;
+        activeOutageIndex=-1;
+      }
+      unavailable=nextUnavailable;
       const bin=Math.floor(i*8/args.sourceCount);
       const id="p20-no-provider-"+String(i).padStart(4,"0");
       const payload=Buffer.from(JSON.stringify({
@@ -154,7 +178,12 @@ export async function runP20SyntheticLocalWallclockV39(args:Readonly<{
       }catch{senderBad++;}
       // Every source is first stored by the fixed ingress; the backend may
       // be down while the sender sees 202. No direct sender->backend retry.
+      const rejectedBefore=backendRejected;
       await spool.replayToLocalReceivers([receiverUrl]);
+      if(unavailable&&activeOutageIndex>=0){
+        rejectionsByOutage[activeOutageIndex]+=
+          backendRejected-rejectedBefore;
+      }
       if(isFull&&i>0&&i%15===0)
         process.stdout.write(JSON.stringify({
           schema:"v39.p20-local-only-progress.v1",elapsedMinutes:i,
@@ -163,6 +192,12 @@ export async function runP20SyntheticLocalWallclockV39(args:Readonly<{
         })+"\n");
     }
     await sleep(started+args.durationMs-performance.now());
+    if(unavailable&&outageEpisodeStartMs!==null){
+      completedOutageSeconds.push(
+        (performance.now()-outageEpisodeStartMs)/1000);
+      outageEpisodeStartMs=null;
+      activeOutageIndex=-1;
+    }
     unavailable=false;
     await spool.replayToLocalReceivers([receiverUrl]);
     const originals=await spool.readAll();
@@ -175,7 +210,19 @@ export async function runP20SyntheticLocalWallclockV39(args:Readonly<{
         receiver?.sha===receipt.rawSha256&&
         receiver.bytes.equals(Buffer.from(original));
     });
-    const ok=senderGood===args.sourceCount&&senderBad===0&&
+    const expectedOutageSeconds=isFull?180:args.durationMs/8/1000;
+    // Full mode MUST prove two distinct ~180s receiver outages
+    // AND observable 503s during EACH outage. No passing no-fault run.
+    // ±15s scheduler allowance (not a scientifically universal tolerance).
+    const outageContractVerified=
+      completedOutageSeconds.length===2&&rejectionsByOutage.length===2&&
+      rejectionsByOutage.every(n=>Number.isSafeInteger(n)&&n>0)&&
+      completedOutageSeconds.every(s=>Number.isFinite(s)&&s>0&&
+        (!isFull||(
+          s>=expectedOutageSeconds-15&&
+          s<=expectedOutageSeconds+15)));
+    const ok=outageContractVerified&&
+      senderGood===args.sourceCount&&senderBad===0&&
       originals.length===args.sourceCount&&
       seen.size===args.sourceCount&&matched&&
       audit.allOriginalReceiptsVerified&&
@@ -191,6 +238,11 @@ export async function runP20SyntheticLocalWallclockV39(args:Readonly<{
       syntheticSenderFailedOrLate:senderBad,
       receiverUniqueOriginals:seen.size,
       receiverRejectedDuringOutage:backendRejected,
+      injectedReceiverOutageCount:completedOutageSeconds.length,
+      injectedReceiverOutageSeconds:
+        completedOutageSeconds.map(n=>+n.toFixed(3)),
+      receiverRejectionsByOutage:rejectionsByOutage,
+      injectedOutageContractVerified:outageContractVerified,
       sourceReceiptsVerified:audit.verifiedOriginalReceiptCount,
       eightElapsedWindowBins:binCounts,
       originalSpoolAuditPassed:audit.allOriginalReceiptsVerified,
