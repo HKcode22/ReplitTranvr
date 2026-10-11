@@ -143,9 +143,14 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
       WHERE session_id=$1 AND synthetic_attempt_hmac=$2
         AND source_sha256=$3 AND owner_token=$4 AND state='PENDING'
         AND original_opaque_blob_path=$5
+        AND original_opaque_blob_uuid=$6::uuid
+        AND created_utc=$7::timestamptz
+        AND source_retention_until=$8::timestamptz
+        AND source_retention_until=created_utc+interval '168 hours'
         AND source_retention_until>clock_timestamp()
       RETURNING source_sha256
-    `,[arg.sessionId,arg.syntheticAttemptHmac,contentHash,owner,objectName]);
+    `,[arg.sessionId,arg.syntheticAttemptHmac,contentHash,owner,objectName,
+      uuid,created.rows[0].created_utc,created.rows[0].source_retention_until]);
     if(q.rowCount!==1)
       throw Error("P06_CANDIDATE_ORIGINAL_COMMIT_UNCERTAIN_NO_ACK");
     return reply("COMMITTED_SOURCE_RECEIPT");
@@ -154,7 +159,8 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
   const until=Date.now()+maxWait;
   while(true){
     const existing=await arg.pool.query(`
-      SELECT source_sha256,original_opaque_blob_path,state,source_retention_until
+      SELECT source_sha256,original_opaque_blob_path,original_opaque_blob_uuid,
+             created_utc,state,source_retention_until
       FROM clean.p2g_synthetic_raw_admission_intent
       WHERE session_id=$1 AND synthetic_attempt_hmac=$2
     `,[arg.sessionId,arg.syntheticAttemptHmac]);
@@ -163,6 +169,18 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
     const row=existing.rows[0];
     if(row.source_sha256!==contentHash)
       throw Error("P06_CANDIDATE_ATTEMPT_HASH_CONFLICT_NO_ACK");
+    // Matching a SHA alone is not a correct opaque original ref. Reject
+    // tampered UUID/path or an extended/shortened retention contract even
+    // when the stored bytes still happen to exist.
+    const createdAt=new Date(row.created_utc).getTime();
+    const retainedUntil=new Date(row.source_retention_until).getTime();
+    const uuidRef=String(row.original_opaque_blob_uuid).toLowerCase();
+    if(!UUID.test(uuidRef)||
+       row.original_opaque_blob_path!==
+         providerBlobObjectNameV39('raw_provider_content',uuidRef)||
+       !Number.isFinite(createdAt)||!Number.isFinite(retainedUntil)||
+       retainedUntil-createdAt!==168*3_600_000)
+      throw Error('P06_CANDIDATE_FROZEN_ORIGINAL_REF_OR_RETENTION_INVALID_NO_ACK');
     if(!Number.isFinite(new Date(row.source_retention_until).getTime())||
        new Date(row.source_retention_until).getTime()<=Date.now())
       throw Error("P06_CANDIDATE_ORIGINAL_RETENTION_EXPIRED_NO_ACK");
