@@ -427,6 +427,15 @@
     "parent_p2g23_sha256": "ae33f82748d0a49a842aab5a4d27ec17f997a8aa6acc8c419cfc9c8c039af0ad",
     "project_lead_decision_file": "artifacts/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json",
     "project_lead_decision_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-    "reason": "Prospective separate one-shot review after P2G24 published callback outage. Explicit approval and real published source parity are NOT present. Historical probes 16/17/18 remain failed, unscoreable and immutable; no metric-based retry selection or automatic rearm. The 500 Alert credit ceiling is NOT granted by this DRAFT."
+    "reason": "Prospective separate one-shot review after P2G24 published callback outage. Explicit approval and real published source parity are NOT present. Historical probes 16/17/18 remain failed, unscoreable and immutable; no metric-based retry selection or automatic rearm. The 500 Alert credit ceiling is NOT granted by this DRAFT.",
+    "stage1_supervisor_health_policy": "six-plus-six",
+    "health_single_outage_wall_limit_seconds": 180,
+    "health_whole_run_cumulative_limit_seconds": 180,
+    "health_whole_run_max_episodes": 2,
+    "health_primary_checks": 6,
+    "health_contingency_checks": 6,
+    "health_poll_interval_seconds": 15,
+    "health_recovery_does_not_certify_sender_completeness": true,
+    "health_recovery_requires_final_credit_and_source_science_audit": true
   }
 }
