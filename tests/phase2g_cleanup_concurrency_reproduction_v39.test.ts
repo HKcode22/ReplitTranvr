@@ -123,6 +123,10 @@ describe("Phase2G callback/cleanup concurrency", () => {
           };
         }
 
+        // Outside-lock and legacy duplicate preflight now fetch the linked
+        // LOGGED raw reference as a LEFT JOIN before mutation.
+        if (q.includes("FROM clean.prepaid_probe_delivery_runtime d") &&
+            q.includes("d.delivery_id=$2")) return {rowCount:0,rows:[]};
         if (q.includes("SELECT blob_ref_id,raw_body_sha256")) {
           return { rowCount: 0, rows: [] };
         }
