@@ -94,7 +94,9 @@ export async function readReadOnlyPgSnapshotV39(
     const delivery=await reader.query(`
       SELECT count(*)::int AS n,
         COALESCE(sum(notification_items),0)::bigint AS items,
-        COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::bigint AS claimed_cost,
+        -- Exact NUMERIC. Never round a fractional claim to bigint and
+        -- accidentally report a false integer reconciliation.
+        COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0) AS claimed_cost,
         count(*) FILTER (WHERE delivery_attempt_cost_credits IS NULL)::int AS cost_missing,
         count(*) FILTER (WHERE delivery_attempt_cost_credits IS NOT NULL
           AND delivery_attempt_cost_credits IS DISTINCT FROM notification_items)::int AS cost_item_mismatch
