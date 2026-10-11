@@ -6,6 +6,7 @@ const base=()=>({
   sessionRows:1,postmasterStartUtc:"2026-10-11T02:00:00.000Z",
   callbackRequestsSeen:5,callbackSuccess2xx:4,callbackFailures:1,
   deliveryRows:4,deliveryItemCount:11,deliveryAttemptCostClaims:11,
+  deliveriesWithMissingExplicitCredit:0,deliveriesWithLocalCostItemMismatch:0,
   perBinNotificationItems:[0,1,0,0,4,6,0,0],
   perBinDeliveryRows:[0,1,0,0,1,2,0,0]
 });
@@ -52,6 +53,22 @@ describe("P06/P15 pure PostgreSQL observer contract (never HTTP ingress)",()=>{
     expect(r.sessionRows).toBe(0);
     expect(r.scientificCompletenessVerified).toBe(false);
     expect(r.missedProviderFlightItems).toBeNull();
+  });
+  it("marks internally missing or contradictory cost claims but never equates local counters to authoritative provider billing",()=>{
+    const m=summarizeReadOnlyPgObservationsV39({
+      ...base(),deliveriesWithMissingExplicitCredit:1,
+      deliveriesWithLocalCostItemMismatch:1
+    });
+    expect(m.locallyClaimedCreditReconciliationNeedsReview).toBe(true);
+    expect(m.independentProviderAttemptLedgerPresent).toBe(false);
+    expect(m.missedProviderFlightItems).toBeNull();
+    expect(m.scientificCompletenessVerified).toBe(false);
+    expect(summarizeReadOnlyPgObservationsV39({
+      ...base(),deliveryAttemptCostClaims:12
+    }).locallyClaimedCreditReconciliationNeedsReview).toBe(true);
+    expect(()=>summarizeReadOnlyPgObservationsV39({
+      ...base(),deliveriesWithLocalCostItemMismatch:5
+    })).toThrow("READONLY_OBSERVER_LOCAL_CREDIT_COUNTERS_INVALID");
   });
   it("rejects malformed bins or negative DB counts rather than claiming a verified snapshot",()=>{
     expect(()=>summarizeReadOnlyPgObservationsV39({
