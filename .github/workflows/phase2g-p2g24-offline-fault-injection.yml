@@ -35,6 +35,9 @@ on:
       - tests/phase2g_cf_free_queue_only_worker_v39.test.ts
       - scripts/v39_p2g24_queue_only_size_feasibility_readonly.ts
       - server/routes_v3.ts
+      - server/lib/disruption/prepaidProbeRuntime_v39.ts
+      - server/lib/disruption/providerBlobStore_v39.ts
+      - server/lib/disruption/replitProviderBlobStore_v39.ts
       - server/phase2gCallbackOnly.ts
       - server/lib/disruption/phase2gDbLivePreflight_v39.ts
       - scripts/phase2gStage1PublishedDatabaseLivePreflight_v39.ts
