@@ -52,11 +52,17 @@ export type Stage1IndependentlyVerifiedOutageWitnessV39 = Readonly<{
   providerMaxDeliveryRetries:0;
   projectedWorstCaseTotalCredits:number;
   frozenCreditCeiling:number;
+  // Signed/frozen WHOLE-RUN exposure limits. Per-incident 180s must NOT
+  // silently rearm an unlimited number of times on successful GETs.
+  frozenMaxOutageEpisodes:number;
+  frozenMaxCumulativeOutageEnvelopeMs:number;
 }>;
 export type Stage1WatchdogStateV39=Readonly<{
   consecutiveFailures:number;
   firstFailureMonotonicMs:number|null;
   maximumFailures:number;
+  outageEpisodeCount:number;
+  closedOutageEnvelopeMs:number;
   recoveredHealthAwaitingScienceAudit:boolean;
   terminated:boolean;
 }>;
@@ -78,7 +84,8 @@ export const STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39=12 as const;
 export const STAGE1_SIX_PLUS_SIX_WALL_MS_V39=180_000 as const;
 export const initialStage1WatchdogStateV39=():Stage1WatchdogStateV39=>({
   consecutiveFailures:0,firstFailureMonotonicMs:null,
-  maximumFailures:0,recoveredHealthAwaitingScienceAudit:false,
+  maximumFailures:0,outageEpisodeCount:0,closedOutageEnvelopeMs:0,
+  recoveredHealthAwaitingScienceAudit:false,
   terminated:false
 });
 const isInteger=(v:unknown)=>typeof v==="number"&&Number.isSafeInteger(v)&&v>=0;
@@ -119,8 +126,13 @@ export function independentOutageWitnessReasonV39(
     e.senderBilledCredits,e.originalSourceAttributedCredits,
     e.rawRetentionHours,e.currentEvidenceAgeSeconds,
     e.queueBacklogAgeSeconds,e.queueRetentionSeconds,
-    e.projectedWorstCaseTotalCredits,e.frozenCreditCeiling
-  ].every(isInteger)||e.providerMaxDeliveryRetries!==0)
+    e.projectedWorstCaseTotalCredits,e.frozenCreditCeiling,
+    e.frozenMaxOutageEpisodes,e.frozenMaxCumulativeOutageEnvelopeMs
+  ].every(isInteger)||e.providerMaxDeliveryRetries!==0||
+     e.frozenMaxOutageEpisodes<1||e.frozenMaxOutageEpisodes>100||
+     e.frozenMaxCumulativeOutageEnvelopeMs<15_000||
+     e.frozenMaxCumulativeOutageEnvelopeMs>86_400_000)
+    
     return "SOURCE_WITNESS_SCHEMA_OR_PROVIDER_RETRY_CONTRACT_INVALID";
   if(!e.evidenceVerifiedByIndependentSource)
     return "INDEPENDENT_PROVIDER_SOURCE_EVIDENCE_NOT_VERIFIED";
@@ -164,6 +176,8 @@ export function advanceStage1WatchdogV39(input:Readonly<{
   if(!["legacy-three","six-plus-six-candidate"].includes(mode)||
      !p||!isInteger(p.consecutiveFailures)||!isInteger(p.maximumFailures)||
      p.maximumFailures<p.consecutiveFailures||
+     !isInteger(p.outageEpisodeCount)||
+     !isInteger(p.closedOutageEnvelopeMs)||
      !(p.firstFailureMonotonicMs===null||
        (Number.isFinite(p.firstFailureMonotonicMs)&&
         p.firstFailureMonotonicMs>=0&&
@@ -183,6 +197,8 @@ export function advanceStage1WatchdogV39(input:Readonly<{
     state:{
       consecutiveFailures:count,firstFailureMonotonicMs:first,
       maximumFailures:Math.max(p.maximumFailures,count),
+      outageEpisodeCount:p.outageEpisodeCount,
+      closedOutageEnvelopeMs:p.closedOutageEnvelopeMs,
       recoveredHealthAwaitingScienceAudit:p.recoveredHealthAwaitingScienceAudit,
       terminated:true
     },
@@ -201,8 +217,15 @@ export function advanceStage1WatchdogV39(input:Readonly<{
       if(wallElapsed>=STAGE1_SIX_PLUS_SIX_WALL_MS_V39)
         return stop("SIX_PLUS_SIX_WALL_CLOCK_MAX_EXCEEDED",
           p.consecutiveFailures,p.firstFailureMonotonicMs);
-      if(independentOutageWitnessReasonV39(input.evidence))
+      const witnessReason=independentOutageWitnessReasonV39(input.evidence);
+      if(witnessReason)
         return stop("RECOVERED_HEALTH_WITH_UNVERIFIED_SCIENTIFIC_SOURCE",
+          p.consecutiveFailures,p.firstFailureMonotonicMs);
+      const total=p.closedOutageEnvelopeMs+wallElapsed;
+      if(!Number.isSafeInteger(total)||
+         p.outageEpisodeCount>input.evidence!.frozenMaxOutageEpisodes||
+         total>input.evidence!.frozenMaxCumulativeOutageEnvelopeMs)
+        return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",
           p.consecutiveFailures,p.firstFailureMonotonicMs);
     }
     return {
@@ -212,6 +235,11 @@ export function advanceStage1WatchdogV39(input:Readonly<{
       state:{
         consecutiveFailures:0,firstFailureMonotonicMs:null,
         maximumFailures:p.maximumFailures,
+        outageEpisodeCount:p.outageEpisodeCount,
+        closedOutageEnvelopeMs:mode==="six-plus-six-candidate"&&
+          p.consecutiveFailures>0?
+          p.closedOutageEnvelopeMs+now-(p.firstFailureMonotonicMs??now):
+          p.closedOutageEnvelopeMs,
         recoveredHealthAwaitingScienceAudit:
           p.recoveredHealthAwaitingScienceAudit||p.consecutiveFailures>0,
         terminated:false
@@ -239,6 +267,16 @@ export function advanceStage1WatchdogV39(input:Readonly<{
   const evidenceReason=independentOutageWitnessReasonV39(input.evidence);
   if(evidenceReason&&input.evidence)
     return stop(evidenceReason,count,first);
+  const episodeCount=p.outageEpisodeCount+(p.consecutiveFailures===0?1:0);
+  if(!Number.isSafeInteger(episodeCount))
+    return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",count,first);
+  if(!evidenceReason&&input.evidence){
+    const cumulative=p.closedOutageEnvelopeMs+duration;
+    if(!Number.isSafeInteger(cumulative)||
+       episodeCount>input.evidence.frozenMaxOutageEpisodes||
+       cumulative>input.evidence.frozenMaxCumulativeOutageEnvelopeMs)
+      return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",count,first);
+  }
   if(duration>=STAGE1_SIX_PLUS_SIX_WALL_MS_V39)
     return stop("SIX_PLUS_SIX_WALL_CLOCK_MAX_EXCEEDED",count,first);
   if(count>=STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39)
@@ -251,6 +289,8 @@ export function advanceStage1WatchdogV39(input:Readonly<{
     state:{
       consecutiveFailures:count,firstFailureMonotonicMs:first,
       maximumFailures:Math.max(count,p.maximumFailures),
+      outageEpisodeCount:episodeCount,
+      closedOutageEnvelopeMs:p.closedOutageEnvelopeMs,
       recoveredHealthAwaitingScienceAudit:p.recoveredHealthAwaitingScienceAudit,
       terminated:false
     },
