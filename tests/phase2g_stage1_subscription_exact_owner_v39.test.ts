@@ -32,6 +32,28 @@ describe("P16 exact-session provider subscription ownership before DELETE (offli
     expect(exact(owned(),{...expected,webhookSubscriberId:"http://example.test/prepaid/any"})).toBe(false);
     expect(exact(null,expected)).toBe(false);
   });
+  it("refuses foreign billable subscriptions BEFORE an exact-owner delete and verifies none remain AFTER deletion",()=>{
+    const src=readFileSync(join(process.cwd(),
+      "scripts/v39_phase2g_stage1_recover_after_exit_v39.ts"),"utf8");
+    expect(src).toContain("RECOVERY_REFUSED:FOREIGN_ACTIVE_BILLABLE_SUBSCRIPTION");
+    expect(src).toContain("RECOVERY_REFUSED:RESIDUAL_ACTIVE_BILLABLE_AFTER_DELETE");
+    expect(src).toContain("RECOVERY_REFUSED:RUNTIME_RESET_FOREIGN_ACTIVE_BILLABLE");
+    expect(src).toContain("RECOVERY_REFUSED:RUNTIME_RESET_RESIDUAL_ACTIVE_BILLABLE");
+    const boundStart=src.indexOf("if (ownedProviderSubscriptionId) {");
+    const foreign=src.indexOf("const foreign=activeBillableBefore.filter",boundStart);
+    const deleteBound=src.indexOf("await deleteSubscriptionVerifiedStrict(",boundStart);
+    expect(boundStart).toBeGreaterThan(0);
+    expect(foreign).toBeGreaterThan(boundStart);
+    expect(foreign).toBeLessThan(deleteBound);
+    const resetStart=src.indexOf("if (exactResetMatches.length === 1)");
+    const resetForeign=src.indexOf("const foreign=activeBillableBefore.filter",resetStart);
+    const deleteReset=src.indexOf("await deleteSubscriptionVerifiedStrict(",resetStart);
+    expect(resetStart).toBeGreaterThan(0);
+    expect(resetForeign).toBeGreaterThan(resetStart);
+    expect(resetForeign).toBeLessThan(deleteReset);
+    expect(src).toContain("const inventoryAfter=await listSubscriptionsStrictWithRetry()");
+    expect(src).toContain("const after=await listSubscriptionsStrictWithRetry()");
+  });
   it("actual abnormal exit recovery uses strict predicate in both bound and UNLOGGED-reset paths",()=>{
     const source=readFileSync(join(process.cwd(),
       "scripts/v39_phase2g_stage1_recover_after_exit_v39.ts"),"utf8");
