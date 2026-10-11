@@ -143,3 +143,87 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
     await sleep(Math.min(25,Math.max(1,until-Date.now())));
   }
 }
+
+/**
+ * P13/P16: READ-ONLY orphan/source presence classification, fixture only.
+ * Inspect PENDING/COMMITTED original SHA and the known opaque object name.
+ * Does NOT mark an intent committed, delete evidence, replay, acknowledge
+ * upstream send, reveal per-flight data, or certify a provider ledger.
+ */
+export type DisposableIntentRecoveryAuditV39=Readonly<{
+  schema:"v39.synthetic-intent-recovery-audit.v1";
+  scanned:number;
+  pending:number;
+  committed:number;
+  pendingOriginalVerified:number;
+  pendingOriginalMissingOrUnreadable:number;
+  pendingOriginalChanged:number;
+  committedOriginalVerified:number;
+  committedOriginalMissingOrUnreadable:number;
+  committedOriginalChanged:number;
+  expiredMetadataCount:number;
+  canAutoAcknowledge:false;
+  canAutoDelete:false;
+  canAutoReplay:false;
+  originalProviderSourceCompletenessVerified:false;
+  paidLaunchAuthorized:false;
+}>;
+
+export async function auditDisposableRawAdmissionIntentsV39(args:{
+  mode:"P2G_DISPOSABLE_ONLY";pool:Pool;store:ProviderBlobStoreV39;
+  now:Date;
+}):Promise<DisposableIntentRecoveryAuditV39>{
+  if(args.mode!=="P2G_DISPOSABLE_ONLY"||
+     process.env.P2G_DISPOSABLE_POSTGRES!=="YES"||
+     process.env.V39_DATABASE_RUNTIME_URL||process.env.AERODATABOX_API_KEY||
+     !Number.isFinite(args.now?.getTime()))
+    throw Error("P16_SYNTHETIC_RECOVERY_PRODUCTION_REFUSED");
+  const c=await args.pool.connect();
+  let rows:any[]=[];
+  try{
+    await c.query("BEGIN TRANSACTION READ ONLY");
+    const db=await c.query("SELECT current_database() AS db");
+    if(db.rows[0]?.db!=="p2g_stage1_fixture")
+      throw Error("P16_SYNTHETIC_RECOVERY_FIXTURE_DB_REQUIRED");
+    const q=await c.query(`
+      SELECT state,source_sha256,original_opaque_blob_path,source_retention_until
+      FROM clean.p2g_synthetic_raw_admission_intent
+      ORDER BY created_utc,original_opaque_blob_uuid
+      LIMIT 101
+    `);
+    if(q.rows.length>100)throw Error("P16_SYNTHETIC_RECOVERY_AUDIT_OVER_BOUND");
+    rows=q.rows;
+    await c.query("COMMIT");
+  }catch(error){
+    await c.query("ROLLBACK").catch(()=>undefined);
+    throw error;
+  }finally{c.release();}
+  const counts={
+    pending:0,committed:0,
+    pendingOriginalVerified:0,pendingOriginalMissingOrUnreadable:0,
+    pendingOriginalChanged:0,committedOriginalVerified:0,
+    committedOriginalMissingOrUnreadable:0,committedOriginalChanged:0,
+    expiredMetadataCount:0
+  };
+  for(const item of rows){
+    if(!["PENDING","COMMITTED"].includes(item.state))
+      throw Error("P16_SYNTHETIC_RECOVERY_STATE_INVALID");
+    const pre=item.state==="PENDING"?"pending":"committed";
+    counts[pre]++;
+    if(new Date(item.source_retention_until).getTime()<=args.now.getTime())
+      counts.expiredMetadataCount++;
+    let downloaded:Uint8Array|null=null;
+    try{downloaded=await args.store.downloadBytes(item.original_opaque_blob_path);}
+    catch{/* original unavailable: must NOT claim source or delete */}
+    const outcome=downloaded===null?"MissingOrUnreadable":
+      sha256(downloaded)===item.source_sha256?"Verified":"Changed";
+    const field=(pre+"Original"+outcome) as keyof typeof counts;
+    counts[field]++;
+  }
+  return {
+    schema:"v39.synthetic-intent-recovery-audit.v1",
+    scanned:rows.length,...counts,
+    canAutoAcknowledge:false,canAutoDelete:false,canAutoReplay:false,
+    originalProviderSourceCompletenessVerified:false,paidLaunchAuthorized:false
+  };
+}
