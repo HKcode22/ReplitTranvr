@@ -174,7 +174,7 @@ export function advanceStage1WatchdogV39(input:Readonly<{
     independentSourceProvenForThisCheck:false,
     scientificPassAuthorized:false,paidLaunchAuthorized:false
   });
-  if(kind==="HARD")
+  if(kind==="HARD"&&mode!=="legacy-three")
     return stop("HARD_CALLBACK_CONTRACT_OR_IDENTITY_VIOLATION",
       p.consecutiveFailures,p.firstFailureMonotonicMs);
   if(kind==="HEALTHY"){
