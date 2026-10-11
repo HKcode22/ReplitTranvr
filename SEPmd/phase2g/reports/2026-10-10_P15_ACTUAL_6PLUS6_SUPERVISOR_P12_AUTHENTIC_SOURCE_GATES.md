@@ -1,0 +1,38 @@
+# P15 actual supervisor 6+6 integration + P12 current SQL verification — launch checkpoint
+
+**October 10, 2026. INTEGRATED ON ISOLATED GITHUB INVESTIGATION BRANCH ONLY. PAID YSSY REMAINS NO-GO.** This report does NOT approve a production merge, paid callback, cloud provisioning or retrospective scientific PASS.
+
+## P15 actual integration completed and tested
+
+The new production-shaped **pure state machine** `scripts/v39_phase2g_stage1_watchdog_6plus6_policy_v39.ts` is now actually imported and called from `scripts/v39_phase2g_stage1_logged_supervisor_v39.ts`. The integrated supervisor still starts the paid child only through the unchanged paid AUTH guard. **Default remains `legacy-three` with 15-second poll and termination after three consecutive unhealthy checks.** A separate explicit configuration label `V39_PHASE2G_CALLBACK_WATCHDOG_POLICY=six-plus-six-candidate` selects the candidate logic on this isolated branch.
+
+The 6+6 controller uses **six primary + six contingent checks**, a strict **180-second monotonic first-failure wall-clock ceiling** (which can stop before 12 checks), and immediate hard vetoes on a non-transient wrong build/secret/owner/DB contract, missing/tampered independent original source, 260/259 sender-original attempt gap, credits mismatch, source/UTC/168h retention loss, physical-v2 reconstruction failure, expired/backlogged queue, stale independent source watermark or frozen budget breach. It **never authorizes scientific PASS on green GET alone**. A 200 after downtime past 180 seconds is terminal; a recovered green response without independently authenticated source/credits is terminal in candidate mode. Unexpected internal async watchdog exceptions signal the child and invoke ordinary recovery rather than leaving the paid child orphaned.
+
+**Vital honesty:** No *genuine independent provider-attempt/source-credit verifier* has been deployed. The real supervisor deliberately supplies `evidence:undefined`; the candidate therefore does **not** grant 12 checks in live operation and fails closed by the third soft-health failure (or earlier on a hard contract). Synthetic test witnesses exercise 6+6 recovery at 11 and stop at 12 but are NOT genuine source authority. No environment flag can spoof an independent source proof. The existing signed source amendment is still DRAFT. Do **not** set the candidate as a live production recovery policy or claim the paid run can survive more than three failures without the verifier.
+
+**Verified code CI for complete P15 change: [GitHub Actions #38098798232](https://github.com/HKcode22/ReplitTranvr/actions/runs/38098798232)**, tested SHA `c01b9048ff7f434eba97c7e7e9f3da450f51fcdf`, **both jobs SUCCESS — 345/345 offline Vitest tests across 32 suites and 42/42 actual disposable V3.9 PostgreSQL16 cases**, separate real PG SIGKILL confirming UNLOGGED loss / one LOGGED owner binding survives. Historical failed initial CI runs were corrected by retaining the *actual* source policy and updating old test text assertions, not by relaxing failure limits.
+
+## P01: decisive new Replit support fact, NOT a proven incident cause
+
+Quinn replied to Replit support **ticket #564568** on October 10, 2026. He confirmed as a general platform fact that **Autoscale scales to zero**, holds incoming requests during cold start, and **if the sender's ~10-second timeout elapses before startup, a webhook can be dropped**; Replit **does not buffer or retry inbound webhooks during scale events or in-flight shutdowns**. He also said publishing a new revision scopes the ordinary log viewer to the current revision and engineering access is required for older revision logs; earlier instance root-cause and old revision log recovery are pending engineering investigation.
+
+Therefore increasing **outbound supervisor GET health-check tolerance** to 6+6 is **NOT a way to preserve any provider POST already lost before receipt**. P09 durable independent ingress is necessary regardless of watchdog configuration. A paid Reserved VM is a platform option but not deployed, approved or assumed to meet 168-hour independent source custody. The user already gave support a private diagnostic project join link; **do not paste, log, or commit it**.
+
+## P12: proof that the exact original delivery is CURRENT in V3.9, not only a stale R2 marker
+
+New test-only `experiments/phase2g_rehearsal/disposable_current_sql_receipt_confirmation_v39.ts` checks a locally HMAC-signed edge receipt, on-wire source SHA-256 and exact source attempt-to-receipt correlation, original provider subscription, actual **V3.9 derived `ppd_<sha256>` logical delivery key** (not the provider notification ID), original delivery's V3.9 canonical body SHA, original received-at UTC, all item indexes and canonical source SHA, exact item received-at UTC, and **exactly one matching LOGGED canonical blob reference** in real isolated V3.9 PostgreSQL tables. Result carries explicit `independentProviderLedgerVerified=false`, `scientificPassAuthorized=false` and `paidOwnerResumed=false`. It performs only SQL `SELECT` and is guarded to disposable loopback PG fixture; no HTTP route is defined or published.
+
+The new 43rd real PG case validates an originally persisted single physical QF flight with a synthetic separate edge signer, deliberate raw-byte/signature/receipt-ID forgery, UTC shift, and an UNLOGGED reset. **The existing callback that recomputes receive UTC would not pass source UTC equality after a delayed Queue relay**, which is correct: a future live relay must pass original first-edge UTC through the approved receiver protocol; the current route has no such verified implementation.
+
+**CI for the final P12 43rd case must be checked separately after completion; do not cite the earlier P15 CI as validating subsequent source-confirmation commits.**
+
+## Hard NO-GO / next critical priorities
+
+1. **P09–P11 independent capture before first provider-facing 2xx**, real authoritative source-attempt identity, complete original wire SHA and first UTC, retention at least 168h, encryption/privacy, immutable custody, and published receiver/API contract.
+2. **P10 independent store and queues**. Previous Cloudflare account read-only check: **0 Queues; R2 disabled, error 10042**. An R2 Standard + Queue staging solution needs explicit billing and quota verification and provision, separate from any paid AeroDataBox operations. Free Queue 24h alone cannot satisfy 168h independent source custody.
+3. **P12–P14 real production-safe exact replay** (no provider-identifying LOGGED normalized rows), current post-restart SQL source proof, 120-minute item/8-bin originals, and 1:1 **actual provider billable** attempted credits including 260 vs 259 veto; local HMAC fixtures are not original provider billing.
+4. **P15/P18 prospective 6+6 science amendment and live deploy equivalence** with an independently operated original source verifier, healthy published callback/DB binding, sole active owner and bounded spend/floor. No 12-check grace without actual live proof.
+5. **P20 exactly 120 real hosted minutes** with original POST/ACK, R0–R11 Replit/edge/DB crash/cold-start tests, zero real AeroDataBox requests, p95/p99 time-to-2xx under provider timeout and proof no source gaps.
+6. Fresh Stage-1 YSSY paid budget-day AUTH and human-reviewed final GO after hard gates. Existing authorization records from failed/censored P2G24 cannot be reused as retroactive scientific PASS.
+
+**Target Sunday Oct 11 2026, 8–10 PM America/Los_Angeles (Mon Oct 12 03:00–05:00 UTC): NO-GO on presently verified infrastructure.** Isolated PR #27 remains draft; no repository main merge, Replit publish, paid provider subscription, Cloudflare provisioning or live DB mutation from these changes.
