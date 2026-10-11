@@ -13,26 +13,29 @@ const state=vi.hoisted(()=>({
   pool:null as null|Pool,
   blobs:new Map<string,Uint8Array>(),
   failUpload:false,uploadDelayMs:0,downloadDelayMs:0,
-  commitAckLost:false,events:[] as string[]
+  commitAckLost:"none" as "none"|"before"|"after",events:[] as string[]
 }));
 vi.mock("../server/lib/disruption/db_v39",()=>({
   v39Pool:{
     connect:async()=>{
       if(!state.pool)throw Error("NO_FIXTURE_POOL");
       const client=await state.pool.connect();
-      if(!state.commitAckLost)return client;
+      if(state.commitAckLost==="none")return client;
       // Disposable PostgreSQL executes a REAL COMMIT, then the test
       // suppresses its successful response: an ambiguous wire outcome.
       const originalQuery=client.query.bind(client);
       client.query=((...args:any[])=>{
-        const result=(originalQuery as any)(...args);
-        if(args[0]==="COMMIT"&&state.commitAckLost){
-          state.commitAckLost=false;
+        if(args[0]==="COMMIT"&&state.commitAckLost!=="none"){
+          const mode=state.commitAckLost;
+          state.commitAckLost="none";
+          if(mode==="before")
+            return Promise.reject(Error("P04_SIMULATED_LOST_COMMIT_BEFORE_EXECUTION"));
+          const result=(originalQuery as any)(...args);
           return Promise.resolve(result).then(()=>{
             throw Error("P04_SIMULATED_LOST_COMMIT_RESPONSE");
           });
         }
-        return result;
+        return (originalQuery as any)(...args);
       }) as typeof client.query;
       return client;
     },
@@ -187,7 +190,7 @@ beforeAll(async()=>{
 },20000);
 beforeEach(async()=>{
   state.blobs.clear();state.failUpload=false;state.uploadDelayMs=0;
-  state.downloadDelayMs=0;state.commitAckLost=false;
+  state.downloadDelayMs=0;state.commitAckLost="none";
   state.events.length=0;
   await state.pool!.query(
     "TRUNCATE clean.provider_content_blob_ref,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime,clean.prepaid_probe_item_runtime");
@@ -228,10 +231,10 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
   });
   it("P04/P13 real PostgreSQL COMMIT success with LOST response retains original blob, not an orphan-deleting false rollback",async()=>{
     const body=sample({id:"p04-postgres-real-commit-lost-response"});
-    state.commitAckLost=true;
+    state.commitAckLost="after";
     await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body}))
       .rejects.toThrow("P04_SIMULATED_LOST_COMMIT_RESPONSE");
-    expect(state.commitAckLost).toBe(false);
+    expect(state.commitAckLost).toBe("none");
     // This SQL really committed: ACK transport was lost after COMMIT.
     // Previously catch-cleanup deleted the original Replit blob here.
     expect(await count()).toEqual({logged:1,unlogged:1});
@@ -247,6 +250,24 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     // A locally committed success is NOT proof the provider saw 2xx.
     // The retry was observed and deduplicated without inventing a flight.
     expect((await session())?.requests).toBe(2);
+  });
+
+  it("P04/P13 COMMIT failed BEFORE server execution retains conservative source orphan, never invents committed science",async()=>{
+    const body=sample({id:"p04-synthetic-commit-not-executed"});
+    state.commitAckLost="before";
+    await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body}))
+      .rejects.toThrow("P04_SIMULATED_LOST_COMMIT_BEFORE_EXECUTION");
+    expect(state.commitAckLost).toBe("none");
+    // The original scientific rows were rolled back. The receiver cannot
+    // know whether its COMMIT reached the DB from the error alone.
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(state.blobs.size).toBe(1);
+    expect(state.events).not.toContain("DELETE");
+    const after=await session();
+    expect(after).toEqual({requests:1,successes:0,failures:1});
+    // The unreferenced original object is a bounded-retention cleanup
+    // problem; never label it a successful provider delivery or replay it
+    // without independently trusted original-time/source evidence.
   });
 
   it("P04 lost-200 retry rechecks original object bytes after prior committed ACK; no second blob uploaded",async()=>{
