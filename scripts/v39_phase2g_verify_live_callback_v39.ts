@@ -109,6 +109,7 @@ async function main(): Promise<void> {
        j?.status!=="PASS"||
        String(j?.git_head??"").toLowerCase()!==expectedHead||
        j?.prepaid_route_registered!==true||
+       j?.prepaid_source_custody_ready!==true||
        Number(j?.retention_hours)!==168||
        j?.provider_mutation!==false||
        j?.runtime_owner_mode!=="replit-published-deployment"||
