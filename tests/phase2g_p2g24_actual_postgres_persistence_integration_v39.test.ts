@@ -320,6 +320,58 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
     const q=await state.pool!.query("SELECT state FROM clean.p2g_synthetic_raw_admission_intent");
     expect(q.rows[0].state).toBe("PENDING");
   });
+  it("P06 duplicate arriving while initial 550ms blob upload still runs cannot be prematurely ACKed",async()=>{
+    const fake=fakeStore(550);
+    const original=submit("same-concurrent",fake.store);
+    const deadline=Date.now()+2000;
+    let intent=false;
+    while(!intent&&Date.now()<deadline){
+      const q=await state.pool!.query("SELECT count(*)::int AS n FROM clean.p2g_synthetic_raw_admission_intent");
+      intent=q.rows[0].n===1;
+      if(!intent)await new Promise(r=>setTimeout(r,5));
+    }
+    expect(intent).toBe(true);
+    const pending=await submit("same-concurrent",fake.store,state.pool!,0);
+    expect(pending.outcome).toBe("PENDING_NOT_ACKNOWLEDGED");
+    expect(pending.safeToReturn2xxToSyntheticSender).toBe(false);
+    expect((await original).outcome).toBe("COMMITTED_SOURCE_RECEIPT");
+    expect((await submit("same-concurrent",fake.store)).outcome).toBe("VERIFIED_DUPLICATE");
+    expect(fake.uploads()).toBe(1);
+  },10000);
+  it("P06 UPDATE executes, SQL reply is lost: source retained and retry may verify committed original",async()=>{
+    const fake=fakeStore();
+    const acknowledgedButReplyLost={
+      query:async(sql:string,args?:unknown[])=>{
+        const completed=await state.pool!.query(sql,args as any[]);
+        if(sql.includes("UPDATE clean.p2g_synthetic_raw_admission_intent"))
+          throw Error("SIMULATED_ACK_AFTER_COMMIT_LOST");
+        return completed;
+      }
+    } as unknown as Pool;
+    await expect(submit("lost-reply",fake.store,acknowledgedButReplyLost))
+      .rejects.toThrow("SIMULATED_ACK_AFTER_COMMIT_LOST");
+    expect(fake.uploads()).toBe(1);
+    expect(state.blobs.size).toBe(1);
+    const q=await state.pool!.query("SELECT state FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(q.rows[0].state).toBe("COMMITTED");
+    const retry=await submit("lost-reply",fake.store);
+    expect(retry.outcome).toBe("VERIFIED_DUPLICATE");
+    expect(retry.safeToReturn2xxToSyntheticSender).toBe(true);
+    expect(fake.uploads()).toBe(1);
+  });
+  it("P06 distinct billable attempt HMACs are never deduped merely for having identical original bytes",async()=>{
+    const fake=fakeStore(),same=bytes("identical-payload");
+    const a=await submit("attempt-A",fake.store,state.pool!,2000,same);
+    const b=await submit("attempt-B",fake.store,state.pool!,2000,same);
+    expect([a.outcome,b.outcome]).toEqual(["COMMITTED_SOURCE_RECEIPT","COMMITTED_SOURCE_RECEIPT"]);
+    expect(fake.uploads()).toBe(2);
+    const q=await state.pool!.query("SELECT count(*)::int AS n FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(q.rows[0].n).toBe(2);
+    // The REAL provider must independently establish both original attempts,
+    // which this synthetic HMAC fixture CANNOT certify.
+    expect(a.originalProviderAttemptWitnessVerified).toBe(false);
+    expect(b.originalProviderAttemptWitnessVerified).toBe(false);
+  });
   it("P06 fail-closed: production credentials or wrong mode never admit source",async()=>{
     const fake=fakeStore();
     await expect(runDisposableParallelRawAdmissionV39({
