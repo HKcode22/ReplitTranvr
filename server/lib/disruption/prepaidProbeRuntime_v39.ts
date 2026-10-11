@@ -955,7 +955,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
         !Number.isFinite(new Date(previous.expires_at_utc).getTime()) ||
         new Date(previous.expires_at_utc).getTime() <= receivedAt.getTime() ||
         typeof previous.object_name !== "string" ||
-        !/^v39\\/provider\\/raw_provider_content\\/[0-9a-f]{2}\\/[0-9a-f-]{36}\\.blob$/.test(previous.object_name) ||
+        !new RegExp("^v39/provider/raw_provider_content/[0-9a-f]{2}/[0-9a-f-]{36}[.]blob$").test(previous.object_name) ||
         !previous.object_name.endsWith(
           `/${String(previous.blob_ref_id).toLowerCase()}.blob`
         ))
