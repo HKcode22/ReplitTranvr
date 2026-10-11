@@ -6,6 +6,7 @@ on:
       - phase2g-p2g24-github-observer-20261009
     paths:
       - tests/phase2g_p2g24_callback_health_behavior_v39.test.cjs
+      - tests/phase2g_p2g24_callback_receiver_health_v39.test.ts
       - .github/workflows/phase2g-p2g24-offline-fault-injection.yml
       - scripts/v39_p2g24_readonly_blob_integrity_audit.ts
       - tests/phase2g_p2g24_prepaid_persistence_fault_injection_v39.test.ts
