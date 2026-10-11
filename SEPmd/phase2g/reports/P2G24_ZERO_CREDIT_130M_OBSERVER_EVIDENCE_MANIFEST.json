@@ -1,0 +1,88 @@
+{
+  "schema": "v39.phase2g-p2g24-observer-evidence-manifest.v1",
+  "source": {
+    "repository": "HKcode22/ReplitTranvr",
+    "github_actions_run_id": 37920862702,
+    "job_id": 113788179542,
+    "artifact_id": 11617790710,
+    "artifact_name": "phase2g-p2g24-observer-evidence",
+    "run_url": "https://github.com/HKcode22/ReplitTranvr/actions/runs/37920862702",
+    "tested_head": "5de44ba66d59c26d9e5ef3b339b7f729ca2f3653",
+    "workflow_head": "3f95098ed3e29713ce40fca113b7a8bd3707296b"
+  },
+  "archive": {
+    "filename": "p2g24-observer-evidence.zip",
+    "byte_length": 17855,
+    "sha256": "40c072fe9d36ec830687ef421621cae1ab18035ca993b803ec5a75e4ce1033b7"
+  },
+  "files": [
+    {
+      "name": "checks.csv",
+      "bytes": 180502,
+      "sha256": "415f7e5dcf14472fef6fb376c315d2832af643d62b9ccf0144977f39dc16e92c"
+    },
+    {
+      "name": "summary.json",
+      "bytes": 557,
+      "sha256": "1756e063aa257b573dfd969b918496eb351033e2a9ea9ecc03e80ea8eff27d3c"
+    }
+  ],
+  "observed": {
+    "result": "PASS_ZERO_CREDIT_130_MIN",
+    "started_at_utc": "2026-10-09T10:58:28.176Z",
+    "ended_at_utc": "2026-10-09T13:08:28.183Z",
+    "duration_minutes": 130,
+    "samples": 520,
+    "checks_per_sample": 5,
+    "checks": 2600,
+    "failed_checks": 0,
+    "max_consecutive_failed_samples": 0,
+    "max_sample_gap_seconds": 15.007,
+    "requests_over_1000ms": 11,
+    "latency_ms": {
+      "root_health": {
+        "n": 520,
+        "p50": 110,
+        "p95": 234,
+        "p99": 408,
+        "max": 4271
+      },
+      "wrong_secret_route": {
+        "n": 520,
+        "p50": 108,
+        "p95": 226,
+        "p99": 277,
+        "max": 4842
+      },
+      "published_runtime": {
+        "n": 520,
+        "p50": 67,
+        "p95": 93,
+        "p99": 175,
+        "max": 5166
+      },
+      "webhook_secret_binding": {
+        "n": 520,
+        "p50": 67,
+        "p95": 103,
+        "p99": 133,
+        "max": 5097
+      },
+      "runtime_db_binding": {
+        "n": 520,
+        "p50": 67,
+        "p95": 84,
+        "p99": 169,
+        "max": 4599
+      }
+    }
+  },
+  "safety": {
+    "live_aerodatabox_calls": 0,
+    "live_provider_mutations": 0,
+    "sql_queries": 0,
+    "sql_mutations": 0
+  },
+  "interpretation": "Availability plus HMAC configuration-binding under active 15-second polling; not proof of idle-autoscale behavior, provider webhook ingestion, DB availability, object-store durability, or Phase6 readiness",
+  "readiness": "NO_GO"
+}

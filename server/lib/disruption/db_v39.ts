@@ -10,8 +10,31 @@ function requireV39RuntimeUrl(): string {
   return url;
 }
 
+/**
+ * EXPERIMENTAL ONLY: changing PostgreSQL pool acquisition timeout can
+ * turn delayed deliveries into immediate non-2xx failures when provider
+ * retries are disabled. A 2026-10-10 real-Postgres burst fixture showed
+ * both failure modes. Keep DEFAULT=0 (original deployment behavior) until
+ * independent durable frontdoor + prospective science approval are proven.
+ *
+ * This is a feature-gated candidate, NOT a standalone reliability fix.
+ */
+export function v39PoolConnectionTimeoutMillis(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const enabled =
+    env.V39_CALLBACK_ONLY_RUNTIME === "1" &&
+    env.V39_CALLBACK_DB_ACQUIRE_TIMEOUT_APPROVED === "1";
+  return enabled ? 4000 : 0;
+}
+
 export function getV39Pool(): Pool {
-  if (!runtimePool) runtimePool = new Pool({ connectionString: requireV39RuntimeUrl() });
+  if (!runtimePool) {
+    runtimePool = new Pool({
+      connectionString: requireV39RuntimeUrl(),
+      connectionTimeoutMillis: v39PoolConnectionTimeoutMillis(),
+    });
+  }
   return runtimePool;
 }
 

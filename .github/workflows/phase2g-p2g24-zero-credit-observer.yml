@@ -1,0 +1,158 @@
+name: Phase2G P2G24 Zero-Credit 130m Observer
+
+on:
+  push:
+    branches:
+      - phase2g-p2g24-github-observer-20261009
+    paths:
+      - .github/workflows/phase2g-p2g24-zero-credit-observer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2g-p2g24-zero-credit-observer
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    if: github.repository == 'HKcode22/ReplitTranvr' && github.ref == 'refs/heads/phase2g-p2g24-github-observer-20261009'
+    runs-on: ubuntu-latest
+    timeout-minutes: 155
+    environment: phase2g-paid
+    env:
+      AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+    steps:
+      - name: GitHub-hosted exact callback-health observation (NO paid provider calls)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          import { createHmac } from "node:crypto";
+          
+          const BASE = "https://replit-tranvr--hk84164.replit.app";
+          const EXPECTED = "5de44ba66d59c26d9e5ef3b339b7f729ca2f3653";
+          const DURATION_MS = 130 * 60_000;
+          const INTERVAL_MS = 15_000;
+          const WRONG_SECRET = "phase2g-healthcheck-intentionally-wrong";
+          const SESSION = "00000000-0000-4000-8000-000000000000";
+          const SECRET = String(process.env.AERODATABOX_WEBHOOK_SECRET ?? "");
+          const DB_URL = String(process.env.V39_DATABASE_RUNTIME_URL ?? "");
+          const directory = "monitor-evidence";
+          fs.mkdirSync(directory, { recursive: true });
+          const recordsFile = directory + "/checks.csv";
+          const summaryFile = directory + "/summary.json";
+          fs.writeFileSync(recordsFile, "time_utc,elapsed_minutes,sample,check,http_status,latency_ms,result,reason\n");
+          
+          const started = Date.now();
+          let sampleCount = 0, failureCount = 0, maxGapMs = 0, lastSampleStart = null;
+          let maxConsecutiveFailedSamples = 0, consecutiveFailedSamples = 0;
+          const failureByCheck = {};
+          const fiveChecks = ["root_health", "wrong_secret_route", "published_runtime", "webhook_secret_binding", "runtime_db_binding"];
+          const log = value => console.log(JSON.stringify(value));
+          if (!SECRET || !DB_URL || SECRET === WRONG_SECRET) {
+            const result = { status:"REFUSED_MISSING_OR_UNSAFE_GITHUB_BINDING", recorded_at_utc:new Date().toISOString(), provider_calls:0, provider_mutations:0, database_queries:0, database_mutations:0 };
+            fs.writeFileSync(summaryFile, JSON.stringify(result, null, 2) + "\n");
+            log(result);
+            process.exit(2);
+          }
+          
+          async function check(name, path, init, valid) {
+            const began = Date.now();
+            let status = 0, reason = "ok";
+            try {
+              const response = await fetch(BASE + path, { ...init, signal:AbortSignal.timeout(8_000) });
+              status = response.status;
+              const payload = await response.json().catch(() => null);
+              reason = valid(status, payload) ? "ok" : (status === 200 || status === 404 ? "contract_mismatch" : "http_mismatch");
+            } catch (error) {
+              const n = error instanceof Error ? error.name : "";
+              reason = n === "TimeoutError" || n === "AbortError" ? "request_timeout" : "network_or_request_error";
+            }
+            return { name, status, ms:Date.now()-began, result:reason==="ok" ? "PASS" : "FAIL", reason };
+          }
+          
+          function expectedRuntime(status, x) {
+            return status===200 && x?.schema==="v39.phase2f-workspace-runtime.v1" &&
+              x?.status==="PASS" && String(x?.git_head??"").toLowerCase()===EXPECTED &&
+              x?.prepaid_route_registered===true && Number(x?.retention_hours)===168 &&
+              x?.provider_mutation===false && x?.runtime_owner_mode==="replit-published-deployment" &&
+              x?.managed_replit_workflow===false && x?.published_deployment===true &&
+              ["autoscale","reserved-vm"].includes(String(x?.runtime_durability_class??"").toLowerCase());
+          }
+          function expectedBinding(status, x, schema, dbBinding=false) {
+            return status===200 && x?.schema===schema && x?.status==="PASS" &&
+              x?.provider_call===false && x?.provider_mutation===false &&
+              (!dbBinding || x?.database_mutation===false) && Number(x?.alert_credits_spent)===0;
+          }
+          
+          log({event:"GITHUB_OBSERVER_STARTED",utc:new Date(started).toISOString(),duration_minutes:130,cadence_seconds:15,checks:fiveChecks,expected_head:EXPECTED,git_run_id:process.env.GITHUB_RUN_ID,provider_calls:0,provider_mutations:0,database_queries:0,database_mutations:0});
+          while (Date.now() - started < DURATION_MS) {
+            const cycleStart = Date.now();
+            sampleCount++;
+            if (lastSampleStart !== null) maxGapMs = Math.max(maxGapMs,cycleStart-lastSampleStart);
+            lastSampleStart = cycleStart;
+            const challenge = "phase2g-observer-"+process.env.GITHUB_RUN_ID+"-"+sampleCount+"-"+Date.now();
+            const proof = createHmac("sha256",DB_URL).update("phase2g-db-binding:"+challenge).digest("hex");
+            const observations = [
+              await check("root_health","/",{headers:{accept:"application/json"}},(status,x)=>status===200&&x?.status==="ok"&&x?.service==="phase2g-callback-only"&&x?.provider_call===false&&x?.provider_mutation===false),
+              await check("wrong_secret_route","/api/v1/webhooks/aerodatabox/"+encodeURIComponent(WRONG_SECRET)+"/prepaid/"+SESSION,{method:"POST",headers:{"content-type":"application/json",accept:"application/json"},body:"{}"},(status,x)=>status===404&&x?.error==="Not found"),
+              await check("published_runtime","/__v39/workspace-runtime",{headers:{accept:"application/json"}},expectedRuntime),
+              await check("webhook_secret_binding","/__v39/phase2g/webhook-secret-match",{method:"POST",headers:{accept:"application/json","x-v39-phase2g-webhook-secret":SECRET}},(status,x)=>expectedBinding(status,x,"v39.phase2g-webhook-secret-match.v1")),
+              await check("runtime_db_binding","/__v39/phase2g/runtime-db-binding",{method:"POST",headers:{accept:"application/json","x-v39-phase2g-db-challenge":challenge,"x-v39-phase2g-db-proof":proof}},(status,x)=>expectedBinding(status,x,"v39.phase2g-runtime-db-binding.v1",true))
+            ];
+            const elapsed=((Date.now()-started)/60000).toFixed(3);
+            let cycleFailed=false;
+            for (const x of observations) {
+              fs.appendFileSync(recordsFile,[new Date().toISOString(),elapsed,sampleCount,x.name,x.status,x.ms,x.result,x.reason].join(",")+"\n");
+              if (x.result!=="PASS") {
+                failureCount++;
+                cycleFailed=true;
+                failureByCheck[x.name]=(failureByCheck[x.name]??0)+1;
+              }
+            }
+            consecutiveFailedSamples=cycleFailed ? consecutiveFailedSamples+1 : 0;
+            maxConsecutiveFailedSamples=Math.max(maxConsecutiveFailedSamples,consecutiveFailedSamples);
+            if (cycleFailed || sampleCount===1 || sampleCount%20===0) {
+              log({event:"OBSERVER_SAMPLE",utc:new Date().toISOString(),elapsed_minutes:elapsed,samples:sampleCount,total_failures:failureCount,max_sample_gap_seconds:Number((maxGapMs/1000).toFixed(2)),results:observations.map(x=>({check:x.name,http:x.status,ms:x.ms,result:x.result,reason:x.reason}))});
+            }
+            const wait=Math.max(0,started+sampleCount*INTERVAL_MS-Date.now());
+            if (wait) await new Promise(resolve=>setTimeout(resolve,wait));
+          }
+          const elapsedMinutes=(Date.now()-started)/60000;
+          const complete=elapsedMinutes>=130 && sampleCount>=490 && maxGapMs<=45000;
+          const result={
+            status:complete&&failureCount===0?"PASS_ZERO_CREDIT_130_MIN":"FAIL_OR_INCOMPLETE",
+            started_at_utc:new Date(started).toISOString(),ended_at_utc:new Date().toISOString(),
+            duration_minutes:Number(elapsedMinutes.toFixed(3)),samples:sampleCount,
+            checks_per_sample:fiveChecks.length,total_checks:sampleCount*fiveChecks.length,
+            failed_checks:failureCount,failed_checks_by_stage:failureByCheck,
+            max_consecutive_failed_samples:maxConsecutiveFailedSamples,
+            max_sample_gap_seconds:Number((maxGapMs/1000).toFixed(3)),
+            expected_head:EXPECTED,git_run_id:process.env.GITHUB_RUN_ID,
+            provider_calls:0,provider_mutations:0,database_queries:0,database_mutations:0
+          };
+          fs.writeFileSync(summaryFile,JSON.stringify(result,null,2)+"\n");
+          log({event:"GITHUB_OBSERVER_FINISHED",...result});
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,"### Phase2G P2G24 GitHub observer\n\n"+
+            "- Result: **"+result.status+"**\n"+
+            "- Duration: "+result.duration_minutes+" minutes\n"+
+            "- Samples: "+result.samples+"\n"+
+            "- Failed checks: "+result.failed_checks+"\n"+
+            "- Maximum sample gap: "+result.max_sample_gap_seconds+" seconds\n"+
+            "- AeroDataBox API calls: 0\n"+
+            "- Scientific database queries and mutations: 0\n"+
+            "- Evidence: downloadable phase2g-p2g24-observer-evidence artifact\n");
+          if (result.status!=="PASS_ZERO_CREDIT_130_MIN") process.exitCode=1;
+          NODE
+      - name: Upload observer evidence even if health fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2g-p2g24-observer-evidence
+          path: monitor-evidence/
+          if-no-files-found: warn
+          retention-days: 30

@@ -1,0 +1,41 @@
+{
+  // P09-P12 investigation ONLY: do NOT deploy to real provider callback.
+  // Resources named below DO NOT EXIST in the connected Cloudflare account.
+  // R2 is not enabled. No real billing/production user has been authorized.
+  // This file is deliberately NOT linked to any production CI deploy.
+  "name": "p2g-yssy-synthetic-edge-staging",
+  "main": "./worker.ts",
+  "compatibility_date": "2026-10-10",
+  "workers_dev": true,
+  "vars": {
+    "EDGE_EXECUTION_MODE": "synthetic-only",
+    "EDGE_ALLOW_SYNTHETIC_RELAY": "0",
+    "EDGE_MAX_BYTES": "2097152"
+  },
+  "r2_buckets": [
+    {
+      "binding": "RAW",
+      "bucket_name": "p2g-yssy-synthetic-only-evidence-staging"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "DELIVERY_QUEUE",
+        "queue": "p2g-yssy-synthetic-only-receipts"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "p2g-yssy-synthetic-only-receipts",
+        "max_batch_size": 1,
+        "max_batch_timeout": 1,
+        "max_retries": 10,
+        "dead_letter_queue": "p2g-yssy-synthetic-only-dlq"
+      }
+    ]
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  }
+}

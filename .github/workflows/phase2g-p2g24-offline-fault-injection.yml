@@ -1,0 +1,435 @@
+name: Phase2G P2G24 Offline Fault Injection
+
+on:
+  push:
+    branches:
+      - phase2g-p2g24-github-observer-20261009
+    paths:
+      - tests/phase2g_p2g24_callback_health_behavior_v39.test.cjs
+      - tests/phase2g_yssy_260_259_regression_v39.test.ts
+      - tests/phase2g_unlogged_runtime_integrity_v39.test.ts
+      - tests/phase2g_paid_callback_origin_v39.test.ts
+      - tests/phase2g_prepaid_ingress_latency_hardening_v39.test.ts
+      - tests/phase2g_pre_yssy_closed_loop_hardening_v39.test.ts
+      - tests/phase2g_historical_failure_regressions_v39.test.ts
+      - tests/phase2g_delivery_gap_schema_v39.test.ts
+      - tests/phase2g_signed_cleanup_attestation_v39.test.ts
+      - tests/phase2g_p2g24_callback_receiver_health_v39.test.ts
+      - .github/workflows/phase2g-p2g24-offline-fault-injection.yml
+      - scripts/v39_p2g24_readonly_blob_integrity_audit.ts
+      - scripts/v39_p2g24_saved_original_item_evidence_v39.ts
+      - tests/phase2g_p2g24_prepaid_persistence_fault_injection_v39.test.ts
+      - tests/phase2g_yssy_oct12_stage1_calendar_v39.test.ts
+      - experiments/phase2g_durable_ingress_offline_prototype_v39.ts
+      - tests/phase2g_durable_ingress_offline_prototype_v39.test.ts
+      - experiments/phase2g_cf_sandbox_ingress/worker.ts
+      - experiments/phase2g_cf_sandbox_ingress/bounded_wire_body.ts
+      - tests/phase2g_bounded_source_wire_v39.test.ts
+      - experiments/phase2g_cf_sandbox_ingress/wrangler.synthetic-staging.jsonc
+      - tests/phase2g_p10_synthetic_wrangle_config_guard_v39.test.ts
+      - experiments/phase2g_cf_sandbox_ingress/p10_readonly_hosted_evidence_gate_v39.ts
+      - tests/phase2g_p10_readonly_hosted_evidence_gate_v39.test.ts
+      - experiments/phase2g_cf_sandbox_ingress/provenance.ts
+      - tests/phase2g_cf_sandbox_ingress_worker_v39.test.ts
+      - tests/phase2g_cf_sandbox_provenance_hmac_v39.test.ts
+      - experiments/phase2g_cf_sandbox_ingress/free_queue_two_hour_model.ts
+      - tests/phase2g_yssy_120m_free_queue_interruption_model_v39.test.ts
+      - experiments/phase2g_cf_sandbox_ingress/worker_queue_only.ts
+      - tests/phase2g_cf_free_queue_only_worker_v39.test.ts
+      - scripts/v39_p2g24_queue_only_size_feasibility_readonly.ts
+      - server/routes_v3.ts
+      - server/lib/disruption/prepaidProbeRuntime_v39.ts
+      - server/lib/disruption/prepaidOriginalJsonStructure_v39.ts
+      - server/lib/disruption/phase2gPrepaidStageTelemetry_v39.ts
+      - tests/phase2g_prepaid_stage_telemetry_v39.test.ts
+      - tests/phase2g_prepaid_prelock_source_preparation_v39.test.ts
+      - tests/phase2g_prepaid_original_json_structure_v39.test.ts
+      - tests/phase2g_p2g24_saved_original_item_evidence_v39.test.ts
+      - server/lib/disruption/providerBlobStore_v39.ts
+      - server/lib/disruption/replitProviderBlobStore_v39.ts
+      - server/phase2gCallbackOnly.ts
+      - server/lib/disruption/phase2gDbLivePreflight_v39.ts
+      - scripts/phase2gStage1PublishedDatabaseLivePreflight_v39.ts
+      - scripts/v39_phase2g_stage1_logged_supervisor_v39.ts
+      - scripts/v39_phase2g_paid_owner_termination_bound_v39.ts
+      - tests/phase2g_paid_owner_termination_bound_v39.test.ts
+      - scripts/v39_phase2g_stage1_recover_after_exit_v39.ts
+      - scripts/v39_phase2g_subscription_exact_owner_match_v39.ts
+      - tests/phase2g_stage1_subscription_exact_owner_v39.test.ts
+      - scripts/v39_phase2g_yssy_20261012_zero_credit_prep_v39.ts
+      - tests/phase2g_yssy_20261012_zero_credit_prep_v39.test.ts
+      - scripts/v39_phase2g_stage1_watchdog_6plus6_policy_v39.ts
+      - tests/phase2g_actual_stage1_watchdog_six_plus_six_v39.test.ts
+      - tests/phase2g_p2g24_prepublish_real_db_prelaunch_v39.test.ts
+      - server/lib/disruption/phase2gPrepaidHttpTransportTelemetry_v39.ts
+      - tests/phase2g_p2g24_prepaid_transport_diagnostics_v39.test.ts
+      - tests/phase2g_p2g24_actual_postgres_persistence_integration_v39.test.ts
+      - server/lib/disruption/db_v39.ts
+      - tests/phase2g_p2g24_db_pool_acquisition_bound_v39.test.ts
+      - tests/phase2g_yssy_zero_billable_delivery_retries_v39.test.ts
+      - experiments/phase2g_rehearsal/yssy_bounded_loss_scientific_adjudication_v39.ts
+      - tests/phase2g_yssy_bounded_loss_scientific_adjudication_v39.test.ts
+      - experiments/phase2g_rehearsal/observed_subset_descriptive_scope_v39.ts
+      - tests/phase2g_observed_subset_descriptive_scope_v39.test.ts
+      - scripts/v39_phase2g_independent_pg_delivery_readonly_observer.ts
+      - tests/phase2g_independent_pg_delivery_readonly_observer_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_three_replit_failover_feasibility_v39.ts
+      - experiments/phase2g_rehearsal/synthetic_fixed_frontdoor_spool_v39.ts
+      - experiments/phase2g_rehearsal/synthetic_published_backup_parity_gate_v39.ts
+      - tests/phase2g_published_backup_parity_gate_v39.test.ts
+      - tests/phase2g_p18_real_published_runtime_snapshot_v39.test.ts
+      - tests/phase2g_synthetic_fixed_frontdoor_spool_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_replit_local_wallclock_v39.ts
+      - tests/phase2g_synthetic_replit_local_wallclock_v39.test.ts
+      - tests/phase2g_synthetic_three_replit_failover_feasibility_v39.test.ts
+      - experiments/phase2g_rehearsal/replit_only_postgres_failover_gate_v39.ts
+      - tests/phase2g_replit_only_postgres_failover_gate_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_six_primary_six_emergency_v39.ts
+      - tests/phase2g_synthetic_six_primary_six_emergency_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_multi_episode_six_plus_six_v39.ts
+      - experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39.ts
+      - experiments/phase2g_rehearsal/disposable_pending_physical_v2_replay_preview_v39.ts
+      - experiments/phase2g_rehearsal/disposable_quarantined_physical_v2_rehydrate_v39.ts
+      - tests/phase2g_synthetic_multi_episode_six_plus_six_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_short_vs_three_minute_gap_impact_v39.ts
+      - tests/phase2g_synthetic_short_vs_three_minute_gap_impact_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_120min_acceptance_v39.ts
+      - experiments/phase2g_rehearsal/synthetic_120min_irregular_trace_v39.ts
+      - tests/phase2g_synthetic_120min_irregular_trace_v39.test.ts
+      - tests/phase2g_yssy_synthetic_120min_acceptance_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_120min_science_recovery_audit_v39.ts
+      - tests/phase2g_synthetic_120min_science_recovery_audit_v39.test.ts
+      - experiments/phase2g_rehearsal/variable_rate_wallclock_audit_v39.ts
+      - tests/phase2g_variable_rate_wallclock_audit_v39.test.ts
+      - experiments/phase2g_rehearsal/independent_variable_sender_freeze_v39.ts
+      - tests/phase2g_independent_variable_sender_freeze_v39.test.ts
+      - experiments/phase2g_rehearsal/dual_source_wire_canonical_receipt_v39.ts
+      - tests/phase2g_dual_wire_canonical_source_receipt_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_dual_receipt_queue_admission_v39.ts
+      - tests/phase2g_dual_receipt_queue_admission_v39.test.ts
+      - experiments/phase2g_rehearsal/disposable_logged_source_receipt_v39.ts
+      - experiments/phase2g_rehearsal/dual_store_receipt_fault_matrix_v39.ts
+      - tests/phase2g_dual_store_receipt_fault_matrix_v39.test.ts
+      - experiments/phase2g_rehearsal/postgres_continuity_guard_v39.ts
+      - experiments/phase2g_rehearsal/disposable_replay_blob_ambiguity_v39.ts
+      - experiments/phase2g_rehearsal/disposable_exact_science_restore_v39.ts
+      - experiments/phase2g_rehearsal/disposable_current_sql_receipt_confirmation_v39.ts
+      - experiments/phase2g_rehearsal/synthetic_120min_science_recovery_audit_v39.ts
+      - tests/phase2g_synthetic_120min_science_recovery_audit_v39.test.ts
+      - tests/phase2g_postgres_continuity_guard_v39.test.ts
+      - experiments/phase2g_rehearsal/signed_attempt_reconciliation_v39.ts
+      - tests/phase2g_signed_attempt_reconciliation_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_owner_freeze_signature_v39.ts
+      - tests/phase2g_synthetic_owner_freeze_signature_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_two_stage_owner_protocol_v39.ts
+      - tests/phase2g_synthetic_two_stage_owner_protocol_v39.test.ts
+      - experiments/phase2g_rehearsal/disposable_two_stage_owner_journal_v39.ts
+      - experiments/phase2g_rehearsal/synthetic_unknown_create_outcome_v39.ts
+      - tests/phase2g_synthetic_unknown_create_outcome_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_physical_item_continuity_v39.ts
+      - tests/phase2g_synthetic_physical_item_continuity_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_watchdog_tolerance_gate_v39.ts
+      - tests/phase2g_synthetic_watchdog_tolerance_gate_v39.test.ts
+      - tests/phase2g_signed_attempt_watchdog_corroboration_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_watchdog_six_plus_four_v39.ts
+      - tests/phase2g_synthetic_watchdog_six_plus_four_v39.test.ts
+      - tests/phase2g_synthetic_watchdog_six_plus_six_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_real_health_6plus4_adapter_v39.ts
+      - tests/phase2g_real_supervisor_six_plus_four_mapping_v39.test.ts
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-fault-injection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # No provider key, paid probe authorization, deployment token,
+      # database URL or webhook secret is connected to this job.
+      CI: "true"
+    steps:
+      - name: Checkout only the isolated incident investigation branch
+        uses: actions/checkout@v4
+      - name: Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install pinned dependencies (no audit)
+        run: npm ci --no-audit --no-fund
+      - name: Execute real callbackHealthy under 18 network-isolated scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/phase2g_p2g24_callback_health_behavior_v39.test.cjs
+          echo "PAID_PROVIDER_CALLS=0"
+          echo "SCIENTIFIC_DATABASE_QUERIES=0"
+          echo "DEPLOYMENT_CHANGES=0"
+      - name: Run existing receiver regressions
+        run: |
+          npx vitest run \
+            tests/phase2g_p2g24_prepaid_persistence_fault_injection_v39.test.ts \
+            tests/phase2g_prepaid_original_json_structure_v39.test.ts \
+            tests/phase2g_p2g24_saved_original_item_evidence_v39.test.ts \
+            tests/phase2g_prepaid_stage_telemetry_v39.test.ts \
+            tests/phase2g_prepaid_prelock_source_preparation_v39.test.ts \
+            tests/phase2g_yssy_260_259_regression_v39.test.ts \
+            tests/phase2g_unlogged_runtime_integrity_v39.test.ts \
+            tests/phase2g_paid_callback_origin_v39.test.ts \
+            tests/phase2g_prepaid_ingress_latency_hardening_v39.test.ts \
+            tests/phase2g_pre_yssy_closed_loop_hardening_v39.test.ts \
+            tests/phase2g_historical_failure_regressions_v39.test.ts \
+            tests/phase2g_delivery_gap_schema_v39.test.ts \
+            tests/phase2g_signed_cleanup_attestation_v39.test.ts \
+            tests/phase2g_yssy_oct12_stage1_calendar_v39.test.ts \
+            tests/phase2g_yssy_20261012_zero_credit_prep_v39.test.ts \
+            tests/phase2g_stage1_subscription_exact_owner_v39.test.ts \
+            tests/phase2g_durable_ingress_offline_prototype_v39.test.ts \
+            tests/phase2g_cf_sandbox_ingress_worker_v39.test.ts \
+            tests/phase2g_bounded_source_wire_v39.test.ts \
+            tests/phase2g_p10_synthetic_wrangle_config_guard_v39.test.ts \
+            tests/phase2g_p10_readonly_hosted_evidence_gate_v39.test.ts \
+            tests/phase2g_cf_sandbox_provenance_hmac_v39.test.ts \
+            tests/phase2g_yssy_120m_free_queue_interruption_model_v39.test.ts \
+            tests/phase2g_cf_free_queue_only_worker_v39.test.ts \
+            tests/phase2g_p2g24_prepublish_real_db_prelaunch_v39.test.ts \
+            tests/phase2g_p2g24_db_pool_acquisition_bound_v39.test.ts \
+            tests/phase2g_p2g24_prepaid_transport_diagnostics_v39.test.ts \
+            tests/phase2g_yssy_zero_billable_delivery_retries_v39.test.ts \
+            tests/phase2g_yssy_bounded_loss_scientific_adjudication_v39.test.ts \
+            tests/phase2g_observed_subset_descriptive_scope_v39.test.ts \
+            tests/phase2g_independent_pg_delivery_readonly_observer_v39.test.ts \
+            tests/phase2g_synthetic_three_replit_failover_feasibility_v39.test.ts \
+            tests/phase2g_replit_only_postgres_failover_gate_v39.test.ts \
+            tests/phase2g_synthetic_fixed_frontdoor_spool_v39.test.ts \
+            tests/phase2g_synthetic_replit_local_wallclock_v39.test.ts \
+            tests/phase2g_published_backup_parity_gate_v39.test.ts \
+            tests/phase2g_p18_real_published_runtime_snapshot_v39.test.ts \
+            tests/phase2g_synthetic_six_primary_six_emergency_v39.test.ts \
+            tests/phase2g_synthetic_multi_episode_six_plus_six_v39.test.ts \
+            tests/phase2g_synthetic_short_vs_three_minute_gap_impact_v39.test.ts \
+            tests/phase2g_yssy_synthetic_120min_acceptance_v39.test.ts \
+            tests/phase2g_synthetic_120min_irregular_trace_v39.test.ts \
+            tests/phase2g_synthetic_120min_science_recovery_audit_v39.test.ts \
+            tests/phase2g_variable_rate_wallclock_audit_v39.test.ts \
+            tests/phase2g_independent_variable_sender_freeze_v39.test.ts \
+            tests/phase2g_dual_wire_canonical_source_receipt_v39.test.ts \
+            tests/phase2g_dual_receipt_queue_admission_v39.test.ts \
+            tests/phase2g_dual_store_receipt_fault_matrix_v39.test.ts \
+            tests/phase2g_postgres_continuity_guard_v39.test.ts \
+            tests/phase2g_signed_attempt_reconciliation_v39.test.ts \
+            tests/phase2g_synthetic_owner_freeze_signature_v39.test.ts \
+            tests/phase2g_synthetic_two_stage_owner_protocol_v39.test.ts \
+            tests/phase2g_synthetic_unknown_create_outcome_v39.test.ts \
+            tests/phase2g_synthetic_physical_item_continuity_v39.test.ts \
+            tests/phase2g_synthetic_watchdog_tolerance_gate_v39.test.ts \
+            tests/phase2g_signed_attempt_watchdog_corroboration_v39.test.ts \
+            tests/phase2g_synthetic_watchdog_six_plus_four_v39.test.ts \
+            tests/phase2g_synthetic_watchdog_six_plus_six_v39.test.ts \
+            tests/phase2g_real_supervisor_six_plus_four_mapping_v39.test.ts \
+            tests/phase2g_actual_stage1_watchdog_six_plus_six_v39.test.ts \
+            tests/phase2g_paid_owner_termination_bound_v39.test.ts \
+            tests/phase2g_p2g24_callback_receiver_health_v39.test.ts \
+            tests/phase2g_published_callback_only_v39.test.ts \
+            tests/phase2g_watchdog_recovery_contract_v39.test.ts \
+            tests/phase2g_zero_credit_callback_binding_v39.test.ts
+      - name: Compile read-only blob auditor without touching database or storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx esbuild scripts/v39_p2g24_readonly_blob_integrity_audit.ts \
+            --bundle --platform=node --format=esm --packages=external \
+            --outfile=/tmp/p2g24-blob-readonly-auditor.mjs
+          node --check /tmp/p2g24-blob-readonly-auditor.mjs
+          echo 'BLOB_AUDITOR_EXECUTED=false'
+          npx esbuild scripts/v39_p2g24_queue_only_size_feasibility_readonly.ts \
+            --bundle --platform=node --format=esm --packages=external \
+            --outfile=/tmp/p2g24-queue-sizing-readonly-auditor.mjs
+          node --check /tmp/p2g24-queue-sizing-readonly-auditor.mjs
+          echo 'QUEUE_SIZE_AUDITOR_EXECUTED=false'
+      - name: Typecheck server
+        run: npm run v39:typecheck
+      - name: Generate YSSY zero-credit prep receipt (NO PAID AUTH)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          test -z "${AERODATABOX_API_KEY:-}"
+          node --import tsx scripts/v39_phase2g_yssy_20261012_zero_credit_prep_v39.ts \
+            --out "${RUNNER_TEMP}/yssy-20261012-zero-credit-prep.json"
+          sha256sum "${RUNNER_TEMP}/yssy-20261012-zero-credit-prep.json"
+          echo "AUTH_CREATED=false"
+          echo "PROVIDER_CALLS=0"
+          echo "PAID_LAUNCH=NOT_AUTHORIZED"
+      - name: Read published Replit runtime version (GET only; no secrets)
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime"
+          OUT="${RUNNER_TEMP}/yssy-published-runtime-readonly.json"
+          if curl -fsS --connect-timeout 5 --max-time 15 \
+            -H "accept: application/json" "${URL}" -o "${OUT}"; then
+            node --input-type=module - "${OUT}" "${GITHUB_SHA}" <<'NODE'
+          import fs from "node:fs";
+          let raw={};try{raw=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));}catch{raw={};}
+          const actual=String(raw?.git_head??"").toLowerCase();
+          const expected=String(process.argv[3]??"").toLowerCase();
+          const ok=raw?.schema==="v39.phase2f-workspace-runtime.v1"&&
+            raw?.status==="PASS"&&actual===expected&&
+            raw?.prepaid_route_registered===true&&
+            raw?.published_deployment===true;
+          console.log(JSON.stringify({
+            schema:"v39.yssy.p18.readonly-published-version.v1",
+            observed_at_utc:new Date().toISOString(),
+            status:ok?"CLAIMED_MATCH_NOT_POST_PROVEN":"PUBLISHED_VERSION_MISMATCH_OR_INVALID",
+            published_git_head:actual||null,
+            expected_branch_head:expected,
+            provider_calls:0,provider_mutations:0,alert_credits_spent:0,
+            published_signed_webhook_persistence_verified:false
+          },null,2));
+          if(process.env.GITHUB_STEP_SUMMARY){
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              "### YSSY live release: HOLD — CI success is NOT paid GO\n"+
+              "- Read-only published claimed HEAD: \`"+(actual||"unavailable")+"\`\n"+
+              "- Reviewed branch HEAD: \`"+expected+"\`\n"+
+              "- Deployment parity claim: **"+(ok?"claimed match, signed POST still unverified":"MISMATCH / INVALID")+"**\n"+
+              "- Fresh retry approval, provider balance, signed test POST and paid AUTH: **NOT VERIFIED**\n"
+            );
+          }
+          NODE
+          else
+            printf '%s\n' '{"schema":"v39.yssy.p18.readonly-published-version.v1","status":"READONLY_PUBLIC_GET_UNREACHABLE","provider_calls":0,"alert_credits_spent":0,"published_signed_webhook_persistence_verified":false}' > "${OUT}"
+            echo "PUBLISHED_RUNTIME=UNREACHABLE_NO_READINESS_CLAIM"
+            echo '### YSSY live release: HOLD — published GET unreachable; tests not paid GO' >> "${GITHUB_STEP_SUMMARY}"
+          fi
+      - name: Preserve YSSY draft receipt and optional published snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: yssy-oct12-zero-credit-prep
+          path: |
+            ${{ runner.temp }}/yssy-20261012-zero-credit-prep.json
+            ${{ runner.temp }}/yssy-published-runtime-readonly.json
+          if-no-files-found: error
+          retention-days: 7
+
+  disposable-postgres-persistence:
+    name: Ephemeral PostgreSQL V3.9 persistence fault integration (no paid credentials)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: p2g_fixture
+          POSTGRES_PASSWORD: fixture_only_password
+          POSTGRES_DB: p2g_stage1_fixture
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U p2g_fixture -d p2g_stage1_fixture"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      P2G_DISPOSABLE_POSTGRES: "YES"
+      P2G_FIXTURE_POSTGRES_URL: postgresql://p2g_fixture:fixture_only_password@127.0.0.1:5432/p2g_stage1_fixture
+      # Deliberately NO V39_DATABASE_RUNTIME_URL, AERODATABOX_API_KEY,
+      # Cloudflare tokens, Replit secrets or scientific DB credentials.
+      CI: "true"
+    steps:
+      - name: Checkout isolated branch only
+        uses: actions/checkout@v4
+      - name: Install Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked test dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run actual V3.9 persistence against disposable PostgreSQL 16
+        run: |
+          set -euo pipefail
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          test -z "${AERODATABOX_API_KEY:-}"
+          npx vitest run tests/phase2g_p2g24_actual_postgres_persistence_integration_v39.test.ts
+          echo 'AERODATABOX_PROVIDER_CALLS=0'
+          echo 'SCIENTIFIC_DATABASE_QUERIES=0'
+          echo 'CLOUDFLARE_RESOURCES=0'
+          echo 'REPLIT_DEPLOYMENTS=0'
+      - name: Prove actual disposable PostgreSQL SIGKILL clears UNLOGGED only
+        shell: bash
+        env:
+          PG_TEST_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          test -n "$PG_TEST_CONTAINER_ID"
+          IMAGE="$(docker inspect --format '{{.Config.Image}}' "$PG_TEST_CONTAINER_ID")"
+          test "$IMAGE" = "postgres:16"
+          docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "CREATE SCHEMA p2g_unlogged_crash_fixture" >/dev/null
+          docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "CREATE TABLE p2g_unlogged_crash_fixture.logged_receipt (id int PRIMARY KEY); CREATE UNLOGGED TABLE p2g_unlogged_crash_fixture.unlogged_session (id int PRIMARY KEY); INSERT INTO p2g_unlogged_crash_fixture.logged_receipt VALUES (1); INSERT INTO p2g_unlogged_crash_fixture.unlogged_session VALUES (1);" >/dev/null
+          # P06 V0064 LOGGED PENDING custody: test the EXACT proposed schema
+          # and a metadata-only PENDING record through real SIGKILL.  This is
+          # the disposable fixture database, NEVER an operator deployment.
+          docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "CREATE SCHEMA IF NOT EXISTS clean" >/dev/null
+          docker exec -i "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture             < migrations/current/V0064__phase2g_prepaid_source_pending_intent_v39.sql >/dev/null
+          docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "
+            INSERT INTO clean.phase2g_prepaid_source_intent_v39
+              (session_id,delivery_id,source_sha256,source_bytes,
+               blob_ref_id,object_name,first_node_received_utc,source_retention_until)
+            VALUES ('12345678-1234-4234-8234-123456789abc',
+                    'synthetic-pending-not-original-upload',
+                    repeat('a',64),10,
+                    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                    'v39/provider/raw_provider_content/aa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.blob',
+                    '2026-10-12T03:02:00Z',
+                    '2026-10-19T03:02:00Z')" >/dev/null
+          PENDING_BEFORE="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT count(*)::text || '|' || min(state) FROM clean.phase2g_prepaid_source_intent_v39")"
+          test "$PENDING_BEFORE" = "1|PENDING"
+          echo "P06_V0064_LOGGED_PENDING_BEFORE_SIGKILL=$PENDING_BEFORE"
+          BEFORE="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT (SELECT count(*) FROM p2g_unlogged_crash_fixture.logged_receipt)::text || '|' || (SELECT count(*) FROM p2g_unlogged_crash_fixture.unlogged_session)::text")"
+          test "$BEFORE" = "1|1"
+          echo "BEFORE_UNCLEAN_STOP_LOGGED_AND_UNLOGGED=$BEFORE"
+          # Crash ONLY this isolated CI PostgreSQL service, never Replit.
+          docker kill --signal=KILL "$PG_TEST_CONTAINER_ID" >/dev/null
+          docker start "$PG_TEST_CONTAINER_ID" >/dev/null
+          READY=0
+          for i in $(seq 1 45); do
+            if docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT 1" >/dev/null 2>&1; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          test "$READY" = 1
+          AFTER="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT (SELECT count(*) FROM p2g_unlogged_crash_fixture.logged_receipt)::text || '|' || (SELECT count(*) FROM p2g_unlogged_crash_fixture.unlogged_session)::text")"
+          echo "AFTER_UNCLEAN_RESTART_LOGGED_AND_UNLOGGED=$AFTER"
+          test "$AFTER" = "1|0"
+          echo "ACTUAL_UNLOGGED_CRASH_RESET=CONFIRMED"
+          PENDING_AFTER="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT count(*)::text || '|' || min(state) FROM clean.phase2g_prepaid_source_intent_v39")"
+          test "$PENDING_AFTER" = "1|PENDING"
+          echo "P06_V0064_LOGGED_PENDING_AFTER_TRUE_SIGKILL=$PENDING_AFTER"
+          echo "P06_V0064_PENDING_CRASH_SURVIVAL=CONFIRMED"
+          echo "P06_V0064_PENDING_PROVES_BYTES_EXIST=false"
+          echo "P06_V0064_PENDING_AUTHORIZES_2XX=false"
+
+          # Original synthetic first-receipt timestamp + blinded digests were
+          # written in the preceding actual V3.9 disposable PG integration.
+          # They MUST survive a genuine unclean restart unlike UNLOGGED rows.
+          RECEIPT_ROW="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT count(*)::text || '|' || to_char(min(first_edge_received_utc) AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS.MS') || '|' || min(length(attempt_hmac))::text || '|' || min(length(wire_sha256))::text || '|' || min(length(canonical_sha256))::text FROM p2g_dual_receipt_crash_fixture.receipt_metadata")"
+          echo "DUAL_HASH_METADATA_AFTER_UNCLEAN_RESTART=$RECEIPT_ROW"
+          test "$RECEIPT_ROW" = "1|2026-10-12 03:01:02.000|64|64|64"
+          echo "DUAL_HASH_FIRST_RECEIPT_RESTART_SURVIVAL=CONFIRMED"
+          # The signed two-stage test inserted EXACTLY ONE LOGGED binding in
+          # an entirely disposable fixture schema. It must survive crash;
+          # this proves only local SQL feasibility, never provider uniqueness.
+          OWNER_ROWS="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT count(*)::int FROM p2g_two_stage_fixture.owner_bindings")"
+          test "$OWNER_ROWS" = "1"
+          echo "TWO_STAGE_LOGGED_OWNER_BINDING_AFTER_UNCLEAN_RESTART=$OWNER_ROWS"
+          echo "REAL_PROVIDER_SUBSCRIPTION_CREATION_PROVEN=false"
+
+
+          echo "PROVIDER_CALLS=0"
+          echo "SCIENTIFIC_DB_QUERIES=0"
+          echo "CLOUDFLARE_CALLS=0"
