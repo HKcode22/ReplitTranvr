@@ -22,8 +22,11 @@ const sleep=(n:number)=>new Promise<void>(r=>setTimeout(r,n));
 export type SyntheticAdmissionResponseV39=Readonly<{
   outcome:"COMMITTED_SOURCE_RECEIPT"|"VERIFIED_DUPLICATE"|"PENDING_NOT_ACKNOWLEDGED";
   sourceBlobBytesVerified:boolean;
+  /** Only the synthetic LOGGED RAW intent was committed. */
   pgCommitted:boolean;
-  safeToReturn2xxToSyntheticSender:boolean;
+  normalizedPhysicalFlightV2ScienceCommitted:false;
+  /** Never ACK raw admission until real durable replay and source ledger. */
+  safeToReturn2xxToSyntheticSender:false;
   originalProviderAttemptWitnessVerified:false;
   realPaidLaunchAuthorized:false;
   originalF8ScientificPassAuthorized:false;
@@ -34,7 +37,8 @@ const reply=(outcome:SyntheticAdmissionResponseV39["outcome"]):
   outcome,
   sourceBlobBytesVerified:outcome!=="PENDING_NOT_ACKNOWLEDGED",
   pgCommitted:outcome!=="PENDING_NOT_ACKNOWLEDGED",
-  safeToReturn2xxToSyntheticSender:outcome!=="PENDING_NOT_ACKNOWLEDGED",
+  normalizedPhysicalFlightV2ScienceCommitted:false,
+  safeToReturn2xxToSyntheticSender:false,
   originalProviderAttemptWitnessVerified:false,
   realPaidLaunchAuthorized:false,originalF8ScientificPassAuthorized:false,
   upstreamProviderCallCount:0
