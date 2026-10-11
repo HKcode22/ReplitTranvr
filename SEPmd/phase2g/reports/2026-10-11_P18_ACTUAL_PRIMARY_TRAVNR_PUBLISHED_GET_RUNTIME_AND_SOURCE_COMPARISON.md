@@ -57,3 +57,10 @@ Exact backup `56e1bad0861db1c68403e5b4dc8c34adf4e8325a` returned GitHub `No comm
 5. Preserve paid **NO-GO** for Sunday 2026-10-11 20:00 PDT / Monday 2026-10-12 03:00 UTC until true evidence closes blockers. GitHub draft-only changes do not republish existing Replit Autoscale deployments.
 
 **Evidence:** Operator actual public GET output; GitHub exact SHA source reads; F.8 protocol §§5/6/21; [P01–P20 tracker](2026-10-10_P01_P20_SUNDAY_YSSY_RELEASE_LEDGER_AND_ZERO_CREDIT_COMMANDS.md), [per-incident 6+6 scientific observed-subset decision](../decisions/2026-10-11_YSSY_6PLUS6_SCIENTIFIC_MISSINGNESS_DECISION_RECORD.md). No new provider credits, storage mutation, database mutation, Replit publication/Cloudflare resource or main merge.
+
+
+## Exact completed CI regression checkpoint for the Oct 11 published snapshot
+
+**Verified [GitHub Actions #38115746460](https://github.com/HKcode22/ReplitTranvr/actions/runs/38115746460) at code SHA `0efc5574ae8a14f90d6a5e0da4ec6d7e6446490f`: BOTH jobs SUCCESS — 633/633 offline tests across 61 suites and 76/76 genuine disposable V3.9 PostgreSQL16 integration tests.** A real PostgreSQL SIGKILL/ungraceful restart confirmed `AFTER_UNCLEAN_RESTART_LOGGED_AND_UNLOGGED=1|0`. Newly added 5 dated offline source-claim snapshot tests passed; they prevent accidentally promoting published 200 GETs to exact source/bucket/backup GO. No hosted two-hour test or real published scientific callback POST was performed.
+
+**P18 classification remains BLOCK / verification partial.** The primary 5de reported-source SHA is recognized and contains Identity-v2/metric v2, but this does not prove the published binary or newer callback fixes. Travnr 56e source unavailable in this repo and earlier read-only inspection says published v2 missing, while both are Autoscale. Sender original source/billed attempt ledger and P20 full hosted test remain open; no launch admission or automatic 6+6 was changed.
