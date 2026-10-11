@@ -115,6 +115,20 @@ describe("P16 bounded local paid owner termination escalation, no provider calls
     expect(s).not.toContain('const childPassed = exit.code === 0 && !exit.signal && !exit.spawnError');
     expect(s).not.toContain('spawnError = error.message');
   });
+  it("P16 real supervisor hard-bounds exact-subscription recovery and never treats timeout as verified cleanup",()=>{
+    const s=readFileSync(join(process.cwd(),
+      "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
+    expect(s).toContain("const STAGE1_RECOVERY_HARD_DEADLINE_MS = 5 * 60_000");
+    expect(s).toContain("timeout: STAGE1_RECOVERY_HARD_DEADLINE_MS");
+    expect(s).toContain('killSignal: "SIGKILL"');
+    expect(s).toContain('code === "ETIMEDOUT"');
+    expect(s).toContain("recovery_proven_complete:false");
+    expect(s).toContain("independent_watchdog_escalation_required:true");
+    expect(s).toContain("recovery_verified_completed: recoveryAttempted &&");
+    expect(s).toContain("recoveryExitCode===0 && !recoveryTimedOut && recoverySignal===null");
+    expect(s).toContain("recovery_exit_code: recoveryExitCode");
+    expect(s).toContain("recovery_timed_out: recoveryTimedOut");
+  });
   it("P16 SIGKILL escalation must write proper newline-delimited JSON not escaped backslash-n",()=>{
     const s=readFileSync(join(process.cwd(),"scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
     const anchor=s.indexOf('reason:"paid_child_unresponsive_after_sigterm_grace"');
