@@ -32,12 +32,14 @@ function setup(){
   };
   const signed=signP20FrozenSenderScheduleV39(plan,privateKey);
   const attempts=plan.attempts.map(x=>({
-    ...x,senderStatus:200,senderElapsedMs:350
+    ...x,syntheticFlightItems:x.syntheticCostCredits,
+    senderStatus:200,senderElapsedMs:350
   }));
   const edge=attempts.map(x=>({
     attemptId:x.attemptId,originalUtc:utc(Date.parse(x.sentUtc)-start+100),
     sourceWireSha256:SHA,completeBytesDurablyAccepted:true,
-    authenticatedSyntheticReceipt:true
+    authenticatedSyntheticReceipt:true,
+    observedSyntheticCostCredits:x.syntheticCostCredits
   }));
   const observed:P20VariableRateFixtureV39={
     mode:"synthetic-only",ownerWindowStartUtc:plan.windowStartUtc,
@@ -56,7 +58,8 @@ function setup(){
     observedInternalAttempts:edge.map(x=>({
       attemptId:x.attemptId,originalUtc:x.originalUtc,
       sourceWireSha256:SHA,rawObjectSha256ReadbackVerified:true,
-      rawRetentionHours:168
+      rawRetentionHours:168,
+      observedSyntheticCostCredits:x.observedSyntheticCostCredits
     }))
   };
   return {
