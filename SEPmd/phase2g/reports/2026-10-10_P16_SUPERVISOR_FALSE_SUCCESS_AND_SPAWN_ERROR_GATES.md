@@ -14,7 +14,7 @@
 - `scripts/v39_phase2g_paid_owner_termination_bound_v39.ts`: `stage1PaidOwnerExitVerdictV39` fails closed on watchdog-triggered shutdown, any explicit termination request, spawn/process error, signal, nonzero/null exit, and non-finite or below-120m monotonic lifetime; clean zero with at least 7,200,000 ms is necessary, NOT sufficient, for paid success.
 - `scripts/v39_phase2g_stage1_logged_supervisor_v39.ts`: invokes the classifier with `terminationSignal`, `callbackWatchdogTriggered`, and `performance.now()` around child spawn/close; awaits `close` instead of optional `exit` after process error; uses sanitized spawn error; records `exit_verdict_reason` and `child_wall_elapsed_ms` in status; fixes escalation newline; retains existing abnormal-exit recovery.
 - `tests/phase2g_paid_owner_termination_bound_v39.test.ts`: reproduces early/zero-exit, failed-after-stop, spawn-error, signal and malformed monotonic timing cases, and verifies real supervisor wiring + log delimiter. No provider call.
-- Exact source checkpoint before this report: `a64497e18aa6bc3d7777737334c412b5f3585945`. Verification target: [GitHub Actions #38101882460](https://github.com/HKcode22/ReplitTranvr/actions/runs/38101882460). **Treat run status as unverified until both jobs complete successfully.**
+- **Verified source SHA:** `a64497e18aa6bc3d7777737334c412b5f3585945`. [GitHub Actions #38101882460](https://github.com/HKcode22/ReplitTranvr/actions/runs/38101882460) **COMPLETED SUCCESS in BOTH jobs**. Offline **443/443** Vitest cases, **45/45** suites; actual disposable PostgreSQL16 **45/45** integration tests. CI logs reconfirm `ACTUAL_UNLOGGED_CRASH_RESET=CONFIRMED` and `TWO_STAGE_LOGGED_OWNER_BINDING_AFTER_UNCLEAN_RESTART=1`. No provider credits, production DB, Cloudflare provisioning, Replit publish, or live owner from this CI.
 
 ## Critical boundaries
 
@@ -24,6 +24,6 @@ No AeroDataBox requests, subscription, provider credit spending, Cloudflare Queu
 
 ## Follow-up
 
-1. Verify full CI at exact source SHA and update this report with checked counts.
+1. CI at the exact source SHA is verified; next add a running published-equivalent owner/receiver reliability rehearsal, not merely more exit unit tests.
 2. Address P09–P13 authentic independently durable ingress + replay and P14 actual provider attempt attribution, then connect P15's trusted source witness (do not emulate from environment variables).
 3. Test exact deployed published/source hashes P18, present prospective P19 authorization and evidence, and run real hosted 120-minute zero-provider-credit R0–R11 rehearsal P20 only in user-approved zero-extra-charge isolated environment.
