@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "crypto";
 import { v39Pool as pool } from "./db_v39";
 import {timePrepaidStageV39,timePrepaidSyncStageV39} from "./phase2gPrepaidStageTelemetry_v39";
+import {prepaidSourcePendingIntentApprovedV39,persistPrepaidSourceWithPendingIntentV39} from "./prepaidSourceIntent_v39";
 import {
   deleteProviderBlobAtExpiryV39,
   persistProviderBlobBeforeAckV39,
@@ -1238,9 +1239,23 @@ export async function persistPrepaidProbeWebhookV39(input: {
       client,store,sessionId,deliveryId,sourceSha:bodySha256,
       originalCanonical:rawBytes,now:receivedAt
     }):null;
+  let originalReceivedAt=receivedAt;
   if(rescued){
     blob=rescued;
     reusedFailedOriginal=true;
+    originalReceivedAt=new Date(rescued.persistedAtUtc);
+  }else if(prepaidSourcePendingIntentApprovedV39()){
+    // P06 opt-in ONLY: commit a LOGGED metadata-only PENDING record before
+    // attempting any external object upload. If the store times out AFTER
+    // accepting bytes, the source is recoverable, not immediately deleted.
+    // Still under this session's existing SQL row lock; not a latency GO.
+    const staged=await timePrepaidStageV39(
+      "original_blob_upload_readback",()=>persistPrepaidSourceWithPendingIntentV39({
+        sessionId,deliveryId,bodySha256,originalCanonical:rawBytes,
+        firstNodeUtc:receivedAt,store:store!
+      }));
+    blob=staged.ref;
+    originalReceivedAt=staged.firstNodeUtc;
   }else{
     blob = await timePrepaidStageV39("original_blob_upload_readback",()=>persistProviderBlobBeforeAckV39({
       store:store!,
@@ -1252,8 +1267,6 @@ export async function persistPrepaidProbeWebhookV39(input: {
   }
   // LOGGED source already exists when reusing a failed original, and must
   // NEVER be inserted twice for the same logical notification.
-  const originalReceivedAt=reusedFailedOriginal?
-    new Date(blob.persistedAtUtc):receivedAt;
   if(!reusedFailedOriginal){
     await client.query(
       `INSERT INTO clean.provider_content_blob_ref
@@ -1476,7 +1489,8 @@ export async function persistPrepaidProbeWebhookV39(input: {
     }
     if (store && blob && !sourceCommitOutcomeUnknown &&
         !failureAccountingCommitOutcomeUnknown &&
-        !sourceFailureJournaled && !reusedFailedOriginal) {
+        !sourceFailureJournaled && !reusedFailedOriginal &&
+        !prepaidSourcePendingIntentApprovedV39()) {
       // Safe only before the source transaction attempted COMMIT. A COMMIT
       // error can mean the server committed and the reply was lost.
       // Retain that original blob for explicit read-only reconciliation;
