@@ -69,7 +69,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
 import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
-import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39,auditDisposableRawAdmissionIntentsV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
+import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39,auditDisposableRawAdmissionIntentsV39,recordVerifiedDisposablePendingOriginalRecoveryV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
 import {subscribePrepaidStageTimingV39,type PrepaidStageTimingV39} from "../server/lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {readReadOnlyPgSnapshotV39} from "../scripts/v39_phase2g_independent_pg_delivery_readonly_observer";
 import {registerV3Routes} from "../server/routes_v3";
@@ -431,6 +431,125 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
     await expect(auditDisposableRawAdmissionIntentsV39({
       mode:"PRODUCTION" as any,pool:state.pool!,store:fake.store,now:new Date()
     })).rejects.toThrow("P16_SYNTHETIC_RECOVERY_PRODUCTION_REFUSED");
+  });
+  const verifyPending=(name:string,store:ReturnType<typeof fakeStore>["store"])=>
+    recordVerifiedDisposablePendingOriginalRecoveryV39({
+      mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store,
+      sessionId:SESSION,syntheticAttemptHmac:key(name)
+    });
+  it("P13 REAL PG logged recovery verifies blob after uploader crashes post-upload; records evidence but NEVER marks PENDING committed or ACKs",async()=>{
+    const fake=fakeStore();
+    const broken={
+      query:(sql:string,params?:unknown[])=>{
+        if(sql.includes("UPDATE clean.p2g_synthetic_raw_admission_intent"))
+          return Promise.reject(Error("SYNTHETIC_UPLOADER_CRASH_BEFORE_FINAL_COMMIT"));
+        return state.pool!.query(sql,params as any[]);
+      }
+    } as unknown as Pool;
+    await expect(submit("uploaded-but-uncommitted",fake.store,broken))
+      .rejects.toThrow("SYNTHETIC_UPLOADER_CRASH_BEFORE_FINAL_COMMIT");
+    expect(fake.uploads()).toBe(1);
+    const before=await state.pool!.query(
+      "SELECT state,recovery_original_verified_utc,original_opaque_blob_path FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(before.rows[0].state).toBe("PENDING");
+    expect(before.rows[0].recovery_original_verified_utc).toBeNull();
+    const original=state.blobs.get(before.rows[0].original_opaque_blob_path);
+    expect(original?.length).toBeGreaterThan(0);
+    const recovered=await verifyPending("uploaded-but-uncommitted",fake.store);
+    expect(recovered).toMatchObject({
+      outcome:"ORIGINAL_PRESENT_VERIFIED_STILL_PENDING",
+      originalBytesProvenAtObservation:true,sourceRecoveryTimestampRecorded:true,
+      originalStateUnchanged:true,canAcknowledge:false,
+      canReplayScience:false,canDeleteOriginal:false,
+      providerAttemptAndCreditsAuthenticated:false,
+      originalF8ScienceComplete:false,paidLaunchAuthorized:false
+    });
+    const after=await state.pool!.query(
+      "SELECT state,recovery_original_verified_utc,original_opaque_blob_path FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(after.rows[0].state).toBe("PENDING");
+    expect(after.rows[0].recovery_original_verified_utc).not.toBeNull();
+    expect(state.blobs.get(after.rows[0].original_opaque_blob_path))
+      .toEqual(original);
+    expect((await submit("uploaded-but-uncommitted",fake.store,state.pool!,0))
+      .safeToReturn2xxToSyntheticSender).toBe(false);
+    expect(fake.uploads()).toBe(1);
+    expect(JSON.stringify(recovered)).not.toContain(SESSION);
+    expect(JSON.stringify(recovered)).not.toContain(SUB);
+  });
+  it("P13 REAL PG recovery refuses to fabricate bytes for PENDING original never uploaded",async()=>{
+    const fake=fakeStore();
+    fake.store.uploadBytes=async()=>{throw Error("SYNTHETIC_ORIGINAL_NEVER_UPLOADED");};
+    await expect(submit("lost-before-upload",fake.store))
+      .rejects.toThrow("SYNTHETIC_ORIGINAL_NEVER_UPLOADED");
+    const result=await verifyPending("lost-before-upload",fake.store);
+    expect(result).toMatchObject({
+      outcome:"ORIGINAL_UNREADABLE_STILL_PENDING",
+      originalBytesProvenAtObservation:false,
+      sourceRecoveryTimestampRecorded:false,canAcknowledge:false
+    });
+    const q=await state.pool!.query(
+      "SELECT state,recovery_original_verified_utc FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(q.rows[0]).toMatchObject({
+      state:"PENDING",recovery_original_verified_utc:null
+    });
+  });
+  it("P13 REAL PG refuses any recovered source receipt for corrupted object bytes",async()=>{
+    const fake=fakeStore();
+    const denied={query:(sql:string,params?:unknown[])=>{
+      if(sql.includes("UPDATE clean.p2g_synthetic_raw_admission_intent"))
+        return Promise.reject(Error("SYNTHETIC_SOURCE_FINALIZATION_UNAVAILABLE"));
+      return state.pool!.query(sql,params as any[]);
+    }} as unknown as Pool;
+    await expect(submit("pending-and-corrupt",fake.store,denied))
+      .rejects.toThrow("SYNTHETIC_SOURCE_FINALIZATION_UNAVAILABLE");
+    const [obj]=state.blobs.keys();
+    state.blobs.set(obj,new TextEncoder().encode("SYNTHETIC_TAMPERED"));
+    const v=await verifyPending("pending-and-corrupt",fake.store);
+    expect(v).toMatchObject({
+      outcome:"ORIGINAL_CHANGED_STILL_PENDING",
+      sourceRecoveryTimestampRecorded:false,canAcknowledge:false
+    });
+    const q=await state.pool!.query(
+      "SELECT recovery_original_verified_utc FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(q.rows[0].recovery_original_verified_utc).toBeNull();
+    expect(state.blobs.has(obj)).toBe(true);
+  });
+  it("P13 recovery does not treat COMMITTED, nonexistent, or expired hash-only intents as recoverable",async()=>{
+    const fake=fakeStore();
+    await submit("already-committed",fake.store);
+    expect((await verifyPending("already-committed",fake.store)).outcome)
+      .toBe("SOURCE_ALREADY_COMMITTED_NO_RECOVERY");
+    expect((await verifyPending("not-present",fake.store)).outcome)
+      .toBe("SOURCE_INTENT_NOT_FOUND_NO_RECOVERY");
+    const blocked={query:(sql:string,params?:unknown[])=>{
+      if(sql.includes("UPDATE clean.p2g_synthetic_raw_admission_intent"))
+        return Promise.reject(Error("STOP_FOR_TEST"));
+      return state.pool!.query(sql,params as any[]);
+    }} as unknown as Pool;
+    await expect(submit("expired-source",fake.store,blocked))
+      .rejects.toThrow("STOP_FOR_TEST");
+    await state.pool!.query(
+      "UPDATE clean.p2g_synthetic_raw_admission_intent SET source_retention_until=clock_timestamp()-interval '1 minute' WHERE synthetic_attempt_hmac=$1",
+      [key("expired-source")]);
+    const expired=await verifyPending("expired-source",fake.store);
+    expect(expired).toMatchObject({
+      outcome:"SOURCE_INTENT_EXPIRED_NO_RECOVERY",
+      canAcknowledge:false,sourceRecoveryTimestampRecorded:false
+    });
+  });
+  it("P13 recovery rejects invalid mode and actual-production environment even when PG is disposable",async()=>{
+    const fake=fakeStore();
+    await expect(recordVerifiedDisposablePendingOriginalRecoveryV39({
+      mode:"PRODUCTION" as any,pool:state.pool!,store:fake.store,
+      sessionId:SESSION,syntheticAttemptHmac:key("norecovery")
+    })).rejects.toThrow("P13_PENDING_RECOVERY_NON_DISPOSABLE_REFUSED");
+    const old=process.env.V39_DATABASE_RUNTIME_URL;
+    process.env.V39_DATABASE_RUNTIME_URL="NONDISPOSABLE_FIXTURE_GUARD";
+    try{
+      await expect(verifyPending("norecovery",fake.store))
+        .rejects.toThrow("P13_PENDING_RECOVERY_NON_DISPOSABLE_REFUSED");
+    }finally{if(old===undefined)delete process.env.V39_DATABASE_RUNTIME_URL;
+      else process.env.V39_DATABASE_RUNTIME_URL=old;}
   });
   it("P06 fail-closed: production credentials or wrong mode never admit source",async()=>{
     const fake=fakeStore();
