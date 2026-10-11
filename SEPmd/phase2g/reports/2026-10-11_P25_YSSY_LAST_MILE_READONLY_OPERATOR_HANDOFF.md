@@ -119,3 +119,71 @@ The returned receipt must verify HTTP 2xx, signed nonempty original canonical by
 - No numeric percent readiness/guaranteed scientific future PASS can be inferred from CI. The **only GO** is actual main/host source parity + same-route post/ACK + source migration/flags validated + zero active subscriptions/live balance + genuinely approved new exact AUTH + final preflight `PASS_READY_FOR_PAID_STAGE1`. Afterwards exact external billed-vs-internal credits, complete two hours/15-minute bins, original receipt quality and physical-v2 identity decide whether YSSY scientific run passed.
 
 **Owner stop state when any gate unknown: HOLD_NO_PAID_ACTION.** No action in sections 1–3 starts subscriptions, refills balance, migrates SQL, changes Replit hosting or issues AUTH.
+
+
+## 2026-10-11 15:41 PDT onward: exact incident #30 + source-custody audit
+
+**Authenticated operator read-only SQL:** one open `clean.adb_incident_stop` ID **30** with cause `reconciliation` and timestamp `2026-10-09T04:59:04.866Z`. Cross-check [the historical GitHub paid owner run #37881617397](https://github.com/HKcode22/ReplitTranvr/actions/runs/37881617397): the supervisor on YSSY probe 18 reported `RECOVERY_COMPLETED_FAIL_CLOSED` at 04:59:04.911Z with `provider_delete_verified=true`, `runtime_cleanup_verified=false`, `cleanup_deferred_to_replit_workspace=true`, `incident_opened=true`. A subsequent cleanup rejected `REFUSED:AUTO_DISCOVERY_REQUIRES_ONE_EXACT_SETTLING_MATCH`. This is the exact known P2G24 failure, not a new synthetic test error.
+
+**Previously verified historical original storage:** Oct 9 operator [read-only P2G24 original audit](https://github.com/HKcode22/ReplitTranvr/blob/phase2g-p2g24-github-observer-20261009/SEPmd/phase2g/reports/2026-10-09_P2G22_P2G24_OPERATOR_READONLY_AUDIT.md) downloaded **30/30 referenced objects**, with **30/30 SHA-256 and byte lengths matched**, 0 missing objects at *that time*. Earliest reference expiry **2026-10-16T04:02:22.780Z**. No evidence proves those are *all AeroDataBox sender attempts*, scientific completeness, or current October 11 object availability. Do NOT delete these historical sources or mutate probe 18 to PASS.
+
+**New production readiness guard:** live public `/__v39/workspace-runtime` now advertises ONLY a Boolean `prepaid_source_custody_ready`. It is true iff the running published receiver actually has `V39_CALLBACK_ONLY_RUNTIME=1`, `V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED=1`, `V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED=1`, `V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED=1`. No values/secrets are returned. Paid preflight, continuous paid supervisor and signed published disposable POST tester all refuse false/missing Boolean in published mode. Separate SQL V0064 presence is checked in paid preflight. **Do not enable these flags before reviewing and applying the migration and validating the new published release**. This closes the important “right Git SHA, old feature behavior” false-ready path; published and source parity are still pending.
+
+**Effective 6+6 half-open recovery:** requires TWO consecutive fully green health polls before closing an outage/re-arming check #1; one green is provisional, subject to unchanged 180s per-episode and whole-run cutoff. Any recovered episode remains *scientifically unverified* until exact source/credits and 8x15m bucket reconciliation. Provider retries stay 0.
+
+### SAFE read-only exact incident and historical-custody SQL
+
+Run in the current Replit Shell using the existing `v39Pool`. Do **NOT** run any historical cleanup command, migration apply or incident-resolution UPDATE before reviewing the result:
+
+```bash
+cd ~/workspace
+node --import tsx --input-type=module <<'NODE'
+import {v39Pool as pool} from "./server/lib/disruption/db_v39.ts";
+const c=await pool.connect();
+try{
+  await c.query("BEGIN TRANSACTION READ ONLY");
+  const incident=await c.query(`
+    SELECT id,cause,occurred_at_utc,resolved,
+           detail->>'kind' AS kind,detail->>'reason' AS reason,
+           detail->>'owner' AS recovery_owner,
+           detail->>'probeId' AS probe_id,
+           detail->>'budgetDayId' AS budget,
+           detail->>'providerDeleteVerified' AS provider_delete_verified,
+           detail->>'runtimeCleanupVerified' AS runtime_cleanup_verified,
+           detail->>'runtimeSessionPresent' AS runtime_session_present
+    FROM clean.adb_incident_stop WHERE id=30
+  `);
+  const probe=await c.query(`
+    SELECT probe_id,icao,status,duration_censored,
+           reconciliation_status,stop_reason,
+           runtime_cleanup_verified_at_utc,
+           (runtime_session_id IS NOT NULL) AS durable_session_identity_present
+    FROM clean.adb_anchor_probe WHERE probe_id=18
+  `);
+  const blobs=await c.query(`
+    SELECT count(*)::int AS referenced_objects,
+           count(*) FILTER(WHERE deletion_verified_at_utc IS NULL)::int AS untombstoned,
+           min(expires_at_utc) AS earliest_expiry
+    FROM clean.provider_content_blob_ref
+    WHERE source_kind='webhook'
+      AND source_record_id LIKE 'prepaid:6267293e-75a0-42a7-b977-89543f200ebc:%'
+  `);
+  console.log(JSON.stringify({
+    schema:"v39.p25.incident30.recovery-custody-readonly.v1",
+    incident:incident.rows,historical_probe:probe.rows,
+    referenced_blob_metadata:blobs.rows,
+    provider_calls:0,provider_mutations:0,database_mutations:0,
+    blob_downloads:0,blob_deletes:0
+  },null,2));
+  await c.query("ROLLBACK");
+}catch(e){
+  await c.query("ROLLBACK").catch(()=>{});
+  console.error("READONLY_AUDIT_FAILED",String(e instanceof Error?e.message:e).slice(0,160));
+  process.exitCode=2;
+}finally{c.release();await pool.end().catch(()=>{});}
+NODE
+```
+
+**Decision:** This audit alone NEVER resolves incident #30. If `provider_delete_verified=true`, zero active billables remains verified, and cleanup/reference preservation is separately reviewed, a narrowly scoped future *operator-approved* administrative closure could be considered without altering probe 18's FAILED/UNRESOLVED/CENSORED science status. The existing generic `REFUSED:OPEN_INCIDENTS` guard must not be bypassed. If referenced original objects are still needed for audit, never purpose-cleanup/delete merely to clear an incident.
+
+**Tonight's GO is still HOLD** pending incident adjudication, reviewed merge + V0064 apply and receiver flags, exact published source parity + signed real published disposable POST, P25 separately frozen/approved one-shot amendment, fresh paid runtime/AUTH, and final paid preflight. Beyond operational availability, an independent first-hop capture and complete sender-attempt evidence, as frozen P09–P20 research gates require, have **NOT** been established; a 6+6 GET watchdog does not replace them.
