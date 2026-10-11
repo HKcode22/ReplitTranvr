@@ -25,5 +25,10 @@
   ],
   "study_inference": "Only 120-minute fully reconciled matching v2 is promotable; no imputed flights for lost original sends; missingness must be disclosed",
   "decision_authorized": false,
-  "scientific_protocol_change_requested": false
+  "scientific_protocol_change_requested": false,
+  "stage1_supervisor_health_policy": "six-plus-six",
+  "health_single_outage_wall_limit_seconds": 180,
+  "health_whole_run_cumulative_limit_seconds": 180,
+  "health_whole_run_max_episodes": 2,
+  "health_recovery_scientific_audit_required": true
 }
