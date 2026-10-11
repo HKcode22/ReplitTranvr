@@ -41,6 +41,8 @@ describe("P25 exact incident30 read-only audit has zero paid/live mutations",()=
     expect(source).toContain("missing_unlogged_runtime_is_not_cleanup_proof:runtime?.rowCount===0");
     expect(source).toContain("to_regclass('clean.phase2g_cleanup_journal_v39')");
     expect(source).toContain("to_regclass('clean.phase2g_prepaid_source_intent_v39')");
+    expect(source).toContain("v0064_source_immutability_trigger_enabled:present.v0064_guard_trigger_enabled===true");
+    expect(source).toContain("tg.tgenabled='O'");
   });
   it("never authorizes closure, evidence deletion, scientific promotion or paid YSSY",()=>{
     for(const field of [
