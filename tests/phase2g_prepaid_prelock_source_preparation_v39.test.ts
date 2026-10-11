@@ -70,7 +70,7 @@ describe("P05/P06 production prepaid source prep moves deterministic SHA workloa
     const source=readFileSync("server/lib/disruption/prepaidProbeRuntime_v39.ts","utf8");
     const fn=source.indexOf("export async function persistPrepaidProbeWebhookV39(");
     const fragment=source.slice(fn,source.indexOf("/**\n * pg NUMERIC",fn));
-    const prepared=fragment.indexOf("const prepared=preparePrepaidProbeSourceV39");
+    const prepared=fragment.indexOf("preparePrepaidProbeSourceV39(sessionId,input.body)");
     const connect=fragment.indexOf("pool.connect()");
     const lock=fragment.indexOf("FOR UPDATE");
     const commit=fragment.lastIndexOf('client.query("COMMIT")');
