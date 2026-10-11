@@ -1385,6 +1385,50 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       else process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED=priorApproval;
     }
   },15000);
+  it("P06 stale prelock duplicate must reverify under real SQL lock if original DISAPPEARS during lock wait",async()=>{
+    const body=sample({id:"p06-stale-precheck-byte-disappearance"});
+    await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+    const prevCallback=process.env.V39_CALLBACK_ONLY_RUNTIME;
+    const prevFlag=process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED;
+    process.env.V39_CALLBACK_ONLY_RUNTIME="1";
+    process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED="1";
+    const holder=await state.pool!.connect();
+    let locked=false;
+    try{
+      await holder.query("BEGIN");
+      await holder.query(
+        "SELECT session_id FROM clean.prepaid_probe_session_runtime "+
+        "WHERE session_id=$1 FOR UPDATE",[SESSION]);
+      locked=true;
+      state.events.length=0;
+      const retry=persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+      const start=Date.now();
+      while(!state.events.includes("READBACK")&&Date.now()-start<2500)
+        await new Promise(r=>setTimeout(r,5));
+      expect(state.events).toContain("READBACK");
+      // Initial object readback has completed and the awaited SQL row lock
+      // is intentionally delayed beyond the 200ms preflight freshness cap.
+      await new Promise(r=>setTimeout(r,360));
+      state.blobs.clear();
+      await holder.query("COMMIT");
+      locked=false;
+      await expect(retry).rejects.toThrow(
+        "PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_UNREADABLE"
+      );
+      expect(state.events).toEqual(["READBACK","READBACK"]);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(await session()).toEqual({
+        requests:2,successes:1,failures:1
+      });
+    }finally{
+      if(locked)await holder.query("ROLLBACK").catch(()=>undefined);
+      holder.release();
+      if(prevCallback===undefined)delete process.env.V39_CALLBACK_ONLY_RUNTIME;
+      else process.env.V39_CALLBACK_ONLY_RUNTIME=prevCallback;
+      if(prevFlag===undefined)delete process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED;
+      else process.env.V39_PREPAID_DUPLICATE_PRELOCK_APPROVED=prevFlag;
+    }
+  },15000);
   it("P05 duplicate callback HTTP response waits for original-source readback; extra latency remains measurable",async()=>{
     const body=sample({id:"p05-delayed-duplicate-readback"});
     await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
