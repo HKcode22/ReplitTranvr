@@ -1960,6 +1960,34 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       else process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED=origApprove;
     }
   });
+  it("P04/P06 original scientific COMMIT BEFORE-wire failure remains uncertain even after SUCCESSFUL failure-accounting COMMIT",async()=>{
+    const oldRuntime=process.env.V39_CALLBACK_ONLY_RUNTIME;
+    const oldEnabled=process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED;
+    process.env.V39_CALLBACK_ONLY_RUNTIME="1";
+    process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED="1";
+    const body=sample({id:"p04-source-commit-before-wire-uncertain"});
+    try{
+      state.commitAckLost="before";
+      await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body}))
+        .rejects.toThrow("P04_SIMULATED_LOST_COMMIT_BEFORE_EXECUTION");
+      expect(state.events).not.toContain("DELETE");
+      expect(state.blobs.size).toBe(1);
+      expect(await count()).toEqual({logged:1,unlogged:0});
+      expect(await session()).toEqual({requests:1,successes:0,failures:1});
+      const retried=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+      expect(retried.duplicate).toBe(false);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+      expect(await session()).toEqual({requests:2,successes:1,failures:1});
+    }finally{
+      state.commitAckLost="none";
+      if(oldRuntime===undefined)delete process.env.V39_CALLBACK_ONLY_RUNTIME;
+      else process.env.V39_CALLBACK_ONLY_RUNTIME=oldRuntime;
+      if(oldEnabled===undefined)
+        delete process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED;
+      else process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED=oldEnabled;
+    }
+  });
   it("P06 lost failure-accounting COMMIT response retains original and LOGGED source; no early delete",async()=>{
     const origCallback=process.env.V39_CALLBACK_ONLY_RUNTIME;
     const origApprove=process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED;
