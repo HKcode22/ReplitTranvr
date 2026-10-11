@@ -440,6 +440,100 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
       mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store,
       sessionId:SESSION,syntheticAttemptHmac:key(name)
     });
+  it("P16 REAL PG synthetic PENDING/COMMITTED custody audit classifies expiry, lost bytes and orphan retention without deleting",async()=>{
+    const fake=fakeStore();
+    const interrupted={
+      query:(sql:string,params?:unknown[])=>{
+        if(sql.includes("UPDATE clean.p2g_synthetic_raw_admission_intent"))
+          return Promise.reject(Error("SYNTHETIC_INTERRUPTED_FINAL_SQL"));
+        return state.pool!.query(sql,params as any[]);
+      }
+    } as unknown as Pool;
+    for(const name of ["verified-near-expiry","not-verified-near-expiry",
+      "recovered-then-missing","expired-still-present"]){
+      await expect(submit(name,fake.store,interrupted))
+        .rejects.toThrow("SYNTHETIC_INTERRUPTED_FINAL_SQL");
+    }
+    for(const name of ["verified-near-expiry","recovered-then-missing"]){
+      const recovery=await verifyPending(name,fake.store);
+      expect(recovery).toMatchObject({
+        outcome:"ORIGINAL_PRESENT_VERIFIED_STILL_PENDING",
+        canDeleteOriginal:false,canAcknowledge:false
+      });
+    }
+    await submit("committed-later-missing",fake.store);
+    await submit("committed-expired-still-present",fake.store);
+    const setExpiry=async(name:string,utc:string)=>state.pool!.query(
+      "UPDATE clean.p2g_synthetic_raw_admission_intent "+
+      "SET source_retention_until=$2::timestamptz "+
+      "WHERE synthetic_attempt_hmac=$1",[key(name),utc]);
+    await setExpiry("verified-near-expiry","2026-10-12T03:30:00.000Z");
+    await setExpiry("not-verified-near-expiry","2026-10-12T03:30:00.000Z");
+    await setExpiry("recovered-then-missing","2026-10-12T05:00:00.000Z");
+    await setExpiry("expired-still-present","2026-10-12T02:00:00.000Z");
+    await setExpiry("committed-later-missing","2026-10-12T05:00:00.000Z");
+    await setExpiry("committed-expired-still-present","2026-10-12T02:00:00.000Z");
+    for(const name of ["recovered-then-missing","committed-later-missing"]){
+      const row=await state.pool!.query(
+        "SELECT original_opaque_blob_path FROM clean.p2g_synthetic_raw_admission_intent "+
+        "WHERE synthetic_attempt_hmac=$1",[key(name)]);
+      expect(row.rowCount).toBe(1);
+      state.blobs.delete(row.rows[0].original_opaque_blob_path);
+    }
+    const beforeSize=state.blobs.size;
+    const q=await auditDisposableRawAdmissionIntentsV39({
+      mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store:fake.store,
+      now:new Date("2026-10-12T03:00:00.000Z")
+    });
+    expect(q).toMatchObject({
+      scanned:6,pending:4,committed:2,
+      pendingOriginalVerified:3,pendingOriginalMissingOrUnreadable:1,
+      committedOriginalVerified:1,committedOriginalMissingOrUnreadable:1,
+      pendingRecoveryPreviouslyVerified:2,
+      pendingRecoveryThenMissingOrUnreadable:1,
+      pendingVerifiedOriginalNearExpiry:1,
+      pendingUnstampedOriginalNearExpiry:1,
+      pendingOriginalPresentAfterExpiry:1,
+      pendingOriginalMissingBeforeExpiry:1,
+      pendingRecoveryVerifiedThenMissingBeforeExpiry:1,
+      committedOriginalMissingBeforeExpiry:1,
+      expiredObjectStillReadable:2,
+      expiredMetadataCount:2,
+      orphanCleanupDisposition:"MANUAL_REVIEW_NO_AUTOMATIC_DELETION",
+      canAutoAcknowledge:false,canAutoDelete:false,canAutoReplay:false,
+      originalProviderSourceCompletenessVerified:false,
+      paidLaunchAuthorized:false
+    });
+    expect(state.blobs.size).toBe(beforeSize);
+    expect((await state.pool!.query(
+      "SELECT COUNT(*)::int AS n FROM clean.p2g_synthetic_raw_admission_intent"
+    )).rows[0].n).toBe(6);
+    expect(JSON.stringify(q)).not.toContain(SESSION);
+    expect(JSON.stringify(q)).not.toContain(SUB);
+  });
+  it("P16 fixture orphan auditor hard-refuses production SQL/provider/bucket environment",async()=>{
+    const fake=fakeStore();
+    const oldDb=process.env.DATABASE_URL;
+    const oldBucket=process.env.V39_PROVIDER_BLOB_BUCKET_ID;
+    try{
+      process.env.DATABASE_URL="PRODUCTION_ONLY_NOT_A_VALID_FIXTURE";
+      await expect(auditDisposableRawAdmissionIntentsV39({
+        mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store:fake.store,
+        now:new Date()
+      })).rejects.toThrow("P16_SYNTHETIC_RECOVERY_PRODUCTION_REFUSED");
+      delete process.env.DATABASE_URL;
+      process.env.V39_PROVIDER_BLOB_BUCKET_ID="PRODUCTION_BUCKET_FORBIDDEN";
+      await expect(auditDisposableRawAdmissionIntentsV39({
+        mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store:fake.store,
+        now:new Date()
+      })).rejects.toThrow("P16_SYNTHETIC_RECOVERY_PRODUCTION_REFUSED");
+    }finally{
+      if(oldDb===undefined)delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL=oldDb;
+      if(oldBucket===undefined)delete process.env.V39_PROVIDER_BLOB_BUCKET_ID;
+      else process.env.V39_PROVIDER_BLOB_BUCKET_ID=oldBucket;
+    }
+  });
   it("P13 REAL PG logged recovery verifies blob after uploader crashes post-upload; records evidence but NEVER marks PENDING committed or ACKs",async()=>{
     const fake=fakeStore();
     const broken={
