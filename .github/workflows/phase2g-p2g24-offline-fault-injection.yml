@@ -62,6 +62,8 @@ on:
       - scripts/v39_phase2g_independent_pg_delivery_readonly_observer.ts
       - tests/phase2g_independent_pg_delivery_readonly_observer_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_three_replit_failover_feasibility_v39.ts
+      - experiments/phase2g_rehearsal/synthetic_fixed_frontdoor_spool_v39.ts
+      - tests/phase2g_synthetic_fixed_frontdoor_spool_v39.test.ts
       - tests/phase2g_synthetic_three_replit_failover_feasibility_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_six_primary_six_emergency_v39.ts
       - tests/phase2g_synthetic_six_primary_six_emergency_v39.test.ts
@@ -173,6 +175,7 @@ jobs:
             tests/phase2g_yssy_bounded_loss_scientific_adjudication_v39.test.ts \
             tests/phase2g_independent_pg_delivery_readonly_observer_v39.test.ts \
             tests/phase2g_synthetic_three_replit_failover_feasibility_v39.test.ts \
+            tests/phase2g_synthetic_fixed_frontdoor_spool_v39.test.ts \
             tests/phase2g_synthetic_six_primary_six_emergency_v39.test.ts \
             tests/phase2g_synthetic_multi_episode_six_plus_six_v39.test.ts \
             tests/phase2g_synthetic_short_vs_three_minute_gap_impact_v39.test.ts \
