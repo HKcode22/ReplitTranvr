@@ -69,6 +69,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
 import {persistPrepaidProbeWebhookV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import {readReadOnlyPgSnapshotV39} from "../scripts/v39_phase2g_independent_pg_delivery_readonly_observer";
 import {registerV3Routes} from "../server/routes_v3";
 import {createSyntheticDualSourceMessageV2,verifySyntheticDualSourceMessageV2} from "../experiments/phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
 import {recordSyntheticSignedReceiptMetadataV2} from "../experiments/phase2g_rehearsal/disposable_logged_source_receipt_v39";
@@ -207,6 +208,85 @@ afterAll(async()=>{
   }
 });
 describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtures",()=>{
+  it("P06/P15 observer actual V3.9 session/delivery schema in READ ONLY transaction",async()=>{
+    await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,
+      body:sample({id:"p06-independent-postgres-receiver-read"}),
+      receivedAtUtc:new Date("2026-10-12T03:01:30Z")
+    });
+    const db=await state.pool!.connect();
+    try{
+      await db.query("BEGIN TRANSACTION READ ONLY");
+      const o=await readReadOnlyPgSnapshotV39(db,{
+        sessionId:SESSION,startUtc:"2026-10-12T03:00:00Z",
+        endUtc:"2026-10-12T05:00:00Z"
+      });
+      expect(o).toMatchObject({
+        schema:"v39.phase2g-readonly-db-independent-observation.v1",
+        callbackRequestsSeen:1,callbackSuccess2xx:1,callbackFailures:0,
+        sessionRows:1,runtimeSessionMissing:false,
+        deliveryRows:1,deliveryItemCount:0,deliveryAttemptCostClaims:1,
+        perBinDeliveryRows:[1,0,0,0,0,0,0,0],
+        perBinNotificationItems:[0,0,0,0,0,0,0,0],
+        receivedDeliveriesOutsideFrozenWindow:0,
+        independentProviderAttemptLedgerPresent:false,
+        missedProviderFlightItems:null,scientificCompletenessVerified:false,
+        prospectivePaidSixPlusSixEnabled:false
+      });
+      expect(o.postmasterStartUtc).toMatch(/^20\d\d-.*Z$/);
+      await expect(db.query("UPDATE clean.prepaid_probe_session_runtime SET callback_requests_seen=999 WHERE session_id=$1",[SESSION]))
+        .rejects.toMatchObject({code:"25006"});
+    }finally{
+      await db.query("ROLLBACK").catch(()=>undefined);db.release();
+    }
+    expect((await session())?.requests).toBe(1);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+  });
+  it("P06/P15 SQL observer flags deliveries outside original 8 bins",async()=>{
+    for(const [id,at]of [
+      ["in-first-bin","2026-10-12T03:02:00Z"],
+      ["in-last-bin","2026-10-12T04:59:58Z"],
+      ["outside-window","2026-10-12T05:00:01Z"]
+    ]){
+      await persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body:sample({id}),receivedAtUtc:new Date(at)
+      });
+    }
+    const db=await state.pool!.connect();
+    try{
+      await db.query("BEGIN TRANSACTION READ ONLY");
+      const o=await readReadOnlyPgSnapshotV39(db,{
+        sessionId:SESSION,startUtc:"2026-10-12T03:00:00Z",
+        endUtc:"2026-10-12T05:00:00Z"
+      });
+      expect(o.deliveryRows).toBe(3);
+      expect(o.callbackRequestsSeen).toBe(3);
+      expect(o.callbackSuccess2xx).toBe(3);
+      expect(o.deliveryAttemptCostClaims).toBe(3);
+      expect(o.perBinDeliveryRows).toEqual([1,0,0,0,0,0,0,1]);
+      expect(o.receivedDeliveriesOutsideFrozenWindow).toBe(1);
+      expect(o.persistedBinDeliveryCount).toBe(2);
+      expect(o.scientificCompletenessVerified).toBe(false);
+    }finally{await db.query("ROLLBACK").catch(()=>undefined);db.release();}
+  });
+  it("P06/P15 UNLOGGED missing session distinguished from verified zero source sends",async()=>{
+    await state.pool!.query("DELETE FROM clean.prepaid_probe_session_runtime WHERE session_id=$1",[SESSION]);
+    const db=await state.pool!.connect();
+    try{
+      await db.query("BEGIN TRANSACTION READ ONLY");
+      const o=await readReadOnlyPgSnapshotV39(db,{
+        sessionId:SESSION,startUtc:"2026-10-12T03:00:00Z",
+        endUtc:"2026-10-12T05:00:00Z"
+      });
+      expect(o.runtimeSessionMissing).toBe(true);
+      expect(o.sessionRows).toBe(0);
+      expect(o.deliveryRows).toBe(0);
+      expect(o.missedProviderFlightItems).toBeNull();
+      expect(o.independentProviderAttemptLedgerPresent).toBe(false);
+      expect(o.scientificCompletenessVerified).toBe(false);
+    }finally{await db.query("ROLLBACK").catch(()=>undefined);db.release();}
+  });
+
   it("SQL COMMIT occurs only after real storage readback; exactly one delivery",async()=>{
     const r=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body:sample()});
     expect(r.duplicate).toBe(false);
