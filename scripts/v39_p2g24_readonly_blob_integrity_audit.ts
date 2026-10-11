@@ -11,6 +11,8 @@
  * object names, source record ids, secrets or payload bytes.
  */
 import { createHash } from "node:crypto";
+import {summarizePreservedOriginalItemEvidenceV39,type PreservedOriginalSourceV39}
+  from "./v39_p2g24_saved_original_item_evidence_v39.ts";
 import { v39Pool } from "../server/lib/disruption/db_v39.ts";
 import { createRequiredProviderBlobStoreV39 } from "../server/lib/disruption/replitProviderBlobStore_v39.ts";
 
@@ -19,8 +21,11 @@ const BUDGET="P2G-S1-20261009-23";
 const PROBE=18;
 const EXPECTED_REFS=30;
 const verifyObjects=process.argv.includes("--verify-objects");
-const unexpectedArgs=process.argv.slice(2).filter(x=>x!=="--verify-objects");
-if(unexpectedArgs.length)throw new Error("READ_ONLY_AUDIT_REFUSED_UNSUPPORTED_ARGUMENT");
+const verifyItems=process.argv.includes("--verify-item-credit-evidence");
+const unexpectedArgs=process.argv.slice(2).filter(x=>
+  x!=="--verify-objects"&&x!=="--verify-item-credit-evidence");
+if(unexpectedArgs.length||verifyItems&&!verifyObjects)
+  throw new Error("READ_ONLY_AUDIT_REFUSED_UNSUPPORTED_ARGUMENT");
 
 type BlobRef = {
   object_name:string;content_sha256:string;content_bytes:string;
@@ -105,6 +110,9 @@ try {
     },null,2));
   }else{
     const store=createRequiredProviderBlobStoreV39();
+    // Only collect already-verified saved canonical originals on explicit
+    // opt-in. This is NEVER a real sender attempt/billing or wire proof.
+    const verifiedSources:PreservedOriginalSourceV39[]=[];
     for(let i=0;i<blobs.length;i++){
       const b=blobs[i];
       try{
@@ -115,6 +123,11 @@ try {
           errors.push({index:i+1,reason:"SHA256_OR_BYTE_LENGTH_MISMATCH"});
         }else{
           verified++;
+          if(verifyItems)verifiedSources.push({
+            contentSha256:b.content_sha256,
+            contentBytes:Number(b.content_bytes),
+            storedBytes:buf
+          });
         }
       }catch{
         downloadFailed++;
@@ -122,6 +135,10 @@ try {
       }
     }
     checkpoint="OBJECT_CONTENTS_INSPECTED";
+    const creditEvidence=verifyItems&&verified===EXPECTED_REFS?
+      summarizePreservedOriginalItemEvidenceV39(verifiedSources):null;
+    if(verifyItems&&creditEvidence===null)
+      throw Error("READ_ONLY_AUDIT_P14_ALL_ORIGINAL_CONTENT_REQUIRED");
     console.log(JSON.stringify({
       schema:"v39.phase2g-p2g24-blob-integrity-audit.v1",
       mode:"VERIFY_OBJECTS_READ_ONLY",
@@ -133,6 +150,7 @@ try {
       earliest_expiry_utc:firstExpiry,
       latest_expiry_utc:lastExpiry,
       failures:errors,
+      ...(verifyItems?{item_credit_evidence:creditEvidence}:{}),
       provider_calls:0,database_mutations:0,object_storage_mutations:0
     },null,2));
     if(verified!==EXPECTED_REFS)process.exitCode=2;
