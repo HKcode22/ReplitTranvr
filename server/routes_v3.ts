@@ -384,7 +384,11 @@ export function registerV3Routes(app:Express):void{
       res.status(200).json({received:true,items:persisted.itemCount,duplicate:persisted.duplicate});
     }catch(err:any){
       console.error("[adb-v3-prepaid] durable persistence failed — returning 5xx (provider details redacted)");
-      if (!err?.phase2gFailureRecorded) {
+      // A lost outside-lock admission COMMIT reply may have already
+      // committed its request counter. Do NOT guess the outcome by
+      // incrementing again. Preserve an unresolved incident for review.
+      if (!err?.phase2gFailureRecorded &&
+          !err?.phase2gCallbackAccountingUncertain) {
         await recordPrepaidProbeCallbackFailureV39(
           sessionId,
         ).catch(() => undefined);
