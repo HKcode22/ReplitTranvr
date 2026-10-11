@@ -118,7 +118,11 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
        owner_token,state,source_retention_until,created_utc)
     VALUES ($1,$2,$3,$4,$5,$6,'PENDING',NOW()+interval '168 hours',NOW())
     ON CONFLICT DO NOTHING
-    RETURNING owner_token,created_utc,source_retention_until
+    -- Text preserves PostgreSQL's full microsecond timestamp precision;
+    -- pg's default JS Date parser would truncate to milliseconds and make
+    -- a legitimate immutable-timestamp equality CAS spuriously fail.
+    RETURNING owner_token,created_utc::text AS created_utc,
+              source_retention_until::text AS source_retention_until
   `,[arg.sessionId,arg.syntheticAttemptHmac,contentHash,uuid,objectName,owner]);
 
   if(created.rowCount===1){
