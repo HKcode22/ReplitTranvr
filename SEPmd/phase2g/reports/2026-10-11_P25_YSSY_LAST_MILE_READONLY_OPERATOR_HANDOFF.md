@@ -95,9 +95,11 @@ The repository already has the exact zero-provider synthetic, raw-blob, 8s-ACK, 
 Only after merged and published release source parity (and reviewed schema inventory), the reviewer/operator can invoke with the exact newly deployed Git HEAD:
 
 ```bash
+set -euo pipefail
 cd ~/workspace
 EXPECTED_PUBLISHED_RELEASE_HEAD="$(git rev-parse HEAD)"
-# ONLY if current working tree is the exact reviewed, merged and published release
+# Fail closed before touching a disposable DB session: unlike the prior
+# shell paste, the Bash process MUST stop when a 'test' command fails.
 test "$(git branch --show-current)" = main
 test "$EXPECTED_PUBLISHED_RELEASE_HEAD" = "$(git rev-parse origin/main)"
 npx tsx scripts/v39_phase2g_verify_live_callback_v39.ts \
