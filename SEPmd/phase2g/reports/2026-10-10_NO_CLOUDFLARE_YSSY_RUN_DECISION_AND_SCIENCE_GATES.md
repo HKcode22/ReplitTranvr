@@ -33,3 +33,12 @@ Date of review: 2026-10-10 Pacific. Branch `phase2g-p2g24-github-observer-202610
 **Official provider guidance (2026-01-31):** https://aerodatabox.com/flight-alert-api-2026/ — 1 credit per flight item sent to the webhook, paid even on failed send, paid retries disabled by default. **No live provider query or mutation made.**
 
 No Cloudflare or alternative billable ingress is selected, so **P09–P12 do not become PASS from these changes.** All 20 master priorities remain open to their full closing evidence, 15 labeled BLOCK, 5 HIGH. Keep PR #27 draft and `main`/Replit deployment unchanged until real science and release gates are satisfied.
+
+
+## Final source+real PostgreSQL CI verification
+
+Exact source revision `1fdd5f2304caca0b8dbb8457b4ba1336ea043deb` passed [GitHub Actions run #38104054342](https://github.com/HKcode22/ReplitTranvr/actions/runs/38104054342), **BOTH jobs green**: 46 offline suites, **465/465** offline tests; actual V3.9/PostgreSQL16 **45/45** integration tests; genuine disposable PG SIGKILL again logged `ACTUAL_UNLOGGED_CRASH_RESET=CONFIRMED`. This includes the corrected two-flight/two-credit PostgreSQL restoration fixture, irregular eight-bucket source reconciliation, and independent 32/32/31 credit-gapped receipt fixtures.
+
+Older intermediate red CI commits were **fixed**, not dismissed: initial overly strict journal cost/item signability blocked negative integration tampering fixtures; retaining signed-journal tamper inputs and enforcing flight-credit equality in the independent source/original-wire review restored all 45 integration tests. Another independent pre-run sender fixture required explicit independent edge/internal observed synthetic credit fields; its compatibility test was updated and now passes. All fixes remain offline on draft PR #27.
+
+No original provider sender log, current deployed revision identity, full hosted two-hour rehearsal, or 168-hour independently persisted upstream source receipts were proven by these tests. The live three-strike watchdog remains the only enforceable limit; selecting 6+6 is not a source witness or permission to run.
