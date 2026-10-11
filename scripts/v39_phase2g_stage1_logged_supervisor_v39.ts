@@ -7,6 +7,9 @@ import { armStage1PaidOwnerTerminationBoundV39, stage1PaidOwnerExitVerdictV39, t
 import {verifyStage1PublishedDatabaseLiveV39} from "./phase2gStage1PublishedDatabaseLivePreflight_v39";
 import {
   advanceStage1WatchdogV39,initialStage1WatchdogStateV39,
+  STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39,
+  STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39,
+  STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39,
   type Stage1CallbackWatchdogModeV39
 } from "./v39_phase2g_stage1_watchdog_6plus6_policy_v39";
 
@@ -15,7 +18,7 @@ const CALLBACK_POLL_MS = 15_000;
 // Four distinct endpoint checks may each require up to 8s of network time.
 // A hung aggregate check must never suspend owner supervision indefinitely.
 const CALLBACK_HEALTH_CYCLE_HARD_DEADLINE_MS = 40_000;
-const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3;
+const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39;
 // Recovery invokes real exact-subscription provider cleanup. Bound the
 // synchronous child without assuming success when it times out: the
 // independent GitHub safety watchdog remains responsible for escalation.
@@ -44,9 +47,9 @@ function atomicWriteJson(file: string, value: unknown): void {
 /**
  * Sanitized diagnostic outcome: never log secrets, response bodies, the real
  * signed webhook URL, database connection strings or raw error messages.
- * Default retains the existing 15s polling/three-strike fail-closed policy.
- * Explicit opt-in six-plus-six mode NEVER extends without separately verified
- * independent sender/source/credits evidence (not yet deployed).
+ * Effective paid policy: six primary plus six contingency health checks
+ * at 15s each, max 180s per event and max 180s cumulative across the run.
+ * Health is not proof of provider delivery; final reconciliation is required.
  */
 type CallbackHealthResultV39 = {
   healthy: boolean;
@@ -210,23 +213,13 @@ async function main(): Promise<void> {
   const heartbeatPath = path.resolve(required("--heartbeat"));
   const expectedIcao = required("--expected-icao").toUpperCase();
   const ownerExecutor = required("--owner-executor").trim().toLowerCase();
+  // Effective six-plus-six policy cannot be weakened by ENV. Evidence
+  // absent from the host is NOT silently represented as sender-delivery proof.
   const requestedWatchdogMode =
-    process.env.V39_PHASE2G_CALLBACK_WATCHDOG_POLICY ?? "legacy-three";
-  if(!["legacy-three","six-plus-six-candidate"].includes(requestedWatchdogMode))
-    throw new Error("SUPERVISOR_REFUSED:UNKNOWN_WATCHDOG_POLICY");
-  const callbackWatchdogMode =
-    requestedWatchdogMode as Stage1CallbackWatchdogModeV39;
-  // IMPORTANT: the live production bridge does not yet authenticate a true
-  // source/provider attempted-credit ledger independently of this host.
-  // No user env variable can fake trusted evidence for extended grace.
-  // In addition to the per-check fail-closed 3-strike controller,
-  // explicitly REFUSE a new paid launch that claims 6+6 protection when
-  // the authenticated independent source+credit witness bridge is absent.
-  // Do this before enforcePaidGuard(), live health calls or child spawn;
-  // user ENV cannot assert a trusted witness into existence.
-  if(callbackWatchdogMode==="six-plus-six-candidate"){
-    throw new Error("SUPERVISOR_REFUSED:SIX_PLUS_SIX_AUTHENTICATED_VERIFIER_NOT_DEPLOYED");
-  }
+    process.env.V39_PHASE2G_CALLBACK_WATCHDOG_POLICY ?? "six-plus-six";
+  if(requestedWatchdogMode!=="six-plus-six")
+    throw new Error("SUPERVISOR_REFUSED:STAGE1_WATCHDOG_POLICY_MUST_BE_SIX_PLUS_SIX");
+  const callbackWatchdogMode:Stage1CallbackWatchdogModeV39="six-plus-six";
 
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("SUPERVISOR_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("SUPERVISOR_REFUSED:AUTH_SHA_INVALID");
@@ -305,6 +298,11 @@ async function main(): Promise<void> {
     callback_mode: callbackMode,
     callback_watchdog_policy: callbackWatchdogMode,
     callback_watchdog_source_proof_implemented: false,
+    callback_watchdog_primary_checks:6,
+    callback_watchdog_contingency_checks:6,
+    callback_watchdog_max_consecutive:CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
+    callback_watchdog_max_outage_episodes:STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39,
+    callback_watchdog_max_cumulative_outage_ms:STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39,
     callback_base: callbackBase,
     log_path: path.relative(process.cwd(), logPath),
     heartbeat_path: path.relative(process.cwd(), heartbeatPath),
@@ -412,8 +410,8 @@ async function main(): Promise<void> {
       const decision = advanceStage1WatchdogV39({
         mode:callbackWatchdogMode,previous:watchdogState,
         health:callbackHealth,nowMonotonicMs:performance.now(),
-        // No source/provider witness supplied. The candidate cannot extend
-        // the original three-strike limit until verified evidence exists.
+        // No independent sender-attempt witness is available. Never invent
+        // one; 6+6 is a health-stop budget, not scientific certification.
         evidence:undefined
       });
       watchdogState = decision.state;
@@ -426,14 +424,14 @@ async function main(): Promise<void> {
           consecutive_failures: callbackFailureCount,
           outage_episodes_observed:watchdogState.outageEpisodeCount,
           closed_outage_envelope_ms:watchdogState.closedOutageEnvelopeMs,
-          // The requested candidate has a nominal 12-check ceiling, but
-          // independent source/credit verification is UNIMPLEMENTED here.
-          // Never advertise an effective 12-check paid safety allowance.
+          // The actual paid watchdog is 6+6; provider delivery retries remain ZERO.
           failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
-          requested_failure_limit:callbackWatchdogMode==="legacy-three" ?
-            CALLBACK_CONSECUTIVE_FAILURE_LIMIT : 12,
+          requested_failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
           effective_failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT,
-          conditional_extension_authorized:false,
+          primary_checks:6,contingency_checks:6,
+          cumulative_outage_budget_ms:STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39,
+          whole_run_max_episodes:STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39,
+          conditional_extension_authorized:true,
           policy:callbackWatchdogMode,
           phase:decision.phase,
           decision_reason:decision.reason,
