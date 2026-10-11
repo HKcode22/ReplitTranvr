@@ -41,6 +41,7 @@ on:
       - server/lib/disruption/prepaidOriginalJsonStructure_v39.ts
       - server/lib/disruption/phase2gPrepaidStageTelemetry_v39.ts
       - tests/phase2g_prepaid_stage_telemetry_v39.test.ts
+      - tests/phase2g_prepaid_prelock_source_preparation_v39.test.ts
       - tests/phase2g_prepaid_original_json_structure_v39.test.ts
       - server/lib/disruption/providerBlobStore_v39.ts
       - server/lib/disruption/replitProviderBlobStore_v39.ts
@@ -163,6 +164,7 @@ jobs:
             tests/phase2g_p2g24_prepaid_persistence_fault_injection_v39.test.ts \
             tests/phase2g_prepaid_original_json_structure_v39.test.ts \
             tests/phase2g_prepaid_stage_telemetry_v39.test.ts \
+            tests/phase2g_prepaid_prelock_source_preparation_v39.test.ts \
             tests/phase2g_yssy_260_259_regression_v39.test.ts \
             tests/phase2g_unlogged_runtime_integrity_v39.test.ts \
             tests/phase2g_paid_callback_origin_v39.test.ts \
