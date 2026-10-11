@@ -41,7 +41,7 @@ const knownProof=():Stage1IndependentlyVerifiedOutageWitnessV39=>({
   providerMaxDeliveryRetries:0,
   projectedWorstCaseTotalCredits:500,frozenCreditCeiling:500,
   frozenMaxOutageEpisodes:2,
-  frozenMaxCumulativeOutageEnvelopeMs:360_000
+  frozenMaxCumulativeOutageEnvelopeMs:180_000
 });
 function observe(input:{
   mode?:Stage1CallbackWatchdogModeV39;
@@ -51,7 +51,7 @@ function observe(input:{
   recover?:boolean;
 }){
   let state:Stage1WatchdogStateV39=initialStage1WatchdogStateV39();
-  const steps=[];const mode=input.mode??"six-plus-six-candidate";
+  const steps=[];const mode=input.mode??"six-plus-six";
   for(let i=0;i<input.failures;i++){
     const r=advanceStage1WatchdogV39({
       mode,previous:state,health:transient,
@@ -74,7 +74,7 @@ const noPaid=(x:ReturnType<typeof observe>["last"])=>{
   expect(x.scientificPassAuthorized).toBe(false);
   expect(x.paidLaunchAuthorized).toBe(false);
 };
-describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider calls)",()=>{
+describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
   it("P15 paid supervisor heartbeat and watch logs expose aggregate outage budget without source IDs",()=>{
     const src=readFileSync(join(process.cwd(),
       "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
@@ -85,42 +85,44 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
     expect(src).toContain("callback_watchdog_source_proof_implemented: false");
     expect(src).toContain("evidence:undefined");
   });
-  it("P15/P19 REAL paid supervisor hard-refuses selected 6+6 before provider health or paid owner spawn while source verifier is absent",()=>{
+  it("REAL paid supervisor defaults to effective 6+6 and forbids fallback to legacy three",()=>{
     const source=readFileSync(join(process.cwd(),
       "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
-    const veto='SUPERVISOR_REFUSED:SIX_PLUS_SIX_AUTHENTICATED_VERIFIER_NOT_DEPLOYED';
-    expect(source).toContain(veto);
-    expect(source).toContain('if(callbackWatchdogMode==="six-plus-six-candidate")');
-    const pos=source.indexOf(veto);
-    expect(pos).toBeGreaterThan(0);
-    expect(pos).toBeLessThan(source.indexOf('enforcePaidGuard("v39:probe:stage1"'));
-    expect(pos).toBeLessThan(source.indexOf('const initialCallbackHealth = await callbackHealthy('));
-    expect(pos).toBeLessThan(source.indexOf('const child = spawn('));
-    // A purely synthetic signed ledger, a user-supplied ENV flag, or a
-    // GET-only callback health check cannot bypass this prospective gate.
+    expect(source).toContain('process.env.V39_PHASE2G_CALLBACK_WATCHDOG_POLICY ?? "six-plus-six"');
+    expect(source).toContain('if(requestedWatchdogMode!=="six-plus-six")');
+    expect(source).toContain("SUPERVISOR_REFUSED:STAGE1_WATCHDOG_POLICY_MUST_BE_SIX_PLUS_SIX");
+    expect(source).toContain("STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39");
+    expect(source).toContain("effective_failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT");
+    expect(source).toContain("callback_watchdog_max_cumulative_outage_ms:STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39");
+    expect(source).toContain("evidence:undefined");
+    expect(source).not.toContain("SIX_PLUS_SIX_AUTHENTICATED_VERIFIER_NOT_DEPLOYED");
     expect(source).not.toContain("V39_P2G_TRUSTED_WITNESS_JSON");
   });
-  it("actual supervisor imports the controller and defaults to legacy three-strike, never source-proof from ENV",()=>{
-    const source=readFileSync(join(process.cwd(),
-      "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
-    expect(source).toContain("advanceStage1WatchdogV39({");
-    expect(source).toContain('process.env.V39_PHASE2G_CALLBACK_WATCHDOG_POLICY ?? "legacy-three"');
-    expect(source).toContain("evidence:undefined");
-    expect(source).toContain("CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3");
-    expect(source).toContain("workspace_watchdog_internal_failure");
-    expect(source).toContain("source_proof_implemented: false");
-    expect(source).not.toContain("process.env.V39_P2G_TRUSTED_WITNESS_JSON");
+  it("sender/source audit remains unresolved on healed GETs and cannot grant scientific PASS",()=>{
+    const x=observe({failures:11,recover:true});
+    expect(x.steps).toHaveLength(12);
+    expect(x.steps[5].phase).toBe("PRIMARY");
+    expect(x.steps[6].phase).toBe("CONTINGENT");
+    expect(x.last).toMatchObject({
+      action:"MONITOR",phase:"HEALTHY",
+      reason:"HEALTH_RECOVERED_SCIENTIFIC_AUDIT_STILL_PENDING",
+      state:{recoveredHealthAwaitingScienceAudit:true,
+        closedOutageEnvelopeMs:165_000,terminated:false}
+    });
+    noPaid(x.last);
   });
-  it("real paid supervisor NEVER advertises twelve effective checks without a deployed independent verifier",()=>{
-    const source=readFileSync(join(process.cwd(),
-      "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
-    expect(source).toContain("failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT");
-    expect(source).toContain("requested_failure_limit:callbackWatchdogMode");
-    expect(source).toContain("effective_failure_limit:CALLBACK_CONSECUTIVE_FAILURE_LIMIT");
-    expect(source).toContain("conditional_extension_authorized:false");
-    expect(source).toContain("callback_watchdog_source_proof_implemented: false");
-    expect(source).toContain("evidence:undefined");
-    expect(source).toContain('const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3');
+  it("500 startup HTTP health errors count as recoverable, not source-verified",()=>{
+    let p=initialStage1WatchdogStateV39();
+    for(let i=0;i<3;i++){
+      const x=advanceStage1WatchdogV39({
+        mode:"six-plus-six",previous:p,
+        health:{...transient,http_status:500},
+        nowMonotonicMs:i*15_000
+      });p=x.state;
+      expect(x.action).toBe("MONITOR");
+    }
+    expect(p.consecutiveFailures).toBe(3);
+    expect(p.recoveredHealthAwaitingScienceAudit).toBe(true);
   });
   it("actual paid supervisor's four-stage callback health has independent 40-second kill timer with guaranteed cleanup",()=>{
     const source=readFileSync(join(process.cwd(),
@@ -175,10 +177,12 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
       expect(r.action).toBe(i===2?"STOP_OWNER":"MONITOR");
     }
   });
-  it("candidate selected without independent evidence FAILS CLOSED by third 503, not falsely 12",()=>{
+  it("6+6 without independent source witness stops on twelfth health failure, not third",()=>{
     const r=observe({failures:12});
-    expect(r.steps).toHaveLength(3);
-    expect(r.last.reason).toBe("NO_EXTENSION_WITHOUT_AUTHENTICATED_SOURCE_AND_CREDITS");
+    expect(r.steps).toHaveLength(12);
+    expect(r.steps[5].phase).toBe("PRIMARY");
+    expect(r.steps[6].phase).toBe("CONTINGENT");
+    expect(r.last.reason).toBe("TWELVE_CONSECUTIVE_HEALTH_FAILURES");
     expect(r.last.state.terminated).toBe(true);
     noPaid(r.last);
   });
@@ -329,13 +333,13 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
       health:transient,nowMonotonicMs:4000,evidence:knownProof()
     })).toThrow("P15_WATCHDOG_INVALID_OR_NONMONOTONIC_STATE");
   });
-  it("return to healthy after 1 failure but WITHOUT original source proof never grants candidate extension or scientific PASS",()=>{
+  it("return to green after 1 failure without sender evidence continues but audit remains pending",()=>{
     const r=observe({failures:1,recover:true});
     expect(r.steps).toHaveLength(2);
     expect(r.last).toMatchObject({
-      action:"STOP_OWNER",
-      reason:"RECOVERED_HEALTH_WITH_UNVERIFIED_SCIENTIFIC_SOURCE",
-      state:{terminated:true}
+      action:"MONITOR",
+      reason:"HEALTH_RECOVERED_SCIENTIFIC_AUDIT_STILL_PENDING",
+      state:{terminated:false,recoveredHealthAwaitingScienceAudit:true}
     });
     noPaid(r.last);
   });
@@ -367,7 +371,7 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
         health:transient,nowMonotonicMs:1000,evidence:original
       });
       expect(initial.state.frozenMaxOutageEpisodes).toBe(2);
-      expect(initial.state.frozenMaxCumulativeOutageEnvelopeMs).toBe(360_000);
+      expect(initial.state.frozenMaxCumulativeOutageEnvelopeMs).toBe(180_000);
       const next=advanceStage1WatchdogV39({
         mode:"six-plus-six-candidate",previous:initial.state,
         health:transient,nowMonotonicMs:16_000,
@@ -446,7 +450,7 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
   });
   it("P15 whole-run cumulative fault envelope is preserved after a signed healthy recovery",()=>{
     let s=initialStage1WatchdogStateV39();
-    const proof={...knownProof(),frozenMaxOutageEpisodes:3,
+    const proof={...knownProof(),frozenMaxOutageEpisodes:2,
       frozenMaxCumulativeOutageEnvelopeMs:30_000};
     for(const [at,health] of [
       [0,transient],[15_000,healthy],[30_000,transient],
@@ -483,6 +487,39 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
         health:transient,nowMonotonicMs:0,evidence:p
       });
       expect(out.action).toBe("STOP_OWNER");
+    }
+  });
+  it("no witness cannot reset risk limits: two episodes and 180s total is maximum",()=>{
+    let st=initialStage1WatchdogStateV39();
+    for(const [ms,health] of [
+      [0,transient],[75_000,healthy],[90_000,transient],
+      [165_000,healthy],[180_000,transient]
+    ] as const){
+      const x=advanceStage1WatchdogV39({
+        mode:"six-plus-six",previous:st,health,
+        nowMonotonicMs:ms
+      });st=x.state;
+      if(ms===180_000){
+        expect(x.action).toBe("STOP_OWNER");
+        expect(x.reason).toBe("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED");
+      }else expect(x.action).toBe("MONITOR");
+    }
+    expect(st.closedOutageEnvelopeMs).toBe(150_000);
+  });
+  it("two disjoint incidents cannot exceed 180s cumulative without any witness",()=>{
+    let st=initialStage1WatchdogStateV39();
+    for(const [ms,health] of [
+      [0,transient],[120_000,healthy],
+      [135_000,transient],[195_000,transient]
+    ] as const){
+      const x=advanceStage1WatchdogV39({
+        mode:"six-plus-six",previous:st,health,
+        nowMonotonicMs:ms
+      });st=x.state;
+      if(ms===195_000){
+        expect(x.action).toBe("STOP_OWNER");
+        expect(x.reason).toBe("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED");
+      }else expect(x.action).toBe("MONITOR");
     }
   });
   it("six plus six never mutates provider retries, bills credits or grants paid owner authority",()=>{
