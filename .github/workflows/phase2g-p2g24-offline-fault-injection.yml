@@ -65,6 +65,8 @@ on:
       - tests/phase2g_synthetic_six_primary_six_emergency_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_multi_episode_six_plus_six_v39.ts
       - tests/phase2g_synthetic_multi_episode_six_plus_six_v39.test.ts
+      - experiments/phase2g_rehearsal/synthetic_short_vs_three_minute_gap_impact_v39.ts
+      - tests/phase2g_synthetic_short_vs_three_minute_gap_impact_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_120min_acceptance_v39.ts
       - experiments/phase2g_rehearsal/synthetic_120min_irregular_trace_v39.ts
       - tests/phase2g_synthetic_120min_irregular_trace_v39.test.ts
@@ -169,6 +171,7 @@ jobs:
             tests/phase2g_synthetic_three_replit_failover_feasibility_v39.test.ts \
             tests/phase2g_synthetic_six_primary_six_emergency_v39.test.ts \
             tests/phase2g_synthetic_multi_episode_six_plus_six_v39.test.ts \
+            tests/phase2g_synthetic_short_vs_three_minute_gap_impact_v39.test.ts \
             tests/phase2g_yssy_synthetic_120min_acceptance_v39.test.ts \
             tests/phase2g_synthetic_120min_irregular_trace_v39.test.ts \
             tests/phase2g_synthetic_120min_science_recovery_audit_v39.test.ts \
