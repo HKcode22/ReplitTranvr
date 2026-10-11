@@ -400,6 +400,102 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
       .rejects.toThrow("P06_CANDIDATE_ORIGINAL_RETENTION_EXPIRED_NO_ACK");
     expect(fake.uploads()).toBe(1);
   },10000);
+  it("P06 REAL PG denies pending→committed if journal 168h TTL is extended mid-upload",async()=>{
+    const fake=fakeStore();
+    const originalUpload=fake.store.uploadBytes;
+    let uploading=false;
+    fake.store.uploadBytes=async(k:string,v:Uint8Array)=>{
+      uploading=true;
+      await new Promise(r=>setTimeout(r,380));
+      return originalUpload(k,v);
+    };
+    const pending=submit("forged-ttl-during-upload",fake.store);
+    const deadline=Date.now()+2000;
+    while(!uploading&&Date.now()<deadline)
+      await new Promise(r=>setTimeout(r,5));
+    expect(uploading).toBe(true);
+    await state.pool!.query(
+      "UPDATE clean.p2g_synthetic_raw_admission_intent "+
+      "SET source_retention_until=source_retention_until+interval '1 hour'");
+    await expect(pending).rejects.toThrow(
+      "P06_CANDIDATE_ORIGINAL_COMMIT_UNCERTAIN_NO_ACK"
+    );
+    const q=await state.pool!.query(
+      "SELECT state,original_opaque_blob_path FROM clean.p2g_synthetic_raw_admission_intent"
+    );
+    expect(q.rows[0].state).toBe("PENDING");
+    expect(state.blobs.has(q.rows[0].original_opaque_blob_path)).toBe(true);
+    await expect(submit("forged-ttl-during-upload",fake.store,state.pool!,0))
+      .rejects.toThrow(
+        "P06_CANDIDATE_FROZEN_ORIGINAL_REF_OR_RETENTION_INVALID_NO_ACK"
+      );
+    expect(fake.uploads()).toBe(1);
+    expect(state.blobs.size).toBe(1);
+  },10000);
+  it("P06 REAL PG denies pending→committed if opaque original UUID changes while bytes upload",async()=>{
+    const fake=fakeStore();
+    const upload=fake.store.uploadBytes;
+    let uploading=false;
+    fake.store.uploadBytes=async(k:string,v:Uint8Array)=>{
+      uploading=true;
+      await new Promise(r=>setTimeout(r,380));
+      return upload(k,v);
+    };
+    const pending=submit("forged-uuid-during-upload",fake.store);
+    const deadline=Date.now()+2000;
+    while(!uploading&&Date.now()<deadline)
+      await new Promise(r=>setTimeout(r,5));
+    expect(uploading).toBe(true);
+    await state.pool!.query(
+      "UPDATE clean.p2g_synthetic_raw_admission_intent "+
+      "SET original_opaque_blob_uuid=$1",
+      ["abcdefab-cdef-4abc-8abc-abcdefabcdef"]
+    );
+    await expect(pending).rejects.toThrow(
+      "P06_CANDIDATE_ORIGINAL_COMMIT_UNCERTAIN_NO_ACK"
+    );
+    const q=await state.pool!.query(
+      "SELECT state FROM clean.p2g_synthetic_raw_admission_intent"
+    );
+    expect(q.rows[0].state).toBe("PENDING");
+    await expect(submit("forged-uuid-during-upload",fake.store,state.pool!,0))
+      .rejects.toThrow(
+        "P06_CANDIDATE_FROZEN_ORIGINAL_REF_OR_RETENTION_INVALID_NO_ACK"
+      );
+    expect(fake.uploads()).toBe(1);
+  },10000);
+  it("P06 REAL PG verified COMMITTED raw source does not conceal a changed UUID/path or extended 168h",async()=>{
+    const fake=fakeStore();
+    await submit("committed-ref-tamper",fake.store);
+    const start=await state.pool!.query(
+      "SELECT original_opaque_blob_uuid,source_retention_until "+
+      "FROM clean.p2g_synthetic_raw_admission_intent");
+    const uuid=start.rows[0].original_opaque_blob_uuid;
+    await state.pool!.query(
+      "UPDATE clean.p2g_synthetic_raw_admission_intent "+
+      "SET original_opaque_blob_uuid=$1",
+      ["abcdefab-cdef-4abc-8abc-abcdefabcdef"]
+    );
+    await expect(submit("committed-ref-tamper",fake.store,state.pool!,0))
+      .rejects.toThrow(
+        "P06_CANDIDATE_FROZEN_ORIGINAL_REF_OR_RETENTION_INVALID_NO_ACK"
+      );
+    await state.pool!.query(
+      "UPDATE clean.p2g_synthetic_raw_admission_intent "+
+      "SET original_opaque_blob_uuid=$1,"+
+      "source_retention_until=source_retention_until+interval '1 hour'",
+      [uuid]
+    );
+    await expect(submit("committed-ref-tamper",fake.store,state.pool!,0))
+      .rejects.toThrow(
+        "P06_CANDIDATE_FROZEN_ORIGINAL_REF_OR_RETENTION_INVALID_NO_ACK"
+      );
+    expect((await state.pool!.query(
+      "SELECT state FROM clean.p2g_synthetic_raw_admission_intent"
+    )).rows[0].state).toBe("COMMITTED");
+    expect(fake.uploads()).toBe(1);
+    expect(state.blobs.size).toBe(1);
+  });
   it("P06 fixture refuses COMMITTED duplicate whose 168h source retention expired; no second write/ACK",async()=>{
     const fake=fakeStore();
     expect((await submit("committed-expired-no-dup",fake.store)).outcome)
