@@ -1221,14 +1221,33 @@ export async function persistPrepaidProbeWebhookV39(input: {
   }
 }
 
+/**
+ * pg NUMERIC is transmitted as a decimal string. Do NOT use ::int on sums:
+ * PostgreSQL can round fractional NUMERIC values and produce a fabricated
+ * match against billable external flight-item credits.
+ *
+ * The per-attempt sender ledger remains independently unverified.
+ */
+export function assertExactPrepaidCreditTotalV39(raw:unknown):number{
+  if(typeof raw!=="string"&&typeof raw!=="number")
+    throw Error("PREPAID_CREDIT_TOTAL_NOT_NUMERIC");
+  const text=String(raw).trim();
+  if(!/^(?:0|[1-9][0-9]*)(?:\\.0+)?$/.test(text))
+    throw Error("PREPAID_CREDIT_TOTAL_NOT_EXACT_NONNEGATIVE_INTEGER");
+  const value=Number(text);
+  if(!Number.isSafeInteger(value)||value<0)
+    throw Error("PREPAID_CREDIT_TOTAL_OUTSIDE_SAFE_INTEGER");
+  return value;
+}
+
 export async function prepaidProbeInternalCreditsV39(sessionId: string): Promise<number> {
   const id = assertSessionId(sessionId);
   const result = await pool.query(
-    `SELECT COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0)::int AS n
+    `SELECT COALESCE(sum(COALESCE(delivery_attempt_cost_credits,notification_items,0)),0) AS n
        FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1`,
     [id],
   );
-  return Number(result.rows[0]?.n ?? 0);
+  return assertExactPrepaidCreditTotalV39(result.rows[0]?.n);
 }
 
 export async function prepaidProbeMetricsV39(
@@ -1356,7 +1375,7 @@ export async function prepaidProbeMetricsV39(
             )
           ),
           0
-        )::int AS internal_credits,
+        ) AS internal_credits,
         count(*) FILTER (
           WHERE delivery_attempt_cost_credits IS NOT NULL
         )::int AS explicit_cost_count,
@@ -1389,7 +1408,7 @@ export async function prepaidProbeMetricsV39(
     rowsDelivered: itemRows.rows.length,
     uniqueFlights: physical.uniqueFlights,
     tailChainLinks: physical.tailChainLinks,
-    internalSendCredits: Number(d.internal_credits ?? 0),
+    internalSendCredits: assertExactPrepaidCreditTotalV39(d.internal_credits),
     confirmedUniqueLower: physical.confirmedUniqueLower,
     confirmedPlusAmbiguousUpper:
       physical.confirmedPlusAmbiguousUpper,
