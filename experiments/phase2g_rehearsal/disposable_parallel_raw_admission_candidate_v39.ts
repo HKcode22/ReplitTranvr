@@ -53,6 +53,7 @@ CREATE TABLE clean.p2g_synthetic_raw_admission_intent (
   source_retention_until timestamptz NOT NULL,
   created_utc timestamptz NOT NULL DEFAULT clock_timestamp(),
   committed_utc timestamptz,
+  recovery_original_verified_utc timestamptz,
   PRIMARY KEY(session_id,synthetic_attempt_hmac)
 )`;
 export async function runDisposableParallelRawAdmissionV39(arg:{
@@ -142,6 +143,102 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
     if(Date.now()>=until)return reply("PENDING_NOT_ACKNOWLEDGED");
     await sleep(Math.min(25,Math.max(1,until-Date.now())));
   }
+}
+
+/**
+ * P13/P16 disposable recovery progression: a crashed uploader may have
+ * already finished the exact original blob upload while its final SQL UPDATE
+ * never executed. Verify actual original bytes in App Storage and record a
+ * LOGGED timestamp, but KEEP the state PENDING. Do NOT ACK, replay flight
+ * science, or delete source: the original provider attempt/billing witness,
+ * scientific UNLOGGED recovery and external first-hop are still absent.
+ *
+ * Strictly fixture-only; this is a necessary recovery building block and not
+ * a production receiver implementation.
+ */
+export type DisposablePendingSourceRecoveryV39=Readonly<{
+  schema:"v39.disposable-pending-original-recovery.v1";
+  outcome:"ORIGINAL_PRESENT_VERIFIED_STILL_PENDING"|
+    "ORIGINAL_UNREADABLE_STILL_PENDING"|"ORIGINAL_CHANGED_STILL_PENDING"|
+    "SOURCE_ALREADY_COMMITTED_NO_RECOVERY"|
+    "SOURCE_INTENT_NOT_FOUND_NO_RECOVERY"|
+    "SOURCE_INTENT_EXPIRED_NO_RECOVERY";
+  originalBytesProvenAtObservation:boolean;
+  sourceRecoveryTimestampRecorded:boolean;
+  originalStateUnchanged:true;
+  canAcknowledge:false;
+  canReplayScience:false;
+  canDeleteOriginal:false;
+  providerAttemptAndCreditsAuthenticated:false;
+  originalF8ScienceComplete:false;
+  paidLaunchAuthorized:false;
+}>;
+export async function recordVerifiedDisposablePendingOriginalRecoveryV39(args:{
+  mode:"P2G_DISPOSABLE_ONLY";pool:Pool;store:ProviderBlobStoreV39;
+  sessionId:string;syntheticAttemptHmac:string;
+}):Promise<DisposablePendingSourceRecoveryV39>{
+  if(args.mode!=="P2G_DISPOSABLE_ONLY"||
+    process.env.P2G_DISPOSABLE_POSTGRES!=="YES"||
+    process.env.V39_DATABASE_RUNTIME_URL||
+    process.env.AERODATABOX_API_KEY||
+    process.env.DATABASE_URL||
+    process.env.V39_PROVIDER_BLOB_BUCKET_ID||
+    !UUID.test(args.sessionId)||!HASH.test(args.syntheticAttemptHmac))
+    throw Error("P13_PENDING_RECOVERY_NON_DISPOSABLE_REFUSED");
+  const db=await args.pool.query("SELECT current_database() AS db");
+  if(db.rows?.[0]?.db!=="p2g_stage1_fixture")
+    throw Error("P13_PENDING_RECOVERY_FIXTURE_DATABASE_REQUIRED");
+  const reply=(outcome:DisposablePendingSourceRecoveryV39["outcome"],
+    verified=false,recorded=false):DisposablePendingSourceRecoveryV39=>({
+    schema:"v39.disposable-pending-original-recovery.v1",
+    outcome,originalBytesProvenAtObservation:verified,
+    sourceRecoveryTimestampRecorded:recorded,
+    originalStateUnchanged:true,
+    canAcknowledge:false,canReplayScience:false,canDeleteOriginal:false,
+    providerAttemptAndCreditsAuthenticated:false,originalF8ScienceComplete:false,
+    paidLaunchAuthorized:false
+  });
+  // Never select the original payload; no provider details/logging.
+  const q=await args.pool.query(`
+    SELECT source_sha256,original_opaque_blob_path,state,
+           source_retention_until
+    FROM clean.p2g_synthetic_raw_admission_intent
+    WHERE session_id=$1 AND synthetic_attempt_hmac=$2
+  `,[args.sessionId,args.syntheticAttemptHmac]);
+  if(q.rowCount!==1)return reply("SOURCE_INTENT_NOT_FOUND_NO_RECOVERY");
+  const row=q.rows[0];
+  if(row.state==="COMMITTED")
+    return reply("SOURCE_ALREADY_COMMITTED_NO_RECOVERY");
+  if(row.state!=="PENDING"||!HASH.test(String(row.source_sha256))||
+    typeof row.original_opaque_blob_path!=="string"||
+    !/^v39\\/provider\\/raw_provider_content\\/[0-9a-f]{2}\\/[0-9a-f-]{36}\\.blob$/.test(row.original_opaque_blob_path))
+    throw Error("P13_PENDING_RECOVERY_INTENT_CONTRACT_INVALID");
+  if(new Date(row.source_retention_until).getTime()<=Date.now())
+    return reply("SOURCE_INTENT_EXPIRED_NO_RECOVERY");
+  let bytes:Uint8Array;
+  try{
+    bytes=await args.store.downloadBytes(row.original_opaque_blob_path);
+  }catch{
+    return reply("ORIGINAL_UNREADABLE_STILL_PENDING");
+  }
+  if(sha256(bytes)!==row.source_sha256)
+    return reply("ORIGINAL_CHANGED_STILL_PENDING");
+  // CAS makes recovery idempotent and refuses retroactive "verification"
+  // after expiry, deletion, or any concurrent state transition. It never
+  // touches original bytes and never advances source state to COMMITTED.
+  const saved=await args.pool.query(`
+    UPDATE clean.p2g_synthetic_raw_admission_intent
+       SET recovery_original_verified_utc=clock_timestamp()
+     WHERE session_id=$1 AND synthetic_attempt_hmac=$2
+       AND source_sha256=$3 AND original_opaque_blob_path=$4
+       AND state='PENDING'
+       AND source_retention_until>clock_timestamp()
+    RETURNING state
+  `,[args.sessionId,args.syntheticAttemptHmac,
+     row.source_sha256,row.original_opaque_blob_path]);
+  if(saved.rowCount!==1)
+    throw Error("P13_PENDING_RECOVERY_CONCURRENT_STATE_UNKNOWN_NO_ACK");
+  return reply("ORIGINAL_PRESENT_VERIFIED_STILL_PENDING",true,true);
 }
 
 /**
