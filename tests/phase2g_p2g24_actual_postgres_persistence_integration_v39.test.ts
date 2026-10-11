@@ -2,6 +2,8 @@ import express from "express";
 import {createServer,request as httpRequest} from "node:http";
 import {beforeAll,afterAll,beforeEach,describe,expect,it,vi} from "vitest";
 import {Pool} from "pg";
+import {readFileSync} from "node:fs";
+import {join} from "node:path";
 
 /**
  * REAL PostgreSQL integration: ACTUAL V3.9 prepaid persistence function.
@@ -12,7 +14,8 @@ import {Pool} from "pg";
 const state=vi.hoisted(()=>({
   pool:null as null|Pool,
   blobs:new Map<string,Uint8Array>(),
-  failUpload:false,uploadDelayMs:0,downloadDelayMs:0,
+  failUpload:false,failDownloadOnce:false,failUploadAfterWriteOnce:false,
+  uploadDelayMs:0,downloadDelayMs:0,
   commitAckLost:"none" as "none"|"before"|"after",events:[] as string[]
 }));
 vi.mock("../server/lib/disruption/db_v39",()=>({
@@ -52,10 +55,18 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
       if(state.failUpload)throw Error("SYNTHETIC_BLOB_FAILURE");
       if(state.uploadDelayMs>0)await new Promise(r=>setTimeout(r,state.uploadDelayMs));
       state.blobs.set(key,new Uint8Array(bytes));
+      if(state.failUploadAfterWriteOnce){
+        state.failUploadAfterWriteOnce=false;
+        throw Error("P06_SYNTHETIC_LOST_UPLOAD_RESPONSE_AFTER_BYTES_SAVED");
+      }
     },
     exists:async(key:string)=>state.blobs.has(key),
     downloadBytes:async(key:string)=>{
       state.events.push("READBACK");
+      if(state.failDownloadOnce){
+        state.failDownloadOnce=false;
+        throw Error("P06_SYNTHETIC_LOST_DOWNLOAD_RESPONSE_AFTER_UPLOAD");
+      }
       if(state.downloadDelayMs>0)await new Promise(r=>setTimeout(r,state.downloadDelayMs));
       const bytes=state.blobs.get(key);
       if(!bytes)throw Error("MISSING_FAKE_BLOB");
@@ -69,6 +80,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
 import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39,prepaidDuplicatePrelockReadbackApprovedV39,prepaidFailedSourceJournalApprovedV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import {prepaidSourcePendingIntentApprovedV39} from "../server/lib/disruption/prepaidSourceIntent_v39";
 import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39,auditDisposableRawAdmissionIntentsV39,recordVerifiedDisposablePendingOriginalRecoveryV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
 import {previewDisposablePendingPhysicalV2ReplayV39} from "../experiments/phase2g_rehearsal/disposable_pending_physical_v2_replay_preview_v39";
 import {rehydrateSyntheticQuarantinedPhysicalV2V39} from "../experiments/phase2g_rehearsal/disposable_quarantined_physical_v2_rehydrate_v39";
@@ -161,6 +173,10 @@ beforeAll(async()=>{
     "; CREATE TABLE clean.adb_incident_stop (cause text NOT NULL, occurred_at_utc timestamptz NOT NULL, detail jsonb, resolved boolean NOT NULL)"
   ].join(" "));
   await state.pool.query(DISPOSABLE_ADMISSION_INTENT_DDL_V39);
+  // EXACT draft migration is executed ONLY on disposable PostgreSQL 16.
+  // Production/live migrations are NEVER invoked by this test process.
+  await state.pool.query(readFileSync(join(process.cwd(),
+    "migrations/current/V0064__phase2g_prepaid_source_pending_intent_v39.sql"),"utf8"));
   const app=express();
   // Same prepaid parser bypass as server/phase2gCallbackOnly.ts. This allows
   // registerV3Routes() to execute its ACTUAL strict 2MB parser and error guard.
@@ -195,11 +211,13 @@ beforeAll(async()=>{
   localOrigin="http://127.0.0.1:"+address.port;
 },20000);
 beforeEach(async()=>{
-  state.blobs.clear();state.failUpload=false;state.uploadDelayMs=0;
+  state.blobs.clear();state.failUpload=false;
+  state.failDownloadOnce=false;state.failUploadAfterWriteOnce=false;
+  state.uploadDelayMs=0;
   state.downloadDelayMs=0;state.commitAckLost="none";
   state.events.length=0;
   await state.pool!.query(
-    "TRUNCATE clean.provider_content_blob_ref,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime,clean.prepaid_probe_item_runtime,clean.p2g_synthetic_raw_admission_intent");
+    "TRUNCATE clean.provider_content_blob_ref,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime,clean.prepaid_probe_item_runtime,clean.p2g_synthetic_raw_admission_intent,clean.phase2g_prepaid_source_intent_v39");
   await state.pool!.query(
     "INSERT INTO clean.prepaid_probe_session_runtime(session_id,provider_subscription_id,state,expires_at_utc) VALUES($1,$2,'active','2099-01-01T00:00:00Z')",
     [SESSION,SUB]);
