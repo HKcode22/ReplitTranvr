@@ -174,6 +174,22 @@ describe("P2G Stage-1 real Cloudflare Worker interface in-memory R2+Queues (NO L
     expect(h.map.size).toBe(0);
     expect(h.messages).toHaveLength(0);
   });
+
+  it("P09 source refuses duplicate object keys, including escaped aliases and nested identity/credit keys",async()=>{
+    const h=harness();
+    for(const body of [
+      '{"id":"first","id":"second","flights":[]}',
+      '{"id":"first","\\u0069d":"second","flights":[]}',
+      '{"deliveryAttempt":{"costCredits":1,"costCredits":2},"flights":[]}',
+      '{"flights":[{"flightId":"A","flightId":"B"}]}'
+    ]){
+      const r=await ingest(h.request({body}),h.env);
+      expect(r.status,body).toBe(400);
+      expect(h.messages,body).toHaveLength(0);
+      expect(h.map.size,body).toBe(0);
+    }
+  });
+
   it("queue consumer retries safely until authenticated sandbox receiver acknowledges persisted hash",async()=>{
     const h=harness();
     expect((await ingest(h.request(),h.env)).status).toBe(200);
