@@ -73,6 +73,21 @@ const noPaid=(x:ReturnType<typeof observe>["last"])=>{
   expect(x.paidLaunchAuthorized).toBe(false);
 };
 describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider calls)",()=>{
+  it("P15/P19 REAL paid supervisor hard-refuses selected 6+6 before provider health or paid owner spawn while source verifier is absent",()=>{
+    const source=readFileSync(join(process.cwd(),
+      "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
+    const veto='SUPERVISOR_REFUSED:SIX_PLUS_SIX_AUTHENTICATED_VERIFIER_NOT_DEPLOYED';
+    expect(source).toContain(veto);
+    expect(source).toContain('if(callbackWatchdogMode==="six-plus-six-candidate")');
+    const pos=source.indexOf(veto);
+    expect(pos).toBeGreaterThan(0);
+    expect(pos).toBeLessThan(source.indexOf('enforcePaidGuard("v39:probe:stage1"'));
+    expect(pos).toBeLessThan(source.indexOf('const initialCallbackHealth = await callbackHealthy('));
+    expect(pos).toBeLessThan(source.indexOf('const child = spawn('));
+    // A purely synthetic signed ledger, a user-supplied ENV flag, or a
+    // GET-only callback health check cannot bypass this prospective gate.
+    expect(source).not.toContain("V39_P2G_TRUSTED_WITNESS_JSON");
+  });
   it("actual supervisor imports the controller and defaults to legacy three-strike, never source-proof from ENV",()=>{
     const source=readFileSync(join(process.cwd(),
       "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
