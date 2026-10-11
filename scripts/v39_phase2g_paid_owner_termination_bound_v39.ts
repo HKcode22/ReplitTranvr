@@ -40,3 +40,26 @@ export function armStage1PaidOwnerTerminationBoundV39(input:Readonly<{
     }
   };
 }
+
+/** A clean OS exit is not proof of scientific completion if supervision stopped
+ * the paid owner. Treat every explicit shutdown/watchdog stop as failed and
+ * enter the existing exact-session recovery/settlement path. */
+export function stage1PaidOwnerExitVerdictV39(input: Readonly<{
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  spawnError: string | null;
+  terminationRequested: boolean;
+  watchdogTriggered: boolean;
+}>): { passed: boolean; reason: string } {
+  if (input.watchdogTriggered)
+    return { passed: false, reason: "WATCHDOG_INTERRUPTED_OWNER" };
+  if (input.terminationRequested)
+    return { passed: false, reason: "SUPERVISOR_SHUTDOWN_REQUESTED" };
+  if (input.spawnError !== null)
+    return { passed: false, reason: "OWNER_SPAWN_OR_PROCESS_ERROR" };
+  if (input.signal !== null)
+    return { passed: false, reason: "OWNER_TERMINATED_BY_SIGNAL" };
+  if (input.code !== 0)
+    return { passed: false, reason: "OWNER_NOT_CLEAN_ZERO_EXIT" };
+  return { passed: true, reason: "CLEAN_ZERO_EXIT_NO_SUPERVISOR_ABORT" };
+}
