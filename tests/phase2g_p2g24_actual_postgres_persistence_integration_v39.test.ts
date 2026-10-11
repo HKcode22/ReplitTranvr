@@ -325,6 +325,31 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
       new Date(intent.rows[0].created_utc).getTime()).toBe(168*3_600_000);
     expect(state.blobs.size).toBe(1);
   });
+  it("P06 fixture LOST UPLOAD RESPONSE after object stored preserves original in PENDING; later SHA recovery is possible",async()=>{
+    const fake=fakeStore();
+    const upload=fake.store.uploadBytes;
+    let deleteCalls=0;
+    fake.store.uploadBytes=async(k:string,v:Uint8Array)=>{
+      await upload(k,v);
+      throw Error("SYNTHETIC_STORAGE_UPLOAD_RESPONSE_LOST");
+    };
+    fake.store.delete=async()=>{deleteCalls++;};
+    await expect(submit("upload-reply-lost",fake.store))
+      .rejects.toThrow("SYNTHETIC_STORAGE_UPLOAD_RESPONSE_LOST");
+    expect(deleteCalls).toBe(0);
+    const q=await state.pool!.query(
+      "SELECT state,original_opaque_blob_path FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(q.rows[0].state).toBe("PENDING");
+    expect(state.blobs.has(q.rows[0].original_opaque_blob_path)).toBe(true);
+    expect((await verifyPending("upload-reply-lost",fake.store))).toMatchObject({
+      outcome:"ORIGINAL_PRESENT_VERIFIED_STILL_PENDING",
+      sourceRecoveryTimestampRecorded:true,canAcknowledge:false,
+      canReplayScience:false,canDeleteOriginal:false
+    });
+    expect((await submit("upload-reply-lost",fake.store,state.pool!,0))
+      .safeToReturn2xxToSyntheticSender).toBe(false);
+    expect(fake.uploads()).toBe(1);
+  });
   it("P06 fixture after-upload corrupted readback keeps original for manual audit; cannot convert to committed or ACK",async()=>{
     const fake=fakeStore();
     let corrupted=true,deletes=0;
