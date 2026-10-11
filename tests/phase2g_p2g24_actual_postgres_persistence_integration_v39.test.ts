@@ -2378,7 +2378,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     await state.pool!.query(
       "UPDATE clean.prepaid_probe_delivery_runtime "+
       "SET received_at_utc=received_at_utc+interval '1 second' "+
-      "WHERE session_id=$1 AND delivery_id=$2",[SESSION,id]
+      "WHERE session_id=$1 AND delivery_id=$2",[SESSION,persisted.deliveryId]
     );
     const drift=await confirmCurrentDisposableV39ScienceReceipt(options);
     expect(drift).toMatchObject({
@@ -2388,7 +2388,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     await state.pool!.query(
       "UPDATE clean.prepaid_probe_delivery_runtime "+
       "SET received_at_utc=$3 WHERE session_id=$1 AND delivery_id=$2",
-      [SESSION,id,received]
+      [SESSION,persisted.deliveryId,received]
     );
     expect((await confirmCurrentDisposableV39ScienceReceipt(options))
       .currentlyPersisted).toBe(true);
