@@ -102,7 +102,7 @@ describe("P17: 30 seconds can be important; 3 minutes not magical SCIENTIFIC inv
     const v=check({assumedDelaySupportMinutes:[0,500],...known,
       exactMissingEligibleFlightItems:3});
     expect(v.hypotheticalFullMeanUpperMinutes).toBeCloseTo((117*5+3*500)/120);
-    expect(v.maximumAbsoluteMeanShiftFromObservedMinutes).toBeCloseTo(12.625);
+    expect(v.maximumAbsoluteMeanShiftFromObservedMinutes).toBeCloseTo(12.375);
   });
   it("fails closed on impossible durations and invented negative or unsupported item counts",()=>{
     expect(()=>check({healthUncertaintyIntervals:[{startSecond:7100,endSecond:7500}]}))
