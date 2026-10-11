@@ -164,6 +164,26 @@ try{
            (runtime_session_id IS NOT NULL) AS durable_session_identity_present
     FROM clean.adb_anchor_probe WHERE probe_id=18
   `);
+  const historicalSession="6267293e-75a0-42a7-b977-89543f200ebc";
+  // UNLOGGED rows can disappear after database restart. Missing rows are
+  // NOT proof that cleanup ran; preserve this distinction.
+  const runtime=await c.query(`
+    SELECT state,expires_at_utc,
+           (provider_subscription_id IS NOT NULL) AS bound_provider_present,
+           callback_requests_seen,callback_success_2xx,callback_failures
+    FROM clean.prepaid_probe_session_runtime
+    WHERE session_id=$1::uuid
+  `,[historicalSession]);
+  const journalExist=await c.query(`
+    SELECT to_regclass('clean.phase2g_cleanup_journal_v39') IS NOT NULL AS present
+  `);
+  const cleanupJournal=journalExist.rows[0]?.present===true
+    ?await c.query(`
+      SELECT probe_id,state,expected_live_blobs
+      FROM clean.phase2g_cleanup_journal_v39
+      WHERE session_id=$1::uuid
+    `,[historicalSession])
+    :null;
   const blobs=await c.query(`
     SELECT count(*)::int AS referenced_objects,
            count(*) FILTER(WHERE deletion_verified_at_utc IS NULL)::int AS untombstoned,
@@ -175,7 +195,14 @@ try{
   console.log(JSON.stringify({
     schema:"v39.p25.incident30.recovery-custody-readonly.v1",
     incident:incident.rows,historical_probe:probe.rows,
+    runtime_session_rows:runtime.rows,
+    runtime_missing_is_not_cleanup_proof:runtime.rowCount===0,
+    cleanup_journal_table_present:journalExist.rows[0]?.present===true,
+    cleanup_journal_rows:cleanupJournal?.rows??null,
     referenced_blob_metadata:blobs.rows,
+    incident30_administrative_clearance_authorized:false,
+    historical_blob_early_deletion_authorized:false,
+    paid_yssy_go_authorized:false,
     provider_calls:0,provider_mutations:0,database_mutations:0,
     blob_downloads:0,blob_deletes:0
   },null,2));
@@ -187,6 +214,8 @@ try{
 }finally{c.release();await pool.end().catch(()=>{});}
 NODE
 ```
+
+**Early-delete warning:** `cleanupPrepaidProbeSessionLocalV39` can call `deleteProviderBlobAtExpiryV39(... allowEarlyDelete:true)` on this exact historical session, so DO NOT invoke the generic purpose-cleanup merely to turn incident #30 green. Preserve and separately hash-readback original bytes before expiry, and independently reconcile any runtime/session state with provider-zero-billable evidence. A missing UNLOGGED session row after restart **is not cleanup proof**. The expanded read-only command above prints runtime and cleanup-journal presence without source bytes, provider credentials, object names, or mutations. Its `paid_yssy_go_authorized:false` is intentional.
 
 **Decision:** This audit alone NEVER resolves incident #30. If `provider_delete_verified=true`, zero active billables remains verified, and cleanup/reference preservation is separately reviewed, a narrowly scoped future *operator-approved* administrative closure could be considered without altering probe 18's FAILED/UNRESOLVED/CENSORED science status. The existing generic `REFUSED:OPEN_INCIDENTS` guard must not be bypassed. If referenced original objects are still needed for audit, never purpose-cleanup/delete merely to clear an incident.
 
