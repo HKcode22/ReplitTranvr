@@ -43,3 +43,14 @@ To investigate without provider credits or new hosting, implemented **a real loo
 - Only after all those gates and prospective scientific budget/whole-run caps are approved, consider paid 6 primary+6 source-gated emergency per separate recovered outage. As of this document **actual paid Stage-1 remains 3-strike and six-plus-six hard-refused**.
 
 **Paid YSSY remains NO-GO.**
+
+
+## Oct 10 P13/P16 additional local crash-recovery spool audit, and production-backup caveat
+
+The fixed localhost frontdoor's new `auditCrashRecoveryReadOnly()` method scans a bounded number of private raw/original-receipt/claim/forward-success marker filenames, returning aggregate-only counts of verified receipts, tampered originals, absent raw sources, claim-without-receipt, raw-without-receipt, forwarded-without-source and quarantined partial temporary files. It never modifies files, deletes sources, replays, acknowledges webhooks or claims independently authenticated AeroDataBox source evidence. Additional test cases deliberately create partial-claim source loss, an original object lacking a final source receipt, a receipt lacking its original object, and a partial temporary write; verified/successful receipts are distinguished from incomplete or corrupted originals.
+
+**Don't conflate this with hosted recovery:** a local filesystem's fsync and an accurate orphan list are insufficient to withstand a full primary hosting outage or prove retention after a cloud disk replacement. Teammate's live published `travnr.com` also is not yet a compatible V3.9 science standby: [read-only two-app Replit backup parity report](2026-10-10_P09_P18_REAL_REPLIT_PUBLISHED_BACKUP_PARITY_READONLY_CHECK.md) records the deployed physical-flight-v2 deficit, unknown secret/bucket/db equality and actual deployed revision mismatch. No network failover was enabled.
+
+The true V3.9 server JSON parser captures raw incoming bytes in `req.rawBody` for duplicate-key structural inspection, but persistence currently serializes `canonical(input.body)` before object storage. This is **not the same as a literal original incoming HTTP wire-byte archive**. An additional direct V3.9 localhost HTTP + disposable PostgreSQL/forced fake App Storage test asserts the byte difference, to prevent unsupported claims about original-wire fidelity. The exact original research source contract still requires independent review; no paid source is reinterpreted or rewritten.
+
+Source/control safeguards remain: full hosted 120-min no-credit run not performed; no real provider sender ledger; no Replit deployment/production write; no route switch; paid 6+6 hard-veto remains; YSSY NO-GO.
