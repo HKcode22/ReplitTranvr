@@ -68,7 +68,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   }),
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
-import {persistPrepaidProbeWebhookV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import {subscribePrepaidStageTimingV39,type PrepaidStageTimingV39} from "../server/lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {readReadOnlyPgSnapshotV39} from "../scripts/v39_phase2g_independent_pg_delivery_readonly_observer";
 import {registerV3Routes} from "../server/routes_v3";
@@ -296,6 +296,36 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       })).rejects.toThrow("READONLY_OBSERVER_INVALID_DB_COUNTERS");
     }finally{await db.query("ROLLBACK").catch(()=>undefined);db.release();}
     expect((await count()).unlogged).toBe(1);
+  });
+  it("P14 actual scientific reconciliation refuses rounded .5 credits in BOTH counters; preserves valid integer credit totals",async()=>{
+    await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,
+      body:sample({id:"scientific-credit-rounding-injection"}),
+      receivedAtUtc:new Date("2026-10-12T03:01:30Z")
+    });
+    expect(await prepaidProbeInternalCreditsV39(SESSION)).toBe(1);
+    const valid=await prepaidProbeMetricsV39(
+      SESSION,new Date("2026-10-12T03:00:00Z"),
+      new Date("2026-10-12T05:00:00Z"));
+    expect(valid.internalSendCredits).toBe(1);
+    await state.pool!.query(
+      "UPDATE clean.prepaid_probe_delivery_runtime SET delivery_attempt_cost_credits=0.5 WHERE session_id=$1",[SESSION]);
+    await expect(prepaidProbeInternalCreditsV39(SESSION))
+      .rejects.toThrow("PREPAID_CREDIT_TOTAL_NOT_EXACT_NONNEGATIVE_INTEGER");
+    await expect(prepaidProbeMetricsV39(
+      SESSION,new Date("2026-10-12T03:00:00Z"),
+      new Date("2026-10-12T05:00:00Z")
+    )).rejects.toThrow("PREPAID_CREDIT_TOTAL_NOT_EXACT_NONNEGATIVE_INTEGER");
+    // Database was NOT mutated by either failed scientific reader.
+    const q=await state.pool!.query("SELECT delivery_attempt_cost_credits::text AS cost FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1",[SESSION]);
+    expect(q.rows[0].cost).toBe("0.5");
+    expect((await count()).unlogged).toBe(1);
+  });
+  it("P14 scientific exact credit parser rejects unsafe totals and accepts only decimal integers",()=>{
+    for(const n of ["0","1","260","260.0","00000".replace(/^0+/,"0")])
+      expect(Number.isSafeInteger(assertExactPrepaidCreditTotalV39(n))).toBe(true);
+    for(const n of ["0.5","259.5","-1","NaN","Infinity","1e3","9007199254740992",null,undefined,{},1.5])
+      expect(()=>assertExactPrepaidCreditTotalV39(n)).toThrow("PREPAID_CREDIT_TOTAL");
   });
   it("P06/P15 UNLOGGED missing session distinguished from verified zero source sends",async()=>{
     await state.pool!.query("DELETE FROM clean.prepaid_probe_session_runtime WHERE session_id=$1",[SESSION]);
