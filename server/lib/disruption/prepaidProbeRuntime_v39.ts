@@ -187,7 +187,7 @@ function assertSessionId(sessionId: string): string {
   return normalized;
 }
 
-function runtimeFlightKey(flight: any): string | null {
+export function prepaidRuntimeFlightKeyV39(flight: any): string | null {
   const number = stringOrNull(flight?.number);
   const providerId = stringOrNull(flight?.id);
   const depIcao = stringOrNull(flight?.departure?.airport?.icao)?.toUpperCase() ?? null;
@@ -1131,7 +1131,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
             stringOrNull(flight?.number),
             identity.aircraftReg,
             identity.codeshareStatus,
-            runtimeFlightKey(flight),
+            prepaidRuntimeFlightKeyV39(flight),
             identity.observation.providerFlightId ?? null,
             identity.observation.callsign ?? null,
             operatingCarrier,
