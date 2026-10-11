@@ -26,6 +26,8 @@ on:
       - tests/phase2g_bounded_source_wire_v39.test.ts
       - experiments/phase2g_cf_sandbox_ingress/wrangler.synthetic-staging.jsonc
       - tests/phase2g_p10_synthetic_wrangle_config_guard_v39.test.ts
+      - experiments/phase2g_cf_sandbox_ingress/p10_readonly_hosted_evidence_gate_v39.ts
+      - tests/phase2g_p10_readonly_hosted_evidence_gate_v39.test.ts
       - experiments/phase2g_cf_sandbox_ingress/provenance.ts
       - tests/phase2g_cf_sandbox_ingress_worker_v39.test.ts
       - tests/phase2g_cf_sandbox_provenance_hmac_v39.test.ts
@@ -167,6 +169,7 @@ jobs:
             tests/phase2g_cf_sandbox_ingress_worker_v39.test.ts \
             tests/phase2g_bounded_source_wire_v39.test.ts \
             tests/phase2g_p10_synthetic_wrangle_config_guard_v39.test.ts \
+            tests/phase2g_p10_readonly_hosted_evidence_gate_v39.test.ts \
             tests/phase2g_cf_sandbox_provenance_hmac_v39.test.ts \
             tests/phase2g_yssy_120m_free_queue_interruption_model_v39.test.ts \
             tests/phase2g_cf_free_queue_only_worker_v39.test.ts \
