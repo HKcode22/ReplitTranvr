@@ -605,6 +605,15 @@ async function main(): Promise<void> {
     callback_watchdog_source_proof_implemented: false,
     callback_watchdog_science_audit_pending:
       watchdogState.recoveredHealthAwaitingScienceAudit,
+    // A live recovered GET never establishes the original notifications
+    // were sent and durably persisted. Preserve the full run evidence, but
+    // forbid interpreting the supervisor's process PASS alone as scientific
+    // promotion when an outage occurred. The frozen full credit/custody
+    // reconciliation + study review must decide acceptance.
+    scientific_promotion_from_supervisor_alone_authorized:
+      childPassed && !watchdogState.recoveredHealthAwaitingScienceAudit,
+    scientific_review_required_after_health_recovery:
+      watchdogState.recoveredHealthAwaitingScienceAudit,
     callback_consecutive_failures_at_exit: callbackFailureCount,
     recovery_attempted: recoveryAttempted,
     recovery_exit_code: recoveryExitCode,
