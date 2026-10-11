@@ -251,6 +251,25 @@ jobs:
           echo 'QUEUE_SIZE_AUDITOR_EXECUTED=false'
       - name: Typecheck server
         run: npm run v39:typecheck
+      - name: Generate YSSY zero-credit prep receipt (NO PAID AUTH)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          test -z "${AERODATABOX_API_KEY:-}"
+          node --import tsx scripts/v39_phase2g_yssy_20261012_zero_credit_prep_v39.ts \
+            --out "${RUNNER_TEMP}/yssy-20261012-zero-credit-prep.json"
+          sha256sum "${RUNNER_TEMP}/yssy-20261012-zero-credit-prep.json"
+          echo "AUTH_CREATED=false"
+          echo "PROVIDER_CALLS=0"
+          echo "PAID_LAUNCH=NOT_AUTHORIZED"
+      - name: Preserve YSSY draft receipt as downloadable CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yssy-oct12-zero-credit-prep
+          path: ${{ runner.temp }}/yssy-20261012-zero-credit-prep.json
+          if-no-files-found: error
+          retention-days: 7
 
   disposable-postgres-persistence:
     name: Ephemeral PostgreSQL V3.9 persistence fault integration (no paid credentials)
