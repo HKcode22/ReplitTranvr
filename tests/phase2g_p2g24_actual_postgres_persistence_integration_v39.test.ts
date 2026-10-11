@@ -2360,6 +2360,13 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       .encode('{"fabricated":true}')};
     await expect(confirmCurrentDisposableV39ScienceReceipt(changed))
       .rejects.toThrow("P12_SQL_CONFIRM_ORIGINAL_EDGE_PROVENANCE_INVALID");
+    // A locally signed but logically inconsistent receipt ID must not
+    // be accepted: the original session + provider-attempt mapping is fixed.
+    const fakeReceipt={...edge,receiptId:"f".repeat(64)};
+    const fakeSigned=await signEdgeProvenanceV1(fakeReceipt,key);
+    await expect(confirmCurrentDisposableV39ScienceReceipt({
+      ...options,edge:{proof:fakeReceipt,hmac:fakeSigned}
+    })).rejects.toThrow("P12_SQL_CONFIRM_ORIGINAL_EDGE_PROVENANCE_INVALID");
     const falseSignature={...options,edge:{
       proof:edge,hmac:"0".repeat(64)
     }};
