@@ -107,10 +107,10 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
     expect(x.steps[5].phase).toBe("PRIMARY");
     expect(x.steps[6].phase).toBe("CONTINGENT");
     expect(x.last).toMatchObject({
-      action:"MONITOR",phase:"HEALTHY",
-      reason:"HEALTH_RECOVERED_SCIENTIFIC_AUDIT_STILL_PENDING",
+      action:"MONITOR",phase:"RECOVERING",
+      reason:"FIRST_HEALTHY_POLL_CONFIRMATION_PENDING",
       state:{recoveredHealthAwaitingScienceAudit:true,
-        closedOutageEnvelopeMs:165_000,terminated:false}
+        recoveryHealthyChecks:1,closedOutageEnvelopeMs:0,terminated:false}
     });
     noPaid(x.last);
   });
@@ -201,7 +201,7 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
     expect(r.last.state.terminated).toBe(true);
     noPaid(r.last);
   });
-  it("candidate with separately VERIFIED synthetic fixture evidence recovers at check 12 after 11 soft failures: never scientific pass",()=>{
+  it("twelfth green after 11 failures is provisional; not full recovery or scientific pass",()=>{
     const r=observe({failures:11,proof:knownProof(),recover:true});
     expect(r.steps).toHaveLength(12);
     expect(r.steps[5].phase).toBe("PRIMARY");
@@ -209,9 +209,10 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
     expect(r.steps[10].phase).toBe("CONTINGENT");
     expect(r.steps[10].independentSourceProvenForThisCheck).toBe(true);
     expect(r.last).toMatchObject({
-      phase:"HEALTHY",action:"MONITOR",
-      reason:"HEALTH_RECOVERED_SCIENTIFIC_AUDIT_STILL_PENDING",
-      state:{consecutiveFailures:0,maximumFailures:11,
+      phase:"RECOVERING",action:"MONITOR",
+      reason:"FIRST_HEALTHY_POLL_CONFIRMATION_PENDING",
+      state:{consecutiveFailures:11,maximumFailures:11,
+        recoveryHealthyChecks:1,
         recoveredHealthAwaitingScienceAudit:true,terminated:false}
     });
     noPaid(r.last);
@@ -353,8 +354,8 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
     expect(r.steps).toHaveLength(2);
     expect(r.last).toMatchObject({
       action:"MONITOR",
-      reason:"HEALTH_RECOVERED_SCIENTIFIC_AUDIT_STILL_PENDING",
-      state:{terminated:false,recoveredHealthAwaitingScienceAudit:true}
+      reason:"FIRST_HEALTHY_POLL_CONFIRMATION_PENDING",
+      state:{terminated:false,recoveryHealthyChecks:1,recoveredHealthAwaitingScienceAudit:true}
     });
     noPaid(r.last);
   });
@@ -440,46 +441,44 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
       })).toThrow("P15_WATCHDOG_INVALID_OR_NONMONOTONIC_STATE");
     }
   });
-  it("P15 real controller does not mint unlimited new 6+6 on independently recovered episodes",()=>{
-    let s=initialStage1WatchdogStateV39();
+  it("first green cannot re-arm 6+6; a second full green alone closes the outage",()=>{
+    let state=initialStage1WatchdogStateV39();
     const proof={...knownProof(),frozenMaxOutageEpisodes:1};
-    const f1=advanceStage1WatchdogV39({
-      mode:"six-plus-six-candidate",previous:s,health:transient,
-      nowMonotonicMs:0,evidence:proof
-    });s=f1.state;
-    expect(s.outageEpisodeCount).toBe(1);
-    const recovered=advanceStage1WatchdogV39({
-      mode:"six-plus-six-candidate",previous:s,health:healthy,
-      nowMonotonicMs:15_000,evidence:proof
-    });s=recovered.state;
-    expect(recovered.action).toBe("MONITOR");
-    expect(s.closedOutageEnvelopeMs).toBe(15_000);
-    const second=advanceStage1WatchdogV39({
-      mode:"six-plus-six-candidate",previous:s,health:transient,
-      nowMonotonicMs:30_000,evidence:proof
-    });
+    const tick=(at:number,health:typeof transient|typeof healthy)=>{
+      const r=advanceStage1WatchdogV39({
+        mode:"six-plus-six",previous:state,health,
+        nowMonotonicMs:at,evidence:proof
+      });state=r.state;return r;
+    };
+    expect(tick(0,transient).phase).toBe("PRIMARY");
+    const firstGreen=tick(15_000,healthy);
+    expect(firstGreen.phase).toBe("RECOVERING");
+    expect(state.consecutiveFailures).toBe(1);
+    expect(state.recoveryHealthyChecks).toBe(1);
+    expect(tick(30_000,healthy).phase).toBe("HEALTHY");
+    expect(state.consecutiveFailures).toBe(0);
+    expect(state.closedOutageEnvelopeMs).toBe(30_000);
+    const second=tick(45_000,transient);
     expect(second.action).toBe("STOP_OWNER");
     expect(second.reason).toBe("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED");
-    expect(second.scientificPassAuthorized).toBe(false);
-    expect(second.paidLaunchAuthorized).toBe(false);
   });
-  it("P15 whole-run cumulative fault envelope is preserved after a signed healthy recovery",()=>{
-    let s=initialStage1WatchdogStateV39();
+  it("consecutive green confirmation debits cumulative exposure; cap cannot rearm",()=>{
+    let state=initialStage1WatchdogStateV39();
     const proof={...knownProof(),frozenMaxOutageEpisodes:2,
       frozenMaxCumulativeOutageEnvelopeMs:45_000};
     for(const [at,health] of [
-      [0,transient],[15_000,healthy],[30_000,transient],
+      [0,transient],[15_000,healthy],[30_000,healthy],
       [45_000,transient]
-    ] as const){
-      const out=advanceStage1WatchdogV39({
-        mode:"six-plus-six-candidate",previous:s,health,
+    ] as const) {
+      const r=advanceStage1WatchdogV39({
+        mode:"six-plus-six",previous:state,health,
         nowMonotonicMs:at,evidence:proof
-      });s=out.state;
-      expect(out.action).toBe("MONITOR");
+      });state=r.state;
+      expect(r.action).toBe("MONITOR");
     }
-    expect(s.closedOutageEnvelopeMs).toBe(15_000);
+    expect(state.closedOutageEnvelopeMs).toBe(30_000);
     const exceeded=advanceStage1WatchdogV39({
-      mode:"six-plus-six-candidate",previous:s,health:transient,
+      mode:"six-plus-six",previous:state,health:transient,
       nowMonotonicMs:60_000,evidence:proof
     });
     expect(exceeded.action).toBe("STOP_OWNER");
@@ -504,30 +503,32 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
       expect(out.action).toBe("STOP_OWNER");
     }
   });
-  it("no witness cannot reset risk limits: two episodes and 180s total is maximum",()=>{
-    let st=initialStage1WatchdogStateV39();
-    for(const [ms,health] of [
-      [0,transient],[75_000,healthy],[90_000,transient],
-      [165_000,healthy],[180_000,transient]
-    ] as const){
-      const x=advanceStage1WatchdogV39({
-        mode:"six-plus-six",previous:st,health,
-        nowMonotonicMs:ms
-      });st=x.state;
-      if(ms===180_000){
-        expect(x.action).toBe("STOP_OWNER");
-        expect(x.reason).toBe("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED");
-      }else expect(x.action).toBe("MONITOR");
-    }
-    expect(st.closedOutageEnvelopeMs).toBe(150_000);
-  });
-  it("green health at precisely 180s cumulative exposure cannot bypass science-stop fence",()=>{
+  it("intermittent single green does not reset outage; 180s monotonic stop still applies",()=>{
     let state=initialStage1WatchdogStateV39();
     for(const [ms,health] of [
-      [0,transient],[120_000,healthy],[135_000,transient],[195_000,healthy]
+      [0,transient],[75_000,healthy],
+      [90_000,transient],[165_000,healthy],[180_000,transient]
     ] as const){
       const r=advanceStage1WatchdogV39({
-        mode:"six-plus-six",previous:state,health,nowMonotonicMs:ms
+        mode:"six-plus-six",previous:state,health,
+        nowMonotonicMs:ms
+      });state=r.state;
+      if(ms===180_000){
+        expect(r.action).toBe("STOP_OWNER");
+        expect(r.reason).toBe("SIX_PLUS_SIX_WALL_CLOCK_MAX_EXCEEDED");
+      }else expect(r.action).toBe("MONITOR");
+    }
+    expect(state.closedOutageEnvelopeMs).toBe(0);
+  });
+  it("green at precisely 180s cumulative exposure cannot bypass science-stop fence",()=>{
+    let state=initialStage1WatchdogStateV39();
+    for(const [ms,health] of [
+      [0,transient],[90_000,healthy],[105_000,healthy],
+      [120_000,transient],[180_000,healthy],[195_000,healthy]
+    ] as const){
+      const r=advanceStage1WatchdogV39({
+        mode:"six-plus-six",previous:state,health,
+        nowMonotonicMs:ms
       });state=r.state;
       if(ms===195_000){
         expect(r.action).toBe("STOP_OWNER");
@@ -535,20 +536,20 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
       }else expect(r.action).toBe("MONITOR");
     }
   });
-  it("two disjoint incidents cannot exceed 180s cumulative without any witness",()=>{
-    let st=initialStage1WatchdogStateV39();
+  it("two independently closed incidents cannot exceed 180s cumulative",()=>{
+    let state=initialStage1WatchdogStateV39();
     for(const [ms,health] of [
-      [0,transient],[120_000,healthy],
-      [135_000,transient],[195_000,transient]
+      [0,transient],[90_000,healthy],[105_000,healthy],
+      [120_000,transient],[195_000,transient]
     ] as const){
-      const x=advanceStage1WatchdogV39({
-        mode:"six-plus-six",previous:st,health,
+      const r=advanceStage1WatchdogV39({
+        mode:"six-plus-six",previous:state,health,
         nowMonotonicMs:ms
-      });st=x.state;
+      });state=r.state;
       if(ms===195_000){
-        expect(x.action).toBe("STOP_OWNER");
-        expect(x.reason).toBe("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED");
-      }else expect(x.action).toBe("MONITOR");
+        expect(r.action).toBe("STOP_OWNER");
+        expect(r.reason).toBe("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED");
+      }else expect(r.action).toBe("MONITOR");
     }
   });
   it("six plus six never mutates provider retries, bills credits or grants paid owner authority",()=>{
