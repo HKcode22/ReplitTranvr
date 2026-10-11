@@ -36,3 +36,11 @@ Negative tests reject incomplete owner heartbeat, missing sender attempts, credi
 - Strict independent signed sender evidence, complete provider-attempt reconciliation, real stage1 runtime-owner/watcher semantics and actual physical-item SQL checks remain separate mandatory evidence gates before any paid Stage1 YSSY retry.
 
 Related: [P20 original 20-gate plan](2026-10-10_YSSY_REMAINING_GATES_AND_120MIN_ZERO_CREDIT_REHEARSAL.md), [P04/P05 receiver burden](2026-10-10_ACTUAL_PREPAID_ROUTE_AND_WIRE_BYTES_SCIENCE_GAP.md), [incident #28](https://github.com/HKcode22/ReplitTranvr/issues/28).
+
+## Additional P20 edge-case: delayed/out-of-order Queue replay
+
+The first V2 implementation traversed `observedPhysicalItems` in the order provided by a synthetic receiver. During a Replit outage and Queue recovery, the first **processed** physical flight update can have a later original provider/edge receipt than another update that is replayed second. That processing order does **not** define the scientific §9.2 first observation and may shift physical identities into the wrong 15-minute bin.
+
+**Correction:** choose the minimum verified `originalEdgeReceivedUtc` among *qualifying resolved-operator observations* for each canonical flight-instance ID. An out-of-order retime/replay must keep the physical instance in its original 15-minute bucket. Marketing and ambiguous/quarantined item observations must never create a physical first observation.
+
+A new synthetic negative-order test reverses the entire 22-attempt receiver sequence, prepends a late F-0 update from bucket 8, and requires F-0's true earliest original first observation to remain in bucket 1. **This is a synthetic trace-consistency regression; it does not yet prove actual Queue or database event ordering and should not be used to authorize paid owner continuation.**
