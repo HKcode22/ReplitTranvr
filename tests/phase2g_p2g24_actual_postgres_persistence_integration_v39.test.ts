@@ -1,7 +1,7 @@
 import express from "express";
 import {createServer,request as httpRequest} from "node:http";
 import {beforeAll,afterAll,beforeEach,describe,expect,it,vi} from "vitest";
-import {Pool} from "pg";
+import {Pool,type PoolClient} from "pg";
 import {readFileSync} from "node:fs";
 import {join} from "node:path";
 
@@ -80,7 +80,10 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
 import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39,prepaidDuplicatePrelockReadbackApprovedV39,prepaidFailedSourceJournalApprovedV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
-import {prepaidSourcePendingIntentApprovedV39} from "../server/lib/disruption/prepaidSourceIntent_v39";
+import {
+  prepaidSourceOutsideSessionLockApprovedV39,
+  prepaidSourcePendingIntentApprovedV39,
+} from "../server/lib/disruption/prepaidSourceIntent_v39";
 import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39,auditDisposableRawAdmissionIntentsV39,recordVerifiedDisposablePendingOriginalRecoveryV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
 import {previewDisposablePendingPhysicalV2ReplayV39} from "../experiments/phase2g_rehearsal/disposable_pending_physical_v2_replay_preview_v39";
 import {rehydrateSyntheticQuarantinedPhysicalV2V39} from "../experiments/phase2g_rehearsal/disposable_quarantined_physical_v2_rehydrate_v39";
@@ -1859,6 +1862,201 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED:"1"
     } as NodeJS.ProcessEnv)).toBe(true);
   });
+  it("P06 outside-session-lock original upload requires a FOURTH exact approval and never inherits three-flag approval",()=>{
+    expect(prepaidSourceOutsideSessionLockApprovedV39({
+      V39_CALLBACK_ONLY_RUNTIME:"1",
+      V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED:"1",
+      V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED:"1"
+    } as NodeJS.ProcessEnv)).toBe(false);
+    expect(prepaidSourceOutsideSessionLockApprovedV39({
+      V39_CALLBACK_ONLY_RUNTIME:"1",
+      V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED:"1",
+      V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED:"1",
+      V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED:"1"
+    } as NodeJS.ProcessEnv)).toBe(true);
+  });
+  it("P06 outside-lock admission rejects the wrong owned subscription before PENDING/upload and preserves request+failure accounting",async()=>{
+    const names=[
+      "V39_CALLBACK_ONLY_RUNTIME",
+      "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
+      "V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",
+      "V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED"
+    ] as const;
+    const saved=names.map(name=>process.env[name]);
+    for(const name of names)process.env[name]="1";
+    try{
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,
+        body:sample({
+          id:"p06-outside-lock-wrong-subscription",
+          subscription:{id:"synthetic-wrong-subscription"}
+        })
+      })).rejects.toThrow("PREPAID_PROBE_PROVIDER_SUBSCRIPTION_MISMATCH");
+      expect(state.events).toEqual([]);
+      expect(state.blobs.size).toBe(0);
+      expect(await count()).toEqual({logged:0,unlogged:0});
+      expect(await session()).toEqual({
+        requests:1,successes:0,failures:1
+      });
+      expect((await state.pool!.query(
+        "SELECT count(*)::int AS n FROM "+
+        "clean.phase2g_prepaid_source_intent_v39"
+      )).rows[0].n).toBe(0);
+    }finally{
+      names.forEach((name,i)=>{
+        if(saved[i]===undefined)delete process.env[name];
+        else process.env[name]=saved[i];
+      });
+    }
+  });
+  it("P06 first callback with no bound subscription safely falls back to legacy locked V0064 upload before binding owner",async()=>{
+    const names=[
+      "V39_CALLBACK_ONLY_RUNTIME",
+      "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
+      "V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",
+      "V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED"
+    ] as const;
+    const saved=names.map(name=>process.env[name]);
+    for(const name of names)process.env[name]="1";
+    await state.pool!.query(
+      "UPDATE clean.prepaid_probe_session_runtime SET "+
+      "provider_subscription_id=NULL,state='armed' WHERE session_id=$1",
+      [SESSION]
+    );
+    state.uploadDelayMs=350;
+    let checker:PoolClient|null=null;
+    try{
+      const first=persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,
+        body:sample({id:"p06-outside-lock-first-owner-binding"})
+      });
+      const deadline=Date.now()+2000;
+      while(!state.events.includes("UPLOAD")&&Date.now()<deadline)
+        await new Promise(r=>setTimeout(r,4));
+      expect(state.events).toContain("UPLOAD");
+      checker=await state.pool!.connect();
+      await checker.query("BEGIN");
+      await expect(checker.query(
+        "SELECT session_id FROM clean.prepaid_probe_session_runtime "+
+        "WHERE session_id=$1 FOR UPDATE NOWAIT",[SESSION]
+      )).rejects.toMatchObject({code:"55P03"});
+      await checker.query("ROLLBACK");
+      checker.release();checker=null;
+      const done=await first;
+      expect(done.duplicate).toBe(false);
+      const owner=await state.pool!.query(
+        "SELECT provider_subscription_id,state FROM "+
+        "clean.prepaid_probe_session_runtime WHERE session_id=$1",[SESSION]
+      );
+      expect(owner.rows[0]).toEqual({
+        provider_subscription_id:SUB,state:"active"
+      });
+      expect(await session()).toEqual({
+        requests:1,successes:1,failures:0
+      });
+    }finally{
+      if(checker){
+        await checker.query("ROLLBACK").catch(()=>undefined);
+        checker.release();
+      }
+      state.uploadDelayMs=0;
+      names.forEach((name,i)=>{
+        if(saved[i]===undefined)delete process.env[name];
+        else process.env[name]=saved[i];
+      });
+    }
+  },15000);
+  it("P06 REAL receiver admits distinct originals briefly, uploads concurrently OUTSIDE session lock, then serializes science COMMIT",async()=>{
+    const names=[
+      "V39_CALLBACK_ONLY_RUNTIME",
+      "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
+      "V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",
+      "V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED"
+    ] as const;
+    const saved=names.map(name=>process.env[name]);
+    for(const name of names)process.env[name]="1";
+    const n=18;
+    state.uploadDelayMs=300;
+    const started=performance.now();
+    try{
+      const results=await Promise.all(Array.from({length:n},(_,i)=>
+        persistPrepaidProbeWebhookV39({
+          sessionId:SESSION,
+          body:sample({
+            id:`p06-outside-lock-distinct-${i}`,
+            deliveryAttempt:{
+              seqNo:i,costCredits:0,
+              timestampUtc:"2026-10-12T03:05:00Z"
+            }
+          }),
+          receivedAtUtc:new Date(1_791_774_300_000+i)
+        })));
+      const elapsed=performance.now()-started;
+      expect(results).toHaveLength(n);
+      expect(results.every(x=>x.duplicate===false)).toBe(true);
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(n);
+      expect(state.blobs.size).toBe(n);
+      expect(await count()).toEqual({logged:n,unlogged:n});
+      expect(await session()).toEqual({
+        requests:n,successes:n,failures:0
+      });
+      const intents=await state.pool!.query(
+        "SELECT state,count(*)::int AS n FROM "+
+        "clean.phase2g_prepaid_source_intent_v39 GROUP BY state"
+      );
+      expect(intents.rows).toEqual([{state:"VERIFIED",n}]);
+      // The old lock-across-upload path needs at least n*300ms merely for
+      // sequential upload delay. This generous bound proves I/O overlapped;
+      // it is NOT a published Replit/provider 10-second SLO measurement.
+      expect(elapsed).toBeLessThan(3000);
+    }finally{
+      state.uploadDelayMs=0;
+      names.forEach((name,i)=>{
+        if(saved[i]===undefined)delete process.env[name];
+        else process.env[name]=saved[i];
+      });
+    }
+  },15000);
+  it("P06 concurrent retry of one fresh PENDING intent never double-uploads or falsely ACKs before the first original exists",async()=>{
+    const names=[
+      "V39_CALLBACK_ONLY_RUNTIME",
+      "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
+      "V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",
+      "V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED"
+    ] as const;
+    const saved=names.map(name=>process.env[name]);
+    for(const name of names)process.env[name]="1";
+    state.uploadDelayMs=450;
+    const body=sample({id:"p06-outside-lock-same-delivery-race"});
+    try{
+      const settled=await Promise.allSettled([
+        persistPrepaidProbeWebhookV39({sessionId:SESSION,body}),
+        persistPrepaidProbeWebhookV39({sessionId:SESSION,body})
+      ]);
+      expect(settled.filter(x=>x.status==="fulfilled")).toHaveLength(1);
+      expect(settled.filter(x=>x.status==="rejected")).toHaveLength(1);
+      const rejected=settled.find(x=>x.status==="rejected") as
+        PromiseRejectedResult;
+      expect(String(rejected.reason)).toContain(
+        "P06_PREPAID_SOURCE_PENDING_ORIGINAL_NOT_READABLE_NO_ACK"
+      );
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+      expect(state.blobs.size).toBe(1);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(await session()).toEqual({
+        requests:2,successes:1,failures:1
+      });
+      expect((await state.pool!.query(
+        "SELECT state FROM clean.phase2g_prepaid_source_intent_v39"
+      )).rows).toEqual([{state:"VERIFIED"}]);
+    }finally{
+      state.uploadDelayMs=0;
+      names.forEach((name,i)=>{
+        if(saved[i]===undefined)delete process.env[name];
+        else process.env[name]=saved[i];
+      });
+    }
+  },15000);
   it("P06 REAL receiver LOST upload response AFTER bytes stored: LOGGED PENDING persists; retry verifies same object, first UTC, no double upload",async()=>{
     const saved=[
       process.env.V39_CALLBACK_ONLY_RUNTIME,
