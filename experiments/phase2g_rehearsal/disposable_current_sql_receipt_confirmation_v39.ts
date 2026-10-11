@@ -85,13 +85,29 @@ export async function confirmCurrentDisposableV39ScienceReceipt(input:{
   if(!decoded||typeof decoded!=="object"||Array.isArray(decoded))
     throw Error("P12_SQL_CONFIRM_SOURCE_TOP_LEVEL_OBJECT_REQUIRED");
   const body=decoded as Record<string,any>;
-  const deliveryId=body.id;
-  if(typeof deliveryId!=="string"||deliveryId.length===0||
-     deliveryId.length>160||
+  const notice=body.id??body.notification?.id;
+  if(typeof notice!=="string"||notice.length===0||
+     notice.length>160||
      body.subscription?.id!==input.expectedSubscriptionId||
      !Array.isArray(body.flights)||
      body.flights.length>5000)
     throw Error("P12_SQL_CONFIRM_SOURCE_IDENTITY_INVALID");
+  // Derive the ACTUAL V3.9 logical delivery ID, not the provider's raw
+  // notification ID. V3.9 hashes {session,canonical body SHA, provider
+  // notification ID, attempt sequence, attempt UTC} into ppd_<SHA256>.
+  const attempt=body.deliveryAttempt??body.delivery?.attempt??null;
+  const rawSeq=attempt?.seqNo;
+  const asSeq=rawSeq===undefined||rawSeq===null||rawSeq===""?
+    null:Number(rawSeq);
+  const seq=asSeq!==null&&Number.isInteger(asSeq)&&asSeq>=0?asSeq:null;
+  const attemptDate=attempt?.timestampUtc?new Date(String(attempt.timestampUtc)):null;
+  const atUtc=attemptDate&&Number.isFinite(attemptDate.getTime())?
+    attemptDate.toISOString():null;
+  const bodySha256=hash(canonical(body));
+  const deliveryId="ppd_"+hash(canonical({
+    sessionId:input.expectedSessionId,bodySha256,
+    notificationId:notice,attemptSeqNo:seq,attemptUtc:atUtc
+  }));
   const response=(valid:boolean,reason:string):P12CurrentSqlConfirmationV39=>({
     v:1,currentlyPersisted:valid,sessionId:x.proof.sessionId,
     receiptId:x.proof.receiptId,
