@@ -27,6 +27,10 @@ describe("P19 YSSY Oct12 UTC read-only operator preparation receipt",()=>{
     expect(x.database_mutations).toBe(0);
     expect(x.alert_credits_spent).toBe(0);
     expect(x.paid_launch_authorized).toBe(false);
+    expect(x.release_candidate_paid_supervisor_policy).toBe("six-plus-six");
+    expect(x.release_candidate_6plus6_max_cumulative_outage_ms).toBe(180000);
+    expect(x.published_paid_supervisor_policy).toBe("UNVERIFIED");
+    expect(x.independent_sender_attempt_evidence_verified).toBe(false);
     expect(x.effective_paid_6plus6_verified).toBe(false);
     expect(x.go_no_go).toBe("HOLD_UNTIL_FRESH_AUTH_AND_LIVE_ADMISSION_EVIDENCE");
   });
