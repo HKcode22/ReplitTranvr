@@ -83,6 +83,9 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
     expect(src).toContain("outage_episodes_observed:watchdogState.outageEpisodeCount");
     expect(src).toContain("closed_outage_envelope_ms:watchdogState.closedOutageEnvelopeMs");
     expect(src).toContain("callback_watchdog_source_proof_implemented: false");
+    expect(src).toContain("scientific_promotion_from_supervisor_alone_authorized:");
+    expect(src).toContain("childPassed && !watchdogState.recoveredHealthAwaitingScienceAudit");
+    expect(src).toContain("scientific_review_required_after_health_recovery:");
     expect(src).toContain("evidence:undefined");
   });
   it("REAL paid supervisor defaults to effective 6+6 and forbids fallback to legacy three",()=>{
