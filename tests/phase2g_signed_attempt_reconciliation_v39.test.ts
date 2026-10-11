@@ -176,6 +176,98 @@ describe("P13/P14 independently signed SYNTHETIC provider-attempt accounting",()
     ]));
     expect(r.attemptEvidenceConsistent).toBe(false);
   },30000);
+  it("P14 one signed 260 / stored 259 loss at receiver edge versus SQL are distinct—not inferred identical",async()=>{
+    const notAtEdge=await fixture(260);
+    notAtEdge.receipts.pop();
+    notAtEdge.internal.pop();
+    const upstreamGap=await run(notAtEdge);
+    expect(upstreamGap).toMatchObject({
+      attemptedCredits:260,edgeCredits:259,
+      internallyCommittedCredits:259,
+      senderAttemptCount:260,verifiedEdgeAttemptCount:259,
+      internalAttemptCount:259,
+      senderAttemptsNotVerifiedAtEdge:1,
+      senderCreditsNotVerifiedAtEdge:1,
+      senderMatchedEdgeAttemptsMissingInternal:0,
+      senderMatchedEdgeCreditsMissingInternal:0,
+      internalAttemptsWithoutMatchingSenderAndEdge:0,
+      attemptEvidenceConsistent:false
+    });
+    expect(upstreamGap.errors).toContain("BILLED_SENDER_ATTEMPT_MISSING_AT_EDGE");
+    const atEdgeNotSql=await fixture(260);
+    atEdgeNotSql.internal.pop();
+    const dbGap=await run(atEdgeNotSql);
+    expect(dbGap).toMatchObject({
+      attemptedCredits:260,edgeCredits:260,internallyCommittedCredits:259,
+      senderAttemptsNotVerifiedAtEdge:0,
+      senderCreditsNotVerifiedAtEdge:0,
+      senderMatchedEdgeAttemptsMissingInternal:1,
+      senderMatchedEdgeCreditsMissingInternal:1,
+      internalAttemptsWithoutMatchingSenderAndEdge:0,
+      attemptEvidenceConsistent:false
+    });
+    expect(dbGap.errors).toContain("BILLED_SENDER_ATTEMPT_MISSING_INTERNAL");
+    expect(dbGap.errors).not.toContain("BILLED_SENDER_ATTEMPT_MISSING_AT_EDGE");
+    // This can diagnose two synthetic possibilities, not establish which
+    // caused the REAL historical 260/259 without authoritative provider logs.
+    expect(upstreamGap.scientificCompletionAuthorized).toBe(false);
+    expect(dbGap.scientificCompletionAuthorized).toBe(false);
+  },30000);
+  it("P14 credits lost with a five-flight notice are five ITEM credits, not one HTTP attempt",async()=>{
+    const v=await fixture(3);
+    const o=JSON.parse(v.receipts[1].rawBody);
+    o.flights=Array.from({length:5},(_,i)=>({
+      id:"synthetic-scientific-item-"+i,codeshareStatus:"IsOperator"
+    }));
+    o.deliveryAttempt.costCredits=5;
+    const receipt=await createSyntheticDualSourceMessageV2({
+      rawBytes:new TextEncoder().encode(JSON.stringify(o)),
+      sessionId:SESSION,expectedProviderSubscriptionId:SUB,
+      trustedReceivedAtUtc:at(1),privateEdgeSigningKey:EDGEKEY
+    });
+    v.receipts[1]=receipt;
+    const frozen=cloneFrame(v);
+    frozen.attempts[1]={...frozen.attempts[1],
+      syntheticCostCredits:5,wireSha256:receipt.receipt.wireSha256,
+      canonicalSha256:receipt.receipt.canonicalSha256};
+    v.sender=signSyntheticSenderFrameV39(frozen,SENDERKEY);
+    v.internal.splice(1,1);
+    const x=await run(v);
+    expect(x).toMatchObject({
+      attemptedCredits:7,edgeCredits:7,internallyCommittedCredits:2,
+      senderAttemptsNotVerifiedAtEdge:0,
+      senderMatchedEdgeAttemptsMissingInternal:1,
+      senderMatchedEdgeCreditsMissingInternal:5,
+      attemptEvidenceConsistent:false
+    });
+    expect(x.scientificCompletionAuthorized).toBe(false);
+  });
+  it("P14 unrelated signed edge source cannot inflate trustworthy sender-correlated eight-bin coverage",async()=>{
+    const v=await fixture(3);
+    const unrelated=JSON.parse(v.receipts[0].rawBody);
+    unrelated.id="synthetic-provider-completely-unrelated";
+    const receipt=await createSyntheticDualSourceMessageV2({
+      rawBytes:new TextEncoder().encode(JSON.stringify(unrelated)),
+      sessionId:SESSION,expectedProviderSubscriptionId:SUB,
+      trustedReceivedAtUtc:at(0),privateEdgeSigningKey:EDGEKEY
+    });
+    v.receipts.push(receipt);
+    const result=await run(v);
+    expect(result.sourceBuckets.reduce((a,b)=>a+b,0)).toBe(3);
+    expect(result.senderAttemptsNotVerifiedAtEdge).toBe(0);
+    expect(result.errors).toContain("EDGE_ATTEMPT_NOT_IN_INDEPENDENT_SENDER");
+    expect(result.attemptEvidenceConsistent).toBe(false);
+  });
+  it("P14 refuses arithmetic credit sum overflow rather than emit rounded inaccurate scientific evidence",async()=>{
+    const v=await fixture(3);
+    const sender=cloneFrame(v);
+    sender.attempts[0].syntheticCostCredits=Number.MAX_SAFE_INTEGER;
+    sender.attempts[1].syntheticCostCredits=Number.MAX_SAFE_INTEGER;
+    v.sender=signSyntheticSenderFrameV39(sender,SENDERKEY);
+    await expect(run(v)).rejects.toThrow(
+      "SYNTHETIC_BILLED_CREDIT_TOTAL_UNSAFE_INTEGER"
+    );
+  });
   it("detects equal-total but wrong internal attempt keys",async()=>{
     const v=await fixture();
     v.internal[1]={...v.internal[1],attemptKey:"c".repeat(64)};
