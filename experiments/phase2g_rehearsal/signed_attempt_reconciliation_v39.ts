@@ -56,6 +56,13 @@ export type SyntheticAttemptReconciliationV39={
   senderAttemptCount:number;
   verifiedEdgeAttemptCount:number;
   internalAttemptCount:number;
+  /** Bounded synthetic discrepancies are diagnostic, NOT provider proof. */
+  senderAttemptsNotVerifiedAtEdge:number;
+  senderCreditsNotVerifiedAtEdge:number;
+  senderMatchedEdgeAttemptsMissingInternal:number;
+  senderMatchedEdgeCreditsMissingInternal:number;
+  internalAttemptsWithoutMatchingSenderAndEdge:number;
+  internalCreditsWithoutMatchingSenderAndEdge:number;
   sourceBuckets:number[];
   attemptEvidenceConsistent:boolean;
   errors:string[];
@@ -171,8 +178,11 @@ export async function reconcileSyntheticSignedAttemptsV39(input:{
   const expected=new Map(f.attempts.map(a=>[a.attemptKey,a]));
   const edges=new Map<string,DualSourceMessageV2>();
   const bins=new Array<number>(8).fill(0);
-  let edgeCredits=0,internalCredits=0;
+  // Avoid JS number summation corruption when combining many individually
+  // safe-int per-notification flight-item credits. Never round evidence.
+  let edgeCreditsExact=0n,internalCreditsExact=0n;
   const from=Date.parse(f.windowStartUtc),end=Date.parse(f.windowEndUtc);
+  const matchedSenderEdgeKeys=new Set<string>();
   for(const e of input.signedEdgeReceipts){
     try{
       await verifySyntheticDualSourceMessageV2({
@@ -191,21 +201,28 @@ export async function reconcileSyntheticSignedAttemptsV39(input:{
       continue;
     }
     edges.set(r.attemptKey,e);
+    edgeCreditsExact+=BigInt(r.syntheticCostCredits);
     const sender=expected.get(r.attemptKey);
     if(!sender){add("EDGE_ATTEMPT_NOT_IN_INDEPENDENT_SENDER");continue;}
-    if(sender.notificationId!==r.notificationId||
-       sender.attemptSeqNo!==r.attemptSeqNo||
-       sender.providerAttemptUtc!==r.providerAttemptUtc||
-       sender.providerGeneratedUtc!==r.providerGeneratedUtc||
-       sender.wireSha256!==r.wireSha256||
-       sender.canonicalSha256!==r.canonicalSha256||
-       sender.syntheticCostCredits!==r.syntheticCostCredits)
+    const identityMatches=
+      sender.notificationId===r.notificationId&&
+      sender.attemptSeqNo===r.attemptSeqNo&&
+      sender.providerAttemptUtc===r.providerAttemptUtc&&
+      sender.providerGeneratedUtc===r.providerGeneratedUtc&&
+      sender.wireSha256===r.wireSha256&&
+      sender.canonicalSha256===r.canonicalSha256&&
+      sender.syntheticCostCredits===r.syntheticCostCredits;
+    if(!identityMatches)
       add("SENDER_EDGE_ATTEMPT_IDENTITY_OR_HASH_MISMATCH");
     const recv=Date.parse(r.firstEdgeReceivedAtUtc);
-    if(!Number.isFinite(recv)||recv<from||recv>=end)
-      add("EDGE_SOURCE_OUTSIDE_FROZEN_WINDOW");
-    else bins[Math.floor((recv-from)/900000)]++;
-    edgeCredits+=r.syntheticCostCredits;
+    const inWindow=Number.isFinite(recv)&&recv>=from&&recv<end;
+    if(!inWindow)add("EDGE_SOURCE_OUTSIDE_FROZEN_WINDOW");
+    // Source buckets should never include an unrelated validly signed edge
+    // event or a conflicting sender attempt: no falsely inflated coverage.
+    if(identityMatches&&inWindow){
+      matchedSenderEdgeKeys.add(r.attemptKey);
+      bins[Math.floor((recv-from)/900000)]++;
+    }
   }
   for(const a of f.attempts){
     if(!edges.has(a.attemptKey))add("BILLED_SENDER_ATTEMPT_MISSING_AT_EDGE");
@@ -231,7 +248,7 @@ export async function reconcileSyntheticSignedAttemptsV39(input:{
       add("DUPLICATE_INTERNAL_PROVIDER_ATTEMPT");continue;
     }
     internal.set(row.attemptKey,row);
-    internalCredits+=row.syntheticCostCredits;
+    internalCreditsExact+=BigInt(row.syntheticCostCredits);
     const e=edges.get(row.attemptKey);
     if(!e){add("INTERNAL_WITHOUT_AUTHENTICATED_EDGE");continue;}
     if(row.canonicalSha256!==e.receipt.canonicalSha256||
@@ -246,15 +263,56 @@ export async function reconcileSyntheticSignedAttemptsV39(input:{
     if(!internal.has(a.attemptKey))add("BILLED_SENDER_ATTEMPT_MISSING_INTERNAL");
   if(edges.size!==expected.size)add("SENDER_EDGE_CARDINALITY_MISMATCH");
   if(internal.size!==expected.size)add("SENDER_INTERNAL_CARDINALITY_MISMATCH");
-  const sentCredits=f.attempts.reduce((sum,a)=>sum+a.syntheticCostCredits,0);
+  const sentCreditsExact=f.attempts.reduce(
+    (sum,a)=>sum+BigInt(a.syntheticCostCredits),0n);
+  const exactCeiling=BigInt(Number.MAX_SAFE_INTEGER);
+  if([sentCreditsExact,edgeCreditsExact,internalCreditsExact]
+      .some(n=>n>exactCeiling))
+    throw Error("SYNTHETIC_BILLED_CREDIT_TOTAL_UNSAFE_INTEGER");
+  const sentCredits=Number(sentCreditsExact);
+  const edgeCredits=Number(edgeCreditsExact);
+  const internalCredits=Number(internalCreditsExact);
   if(sentCredits!==edgeCredits||sentCredits!==internalCredits)
     add("SYNTHETIC_BILLED_CREDIT_GAP");
+
+  // This breakdown is keyed to the independently synthetic signed sender
+  // attempt ledger; it does not prove the actual provider sent these events.
+  // Counts describe *corroboration*, not physically missing flights.
+  let senderAttemptsNotVerifiedAtEdge=0;
+  let senderCreditsNotVerifiedAtEdge=0n;
+  let senderMatchedEdgeAttemptsMissingInternal=0;
+  let senderMatchedEdgeCreditsMissingInternal=0n;
+  for(const attempt of f.attempts){
+    if(!matchedSenderEdgeKeys.has(attempt.attemptKey)){
+      senderAttemptsNotVerifiedAtEdge++;
+      senderCreditsNotVerifiedAtEdge+=BigInt(attempt.syntheticCostCredits);
+    }else if(!internal.has(attempt.attemptKey)){
+      senderMatchedEdgeAttemptsMissingInternal++;
+      senderMatchedEdgeCreditsMissingInternal+=BigInt(attempt.syntheticCostCredits);
+    }
+  }
+  let internalAttemptsWithoutMatchingSenderAndEdge=0;
+  let internalCreditsWithoutMatchingSenderAndEdge=0n;
+  for(const [attemptKey,delivery] of internal){
+    if(!matchedSenderEdgeKeys.has(attemptKey)){
+      internalAttemptsWithoutMatchingSenderAndEdge++;
+      internalCreditsWithoutMatchingSenderAndEdge+=BigInt(delivery.syntheticCostCredits);
+    }
+  }
   return {
     attemptedCredits:sentCredits,edgeCredits,
     internallyCommittedCredits:internalCredits,
     senderAttemptCount:f.attempts.length,
     verifiedEdgeAttemptCount:edges.size,
     internalAttemptCount:internal.size,
+    senderAttemptsNotVerifiedAtEdge,
+    senderCreditsNotVerifiedAtEdge:Number(senderCreditsNotVerifiedAtEdge),
+    senderMatchedEdgeAttemptsMissingInternal,
+    senderMatchedEdgeCreditsMissingInternal:
+      Number(senderMatchedEdgeCreditsMissingInternal),
+    internalAttemptsWithoutMatchingSenderAndEdge,
+    internalCreditsWithoutMatchingSenderAndEdge:
+      Number(internalCreditsWithoutMatchingSenderAndEdge),
     sourceBuckets:bins,
     attemptEvidenceConsistent:errs.size===0,
     errors:[...errs].sort(),
