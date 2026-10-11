@@ -1,3 +1,4 @@
+import {readBoundedSourceWireV39,SourceWireBodyErrorV39} from "./bounded_wire_body";
 import { assertNoDuplicateJsonObjectKeysV2 } from "../phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
 import {signEdgeProvenanceV1} from "./provenance";
 
@@ -75,8 +76,15 @@ export async function queueOnlyIngest(r:Request,e:QueueOnlyEnv):Promise<Response
   if(!isSession(sessionId)||!isAttempt(providerAttemptId))return response(400,"INVALID_SYNTHETIC_ID");
   if((r.headers.get("content-type")??"").split(";")[0].trim().toLowerCase()!=="application/json")
     return response(415,"JSON_REQUIRED");
-  const rawBytes=new Uint8Array(await r.arrayBuffer());
-  if(!rawBytes.length||rawBytes.length>127000)return response(413,"QUEUE_SIZE_LIMIT");
+  let rawBytes:Uint8Array;
+  try{
+    rawBytes=await readBoundedSourceWireV39(r,127000);
+  }catch(error){
+    if(error instanceof SourceWireBodyErrorV39)
+      return response(error.reason==="SOURCE_WIRE_TOO_LARGE"?413:400,error.reason);
+    throw error;
+  }
+  if(!rawBytes.length)return response(413,"QUEUE_SIZE_LIMIT");
   let rawBody:string;
   try{
     rawBody=new TextDecoder("utf-8",{fatal:true}).decode(rawBytes);
