@@ -31,3 +31,16 @@ For the **final hosted wall-clock rehearsal** (only after source gates, cost app
 The latest 348+43 GitHub tests already cover a broad set of cases, but they remain test-only and do not prove a hosted 120-minute trial. **No paid Stage-1 YSSY attempt is authorized by this added module.** For any real hosted 120-minute rehearsal or Cloudflare Free service activation, independently verify a $0 added-cost hosting configuration and obtain user approval before provisioning.
 
 Related: [20 closure gates and R0–R11 fault matrix](2026-10-10_YSSY_REMAINING_GATES_AND_120MIN_ZERO_CREDIT_REHEARSAL.md), [signed sender attempt reconciliation](../../../../experiments/phase2g_rehearsal/signed_attempt_reconciliation_v39.ts), [actual-route sender ACK divergence report](2026-10-10_ACTUAL_PREPAID_ROUTE_AND_WIRE_BYTES_SCIENCE_GAP.md).
+
+## Signed independent pre-run sender schedule
+
+The initial variable-rate manifest still **claimed** a preplanned sequence while accepting the plan from the same post-run report as its resulting receipts. An adversarial report could rewrite its alleged expected attempt list to match missing notifications, producing a misleading consistency pass.
+
+**New test-only hardening:** `experiments/phase2g_rehearsal/independent_variable_sender_freeze_v39.ts` and `tests/phase2g_independent_variable_sender_freeze_v39.test.ts`. Before any simulated 120-minute start, an isolated synthetic provider-emulator signs its immutable expected IDs, UTC send times, original source wire SHA-256 digests and permitted synthetic cost per SEND using **Ed25519**. The verifier requires:
+
+- An **independently pinned signer public-key SPKI SHA-256 fingerprint**, independent frozen owner/run SHA-256 and **independently pinned sender-plan SHA-256**. No self-supplied, unpinned public key is accepted as authority.
+- Exact strict schema, strict UTC, identity, hash, nonduplicate sender IDs, monotonic scheduled send times, 120-minute window, and `frozenAtUtc` **strictly before** window start.
+- Exact attempt-by-attempt equality between the independently signed pre-run plan and later observed emulator outcomes. An altered expected notification, reordered sender, changed planned time, revised original wire hash, or changed cost cannot be made to pass merely by updating the post-run report.
+- **POST-run response status and latency remain separately observed:** a valid pre-run signature cannot hide a timeout, missing source receipt, changed source time, incomplete internal delivery or corrupted evidence. The existing variable-rate validator rejects such discrepancies.
+
+This is a signed **synthetic fixture** only. It does not establish independently authenticated AeroDataBox-origin SENDs, real 120-minute host elapsed time, actual App Storage receipts, a valid V3.9 physical-flight sample, free-tier hosted durability, or authorization to launch paid Stage-1. Actual hosted rehearsal would require the independent signing key and plan digest stored outside the process under test and frozen before start, with signed real sender observations afterward.
