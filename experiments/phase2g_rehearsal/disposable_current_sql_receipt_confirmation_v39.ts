@@ -54,6 +54,9 @@ export async function confirmCurrentDisposableV39ScienceReceipt(input:{
   client:Pick<PoolClient,"query">;
   edge:P12CurrentEdgeEvidenceV39;
   originalWire:Uint8Array;
+  // Injected isolated fixture reader, not an approved production App Storage
+  // integration. A LOGGED blob_ref row alone is not durable object custody.
+  readStoredCanonicalSource:(objectName:string)=>Promise<Uint8Array|null>;
   signingKey:string;
   expectedSessionId:string;
   expectedSubscriptionId:string;
@@ -147,16 +150,28 @@ export async function confirmCurrentDisposableV39ScienceReceipt(input:{
       return response(false,"CURRENT_FLIGHT_ITEM_SOURCE_SHA_OR_UTC_CHANGED");
   }
   const source=await input.client.query(
-    "SELECT content_sha256,content_bytes "+
+    "SELECT content_sha256,content_bytes,object_name,"+
+    "retention_hours,expires_at_utc "+
     "FROM clean.provider_content_blob_ref "+
     "WHERE source_kind='webhook' AND source_record_id=$1",
     ["prepaid:"+input.expectedSessionId+":"+deliveryId]
   );
+  const expectedCanonical=new TextEncoder().encode(canonical(body));
   if(source.rowCount!==1||
-     source.rows[0].content_sha256!==hash(canonical(body))||
-     Number(source.rows[0].content_bytes)!==new TextEncoder().encode(
-       canonical(body)).byteLength)
-    return response(false,"CURRENT_UNIQUE_LOGGED_BLOB_REF_NOT_MATCHED");
+     source.rows[0].content_sha256!==hash(expectedCanonical)||
+     Number(source.rows[0].content_bytes)!==expectedCanonical.byteLength||
+     Number(source.rows[0].retention_hours)<168||
+     !Number.isFinite(new Date(source.rows[0].expires_at_utc).getTime())||
+     new Date(source.rows[0].expires_at_utc).getTime()<=Date.now())
+    return response(false,"CURRENT_UNIQUE_LOGGED_BLOB_REF_OR_RETENTION_NOT_MATCHED");
+  let current:Uint8Array|null;
+  try{
+    current=await input.readStoredCanonicalSource(
+      String(source.rows[0].object_name))
+  }catch{return response(false,"CURRENT_CANONICAL_SOURCE_OBJECT_UNREADABLE")}
+  if(!current||current.byteLength!==expectedCanonical.byteLength||
+     hash(current)!==hash(expectedCanonical))
+    return response(false,"CURRENT_CANONICAL_SOURCE_OBJECT_MISSING_OR_CHANGED");
   return response(true,"CURRENT_SOURCE_DELIVERY_ITEMS_AND_UTC_VERIFIED");
 }
 export type P12CurrentEdgeEvidenceV39=Readonly<{
