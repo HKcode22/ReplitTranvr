@@ -40,6 +40,7 @@ jobs:
           npx vitest run \
             tests/phase2g_actual_stage1_watchdog_six_plus_six_v39.test.ts \
             tests/phase2g_paid_owner_termination_bound_v39.test.ts \
+            tests/phase2g_cleanup_concurrency_reproduction_v39.test.ts \
             tests/phase2g_stage1_subscription_exact_owner_v39.test.ts \
             tests/phase2g_yssy_20261012_zero_credit_prep_v39.test.ts \
             tests/phase2g_p2g24_callback_receiver_health_v39.test.ts \
