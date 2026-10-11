@@ -4,6 +4,17 @@
 
 **Source at handoff:** release-candidate PR #29 based on main; `main` and the published Replit image are NOT this same release SHA. The independent [GitHub P18 GET check](https://github.com/HKcode22/ReplitTranvr/actions/runs/38178515634) returned HTTP 200 after 300ms on a warmed path and claimed older published SHA `5de44ba66d59c26d9e5ef3b339b7f729ca2f3653`. A GET does not establish a signed POST ACK/source custody or cold-start sender access.
 
+## P25 fast incident #30 read-only audit (new; zero provider, zero database mutations)
+
+From a Replit workspace whose source includes PR #29, this source-controlled diagnostic replaces the longer manual incident SQL. It performs only parameterized PostgreSQL SELECT in a READ ONLY transaction with ROLLBACK, does not fetch blobs, and **does not close the incident or authorize a paid run**:
+
+```bash
+cd ~/workspace
+node --import tsx scripts/v39_phase2g_p25_incident30_readonly_audit_v39.ts
+```
+
+The output shows whether historical probe 18, incident 30, exact original runtime session, cleanup journal and 30 retained-reference metadata remain consistent, and whether V0064 exists. An absent UNLOGGED session is **not** proof of purpose cleanup; the script never deletes or downloads an original object. If your workspace branch does not yet contain the new script, do **not** paste it as ad-hoc SQL or reset a dirty workspace; use the longer vetted read-only query below. This check is historical triage only; all current live gates remain independent.
+
 ## 1. Safe to paste in existing Replit Shell RIGHT NOW — read-only git and live published GET
 
 ```bash
