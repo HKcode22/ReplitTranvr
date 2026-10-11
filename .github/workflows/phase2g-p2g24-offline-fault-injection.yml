@@ -291,11 +291,11 @@ jobs:
           },null,2));
           if(process.env.GITHUB_STEP_SUMMARY){
             fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-              "### YSSY live release: HOLD — CI success is NOT paid GO\\n"+
-              "- Read-only published claimed HEAD: \`"+(actual||"unavailable")+"\`\\n"+
-              "- Reviewed branch HEAD: \`"+expected+"\`\\n"+
-              "- Deployment parity claim: **"+(ok?"claimed match, signed POST still unverified":"MISMATCH / INVALID")+"**\\n"+
-              "- Fresh retry approval, provider balance, signed test POST and paid AUTH: **NOT VERIFIED**\\n"
+              "### YSSY live release: HOLD — CI success is NOT paid GO\n"+
+              "- Read-only published claimed HEAD: \`"+(actual||"unavailable")+"\`\n"+
+              "- Reviewed branch HEAD: \`"+expected+"\`\n"+
+              "- Deployment parity claim: **"+(ok?"claimed match, signed POST still unverified":"MISMATCH / INVALID")+"**\n"+
+              "- Fresh retry approval, provider balance, signed test POST and paid AUTH: **NOT VERIFIED**\n"
             );
           }
           NODE
