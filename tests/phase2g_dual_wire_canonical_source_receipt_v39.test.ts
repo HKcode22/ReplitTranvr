@@ -47,6 +47,24 @@ describe("V3.9 F.8 synthetic source-wire and canonical-JSON dual-attestation (NO
     expect(JSON.parse(wire).id).toBe(m.receipt.notificationId);
   });
 
+  it("P14 retains ONE signed provider attempt containing FIVE physical flight items and FIVE billable credits",async()=>{
+    const body=JSON.parse(wire);
+    body.flights=Array.from({length:5},(_,i)=>({id:"synthetic-flight-"+i}));
+    body.deliveryAttempt.costCredits=5;
+    const m=await make(JSON.stringify(body));
+    expect(m.receipt.syntheticCostCredits).toBe(5);
+    expect(m.receipt.attemptSeqNo).toBe(0);
+    expect((await verify(m)).verified).toBe(true);
+    // A signed edge observation MUST NOT accept 1 credit for five
+    // original provider flight items merely because the webhook count is 1.
+    body.deliveryAttempt.costCredits=1;
+    await fails(make(JSON.stringify(body)),
+      "SOURCE_FLIGHT_ITEM_CREDIT_COUNT_MISMATCH");
+    body.deliveryAttempt.costCredits=6;
+    await fails(make(JSON.stringify(body)),
+      "SOURCE_FLIGHT_ITEM_CREDIT_COUNT_MISMATCH");
+  });
+
   it("equivalent JSON whitespace or key order yields same legacy canonical SHA but DIFFERENT original-wire SHA",async()=>{
     const pretty=await make();
     const minified=await make(JSON.stringify(JSON.parse(wire)));
