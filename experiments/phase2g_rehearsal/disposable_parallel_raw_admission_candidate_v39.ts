@@ -11,7 +11,7 @@
  * an independent audited cleanup/recovery protocol before any launch.
  */
 import {createHash,randomUUID} from "node:crypto";
-import {persistProviderBlobBeforeAckV39,providerBlobObjectNameV39,
+import {providerBlobObjectNameV39,
   type ProviderBlobStoreV39} from "../../server/lib/disruption/providerBlobStore_v39";
 import type {Pool} from "pg";
 
@@ -19,6 +19,23 @@ const sha256=(bytes:Uint8Array)=>createHash("sha256").update(bytes).digest("hex"
 const HASH=/^[a-f0-9]{64}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const sleep=(n:number)=>new Promise<void>(r=>setTimeout(r,n));
+/** Fixture-only PENDING source: NEVER delete uploaded original solely because
+ * download/readback failed. Bytes may exist and be SHA-recovered later.
+ * Not a paid ACK, independent provider receipt, or replay authorization.
+ */
+async function stageQuarantinedOriginalWithoutCleanupV39(input:{
+  store:ProviderBlobStoreV39;objectName:string;original:Uint8Array;
+}):Promise<void>{
+  await input.store.uploadBytes(input.objectName,input.original);
+  if(!await input.store.exists(input.objectName))
+    throw Error("P06_PENDING_ORIGINAL_VISIBILITY_UNPROVEN_NO_ACK");
+  const readback=await input.store.downloadBytes(input.objectName);
+  if(!(readback instanceof Uint8Array)||
+    readback.byteLength!==input.original.byteLength||
+    sha256(readback)!==sha256(input.original)||
+    !Buffer.from(readback).equals(Buffer.from(input.original)))
+    throw Error("P06_PENDING_ORIGINAL_READBACK_UNVERIFIED_NO_ACK");
+}
 export type SyntheticAdmissionResponseV39=Readonly<{
   outcome:"COMMITTED_SOURCE_RECEIPT"|"VERIFIED_DUPLICATE"|"PENDING_NOT_ACKNOWLEDGED";
   sourceBlobBytesVerified:boolean;
@@ -72,6 +89,8 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
   if(arg.mode!=="P2G_DISPOSABLE_ONLY"||
      process.env.P2G_DISPOSABLE_POSTGRES!=="YES"||
      process.env.V39_DATABASE_RUNTIME_URL||
+     process.env.DATABASE_URL||
+     process.env.V39_PROVIDER_BLOB_BUCKET_ID||
      process.env.AERODATABOX_API_KEY||
      !UUID.test(arg.sessionId)||
      !HASH.test(arg.syntheticAttemptHmac)||
@@ -99,16 +118,21 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
        owner_token,state,source_retention_until,created_utc)
     VALUES ($1,$2,$3,$4,$5,$6,'PENDING',NOW()+interval '168 hours',NOW())
     ON CONFLICT DO NOTHING
-    RETURNING owner_token
+    RETURNING owner_token,created_utc,source_retention_until
   `,[arg.sessionId,arg.syntheticAttemptHmac,contentHash,uuid,objectName,owner]);
 
   if(created.rowCount===1){
     // If upload fails/crashes, logged PENDING remains. Never send 2xx.
     // An orphan object may exist; no automatic deletion or fake replay.
-    await persistProviderBlobBeforeAckV39({
-      store:arg.store,bytes:arg.exactOriginalSyntheticBytes,
-      contentClass:"raw_provider_content",retentionHours:168,
-      now:new Date(),uuid
+    // Anchor object-retention evidence to exact SQL PENDING created time.
+    const createdMs=new Date(created.rows[0].created_utc).getTime();
+    const endMs=new Date(created.rows[0].source_retention_until).getTime();
+    if(!Number.isFinite(createdMs)||!Number.isFinite(endMs)||
+      endMs-createdMs!==168*3_600_000)
+      throw Error("P06_PENDING_ORIGINAL_RETENTION_CONTRACT_INVALID_NO_ACK");
+    // A readback timeout after upload MUST NOT delete recoverable bytes.
+    await stageQuarantinedOriginalWithoutCleanupV39({
+      store:arg.store,objectName,original:arg.exactOriginalSyntheticBytes
     });
     // Atomically publish a VERIFIED blob receipt with a short SQL UPDATE.
     // Unknown COMMIT outcome always fails closed and retains the blob;
@@ -118,8 +142,10 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
       SET state='COMMITTED',committed_utc=clock_timestamp()
       WHERE session_id=$1 AND synthetic_attempt_hmac=$2
         AND source_sha256=$3 AND owner_token=$4 AND state='PENDING'
+        AND original_opaque_blob_path=$5
+        AND source_retention_until>clock_timestamp()
       RETURNING source_sha256
-    `,[arg.sessionId,arg.syntheticAttemptHmac,contentHash,owner]);
+    `,[arg.sessionId,arg.syntheticAttemptHmac,contentHash,owner,objectName]);
     if(q.rowCount!==1)
       throw Error("P06_CANDIDATE_ORIGINAL_COMMIT_UNCERTAIN_NO_ACK");
     return reply("COMMITTED_SOURCE_RECEIPT");
@@ -128,7 +154,7 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
   const until=Date.now()+maxWait;
   while(true){
     const existing=await arg.pool.query(`
-      SELECT source_sha256,original_opaque_blob_path,state
+      SELECT source_sha256,original_opaque_blob_path,state,source_retention_until
       FROM clean.p2g_synthetic_raw_admission_intent
       WHERE session_id=$1 AND synthetic_attempt_hmac=$2
     `,[arg.sessionId,arg.syntheticAttemptHmac]);
@@ -137,6 +163,9 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
     const row=existing.rows[0];
     if(row.source_sha256!==contentHash)
       throw Error("P06_CANDIDATE_ATTEMPT_HASH_CONFLICT_NO_ACK");
+    if(!Number.isFinite(new Date(row.source_retention_until).getTime())||
+       new Date(row.source_retention_until).getTime()<=Date.now())
+      throw Error("P06_CANDIDATE_ORIGINAL_RETENTION_EXPIRED_NO_ACK");
     if(row.state==="COMMITTED"){
       const original=await arg.store.downloadBytes(row.original_opaque_blob_path);
       if(sha256(original)!==contentHash||
