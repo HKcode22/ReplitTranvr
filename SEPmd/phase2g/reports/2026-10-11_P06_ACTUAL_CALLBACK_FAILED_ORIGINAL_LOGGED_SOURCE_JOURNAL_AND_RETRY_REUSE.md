@@ -44,7 +44,9 @@ Added real PostgreSQL16 fixture tests (not SQL mocks) on the **actual V3.9 persi
 
 All real provider calls=0, original paid app change=0, new live migrations=0, deployment/main merge=0.
 
-**CI pending at creation**: [Actions #38125006523](https://github.com/HKcode22/ReplitTranvr/actions/runs/38125006523) at exact code source SHA `d4ce312b4e8b24e64c74490f3a61595f6491b1a9`. Do not call success until BOTH offline and ephemeral PostgreSQL16 finish; if either fails, fix and rerun.
+**VERIFIED [GitHub Actions #38125265987](https://github.com/HKcode22/ReplitTranvr/actions/runs/38125265987)** at exact tested code SHA `48e23e6672efdfe0af1563e707e46c5687abdf2a`: **BOTH JOBS SUCCESS — 659/659 offline tests across 63 suites, 114/114 actual disposable PostgreSQL16 integration tests**. A genuine unclean PostgreSQL SIGKILL again proved `AFTER_UNCLEAN_RESTART_LOGGED_AND_UNLOGGED=1|0` and `ACTUAL_UNLOGGED_CRASH_RESET=CONFIRMED`.
+
+**Important code regression caught and corrected**: intermediate run [#38125006523](https://github.com/HKcode22/ReplitTranvr/actions/runs/38125006523) passed 112/113 actual-PG tests but regressed the *original science COMMIT failed-before-execution* safety case: the subsequent *failure-accounting COMMIT* incorrectly reset the previous source uncertainty and enabled early deletion. The fix introduced **two separate uncertainty flags**: `sourceCommitOutcomeUnknown` for the original scientific COMMIT and `failureAccountingCommitOutcomeUnknown` for later accounting/journal COMMIT. The former is NEVER cleared by the latter. The final run revalidated both the original negative tests and an additional regression in which the initial science COMMIT fails before execution, the failure journal COMMIT succeeds, source bytes remain, and a later retry recovers without a duplicate blob. Real HTTP and SQL results were checked without any paid credentials.
 
 ## Remaining release gate
 
