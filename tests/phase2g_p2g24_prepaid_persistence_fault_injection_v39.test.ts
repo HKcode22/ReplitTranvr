@@ -14,6 +14,7 @@ const fake = vi.hoisted(() => ({
   injected: { deliveryInsertError: false, uploadError: false, corruptRead: false, sessionLost: false },
   session: { requests: 0, successes: 0, failures: 0 },
   deliveries: new Map<string, {blob:string,sha:string}>(),
+  loggedBlobRefs: new Map<string,Record<string,unknown>>(),
   savedMetadata: 0,
   deleteCalls: 0,
 }));
@@ -78,10 +79,23 @@ function setupDb() {
       if(q.includes("FROM clean.prepaid_probe_delivery_runtime")&&q.includes("delivery_id=$2")){
         fake.events.push("DUPLICATE_LOOKUP");
         const d=fake.deliveries.get(String(params[1]));
-        return d?{rowCount:1,rows:[{blob_ref_id:d.blob,raw_body_sha256:d.sha}]}:{rowCount:0,rows:[]};
+        if(!d)return {rowCount:0,rows:[]};
+        const prior=fake.loggedBlobRefs.get(d.blob)??{};
+        return {rowCount:1,rows:[{
+          blob_ref_id:d.blob,raw_body_sha256:d.sha,
+          ...prior
+        }]};
       }
       if(q.startsWith("INSERT INTO clean.provider_content_blob_ref")){
         fake.events.push("LOGGED_BLOB_METADATA_INSERT");
+        fake.loggedBlobRefs.set(String(params[0]),{
+          logged_blob_ref_id:String(params[0]),
+          storage_kind:params[1],contract_version:params[2],
+          object_name:params[3],content_class:params[4],
+          content_sha256:params[5],content_bytes:params[6],
+          source_kind:"webhook",source_record_id:params[7],
+          retention_hours:params[9],expires_at_utc:params[10]
+        });
         fake.savedMetadata++;return ok;
       }
       if(q.startsWith("INSERT INTO clean.prepaid_probe_delivery_runtime")){
@@ -114,6 +128,7 @@ beforeEach(()=>{
   fake.uploads.clear();
   fake.events.length=0;
   fake.deliveries.clear();
+  fake.loggedBlobRefs.clear();
   fake.savedMetadata=0;
   fake.deleteCalls=0;
   fake.injected={deliveryInsertError:false,uploadError:false,corruptRead:false,sessionLost:false};
