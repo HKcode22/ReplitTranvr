@@ -70,6 +70,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
 }));
 import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39,auditDisposableRawAdmissionIntentsV39,recordVerifiedDisposablePendingOriginalRecoveryV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
+import {previewDisposablePendingPhysicalV2ReplayV39} from "../experiments/phase2g_rehearsal/disposable_pending_physical_v2_replay_preview_v39";
 import {subscribePrepaidStageTimingV39,type PrepaidStageTimingV39} from "../server/lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {readReadOnlyPgSnapshotV39} from "../scripts/v39_phase2g_independent_pg_delivery_readonly_observer";
 import {registerV3Routes} from "../server/routes_v3";
@@ -600,6 +601,153 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
         .rejects.toThrow("P13_PENDING_RECOVERY_NON_DISPOSABLE_REFUSED");
     }finally{if(old===undefined)delete process.env.V39_DATABASE_RUNTIME_URL;
       else process.env.V39_DATABASE_RUNTIME_URL=old;}
+  });
+
+  const sourceToPending=(name:string,body:any,store:ReturnType<typeof fakeStore>["store"])=>
+    submit(name,store,{
+      query:(sql:string,params?:unknown[])=>{
+        if(sql.includes("UPDATE clean.p2g_synthetic_raw_admission_intent"))
+          return Promise.reject(Error("SYNTHETIC_RECOVERY_REPLAY_SQL_COMMIT_FAILED"));
+        return state.pool!.query(sql,params as any[]);
+      }
+    } as unknown as Pool,2000,new TextEncoder().encode(
+      typeof body==="string"?body:JSON.stringify(body)
+    ));
+  const preview=(name:string,store:ReturnType<typeof fakeStore>["store"])=>
+    previewDisposablePendingPhysicalV2ReplayV39({
+      mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store,
+      sessionId:SESSION,syntheticAttemptHmac:key(name)
+    });
+  it("P13 REAL PostgreSQL recovered original preview invokes ACTUAL prepaid physical-v2 source mapper, preserves source and never ACKs",async()=>{
+    const fake=fakeStore();
+    const operator={
+      id:"synthetic-QF-physical-001",number:"QF602",
+      codeshareStatus:"IsOperator",
+      airline:{iata:"QF",icao:"QFA"},
+      departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+        scheduledTime:{utc:"2026-10-12T03:40:00.000Z"}},
+      arrival:{airport:{icao:"YMML"},
+        scheduledTime:{utc:"2026-10-12T05:20:00.000Z"}},
+      aircraft:{reg:"VH-SYN"}
+    };
+    const marketing={...operator,id:"synthetic-marketing-001",
+      number:"AA999",codeshareStatus:"IsCodeshared"};
+    const unknown={...operator,id:"synthetic-unknown-001",
+      number:"QF998",codeshareStatus:"Unknown"};
+    const body=sample({id:"synthetic-preview-original-1",
+      flights:[operator,marketing,unknown]});
+    await expect(sourceToPending("physical-preview",body,fake.store))
+      .rejects.toThrow("SYNTHETIC_RECOVERY_REPLAY_SQL_COMMIT_FAILED");
+    await expect(preview("physical-preview",fake.store))
+      .rejects.toThrow("P13_PHYSICAL_PREVIEW_SOURCE_NOT_RECOVERED_PENDING");
+    expect((await verifyPending("physical-preview",fake.store)).outcome)
+      .toBe("ORIGINAL_PRESENT_VERIFIED_STILL_PENDING");
+    const before=await state.pool!.query(
+      "SELECT state,recovery_original_verified_utc FROM clean.p2g_synthetic_raw_admission_intent");
+    const read=await preview("physical-preview",fake.store);
+    expect(read).toMatchObject({
+      schema:"v39.disposable-pending-physical-v2-preview.v1",
+      candidateStatus:"BYTE_VERIFIED_REPLAY_PREVIEW_ONLY",
+      metricContract:"v39-physical-flight-instance-v2",
+      parsedNotificationItems:3,operatorCandidates:1,
+      marketingCodesharesQuarantined:1,
+      ambiguousCodesharesQuarantined:1,
+      invalidOperatorIdentityPrerequisites:0,
+      senderClaimsCostCredits:1,
+      physicallyResolvedRows:0,persistedScientificRows:0,
+      independentlyVerifiedExternalItemCredits:false,
+      independentlyVerifiedProviderAttempts:false,
+      originalProviderWireOriginAuthenticated:false,
+      sourceRecoveryPreviouslyVerified:true,sourceVerifiedAtPreview:true,
+      canAutoReplay:false,canWriteNormalizedScience:false,
+      canAdvancePendingIntent:false,canAcknowledgeProvider:false,
+      paidLaunchAuthorized:false
+    });
+    expect(read.rawOriginalSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(read.itemHashListSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(read.canonicalReceivedSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect((await preview("physical-preview",fake.store))).toEqual(read);
+    const after=await state.pool!.query(
+      "SELECT state,recovery_original_verified_utc FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(after.rows).toEqual(before.rows);
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(state.blobs.size).toBe(1);
+    expect(JSON.stringify(read)).not.toContain("QF602");
+    expect(JSON.stringify(read)).not.toContain("synthetic-QF-physical");
+    expect(JSON.stringify(read)).not.toContain(SESSION);
+    expect(JSON.stringify(read)).not.toContain(SUB);
+  });
+  it("P13 physical-v2 original replay preview fails closed if verified object later disappears or changes",async()=>{
+    const fake=fakeStore();
+    await expect(sourceToPending("preview-now-unavailable",
+      sample({id:"preview-now-unavailable",flights:[]}),fake.store))
+      .rejects.toThrow("SYNTHETIC_RECOVERY_REPLAY_SQL_COMMIT_FAILED");
+    expect((await verifyPending("preview-now-unavailable",fake.store)).sourceRecoveryTimestampRecorded)
+      .toBe(true);
+    const [keyName]=state.blobs.keys();
+    const original=state.blobs.get(keyName)!;
+    state.blobs.set(keyName,new TextEncoder().encode("tampered after verified"));
+    await expect(preview("preview-now-unavailable",fake.store))
+      .rejects.toThrow("P13_PHYSICAL_PREVIEW_ORIGINAL_BYTE_SHA_INVALID");
+    state.blobs.delete(keyName);
+    await expect(preview("preview-now-unavailable",fake.store))
+      .rejects.toThrow("P13_PHYSICAL_PREVIEW_SOURCE_MISSING");
+    state.blobs.set(keyName,original);
+    const valid=await preview("preview-now-unavailable",fake.store);
+    expect(valid.parsedNotificationItems).toBe(0);
+    expect(valid.canAcknowledgeProvider).toBe(false);
+    expect(await count()).toEqual({logged:0,unlogged:0});
+  });
+  it("P13 physical-v2 original replay preview rejects preserved JSON with duplicate provider keys, even if SHA matches",async()=>{
+    const fake=fakeStore();
+    const wire='{"id":"fixture","deliveryAttempt":{"costCredits":1,"costCredits":2},"flights":[]}';
+    await expect(sourceToPending("original-dup-keys",wire,fake.store))
+      .rejects.toThrow("SYNTHETIC_RECOVERY_REPLAY_SQL_COMMIT_FAILED");
+    expect((await verifyPending("original-dup-keys",fake.store)).sourceRecoveryTimestampRecorded)
+      .toBe(true);
+    await expect(preview("original-dup-keys",fake.store))
+      .rejects.toThrow("PREPAID_ORIGINAL_DUPLICATE_JSON_KEY");
+    expect(await count()).toEqual({logged:0,unlogged:0});
+  });
+  it("P13 physical-v2 original replay preview refuses expired, committed, unverified and malformed original envelopes",async()=>{
+    const fake=fakeStore();
+    await submit("already-committed-preview",fake.store);
+    await expect(preview("already-committed-preview",fake.store))
+      .rejects.toThrow("P13_PHYSICAL_PREVIEW_SOURCE_NOT_RECOVERED_PENDING");
+    await expect(sourceToPending("unverified-preview",
+      sample({id:"unverified-preview",flights:[]}),fake.store))
+      .rejects.toThrow("SYNTHETIC_RECOVERY_REPLAY_SQL_COMMIT_FAILED");
+    await expect(preview("unverified-preview",fake.store))
+      .rejects.toThrow("P13_PHYSICAL_PREVIEW_SOURCE_NOT_RECOVERED_PENDING");
+    await expect(sourceToPending("malformed-envelope",{"id":"only-no-flights"},fake.store))
+      .rejects.toThrow("SYNTHETIC_RECOVERY_REPLAY_SQL_COMMIT_FAILED");
+    expect((await verifyPending("malformed-envelope",fake.store)).sourceRecoveryTimestampRecorded)
+      .toBe(true);
+    await expect(preview("malformed-envelope",fake.store))
+      .rejects.toThrow("P13_PHYSICAL_PREVIEW_FLIGHT_ENVELOPE_INVALID");
+    await state.pool!.query(
+      "UPDATE clean.p2g_synthetic_raw_admission_intent SET source_retention_until=clock_timestamp()-interval '1 minute' WHERE synthetic_attempt_hmac=$1",
+      [key("malformed-envelope")]);
+    await expect(preview("malformed-envelope",fake.store))
+      .rejects.toThrow("P13_PHYSICAL_PREVIEW_SOURCE_EXPIRED");
+  });
+  it("P13 physical-v2 preview cannot access real accounts or nonfixture mode",async()=>{
+    const fake=fakeStore();
+    await expect(previewDisposablePendingPhysicalV2ReplayV39({
+      mode:"PAID" as any,pool:state.pool!,store:fake.store,
+      sessionId:SESSION,syntheticAttemptHmac:key("negative")
+    })).rejects.toThrow("P13_PHYSICAL_PREVIEW_DISPOSABLE_ONLY");
+    const original=process.env.AERODATABOX_API_KEY;
+    process.env.AERODATABOX_API_KEY="SYNTHETIC_TEST_REJECTED";
+    try{
+      await expect(preview("nonexistent",fake.store))
+        .rejects.toThrow("P13_PHYSICAL_PREVIEW_DISPOSABLE_ONLY");
+    }finally{
+      if(original===undefined)delete process.env.AERODATABOX_API_KEY;
+      else process.env.AERODATABOX_API_KEY=original;
+    }
+    await expect(preview("nonexistent",fake.store))
+      .rejects.toThrow("P13_PHYSICAL_PREVIEW_SOURCE_INTENT_MISSING");
   });
   it("P06 fail-closed: production credentials or wrong mode never admit source",async()=>{
     const fake=fakeStore();
