@@ -7,6 +7,13 @@ const supervisor=readFileSync("scripts/v39_phase2g_stage1_logged_supervisor_v39.
 const verifier=readFileSync("scripts/v39_phase2g_verify_live_callback_v39.ts","utf8");
 
 describe("P25 production callback source-custody feature-gate binding, no provider",()=>{
+  it("operator read-only schema diagnostic fails closed when V0064 is missing",()=>{
+    const handoff=readFileSync("SEPmd/phase2g/reports/2026-10-11_P25_YSSY_LAST_MILE_READONLY_OPERATOR_HANDOFF.md","utf8");
+    expect(handoff).toContain("q.rows[0]?.has_v0064_source_intent===true");
+    expect(handoff).toContain("current_schema_gate_pass:schemaGatePass");
+    expect(handoff).toContain("if(!schemaGatePass)process.exitCode=2");
+    expect(handoff).not.toContain("!q.rows[0]?.has_logged_blobs||!q.rows[0]?.has_session_runtime||");
+  });
   it("advertises readiness ONLY when all four active receiver flags are set, no secret values",()=>{
     const from=runtime.indexOf("prepaid_source_custody_ready:");
     const to=runtime.indexOf("retention_hours: retentionHours",from);
