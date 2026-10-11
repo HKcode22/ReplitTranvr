@@ -266,6 +266,19 @@ export type DisposableIntentRecoveryAuditV39=Readonly<{
   committedOriginalMissingOrUnreadable:number;
   committedOriginalChanged:number;
   expiredMetadataCount:number;
+  /** PENDING readable originals at risk of retention expiry within 1h. */
+  pendingVerifiedOriginalNearExpiry:number;
+  pendingUnstampedOriginalNearExpiry:number;
+  /** Incomplete source+SQL custody requires a human before any deletion. */
+  pendingOriginalPresentAfterExpiry:number;
+  /** Hash-only PENDING source absent while retention window remains open. */
+  pendingOriginalMissingBeforeExpiry:number;
+  pendingRecoveryVerifiedThenMissingBeforeExpiry:number;
+  /** A COMMITTED receipt with live custody missing before nominal expiry. */
+  committedOriginalMissingBeforeExpiry:number;
+  /** Metadata expiry is NOT authorization to delete existing raw bytes. */
+  expiredObjectStillReadable:number;
+  orphanCleanupDisposition:"MANUAL_REVIEW_NO_AUTOMATIC_DELETION";
   canAutoAcknowledge:false;
   canAutoDelete:false;
   canAutoReplay:false;
@@ -279,7 +292,9 @@ export async function auditDisposableRawAdmissionIntentsV39(args:{
 }):Promise<DisposableIntentRecoveryAuditV39>{
   if(args.mode!=="P2G_DISPOSABLE_ONLY"||
      process.env.P2G_DISPOSABLE_POSTGRES!=="YES"||
-     process.env.V39_DATABASE_RUNTIME_URL||process.env.AERODATABOX_API_KEY||
+     process.env.V39_DATABASE_RUNTIME_URL||process.env.DATABASE_URL||
+     process.env.AERODATABOX_API_KEY||
+     process.env.V39_PROVIDER_BLOB_BUCKET_ID||
      !Number.isFinite(args.now?.getTime()))
     throw Error("P16_SYNTHETIC_RECOVERY_PRODUCTION_REFUSED");
   const c=await args.pool.connect();
@@ -310,15 +325,27 @@ export async function auditDisposableRawAdmissionIntentsV39(args:{
     pendingRecoveryThenMissingOrUnreadable:0,pendingRecoveryThenChanged:0,
     committedOriginalVerified:0,
     committedOriginalMissingOrUnreadable:0,committedOriginalChanged:0,
-    expiredMetadataCount:0
+    expiredMetadataCount:0,
+    pendingVerifiedOriginalNearExpiry:0,
+    pendingUnstampedOriginalNearExpiry:0,
+    pendingOriginalPresentAfterExpiry:0,
+    pendingOriginalMissingBeforeExpiry:0,
+    pendingRecoveryVerifiedThenMissingBeforeExpiry:0,
+    committedOriginalMissingBeforeExpiry:0,
+    expiredObjectStillReadable:0
   };
   for(const item of rows){
     if(!["PENDING","COMMITTED"].includes(item.state))
       throw Error("P16_SYNTHETIC_RECOVERY_STATE_INVALID");
     const pre=item.state==="PENDING"?"pending":"committed";
     counts[pre]++;
-    if(new Date(item.source_retention_until).getTime()<=args.now.getTime())
-      counts.expiredMetadataCount++;
+    const retentionEnd=new Date(item.source_retention_until).getTime();
+    if(!Number.isFinite(retentionEnd))
+      throw Error("P16_SYNTHETIC_RECOVERY_RETENTION_METADATA_INVALID");
+    const timeUntilExpiryMs=retentionEnd-args.now.getTime();
+    const expired=timeUntilExpiryMs<=0;
+    const nearExpiry=!expired&&timeUntilExpiryMs<=3_600_000;
+    if(expired)counts.expiredMetadataCount++;
     let downloaded:Uint8Array|null=null;
     try{downloaded=await args.store.downloadBytes(item.original_opaque_blob_path);}
     catch{/* original unavailable: must NOT claim source or delete */}
@@ -326,10 +353,26 @@ export async function auditDisposableRawAdmissionIntentsV39(args:{
       sha256(downloaded)===item.source_sha256?"Verified":"Changed";
     const field=(pre+"Original"+outcome) as keyof typeof counts;
     counts[field]++;
+    if(expired&&downloaded!==null)counts.expiredObjectStillReadable++;
+    if(item.state==="PENDING"){
+      if(expired&&downloaded!==null)
+        counts.pendingOriginalPresentAfterExpiry++;
+      if(!expired&&outcome==="MissingOrUnreadable")
+        counts.pendingOriginalMissingBeforeExpiry++;
+      if(nearExpiry&&outcome==="Verified"){
+        if(item.recovery_original_verified_utc!==null)
+          counts.pendingVerifiedOriginalNearExpiry++;
+        else counts.pendingUnstampedOriginalNearExpiry++;
+      }
+    }else if(!expired&&outcome==="MissingOrUnreadable"){
+      counts.committedOriginalMissingBeforeExpiry++;
+    }
     if(item.state==="PENDING"&&item.recovery_original_verified_utc!==null){
       counts.pendingRecoveryPreviouslyVerified++;
-      if(outcome==="MissingOrUnreadable")
+      if(outcome==="MissingOrUnreadable"){
         counts.pendingRecoveryThenMissingOrUnreadable++;
+        if(!expired)counts.pendingRecoveryVerifiedThenMissingBeforeExpiry++;
+      }
       if(outcome==="Changed")
         counts.pendingRecoveryThenChanged++;
     }
@@ -337,6 +380,7 @@ export async function auditDisposableRawAdmissionIntentsV39(args:{
   return {
     schema:"v39.synthetic-intent-recovery-audit.v1",
     scanned:rows.length,...counts,
+    orphanCleanupDisposition:"MANUAL_REVIEW_NO_AUTOMATIC_DELETION",
     canAutoAcknowledge:false,canAutoDelete:false,canAutoReplay:false,
     originalProviderSourceCompletenessVerified:false,paidLaunchAuthorized:false
   };
