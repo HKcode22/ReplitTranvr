@@ -255,6 +255,9 @@ export type DisposableIntentRecoveryAuditV39=Readonly<{
   pendingOriginalVerified:number;
   pendingOriginalMissingOrUnreadable:number;
   pendingOriginalChanged:number;
+  pendingRecoveryPreviouslyVerified:number;
+  pendingRecoveryThenMissingOrUnreadable:number;
+  pendingRecoveryThenChanged:number;
   committedOriginalVerified:number;
   committedOriginalMissingOrUnreadable:number;
   committedOriginalChanged:number;
@@ -283,7 +286,8 @@ export async function auditDisposableRawAdmissionIntentsV39(args:{
     if(db.rows[0]?.db!=="p2g_stage1_fixture")
       throw Error("P16_SYNTHETIC_RECOVERY_FIXTURE_DB_REQUIRED");
     const q=await c.query(`
-      SELECT state,source_sha256,original_opaque_blob_path,source_retention_until
+      SELECT state,source_sha256,original_opaque_blob_path,source_retention_until,
+             recovery_original_verified_utc
       FROM clean.p2g_synthetic_raw_admission_intent
       ORDER BY created_utc,original_opaque_blob_uuid
       LIMIT 101
@@ -298,7 +302,9 @@ export async function auditDisposableRawAdmissionIntentsV39(args:{
   const counts={
     pending:0,committed:0,
     pendingOriginalVerified:0,pendingOriginalMissingOrUnreadable:0,
-    pendingOriginalChanged:0,committedOriginalVerified:0,
+    pendingOriginalChanged:0,pendingRecoveryPreviouslyVerified:0,
+    pendingRecoveryThenMissingOrUnreadable:0,pendingRecoveryThenChanged:0,
+    committedOriginalVerified:0,
     committedOriginalMissingOrUnreadable:0,committedOriginalChanged:0,
     expiredMetadataCount:0
   };
@@ -316,6 +322,13 @@ export async function auditDisposableRawAdmissionIntentsV39(args:{
       sha256(downloaded)===item.source_sha256?"Verified":"Changed";
     const field=(pre+"Original"+outcome) as keyof typeof counts;
     counts[field]++;
+    if(item.state==="PENDING"&&item.recovery_original_verified_utc!==null){
+      counts.pendingRecoveryPreviouslyVerified++;
+      if(outcome==="MissingOrUnreadable")
+        counts.pendingRecoveryThenMissingOrUnreadable++;
+      if(outcome==="Changed")
+        counts.pendingRecoveryThenChanged++;
+    }
   }
   return {
     schema:"v39.synthetic-intent-recovery-audit.v1",
