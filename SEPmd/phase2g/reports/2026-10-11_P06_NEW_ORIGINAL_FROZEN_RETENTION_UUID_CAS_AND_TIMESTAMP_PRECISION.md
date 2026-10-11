@@ -28,7 +28,7 @@ Added three actual PostgreSQL16 source-race tests, with the full pre-existing 65
 
 Existing tests additionally cover upload-success response lost, post-upload download timeout, readback corruption, upload finishing after expiry, COMMITTED duplicate after expiry, recovery SHA and no delete. All tests use a disposable database `p2g_stage1_fixture` and mock original storage; true separate PostgreSQL SIGKILL LOGGED=1/UNLOGGED=0 is also part of suite.
 
-**Final CI pending** at preparation. Check GitHub Actions job with source SHA `040c4ff9b2165577b63f0ceb43c6a5757ec4aea4` and validate both exact outcomes before asserting green.
+**VERIFIED [GitHub Actions #38124265984](https://github.com/HKcode22/ReplitTranvr/actions/runs/38124265984)** at exact tested source SHA `040c4ff9b2165577b63f0ceb43c6a5757ec4aea4`: **BOTH JOBS SUCCESS: 659/659 offline tests (63 suites), 109/109 real disposable PostgreSQL16 integration tests**. The real PostgreSQL server SIGKILL again confirmed `AFTER_UNCLEAN_RESTART_LOGGED_AND_UNLOGGED=1|0`, `ACTUAL_UNLOGGED_CRASH_RESET=CONFIRMED`. Earlier interim runs #38124132542 and #38124160610 failed because JS Date truncated the PostgreSQL microseconds, which was fixed by exact SQL timestamp-text roundtrip. No production DB/blob/provider was exercised.
 
 ## Operational relevance
 
