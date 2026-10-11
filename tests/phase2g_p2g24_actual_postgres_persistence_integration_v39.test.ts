@@ -275,6 +275,27 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       expect(o.scientificCompletenessVerified).toBe(false);
     }finally{await db.query("ROLLBACK").catch(()=>undefined);db.release();}
   });
+  it("P06/P14 refuses fractional PostgreSQL delivery-credit claims instead of rounding them to a false billing match",async()=>{
+    await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,
+      body:sample({id:"p14-fractional-credit-regression"}),
+      receivedAtUtc:new Date("2026-10-12T03:01:30Z")
+    });
+    // A malformed database delivery-credit claim should be detected, NEVER
+    // silently rounded to a legitimate integer flight-item credit.
+    await state.pool!.query(
+      "UPDATE clean.prepaid_probe_delivery_runtime SET delivery_attempt_cost_credits=0.5 WHERE session_id=$1",
+      [SESSION]);
+    const db=await state.pool!.connect();
+    try{
+      await db.query("BEGIN TRANSACTION READ ONLY");
+      await expect(readReadOnlyPgSnapshotV39(db,{
+        sessionId:SESSION,startUtc:"2026-10-12T03:00:00Z",
+        endUtc:"2026-10-12T05:00:00Z"
+      })).rejects.toThrow("READONLY_OBSERVER_INVALID_DB_COUNTERS");
+    }finally{await db.query("ROLLBACK").catch(()=>undefined);db.release();}
+    expect((await count()).unlogged).toBe(1);
+  });
   it("P06/P15 UNLOGGED missing session distinguished from verified zero source sends",async()=>{
     await state.pool!.query("DELETE FROM clean.prepaid_probe_session_runtime WHERE session_id=$1",[SESSION]);
     const db=await state.pool!.connect();
