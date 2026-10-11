@@ -102,6 +102,64 @@ After the NEW machine-supported prospective amendment is approved and deployed a
 
 `scripts/v39_prepare_gate2_runtime_v39.ts` → `scripts/v39_prepare_phase2g_auth_v39.ts` (**draft only**) → human-reviewed SHA → `scripts/v39_approve_phase2g_auth_v39.ts` → GitHub Actions dedicated signed callback/source/cleanup and actual paid preflight → **only if** `PASS_READY_FOR_PAID_STAGE1`, use the existing `phase2g-paid-stage1.yml` exact AUTH-bound GitHub Actions workflow.
 
+**Prospective runtime + AUTH draft commands (NOT CURRENTLY EXECUTABLE):** these are provided to avoid recycling the October 8/P2G23 script. They intentionally demand a NEW **separately approved and machine-supported** prospective YSSY retry artifact. Today the artifact does **not** exist, so the first `test` fails instead of creating a misleading AUTH. `P2G25` is only a candidate identifier, not an authorized probe.
+
+```bash
+cd ~/workspace
+set -euo pipefail
+
+# Must be the reviewed release/main, already published as the same exact SHA.
+git fetch origin main
+test "$(git branch --show-current)" = "main"
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+test -z "$(git status --porcelain -- server scripts migrations tests .github/workflows)"
+
+# DO NOT point this at the consumed P2G22/P2G23 files or the DRAFT markdown.
+# This future JSON must have been scientifically approved, frozen, hash-bound,
+# and actually recognized by the current scope loader/Stage1 selector.
+NEW_AMENDMENT="artifacts/phase2g-yssy-p2g25-approved-technical-retry-freeze-20261011.json"
+test -f "$NEW_AMENDMENT" || {
+  echo "HOLD:NO_NEW_APPROVED_P2G25_RETRY_AMENDMENT"; exit 2;
+}
+sha256sum "$NEW_AMENDMENT"
+
+PREPROBE="artifacts/preprobe-reference-freeze-record.json"
+SMOKE="artifacts/v39-phase2-safety-smoke-AUTH-20260915-P2F095554-20260915T100325Z.json"
+SMOKE_RUNTIME="artifacts/phase2f-smoke-runtime-20260915T095554Z.json"
+SMOKE_RUNTIME_SHA="58dbadb53bedc27dbaa236d020e21e7059470dd5ba0d10594475c5af2429d232"
+RUNTIME="artifacts/phase2g-gate2-runtime-P2G-S1-20261012-25.json"
+AUTH="SEPmd/V3.9_PHASE2G_AUTH_20261012_P2G25.json"
+AUTH_ID="AUTH-20261012-P2G25"
+BUDGET="P2G-S1-20261012-25"
+
+# Create new runtime file only (NO provider mutation).
+test ! -e "$RUNTIME"
+npx tsx scripts/v39_prepare_gate2_runtime_v39.ts \
+  --preprobe "$PREPROBE" --smoke "$SMOKE" \
+  --smoke-runtime-file "$SMOKE_RUNTIME" --smoke-runtime-sha "$SMOKE_RUNTIME_SHA" \
+  --out "$RUNTIME" --probe-budget-day-id "$BUDGET" \
+  --min-stability-buckets 6 --stage1-reservation 450 --stage2-reservation 450 \
+  --stage1-amendment-file "$NEW_AMENDMENT"
+
+RUNTIME_SHA="$(sha256sum "$RUNTIME" | awk '{print $1}')"
+echo "DRAFT_RUNTIME_SHA=$RUNTIME_SHA"
+
+# Create unapproved hash-locked AUTH JSON draft; NEVER an approval.
+test ! -e "$AUTH"
+npx tsx scripts/v39_prepare_phase2g_auth_v39.ts \
+  --auth "$AUTH_ID" --alert-ceiling 500 \
+  --start "2026-10-12T03:00:00Z" \
+  --expires "2026-10-12T07:10:00Z" \
+  --cleanup-owner "scripts/v39_phase2g_github_actions_owner_v39.sh" \
+  --out "$AUTH" --runtime-file "$RUNTIME" --runtime-sha "$RUNTIME_SHA" \
+  --smoke "$SMOKE" --smoke-runtime-file "$SMOKE_RUNTIME" \
+  --smoke-runtime-sha "$SMOKE_RUNTIME_SHA" --preprobe "$PREPROBE"
+sha256sum "$AUTH"
+echo "DRAFT_ONLY_NO_STAGE1_PAID_AUTHORIZATION"
+```
+
+Only after the operator approves the **exact reviewed AUTH SHA**, and the release preflight independently passes, should the separate approval helper and **GitHub Actions** paid workflow be considered. Do not run `auth-approve` or any subscription-create command from a generic assistant-generated receipt.
+
 Do not start AeroDataBox through local Replit Shell/nohup: the GitHub owner/safety watchdog remains sole permitted billable subscription owner.
 
 **No step here issues paid authorization or spends Alert credits.**
