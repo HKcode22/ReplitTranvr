@@ -24,6 +24,15 @@ describe("P20 genuine monotonic-time LOCAL HTTP + raw fsync, not published two-h
       expect(r.syntheticSenderFailedOrLate).toBe(0);
       expect(r.receiverUniqueOriginals).toBe(8);
       expect(r.receiverRejectedDuringOutage).toBeGreaterThanOrEqual(2);
+      // TWO distinct fault episodes must actually reject a replay each.
+      expect(r.injectedReceiverOutageCount).toBe(2);
+      expect(r.injectedReceiverOutageSeconds).toHaveLength(2);
+      expect(r.injectedReceiverOutageSeconds.every(x=>x>0)).toBe(true);
+      expect(r.receiverRejectionsByOutage).toHaveLength(2);
+      expect(r.receiverRejectionsByOutage.every(x=>x>=1)).toBe(true);
+      expect(r.receiverRejectionsByOutage.reduce((a,b)=>a+b,0))
+        .toBe(r.receiverRejectedDuringOutage);
+      expect(r.injectedOutageContractVerified).toBe(true);
       expect(r.sourceReceiptsVerified).toBe(8);
       expect(r.eightElapsedWindowBins).toEqual([1,1,1,1,1,1,1,1]);
       expect(r.originalSpoolAuditPassed).toBe(true);
