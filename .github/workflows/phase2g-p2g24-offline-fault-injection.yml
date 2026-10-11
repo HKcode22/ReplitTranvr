@@ -263,11 +263,44 @@ jobs:
           echo "AUTH_CREATED=false"
           echo "PROVIDER_CALLS=0"
           echo "PAID_LAUNCH=NOT_AUTHORIZED"
-      - name: Preserve YSSY draft receipt as downloadable CI artifact
+      - name: Read published Replit runtime version (GET only; no secrets)
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime"
+          OUT="${RUNNER_TEMP}/yssy-published-runtime-readonly.json"
+          if curl -fsS --connect-timeout 5 --max-time 15 \
+            -H "accept: application/json" "${URL}" -o "${OUT}"; then
+            node --input-type=module - "${OUT}" "${GITHUB_SHA}" <<'NODE'
+          import fs from "node:fs";
+          const raw=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
+          const actual=String(raw?.git_head??"").toLowerCase();
+          const expected=String(process.argv[3]??"").toLowerCase();
+          const ok=raw?.schema==="v39.phase2f-workspace-runtime.v1"&&
+            raw?.status==="PASS"&&actual===expected&&
+            raw?.prepaid_route_registered===true&&
+            raw?.published_deployment===true;
+          console.log(JSON.stringify({
+            schema:"v39.yssy.p18.readonly-published-version.v1",
+            observed_at_utc:new Date().toISOString(),
+            status:ok?"CLAIMED_MATCH_NOT_POST_PROVEN":"PUBLISHED_VERSION_MISMATCH_OR_INVALID",
+            published_git_head:actual||null,
+            expected_branch_head:expected,
+            provider_calls:0,provider_mutations:0,alert_credits_spent:0,
+            published_signed_webhook_persistence_verified:false
+          },null,2));
+          NODE
+          else
+            printf '%s\n' '{"schema":"v39.yssy.p18.readonly-published-version.v1","status":"READONLY_PUBLIC_GET_UNREACHABLE","provider_calls":0,"alert_credits_spent":0,"published_signed_webhook_persistence_verified":false}' > "${OUT}"
+            echo "PUBLISHED_RUNTIME=UNREACHABLE_NO_READINESS_CLAIM"
+          fi
+      - name: Preserve YSSY draft receipt and optional published snapshot
         uses: actions/upload-artifact@v4
         with:
           name: yssy-oct12-zero-credit-prep
-          path: ${{ runner.temp }}/yssy-20261012-zero-credit-prep.json
+          path: |
+            ${{ runner.temp }}/yssy-20261012-zero-credit-prep.json
+            ${{ runner.temp }}/yssy-published-runtime-readonly.json
           if-no-files-found: error
           retention-days: 7
 
