@@ -86,6 +86,23 @@ describe("P20 frozen independent irregular 120min sender trace vs physical-v2 sc
     });
     expect(r.callbackArrivalCounts15m).not.toEqual(r.distinctFirstPhysicalFlightCounts15m);
   });
+  it("reversed Queue replay order cannot move an earlier physical flight into a later 15m bucket",()=>{
+    const a=baseline();
+    a.observedPhysicalItems.push({
+      attemptId:"synthetic-bursty-20",itemIndex:0,flightInstanceId:"F-0",
+      resolution:"resolved_operator",sourceItemSha256:sha("late-source-F0-retime")
+    });
+    // The later F-0 update is processed FIRST after an outage. The initial
+    // original UTC of F-0 belongs to bin0, NOT to bin7.
+    a.observedPhysicalItems.reverse();
+    a.observedAttempts.reverse();
+    const out=evaluateSyntheticIrregularTwoHourTraceV39(a);
+    expect(out.errors).toEqual([]);
+    expect(out.passOnlySyntheticEvidence).toBe(true);
+    expect(out.distinctFirstPhysicalFlightCounts15m)
+      .toEqual([2,0,1,0,0,1,1,0]);
+    expect(out.actualPaidScientificGoAuthorized).toBe(false);
+  });
   it("does not confuse a valid 15-minute quiet interval with missing minute-level owner heartbeat",()=>{
     const input=baseline();input.minuteHeartbeatIndices.splice(36,1);
     hasError(input,"P20_OWNER_HEARTBEAT_GAP");
