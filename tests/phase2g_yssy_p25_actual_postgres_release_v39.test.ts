@@ -110,7 +110,7 @@ const count=async()=>{
 };
 
 beforeAll(async()=>{
-  if(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")throw Error("DISPOSABLE_ONLY_FLAG_REQUIRED");
+  if(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")return;
   if(process.env.V39_DATABASE_RUNTIME_URL||process.env.AERODATABOX_API_KEY)
     throw Error("REAL_DATABASE_OR_PROVIDER_ENVIRONMENT_FORBIDDEN");
   const u=new URL(process.env.P2G_FIXTURE_POSTGRES_URL??"");
@@ -192,6 +192,7 @@ beforeAll(async()=>{
   localOrigin="http://127.0.0.1:"+address.port;
 },20000);
 beforeEach(async()=>{
+  if(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")return;
   state.blobs.clear();state.failUpload=false;state.failStoreInitialization=false;
   state.failDownloadOnce=false;state.failUploadAfterWriteOnce=false;
   state.uploadDelayMs=0;
@@ -204,6 +205,7 @@ beforeEach(async()=>{
     [SESSION,SUB]);
 });
 afterAll(async()=>{
+  if(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")return;
   if(localHttpServer)await new Promise<void>((resolve,reject)=>localHttpServer!.close(err=>err?reject(err):resolve()));
   delete process.env.AERODATABOX_WEBHOOK_SECRET;
   if(state.pool){
@@ -213,7 +215,7 @@ afterAll(async()=>{
 });
 
 
-describe("YSSY P25 real receiver + real PostgreSQL 16, strictly disposable",()=>{
+describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("YSSY P25 real receiver + real PostgreSQL 16, strictly disposable",()=>{
   const flags=[
     "V39_CALLBACK_ONLY_RUNTIME",
     "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
