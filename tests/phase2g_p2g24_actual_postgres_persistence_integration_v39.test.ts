@@ -874,6 +874,71 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
     expect(q.rows[0].state).toBe("PENDING");
     expect(fake.uploads()).toBe(1);
   });
+  it("P13 two simultaneous quarantined recoveries serialize source and produce one exact original, not two credits",async()=>{
+    const fake=fakeStore();
+    await createRecoveredQuarantineSource("race-recovery",
+      sample({id:"synthetic-race",flights:[operatorLeg()]}),fake.store);
+    const results=await Promise.all([
+      actualQuarantineReplay("race-recovery",fake.store),
+      actualQuarantineReplay("race-recovery",fake.store)
+    ]);
+    expect(results.map(x=>x.outcome).sort()).toEqual([
+      "SYNTHETIC_QUARANTINED_IDEMPOTENT",
+      "SYNTHETIC_QUARANTINED_INSERTED"
+    ]);
+    expect(results.every(x=>x.canAcknowledge===false&&
+      x.paidLaunchAuthorized===false)).toBe(true);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect((await state.pool!.query(
+      "SELECT COUNT(*)::int AS n FROM clean.prepaid_probe_item_runtime"
+    )).rows[0].n).toBe(1);
+    expect(fake.uploads()).toBe(1);
+  });
+  it("P13 simulated UNLOGGED reset refuses autonomous replay, then quarantined manual fixture rehydration preserves LOGGED original",async()=>{
+    const fake=fakeStore();
+    await createRecoveredQuarantineSource("reset-then-replay",
+      sample({id:"synthetic-crash-reset",flights:[operatorLeg()]}),fake.store);
+    const first=await actualQuarantineReplay("reset-then-replay",fake.store);
+    expect(first.outcome).toBe("SYNTHETIC_QUARANTINED_INSERTED");
+    const initial=(await state.pool!.query(
+      "SELECT flight_instance_id,raw_item_sha256,received_at_utc "+
+      "FROM clean.prepaid_probe_item_runtime")).rows[0];
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    await state.pool!.query(
+      "TRUNCATE clean.prepaid_probe_item_runtime,"+
+      "clean.prepaid_probe_delivery_runtime,"+
+      "clean.prepaid_probe_session_runtime");
+    expect(await count()).toEqual({logged:1,unlogged:0});
+    await expect(actualQuarantineReplay("reset-then-replay",fake.store))
+      .rejects.toThrow("P13_REHYDRATE_OWNER_NOT_QUARANTINED");
+    // Never auto-rearm a paid owner after the UNLOGGED reset.
+    // This is an explicit disposable synthetic quarantined restoration ONLY.
+    await state.pool!.query(
+      "INSERT INTO clean.prepaid_probe_session_runtime("+
+      "session_id,provider_subscription_id,state,expires_at_utc) "+
+      "VALUES($1,$2,'quarantined','2099-01-01T00:00:00Z')",
+      [SESSION,SUB]);
+    const after=await actualQuarantineReplay("reset-then-replay",fake.store);
+    expect(after).toMatchObject({
+      outcome:"SYNTHETIC_QUARANTINED_INSERTED",
+      loggedOriginalObjectReused:true,
+      originalEdgeUtcIndependentlyAttested:false,
+      canAcknowledge:false,canClaimCompleteF8:false,
+      paidLaunchAuthorized:false
+    });
+    const restored=(await state.pool!.query(
+      "SELECT flight_instance_id,raw_item_sha256,received_at_utc "+
+      "FROM clean.prepaid_probe_item_runtime")).rows[0];
+    expect(restored.flight_instance_id).toBe(initial.flight_instance_id);
+    expect(restored.raw_item_sha256).toBe(initial.raw_item_sha256);
+    expect(new Date(restored.received_at_utc).toISOString())
+      .toBe(new Date(initial.received_at_utc).toISOString());
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(fake.uploads()).toBe(1);
+    expect((await state.pool!.query(
+      "SELECT state FROM clean.p2g_synthetic_raw_admission_intent"
+    )).rows[0].state).toBe("PENDING");
+  });
   it("P13 quarantined replay rejects original JSON duplicate cost key, unknown subscription or production credentials",async()=>{
     const fake=fakeStore();
     const wire='{"id":"fake","subscription":{"id":"'+SUB+
