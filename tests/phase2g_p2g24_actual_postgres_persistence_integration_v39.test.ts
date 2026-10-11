@@ -204,14 +204,29 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(await count()).toEqual({logged:1,unlogged:1});
     expect(await session()).toEqual({requests:2,successes:2,failures:0});
   });
-  it("actual SQL constraint failure after blob upload rolls back metadata and does not ACK",async()=>{
-    await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body:sample({
-      deliveryAttempt:{seqNo:0,costCredits:2,timestampUtc:"2026-10-12T03:01:01Z"}
-    })})).rejects.toThrow();
-    expect(state.events).toEqual(expect.arrayContaining(["UPLOAD","READBACK","DELETE"]));
-    expect(state.blobs.size).toBe(0);
-    expect(await count()).toEqual({logged:0,unlogged:0});
-    expect(await session()).toEqual({requests:1,successes:0,failures:1});
+  it("actual deliberately injected SQL constraint failure after blob upload rolls back metadata and does not ACK",async()=>{
+    // Do NOT use a fictional <=1 credit cap: the actual baseline allows
+    // 5 credits for a 5-flight provider notification. Inject a unique
+    // disposable-only CHECK to preserve this unrelated atomic rollback test.
+    await state.pool!.query(
+      "ALTER TABLE clean.prepaid_probe_delivery_runtime "+
+      "ADD CONSTRAINT p14_disposable_injected_sql_failure "+
+      "CHECK (delivery_attempt_cost_credits IS NULL OR delivery_attempt_cost_credits <> 2)"
+    );
+    try{
+      await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body:sample({
+        deliveryAttempt:{seqNo:0,costCredits:2,timestampUtc:"2026-10-12T03:01:01Z"}
+      })})).rejects.toThrow();
+      expect(state.events).toEqual(expect.arrayContaining(["UPLOAD","READBACK","DELETE"]));
+      expect(state.blobs.size).toBe(0);
+      expect(await count()).toEqual({logged:0,unlogged:0});
+      expect(await session()).toEqual({requests:1,successes:0,failures:1});
+    }finally{
+      await state.pool!.query(
+        "ALTER TABLE clean.prepaid_probe_delivery_runtime "+
+        "DROP CONSTRAINT IF EXISTS p14_disposable_injected_sql_failure"
+      );
+    }
   });
   it("synthetic blob service failure leaves no successful scientific delivery",async()=>{
     state.failUpload=true;
