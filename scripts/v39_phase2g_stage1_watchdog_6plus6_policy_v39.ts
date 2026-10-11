@@ -68,13 +68,15 @@ export type Stage1WatchdogStateV39=Readonly<{
   frozenMaxOutageEpisodes:number|null;
   frozenMaxCumulativeOutageEnvelopeMs:number|null;
   recoveredHealthAwaitingScienceAudit:boolean;
+  /** First green during outage: wait for a second consecutive full check. */
+  recoveryHealthyChecks:0|1;
   terminated:boolean;
 }>;
 export type Stage1WatchdogDecisionV39=Readonly<{
   state:Stage1WatchdogStateV39;
   mode:Stage1CallbackWatchdogModeV39;
   action:"MONITOR"|"STOP_OWNER";
-  phase:"HEALTHY"|"LEGACY_PENDING"|"PRIMARY"|"CONTINGENT"|"TERMINATED";
+  phase:"HEALTHY"|"LEGACY_PENDING"|"PRIMARY"|"CONTINGENT"|"RECOVERING"|"TERMINATED";
   reason:string;
   independentSourceProvenForThisCheck:boolean;
   scientificPassAuthorized:false;
@@ -93,6 +95,7 @@ export const initialStage1WatchdogStateV39=():Stage1WatchdogStateV39=>({
   lastObservedMonotonicMs:null,maximumFailures:0,outageEpisodeCount:0,closedOutageEnvelopeMs:0,
   frozenMaxOutageEpisodes:null,frozenMaxCumulativeOutageEnvelopeMs:null,
   recoveredHealthAwaitingScienceAudit:false,
+  recoveryHealthyChecks:0,
   terminated:false
 });
 const isInteger=(v:unknown)=>typeof v==="number"&&Number.isSafeInteger(v)&&v>=0;
@@ -202,6 +205,8 @@ export function advanceStage1WatchdogV39(input:Readonly<{
         p.firstFailureMonotonicMs<=now))||
      !Number.isFinite(now)||now<0||
      typeof p.recoveredHealthAwaitingScienceAudit!=="boolean"||
+     (p.recoveryHealthyChecks!==0&&p.recoveryHealthyChecks!==1)||
+     (p.recoveryHealthyChecks===1&&p.consecutiveFailures===0)||
      typeof p.terminated!=="boolean")
     throw Error("P15_WATCHDOG_INVALID_OR_NONMONOTONIC_STATE");
   if(p.terminated)return {
@@ -221,6 +226,7 @@ export function advanceStage1WatchdogV39(input:Readonly<{
       frozenMaxOutageEpisodes:p.frozenMaxOutageEpisodes,
       frozenMaxCumulativeOutageEnvelopeMs:p.frozenMaxCumulativeOutageEnvelopeMs,
       recoveredHealthAwaitingScienceAudit:p.recoveredHealthAwaitingScienceAudit,
+      recoveryHealthyChecks:p.recoveryHealthyChecks,
       terminated:true
     },
     independentSourceProvenForThisCheck:false,
@@ -264,6 +270,20 @@ export function advanceStage1WatchdogV39(input:Readonly<{
          total>=allowedCumulative)
         return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",
           p.consecutiveFailures,p.firstFailureMonotonicMs);
+      if(p.recoveryHealthyChecks===0) {
+        // Do NOT close a 6+6 outage or re-arm primary on the first green.
+        // Keep the monotonic deadline armed while waiting for a second
+        // consecutive full-contract health observation at the next poll.
+        return {
+          mode,action:"MONITOR",phase:"RECOVERING",
+          reason:"FIRST_HEALTHY_POLL_CONFIRMATION_PENDING",
+          state:{...p,lastObservedMonotonicMs:now,
+            recoveryHealthyChecks:1,
+            recoveredHealthAwaitingScienceAudit:true},
+          independentSourceProvenForThisCheck:false,
+          scientificPassAuthorized:false,paidLaunchAuthorized:false
+        };
+      }
     }
     return {
       mode,action:"MONITOR",phase:"HEALTHY",
@@ -284,6 +304,7 @@ export function advanceStage1WatchdogV39(input:Readonly<{
           (extended?STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39:null),
         recoveredHealthAwaitingScienceAudit:
           p.recoveredHealthAwaitingScienceAudit||p.consecutiveFailures>0,
+        recoveryHealthyChecks:0,
         terminated:false
       },
       independentSourceProvenForThisCheck:false,
@@ -299,7 +320,8 @@ export function advanceStage1WatchdogV39(input:Readonly<{
       mode,action:"MONITOR",phase:"LEGACY_PENDING",reason:"LEGACY_MONITOR",
       state:{...p,consecutiveFailures:count,firstFailureMonotonicMs:first,
         lastObservedMonotonicMs:now,
-        maximumFailures:Math.max(p.maximumFailures,count)},
+        maximumFailures:Math.max(p.maximumFailures,count),
+        recoveryHealthyChecks:0},
       independentSourceProvenForThisCheck:false,
       scientificPassAuthorized:false,paidLaunchAuthorized:false
     };
@@ -347,6 +369,7 @@ export function advanceStage1WatchdogV39(input:Readonly<{
         (input.evidence?.frozenMaxCumulativeOutageEnvelopeMs??
          STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39),
       recoveredHealthAwaitingScienceAudit:true,
+      recoveryHealthyChecks:0,
       terminated:false
     },
     independentSourceProvenForThisCheck:!evidenceReason,
