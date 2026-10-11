@@ -229,6 +229,33 @@ describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("YSSY P25 real rece
       flags.forEach((k,i)=>prev[i]===undefined?delete process.env[k]:process.env[k]=prev[i]);
     }
   };
+  it("real V0064 trigger is enabled; an accidentally disabled immutability guard fails the catalog gate",async()=>{
+    const check=async()=>{
+      const q=await state.pool!.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_trigger tg
+          WHERE tg.tgrelid=to_regclass('clean.phase2g_prepaid_source_intent_v39')
+            AND tg.tgname='trg_p2g_prepaid_source_intent_v39'
+            AND tg.tgfoid=to_regprocedure('clean.guard_p2g_prepaid_source_intent_v39()')
+            AND tg.tgenabled='O'
+        ) AS source_intent_v0064_guard_trigger
+      `);
+      return q.rows[0]?.source_intent_v0064_guard_trigger;
+    };
+    expect(await check()).toBe(true);
+    // This database is an isolated throwaway PG16 fixture, not production.
+    await state.pool!.query(
+      "ALTER TABLE clean.phase2g_prepaid_source_intent_v39 DISABLE TRIGGER trg_p2g_prepaid_source_intent_v39"
+    );
+    try{
+      expect(await check()).toBe(false);
+    }finally{
+      await state.pool!.query(
+        "ALTER TABLE clean.phase2g_prepaid_source_intent_v39 ENABLE TRIGGER trg_p2g_prepaid_source_intent_v39"
+      );
+    }
+    expect(await check()).toBe(true);
+  });
   it("ACTUAL SQL baseline records one verified original and safely ACKs a same-content duplicate",async()=>{
     const body=sample({id:"p25-release-baseline"});
     const a=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
