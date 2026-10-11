@@ -1232,7 +1232,7 @@ export function assertExactPrepaidCreditTotalV39(raw:unknown):number{
   if(typeof raw!=="string"&&typeof raw!=="number")
     throw Error("PREPAID_CREDIT_TOTAL_NOT_NUMERIC");
   const text=String(raw).trim();
-  if(!/^(?:0|[1-9][0-9]*)(?:\\.0+)?$/.test(text))
+  if(!/^(?:0|[1-9][0-9]*)(?:\.0+)?$/.test(text))
     throw Error("PREPAID_CREDIT_TOTAL_NOT_EXACT_NONNEGATIVE_INTEGER");
   const value=Number(text);
   if(!Number.isSafeInteger(value)||value<0)
