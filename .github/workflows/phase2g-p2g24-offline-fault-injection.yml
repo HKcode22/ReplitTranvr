@@ -289,10 +289,20 @@ jobs:
             provider_calls:0,provider_mutations:0,alert_credits_spent:0,
             published_signed_webhook_persistence_verified:false
           },null,2));
+          if(process.env.GITHUB_STEP_SUMMARY){
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              "### YSSY live release: HOLD — CI success is NOT paid GO\\n"+
+              "- Read-only published claimed HEAD: \`"+(actual||"unavailable")+"\`\\n"+
+              "- Reviewed branch HEAD: \`"+expected+"\`\\n"+
+              "- Deployment parity claim: **"+(ok?"claimed match, signed POST still unverified":"MISMATCH / INVALID")+"**\\n"+
+              "- Fresh retry approval, provider balance, signed test POST and paid AUTH: **NOT VERIFIED**\\n"
+            );
+          }
           NODE
           else
             printf '%s\n' '{"schema":"v39.yssy.p18.readonly-published-version.v1","status":"READONLY_PUBLIC_GET_UNREACHABLE","provider_calls":0,"alert_credits_spent":0,"published_signed_webhook_persistence_verified":false}' > "${OUT}"
             echo "PUBLISHED_RUNTIME=UNREACHABLE_NO_READINESS_CLAIM"
+            echo '### YSSY live release: HOLD — published GET unreachable; tests not paid GO' >> "${GITHUB_STEP_SUMMARY}"
           fi
       - name: Preserve YSSY draft receipt and optional published snapshot
         uses: actions/upload-artifact@v4
