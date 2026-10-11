@@ -443,6 +443,36 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
 });
 
 describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtures",()=>{
+  it("P18 actual V3.9 HTTP route DOES NOT archive literal original wire bytes: canonical JSON is semantically equal but byte-different",async()=>{
+    const value=sample({id:"actual-route-noncanonical-wire"});
+    // The sender deliberately sends a noncanonical formatting of the same
+    // JSON object. This is local disposable PG and mocked App Storage ONLY.
+    const literalWire=Buffer.from(JSON.stringify(value,null,2)+"\n","utf8");
+    const response=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:literalWire
+    });
+    expect(response.status).toBe(200);
+    const q=await state.pool!.query(
+      "SELECT content_sha256,content_bytes FROM clean.provider_content_blob_ref LIMIT 1"
+    );
+    expect(q.rows).toHaveLength(1);
+    const stored=[...state.blobs.values()];
+    expect(stored).toHaveLength(1);
+    const decoded=Buffer.from(stored[0]);
+    expect(JSON.parse(decoded.toString("utf8"))).toEqual(value);
+    expect(decoded.equals(literalWire)).toBe(false);
+    expect(decoded.byteLength).toBeLessThan(literalWire.byteLength);
+    expect(offlineShaHash("sha256").update(decoded).digest("hex"))
+      .toBe(q.rows[0].content_sha256);
+    expect(offlineShaHash("sha256").update(literalWire).digest("hex"))
+      .not.toBe(q.rows[0].content_sha256);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    // The exact original wire can only be proven by capturing it and
+    // writing it separately, which the current paid runtime does not do.
+    console.log("ACTUAL_V39_ORIGINAL_WIRE_BYTE_ARCHIVE=NOT_IMPLEMENTED");
+    console.log("ACTUAL_V39_CANONICAL_PARSED_JSON_BLOB=CONFIRMED");
+  });
   it("P06/P15 observer actual V3.9 session/delivery schema in READ ONLY transaction",async()=>{
     await persistPrepaidProbeWebhookV39({
       sessionId:SESSION,
