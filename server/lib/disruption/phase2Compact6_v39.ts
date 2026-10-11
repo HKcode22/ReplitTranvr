@@ -37,6 +37,10 @@ export const PHASE2G_P2G23_YSSY_FROZEN_PATH =
 
 export const PHASE2G_P2G23_YSSY_CANDIDATE_PATH =
   "artifacts/phase2g-early-pilot-yssy-p2g23-recovery-candidate-20261009.json";
+export const PHASE2G_P25_YSSY_FROZEN_PATH =
+  "artifacts/phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json";
+export const PHASE2G_P25_YSSY_DRAFT_PATH =
+  "artifacts/phase2g-early-pilot-yssy-p25-draft-20261011.json";
 
 export type Phase2gIdentityV2RecoveryIcaoV39 =
   | "WSSS"
@@ -453,10 +457,11 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   const sourcePreprobe = assertSha256(input.sourcePreprobeFileSha256, "COMPACT6_PREPROBE");
   const candidatePaths = input.path
     ? [input.path]
-    : ["artifacts/phase2g-early-pilot-yssy-p25-draft-20261011.json",
+    : [PHASE2G_P25_YSSY_FROZEN_PATH,PHASE2G_P25_YSSY_DRAFT_PATH,
       PHASE2G_P2G23_YSSY_FROZEN_PATH, PHASE2G_P2G23_YSSY_CANDIDATE_PATH, PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH, PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH, PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH, PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH, PHASE2G_COMPACT6_ARTIFACT_PATH];
   let raw: string | null = null;
   let actual: string | null = null;
+  let selectedPath: string | null = null;
   for (const candidatePath of candidatePaths) {
     if (!existsSync(candidatePath)) continue;
     const candidateRaw = readFileSync(candidatePath, "utf8");
@@ -464,6 +469,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     if (candidateSha === expected) {
       raw = candidateRaw;
       actual = candidateSha;
+      selectedPath = candidatePath;
       break;
     }
   }
@@ -952,6 +958,11 @@ export function loadPhase2gCompact6AmendmentV39(input: {
   // insufficient. This check runs before the paid Stage1 owner can select.
   const p25=amendment.p2g25_yssy_published_infrastructure_recovery_rerun;
   if(p25!==undefined){
+    // Publishing an edited or renamed DRAFT is not an approved frozen
+    // prospective Stage1 protocol. The immutable artifact must be at its
+    // separately reviewed canonical frozen filename, not the draft.
+    if(selectedPath!==PHASE2G_P25_YSSY_FROZEN_PATH)
+      throw Error("REFUSED_P2G25_FINAL_FROZEN_ARTIFACT_PATH_REQUIRED");
     if(p23===undefined||p25.authorized!==true||
        p25.approval_status!=="PROJECT_LEAD_APPROVED_ONE_RECOVERY")
       throw Error("REFUSED_P2G25_NEW_PROSPECTIVE_RETRY_NOT_APPROVED");
