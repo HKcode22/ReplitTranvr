@@ -41,6 +41,7 @@ jobs:
             tests/phase2g_actual_stage1_watchdog_six_plus_six_v39.test.ts \
             tests/phase2g_paid_owner_termination_bound_v39.test.ts \
             tests/phase2g_p25_published_verify_source_before_mutation_v39.test.ts \
+            tests/phase2g_p25_published_custody_flag_gate_v39.test.ts \
             tests/phase2g_cleanup_concurrency_reproduction_v39.test.ts \
             tests/phase2g_stage1_subscription_exact_owner_v39.test.ts \
             tests/phase2g_yssy_20261012_zero_credit_prep_v39.test.ts \
