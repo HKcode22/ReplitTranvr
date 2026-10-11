@@ -12,6 +12,7 @@ import {
   prepaidProbeWebhookUrlV39,
 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authRecord_v39";
+import {isExactStage1ProviderSubscriptionOwnerV39} from "./v39_phase2g_subscription_exact_owner_match_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const LEDGER = path.join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
@@ -225,10 +226,9 @@ async function main(): Promise<void> {
     if (!ownedProviderSubscriptionId) {
       const expectedSubscriberId = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), sessionId);
       const exactUnboundMatches = activeBillableBefore.filter((subscription) =>
-        subscription.billingType === "CreditBased" &&
-        String(subscription.subject?.type ?? "") === "FlightByAirportIcao" &&
-        String(subscription.subject?.id ?? "").toUpperCase() === probeIcao &&
-        String(subscription.subscriber?.id ?? "") === expectedSubscriberId,
+        isExactStage1ProviderSubscriptionOwnerV39(subscription,{
+          icao:probeIcao,webhookSubscriberId:expectedSubscriberId
+        }),
       );
       if (exactUnboundMatches.length > 1) {
         await openRecoveryIncident({ probeId, budgetDayId, reason: "multiple_exact_unbound_subscription_matches" });
@@ -250,9 +250,18 @@ async function main(): Promise<void> {
     if (ownedProviderSubscriptionId) {
       const owned = before.find((subscription) => subscription.id === ownedProviderSubscriptionId);
       if (owned?.isActive) {
-        if (owned.billingType !== "CreditBased") {
-          await openRecoveryIncident({ probeId, budgetDayId, reason: "owned_subscription_billing_type_unexpected" });
-          throw new Error("RECOVERY_REFUSED:OWNED_ACTIVE_SUBSCRIPTION_NOT_CREDIT_BASED");
+        const expectedSubscriberId = prepaidProbeWebhookUrlV39(
+          defaultWebhookUrl(),sessionId);
+        if(!isExactStage1ProviderSubscriptionOwnerV39(owned,{
+          icao:probeIcao,webhookSubscriberId:expectedSubscriberId
+        })){
+          await openRecoveryIncident({
+            probeId,budgetDayId,
+            reason:"bound_provider_subscription_ownership_mismatch_no_delete"
+          });
+          throw new Error(
+            "RECOVERY_REFUSED:BOUND_SUBSCRIPTION_EXACT_OWNER_MISMATCH"
+          );
         }
         providerDeleteAttempted = true;
         providerDeleteVerified =
@@ -272,10 +281,20 @@ async function main(): Promise<void> {
           );
         }
       } else {
-        providerDeleteVerified = true;
+        // An unknown/stale exact ID cannot establish the absence of other
+        // billable subscriptions. This prevents a false clean recovery.
+        providerDeleteVerified = activeBillableBefore.length === 0;
       }
     } else {
       providerDeleteVerified = activeBillableBefore.length === 0;
+    }
+    if(!providerDeleteVerified){
+      await openRecoveryIncident({
+        probeId,budgetDayId,
+        reason:"provider_subscription_cleanup_not_proven",
+        activeBillableCountBefore:activeBillableBefore.length
+      });
+      throw new Error("RECOVERY_REFUSED:SUBSCRIPTION_CLEANUP_NOT_VERIFIED");
     }
 
     /*
@@ -334,11 +353,9 @@ async function main(): Promise<void> {
       sessionId = durableSessionId;
       const expectedSubscriberId = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), durableSessionId);
       const exactResetMatches = activeBillableBefore.filter((subscription) =>
-        subscription.billingType === "CreditBased" &&
-        String(subscription.subject?.type ?? "") === "FlightByAirportIcao" &&
-        String(subscription.subject?.id ?? "").toUpperCase() === probeIcao &&
-        String(subscription.subscriber?.type ?? "") === "WebHook" &&
-        String(subscription.subscriber?.id ?? "") === expectedSubscriberId,
+        isExactStage1ProviderSubscriptionOwnerV39(subscription,{
+          icao:probeIcao,webhookSubscriberId:expectedSubscriberId
+        }),
       );
       if (exactResetMatches.length > 1) {
         await openRecoveryIncident({
