@@ -658,7 +658,16 @@ export function chooseEarlyPilotScopeTargetV39(
          !exactP2g22YssyRecoveryFailureMatchesV39(yssyRecovery,prior.find(row=>row.probeId===16)!)||
          prior.find(row=>row.probeId===17)?.status!=="failed"||
          prior.find(row=>row.probeId===17)?.durationCensored!==true||
-         prior.find(row=>row.probeId===17)?.reconciliationStatus!=="UNRESOLVED")
+         prior.find(row=>row.probeId===17)?.reconciliationStatus!=="UNRESOLVED"||
+         prior.find(row=>row.probeId===17)?.probeBudgetDayId!==
+           p2g23Recovery.expected_probe_budget_day_id||
+         prior.find(row=>row.probeId===17)?.runtimeSessionId!==
+           p2g23Recovery.expected_runtime_session_id||
+         prior.find(row=>row.probeId===17)?.stopReason!==
+           p2g23Recovery.expected_anchor_stop_reason||
+         prior.find(row=>row.probeId===17)?.metricContractVersion!==
+           p2g23Recovery.expected_metric_contract_version||
+         prior.find(row=>row.probeId===17)?.durableReconciliation!==null)
         throw Error("REFUSED_P2G25_PRIOR_YSSY_HISTORICAL_EVIDENCE_MISMATCH");
       const a=p18[0];
       if(a.status!==p2g25Recovery.expected_anchor_status||
