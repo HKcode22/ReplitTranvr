@@ -194,6 +194,61 @@ describe("P09/P18 one fixed source-spooling front door (actual LOCAL HTTP + fsyn
     expect((await sender(edge.url,"oversized",Buffer.alloc(65537,1))).status).toBe(413);
     expect((await spool.readAll())).toHaveLength(0);
   });
+  it("P13/P16 read-only spool crash audit distinguishes valid complete source and orphan claim/raw/receipt",async()=>{
+    expect((await sender((await (async()=>{
+      const gate=await createSyntheticFixedFrontdoorHttpV39({spool,token});
+      opened.push(gate.server);return gate.url;
+    })()),"source-good")).status).toBe(202);
+    const a=sha("claim-without-any-source");
+    await writeFile(join(root,"claims",a+".lock"),"interrupted-before-blob");
+    const b=sha("orphan-raw-after-blob-before-receipt");
+    await writeFile(join(root,"raw",b+".bin"),Buffer.from("unacknowledged-original"));
+    await writeFile(join(root,"claims",b+".lock"),"interrupted-before-receipt");
+    const c=sha("orphan-receipt-without-raw");
+    await writeFile(join(root,"receipts",c+".json"),
+      JSON.stringify({schema:"v39.synthetic-fixed-frontdoor-receipt.v1",
+        attemptHash:c,rawSha256:sha("missing"),rawBytes:7}));
+    const before={
+      claims:(await readdir(join(root,"claims"))).length,
+      raw:(await readdir(join(root,"raw"))).length,
+      receipts:(await readdir(join(root,"receipts"))).length
+    };
+    const audit=await spool.auditCrashRecoveryReadOnly();
+    expect(audit).toMatchObject({
+      originalReceiptCount:2,verifiedOriginalReceiptCount:1,
+      corruptedOriginalReceiptCount:1,
+      claimedButNotReceiptedCount:2,rawWithoutReceiptCount:1,
+      receiptWithoutRawCount:1,
+      allOriginalReceiptsVerified:false,
+      automaticRecoveryAuthorized:false,sourceDeletionAuthorized:false,
+      providerOriginalSenderLedgerVerified:false,paidLaunchAuthorized:false
+    });
+    expect((await readdir(join(root,"claims"))).length).toBe(before.claims);
+    expect((await readdir(join(root,"raw"))).length).toBe(before.raw);
+    expect((await readdir(join(root,"receipts"))).length).toBe(before.receipts);
+    expect(JSON.stringify(audit)).not.toContain("source-good");
+    expect(JSON.stringify(audit)).not.toContain("unacknowledged-original");
+  });
+  it("P13/P16 recovered original spool may be internally consistent but not independent upstream source-complete",async()=>{
+    const gate=await createSyntheticFixedFrontdoorHttpV39({spool,token});
+    opened.push(gate.server);
+    expect((await sender(gate.url,"source-complete")).status).toBe(202);
+    const a=await spool.auditCrashRecoveryReadOnly();
+    expect(a).toMatchObject({
+      originalReceiptCount:1,verifiedOriginalReceiptCount:1,
+      corruptedOriginalReceiptCount:0,
+      allOriginalReceiptsVerified:true,
+      automaticRecoveryAuthorized:false,
+      providerOriginalSenderLedgerVerified:false,
+      paidLaunchAuthorized:false
+    });
+    // Source on a single ephemeral runner is still not redundant HTTPS ingress.
+    await writeFile(join(root,"raw",".writing-aborted-payload"),"partial-file");
+    const failed=await spool.auditCrashRecoveryReadOnly();
+    expect(failed.quarantinedPartialWriteCount).toBe(1);
+    expect(failed.allOriginalReceiptsVerified).toBe(false);
+    expect(failed.sourceDeletionAuthorized).toBe(false);
+  });
   it("FRONTDOOR itself unavailable => backups cannot receive an upstream POST; fixed URL remains a single ingress dependency",async()=>{
     const edge=await createSyntheticFixedFrontdoorHttpV39({spool,token});
     opened.push(edge.server);
