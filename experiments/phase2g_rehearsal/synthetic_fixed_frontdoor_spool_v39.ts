@@ -213,7 +213,8 @@ export async function createSyntheticFixedFrontdoorHttpV39(args:{
 }):Promise<{server:Server;url:string}>{
   guard();
   if(args.token.length<32)throw Error("SYNTHETIC_FRONTDOOR_TOKEN_TOO_SHORT");
-  const server=createServer(async(req,res)=>{
+  const server=createServer((req,res)=>{
+    void (async()=>{
     if(req.method!=="POST"||req.url!=="/__synthetic__/ingress"){
       res.writeHead(404);res.end();return;
     }
@@ -243,6 +244,13 @@ export async function createSyntheticFixedFrontdoorHttpV39(args:{
     }catch{
       res.writeHead(503);res.end(JSON.stringify({durable:false}));
     }
+    })().catch(()=>{
+      // A truncated/aborted request may throw from async iteration.
+      // Never crash the frontdoor and never ACK uncommitted partial bytes.
+      if(!res.headersSent&&!res.destroyed&&!res.writableEnded){
+        res.writeHead(503);res.end(JSON.stringify({durable:false}));
+      }
+    });
   });
   await new Promise<void>(ok=>server.listen(0,"127.0.0.1",ok));
   const address=server.address();
