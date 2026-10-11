@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "crypto";
 import { v39Pool as pool } from "./db_v39";
+import {timePrepaidStageV39} from "./phase2gPrepaidStageTelemetry_v39";
 import {
   deleteProviderBlobAtExpiryV39,
   persistProviderBlobBeforeAckV39,
@@ -881,7 +882,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
   // result is known, retain the original Replit blob: deleting it could
   // destroy source evidence of a transaction that actually committed.
   let sourceCommitOutcomeUnknown = false;
-  const client = await pool.connect();
+  const client = await timePrepaidStageV39("db_pool_acquire",()=>pool.connect());
   let store: ReturnType<typeof createRequiredProviderBlobStoreV39> | null = null;
   let blob: ProviderBlobRefV39 | null = null;
   try {
@@ -889,13 +890,13 @@ export async function persistPrepaidProbeWebhookV39(input: {
 
     // Serialize admission, duplicate detection, raw blob persistence,
     // and all runtime writes for this exact session.
-    const session = await client.query(
+    const session = await timePrepaidStageV39("db_session_lock",()=>client.query(
       `SELECT provider_subscription_id,state,expires_at_utc
          FROM clean.prepaid_probe_session_runtime
         WHERE session_id=$1
         FOR UPDATE`,
       [sessionId],
-    );
+    ));
   if (session.rowCount !== 1) throw new Error("PREPAID_PROBE_SESSION_NOT_FOUND_OR_CRASH_RESET");
   const state = String(session.rows[0].state ?? "");
   if (!["armed", "active", "settling"].includes(state)) throw new Error(`PREPAID_PROBE_SESSION_NOT_ACCEPTING:${state}`);
@@ -970,7 +971,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
     store = createRequiredProviderBlobStoreV39();
     let readBack:Uint8Array;
     try {
-      readBack = await store.downloadBytes(previous.object_name);
+      readBack = await timePrepaidStageV39("duplicate_original_blob_readback",()=>store!.downloadBytes(previous.object_name));
     } catch {
       throw new Error("PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_UNREADABLE");
     }
@@ -984,7 +985,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
         WHERE session_id=$1`,
       [sessionId],
     );
-    await client.query("COMMIT");
+    await timePrepaidStageV39("final_sql_commit",()=>client.query("COMMIT"));
     return {
       deliveryId,blobRefId:String(previous.blob_ref_id),
       itemCount:Array.isArray(input.body?.flights) ?
@@ -1000,13 +1001,13 @@ export async function persistPrepaidProbeWebhookV39(input: {
       ? input.body.flights
       : [];
   store = createRequiredProviderBlobStoreV39();
-  blob = await persistProviderBlobBeforeAckV39({
+  blob = await timePrepaidStageV39("original_blob_upload_readback",()=>persistProviderBlobBeforeAckV39({
     store,
     bytes: rawBytes,
     contentClass: "raw_provider_content",
     retentionHours: resolvePrepaidRawRetentionHoursV39(),
     now: receivedAt,
-  });
+  }));
 
     await client.query(
       `INSERT INTO clean.provider_content_blob_ref
@@ -1027,6 +1028,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
        evidence.notificationGeneratedUtc, evidence.attemptSeqNo, evidence.attemptUtc,
        evidence.costCredits, flights.length],
     );
+    await timePrepaidStageV39("physical_item_sql",async()=>{
     if (flights.length > 0) {
       /*
        * Resolve and persist sequentially inside this transaction.
@@ -1119,6 +1121,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
         );
       }
     }
+    });
     if (subId) {
       const bind = await client.query(
         `UPDATE clean.prepaid_probe_session_runtime
@@ -1146,7 +1149,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
       [sessionId],
     );
     sourceCommitOutcomeUnknown = true;
-    await client.query("COMMIT");
+    await timePrepaidStageV39("final_sql_commit",()=>client.query("COMMIT"));
     sourceCommitOutcomeUnknown = false;
     return { deliveryId, blobRefId: blob.blobRefId, itemCount: flights.length, duplicate: false };
   } catch (error) {
