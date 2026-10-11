@@ -139,11 +139,29 @@ async function main(): Promise<void> {
     [budgetDayId],
   );
   if ((probes.rowCount ?? probes.rows.length) === 0) {
+    // The logged probe row may already have been marked failed while the
+    // UNLOGGED session disappeared or a subscription remained billable.
+    // No qualifying probe row is NOT proof that the provider stopped.
+    // Inspect provider inventory read-only. Never delete an unowned ID.
+    const inventory=await listSubscriptionsStrictWithRetry();
+    const activeBillable=inventory.filter(subscription=>
+      subscription.isActive&&subscription.billingType!=="LifetimeBased");
+    if(activeBillable.length>0){
+      await openRecoveryIncident({
+        budgetDayId,
+        reason:"no_recoverable_probe_row_with_active_billable_subscription",
+        activeBillableCount:activeBillable.length
+      });
+      throw new Error(
+        "RECOVERY_REFUSED:NO_PROBE_ROW_BUT_ACTIVE_BILLABLE_SUBSCRIPTION"
+      );
+    }
     console.log(JSON.stringify({
       schema: "v39.phase2g-stage1-abnormal-exit-recovery.v1",
       status: "NO_RECOVERY_NEEDED",
       probe_budget_day_id: budgetDayId,
       active_probe_rows: 0,
+      active_billable_subscriptions_verified: 0,
       provider_mutation_performed: false,
     }, null, 2));
     return;
