@@ -246,6 +246,13 @@ async function main(): Promise<void> {
     }
   }
 
+  if (
+    compact6?.amendment.freeze_revision ===
+      "early-pilot-yssy-p2g23-technical-recovery-candidate-20261009"
+  ) {
+    blockers.push("p2g23_candidate_not_final_frozen");
+  }
+
   const migrationCheck = await pool.query(
     `SELECT
        to_regclass('clean.adb_probe_reconciliation_evidence') IS NOT NULL AS evidence_table,
