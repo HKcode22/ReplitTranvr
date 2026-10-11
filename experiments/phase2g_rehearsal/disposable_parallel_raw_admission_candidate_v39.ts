@@ -175,15 +175,14 @@ export async function runDisposableParallelRawAdmissionV39(arg:{
     const createdAt=new Date(row.created_utc).getTime();
     const retainedUntil=new Date(row.source_retention_until).getTime();
     const uuidRef=String(row.original_opaque_blob_uuid).toLowerCase();
+    if(!Number.isFinite(retainedUntil)||retainedUntil<=Date.now())
+      throw Error("P06_CANDIDATE_ORIGINAL_RETENTION_EXPIRED_NO_ACK");
     if(!UUID.test(uuidRef)||
        row.original_opaque_blob_path!==
          providerBlobObjectNameV39('raw_provider_content',uuidRef)||
        !Number.isFinite(createdAt)||!Number.isFinite(retainedUntil)||
        retainedUntil-createdAt!==168*3_600_000)
       throw Error('P06_CANDIDATE_FROZEN_ORIGINAL_REF_OR_RETENTION_INVALID_NO_ACK');
-    if(!Number.isFinite(new Date(row.source_retention_until).getTime())||
-       new Date(row.source_retention_until).getTime()<=Date.now())
-      throw Error("P06_CANDIDATE_ORIGINAL_RETENTION_EXPIRED_NO_ACK");
     if(row.state==="COMMITTED"){
       const original=await arg.store.downloadBytes(row.original_opaque_blob_path);
       if(sha256(original)!==contentHash||
