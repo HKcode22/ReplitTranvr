@@ -424,7 +424,7 @@
     "requires_exact_published_signed_callback_post": true,
     "requires_external_internal_credit_match": true,
     "prior_failure_cause_not_claimed_proven": true,
-    "parent_p2g23_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "parent_p2g23_sha256": "ae33f82748d0a49a842aab5a4d27ec17f997a8aa6acc8c419cfc9c8c039af0ad",
     "project_lead_decision_file": "artifacts/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json",
     "project_lead_decision_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "reason": "Prospective separate one-shot review after P2G24 published callback outage. Explicit approval and real published source parity are NOT present. Historical probes 16/17/18 remain failed, unscoreable and immutable; no metric-based retry selection or automatic rearm. The 500 Alert credit ceiling is NOT granted by this DRAFT."
