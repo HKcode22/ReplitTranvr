@@ -16,6 +16,10 @@ const CALLBACK_POLL_MS = 15_000;
 // A hung aggregate check must never suspend owner supervision indefinitely.
 const CALLBACK_HEALTH_CYCLE_HARD_DEADLINE_MS = 40_000;
 const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3;
+// Recovery invokes real exact-subscription provider cleanup. Bound the
+// synchronous child without assuming success when it times out: the
+// independent GitHub safety watchdog remains responsible for escalation.
+const STAGE1_RECOVERY_HARD_DEADLINE_MS = 5 * 60_000;
 
 function required(name: string): string {
   const i = process.argv.indexOf(name);
@@ -497,6 +501,8 @@ async function main(): Promise<void> {
 
   let recoveryAttempted = false;
   let recoveryExitCode: number | null = null;
+  let recoveryTimedOut = false;
+  let recoverySignal: NodeJS.Signals | null = null;
   if (!childPassed) {
     recoveryAttempted = true;
     fs.writeSync(logFd, `${JSON.stringify({
@@ -521,9 +527,26 @@ async function main(): Promise<void> {
         cwd: process.cwd(),
         env: { ...process.env },
         stdio: ["ignore", logFd, logFd],
+        timeout: STAGE1_RECOVERY_HARD_DEADLINE_MS,
+        killSignal: "SIGKILL",
       },
     );
     recoveryExitCode = recovery.status ?? 1;
+    recoverySignal = recovery.signal;
+    recoveryTimedOut = Boolean(
+      recovery.error &&
+      (recovery.error as NodeJS.ErrnoException).code === "ETIMEDOUT"
+    );
+    if (recoveryTimedOut) {
+      fs.writeSync(logFd, `${JSON.stringify({
+        schema:"v39.phase2g-stage1-supervisor-recovery-deadline.v1",
+        observed_at_utc:new Date().toISOString(),
+        reason:"exact_subscription_recovery_deadline_exceeded",
+        recovery_proven_complete:false,
+        independent_watchdog_escalation_required:true
+      })}\n`);
+      fs.fsyncSync(logFd);
+    }
   }
 
   const endedAtUtc = new Date().toISOString();
@@ -548,6 +571,10 @@ async function main(): Promise<void> {
     callback_consecutive_failures_at_exit: callbackFailureCount,
     recovery_attempted: recoveryAttempted,
     recovery_exit_code: recoveryExitCode,
+    recovery_timed_out: recoveryTimedOut,
+    recovery_signal: recoverySignal,
+    recovery_verified_completed: recoveryAttempted &&
+      recoveryExitCode===0 && !recoveryTimedOut && recoverySignal===null,
     git_head: head,
     authorization_id: authId,
     auth_sha256: expectedAuthSha,
