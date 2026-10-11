@@ -1087,6 +1087,9 @@ export async function persistPrepaidProbeWebhookV39(input: {
   // result is known, retain the original Replit blob: deleting it could
   // destroy source evidence of a transaction that actually committed.
   let sourceCommitOutcomeUnknown = false;
+  // Never clear ORIGINAL science-COMMIT uncertainty after a later
+  // failure-accounting COMMIT. Those are independent DB outcomes.
+  let failureAccountingCommitOutcomeUnknown = false;
   let sourceFailureJournaled = false;
   let reusedFailedOriginal = false;
   const client = await timePrepaidStageV39("db_pool_acquire",()=>pool.connect());
@@ -1447,9 +1450,9 @@ export async function persistPrepaidProbeWebhookV39(input: {
         }
         // A COMMIT reply could be lost even for failure accounting and this
         // source journal; never hard-delete a possibly committed object.
-        sourceCommitOutcomeUnknown=true;
+        failureAccountingCommitOutcomeUnknown=true;
         await client.query("COMMIT");
-        sourceCommitOutcomeUnknown=false;
+        failureAccountingCommitOutcomeUnknown=false;
         failureRecordedUnderLock = true;
         sourceFailureJournaled=journalReady;
       } catch {
@@ -1472,6 +1475,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
         .phase2gFailureRecorded = true;
     }
     if (store && blob && !sourceCommitOutcomeUnknown &&
+        !failureAccountingCommitOutcomeUnknown &&
         !sourceFailureJournaled && !reusedFailedOriginal) {
       // Safe only before the source transaction attempted COMMIT. A COMMIT
       // error can mean the server committed and the reply was lost.
