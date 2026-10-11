@@ -1,0 +1,65 @@
+name: YSSY P25 Real PG Receiver Faults (No Paid Provider)
+on:
+  push:
+    branches:
+      - phase2g-yssy-p25-minimal-release-20261011
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  actual-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: p2g_fixture
+          POSTGRES_PASSWORD: fixture_only_password
+          POSTGRES_DB: p2g_stage1_fixture
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U p2g_fixture -d p2g_stage1_fixture"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      P2G_DISPOSABLE_POSTGRES: "YES"
+      P2G_FIXTURE_POSTGRES_URL: postgresql://p2g_fixture:fixture_only_password@127.0.0.1:5432/p2g_stage1_fixture
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Actual V3.9 receiver plus HTTP and SQL faults against disposable PG16
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          npx vitest run tests/phase2g_yssy_p25_actual_postgres_release_v39.test.ts
+          echo "PAID_PROVIDER_CALLS=0"
+          echo "PRODUCTION_DATABASE_QUERIES=0"
+      - name: Real PG16 SIGKILL proves LOGGED versus UNLOGGED lifecycle
+        shell: bash
+        env:
+          PG_TEST_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          test -n "${PG_TEST_CONTAINER_ID}"
+          test "$(docker inspect --format '{{.Config.Image}}' "${PG_TEST_CONTAINER_ID}")" = "postgres:16"
+          docker exec "${PG_TEST_CONTAINER_ID}" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "CREATE SCHEMA p2g_recovery; CREATE TABLE p2g_recovery.logged_original(id int PRIMARY KEY); CREATE UNLOGGED TABLE p2g_recovery.unlogged_delivery(id int PRIMARY KEY); INSERT INTO p2g_recovery.logged_original VALUES(1); INSERT INTO p2g_recovery.unlogged_delivery VALUES(1);" >/dev/null
+          test "$(docker exec "${PG_TEST_CONTAINER_ID}" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT (SELECT count(*) FROM p2g_recovery.logged_original)::text||'|'||(SELECT count(*) FROM p2g_recovery.unlogged_delivery)::text")" = "1|1"
+          docker kill --signal=KILL "${PG_TEST_CONTAINER_ID}" >/dev/null
+          docker start "${PG_TEST_CONTAINER_ID}" >/dev/null
+          READY=0
+          for i in $(seq 1 45); do
+            if docker exec "${PG_TEST_CONTAINER_ID}" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT 1" >/dev/null 2>&1; then READY=1; break; fi
+            sleep 1
+          done
+          test "${READY}" -eq 1
+          OBSERVED="$(docker exec "${PG_TEST_CONTAINER_ID}" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT (SELECT count(*) FROM p2g_recovery.logged_original)::text||'|'||(SELECT count(*) FROM p2g_recovery.unlogged_delivery)::text")"
+          test "${OBSERVED}" = "1|0"
+          echo "UNCLEAN_PG_CRASH_LOGGED_AND_UNLOGGED=${OBSERVED}"
+          echo "PROVIDER_CALLS=0"
