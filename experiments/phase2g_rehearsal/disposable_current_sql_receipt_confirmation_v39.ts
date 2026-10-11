@@ -67,6 +67,8 @@ export async function confirmCurrentDisposableV39ScienceReceipt(input:{
      input.originalWire.byteLength===0)
     throw Error("P12_SQL_CONFIRM_INPUT_INVALID");
   if(x.proof.sessionId!==input.expectedSessionId||
+     x.proof.receiptId!==hash(
+       x.proof.sessionId+"\n"+x.proof.providerAttemptId)||
      hash(input.originalWire)!==x.proof.sourceSha256||
      !await verifyEdgeProvenanceV1(
        x.proof,input.signingKey,x.hmac,{
