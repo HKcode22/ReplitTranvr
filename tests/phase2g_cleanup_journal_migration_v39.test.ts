@@ -54,8 +54,10 @@ describe("Phase2G durable cleanup journal migration", () => {
       checksumSha256: baseline!.checksumSha256,
     }]);
 
-    expect(pending.map(x => x.file)).toEqual([filename]);
-    expect(pending[0].version).toBe(63);
-    expect(pending[0].kind).toBe("VERSIONED");
+    // New source-custody V0064 follows journal V0063; both are planned
+    // without applying either to a live scientific database here.
+    expect(pending.map(x => x.file)).toEqual([filename, "V0064__phase2g_prepaid_source_pending_intent_v39.sql"]);
+    expect(pending.map(x => x.version)).toEqual([63,64]);
+    expect(pending.every(x => x.kind === "VERSIONED")).toBe(true);
   });
 });
