@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { enforcePaidGuard, verifyAuthFile } from "./v39_paid_guard_v39";
+import { armStage1PaidOwnerTerminationBoundV39, type PaidOwnerTerminationEscalationV39 } from "./v39_phase2g_paid_owner_termination_bound_v39";
 import {verifyStage1PublishedDatabaseLiveV39} from "./phase2gStage1PublishedDatabaseLivePreflight_v39";
 import {
   advanceStage1WatchdogV39,initialStage1WatchdogStateV39,
@@ -317,6 +318,7 @@ async function main(): Promise<void> {
   );
 
   let terminationSignal: NodeJS.Signals | null = null;
+  let forcedOwnerKillDeadline: PaidOwnerTerminationEscalationV39 | null = null;
   let callbackWatchdogTriggered = false;
   let callbackFailureCount = 0;
   let watchdogState = initialStage1WatchdogStateV39();
@@ -332,6 +334,25 @@ async function main(): Promise<void> {
     })}\n`);
     fs.fsyncSync(logFd);
     if (!child.killed) child.kill("SIGTERM");
+    // Sending SIGTERM is NOT proof the owner has exited. If the child hangs,
+    // force its local OS process to exit within a bounded grace period so
+    // the supervisor's existing fail-closed provider recovery can execute.
+    if (!forcedOwnerKillDeadline) {
+      forcedOwnerKillDeadline = armStage1PaidOwnerTerminationBoundV39({
+        childStillRunning:()=>child.pid!==undefined&&
+          child.exitCode===null&&child.signalCode===null,
+        forceKillChild:()=>{
+          fs.writeSync(logFd, `${JSON.stringify({
+            schema:"v39.phase2g-stage1-supervisor-escalation.v1",
+            observed_at_utc:new Date().toISOString(),
+            action:"sigkill_unresponsive_local_paid_child_then_recover",
+            reason:"paid_child_unresponsive_after_sigterm_grace"
+          })}\\n`);
+          fs.fsyncSync(logFd);
+          child.kill("SIGKILL");
+        }
+      });
+    }
   };
   process.on("SIGTERM", () => requestTermination("SIGTERM", "supervisor_sigterm"));
   process.on("SIGINT", () => requestTermination("SIGINT", "supervisor_sigint"));
@@ -436,6 +457,7 @@ async function main(): Promise<void> {
     child.once("error", (error) => { spawnError = error.message; });
     child.once("exit", (code, signal) => resolve({ code, signal, spawnError }));
   });
+  forcedOwnerKillDeadline?.cancel();
   clearInterval(heartbeat);
   clearInterval(callbackWatchdog);
 
