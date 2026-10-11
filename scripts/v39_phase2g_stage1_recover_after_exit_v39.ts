@@ -12,6 +12,7 @@ import {
   prepaidProbeWebhookUrlV39,
 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authRecord_v39";
+import {isExactStage1ProviderSubscriptionOwnerV39} from "./v39_phase2g_subscription_exact_owner_match_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const LEDGER = path.join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
@@ -139,11 +140,29 @@ async function main(): Promise<void> {
     [budgetDayId],
   );
   if ((probes.rowCount ?? probes.rows.length) === 0) {
+    // The logged probe row may already have been marked failed while the
+    // UNLOGGED session disappeared or a subscription remained billable.
+    // No qualifying probe row is NOT proof that the provider stopped.
+    // Inspect provider inventory read-only. Never delete an unowned ID.
+    const inventory=await listSubscriptionsStrictWithRetry();
+    const activeBillable=inventory.filter(subscription=>
+      subscription.isActive&&subscription.billingType!=="LifetimeBased");
+    if(activeBillable.length>0){
+      await openRecoveryIncident({
+        budgetDayId,
+        reason:"no_recoverable_probe_row_with_active_billable_subscription",
+        activeBillableCount:activeBillable.length
+      });
+      throw new Error(
+        "RECOVERY_REFUSED:NO_PROBE_ROW_BUT_ACTIVE_BILLABLE_SUBSCRIPTION"
+      );
+    }
     console.log(JSON.stringify({
       schema: "v39.phase2g-stage1-abnormal-exit-recovery.v1",
       status: "NO_RECOVERY_NEEDED",
       probe_budget_day_id: budgetDayId,
       active_probe_rows: 0,
+      active_billable_subscriptions_verified: 0,
       provider_mutation_performed: false,
     }, null, 2));
     return;
@@ -207,10 +226,9 @@ async function main(): Promise<void> {
     if (!ownedProviderSubscriptionId) {
       const expectedSubscriberId = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), sessionId);
       const exactUnboundMatches = activeBillableBefore.filter((subscription) =>
-        subscription.billingType === "CreditBased" &&
-        String(subscription.subject?.type ?? "") === "FlightByAirportIcao" &&
-        String(subscription.subject?.id ?? "").toUpperCase() === probeIcao &&
-        String(subscription.subscriber?.id ?? "") === expectedSubscriberId,
+        isExactStage1ProviderSubscriptionOwnerV39(subscription,{
+          icao:probeIcao,webhookSubscriberId:expectedSubscriberId
+        }),
       );
       if (exactUnboundMatches.length > 1) {
         await openRecoveryIncident({ probeId, budgetDayId, reason: "multiple_exact_unbound_subscription_matches" });
@@ -230,11 +248,33 @@ async function main(): Promise<void> {
     }
 
     if (ownedProviderSubscriptionId) {
+      // A second unrelated billable subscription means isolation was lost.
+      // Never delete an owned one and then report "billing stopped" while
+      // another subscription is still active on this shared provider key.
+      const foreign=activeBillableBefore.filter(subscription=>
+        subscription.id!==ownedProviderSubscriptionId);
+      if(foreign.length){
+        await openRecoveryIncident({
+          probeId,budgetDayId,
+          reason:"foreign_active_billable_during_exact_owned_cleanup",
+          activeForeignBillableCount:foreign.length
+        });
+        throw new Error("RECOVERY_REFUSED:FOREIGN_ACTIVE_BILLABLE_SUBSCRIPTION");
+      }
       const owned = before.find((subscription) => subscription.id === ownedProviderSubscriptionId);
       if (owned?.isActive) {
-        if (owned.billingType !== "CreditBased") {
-          await openRecoveryIncident({ probeId, budgetDayId, reason: "owned_subscription_billing_type_unexpected" });
-          throw new Error("RECOVERY_REFUSED:OWNED_ACTIVE_SUBSCRIPTION_NOT_CREDIT_BASED");
+        const expectedSubscriberId = prepaidProbeWebhookUrlV39(
+          defaultWebhookUrl(),sessionId);
+        if(!isExactStage1ProviderSubscriptionOwnerV39(owned,{
+          icao:probeIcao,webhookSubscriberId:expectedSubscriberId
+        })){
+          await openRecoveryIncident({
+            probeId,budgetDayId,
+            reason:"bound_provider_subscription_ownership_mismatch_no_delete"
+          });
+          throw new Error(
+            "RECOVERY_REFUSED:BOUND_SUBSCRIPTION_EXACT_OWNER_MISMATCH"
+          );
         }
         providerDeleteAttempted = true;
         providerDeleteVerified =
@@ -254,10 +294,36 @@ async function main(): Promise<void> {
           );
         }
       } else {
-        providerDeleteVerified = true;
+        // An unknown/stale exact ID cannot establish the absence of other
+        // billable subscriptions. This prevents a false clean recovery.
+        providerDeleteVerified = activeBillableBefore.length === 0;
       }
     } else {
       providerDeleteVerified = activeBillableBefore.length === 0;
+    }
+    if(providerDeleteVerified){
+      // A successful exact-ID DELETE is necessary, not a census of the
+      // entire account. Verify provider inventory has NO remaining active
+      // billable subscriptions before recording final cleanup success.
+      const inventoryAfter=await listSubscriptionsStrictWithRetry();
+      const residual=inventoryAfter.filter(s=>
+        s.isActive&&s.billingType!=="LifetimeBased");
+      if(residual.length){
+        await openRecoveryIncident({
+          probeId,budgetDayId,
+          reason:"billable_subscription_remained_after_exact_owner_cleanup",
+          activeResidualBillableCount:residual.length
+        });
+        throw new Error("RECOVERY_REFUSED:RESIDUAL_ACTIVE_BILLABLE_AFTER_DELETE");
+      }
+    }
+    if(!providerDeleteVerified){
+      await openRecoveryIncident({
+        probeId,budgetDayId,
+        reason:"provider_subscription_cleanup_not_proven",
+        activeBillableCountBefore:activeBillableBefore.length
+      });
+      throw new Error("RECOVERY_REFUSED:SUBSCRIPTION_CLEANUP_NOT_VERIFIED");
     }
 
     /*
@@ -316,11 +382,9 @@ async function main(): Promise<void> {
       sessionId = durableSessionId;
       const expectedSubscriberId = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), durableSessionId);
       const exactResetMatches = activeBillableBefore.filter((subscription) =>
-        subscription.billingType === "CreditBased" &&
-        String(subscription.subject?.type ?? "") === "FlightByAirportIcao" &&
-        String(subscription.subject?.id ?? "").toUpperCase() === probeIcao &&
-        String(subscription.subscriber?.type ?? "") === "WebHook" &&
-        String(subscription.subscriber?.id ?? "") === expectedSubscriberId,
+        isExactStage1ProviderSubscriptionOwnerV39(subscription,{
+          icao:probeIcao,webhookSubscriberId:expectedSubscriberId
+        }),
       );
       if (exactResetMatches.length > 1) {
         await openRecoveryIncident({
@@ -333,6 +397,16 @@ async function main(): Promise<void> {
       }
       if (exactResetMatches.length === 1) {
         const ownedProviderSubscriptionId = exactResetMatches[0].id;
+        const foreign=activeBillableBefore.filter(s=>
+          s.id!==ownedProviderSubscriptionId);
+        if(foreign.length){
+          await openRecoveryIncident({
+            probeId,budgetDayId,durableSessionId,
+            reason:"runtime_reset_has_foreign_active_billable_subscriptions",
+            activeForeignBillableCount:foreign.length
+          });
+          throw new Error("RECOVERY_REFUSED:RUNTIME_RESET_FOREIGN_ACTIVE_BILLABLE");
+        }
         providerDeleteAttempted = true;
         providerDeleteVerified =
           await deleteSubscriptionVerifiedStrict(
@@ -350,6 +424,17 @@ async function main(): Promise<void> {
           throw new Error(
             "RECOVERY_FAILED:RUNTIME_RESET_OWNED_SUBSCRIPTION_DELETE_NOT_VERIFIED",
           );
+        }
+        const after=await listSubscriptionsStrictWithRetry();
+        const residual=after.filter(s=>s.isActive&&
+          s.billingType!=="LifetimeBased");
+        if(residual.length){
+          await openRecoveryIncident({
+            probeId,budgetDayId,durableSessionId,
+            reason:"runtime_reset_residual_active_billable_after_delete",
+            activeResidualBillableCount:residual.length
+          });
+          throw new Error("RECOVERY_REFUSED:RUNTIME_RESET_RESIDUAL_ACTIVE_BILLABLE");
         }
         stopReason = "supervisor_child_exit_after_runtime_reset_recovered";
       } else if (activeBillableBefore.length > 0) {
