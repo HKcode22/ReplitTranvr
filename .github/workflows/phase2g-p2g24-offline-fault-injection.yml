@@ -273,7 +273,7 @@ jobs:
             -H "accept: application/json" "${URL}" -o "${OUT}"; then
             node --input-type=module - "${OUT}" "${GITHUB_SHA}" <<'NODE'
           import fs from "node:fs";
-          const raw=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));
+          let raw={};try{raw=JSON.parse(fs.readFileSync(process.argv[2],"utf8"));}catch{raw={};}
           const actual=String(raw?.git_head??"").toLowerCase();
           const expected=String(process.argv[3]??"").toLowerCase();
           const ok=raw?.schema==="v39.phase2f-workspace-runtime.v1"&&
