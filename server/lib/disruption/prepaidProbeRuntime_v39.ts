@@ -1094,6 +1094,35 @@ async function recordOutsideAdmittedPrepaidFailureV39(
 }
 
 /**
+ * Read an exact randomly reserved LOGGED PENDING intent after the admission
+ * COMMIT reply is ambiguous. This does NOT establish that original webhook
+ * bytes were stored: the original upload has not yet happened. A matched
+ * random blob UUID is proof this specific fresh admission transaction took
+ * effect (not merely that an older same-delivery PENDING exists).
+ */
+async function freshAdmissionCommitConfirmedV39(input:{
+  sessionId:string;deliveryId:string;blobRefId:string;
+  bodySha256:string;sourceBytes:number;
+}):Promise<boolean>{
+  try{
+    const q=await pool.query(`
+      SELECT blob_ref_id::text AS blob_ref_id,source_sha256,source_bytes
+        FROM clean.phase2g_prepaid_source_intent_v39
+       WHERE session_id=$1::uuid AND delivery_id=$2
+         AND blob_ref_id=$3::uuid
+         AND source_sha256=$4
+         AND source_bytes=$5
+    `,[input.sessionId,input.deliveryId,input.blobRefId,
+        input.bodySha256,input.sourceBytes]);
+    return q.rowCount===1&&q.rows.length===1&&
+      String(q.rows[0].blob_ref_id).toLowerCase()===input.blobRefId;
+  }catch{
+    // A database failure or absence cannot be misrepresented as a rollback.
+    return false;
+  }
+}
+
+/**
  * PITR-safe prepaid webhook persistence.
  *
  * Raw bytes are durably round-trip verified in App Storage BEFORE this returns.
@@ -1144,6 +1173,8 @@ export async function persistPrepaidProbeWebhookV39(input: {
     let reservation:Awaited<ReturnType<
       typeof reservePrepaidSourceIntentV39
     >>|null=null;
+    let freshAdmissionCommitAttempted=false;
+    let ambiguousAdmissionCommit=false;
     try{
       await admission.query("BEGIN");
       const session=await timePrepaidStageV39(
@@ -1211,15 +1242,56 @@ export async function persistPrepaidProbeWebhookV39(input: {
           sessionId,deliveryId,bodySha256,originalCanonical:rawBytes,
           firstNodeUtc:receivedAt,query:admission
         });
-        await admission.query("COMMIT");
-        requestAdmittedOutsideLock=true;
+        if(!reservation.fresh){
+          // Prior durable PENDING identity may have been created by an
+          // earlier delivery attempt. No new unique marker would prove
+          // whether OUR next COMMIT counted this request; use the original
+          // locked/readback path instead of risking ambiguous double counts.
+          await admission.query("ROLLBACK");
+          reservation=null;
+        }else{
+          freshAdmissionCommitAttempted=true;
+          await admission.query("COMMIT");
+          freshAdmissionCommitAttempted=false;
+          requestAdmittedOutsideLock=true;
+        }
       }
       }
     }catch(error){
       await admission.query("ROLLBACK").catch(()=>undefined);
-      throw error;
+      if(freshAdmissionCommitAttempted&&reservation?.fresh){
+        // PostgreSQL may have committed even though the ACK was lost.
+        // Defer reconciliation until AFTER releasing the admission client.
+        // Never upload or return HTTP 2xx on this uncertain path.
+        ambiguousAdmissionCommit=true;
+      }else{
+        throw error;
+      }
     }finally{
       admission.release();
+    }
+    if(ambiguousAdmissionCommit){
+      const exactCommitted=await freshAdmissionCommitConfirmedV39({
+        sessionId,deliveryId,blobRefId:reservation!.blobRefId,
+        bodySha256,sourceBytes:rawBytes.byteLength
+      });
+      let counted=false;
+      if(exactCommitted)
+        counted=await recordOutsideAdmittedPrepaidFailureV39(sessionId);
+      const error=Error(exactCommitted?
+        "P06_OUTSIDE_ADMISSION_COMMIT_REPLY_LOST_PENDING_CONFIRMED_NO_ACK":
+        "P06_OUTSIDE_ADMISSION_COMMIT_OUTCOME_UNKNOWN_NO_ACK") as Error&{
+          phase2gFailureRecorded?:boolean;
+          phase2gCallbackAccountingUncertain?:boolean;
+        };
+      if(counted)
+        error.phase2gFailureRecorded=true;
+      else
+        // A missing/read-failed row is NOT proof that COMMIT rolled back;
+        // prevent the generic route fallback from forging a second request.
+        // The incident stays unresolved; independent review is required.
+        error.phase2gCallbackAccountingUncertain=true;
+      throw error;
     }
     if(reservation){
       try{
