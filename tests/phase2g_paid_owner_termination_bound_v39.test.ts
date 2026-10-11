@@ -4,7 +4,8 @@ import {afterEach,beforeEach,describe,expect,it,vi} from "vitest";
 import {
   armStage1PaidOwnerTerminationBoundV39,
   STAGE1_PAID_OWNER_SIGTERM_GRACE_MS_V39,
-  stage1PaidOwnerExitVerdictV39
+  stage1PaidOwnerExitVerdictV39,
+  STAGE1_PAID_OWNER_MIN_MONOTONIC_MS_V39
 } from "../scripts/v39_phase2g_paid_owner_termination_bound_v39";
 
 describe("P16 bounded local paid owner termination escalation, no provider calls",()=>{
@@ -65,7 +66,7 @@ describe("P16 bounded local paid owner termination escalation, no provider calls
       .toBeGreaterThan(s.indexOf("const exit = await new Promise"));
   });
   it("P16 clean exit is PASS only without supervisor cancellation/watchdog failure",()=>{
-    const base={code:0,signal:null,spawnError:null,terminationRequested:false,watchdogTriggered:false} as const;
+    const base={code:0,signal:null,spawnError:null,terminationRequested:false,watchdogTriggered:false,elapsedMonotonicMs:7_200_000} as const;
     expect(stage1PaidOwnerExitVerdictV39(base)).toEqual({
       passed:true,reason:"CLEAN_ZERO_EXIT_NO_SUPERVISOR_ABORT"
     });
@@ -78,7 +79,7 @@ describe("P16 bounded local paid owner termination escalation, no provider calls
     expect(stage1PaidOwnerExitVerdictV39({...base,watchdogTriggered:true,terminationRequested:true}).passed).toBe(false);
   });
   it("P16 rejects zero exit with spawn error, real signals, null exit, and nonzero exit",()=>{
-    const base={code:0,signal:null,spawnError:null,terminationRequested:false,watchdogTriggered:false};
+    const base={code:0,signal:null,spawnError:null,terminationRequested:false,watchdogTriggered:false,elapsedMonotonicMs:7_200_000};
     for(const modification of [
       {spawnError:"child_spawn_or_process_error"},
       {signal:"SIGKILL" as const},
@@ -88,6 +89,16 @@ describe("P16 bounded local paid owner termination escalation, no provider calls
       expect(stage1PaidOwnerExitVerdictV39({...base,...modification}).passed).toBe(false);
     }
   });
+  it("P16 child zero exit before the full 120m window cannot claim Stage-1 success",()=>{
+    const base={code:0,signal:null,spawnError:null,terminationRequested:false,watchdogTriggered:false};
+    expect(STAGE1_PAID_OWNER_MIN_MONOTONIC_MS_V39).toBe(7_200_000);
+    for(const elapsedMonotonicMs of [0, 30_000, 7_199_999, -1, Number.NaN, Infinity]){
+      expect(stage1PaidOwnerExitVerdictV39({...base,elapsedMonotonicMs})).toEqual({
+        passed:false,reason:"OWNER_UNDER_120_MINUTES"
+      });
+    }
+    expect(stage1PaidOwnerExitVerdictV39({...base,elapsedMonotonicMs:7_200_000}).passed).toBe(true);
+  });
   it("P16 actual supervisor must use close for spawn errors, and never call watchdog-interrupted exit PASS",()=>{
     const s=readFileSync(join(process.cwd(),"scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
     expect(s).toContain('child.once("error", () => { spawnError = "child_spawn_or_process_error"; })');
@@ -96,6 +107,10 @@ describe("P16 bounded local paid owner termination escalation, no provider calls
     expect(s).toContain('terminationRequested: terminationSignal !== null');
     expect(s).toContain('watchdogTriggered: callbackWatchdogTriggered');
     expect(s).toContain('const childPassed = exitVerdict.passed');
+    expect(s).toContain('const ownerSpawnMonotonicMs = performance.now()');
+    expect(s).toContain('const ownerElapsedMonotonicMs = performance.now() - ownerSpawnMonotonicMs');
+    expect(s).toContain('elapsedMonotonicMs: ownerElapsedMonotonicMs');
+    expect(s).toContain('child_wall_elapsed_ms: Math.round(ownerElapsedMonotonicMs)');
     expect(s).toContain('child_exit_verdict_reason: exitVerdict.reason');
     expect(s).not.toContain('const childPassed = exit.code === 0 && !exit.signal && !exit.spawnError');
     expect(s).not.toContain('spawnError = error.message');
