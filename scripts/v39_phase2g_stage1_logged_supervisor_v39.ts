@@ -393,6 +393,13 @@ async function main(): Promise<void> {
         callbackWatchdogTriggered = true;
         requestTermination("SIGTERM", "workspace_callback_unreachable_threshold");
       }
+    } catch (_watchdogInternalFailure) {
+      // Callback monitor failures must NEVER escape an async setInterval and
+      // orphan the paid owner. The source/secret details are not logged.
+      if (!callbackWatchdogTriggered) {
+        callbackWatchdogTriggered = true;
+        requestTermination("SIGTERM", "workspace_watchdog_internal_failure");
+      }
     } finally {
       callbackCheckInFlight = false;
     }
