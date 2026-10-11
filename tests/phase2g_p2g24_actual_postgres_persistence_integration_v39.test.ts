@@ -68,7 +68,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   }),
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
-import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39,prepaidDuplicatePrelockReadbackApprovedV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39,prepaidDuplicatePrelockReadbackApprovedV39,prepaidFailedSourceJournalApprovedV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39,auditDisposableRawAdmissionIntentsV39,recordVerifiedDisposablePendingOriginalRecoveryV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
 import {previewDisposablePendingPhysicalV2ReplayV39} from "../experiments/phase2g_rehearsal/disposable_pending_physical_v2_replay_preview_v39";
 import {rehydrateSyntheticQuarantinedPhysicalV2V39} from "../experiments/phase2g_rehearsal/disposable_quarantined_physical_v2_rehydrate_v39";
@@ -1829,6 +1829,169 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     }
   });
 
+  it("P06 failed original source custody is OFF without both explicit, separate env approvals",()=>{
+    expect(prepaidFailedSourceJournalApprovedV39({} as NodeJS.ProcessEnv)).toBe(false);
+    expect(prepaidFailedSourceJournalApprovedV39({
+      V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED:"1"
+    } as NodeJS.ProcessEnv)).toBe(false);
+    expect(prepaidFailedSourceJournalApprovedV39({
+      V39_CALLBACK_ONLY_RUNTIME:"1"
+    } as NodeJS.ProcessEnv)).toBe(false);
+    expect(prepaidFailedSourceJournalApprovedV39({
+      V39_CALLBACK_ONLY_RUNTIME:"1",
+      V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED:"1"
+    } as NodeJS.ProcessEnv)).toBe(true);
+  });
+  it("P06 actual real-PG opt-in preserves failed ORIGINAL LOGGED ref and retry reuses bytes/first Node receive UTC, never double uploads",async()=>{
+    const beforeCallback=process.env.V39_CALLBACK_ONLY_RUNTIME;
+    const beforeApprove=process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED;
+    process.env.V39_CALLBACK_ONLY_RUNTIME="1";
+    process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED="1";
+    const body=sample({
+      id:"failed-then-verified-once",
+      deliveryAttempt:{seqNo:0,costCredits:2,timestampUtc:"2026-10-12T03:01:01Z"},
+      flights:[{id:"synthetic-quarantine-source",number:"QF812",
+        codeshareStatus:"Unknown"}]
+    });
+    const firstUtc=new Date("2026-10-12T03:04:05.123Z");
+    const laterUtc=new Date("2026-10-12T03:14:05.123Z");
+    try{
+      await state.pool!.query(
+        "ALTER TABLE clean.prepaid_probe_delivery_runtime "+
+        "ADD CONSTRAINT p06_failure_source_test CHECK ("+
+        "delivery_attempt_cost_credits IS NULL OR "+
+        "delivery_attempt_cost_credits <> 2)"
+      );
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body,receivedAtUtc:firstUtc
+      })).rejects.toThrow();
+      expect(await count()).toEqual({logged:1,unlogged:0});
+      expect(await session()).toEqual({requests:1,successes:0,failures:1});
+      expect(state.blobs.size).toBe(1);
+      expect(state.events).toEqual(["UPLOAD","READBACK"]);
+      const src=await state.pool!.query(
+        "SELECT blob_ref_id,source_kind,source_record_id,"+
+        "content_sha256,content_bytes,persisted_at_utc,retention_hours,"+
+        "expires_at_utc,object_name FROM clean.provider_content_blob_ref"
+      );
+      expect(src.rowCount).toBe(1);
+      expect(src.rows[0].source_kind).toBe("webhook");
+      expect(src.rows[0].source_record_id).toMatch(/^prepaid:/);
+      expect(src.rows[0].retention_hours).toBe(168);
+      expect(new Date(src.rows[0].persisted_at_utc).toISOString())
+        .toBe(firstUtc.toISOString());
+      await state.pool!.query(
+        "ALTER TABLE clean.prepaid_probe_delivery_runtime "+
+        "DROP CONSTRAINT p06_failure_source_test"
+      );
+      const retried=await persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body,receivedAtUtc:laterUtc
+      });
+      expect(retried.duplicate).toBe(false);
+      expect(retried.blobRefId).toBe(src.rows[0].blob_ref_id);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(state.blobs.size).toBe(1);
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+      expect(state.events.filter(x=>x==="READBACK")).toHaveLength(2);
+      const restored=await state.pool!.query(
+        "SELECT received_at_utc FROM clean.prepaid_probe_delivery_runtime"
+      );
+      expect(new Date(restored.rows[0].received_at_utc).toISOString())
+        .toBe(firstUtc.toISOString());
+      const item=await state.pool!.query(
+        "SELECT received_at_utc FROM clean.prepaid_probe_item_runtime"
+      );
+      expect(item.rowCount).toBe(1);
+      expect(new Date(item.rows[0].received_at_utc).toISOString())
+        .toBe(firstUtc.toISOString());
+      const third=await persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body,receivedAtUtc:new Date("2026-10-12T03:16:00Z")
+      });
+      expect(third.duplicate).toBe(true);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(await session()).toEqual({requests:3,successes:2,failures:1});
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+    }finally{
+      await state.pool!.query(
+        "ALTER TABLE clean.prepaid_probe_delivery_runtime "+
+        "DROP CONSTRAINT IF EXISTS p06_failure_source_test"
+      );
+      if(beforeCallback===undefined)delete process.env.V39_CALLBACK_ONLY_RUNTIME;
+      else process.env.V39_CALLBACK_ONLY_RUNTIME=beforeCallback;
+      if(beforeApprove===undefined)
+        delete process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED;
+      else process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED=beforeApprove;
+    }
+  },15000);
+  it("P06 actual real-PG refuses source retry after retained original goes missing, no new upload or 2xx",async()=>{
+    const origCallback=process.env.V39_CALLBACK_ONLY_RUNTIME;
+    const origApprove=process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED;
+    process.env.V39_CALLBACK_ONLY_RUNTIME="1";
+    process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED="1";
+    const body=sample({id:"retained-failed-then-lost-original",
+      deliveryAttempt:{seqNo:0,costCredits:2}});
+    try{
+      await state.pool!.query(
+        "ALTER TABLE clean.prepaid_probe_delivery_runtime "+
+        "ADD CONSTRAINT p06_missing_source_test "+
+        "CHECK (delivery_attempt_cost_credits <> 2)"
+      );
+      await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body}))
+        .rejects.toThrow();
+      expect(await count()).toEqual({logged:1,unlogged:0});
+      await state.pool!.query(
+        "ALTER TABLE clean.prepaid_probe_delivery_runtime "+
+        "DROP CONSTRAINT p06_missing_source_test"
+      );
+      state.blobs.clear();
+      await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body}))
+        .rejects.toThrow("PREPAID_FAILED_SOURCE_RETAINED_OBJECT_MISSING_NO_ACK");
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+      expect(await count()).toEqual({logged:1,unlogged:0});
+      expect(await session()).toEqual({requests:2,successes:0,failures:2});
+    }finally{
+      await state.pool!.query(
+        "ALTER TABLE clean.prepaid_probe_delivery_runtime "+
+        "DROP CONSTRAINT IF EXISTS p06_missing_source_test"
+      );
+      if(origCallback===undefined)delete process.env.V39_CALLBACK_ONLY_RUNTIME;
+      else process.env.V39_CALLBACK_ONLY_RUNTIME=origCallback;
+      if(origApprove===undefined)delete process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED;
+      else process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED=origApprove;
+    }
+  });
+  it("P06 lost failure-accounting COMMIT response retains original and LOGGED source; no early delete",async()=>{
+    const origCallback=process.env.V39_CALLBACK_ONLY_RUNTIME;
+    const origApprove=process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED;
+    process.env.V39_CALLBACK_ONLY_RUNTIME="1";
+    process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED="1";
+    try{
+      await state.pool!.query(
+        "ALTER TABLE clean.prepaid_probe_delivery_runtime "+
+        "ADD CONSTRAINT p06_lost_failed_commit_test "+
+        "CHECK (delivery_attempt_cost_credits <> 2)"
+      );
+      state.commitAckLost="after";
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body:sample({id:"lost-failure-commit-source",
+          deliveryAttempt:{seqNo:0,costCredits:2}})
+      })).rejects.toThrow();
+      expect(state.events).not.toContain("DELETE");
+      expect(state.blobs.size).toBe(1);
+      expect(await count()).toEqual({logged:1,unlogged:0});
+      expect(await session()).toEqual({requests:1,successes:0,failures:1});
+    }finally{
+      state.commitAckLost="none";
+      await state.pool!.query(
+        "ALTER TABLE clean.prepaid_probe_delivery_runtime "+
+        "DROP CONSTRAINT IF EXISTS p06_lost_failed_commit_test"
+      );
+      if(origCallback===undefined)delete process.env.V39_CALLBACK_ONLY_RUNTIME;
+      else process.env.V39_CALLBACK_ONLY_RUNTIME=origCallback;
+      if(origApprove===undefined)delete process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED;
+      else process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED=origApprove;
+    }
+  });
   it("actual deliberately injected SQL constraint failure after blob upload rolls back metadata and does not ACK",async()=>{
     // Do NOT use a fictional <=1 credit cap: the actual baseline allows
     // 5 credits for a 5-flight provider notification. Inject a unique
