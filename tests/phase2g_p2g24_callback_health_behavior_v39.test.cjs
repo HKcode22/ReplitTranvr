@@ -133,9 +133,15 @@ for (const c of cases) {
 test("published callback safety policy stays bounded and three-strike fail closed",()=>{
   assert.match(SOURCE,/const CALLBACK_POLL_MS = 15_000/);
   assert.match(SOURCE,/const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3/);
-  assert.match(SOURCE,/if \(callbackFailureCount >= CALLBACK_CONSECUTIVE_FAILURE_LIMIT && !callbackWatchdogTriggered\)/);
+  // Three-strike default remains in the new imported real-supervisor state
+  // machine; no environment flag can manufacture independent provider proof.
+  assert.match(SOURCE,/advanceStage1WatchdogV39\(\{/);
+  assert.match(SOURCE,/initialStage1WatchdogStateV39/);
+  assert.match(SOURCE,/V39_PHASE2G_CALLBACK_WATCHDOG_POLICY \?\? "legacy-three"/);
+  assert.match(SOURCE,/evidence:undefined/);
+  assert.match(SOURCE,/callbackFailureCount = watchdogState\.consecutiveFailures/);
   assert.match(SOURCE,/requestTermination\("SIGTERM", "workspace_callback_unreachable_threshold"\)/);
-  assert.match(SOURCE,/callbackFailureCount = callbackHealth\.healthy \? 0 : callbackFailureCount \+ 1/);
+  assert.match(SOURCE,/requestTermination\("SIGTERM", "workspace_watchdog_internal_failure"\)/);
 });
 
 test("observer and offline fixture cannot accidentally import paid provider API credentials",()=>{
