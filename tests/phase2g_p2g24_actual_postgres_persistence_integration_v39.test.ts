@@ -56,10 +56,11 @@ import {makeSyntheticTwoStageOwnerV39} from "../experiments/phase2g_rehearsal/sy
 import {recordSyntheticTwoStageOwnerBindingV39} from "../experiments/phase2g_rehearsal/disposable_two_stage_owner_journal_v39";
 import {compareSyntheticPhysicalItemContinuityV39,type SyntheticPhysicalItemWitnessV39} from "../experiments/phase2g_rehearsal/synthetic_physical_item_continuity_v39";
 import {ingest as syntheticEdgeIngest,consume as syntheticEdgeConsume,type Env as SyntheticEdgeEnv} from "../experiments/phase2g_cf_sandbox_ingress/worker";
-import {verifyEdgeProvenanceV1} from "../experiments/phase2g_cf_sandbox_ingress/provenance";
+import {verifyEdgeProvenanceV1,signEdgeProvenanceV1} from "../experiments/phase2g_cf_sandbox_ingress/provenance";
 import {createHash as offlineShaHash} from "node:crypto";
 import {signSyntheticScienceRecoveryFrameV39,writeSyntheticLoggedScienceJournalV39,reviewSyntheticLoggedScienceJournalV39,type SyntheticScienceJournalFrameV39} from "../experiments/phase2g_rehearsal/disposable_logged_science_recovery_journal_v39";
 import {auditDisposableCrashReplayBlobRefsV39} from "../experiments/phase2g_rehearsal/disposable_replay_blob_ambiguity_v39";
+import {confirmCurrentDisposableV39ScienceReceipt} from "../experiments/phase2g_rehearsal/disposable_current_sql_receipt_confirmation_v39";
 import {recordSyntheticExactRuntimeSnapshotV39,restoreSyntheticExactRuntimeFromJournalV39,restoreSyntheticCompleteWindowV39} from "../experiments/phase2g_rehearsal/disposable_exact_science_restore_v39";
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
@@ -2308,5 +2309,102 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       console.log("P13_FULL_WINDOW_PAID_GO_AUTHORIZED=false");
     }finally{client.release();}
   },120000);
+
+  it("P12 actual signed original-edge -> V3.9 disposable SQL live-source read-only verification and post-UNLOGGED-loss HARD negative",async()=>{
+    const id="p12-current-confirm-yssy-qf920";
+    const body=sample({
+      id,flights:[{
+        id:"p12-physical-qf920",number:"QF920",codeshareStatus:"IsOperator",
+        airline:{iata:"QF",icao:"QFA"},
+        departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+          scheduledTime:{utc:"2026-10-12T03:59:00.000Z"}},
+        arrival:{airport:{icao:"YMEL"},
+          scheduledTime:{utc:"2026-10-12T05:40:00.000Z"}}
+      }]
+    });
+    const raw=new TextEncoder().encode(JSON.stringify(body,null,2));
+    const received="2026-10-12T03:04:17.000Z";
+    const persisted=await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body,receivedAtUtc:new Date(received)
+    });
+    expect(persisted.itemCount).toBe(1);
+    const attempt="independent-test-fixture:original:0";
+    const receiptId=offlineShaHash("sha256")
+      .update(SESSION+"\n"+attempt).digest("hex");
+    const edge={
+      v:1 as const,sessionId:SESSION,receiptId,
+      providerAttemptId:attempt,
+      sourceSha256:offlineShaHash("sha256").update(raw).digest("hex"),
+      edgeReceivedAtUtc:received
+    };
+    const key="synthetic-independent-original-edge-"+"s".repeat(64);
+    const hmac=await signEdgeProvenanceV1(edge,key);
+    const options={
+      client:state.pool!,edge:{proof:edge,hmac},
+      originalWire:raw,signingKey:key,
+      expectedSessionId:SESSION,expectedSubscriptionId:SUB
+    };
+    const first=await confirmCurrentDisposableV39ScienceReceipt(options);
+    expect(first).toMatchObject({
+      v:1,currentlyPersisted:true,sessionId:SESSION,
+      providerAttemptId:attempt,receiptId,
+      originalEdgeReceivedAtUtc:received,
+      reason:"CURRENT_SOURCE_DELIVERY_ITEMS_AND_UTC_VERIFIED",
+      independentProviderLedgerVerified:false,
+      scientificPassAuthorized:false,paidOwnerResumed:false
+    });
+    expect(await count()).toEqual({logged:1,unlogged:1});
+
+    // A raw wire byte change must invalidate the edge signature binding.
+    const changed={...options,originalWire:new TextEncoder()
+      .encode('{"fabricated":true}')};
+    await expect(confirmCurrentDisposableV39ScienceReceipt(changed))
+      .rejects.toThrow("P12_SQL_CONFIRM_ORIGINAL_EDGE_PROVENANCE_INVALID");
+    const falseSignature={...options,edge:{
+      proof:edge,hmac:"0".repeat(64)
+    }};
+    await expect(confirmCurrentDisposableV39ScienceReceipt(falseSignature))
+      .rejects.toThrow("P12_SQL_CONFIRM_ORIGINAL_EDGE_PROVENANCE_INVALID");
+
+    // Timestamp drift is scientific evidence loss, even when item hashes
+    // match and R2 once recorded "processed".
+    await state.pool!.query(
+      "UPDATE clean.prepaid_probe_delivery_runtime "+
+      "SET received_at_utc=received_at_utc+interval '1 second' "+
+      "WHERE session_id=$1 AND delivery_id=$2",[SESSION,id]
+    );
+    const drift=await confirmCurrentDisposableV39ScienceReceipt(options);
+    expect(drift).toMatchObject({
+      currentlyPersisted:false,
+      reason:"CURRENT_DELIVERY_SHA_TIME_OR_OWNER_CONFLICT"
+    });
+    await state.pool!.query(
+      "UPDATE clean.prepaid_probe_delivery_runtime "+
+      "SET received_at_utc=$3 WHERE session_id=$1 AND delivery_id=$2",
+      [SESSION,id,received]
+    );
+    expect((await confirmCurrentDisposableV39ScienceReceipt(options))
+      .currentlyPersisted).toBe(true);
+
+    // The relevant actual Replit failure loses UNLOGGED session/delivery/
+    // item rows. The surviving LOGGED blob and edge signature do not mean
+    // CURRENT original physical science still exists: fail closed.
+    await state.pool!.query(
+      "TRUNCATE clean.prepaid_probe_item_runtime,"+
+      "clean.prepaid_probe_delivery_runtime,"+
+      "clean.prepaid_probe_session_runtime"
+    );
+    const lost=await confirmCurrentDisposableV39ScienceReceipt(options);
+    expect(lost).toMatchObject({
+      currentlyPersisted:false,reason:"CURRENT_DELIVERY_MISSING_AFTER_DB_EPOCH",
+      scientificPassAuthorized:false,paidOwnerResumed:false
+    });
+    expect(await count()).toEqual({logged:1,unlogged:0});
+    console.log("P12_REAL_V39_DISPOSABLE_SIGNED_SOURCE_SQL_PRESENT=true");
+    console.log("P12_REAL_V39_DISPOSABLE_SQL_EPOCH_LOST_REJECTED=true");
+    console.log("P12_REAL_PROVIDER_SENDER_PROVEN=false");
+    console.log("P12_REAL_PRODUCTION_CONFIRM_ENDPOINT_DEPLOYED=false");
+    console.log("P12_SCIENTIFIC_PASS=false");
+  });
 
 });
