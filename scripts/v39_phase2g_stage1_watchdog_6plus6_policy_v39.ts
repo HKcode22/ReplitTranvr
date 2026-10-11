@@ -64,6 +64,8 @@ export type Stage1WatchdogStateV39=Readonly<{
   maximumFailures:number;
   outageEpisodeCount:number;
   closedOutageEnvelopeMs:number;
+  frozenMaxOutageEpisodes:number|null;
+  frozenMaxCumulativeOutageEnvelopeMs:number|null;
   recoveredHealthAwaitingScienceAudit:boolean;
   terminated:boolean;
 }>;
@@ -86,6 +88,7 @@ export const STAGE1_SIX_PLUS_SIX_WALL_MS_V39=180_000 as const;
 export const initialStage1WatchdogStateV39=():Stage1WatchdogStateV39=>({
   consecutiveFailures:0,firstFailureMonotonicMs:null,
   lastObservedMonotonicMs:null,maximumFailures:0,outageEpisodeCount:0,closedOutageEnvelopeMs:0,
+  frozenMaxOutageEpisodes:null,frozenMaxCumulativeOutageEnvelopeMs:null,
   recoveredHealthAwaitingScienceAudit:false,
   terminated:false
 });
@@ -179,6 +182,13 @@ export function advanceStage1WatchdogV39(input:Readonly<{
      p.maximumFailures<p.consecutiveFailures||
      !isInteger(p.outageEpisodeCount)||
      !isInteger(p.closedOutageEnvelopeMs)||
+     !(p.frozenMaxOutageEpisodes===null||
+       (isInteger(p.frozenMaxOutageEpisodes)&&
+        p.frozenMaxOutageEpisodes>=1&&p.frozenMaxOutageEpisodes<=100))||
+     !(p.frozenMaxCumulativeOutageEnvelopeMs===null||
+       (isInteger(p.frozenMaxCumulativeOutageEnvelopeMs)&&
+        p.frozenMaxCumulativeOutageEnvelopeMs>=15_000&&
+        p.frozenMaxCumulativeOutageEnvelopeMs<=86_400_000))||
      !(p.lastObservedMonotonicMs===null||
        (Number.isFinite(p.lastObservedMonotonicMs)&&
         p.lastObservedMonotonicMs>=0&&
@@ -205,12 +215,25 @@ export function advanceStage1WatchdogV39(input:Readonly<{
       maximumFailures:Math.max(p.maximumFailures,count),
       outageEpisodeCount:p.outageEpisodeCount,
       closedOutageEnvelopeMs:p.closedOutageEnvelopeMs,
+      frozenMaxOutageEpisodes:p.frozenMaxOutageEpisodes,
+      frozenMaxCumulativeOutageEnvelopeMs:p.frozenMaxCumulativeOutageEnvelopeMs,
       recoveredHealthAwaitingScienceAudit:p.recoveredHealthAwaitingScienceAudit,
       terminated:true
     },
     independentSourceProvenForThisCheck:false,
     scientificPassAuthorized:false,paidLaunchAuthorized:false
   });
+  // Independently authenticated limits must be identical for this entire
+  // owner lifecycle; a new signed number is not a new risk authorization.
+  const frozenWitnessReason=independentOutageWitnessReasonV39(input.evidence);
+  if(mode==="six-plus-six-candidate"&&input.evidence&&!frozenWitnessReason&&
+     ((p.frozenMaxOutageEpisodes!==null&&
+       p.frozenMaxOutageEpisodes!==input.evidence.frozenMaxOutageEpisodes)||
+      (p.frozenMaxCumulativeOutageEnvelopeMs!==null&&
+       p.frozenMaxCumulativeOutageEnvelopeMs!==
+         input.evidence.frozenMaxCumulativeOutageEnvelopeMs)))
+    return stop("FROZEN_OUTAGE_RISK_POLICY_CHANGED",
+      p.consecutiveFailures,p.firstFailureMonotonicMs);
   if(kind==="HARD"&&mode!=="legacy-three")
     return stop("HARD_CALLBACK_CONTRACT_OR_IDENTITY_VIOLATION",
       p.consecutiveFailures,p.firstFailureMonotonicMs);
@@ -247,6 +270,12 @@ export function advanceStage1WatchdogV39(input:Readonly<{
           p.consecutiveFailures>0?
           p.closedOutageEnvelopeMs+now-(p.firstFailureMonotonicMs??now):
           p.closedOutageEnvelopeMs,
+        frozenMaxOutageEpisodes:p.frozenMaxOutageEpisodes??
+          (mode==="six-plus-six-candidate"&&!frozenWitnessReason?
+            input.evidence!.frozenMaxOutageEpisodes:null),
+        frozenMaxCumulativeOutageEnvelopeMs:p.frozenMaxCumulativeOutageEnvelopeMs??
+          (mode==="six-plus-six-candidate"&&!frozenWitnessReason?
+            input.evidence!.frozenMaxCumulativeOutageEnvelopeMs:null),
         recoveredHealthAwaitingScienceAudit:
           p.recoveredHealthAwaitingScienceAudit||p.consecutiveFailures>0,
         terminated:false
@@ -300,6 +329,10 @@ export function advanceStage1WatchdogV39(input:Readonly<{
       maximumFailures:Math.max(count,p.maximumFailures),
       outageEpisodeCount:episodeCount,
       closedOutageEnvelopeMs:p.closedOutageEnvelopeMs,
+      frozenMaxOutageEpisodes:p.frozenMaxOutageEpisodes??
+        (!evidenceReason?input.evidence!.frozenMaxOutageEpisodes:null),
+      frozenMaxCumulativeOutageEnvelopeMs:p.frozenMaxCumulativeOutageEnvelopeMs??
+        (!evidenceReason?input.evidence!.frozenMaxCumulativeOutageEnvelopeMs:null),
       recoveredHealthAwaitingScienceAudit:p.recoveredHealthAwaitingScienceAudit,
       terminated:false
     },
