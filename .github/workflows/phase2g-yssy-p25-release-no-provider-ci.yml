@@ -47,6 +47,7 @@ jobs:
             tests/phase2g_prepaid_stage_telemetry_v39.test.ts \
             tests/phase2g_yssy_operating_hours_v39.test.ts \
             tests/phase2g_early_pilot_scope_v39.test.ts \
+            tests/phase2g_p2g23_frozen_recovery_selector_v39.test.ts \
             tests/phase2g_source_head_auth_binding_v39.test.ts
           echo "PAID_OPERATIONS=NONE"
       - name: Create SHA-bound source/calendar zero-credit receipt
