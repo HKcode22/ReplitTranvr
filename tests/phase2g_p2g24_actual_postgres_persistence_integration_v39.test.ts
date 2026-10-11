@@ -69,6 +69,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
 import {persistPrepaidProbeWebhookV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
+import {subscribePrepaidStageTimingV39,type PrepaidStageTimingV39} from "../server/lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {readReadOnlyPgSnapshotV39} from "../scripts/v39_phase2g_independent_pg_delivery_readonly_observer";
 import {registerV3Routes} from "../server/routes_v3";
 import {createSyntheticDualSourceMessageV2,verifySyntheticDualSourceMessageV2} from "../experiments/phase2g_rehearsal/dual_source_wire_canonical_receipt_v39";
@@ -314,6 +315,61 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     }finally{await db.query("ROLLBACK").catch(()=>undefined);db.release();}
   });
 
+
+  it("P08 real V3.9 persistence emits only redacted pool/lock/blob/identity/COMMIT stage timings",async()=>{
+    const events:PrepaidStageTimingV39[]=[];
+    const unsubscribe=subscribePrepaidStageTimingV39(e=>events.push(e));
+    try{
+      state.uploadDelayMs=220;
+      const sensitive="SYNTHETIC-SOURCE-SHOULD-NEVER-APPEAR-IN-METRICS";
+      const input=sample({id:"stage-telemetry-source",syntheticSensitive:sensitive});
+      const response=await fetch(localOrigin+actualPath,{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify(input)
+      });
+      expect(response.status).toBe(200);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(events.map(e=>e.stage)).toEqual([
+        "db_pool_acquire","db_session_lock","original_blob_upload_readback",
+        "physical_item_sql","final_sql_commit"
+      ]);
+      expect(events.every(e=>e.outcome==="completed")).toBe(true);
+      expect(events.find(e=>e.stage==="original_blob_upload_readback")!.elapsed_ms)
+        .toBeGreaterThanOrEqual(190);
+      expect(JSON.stringify(events)).not.toContain(sensitive);
+      expect(JSON.stringify(events)).not.toContain(SESSION);
+      expect(JSON.stringify(events)).not.toContain(SUB);
+      expect(JSON.stringify(events)).not.toContain(TEST_ONLY_CALLBACK_SECRET);
+      expect(events.every(e=>e.independent_original_source_proven===false)).toBe(true);
+      events.length=0;
+      const duplicate=await fetch(localOrigin+actualPath,{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify(input)
+      });
+      expect(duplicate.status).toBe(200);
+      expect((await duplicate.json()).duplicate).toBe(true);
+      expect(events.map(e=>e.stage)).toEqual([
+        "db_pool_acquire","db_session_lock","duplicate_original_blob_readback",
+        "final_sql_commit"
+      ]);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect((await session())?.successes).toBe(2);
+    }finally{unsubscribe();}
+  });
+  it("P08 callback remains successful if a timing observer throws during actual SQL and raw readback",async()=>{
+    const unsubscribe=subscribePrepaidStageTimingV39(()=>{
+      throw Error("MALFUNCTIONING_SYNTHETIC_OBSERVER");
+    });
+    try{
+      const r=await fetch(localOrigin+actualPath,{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify(sample({id:"p08-malfunctioning-observer"}))
+      });
+      expect(r.status).toBe(200);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(await session()).toEqual({requests:1,successes:1,failures:0});
+    }finally{unsubscribe();}
+  });
   it("SQL COMMIT occurs only after real storage readback; exactly one delivery",async()=>{
     const r=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body:sample()});
     expect(r.duplicate).toBe(false);
