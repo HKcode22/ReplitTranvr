@@ -357,7 +357,7 @@ describe("P2G25 distinct prospective YSSY one-recovery only, fail closed",()=>{
     expect(draft.authorized).toBe(false);
     expect(draft.approval_status).toBe("DRAFT_NOT_AUTHORIZED");
     expect(()=>load(path)).toThrow(
-      "REFUSED_P2G25_NEW_PROSPECTIVE_RETRY_NOT_APPROVED"
+      "REFUSED_P2G25_FINAL_FROZEN_ARTIFACT_PATH_REQUIRED"
     );
   });
   it("pure one-shot selector can choose YSSY only with explicit prospective approval and exact immutable probe18",()=>{
