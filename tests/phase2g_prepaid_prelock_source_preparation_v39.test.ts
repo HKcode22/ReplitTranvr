@@ -6,6 +6,11 @@ import {preparePrepaidProbeSourceV39} from
 
 const SESSION="12345678-1234-4234-8234-123456789abc";
 const sha=(v:string|Uint8Array)=>createHash("sha256").update(v).digest("hex");
+const canonical=(v:any):string=>{
+  if(v===null||typeof v!=="object")return JSON.stringify(v);
+  if(Array.isArray(v))return "["+v.map(canonical).join(",")+"]";
+  return "{"+Object.keys(v).sort().map(k=>JSON.stringify(k)+":"+canonical(v[k])).join(",")+"}";
+};
 const flight=(id:string)=>({
   id,number:"QF"+id,departure:{scheduledTime:{utc:"2026-10-12T03:04:05Z"}},
   airline:{iata:"QF"}
@@ -21,9 +26,9 @@ describe("P05/P06 production prepaid source prep moves deterministic SHA workloa
     const payload=body();
     const p=preparePrepaidProbeSourceV39(SESSION,payload);
     expect(p.rawBytes).toBeInstanceOf(Buffer);
-    expect(p.rawBytes.toString()).toBe(JSON.stringify(payload));
+    expect(p.rawBytes.toString()).toBe(canonical(payload));
     expect(p.bodySha256).toBe(sha(p.rawBytes));
-    expect(p.itemRawSha256s).toEqual(payload.flights.map(x=>sha(JSON.stringify(x))));
+    expect(p.itemRawSha256s).toEqual(payload.flights.map(x=>sha(canonical(x))));
     expect(p.flights).toHaveLength(2);
     expect(p.evidence.costCredits).toBe(2);
     expect(p.evidence.attemptSeqNo).toBe(0);
