@@ -52,4 +52,55 @@ describe("P2G24 primary callback response transport warning only, zero provider 
       expect(content).not.toContain(bad);
     }
   });
+  it("emits an in-flight warning without claiming a 200 ACK when POST is stuck",async()=>{
+    vi.useFakeTimers();
+    try {
+      const h=harness();h.advance(7000);
+      await vi.advanceTimersByTimeAsync(7000);
+      expect(h.records).toHaveLength(1);
+      expect(h.records[0]).toMatchObject({
+        warning:"response_stalled_in_flight",elapsed_ms:7000,
+        http_status:null,server_response_finished:false
+      });
+      expect(JSON.stringify(h.records[0])).not.toContain("webhook_url");
+      h.advance(3000);h.emitter.statusCode=200;h.emitter.emit("finish");
+      expect(h.records).toHaveLength(2);
+      expect(h.records[1]).toMatchObject({
+        warning:"response_slow",http_status:200,
+        server_response_finished:true,elapsed_ms:10000
+      });
+    } finally { vi.useRealTimers(); }
+  });
+  it("a stalled request then HTTP 503 records BOTH missing in-flight ACK and terminal server failure",async()=>{
+    vi.useFakeTimers();
+    try {
+      const h=harness();h.advance(7100);
+      await vi.advanceTimersByTimeAsync(7000);
+      h.emitter.statusCode=503;h.emitter.emit("finish");
+      expect(h.records.map(x=>x.warning)).toEqual([
+        "response_stalled_in_flight","response_server_error"
+      ]);
+      expect(h.records[0].http_status).toBeNull();
+      expect(h.records[1].http_status).toBe(503);
+      h.emitter.emit("close");
+      expect(h.records).toHaveLength(2);
+    } finally {vi.useRealTimers();}
+  });
+  it("timer cleanup prevents phantom slow alarms after a fast finish or early close",async()=>{
+    vi.useFakeTimers();
+    try {
+      const ok=harness(),cut=harness();
+      ok.advance(100);ok.emitter.emit("finish");
+      cut.advance(80);cut.emitter.emit("close");
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(ok.records).toHaveLength(0);
+      expect(cut.records).toHaveLength(1);
+      expect(cut.records[0].warning).toBe("connection_closed_before_response_finished");
+    }finally{vi.useRealTimers();}
+  });
+  it("invalid deadline config cannot silently disable transport stall warnings",()=>{
+    expect(()=>observePrepaidHttpTransportV39(
+      Object.assign(new EventEmitter(),{statusCode:200}),{warningThresholdMs:NaN}
+    )).toThrow("P08_INVALID_TRANSPORT_WARNING_THRESHOLD");
+  });
 });
