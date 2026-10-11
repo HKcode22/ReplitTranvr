@@ -29,7 +29,7 @@ describe("P08 actual prepaid stage diagnostics: only timing, bounded labels and 
         "provider_calls","schema","stage"
       ]);
       expect(JSON.stringify(events)).not.toContain(secret);
-    }finally{unconst unsubscribe=subscribePrepaidStageTimingV39(listener);}
+    }finally{unsubscribe();}
   });
   it("an async stage failure still emits failed and never obscures the original error",async()=>{
     const events:unknown[]=[];const listener=(e:unknown)=>{events.push(e);};
@@ -41,7 +41,7 @@ describe("P08 actual prepaid stage diagnostics: only timing, bounded labels and 
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({outcome:"failed",stage:"final_sql_commit"});
       expect(JSON.stringify(events)).not.toContain(reason.message);
-    }finally{unconst unsubscribe=subscribePrepaidStageTimingV39(listener);}
+    }finally{unsubscribe();}
   });
   it("subscriber malfunction never causes a false HTTP 5xx",async()=>{
     const listener=()=>{throw Error("SIMULATED_METRICS_SUBSCRIBER_FAILURE");};
@@ -49,7 +49,7 @@ describe("P08 actual prepaid stage diagnostics: only timing, bounded labels and 
     try{
       await expect(timePrepaidStageV39("db_pool_acquire",async()=>17))
         .resolves.toBe(17);
-    }finally{unconst unsubscribe=subscribePrepaidStageTimingV39(listener);}
+    }finally{unsubscribe();}
   });
   it("refuses invalid stage names and impossible timing values",()=>{
     expect(()=>recordPrepaidStageTimingV39("secrets" as any,1,"completed"))
