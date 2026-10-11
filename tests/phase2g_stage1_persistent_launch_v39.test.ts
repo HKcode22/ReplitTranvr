@@ -269,10 +269,10 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
 
   it("fails the owner closed when the public callback becomes persistently unreachable", () => {
     expect(supervisor).toContain("const CALLBACK_POLL_MS = 15_000");
-    expect(supervisor).toContain("const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3");
+    expect(supervisor).toContain("const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39");
     expect(supervisor).toContain('if (decision.action==="STOP_OWNER" && !callbackWatchdogTriggered)');
-    expect(supervisor).toContain("const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3");
-    expect(supervisor).toContain("SIX_PLUS_SIX_AUTHENTICATED_VERIFIER_NOT_DEPLOYED");
+    expect(supervisor).toContain('process.env.V39_PHASE2G_CALLBACK_WATCHDOG_POLICY ?? "six-plus-six"');
+    expect(supervisor).toContain("STAGE1_WATCHDOG_POLICY_MUST_BE_SIX_PLUS_SIX");
     expect(supervisor).toContain('requestTermination("SIGTERM", "workspace_callback_unreachable_threshold")');
     expect(supervisor).toContain("/__v39/workspace-runtime");
     expect(supervisor).toContain("/__v39/phase2g/webhook-secret-match");
