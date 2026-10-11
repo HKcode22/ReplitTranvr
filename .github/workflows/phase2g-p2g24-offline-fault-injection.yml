@@ -300,6 +300,25 @@ jobs:
           test "$IMAGE" = "postgres:16"
           docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "CREATE SCHEMA p2g_unlogged_crash_fixture" >/dev/null
           docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "CREATE TABLE p2g_unlogged_crash_fixture.logged_receipt (id int PRIMARY KEY); CREATE UNLOGGED TABLE p2g_unlogged_crash_fixture.unlogged_session (id int PRIMARY KEY); INSERT INTO p2g_unlogged_crash_fixture.logged_receipt VALUES (1); INSERT INTO p2g_unlogged_crash_fixture.unlogged_session VALUES (1);" >/dev/null
+          # P06 V0064 LOGGED PENDING custody: test the EXACT proposed schema
+          # and a metadata-only PENDING record through real SIGKILL.  This is
+          # the disposable fixture database, NEVER an operator deployment.
+          docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "CREATE SCHEMA IF NOT EXISTS clean" >/dev/null
+          docker exec -i "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture             < migrations/current/V0064__phase2g_prepaid_source_pending_intent_v39.sql >/dev/null
+          docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -c "
+            INSERT INTO clean.phase2g_prepaid_source_intent_v39
+              (session_id,delivery_id,source_sha256,source_bytes,
+               blob_ref_id,object_name,first_node_received_utc,source_retention_until)
+            VALUES ('12345678-1234-4234-8234-123456789abc',
+                    'synthetic-pending-not-original-upload',
+                    repeat('a',64),10,
+                    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                    'v39/provider/raw_provider_content/aa/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.blob',
+                    '2026-10-12T03:02:00Z',
+                    '2026-10-19T03:02:00Z')" >/dev/null
+          PENDING_BEFORE="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT count(*)::text || '|' || min(state) FROM clean.phase2g_prepaid_source_intent_v39")"
+          test "$PENDING_BEFORE" = "1|PENDING"
+          echo "P06_V0064_LOGGED_PENDING_BEFORE_SIGKILL=$PENDING_BEFORE"
           BEFORE="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT (SELECT count(*) FROM p2g_unlogged_crash_fixture.logged_receipt)::text || '|' || (SELECT count(*) FROM p2g_unlogged_crash_fixture.unlogged_session)::text")"
           test "$BEFORE" = "1|1"
           echo "BEFORE_UNCLEAN_STOP_LOGGED_AND_UNLOGGED=$BEFORE"
@@ -319,6 +338,13 @@ jobs:
           echo "AFTER_UNCLEAN_RESTART_LOGGED_AND_UNLOGGED=$AFTER"
           test "$AFTER" = "1|0"
           echo "ACTUAL_UNLOGGED_CRASH_RESET=CONFIRMED"
+          PENDING_AFTER="$(docker exec "$PG_TEST_CONTAINER_ID" psql -X -v ON_ERROR_STOP=1 -U p2g_fixture -d p2g_stage1_fixture -tA -c "SELECT count(*)::text || '|' || min(state) FROM clean.phase2g_prepaid_source_intent_v39")"
+          test "$PENDING_AFTER" = "1|PENDING"
+          echo "P06_V0064_LOGGED_PENDING_AFTER_TRUE_SIGKILL=$PENDING_AFTER"
+          echo "P06_V0064_PENDING_CRASH_SURVIVAL=CONFIRMED"
+          echo "P06_V0064_PENDING_PROVES_BYTES_EXIST=false"
+          echo "P06_V0064_PENDING_AUTHORIZES_2XX=false"
+
           # Original synthetic first-receipt timestamp + blinded digests were
           # written in the preceding actual V3.9 disposable PG integration.
           # They MUST survive a genuine unclean restart unlike UNLOGGED rows.
