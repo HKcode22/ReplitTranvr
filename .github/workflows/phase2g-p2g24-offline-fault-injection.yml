@@ -36,6 +36,8 @@ on:
       - scripts/v39_p2g24_queue_only_size_feasibility_readonly.ts
       - server/routes_v3.ts
       - server/lib/disruption/prepaidProbeRuntime_v39.ts
+      - server/lib/disruption/prepaidOriginalJsonStructure_v39.ts
+      - tests/phase2g_prepaid_original_json_structure_v39.test.ts
       - server/lib/disruption/providerBlobStore_v39.ts
       - server/lib/disruption/replitProviderBlobStore_v39.ts
       - server/phase2gCallbackOnly.ts
@@ -131,6 +133,7 @@ jobs:
         run: |
           npx vitest run \
             tests/phase2g_p2g24_prepaid_persistence_fault_injection_v39.test.ts \
+            tests/phase2g_prepaid_original_json_structure_v39.test.ts \
             tests/phase2g_yssy_260_259_regression_v39.test.ts \
             tests/phase2g_unlogged_runtime_integrity_v39.test.ts \
             tests/phase2g_paid_callback_origin_v39.test.ts \
