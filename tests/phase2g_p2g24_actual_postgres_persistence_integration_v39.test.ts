@@ -2341,7 +2341,10 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     const hmac=await signEdgeProvenanceV1(edge,key);
     const options={
       client:state.pool!,edge:{proof:edge,hmac},
-      originalWire:raw,signingKey:key,
+      originalWire:raw,
+      readStoredCanonicalSource:async(objectName:string)=>
+        state.blobs.get(objectName)??null,
+      signingKey:key,
       expectedSessionId:SESSION,expectedSubscriptionId:SUB
     };
     const first=await confirmCurrentDisposableV39ScienceReceipt(options);
@@ -2354,6 +2357,41 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       scientificPassAuthorized:false,paidOwnerResumed:false
     });
     expect(await count()).toEqual({logged:1,unlogged:1});
+    const sourceObject=await state.pool!.query(
+      "SELECT object_name,expires_at_utc FROM clean.provider_content_blob_ref "+
+      "WHERE source_kind='webhook' AND source_record_id=$1",
+      ["prepaid:"+SESSION+":"+persisted.deliveryId]
+    );
+    expect(sourceObject.rowCount).toBe(1);
+    const objectName=sourceObject.rows[0].object_name;
+    const originalBlob=state.blobs.get(objectName);
+    expect(originalBlob).toBeDefined();
+    state.blobs.delete(objectName);
+    const missingOriginal=await confirmCurrentDisposableV39ScienceReceipt(options);
+    expect(missingOriginal).toMatchObject({
+      currentlyPersisted:false,
+      reason:"CURRENT_CANONICAL_SOURCE_OBJECT_MISSING_OR_CHANGED"
+    });
+    state.blobs.set(objectName,originalBlob!);
+    await state.pool!.query(
+      "UPDATE clean.provider_content_blob_ref "+
+      "SET expires_at_utc='2020-01-01T00:00:00Z' "+
+      "WHERE source_kind='webhook' AND source_record_id=$1",
+      ["prepaid:"+SESSION+":"+persisted.deliveryId]
+    );
+    const expiredOriginal=await confirmCurrentDisposableV39ScienceReceipt(options);
+    expect(expiredOriginal).toMatchObject({
+      currentlyPersisted:false,
+      reason:"CURRENT_UNIQUE_LOGGED_BLOB_REF_OR_RETENTION_NOT_MATCHED"
+    });
+    await state.pool!.query(
+      "UPDATE clean.provider_content_blob_ref SET expires_at_utc=$2 "+
+      "WHERE source_kind='webhook' AND source_record_id=$1",
+      ["prepaid:"+SESSION+":"+persisted.deliveryId,
+        sourceObject.rows[0].expires_at_utc]
+    );
+    expect((await confirmCurrentDisposableV39ScienceReceipt(options))
+      .currentlyPersisted).toBe(true);
 
     // A raw wire byte change must invalidate the edge signature binding.
     const changed={...options,originalWire:new TextEncoder()
