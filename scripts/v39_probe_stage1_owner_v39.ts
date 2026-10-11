@@ -32,6 +32,7 @@ import {
   type Phase2gP2g17MmunDeliveryGapRecoveryV39,
   type Phase2gP2g22YssyDeliveryGapRecoveryV39,
   type Phase2gP2g23YssyRecoveryV39,
+  type Phase2gP2g25YssyRecoveryV39,
   type Phase2gPhysicalIdentityV2RemeasurementV39,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
@@ -590,6 +591,8 @@ export function chooseEarlyPilotScopeTargetV39(
     Phase2gP2g22YssyDeliveryGapRecoveryV39,
   p2g23Recovery?:
     Phase2gP2g23YssyRecoveryV39,
+  p2g25Recovery?:
+    Phase2gP2g25YssyRecoveryV39,
 ): "YSSY" | "SKBO" | null {
   for (const requirement of scope.baseline_completed_probes) {
     const matches = attempts.filter(
@@ -638,6 +641,44 @@ export function chooseEarlyPilotScopeTargetV39(
   for (const target of scope.ordered_new_targets) {
     const rows = attempts.filter((row) => row.icao.toUpperCase() === target);
 
+
+    // P2G25: one NEW bounded scientific run ONLY after an additive,
+    // SHA-bound prospective decision. Historical failures 16/17/18 are
+    // immutable, not scoreable; no fourth failed run can rearm itself.
+    if(target==="YSSY" && p2g25Recovery?.authorized===true){
+      if(p2g25Recovery.approval_status!=="PROJECT_LEAD_APPROVED_ONE_RECOVERY"||
+         p2g25Recovery.maximum_additional_attempts!==1||
+         p2g25Recovery.failed_probe_id!==18||
+         p2g23Recovery?.authorized!==true||
+         yssyRecovery?.authorized!==true)
+        throw Error("REFUSED_P2G25_FROZEN_RETRY_APPROVAL_OR_PARENT_MISSING");
+      const p18=rows.filter(row=>row.probeId===18);
+      const prior=rows.filter(row=>row.probeId===16||row.probeId===17);
+      if(p18.length!==1||prior.length!==2||
+         !exactP2g22YssyRecoveryFailureMatchesV39(yssyRecovery,prior.find(row=>row.probeId===16)!)||
+         prior.find(row=>row.probeId===17)?.status!=="failed"||
+         prior.find(row=>row.probeId===17)?.durationCensored!==true||
+         prior.find(row=>row.probeId===17)?.reconciliationStatus!=="UNRESOLVED")
+        throw Error("REFUSED_P2G25_PRIOR_YSSY_HISTORICAL_EVIDENCE_MISMATCH");
+      const a=p18[0];
+      if(a.status!==p2g25Recovery.expected_anchor_status||
+         a.icao!=="YSSY"||
+         a.metricContractVersion!==p2g25Recovery.expected_metric_contract_version||
+         a.probeBudgetDayId!==p2g25Recovery.expected_probe_budget_day_id||
+         a.runtimeSessionId!==p2g25Recovery.expected_runtime_session_id||
+         a.durationCensored!==true||
+         a.reconciliationStatus!=="UNRESOLVED"||
+         a.stopReason!==p2g25Recovery.expected_anchor_stop_reason||
+         a.durableReconciliation!==null)
+        throw Error("REFUSED_P2G25_PROBE18_DATABASE_FINGERPRINT_MISMATCH");
+      const subsequent=rows.filter(row=>![16,17,18].includes(row.probeId));
+      if(subsequent.length>1)
+        throw Error("REFUSED_P2G25_ONLY_ONE_ADDITIONAL_ATTEMPT_ALLOWED");
+      if(subsequent.length===0)return "YSSY";
+      if(!isScientificallyValidEarlyPilotAttemptV39(subsequent[0]))
+        throw Error("REFUSED_P2G25_RETRY_CONSUMED_AND_INVALID");
+      continue;
+    }
 
     // Project-lead approved one independent P2G23 technical recovery.
     // This branch never alters the old P2G22 retry limit.
@@ -916,6 +957,7 @@ export function chooseNextStage1TargetV39(
       evidence,
       amendment?.p2g22_yssy_delivery_gap_recovery_rerun,
       amendment?.p2g23_yssy_infrastructure_recovery_rerun,
+      amendment?.p2g25_yssy_published_infrastructure_recovery_rerun,
     );
     return target ? { icao: target, replacement: false } : null;
   }
