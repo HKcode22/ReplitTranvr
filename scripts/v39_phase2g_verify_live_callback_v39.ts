@@ -93,6 +93,29 @@ async function main(): Promise<void> {
     if (!healthExact) throw new Error("REFUSED:DEV_RUNTIME_HEALTH_NOT_EXACT");
   }
 
+  // Published verification has the SAME exact-source requirement as the
+  // development contingency. Check it BEFORE arming a disposable session,
+  // any signed POST, SQL mutation, or original object-storage creation.
+  // A shell operator may accidentally continue after a failed 'test':
+  // the executable itself MUST reject an older Replit published image.
+  if(!isDevContingency){
+    const h=await fetch(`${base}/__v39/workspace-runtime`,{
+      headers:{accept:"application/json"},
+      signal:AbortSignal.timeout(15_000)
+    });
+    const j=await jsonBody(h);
+    if(h.status!==200||
+       j?.schema!=="v39.phase2f-workspace-runtime.v1"||
+       j?.status!=="PASS"||
+       String(j?.git_head??"").toLowerCase()!==expectedHead||
+       j?.prepaid_route_registered!==true||
+       Number(j?.retention_hours)!==168||
+       j?.provider_mutation!==false||
+       j?.runtime_owner_mode!=="replit-published-deployment"||
+       j?.published_deployment!==true)
+      throw new Error("REFUSED:PUBLISHED_RUNTIME_GIT_HEAD_OR_CONTRACT_MISMATCH");
+  }
+
   const secret = String(process.env.AERODATABOX_WEBHOOK_SECRET ?? "").trim();
   if (secret.length < 32) throw new Error("REFUSED:AERODATABOX_WEBHOOK_SECRET_REQUIRED");
 
