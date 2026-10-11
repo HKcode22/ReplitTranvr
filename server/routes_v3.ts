@@ -393,8 +393,14 @@ export function registerV3Routes(app:Express):void{
           sessionId,
         ).catch(() => undefined);
       }
-      await recordIncident("raw-persistence",{mode:"prepaid_probe",sessionId,error:String(err?.message??"error").slice(0,240)});
-      res.status(500).json({error:"Prepaid probe persistence failed; please retry"});
+      // Incident reporting depends on the same PostgreSQL/hosting path
+      // that may have failed to persist this callback. Never let failure of
+      // this SECONDARY diagnostic suppress a definitive HTTP 5xx response.
+      // This 5xx is not an AeroDataBox retry authorization.
+      await recordIncident("raw-persistence",{mode:"prepaid_probe",sessionId,error:String(err?.message??"error").slice(0,240)})
+        .catch(()=>undefined);
+      if(!res.headersSent)
+        res.status(500).json({error:"Prepaid probe persistence failed; please retry"});
     }
   };
   const webhookIngress=async(req:Request,res:Response)=>{
