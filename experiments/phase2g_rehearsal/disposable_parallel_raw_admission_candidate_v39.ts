@@ -228,7 +228,7 @@ export async function recordVerifiedDisposablePendingOriginalRecoveryV39(args:{
   // touches original bytes and never advances source state to COMMITTED.
   const saved=await args.pool.query(`
     UPDATE clean.p2g_synthetic_raw_admission_intent
-       SET recovery_original_verified_utc=clock_timestamp()
+       SET recovery_original_verified_utc=COALESCE(recovery_original_verified_utc,clock_timestamp())
      WHERE session_id=$1 AND synthetic_attempt_hmac=$2
        AND source_sha256=$3 AND original_opaque_blob_path=$4
        AND state='PENDING'
