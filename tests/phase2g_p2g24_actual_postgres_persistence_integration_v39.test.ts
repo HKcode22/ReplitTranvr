@@ -2454,4 +2454,77 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     console.log("P12_SCIENTIFIC_PASS=false");
   });
 
+  it("P14 actual V3.9/PostgreSQL: one five-flight notification is ONE attempt and FIVE credits; a wrong cost is separately detected",async()=>{
+    const five=Array.from({length:5},(_,i)=>({
+      id:"p14-multiflight-QF"+(810+i),
+      number:"QF"+(810+i),
+      codeshareStatus:"IsOperator",
+      airline:{iata:"QF",icao:"QFA"},
+      departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+        scheduledTime:{utc:new Date(
+          Date.parse("2026-10-12T03:20:00.000Z")+60_000*i
+        ).toISOString()}},
+      arrival:{airport:{icao:"YMEL"},
+        scheduledTime:{utc:new Date(
+          Date.parse("2026-10-12T05:20:00.000Z")+60_000*i
+        ).toISOString()}}
+    }));
+    const original=sample({
+      id:"synthetic-p14-five-flight-notification",
+      deliveryAttempt:{seqNo:0,costCredits:5,
+        timestampUtc:"2026-10-12T03:03:01.000Z"},
+      flights:five
+    });
+    const inserted=await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:original,
+      receivedAtUtc:new Date("2026-10-12T03:03:02.000Z")
+    });
+    expect(inserted.itemCount).toBe(5);
+    const delivered=await state.pool!.query(
+      "SELECT delivery_attempt_cost_credits::int AS credits,"+
+      "notification_items FROM clean.prepaid_probe_delivery_runtime "+
+      "WHERE session_id=$1 AND delivery_id=$2",
+      [SESSION,inserted.deliveryId]
+    );
+    expect(delivered.rows).toMatchObject([{
+      credits:5,notification_items:5
+    }]);
+    const physical=await state.pool!.query(
+      "SELECT count(*)::int AS n FROM clean.prepaid_probe_item_runtime "+
+      "WHERE session_id=$1 AND delivery_id=$2",
+      [SESSION,inserted.deliveryId]
+    );
+    expect(physical.rows[0].n).toBe(5);
+    expect(await count()).toMatchObject({logged:1,unlogged:1});
+    const fabricated=sample({
+      id:"synthetic-p14-incorrect-credit-notification",
+      deliveryAttempt:{seqNo:0,costCredits:1,
+        timestampUtc:"2026-10-12T03:04:01.000Z"},
+      flights:five
+    });
+    const mismatch=await persistPrepaidProbeWebhookV39({
+      sessionId:SESSION,body:fabricated,
+      receivedAtUtc:new Date("2026-10-12T03:04:02.000Z")
+    });
+    expect(mismatch.itemCount).toBe(5);
+    const accounting=await state.pool!.query(
+      "SELECT count(*)::int AS attempts,"+
+      "COALESCE(sum(delivery_attempt_cost_credits),0)::int AS credits,"+
+      "COALESCE(sum(notification_items),0)::int AS flight_items,"+
+      "count(*) FILTER (WHERE delivery_attempt_cost_credits<>notification_items)::int "+
+      "AS disagreements "+
+      "FROM clean.prepaid_probe_delivery_runtime WHERE session_id=$1",
+      [SESSION]
+    );
+    expect(accounting.rows[0]).toMatchObject({
+      attempts:2,credits:6,flight_items:10,disagreements:1
+    });
+    expect(await count()).toMatchObject({logged:2,unlogged:2});
+    console.log("P14_ACTUAL_V39_MULTI_FLIGHT_CREDITS=5");
+    console.log("P14_ACTUAL_V39_NOTIFICATION_ATTEMPTS=2");
+    console.log("P14_ACTUAL_V39_10_ITEMS_6_REPORTED_CREDITS_DISAGREEMENTS=1");
+    console.log("P14_REAL_PROVIDER_SENDER_LEDGER_VERIFIED=false");
+    console.log("P14_PAID_YSSY_GO_AUTHORIZED=false");
+  });
+
 });
