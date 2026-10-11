@@ -729,6 +729,39 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(await count()).toEqual({logged:0,unlogged:0});
     expect(await session()).toEqual({requests:1,successes:0,failures:1});
   });
+  it("P04/P11 ACTUAL prepaid parser rejects duplicate top-level notification id before any DB/source ACK",async()=>{
+    const wire='{"id":"first","id":"second","subscription":{"id":"'+SUB+'"},"flights":[]}';
+    const r=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},body:wire
+    });
+    expect(r.status).toBe(400);
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(state.blobs.size).toBe(0);
+    expect(await session()).toEqual({requests:1,successes:0,failures:1});
+  });
+  it("P04/P11 ACTUAL prepaid parser rejects escaped duplicate billable costCredits in nested original-wire JSON",async()=>{
+    const wire='{"id":"escaped-billed-attempt","subscription":{"id":"'+SUB+
+      '"},"flights":[],"deliveryAttempt":{"costCredits":1,"\\u0063ostCredits":3}}';
+    const r=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},body:wire
+    });
+    expect(r.status).toBe(400);
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    expect(state.blobs.size).toBe(0);
+    expect(await session()).toEqual({requests:1,successes:0,failures:1});
+  });
+  it("P04/P11 ACTUAL prepaid parser accepts a single escaped legitimate JSON key without confusing it for a duplicate",async()=>{
+    const wire='{"\\u0069d":"unique-notification","subscription":{"id":"'+SUB+
+      '"},"flights":[],"deliveryAttempt":{"costCredits":0}}';
+    const r=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},body:wire
+    });
+    expect(r.status).toBe(200);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(state.blobs.size).toBe(1);
+    expect(await session()).toEqual({requests:1,successes:1,failures:0});
+  });
+
   it("ACTUAL parser rejects excessive 2MB body with HTTP 413 before persistence",async()=>{
     const r=await fetch(localOrigin+actualPath,{
       method:"POST",headers:{"content-type":"application/json"},
