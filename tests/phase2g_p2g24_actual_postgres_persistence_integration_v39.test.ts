@@ -69,7 +69,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
 import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
-import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
+import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39,auditDisposableRawAdmissionIntentsV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
 import {subscribePrepaidStageTimingV39,type PrepaidStageTimingV39} from "../server/lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {readReadOnlyPgSnapshotV39} from "../scripts/v39_phase2g_independent_pg_delivery_readonly_observer";
 import {registerV3Routes} from "../server/routes_v3";
@@ -371,6 +371,66 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
     // which this synthetic HMAC fixture CANNOT certify.
     expect(a.originalProviderAttemptWitnessVerified).toBe(false);
     expect(b.originalProviderAttemptWitnessVerified).toBe(false);
+  });
+  it("P13/P16 read-only recovery audit distinguishes committed, source-present PENDING and source-missing PENDING without ACK/replay/delete",async()=>{
+    const fake=fakeStore();
+    await submit("committed-intent",fake.store);
+    const blockFinal={
+      query:(sql:string,params?:unknown[])=>{
+        if(sql.includes("UPDATE clean.p2g_synthetic_raw_admission_intent"))
+          return Promise.reject(Error("SYNTHETIC_FINALIZATION_FAILED"));
+        return state.pool!.query(sql,params as any[]);
+      }
+    } as unknown as Pool;
+    await expect(submit("pending-original-present",fake.store,blockFinal))
+      .rejects.toThrow("SYNTHETIC_FINALIZATION_FAILED");
+    const missing=fakeStore();
+    missing.store.uploadBytes=async()=>{throw Error("SYNTHETIC_STORAGE_UPLOAD_FAILED");};
+    await expect(submit("pending-blob-missing",missing.store))
+      .rejects.toThrow("SYNTHETIC_STORAGE_UPLOAD_FAILED");
+    const before=state.blobs.size;
+    const audit=await auditDisposableRawAdmissionIntentsV39({
+      mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store:fake.store,
+      now:new Date("2026-10-12T03:00:00Z")
+    });
+    expect(audit).toMatchObject({
+      scanned:3,pending:2,committed:1,
+      pendingOriginalVerified:1,pendingOriginalMissingOrUnreadable:1,
+      committedOriginalVerified:1,
+      canAutoAcknowledge:false,canAutoReplay:false,canAutoDelete:false,
+      originalProviderSourceCompletenessVerified:false,paidLaunchAuthorized:false
+    });
+    expect(state.blobs.size).toBe(before);
+    expect(JSON.stringify(audit)).not.toContain(SESSION);
+    expect(JSON.stringify(audit)).not.toContain(SUB);
+  });
+  it("P13/P16 a corrupted committed blob is detected; no false science completeness or destructive cleanup",async()=>{
+    const fake=fakeStore();
+    await submit("corrupted-after-commit",fake.store);
+    const [key]=state.blobs.keys();
+    state.blobs.set(key,new TextEncoder().encode("corrupted-source"));
+    const audit=await auditDisposableRawAdmissionIntentsV39({
+      mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store:fake.store,
+      now:new Date("2100-01-01T00:00:00Z")
+    });
+    expect(audit.committedOriginalChanged).toBe(1);
+    expect(audit.expiredMetadataCount).toBe(1);
+    expect(audit.canAutoDelete).toBe(false);
+    expect(audit.canAutoReplay).toBe(false);
+    expect(state.blobs.has(key)).toBe(true);
+  });
+  it("P13/P16 audit refuses production mode; independent source remains unproven even when blobs intact",async()=>{
+    const fake=fakeStore();
+    await submit("proof-limit",fake.store);
+    const good=await auditDisposableRawAdmissionIntentsV39({
+      mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store:fake.store,
+      now:new Date("2026-10-12T03:00:00Z")
+    });
+    expect(good.committedOriginalVerified).toBe(1);
+    expect(good.originalProviderSourceCompletenessVerified).toBe(false);
+    await expect(auditDisposableRawAdmissionIntentsV39({
+      mode:"PRODUCTION" as any,pool:state.pool!,store:fake.store,now:new Date()
+    })).rejects.toThrow("P16_SYNTHETIC_RECOVERY_PRODUCTION_REFUSED");
   });
   it("P06 fail-closed: production credentials or wrong mode never admit source",async()=>{
     const fake=fakeStore();
