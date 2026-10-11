@@ -12,11 +12,30 @@ import {Pool} from "pg";
 const state=vi.hoisted(()=>({
   pool:null as null|Pool,
   blobs:new Map<string,Uint8Array>(),
-  failUpload:false,uploadDelayMs:0,downloadDelayMs:0,events:[] as string[]
+  failUpload:false,uploadDelayMs:0,downloadDelayMs:0,
+  commitAckLost:false,events:[] as string[]
 }));
 vi.mock("../server/lib/disruption/db_v39",()=>({
   v39Pool:{
-    connect:()=>{if(!state.pool)throw Error("NO_FIXTURE_POOL");return state.pool.connect()},
+    connect:async()=>{
+      if(!state.pool)throw Error("NO_FIXTURE_POOL");
+      const client=await state.pool.connect();
+      if(!state.commitAckLost)return client;
+      // Disposable PostgreSQL executes a REAL COMMIT, then the test
+      // suppresses its successful response: an ambiguous wire outcome.
+      const originalQuery=client.query.bind(client);
+      client.query=((...args:any[])=>{
+        const result=(originalQuery as any)(...args);
+        if(args[0]==="COMMIT"&&state.commitAckLost){
+          state.commitAckLost=false;
+          return Promise.resolve(result).then(()=>{
+            throw Error("P04_SIMULATED_LOST_COMMIT_RESPONSE");
+          });
+        }
+        return result;
+      }) as typeof client.query;
+      return client;
+    },
     query:(sql:string,params?:unknown[])=>{
       if(!state.pool)throw Error("NO_FIXTURE_POOL");
       return state.pool.query(sql,params);
@@ -168,7 +187,8 @@ beforeAll(async()=>{
 },20000);
 beforeEach(async()=>{
   state.blobs.clear();state.failUpload=false;state.uploadDelayMs=0;
-  state.downloadDelayMs=0;state.events.length=0;
+  state.downloadDelayMs=0;state.commitAckLost=false;
+  state.events.length=0;
   await state.pool!.query(
     "TRUNCATE clean.provider_content_blob_ref,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime,clean.prepaid_probe_item_runtime");
   await state.pool!.query(
@@ -206,6 +226,29 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(await count()).toEqual({logged:1,unlogged:1});
     expect(await session()).toEqual({requests:2,successes:2,failures:0});
   });
+  it("P04/P13 real PostgreSQL COMMIT success with LOST response retains original blob, not an orphan-deleting false rollback",async()=>{
+    const body=sample({id:"p04-postgres-real-commit-lost-response"});
+    state.commitAckLost=true;
+    await expect(persistPrepaidProbeWebhookV39({sessionId:SESSION,body}))
+      .rejects.toThrow("P04_SIMULATED_LOST_COMMIT_RESPONSE");
+    expect(state.commitAckLost).toBe(false);
+    // This SQL really committed: ACK transport was lost after COMMIT.
+    // Previously catch-cleanup deleted the original Replit blob here.
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(state.blobs.size).toBe(1);
+    expect(state.events).toContain("UPLOAD");
+    expect(state.events).toContain("READBACK");
+    expect(state.events).not.toContain("DELETE");
+    const retry=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+    expect(retry.duplicate).toBe(true);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(state.blobs.size).toBe(1);
+    expect(state.events.filter(s=>s==="UPLOAD")).toHaveLength(1);
+    // A locally committed success is NOT proof the provider saw 2xx.
+    // The retry was observed and deduplicated without inventing a flight.
+    expect((await session())?.requests).toBe(2);
+  });
+
   it("P04 lost-200 retry rechecks original object bytes after prior committed ACK; no second blob uploaded",async()=>{
     const body=sample({id:"p04-lost-200-real-duplicate"});
     const first=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
