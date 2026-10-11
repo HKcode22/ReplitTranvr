@@ -40,6 +40,29 @@ curl --silent --show-error --max-time 15 --fail-with-body \
 
 **Interpretation:** even a 200/PASS GET is NOT a successful original signed POST / ACK test. Compare published `git_head` to the exact **subsequent reviewed, merged release commit**. Current draft branch SHA cannot be assumed deployed.
 
+## Release-code review before any republish (read-only, narrow)
+
+PR #27 currently targets old callback base commit `5de44ba66d59c26d9e5ef3b339b7f729ca2f3653`, has **212 changed files / ~701 commits**, and is **DRAFT**. Current `main` is a separately diverged commit, and the public deployed source still claims the old callback base. **DO NOT merge the full PR into main by convenience.** Review an appropriately scoped runtime-only patch and its dependency closure; source changes in the review branch do NOT publish themselves.
+
+```bash
+cd ~/workspace
+git fetch origin main phase2g-p2g24-github-observer-20261009
+printf 'MAIN='; git rev-parse origin/main
+printf 'REVIEW='; git rev-parse origin/phase2g-p2g24-github-observer-20261009
+printf 'COMMON_ANCESTOR='; git merge-base origin/main origin/phase2g-p2g24-github-observer-20261009
+git diff --stat origin/main origin/phase2g-p2g24-github-observer-20261009 -- \
+  server/routes_v3.ts \
+  server/lib/disruption/prepaidProbeRuntime_v39.ts \
+  server/lib/disruption/prepaidSourceIntent_v39.ts \
+  scripts/v39_phase2g_stage1_logged_supervisor_v39.ts \
+  scripts/v39_phase2g_stage1_watchdog_6plus6_policy_v39.ts \
+  scripts/v39_phase2g_stage1_recover_after_exit_v39.ts \
+  scripts/v39_phase2g_subscription_exact_owner_match_v39.ts \
+  migrations/current/V0064__phase2g_prepaid_source_pending_intent_v39.sql
+```
+
+This is only the **core patch review**, not a complete dependency list; tests, exact migration ordering, feature approvals, `phase2gCallbackOnly` published build entrypoint and all imports also require verification. Git diff inspection never changes main or deployment.
+
 ## B. Optional operator account inventory read — zero Alert credits, provider GET/LIST API requests
 
 Run once if relevant credentials already exist in the normal Replit Shell. This is not a purchase and must not expose credentials in chat or commits. It may consume ordinary API request quota.
