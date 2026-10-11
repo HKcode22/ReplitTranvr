@@ -215,9 +215,14 @@ async function main(): Promise<void> {
   // IMPORTANT: the live production bridge does not yet authenticate a true
   // source/provider attempted-credit ledger independently of this host.
   // No user env variable can fake trusted evidence for extended grace.
-  // Candidate mode therefore fails closed by its third failed check until
-  // a separately reviewed, deployed verifier is integrated prospectively.
-
+  // In addition to the per-check fail-closed 3-strike controller,
+  // explicitly REFUSE a new paid launch that claims 6+6 protection when
+  // the authenticated independent source+credit witness bridge is absent.
+  // Do this before enforcePaidGuard(), live health calls or child spawn;
+  // user ENV cannot assert a trusted witness into existence.
+  if(callbackWatchdogMode==="six-plus-six-candidate"){
+    throw new Error("SUPERVISOR_REFUSED:SIX_PLUS_SIX_AUTHENTICATED_VERIFIER_NOT_DEPLOYED");
+  }
 
   if (!/^AUTH-\d{8}-[A-Z0-9]+$/.test(authId)) throw new Error("SUPERVISOR_REFUSED:AUTH_ID_INVALID");
   if (!/^[a-f0-9]{64}$/.test(expectedAuthSha)) throw new Error("SUPERVISOR_REFUSED:AUTH_SHA_INVALID");
