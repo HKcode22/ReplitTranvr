@@ -10,18 +10,19 @@ const H="c".repeat(64);
 function fixture(minutes:number[]=[0,1,3,3.5,9,15,29,30,31,44,46,47,58,60,62,62.5,70,72,75,88,91,93,94,99,103,105,109,110,115,119]):P20VariableRateFixtureV39{
   const attempts=minutes.map((minute,i)=>({
     attemptId:"attempt-"+i,sentUtc:utc(minute*60_000),
-    sourceWireSha256:H,syntheticCostCredits:1,
+    sourceWireSha256:H,syntheticFlightItems:1,syntheticCostCredits:1,
     senderStatus:200,senderElapsedMs:300
   }));
   const edges=attempts.map(x=>({
     attemptId:x.attemptId,originalUtc:utc(Date.parse(x.sentUtc)-BASE+100),
     sourceWireSha256:H,completeBytesDurablyAccepted:true,
-    authenticatedSyntheticReceipt:true
+    authenticatedSyntheticReceipt:true,
+    observedSyntheticCostCredits:x.syntheticCostCredits
   }));
   const internal=edges.map(x=>({
     attemptId:x.attemptId,originalUtc:x.originalUtc,
     sourceWireSha256:H,rawObjectSha256ReadbackVerified:true,
-    rawRetentionHours:168
+    rawRetentionHours:168,observedSyntheticCostCredits:x.observedSyntheticCostCredits
   }));
   return {
     mode:"synthetic-only",ownerWindowStartUtc:utc(0),
@@ -130,4 +131,57 @@ describe("P20 120m realistic variable-rate rehearsal evidence, no provider/no ho
     const b=fixture();rejects({...b,cloudResourcesCreated:1},"P20_NOT_STRICTLY_ZERO_PROVIDER_AND_CLOUD");
     const c=fixture();rejects({...c,scientificDatabaseWrites:1},"P20_NOT_STRICTLY_ZERO_PROVIDER_AND_CLOUD");
   });
+
+  it("P14 multi-flight notification can consume three synthetic flight credits in one attempt",()=>{
+    const f=fixture();
+    const sender=[...f.preplannedSenderAttempts];
+    const edge=[...f.observedEdgeAttempts];
+    const internal=[...f.observedInternalAttempts];
+    sender[10]={...sender[10],syntheticFlightItems:3,syntheticCostCredits:3};
+    edge[10]={...edge[10],observedSyntheticCostCredits:3};
+    internal[10]={...internal[10],observedSyntheticCostCredits:3};
+    const r=assessP20VariableRateRehearsalV39({...f,
+      preplannedSenderAttempts:sender,observedEdgeAttempts:edge,
+      observedInternalAttempts:internal});
+    expect(r.infrastructureFixtureConsistent,r.errors.join(",")).toBe(true);
+    expect(r.senderAttemptCount).toBe(30);
+    expect([r.senderCredits,r.edgeCredits,r.internalCredits]).toEqual([32,32,32]);
+    expect(r.paidLaunchAuthorized).toBe(false);
+  });
+  it("P14 exact same 30 attempts can hide 32/32/31 item-credit gap unless downstream observed credits are independent",()=>{
+    const f=fixture();
+    const sender=[...f.preplannedSenderAttempts];
+    const edge=[...f.observedEdgeAttempts];
+    const internal=[...f.observedInternalAttempts];
+    sender[10]={...sender[10],syntheticFlightItems:3,syntheticCostCredits:3};
+    edge[10]={...edge[10],observedSyntheticCostCredits:3};
+    internal[10]={...internal[10],observedSyntheticCostCredits:2};
+    const r=assessP20VariableRateRehearsalV39({...f,
+      preplannedSenderAttempts:sender,observedEdgeAttempts:edge,
+      observedInternalAttempts:internal});
+    expect(r.senderAttemptCount).toBe(30);
+    expect([r.senderCredits,r.edgeCredits,r.internalCredits]).toEqual([32,32,31]);
+    expect(r.errors).toEqual(expect.arrayContaining([
+      "P20_INTERNAL_OBSERVED_CREDIT_MISMATCH",
+      "P20_ATTEMPT_CREDIT_RECONCILIATION_GAP"
+    ]));
+  });
+  it("P14 same attempt-count edge credit deficiency must be measured, not copied from sender",()=>{
+    const f=fixture();
+    const edge=[...f.observedEdgeAttempts];
+    edge[4]={...edge[4],observedSyntheticCostCredits:0};
+    const r=assessP20VariableRateRehearsalV39({...f,observedEdgeAttempts:edge});
+    expect([r.senderCredits,r.edgeCredits,r.internalCredits]).toEqual([30,29,30]);
+    expect(r.errors).toEqual(expect.arrayContaining([
+      "P20_EDGE_OBSERVED_CREDIT_MISMATCH",
+      "P20_ATTEMPT_CREDIT_RECONCILIATION_GAP"
+    ]));
+  });
+  it("P14 sender must not claim zero charged flight items for a nonempty synthetic notification",()=>{
+    const f=fixture();
+    const sender=[...f.preplannedSenderAttempts];
+    sender[0]={...sender[0],syntheticFlightItems:2,syntheticCostCredits:1};
+    rejects({...f,preplannedSenderAttempts:sender},"P20_SENDER_FLIGHT_ITEM_CREDIT_MISMATCH");
+  });
+
 });
