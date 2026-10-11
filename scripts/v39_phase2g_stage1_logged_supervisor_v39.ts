@@ -414,6 +414,7 @@ async function main(): Promise<void> {
       git_head: head,
       probe_budget_day_id: budgetDayId,
       callback_consecutive_failures: callbackFailureCount,
+      callback_recovery_healthy_checks:watchdogState.recoveryHealthyChecks,
       callback_watchdog_policy: callbackWatchdogMode,
       // Aggregate episode/risk counters; no secrets, source IDs or flights.
       callback_outage_episodes_observed:watchdogState.outageEpisodeCount,
@@ -461,6 +462,7 @@ async function main(): Promise<void> {
           observed_at_utc: new Date().toISOString(),
           ...callbackHealth,
           consecutive_failures: callbackFailureCount,
+          recovery_healthy_checks:watchdogState.recoveryHealthyChecks,
           outage_episodes_observed:watchdogState.outageEpisodeCount,
           closed_outage_envelope_ms:watchdogState.closedOutageEnvelopeMs,
           // The actual paid watchdog is 6+6; provider delivery retries remain ZERO.
