@@ -71,6 +71,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
 import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import {DISPOSABLE_ADMISSION_INTENT_DDL_V39,runDisposableParallelRawAdmissionV39,auditDisposableRawAdmissionIntentsV39,recordVerifiedDisposablePendingOriginalRecoveryV39} from "../experiments/phase2g_rehearsal/disposable_parallel_raw_admission_candidate_v39";
 import {previewDisposablePendingPhysicalV2ReplayV39} from "../experiments/phase2g_rehearsal/disposable_pending_physical_v2_replay_preview_v39";
+import {rehydrateSyntheticQuarantinedPhysicalV2V39} from "../experiments/phase2g_rehearsal/disposable_quarantined_physical_v2_rehydrate_v39";
 import {subscribePrepaidStageTimingV39,type PrepaidStageTimingV39} from "../server/lib/disruption/phase2gPrepaidStageTelemetry_v39";
 import {readReadOnlyPgSnapshotV39} from "../scripts/v39_phase2g_independent_pg_delivery_readonly_observer";
 import {registerV3Routes} from "../server/routes_v3";
@@ -748,6 +749,153 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
     }
     await expect(preview("nonexistent",fake.store))
       .rejects.toThrow("P13_PHYSICAL_PREVIEW_SOURCE_INTENT_MISSING");
+  });
+  const actualQuarantineReplay=(name:string,store:ReturnType<typeof fakeStore>["store"],
+      syntheticEdgeReceivedUtc="2026-10-12T03:04:00.000Z")=>
+    rehydrateSyntheticQuarantinedPhysicalV2V39({
+      mode:"P2G_DISPOSABLE_ONLY",pool:state.pool!,store,
+      sessionId:SESSION,syntheticAttemptHmac:key(name),
+      expectedSyntheticSubscriptionId:SUB,syntheticEdgeReceivedUtc,
+      syntheticWindowStartUtc:"2026-10-12T03:00:00.000Z",
+      syntheticWindowEndUtc:"2026-10-12T05:00:00.000Z"
+    });
+  const operatorLeg=()=>({
+    id:"synthetic-qf-quarantine-12",number:"QF612",
+    codeshareStatus:"IsOperator",
+    airline:{iata:"QF",icao:"QFA"},
+    departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+      scheduledTime:{utc:"2026-10-12T03:40:00Z"}},
+    arrival:{airport:{icao:"YMML"},scheduledTime:{utc:"2026-10-12T05:15:00Z"}},
+    callSign:"QFA612"
+  });
+  const createRecoveredQuarantineSource=async(name:string,
+    body:any,store:ReturnType<typeof fakeStore>["store"])=>{
+    await expect(sourceToPending(name,body,store))
+      .rejects.toThrow("SYNTHETIC_RECOVERY_REPLAY_SQL_COMMIT_FAILED");
+    const rec=await verifyPending(name,store);
+    expect(rec.outcome).toBe("ORIGINAL_PRESENT_VERIFIED_STILL_PENDING");
+    await state.pool!.query(
+      "UPDATE clean.prepaid_probe_session_runtime SET state='quarantined' WHERE session_id=$1",
+      [SESSION]);
+  };
+  it("P13 quarantined TRUE V3.9 physical-v2 resolver inserts exact UNLOGGED rows, idempotent without ACK or second LOGGED original",async()=>{
+    const fake=fakeStore();
+    const operator=operatorLeg();
+    const marketing={...operator,id:"synthetic-marketing",number:"AA805",
+      codeshareStatus:"IsCodeshared"};
+    const unknown={...operator,id:"synthetic-unknown",number:"QF777",
+      codeshareStatus:"Unknown"};
+    await createRecoveredQuarantineSource("replay-initial",
+      sample({id:"signed-only-by-test-fixture",
+        flights:[operator,marketing,unknown]}),fake.store);
+    const first=await actualQuarantineReplay("replay-initial",fake.store);
+    expect(first).toMatchObject({
+      outcome:"SYNTHETIC_QUARANTINED_INSERTED",
+      recoveredDeliveryRows:1,recoveredPhysicalObservationRows:3,
+      confirmedPhysicalOperatorRows:1,
+      unresolvableOrMarketingQuarantinedRows:2,
+      originalIntentStillPending:true,runState:"quarantined",
+      originalEdgeUtcIndependentlyAttested:false,
+      providerAttemptAndCreditsIndependentlyVerified:false,
+      canAcknowledge:false,canResumePaidCollection:false,
+      canClaimCompleteF8:false,paidLaunchAuthorized:false
+    });
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    const records=await state.pool!.query(
+      "SELECT item_index,flight_instance_id,identity_resolution_status,"+
+      "codeshare_resolution_status,received_at_utc,raw_item_sha256 "+
+      "FROM clean.prepaid_probe_item_runtime ORDER BY item_index");
+    expect(records.rows).toHaveLength(3);
+    expect(records.rows[0].flight_instance_id).toMatch(/^leg:/);
+    expect(records.rows[0].identity_resolution_status).toBe("resolved");
+    expect(records.rows.slice(1).every(x=>x.identity_resolution_status==="quarantined"&&
+      x.flight_instance_id===null)).toBe(true);
+    expect(records.rows.every(x=>
+      new Date(x.received_at_utc).toISOString()==="2026-10-12T03:04:00.000Z")).toBe(true);
+    const replay=await actualQuarantineReplay("replay-initial",fake.store);
+    expect(replay.outcome).toBe("SYNTHETIC_QUARANTINED_IDEMPOTENT");
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect((await state.pool!.query(
+      "SELECT COUNT(*)::int AS n FROM clean.prepaid_probe_item_runtime"
+    )).rows[0].n).toBe(3);
+    expect((await state.pool!.query(
+      "SELECT state FROM clean.p2g_synthetic_raw_admission_intent"
+    )).rows[0].state).toBe("PENDING");
+    expect((await state.pool!.query(
+      "SELECT state,callback_success_2xx FROM clean.prepaid_probe_session_runtime"
+    )).rows[0]).toMatchObject({state:"quarantined",callback_success_2xx:0});
+    expect(fake.uploads()).toBe(1);
+    expect(JSON.stringify(first)).not.toContain(SESSION);
+    expect(JSON.stringify(first)).not.toContain("QF612");
+  });
+  it("P13 reject replay when owner is active, original changed, missing, expired or synthetic clock outside frozen window",async()=>{
+    const fake=fakeStore();
+    await createRecoveredQuarantineSource("original-race",
+      sample({id:"one-synthetic",flights:[operatorLeg()]}),fake.store);
+    await state.pool!.query(
+      "UPDATE clean.prepaid_probe_session_runtime SET state='active'");
+    await expect(actualQuarantineReplay("original-race",fake.store))
+      .rejects.toThrow("P13_REHYDRATE_OWNER_NOT_QUARANTINED");
+    expect(await count()).toEqual({logged:0,unlogged:0});
+    await state.pool!.query(
+      "UPDATE clean.prepaid_probe_session_runtime SET state='quarantined'");
+    const [blobName]=state.blobs.keys();
+    const original=state.blobs.get(blobName)!;
+    state.blobs.set(blobName,new TextEncoder().encode("tampered"));
+    await expect(actualQuarantineReplay("original-race",fake.store))
+      .rejects.toThrow("P13_REHYDRATE_ORIGINAL_SHA_MISMATCH");
+    state.blobs.delete(blobName);
+    await expect(actualQuarantineReplay("original-race",fake.store))
+      .rejects.toThrow("P13_REHYDRATE_ORIGINAL_UNREADABLE");
+    state.blobs.set(blobName,original);
+    await expect(actualQuarantineReplay("original-race",fake.store,
+      "2026-10-12T05:00:00.000Z"))
+      .rejects.toThrow("P13_REHYDRATE_SYNTHETIC_WINDOW_INVALID");
+    await state.pool!.query(
+      "UPDATE clean.p2g_synthetic_raw_admission_intent SET source_retention_until=clock_timestamp()-interval '1 minute'");
+    await expect(actualQuarantineReplay("original-race",fake.store))
+      .rejects.toThrow("P13_REHYDRATE_ORIGINAL_EXPIRED");
+    expect(await count()).toEqual({logged:0,unlogged:0});
+  });
+  it("P13 reject partial/corrupted duplicate before any second replay or ACK",async()=>{
+    const fake=fakeStore();
+    await createRecoveredQuarantineSource("conflicted-repeat",
+      sample({id:"no-science-authorization",
+        flights:[operatorLeg()]}),fake.store);
+    await actualQuarantineReplay("conflicted-repeat",fake.store);
+    await state.pool!.query(
+      "UPDATE clean.prepaid_probe_item_runtime SET raw_item_sha256=$1",
+      ["f".repeat(64)]);
+    await expect(actualQuarantineReplay("conflicted-repeat",fake.store))
+      .rejects.toThrow("P13_REHYDRATE_ITEM_IDENTITY_CONFLICT");
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    const q=await state.pool!.query(
+      "SELECT state FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(q.rows[0].state).toBe("PENDING");
+    expect(fake.uploads()).toBe(1);
+  });
+  it("P13 quarantined replay rejects original JSON duplicate cost key, unknown subscription or production credentials",async()=>{
+    const fake=fakeStore();
+    const wire='{"id":"fake","subscription":{"id":"'+SUB+
+      '"},"deliveryAttempt":{"costCredits":1,"costCredits":2},"flights":[]}';
+    await createRecoveredQuarantineSource("double-cost-key",wire,fake.store);
+    await expect(actualQuarantineReplay("double-cost-key",fake.store))
+      .rejects.toThrow("PREPAID_ORIGINAL_DUPLICATE_JSON_KEY");
+    const mismatched=sample({subscription:{id:"wrong-test-subscription"},
+      id:"synthetic-wrong-sub",flights:[operatorLeg()]});
+    await createRecoveredQuarantineSource("wrong-sub",mismatched,fake.store);
+    await expect(actualQuarantineReplay("wrong-sub",fake.store))
+      .rejects.toThrow("P13_REHYDRATE_SUBSCRIPTION_MISMATCH");
+    const old=process.env.V39_PROVIDER_BLOB_BUCKET_ID;
+    process.env.V39_PROVIDER_BLOB_BUCKET_ID="FORBIDDEN_PRODUCTION_BUCKET";
+    try{
+      await expect(actualQuarantineReplay("wrong-sub",fake.store))
+        .rejects.toThrow("P13_REHYDRATE_FIXTURE_ONLY");
+    }finally{
+      if(old===undefined)delete process.env.V39_PROVIDER_BLOB_BUCKET_ID;
+      else process.env.V39_PROVIDER_BLOB_BUCKET_ID=old;
+    }
+    expect(await count()).toEqual({logged:0,unlogged:0});
   });
   it("P06 fail-closed: production credentials or wrong mode never admit source",async()=>{
     const fake=fakeStore();
