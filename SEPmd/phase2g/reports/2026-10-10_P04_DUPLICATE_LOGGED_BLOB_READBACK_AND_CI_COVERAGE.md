@@ -18,7 +18,7 @@ In the actual V3.9 prepaid processor `server/lib/disruption/prepaidProbeRuntime_
 ## Regression evidence
 
 - [Verified CI #38105116907](https://github.com/HKcode22/ReplitTranvr/actions/runs/38105116907) at source `d9641e781089524736023eb1b0c4d48a2106c04d`: **468/468 offline (46 suites), 49/49 actual V3.9 disposable PostgreSQL16 (both jobs SUCCESS)**. Four new PG tests cover healthy lost-200 retry without duplicate blob, missing original raw on actual prepaid route, corrupted object on retry, and three types of forged/missing logged blob metadata; genuine SIGKILL again confirms UNLOGGED reset and LOGGED owner-binding persistence.
-- Source `a2f556ccbf2b63a769317efed40365a026ef069b` adds a fifth disposable PostgreSQL delayed-blob-read HTTP regression to test P05 ACK timing. [CI #38105227610](https://github.com/HKcode22/ReplitTranvr/actions/runs/38105227610) **must be checked for both-job success before marking that extra test verified**.
+- **LATEST VERIFIED SOURCE:** `a2f556ccbf2b63a769317efed40365a026ef069b`: fifth disposable PostgreSQL real-prepaid-route regression uses 220ms delayed synthetic object readback and requires the duplicate HTTP acknowledgment to wait. [CI #38105227610](https://github.com/HKcode22/ReplitTranvr/actions/runs/38105227610) **BOTH jobs SUCCESS: 468/468 offline tests across 46 suites, 50/50 actual V3.9 disposable PostgreSQL16 tests; independent real SIGKILL confirms UNLOGGED crash loss**.
 
 ## Remaining unclosed launch blockers
 
