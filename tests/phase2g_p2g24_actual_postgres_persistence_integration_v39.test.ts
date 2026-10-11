@@ -1867,6 +1867,10 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     );
     const wire=JSON.stringify(sample({
       id:"synthetic-atomic-yssy-two-flights",
+      // AeroDataBox bills per flight ITEM. Two original operator flight
+      // observations in one webhook cost two synthetic attempt credits.
+      deliveryAttempt:{seqNo:0,costCredits:2,
+        timestampUtc:"2026-10-12T03:01:01Z"},
       flights:[
         {id:"p13-original-QF740",number:"QF740",
           codeshareStatus:"IsOperator",
@@ -1900,6 +1904,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     );
     expect(delivery.rowCount).toBe(1);
     expect(origItems.rowCount).toBe(2);
+    expect(Number(delivery.rows[0].delivery_attempt_cost_credits)).toBe(2);
     const clone=(x:any)=>JSON.parse(JSON.stringify(x));
     const normalizeBefore=origItems.rows.map(clone);
     const refs=await state.pool!.query(
@@ -1934,7 +1939,7 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       windowEndUtc:"2026-10-12T05:00:00.000Z",
       attemptKey:"restore:exact:two:operator",sourceWireSha256:
         offlineShaHash("sha256").update(raw).digest("hex"),
-      firstEdgeReceivedUtc:received,syntheticCostCredits:1,
+      firstEdgeReceivedUtc:received,syntheticCostCredits:2,
       items:witnessed
     };
     const journalKey="p13-synthetic-science-journal-key-"+"s".repeat(64);
