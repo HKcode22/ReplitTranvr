@@ -340,6 +340,40 @@ describe("P13 signed synthetic TWO-HOUR all-eight-bin source-to-recovery truth a
       "P13_SIGNED_SENDER_ATTEMPT_MISSING_FROM_SCIENCE_JOURNAL"
     ]));
   });
+  it("zero-flight original provider-shaped synthetic notification costs zero, preserves source receipt and fabricates no physical row",()=>{
+    const f=makeFixture(),i=5;
+    const body=JSON.parse(new TextDecoder().decode(f.entries[i].originalWire));
+    body.flights=[];
+    body.deliveryAttempt.costCredits=0;
+    const wire=new TextEncoder().encode(JSON.stringify(body));
+    const prior=f.entries[i].signed.frame;
+    f.entries[i]={
+      originalWire:wire,
+      signed:signSyntheticScienceRecoveryFrameV39({
+        ...prior,sourceWireSha256:digest(wire),syntheticCostCredits:0,
+        items:[]
+      },JOURNAL_KEY)
+    };
+    const attempt=f.signedSyntheticSender.frame.attempts[i];
+    f.signedSyntheticSender=signSyntheticSenderFrameV39({
+      ...f.signedSyntheticSender.frame,
+      attempts:f.signedSyntheticSender.frame.attempts.map((x,k)=>
+        k===i?{...attempt,wireSha256:digest(wire),
+          canonicalSha256:digest(canonical(body)),
+          syntheticCostCredits:0}:x)
+    },SENDER_KEY);
+    f.observedRuntimeRows.splice(i,1);
+    const d=audit(f);
+    expect(d.testManifestConsistent,d.errors.join(",")).toBe(true);
+    expect(d).toMatchObject({
+      sourceAttempts:120,journalAttempts:120,
+      observedItems:119,confirmedObservationRows:119,
+      sourceSyntheticCredits:119,journalSyntheticCredits:119,
+      scientificPassAuthorized:false,paidLaunchAuthorized:false
+    });
+    expect(d.sourceBuckets).toEqual([15,15,15,15,15,15,15,15]);
+  });
+
   it("multi-flight cost 2 within one notification is measured per flight item, not per webhook",()=>{
     const f=makeFixture();
     const i=10;
