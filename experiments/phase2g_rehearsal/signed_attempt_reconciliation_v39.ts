@@ -72,8 +72,10 @@ const iso=(v:unknown):v is string=>typeof v==="string"&&
   new Date(Date.parse(v)).toISOString().slice(0,19)===v.slice(0,19);
 const digest=(v:unknown):v is string=>typeof v==="string"&&H.test(v);
 const key=(v:unknown):v is string=>typeof v==="string"&&ID.test(v);
-const credit=(v:unknown):v is number=>Number.isSafeInteger(v)&&
-  (v===0||v===1);
+// Official AeroDataBox alerts bill per FLIGHT ITEM in each notification,
+// not one credit per webhook. A multi-flight airport notice can cost >1.
+// This is still a synthetic signer: no real provider attestation is implied.
+const credit=(v:unknown):v is number=>Number.isSafeInteger(v)&&v>=0;
 const requireFrame=(f:SyntheticSenderFrameV39)=>{
   if(f?.schema!=="v39.phase2g-synthetic-independent-sender.v1"||
      f.mode!=="synthetic-only"||!UUID.test(f.sessionId)||
