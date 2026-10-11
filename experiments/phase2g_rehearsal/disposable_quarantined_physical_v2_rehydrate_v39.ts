@@ -182,8 +182,10 @@ export async function rehydrateSyntheticQuarantinedPhysicalV2V39(
        all.rowCount>1)
       throw Error("P13_REHYDRATE_UNRELATED_RUNTIME_PRESENT");
     const logged=await c.query(
-      "SELECT blob_ref_id,content_sha256,object_name,source_record_id FROM "+
-      "clean.provider_content_blob_ref WHERE blob_ref_id=$1 FOR SHARE",
+      "SELECT blob_ref_id,content_sha256,content_bytes,object_name,"+
+      "source_record_id,source_kind,storage_kind,contract_version,"+
+      "retention_hours,persisted_at_utc,expires_at_utc "+
+      "FROM clean.provider_content_blob_ref WHERE blob_ref_id=$1 FOR SHARE",
       [row.original_opaque_blob_uuid]);
     const expectedSourceRecord="synthetic-quarantined:"+
       input.sessionId+":"+prepared.deliveryId;
@@ -203,8 +205,17 @@ export async function rehydrateSyntheticQuarantinedPhysicalV2V39(
       const prior=logged.rows[0];
       if(prior.blob_ref_id!==row.original_opaque_blob_uuid||
          prior.content_sha256!==row.source_sha256||
+         Number(prior.content_bytes)!==raw.length||
          prior.object_name!==row.original_opaque_blob_path||
-         prior.source_record_id!==expectedSourceRecord)
+         prior.source_record_id!==expectedSourceRecord||
+         prior.source_kind!=="synthetic-quarantined"||
+         prior.storage_kind!=="replit_app_storage"||
+         prior.contract_version!=="provider-blob-contract-v39@1.0.0"||
+         Number(prior.retention_hours)!==168||
+         new Date(prior.persisted_at_utc).getTime()!==
+           new Date(row.created_utc).getTime()||
+         new Date(prior.expires_at_utc).getTime()!==
+           new Date(row.source_retention_until).getTime())
         throw Error("P13_REHYDRATE_LOGGED_ORIGINAL_REF_CONFLICT");
     }
     const existing=all.rowCount===1;
