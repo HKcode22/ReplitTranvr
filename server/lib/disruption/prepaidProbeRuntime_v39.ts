@@ -1183,12 +1183,37 @@ export async function persistPrepaidProbeWebhookV39(input: {
         error.phase2gFailureRecorded=true;
         throw error;
       }
-      reservation=await reservePrepaidSourceIntentV39({
-        sessionId,deliveryId,bodySha256,originalCanonical:rawBytes,
-        firstNodeUtc:receivedAt,query:admission
-      });
-      await admission.query("COMMIT");
-      requestAdmittedOutsideLock=true;
+      // A delivery committed before this opt-in, or an original retained
+      // after scientific SQL failure, already has source custody. Do NOT
+      // reserve/upload a second blob merely because prelock optimization is
+      // disabled or failed. Fall back to the authoritative locked-path
+      // duplicate/readback or failed-source recovery and account once there.
+      const existing=await admission.query(`
+        SELECT
+          EXISTS(
+            SELECT 1 FROM clean.prepaid_probe_delivery_runtime
+             WHERE session_id=$1 AND delivery_id=$2
+          ) AS delivered,
+          EXISTS(
+            SELECT 1 FROM clean.provider_content_blob_ref
+             WHERE source_kind='webhook' AND source_record_id=$3
+          ) AS retained
+      `,[sessionId,deliveryId,`prepaid:${sessionId}:${deliveryId}`]);
+      if(existing.rowCount!==1)
+        throw Error("PREPAID_SOURCE_CUSTODY_PREFLIGHT_UNAVAILABLE_NO_ACK");
+      if(existing.rows[0].delivered===true||
+         existing.rows[0].retained===true){
+        // Roll back the provisional callback_requests_seen increment: the
+        // normal locked path below will count this SAME request exactly once.
+        await admission.query("ROLLBACK");
+      }else{
+        reservation=await reservePrepaidSourceIntentV39({
+          sessionId,deliveryId,bodySha256,originalCanonical:rawBytes,
+          firstNodeUtc:receivedAt,query:admission
+        });
+        await admission.query("COMMIT");
+        requestAdmittedOutsideLock=true;
+      }
       }
     }catch(error){
       await admission.query("ROLLBACK").catch(()=>undefined);
