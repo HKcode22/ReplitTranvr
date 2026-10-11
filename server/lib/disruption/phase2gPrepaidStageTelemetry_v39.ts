@@ -44,3 +44,20 @@ export function recordPrepaidStageTimingV39(
     independent_original_source_proven:false
   } satisfies PrepaidStageTimingV39);
 }
+
+/** Measure exactly one asynchronous boundary, including failed stages. */
+export async function timePrepaidStageV39<T>(
+  stage:PrepaidStageV39,action:()=>Promise<T>
+):Promise<T>{
+  const started=performance.now();
+  let outcome:"completed"|"failed"="failed";
+  try{
+    const result=await action();
+    outcome="completed";
+    return result;
+  }finally{
+    // Diagnostic subscribers must never be allowed to cause a callback 5xx.
+    try{recordPrepaidStageTimingV39(stage,performance.now()-started,outcome);}
+    catch {/* metrics must not alter provider processing */}
+  }
+}
