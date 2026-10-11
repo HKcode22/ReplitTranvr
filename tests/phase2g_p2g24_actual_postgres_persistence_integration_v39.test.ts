@@ -468,6 +468,13 @@ describe("P06 proposal: release DB connection during original blob I/O; DISPOSAB
       "SELECT state,recovery_original_verified_utc,original_opaque_blob_path FROM clean.p2g_synthetic_raw_admission_intent");
     expect(after.rows[0].state).toBe("PENDING");
     expect(after.rows[0].recovery_original_verified_utc).not.toBeNull();
+    const firstVerificationUtc=new Date(after.rows[0].recovery_original_verified_utc).getTime();
+    expect((await verifyPending("uploaded-but-uncommitted",fake.store)).outcome)
+      .toBe("ORIGINAL_PRESENT_VERIFIED_STILL_PENDING");
+    const repeated=await state.pool!.query(
+      "SELECT recovery_original_verified_utc FROM clean.p2g_synthetic_raw_admission_intent");
+    expect(new Date(repeated.rows[0].recovery_original_verified_utc).getTime())
+      .toBe(firstVerificationUtc);
     expect(state.blobs.get(after.rows[0].original_opaque_blob_path))
       .toEqual(original);
     expect((await submit("uploaded-but-uncommitted",fake.store,state.pool!,0))
