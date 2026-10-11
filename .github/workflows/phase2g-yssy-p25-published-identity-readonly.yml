@@ -1,0 +1,85 @@
+name: YSSY P25 Public Receiver Identity (Read-Only, No Provider)
+on:
+  push:
+    branches:
+      - phase2g-yssy-p25-minimal-release-20261011
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  hosted-public-get:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EXPECTED_REF_HEAD: ${{ github.sha }}
+      PUBLISHED_URL: https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime
+    steps:
+      - name: Observe public deployed version WITHOUT POST or secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/p25-readonly-published-identity.json"
+          HTTP_BODY="${RUNNER_TEMP}/p25-readonly-public-body.json"
+          set +e
+          RESULT="$(curl -sS -L --connect-timeout 5 --max-time 15 \
+            --write-out '%{http_code}|%{time_total}' \
+            --header 'accept: application/json' \
+            --output "${HTTP_BODY}" \
+            "${PUBLISHED_URL}")"
+          EXIT=$?
+          set -e
+          node --input-type=module - "${HTTP_BODY}" "${OUT}" "${EXIT}" "${RESULT}" <<'NODE'
+          import fs from 'node:fs';
+          const [rawPath,outPath,exitCode,wire]=process.argv.slice(2);
+          let response={};
+          try{ response=JSON.parse(fs.readFileSync(rawPath,'utf8')); }catch{}
+          const parts=String(wire??'').split('|');
+          const http=Number(parts[0]??0);
+          const elapsedSec=Number(parts[1]??'NaN');
+          const expected=String(process.env.EXPECTED_REF_HEAD??'').toLowerCase();
+          const claimed=String(response?.git_head??'').toLowerCase();
+          const valid=Number(exitCode)===0 && http===200 &&
+            response?.schema==='v39.phase2f-workspace-runtime.v1' &&
+            response?.status==='PASS' &&
+            response?.prepaid_route_registered===true &&
+            response?.published_deployment===true;
+          const match=valid && claimed===expected;
+          const result={
+            schema:'v39.phase2g-p25.published-identity-readonly.v1',
+            checked_at_utc:new Date().toISOString(),
+            status:!valid?'HOLD_UNREACHABLE_OR_INVALID_PUBLIC_RUNTIME':
+              match?'CLAIMED_SOURCE_MATCH_STILL_NOT_SIGNED_POST_PROOF':
+              'HOLD_PUBLISHED_SOURCE_DIFFERS_FROM_TESTED_RELEASE',
+            hosted_http_status:Number.isFinite(http)?http:null,
+            hosted_elapsed_ms:Number.isFinite(elapsedSec)?Math.round(elapsedSec*1000):null,
+            claimed_published_git_head:claimed||null,
+            candidate_git_head:expected,
+            published_autoscale_class:response?.runtime_durability_class??null,
+            credential_access:false,provider_requests:0,
+            provider_mutations:0,paid_alert_credits:0,
+            database_reads:0,database_mutations:0,
+            signed_nonempty_external_post_verified:false,
+            stage1_retry_approval_verified:false,
+            6plus6_paid_activation_verified:false,
+            paid_yssy_launch_go:false
+          };
+          fs.writeFileSync(outPath,JSON.stringify(result,null,2)+'\n',{flag:'wx'});
+          console.log(JSON.stringify(result,null,2));
+          if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            '### YSSY P25 published receiver: NOT PAID GO\n'+
+            '- Published claimed Git SHA: `'+(claimed||'unavailable')+'`\n'+
+            '- Release candidate Git SHA: `'+expected+'`\n'+
+            '- Read-only GET: HTTP '+(Number.isFinite(http)?http:'unknown')+
+            ', '+(Number.isFinite(elapsedSec)?Math.round(elapsedSec*1000)+' ms':'unknown latency')+'\n'+
+            '- Result: **'+result.status+'**\n'+
+            '- This GET never proves signed POST custody, provider cost safety, or Stage-1 authorization.\n'
+          );
+          NODE
+          echo "READONLY_ONLY=true"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p25-published-identity-readonly
+          path: ${{ runner.temp }}/p25-readonly-published-identity.json
+          if-no-files-found: error
+          retention-days: 7
