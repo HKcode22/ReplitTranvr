@@ -460,6 +460,7 @@ async function main(): Promise<void> {
           health.json?.git_head ?? "",
         ).toLowerCase() === expectedHead &&
         health.json?.prepaid_route_registered === true &&
+        health.json?.prepaid_source_custody_ready === true &&
         Number(
           health.json?.retention_hours,
         ) === 168 &&
