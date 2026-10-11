@@ -23,7 +23,7 @@ export type SyntheticScienceJournalFrameV39=Readonly<{
   attemptKey:string;
   sourceWireSha256:string;
   firstEdgeReceivedUtc:string;
-  syntheticCostCredits:0|1;
+  syntheticCostCredits:number;
   items:readonly SyntheticPhysicalItemWitnessV39[];
 }>;
 export type SignedSyntheticScienceJournalV39=Readonly<{
@@ -111,8 +111,10 @@ function frameProjection(f:SyntheticScienceJournalFrameV39):string{
      !date(f.firstEdgeReceivedUtc)||
      Date.parse(f.firstEdgeReceivedUtc)<Date.parse(f.windowStartUtc)||
      Date.parse(f.firstEdgeReceivedUtc)>=Date.parse(f.windowEndUtc)||
-     ![0,1].includes(f.syntheticCostCredits)||
-     !Array.isArray(f.items)||f.items.length>2000)
+     !Number.isSafeInteger(f.syntheticCostCredits)||
+     f.syntheticCostCredits<0||f.syntheticCostCredits>2000||
+     !Array.isArray(f.items)||f.items.length>2000||
+     f.syntheticCostCredits!==f.items.length)
     throw new Error("P13_LOGGED_SCIENCE_FRAME_INVALID");
   // Original evidence and V3.9 processing timestamps are NOT interchangeable.
   const keys=new Set<string>();
