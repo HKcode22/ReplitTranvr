@@ -68,7 +68,7 @@ describe("P2G24 published callback startup and diagnostics hardening", () => {
     expect(supervisor).toContain('String(health?.git_head ?? "").toLowerCase() !== expectedHead');
     expect(supervisor).toContain('health?.published_deployment !== publishedMode');
     expect(supervisor).toContain('const CALLBACK_POLL_MS = 15_000');
-    expect(supervisor).toContain("const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3");
+    expect(supervisor).toContain("const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39");
     expect(supervisor).toContain(
       'requestTermination("SIGTERM", "workspace_callback_unreachable_threshold")',
     );
