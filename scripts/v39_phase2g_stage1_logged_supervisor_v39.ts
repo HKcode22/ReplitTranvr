@@ -307,6 +307,7 @@ async function main(): Promise<void> {
   // The owner is spawned directly after the paid guard. It independently
   // re-verifies the same AUTH, while direct parentage lets the supervisor
   // signal the real paid owner before fail-closed recovery.
+  const ownerSpawnMonotonicMs = performance.now();
   const child = spawn(
     process.execPath,
     ["--import", "tsx", "scripts/v39_probe_stage1_owner_v39.ts", "--auth", authId, "--auth-file", authFile, "--icao", expectedIcao],
@@ -463,8 +464,10 @@ async function main(): Promise<void> {
   clearInterval(heartbeat);
   clearInterval(callbackWatchdog);
 
+  const ownerElapsedMonotonicMs = performance.now() - ownerSpawnMonotonicMs;
   const exitVerdict = stage1PaidOwnerExitVerdictV39({
     ...exit,
+    elapsedMonotonicMs: ownerElapsedMonotonicMs,
     terminationRequested: terminationSignal !== null,
     watchdogTriggered: callbackWatchdogTriggered,
   });
@@ -525,6 +528,7 @@ async function main(): Promise<void> {
     child_signal: exit.signal,
     child_spawn_error: exit.spawnError,
     child_exit_verdict_reason: exitVerdict.reason,
+    child_wall_elapsed_ms: Math.round(ownerElapsedMonotonicMs),
     termination_signal_seen_by_supervisor: terminationSignal,
     callback_watchdog_triggered: callbackWatchdogTriggered,
     callback_watchdog_policy: callbackWatchdogMode,
