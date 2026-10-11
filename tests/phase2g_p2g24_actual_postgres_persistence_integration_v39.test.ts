@@ -14,7 +14,7 @@ import {join} from "node:path";
 const state=vi.hoisted(()=>({
   pool:null as null|Pool,
   blobs:new Map<string,Uint8Array>(),
-  failUpload:false,failDownloadOnce:false,failUploadAfterWriteOnce:false,
+  failUpload:false,failStoreInitialization:false,failDownloadOnce:false,failUploadAfterWriteOnce:false,
   uploadDelayMs:0,downloadDelayMs:0,
   commitAckLost:"none" as "none"|"before"|"after",events:[] as string[]
 }));
@@ -49,7 +49,10 @@ vi.mock("../server/lib/disruption/db_v39",()=>({
   }
 }));
 vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
-  createRequiredProviderBlobStoreV39:()=>({
+  createRequiredProviderBlobStoreV39:()=>{
+    if(state.failStoreInitialization)
+      throw Error("P06_SYNTHETIC_STORE_INITIALIZATION_FAILED");
+    return {
     uploadBytes:async(key:string,bytes:Uint8Array)=>{
       state.events.push("UPLOAD");
       if(state.failUpload)throw Error("SYNTHETIC_BLOB_FAILURE");
@@ -76,7 +79,8 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
       state.events.push("DELETE");
       state.blobs.delete(key);
     }
-  }),
+    };
+  },
   normalizeProviderBlobBucketIdV39:(s:string)=>s,
 }));
 import {persistPrepaidProbeWebhookV39,prepaidProbeInternalCreditsV39,prepaidProbeMetricsV39,assertExactPrepaidCreditTotalV39,prepaidDuplicatePrelockReadbackApprovedV39,prepaidFailedSourceJournalApprovedV39} from "../server/lib/disruption/prepaidProbeRuntime_v39";
@@ -214,7 +218,7 @@ beforeAll(async()=>{
   localOrigin="http://127.0.0.1:"+address.port;
 },20000);
 beforeEach(async()=>{
-  state.blobs.clear();state.failUpload=false;
+  state.blobs.clear();state.failUpload=false;state.failStoreInitialization=false;
   state.failDownloadOnce=false;state.failUploadAfterWriteOnce=false;
   state.uploadDelayMs=0;
   state.downloadDelayMs=0;state.commitAckLost="none";
@@ -1874,6 +1878,38 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED:"1",
       V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED:"1"
     } as NodeJS.ProcessEnv)).toBe(true);
+  });
+  it("P06 outside-lock App Storage constructor failure after SQL admission counts ONE failed request and retains PENDING metadata",async()=>{
+    const flags=[
+      "V39_CALLBACK_ONLY_RUNTIME",
+      "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
+      "V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",
+      "V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED"
+    ] as const;
+    const saved=flags.map(name=>process.env[name]);
+    for(const name of flags)process.env[name]="1";
+    state.failStoreInitialization=true;
+    try{
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,
+        body:sample({id:"p06-outside-lock-store-constructor-fails"})
+      })).rejects.toThrow("P06_SYNTHETIC_STORE_INITIALIZATION_FAILED");
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(0);
+      expect(state.blobs.size).toBe(0);
+      expect(await count()).toEqual({logged:0,unlogged:0});
+      expect(await session()).toEqual({requests:1,successes:0,failures:1});
+      const pending=await state.pool!.query(
+        "SELECT state,count(*)::int AS n FROM "+
+        "clean.phase2g_prepaid_source_intent_v39 GROUP BY state"
+      );
+      expect(pending.rows).toEqual([{state:"PENDING",n:1}]);
+    }finally{
+      state.failStoreInitialization=false;
+      flags.forEach((name,i)=>{
+        if(saved[i]===undefined)delete process.env[name];
+        else process.env[name]=saved[i];
+      });
+    }
   });
   it("P06 outside-lock opt-in reuses a previously committed LEGACY original without a second blob or spurious V0064 journal",async()=>{
     const flags=[
