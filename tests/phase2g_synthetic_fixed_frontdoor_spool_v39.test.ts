@@ -3,7 +3,7 @@ import {mkdtemp,rm,mkdir,writeFile,readFile,readdir} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {createHash} from "node:crypto";
-import {createServer,type Server} from "node:http";
+import {createServer,request as rawHttpRequest,type Server} from "node:http";
 import {SyntheticFixedFrontdoorSpoolV39,
   createSyntheticFixedFrontdoorHttpV39}
   from "../experiments/phase2g_rehearsal/synthetic_fixed_frontdoor_spool_v39";
@@ -204,6 +204,34 @@ describe("P09/P18 one fixed source-spooling front door (actual LOCAL HTTP + fsyn
     expect(receiverRecords.size).toBe(0);
     // An existing healthy standby elsewhere is not automatically the original URL.
     expect(standby.server.listening).toBe(true);
+  });
+  it("truncated upstream POST never persists partial original or kills the fixed front-door server",async()=>{
+    const edge=await createSyntheticFixedFrontdoorHttpV39({spool,token});
+    opened.push(edge.server);
+    const url=new URL(edge.url);
+    await new Promise<void>(resolve=>{
+      let complete=false;
+      const done=()=>{if(complete)return;complete=true;resolve();};
+      const client=rawHttpRequest({
+        hostname:"127.0.0.1",port:Number(url.port),path:url.pathname,
+        method:"POST",headers:{
+          "x-synthetic-token":token,
+          "x-synthetic-attempt-id":"truncated-source",
+          "content-type":"application/json",
+          "content-length":"4096"
+        }
+      },response=>{response.resume();response.on("end",done);});
+      client.on("error",done);
+      client.write(Buffer.alloc(48,65));
+      setTimeout(()=>{client.destroy();done();},30);
+    });
+    await new Promise(r=>setTimeout(r,40));
+    expect((await spool.readAll())).toHaveLength(0);
+    const good=await sender(edge.url,"after-truncated");
+    expect(good.status).toBe(202);
+    expect((await spool.readAll())).toHaveLength(1);
+    expect((await spool.get("after-truncated"))?.rawSha256)
+      .toBe(createHash("sha256").update(raw("after-truncated")).digest("hex"));
   });
   it("22 concurrent real loopback sender POSTs persist distinct original bytes then drain deterministically",async()=>{
     const edge=await createSyntheticFixedFrontdoorHttpV39({spool,token});
