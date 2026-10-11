@@ -11,6 +11,9 @@ import {
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
 const CALLBACK_POLL_MS = 15_000;
+// Four distinct endpoint checks may each require up to 8s of network time.
+// A hung aggregate check must never suspend owner supervision indefinitely.
+const CALLBACK_HEALTH_CYCLE_HARD_DEADLINE_MS = 40_000;
 const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3;
 
 function required(name: string): string {
@@ -360,6 +363,15 @@ async function main(): Promise<void> {
   const callbackWatchdog = setInterval(async () => {
     if (callbackCheckInFlight || child.exitCode !== null || child.killed) return;
     callbackCheckInFlight = true;
+    // Independently terminate the paid owner if the entire sequential
+    // four-endpoint health cycle stalls. This timer does NOT depend on the
+    // async fetch chain completing, and never changes provider retry count.
+    const healthCycleDeadline = setTimeout(() => {
+      if (callbackWatchdogTriggered || child.exitCode !== null || child.killed) return;
+      callbackWatchdogTriggered = true;
+      requestTermination("SIGTERM", "workspace_callback_health_cycle_hard_timeout");
+    }, CALLBACK_HEALTH_CYCLE_HARD_DEADLINE_MS);
+    healthCycleDeadline.unref();
     try {
       const callbackHealth = await callbackHealthy(callbackBase, expectedHead, callbackMode);
       const previousCount = watchdogState.consecutiveFailures;
@@ -407,6 +419,7 @@ async function main(): Promise<void> {
         requestTermination("SIGTERM", "workspace_watchdog_internal_failure");
       }
     } finally {
+      clearTimeout(healthCycleDeadline);
       callbackCheckInFlight = false;
     }
   }, CALLBACK_POLL_MS);
