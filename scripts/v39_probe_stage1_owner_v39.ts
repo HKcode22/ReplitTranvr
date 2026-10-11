@@ -31,6 +31,7 @@ import {
   type Phase2gEarlyPilotScopeReductionV39,
   type Phase2gP2g17MmunDeliveryGapRecoveryV39,
   type Phase2gP2g22YssyDeliveryGapRecoveryV39,
+  type Phase2gP2g23YssyRecoveryV39,
   type Phase2gPhysicalIdentityV2RemeasurementV39,
 } from "../server/lib/disruption/phase2Compact6_v39";
 import {
@@ -587,6 +588,8 @@ export function chooseEarlyPilotScopeTargetV39(
   attempts: Stage1AttemptEvidence[],
   yssyRecovery?:
     Phase2gP2g22YssyDeliveryGapRecoveryV39,
+  p2g23Recovery?:
+    Phase2gP2g23YssyRecoveryV39,
 ): "YSSY" | "SKBO" | null {
   for (const requirement of scope.baseline_completed_probes) {
     const matches = attempts.filter(
@@ -634,6 +637,86 @@ export function chooseEarlyPilotScopeTargetV39(
 
   for (const target of scope.ordered_new_targets) {
     const rows = attempts.filter((row) => row.icao.toUpperCase() === target);
+
+
+    // Project-lead approved one independent P2G23 technical recovery.
+    // This branch never alters the old P2G22 retry limit.
+    if (
+      target === "YSSY" &&
+      p2g23Recovery?.authorized === true
+    ) {
+      if (
+        p2g23Recovery.maximum_additional_attempts !== 1 ||
+        p2g23Recovery.failed_probe_id !== 17 ||
+        p2g23Recovery.paid_launch_authorized_now !== false ||
+        yssyRecovery?.authorized !== true ||
+        yssyRecovery.failed_probe_id !== 16 ||
+        yssyRecovery.maximum_additional_attempts !== 1
+      ) {
+        throw new Error(
+          "REFUSED_P2G23_RECOVERY_AUTHORIZATION_CONTRACT",
+        );
+      }
+
+      const p16 = rows.filter(row => row.probeId === 16);
+      const p17 = rows.filter(row => row.probeId === 17);
+      const subsequent = rows.filter(
+        row => row.probeId !== 16 && row.probeId !== 17,
+      );
+
+      if (
+        p16.length !== 1 ||
+        !exactP2g22YssyRecoveryFailureMatchesV39(
+          yssyRecovery, p16[0],
+        )
+      ) {
+        throw new Error(
+          "REFUSED_P2G23_P2G22_HISTORICAL_MISMATCH",
+        );
+      }
+
+      const prior = p17[0];
+
+      if (
+        p17.length !== 1 ||
+        prior.icao.toUpperCase() !== "YSSY" ||
+        prior.status !== "failed" ||
+        prior.metricContractVersion !==
+          "v39-physical-flight-instance-v2" ||
+        prior.probeBudgetDayId !==
+          p2g23Recovery.expected_probe_budget_day_id ||
+        prior.runtimeSessionId !==
+          p2g23Recovery.expected_runtime_session_id ||
+        prior.durationCensored !== true ||
+        prior.reconciliationStatus !== "UNRESOLVED" ||
+        prior.stopReason !== "supervisor_child_exit_recovered" ||
+        prior.durableReconciliation !== null
+      ) {
+        throw new Error(
+          "REFUSED_P2G23_HISTORICAL_DATABASE_MISMATCH",
+        );
+      }
+
+      if (subsequent.length > 1) {
+        throw new Error(
+          "REFUSED_P2G23_RECOVERY_RETRY_LIMIT",
+        );
+      }
+
+      if (subsequent.length === 0) {
+        return "YSSY";
+      }
+
+      if (!isScientificallyValidEarlyPilotAttemptV39(
+        subsequent[0],
+      )) {
+        throw new Error(
+          "REFUSED_P2G23_RECOVERY_CONSUMED",
+        );
+      }
+
+      continue;
+    }
 
     if (
       target === "YSSY" &&
@@ -832,6 +915,7 @@ export function chooseNextStage1TargetV39(
       earlyPilotScope,
       evidence,
       amendment?.p2g22_yssy_delivery_gap_recovery_rerun,
+      amendment?.p2g23_yssy_infrastructure_recovery_rerun,
     );
     return target ? { icao: target, replacement: false } : null;
   }
@@ -869,6 +953,15 @@ export async function runStage1Owner(argv = process.argv.slice(2)): Promise<numb
         preprobe: artifacts.preprobe,
       })
     : null;
+  if (
+    compact6?.amendment.freeze_revision ===
+      "early-pilot-yssy-p2g23-technical-recovery-candidate-20261009"
+  ) {
+    throw new Error(
+      "REFUSED_P2G23_CANDIDATE_NOT_FINAL_FROZEN",
+    );
+  }
+
   const selectionArtifact = compact6
     ? {
         ...artifacts.preprobe,
