@@ -23,8 +23,7 @@ export type ObservedSubsetScopeInputV39 = Readonly<{
   postgresEpochAndRetainedRowsAudited:boolean;
   excludedQuarantinedItems:number;
   healthUncertaintySeconds:number;
-  independentProviderSentItemsAuthenticated:boolean;
-  independentlyKnownMissingEligibleItemCount:number|null;
+  // Upstream item completeness is OUT OF SCOPE for this received-only helper.
 }>;
 export type ObservedSubsetScopeOutputV39 = Readonly<{
   schema:"v39.observed-subset-descriptive-scope.v1";
@@ -34,12 +33,14 @@ export type ObservedSubsetScopeOutputV39 = Readonly<{
   excludedQuarantinedItems:number;
   receivedOnlyMeanRunwayDepartureDelayMinutes:number|null;
   receivedOnlyMeanByUtcBinMinutes:readonly (number|null)[];
-  originalSourceByteForByteProviderWireEstablished:boolean;
+  storedRepresentationClaimed:"canonical_parsed_json"|"literal_provider_wire"|"unknown";
+  providerOriginalWireAuthenticityAttested:false;
   independentProviderMissingItems:number|null;
   unknownUpstreamSelection:boolean;
   observedUtcBinClockPreserved:boolean;
   operationalHealthUncertaintySeconds:number;
   canDescribeVerifiedReceivedItems:boolean;
+  productionScientificUseApproved:false;
   canInferAllEligibleAirportFlights:false;
   canClaimMissingAtRandom:false;
   canClaimUnbiasedPopulationMean:false;
@@ -98,16 +99,8 @@ export function assessObservedSubsetDescriptiveScopeV39(
     if(means.some(v=>v!==null&&!Number.isFinite(v)))
       err.push("OBSERVED_MEAN_NOT_FINITE");
   }
-  if(x.independentlyKnownMissingEligibleItemCount!==null&&
-     !nat(x.independentlyKnownMissingEligibleItemCount))
-    err.push("INVALID_PROVIDER_MISSING_ITEM_COUNT");
-  // A Boolean from an untrusted caller is NOT independently authenticated.
-  // This helper can characterize an observed sample, not establish a true
-  // upstream census or validate a billed credit ledger.
-  const externallyKnownMissing=x.independentProviderSentItemsAuthenticated===true&&
-    x.independentlyKnownMissingEligibleItemCount!==null&&
-    nat(x.independentlyKnownMissingEligibleItemCount)?
-      x.independentlyKnownMissingEligibleItemCount:null;
+  // Independent provider sender and billing are intentionally not read here.
+  // The P14/P17 source-bounded analyst must establish them separately.
   const okay=err.length===0&&count>0;
   const status:ObservedSubsetScopeOutputV39["status"]=err.length>0?
     "INVALID_OBSERVED_DATA":count===0?
@@ -120,14 +113,15 @@ export function assessObservedSubsetDescriptiveScopeV39(
       x.excludedQuarantinedItems:0,
     receivedOnlyMeanRunwayDepartureDelayMinutes:okay?sum/count:null,
     receivedOnlyMeanByUtcBinMinutes:okay?means:Array(8).fill(null),
-    originalSourceByteForByteProviderWireEstablished:
-      okay&&x.storedSourceRepresentation==="literal_provider_wire",
-    independentProviderMissingItems:externallyKnownMissing,
-    unknownUpstreamSelection:externallyKnownMissing===null,
+    storedRepresentationClaimed:x.storedSourceRepresentation,
+    providerOriginalWireAuthenticityAttested:false,
+    independentProviderMissingItems:null,
+    unknownUpstreamSelection:true,
     observedUtcBinClockPreserved:okay,
     operationalHealthUncertaintySeconds:nat(x.healthUncertaintySeconds)?
       x.healthUncertaintySeconds:0,
     canDescribeVerifiedReceivedItems:okay,
+    productionScientificUseApproved:false,
     canInferAllEligibleAirportFlights:false,
     canClaimMissingAtRandom:false,
     canClaimUnbiasedPopulationMean:false,
