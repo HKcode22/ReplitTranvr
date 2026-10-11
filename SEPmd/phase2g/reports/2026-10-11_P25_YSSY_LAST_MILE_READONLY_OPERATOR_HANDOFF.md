@@ -69,15 +69,19 @@ try{
  const active=hasProbe?await c.query(
   "SELECT count(*)::int AS n FROM clean.adb_anchor_probe WHERE status IN ('probing','settling')"
  ):null;
+ const schemaGatePass=q.rows[0]?.has_v0064_source_intent===true&&
+   q.rows[0]?.has_logged_blobs===true&&
+   q.rows[0]?.has_session_runtime===true&&hasProbe&&
+   active?.rows[0]?.n===0;
  console.log(JSON.stringify({
   schema:"v39.yssy-p25.readonly-schema-and-probe-gate.v1",
   ...q.rows[0],
   active_or_settling_probes:active?.rows[0]?.n??null,
+  current_schema_gate_pass:schemaGatePass,
   provider_calls:0,db_mutations:0,paid_alert_credits_spent:0
  },null,2));
  await c.query("ROLLBACK");
- if(!q.rows[0]?.has_logged_blobs||!q.rows[0]?.has_session_runtime||
-    !hasProbe||active?.rows[0]?.n!==0)process.exitCode=2;
+ if(!schemaGatePass)process.exitCode=2;
 }catch(e){
  await c.query("ROLLBACK").catch(()=>undefined);
  console.error("READ_ONLY_SCHEMA_CHECK_FAILED",String(e instanceof Error?e.message:e).slice(0,200));
@@ -86,7 +90,7 @@ try{
 NODE
 ```
 
-This check NEVER applies V0064. If `has_v0064_source_intent=false`, enable no PENDING-source feature flags; freeze exact reviewed migrations and preflight first. If it is present, that still does not mean the published older receiver includes the P06 code.
+This check NEVER applies V0064. It prints `current_schema_gate_pass=false` and exits nonzero if V0064 or any other required schema/probe condition fails; a zero exit status is still only a diagnostic and **not paid GO**. If `has_v0064_source_intent=false`, enable no PENDING-source feature flags; freeze exact reviewed migrations and preflight first. If it is present, that still does not mean the published older receiver includes the P06 code.
 
 ## 4. The actual existing signed synthetic POST after a reviewed release — NOT safe to run until parity and schema confirmed
 
