@@ -115,6 +115,24 @@ describe("P16 bounded local paid owner termination escalation, no provider calls
     expect(s).not.toContain('const childPassed = exit.code === 0 && !exit.signal && !exit.spawnError');
     expect(s).not.toContain('spawnError = error.message');
   });
+  it("P16 recovery refuses false clean/no-op if probe row disappeared but paid provider subscription remains",()=>{
+    const s=readFileSync(join(process.cwd(),
+      "scripts/v39_phase2g_stage1_recover_after_exit_v39.ts"),"utf8");
+    const branch=s.indexOf("if ((probes.rowCount ?? probes.rows.length) === 0)");
+    const early=s.indexOf('status: "NO_RECOVERY_NEEDED"',branch);
+    const inspect=s.indexOf("const inventory=await listSubscriptionsStrictWithRetry()",branch);
+    const filter=s.indexOf('subscription.isActive&&subscription.billingType!=="LifetimeBased"',branch);
+    const open=s.indexOf('reason:"no_recoverable_probe_row_with_active_billable_subscription"',branch);
+    const reject=s.indexOf("RECOVERY_REFUSED:NO_PROBE_ROW_BUT_ACTIVE_BILLABLE_SUBSCRIPTION",branch);
+    expect(branch).toBeGreaterThan(0);
+    expect(inspect).toBeGreaterThan(branch);
+    expect(inspect).toBeLessThan(early);
+    expect(filter).toBeLessThan(early);
+    expect(open).toBeLessThan(early);
+    expect(reject).toBeLessThan(early);
+    expect(s).toContain("active_billable_subscriptions_verified: 0");
+    expect(s).toContain("provider_mutation_performed: false");
+  });
   it("P16 real supervisor hard-bounds exact-subscription recovery and never treats timeout as verified cleanup",()=>{
     const s=readFileSync(join(process.cwd(),
       "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
