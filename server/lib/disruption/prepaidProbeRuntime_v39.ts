@@ -1002,7 +1002,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
       : [];
   store = createRequiredProviderBlobStoreV39();
   blob = await timePrepaidStageV39("original_blob_upload_readback",()=>persistProviderBlobBeforeAckV39({
-    store,
+    store:store!,
     bytes: rawBytes,
     contentClass: "raw_provider_content",
     retentionHours: resolvePrepaidRawRetentionHoursV39(),
