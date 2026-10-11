@@ -319,11 +319,13 @@ export function advanceStage1WatchdogV39(input:Readonly<{
     STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39,
     input.evidence?.frozenMaxCumulativeOutageEnvelopeMs??STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39);
   const cumulative=p.closedOutageEnvelopeMs+duration;
-  if(!Number.isSafeInteger(cumulative)||episodeCount>allowedEpisodes||
-     cumulative>allowedCumulative)
-    return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",count,first);
+  // Distinguish the single-episode wall breach from the whole-run limit,
+  // and stop at (not after) the full 180s cumulative failure boundary.
   if(duration>=STAGE1_SIX_PLUS_SIX_WALL_MS_V39)
     return stop("SIX_PLUS_SIX_WALL_CLOCK_MAX_EXCEEDED",count,first);
+  if(!Number.isSafeInteger(cumulative)||episodeCount>allowedEpisodes||
+     cumulative>=allowedCumulative)
+    return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",count,first);
   if(count>=STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39)
     return stop("TWELVE_CONSECUTIVE_HEALTH_FAILURES",count,first);
   // No fallback to three failures solely for missing sender witness.
@@ -339,9 +341,11 @@ export function advanceStage1WatchdogV39(input:Readonly<{
       outageEpisodeCount:episodeCount,
       closedOutageEnvelopeMs:p.closedOutageEnvelopeMs,
       frozenMaxOutageEpisodes:p.frozenMaxOutageEpisodes??
-        STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39,
+        (input.evidence?.frozenMaxOutageEpisodes??
+         STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39),
       frozenMaxCumulativeOutageEnvelopeMs:p.frozenMaxCumulativeOutageEnvelopeMs??
-        STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39,
+        (input.evidence?.frozenMaxCumulativeOutageEnvelopeMs??
+         STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39),
       recoveredHealthAwaitingScienceAudit:true,
       terminated:false
     },
