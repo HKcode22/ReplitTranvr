@@ -862,6 +862,38 @@ function deliveryIdFor(sessionId: string, bodySha256: string, evidence: PrepaidP
 }
 
 /**
+ * P05/P06 actual-receiver preparation: do deterministic source serialization,
+ * notification identity and per-item hashing BEFORE acquiring a PostgreSQL
+ * pool connection or the globally shared session row lock.
+ *
+ * This is PURE preprocessing of the already authenticated/parsed callback,
+ * NOT durable admission: never send a 2xx on the basis of these hashes.
+ * Actual App Storage readback and SQL COMMIT remain mandatory before ACK.
+ */
+export function preparePrepaidProbeSourceV39(
+  sessionId: string,
+  body: any,
+):Readonly<{
+  rawBytes:Buffer;
+  bodySha256:string;
+  evidence:PrepaidProbeDeliveryEvidenceV39;
+  deliveryId:string;
+  flights:readonly any[];
+  itemRawSha256s:readonly string[];
+}>{
+  const id=assertSessionId(sessionId);
+  const rawBytes=Buffer.from(canonical(body??{}),"utf8");
+  const bodySha256=sha256(rawBytes);
+  const evidence=providerDeliveryEvidence(body);
+  const deliveryId=deliveryIdFor(id,bodySha256,evidence);
+  const flights:readonly any[]=Array.isArray(body)?
+    body:Array.isArray(body?.flights)?body.flights:[];
+  // These are canonical *item* hashes, not claimed literal HTTP wire bytes.
+  const itemRawSha256s=flights.map(item=>sha256(canonical(item)));
+  return {rawBytes,bodySha256,evidence,deliveryId,flights,itemRawSha256s};
+}
+
+/**
  * PITR-safe prepaid webhook persistence.
  *
  * Raw bytes are durably round-trip verified in App Storage BEFORE this returns.
@@ -877,6 +909,13 @@ export async function persistPrepaidProbeWebhookV39(input: {
   const sessionId = assertSessionId(input.sessionId);
   const receivedAt = input.receivedAtUtc ?? new Date();
   if (!Number.isFinite(receivedAt.getTime())) throw new Error("PREPAID_PROBE_RECEIVED_AT_INVALID");
+  // P06: do ALL deterministic JSON canonicalization and item SHA work
+  // outside the pooled SQL connection and session-wide row lock.
+  // JSON has already passed the prepaid request's structural parser guard.
+  // This leaves admission/identity/dedup/failure accounting unchanged.
+  const prepared=preparePrepaidProbeSourceV39(sessionId,input.body);
+  const {rawBytes,bodySha256,evidence,deliveryId,flights,itemRawSha256s}=
+    prepared;
   let failureSavepointOpen = false;
   // A lost PostgreSQL COMMIT response does not prove rollback. Until the
   // result is known, retain the original Replit blob: deleting it could
@@ -919,11 +958,6 @@ export async function persistPrepaidProbeWebhookV39(input: {
   const boundSub = session.rows[0].provider_subscription_id ? String(session.rows[0].provider_subscription_id) : null;
   if (boundSub && subId && boundSub !== subId) throw new Error("PREPAID_PROBE_PROVIDER_SUBSCRIPTION_MISMATCH");
 
-  const rawText = canonical(input.body ?? {});
-  const rawBytes = Buffer.from(rawText, "utf8");
-  const bodySha256 = sha256(rawBytes);
-  const evidence = providerDeliveryEvidence(input.body);
-  const deliveryId = deliveryIdFor(sessionId, bodySha256, evidence);
   const prior = await client.query(
     `SELECT d.blob_ref_id,d.raw_body_sha256,
             r.blob_ref_id AS logged_blob_ref_id,
@@ -995,11 +1029,6 @@ export async function persistPrepaidProbeWebhookV39(input: {
     };
   }
 
-  const flights: any[] = Array.isArray(input.body)
-    ? input.body
-    : Array.isArray(input.body?.flights)
-      ? input.body.flights
-      : [];
   store = createRequiredProviderBlobStoreV39();
   blob = await timePrepaidStageV39("original_blob_upload_readback",()=>persistProviderBlobBeforeAckV39({
     store:store!,
@@ -1039,7 +1068,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
        */
       for (let itemIndex = 0; itemIndex < flights.length; itemIndex += 1) {
         const flight = flights[itemIndex];
-        const itemRaw = canonical(flight);
+        const itemRawSha256=itemRawSha256s[itemIndex];
 
         const identity =
           await resolvePrepaidFlightIdentityV39(client, sessionId, flight);
@@ -1097,7 +1126,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
             sessionId,
             deliveryId,
             itemIndex,
-            sha256(itemRaw),
+            itemRawSha256,
             stringOrNull(flight?.number),
             identity.aircraftReg,
             identity.codeshareStatus,
