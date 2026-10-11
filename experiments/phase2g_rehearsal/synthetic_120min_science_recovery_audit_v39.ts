@@ -73,8 +73,12 @@ export function auditSynthetic120MinuteScienceRecoveryV39(input:{
      !Array.isArray(input.observedRuntimeRows)||
      input.entries.length>10000||input.observedRuntimeRows.length>20000)
     throw new Error("P13_RECOVERY_LEDGER_UNBOUNDED");
-  if(f.attempts.length!==120||input.entries.length!==120)
-    add("P13_FROZEN_120_ATTEMPT_TEST_PLAN_INCOMPLETE");
+  // A frozen 120-minute WINDOW does not imply 120 notifications, nor
+  // 15 in every bin. The independently signed, pre-frozen sender ledger
+  // is the cardinality authority for this synthetic fixture. Completeness
+  // is a per-attempt identity comparison, not an invented traffic histogram.
+  if(f.attempts.length!==input.entries.length)
+    add("P13_SIGNED_SENDER_JOURNAL_CARDINALITY_GAP");
   const source=new Map(f.attempts.map(a=>[a.attemptKey,a]));
   const processed=new Set<string>();
   const buckets=Array<number>(8).fill(0);
@@ -82,8 +86,6 @@ export function auditSynthetic120MinuteScienceRecoveryV39(input:{
   let expectedCredits=0,observedCredits=0;
   for(const attempt of f.attempts){
     expectedCredits+=attempt.syntheticCostCredits;
-    if(attempt.syntheticCostCredits!==1)
-      add("P13_SYNTHETIC_SENDER_PER_ATTEMPT_CREDIT_INVALID");
     if(attempt.attemptSeqNo!==0)
       add("P13_ZERO_PROVIDER_DELIVERY_RETRY_CONTRACT_BROKEN");
     if(attempt.senderResponseStatus!==200||
@@ -141,6 +143,13 @@ export function auditSynthetic120MinuteScienceRecoveryV39(input:{
       if(json?.deliveryAttempt?.seqNo!==a.attemptSeqNo||
          json?.deliveryAttempt?.costCredits!==a.syntheticCostCredits)
         add("P13_ORIGINAL_WIRE_ATTEMPT_OR_CREDIT_MISMATCH");
+      // Provider billing is for FLIGHT ITEMS, not one credit per webhook.
+      // Even independently signed source/journal matching values cannot
+      // legitimize an invented cost inconsistent with original wire items.
+      if(!Array.isArray(json?.flights)||
+         a.syntheticCostCredits!==json.flights.length||
+         v.syntheticCostCredits!==json.flights.length)
+        add("P13_ORIGINAL_FLIGHT_ITEM_CREDIT_COUNT_MISMATCH");
       if(json?.timestampUtc!==a.providerGeneratedUtc)
         add("P13_PROVIDER_SOURCE_GENERATED_TIME_MISMATCH");
     }catch{add("P13_ORIGINAL_WIRE_JSON_CONTENT_INVALID");}
@@ -158,9 +167,8 @@ export function auditSynthetic120MinuteScienceRecoveryV39(input:{
     if(ms<from||ms>=end)
       add("P13_SOURCE_FIRST_EDGE_OUTSIDE_FROZEN_WINDOW");
     else buckets[Math.floor((ms-from)/900000)]++;
-    // An empty event MAY be valid provider content but this synthetic
-    // 120-flight stress acceptance fixture expects actual item evidence.
-    if(v.items.length===0)add("P13_EXPECTED_OPERATOR_ITEM_ABSENT");
+    // Empty flight arrays are permitted when the original wire really
+    // contains zero items and billed cost zero. Never fabricate flights.
     witnesses.push(...v.items);
   }
   for(const a of f.attempts)
@@ -170,8 +178,11 @@ export function auditSynthetic120MinuteScienceRecoveryV39(input:{
     add("P13_SENDER_JOURNAL_ATTEMPT_CARDINALITY_MISMATCH");
   if(expectedCredits!==observedCredits)
     add("P13_SENDER_JOURNAL_TOTAL_CREDIT_GAP");
-  if(!buckets.every(n=>n===15))
-    add("P13_ORIGINAL_EIGHT_15MIN_SOURCE_BUCKETS_INCOMPLETE");
+  // Preserve the exact eight elapsed-time bins and their REAL source
+  // distribution. Zero entries in a bin is permitted. The sender-vs-
+  // journal per-attempt checks above establish completeness.
+  if(buckets.reduce((sum,n)=>sum+n,0)!==processed.size)
+    add("P13_JOURNAL_SOURCE_BUCKET_COUNT_MISMATCH");
   const continuity=compareSyntheticPhysicalItemContinuityV39({
     frozenSessionId:f.sessionId,
     windowStartUtc:f.windowStartUtc,windowEndUtc:f.windowEndUtc,
