@@ -56,7 +56,7 @@ if(process.env.V39_PREPAID_STAGE_TELEMETRY==="1"){
   subscribePrepaidStageTimingV39((event)=>{
     const e=event as Record<string,unknown>;
     const allowed=new Set([
-      "db_pool_acquire","db_session_lock","original_blob_upload_readback",
+      "source_prepare","db_pool_acquire","db_session_lock","original_blob_upload_readback",
       "duplicate_original_blob_readback","physical_item_sql","final_sql_commit"
     ]);
     if(!allowed.has(String(e?.stage??""))||
