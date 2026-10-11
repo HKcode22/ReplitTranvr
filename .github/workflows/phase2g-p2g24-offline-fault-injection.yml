@@ -69,6 +69,8 @@ on:
       - tests/phase2g_published_backup_parity_gate_v39.test.ts
       - tests/phase2g_synthetic_fixed_frontdoor_spool_v39.test.ts
       - tests/phase2g_synthetic_three_replit_failover_feasibility_v39.test.ts
+      - experiments/phase2g_rehearsal/replit_only_postgres_failover_gate_v39.ts
+      - tests/phase2g_replit_only_postgres_failover_gate_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_six_primary_six_emergency_v39.ts
       - tests/phase2g_synthetic_six_primary_six_emergency_v39.test.ts
       - experiments/phase2g_rehearsal/synthetic_multi_episode_six_plus_six_v39.ts
@@ -180,6 +182,7 @@ jobs:
             tests/phase2g_yssy_bounded_loss_scientific_adjudication_v39.test.ts \
             tests/phase2g_independent_pg_delivery_readonly_observer_v39.test.ts \
             tests/phase2g_synthetic_three_replit_failover_feasibility_v39.test.ts \
+            tests/phase2g_replit_only_postgres_failover_gate_v39.test.ts \
             tests/phase2g_synthetic_fixed_frontdoor_spool_v39.test.ts \
             tests/phase2g_published_backup_parity_gate_v39.test.ts \
             tests/phase2g_synthetic_six_primary_six_emergency_v39.test.ts \
