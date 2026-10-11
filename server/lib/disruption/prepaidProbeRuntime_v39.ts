@@ -920,12 +920,60 @@ export async function persistPrepaidProbeWebhookV39(input: {
   const evidence = providerDeliveryEvidence(input.body);
   const deliveryId = deliveryIdFor(sessionId, bodySha256, evidence);
   const prior = await client.query(
-    `SELECT blob_ref_id,raw_body_sha256 FROM clean.prepaid_probe_delivery_runtime
-      WHERE session_id=$1 AND delivery_id=$2`,
+    `SELECT d.blob_ref_id,d.raw_body_sha256,
+            r.blob_ref_id AS logged_blob_ref_id,
+            r.storage_kind,r.contract_version,r.object_name,r.content_class,
+            r.content_sha256,r.content_bytes,r.source_kind,r.source_record_id,
+            r.retention_hours,r.expires_at_utc
+       FROM clean.prepaid_probe_delivery_runtime d
+       LEFT JOIN clean.provider_content_blob_ref r
+         ON r.blob_ref_id=d.blob_ref_id
+      WHERE d.session_id=$1 AND d.delivery_id=$2`,
     [sessionId, deliveryId],
   );
   if (prior.rowCount) {
-    if (String(prior.rows[0].raw_body_sha256) !== bodySha256) throw new Error("PREPAID_PROBE_DUPLICATE_HASH_CONFLICT");
+    const previous = prior.rows[0];
+    if (String(previous.raw_body_sha256) !== bodySha256)
+      throw new Error("PREPAID_PROBE_DUPLICATE_HASH_CONFLICT");
+    // A previous COMMIT is NOT evidence that the raw object still exists.
+    // If Replit App Storage lost or changed it after a first 200 / a lost
+    // 200 response, a retry must never receive another false successful ACK.
+    // Verify the original LOGGED reference AND unchanged original bytes
+    // under the same UNLOGGED session row lock. Do not upload a new object
+    // or extend the original 168h retention on a duplicate.
+    if (String(previous.logged_blob_ref_id ?? "") !==
+          String(previous.blob_ref_id) ||
+        previous.storage_kind !== "replit_app_storage" ||
+        previous.contract_version !== "provider-blob-contract-v39@1.0.0" ||
+        previous.content_class !== "raw_provider_content" ||
+        previous.source_kind !== "webhook" ||
+        previous.source_record_id !==
+          `prepaid:${sessionId}:${deliveryId}` ||
+        previous.content_sha256 !== bodySha256 ||
+        Number(previous.content_bytes) !== rawBytes.byteLength ||
+        Number(previous.retention_hours) !== 168 ||
+        !Number.isFinite(new Date(previous.expires_at_utc).getTime()) ||
+        new Date(previous.expires_at_utc).getTime() <= receivedAt.getTime() ||
+        typeof previous.object_name !== "string" ||
+        !/^v39\\/provider\\/raw_provider_content\\/[0-9a-f]{2}\\/[0-9a-f-]{36}\\.blob$/.test(previous.object_name) ||
+        !previous.object_name.endsWith(
+          `/${String(previous.blob_ref_id).toLowerCase()}.blob`
+        ))
+      throw new Error("PREPAID_PROBE_DUPLICATE_LOGGED_SOURCE_REF_INVALID");
+    // A DB row can outlive the bytes due to bucket deletion, corruption or
+    // service availability. Read-back failure must roll back this ACK and
+    // preserve explicit callback failure accounting under the session lock.
+    store = createRequiredProviderBlobStoreV39();
+    let readBack:Uint8Array;
+    try {
+      readBack = await store.downloadBytes(previous.object_name);
+    } catch {
+      throw new Error("PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_UNREADABLE");
+    }
+    if (readBack.byteLength !== rawBytes.byteLength ||
+        sha256(readBack) !== bodySha256 ||
+        !Buffer.from(readBack).equals(rawBytes))
+      throw new Error("PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_CHANGED");
     await client.query(
       `UPDATE clean.prepaid_probe_session_runtime
           SET callback_success_2xx=callback_success_2xx+1
@@ -933,7 +981,13 @@ export async function persistPrepaidProbeWebhookV39(input: {
       [sessionId],
     );
     await client.query("COMMIT");
-    return { deliveryId, blobRefId: String(prior.rows[0].blob_ref_id), itemCount: Array.isArray(input.body?.flights) ? input.body.flights.length : Array.isArray(input.body) ? input.body.length : 0, duplicate: true };
+    return {
+      deliveryId,blobRefId:String(previous.blob_ref_id),
+      itemCount:Array.isArray(input.body?.flights) ?
+        input.body.flights.length : Array.isArray(input.body) ?
+          input.body.length : 0,
+      duplicate:true
+    };
   }
 
   const flights: any[] = Array.isArray(input.body)
