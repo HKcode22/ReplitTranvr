@@ -11,6 +11,9 @@ on:
       - tests/phase2g_paid_callback_origin_v39.test.ts
       - tests/phase2g_prepaid_ingress_latency_hardening_v39.test.ts
       - tests/phase2g_pre_yssy_closed_loop_hardening_v39.test.ts
+      - tests/phase2g_historical_failure_regressions_v39.test.ts
+      - tests/phase2g_delivery_gap_schema_v39.test.ts
+      - tests/phase2g_signed_cleanup_attestation_v39.test.ts
       - tests/phase2g_p2g24_callback_receiver_health_v39.test.ts
       - .github/workflows/phase2g-p2g24-offline-fault-injection.yml
       - scripts/v39_p2g24_readonly_blob_integrity_audit.ts
@@ -122,6 +125,9 @@ jobs:
             tests/phase2g_paid_callback_origin_v39.test.ts \
             tests/phase2g_prepaid_ingress_latency_hardening_v39.test.ts \
             tests/phase2g_pre_yssy_closed_loop_hardening_v39.test.ts \
+            tests/phase2g_historical_failure_regressions_v39.test.ts \
+            tests/phase2g_delivery_gap_schema_v39.test.ts \
+            tests/phase2g_signed_cleanup_attestation_v39.test.ts \
             tests/phase2g_yssy_oct12_stage1_calendar_v39.test.ts \
             tests/phase2g_durable_ingress_offline_prototype_v39.test.ts \
             tests/phase2g_cf_sandbox_ingress_worker_v39.test.ts \
