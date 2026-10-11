@@ -60,6 +60,7 @@ export type Stage1IndependentlyVerifiedOutageWitnessV39 = Readonly<{
 export type Stage1WatchdogStateV39=Readonly<{
   consecutiveFailures:number;
   firstFailureMonotonicMs:number|null;
+  lastObservedMonotonicMs:number|null;
   maximumFailures:number;
   outageEpisodeCount:number;
   closedOutageEnvelopeMs:number;
@@ -84,7 +85,7 @@ export const STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39=12 as const;
 export const STAGE1_SIX_PLUS_SIX_WALL_MS_V39=180_000 as const;
 export const initialStage1WatchdogStateV39=():Stage1WatchdogStateV39=>({
   consecutiveFailures:0,firstFailureMonotonicMs:null,
-  maximumFailures:0,outageEpisodeCount:0,closedOutageEnvelopeMs:0,
+  lastObservedMonotonicMs:null,maximumFailures:0,outageEpisodeCount:0,closedOutageEnvelopeMs:0,
   recoveredHealthAwaitingScienceAudit:false,
   terminated:false
 });
@@ -178,6 +179,10 @@ export function advanceStage1WatchdogV39(input:Readonly<{
      p.maximumFailures<p.consecutiveFailures||
      !isInteger(p.outageEpisodeCount)||
      !isInteger(p.closedOutageEnvelopeMs)||
+     !(p.lastObservedMonotonicMs===null||
+       (Number.isFinite(p.lastObservedMonotonicMs)&&
+        p.lastObservedMonotonicMs>=0&&
+        p.lastObservedMonotonicMs<now))||
      !(p.firstFailureMonotonicMs===null||
        (Number.isFinite(p.firstFailureMonotonicMs)&&
         p.firstFailureMonotonicMs>=0&&
@@ -196,6 +201,7 @@ export function advanceStage1WatchdogV39(input:Readonly<{
     mode,action:"STOP_OWNER",phase:"TERMINATED",reason,
     state:{
       consecutiveFailures:count,firstFailureMonotonicMs:first,
+      lastObservedMonotonicMs:now,
       maximumFailures:Math.max(p.maximumFailures,count),
       outageEpisodeCount:p.outageEpisodeCount,
       closedOutageEnvelopeMs:p.closedOutageEnvelopeMs,
@@ -234,6 +240,7 @@ export function advanceStage1WatchdogV39(input:Readonly<{
         "HEALTH_RECOVERED_SCIENTIFIC_AUDIT_STILL_PENDING":"HEALTHY",
       state:{
         consecutiveFailures:0,firstFailureMonotonicMs:null,
+        lastObservedMonotonicMs:now,
         maximumFailures:p.maximumFailures,
         outageEpisodeCount:p.outageEpisodeCount,
         closedOutageEnvelopeMs:mode==="six-plus-six-candidate"&&
@@ -256,6 +263,7 @@ export function advanceStage1WatchdogV39(input:Readonly<{
     return {
       mode,action:"MONITOR",phase:"LEGACY_PENDING",reason:"LEGACY_MONITOR",
       state:{...p,consecutiveFailures:count,firstFailureMonotonicMs:first,
+        lastObservedMonotonicMs:now,
         maximumFailures:Math.max(p.maximumFailures,count)},
       independentSourceProvenForThisCheck:false,
       scientificPassAuthorized:false,paidLaunchAuthorized:false
@@ -288,6 +296,7 @@ export function advanceStage1WatchdogV39(input:Readonly<{
     reason:evidenceReason??(count<=6?"PRIMARY_SIX_MONITORING":"CONTINGENT_SIX_MONITORING"),
     state:{
       consecutiveFailures:count,firstFailureMonotonicMs:first,
+      lastObservedMonotonicMs:now,
       maximumFailures:Math.max(count,p.maximumFailures),
       outageEpisodeCount:episodeCount,
       closedOutageEnvelopeMs:p.closedOutageEnvelopeMs,
