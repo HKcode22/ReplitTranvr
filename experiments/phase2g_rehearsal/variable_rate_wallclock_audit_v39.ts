@@ -13,15 +13,17 @@ export type P20MinuteWitnessV39=Readonly<{
 }>;
 export type P20AttemptWitnessV39=Readonly<{
   attemptId:string; sentUtc:string; sourceWireSha256:string;
-  syntheticCostCredits:number; senderStatus:number; senderElapsedMs:number;
+  syntheticFlightItems:number; syntheticCostCredits:number; senderStatus:number; senderElapsedMs:number;
 }>;
 export type P20EdgeWitnessV39=Readonly<{
   attemptId:string; originalUtc:string; sourceWireSha256:string;
   completeBytesDurablyAccepted:boolean; authenticatedSyntheticReceipt:boolean;
+  observedSyntheticCostCredits:number;
 }>;
 export type P20InternalWitnessV39=Readonly<{
   attemptId:string; originalUtc:string; sourceWireSha256:string;
   rawObjectSha256ReadbackVerified:boolean; rawRetentionHours:number;
+  observedSyntheticCostCredits:number;
 }>;
 export type P20VariableRateFixtureV39=Readonly<{
   mode:"synthetic-only";
@@ -118,9 +120,14 @@ export function assessP20VariableRateRehearsalV39(
     const time=ts(x.sentUtc);
     if(!Number.isFinite(time)||time<from||time>=until)
       bad("P20_SENDER_OUTSIDE_FROZEN_WINDOW");
-    if(!whole(x.syntheticCostCredits)||x.syntheticCostCredits>1)
+    if(!whole(x.syntheticCostCredits)||x.syntheticCostCredits>2000||
+       !whole(x.syntheticFlightItems)||x.syntheticFlightItems>2000)
       bad("P20_SYNTHETIC_CREDIT_INVALID");
-    else senderCredits+=x.syntheticCostCredits;
+    else{
+      senderCredits+=x.syntheticCostCredits;
+      if(x.syntheticCostCredits!==x.syntheticFlightItems)
+        bad("P20_SENDER_FLIGHT_ITEM_CREDIT_MISMATCH");
+    }
     if(x.senderStatus!==200||!Number.isFinite(x.senderElapsedMs)||
        x.senderElapsedMs<0||x.senderElapsedMs>10_000)
       bad("P20_PROVIDER_EMULATOR_ACK_FAILURE");
@@ -142,7 +149,15 @@ export function assessP20VariableRateRehearsalV39(
        utc<attemptUtc-2_000||utc>attemptUtc+sent.senderElapsedMs+2_000)
       bad("P20_EDGE_FIRST_RECEIPT_TIME_INVALID");
     else attemptsPerBucket[Math.floor((utc-from)/900_000)]++;
-    edgeCredits+=sent.syntheticCostCredits;
+    // This is the separately observed synthetic edge ledger, not a
+    // duplicate calculation from the sender's numbers.
+    if(!whole(e.observedSyntheticCostCredits)||e.observedSyntheticCostCredits>2000)
+      bad("P20_EDGE_OBSERVED_CREDIT_INVALID");
+    else{
+      edgeCredits+=e.observedSyntheticCostCredits;
+      if(e.observedSyntheticCostCredits!==sent.syntheticCostCredits)
+        bad("P20_EDGE_OBSERVED_CREDIT_MISMATCH");
+    }
   }
   const internal=new Map<string,P20InternalWitnessV39>();
   let internalCredits=0;
@@ -157,7 +172,15 @@ export function assessP20VariableRateRehearsalV39(
        x.originalUtc!==edge.originalUtc||!x.rawObjectSha256ReadbackVerified||
        x.rawRetentionHours!==168)
       bad("P20_INTERNAL_OBJECT_OR_FIRST_RECEIPT_MISMATCH");
-    internalCredits+=sender.syntheticCostCredits;
+    // Preserve the committed downstream observation, including a 260/259
+    // flight-ITEM discrepancy in the SAME attempt set.
+    if(!whole(x.observedSyntheticCostCredits)||x.observedSyntheticCostCredits>2000)
+      bad("P20_INTERNAL_OBSERVED_CREDIT_INVALID");
+    else{
+      internalCredits+=x.observedSyntheticCostCredits;
+      if(x.observedSyntheticCostCredits!==sender.syntheticCostCredits)
+        bad("P20_INTERNAL_OBSERVED_CREDIT_MISMATCH");
+    }
   }
   for(const id of planned.keys()){
     if(!edges.has(id))bad("P20_PLANNED_SENDER_MISSING_EDGE");
