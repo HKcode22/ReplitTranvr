@@ -10,6 +10,7 @@ describe("P25 production callback source-custody feature-gate binding, no provid
   it("operator read-only schema diagnostic fails closed when V0064 is missing",()=>{
     const handoff=readFileSync("SEPmd/phase2g/reports/2026-10-11_P25_YSSY_LAST_MILE_READONLY_OPERATOR_HANDOFF.md","utf8");
     expect(handoff).toContain("q.rows[0]?.has_v0064_source_intent===true");
+    expect(handoff).toContain("q.rows[0]?.has_v0064_guard_trigger===true");
     expect(handoff).toContain("current_schema_gate_pass:schemaGatePass");
     expect(handoff).toContain("if(!schemaGatePass)process.exitCode=2");
     expect(handoff).not.toContain("!q.rows[0]?.has_logged_blobs||!q.rows[0]?.has_session_runtime||");
