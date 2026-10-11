@@ -30,6 +30,15 @@ export type Stage1IndependentlyVerifiedOutageWitnessV39 = Readonly<{
   originalSourceAttemptCount:number;
   senderBilledCredits:number;
   originalSourceAttributedCredits:number;
+  /**
+   * Summary credits and counts can agree while two distinct billable
+   * attempts are swapped or their individual flight-item costs offset.
+   * Each immutable original provider attempt must match exactly once.
+   * These assertions MUST come from a genuinely independent verifier.
+   */
+  eachSenderAttemptMatchedByImmutableIdentity:boolean;
+  eachSenderAttemptFlightItemCreditsMatched:boolean;
+  noUnattributedOrDuplicateBillableAttempts:boolean;
   sourceUtcAndWireShaVerified:boolean;
   fullOriginalBytesReadBack:boolean;
   rawRetentionHours:number;
@@ -120,6 +129,12 @@ export function independentOutageWitnessReasonV39(
   if(e.senderAttemptCount!==e.originalSourceAttemptCount||
      e.senderBilledCredits!==e.originalSourceAttributedCredits)
     return "SOURCE_WITNESS_PROVIDER_ATTEMPT_OR_CREDIT_GAP";
+  // Reject offsetting per-attempt credit changes even if both totals match.
+  // Also veto a same-count forged/duplicated billable identity.
+  if(e.eachSenderAttemptMatchedByImmutableIdentity!==true||
+     e.eachSenderAttemptFlightItemCreditsMatched!==true||
+     e.noUnattributedOrDuplicateBillableAttempts!==true)
+    return "SOURCE_WITNESS_PER_ATTEMPT_ITEM_CREDITS_OR_IDENTITY_GAP";
   if(!e.sourceUtcAndWireShaVerified||!e.fullOriginalBytesReadBack||
      e.rawRetentionHours<168)
     return "SOURCE_WITNESS_ORIGINAL_RAW_OR_UTC_LOST";
