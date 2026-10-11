@@ -1,7 +1,7 @@
 import {describe,it,expect} from "vitest";
-import {subscribe,unsubscribe} from "node:diagnostics_channel";
 import {PHASE2G_PREPAID_STAGE_CHANNEL_V39,
   recordPrepaidStageTimingV39,timePrepaidStageV39,
+  subscribePrepaidStageTimingV39,
   type PrepaidStageTimingV39
 } from "../server/lib/disruption/phase2gPrepaidStageTelemetry_v39";
 
@@ -9,7 +9,7 @@ describe("P08 actual prepaid stage diagnostics: only timing, bounded labels and 
   it("records exactly the allowed fields; never serializes original source, URL or session",async()=>{
     const events:unknown[]=[];
     const listener=(x:unknown)=>{events.push(x);};
-    subscribe(PHASE2G_PREPAID_STAGE_CHANNEL_V39,listener);
+    const unsubscribe=subscribePrepaidStageTimingV39(listener);
     try{
       const secret="secret-not-to-emit-this-string";
       const result=await timePrepaidStageV39("original_blob_upload_readback",
@@ -29,11 +29,11 @@ describe("P08 actual prepaid stage diagnostics: only timing, bounded labels and 
         "provider_calls","schema","stage"
       ]);
       expect(JSON.stringify(events)).not.toContain(secret);
-    }finally{unsubscribe(PHASE2G_PREPAID_STAGE_CHANNEL_V39,listener);}
+    }finally{unconst unsubscribe=subscribePrepaidStageTimingV39(listener);}
   });
   it("an async stage failure still emits failed and never obscures the original error",async()=>{
     const events:unknown[]=[];const listener=(e:unknown)=>{events.push(e);};
-    subscribe(PHASE2G_PREPAID_STAGE_CHANNEL_V39,listener);
+    const unsubscribe=subscribePrepaidStageTimingV39(listener);
     try{
       const reason=Error("TEST_STORAGE_FAILURE");
       await expect(timePrepaidStageV39("final_sql_commit",async()=>{throw reason;}))
@@ -41,15 +41,15 @@ describe("P08 actual prepaid stage diagnostics: only timing, bounded labels and 
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({outcome:"failed",stage:"final_sql_commit"});
       expect(JSON.stringify(events)).not.toContain(reason.message);
-    }finally{unsubscribe(PHASE2G_PREPAID_STAGE_CHANNEL_V39,listener);}
+    }finally{unconst unsubscribe=subscribePrepaidStageTimingV39(listener);}
   });
   it("subscriber malfunction never causes a false HTTP 5xx",async()=>{
     const listener=()=>{throw Error("SIMULATED_METRICS_SUBSCRIBER_FAILURE");};
-    subscribe(PHASE2G_PREPAID_STAGE_CHANNEL_V39,listener);
+    const unsubscribe=subscribePrepaidStageTimingV39(listener);
     try{
       await expect(timePrepaidStageV39("db_pool_acquire",async()=>17))
         .resolves.toBe(17);
-    }finally{unsubscribe(PHASE2G_PREPAID_STAGE_CHANNEL_V39,listener);}
+    }finally{unconst unsubscribe=subscribePrepaidStageTimingV39(listener);}
   });
   it("refuses invalid stage names and impossible timing values",()=>{
     expect(()=>recordPrepaidStageTimingV39("secrets" as any,1,"completed"))
