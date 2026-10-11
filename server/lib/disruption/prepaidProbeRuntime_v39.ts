@@ -1,7 +1,14 @@
 import { createHash, randomUUID } from "crypto";
+import type {PoolClient} from "pg";
 import { v39Pool as pool } from "./db_v39";
 import {timePrepaidStageV39,timePrepaidSyncStageV39} from "./phase2gPrepaidStageTelemetry_v39";
-import {prepaidSourcePendingIntentApprovedV39,persistPrepaidSourceWithPendingIntentV39} from "./prepaidSourceIntent_v39";
+import {
+  prepaidSourceOutsideSessionLockApprovedV39,
+  prepaidSourcePendingIntentApprovedV39,
+  persistPrepaidSourceWithPendingIntentV39,
+  persistReservedPrepaidSourceIntentV39,
+  reservePrepaidSourceIntentV39,
+} from "./prepaidSourceIntent_v39";
 import {
   deleteProviderBlobAtExpiryV39,
   persistProviderBlobBeforeAckV39,
@@ -1051,6 +1058,41 @@ async function readPrepaidDuplicateOutsideLockV39(input:{
   }
 }
 
+async function recordOutsideAdmittedPrepaidFailureV39(
+  sessionId:string
+):Promise<boolean>{
+  let client:PoolClient|null=null;
+  try{
+    client=await pool.connect();
+    await client.query("BEGIN");
+    const locked=await client.query(
+      `SELECT session_id
+         FROM clean.prepaid_probe_session_runtime
+        WHERE session_id=$1
+        FOR UPDATE`,[sessionId]);
+    if(locked.rowCount!==1){
+      await client.query("ROLLBACK");
+      return false;
+    }
+    const counted=await client.query(
+      `UPDATE clean.prepaid_probe_session_runtime
+          SET callback_failures=callback_failures+1
+        WHERE session_id=$1
+        RETURNING session_id`,[sessionId]);
+    if(counted.rowCount!==1){
+      await client.query("ROLLBACK");
+      return false;
+    }
+    await client.query("COMMIT");
+    return true;
+  }catch{
+    await client?.query("ROLLBACK").catch(()=>undefined);
+    return false;
+  }finally{
+    client?.release();
+  }
+}
+
 /**
  * PITR-safe prepaid webhook persistence.
  *
@@ -1083,6 +1125,95 @@ export async function persistPrepaidProbeWebhookV39(input: {
     sessionId,deliveryId,expectedBodySha256:bodySha256,
     expectedRawBytes:rawBytes,receivedAtUtc:receivedAt
   });
+  const subId = providerSubscriptionId(input.body);
+  let store: ReturnType<typeof createRequiredProviderBlobStoreV39> | null = null;
+  let blob: ProviderBlobRefV39 | null = null;
+  let stagedOutsideLock:Awaited<ReturnType<
+    typeof persistReservedPrepaidSourceIntentV39
+  >>|null=null;
+  let requestAdmittedOutsideLock=false;
+
+  // Fourth, separate approval: keep the legacy lock-across-storage behavior
+  // unless V0064 custody AND outside-lock admission were both reviewed.
+  // A short transaction validates/serializes the session, counts the request
+  // and commits the immutable PENDING identity. Only then may App Storage I/O
+  // happen without holding a pool client or the session FOR UPDATE lock.
+  if(prepaidSourceOutsideSessionLockApprovedV39()&&preflight===null){
+    const admission=await timePrepaidStageV39(
+      "db_pool_acquire",()=>pool.connect());
+    let reservation:Awaited<ReturnType<
+      typeof reservePrepaidSourceIntentV39
+    >>|null=null;
+    try{
+      await admission.query("BEGIN");
+      const session=await timePrepaidStageV39(
+        "db_session_lock",()=>admission.query(
+          `SELECT provider_subscription_id,state,expires_at_utc
+             FROM clean.prepaid_probe_session_runtime
+            WHERE session_id=$1
+            FOR UPDATE`,[sessionId]));
+      if(session.rowCount!==1)
+        throw Error("PREPAID_PROBE_SESSION_NOT_FOUND_OR_CRASH_RESET");
+      const state=String(session.rows[0].state??"");
+      if(!["armed","active","settling"].includes(state))
+        throw Error(`PREPAID_PROBE_SESSION_NOT_ACCEPTING:${state}`);
+      if(new Date(session.rows[0].expires_at_utc).getTime()<=receivedAt.getTime())
+        throw Error("PREPAID_PROBE_SESSION_EXPIRED");
+      const boundSub=session.rows[0].provider_subscription_id?
+        String(session.rows[0].provider_subscription_id):null;
+      // Do not race the first provider-subscription binding outside the
+      // scientific transaction. The first/unidentified callback retains the
+      // legacy lock-across-I/O path; only an already-bound exact owner may use
+      // this optimization.
+      if(!boundSub||!subId){
+        await admission.query("ROLLBACK");
+      }else{
+      await admission.query(
+        `UPDATE clean.prepaid_probe_session_runtime
+            SET callback_requests_seen=callback_requests_seen+1
+          WHERE session_id=$1`,[sessionId]);
+      if(boundSub&&subId&&boundSub!==subId){
+        await admission.query(
+          `UPDATE clean.prepaid_probe_session_runtime
+              SET callback_failures=callback_failures+1
+            WHERE session_id=$1`,[sessionId]);
+        await admission.query("COMMIT");
+        const error=Error("PREPAID_PROBE_PROVIDER_SUBSCRIPTION_MISMATCH") as
+          Error&{phase2gFailureRecorded?:boolean};
+        error.phase2gFailureRecorded=true;
+        throw error;
+      }
+      reservation=await reservePrepaidSourceIntentV39({
+        sessionId,deliveryId,bodySha256,originalCanonical:rawBytes,
+        firstNodeUtc:receivedAt,query:admission
+      });
+      await admission.query("COMMIT");
+      requestAdmittedOutsideLock=true;
+      }
+    }catch(error){
+      await admission.query("ROLLBACK").catch(()=>undefined);
+      throw error;
+    }finally{
+      admission.release();
+    }
+    if(reservation){
+      store=createRequiredProviderBlobStoreV39();
+      try{
+        stagedOutsideLock=await timePrepaidStageV39(
+          "original_blob_upload_readback",()=>
+            persistReservedPrepaidSourceIntentV39({
+              sessionId,deliveryId,bodySha256,originalCanonical:rawBytes,
+              store:store!,reservation
+            }));
+      }catch(error){
+        const counted=await recordOutsideAdmittedPrepaidFailureV39(sessionId);
+        if(counted&&error!==null&&typeof error==="object")
+          (error as {phase2gFailureRecorded?:boolean})
+            .phase2gFailureRecorded=true;
+        throw error;
+      }
+    }
+  }
   let failureSavepointOpen = false;
   // A lost PostgreSQL COMMIT response does not prove rollback. Until the
   // result is known, retain the original Replit blob: deleting it could
@@ -1093,9 +1224,18 @@ export async function persistPrepaidProbeWebhookV39(input: {
   let failureAccountingCommitOutcomeUnknown = false;
   let sourceFailureJournaled = false;
   let reusedFailedOriginal = false;
-  const client = await timePrepaidStageV39("db_pool_acquire",()=>pool.connect());
-  let store: ReturnType<typeof createRequiredProviderBlobStoreV39> | null = null;
-  let blob: ProviderBlobRefV39 | null = null;
+  let client:PoolClient;
+  try{
+    client=await timePrepaidStageV39("db_pool_acquire",()=>pool.connect());
+  }catch(error){
+    if(requestAdmittedOutsideLock){
+      const counted=await recordOutsideAdmittedPrepaidFailureV39(sessionId);
+      if(counted&&error!==null&&typeof error==="object")
+        (error as {phase2gFailureRecorded?:boolean})
+          .phase2gFailureRecorded=true;
+    }
+    throw error;
+  }
   try {
     await client.query("BEGIN");
 
@@ -1113,12 +1253,14 @@ export async function persistPrepaidProbeWebhookV39(input: {
   if (!["armed", "active", "settling"].includes(state)) throw new Error(`PREPAID_PROBE_SESSION_NOT_ACCEPTING:${state}`);
   if (new Date(session.rows[0].expires_at_utc).getTime() <= receivedAt.getTime()) throw new Error("PREPAID_PROBE_SESSION_EXPIRED");
 
-  await client.query(
-    `UPDATE clean.prepaid_probe_session_runtime
-        SET callback_requests_seen=callback_requests_seen+1
-      WHERE session_id=$1`,
-    [sessionId],
-  );
+  if(!requestAdmittedOutsideLock){
+    await client.query(
+      `UPDATE clean.prepaid_probe_session_runtime
+          SET callback_requests_seen=callback_requests_seen+1
+        WHERE session_id=$1`,
+      [sessionId],
+    );
+  }
 
   // The row lock and request increment precede this savepoint.
   // A payload failure can roll back its writes without releasing
@@ -1126,7 +1268,6 @@ export async function persistPrepaidProbeWebhookV39(input: {
   await client.query("SAVEPOINT phase2g_callback_payload");
   failureSavepointOpen = true;
 
-  const subId = providerSubscriptionId(input.body);
   const boundSub = session.rows[0].provider_subscription_id ? String(session.rows[0].provider_subscription_id) : null;
   if (boundSub && subId && boundSub !== subId) throw new Error("PREPAID_PROBE_PROVIDER_SUBSCRIPTION_MISMATCH");
 
@@ -1230,7 +1371,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
     };
   }
 
-  store = createRequiredProviderBlobStoreV39();
+  store ??= createRequiredProviderBlobStoreV39();
   // A prior callback could have SHA-verified the ORIGINAL and then failed
   // normalized SQL, retaining its immutable LOGGED source reference.
   // The caller still needs full physical-flight SQL COMMIT before HTTP 2xx.
@@ -1244,6 +1385,9 @@ export async function persistPrepaidProbeWebhookV39(input: {
     blob=rescued;
     reusedFailedOriginal=true;
     originalReceivedAt=new Date(rescued.persistedAtUtc);
+  }else if(stagedOutsideLock){
+    blob=stagedOutsideLock.ref;
+    originalReceivedAt=stagedOutsideLock.firstNodeUtc;
   }else if(prepaidSourcePendingIntentApprovedV39()){
     // P06 opt-in ONLY: commit a LOGGED metadata-only PENDING record before
     // attempting any external object upload. If the store times out AFTER
@@ -1486,6 +1630,14 @@ export async function persistPrepaidProbeWebhookV39(input: {
     ) {
       (error as { phase2gFailureRecorded?: boolean })
         .phase2gFailureRecorded = true;
+    }
+    if(requestAdmittedOutsideLock&&!failureRecordedUnderLock&&
+       !sourceCommitOutcomeUnknown&&
+       !failureAccountingCommitOutcomeUnknown){
+      const counted=await recordOutsideAdmittedPrepaidFailureV39(sessionId);
+      if(counted&&error!==null&&typeof error==="object")
+        (error as {phase2gFailureRecorded?:boolean})
+          .phase2gFailureRecorded=true;
     }
     if (store && blob && !sourceCommitOutcomeUnknown &&
         !failureAccountingCommitOutcomeUnknown &&
