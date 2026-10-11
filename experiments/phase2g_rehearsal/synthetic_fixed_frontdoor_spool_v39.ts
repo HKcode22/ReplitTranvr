@@ -146,6 +146,76 @@ export class SyntheticFixedFrontdoorSpoolV39{
     }
     return result;
   }
+  /**
+   * P13/P16 inspect incomplete/spoiled spool, READ ONLY. The exclusive
+   * claim persists after a successful receipt; count as orphaned only if
+   * no receipt was published. This never reconstructs missing raw bytes.
+   */
+  async auditCrashRecoveryReadOnly():Promise<Readonly<{
+    schema:"v39.synthetic-frontdoor-spool-readonly-audit.v1";
+    originalReceiptCount:number;
+    verifiedOriginalReceiptCount:number;
+    corruptedOriginalReceiptCount:number;
+    claimedButNotReceiptedCount:number;
+    rawWithoutReceiptCount:number;
+    receiptWithoutRawCount:number;
+    forwardedMarkWithoutReceiptCount:number;
+    quarantinedPartialWriteCount:number;
+    allOriginalReceiptsVerified:boolean;
+    automaticRecoveryAuthorized:false;
+    sourceDeletionAuthorized:false;
+    paidLaunchAuthorized:false;
+    providerOriginalSenderLedgerVerified:false;
+  }>>{
+    guard();
+    const names=await Promise.all(
+      ["raw","claims","receipts","forwarded"].map(sub=>fs.readdir(join(this.root,sub)))
+    );
+    const [raw,claims,receipts,forwarded]=names;
+    if(names.some(n=>n.length>512))
+      throw Error("SYNTHETIC_FRONTDOOR_AUDIT_OVER_BOUND");
+    const rset=new Set(receipts.filter(n=>HASH.test(n.slice(0,-5))&&n.endsWith(".json")).map(n=>n.slice(0,-5)));
+    const oset=new Set(raw.filter(n=>HASH.test(n.slice(0,-4))&&n.endsWith(".bin")).map(n=>n.slice(0,-4)));
+    const cset=new Set(claims.filter(n=>HASH.test(n.slice(0,-5))&&n.endsWith(".lock")).map(n=>n.slice(0,-5)));
+    const fset=new Set(forwarded.filter(n=>HASH.test(n.slice(0,-5))&&n.endsWith(".json")).map(n=>n.slice(0,-5)));
+    let verified=0,corrupt=0,withoutRaw=0;
+    for(const id of rset){
+      const actual=await readMaybe(this.file("receipts",id,"json"));
+      const body=await readMaybe(this.file("raw",id,"bin"));
+      if(!body){withoutRaw++;corrupt++;continue;}
+      try{
+        const v=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(actual!));
+        if(v.schema!=="v39.synthetic-fixed-frontdoor-receipt.v1"||
+           v.attemptHash!==id||!HASH.test(v.rawSha256)||
+           !Number.isSafeInteger(v.rawBytes)||v.rawBytes<1||
+           v.rawBytes>65536||sha(body)!==v.rawSha256||
+           v.rawBytes!==body.byteLength)
+          corrupt++;
+        else verified++;
+      }catch{corrupt++;}
+    }
+    const unparsed=names.reduce((count,arr,i)=>
+      count+arr.filter(n=>n.startsWith(".writing-")||
+        !(i===0?HASH.test(n.slice(0,-4))&&n.endsWith(".bin"):
+          i===1?HASH.test(n.slice(0,-5))&&n.endsWith(".lock"):
+          HASH.test(n.slice(0,-5))&&n.endsWith(".json"))).length,0);
+    return{
+      schema:"v39.synthetic-frontdoor-spool-readonly-audit.v1",
+      originalReceiptCount:rset.size,verifiedOriginalReceiptCount:verified,
+      corruptedOriginalReceiptCount:corrupt,
+      claimedButNotReceiptedCount:[...cset].filter(x=>!rset.has(x)).length,
+      rawWithoutReceiptCount:[...oset].filter(x=>!rset.has(x)).length,
+      receiptWithoutRawCount:withoutRaw,
+      forwardedMarkWithoutReceiptCount:[...fset].filter(x=>!rset.has(x)).length,
+      quarantinedPartialWriteCount:unparsed,
+      allOriginalReceiptsVerified:verified===rset.size&&corrupt===0&&
+        [...cset].every(x=>rset.has(x))&&
+        [...oset].every(x=>rset.has(x))&&
+        [...fset].every(x=>rset.has(x))&&unparsed===0,
+      automaticRecoveryAuthorized:false,sourceDeletionAuthorized:false,
+      paidLaunchAuthorized:false,providerOriginalSenderLedgerVerified:false
+    };
+  }
   async replayToLocalReceivers(urls:readonly string[],opts?:{
     afterReceiverAckBeforeLocalMark?:()=>void
   }):Promise<FrontdoorReplayResultV39>{
