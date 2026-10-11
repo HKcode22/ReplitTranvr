@@ -355,6 +355,47 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
     });
     noPaid(recovered);
   });
+  it("P15 freezes signed max-episodes and cumulative budget; future witness cannot increase either midrun",()=>{
+    for(const changed of [
+      {frozenMaxOutageEpisodes:3},
+      {frozenMaxCumulativeOutageEnvelopeMs:420_000}
+    ]){
+      const original=knownProof();
+      const initial=advanceStage1WatchdogV39({
+        mode:"six-plus-six-candidate",
+        previous:initialStage1WatchdogStateV39(),
+        health:transient,nowMonotonicMs:1000,evidence:original
+      });
+      expect(initial.state.frozenMaxOutageEpisodes).toBe(2);
+      expect(initial.state.frozenMaxCumulativeOutageEnvelopeMs).toBe(360_000);
+      const next=advanceStage1WatchdogV39({
+        mode:"six-plus-six-candidate",previous:initial.state,
+        health:transient,nowMonotonicMs:16_000,
+        evidence:{...original,...changed}
+      });
+      expect(next.action).toBe("STOP_OWNER");
+      expect(next.reason).toBe("FROZEN_OUTAGE_RISK_POLICY_CHANGED");
+    }
+  });
+  it("P15 default three-strike never accepts an unsigned witness as a way to change the active safety policy",()=>{
+    const initial=initialStage1WatchdogStateV39();
+    const first=advanceStage1WatchdogV39({
+      mode:"legacy-three",previous:initial,
+      health:transient,nowMonotonicMs:0
+    });
+    expect(first.state.frozenMaxOutageEpisodes).toBe(null);
+    expect(first.state.frozenMaxCumulativeOutageEnvelopeMs).toBe(null);
+    const second=advanceStage1WatchdogV39({
+      mode:"legacy-three",previous:first.state,
+      health:transient,nowMonotonicMs:15_000
+    });
+    const third=advanceStage1WatchdogV39({
+      mode:"legacy-three",previous:second.state,
+      health:transient,nowMonotonicMs:30_000
+    });
+    expect(third.reason).toBe("LEGACY_THREE_CONSECUTIVE_CALLBACK_FAILURES");
+    expect(third.state.frozenMaxOutageEpisodes).toBe(null);
+  });
   it("P15 both watchdog modes reject repeated health observation time, including AFTER green recovery",()=>{
     for(const mode of ["legacy-three","six-plus-six-candidate"] as const){
       const proof=knownProof();
