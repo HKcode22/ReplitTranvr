@@ -25,7 +25,7 @@ describe("P20 genuine monotonic-time LOCAL HTTP + raw fsync, not published two-h
       expect(r.receiverUniqueOriginals).toBe(8);
       expect(r.receiverRejectedDuringOutage).toBeGreaterThanOrEqual(2);
       expect(r.sourceReceiptsVerified).toBe(8);
-      expect(r.eightOriginalUtcBins).toEqual([1,1,1,1,1,1,1,1]);
+      expect(r.eightElapsedWindowBins).toEqual([1,1,1,1,1,1,1,1]);
       expect(r.originalSpoolAuditPassed).toBe(true);
       expect(r.allLocallySentSourcesReplayedExactly).toBe(true);
       expect(r.evidenceDirectory).toBeNull();
