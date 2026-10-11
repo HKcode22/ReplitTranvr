@@ -115,6 +115,7 @@ async function callbackHealthy(
       health?.status !== "PASS" ||
       String(health?.git_head ?? "").toLowerCase() !== expectedHead ||
       health?.prepaid_route_registered !== true ||
+      (publishedMode&&health?.prepaid_source_custody_ready!==true) ||
       Number(health?.retention_hours) !== 168 ||
       health?.provider_mutation !== false ||
       health?.runtime_owner_mode !==
