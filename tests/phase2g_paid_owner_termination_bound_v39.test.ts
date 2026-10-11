@@ -3,7 +3,8 @@ import {join} from "node:path";
 import {afterEach,beforeEach,describe,expect,it,vi} from "vitest";
 import {
   armStage1PaidOwnerTerminationBoundV39,
-  STAGE1_PAID_OWNER_SIGTERM_GRACE_MS_V39
+  STAGE1_PAID_OWNER_SIGTERM_GRACE_MS_V39,
+  stage1PaidOwnerExitVerdictV39
 } from "../scripts/v39_phase2g_paid_owner_termination_bound_v39";
 
 describe("P16 bounded local paid owner termination escalation, no provider calls",()=>{
@@ -63,4 +64,49 @@ describe("P16 bounded local paid owner termination escalation, no provider calls
     expect(s.indexOf("forcedOwnerKillDeadline?.cancel()"))
       .toBeGreaterThan(s.indexOf("const exit = await new Promise"));
   });
+  it("P16 clean exit is PASS only without supervisor cancellation/watchdog failure",()=>{
+    const base={code:0,signal:null,spawnError:null,terminationRequested:false,watchdogTriggered:false} as const;
+    expect(stage1PaidOwnerExitVerdictV39(base)).toEqual({
+      passed:true,reason:"CLEAN_ZERO_EXIT_NO_SUPERVISOR_ABORT"
+    });
+    expect(stage1PaidOwnerExitVerdictV39({...base,terminationRequested:true})).toEqual({
+      passed:false,reason:"SUPERVISOR_SHUTDOWN_REQUESTED"
+    });
+    expect(stage1PaidOwnerExitVerdictV39({...base,watchdogTriggered:true})).toEqual({
+      passed:false,reason:"WATCHDOG_INTERRUPTED_OWNER"
+    });
+    expect(stage1PaidOwnerExitVerdictV39({...base,watchdogTriggered:true,terminationRequested:true}).passed).toBe(false);
+  });
+  it("P16 rejects zero exit with spawn error, real signals, null exit, and nonzero exit",()=>{
+    const base={code:0,signal:null,spawnError:null,terminationRequested:false,watchdogTriggered:false};
+    for(const modification of [
+      {spawnError:"child_spawn_or_process_error"},
+      {signal:"SIGKILL" as const},
+      {code:null},
+      {code:1}
+    ]){
+      expect(stage1PaidOwnerExitVerdictV39({...base,...modification}).passed).toBe(false);
+    }
+  });
+  it("P16 actual supervisor must use close for spawn errors, and never call watchdog-interrupted exit PASS",()=>{
+    const s=readFileSync(join(process.cwd(),"scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
+    expect(s).toContain('child.once("error", () => { spawnError = "child_spawn_or_process_error"; })');
+    expect(s).toContain('child.once("close", (code, signal) => resolve({ code, signal, spawnError }))');
+    expect(s).toContain('const exitVerdict = stage1PaidOwnerExitVerdictV39({');
+    expect(s).toContain('terminationRequested: terminationSignal !== null');
+    expect(s).toContain('watchdogTriggered: callbackWatchdogTriggered');
+    expect(s).toContain('const childPassed = exitVerdict.passed');
+    expect(s).toContain('child_exit_verdict_reason: exitVerdict.reason');
+    expect(s).not.toContain('const childPassed = exit.code === 0 && !exit.signal && !exit.spawnError');
+    expect(s).not.toContain('spawnError = error.message');
+  });
+  it("P16 SIGKILL escalation must write proper newline-delimited JSON not escaped backslash-n",()=>{
+    const s=readFileSync(join(process.cwd(),"scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
+    const anchor=s.indexOf('reason:"paid_child_unresponsive_after_sigterm_grace"');
+    expect(anchor).toBeGreaterThan(0);
+    const segment=s.slice(anchor,anchor+85);
+    expect(segment).toContain('})}'+String.fromCharCode(92)+'n`');
+    expect(segment).not.toContain('})}'+String.fromCharCode(92,92)+'n`');
+  });
+
 });
