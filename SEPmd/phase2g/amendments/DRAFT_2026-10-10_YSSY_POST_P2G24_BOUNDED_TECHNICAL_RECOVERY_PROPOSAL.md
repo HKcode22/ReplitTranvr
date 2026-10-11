@@ -47,6 +47,20 @@ A single further technical YSSY attempt **could be considered** only if **all** 
 - Do not set `reconciliation=MATCH` from health status or create replacement rows. Quarantine and preserve referenced raw payloads per 168h expiry policy; do not copy them to public repository. Record SQL postmaster start, frontend instance transition, receiver latency and probe/callback counters as redacted forensic evidence.
 - If provider webhook cannot be made robust enough, terminate prospective Stage1 YSSY effort and report a missing Oceania domestic contrast; the narrowed early-pilot findings must not be generalized to a global anchor sample.
 
+## Oct 11 minimum executable decision — prospective eligibility, not perfection
+
+User's new urgency does NOT invalidate prior corrected-v2 WSSS (probe 11), OMAA (12), MMUN (14) and SKBO (15) results: they were completed and individually reconciled under their then-frozen contract. A later reliability upgrade is prospective; only newly discovered **actual evidence** of a prior mismatch would justify reopening a particular historical result.
+
+**Exact calendar:** Sunday Oct11 20:00 PDT maps to Monday Oct12 03:00 UTC and Monday 14:00 Sydney AEDT; UTC and Sydney are BOTH weekday; slot 04 ±1h, 120m and curfew buffer PASS. F.8's older generic Sunday provision is not violated by that *UTC/Sydney weekday* YSSY local-hours freeze. Calendar need not be amended.
+
+**Stop the perfection waterfall.** Exact Replit support root cause (Quinn), an autonomous global high-availability network, additional Cloudflare hosting, and a 120-minute public shadow collection are NOT intrinsic prerequisites of a separately documented *received-only exploratory* exercise, but that is NOT equivalent to scientific Stage1 completion. A further full Stage1 YSSY must at least have: independently authorized new bounded attempt; deployed version/source + signed nonempty test POST that persists raw bytes and ACKs before timeout; exact currently owned provider inventory and min-balance/cap; exact owner/cleanup safety; and verified after-run physical-v2 complete window/external-internal settled zero-gap reconciliation. This remains one coherent admission decision, not twenty simultaneous research projects.
+
+**Measured deployment difference (Oct11 GitHub read-only GET):** published Replit claimed commit `5de44ba66d59c26d9e5ef3b339b7f729ca2f3653`, while current main and tested draft differ. This is an actual release-parity gap; merge/republish reviews cannot be skipped. No one may truthfully authorize a paid trial under draft-code protections while the receiver serves the older image. New source-custody fix CI [677 offline / 129 actual disposable PostgreSQL](https://github.com/HKcode22/ReplitTranvr/actions/runs/38136542628) is useful but not live production evidence.
+
+**6+6 is NOT LIVE.** The audited code models six primary and six conditional emergency health GET polls and caps repeated/cumulative outage time; the actual supervisor refuses this mode absent independent original-sender/credit witness. Do not set an env flag expecting an effective 180s tolerance. The *effective* paid safety fallback is three consecutive failures unless a reviewed prospective signed policy and real matching verifier bridge are implemented and deployed. This restriction does not automatically invalidate previous matched Stage1 results.
+
+**New approval cannot be invented by drafting this text.** The existing P2G22 one-extra-attempt allowance was consumed; P2G23 and P2G24 failed/censored. A new bounded official run requires a truly new scientifically approved, hash-locked amendment accepted by the real selector (which currently hard-refuses consumed attempts), then exact fresh runtime/AUTH/balance/preflight. The [Oct11 zero-provider handoff](../reports/2026-10-11_YSSY_8PM_PDT_ZERO_CREDIT_OPERATOR_HANDOFF.md) provides operator commands that cannot create paid subscriptions.
+
 ## Governance review slots
 
 | Required review | Value now |
