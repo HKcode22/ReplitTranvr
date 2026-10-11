@@ -160,7 +160,7 @@ export async function runP20SyntheticLocalWallclockV39(args:Readonly<{
           schema:"v39.p20-local-only-progress.v1",elapsedMinutes:i,
           senderAttempts:i+1,senderTimely202:senderGood,
           paidProviderCalls:0,paidAuthorization:false
-        })+"\\n");
+        })+"\n");
     }
     await sleep(started+args.durationMs-performance.now());
     unavailable=false;
