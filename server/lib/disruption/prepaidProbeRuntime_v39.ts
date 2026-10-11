@@ -91,8 +91,14 @@ function nonnegativeIntOrNull(value: unknown): number | null {
 
 function nonnegativeNumberOrNull(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? n : null;
+  // AeroDataBox's Flight Alert deliveryAttempt.costCredits is an int64
+  // count of billable FLIGHT ITEMS, not a fractional per-POST amount.
+  // Reject non-integer/unsafe/type-coerced claims instead of letting numeric
+  // rounding or an implicit fallback silently alter reconciliation evidence.
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error("PREPAID_PROBE_PROVIDER_CREDIT_COUNT_INVALID");
+  }
+  return value;
 }
 
 function normalizeCodeshareStatus(value: unknown): string | null {
