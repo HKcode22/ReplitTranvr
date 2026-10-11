@@ -102,6 +102,59 @@ describe("P13/P14 independently signed SYNTHETIC provider-attempt accounting",()
     expect(r.sourceBuckets).toHaveLength(8);
     expect(r.sourceBuckets.reduce((a,b)=>a+b,0)).toBe(3);
   });
+  it("P14 one 5-flight airport notification costs 5 credits but remains ONE provider delivery attempt",async()=>{
+    const v=await fixture(3);
+    const json=JSON.parse(v.receipts[1].rawBody);
+    json.flights=Array.from({length:5},(_,i)=>({
+      id:"fictional-physical-flight-"+i,
+      codeshareStatus:"IsOperator"
+    }));
+    json.deliveryAttempt.costCredits=5;
+    const multi=await createSyntheticDualSourceMessageV2({
+      rawBytes:new TextEncoder().encode(JSON.stringify(json)),
+      sessionId:SESSION,expectedProviderSubscriptionId:SUB,
+      trustedReceivedAtUtc:at(1),privateEdgeSigningKey:EDGEKEY
+    });
+    expect(multi.receipt.syntheticCostCredits).toBe(5);
+    v.receipts[1]=multi;
+    const changed=cloneFrame(v);
+    changed.attempts[1]={
+      ...changed.attempts[1],
+      attemptKey:multi.receipt.attemptKey,
+      wireSha256:multi.receipt.wireSha256,
+      canonicalSha256:multi.receipt.canonicalSha256,
+      syntheticCostCredits:5
+    };
+    v.sender=signSyntheticSenderFrameV39(changed,SENDERKEY);
+    v.internal[1]={
+      attemptKey:multi.receipt.attemptKey,
+      canonicalSha256:multi.receipt.canonicalSha256,
+      rawObjectReadbackSha256:multi.receipt.canonicalSha256,
+      originalEdgeReceivedUtc:multi.receipt.firstEdgeReceivedAtUtc,
+      syntheticCostCredits:5
+    };
+    const result=await run(v);
+    expect(result).toMatchObject({
+      senderAttemptCount:3,verifiedEdgeAttemptCount:3,internalAttemptCount:3,
+      attemptedCredits:7,edgeCredits:7,internallyCommittedCredits:7,
+      attemptEvidenceConsistent:true,errors:[],
+      scientificCompletionAuthorized:false,
+      automaticRecoveryAuthorized:false
+    });
+    // A physically distinct item is not the same metric as an attempt.
+    // One 5-flight notification is ONE attempt, FIVE billable items.
+    v.internal[1]={...v.internal[1],syntheticCostCredits:1};
+    const gap=await run(v);
+    expect(gap).toMatchObject({
+      senderAttemptCount:3,internalAttemptCount:3,
+      attemptedCredits:7,internallyCommittedCredits:3,
+      attemptEvidenceConsistent:false
+    });
+    expect(gap.errors).toEqual(expect.arrayContaining([
+      "INTERNAL_PROVIDER_ATTEMPT_COST_MISMATCH",
+      "SYNTHETIC_BILLED_CREDIT_GAP"
+    ]));
+  });
   it("does not count duplicate at-least-once relay as a new billed provider attempt",async()=>{
     const v=await fixture();
     v.receipts.push(v.receipts[0]);
