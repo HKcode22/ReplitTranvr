@@ -12,7 +12,7 @@ import {Pool} from "pg";
 const state=vi.hoisted(()=>({
   pool:null as null|Pool,
   blobs:new Map<string,Uint8Array>(),
-  failUpload:false,uploadDelayMs:0,events:[] as string[]
+  failUpload:false,uploadDelayMs:0,downloadDelayMs:0,events:[] as string[]
 }));
 vi.mock("../server/lib/disruption/db_v39",()=>({
   v39Pool:{
@@ -34,6 +34,7 @@ vi.mock("../server/lib/disruption/replitProviderBlobStore_v39",()=>({
     exists:async(key:string)=>state.blobs.has(key),
     downloadBytes:async(key:string)=>{
       state.events.push("READBACK");
+      if(state.downloadDelayMs>0)await new Promise(r=>setTimeout(r,state.downloadDelayMs));
       const bytes=state.blobs.get(key);
       if(!bytes)throw Error("MISSING_FAKE_BLOB");
       return new Uint8Array(bytes);
@@ -166,7 +167,8 @@ beforeAll(async()=>{
   localOrigin="http://127.0.0.1:"+address.port;
 },20000);
 beforeEach(async()=>{
-  state.blobs.clear();state.failUpload=false;state.uploadDelayMs=0;state.events.length=0;
+  state.blobs.clear();state.failUpload=false;state.uploadDelayMs=0;
+  state.downloadDelayMs=0;state.events.length=0;
   await state.pool!.query(
     "TRUNCATE clean.provider_content_blob_ref,clean.prepaid_probe_delivery_runtime,clean.prepaid_probe_session_runtime,clean.prepaid_probe_item_runtime");
   await state.pool!.query(
@@ -217,6 +219,26 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
     expect(await count()).toEqual({logged:1,unlogged:1});
     expect(await session()).toEqual({requests:2,successes:2,failures:0});
   });
+  it("P05 duplicate callback HTTP response waits for original-source readback; extra latency remains measurable",async()=>{
+    const body=sample({id:"p05-delayed-duplicate-readback"});
+    await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+    state.events.length=0;
+    state.downloadDelayMs=220;
+    const started=performance.now();
+    const response=await fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify(body)
+    });
+    const elapsed=performance.now()-started;
+    expect(response.status).toBe(200);
+    expect(elapsed).toBeGreaterThanOrEqual(190);
+    expect(await response.json()).toMatchObject({received:true,duplicate:true});
+    expect(state.events).toEqual(["READBACK"]);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(await session()).toEqual({requests:2,successes:2,failures:0});
+    // Artificially delayed mock != published Replit P95/P99 or provider ACK.
+  });
+
   it("P04/P09 missing raw object MUST NOT ACK a matching paid duplicate; original receipt and failure accounting remain",async()=>{
     const body=sample({id:"p04-source-missing-on-duplicate"});
     await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
