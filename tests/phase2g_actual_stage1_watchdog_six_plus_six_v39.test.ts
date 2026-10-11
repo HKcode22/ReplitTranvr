@@ -355,6 +355,31 @@ describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider c
     });
     noPaid(recovered);
   });
+  it("P15 both watchdog modes reject repeated health observation time, including AFTER green recovery",()=>{
+    for(const mode of ["legacy-three","six-plus-six-candidate"] as const){
+      const proof=knownProof();
+      let p=initialStage1WatchdogStateV39();
+      const first=advanceStage1WatchdogV39({
+        mode,previous:p,health:transient,
+        nowMonotonicMs:15_000,evidence:proof
+      });
+      p=first.state;
+      expect(p.lastObservedMonotonicMs).toBe(15_000);
+      expect(()=>advanceStage1WatchdogV39({
+        mode,previous:p,health:transient,
+        nowMonotonicMs:15_000,evidence:proof
+      })).toThrow("P15_WATCHDOG_INVALID_OR_NONMONOTONIC_STATE");
+      const healthyResult=advanceStage1WatchdogV39({
+        mode,previous:p,health:healthy,
+        nowMonotonicMs:30_000,evidence:proof
+      });
+      expect(healthyResult.state.lastObservedMonotonicMs).toBe(30_000);
+      expect(()=>advanceStage1WatchdogV39({
+        mode,previous:healthyResult.state,health:transient,
+        nowMonotonicMs:30_000,evidence:proof
+      })).toThrow("P15_WATCHDOG_INVALID_OR_NONMONOTONIC_STATE");
+    }
+  });
   it("P15 real controller does not mint unlimited new 6+6 on independently recovered episodes",()=>{
     let s=initialStage1WatchdogStateV39();
     const proof={...knownProof(),frozenMaxOutageEpisodes:1};
