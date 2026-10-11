@@ -211,7 +211,7 @@ export async function recordVerifiedDisposablePendingOriginalRecoveryV39(args:{
     return reply("SOURCE_ALREADY_COMMITTED_NO_RECOVERY");
   if(row.state!=="PENDING"||!HASH.test(String(row.source_sha256))||
     typeof row.original_opaque_blob_path!=="string"||
-    !/^v39\\/provider\\/raw_provider_content\\/[0-9a-f]{2}\\/[0-9a-f-]{36}\\.blob$/.test(row.original_opaque_blob_path))
+    !/^v39\/provider\/raw_provider_content\/[0-9a-f]{2}\/[0-9a-f-]{36}\.blob$/.test(row.original_opaque_blob_path))
     throw Error("P13_PENDING_RECOVERY_INTENT_CONTRACT_INVALID");
   if(new Date(row.source_retention_until).getTime()<=Date.now())
     return reply("SOURCE_INTENT_EXPIRED_NO_RECOVERY");
