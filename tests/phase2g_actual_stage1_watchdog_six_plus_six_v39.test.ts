@@ -75,6 +75,16 @@ const noPaid=(x:ReturnType<typeof observe>["last"])=>{
   expect(x.paidLaunchAuthorized).toBe(false);
 };
 describe("P15 real supervisor 6+6 source-proof-gated controller (zero provider calls)",()=>{
+  it("P15 paid supervisor heartbeat and watch logs expose aggregate outage budget without source IDs",()=>{
+    const src=readFileSync(join(process.cwd(),
+      "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
+    expect(src).toContain("callback_outage_episodes_observed:watchdogState.outageEpisodeCount");
+    expect(src).toContain("callback_closed_outage_envelope_ms:watchdogState.closedOutageEnvelopeMs");
+    expect(src).toContain("outage_episodes_observed:watchdogState.outageEpisodeCount");
+    expect(src).toContain("closed_outage_envelope_ms:watchdogState.closedOutageEnvelopeMs");
+    expect(src).toContain("callback_watchdog_source_proof_implemented: false");
+    expect(src).toContain("evidence:undefined");
+  });
   it("P15/P19 REAL paid supervisor hard-refuses selected 6+6 before provider health or paid owner spawn while source verifier is absent",()=>{
     const source=readFileSync(join(process.cwd(),
       "scripts/v39_phase2g_stage1_logged_supervisor_v39.ts"),"utf8");
