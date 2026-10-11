@@ -1875,6 +1875,76 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED:"1"
     } as NodeJS.ProcessEnv)).toBe(true);
   });
+  it("P06 outside-lock opt-in reuses a previously committed LEGACY original without a second blob or spurious V0064 journal",async()=>{
+    const flags=[
+      "V39_CALLBACK_ONLY_RUNTIME",
+      "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
+      "V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",
+      "V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED"
+    ] as const;
+    const saved=flags.map(name=>process.env[name]);
+    try{
+      for(const name of flags)delete process.env[name];
+      const body=sample({id:"p06-legacy-original-before-four-flag-opt-in"});
+      const first=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+      expect(first.duplicate).toBe(false);
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+      for(const name of flags)process.env[name]="1";
+      const duplicate=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+      expect(duplicate.duplicate).toBe(true);
+      expect(duplicate.blobRefId).toBe(first.blobRefId);
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+      expect(state.blobs.size).toBe(1);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(await session()).toEqual({requests:2,successes:2,failures:0});
+      const intents=await state.pool!.query(
+        "SELECT count(*)::int AS n FROM clean.phase2g_prepaid_source_intent_v39"
+      );
+      expect(intents.rows[0].n).toBe(0);
+    }finally{
+      flags.forEach((name,i)=>{
+        if(saved[i]===undefined)delete process.env[name];
+        else process.env[name]=saved[i];
+      });
+    }
+  });
+  it("P06 outside-lock duplicate with vanished LEGACY source fails closed instead of uploading a replacement",async()=>{
+    const flags=[
+      "V39_CALLBACK_ONLY_RUNTIME",
+      "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
+      "V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",
+      "V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED"
+    ] as const;
+    const saved=flags.map(name=>process.env[name]);
+    try{
+      for(const name of flags)delete process.env[name];
+      const body=sample({id:"p06-legacy-original-vanished-before-opt-in"});
+      const first=await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
+      const ref=await state.pool!.query(
+        "SELECT object_name FROM clean.provider_content_blob_ref WHERE blob_ref_id=$1",
+        [first.blobRefId]
+      );
+      expect(ref.rowCount).toBe(1);
+      state.blobs.delete(ref.rows[0].object_name);
+      for(const name of flags)process.env[name]="1";
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body
+      })).rejects.toThrow("PREPAID_PROBE_DUPLICATE_ORIGINAL_BLOB_UNREADABLE");
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+      expect(state.blobs.size).toBe(0);
+      expect(await count()).toEqual({logged:1,unlogged:1});
+      expect(await session()).toEqual({requests:2,successes:1,failures:1});
+      const intents=await state.pool!.query(
+        "SELECT count(*)::int AS n FROM clean.phase2g_prepaid_source_intent_v39"
+      );
+      expect(intents.rows[0].n).toBe(0);
+    }finally{
+      flags.forEach((name,i)=>{
+        if(saved[i]===undefined)delete process.env[name];
+        else process.env[name]=saved[i];
+      });
+    }
+  });
   it("P06 outside-lock admission rejects the wrong owned subscription before PENDING/upload and preserves request+failure accounting",async()=>{
     const names=[
       "V39_CALLBACK_ONLY_RUNTIME",
