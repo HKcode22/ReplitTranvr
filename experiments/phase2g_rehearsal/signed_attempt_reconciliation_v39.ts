@@ -61,6 +61,9 @@ export type SyntheticAttemptReconciliationV39={
   senderCreditsNotVerifiedAtEdge:number;
   senderMatchedEdgeAttemptsMissingInternal:number;
   senderMatchedEdgeCreditsMissingInternal:number;
+  senderMatchedEdgeAttemptCount:number;
+  fullyCorroboratedAttemptCount:number;
+  fullyCorroboratedFlightItemCredits:number;
   internalAttemptsWithoutMatchingSenderAndEdge:number;
   internalCreditsWithoutMatchingSenderAndEdge:number;
   sourceBuckets:number[];
@@ -238,6 +241,7 @@ export async function reconcileSyntheticSignedAttemptsV39(input:{
       add("SENDER_TIMELY_ACK_NOT_PROVEN");
   }
   const internal=new Map<string,SyntheticInternalDeliveryV39>();
+  const endToEndCorroboratedKeys=new Set<string>();
   for(const row of input.committedInternal){
     if(!digest(row?.attemptKey)||!digest(row.canonicalSha256)||
        !digest(row.rawObjectReadbackSha256)||
@@ -258,6 +262,12 @@ export async function reconcileSyntheticSignedAttemptsV39(input:{
       add("INTERNAL_ORIGINAL_SOURCE_UTC_SHIFTED");
     if(row.syntheticCostCredits!==e.receipt.syntheticCostCredits)
       add("INTERNAL_PROVIDER_ATTEMPT_COST_MISMATCH");
+    if(matchedSenderEdgeKeys.has(row.attemptKey)&&
+       row.canonicalSha256===e.receipt.canonicalSha256&&
+       row.rawObjectReadbackSha256===e.receipt.canonicalSha256&&
+       row.originalEdgeReceivedUtc===e.receipt.firstEdgeReceivedAtUtc&&
+       row.syntheticCostCredits===e.receipt.syntheticCostCredits)
+      endToEndCorroboratedKeys.add(row.attemptKey);
   }
   for(const a of f.attempts)
     if(!internal.has(a.attemptKey))add("BILLED_SENDER_ATTEMPT_MISSING_INTERNAL");
@@ -299,6 +309,9 @@ export async function reconcileSyntheticSignedAttemptsV39(input:{
       internalCreditsWithoutMatchingSenderAndEdge+=BigInt(delivery.syntheticCostCredits);
     }
   }
+  const fullyCorroboratedCreditExact=f.attempts.reduce((sum,a)=>
+    sum+(endToEndCorroboratedKeys.has(a.attemptKey)?
+      BigInt(a.syntheticCostCredits):0n),0n);
   return {
     attemptedCredits:sentCredits,edgeCredits,
     internallyCommittedCredits:internalCredits,
@@ -310,6 +323,9 @@ export async function reconcileSyntheticSignedAttemptsV39(input:{
     senderMatchedEdgeAttemptsMissingInternal,
     senderMatchedEdgeCreditsMissingInternal:
       Number(senderMatchedEdgeCreditsMissingInternal),
+    senderMatchedEdgeAttemptCount:matchedSenderEdgeKeys.size,
+    fullyCorroboratedAttemptCount:endToEndCorroboratedKeys.size,
+    fullyCorroboratedFlightItemCredits:Number(fullyCorroboratedCreditExact),
     internalAttemptsWithoutMatchingSenderAndEdge,
     internalCreditsWithoutMatchingSenderAndEdge:
       Number(internalCreditsWithoutMatchingSenderAndEdge),
