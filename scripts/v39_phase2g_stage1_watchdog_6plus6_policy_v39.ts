@@ -5,13 +5,14 @@
  * for actual provider/source evidence, an approved scientific amendment or an
  * authenticated external attribution service. No provider calls or DB writes.
  *
- * Default supervisor policy is unchanged (three consecutive failures).
- * A 6+6 candidate never receives 12 checks without a freshly verified
- * independent provider/source evidence witness supplied by a separate trusted
- * verifier; production currently provides NONE, so it stops by check three.
+ * Effective paid owner policy: six primary and six contingency checks.
+ * Health recovery is not proof that sender notifications survived. Exact
+ * original-source and external credit reconciliation remains mandatory.
+ * Without independent sender evidence we mark scientific audit pending,
+ * not fabricated source completeness. Health grace remains bounded.
  */
 export type Stage1CallbackWatchdogModeV39 =
-  "legacy-three" | "six-plus-six-candidate";
+  "legacy-three" | "six-plus-six-candidate" | "six-plus-six";
 export type Stage1SanitizedCallbackHealthV39 = Readonly<{
   healthy:boolean;check:string;reason:string;
   http_status:number|null;elapsed_ms:number;
@@ -85,6 +86,8 @@ export const STAGE1_SIX_PLUS_SIX_CONTINGENT_V39=6 as const;
 export const STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39=12 as const;
 /** Wall-clock ceiling may stop earlier than check 12 if polling is slow. */
 export const STAGE1_SIX_PLUS_SIX_WALL_MS_V39=180_000 as const;
+export const STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39=2 as const;
+export const STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39=180_000 as const;
 export const initialStage1WatchdogStateV39=():Stage1WatchdogStateV39=>({
   consecutiveFailures:0,firstFailureMonotonicMs:null,
   lastObservedMonotonicMs:null,maximumFailures:0,outageEpisodeCount:0,closedOutageEnvelopeMs:0,
@@ -118,7 +121,7 @@ function classify(h:Stage1SanitizedCallbackHealthV39):
   if(["request_timeout","network_or_request_error"].includes(h.reason)&&
      h.http_status===null)return "TRANSIENT";
   if(mismatches[h.check]===h.reason&&
-     [502,503,504].includes(h.http_status??0))return "TRANSIENT";
+     [500,502,503,504].includes(h.http_status??0))return "TRANSIENT";
   return "HARD";
 }
 export function independentOutageWitnessReasonV39(
@@ -177,7 +180,7 @@ export function advanceStage1WatchdogV39(input:Readonly<{
   evidence?:Stage1IndependentlyVerifiedOutageWitnessV39;
 }>):Stage1WatchdogDecisionV39{
   const {mode,previous:p,health,nowMonotonicMs:now}=input;
-  if(!["legacy-three","six-plus-six-candidate"].includes(mode)||
+  if(!["legacy-three","six-plus-six-candidate","six-plus-six"].includes(mode)||
      !p||!isInteger(p.consecutiveFailures)||!isInteger(p.maximumFailures)||
      p.maximumFailures<p.consecutiveFailures||
      !isInteger(p.outageEpisodeCount)||
@@ -226,7 +229,8 @@ export function advanceStage1WatchdogV39(input:Readonly<{
   // Independently authenticated limits must be identical for this entire
   // owner lifecycle; a new signed number is not a new risk authorization.
   const frozenWitnessReason=independentOutageWitnessReasonV39(input.evidence);
-  if(mode==="six-plus-six-candidate"&&input.evidence&&!frozenWitnessReason&&
+  const extended=mode!=="legacy-three";
+  if(extended&&input.evidence&&!frozenWitnessReason&&
      ((p.frozenMaxOutageEpisodes!==null&&
        p.frozenMaxOutageEpisodes!==input.evidence.frozenMaxOutageEpisodes)||
       (p.frozenMaxCumulativeOutageEnvelopeMs!==null&&
@@ -234,26 +238,30 @@ export function advanceStage1WatchdogV39(input:Readonly<{
          input.evidence.frozenMaxCumulativeOutageEnvelopeMs)))
     return stop("FROZEN_OUTAGE_RISK_POLICY_CHANGED",
       p.consecutiveFailures,p.firstFailureMonotonicMs);
-  if(kind==="HARD"&&mode!=="legacy-three")
+  if(kind==="HARD"&&extended)
     return stop("HARD_CALLBACK_CONTRACT_OR_IDENTITY_VIOLATION",
       p.consecutiveFailures,p.firstFailureMonotonicMs);
   if(kind==="HEALTHY"){
-    if(mode==="six-plus-six-candidate"&&p.consecutiveFailures>0){
-      // A green GET after a long outage is NOT an original-webhook ledger.
-      // Recovery beyond the bounded wall time or without independently
-      // verified exact source/credits is a terminal scientific veto.
+    if(extended&&p.consecutiveFailures>0){
+      // A green GET after an outage never proves source completeness.
+      // It merely closes a strictly bounded health outage episode;
+      // scientific quality is verified during external billing reconciliation.
       const wallElapsed=now-(p.firstFailureMonotonicMs??now);
       if(wallElapsed>=STAGE1_SIX_PLUS_SIX_WALL_MS_V39)
         return stop("SIX_PLUS_SIX_WALL_CLOCK_MAX_EXCEEDED",
           p.consecutiveFailures,p.firstFailureMonotonicMs);
       const witnessReason=independentOutageWitnessReasonV39(input.evidence);
-      if(witnessReason)
-        return stop("RECOVERED_HEALTH_WITH_UNVERIFIED_SCIENTIFIC_SOURCE",
-          p.consecutiveFailures,p.firstFailureMonotonicMs);
+      if(input.evidence&&witnessReason)
+        return stop(witnessReason,p.consecutiveFailures,p.firstFailureMonotonicMs);
       const total=p.closedOutageEnvelopeMs+wallElapsed;
-      if(!Number.isSafeInteger(total)||
-         p.outageEpisodeCount>input.evidence!.frozenMaxOutageEpisodes||
-         total>input.evidence!.frozenMaxCumulativeOutageEnvelopeMs)
+      const allowedEpisodes=Math.min(
+        STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39,
+        input.evidence?.frozenMaxOutageEpisodes??STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39);
+      const allowedCumulative=Math.min(
+        STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39,
+        input.evidence?.frozenMaxCumulativeOutageEnvelopeMs??STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39);
+      if(!Number.isSafeInteger(total)||p.outageEpisodeCount>allowedEpisodes||
+         total>allowedCumulative)
         return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",
           p.consecutiveFailures,p.firstFailureMonotonicMs);
     }
@@ -266,16 +274,14 @@ export function advanceStage1WatchdogV39(input:Readonly<{
         lastObservedMonotonicMs:now,
         maximumFailures:p.maximumFailures,
         outageEpisodeCount:p.outageEpisodeCount,
-        closedOutageEnvelopeMs:mode==="six-plus-six-candidate"&&
+        closedOutageEnvelopeMs:extended&&
           p.consecutiveFailures>0?
           p.closedOutageEnvelopeMs+now-(p.firstFailureMonotonicMs??now):
           p.closedOutageEnvelopeMs,
         frozenMaxOutageEpisodes:p.frozenMaxOutageEpisodes??
-          (mode==="six-plus-six-candidate"&&!frozenWitnessReason?
-            input.evidence!.frozenMaxOutageEpisodes:null),
+          (extended?STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39:null),
         frozenMaxCumulativeOutageEnvelopeMs:p.frozenMaxCumulativeOutageEnvelopeMs??
-          (mode==="six-plus-six-candidate"&&!frozenWitnessReason?
-            input.evidence!.frozenMaxCumulativeOutageEnvelopeMs:null),
+          (extended?STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39:null),
         recoveredHealthAwaitingScienceAudit:
           p.recoveredHealthAwaitingScienceAudit||p.consecutiveFailures>0,
         terminated:false
@@ -298,31 +304,34 @@ export function advanceStage1WatchdogV39(input:Readonly<{
       scientificPassAuthorized:false,paidLaunchAuthorized:false
     };
   }
-  // A verified witness can justify *continuing* but does not prove the
-  // scientific 120-minute experiment PASS. Any known negative evidence
-  // (provider attempts, credits, identity, retention, budget) stops early.
+  // Negative independent evidence still terminates immediately.
+  // Without it, bounded GET grace is allowed but science audit is pending.
   const evidenceReason=independentOutageWitnessReasonV39(input.evidence);
   if(evidenceReason&&input.evidence)
     return stop(evidenceReason,count,first);
   const episodeCount=p.outageEpisodeCount+(p.consecutiveFailures===0?1:0);
   if(!Number.isSafeInteger(episodeCount))
     return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",count,first);
-  if(!evidenceReason&&input.evidence){
-    const cumulative=p.closedOutageEnvelopeMs+duration;
-    if(!Number.isSafeInteger(cumulative)||
-       episodeCount>input.evidence.frozenMaxOutageEpisodes||
-       cumulative>input.evidence.frozenMaxCumulativeOutageEnvelopeMs)
-      return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",count,first);
-  }
+  const allowedEpisodes=Math.min(
+    STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39,
+    input.evidence?.frozenMaxOutageEpisodes??STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39);
+  const allowedCumulative=Math.min(
+    STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39,
+    input.evidence?.frozenMaxCumulativeOutageEnvelopeMs??STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39);
+  const cumulative=p.closedOutageEnvelopeMs+duration;
+  if(!Number.isSafeInteger(cumulative)||episodeCount>allowedEpisodes||
+     cumulative>allowedCumulative)
+    return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",count,first);
   if(duration>=STAGE1_SIX_PLUS_SIX_WALL_MS_V39)
     return stop("SIX_PLUS_SIX_WALL_CLOCK_MAX_EXCEEDED",count,first);
   if(count>=STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39)
     return stop("TWELVE_CONSECUTIVE_HEALTH_FAILURES",count,first);
-  if(evidenceReason&&count>=3)
-    return stop("NO_EXTENSION_WITHOUT_AUTHENTICATED_SOURCE_AND_CREDITS",count,first);
+  // No fallback to three failures solely for missing sender witness.
+  // It cannot claim a scientific PASS, but the 6+6 health watchdog may
+  // continue until its immutable episode/cumulative limits.
   return {
     mode,action:"MONITOR",phase:count<=6?"PRIMARY":"CONTINGENT",
-    reason:evidenceReason??(count<=6?"PRIMARY_SIX_MONITORING":"CONTINGENT_SIX_MONITORING"),
+    reason:count<=6?"PRIMARY_SIX_MONITORING_SCIENCE_AUDIT_PENDING":"CONTINGENT_SIX_MONITORING_SCIENCE_AUDIT_PENDING",
     state:{
       consecutiveFailures:count,firstFailureMonotonicMs:first,
       lastObservedMonotonicMs:now,
@@ -330,10 +339,10 @@ export function advanceStage1WatchdogV39(input:Readonly<{
       outageEpisodeCount:episodeCount,
       closedOutageEnvelopeMs:p.closedOutageEnvelopeMs,
       frozenMaxOutageEpisodes:p.frozenMaxOutageEpisodes??
-        (!evidenceReason?input.evidence!.frozenMaxOutageEpisodes:null),
+        STAGE1_SIX_PLUS_SIX_MAX_EPISODES_V39,
       frozenMaxCumulativeOutageEnvelopeMs:p.frozenMaxCumulativeOutageEnvelopeMs??
-        (!evidenceReason?input.evidence!.frozenMaxCumulativeOutageEnvelopeMs:null),
-      recoveredHealthAwaitingScienceAudit:p.recoveredHealthAwaitingScienceAudit,
+        STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39,
+      recoveredHealthAwaitingScienceAudit:true,
       terminated:false
     },
     independentSourceProvenForThisCheck:!evidenceReason,
