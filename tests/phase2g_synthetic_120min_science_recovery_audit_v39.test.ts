@@ -134,10 +134,9 @@ describe("P13 signed synthetic TWO-HOUR all-eight-bin source-to-recovery truth a
     const r=audit(f);
     expect(r.testManifestConsistent).toBe(false);
     expect(r.errors).toEqual(expect.arrayContaining([
-      "P13_FROZEN_120_ATTEMPT_TEST_PLAN_INCOMPLETE",
+      "P13_SIGNED_SENDER_JOURNAL_CARDINALITY_GAP",
       "P13_JOURNAL_ATTEMPT_NOT_IN_SENDER_LEDGER",
-      "P13_SENDER_JOURNAL_ATTEMPT_CARDINALITY_MISMATCH",
-      "P13_ORIGINAL_EIGHT_15MIN_SOURCE_BUCKETS_INCOMPLETE"
+      "P13_SENDER_JOURNAL_ATTEMPT_CARDINALITY_MISMATCH"
     ]));
   });
   it("one missing durable journal receipt yields a signed-sender gap and incomplete source bucket",()=>{
@@ -146,7 +145,7 @@ describe("P13 signed synthetic TWO-HOUR all-eight-bin source-to-recovery truth a
     expect(r).toMatchObject({testManifestConsistent:false,journalAttempts:119});
     expect(r.errors).toEqual(expect.arrayContaining([
       "P13_SIGNED_SENDER_ATTEMPT_MISSING_FROM_SCIENCE_JOURNAL",
-      "P13_ORIGINAL_EIGHT_15MIN_SOURCE_BUCKETS_INCOMPLETE"
+      "P13_SIGNED_SENDER_JOURNAL_CARDINALITY_GAP"
     ]));
   });
   it("a duplicated attempt cannot take the place of a missing attempt",()=>{
@@ -180,7 +179,7 @@ describe("P13 signed synthetic TWO-HOUR all-eight-bin source-to-recovery truth a
       items:e.items.map(x=>({...x,originalEdgeReceivedUtc:at(15)}))
     });
     const r=audit(f);
-    expect(r.errors).toContain("P13_ORIGINAL_EIGHT_15MIN_SOURCE_BUCKETS_INCOMPLETE");
+    expect(r.errors).toContain("P13_SENDER_EDGE_UTC_CAUSALITY_MISMATCH");
     expect(r.sourceBuckets.slice(0,2)).toEqual([14,16]);
   });
   it("a genuine source wire SHA cannot be replaced by a merely valid journal HMAC",()=>{
@@ -317,4 +316,81 @@ describe("P13 signed synthetic TWO-HOUR all-eight-bin source-to-recovery truth a
     expect(r.scientificPassAuthorized).toBe(false);
     expect(r.automaticRecoveryAuthorized).toBe(false);
   });
+
+  it("signed 120m window can contain sparse irregular arrivals and quiet 15m buckets",()=>{
+    const f=makeFixture();
+    const picks=[0,1,15,44,59,60,92,119];
+    f.signedSyntheticSender=signSyntheticSenderFrameV39({
+      ...f.signedSyntheticSender.frame,
+      attempts:picks.map(i=>f.signedSyntheticSender.frame.attempts[i])
+    },SENDER_KEY);
+    f.entries=picks.map(i=>f.entries[i]);
+    f.observedRuntimeRows=picks.map(i=>f.observedRuntimeRows[i]);
+    const r=audit(f);
+    expect(r.testManifestConsistent,r.errors.join(",")).toBe(true);
+    expect(r.sourceAttempts).toBe(8);
+    expect(r.sourceBuckets).toEqual([2,1,1,1,0,0,1,2]);
+    expect(r.scientificPassAuthorized).toBe(false);
+  });
+  it("signed sender may specify 120 but missing one journal entry cannot be hidden in a quiet bin",()=>{
+    const f=makeFixture();
+    f.entries.splice(60,1);
+    expect(audit(f).errors).toEqual(expect.arrayContaining([
+      "P13_SIGNED_SENDER_JOURNAL_CARDINALITY_GAP",
+      "P13_SIGNED_SENDER_ATTEMPT_MISSING_FROM_SCIENCE_JOURNAL"
+    ]));
+  });
+  it("multi-flight cost 2 within one notification is measured per flight item, not per webhook",()=>{
+    const f=makeFixture();
+    const i=10;
+    const old=JSON.parse(new TextDecoder().decode(f.entries[i].originalWire));
+    const second={...old.flights[0],id:"synthetic-second-operating-flight",
+      number:"QF9901"};
+    old.flights.push(second);
+    old.deliveryAttempt.costCredits=2;
+    const bytes=new TextEncoder().encode(JSON.stringify(old));
+    const a=f.signedSyntheticSender.frame.attempts[i];
+    const item:SyntheticPhysicalItemWitnessV39={
+      ...f.observedRuntimeRows[i],itemIndex:1,
+      rawItemSha256:digest(canonical(second)),
+      flightInstanceId:"synthetic-second-phys-"+i,
+      operatingFlightNumber:"9901"
+    };
+    const previous=f.entries[i].signed.frame;
+    f.entries[i]={
+      originalWire:bytes,
+      signed:signSyntheticScienceRecoveryFrameV39({
+        ...previous,sourceWireSha256:digest(bytes),
+        syntheticCostCredits:2,
+        items:[...previous.items,item]
+      },JOURNAL_KEY)
+    };
+    f.observedRuntimeRows.push(item);
+    f.signedSyntheticSender=signSyntheticSenderFrameV39({
+      ...f.signedSyntheticSender.frame,
+      attempts:f.signedSyntheticSender.frame.attempts.map((v,k)=>
+        k===i?{...a,wireSha256:digest(bytes),
+          canonicalSha256:digest(canonical(old)),syntheticCostCredits:2}:v)
+    },SENDER_KEY);
+    const r=audit(f);
+    expect(r.testManifestConsistent,r.errors.join(",")).toBe(true);
+    expect(r).toMatchObject({
+      sourceAttempts:120,observedItems:121,
+      sourceSyntheticCredits:121,journalSyntheticCredits:121,
+      scientificPassAuthorized:false
+    });
+  });
+  it("a signed but incorrect multi-flight cost is rejected against original wire item count",()=>{
+    const f=makeFixture();
+    const i=3;
+    const old=JSON.parse(new TextDecoder().decode(f.entries[i].originalWire));
+    old.deliveryAttempt.costCredits=0;
+    const bytes=new TextEncoder().encode(JSON.stringify(old));
+    const frame=f.entries[i].signed.frame;
+    // A zero-credit journal cannot sign one physical item anymore.
+    expect(()=>signSyntheticScienceRecoveryFrameV39({
+      ...frame,sourceWireSha256:digest(bytes),syntheticCostCredits:0
+    },JOURNAL_KEY)).toThrow("P13_LOGGED_SCIENCE_FRAME_INVALID");
+  });
+
 });
