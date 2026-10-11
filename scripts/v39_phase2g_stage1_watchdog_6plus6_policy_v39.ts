@@ -261,7 +261,7 @@ export function advanceStage1WatchdogV39(input:Readonly<{
         STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39,
         input.evidence?.frozenMaxCumulativeOutageEnvelopeMs??STAGE1_SIX_PLUS_SIX_MAX_CUMULATIVE_MS_V39);
       if(!Number.isSafeInteger(total)||p.outageEpisodeCount>allowedEpisodes||
-         total>allowedCumulative)
+         total>=allowedCumulative)
         return stop("FROZEN_WHOLE_RUN_OUTAGE_RISK_BUDGET_EXCEEDED",
           p.consecutiveFailures,p.firstFailureMonotonicMs);
     }
