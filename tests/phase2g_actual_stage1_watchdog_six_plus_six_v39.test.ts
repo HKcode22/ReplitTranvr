@@ -451,7 +451,7 @@ describe("P25 effective live 6+6 owner controller (zero provider calls)",()=>{
   it("P15 whole-run cumulative fault envelope is preserved after a signed healthy recovery",()=>{
     let s=initialStage1WatchdogStateV39();
     const proof={...knownProof(),frozenMaxOutageEpisodes:2,
-      frozenMaxCumulativeOutageEnvelopeMs:30_000};
+      frozenMaxCumulativeOutageEnvelopeMs:45_000};
     for(const [at,health] of [
       [0,transient],[15_000,healthy],[30_000,transient],
       [45_000,transient]
