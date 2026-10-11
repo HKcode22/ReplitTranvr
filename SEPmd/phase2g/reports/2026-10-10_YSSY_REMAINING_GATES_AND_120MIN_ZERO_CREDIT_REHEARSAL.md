@@ -117,3 +117,19 @@ Repository commit and exact build SHA, owner/watchdog version, published deploym
 - [Evidence + exact limitations and future gates](2026-10-10_DUAL_SOURCE_HASH_AND_LOGGED_RECEIPT_RESTART_PROTOTYPE.md). Also see [actual prepaid parser and wire fidelity report](2026-10-10_ACTUAL_PREPAID_ROUTE_AND_WIRE_BYTES_SCIENCE_GAP.md).
 
 **Status is still P09/P10/P11/P12/P13 = INCOMPLETE.** Specifically, authenticated original provider source, real queue admission, independent durable ledger/outbox atomicity, 168-hour lawful raw retention, free-tier quota/exhaustion fail-closed, post-crash fully reconstructible signed scientific session and 15-minute physical-v2 results, deployment source-hash matching, and real 120-minute wall-clock no-credit rehearsal are NOT yet verified. Paid YSSY Stage 1 remains NO-GO until the new prospective bounded AUTH and all science gates pass.
+
+## P20 variable-rate rehearsal correction — October 10 PDT / October 11 UTC
+
+**[CI #38099863798](https://github.com/HKcode22/ReplitTranvr/actions/runs/38099863798) COMPLETE SUCCESS:** **408/408** offline tests and **43/43** disposable real-PostgreSQL V3.9 integration tests, including a genuine PostgreSQL SIGKILL → UNLOGGED loss; no AeroDataBox, Cloudflare, Replit deployment, or live scientific DB change.
+
+The earlier P20 `synthetic_120min_acceptance_v39.ts` test fixture assumes **120 distinct synthetic notifications / one per minute and 15 per 15-minute source bucket**. This assumption is only a deterministic unit-test convenience: neither the frozen 120-minute owner window nor F.8 Stage-1 scientifically guarantees such an actual provider arrival pattern. Do **not** apply that count rule to the hosted rehearsal or paid study.
+
+**New parallel, stricter variable-rate rehearsal feasibility validator:** `experiments/phase2g_rehearsal/variable_rate_wallclock_audit_v39.ts` + `tests/phase2g_variable_rate_wallclock_audit_v39.test.ts`, with 13 targeted tests. Requires:
+- Frozen exact 120-minute UTC owner window, credible monotonic duration **as declared in the fixture**, and 120 unique owner/receiver monitoring minute witnesses, maintaining **15 monitoring minutes per 15-minute interval**.
+- A nonempty **preplanned** synthetic sender series and independent sender/edge/internal attempt identity, full-wire SHA, receipt UTC, caller-observed ≤10s HTTP 200, full durable-receipt assertions, 168-hour downstream raw policy, exact synthetic credits and validated cleanup; zero real provider calls, cloud resources or scientific DB writes.
+- **Variable notification arrival rates are allowed**, including synthetic quiet intervals. A missing source is detected relative to the preplanned sender series; the validator does not fabricate 120 webhooks to fill 120 minutes.
+- Fails closed for a 119-minute duration, missing/duplicated/late health witness, receiver unhealthy at minute 60, source ACK delay/failure, unverified or shifted receipt, duplicate attempt, absent callback, source/internal 30/29 mismatch, missing retention, broken cleanup, and even an otherwise green **GET-only 120-minute run with zero test POSTs**.
+
+**IMPORTANT:** The exported decision still hardcodes `scientificPassAuthorized=false`, `paidLaunchAuthorized=false`, `wallClockHostContinuityProven=false`. It evaluates fabricated fixture evidence and is not a genuine real-time test. A future wall-clock hosted rehearsal must obtain independent real monotonic timestamps, actual published-equivalent signed POSTs, real storage readback, true source-side response evidence and scientific frame completeness. The test's hypothetical 30-message schedule does **not** reconstruct the exact historical P2G24 timestamp histogram.
+
+[New P20 design and known limitations](2026-10-10_P20_VARIABLE_RATE_TWO_HOUR_REHEARSAL_WITNESS.md). Stage-1 paid YSSY remains **NO-GO** pending true end-to-end and prospective authorization. No service or source freeze was changed by this offline implementation.
