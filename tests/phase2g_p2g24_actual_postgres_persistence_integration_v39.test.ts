@@ -1911,6 +1911,115 @@ describe("actual V3.9 persistence + disposable PostgreSQL UNLOGGED/LOGGED fixtur
       });
     }
   });
+  it("P06 actual PG LOST outside-lock admission COMMIT response: unique durable intent proves exactly one counted request, fails without upload/ACK",async()=>{
+    const names=[
+      "V39_CALLBACK_ONLY_RUNTIME",
+      "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
+      "V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",
+      "V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED"
+    ] as const;
+    const original=names.map(name=>process.env[name]);
+    for(const name of names)process.env[name]="1";
+    try{
+      state.commitAckLost="after";
+      const body=sample({id:"p06-outside-admission-commit-ack-lost"});
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body
+      })).rejects.toMatchObject({
+        message:"P06_OUTSIDE_ADMISSION_COMMIT_REPLY_LOST_PENDING_CONFIRMED_NO_ACK",
+        phase2gFailureRecorded:true
+      });
+      expect(await session()).toEqual({requests:1,successes:0,failures:1});
+      expect(await count()).toEqual({logged:0,unlogged:0});
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(0);
+      const pending=await state.pool!.query(
+        "SELECT state,count(*)::int AS n FROM "+
+        "clean.phase2g_prepaid_source_intent_v39 GROUP BY state"
+      );
+      expect(pending.rows).toEqual([{state:"PENDING",n:1}]);
+      // An already-owned source UUID MUST NOT be overwritten by a retry
+      // just because the admission response was lost before upload.
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,body
+      })).rejects.toThrow("P06_PREPAID_SOURCE_PENDING_ORIGINAL_NOT_READABLE_NO_ACK");
+      expect(await session()).toEqual({requests:2,successes:0,failures:2});
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(0);
+      expect((await state.pool!.query(
+        "SELECT count(*)::int AS n FROM clean.phase2g_prepaid_source_intent_v39"
+      )).rows[0].n).toBe(1);
+    }finally{
+      state.commitAckLost="none";
+      names.forEach((name,i)=>{
+        if(original[i]===undefined)delete process.env[name];
+        else process.env[name]=original[i];
+      });
+    }
+  });
+  it("P06 actual PG COMMIT not executed: no speculative second request count or invented source under ambiguous wire outcome",async()=>{
+    const names=[
+      "V39_CALLBACK_ONLY_RUNTIME",
+      "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
+      "V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",
+      "V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED"
+    ] as const;
+    const original=names.map(name=>process.env[name]);
+    for(const name of names)process.env[name]="1";
+    try{
+      state.commitAckLost="before";
+      await expect(persistPrepaidProbeWebhookV39({
+        sessionId:SESSION,
+        body:sample({id:"p06-outside-admission-commit-did-not-run"})
+      })).rejects.toMatchObject({
+        message:"P06_OUTSIDE_ADMISSION_COMMIT_OUTCOME_UNKNOWN_NO_ACK",
+        phase2gCallbackAccountingUncertain:true
+      });
+      expect(await session()).toEqual({requests:0,successes:0,failures:0});
+      expect(await count()).toEqual({logged:0,unlogged:0});
+      expect(state.blobs.size).toBe(0);
+      expect((await state.pool!.query(
+        "SELECT count(*)::int AS n FROM clean.phase2g_prepaid_source_intent_v39"
+      )).rows[0].n).toBe(0);
+      // Exact accounting is deliberately UNKNOWN rather than a fabricated
+      // clean report. The HTTP handler's incident route will fail closed.
+    }finally{
+      state.commitAckLost="none";
+      names.forEach((name,i)=>{
+        if(original[i]===undefined)delete process.env[name];
+        else process.env[name]=original[i];
+      });
+    }
+  });
+  it("P06 actual HTTP receiver 500 after lost admission COMMIT ACK keeps counted request/failure exactly once, original still PENDING",async()=>{
+    const names=[
+      "V39_CALLBACK_ONLY_RUNTIME",
+      "V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED",
+      "V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED",
+      "V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED"
+    ] as const;
+    const original=names.map(name=>process.env[name]);
+    for(const name of names)process.env[name]="1";
+    try{
+      state.commitAckLost="after";
+      const response=await fetch(localOrigin+actualPath,{
+        method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify(sample({id:"p06-outside-admission-http-commit-lost"}))
+      });
+      expect(response.status).toBe(500);
+      expect(await session()).toEqual({requests:1,successes:0,failures:1});
+      expect(await count()).toEqual({logged:0,unlogged:0});
+      expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(0);
+      expect((await state.pool!.query(
+        "SELECT count(*)::int AS n FROM clean.phase2g_prepaid_source_intent_v39 "+
+        "WHERE state='PENDING'"
+      )).rows[0].n).toBe(1);
+    }finally{
+      state.commitAckLost="none";
+      names.forEach((name,i)=>{
+        if(original[i]===undefined)delete process.env[name];
+        else process.env[name]=original[i];
+      });
+    }
+  });
   it("P06 outside-lock opt-in reuses a previously committed LEGACY original without a second blob or spurious V0064 journal",async()=>{
     const flags=[
       "V39_CALLBACK_ONLY_RUNTIME",
