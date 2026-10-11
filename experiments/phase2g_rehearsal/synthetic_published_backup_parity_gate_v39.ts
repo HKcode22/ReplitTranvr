@@ -48,6 +48,7 @@ const acceptable=(v:PublishedBackupEvidenceV39):boolean=>
   v.publishedPrepaidCallbackRoute===true&&
   v.publishedPhysicalFlightInstanceV2===true&&
   v.originalBlobRoundtripBeforeAck===true&&
+  v.originalWireByteArchive==="literal_wire"&&
   v.originalStorageRetentionHours===168&&
   v.independentlyReachableWithoutOtherReceiver===true;
 export function evaluatePublishedBackupParityV39(input:{
