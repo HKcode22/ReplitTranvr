@@ -13,7 +13,7 @@ describe("P25 prospective draft bundle: exact published Git and zero paid author
  });
  it("requires SHA-pinned prospective file pair and keeps the one-shot budget",()=>{
   expect(s).toContain('const P25_APPROVED_SHA="f0162c4db03ba8478b6b0cb04dfe1457482d1953a91ce98dcdc6518a95a99d30"');
-  expect(s).toContain('const P25_FROZEN_SHA="ea20048cb3cf912f3f9b70de9b4910e7f9994b3c89d3d82258c14dbbc42c6e86"');
+  expect(s).toContain('const P25_FROZEN_SHA="fba71c745e37426255d7117b05f76b5f9e035159650c3d23c88c79fa7b0f8871"');
   expect(s).toContain('const BUDGET="P2G-S1-20261012-03"');
   expect(s).toContain('const AUTH_ID="AUTH-20261012-P2G25"');
   expect(s).toContain('startNotBeforeUtc:"2026-10-12T03:00:00.000Z"');
