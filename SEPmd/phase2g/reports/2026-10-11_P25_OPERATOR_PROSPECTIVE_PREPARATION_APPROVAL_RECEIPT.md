@@ -26,3 +26,7 @@
 **Decision:** `PREPARATION_APPROVED`; `SCIENTIFIC_PROSPECTIVE_APPROVAL=NOT_YET`; `PAID_AUTHORIZATION=NOT_YET`; `PAID_PROVIDER_MUTATION=HOLD`.
 
 This note does not alter the frozen F.8 implementation log, P2G23 consent, project-lead source file, or existing provider/scientific records.
+
+## Oct 11 ~18:35 PDT production republish check pending
+
+The user added the three requested custody-setting **names** in Replit Secrets (values hidden in screenshots) and confirmed completion. The connected Replit publishing API was invoked again; the same published Replit app advanced through building/running/promoting and reported `success`. The actual live public value `prepaid_source_custody_ready` is **not yet independently evidenced after this republish**, and no live signed nonempty callback POST or 8-second ACK was performed. The operator was given a read-only public GET one-liner to verify the deployed flags. This append does not authorize a new provider subscription, source deletion, incident closure, scientific promotion, or any conditional gate waiver.
