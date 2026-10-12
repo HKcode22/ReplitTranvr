@@ -265,3 +265,22 @@ GitHub main independently still `f5b1347b7b9aebd6830302394ea2cc5775aedbf4`. GitH
 - Operator's last checked database: 0 incidents, 0 active/settling, V0064 LOGGED table/immutability enabled, evidence and counter/settling schema present, 0 OPEN budgets, 0 P25 existing probes. AeroDataBox fresh read 2287 credits, 60000 API units, 0 active billable; account point-in-time, final three-read balance canary per amendment remains pending (code takes 3 separated 5-second reads), as does live GH secrets/DB binding.
 - GitHub [120m synthetic rehearsal #38247064249](https://github.com/HKcode22/ReplitTranvr/actions/runs/38247064249) IN_PROGRESS on latest check, exact P25 6+6/termination tests passed, monotonic two-hour spool + two deliberate fake 180-second outages not concluded; localhost spool simulation is NOT two-hour production Autoscale, independent provider sender witness, or published raw POST. Preserve actual result/artifact when completed, do not infer success.
 - No code changes, Replit Agent, paid provider calls or DB mutations by this review. No exact ETA/automatic GO claim; actual deadline remains Oct12 20:00 PDT = Oct13 03:00Z. Last mile is short **in kinds of verifications**, not a warranted time-to-finish or guarantee of scientific PASS. Remaining: verify local auto-commit parent/files safely; signed live published disposable POST receipt/cleanup; independent Github DB/secret/cleanup binding workflows; inspect full wall-clock run when it ends; fresh launch-time balance/account status, exact source/receipt and time-class preflight; separate owner `RUN_PAID_STAGE1_ONCE`. Hard failure -> HOLD, preserve all earlier evidence.
+
+## October 12 — owner-proven Replit publication checkpoint is empty single-parent child, no reset required
+
+Actual Replit Shell `P25_PUBLISH_COMMIT_AUDIT` **PASS**:
+```text
+CURRENT=65e1c8718a23b4e447aaceb2fcb58a38c2101b64
+PARENTS=65e1c8718a23b4e447aaceb2fcb58a38c2101b64 f5b1347b7b9aebd6830302394ea2cc5775aedbf4
+git diff --name-status f5b1347..65e1c871 => NO CHANGED FILES
+PROTECTED_AND_DEPLOYMENT_CONFIG_UNCHANGED=true
+TREE=5eed390ac062a58482ddb5883c0fd8f72e0f0127a3bd46f89f1c9e9ec21ffe9c
+LOCAL_PUBLICATION_CHILD_AUDIT=PASS
+READ_ONLY=true
+PAID_PROVIDER_CALLS=0
+```
+This proves local `65e1` is a zero-tree-change one-parent Replit `Published your App` child of reviewed GitHub main `f5b`. Independently operator already verified public deployed HTTPS `git_head=f5b`. **Keep local child intact; do not `reset --hard`, push child to GitHub main, or change published source SHA to local child.** The previous Bash `P25_LIVE_CALLBACK_SMOKE` wrapper aborted due to its unnecessary `git rev-parse HEAD == f5b` local guard, not a real HTTP/DB failure and not evidence of callback loss.
+
+Source `scripts/v39_phase2g_verify_live_callback_v39.ts` blob `cbcc4783690e6e2c9acec392ac4e644392f3ac82` supports `--expected-head f5b` as PUBLIC Git revision independently of local `gitHead() == 65e1`. On published mode its pre-mutation gate validates actual public deployed revision equals `--expected-head`; receipt records `workspace_git_head=65e1` (truthful local) and `deployed_git_head_claimed=null`. The paid preflight `scripts/v39_phase2g_stage1_paid_preflight_v39.ts` only compares receipt's local git_head to published expected when `same-app-development-contingency`, **not** standard `published` mode. Thus safe next owner-operated Bash wrapper must check `HEAD=65e1`, `parents=65e1 f5b`, `git diff f5b..65e1` EMPTY including .replit, all protected files clean, committed protected SHA frozen; public HTTPS identity f5b exact; then run the *existing unchanged reviewed* signed-disposable callback script with `--callback-mode published --expected-head f5b`. No Replit Agent, no provider calls/Alert credits, no source rewrite; **one disposable live SQL session and blob will be written and exact-cleaned**. On failure refrain from automatic retry and inspect residual session/blob. Need actual receipt PASS/sha to advance.
+
+Independent GitHub true-wall-clock synthetic [38247064249](https://github.com/HKcode22/ReplitTranvr/actions/runs/38247064249) was still `in_progress` on this checkpoint tool read; never mark full PASS prematurely.
