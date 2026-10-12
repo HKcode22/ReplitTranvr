@@ -121,3 +121,42 @@ Checkpoint documents what connector GitHub and previous evidence showed, not pro
 3. Produce exact Replit local source parity, review+merge approved PR35/release commit; publish callback-only matching source and independently attest real public git_head, signed wrong-secret/nonempty POST, durable source byte/hash, DB/secret/key binding and cleaned synthetic source. Do not assume Replit "success" means new PR35 code.
 4. Actual fresh provider balance, 0 active billable subscriptions, protected ceiling/floor, existing and new budgets and incident state; GitHub workflow genuine `PASS_READY_FOR_PAID_STAGE1` under approved source and exact callback receipt. User separately confirms one paid start. If any hard failure, HOLD with checkpoint.
 5. Never treat the PR36 future tolerance proposal or local 120m rehearsal as a substitute for current P25 preflight.
+
+## October 12 ~05:03 PDT follow-up — confirmed administrative mutation and independent GitHub 120m run
+
+**Supersedes prior statement "quarantine pending".** The operator pasted the entire exact guarded output including fresh `READ_ONLY_PREVIEW`, separately typed `QUARANTINE`, and explicit `--apply` success. Script exact audited source commit `469d94be9e5dc51cd45496b39f6d29469c3157eb`. Observed:
+```json
+{
+ "status":"HISTORICAL_BUDGET_QUARANTINED_MISMATCH_SPEND_UNKNOWN",
+ "mode":"EXPLICIT_ADMIN_APPLY",
+ "old_budget_day":"P2G-S1-20261009-23",
+ "old_budget_state":"MISMATCH",
+ "old_failed_probe_id":18,
+ "old_science_status":"failed",
+ "old_reconciliation_status":"UNRESOLVED",
+ "historical_credit_totals_left_null":true,
+ "actual_provider_credit_spend_verified":false,
+ "source_references_retained":30,
+ "active_billable_subscriptions":0,
+ "database_mutations":1,
+ "new_paid_stage1_authorized":false,
+ "paid_provider_calls":0,
+ "alert_credits_spent":0
+}
+```
+**Verified scope:** one administrative database update; historical spend still unknown, probe18 still failed/censored, 30 source refs retained, 0 active billable subscriptions **when script checked**. The old expense forensic investigation is **not** a prerequisite to the exact separately guarded P25 run; it remains open as historical attribution. This does **not** prove today's refreshed account balance nor authorize paid service.
+
+**Operator's independent Replit P20 local synthetic:** stdout progressed at elapsed minute 15 (16/16 timely 202) and minute 30 (31/31 timely 202) from `/tmp/yssy-p20-local.5GpMah/rehearsal.log`. Completion unknown. Its own script explicitly sets `liveSixPlusSixEnabled:false`, `publishedHttpsIngressProven:false`, `paidYssyGoAuthorized:false`; no claim of production 6+6 deployment or full hosted backup from it.
+
+**Actual current P25 6+6 source readback:** `scripts/v39_phase2g_stage1_logged_supervisor_v39.ts` blob `71eeda85e9b457de9c678e2ffe8373a278cd8513`, `scripts/v39_phase2g_stage1_watchdog_6plus6_policy_v39.ts` blob `c5f24a827c22d2132de90bac585e6321797511fd`, on PR35 HEAD `66e9bce7...`. Current paid supervisor default is `six-plus-six`, exactly 6 primary+6 contingency at 15s polls, 12 consecutive failure maximum, 2 outage episodes, **180-second cumulative** outage ceiling, 40s individual health-cycle hard timeout, health confirmation (2 consecutive all-check green), strict no provider attempt-retry claim. Actual independent source/send proof **not deployed**, `evidence:undefined`, so recovered GET means `scientific_audit_pending`, not scientifically complete. Distinguish earlier PR27 `f4c9b24` supervisor source which had legacy 3-strike and disallowed 6+6 candidate; **do not misinterpret that research branch as the frozen P25 paid owner**.
+
+**Independent GitHub-hosted 120m rehearsal:** created isolated branch `phase2g-p25-gh-120m-synthetic-20261012` from PR35 HEAD, added only `.github/workflows/phase2g-p25-120min-github-only-synthetic-20261012.yml` at commit `69243c7cad89a51962ca0e7e2bb6cdaf65781554`. Automatic branch push started [run 38247064249](https://github.com/HKcode22/ReplitTranvr/actions/runs/38247064249); its current P25 6+6 policy and owner termination **Vitest steps completed SUCCESS**; pinned PR27 synthetic spool harness `f4c9b244943a9bd2de76d96f2cd78f93c71e4f01` prepared, real 120m monotonic fault/replay step **IN PROGRESS**, not PASS. Workflow zero AeroDataBox calls, no production DB, no paid secrets; repo confirmed **public**, GitHub standard-runner Actions free by published terms. Job timeout 150m. Standard hosted GitHub runner independent from Replit restart, but the harness is still LOCALHOST synthetic, **not exact hosted webhook, not full cloud backup, not a real P25 paid session**. The separate CI step tests current P25 6+6 code, the synthetic step reports liveSixPlusSixEnabled=false truthfully. Do not count the same fake local spool as a deployed independent upstream ingress.
+
+**Actual remaining YSSY GO blockers after quarantine:**
+1. Exact P25 `AUTH-20261013-P2G25` SHA256 `4a27a43d26fa2e257ea5ddf92afb2d05efe7213c07c0ec3def41ac4da8ab10e0`, runtime SHA256 `101c9ab8ade5978194fc22c4e2f64660ee74dbe5d0b8efcfab87b798e4df333f`: candidates committed but financial AUTH not approved in `SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md` or by fresh explicit user action.
+2. PR35 remains draft/unmerged and new P25 HEAD not yet independently matched to actual published Replit `git_head`; publishing may create a legitimate Replit generated child commit. Do not bypass exact SHA/tree binding.
+3. Must obtain fresh signed nonempty public POST receipt/wrong-secret rejection and durable storage/DB binding for exact newly deployed head.
+4. Obtain fresh authoritative Alert balance, zero active billable subscriptions, clean new budget, account floor1000 and max500 send exposure; actual GitHub paid `PASS_READY_FOR_PAID_STAGE1` and separate explicit one-time paid start consent.
+5. Production backup/full-parity independent frontdoor or hosted 120-minute proving run **NOT deployed or verified**; on P25 matrix P09/P10/P12 this is a disclosed availability limitation, not a silently PASSED feature, and no independent remote sender attempt proof.
+
+**Previous 3h45m+ estimate now obsolete in one respect:** rebuilding exact *old* paid credit totals no longer needed for P25 admission after quarantine. Remaining releases may take less or more elapsed time depending on human approval, Replit publish, public callback and genuine preflight; not a fixed minimum work duration. Target 20:00 PDT Oct12, never shortcut true hard gates if delayed. Next safe operator step: READ-ONLY public deployed `/__v39/workspace-runtime` identity and exact source/git comparison, alongside human review of the distinct financial AUTH scope.
