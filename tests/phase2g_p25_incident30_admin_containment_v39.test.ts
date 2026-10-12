@@ -30,5 +30,10 @@ describe("P25 incident30 admin current-risk-only containment, default no mutatio
    expect(s).toContain('updated.rowCount!==1');
    expect(s).toContain("client.query(\"COMMIT\")");
    expect(s).toContain("paid_yssy_authorized:false");
+   expect(s).toContain('const historicalBudgetId="P2G-S1-20261009-23"');
+   expect(s).toContain("openBudgets.rows[0]?.probe_budget_day_id===historicalBudgetId");
+   expect(s).toContain("String(p.probe_budget_day_id)===historicalBudgetId");
+   expect(s).toContain("historical_budget_marked_reconciled_by_this_script:false");
+   expect(s).toContain("old_budget_still_requires_independent_closeout:");
  });
 });
