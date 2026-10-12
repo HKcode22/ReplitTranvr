@@ -80,6 +80,26 @@ jobs:
           sha256sum artifacts/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json
           echo "P2G25_PROJECT_LEAD_APPROVED=false"
           echo "P2G25_PAID_MUTATION_AUTHORIZED=false"
+      - name: Generate tomorrow's exact source-bound P25 runtime/Auth DRAFT (zero provider)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          git fetch --no-tags origin phase2g-p25-20261012-integrated-release-review
+          node --import tsx scripts/v39_p25_prepare_exact_runtime_auth_drafts_v39.ts \
+            > "${RUNNER_TEMP}/p25-tomorrow-runtime-auth-draft.json"
+          node -e '
+            const r=require(process.argv[1]);
+            if(r.status!=="DRAFT_REVIEW_ONLY_NO_PAID_AUTH"||
+              r.stage1_budget_day_id!=="P2G-S1-20261013-03"||
+              r.paid_auth_approved!==false||
+              r.paid_preflight_passed!==false||
+              r.paid_alert_credits_spent!==0)
+              process.exit(2);
+            console.log("DRAFT_RUNTIME_AND_AUTH_BINDING_VERIFIED=YES");
+          ' "${RUNNER_TEMP}/p25-tomorrow-runtime-auth-draft.json"
+          echo "PROVIDER_MUTATIONS=0"
       - name: Create SHA-bound source/calendar zero-credit receipt
         shell: bash
         run: |
