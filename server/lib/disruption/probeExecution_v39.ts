@@ -260,12 +260,86 @@ async function assertR1Clean(deps: ProbeExecutionDependencies): Promise<void> {
   }
 }
 
+/**
+ * Under P25 prospective one-shot science only, allow the *one exact* October 9
+ * failed/censored P2G24 budget quarantined as MISMATCH, never as CLOSED/MATCH.
+ * The original NULL external/internal spent amounts remain unknown. This is
+ * NOT a general mismatch waiver; all unrelated MISMATCH rows fail.
+ *
+ * The prospective P25 frozen amendment hash and runtime budget day are both
+ * mandatory before considering old historical quarantine. Actual current
+ * paid account ceiling, signed callback, ZERO billable subscriptions, same-day
+ * budget, AUTH approval and preflight remain independently enforced.
+ */
+async function p25ExactHistoricalQuarantinePermitsNewDayV39(
+  config: ProbeRuntimeConfig,
+  historicalMismatchId: string,
+): Promise<boolean> {
+  if (
+    historicalMismatchId !== "P2G-S1-20261009-23" ||
+    config.probeBudgetDayId !== "P2G-S1-20261013-03" ||
+    config.stage1AmendmentSha256 !==
+      "b54256346a35354d71e46e18a44d175056cba3228d93313d0036cc08af2f4f94"
+  ) return false;
+
+  const q = await pool.query(`
+    SELECT
+      EXISTS (
+        SELECT 1 FROM clean.adb_probe_budget_day b
+        WHERE b.probe_budget_day_id='P2G-S1-20261009-23'
+          AND b.state='MISMATCH'
+          AND b.cap_credits=500 AND b.closed_at IS NOT NULL
+      ) AS old_budget_quarantined,
+      (
+        SELECT count(*)::int FROM clean.adb_anchor_probe p
+        WHERE p.probe_budget_day_id='P2G-S1-20261009-23'
+          AND p.probe_id=18 AND p.icao='YSSY'
+          AND p.status='failed' AND p.duration_censored=true
+          AND p.reconciliation_status='UNRESOLVED'
+          AND p.stop_reason='supervisor_child_exit_recovered'
+          AND p.provider_content_safe_mode=true
+          AND p.reserved_credits=500
+          AND p.credits_spent IS NULL AND p.internal_send_credits IS NULL
+      ) AS old_failed_probe_exact,
+      (
+        SELECT count(*)::int FROM clean.adb_incident_stop i
+        WHERE i.id=30 AND i.cause='reconciliation'
+          AND i.resolved=true
+          AND i.detail->>'runtimeCleanupVerified'='false'
+          AND i.detail->>'adminScope'='CURRENT_HAZARD_CONTAINED_ONLY'
+      ) AS incident_admin_contained_exact,
+      (
+        SELECT count(*)::int FROM clean.provider_content_blob_ref r
+        WHERE r.source_kind='webhook'
+          AND r.source_record_id LIKE
+           'prepaid:6267293e-75a0-42a7-b977-89543f200ebc:%'
+          AND r.deletion_verified_at_utc IS NULL
+      ) AS historical_source_refs,
+      (
+        SELECT count(*)::int FROM clean.adb_incident_stop WHERE resolved=false
+      ) AS unresolved_incident_count
+  `);
+  const r=q.rows[0];
+  return r?.old_budget_quarantined===true &&
+    Number(r?.old_failed_probe_exact)===1 &&
+    Number(r?.incident_admin_contained_exact)===1 &&
+    Number(r?.historical_source_refs)===30 &&
+    Number(r?.unresolved_incident_count)===0;
+}
+
 export async function ensureProbeBudgetDay(config: ProbeRuntimeConfig): Promise<void> {
   const mismatch = await pool.query(
-    `SELECT probe_budget_day_id FROM clean.adb_probe_budget_day WHERE state='MISMATCH' LIMIT 1`,
+    `SELECT probe_budget_day_id FROM clean.adb_probe_budget_day WHERE state='MISMATCH' ORDER BY probe_budget_day_id LIMIT 2`,
   );
   if (mismatch.rowCount) {
-    throw new Error(`REFUSED_PROBE_BUDGET_MISMATCH: ${mismatch.rows[0].probe_budget_day_id}`);
+    const exactQuarantine =
+      mismatch.rows.length===1 &&
+      await p25ExactHistoricalQuarantinePermitsNewDayV39(
+        config, String(mismatch.rows[0].probe_budget_day_id),
+      );
+    if(!exactQuarantine) {
+      throw new Error(`REFUSED_PROBE_BUDGET_MISMATCH: ${mismatch.rows[0].probe_budget_day_id}`);
+    }
   }
   const open = await pool.query(
     `SELECT probe_budget_day_id FROM clean.adb_probe_budget_day WHERE state='OPEN'`,
