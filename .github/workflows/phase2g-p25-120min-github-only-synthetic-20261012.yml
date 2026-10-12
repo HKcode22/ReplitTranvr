@@ -74,6 +74,24 @@ jobs:
           echo "REHEARSAL_SOURCE=$PIN"
           echo "REVIEWED_P25_SOURCE_ANCESTOR=c0634bfd80fd16d7a48bfa848b7f9df0a65d5d67"
 
+      - name: Preflight actual receipt export with 1.2-second no-provider localhost smoke
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$P20_STAGE"
+          env -i HOME="$HOME" PATH="$PATH" \
+            P2G_LOCAL_SYNTHETIC_ONLY=YES \
+            node --import tsx \
+              experiments/phase2g_rehearsal/synthetic_replit_local_wallclock_v39.ts \
+              --smoke 2>&1 | tee "${RUNNER_TEMP}/P20_SHORT_SMOKE_GITHUB_ONLY.log"
+
+          node "${GITHUB_WORKSPACE}/experiments/phase2g_rehearsal/p20_export_verified_local_receipt_v39.mjs" \
+            "${RUNNER_TEMP}/P20_SHORT_SMOKE_GITHUB_ONLY.log" \
+            "${RUNNER_TEMP}/P20_SHORT_SMOKE_RESULT.json" \
+            SHORT_LOCAL_SMOKE
+          echo "P20_RECEIPT_EXPORT_SMOKE=PASS"
+          echo "PROVIDER_CALLS=0"
+
       - name: Real 120-minute monotonic synthetic spool/replay and two injected outages
         shell: bash
         run: |
@@ -85,9 +103,12 @@ jobs:
               experiments/phase2g_rehearsal/synthetic_replit_local_wallclock_v39.ts \
               --full-120m 2>&1 | tee "${RUNNER_TEMP}/P20_120M_GITHUB_ONLY.log"
 
-          RECEIPT="$(find /tmp -maxdepth 2 -name P20_LOCAL_ONLY_RESULT.json -path '/tmp/p2g-wallclock-synthetic-*/*' -print -quit)"
-          test -n "$RECEIPT"
-          cp "$RECEIPT" "${RUNNER_TEMP}/P20_LOCAL_ONLY_RESULT.json"
+          # Read the exact saved receipt from THIS run's emitted evidenceDirectory.
+          # Never traverse unrelated /tmp/systemd-private or risk selecting stale files.
+          node "${GITHUB_WORKSPACE}/experiments/phase2g_rehearsal/p20_export_verified_local_receipt_v39.mjs" \
+            "${RUNNER_TEMP}/P20_120M_GITHUB_ONLY.log" \
+            "${RUNNER_TEMP}/P20_LOCAL_ONLY_RESULT.json" \
+            ACTUAL_LOCAL_120M
 
           node --input-type=module - "${RUNNER_TEMP}/P20_LOCAL_ONLY_RESULT.json" <<'NODE'
           import {readFileSync} from "node:fs";
