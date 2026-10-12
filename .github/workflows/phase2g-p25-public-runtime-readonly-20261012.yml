@@ -1,0 +1,46 @@
+name: P25 public Replit runtime head read-only audit
+on:
+  push:
+    branches:
+      - phase2g-p25-public-runtime-readonly-20261012
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Public runtime GET only; no provider secrets or DB
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --silent --show-error --fail-with-body --max-time 20 \
+            'https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime' \
+            > "${RUNNER_TEMP}/runtime.json"
+          node --input-type=module - "${RUNNER_TEMP}/runtime.json" <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const x=JSON.parse(readFileSync(process.argv[2],'utf8'));
+          const expected='66e9bce772918ceca470bae0e3c9e13f6e8d0af6';
+          const actual=String(x.git_head||'').toLowerCase();
+          const result={
+            schema:x.schema||null,
+            status:x.status||null,
+            published_git_head:actual||null,
+            expected_pr35_head:expected,
+            exact_current_pr35_match:actual===expected,
+            runtime_owner_mode:x.runtime_owner_mode||null,
+            published_deployment:x.published_deployment??null,
+            runtime_durability_class:x.runtime_durability_class||null,
+            prepaid_route_registered:x.prepaid_route_registered??null,
+            retention_hours:x.retention_hours??null,
+            P25_PAID_GO_AUTHORIZED:false,
+            provider_calls:0,
+            database_mutations:0
+          };
+          console.log(JSON.stringify(result,null,2));
+          if(x.status!=='PASS'||!actual)process.exitCode=2;
+          else if(actual!==expected)console.log('P25_PUBLIC_DEPLOYED_HEAD_NOT_YET_PR35_REVIEWED_RELEASE');
+          NODE
+          echo 'PUBLIC_READ_ONLY_CHECK_FINISHED'
