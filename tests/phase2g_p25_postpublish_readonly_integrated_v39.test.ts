@@ -17,6 +17,9 @@ describe("P25 integrated public deployed release and V0064 read-only audit",()=>
   expect(s).toContain("pg_get_functiondef");
   expect(s).toContain("pg_trigger");
   expect(s).toContain('tgenabled==="O"');
+  expect(s).toContain("kind_flags===31");
+  expect(s).toContain("pg_get_constraintdef(oid)");
+  expect(s).toContain("retention_identity_and_state_checks:semanticsOk");
   expect(s).toContain('rel.relpersistence==="p"');
   expect(s).toContain("required_constraints_validated:constraintOk");
   expect(s).toContain("historical_untombstoned_references");
