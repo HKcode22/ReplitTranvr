@@ -51,6 +51,7 @@ jobs:
             tests/phase2g_p25_historical_incident30_disposable_smoke_only_v39.test.ts \
             tests/phase2g_p25_v0064_guarded_install_v39.test.ts \
             tests/phase2g_p25_postpublish_readonly_integrated_v39.test.ts \
+            tests/phase2g_p25_signed_smoke_postflight_audit_v39.test.ts \
             tests/phase2g_p25_replit_callback_published_deploy_contract_v39.test.ts \
             tests/phase2g_p25_prospective_gap_research_only_v39.test.ts \
             tests/phase2g_cleanup_concurrency_reproduction_v39.test.ts \
