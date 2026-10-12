@@ -64,3 +64,38 @@ Checkpoint documents what connector GitHub and previous evidence showed, not pro
 - Reviewed PR35 `probeExecution_v39.ts`: the single historical quarantine exception requires exact old-budget `MISMATCH`, old probe18 failed/censored/UNRESOLVED, old amounts NULL, 30 retained refs, incident30 containment and no unresolved incidents; unrelated MISMATCH blocks. Not a general production gap tolerance.
 - Old detached quarantine script `469d94be9e5dc51cd45496b39f6d29469c3157eb` verified with exact GitHub Actions **SUCCESS** [run 38199014273](https://github.com/HKcode22/ReplitTranvr/actions/runs/38199014273). Later quarantine-branch head `e553fc03246a77d4643ca7ae67c51d1501ad220d` advanced five commits, none changed that quarantine script. Pin the exact tested commit when conducting default read-only preview; get separate consent before `--apply`. No Shell result or approval was observed in this session.
 - New [draft PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36) stores these checkpoints/prospective study-method proposals without changing current PR35 source.
+
+## 2026-10-12 follow-up: operator preview + research/deadline decision (new current checkpoint)
+**Verified from user-supplied Replit Shell output, not merely an old handoff:** detached pinned historic-quarantine script from `469d94be9e5dc51cd45496b39f6d29469c3157eb` ran in READ_ONLY_PREVIEW and returned:
+```json
+{
+ "status":"ELIGIBLE_ONLY_FOR_HISTORICAL_MISMATCH_QUARANTINE",
+ "old_budget_day":"P2G-S1-20261009-23",
+ "old_budget_state":"OPEN",
+ "old_failed_probe_id":18,
+ "old_science_status":"failed",
+ "old_reconciliation_status":"UNRESOLVED",
+ "prepaid_safe_mode":true,
+ "conservative_reserved_exposure":500,
+ "actual_provider_credit_spend_verified":false,
+ "historical_credit_totals_left_null":true,
+ "incident30_administratively_contained":true,
+ "historical_runtime_cleanup_proven":false,
+ "source_references_retained":30,
+ "active_billable_subscriptions":0,
+ "new_paid_stage1_authorized":false,
+ "paid_provider_calls":0,
+ "alert_credits_spent":0
+}
+```
+**This proves eligibility only at preview time, not a mutation.** The operator has **not** supplied `--apply` result; old budget is presumed OPEN pending fresh verification. No provider balance amount was observed. Administrative historical quarantine and new paid AUTH require separate informed consent and fresh guards.
+
+**P20:** Operator started `P2G_LOCAL_SYNTHETIC_ONLY=YES` `--full-120m` from detached PR27 worktree HEAD `f4c9b24`; Shell printed `LOG=/tmp/yssy-p20-local.5GpMah/rehearsal.log`. This is a start only. Until complete stdout/result receipt: `LOCAL_REHEARSAL_STATUS=RUNNING_OR_UNKNOWN`, not PASS. It is never hosted Replit/AeroDataBox proof.
+
+**Expanded methodological review committed on documentation-only PR36:** [research assessment of data loss, 3 vs 6+6 retries, Plan f.8 / implementation-log overhead, and realistic phase deadlines](../reports/2026-10-12_PHASE2G_METHODS_RELIABILITY_TOLERANCE_AND_DEADLINE_RESEARCH_REVIEW.md), commit `62acdd5ac133931832cdbb367a5d0e7c0f04e4a2`. Source Plan main blob `3ef1b8730e3148b936fcf02b46d0a091e69f7480`; current implementation log main blob `0a5e4bedfa7c743feaf05ec2dc66f22084f39236`. Confirmed Plan §11.2 permits prospective separately measured production tolerance but existing §20.4 exact acceptance remains authoritative for **current P25**; no change to current source/frozen science. Current Log §23's 59 fields per task and §25's 20/function are candidates for proportional future documentation amendments rather than unilateral bypass today.
+
+**Research assessment:** User's concern about disproportionate insistence on perfection is supported by Google SRE/NIST principles and actual Plan built-in stop/scoping clauses; small measured item-credit delivery gaps do **not** guarantee unbiased missing flight observations or official anchor scores. Treat P2G06 1/220 and P2G22 1/260 as recorded item-credit gaps, NOT measured missing distinct flights; P2G24 historic cost remains UNKNOWN. Keep 6+6 15s **local health** retries separate from zero **provider delivery** retries, bounded by whole-run two episodes/180s; health recovery alone not proof of notifications. For *future* cohorts, pursue A/B/C/D data classes, a one-pass sensitivity audit, concise change receipts for minor work, and evidence-based deadlines—no arbitrary 0.5%/1% cutoff adopted now.
+
+**Latest actual work performed here:** GitHub documentation commit only, read-only GitHub / public research. No GitHub release merge, live DB mutation, provider action, Replit deploy, financial approval or paid GO. The substantive completion this turn is saving the review and handing off a decision-ready next path.
+
+**Next paid path unchanged:** (1) explicit historical quarantine consent and separate `--apply` + fresh verification; (2) exact P25 new AUTH bytes and approved financial ledger; (3) PR35 reviewed/matched Replit publish and freshly signed public POST custody; (4) fresh account cap/floor/zero billable sub verification; (5) actual `PASS_READY_FOR_PAID_STAGE1` and separate paid GO; otherwise HOLD. The proposed methods relaxation is not a route around this launch's authorized guards.
