@@ -125,6 +125,14 @@ async function main(): Promise<void> {
   const boundSynthetic=process.argv.includes("--synthetic-bound-subscription");
   const secret = String(process.env.AERODATABOX_WEBHOOK_SECRET ?? "").trim();
   if (secret.length < 32) throw new Error("REFUSED:AERODATABOX_WEBHOOK_SECRET_REQUIRED");
+  if(boundSynthetic&&(
+    callbackMode!=="published"||
+    process.env.V39_CALLBACK_ONLY_RUNTIME!=="1"||
+    process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED!=="1"||
+    process.env.V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED!=="1"||
+    process.env.V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED!=="1"))
+    throw Error("REFUSED:BOUND_SYNTHETIC_OUTSIDE_LOCK_FLAGS_NOT_FULLY_ENABLED");
+
 
   // Local cleanup must use the same dedicated provider bucket that the live
   // callback route writes to.
@@ -379,7 +387,7 @@ async function main(): Promise<void> {
       throw new Error(`REFUSED:LIVE_PREPAID_PERSISTENCE_PROOF:${JSON.stringify(b)}`);
     }
 
-    // A bound session + payload.subcription.id forces the reviewed
+    // A bound session + payload.subscription.id forces the reviewed
     // V0064 outside-session-lock admission path on the actual hosted POST.
     // This is synthetic; prove the LOGGED VERIFIED source intent exists
     // before this exact disposable source is intentionally cleaned up.
