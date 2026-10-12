@@ -136,7 +136,7 @@
     "requires_zero_callback_spend_fail_fast_watchdog": true,
     "requires_url_encoded_webhook_secret_path": true
   },
-  "freeze_revision": "early-pilot-yssy-p2g25-single-prospective-recovery-20261011",
+  "freeze_revision": "early-pilot-yssy-p25-published-recovery-frozen-20261011",
   "physical_identity_v2_remeasurement": {
     "authorized": true,
     "current_metric_contract": "v39-physical-flight-instance-v2",
