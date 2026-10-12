@@ -1,9 +1,9 @@
 {
   "schema": "v39.phase2g-p25-prospective-recovery-decision.v1",
-  "status": "DRAFT_NOT_APPROVED",
+  "status": "PROJECT_LEAD_APPROVED_ONE_RECOVERY",
   "target": "YSSY",
-  "target_window_start_utc": "2026-10-12T03:00:00Z",
-  "target_window_end_utc": "2026-10-12T05:00:00Z",
+  "target_window_start_utc": "2026-10-13T03:00:00Z",
+  "target_window_end_utc": "2026-10-13T05:00:00Z",
   "max_alert_credits": 500,
   "max_additional_attempts": 1,
   "previous_failed_probes": [
@@ -17,18 +17,25 @@
   "no_automatic_retry": true,
   "parent_p2g23_sha256": "ae33f82748d0a49a842aab5a4d27ec17f997a8aa6acc8c419cfc9c8c039af0ad",
   "evidence_pending": [
-    "exact_readonly_P2G24_provider_cleanup_and_incidents",
-    "published_release_hash",
-    "signed_nonempty_disposable_post_10s_ack",
-    "live_provider_balance_and_zero_billable",
-    "reviewed_P25_amendment_SHA"
+    "new prospective P25 exact source bound Gate2 runtime and budget AuthRecord",
+    "actual paid preflight PASS_READY_FOR_PAID_STAGE1",
+    "administrative containment-only incident30 disposition; historical runtime cleanup remains unverified",
+    "fresh provider zero active billable and protected floor"
   ],
   "study_inference": "Only 120-minute fully reconciled matching v2 is promotable; no imputed flights for lost original sends; missingness must be disclosed",
-  "decision_authorized": false,
+  "decision_authorized": true,
   "scientific_protocol_change_requested": false,
   "stage1_supervisor_health_policy": "six-plus-six",
   "health_single_outage_wall_limit_seconds": 180,
   "health_whole_run_cumulative_limit_seconds": 180,
   "health_whole_run_max_episodes": 2,
-  "health_recovery_scientific_audit_required": true
+  "health_recovery_scientific_audit_required": true,
+  "approval_authority": "operator_research_project_lead",
+  "approval_provenance": "The operator cancelled the Oct11 8 PM launch and explicitly requested preparation for Monday October 12 2026 at 8 PM PDT. This retains exactly one prospective 120-minute attempt with maximum 500 Alert credits, 1000 protected floor and no automatic retry. The new source/time-bound paid AuthRecord and an actual PASS final preflight are separately required; this decision does not authorize provider mutations.",
+  "scope": "OCT12_ONE_PROSPECTIVE_P25_PLANNING_ONLY_NEW_PAID_AUTH_REQUIRED",
+  "nonpaid_prelaunch_rehearsal_disposition": "SKIPPED_BY_OPERATOR_NOT_PASSED",
+  "historical_failed_probes_remain_unscoreable": true,
+  "independent_source_attempt_truth_unknown": true,
+  "historical_incident30_operational_adjudication_pending": true,
+  "paid_launch_authorized_now": false
 }

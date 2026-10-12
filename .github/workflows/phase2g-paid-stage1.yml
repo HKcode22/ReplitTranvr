@@ -87,7 +87,7 @@ on:
         default: ''
         type: string
       callback_verification_b64:
-        description: 'Fresh callback verification bytes as base64; required for same-app development contingency'
+        description: 'SHA-verified post-publication callback receipt as base64 (published or contingency); do not include secrets'
         required: false
         default: ''
         type: string
@@ -346,9 +346,15 @@ jobs:
           OUT="${RUNNER_TEMP}/phase2g-stage1-paid-preflight.json"
           CALLBACK_FILE="${{ inputs.callback_verification_file }}"
 
-          if [[ "${{ inputs.callback_mode }}" == "same-app-development-contingency" ]]; then
-            [[ -n "${CALLBACK_VERIFICATION_B64:-}" ]] || {
-              echo "::error::callback_verification_b64 is required for same-app development contingency"
+          # Post-publish signed verification cannot live in the same
+          # already-published Git commit it attests: committing it changes
+          # the commit SHA. Accept SHA-verified one-time receipt bytes on
+          # workflow_dispatch instead of weakening deployed-head equality.
+          # This does NOT waive the existing preflight receipt age,
+          # paid authorization, DB binding or explicit host SHA checks.
+          if [[ -n "${CALLBACK_VERIFICATION_B64:-}" ]]; then
+            [[ -z "$CALLBACK_FILE" ]] || {
+              echo "::error::Supply exactly one callback-verification source"
               exit 2
             }
             CALLBACK_FILE="${RUNNER_TEMP}/phase2g-live-callback-verification.json"
@@ -358,8 +364,16 @@ jobs:
               exit 2
             }
           else
+            [[ "${{ inputs.callback_mode }}" != "same-app-development-contingency" ]] || {
+              echo "::error::callback_verification_b64 required for development contingency"
+              exit 2
+            }
             [[ -n "$CALLBACK_FILE" && -f "$CALLBACK_FILE" ]] || {
-              echo "::error::callback_verification_file is required for published mode"
+              echo "::error::Supply SHA-verified callback_verification_b64 or committed callback_verification_file"
+              exit 2
+            }
+            [[ "$(sha256sum "$CALLBACK_FILE" | awk '{print $1}')" == "${{ inputs.callback_verification_sha }}" ]] || {
+              echo "::error::Committed callback-verification SHA mismatch"
               exit 2
             }
           fi
