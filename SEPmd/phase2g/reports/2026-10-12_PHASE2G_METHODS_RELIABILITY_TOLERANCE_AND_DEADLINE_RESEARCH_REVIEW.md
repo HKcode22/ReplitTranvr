@@ -142,3 +142,60 @@ For *unrecoverable* missingness, timebox forensic retrieval once: enumerate avai
 - **Not executed:** historical OPEN→MISMATCH `--apply`; P25 AUTH financial ledger consent; release merge or Replit publication; fresh post-publish webhook receipt; live provider balance/safety read; paid preflight; paid 120min YSSY.
 - **Next exact independent read:** Obtain guarded quarantine write consent separately from new financial AUTH; verify status post-write; compare PR35 actual HEAD/deployed matching source and required workflow; obtain signed callback evidence; run real protected preflight. **HOLD** until proof.
 - **Research next:** Review user agreement; implement *prospective* changes only after future-cohort numerical/sensitivity checks. Preserve no-backdating and no automatic paid action.
+
+## 11. Granular phase/subphase schedule crosswalk to implementation-log §1 (requested explicit "inside each phase" deadlines)
+All time budgets below are **initial focused engineering effort**, **not deadlines for waiting on AeroDataBox, matched time slots, approvals or 2h/4h observation windows**. Values are planning estimates, not measured productivity baselines. Mark completed items DONE with their existing evidence; **never reopen all of Phase0** or sum these numbers as if nothing has been built. If a substep is truly unimplemented, revise the aggregate phase estimate instead of attempting to force a 30-day first build into 7 days. Scientific and monetary critical paths are never shortened merely by a deadline.
+
+| Implementation Log exact subsection | Focused timebox if outstanding | Test/evidence exit |
+|---|---:|---|
+| §1.5.1 **Phase 0A** runtime fail-closed | 0.5–1 day | Safe OFF at boot/restart, negative test |
+| §1.5.2 **0B** durable ingress-before-2xx | 1–2 days | Durable original and failed-store negative PG/object test |
+| §1.5.3 **0C** FIDS population | 1–3 days | Independent population frame and fixtures |
+| §1.5.4 **0D** identity/retiming | 1–2 days | Physical-flight-v2/codeshare tests |
+| §1.5.5 **0E** semantic event id/log | 0.5–1 day | Append-before-mutating-state receipt |
+| §1.5.6 **0F** T and PRE builder | 0.5–2 days | Cutoff-proof snapshot test |
+| §1.5.7 **0G** AIRBORNE preservation | 1–2 days | Trajectory retained and no future-time access |
+| §1.5.8 **0H** targets/censoring | 1–2 days | Actual/estimated distinction, honest censoring |
+| §1.5.9 **0I** historical/weather/graph | 1–3 days | As-known-at-cutoff test or NULL/defer optional feature |
+| §1.5.10 **0J** frame/tier/scoring | 1–2 days | Deterministic reference hashes, score fixtures |
+| §1.5.11 **0K** money, settlement/watchdog | 1–3 days | Provider floor/cap, unsettled negative cases |
+| §1.5.12 **0L** schedule/crossover | 1–2 days | Frozen matching and UNSAT refusal |
+| §1.5.13 **0M** manifest/split/eval | 1–2 days | Future-split protection and manifest hash |
+| §1.5.14 **0N** migrations | 0.5–1 day | Real disposable PG migration/install/repeat |
+| §1.5.15 **0O** CLI wrappers | 0.5–1 day | Owner command works, no echo-stub passing |
+| §1.5.16 **0P** TEST001–028 | 1–2 days | Targeted suite/reused coverage, not gratuitous duplicate tests |
+| §1.5.17 **0Q** closure | 0.5–1 day | Signed evidence matrix and STOP redesign |
+| §1.6 **Phase 1** Gate0 | 0.5–1 day | Quota/account/ceiling/floor authoritative reads |
+| §1.7.1 **Phase 2A** prerequisite P | 0.5–2 days | Security/retention provision and proof |
+| §1.7.2 **2B** Gate1 coverage | 0.5–1 day | Observed region/airport coverage |
+| §1.7.3 **2C** reference freeze | 0.5–1 day | Frozen traffic/region rule |
+| §1.7.4 **2D** final frame/hash | 0.5–1 day | Deterministic authoritative frame hash |
+| §1.7.5 **2E** preprobe record | 0.25–0.5 day | One machine-readable verified freeze |
+| §1.7.6 **2F** smoke | 0.5 day plus real allowed exposure | Live minimal custody/billing test |
+| §1.7.7 **2G** Stage1 | Per candidate: 2h target exposure + 1–2h prep/settle | Honest A/B/C outcome after actual window, no fabricated missing |
+| §1.7.8 **2H** Stage2 | **Only if frozen compact-six trigger**: per candidate 4h exposure + 1–2h overhead | Confirmed candidate or explicitly skipped |
+| §1.8.1 **Phase 3** Gate3 canary | 0.5–1 day plus minimal real exposure | Isolated exact zero-tolerance canary |
+| §1.8.2 **Phase 3** Gate0.5 pilot | 1–3 days plus predefined pilot window | Clock/T/target/cadence constructibility measurements |
+| §1.8.3 **Phase 3** Gate4 | 0.5–1 day | Cap/soft-stop/unsettled failure and second-start refusal |
+| §1.9 **Phase 4** Gate5 | 1–3 days | Population/capture/snapshot/label independent funnel |
+| §1.10.1 **Phase 5** readiness recheck | 0.25–0.5 day | No open true hard blockers |
+| §1.10.2 **Phase 5** REST budget | 0.5–1 day | Exact request category/quota count |
+| §1.10.3 **Phase 5** calendar | 0.5–1 day | SAT final calendar or documented UNSAT |
+| §1.10.4 **Phase 5** split freeze | 0.25–0.5 day | Time/group protected hash |
+| §1.10.5 **Phase 5** final manifest | 0.5–1 day | Machine-checkable freeze and authority |
+| §1.11.1 **Phase 6** daily precheck | 15–30min per batch day | Budget/owners/manifest/cutoff proof |
+| §1.11.2 **Phase 6** runtime | Frozen scheduled duration, not timebox | Collection within authorized time class |
+| §1.11.3 **Phase 6** diagnostics | 1–2h per week | One generated report, no repeated manual 59-field ledger |
+| §1.11.4 **Phase 6** close | 30–90min per batch day plus actual settlement | Source custody, no active subscriptions, honest reconciliation |
+| §1.12 **Phase 7** materialization/split | 1–2 days | Protected test IDs and leakage checks |
+| §1.12 **Phase 7** baseline and first XGB | 2–4 days | Train/validation-only model selection |
+| §1.12 **Phase 7** once-only test and report | 2–4 days | Preregistered point/interval & limitation reporting |
+
+**Revised end-to-end realities:** If many Phase0 0A–0Q contracts remain missing, this is **multiple weeks of work**—the earlier "3–7 focused workdays" only covers a partially completed remainder. The 31 scheduled Phase6 batch-days imply **at least 31 run-days and possibly substantially more calendar time** because of matched-class windows and washout. A full study is therefore not realistically a one-week task, but each substep should have a bound, checkpoint, and a chance to defer nonessential development. The project lead should receive a **weekly critical-path forecast** using actual completed evidence rather than being told that every newly discovered reliability idea is a gate.
+
+### Lightweight mandatory checkpoint proposal (future Log amendment)
+For routine work use a single daily Markdown record with: (1) timestamp/phase, (2) exact branch/commit/files, (3) P0/P1/P2/P3 and why, (4) actual work/change, (5) tests + observed results, (6) money/provider/DB effects, (7) remaining blockers or known limitations, (8) next command/owner and target date. For serious changes involving financial authority, identity, population, outcomes, temporal validity, raw custody, or schema migration add the **full relevant** methods, cost proof, provenance/approval, and negative integration evidence. Preserve full historical 59-field records without retrospectively rewriting them. NIST's Research Data Framework [R13] emphasizes fit-for-purpose provenance and documentation; its information-quality guidance [R14] expressly describes reproducibility subject to an *acceptable degree of imprecision* adjusted to consequence, not an expectation of error-free numeric measurements.
+
+**[R13]** NIST Research Data Framework (RDaF), NIST SP1500-18r2, metadata/provenance and reproducibility practices. https://nvlpubs.nist.gov/nistpubs/SpecialPublications/1500-18/NIST.SP.1500-18r2.html
+
+**[R14]** NIST Information Quality Standards, reproducibility can allow acceptable imprecision based on impact; never supports arbitrary inaccurate financial accounting. https://www.nist.gov/director/nist-information-quality-standards
