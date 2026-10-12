@@ -11,7 +11,7 @@ describe("P25 old budget closeout separates admin accounting from failed science
    'p.status==="failed"&&p.reconciliation_status==="UNRESOLVED"',
    'Number(totals.preserved_old_refs)===30',
    'Number(totals.unresolved_incidents)===0',
-   'i.resolved===true&&i.old_cleanup==="false"'
+   'String(i.id)==="30"','i.resolved===true&&i.old_cleanup==="false"'
   ])expect(s).toContain(marker);
  });
  it("requires fresh operator consent and refuses missing spent, fractional cost, cap overage",()=>{
