@@ -371,6 +371,35 @@ describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("YSSY P25 real rece
     expect(await count()).toEqual({logged:1,unlogged:1});
     expect(await session()).toEqual({requests:2,successes:2,failures:0});
   });
+  it("P03/P04 actual signed prepaid parser persists nonempty operator v2 and idempotent HTTP repeat",async()=>{
+    const leg={
+      id:"synthetic-http-operator-871",number:"QF871",
+      codeshareStatus:"IsOperator",airline:{iata:"QF"},
+      departure:{airport:{icao:"YSSY",timeZone:"Australia/Sydney"},
+        scheduledTime:{utc:"2026-10-12T03:40:00Z"}},
+      arrival:{airport:{icao:"YMML"},
+        scheduledTime:{utc:"2026-10-12T05:10:00Z"}}
+    };
+    const body=JSON.stringify(sample({
+      id:"p25-http-nonempty-physical-v2",flights:[leg]
+    }));
+    const send=()=>fetch(localOrigin+actualPath,{
+      method:"POST",headers:{"content-type":"application/json"},body
+    });
+    const first=await send();
+    expect(first.status).toBe(200);
+    const second=await send();
+    expect(second.status).toBe(200);
+    const q=await state.pool!.query(
+      "SELECT flight_instance_id,identity_resolution_status FROM clean.prepaid_probe_item_runtime"
+    );
+    expect(q.rows).toHaveLength(1);
+    expect(q.rows[0].identity_resolution_status).toBe("resolved");
+    expect(q.rows[0].flight_instance_id).toMatch(/^.+$/);
+    expect(await count()).toEqual({logged:1,unlogged:1});
+    expect(await session()).toEqual({requests:2,successes:2,failures:0});
+    expect(state.events.filter(x=>x==="UPLOAD")).toHaveLength(1);
+  });
   it("ACTUAL HTTP route refuses a missing original rather than acknowledging a duplicate",async()=>{
     const body=sample({id:"p25-release-missing-original"});
     await persistPrepaidProbeWebhookV39({sessionId:SESSION,body});
