@@ -23,6 +23,9 @@ async function main(){
    const related=await c.query(`
     SELECT probe_id,icao,status,duration_censored,
            reconciliation_status,stop_reason,
+           credits_spent::text AS credits_spent_exact,
+           internal_send_credits::text AS internal_credits_exact,
+           reserved_credits::text AS reserved_credits_exact,
            runtime_session_id
       FROM clean.adb_anchor_probe
       WHERE probe_budget_day_id=$1
@@ -36,11 +39,17 @@ async function main(){
     // list only non-sensitive field names, not any hidden json values
     record_keys:Object.keys(row.original_record??{}).sort(),
     related_probe_count:related.rows.length,
+    failed_probes_missing_spend:related.rows.filter(p=>
+      p.status==="failed"&&(p.credits_spent_exact==null||
+        p.internal_credits_exact==null)).length,
     related_probes:related.rows.map(p=>({
      probe_id:p.probe_id,icao:p.icao,status:p.status,
      duration_censored:p.duration_censored,
      reconciliation_status:p.reconciliation_status,
      stop_reason:p.stop_reason,
+     credits_spent_exact:p.credits_spent_exact,
+     internal_credits_exact:p.internal_credits_exact,
+     reserved_credits_exact:p.reserved_credits_exact,
      has_runtime_session_id:p.runtime_session_id!=null
     }))
    });
