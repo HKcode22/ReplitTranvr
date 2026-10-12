@@ -12,7 +12,7 @@ describe("P25 incident30 admin current-risk-only containment, default no mutatio
  it("requires exact failed YSSY probe18 and incident30, all 30 retained refs, no billable or open budgets",()=>{
    for(const t of [
      'String(i.id)==="30"','i.cause==="reconciliation"','i.resolved===false',
-     'metadata.runtimeCleanupVerified===false','metadata.providerDeleteVerified===true',
+     'String(metadata.runtimeCleanupVerified)===\"false\"','String(metadata.providerDeleteVerified)===\"true\"',
      'p.status==="failed"','p.duration_censored===true',
      'p.reconciliation_status==="UNRESOLVED"',
      'Number(t.untombstoned_historical_refs)===30','Number(t.open_incidents)===1',
