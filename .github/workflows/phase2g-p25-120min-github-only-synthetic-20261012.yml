@@ -1,0 +1,133 @@
+# Deliberately separate from the paid Stage1 workflow and PR #35.
+# This push-triggered job runs only on its isolated rehearsal branch.
+# It must not receive secrets, invoke AeroDataBox, use a production database,
+# or claim that a localhost prototype proves published Replit ingress.
+name: P25 two-hour GitHub-only synthetic reliability rehearsal
+
+on:
+  push:
+    branches:
+      - phase2g-p25-gh-120m-synthetic-20261012
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p25-github-local-synthetic-20261012
+  cancel-in-progress: false
+
+jobs:
+  offline-wallclock:
+    if: github.ref == 'refs/heads/phase2g-p25-gh-120m-synthetic-20261012'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      CI: 'true'
+    steps:
+      - name: Checkout reviewed P25 source ancestor (no provider secrets)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Refuse paid or production environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for key in AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET V39_DATABASE_RUNTIME_URL DATABASE_URL V39_PROVIDER_BLOB_BUCKET_ID V39_PROVIDER_BLOB_MODE; do
+            test -z "${!key:-}" || { echo "REFUSED_NONISOLATED_ENVIRONMENT:$key"; exit 2; }
+          done
+          echo "PROVIDER_CALLS=0"
+          echo "PRODUCTION_DATABASE=NONE"
+          echo "PAID_AUTHORIZATION=false"
+
+      - name: Install current P25 dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Test current P25 effective 6+6 and exact owner termination
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx vitest run \
+            tests/phase2g_actual_stage1_watchdog_six_plus_six_v39.test.ts \
+            tests/phase2g_paid_owner_termination_bound_v39.test.ts
+          echo "SIX_PLUS_SIX=P25_POLICY_TESTED_ONLY"
+          echo "PROVIDER_CALLS=0"
+
+      - name: Prepare pinned and independent PR27 localhost spool rehearsal
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PIN="f4c9b244943a9bd2de76d96f2cd78f93c71e4f01"
+          git fetch origin phase2g-p2g24-github-observer-20261009
+          git cat-file -e "${PIN}^{commit}"
+          STAGE="${RUNNER_TEMP}/p20-pinned-source"
+          git worktree add --detach "$STAGE" "$PIN"
+          ln -s "${GITHUB_WORKSPACE}/node_modules" "$STAGE/node_modules"
+          echo "P20_STAGE=$STAGE" >> "$GITHUB_ENV"
+          echo "REHEARSAL_SOURCE=$PIN"
+          echo "REVIEWED_P25_SOURCE_ANCESTOR=c0634bfd80fd16d7a48bfa848b7f9df0a65d5d67"
+
+      - name: Real 120-minute monotonic synthetic spool/replay and two injected outages
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd "$P20_STAGE"
+          env -i HOME="$HOME" PATH="$PATH" \
+            P2G_LOCAL_SYNTHETIC_ONLY=YES \
+            node --import tsx \
+              experiments/phase2g_rehearsal/synthetic_replit_local_wallclock_v39.ts \
+              --full-120m 2>&1 | tee "${RUNNER_TEMP}/P20_120M_GITHUB_ONLY.log"
+
+          RECEIPT="$(find /tmp -maxdepth 2 -name P20_LOCAL_ONLY_RESULT.json -path '/tmp/p2g-wallclock-synthetic-*/*' -print -quit)"
+          test -n "$RECEIPT"
+          cp "$RECEIPT" "${RUNNER_TEMP}/P20_LOCAL_ONLY_RESULT.json"
+
+          node --input-type=module - "${RUNNER_TEMP}/P20_LOCAL_ONLY_RESULT.json" <<'NODE'
+          import {readFileSync} from "node:fs";
+          const r=JSON.parse(readFileSync(process.argv[2],"utf8"));
+          const ok=r.mode==="ACTUAL_LOCAL_120M" &&
+            r.elapsedSeconds>=7200 &&
+            r.syntheticSenderAttempts===120 &&
+            r.syntheticSenderTimely202===120 &&
+            r.syntheticSenderFailedOrLate===0 &&
+            r.receiverUniqueOriginals===120 &&
+            r.injectedReceiverOutageCount===2 &&
+            r.injectedOutageContractVerified===true &&
+            r.originalSpoolAuditPassed===true &&
+            r.allLocallySentSourcesReplayedExactly===true &&
+            r.localRuntimeResult==="PASS_LOCAL_ONLY" &&
+            r.originalProviderCreditsUsed===0 &&
+            r.productionDatabaseReadOrWrite===false &&
+            r.liveSixPlusSixEnabled===false &&
+            r.paidYssyGoAuthorized===false &&
+            r.publishedHttpsIngressProven===false;
+          console.log(JSON.stringify({
+            result:ok?"PASS_GITHUB_LOCAL_SYNTHETIC_ONLY":"FAIL_OR_CENSORED",
+            elapsedSeconds:r.elapsedSeconds,
+            senderAttempts:r.syntheticSenderAttempts,
+            injectedOutageSeconds:r.injectedReceiverOutageSeconds,
+            backlogReplayed:r.allLocallySentSourcesReplayedExactly,
+            p25LiveSixPlusSixIntegratedHere:false,
+            providerCalls:0,
+            paidAuthorization:false
+          }));
+          if(!ok)process.exit(2);
+          NODE
+
+      - name: Preserve full evidence even after failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p25-github-local-synthetic-120m-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/P20_120M_GITHUB_ONLY.log
+            ${{ runner.temp }}/P20_LOCAL_ONLY_RESULT.json
+          if-no-files-found: warn
+          retention-days: 7
