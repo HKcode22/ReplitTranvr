@@ -50,7 +50,7 @@ if(approved.status!=="PROJECT_LEAD_APPROVED_ONE_RECOVERY"||
    !p25.no_automatic_retry_after_this_attempt)
  throw Error("REFUSED:PROSPECTIVE_SCIENCE_SCOPE_MISMATCH");
 const out=mkdtempSync(path.join(tmpdir(),"yssy-p25-exact-runtime-review-"));
-const protectedTree=sha(git(["ls-tree","-r",SOURCE,"--","server","scripts","migrations","tests",".github/workflows"]));
+const protectedTree=sha(execFileSync("git",["ls-tree","-r",SOURCE,"--","server","scripts","migrations","tests",".github/workflows"],{encoding:"utf8",maxBuffer:20*1024*1024}));
 const previous=JSON.parse(readFileSync(OLD_RUNTIME,"utf8"));
 if(previous.stage1ReservationCredits!==450||previous.unsettledBurstMarginCredits!==50||
    previous.watchdogPollMs!==5000||previous.settlementTimeoutSeconds!==600)
