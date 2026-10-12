@@ -50,6 +50,14 @@ jobs:
             tests/phase2g_p25_historical_object_audit_isolation_v39.test.ts \
             tests/phase2g_p25_historical_incident30_disposable_smoke_only_v39.test.ts \
             tests/phase2g_p25_v0064_guarded_install_v39.test.ts \
+            tests/phase2g_p25_postpublish_readonly_integrated_v39.test.ts \
+            tests/phase2g_p25_signed_smoke_postflight_audit_v39.test.ts \
+            tests/phase2g_p25_published_bound_synthetic_post_contract_v39.test.ts \
+            tests/phase2g_p25_incident30_admin_containment_v39.test.ts \
+            tests/phase2g_p25_prepare_runtime_auth_drafts_v39.test.ts \
+            tests/phase2g_p25_exact_historical_budget_admin_v39.test.ts \
+            tests/phase2g_p25_safe_mode_budget_quarantine_v39.test.ts \
+            tests/phase2g_p25_exact_quarantined_history_budget_gate_v39.test.ts \
             tests/phase2g_p25_replit_callback_published_deploy_contract_v39.test.ts \
             tests/phase2g_p25_prospective_gap_research_only_v39.test.ts \
             tests/phase2g_cleanup_concurrency_reproduction_v39.test.ts \
@@ -72,6 +80,61 @@ jobs:
           sha256sum artifacts/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json
           echo "P2G25_PROJECT_LEAD_APPROVED=false"
           echo "P2G25_PAID_MUTATION_AUTHORIZED=false"
+      - name: Generate tomorrow's exact source-bound P25 runtime/Auth DRAFT (zero provider)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          git fetch --no-tags origin phase2g-p25-20261012-integrated-release-review
+          node --import tsx scripts/v39_p25_prepare_exact_runtime_auth_drafts_v39.ts \
+            > "${RUNNER_TEMP}/p25-tomorrow-runtime-auth-draft.json"
+          node -e '
+            const r=require(process.argv[1]);
+            if(r.status!=="DRAFT_REVIEW_ONLY_NO_PAID_AUTH"||
+              r.stage1_budget_day_id!=="P2G-S1-20261013-03"||
+              r.paid_auth_approved!==false||
+              r.paid_preflight_passed!==false||
+              r.paid_alert_credits_spent!==0)
+              process.exit(2);
+            console.log("DRAFT_RUNTIME_AND_AUTH_BINDING_VERIFIED=YES");
+          ' "${RUNNER_TEMP}/p25-tomorrow-runtime-auth-draft.json"
+          node -e '
+            const fs=require("node:fs");
+            const path=require("node:path");
+            const root=process.env.RUNNER_TEMP;
+            const r=JSON.parse(fs.readFileSync(path.join(root,"p25-tomorrow-runtime-auth-draft.json"),"utf8"));
+            if(r.status!=="DRAFT_REVIEW_ONLY_NO_PAID_AUTH"||
+              r.paid_auth_approved!==false||
+              r.paid_preflight_passed!==false||
+              r.provider_calls!==0||
+              r.paid_alert_credits_spent!==0)
+              process.exit(2);
+            fs.copyFileSync(r.runtime_file,path.join(root,"P25_RUNTIME_DRAFT_REVIEW_ONLY.json"));
+            fs.copyFileSync(r.auth_file,path.join(root,"P25_AUTH_DRAFT_REVIEW_ONLY.json"));
+            fs.copyFileSync(r.draft_auth_ledger_file,path.join(root,"P25_LEDGER_DRAFT_REVIEW_ONLY.md"));
+            console.log(JSON.stringify({
+              reviewed_source_head:r.published_git_head,
+              runtime_sha256:r.runtime_sha256,
+              auth_sha256:r.auth_sha256,
+              science_freeze_sha256:r.science_freeze_sha256,
+              stage1_budget_day_id:r.stage1_budget_day_id,
+              provider_paid_calls:0,
+              paid_authorized:false
+            },null,2));
+          '
+          echo "PROVIDER_MUTATIONS=0"
+      - name: Store next-day P25 review-only runtime/Auth draft bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: p25-oct12-runtime-auth-review-only-zero-provider
+          path: |
+            ${{ runner.temp }}/p25-tomorrow-runtime-auth-draft.json
+            ${{ runner.temp }}/P25_RUNTIME_DRAFT_REVIEW_ONLY.json
+            ${{ runner.temp }}/P25_AUTH_DRAFT_REVIEW_ONLY.json
+            ${{ runner.temp }}/P25_LEDGER_DRAFT_REVIEW_ONLY.md
+          if-no-files-found: error
+          retention-days: 7
       - name: Create SHA-bound source/calendar zero-credit receipt
         shell: bash
         run: |

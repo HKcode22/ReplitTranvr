@@ -5,6 +5,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
   armPrepaidProbeSessionV39,
+  bindPrepaidProbeSubscriptionV39,
   cleanupPrepaidProbeSessionV39,
 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
@@ -118,8 +119,20 @@ async function main(): Promise<void> {
       throw new Error("REFUSED:PUBLISHED_RUNTIME_GIT_HEAD_OR_CONTRACT_MISMATCH");
   }
 
+  // Integration-only opt-in: model an already-bound provider identity using
+  // a fake local runtime identifier. It never invokes a provider endpoint.
+  // No paid/scientific admission can be derived from this synthetic record.
+  const boundSynthetic=process.argv.includes("--synthetic-bound-subscription");
   const secret = String(process.env.AERODATABOX_WEBHOOK_SECRET ?? "").trim();
   if (secret.length < 32) throw new Error("REFUSED:AERODATABOX_WEBHOOK_SECRET_REQUIRED");
+  if(boundSynthetic&&(
+    callbackMode!=="published"||
+    process.env.V39_CALLBACK_ONLY_RUNTIME!=="1"||
+    process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED!=="1"||
+    process.env.V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED!=="1"||
+    process.env.V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED!=="1"))
+    throw Error("REFUSED:BOUND_SYNTHETIC_OUTSIDE_LOCK_FLAGS_NOT_FULLY_ENABLED");
+
 
   // Local cleanup must use the same dedicated provider bucket that the live
   // callback route writes to.
@@ -246,8 +259,13 @@ async function main(): Promise<void> {
   let cleanupDone = false;
 
   try {
+    const syntheticSubId = `P25-NO-PROVIDER-BOUND-${session.sessionId}`;
+    if(boundSynthetic){
+      await bindPrepaidProbeSubscriptionV39(session.sessionId,syntheticSubId);
+    }
     const now = new Date();
     const payload = {
+      ...(boundSynthetic?{subscription:{id:syntheticSubId}}:{}),
       id: `phase2g-live-callback-${Date.now()}`,
       timestampUtc: now.toISOString(),
       deliveryAttempt: {
@@ -369,6 +387,19 @@ async function main(): Promise<void> {
       throw new Error(`REFUSED:LIVE_PREPAID_PERSISTENCE_PROOF:${JSON.stringify(b)}`);
     }
 
+    // A bound session + payload.subscription.id forces the reviewed
+    // V0064 outside-session-lock admission path on the actual hosted POST.
+    // This is synthetic; prove the LOGGED VERIFIED source intent exists
+    // before this exact disposable source is intentionally cleaned up.
+    if(boundSynthetic){
+      const q=await pool.query(`
+        SELECT count(*)::int AS verified FROM clean.phase2g_prepaid_source_intent_v39
+        WHERE session_id=$1::uuid AND state='VERIFIED'
+      `,[session.sessionId]);
+      if(Number(q.rows[0]?.verified??-1)!==1)
+        throw Error("REFUSED:BOUND_SYNTHETIC_V0064_VERIFIED_INTENT_MISSING");
+    }
+
     const cleanup = await cleanupPrepaidProbeSessionV39(
       session.sessionId,
       `phase2g-live-callback-verification-${Date.now()}`,
@@ -433,6 +464,10 @@ async function main(): Promise<void> {
         ADB_WEBHOOK_RESPONSE_LIMIT_MS -
         PHASE2G_CALLBACK_ADMISSION_BUDGET_MS,
       persistence_verified: true,
+      signed_test_synthetic_subscription_only: boundSynthetic,
+      actual_paid_provider_subscription_created: false,
+      published_bound_outside_lock_path_exercised: boundSynthetic,
+      synthetic_is_not_paid_or_scientific_evidence: true,
       local_exact_session_cleanup_verified: true,
       provider_called: false,
       provider_subscription_created: false,
