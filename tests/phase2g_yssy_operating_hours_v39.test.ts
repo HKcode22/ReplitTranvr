@@ -53,6 +53,24 @@ describe("Phase2G YSSY local operating-hours protocol", () => {
     expect(s.targetWindowOutsideCurfew).toBe(true);
   });
 
+  it("accepts next-day Tuesday 2026-10-13 03 UTC, 14-16 AEDT and outside Sydney curfew", () => {
+    const { protocol } = loadYssyOperatingHoursProtocolV39({
+      expectedSha256: PROTOCOL_SHA,
+    });
+    const start = new Date("2026-10-13T03:00:00.000Z");
+    const s = yssyStage1TimeClassStatusV39(start, protocol);
+    expect(s.eligible).toBe(true);
+    expect(s.utcWeekdayClass).toBe("weekday");
+    expect(s.localWeekdayClass).toBe("weekday");
+    expect(s.targetWindowOutsideCurfew).toBe(true);
+    const localStart = new Intl.DateTimeFormat("en-AU", {
+      timeZone:"Australia/Sydney",hour12:false,weekday:"short",
+      hour:"2-digit",minute:"2-digit"
+    }).format(start);
+    expect(localStart).toContain("Tue");
+    expect(localStart).toContain("14:00");
+  });
+
   it("also accepts the frozen slot in AEST before DST", () => {
     const { protocol } = loadYssyOperatingHoursProtocolV39({
       expectedSha256: PROTOCOL_SHA,
