@@ -1,0 +1,87 @@
+name: YSSY P25 Focused Release — No Provider
+
+on:
+  push:
+    branches:
+      - phase2g-yssy-p25-minimal-release-20261011
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [synchronize,opened,reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  focused-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: "true"
+      V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED: "0"
+      V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED: "0"
+      V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Reject paid provider environment; typecheck changed production code
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          npm run v39:typecheck
+          echo "PROVIDER_CALLS=0"
+      - name: Focused regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx vitest run \
+            tests/phase2g_actual_stage1_watchdog_six_plus_six_v39.test.ts \
+            tests/phase2g_paid_owner_termination_bound_v39.test.ts \
+            tests/phase2g_p25_published_verify_source_before_mutation_v39.test.ts \
+            tests/phase2g_p25_published_custody_flag_gate_v39.test.ts \
+            tests/phase2g_p25_incident30_readonly_audit_v39.test.ts \
+            tests/phase2g_p2g24_saved_original_item_evidence_v39.test.ts \
+            tests/phase2g_p25_historical_object_audit_isolation_v39.test.ts \
+            tests/phase2g_p25_historical_incident30_disposable_smoke_only_v39.test.ts \
+            tests/phase2g_p25_v0064_guarded_install_v39.test.ts \
+            tests/phase2g_p25_prospective_gap_research_only_v39.test.ts \
+            tests/phase2g_cleanup_concurrency_reproduction_v39.test.ts \
+            tests/phase2g_stage1_subscription_exact_owner_v39.test.ts \
+            tests/phase2g_yssy_20261012_zero_credit_prep_v39.test.ts \
+            tests/phase2g_p2g24_callback_receiver_health_v39.test.ts \
+            tests/phase2g_prepaid_original_json_structure_v39.test.ts \
+            tests/phase2g_prepaid_stage_telemetry_v39.test.ts \
+            tests/phase2g_yssy_operating_hours_v39.test.ts \
+            tests/phase2g_early_pilot_scope_v39.test.ts \
+            tests/phase2g_p2g23_frozen_recovery_selector_v39.test.ts \
+            tests/phase2g_source_head_auth_binding_v39.test.ts
+          echo "PAID_OPERATIONS=NONE"
+      - name: Verify historical immutable P2G23 and draft P25 amendment SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum artifacts/phase2g-early-pilot-yssy-p2g23-recovery-freeze-20261009.json
+          sha256sum artifacts/phase2g-early-pilot-yssy-p25-draft-20261011.json
+          sha256sum artifacts/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json
+          echo "P2G25_PROJECT_LEAD_APPROVED=false"
+          echo "P2G25_PAID_MUTATION_AUTHORIZED=false"
+      - name: Create SHA-bound source/calendar zero-credit receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --import tsx scripts/v39_phase2g_yssy_20261012_zero_credit_prep_v39.ts \
+            --out "${RUNNER_TEMP}/yssy-p25-release-zero-credit-prep.json"
+          sha256sum "${RUNNER_TEMP}/yssy-p25-release-zero-credit-prep.json"
+          echo "PAID_AUTHORIZATION=false"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yssy-p25-release-prep-no-provider
+          path: ${{ runner.temp }}/yssy-p25-release-zero-credit-prep.json
+          if-no-files-found: error
+          retention-days: 7

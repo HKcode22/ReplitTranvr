@@ -8,6 +8,7 @@ import {
   cleanupPrepaidProbeSessionV39,
 } from "../server/lib/disruption/prepaidProbeRuntime_v39";
 import { v39Pool as pool } from "../server/lib/disruption/db_v39";
+import { assessIncident30ZeroProviderSmokeV39 } from "./v39_phase2g_p25_historical_incident_smoke_scope_v39";
 
 function required(name: string): string {
   const i = process.argv.indexOf(name);
@@ -93,6 +94,30 @@ async function main(): Promise<void> {
     if (!healthExact) throw new Error("REFUSED:DEV_RUNTIME_HEALTH_NOT_EXACT");
   }
 
+  // Published verification has the SAME exact-source requirement as the
+  // development contingency. Check it BEFORE arming a disposable session,
+  // any signed POST, SQL mutation, or original object-storage creation.
+  // A shell operator may accidentally continue after a failed 'test':
+  // the executable itself MUST reject an older Replit published image.
+  if(!isDevContingency){
+    const h=await fetch(`${base}/__v39/workspace-runtime`,{
+      headers:{accept:"application/json"},
+      signal:AbortSignal.timeout(15_000)
+    });
+    const j=await jsonBody(h);
+    if(h.status!==200||
+       j?.schema!=="v39.phase2f-workspace-runtime.v1"||
+       j?.status!=="PASS"||
+       String(j?.git_head??"").toLowerCase()!==expectedHead||
+       j?.prepaid_route_registered!==true||
+       j?.prepaid_source_custody_ready!==true||
+       Number(j?.retention_hours)!==168||
+       j?.provider_mutation!==false||
+       j?.runtime_owner_mode!=="replit-published-deployment"||
+       j?.published_deployment!==true)
+      throw new Error("REFUSED:PUBLISHED_RUNTIME_GIT_HEAD_OR_CONTRACT_MISMATCH");
+  }
+
   const secret = String(process.env.AERODATABOX_WEBHOOK_SECRET ?? "").trim();
   if (secret.length < 32) throw new Error("REFUSED:AERODATABOX_WEBHOOK_SECRET_REQUIRED");
 
@@ -110,6 +135,7 @@ async function main(): Promise<void> {
   );
   let toleratedIncident24 = false;
   let toleratedIncident25 = false;
+  let historicalIncident30PreservedForSmokeOnly = false;
   if (incidents.rows.length !== 0) {
     const byId = new Map(incidents.rows.map((row: any) => [Number(row.id), row]));
     const i24 = byId.get(24);
@@ -135,7 +161,58 @@ async function main(): Promise<void> {
       toleratedIncident24 &&
       toleratedIncident25;
 
-    if (!knownOnly) throw new Error(`REFUSED:OPEN_INCIDENTS:${incidents.rows.length}`);
+    if (!knownOnly) {
+      // Narrow separate admission for disposable signed POST only. The
+      // actual paid owner/preflight STILL rejects the open incident #30.
+      // No cleanup, UPDATE, deletion or scientific promotion of probe 18.
+      const historicalSession = "6267293e-75a0-42a7-b977-89543f200ebc";
+      const proof = await pool.query(`
+        SELECT p.probe_id,p.icao,p.status,p.duration_censored,
+               p.reconciliation_status,p.stop_reason,
+               p.runtime_cleanup_verified_at_utc,
+               (p.runtime_session_id=$2::uuid) AS exact_session_bound,
+               (SELECT count(*)::int FROM clean.prepaid_probe_session_runtime
+                 WHERE session_id=$2::uuid) AS historical_runtime_rows,
+               (SELECT count(*)::int FROM clean.phase2g_cleanup_journal_v39
+                 WHERE session_id=$2::uuid) AS historical_cleanup_journal_rows,
+               (SELECT count(*)::int FROM clean.provider_content_blob_ref
+                 WHERE source_kind='webhook' AND source_record_id LIKE $3) AS original_refs,
+               (SELECT count(*)::int FROM clean.provider_content_blob_ref
+                 WHERE source_kind='webhook' AND source_record_id LIKE $3
+                 AND deletion_verified_at_utc IS NULL) AS untombstoned_original_refs,
+               (SELECT count(*)::int FROM clean.adb_anchor_probe
+                 WHERE status IN ('probing','settling')) AS current_active_or_settling
+        FROM clean.adb_anchor_probe p WHERE p.probe_id=$1
+      `,[18,historicalSession,`prepaid:${historicalSession}:%`]);
+      const row=proof.rows.length===1?proof.rows[0]:null;
+      const incidentWitness=incidents.rows.map((i:any)=>({
+        id:Number(i.id),cause:String(i.cause),resolved:false,
+        kind:i.detail?.kind??null,reason:i.detail?.reason??null,
+        providerDeleteVerified:i.detail?.providerDeleteVerified==null?null:
+          String(i.detail.providerDeleteVerified),
+        runtimeCleanupVerified:i.detail?.runtimeCleanupVerified==null?null:
+          String(i.detail.runtimeCleanupVerified)
+      }));
+      const decision=assessIncident30ZeroProviderSmokeV39({
+        incidents:incidentWitness,
+        historicalProbe:{
+          probeId:Number(row?.probe_id??-1),icao:String(row?.icao??""),
+          status:String(row?.status??""),durationCensored:row?.duration_censored===true,
+          reconciliationStatus:String(row?.reconciliation_status??""),
+          stopReason:String(row?.stop_reason??""),
+          exactSessionBound:row?.exact_session_bound===true,
+          runtimeCleanupVerifiedAtUtc:row?.runtime_cleanup_verified_at_utc??null
+        },
+        originalRefs:Number(row?.original_refs??-1),
+        untombstonedOriginalRefs:Number(row?.untombstoned_original_refs??-1),
+        historicalRuntimeRows:Number(row?.historical_runtime_rows??-1),
+        historicalCleanupJournalRows:Number(row?.historical_cleanup_journal_rows??-1),
+        currentActiveOrSettlingProbes:Number(row?.current_active_or_settling??-1)
+      });
+      if(isDevContingency||!decision.allowed)
+        throw new Error(`REFUSED:OPEN_INCIDENTS:${incidents.rows.length}:${decision.reason}`);
+      historicalIncident30PreservedForSmokeOnly=decision.historicalIncident30Preserved;
+    }
   }
   const active = await pool.query(
     `SELECT count(*)::int AS n FROM clean.adb_anchor_probe WHERE status IN ('probing','settling')`,
@@ -164,6 +241,8 @@ async function main(): Promise<void> {
     ownerKind: "phase2_safety_smoke",
     lifetimeHours: 1,
   });
+  if (session.sessionId === "6267293e-75a0-42a7-b977-89543f200ebc")
+    throw new Error("REFUSED:DISPOSABLE_SESSION_COLLIDES_WITH_HISTORICAL_YSSY");
   let cleanupDone = false;
 
   try {
@@ -331,6 +410,9 @@ async function main(): Promise<void> {
       workspace_git_head: gitHead(),
       deployed_git_head_claimed: null,
       contract_mode: "live-prepaid-route-end-to-end",
+      historical_incident30_unresolved_and_preserved_for_disposable_only: historicalIncident30PreservedForSmokeOnly,
+      historical_incident30_paid_launch_authorized: false,
+      historical_incident30_closure_or_deletion_authorized: false,
       preexisting_incident_24_tolerated: toleratedIncident24,
       preexisting_incident_25_tolerated: toleratedIncident25,
       preexisting_synthetic_incident_ids: [

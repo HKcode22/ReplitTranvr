@@ -294,7 +294,10 @@ describe("Phase2G callback and cleanup evidence ordering", () => {
 
   it("counts prepaid callback failures at the HTTP boundary", () => {
     expect(runtime).toContain("export async function recordPrepaidProbeCallbackFailureV39");
-    expect(routes).toContain("if (!err?.phase2gFailureRecorded)");
+    // A COMMIT reply may be lost after admission counted the request;
+    // the route must also suppress speculative second increments then.
+    expect(routes).toContain("if (!err?.phase2gFailureRecorded &&");
+    expect(routes).toContain("!err?.phase2gCallbackAccountingUncertain");
     expect(routes).toContain("await recordPrepaidProbeCallbackFailureV39(");
     expect(runtime).toContain("SAVEPOINT phase2g_callback_payload");
     expect(runtime).toContain("ROLLBACK TO SAVEPOINT phase2g_callback_payload");

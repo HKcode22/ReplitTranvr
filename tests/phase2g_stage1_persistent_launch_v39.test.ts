@@ -269,8 +269,10 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
 
   it("fails the owner closed when the public callback becomes persistently unreachable", () => {
     expect(supervisor).toContain("const CALLBACK_POLL_MS = 15_000");
-    expect(supervisor).toContain("const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = 3");
-    expect(supervisor).toContain("callbackFailureCount >= CALLBACK_CONSECUTIVE_FAILURE_LIMIT");
+    expect(supervisor).toContain("const CALLBACK_CONSECUTIVE_FAILURE_LIMIT = STAGE1_SIX_PLUS_SIX_MAX_CONSECUTIVE_V39");
+    expect(supervisor).toContain('if (decision.action==="STOP_OWNER" && !callbackWatchdogTriggered)');
+    expect(supervisor).toContain('process.env.V39_PHASE2G_CALLBACK_WATCHDOG_POLICY ?? "six-plus-six"');
+    expect(supervisor).toContain("STAGE1_WATCHDOG_POLICY_MUST_BE_SIX_PLUS_SIX");
     expect(supervisor).toContain('requestTermination("SIGTERM", "workspace_callback_unreachable_threshold")');
     expect(supervisor).toContain("/__v39/workspace-runtime");
     expect(supervisor).toContain("/__v39/phase2g/webhook-secret-match");
@@ -323,9 +325,9 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(recovery).toContain("SELECT probe_id,icao,status,runtime_session_id");
     expect(recovery).toContain("durableSessionId");
     expect(recovery).toContain("prepaidProbeWebhookUrlV39(defaultWebhookUrl(), durableSessionId)");
-    expect(recovery).toContain('String(subscription.subject?.type ?? "") === "FlightByAirportIcao"');
-    expect(recovery).toContain('String(subscription.subject?.id ?? "").toUpperCase() === probeIcao');
-    expect(recovery).toContain('String(subscription.subscriber?.type ?? "") === "WebHook"');
+    expect(recovery).toContain("isExactStage1ProviderSubscriptionOwnerV39(subscription");
+    expect(recovery).toContain("icao:probeIcao,webhookSubscriberId:expectedSubscriberId");
+    expect(recovery).toContain("isExactStage1ProviderSubscriptionOwnerV39(owned");
     expect(recovery).toContain("RECOVERY_REFUSED:RUNTIME_RESET_ACTIVE_BILLABLE_NOT_EXACTLY_OWNED");
     expect(recovery).toContain("supervisor_child_exit_after_runtime_reset_recovered");
     expect(recovery).toContain("durable_session_id_used");
@@ -335,7 +337,8 @@ describe("Phase-2G persistent paid Stage-1 launch contract", () => {
     expect(recovery).toContain("stage=1 AND probe_budget_day_id=$1");
     expect(recovery).toContain("owner_kind='anchor_probe' AND owner_probe_id=$1 AND stage=1");
     expect(recovery).toContain("RECOVERY_REFUSED:MULTIPLE_ACTIVE_RUNTIME_SESSIONS");
-    expect(recovery).toContain('subscription.billingType === "CreditBased"');
+    expect(recovery).toContain("RECOVERY_REFUSED:BOUND_SUBSCRIPTION_EXACT_OWNER_MISMATCH");
+    expect(recovery).toContain("RECOVERY_REFUSED:FOREIGN_ACTIVE_BILLABLE_SUBSCRIPTION");
     expect(recovery).toContain("RECOVERY_REFUSED:UNBOUND_SESSION_ACTIVE_BILLABLE_NOT_EXACTLY_OWNED");
     expect(recovery).toContain("listSubscriptionsStrictWithRetry");
     expect(recovery).toContain("deleteSubscriptionVerifiedStrict");

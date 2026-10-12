@@ -76,6 +76,14 @@ export function registerWorkspaceRuntimeHealthV39(
         git_head: startupGitHead,
         route_owner: input.routeOwner,
         prepaid_route_registered: true,
+        // Public yes/no readiness only: no bucket ID, secret or credential.
+        // These four immutable launch-gate flags control actual original
+        // source custody, not merely whether its implementation is deployed.
+        prepaid_source_custody_ready:
+          process.env.V39_CALLBACK_ONLY_RUNTIME==="1"&&
+          process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED==="1"&&
+          process.env.V39_PREPAID_SOURCE_PENDING_INTENT_APPROVED==="1"&&
+          process.env.V39_PREPAID_SOURCE_OUTSIDE_SESSION_LOCK_APPROVED==="1",
         retention_hours: retentionHours,
         bucket_prefix: bucket.split("-").slice(0, 2).join("-"),
         provider_mutation: false,
