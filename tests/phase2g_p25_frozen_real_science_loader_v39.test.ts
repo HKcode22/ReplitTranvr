@@ -19,8 +19,8 @@ describe("P25 exact prospective recovery must load under real V3.9 scientific ga
    expect(a?.authorized).toBe(true);
    expect(a?.approval_status).toBe("PROJECT_LEAD_APPROVED_ONE_RECOVERY");
    expect(a?.project_lead_decision_sha256).toBe(sha(decision));
-   expect(loaded.fileSha256).toBe("fba71c745e37426255d7117b05f76b5f9e035159650c3d23c88c79fa7b0f8871");
-   expect(a?.current_utc_window_start).toBe("2026-10-12T03:00:00Z");
+   expect(loaded.fileSha256).toBe("b54256346a35354d71e46e18a44d175056cba3228d93313d0036cc08af2f4f94");
+   expect(a?.current_utc_window_start).toBe("2026-10-13T03:00:00Z");
    expect(a?.max_alert_credits).toBe(500);
    expect(a?.no_automatic_retry_after_this_attempt).toBe(true);
    expect(JSON.parse(decision).provider_mutation_authorized_now).toBe(false);
