@@ -57,6 +57,7 @@ jobs:
             tests/phase2g_p25_prepare_runtime_auth_drafts_v39.test.ts \
             tests/phase2g_p25_exact_historical_budget_admin_v39.test.ts \
             tests/phase2g_p25_safe_mode_budget_quarantine_v39.test.ts \
+            tests/phase2g_p25_exact_quarantined_history_budget_gate_v39.test.ts \
             tests/phase2g_p25_replit_callback_published_deploy_contract_v39.test.ts \
             tests/phase2g_p25_prospective_gap_research_only_v39.test.ts \
             tests/phase2g_cleanup_concurrency_reproduction_v39.test.ts \
