@@ -64,7 +64,7 @@ async function main(){
     p.status==="failed"&&p.reconciliation_status==="UNRESOLVED"&&
     p.duration_censored===true&&p.stop_reason==="supervisor_child_exit_recovered"&&
     String(p.runtime_session_id)===SESSION&&exposure!==null&&exposure<=500&&
-    incidents.length===1&&i.id===30&&i.cause==="reconciliation"&&
+    incidents.length===1&&String(i.id)==="30"&&i.cause==="reconciliation"&&
     i.resolved===true&&i.old_cleanup==="false"&&
     Number(totals.open_budgets)===1&&
     Number(totals.unresolved_incidents)===0&&
