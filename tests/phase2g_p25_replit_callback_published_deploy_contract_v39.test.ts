@@ -14,6 +14,10 @@ describe("P25 Replit published callback release configuration",()=>{
   expect(section).toContain('build = ["env", "V39_CALLBACK_ONLY_BUILD=1", "npm", "run", "build"]');
   expect(section).toContain('run = ["env", "V39_CALLBACK_ONLY_RUNTIME=1", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "V39_RUNTIME_DURABILITY_CLASS=autoscale", "node", "dist/index.mjs"]');
   expect(section).not.toContain('run = ["env", "V39_WORKSPACE_RUNTIME_OWNER_MODE=');
+  expect(deployment).toContain('V39_PROVIDER_BLOB_BUCKET_ID = "replit-objstore-5aa4d2c4-399b-4933-9acf-0292f79d6d59"');
+  expect(deployment).toContain('defaultBucketID = "replit-objstore-5aa4d2c4-399b-4933-9acf-0292f79d6d59"');
+  expect(deployment).not.toContain('replit-objstore-89d08290-bfed-4ba9-ab3a-517a47e8095f');
+  expect(deployment).not.toContain('https://travnr.com');
  });
  it("build entry is callback-only and refuses wrong runtime executable",()=>{
   expect(build).toContain('process.env.V39_CALLBACK_ONLY_BUILD === "1"');
@@ -25,7 +29,7 @@ describe("P25 Replit published callback release configuration",()=>{
   expect(general).toContain('REFUSED:FULL_APP_BINARY_IN_CALLBACK_ONLY_MODE');
  });
  it("Replit postMerge never does surprise forced migrations or database pushes",()=>{
-  expect(deployment).toContain('path = "scripts/post-merge.sh"');
+  expect(deployment).not.toContain("[postMerge]");
   expect(hook).toContain("set -Eeuo pipefail");
   expect(hook).toContain("npm ci --no-audit --no-fund");
   expect(hook).toContain("P25_POSTMERGE_DATABASE_MUTATIONS=ZERO");
