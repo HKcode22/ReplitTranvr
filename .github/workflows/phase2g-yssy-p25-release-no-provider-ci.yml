@@ -99,7 +99,42 @@ jobs:
               process.exit(2);
             console.log("DRAFT_RUNTIME_AND_AUTH_BINDING_VERIFIED=YES");
           ' "${RUNNER_TEMP}/p25-tomorrow-runtime-auth-draft.json"
+          node -e '
+            const fs=require("node:fs");
+            const path=require("node:path");
+            const root=process.env.RUNNER_TEMP;
+            const r=JSON.parse(fs.readFileSync(path.join(root,"p25-tomorrow-runtime-auth-draft.json"),"utf8"));
+            if(r.status!=="DRAFT_REVIEW_ONLY_NO_PAID_AUTH"||
+              r.paid_auth_approved!==false||
+              r.paid_preflight_passed!==false||
+              r.provider_calls!==0||
+              r.paid_alert_credits_spent!==0)
+              process.exit(2);
+            fs.copyFileSync(r.runtime_file,path.join(root,"P25_RUNTIME_DRAFT_REVIEW_ONLY.json"));
+            fs.copyFileSync(r.auth_file,path.join(root,"P25_AUTH_DRAFT_REVIEW_ONLY.json"));
+            fs.copyFileSync(r.draft_auth_ledger_file,path.join(root,"P25_LEDGER_DRAFT_REVIEW_ONLY.md"));
+            console.log(JSON.stringify({
+              reviewed_source_head:r.published_git_head,
+              runtime_sha256:r.runtime_sha256,
+              auth_sha256:r.auth_sha256,
+              science_freeze_sha256:r.science_freeze_sha256,
+              stage1_budget_day_id:r.stage1_budget_day_id,
+              provider_paid_calls:0,
+              paid_authorized:false
+            },null,2));
+          '
           echo "PROVIDER_MUTATIONS=0"
+      - name: Store next-day P25 review-only runtime/Auth draft bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: p25-oct12-runtime-auth-review-only-zero-provider
+          path: |
+            ${{ runner.temp }}/p25-tomorrow-runtime-auth-draft.json
+            ${{ runner.temp }}/P25_RUNTIME_DRAFT_REVIEW_ONLY.json
+            ${{ runner.temp }}/P25_AUTH_DRAFT_REVIEW_ONLY.json
+            ${{ runner.temp }}/P25_LEDGER_DRAFT_REVIEW_ONLY.md
+          if-no-files-found: error
+          retention-days: 7
       - name: Create SHA-bound source/calendar zero-credit receipt
         shell: bash
         run: |
