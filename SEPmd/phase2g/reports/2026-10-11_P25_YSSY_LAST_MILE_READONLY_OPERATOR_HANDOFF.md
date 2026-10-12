@@ -4,6 +4,25 @@
 
 **Source at handoff:** release-candidate PR #29 based on main; `main` and the published Replit image are NOT this same release SHA. The independent [GitHub P18 GET check](https://github.com/HKcode22/ReplitTranvr/actions/runs/38178515634) returned HTTP 200 after 300ms on a warmed path and claimed older published SHA `5de44ba66d59c26d9e5ef3b339b7f729ca2f3653`. A GET does not establish a signed POST ACK/source custody or cold-start sender access.
 
+## P02/P14 original 30-object preservation and item-credit audit (optional, read-only)
+
+The separate original P2G24/incident #30 YSSY probe-18 source-object audit is ported from forensic PR #27, with pure aggregate credit/item accounting. It reads **only** the existing 30 stored objects, not the live provider. Use it only on a reviewed checkout where these scripts are present, with pre-existing read-only authorized storage credentials, no live paid owner and no changes to database, object-retention policy or active published receiver. Original reference expiry starts **October 16, 2026, 04:02:22 UTC**.
+
+```bash
+cd ~/workspace
+# Confirm this file exists in your CURRENT reviewed source. Do not reset a live workspace.
+test -f scripts/v39_p2g24_readonly_blob_integrity_audit.ts || exit 2
+
+# Metadata-only precheck: no object downloads.
+node --import tsx scripts/v39_p2g24_readonly_blob_integrity_audit.ts
+
+# Optional exact content SHA/bytes + received-only item/credit summary:
+node --import tsx scripts/v39_p2g24_readonly_blob_integrity_audit.ts \
+  --verify-objects --verify-item-credit-evidence
+```
+
+The second command downloads existing original saved bytes for aggregate SHA/content review and SELECTs current UNLOGGED delivery metadata. It **does not** create a provider subscription, reconstruct missing provider attempts, extend retention, mutate production data or resolve #30. Do not paste credentials or original JSON into GitHub issues. The output's `explicitCostCreditClaimTotal` is a **stored notification-body claim**, not authenticated independent AeroDataBox billing. Missing current UNLOGGED rows after a reset do not establish where any historical delivery was lost.
+
 ## P25 fast incident #30 read-only audit (new; zero provider, zero database mutations)
 
 From a Replit workspace whose source includes PR #29, this source-controlled diagnostic replaces the longer manual incident SQL. It performs only parameterized PostgreSQL SELECT in a READ ONLY transaction with ROLLBACK, does not fetch blobs, and **does not close the incident or authorize a paid run**:
