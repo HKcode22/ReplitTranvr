@@ -83,12 +83,13 @@ async function main(){
        AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum
    `)).rows;
    const cons=(await client.query(`
-     SELECT conname,convalidated,condeferrable
+     SELECT conname,convalidated,condeferrable,
+       pg_get_constraintdef(oid) AS definition
      FROM pg_constraint
      WHERE conrelid=to_regclass('clean.phase2g_prepaid_source_intent_v39')
    `)).rows;
    const trg=(await client.query(`
-     SELECT t.tgname,t.tgenabled,t.tgisinternal,
+     SELECT t.tgname,t.tgenabled,t.tgisinternal,t.tgtype::int AS kind_flags,
        t.tgfoid=to_regprocedure('clean.guard_p2g_prepaid_source_intent_v39()') AS same_function
      FROM pg_trigger t
      WHERE t.tgrelid=to_regclass('clean.phase2g_prepaid_source_intent_v39')
@@ -103,6 +104,17 @@ async function main(){
      const c:any=cset.get(name);
      return c?.convalidated===true&&c?.condeferrable===false;
    });
+   const definitions=new Map(cons.map((r:any)=>[r.conname,String(r.definition??"")]));
+   const contains=(name:string,...needles:string[])=>
+     needles.every(x=>String(definitions.get(name)??"").includes(x));
+   const semanticsOk=
+     contains("p2g_source_intent_exact_object_name",
+       "v39/provider/raw_provider_content/","blob_ref_id")&&
+     contains("p2g_source_intent_exact_retention",
+       "source_retention_until","first_node_received_utc","168")&&
+     contains("p2g_source_intent_state_shape","PENDING","VERIFIED","verified_at_utc")&&
+     contains("phase2g_prepaid_source_intent_v39_source_bytes_check","2097152")&&
+     contains("phase2g_prepaid_source_intent_v39_source_sha256_check","64");
    const colsOk=columns.length===COLUMNS.length&&
      COLUMNS.every(([name,typ,required],i)=>columns[i]?.attname===name&&
        columns[i]?.sql_type===typ&&columns[i]?.attnotnull===required);
@@ -114,7 +126,8 @@ async function main(){
    ];
    const functionOk=typeof fn==="string"&&expectedFn.every(t=>fn.includes(t));
    const triggerOk=trg.length===1&&trg[0].tgname==="trg_p2g_prepaid_source_intent_v39"&&
-     trg[0].tgenabled==="O"&&trg[0].tgisinternal===false&&trg[0].same_function===true;
+     trg[0].tgenabled==="O"&&trg[0].tgisinternal===false&&
+     trg[0].kind_flags===31&&trg[0].same_function===true;
    const tableOk=rel.relkind==="r"&&rel.relpersistence==="p"&&
      rel.schema_name==="clean"&&rel.relname==="phase2g_prepaid_source_intent_v39";
    const active=(await client.query(`
@@ -134,11 +147,12 @@ async function main(){
      WHERE source_kind='webhook'
        AND source_record_id LIKE $1
    `,["prepaid:6267293e-75a0-42a7-b977-89543f200ebc:%"])).rows[0];
-   const schemaOk=tableOk&&colsOk&&constraintOk&&functionOk&&triggerOk;
+   const schemaOk=tableOk&&colsOk&&constraintOk&&semanticsOk&&functionOk&&triggerOk;
    database={
      status:schemaOk?"V0064_STRUCTURAL_PASS":"V0064_STRUCTURAL_HOLD",
      logged_table:tableOk,exact_column_types_and_nullability:colsOk,
-     required_constraints_validated:constraintOk,guard_function_behavior_text: functionOk,
+     required_constraints_validated:constraintOk,retention_identity_and_state_checks:semanticsOk,
+     guard_function_behavior_text:functionOk,
      immutable_trigger_enabled:triggerOk,
      active_or_settling_probes:Number(active.active_probes),
      active_runtime_sessions:Number(active.active_sessions),
