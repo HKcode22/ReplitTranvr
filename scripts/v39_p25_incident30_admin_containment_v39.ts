@@ -39,6 +39,7 @@ async function main(){
     const probes=await client.query(`
       SELECT probe_id,icao,status,duration_censored,
              reconciliation_status,stop_reason,runtime_session_id,
+             probe_budget_day_id,
              runtime_cleanup_verified_at_utc
         FROM clean.adb_anchor_probe WHERE probe_id=18`);
     const totals=await client.query(`
@@ -64,6 +65,19 @@ async function main(){
         (SELECT count(*)::int FROM clean.adb_probe_budget_day WHERE state='OPEN')
           AS open_budget_days
     `,[SESSION,`prepaid:${SESSION}:%`]);
+    // Budget closeout is blocked by assertIncidentClear(), so an exact
+    // historical OPEN budget must NOT deadlock current-risk incident closure.
+    // Only this exact failed probe's budget is allowed here. The later
+    // budget CLOSED/MISMATCH decision is independently guarded and NEVER
+    // inferred from marking incident30 administratively contained.
+    const historicalBudgetId="P2G-S1-20261009-23";
+    const openBudgets=await client.query(`
+      SELECT probe_budget_day_id,state,cap_credits
+      FROM clean.adb_probe_budget_day
+      WHERE state='OPEN'
+      ORDER BY probe_budget_day_id
+      LIMIT 3
+    `);
     const i=incidents.rows[0],p=probes.rows[0],t=totals.rows[0];
     const metadata=i?.detail??{};
     const eligible=incidents.rowCount===1&&probes.rowCount===1&&
@@ -82,7 +96,13 @@ async function main(){
       Number(t.historical_blob_refs)===30&&
       Number(t.untombstoned_historical_refs)===30&&
       new Date(t.earliest_source_expiry).getTime()>Date.now()&&
-      Number(t.open_budget_days)===0&&activeBillable.length===0;
+      (
+        Number(t.open_budget_days)===0||
+        (Number(t.open_budget_days)===1&&openBudgets.rows.length===1&&
+          openBudgets.rows[0]?.probe_budget_day_id===historicalBudgetId&&
+          String(p.probe_budget_day_id)===historicalBudgetId&&
+          Number(openBudgets.rows[0]?.cap_credits)===500)
+      )&&activeBillable.length===0;
     const out={
       schema:"v39.p25.incident30.current-risk-containment.v1",
       status:eligible?"ELIGIBLE_FOR_EXPLICIT_CONTAINMENT_ONLY":
@@ -99,6 +119,11 @@ async function main(){
       active_probes:Number(t?.busy_probes??-1),
       runtime_sessions:Number(t?.runtime_sessions??-1),
       open_budget_days:Number(t?.open_budget_days??-1),
+      historical_open_budget_id:
+        openBudgets.rows.length===1?String(openBudgets.rows[0].probe_budget_day_id):null,
+      old_budget_still_requires_independent_closeout:
+        Number(t?.open_budget_days??-1)!==0,
+      historical_budget_marked_reconciled_by_this_script:false,
       existing_open_incidents:Number(t?.open_incidents??-1),
       current_risk_containment_decision_requested:APPLY,
       paid_provider_calls:0,paid_alert_credits_spent:0,
@@ -114,6 +139,9 @@ async function main(){
       console.log(JSON.stringify(out,null,2));
       await client.query("ROLLBACK");tx=false;return;
     }
+    // An exact historical OPEN budget is permitted for administrative
+    // incident containment ONLY. A later budget close requires a separate
+    // evidence-backed spent-credit check, and paid preflight will stay HOLD.
     // The old incident's detail stays intact, including
     // runtimeCleanupVerified:false. This optional note distinguishes
     // current-hazard closure from absent historical cleanup proof.
