@@ -41,6 +41,20 @@ async function main(){
      !sql.includes("P2G source-intent deletion forbidden")||
      /\b(?:DROP|TRUNCATE|ALTER\s+TABLE|DELETE\s+FROM|UPDATE\s+clean\.)\b/i.test(sql))
     throw Error("P25_V0064_UNREVIEWED_MIGRATION_CONTRACT");
+  // The versioned installer must run only after the reviewed release is
+  // actually published. Do not change production SQL for a stale receiver.
+  if(apply){
+    const h=await fetch("https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime",{
+      headers:{accept:"application/json"},signal:AbortSignal.timeout(12_000)
+    });
+    const j=await h.json().catch(()=>null);
+    if(h.status!==200||j?.status!=="PASS"||
+       j?.schema!=="v39.phase2f-workspace-runtime.v1"||
+       String(j?.git_head??"").toLowerCase()!==head||
+       j?.prepaid_route_registered!==true||
+       j?.published_deployment!==true)
+      throw Error("P25_V0064_PUBLISHED_SOURCE_NOT_REVIEWED_RELEASE");
+  }
   const client=await pool.connect();
   let tx=false;
   try{
