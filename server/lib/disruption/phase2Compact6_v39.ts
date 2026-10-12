@@ -184,7 +184,7 @@ export interface Phase2gP2g25YssyRecoveryV39 {
   expected_durable_reconciliation_absent:true;
   prior_failed_probes_immutable:[16,17,18];
   historical_failures_excluded_from_scoring:true;
-  current_utc_window_start:"2026-10-12T03:00:00Z";
+  current_utc_window_start:"2026-10-13T03:00:00Z";
   target_minutes:120;
   max_alert_credits:500;
   stage1_reserved_credits:450;
@@ -978,7 +978,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
        p25.expected_durable_reconciliation_absent!==true||
        JSON.stringify(p25.prior_failed_probes_immutable)!=="[16,17,18]"||
        p25.historical_failures_excluded_from_scoring!==true||
-       p25.current_utc_window_start!=="2026-10-12T03:00:00Z"||
+       p25.current_utc_window_start!=="2026-10-13T03:00:00Z"||
        p25.target_minutes!==120||
        p25.max_alert_credits!==500||
        p25.stage1_reserved_credits!==450||
