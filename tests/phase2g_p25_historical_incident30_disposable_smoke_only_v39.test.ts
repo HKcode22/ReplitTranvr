@@ -25,7 +25,7 @@ describe("P25 exact old incident #30 is isolated for zero-provider synthetic POS
       paidLaunchAuthorized:false,incidentClosureAuthorized:false,
       originalDeletionAuthorized:false,historicalSciencePromotionAuthorized:false
     });
-    expect(r.reason).toContain("DISPOSABLE_SMOKE_ONLY");
+    expect(r.reason).toBe("EXACT_UNRESOLVED_HISTORICAL_INCIDENT30_ISOLATED_SMOKE_ONLY");
   });
   it("permits no-existing-incidents smoke without conferring paid authorization",()=>{
     const r=assessIncident30ZeroProviderSmokeV39({...exact(),incidents:[]});
