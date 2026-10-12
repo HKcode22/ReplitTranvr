@@ -56,3 +56,11 @@ All deadlines are **planning targets**, not hardcoded runtime validity rules. Mi
 ## Scope and caveat
 
 Checkpoint documents what connector GitHub and previous evidence showed, not proof of user Shell execution, Replit deploy, provider balance or applied quarantine. No provider calls, production DB writes, merge, publication or paid authorization were made in this documentation-only session.
+
+## Later Oct12 connector evidence added before handoff
+
+- Independently compared protected P25 code freeze commit `c0634bfd80fd16d7a48bfa848b7f9df0a65d5d67` to PR35 HEAD `66e9bce772918ceca470bae0e3c9e13f6e8d0af6`: **exactly four commits, and changed paths only two JSON artifacts plus two Markdown reports; no server/scripts/test/workflow/migration change**. This supports continued artifact ancestry/source code integrity, not proof of deployed HEAD.
+- Read exact candidate runtime and AUTH JSON from PR35; `sourceGitHead`/`source_git_head` is the protected reviewed code freeze `c0634bfd...`, protected-tree SHA `5eed390ac062a58482ddb5883c0fd8f72e0f0127a3bd46f89f1c9e9ec21ffe9c`, window Oct13 03:00–05:00Z, AUTH expiry 05:25Z. They remain unapproved.
+- Reviewed PR35 `probeExecution_v39.ts`: the single historical quarantine exception requires exact old-budget `MISMATCH`, old probe18 failed/censored/UNRESOLVED, old amounts NULL, 30 retained refs, incident30 containment and no unresolved incidents; unrelated MISMATCH blocks. Not a general production gap tolerance.
+- Old detached quarantine script `469d94be9e5dc51cd45496b39f6d29469c3157eb` verified with exact GitHub Actions **SUCCESS** [run 38199014273](https://github.com/HKcode22/ReplitTranvr/actions/runs/38199014273). Later quarantine-branch head `e553fc03246a77d4643ca7ae67c51d1501ad220d` advanced five commits, none changed that quarantine script. Pin the exact tested commit when conducting default read-only preview; get separate consent before `--apply`. No Shell result or approval was observed in this session.
+- New [draft PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36) stores these checkpoints/prospective study-method proposals without changing current PR35 source.
