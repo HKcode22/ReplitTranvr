@@ -10,6 +10,8 @@ describe("P25 V0064 installer is guarded metadata-only, no paid action",()=>{
     expect(src).toContain('BEGIN TRANSACTION READ ONLY');
     expect(src).toContain('client.query("ROLLBACK")');
     expect(src).toContain("SOURCE_DIRTY_OR_UNREVIEWED");
+    expect(src).toContain("P25_V0064_PUBLISHED_SOURCE_NOT_REVIEWED_RELEASE");
+    expect(src).toContain('String(j?.git_head??"").toLowerCase()!==head');
     expect(src).toContain("git");
   });
   it("refuses migration with old/partial table, active probe/runtime, missing base or lock race",()=>{
