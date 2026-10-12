@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "python-3.11", "postgresql-16"]
+modules = ["nodejs-20", "bash", "python-3.12"]
 [nix]
 channel = "stable-25_05"
 packages = ["unzip"]
@@ -28,7 +28,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-managed-project npm run dev"
+args = "V39_CALLBACK_ONLY_RUNTIME=1 V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-managed-project ./node_modules/.bin/tsx server/phase2gCallbackOnly.ts"
 waitForPort = 5000
 
 [[ports]]
@@ -37,20 +37,17 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["env", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "V39_RUNTIME_DURABILITY_CLASS=autoscale", "node", "dist/index.mjs"]
-build = ["npm", "run", "build"]
+run = ["env", "V39_CALLBACK_ONLY_RUNTIME=1", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "V39_RUNTIME_DURABILITY_CLASS=autoscale", "node", "dist/index.mjs"]
+build = ["env", "V39_CALLBACK_ONLY_BUILD=1", "npm", "run", "build"]
 
 [userenv]
 
 [userenv.shared]
-SENDGRID_FROM_EMAIL = "hello@travnr.com"
-V39_PROVIDER_BLOB_BUCKET_ID = "replit-objstore-89d08290-bfed-4ba9-ab3a-517a47e8095f"
 V39_PROVIDER_BLOB_MODE = "required"
-V39_PUBLIC_WEBHOOK_BASE_URL = "https://travnr.com"
 ADB_AUTO_COLLECT = "false"
+SENDGRID_FROM_EMAIL = "hello@travnr.com"
 V39_DATABASE_TARGET_CONFIRM = "production"
-WEBHOOK_BASE_URL = "https://travnr.com/"
+V39_PROVIDER_BLOB_BUCKET_ID = "replit-objstore-5aa4d2c4-399b-4933-9acf-0292f79d6d59"
 
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 180000
+[objectStorage]
+defaultBucketID = "replit-objstore-5aa4d2c4-399b-4933-9acf-0292f79d6d59"
