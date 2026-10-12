@@ -30,6 +30,7 @@ describe("P25 opt-in real published bound synthetic POST, no paid provider",()=>
   expect(s).toContain("correct_secret_accepted_200: true");
   expect(s).toContain("PHASE2G_CALLBACK_ADMISSION_BUDGET_MS = 8_000");
   expect(s).toContain("cleanupPrepaidProbeSessionV39(");
-  expect(s).toContain("refused".toUpperCase());
+  expect(s).toContain("provider_subscription_created: false");
+  expect(s).toContain("alert_credits_spent: 0");
  });
 });
