@@ -70,8 +70,8 @@ async function main(){
       String(i.id)==="30"&&i.cause==="reconciliation"&&i.resolved===false&&
       metadata.kind==="stage1_supervisor_recovery"&&
       metadata.reason==="supervisor_child_exit_recovered"&&
-      metadata.providerDeleteVerified===true&&
-      metadata.runtimeCleanupVerified===false&&
+      String(metadata.providerDeleteVerified)==="true"&&
+      String(metadata.runtimeCleanupVerified)==="false"&&
       p.probe_id===18&&p.icao==="YSSY"&&p.status==="failed"&&
       p.duration_censored===true&&p.reconciliation_status==="UNRESOLVED"&&
       p.stop_reason==="supervisor_child_exit_recovered"&&
