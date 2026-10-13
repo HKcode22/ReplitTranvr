@@ -10,6 +10,10 @@ import "dotenv/config";
 import { createHash } from "node:crypto";
 import { v39Pool } from "../server/lib/disruption/db_v39.ts";
 import { createRequiredProviderBlobStoreV39 } from "../server/lib/disruption/replitProviderBlobStore_v39.ts";
+import {
+  summarizePreservedOriginalItemEvidenceV39,
+  type PreservedOriginalSourceV39,
+} from "./v39_p2g24_saved_original_item_evidence_v39.ts";
 
 const PROBE_ID = 19;
 const BUDGET = "P2G-S1-20261013-03";
@@ -18,8 +22,11 @@ const EXPECTED_REFS = 58;
 const EXPECTED_BYTES = 308832;
 const EXPECTED_EXTERNAL_CREDITS = 231;
 const EXPECTED_RECEIVED_CREDITS = 229;
-const verify = process.argv.slice(2).length === 1 &&
-  process.argv[2] === "--verify-objects";
+const argv = process.argv.slice(2);
+const summarizeItems = argv.includes("--summarize-items");
+const verify = argv.includes("--verify-objects") &&
+  argv.length === (summarizeItems ? 2 : 1) &&
+  argv.every(x => x === "--verify-objects" || x === "--summarize-items");
 if (!verify) throw Error("P25_REQUIRES_EXPLICIT_VERIFY_OBJECTS");
 if (!process.env.V39_DATABASE_RUNTIME_URL ||
     process.env.V39_PROVIDER_BLOB_MODE !== "required" ||
@@ -28,6 +35,7 @@ if (!process.env.V39_DATABASE_RUNTIME_URL ||
 
 const failures: { index: number; kind: string }[] = [];
 let checked = 0, readBytes = 0;
+const verifiedSources: PreservedOriginalSourceV39[] = [];
 let refs: Array<{
   object_name: string;
   content_sha256: string;
@@ -117,13 +125,24 @@ try {
       } else {
         checked++;
         readBytes += b.length;
+        if (summarizeItems) verifiedSources.push({
+          contentSha256: refs[i].content_sha256,
+          contentBytes: Number(refs[i].content_bytes),
+          storedBytes: b,
+        });
       }
     } catch {
       failures.push({ index: i+1, kind: "STORAGE_DOWNLOAD_UNAVAILABLE" });
     }
   }
-  const pass = checked === EXPECTED_REFS && readBytes === EXPECTED_BYTES &&
+  const objectPass = checked === EXPECTED_REFS && readBytes === EXPECTED_BYTES &&
     failures.length === 0;
+  const itemSummary = summarizeItems && objectPass
+    ? summarizePreservedOriginalItemEvidenceV39(verifiedSources)
+    : null;
+  const itemCountAgrees = itemSummary === null ||
+    itemSummary.notificationItemsInSavedObjects === EXPECTED_RECEIVED_CREDITS;
+  const pass = objectPass && itemCountAgrees;
   console.log(JSON.stringify({
     schema: "v39.phase2g-p25-yssy-original-readback.v1",
     status: pass ? "PASS_ORIGINAL_BYTES_SHA256" : "HOLD_READBACK_INCOMPLETE",
@@ -137,6 +156,12 @@ try {
     earliest_source_expiry: new Date(Math.min(...refs.map(x =>
       new Date(x.expires_at_utc).getTime()))).toISOString(),
     failures,
+    ...(summarizeItems ? {
+      payload_item_summary: itemSummary,
+      payload_items_equal_durable_received_credits: itemCountAgrees,
+      // This is a saved-body comparison, never proof of two unseen sender attempts.
+      original_saved_bodies_derive_provable_external_attempts: false,
+    } : {}),
     original_payloads_exported: false,
     provider_calls: 0, provider_mutations: 0,
     database_mutations: 0, storage_mutations: 0,
