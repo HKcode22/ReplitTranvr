@@ -79,7 +79,7 @@ export function evaluateObservedDatasetResearchV39(
   const external = e.externalSettledCredits;
   const gap = external === null || !Number.isSafeInteger(external) || external < 0
     ? null : external - e.internalReceivedCredits;
-  const completeness = gap === null ? null
+  const completeness = gap === null || external === null ? null
     : external === 0 ? (e.internalReceivedCredits === 0 ? 1 : 0)
     : e.internalReceivedCredits / external;
   if (gap !== null && gap < 0) problem.push("RECEIVED_EXCEEDS_BILLED");
