@@ -1,4 +1,3 @@
-import {sendLegacySemanticWebhookFailureV39} from "./lib/disruption/legacyWebhookFailureResponse_v39";
 /**
  * V3.9-f.8 AeroDataBox webhook + management routes.
  * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§0–21.
@@ -448,7 +447,11 @@ export function registerV3Routes(app:Express):void{
       }
       try{await pool.query(`INSERT INTO clean.adb_ingest_events(subscription_id,batch_id,notification_items,delivery_failure,error) VALUES($1,$2,0,true,$3)`,[typeof req.body?.subscription?.id==="string"?req.body.subscription.id:null,samplingForCatch?.batchId??null,String(err?.message||"error").slice(0,500)]);}catch(ledgerErr:any){console.error("[adb-v3-webhook] failure-ledger write failed:",ledgerErr?.message||ledgerErr);}
       try{if(rawDeliveryIdForCatch)await persistProcessingAttempt({deliveryId:rawDeliveryIdForCatch,attemptIndex:1,parserVersion:"flightNotificationExtractor_v3",schemaVersion:"v3.9-f.8",outcome:"failed",itemsReceived:flightsForCatch.length,itemsParsed:0,itemsStored:0,itemsSkipped:0,itemsFailed:flightsForCatch.length,validationErrors:null,parseErrors:[String(err?.message||"error").slice(0,500)],storageErrors:null,errorMessage:String(err?.message||"error").slice(0,500),startedAtUtc:receivedAtForCatch??new Date(startedAt),completedAtUtc:new Date(),durationMs:Date.now()-startedAt,upsertResult:null,researchEventsAppended:false,ingestEventWritten:false});}catch(attemptErr:any){console.error("[adb-v3-webhook] failed-attempt write failed:",attemptErr?.message||attemptErr);}
-      sendLegacySemanticWebhookFailureV39(res);
+      // Raw original has already committed: ACK durable reception.
+      // Semantic repair remains an incident-backed downstream task.
+      // A 503 here would encourage billable upstream retries even though
+      // the original was safely stored; never leak the thrown error details.
+      if(!res.headersSent)res.status(200).json({received:true,error:"semantic_processing_failed_after_raw_durability"});
     }
   };
 
