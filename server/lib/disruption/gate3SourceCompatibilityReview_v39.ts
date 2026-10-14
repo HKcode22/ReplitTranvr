@@ -34,7 +34,7 @@ export function reviewGate3SourceCompatibilityV39(
   const blockers: string[] = [];
   const reject = (why: string) => blockers.push(why);
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) ||
-    Object.values(snapshot).some(v => typeof v !== "string")) {
+    (["callbackOnly","registeredRoutes","prepaidRuntime","legacyCanary","legacyWrapper","legacyReadiness"] as const).some(k => typeof snapshot[k] !== "string")) {
     reject("SOURCE_SNAPSHOT_INVALID");
   } else {
     const {
