@@ -45,7 +45,7 @@ export function evaluatePhase2gQualityDimensionsV39(
   const problems: string[] = [];
   if (!Number.isFinite(v.actualWindowSeconds) ||
       !Number.isFinite(v.targetWindowSeconds) ||
-      v.actualWindowSeconds < 0 || v.targetWindowSeconds <= 0) {
+      v.actualWindowSeconds <= 0 || v.targetWindowSeconds <= 0) {
     problems.push("INVALID_TIME_WINDOW");
   }
   for (const key of [
