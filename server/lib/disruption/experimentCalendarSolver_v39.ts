@@ -214,10 +214,10 @@ function solveCalendarByAnchorPolicy(
         pairAirportSet = input.pairAirportSets[pairId(p)];
         const pairRegions = Object.fromEntries((Object.keys(pairAirportSet) as SlotId[]).map(s => [s, pairAirportSet![s].region])) as Record<SlotId, string>;
         if ((Object.keys(slotRegions) as SlotId[]).some(s => slotRegions[s] !== pairRegions[s])) {
-          return { status: "UNSAT", reason: `${pairId(p)} airport-set region does not match frozen slot-region template`, days: [], calendarHash: null };
+          return { status: "UNSAT", reason: `${pairId(p)} airport-set region does not match frozen slot-region template; scheduled=${JSON.stringify(slotRegions)} pair=${JSON.stringify(pairRegions)}`, days: [], calendarHash: null };
         }
         if (pairAirportSet.HUB.icao.toUpperCase() !== anchor.icao.toUpperCase()) {
-          return { status: "UNSAT", reason: `${pairId(p)} HUB airport does not match frozen anchor rotation`, days: [], calendarHash: null };
+          return { status: "UNSAT", reason: `${pairId(p)} HUB airport does not match frozen anchor rotation; scheduled=${anchor.icao} paired=${pairAirportSet.HUB.icao}`, days: [], calendarHash: null };
         }
       }
       newDrawIndex += 1;
