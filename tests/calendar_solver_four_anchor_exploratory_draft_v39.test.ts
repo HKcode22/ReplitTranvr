@@ -6,7 +6,7 @@ import {
 } from "../server/lib/disruption/experimentCalendarSolver_v39";
 function ordered<T>(xs:readonly T[],seed:string):T[]{
   return xs.map((value,i)=>({value,key:createHash("sha256")
-    .update(`${seed}|${i}|${JSON.stringify(value)}`).digest("hex")}))
+    .update(JSON.stringify(`${seed}|${i}|${JSON.stringify(value)}`)).digest("hex")}))
     .sort((a,b)=>a.key.localeCompare(b.key)).map(x=>x.value);
 }
 function fixture():FrozenCalendarDesignInput {
