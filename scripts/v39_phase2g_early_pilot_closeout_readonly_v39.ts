@@ -116,7 +116,8 @@ async function main():Promise<void>{
     historical_probe_reclassifications:0,paid_stage2_authorized:false,
     paid_gate3_authorized:false,
   },null,2));
-  if(disposition.fieldwork!=="COMPLETE")process.exitCode=2;
+  if(disposition.fieldwork!=="COMPLETE" || activeBillable!==0 ||
+     disposition.researchInventory==="HOLD")process.exitCode=2;
 }
 main().catch(async ()=>{
   console.error("PHASE2G_EARLY_PILOT_READONLY_CLOSEOUT_REFUSED_OR_UNAVAILABLE");
