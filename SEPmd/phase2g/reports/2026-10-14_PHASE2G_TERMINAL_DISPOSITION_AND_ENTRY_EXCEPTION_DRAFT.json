@@ -1,0 +1,96 @@
+{
+  "schema": "v39.phase2g.terminal-fieldwork-disposition.v1",
+  "prepared_date_utc": "2026-10-14",
+  "evidence_basis": {
+    "primary_plan": "SEPmd/V3.9_DataCollectPlan_f.8.md",
+    "implementation_log": "SEPmd/V3.9_IMPLEMENTATION_LOG.md",
+    "pilot_amendment": "artifacts/phase2g-compact6-early-pilot-scope-reduction-freeze-20261002.json",
+    "baseline_main_sha": "f5b1347b7b9aebd6830302394ea2cc5775aedbf4",
+    "source_readback_operator_audit_verified": true,
+    "last_active_subscription_audit_fresh_in_this_session": false
+  },
+  "fieldwork": {
+    "status": "COMPLETE_5_OBSERVED_WINDOWS",
+    "no_additional_early_pilot_stage1_or_automatic_stage2_planned": true,
+    "sites_completed": [
+      "WSSS",
+      "OMAA",
+      "MMUN",
+      "SKBO",
+      "YSSY"
+    ],
+    "deferred": [
+      "LKPR"
+    ]
+  },
+  "original_gate2": {
+    "certification": "NOT_PASSED",
+    "prior_decision": "HOLD_NOT_PASSED",
+    "final_five_formal_anchors_selected": false,
+    "strict_capacity_and_reconciliation_eligible": [
+      "WSSS",
+      "OMAA",
+      "SKBO"
+    ],
+    "ineligible_due_to_capacity": [
+      "MMUN"
+    ],
+    "ineligible_due_to_reconciliation": [
+      "YSSY"
+    ],
+    "original_protocol_or_history_rewritten": false,
+    "missing_mandatory_anchor_count": 2
+  },
+  "yssy": {
+    "probe_id": 19,
+    "original_status": "failed",
+    "original_reconciliation": "DELIVERY_GAP",
+    "window_seconds": 7203.639,
+    "retained_sha_verified_originals": 58,
+    "retained_original_bytes": 308832,
+    "saved_original_items": 229,
+    "saved_explicit_claim_units": 229,
+    "settled_provider_billed_units": 231,
+    "unreconciled_billed_units": 2,
+    "billed_to_received_claim_reconciliation": 0.9913419913419913,
+    "research_tier": "B_DEGRADED_OBSERVED_ONLY",
+    "official_capacity_metric": null,
+    "attempt_delivery_probability": null,
+    "missingness_mechanism": "UNKNOWN",
+    "missing_distinct_flights": null
+  },
+  "qualified_pilot": {
+    "fieldwork_scientific_report": "COMPLETE_WITH_QUALIFICATIONS",
+    "research_inventory_includes_yssy": true,
+    "declared_use": "DESCRIPTIVE_RECEIVED_DATA_EXPLORATORY_ONLY",
+    "confirmatory_anchor_pool_promotion": false,
+    "signed_scientific_gate2_exception": false,
+    "exception_proposal_status": "PREPARED_NOT_APPROVED",
+    "paid_phase3_entry_override": false
+  },
+  "lifecycle": {
+    "internal_incident31": "OPEN",
+    "last_56_or_58_refs": 58,
+    "first_source_expiry_utc": "2026-10-20T03:06:15.502Z",
+    "last_source_expiry_utc": "2026-10-20T05:02:12.501Z",
+    "deletion_tombstones_verified": false,
+    "existing_missing_session_cleanup_apply_allowed": false,
+    "fresh_operator_readonly_probe_required": true
+  },
+  "phase3": {
+    "offline_preparation_allowed": true,
+    "legacy_paid_gate3_no_go": true,
+    "paid_gate3_authorized": false,
+    "exact_credit_tolerance": 0,
+    "requires_new_bound_authorization": true,
+    "requires_published_prepaid_receiver_e2e_proof": true
+  },
+  "side_effects_this_document": {
+    "provider_paid_calls": 0,
+    "provider_subscription_mutations": 0,
+    "production_database_mutations": 0,
+    "provider_object_deletions": 0,
+    "deployments": 0,
+    "main_merges": 0
+  }
+}
