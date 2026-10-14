@@ -44,3 +44,16 @@ Core Phase3 **46–78 active engineering hours** estimated, exclude wait time, i
 **Explicit side-effects statement:** provider API calls made by this work session 0; provider create/delete/refill 0; production SQL mutations 0; blob deletes 0; runtime deploys 0; main merges 0; historical probe reclassification 0. GitHub draft files, comments and issue #38 **were created** as documented. No external support response or live provider balance was obtained.
 
 **Scientific/release philosophy:** advances on evidenced test gates only, permits finite quality thresholds for prospective *research* but retains Gate3 zero discrepancy and actual SEND-side hard-cap guarantees; do not claim no observed callback errors implies no missing unobserved SEND.
+
+---
+
+## 2026-10-14 end-of-session executable-code update — B0062 check included
+
+After the first fully passing source checker, made a narrow **source/CLI/test** change (all draft PR36, no paid operations):
+- `server/lib/disruption/gate3SourceCompatibilityReview_v39.ts`, commit `6151e83ceb02202b3602b2266e78a3ccf826fd71`: explicit B0062 baseline CHECK review; emits `BASELINE_SQL_REJECTS_GATE3_OWNER_KIND_NEEDS_ADDITIVE_MIGRATION`. Keeps no-live/no-paid verdict.
+- `scripts/v39_gate3_source_compatibility_readonly_v39.ts`, commit `76f531cb2afebf0fd83836965037eebfda5110c0`: reads immutable B0062 SQL as an **additional local source file** (no database access).
+- `tests/phase3_gate3_source_compatibility_review_v39.test.ts`, exact code/test commit `365a58bc483bd3c93bd55ac8b65470f99a855790`: asserts that the current B0062 SQL check still rejects a dedicated Phase3 canary and keeps old paid owner blocked.
+
+**Independently verified all 4 no-provider GitHub CI PASS on exact executable code SHA `365a58bc483bd3c93bd55ac8b65470f99a855790`:** [V3.9 Offline Safety #38578125890](https://github.com/HKcode22/ReplitTranvr/actions/runs/38578125890), [focused release #38578125780](https://github.com/HKcode22/ReplitTranvr/actions/runs/38578125780), [real PG faults #38578125726](https://github.com/HKcode22/ReplitTranvr/actions/runs/38578125726), [public receiver identity #38578125822](https://github.com/HKcode22/ReplitTranvr/actions/runs/38578125822). No new Phase3 owner/migration has been created; the output is **BLOCKED** accurately, not a canary PASS. Future compatibility review must inspect the actual **effective additive migration**, not mistake the unchanged historical B0062 baseline for current live constraints.
+
+**Next exact engineering step:** review Postgres CHECK migration conventions + current V0063/64, design new dedicated canary owner and independent LOGGED receipt without distorting anchor labels, implement migration and disposable-PG negative tests in PR36; simultaneously track October 15 P2G24 source deadline and October 19 YSSY deadline. Previous [roadmap](2026-10-14_EXECUTION_SPRINT_ROADMAP_DEADLINES_AND_EVIDENCE_GATES.md) and [issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38) control target dates. No paid provider or production mutation from this work.
