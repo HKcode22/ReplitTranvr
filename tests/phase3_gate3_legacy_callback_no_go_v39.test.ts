@@ -21,6 +21,18 @@ describe("legacy raw-after-ACK contract and incompatible paid Gate3 NO-GO",()=>{
     const src=readFileSync(join(process.cwd(),"server/routes_v3.ts"),"utf8");
     expect(src).toContain('res.status(500).json({error:"Raw persistence failed; please retry"})');
   });
+  it("pre-durable raw errors do not await a second SQL incident write before HTTP 500",()=>{
+    const src=readFileSync(join(process.cwd(),"server/routes_v3.ts"),"utf8");
+    const beginning=src.indexOf('}catch(rawErr:any){');
+    const end=src.indexOf('const extracted:ExtractedWebhookRow[]',beginning);
+    expect(beginning).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(beginning);
+    const errorPath=src.slice(beginning,end);
+    expect(errorPath).toContain('void recordIncident("raw-persistence"');
+    expect(errorPath).not.toContain('await recordIncident("raw-persistence"');
+    expect(errorPath).toContain('if(!res.headersSent)res.status(500).json');
+    expect(errorPath).not.toContain('console.error("[adb-v3-webhook] raw delivery persistence failed — returning 5xx:",rawErr?.message');
+  });
   it("hard-refuses legacy canary before provider balance reads or subscription creation",()=>{
     expect(()=>refuseLegacyGate3CanaryReceiverV39()).toThrow(
       "GATE3_LEGACY_CANARY_RECEIVER_INCOMPATIBLE_WITH_PUBLISHED_PREPAID_ONLY_RUNTIME");
