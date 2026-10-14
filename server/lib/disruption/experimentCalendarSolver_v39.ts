@@ -105,7 +105,7 @@ function samePairSet(a: FrozenPairAirportSet | null, b: FrozenPairAirportSet | n
 /** The ORIGINAL five-anchor solver remains authoritative for V3.9-f.8. */
 function solveCalendarByAnchorPolicy(
   input: FrozenCalendarDesignInput,
-  mode: "original-five" | "draft-exploratory-three",
+  mode: "original-five" | "draft-exploratory-three" | "draft-exploratory-four",
 ): CalendarSolveResult {
   const start = parseDate(input.startDate);
   if (!start) return { status: "UNSAT", reason: "invalid startDate", days: [], calendarHash: null };
@@ -115,7 +115,7 @@ function solveCalendarByAnchorPolicy(
     if (input.anchorPool.length !== 5 || unique.size !== 5 || input.anchorPool.some(x => !x.region?.trim())) {
       return { status: "UNSAT", reason: "anchorPool must be exact five unique mapped anchors", days: [], calendarHash: null };
     }
-  } else {
+  } else if (mode === "draft-exploratory-three") {
     // Deliberately versioned PROPOSAL only; never treat the resulting SAT as
     // an operational Phase6 permit or as a retrospective Gate2 five-anchor PASS.
     // The three Stage1-eligible anchors are recorded independently of YSSY-B
@@ -125,6 +125,17 @@ function solveCalendarByAnchorPolicy(
         required.some(icao => !unique.has(icao)) ||
         input.anchorPool.some(x => !x.region?.trim())) {
       return { status: "UNSAT", reason: "draft exploratory anchors require exactly WSSS OMAA SKBO with mapped regions", days: [], calendarHash: null };
+    }
+  } else {
+    // Independently versioned FOUR-airport prospective design. Unlike the
+    // historical Stage1 score, YSSY is included as a scientifically useful
+    // but qualified Tier-B observation; its original DELIVERY_GAP does NOT
+    // become a historical Gate2 PASS or claim 100% provider completeness.
+    const required = ["OMAA", "SKBO", "WSSS", "YSSY"];
+    if (input.anchorPool.length !== 4 || unique.size !== 4 ||
+        required.some(icao => !unique.has(icao)) ||
+        input.anchorPool.some(x => !x.region?.trim())) {
+      return { status: "UNSAT", reason: "draft four-anchor selection requires WSSS OMAA SKBO YSSY and mapped regions", days: [], calendarHash: null };
     }
   }
   for (const slot of ["MID_A", "MID_B", "REGIONAL"] as const) {
@@ -143,7 +154,7 @@ function solveCalendarByAnchorPolicy(
   if (!Number.isFinite(input.projectedRestUnitsTotal) || !Number.isFinite(input.protectedRestBudget) || input.projectedRestUnitsTotal > input.protectedRestBudget) {
     return { status: "UNSAT", reason: "REST budget infeasible/unknown", days: [], calendarHash: null };
   }
-  if (mode === "draft-exploratory-three") {
+  if (mode !== "original-five") {
     const projectedTotal = Array.from({ length: 31 }, (_, index) =>
       input.projectedAlertCreditsByRunDay[String(index + 1)])
       .reduce((sum, value) => sum + value, 0);
@@ -244,7 +255,9 @@ function solveCalendarByAnchorPolicy(
     // Distinct hash domain prevents passing an exploratory-design calendar
     // as if it were the frozen five-anchor original study.
     calendarHash: mode === "original-five" ? hash(days) :
-      hash({ studyVersion: "V39_EXPLORATORY_THREE_ANCHOR_DRAFT_1", anchorPool: input.anchorPool, days }),
+      hash({ studyVersion: mode === "draft-exploratory-three" ?
+        "V39_EXPLORATORY_THREE_ANCHOR_DRAFT_1" : "V39_EXPLORATORY_FOUR_ANCHOR_DRAFT_1",
+        anchorPool: input.anchorPool, days }),
   };
 }
 
@@ -274,6 +287,38 @@ export function solveV39ThreeAnchorExploratoryDraft(
     studyVersion: "V39_EXPLORATORY_THREE_ANCHOR_DRAFT_1",
     researchScope: "selected_airport_time_operational_frame_only",
     originalFiveAnchorGate2Passed: false,
+    operationalPhase6StartAuthorized: false,
+  };
+}
+
+export type FourAnchorDraftCalendarResult = CalendarSolveResult & {
+  studyVersion: "V39_EXPLORATORY_FOUR_ANCHOR_DRAFT_1";
+  researchScope: "four_anchor_stratified_operational_frame_only";
+  anchorIcaos: readonly ["WSSS", "OMAA", "SKBO", "YSSY"];
+  historicalYssyCreditReconciliationPassed: false;
+  historicalOriginalFiveAnchorGate2Passed: false;
+  operationalPhase6StartAuthorized: false;
+};
+/**
+ * RESEARCH-DESIGN-ONLY / NO PROVIDER SIDE EFFECTS. Versioned future plan:
+ * WSSS/OMAA/SKBO plus qualified YSSY; MMUN excluded from anchor rotation.
+ * Keeps 5 paired WINDOW comparisons despite only 4 distinct anchors, the
+ * 1 HUB + 2 MID + 1 REGIONAL slot allocation and all frozen time/budget
+ * constraints. Does NOT make this a confirmatory five-anchor study.
+ *
+ * This helper is NOT wired to Phase6 launch, the live calendar writer,
+ * or the paid canary. Formal sampling-scope + manifest review required.
+ */
+export function solveV39FourAnchorExploratoryDraft(
+  input: FrozenCalendarDesignInput,
+): FourAnchorDraftCalendarResult {
+  return {
+    ...solveCalendarByAnchorPolicy(input, "draft-exploratory-four"),
+    studyVersion: "V39_EXPLORATORY_FOUR_ANCHOR_DRAFT_1",
+    researchScope: "four_anchor_stratified_operational_frame_only",
+    anchorIcaos: ["WSSS", "OMAA", "SKBO", "YSSY"],
+    historicalYssyCreditReconciliationPassed: false,
+    historicalOriginalFiveAnchorGate2Passed: false,
     operationalPhase6StartAuthorized: false,
   };
 }
