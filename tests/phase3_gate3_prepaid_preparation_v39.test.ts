@@ -41,9 +41,11 @@ pgSuite("Gate3 draft preparation durable atomic source in disposable PG",()=>{
   it("creates same-ID logged owner and unlogged session and refuses repeated arm",async()=>{
     const client=new pg.Client({connectionString:url,connectionTimeoutMillis:8000});
     await client.connect();
+    let preparedSessionId:string|null=null;
     try{
       const input={...base(),nowUtc:new Date()};
       const created=await prepareGate3CanaryDraftV39(client,input);
+      preparedSessionId=created.sessionId;
       expect(created).toMatchObject({
         icao:"YSSY",state:"PREPARED",runtimeState:"armed",
         canaryCreditCeiling:20,fixedExposureSeconds:300,
@@ -70,8 +72,20 @@ pgSuite("Gate3 draft preparation durable atomic source in disposable PG",()=>{
         "SELECT count(*)::int AS n FROM clean.phase3_gate3_canary_owner_v39 WHERE state='PREPARED'",
       );
       expect(preserved.rows[0].n).toBe(1);
-      // This disposable CI database is destroyed after workflow, not a live
-      // user dataset; never cleanup live source evidence here.
-    }finally {await client.end();}
+      // Keep the immutable audit trail but terminalize this synthetic
+      // canary, so the second offline/full CI pass can start from a clean
+      // operator-admission state. Never DELETE a real source/owner.
+    }finally {
+      if(preparedSessionId){
+        await client.query(
+          `UPDATE clean.phase3_gate3_canary_owner_v39
+              SET state='FAILED',failure_reason='synthetic_disposable_test_end',
+                  evidence_sha256=$2,terminal_at_utc=now()
+            WHERE session_id=$1 AND state='PREPARED'`,
+          [preparedSessionId,"f".repeat(64)],
+        ).catch(()=>undefined);
+      }
+      await client.end();
+    }
   },30000);
 });
