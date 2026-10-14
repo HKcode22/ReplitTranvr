@@ -16,6 +16,7 @@ const files: Readonly<Record<keyof Gate3SourceSnapshotV39,string>> = {
   legacyCanary: "scripts/credit_canary.ts",
   legacyWrapper: "scripts/v39_gate3_canary_v39.ts",
   legacyReadiness: "server/lib/disruption/gate3CanaryReceiverReadiness_v39.ts",
+  baselineSessionSchema: "migrations/baseline/B0062__v39_schema_baseline_20261001.sql",
 };
 export function runGate3SourceReviewReadonlyV39(
   args: readonly string[] = process.argv.slice(2),
