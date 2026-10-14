@@ -23,7 +23,7 @@ Found in `server/lib/disruption/gates_v3.ts`: the `evaluateGate05` measurement i
 ## Evidence / test status at checkpoint creation
 
 - PR #36 prior exact source head `dac5ec10eb02bee00daceaffb25a5a5ada7c785b` passed four no-provider workflows (#38541183703, #38541183502, #38541183518, #38541183348). This does NOT prove the new source patch.
-- New Gate05 **test commit** `56ea564ff3b6634125bff2bb6a97c2ac2902df48`: public receiver identity #38568945152 **PASS**, real PostgreSQL faults #38568945071 **PASS**, focused no-provider #38568945170 **PASS**; full offline safety #38568945278 **IN_PROGRESS when checkpoint authored**, do not claim PASS until verified.
+- New Gate05 **test commit** `56ea564ff3b6634125bff2bb6a97c2ac2902df48` **ALL FOUR CI PASS**, independently re-queried: public receiver identity [#38568945152](https://github.com/HKcode22/ReplitTranvr/actions/runs/38568945152) PASS; real PostgreSQL faults [#38568945071](https://github.com/HKcode22/ReplitTranvr/actions/runs/38568945071) PASS; focused no-provider [#38568945170](https://github.com/HKcode22/ReplitTranvr/actions/runs/38568945170) PASS; full offline safety [#38568945278](https://github.com/HKcode22/ReplitTranvr/actions/runs/38568945278) PASS. Full offline job also reports typecheck, offline tests, full suite, lint, traceability, contradiction scanner, migrations and production build succeeded. These prove the tested **draft code SHA**, not deployment/live gate.
 - NO local Replit shell executions or hosted runtime verification in this session. GitHub connector code edits and CI inspection only.
 
 ## Finances, source custody and safety
