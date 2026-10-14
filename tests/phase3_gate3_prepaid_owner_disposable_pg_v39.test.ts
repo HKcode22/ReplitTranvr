@@ -75,8 +75,8 @@ suite("Phase3 Gate3 real disposable-PG LOGGED owner before UNLOGGED prepaid runt
       await client.query("SAVEPOINT wrong_cost");
       await expect(client.query(
         `UPDATE clean.phase3_gate3_canary_owner_v39
-         SET state='SETTLED',balance_before=500,balance_stable=498,
-             external_credits=2,internal_received_credits=1,
+         SET state='SETTLED',exact_reconciliation_verified=true,
+             internal_received_credits=0,
              stable_read_count=3,owned_subscription_delete_verified=true,
              foreign_billable_count=0,evidence_sha256=$2,
              terminal_at_utc=now()
@@ -87,8 +87,8 @@ suite("Phase3 Gate3 real disposable-PG LOGGED owner before UNLOGGED prepaid runt
 
       await client.query(
         `UPDATE clean.phase3_gate3_canary_owner_v39
-         SET state='SETTLED',balance_before=500,balance_stable=498,
-             external_credits=2,internal_received_credits=2,
+         SET state='SETTLED',exact_reconciliation_verified=true,
+             internal_received_credits=2,
              stable_read_count=3,owned_subscription_delete_verified=true,
              foreign_billable_count=0,evidence_sha256=$2,
              terminal_at_utc=now()
@@ -97,7 +97,7 @@ suite("Phase3 Gate3 real disposable-PG LOGGED owner before UNLOGGED prepaid runt
       );
       await client.query("SAVEPOINT mutate_terminal");
       await expect(client.query(
-        "UPDATE clean.phase3_gate3_canary_owner_v39 SET external_credits=3 WHERE session_id=$1",
+        "UPDATE clean.phase3_gate3_canary_owner_v39 SET internal_received_credits=3 WHERE session_id=$1",
         [session],
       )).rejects.toThrow(/terminal receipt immutable/);
       await client.query("ROLLBACK TO SAVEPOINT mutate_terminal");
