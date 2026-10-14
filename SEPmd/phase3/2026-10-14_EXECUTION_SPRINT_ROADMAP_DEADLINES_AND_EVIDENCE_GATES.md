@@ -49,3 +49,13 @@ Dates below are TARGET REVIEW/DESIRED COMPLETION, **not a promise** that unsafe/
 - Keep [PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36) for Phase3 offline code experiments, [PR #37](https://github.com/HKcode22/ReplitTranvr/pull/37) for approved qualified Phase2 closeout, [issue #28](https://github.com/HKcode22/ReplitTranvr/issues/28) for Replit incident durability/root-cause/Phase6 risk.
 - Use a separate GitHub tracking issue for this finite sprint, keyed by targets, red/green evidence and reforecast. Never mark future-target "DONE" from a successful synthetic fixture alone.
 - At next session: (i) recheck PRs/main exact SHA and CI; (ii) prioritize P2G24 Oct15 retention and Gate3 independent source contract; (iii) implement new Gate3 owner/schema testable offline; (iv) checkpoint changes. No manual paid dispatch.
+
+## 2026-10-14 exact PostgreSQL schema discovery (changes Gate3 owner estimate)
+
+Direct source review of immutable `migrations/baseline/B0062__v39_schema_baseline_20261001.sql` confirms **two independent CHECK constraints** on `clean.prepaid_probe_session_runtime`:
+- `prepaid_probe_session_runtime_owner_kind_check` only permits `phase2_safety_smoke` and `anchor_probe`.
+- `prepaid_probe_session_runtime_check2` only permits an anchor with nonnull `owner_probe_id`, stage 1/2, ICAO, or Phase2 safety-smoke with stage NULL. It has **no Gate3 record shape**. This runtime is `UNLOGGED`, so a restart can erase it, and independent LOGGED owner/source-custody and reconciliation receipts must be designed.
+
+Thus changing only the TypeScript union or reusing an anchor-probe label would be **incorrect**: even a successful transpile would hit SQL CHECK failure or falsify Gate2 measurements. **Gate3 needs a separately reviewed additive migration and independent canary lifecycle/ledger**, with disposable PostgreSQL migration/restart tests before any live write. The initial Oct16 design gate should explicitly pin these constraints and the new session/canary schema. The 12–20 engineering-hour implementation estimate is provisional, not a guarantee; reforecast after SQL design review if a durable journal/runner requires more work.
+
+Latest new *read-only source checker* is `server/lib/disruption/gate3SourceCompatibilityReview_v39.ts`, `scripts/v39_gate3_source_compatibility_readonly_v39.ts` and `tests/phase3_gate3_source_compatibility_review_v39.test.ts`, source/test commit `60c873ed28f5187739562231b156a0574aad67ae`. Exact 4/4 zero-provider CI **PASS**: focused #38576150738, real PG faults #38576151111, published receiver read-only #38576150893, full offline #38576151055. It prints BLOCKED by design for the current incompatible legacy owner. Passing this checker is NOT the paid receiver proof.
