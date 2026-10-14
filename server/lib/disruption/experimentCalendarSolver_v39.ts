@@ -144,7 +144,8 @@ function solveCalendarByAnchorPolicy(
     return { status: "UNSAT", reason: "REST budget infeasible/unknown", days: [], calendarHash: null };
   }
   if (mode === "draft-exploratory-three") {
-    const projectedTotal = Object.values(input.projectedAlertCreditsByRunDay).slice(0, 31)
+    const projectedTotal = Array.from({ length: 31 }, (_, index) =>
+      input.projectedAlertCreditsByRunDay[String(index + 1)])
       .reduce((sum, value) => sum + value, 0);
     // Frozen original Plan ceiling, NOT a 31 x 1900 spending target.
     if (!Number.isSafeInteger(projectedTotal) || projectedTotal > 57_900) {
