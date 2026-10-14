@@ -40,16 +40,18 @@ CREATE TABLE clean.phase3_gate3_canary_owner_v39 (
   authorization_evidence_sha256 TEXT NOT NULL
     CHECK (authorization_evidence_sha256 ~ '^[0-9a-f]{64}$'),
   canary_credit_ceiling INTEGER NOT NULL
-    CHECK (canary_credit_ceiling BETWEEN 1 AND 1900),
+    CHECK (canary_credit_ceiling BETWEEN 1 AND 100),
   fixed_exposure_seconds INTEGER NOT NULL
-    CHECK (fixed_exposure_seconds BETWEEN 1 AND 86400),
+    CHECK (fixed_exposure_seconds BETWEEN 1 AND 3600),
   created_at_utc TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at_utc TIMESTAMPTZ NOT NULL,
   state TEXT NOT NULL DEFAULT 'PREPARED'
     CHECK (state IN ('PREPARED','SETTLED','FAILED')),
-  balance_before INTEGER CHECK (balance_before IS NULL OR balance_before >= 0),
-  balance_stable INTEGER CHECK (balance_stable IS NULL OR balance_stable >= 0),
-  external_credits INTEGER CHECK (external_credits IS NULL OR external_credits >= 0),
+  -- Do NOT persist actual provider account balances or exact external credit
+  -- deltas in LOGGED research tables. Calculate these strictly in owner
+  -- memory, verify equality there, store only a boolean+evidence digest.
+  -- This is NOT a substitute for real provider receipt verification.
+  exact_reconciliation_verified BOOLEAN,
   internal_received_credits INTEGER
     CHECK (internal_received_credits IS NULL OR internal_received_credits >= 0),
   stable_read_count INTEGER CHECK (stable_read_count IS NULL OR stable_read_count >= 3),
@@ -68,8 +70,8 @@ CREATE TABLE clean.phase3_gate3_canary_owner_v39 (
   -- stable timing or provider subscription ownership verification.
   CONSTRAINT phase3_g3_canary_terminal_shape_v39 CHECK (
     (state='PREPARED'
-       AND balance_before IS NULL AND balance_stable IS NULL
-       AND external_credits IS NULL AND internal_received_credits IS NULL
+       AND exact_reconciliation_verified IS NULL
+       AND internal_received_credits IS NULL
        AND stable_read_count IS NULL
        AND owned_subscription_delete_verified IS NULL
        AND foreign_billable_count IS NULL
@@ -78,10 +80,10 @@ CREATE TABLE clean.phase3_gate3_canary_owner_v39 (
     OR
     (state='SETTLED' AND failure_reason IS NULL
        AND terminal_at_utc IS NOT NULL
-       AND balance_before IS NOT NULL AND balance_stable IS NOT NULL
-       AND external_credits IS NOT NULL AND external_credits > 0
-       AND external_credits = balance_before - balance_stable
-       AND external_credits = internal_received_credits
+       AND exact_reconciliation_verified IS TRUE
+       AND internal_received_credits IS NOT NULL
+       AND internal_received_credits > 0
+       AND internal_received_credits <= canary_credit_ceiling
        AND stable_read_count >= 3
        AND owned_subscription_delete_verified IS TRUE
        AND foreign_billable_count = 0
