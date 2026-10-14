@@ -33,6 +33,16 @@ describe("Phase3 Gate3 additive SQL is owned, logged and NO paid authorization",
     ])expect(sql).toContain(s);
     expect(sql).not.toMatch(/raw_body|access_token|api_key|webhook_secret|private_key/i);
   });
+  it("blocks direct UNLOGGED canary session insertion without independent LOGGED owner",()=>{
+    expect(sql).toContain("CREATE FUNCTION clean.guard_gate3_prepaid_runtime_session_v39()");
+    expect(sql).toContain("REFUSED_GATE3_CANARY_DURABLE_OWNER_REQUIRED");
+    expect(sql).toContain("owner.session_id=NEW.session_id");
+    expect(sql).toContain("owner.icao=NEW.icao");
+    expect(sql).toContain("owner.state='PREPARED'");
+    expect(sql).toContain("owner.expires_at_utc >= NEW.expires_at_utc");
+    expect(sql).toContain("CREATE TRIGGER trg_guard_gate3_prepaid_runtime_session_v39");
+    expect(sql).toContain("Prepaid session owner kind/identity immutable");
+  });
   it("requires a new audit ref/paid AUTH and cannot claim Gate3 is already live",()=>{
     expect(sql).toContain("canary_credit_ceiling BETWEEN 1 AND 1900");
     expect(sql).toContain("state='PREPARED'");
