@@ -62,8 +62,8 @@ export function auditMlPilotInputV39(
   const boundValid=split!==null && typeof split==="object" &&
     isIso(split.trainBeforeUtc) && isIso(split.validationBeforeUtc) &&
     isIso(split.testBeforeUtc) &&
-    split.trainBeforeUtc<split.validationBeforeUtc &&
-    split.validationBeforeUtc<split.testBeforeUtc &&
+    Date.parse(split.trainBeforeUtc)<Date.parse(split.validationBeforeUtc) &&
+    Date.parse(split.validationBeforeUtc)<Date.parse(split.testBeforeUtc) &&
     Array.isArray(split.featureNames) && split.featureNames.length>0 &&
     split.featureNames.every(x=>typeof x==="string"&&x.length>0) &&
     new Set(split.featureNames).size===split.featureNames.length;
@@ -81,7 +81,7 @@ export function auditMlPilotInputV39(
       if(!isSha(row.originSourceSha256)){flag("SOURCE_SHA_UNVERIFIED");continue;}
       if(!isIso(row.predictionCutoffUtc)) {flag("INVALID_PREDICTION_CUTOFF");continue;}
       if(!isIso(row.labelObservedAtUtc) ||
-        row.labelObservedAtUtc<=row.predictionCutoffUtc ||
+        Date.parse(row.labelObservedAtUtc)<=Date.parse(row.predictionCutoffUtc) ||
         row.labelIsActual!==true ||
         typeof row.delayMinutes!=="number" || !Number.isFinite(row.delayMinutes)){
         flag("LABEL_NOT_OBSERVED_ACTUAL_AFTER_CUTOFF");continue;
@@ -97,15 +97,15 @@ export function auditMlPilotInputV39(
       for(const name of split.featureNames){
         const value=row.featureValues[name],available=row.featureAvailableAtUtc[name];
         if(typeof value!=="number"||!Number.isFinite(value) ||
-           !isIso(available)||available>row.predictionCutoffUtc) {
+           !isIso(available)||Date.parse(available)>Date.parse(row.predictionCutoffUtc)) {
           badFeature=true;break;
         }
       }
       if(badFeature){flag("FUTURE_OR_UNVERIFIED_FEATURE");continue;}
-      const stamp=row.predictionCutoffUtc;
-      if(stamp>=split.testBeforeUtc){flag("OUTSIDE_FROZEN_EXPLORATORY_WINDOW");continue;}
-      const part:MlPilotPartitionV39=stamp<split.trainBeforeUtc?"TRAIN":
-        stamp<split.validationBeforeUtc?"VALIDATION":"EXPLORATORY_TEST";
+      const stamp=Date.parse(row.predictionCutoffUtc);
+      if(stamp>=Date.parse(split.testBeforeUtc)){flag("OUTSIDE_FROZEN_EXPLORATORY_WINDOW");continue;}
+      const part:MlPilotPartitionV39=stamp<Date.parse(split.trainBeforeUtc)?"TRAIN":
+        stamp<Date.parse(split.validationBeforeUtc)?"VALIDATION":"EXPLORATORY_TEST";
       const existing=identities.get(row.flightInstanceId);
       if(existing && existing!==part){cross=true;flag("CROSS_PARTITION_FLIGHT_ID");continue;}
       identities.set(row.flightInstanceId,part);
