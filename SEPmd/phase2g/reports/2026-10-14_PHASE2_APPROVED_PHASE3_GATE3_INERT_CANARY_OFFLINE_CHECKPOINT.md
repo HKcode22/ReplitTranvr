@@ -37,3 +37,17 @@ These tests/model are useful **preparation**, not hosted published HTTP+durable 
 5. Keep YSSY retained originals in purpose/legal permitted custody until scheduled expiry starting 2026-10-20T03:06:15Z and ending 05:02:12Z. Before deletion inspect scoped retention dry-run, only separately authorized expiry cleanup and per-object tombstones, then independently approved internal incident31 disposition. Do not use missing-session exact-session `--apply` and do not rewrite probe19.
 
 **Scientific limits:** 229/231 = 99.134% externally billed credits reconciled, not a statistically sampled callback-delivery probability. Unknown missingness may bias any extrapolation. Gate3 live readiness has no evidence yet and no authority to use the provider.
+
+---
+
+## Addendum — verified post-code CI and new Phase3 architecture report (2026-10-14)
+
+The exact CLI+negative-tests **executable source commit** `7a87be3cd183ba57d5e63cb545e06b4777c486ed` is independently verified **4/4 zero-provider GitHub Actions PASS**:
+- Full V3.9 Offline Safety [#38572998160](https://github.com/HKcode22/ReplitTranvr/actions/runs/38572998160) **PASS**.
+- Focused release no-provider [#38572998181](https://github.com/HKcode22/ReplitTranvr/actions/runs/38572998181) **PASS**.
+- Real PostgreSQL fault suite (no paid provider) [#38572998230](https://github.com/HKcode22/ReplitTranvr/actions/runs/38572998230) **PASS**.
+- Published receiver identity read-only check [#38572997990](https://github.com/HKcode22/ReplitTranvr/actions/runs/38572997990) **PASS**.
+
+This verifies the **offline executable source**, not a real hosted Gate3 canary. Later docs-only commits do not alter these source/tests. New [Phase3 Gate3 exact-session implementation and failure matrix](../../phase3/2026-10-14_GATE3_PREPAID_EXACT_SESSION_IMPLEMENTATION_AND_TEST_PLAN.md) explains the actual new owner/session/ledger, published endpoint preflight, refusal boundaries and zero-provider HTTP/disposable PG tests that remain before any paid AUTH. Its own docs-head CI was in-progress at first read; inspect independently.
+
+**Important advancement:** this session **did not** request a new Phase2 Stage1 attempt. The project owner's approval is captured in separate PR37's science-scope amendment. Phase2 qualified pilot is CLOSED, original strict Gate2 NOT PASSED, Phase3 offline GO / Phase3 paid NO-GO. No main merge, deploy, provider call or source deletion.
