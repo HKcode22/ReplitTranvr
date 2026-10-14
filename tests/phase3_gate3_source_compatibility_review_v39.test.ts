@@ -14,6 +14,7 @@ const current=():Gate3SourceSnapshotV39=>({
   legacyCanary:sourceFile("scripts/credit_canary.ts"),
   legacyWrapper:sourceFile("scripts/v39_gate3_canary_v39.ts"),
   legacyReadiness:sourceFile("server/lib/disruption/gate3CanaryReceiverReadiness_v39.ts"),
+  baselineSessionSchema:sourceFile("migrations/baseline/B0062__v39_schema_baseline_20261001.sql"),
 });
 describe("Phase3 zero-provider compatibility inventory",()=>{
   it("must see real source incompatibilities instead of treating YSSY approval as paid Gate3",()=>{
@@ -21,6 +22,7 @@ describe("Phase3 zero-provider compatibility inventory",()=>{
     expect(result.status).toBe("BLOCKED_SOURCE_CONTRACT");
     expect(result.blockers).toEqual(expect.arrayContaining([
       "DEDICATED_GATE3_SESSION_OWNER_KIND_NOT_IMPLEMENTED",
+      "BASELINE_SQL_REJECTS_GATE3_OWNER_KIND_NEEDS_ADDITIVE_MIGRATION",
       "LEGACY_CANARY_STILL_USES_NONPREPAID_LEDGER",
       "GATE3_WRAPPER_STILL_DELEGATES_LEGACY_CANARY",
     ]));
