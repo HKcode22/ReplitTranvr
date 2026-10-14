@@ -23,8 +23,8 @@ describe("Phase3 Gate3 additive SQL is owned, logged and NO paid authorization",
       "authorization_evidence_sha256 TEXT NOT NULL",
       "canary_credit_ceiling INTEGER NOT NULL",
       "state IN ('PREPARED','SETTLED','FAILED')",
-      "external_credits = balance_before - balance_stable",
-      "external_credits = internal_received_credits",
+      "exact_reconciliation_verified IS TRUE",
+      "internal_received_credits <= canary_credit_ceiling",
       "stable_read_count >= 3",
       "owned_subscription_delete_verified IS TRUE",
       "foreign_billable_count = 0",
@@ -32,6 +32,9 @@ describe("Phase3 Gate3 additive SQL is owned, logged and NO paid authorization",
       "Gate3 owner identity and budget cannot be rewritten",
     ])expect(sql).toContain(s);
     expect(sql).not.toMatch(/raw_body|access_token|api_key|webhook_secret|private_key/i);
+    // Vendor account balances and external delta are forbidden in LOGGED
+    // source-safe Gate3 metadata; reconciliation occurs in volatile memory.
+    expect(sql).not.toMatch(/balance_before\s+INTEGER|balance_stable\s+INTEGER|external_credits\s+INTEGER/i);
   });
   it("blocks direct UNLOGGED canary session insertion without independent LOGGED owner",()=>{
     expect(sql).toContain("CREATE FUNCTION clean.guard_gate3_prepaid_runtime_session_v39()");
@@ -44,10 +47,10 @@ describe("Phase3 Gate3 additive SQL is owned, logged and NO paid authorization",
     expect(sql).toContain("Prepaid session owner kind/identity immutable");
   });
   it("requires a new audit ref/paid AUTH and cannot claim Gate3 is already live",()=>{
-    expect(sql).toContain("canary_credit_ceiling BETWEEN 1 AND 1900");
+    expect(sql).toContain("canary_credit_ceiling BETWEEN 1 AND 100");
     expect(sql).toContain("state='PREPARED'");
     expect(sql).toContain("state='SETTLED'");
-    expect(sql).toContain("external_credits > 0");
+    expect(sql).toContain("internal_received_credits > 0");
     expect(sql).toContain("CREATE TRIGGER phase3_gate3_canary_owner_guard_v39");
     expect(sql).not.toMatch(/CREATE SUBSCRIPTION|HTTP|CALL .*provider/i);
   });
