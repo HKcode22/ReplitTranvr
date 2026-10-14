@@ -434,10 +434,20 @@ export function registerV3Routes(app:Express):void{
       console.log(`[adb-v3-webhook] received=${flights.length} resolved=${rows.length} quarantined=${extracted.length-resolved.length} skipped=${skipped} stored=${stats.stored} sub=${subId??"-"} ms=${Date.now()-startedAt}`);res.status(200).json({received:true,flights:flights.length,stored:stats.stored,skipped});
     }catch(err:any){
       console.error("[adb-v3-webhook] semantic processing error after raw durability:",err?.message||err);
-      if(rawDeliveryIdForCatch){await recordIncident("persistence",{deliveryId:rawDeliveryIdForCatch,subscriptionId:typeof req.body?.subscription?.id==="string"?req.body.subscription.id:null,error:String(err?.message||"error").slice(0,500)});await updateRawDeliveryOutcome(rawDeliveryIdForCatch,"failed",flightsForCatch.length,String(err?.message||"error").slice(0,500));}
+      // A secondary diagnostic failure must NEVER swallow an HTTP 5xx.
+      // The original legacy handler incorrectly returned HTTP 200 on
+      // semantic-processing failure after raw durability.
+      if(rawDeliveryIdForCatch){
+        try{
+          await recordIncident("persistence",{deliveryId:rawDeliveryIdForCatch,subscriptionId:typeof req.body?.subscription?.id==="string"?req.body.subscription.id:null,error:String(err?.message||"error").slice(0,500)});
+        }catch{console.error("[adb-v3-webhook] secondary incident write failed (redacted)");}
+        try{
+          await updateRawDeliveryOutcome(rawDeliveryIdForCatch,"failed",flightsForCatch.length,String(err?.message||"error").slice(0,500));
+        }catch{console.error("[adb-v3-webhook] secondary outcome update failed (redacted)");}
+      }
       try{await pool.query(`INSERT INTO clean.adb_ingest_events(subscription_id,batch_id,notification_items,delivery_failure,error) VALUES($1,$2,0,true,$3)`,[typeof req.body?.subscription?.id==="string"?req.body.subscription.id:null,samplingForCatch?.batchId??null,String(err?.message||"error").slice(0,500)]);}catch(ledgerErr:any){console.error("[adb-v3-webhook] failure-ledger write failed:",ledgerErr?.message||ledgerErr);}
       try{if(rawDeliveryIdForCatch)await persistProcessingAttempt({deliveryId:rawDeliveryIdForCatch,attemptIndex:1,parserVersion:"flightNotificationExtractor_v3",schemaVersion:"v3.9-f.8",outcome:"failed",itemsReceived:flightsForCatch.length,itemsParsed:0,itemsStored:0,itemsSkipped:0,itemsFailed:flightsForCatch.length,validationErrors:null,parseErrors:[String(err?.message||"error").slice(0,500)],storageErrors:null,errorMessage:String(err?.message||"error").slice(0,500),startedAtUtc:receivedAtForCatch??new Date(startedAt),completedAtUtc:new Date(),durationMs:Date.now()-startedAt,upsertResult:null,researchEventsAppended:false,ingestEventWritten:false});}catch(attemptErr:any){console.error("[adb-v3-webhook] failed-attempt write failed:",attemptErr?.message||attemptErr);}
-      res.status(200).json({received:true,error:err?.message||"error"});
+      if(!res.headersSent)res.status(503).json({received:false,error:"Semantic webhook processing failed"});
     }
   };
 
