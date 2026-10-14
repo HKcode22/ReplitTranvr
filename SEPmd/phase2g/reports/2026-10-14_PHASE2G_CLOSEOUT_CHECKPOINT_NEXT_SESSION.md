@@ -26,3 +26,17 @@
 NIST SP1500-18r2 research data fit-for-purpose and data-quality dimensions; ISO/IEC 25012 structured data-quality characteristics; STROBE observational missingness disclosure/sensitivity analysis. These justify structured measurement disclosure, **not** any universal 1% PASS law. Reference report: `2026-10-14_P25_SCIENTIFIC_QUALITY_DIMENSIONS_AND_GAP_PREVENTION.md`.
 
 **Owner approval boundaries:** no Merge to protected main, Replit publish, AeroDataBox credit spend/refill, provider subscription create/delete, DB incident mutation, object deletion, or replacement protocol without explicit user/operator confirmation and exact audited preflight.
+
+---
+
+## 2026-10-14 terminal disposition continuation — no more Phase-2 pilot paid work pending
+
+**New complete documents:**
+- [Terminal fieldwork/exception boundary](2026-10-14_PHASE2G_TERMINAL_FIELDWORK_CLOSEOUT_AND_EXCEPTION_BOUNDARY.md): closes **observational work** at five measured sites; original frozen Gate2 remains NOT PASSED (three formally eligible); distinguishes researcher-facing qualified YSSY pilot inclusion from future live Gate3 acceptance.
+- [Machine-readable terminal disposition and *unsigned* exception proposal](2026-10-14_PHASE2G_TERMINAL_DISPOSITION_AND_ENTRY_EXCEPTION_DRAFT.json): records independent evidence axes and no paid-authority fields.
+
+**Nothing else to collect in Stage1/automatic Stage2 for this Oct2 early pilot.** Original 5-anchor Gate2 cannot be retrospectively certified. The study's *terminal scientific observation report* can be closed with exceptions without another paid YSSY/LKPR/Stage2 test. If a new **live Phase3 entry under reduced exploratory-only pilot scope** is intended, independent review and explicit owner scientist authorization of a separately versioned scope/entry amendment is still needed; original Gate2 PASS and historical P25 delivery gap remain unchanged.
+
+**Remaining technical lifecycle:** internal incident31 (not PR #31) and 58 SHA-verified objects retain until authorized Oct20 expiry/TTL and tombstone verification; separate cleanup authorization required, no pre-expiry deletions. Last production billable count was zero at earlier operator audit, not revalidated live today. Incident closure must not rewrite probe19. Live Gate3 no-go until publication/receiver parity and exact 0-gap compatible canary approved; **offline Phase3 engineering can proceed now**.
+
+**This session action:** updated docs-only PR37 only. No provider, database, deletion, refill, Replit deployment, merge, historical outcome rewrite, or paid-authorized change. Exact baseline main `f5b1347b7b9aebd6830302394ea2cc5775aedbf4` confirmed earlier in this session. Check PR37's new head and all no-provider CI before merging. Existing draft PR36 contains executable code and must stay separately reviewed.
