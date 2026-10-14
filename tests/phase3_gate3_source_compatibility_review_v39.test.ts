@@ -15,6 +15,7 @@ const current=():Gate3SourceSnapshotV39=>({
   legacyWrapper:sourceFile("scripts/v39_gate3_canary_v39.ts"),
   legacyReadiness:sourceFile("server/lib/disruption/gate3CanaryReceiverReadiness_v39.ts"),
   baselineSessionSchema:sourceFile("migrations/baseline/B0062__v39_schema_baseline_20261001.sql"),
+  additiveCanarySchema:sourceFile("migrations/current/V0065__phase3_gate3_prepaid_canary_owner_v39.sql"),
 });
 describe("Phase3 zero-provider compatibility inventory",()=>{
   it("must see real source incompatibilities instead of treating YSSY approval as paid Gate3",()=>{
@@ -22,7 +23,6 @@ describe("Phase3 zero-provider compatibility inventory",()=>{
     expect(result.status).toBe("BLOCKED_SOURCE_CONTRACT");
     expect(result.blockers).toEqual(expect.arrayContaining([
       "DEDICATED_GATE3_SESSION_OWNER_KIND_NOT_IMPLEMENTED",
-      "BASELINE_SQL_REJECTS_GATE3_OWNER_KIND_NEEDS_ADDITIVE_MIGRATION",
       "LEGACY_CANARY_STILL_USES_NONPREPAID_LEDGER",
       "GATE3_WRAPPER_STILL_DELEGATES_LEGACY_CANARY",
     ]));
@@ -31,6 +31,15 @@ describe("Phase3 zero-provider compatibility inventory",()=>{
     expect(result.livePublishedVerified).toBe(false);
     expect(result.providerCalls).toBe(0);
     expect(result.databaseMutations).toBe(0);
+  });
+  it("fails closed when reviewed forward-only Gate3 owner SQL is removed",()=>{
+    const snapshot=current();
+    const verdict=reviewGate3SourceCompatibilityV39({
+      ...snapshot,additiveCanarySchema:"",
+    });
+    expect(verdict.blockers).toContain(
+      "ADDITIVE_GATE3_SQL_OWNER_AND_DURABLE_RECEIPT_MISSING");
+    expect(verdict.authorizedPaidCanary).toBe(false);
   });
   it("hard detects removal or relocation of legacy paid guard",()=>{
     const snapshot=current();
