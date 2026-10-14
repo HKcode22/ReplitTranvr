@@ -52,6 +52,7 @@ describe("four-anchor prospective exploratory calendar, NEVER production AUTH",(
   });
   it("SATs 31 windows/5 matched crossover comparisons with 4 unique anchor ICAOs",()=>{
     const x=fixture(),r=solveV39FourAnchorExploratoryDraft(x);
+    expect(r.reason, "four-anchor UNSAT diagnostic").toBeNull();
     expect(r).toMatchObject({
       status:"SAT",
       studyVersion:"V39_EXPLORATORY_FOUR_ANCHOR_DRAFT_1",
