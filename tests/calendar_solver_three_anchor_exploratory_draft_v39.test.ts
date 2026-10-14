@@ -61,6 +61,7 @@ describe("PROPOSAL-ONLY V39 three verified anchors, five paired contrasts",()=>{
   });
   it("new explicitly named draft can construct 31 days without promoting original Gate2",()=>{
     const x=fixture(), r=solveV39ThreeAnchorExploratoryDraft(x);
+    expect(r.reason, "three-anchor UNSAT diagnostic").toBeNull();
     expect(r).toMatchObject({
       status:"SAT",
       studyVersion:"V39_EXPLORATORY_THREE_ANCHOR_DRAFT_1",
