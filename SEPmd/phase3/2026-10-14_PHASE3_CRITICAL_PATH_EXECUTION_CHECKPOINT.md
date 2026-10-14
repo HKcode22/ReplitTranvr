@@ -23,7 +23,7 @@
 | **Oct15 18:00 PDT** | P2G24 earlier 30 originals licensed/derived-source triage **before first expiry 21:02:22** | 1–3 |
 | **Oct16 17:00 PDT** | Gate3 new owned-kind + additive CHECK/schema design, source compat review | 6–10 |
 | **Oct19 17:00 PDT** | Isolated prepaid Gate3 owner/source ledger implementation review | 12–20 |
-| **Oct19 19:00 PDT** | YSSY 58 refs/legal derived work review before **Oct19 20:06:15** first expiry | 2–4 |
+| **Oct18 17:00 PDT** | YSSY 58 refs/legal derived work review before **Oct19 20:06:15** first expiry | 2–4 |
 | **Oct20 17:00 PDT** | Scoped expiry dry-run, decision. **Last source expiry Oct19 22:02:12** | 2–4 |
 | **Oct21 18:00 PDT** | HTTP+disposable PG crash/fault/adversarial tests, tol=0, settlement 3+ | 8–12 |
 | **Oct22 18:00 PDT** | Real hosted no-provider synthetic **120m** rehearsal & receipts, separately authorized hosted/staging environment | 4–8 active +120m elapsed |
@@ -57,3 +57,5 @@ After the first fully passing source checker, made a narrow **source/CLI/test** 
 **Independently verified all 4 no-provider GitHub CI PASS on exact executable code SHA `365a58bc483bd3c93bd55ac8b65470f99a855790`:** [V3.9 Offline Safety #38578125890](https://github.com/HKcode22/ReplitTranvr/actions/runs/38578125890), [focused release #38578125780](https://github.com/HKcode22/ReplitTranvr/actions/runs/38578125780), [real PG faults #38578125726](https://github.com/HKcode22/ReplitTranvr/actions/runs/38578125726), [public receiver identity #38578125822](https://github.com/HKcode22/ReplitTranvr/actions/runs/38578125822). No new Phase3 owner/migration has been created; the output is **BLOCKED** accurately, not a canary PASS. Future compatibility review must inspect the actual **effective additive migration**, not mistake the unchanged historical B0062 baseline for current live constraints.
 
 **Next exact engineering step:** review Postgres CHECK migration conventions + current V0063/64, design new dedicated canary owner and independent LOGGED receipt without distorting anchor labels, implement migration and disposable-PG negative tests in PR36; simultaneously track October 15 P2G24 source deadline and October 19 YSSY deadline. Previous [roadmap](2026-10-14_EXECUTION_SPRINT_ROADMAP_DEADLINES_AND_EVIDENCE_GATES.md) and [issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38) control target dates. No paid provider or production mutation from this work.
+
+**Scheduling correction (same date):** pre-expiry YSSY source/purpose audit moves to **Oct18 at 17:00 PDT**, before the Oct19 evening TTL window and without overlapping the Oct19 new Gate3 owner code review. **Oct23 is a stretch Gate3 go/HOLD review**, Oct30 is the contingency reforecast checkpoint if integration/host evidence slips. The change is recorded in GitHub issue #38 and roadmap; no work is auto-executed by a deadline.
