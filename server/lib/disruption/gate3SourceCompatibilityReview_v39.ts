@@ -12,6 +12,7 @@ export type Gate3SourceSnapshotV39 = Readonly<{
   legacyCanary: string;
   legacyWrapper: string;
   legacyReadiness: string;
+  baselineSessionSchema: string;
 }>;
 export type Gate3SourceReviewV39 = Readonly<{
   schema: "v39.gate3.source-compatibility-review.v1";
@@ -34,12 +35,12 @@ export function reviewGate3SourceCompatibilityV39(
   const blockers: string[] = [];
   const reject = (why: string) => blockers.push(why);
   if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) ||
-    (["callbackOnly","registeredRoutes","prepaidRuntime","legacyCanary","legacyWrapper","legacyReadiness"] as const).some(k => typeof snapshot[k] !== "string")) {
+    (["callbackOnly","registeredRoutes","prepaidRuntime","legacyCanary","legacyWrapper","legacyReadiness","baselineSessionSchema"] as const).some(k => typeof snapshot[k] !== "string")) {
     reject("SOURCE_SNAPSHOT_INVALID");
   } else {
     const {
       callbackOnly, registeredRoutes, prepaidRuntime,
-      legacyCanary, legacyWrapper, legacyReadiness,
+      legacyCanary, legacyWrapper, legacyReadiness, baselineSessionSchema,
     } = snapshot;
     if (!callbackOnly.includes("prepaidPath.test(req.path)") ||
         !callbackOnly.includes("registerV3Routes(app)"))
@@ -49,6 +50,12 @@ export function reviewGate3SourceCompatibilityV39(
     const ownerType = prepaidRuntime.match(/export type PrepaidProbeOwnerKindV39\s*=\s*([^;]+);/);
     if (!ownerType || !ownerType[1].includes('"phase3_credit_canary"'))
       reject("DEDICATED_GATE3_SESSION_OWNER_KIND_NOT_IMPLEMENTED");
+    if (!baselineSessionSchema.includes("CREATE UNLOGGED TABLE clean.prepaid_probe_session_runtime") ||
+        !baselineSessionSchema.includes("prepaid_probe_session_runtime_owner_kind_check") ||
+        !baselineSessionSchema.includes("prepaid_probe_session_runtime_check2"))
+      reject("BASELINE_SESSION_SQL_CONSTRAINTS_NOT_IDENTIFIED");
+    else if (!baselineSessionSchema.includes("'phase3_credit_canary'::text"))
+      reject("BASELINE_SQL_REJECTS_GATE3_OWNER_KIND_NEEDS_ADDITIVE_MIGRATION");
     if (!prepaidRuntime.includes("armPrepaidProbeSessionV39") ||
         !prepaidRuntime.includes("provider_subscription_id"))
       reject("DURABLE_PREPAID_SESSION_CONTRACT_NOT_FOUND");
