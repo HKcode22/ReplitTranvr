@@ -130,3 +130,39 @@ BEFORE INSERT OR UPDATE OR DELETE
 ON clean.phase3_gate3_canary_owner_v39
 FOR EACH ROW
 EXECUTE FUNCTION clean.guard_phase3_gate3_canary_owner_v39();
+
+-- Harden the actual PREPAID session INSERT path, not just a TS enum check.
+-- A new Gate3 session MUST have a same-id LOGGED PREPARED owner with exact
+-- ICAO and sufficient lifetime; a caller cannot bypass it by writing the
+-- UNLOGGED runtime row directly. Existing Phase2 smoke/anchor inserts do not
+-- use this new owner and remain historically unchanged.
+CREATE FUNCTION clean.guard_gate3_prepaid_runtime_session_v39()
+RETURNS trigger LANGUAGE plpgsql AS $gate3_session$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+    IF NEW.owner_kind IS DISTINCT FROM OLD.owner_kind
+       OR NEW.session_id IS DISTINCT FROM OLD.session_id THEN
+      RAISE EXCEPTION 'Prepaid session owner kind/identity immutable';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF NEW.owner_kind='phase3_credit_canary' THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM clean.phase3_gate3_canary_owner_v39 owner
+      WHERE owner.session_id=NEW.session_id
+        AND owner.icao=NEW.icao
+        AND owner.state='PREPARED'
+        AND owner.expires_at_utc >= NEW.expires_at_utc
+    ) THEN
+      RAISE EXCEPTION 'REFUSED_GATE3_CANARY_DURABLE_OWNER_REQUIRED';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$gate3_session$;
+
+CREATE TRIGGER trg_guard_gate3_prepaid_runtime_session_v39
+BEFORE INSERT OR UPDATE
+ON clean.prepaid_probe_session_runtime
+FOR EACH ROW
+EXECUTE FUNCTION clean.guard_gate3_prepaid_runtime_session_v39();
