@@ -417,7 +417,22 @@ export function registerV3Routes(app:Express):void{
       try{
         const committed=await persistRawDeliveryTransaction({subscriptionId:subId,batchId:sampling?.batchId??null,httpMethod:req.method??"POST",httpPath:req.originalUrl??req.path??null,rawBody:body,providerPublishedUtc:deliveryEvidence.notificationGeneratedUtc,providerNotificationGeneratedUtc:deliveryEvidence.notificationGeneratedUtc,receivedAtUtc:receivedAt,adbDeliveryId:deliveryEvidence.attemptId,adbCostCredits:deliveryEvidence.costCredits,notificationId:deliveryEvidence.notificationId,deliveryAttemptSeqNo:deliveryEvidence.attemptSeqNo,deliveryAttemptUtc:deliveryEvidence.attemptUtc,deliveryAttemptCostCredits:deliveryEvidence.costCredits},flights.map((flight:any,i:number)=>({itemIndex:i,flightNumber:typeof flight?.number==="string"&&flight.number?String(flight.number):typeof flight?.callSign==="string"?String(flight.callSign):null,carrierIata:flight?.airline?.iata??null,carrierIcao:flight?.airline?.icao??null,status:flight?.status!=null?String(flight.status):null,statusCode:typeof flight?.status==="number"?Math.trunc(flight.status):null,rawItem:flight,lastUpdatedUtc:dateOrNull(flight?.lastUpdatedUtc),departureScheduledUtc:dateOrNull(flight?.departure?.scheduledTime?.utc),arrivalScheduledUtc:dateOrNull(flight?.arrival?.scheduledTime?.utc),parsingOutcome:"pending",canonicalFlightInstanceId:null})));
         rawDeliveryId=committed.deliveryId;rawCommittedAtUtc=committed.committedAtUtc;
-      }catch(rawErr:any){console.error("[adb-v3-webhook] raw delivery persistence failed — returning 5xx:",rawErr?.message||rawErr);await recordIncident("raw-persistence",{error:String(rawErr?.message??rawErr),subscriptionId:subId});res.status(500).json({error:"Raw persistence failed; please retry"});return;}
+      }catch(rawErr:any){
+        // Before raw durability we must return an unambiguous 5xx promptly.
+        // A failed/unavailable diagnostic SQL path cannot delay or swallow it.
+        // The independent incident write remains best-effort and sanitized.
+        console.error("[adb-v3-webhook] raw persistence failed — returning HTTP 500 (redacted)");
+        try{
+          void recordIncident("raw-persistence",{
+            error:String(rawErr?.name??"RAW_PERSISTENCE_FAILURE").slice(0,80),
+            subscriptionId:subId,
+          }).catch(()=>console.error("[adb-v3-webhook] secondary raw incident write unavailable (redacted)"));
+        }catch{
+          console.error("[adb-v3-webhook] secondary raw incident start failed (redacted)");
+        }
+        if(!res.headersSent)res.status(500).json({error:"Raw persistence failed; please retry"});
+        return;
+      }
       rawDeliveryIdForCatch=rawDeliveryId;
 
       const extracted:ExtractedWebhookRow[]=[];let skipped=0;flights.forEach((flight:any,rawIndex:number)=>{const row=extractFlightNotification(flight,{subscription,balance,receivedAt,index:rawIndex,sampling});if(!row){skipped++;return;}extracted.push({row,rawIndex,rawFlight:flight,rawItemSha256:hashJson(flight)});});
