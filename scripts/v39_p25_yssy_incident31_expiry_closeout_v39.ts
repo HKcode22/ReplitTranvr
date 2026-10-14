@@ -1,6 +1,5 @@
 import "dotenv/config";
 import {createHash} from "node:crypto";
-import fs from "node:fs";
 import {v39Pool as pool} from "../server/lib/disruption/db_v39.ts";
 import {listSubscriptionsStrict} from "../server/lib/disruption/aerodataboxLimiter_v3.ts";
 import {assessIncident31ExpiryCloseoutV39,
@@ -14,6 +13,7 @@ import {assessIncident31ExpiryCloseoutV39,
  * and were verified deleted by the independent existing retention operator.
  * Human explicit yes + approved/reviewed version required before APPLY.
  */
+async function main(): Promise<void> {
 const SESSION="b0077437-edc1-459a-9d63-8c6e6e50c4f2";
 const BUDGET="P2G-S1-20261013-03";
 const now=new Date();
@@ -30,7 +30,6 @@ try{providerInventory=await listSubscriptionsStrict();}
 catch{throw Error("INCIDENT31_PROVIDER_READ_UNAVAILABLE");}
 const activeBillable=providerInventory.filter(s=>s.isActive&&s.billingType!=="LifetimeBased").length;
 const c=await pool.connect();
-let updated=false;
 try{
   await c.query(apply?"BEGIN":"BEGIN TRANSACTION READ ONLY");
   await c.query("SET LOCAL statement_timeout='15000ms'");
@@ -101,7 +100,6 @@ try{
     originalBytesRecorded:Number(b.bytes),
     deletedVerifiedReferences:Number(b.deleted),
     stillLiveReferences:Number(b.live),
-    latestOriginalExpiryMs:new Date(b.max_expiry).getTime(),
     contractInvalidReferences:Number(b.bad_contract)
   };
   const decision=assessIncident31ExpiryCloseoutV39(w);
@@ -149,7 +147,6 @@ try{
     [receiptSha]);
   if(resolution.rowCount!==1)throw Error("INCIDENT31_UPDATE_CONFLICT");
   await c.query("COMMIT");
-  updated=true;
   console.log(JSON.stringify({
     schema:"v39.p25.incident31.expiry-disposition.v1",
     mode:"APPLY",status:"PASS_INCIDENT31_ADMIN_RESOLVED_AFTER_TTL",
@@ -167,3 +164,8 @@ try{
   c.release();
   await pool.end();
 }
+}
+main().catch(()=>{
+  console.error("INCIDENT31_EXPIRY_DISPOSITION_PRECHECK_REFUSED_OR_ERROR");
+  process.exitCode=2;
+});
