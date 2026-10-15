@@ -5,7 +5,7 @@
 - `main=f5b1347b7b9aebd6830302394ea2cc5775aedbf4` → **108** `SEPmd/` files.
 - Unmerged PR36 `318e2c3b8223bfc417757dbe571883aecdbca589` → **150** `SEPmd/` files.
 - Their path union → **155** candidate paths in [complete manifest](manifests/2026-10-15_SEPMD_MAIN_AND_PR36_PATH_MAPPING.csv) containing original Git blob SHAs, byte sizes, status in each tree, proposed destinations, category, and move hold reasons.
-- Proposed destination *casefold collisions within this manifest*: **0**. This does NOT prove current casefold-safe checkout or future collision freedom; run full cross-tree collision scans before changing folders.
+- Proposed destination *casefold collisions within this manifest*: **0**. **2026-10-15 correction:** the original manifest still had **one collision with an existing repository file**: `SEPmd/phase2g/README.md` → `data-collection/phase2g/README.md`. That target was already the new Wave A navigation index and would have been overwritten. Its destination is now **`data-collection/phase2g/legacy-lowercase/README.md`**. [An executable full existing-tree collision check](../../scripts/repo_waveb_migration_dryrun.mjs) is now provided; run CI before trusting it. This is still NOT migration authorization.
 
 ## Confirmed case-sensitivity hazard
 
@@ -31,4 +31,4 @@ This separation is a future path candidate, **not** an endorsement that either c
 4. Generate atomic source/test/docs/ref update diff in independent cleanup branch, not within PR36, and rerun offline/typecheck/lint/build/database fixture tests.
 5. Review final exact source SHAs and owner approval before production merge, publication or any future paid action.
 
-**Current decision:** ALL proposed moves are HOLD. Only the zero-byte file is marked REVIEW_REMOVAL, not deleted.
+**Current decision:** ALL proposed moves are HOLD. Collision-free destination planning and scientific approval are separate requirements. Only the zero-byte file is marked REVIEW_REMOVAL, not deleted.
