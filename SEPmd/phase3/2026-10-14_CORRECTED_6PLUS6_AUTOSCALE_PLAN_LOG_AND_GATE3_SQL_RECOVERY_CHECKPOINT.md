@@ -40,3 +40,13 @@ Earlier October14 ChatGPT work **INCORRECTLY called Autoscale vs Reserved VM a N
 6. **User action NOW:** none needed for code safety source; the two Git Shell tests already completed. A decision about approved deployment/hosted test and exact bounded provider-paid AUTH is needed LATER once truly prepared and reviewed. No new random shell chores.
 
 All modifications made only on unmerged draft PR36: no provider API (including GET), no paid credits, no production SQL/migration, no Replit publish/change, no original deletion, no main merge, no automatic refill. Preserve this file for loss-of-chat continuity.
+
+## FINAL VERIFIED CI — supersedes initial IN_PROGRESS snapshot
+
+**Exact new source/test SHA `80f48d7cb13abc87a2d65da041298a039966ece6` has 4/4 no-provider GitHub workflows completed SUCCESS**:
+1. Full V3.9 Offline Safety [#38683314896](https://github.com/HKcode22/ReplitTranvr/actions/runs/38683314896) — `completed/success`, including Phase0 preflight, production build, TypeScript, regression suite, lint.
+2. Focused Release, No Provider [#38683314880](https://github.com/HKcode22/ReplitTranvr/actions/runs/38683314880) — `completed/success`.
+3. Disposable Real PostgreSQL Receiver Faults, No Paid Provider [#38683314890](https://github.com/HKcode22/ReplitTranvr/actions/runs/38683314890) — `completed/success`.
+4. Published Receiver Identity, Read-Only, No Provider [#38683314891](https://github.com/HKcode22/ReplitTranvr/actions/runs/38683314891) — `completed/success`.
+
+This verifies **draft Gate3 prepared-session pooled-connection recovery source/tests**, not a live Gate3 canary, provider-account integration, published PR36 source, or a different-hosting requirement. Final check confirmed code result at exact executable SHA, unaffected by docs-only later PR HEAD. No source/build deploy occurred.
