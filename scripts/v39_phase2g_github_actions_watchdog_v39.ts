@@ -15,6 +15,9 @@ import {
 import {
   PREPAID_PROBE_METRIC_CONTRACT_V39,
 } from "../server/lib/disruption/prepaidProbeMetricContract_v39";
+import {
+  classifyPhase2gTerminalOwnerZeroSubscriptionV39,
+} from "../server/lib/disruption/phase2gTerminalOwnerHandoff_v39";
 
 const LIVE_CREDIT_LIMIT = 450;
 const POLL_MS = 30_000;
@@ -562,16 +565,41 @@ async function main(): Promise<void> {
             String(activeBillable[0]?.id ?? "") !==
               providerSubscriptionId
           ) {
-            await invokeRecovery({
-              authId,
-              authFile,
-              authSha,
-              budgetDay,
-              reason:
-                "provider_subscription_isolation_lost",
-              durableStopReason:
-                "provider_subscription_isolation_lost",
+            // Provider may disappear between a snapshot that still says
+            // 'probing' and the owner's completed DELETE at the 120m cutoff.
+            // Only tolerate exactly zero active subscriptions, after
+            // scheduled end and strictly before the existing 5m cleanup
+            // grace deadline. Any pre-end disappearance, wrong/foreign
+            // subscription, invalid deadline or expired grace recovers.
+            const handoff = classifyPhase2gTerminalOwnerZeroSubscriptionV39({
+              probeStatus: status,
+              expectedSubscriptionId: providerSubscriptionId,
+              activeBillableSubscriptionIds: activeBillable.map((s) => String(s.id)),
+              scheduledWindowEndMs: windowEndMs,
+              observedNowMs: Date.now(),
+              cleanupGraceMs: DEADLINE_CLEANUP_GRACE_MS,
             });
+            if (handoff !== "WAIT_BOUNDED_TERMINAL_OWNER_CLEANUP") {
+              await invokeRecovery({
+                authId,
+                authFile,
+                authSha,
+                budgetDay,
+                reason: "provider_subscription_isolation_lost",
+                durableStopReason: "provider_subscription_isolation_lost",
+              });
+            }
+            console.log(JSON.stringify({
+              schema: "v39.phase2g-github-safety-watchdog.v1",
+              status: "WAIT_BOUNDED_TERMINAL_OWNER_CLEANUP",
+              observed_at_utc: new Date().toISOString(),
+              probe_budget_day_id: budgetDay,
+              active_billable_subscriptions: 0,
+              bounded_until_utc: new Date(windowEndMs + DEADLINE_CLEANUP_GRACE_MS).toISOString(),
+              // No watcher-initiated subscription mutation, independent
+              // scientific and spending checks remain enforced below.
+              provider_mutation: false,
+            }));
           }
         }
 

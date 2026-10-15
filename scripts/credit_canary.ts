@@ -36,6 +36,7 @@ import {
   type SettlementConfig,
 } from "../server/lib/disruption/settlement_v3";
 import { resolveOwnerAuthorization } from "./v39_paid_guard_v39";
+import {refuseLegacyGate3CanaryReceiverV39} from "../server/lib/disruption/gate3CanaryReceiverReadiness_v39";
 
 const ICAO = (process.env.ADB_CANARY_ICAO || "KLAX").toUpperCase();
 const WAIT_MS = Number(process.env.ADB_CANARY_WAIT_MS || 120_000);
@@ -63,6 +64,11 @@ async function main(): Promise<void> {
     await pool.end();
     process.exit(2);
   }
+  // Strictly block paid Gate3 legacy ingress until a compatible receiver
+  // and source/ledger preflight have been separately reviewed and frozen.
+  // This is inside the owner; direct script invocation cannot bypass it.
+  // It runs BEFORE even the first provider GET or subscription mutation.
+  refuseLegacyGate3CanaryReceiverV39();
   console.log("V3.9 credit canary — Gate 3 official isolated run (maxDeliveryRetries=0, tol=0)\n");
 
   const b1 = await getBalance();
