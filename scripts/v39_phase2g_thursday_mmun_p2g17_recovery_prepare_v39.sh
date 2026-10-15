@@ -4,21 +4,21 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-PREPROBE="artifacts/preprobe-reference-freeze-record.json"
-SMOKE="artifacts/v39-phase2-safety-smoke-AUTH-20260915-P2F095554-20260915T100325Z.json"
-SMOKE_RUNTIME="artifacts/phase2f-smoke-runtime-20260915T095554Z.json"
+PREPROBE="data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json"
+SMOKE="data-collection/evidence/original-artifacts/other/v39-phase2-safety-smoke-AUTH-20260915-P2F095554-20260915T100325Z.json"
+SMOKE_RUNTIME="data-collection/evidence/original-artifacts/phase2f/phase2f-smoke-runtime-20260915T095554Z.json"
 SMOKE_RUNTIME_SHA="58dbadb53bedc27dbaa236d020e21e7059470dd5ba0d10594475c5af2429d232"
 
-AMENDMENT="artifacts/phase2g-compact6-p2g17-mmun-delivery-gap-recovery-freeze-20261001.json"
+AMENDMENT="data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g17-mmun-delivery-gap-recovery-freeze-20261001.json"
 EXPECTED_AMENDMENT_SHA="7ace48ceaf4b929189b2d65d97c6de5e6a6d06a7de88470133c197442b9d2568"
 
-CLEANUP="artifacts/phase2g-exact-session-purpose-cleanup-P2G17-MMUN-20260930-1790817643233.json"
+CLEANUP="data-collection/evidence/original-artifacts/phase2g/phase2g-exact-session-purpose-cleanup-P2G17-MMUN-20260930-1790817643233.json"
 EXPECTED_CLEANUP_SHA="7a1fb4622e4adffbda4ba88a04c2243cf702504414d78c7a1bfd862eafe1fd2e"
 
 EXPECTED_ICAO="MMUN"
-RUNTIME="artifacts/phase2g-gate2-runtime-P2G-S1-20261001-17-H1.json"
+RUNTIME="data-collection/evidence/original-artifacts/phase2g/phase2g-gate2-runtime-P2G-S1-20261001-17-H1.json"
 BUDGET="P2G-S1-20261001-17"
-AUTH="SEPmd/V3.9_PHASE2G_AUTH_20261001_P2G18H1.json"
+AUTH="data-collection/authorizations/V3.9_PHASE2G_AUTH_20261001_P2G18H1.json"
 AUTH_ID="AUTH-20261001-P2G18H1"
 AUTH_START="2026-10-01T11:00:00Z"
 AUTH_EXPIRES="2026-10-01T15:10:00Z"

@@ -4,20 +4,20 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-PREPROBE="artifacts/preprobe-reference-freeze-record.json"
+PREPROBE="data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json"
 PREPROBE_SHA="b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870"
 
-SMOKE="artifacts/v39-phase2-safety-smoke-AUTH-20260915-P2F095554-20260915T100325Z.json"
-SMOKE_RUNTIME="artifacts/phase2f-smoke-runtime-20260915T095554Z.json"
+SMOKE="data-collection/evidence/original-artifacts/other/v39-phase2-safety-smoke-AUTH-20260915-P2F095554-20260915T100325Z.json"
+SMOKE_RUNTIME="data-collection/evidence/original-artifacts/phase2f/phase2f-smoke-runtime-20260915T095554Z.json"
 SMOKE_RUNTIME_SHA="58dbadb53bedc27dbaa236d020e21e7059470dd5ba0d10594475c5af2429d232"
 
-AMENDMENT="artifacts/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json"
+AMENDMENT="data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json"
 EXPECTED_AMENDMENT_GIT_BLOB="914614c088b72f9e0ab8a99f4546c77bdf896826"
 
 EXPECTED_ICAO="YSSY"
-RUNTIME="artifacts/phase2g-gate2-runtime-P2G-S1-20261008-22.json"
+RUNTIME="data-collection/evidence/original-artifacts/phase2g/phase2g-gate2-runtime-P2G-S1-20261008-22.json"
 BUDGET="P2G-S1-20261008-22"
-AUTH="SEPmd/V3.9_PHASE2G_AUTH_20261008_P2G23.json"
+AUTH="data-collection/authorizations/V3.9_PHASE2G_AUTH_20261008_P2G23.json"
 AUTH_ID="AUTH-20261008-P2G23"
 AUTH_START="2026-10-08T03:00:00Z"
 AUTH_EXPIRES="2026-10-08T07:10:00Z"
@@ -134,7 +134,7 @@ if (
 }
 NODE
 
-  local protocol="artifacts/phase2g-yssy-local-operating-hours-protocol-freeze-20261003.json"
+  local protocol="data-collection/evidence/original-artifacts/phase2g/phase2g-yssy-local-operating-hours-protocol-freeze-20261003.json"
   [[ -f "$protocol" ]] || {
     echo "REFUSED:YSSY_PROTOCOL_MISSING=$protocol"
     exit 2
@@ -190,7 +190,7 @@ import {
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-const preprobePath="artifacts/preprobe-reference-freeze-record.json";
+const preprobePath="data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json";
 const preprobeSha="b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870";
 const amendmentPath=process.env.AMENDMENT;
 if (!amendmentPath) {

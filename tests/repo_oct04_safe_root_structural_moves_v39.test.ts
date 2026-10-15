@@ -78,10 +78,10 @@ describe("Oct 4 safe structural root cleanup", () => {
       const out=execFileSync("git",["ls-files","--cached","--",path],{encoding:"utf8",timeout:5000}).trim();
       expect(out,"old tracked directory retained: "+path).toBe("");
     }
-    for(const path of ["SEPmd/V3.9_DataCollectPlan_f.8.md","SEPmd/V3.9_IMPLEMENTATION_LOG.md",
-      "SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md","SEPmd/V3.9_PHASE2G_AUTH_20261013_P2G25.json",
-      "artifacts/phase2g-gate2-runtime-P2G-S1-20261013-03.json",
-      "SEPmd/PHASE2G/OPERATOR_SHELL_ONLY_GUARDRAIL.md","AGENTS.md","attached_assets"]){
+    for(const path of ["data-collection/plans/V3.9_DataCollectPlan_f.8.md","data-collection/implementation/V3.9_IMPLEMENTATION_LOG.md",
+      "data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md","data-collection/authorizations/V3.9_PHASE2G_AUTH_20261013_P2G25.json",
+      "data-collection/evidence/original-artifacts/phase2g/phase2g-gate2-runtime-P2G-S1-20261013-03.json",
+      "data-collection/phase2g/operations/OPERATOR_SHELL_ONLY_GUARDRAIL.md","AGENTS.md","attached_assets"]){
       expect(existsSync(path),"critical original source missing: "+path).toBe(true);
     }
     console.log("REPO_OCT04_STRUCTURAL_MOVE="+JSON.stringify({unchanged_blob_paths:exactMoves.length,root_folders_removed:3,obsolete_metadata_file_removed:true,provider_calls:0}));

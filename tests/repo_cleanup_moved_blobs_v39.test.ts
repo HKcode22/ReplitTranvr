@@ -64,13 +64,13 @@ const moved = [
 ] as const;
 const preserved = [
   "AGENTS.md",
-  "SEPmd/V3.9_DataCollectPlan_f.8.md",
-  "SEPmd/V3.9_IMPLEMENTATION_LOG.md",
-  "SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md",
-  "SEPmd/PHASE2G/OPERATOR_SHELL_ONLY_GUARDRAIL.md",
-  "SEPmd/phase2g/README.md",
-  "SEPmd/PHASE2G/README.md",
-  "artifacts/phase2g-gate2-runtime-P2G-S1-20261013-03.json",
+  "data-collection/plans/V3.9_DataCollectPlan_f.8.md",
+  "data-collection/implementation/V3.9_IMPLEMENTATION_LOG.md",
+  "data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md",
+  "data-collection/phase2g/operations/OPERATOR_SHELL_ONLY_GUARDRAIL.md",
+  "data-collection/phase2g/legacy-lowercase/README.md",
+  "data-collection/phase2g/legacy-uppercase/README.md",
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-gate2-runtime-P2G-S1-20261013-03.json",
 ] as const;
 
 describe("Wave A original bytes, historical links and guardrail invariants", () => {

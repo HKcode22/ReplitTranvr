@@ -58,10 +58,10 @@ export function loadFrozenTrafficReferenceV39(root = process.cwd()): LoadedTraff
     return loadRawFile(explicit, false);
   }
 
-  const plain = join(root, "artifacts", "traffic-reference-frozen.json");
+  const plain = join(root, "data-collection", "evidence", "original-artifacts", "other", "traffic-reference-frozen.json");
   if (existsSync(plain)) return loadRawFile(plain, false);
 
-  const encodedPath = join(root, "artifacts", "traffic-reference-frozen.json.gz.b64");
+  const encodedPath = join(root, "data-collection", "evidence", "original-artifacts", "other", "traffic-reference-frozen.json.gz.b64");
   if (!existsSync(encodedPath)) throw new Error("BLOCKED:TRAFFIC_REFERENCE_FROZEN_FILE_MISSING");
 
   // Normalize transport-only formatting characters before base64 decoding. This

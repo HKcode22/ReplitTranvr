@@ -856,7 +856,9 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       historicalPath: string,
       expectedSha: string,
     ): any => {
-      const storedPath = relocatedHistoricalReceipts.get(historicalPath);
+      const storedPath = historicalPath === PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH
+        ? PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH
+        : relocatedHistoricalReceipts.get(historicalPath);
       if (
         !storedPath ||
         !existsSync(storedPath) ||
