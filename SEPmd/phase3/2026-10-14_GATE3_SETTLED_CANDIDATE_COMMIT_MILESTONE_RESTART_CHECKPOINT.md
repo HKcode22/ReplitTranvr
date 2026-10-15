@@ -40,3 +40,35 @@ Exact previous executable SHA `d8bc6a0420a87f1cc3e35e0650608c91e6abc618` confirm
 5. Subsequent Phase4/5 deadlines and historical retention/incident evidence persist; no provider spend, Replit deployment, source delete, live DB mutations, main merge or credit refills were done by this GitHub work.
 
 **Source of truth is tested executable SHA, not docs HEAD**, which will change when checkpoint/index is written. No hidden background work or future result promise.
+
+## FINAL independently verified exact-source CI — 4/4 SUCCESS
+
+The source+test SHA **`eb8b38ee059236039ac7db1a4800e9dab380c191`** has ALL FOUR no-provider GitHub workflows conclusively **SUCCESS**, superseding the initial IN_PROGRESS snapshot:
+
+| Workflow | Run | Final |
+| --- | --- | --- |
+| V3.9 full Offline Safety incl. disposable PG, TypeScript, Vitest, lint, preflight, production build | [38674532894](https://github.com/HKcode22/ReplitTranvr/actions/runs/38674532894) | **SUCCESS**, job `116224990668` success, no failed steps |
+| Focused no-provider | [38674532905](https://github.com/HKcode22/ReplitTranvr/actions/runs/38674532905) | **SUCCESS** |
+| Real PG receiver faults, no paid provider | [38674532978](https://github.com/HKcode22/ReplitTranvr/actions/runs/38674532978) | **SUCCESS** |
+| Public receiver identity read-only | [38674532897](https://github.com/HKcode22/ReplitTranvr/actions/runs/38674532897) | **SUCCESS** |
+
+The new SQL owner is now **code-and-test complete for its narrowly scoped DRAFT functionality**, not real Gate3 paid certification. Mandatory provider/source/host authenticity still belongs to independently reviewed outer runtime owner; do not infer it from flags in a synthetic fixture or from completed SQL transactions alone.
+
+## New read-only Replit deployment discovery and the ONE useful user action
+
+Via the connected Replit App **`ReplitTranvr`**, app ID `d2a063c7-c2c2-4f46-9db4-3a3850d2eb1f`, Replit returned **publish status `success`**, deployment ID `ce096a13-62ff-4f7a-ae6f-3bc91af601d9`, public origin `https://replit-tranvr--hk84164.replit.app`. This proves Replit reports a public deployment exists; it does **NOT** certify its specific deployed commit, host SHA, reserved-VM durability, live source route, PostgreSQL connection, App-Storage binding, or Gate3 paid readiness. Public runtime GET through the assistant's network was **not accessible**, so we did not fabricate response flags. Replit inspection query did not provide a verifiable runtime HEAD. Last operator-observed **workspace checkout** remains clean `release/p25-reviewed-publish-20261012`, SHA `bb44fc1d122868e20664b2c149406f99bb10cb86`, which is NOT automatically equal to published host HEAD.
+
+Safe operator action **READ-ONLY (no provider GET, POST, paid credit or SQL write)** on their EXISTING Replit workspace; use a deliberately version-locked already-present `main` script that makes **one HTTPS GET** to the published public `/__v39/workspace-runtime` JSON health endpoint and compares declared published HEAD to their known local release:
+
+```bash
+cd ~/workspace
+test "$(git rev-parse HEAD)" = "bb44fc1d122868e20664b2c149406f99bb10cb86" || { echo "STOP:WORKSPACE_HEAD_CHANGED"; exit 2; }
+test -f scripts/v39_phase2g_reserved_vm_readiness_v39.ts || { echo "STOP:READONLY_SCRIPT_MISSING"; exit 2; }
+node --import tsx scripts/v39_phase2g_reserved_vm_readiness_v39.ts \
+  --base "https://replit-tranvr--hk84164.replit.app" \
+  --expected-head "bb44fc1d122868e20664b2c149406f99bb10cb86"
+```
+
+The script checks published HTTP=200, status PASS, exact HEAD, route-registered flag, published mode, reserved-VM durability, valid retention and bucket PREFIX. Source inspection on protected `main` confirms `workspaceRuntimeHealth_v39.ts` exposes only sanitized flags (no credentials/bucket ID). This is a more useful imminent real-host milestone than another simulated test. **If BLOCKED (including autoscale mismatch), do not override it, guess an alternate live HEAD, run paid canary, or reset/republish anything.** Operator may share redacted JSON with us; a PASS still does **NOT** prove signed real callback, SQL/blob readback, account subscription/balance checks or authorize any paid action.
+
+**Do not repeat already completed P2G24 30/30 original audit.** Source retention expiry and incident31 cleanup remain separate; no automatic irreversible `--apply`. Replit *publish status* must not be conflated with live HTTP health/parity or GitHub PR36 being deployed (it is NOT).
