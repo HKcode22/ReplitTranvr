@@ -53,6 +53,16 @@ Hard safety vetoes remain: unresolved account/foreign active subscription, unbou
 - New code/tests remain offline and **not wired into paid acquisition**, so no retroactive or automatic approval. Latest executable source SHA `2370cfb734ecad62a387aea5f2b281b9b527bc3a`; GitHub Actions must be independently queried to establish exact tests before marking PASS.
 - The prior terminal-candidate exact-check code `c4485c8405483114f03b5ebc61ce864fc9f15515` had **4/4 provider-free GitHub CI PASS** (#38665519296 full, #38665519204 focused, #38665519284 realPG, #38665519265 receiver). The new composite code requires its own verification.
 
+## Verified code/test checkpoint — 4/4 no-provider CI green
+
+The exact executable code/test SHA **`2370cfb734ecad62a387aea5f2b281b9b527bc3a`** has **4/4 successful GitHub Actions workflows**, independently verified October 14:
+- [V3.9 Offline Safety #38666670746](https://github.com/HKcode22/ReplitTranvr/actions/runs/38666670746) — SUCCESS, includes TypeScript/test suites and production build
+- [Focused Release no-provider #38666670348](https://github.com/HKcode22/ReplitTranvr/actions/runs/38666670348) — SUCCESS
+- [Real disposable PostgreSQL receiver-fault suite #38666670555](https://github.com/HKcode22/ReplitTranvr/actions/runs/38666670555) — SUCCESS
+- [Public receiver identity read-only #38666670795](https://github.com/HKcode22/ReplitTranvr/actions/runs/38666670795) — SUCCESS
+
+**What these tests prove:** the new *offline* independent research-vs-canary interpretation and existing source/fault regression tests pass at that SHA. **Not proved:** live provider/account, signed owner, historical permission to store expired original blobs, hosted callback deployment, approved prospective 1% rule, or Gate3 paid acceptance. Later documentation commits have distinct heads and may have their own CI state.
+
 ## Next decisive work, not another months-long Phase2 repeat
 
 1. Verify 4 no-provider CI on latest executable SHA; repair exact failing test only, record evidence in checkpoint and [issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38).
