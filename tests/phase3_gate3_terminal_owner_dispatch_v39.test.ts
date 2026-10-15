@@ -103,12 +103,14 @@ describe("Gate3 source status -> immutable SQL FAILED or SETTLED candidate, prov
     });
   });
   it("routes a failed result to failed-only LOGGED SQL, never a success update",async()=>{
-    const x=success();
-    x.result={
-      ...x.result,status:"failed",
-      durationCensored:true,stopReason:"subscription_delete_failed",
-      reconciliationStatus:"UNRESOLVED",externalCredits:null,
-      subscriptionDeleted:false,metrics:null,
+    const f=success();
+    const x={
+      ...f,result:{
+        ...f.result,status:"failed" as const,
+        durationCensored:true,stopReason:"subscription_delete_failed",
+        reconciliationStatus:"UNRESOLVED" as const,externalCredits:null,
+        subscriptionDeleted:false,metrics:null,
+      },
     };
     const db=fakeDb(x);
     const got=await commitGate3TerminalDispositionV39(db.pool,x);
