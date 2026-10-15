@@ -1,3 +1,5 @@
+> **DRAFT migration branch only:** Links below follow physically relocated original Git blobs. Historical signed references, source compatibility and release safety remain under review; no paid execution is authorized.
+
 # ReplitTranvr — Aviation Data Collection & Research
 
 The project includes a live-capable application, original V3.9 aviation scientific records, evidence receipts, scripts and tests.
@@ -8,7 +10,7 @@ The project includes a live-capable application, original V3.9 aviation scientif
 
 | You are looking for | Open |
 |---|---|
-| What the experiment predicts and how it is defined | [Binding V3.9 Plan](SEPmd/V3.9_DataCollectPlan_f.8.md) |
+| What the experiment predicts and how it is defined | [Binding V3.9 Plan](data-collection/plans/V3.9_DataCollectPlan_f.8.md) |
 | Past pilots, errors and amendments | [58 Phase 2G dated documents](data-collection/phase2g/ALL_REPORTS.md) |
 | Machine evidence or receipts | [All 352 original artifacts](data-collection/evidence/ARTIFACTS_START_HERE.md) |
 | A specific original research file | [All 108 SEPmd records](data-collection/ALL_SEPMD_FILES.md) |
@@ -40,4 +42,4 @@ The project includes a live-capable application, original V3.9 aviation scientif
 | `docs/history/` | Historical archive |
 | `docs/repository-maintenance/` | [Cleanup checkpoints and current status](docs/repository-maintenance/START_HERE.md) |
 
-**Safety and science:** YSSY P25 originally recorded 231 provider-billed versus 229 received; the original delivery gap and formal Gate 2 acceptance hold are not retroactively changed by repo cleanup. No deployment or paid provider call is implied by a GitHub merge. Do not use Replit AI Agent. Follow [`AGENTS.md`](AGENTS.md) and the [ACTIVE shell-only guardrail](SEPmd/PHASE2G/OPERATOR_SHELL_ONLY_GUARDRAIL.md); paid, SQL, blob and retention mutations require separate explicit authorization.
+**Safety and science:** YSSY P25 originally recorded 231 provider-billed versus 229 received; the original delivery gap and formal Gate 2 acceptance hold are not retroactively changed by repo cleanup. No deployment or paid provider call is implied by a GitHub merge. Do not use Replit AI Agent. Follow [`AGENTS.md`](AGENTS.md) and the [ACTIVE shell-only guardrail](data-collection/phase2g/operations/OPERATOR_SHELL_ONLY_GUARDRAIL.md); paid, SQL, blob and retention mutations require separate explicit authorization.

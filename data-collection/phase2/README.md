@@ -1,9 +1,11 @@
+> **DRAFT migration branch only:** Links below follow relocated original Git blobs. Signed source paths and runtime consumers still require verification.
+
 # Phase 2 Evidence Navigation
 
 - [Historical Gate 0 preflight checklist](../../docs/history/phase1/GATE0_INPUT_CHECKLIST.md) — original September checklist archived intact; not currently authorizing a provider or paid run.
-- [Original Phase 2 reference freeze](../../SEPmd/V3.9_PHASE2_REFERENCE_FREEZE.md).
-- [Phase 2 proposal](../../SEPmd/V3.9_PHASE2_PLAN_AMENDMENT_PROPOSAL.md) (proposal status only).
-- [Historical Phase 0 → Phase 2 proof index](../../SEPmd/V3.9_PHASE0_TO_PHASE2_PROOF_INDEX.md).
+- [Original Phase 2 reference freeze](V3.9_PHASE2_REFERENCE_FREEZE.md).
+- [Phase 2 proposal](V3.9_PHASE2_PLAN_AMENDMENT_PROPOSAL.md) (proposal status only).
+- [Historical Phase 0 → Phase 2 proof index](../phase2g/reference/V3.9_PHASE0_TO_PHASE2_PROOF_INDEX.md).
 - [Phase 2G experiments and Gate2 evidence](../phase2g/README.md).
 - [Original main evidence ledgers](../evidence/README.md).
 

@@ -1,10 +1,12 @@
+> **DRAFT migration branch only:** Links below follow physically relocated original Git blobs. Historical signed references, source compatibility and release safety remain under review; no paid execution is authorized.
+
 # Start Here — Understand the aviation research repository
 
 **Wave A organization is merged into `main`** ([PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39)). This page helps you find original material; it is not a new scientific protocol or paid-run permission.
 
 | Question | Read |
 |---|---|
-| What is being predicted and measured? | [Original V3.9 scientific Plan](../SEPmd/V3.9_DataCollectPlan_f.8.md) |
+| What is being predicted and measured? | [Original V3.9 scientific Plan](plans/V3.9_DataCollectPlan_f.8.md) |
 | How is the experiment implemented? | [Implementation guide](implementation/README.md) |
 | What happened in the airport pilot runs? | [Phase 2G overview](phase2g/README.md) and [all 58 dated Phase2G records](phase2g/ALL_REPORTS.md) |
 | Where are original machine receipts? | [Evidence index](evidence/ARTIFACTS_START_HERE.md) |
