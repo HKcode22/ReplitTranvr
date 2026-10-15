@@ -36,6 +36,8 @@ export interface PrepaidSessionSelectionRequestV39{
   settledOtherCredits:number;
   prearmedGate3?:Gate3PrearmedSessionV39;
 }
+export type SelectedPrepaidWindowSessionV39=Pick<PrepaidProbeSessionV39,
+  "sessionId"|"ownerKind"|"ownerProbeId"|"stage"|"icao"|"state">;
 export interface PrepaidSessionSelectionHooksV39{
   armHistorical:(input:HistoricalSessionInputV39)=>Promise<PrepaidProbeSessionV39>;
   reviewPrearmedGate3:(expected:Gate3PrearmedSessionV39)=>
@@ -46,7 +48,7 @@ const SHA=/^[0-9a-f]{64}$/;
 export async function selectPrepaidWindowSessionV39(
   input:PrepaidSessionSelectionRequestV39,
   hooks:PrepaidSessionSelectionHooksV39,
-):Promise<PrepaidProbeSessionV39>{
+):Promise<SelectedPrepaidWindowSessionV39>{
   if(input.ownerKind!=="phase3_credit_canary"){
     if(input.prearmedGate3!==undefined)
       throw Error("GATE3_PREARMED_MODE_FORBIDDEN_FOR_PHASE2");
@@ -82,6 +84,6 @@ export async function selectPrepaidWindowSessionV39(
   return {
     sessionId:gate3.sessionId,ownerKind:"phase3_credit_canary",
     ownerProbeId:null,stage:null,icao:gate3.icao,
-    state:"armed",expiresAtUtc:"SOURCE_VERIFIED_BY_READONLY_REVIEW",
+    state:"armed",
   };
 }
