@@ -17,6 +17,8 @@ import {
 import { runSettlement, type SettlementConfig } from "./settlement_v3";
 import {bindOrCompensatePrepaidSubscriptionV39}
   from "./prepaidSubscriptionBindingRecovery_v39";
+import {resolveAmbiguousPrepaidCreateV39}
+  from "./prepaidAmbiguousCreateResolution_v39";
 import {
   armPrepaidProbeSessionV39,
   assertPrepaidProbePersistenceConfigV39,
@@ -474,14 +476,20 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   let lastObservedProviderBalance =
     input.balanceBefore;
 
-  let sub = await createSubscription("FlightByAirportIcao", icao, {
-    url: webhookUrl,
-    maxDeliveryRetries: 0,
+  // CREATE can throw *after* the remote provider has committed a billable
+  // subscription but before its HTTP response reaches this owner. Treat a
+  // thrown response EXACTLY as an empty-ID response: strict LIST by the
+  // already-frozen airport + unique callback, never blindly retry CREATE.
+  // Any failure/multiple match in strict LIST is an unresolved account HOLD.
+  const creation = await resolveAmbiguousPrepaidCreateV39({
+    createOnce:()=>createSubscription("FlightByAirportIcao", icao, {
+      url: webhookUrl,maxDeliveryRetries: 0,
+    }),
+    recoverExactUsingStrictList:()=>recoverAmbiguousSubscriptionCreateV39(
+      icao,webhookUrl,
+    ),
   });
-
-  if (!sub?.id) {
-    sub = await recoverAmbiguousSubscriptionCreateV39(icao, webhookUrl);
-  }
+  let sub = creation.subscription;
 
   if (!sub?.id) {
     await setPrepaidProbeSessionStateV39(
