@@ -81,11 +81,28 @@ export async function prepareGate3CanaryDraftV39(
     // isolates provider operations from other owners. A published owner still
     // checks the live provider subscription inventory before actual creation.
     await client.query("SELECT pg_advisory_xact_lock(39003,3)");
+    // An immutable FAILED receipt can still coexist with a billable owned
+    // subscription or unsettled provider charges. A new session MUST NOT
+    // start merely because the previous row left PREPARED. Those failures
+    // require separate reviewed account recovery, not auto-retry or a waiver
+    // based on the age of the receipt. Ordinary scientific mismatch does not
+    // itself assert that another billable subscription is alive.
     const existing=await client.query(
-      "SELECT session_id FROM clean.phase3_gate3_canary_owner_v39 WHERE state='PREPARED' LIMIT 1",
+      `SELECT session_id,state,failure_reason
+         FROM clean.phase3_gate3_canary_owner_v39
+        WHERE state='PREPARED'
+           OR (state='FAILED' AND failure_reason IN
+              ('CREATE_AMBIGUOUS_ACCOUNT_HOLD',
+               'BIND_FAILED',
+               'OWNED_DELETE_UNVERIFIED',
+               'SETTLEMENT_UNRESOLVED'))
+        LIMIT 1`,
     );
-    if(existing.rowCount!==0)
+    if(existing.rowCount!==0){
+      if(existing.rows[0]?.state==="FAILED")
+        throw Error("GATE3_PREPARE_PRIOR_UNRESOLVED_ACCOUNT_FAILURE_HOLD");
       throw Error("GATE3_PREPARE_PRIOR_UNSETTLED_OWNER_HOLD");
+    }
     await client.query(
       `INSERT INTO clean.phase3_gate3_canary_owner_v39
          (session_id,icao,authorization_evidence_sha256,
