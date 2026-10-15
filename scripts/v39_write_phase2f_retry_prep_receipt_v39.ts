@@ -6,8 +6,8 @@ import { loadPhase2FWorkspaceIngressBindingV39 } from "../server/lib/disruption/
 import { loadPhase2FSmokeRuntimeV39 } from "../server/lib/disruption/phase2SmokeRuntime_v39";
 import type { AuthRecord } from "../server/lib/disruption/authRecord_v39";
 
-const LEDGER = path.join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
-const PREPROBE = path.resolve("artifacts/preprobe-reference-freeze-record.json");
+const LEDGER = path.join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+const PREPROBE = path.resolve("data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json");
 
 function required(name: string): string {
   const i = process.argv.indexOf(name);

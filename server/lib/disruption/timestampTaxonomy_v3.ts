@@ -1,7 +1,7 @@
 /**
  * Timestamp taxonomy — V3.9-f.8 cutoff-safety owner.
  *
- * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§6.1, 6.3-6.6, 7,
+ * Binding authority: data-collection/plans/V3.9_DataCollectPlan_f.8.md §§6.1, 6.3-6.6, 7,
  * 12.2, 14. Unknown information availability is never deployably eligible.
  */
 

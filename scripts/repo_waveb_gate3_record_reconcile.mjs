@@ -13,19 +13,19 @@ const run=(args)=>execFileSync("git",args,{encoding:"utf8",maxBuffer:16*1024*102
 const source=(ref,path)=>run(["show",ref+":"+path]);
 const hash=s=>createHash("sha256").update(s).digest("hex");
 const files=[
-"SEPmd/V3.9_DataCollectPlan_f.8.md",
-"SEPmd/V3.9_IMPLEMENTATION_LOG.md",
-"SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md"
+  { historical: "SEPmd/V3.9_DataCollectPlan_f.8.md", current: "data-collection/plans/V3.9_DataCollectPlan_f.8.md" },
+  { historical: "SEPmd/V3.9_IMPLEMENTATION_LOG.md", current: "data-collection/implementation/V3.9_IMPLEMENTATION_LOG.md" },
+  { historical: "SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md", current: "data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md" }
 ];
 const findings=[],errors=[];
-for(const path of files){
+for(const {historical: path, current} of files){
   let main,draft;
-  try{main=source(mainRef,path);draft=source(draftRef,path)}
-  catch(e){errors.push("missing scientific record "+path+" ("+e.message+")");continue}
+  try{main=source(mainRef,current);draft=source(draftRef,path)}
+  catch(e){errors.push("missing scientific record "+path+" at "+current+" ("+e.message+")");continue}
   const ma=main.split("\n"),da=draft.split("\n");
   let prefix=0;while(prefix<Math.min(ma.length,da.length)&&ma[prefix]===da[prefix])prefix++;
   let suffix=0;while(suffix<Math.min(ma.length,da.length)-prefix&&ma[ma.length-1-suffix]===da[da.length-1-suffix])suffix++;
-  const item={path,main_sha256:hash(main),draft_sha256:hash(draft),
+  const item={path,current_path:current,main_sha256:hash(main),draft_sha256:hash(draft),
     main_lines:ma.length,draft_lines:da.length,common_prefix_lines:prefix,common_suffix_lines:suffix,
     main_unique_span_lines:ma.length-prefix-suffix,draft_unique_span_lines:da.length-prefix-suffix};
   if(path.endsWith("V3.9_RUN_REPORTS_AND_EVIDENCE.md")){

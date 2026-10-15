@@ -1,7 +1,7 @@
 /**
  * V3.9-f.8 REGIONAL adaptive allocation owner.
  *
- * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§8.2, 8.3, 8.6.
+ * Binding authority: data-collection/plans/V3.9_DataCollectPlan_f.8.md §§8.2, 8.3, 8.6.
  * This module deliberately fails closed on missing adaptive evidence. Probe
  * results never seed Phase-6 state and true zero-yield observations never
  * update the EMA.

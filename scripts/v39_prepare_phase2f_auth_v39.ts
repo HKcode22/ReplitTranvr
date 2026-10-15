@@ -5,7 +5,7 @@ import { loadPhase2FSmokeRuntimeV39 } from "../server/lib/disruption/phase2Smoke
 import type { AuthRecord } from "../server/lib/disruption/authRecord_v39";
 
 const PHASE = "Phase 2 / safety smoke";
-const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
+const DEFAULT_PREPROBE = "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json";
 
 function value(name: string): string {
   const i = process.argv.indexOf(name);

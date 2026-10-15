@@ -1,7 +1,7 @@
 /**
  * V3.9-f.8 AeroDataBox collection controller.
  *
- * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§0–21.
+ * Binding authority: data-collection/plans/V3.9_DataCollectPlan_f.8.md §§0–21.
  * Phase-6 execution consumes a persistent hash-bound authorization and a
  * hash-frozen calendar/sampling template. It NEVER redraws regions at runtime,
  * never treats a manual PHASE6_READY environment variable as authority, and

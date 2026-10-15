@@ -2,8 +2,8 @@ import { appendFileSync, existsSync, readFileSync } from "fs";
 import { join, resolve } from "path";
 import { loadPreprobeHandoffBindingV39 } from "../server/lib/disruption/phase2Handoff_v39";
 
-const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
-const LEDGER = join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+const DEFAULT_PREPROBE = "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json";
+const LEDGER = join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
 
 function argValue(name: string): string | null {
   const index = process.argv.indexOf(name);

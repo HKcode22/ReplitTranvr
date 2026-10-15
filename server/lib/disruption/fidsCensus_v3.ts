@@ -1,7 +1,7 @@
 /**
  * FIDS / flight_population census — V3.9-f.8 §§5.1-5.4, 6, 7.
  *
- * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§0–21.
+ * Binding authority: data-collection/plans/V3.9_DataCollectPlan_f.8.md §§0–21.
  * The FIDS population is provider-observable and append-only. Canonical
  * physical-flight identity is never fabricated: missing/invalid provider-native
  * departure schedule or airport IANA timezone yields an unresolved/provisional

@@ -14,7 +14,7 @@
 | Which past authorizations exist? | [Authorization index](authorizations/README.md), not authorization to run again |
 | What is happening in Phase 3? | [Gate 3 separate unmerged draft](phase3/README.md) |
 | What tools can be run safely? | [Operations](operations/README.md) |
-| Why not move the remaining original files? | [Wave B path-compatibility rule](operations/WAVE_B_COMPATIBILITY_GATE.md) |
+| Where is the physical relocation and its safety review? | [Wave B compatibility gate](operations/WAVE_B_COMPATIBILITY_GATE.md) |
 
 **Chronology:** Phase 0 established protocols and early gates; Phase 2/2G performed flight pilots and studied failures; YSSY P25 retained its original **231 billed / 229 received delivery gap**, distinct from qualified research use or formal Gate2 PASS. Phase 3/Gate3 is a separate engineering draft, not a deployed paid study.
 

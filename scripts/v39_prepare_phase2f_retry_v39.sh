@@ -3,9 +3,9 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
-mkdir -p artifacts SEPmd
+mkdir -p artifacts data-collection/authorizations
 
-PREPROBE="artifacts/preprobe-reference-freeze-record.json"
+PREPROBE="data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json"
 if [[ ! -f "$PREPROBE" ]]; then
   echo "BLOCKED:PREPROBE_ARTIFACT_MISSING=$PREPROBE"
   exit 1
@@ -40,7 +40,7 @@ fi
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 INGRESS="artifacts/phase2f-workspace-ingress-binding-${STAMP}.json"
 RUNTIME="artifacts/phase2f-smoke-runtime-${STAMP}.json"
-AUTH_FILE="SEPmd/V3.9_PHASE2F_AUTH_${STAMP}.json"
+AUTH_FILE="data-collection/authorizations/V3.9_PHASE2F_AUTH_${STAMP}.json"
 PREP_RECEIPT="artifacts/phase2f-retry-prep-${STAMP}.json"
 
 printf 'STEP=build_workspace_ingress_binding\n'
