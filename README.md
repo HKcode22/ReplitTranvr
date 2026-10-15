@@ -12,6 +12,8 @@ The project includes a live-capable application, original V3.9 aviation scientif
 | Past pilots, errors and amendments | [58 Phase 2G dated documents](data-collection/phase2g/ALL_REPORTS.md) |
 | Machine evidence or receipts | [All 352 original artifacts](data-collection/evidence/ARTIFACTS_START_HERE.md) |
 | A specific original research file | [All 108 SEPmd records](data-collection/ALL_SEPMD_FILES.md) |
+| Archived original PDF rendition | [Original V3.9 Plan PDF (status unverified)](data-collection/plans/reference-pdfs/V3.9_DataCollectPlanCurrent.pdf) |
+| Preserved unreviewed legacy ZIP | [Historical archive custody](docs/history/unreviewed-archives/README.md) |
 | Research literature and prediction models | [Research paper extracts](data-collection/research-papers/README.md) |
 | Historic website screenshots | [Screenshots archive](docs/history/travnr-ui-screenshots/README.md) |
 | Implementation details | [Implementation Log navigation](data-collection/implementation/README.md) |
