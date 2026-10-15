@@ -1,0 +1,20 @@
+# Repository Reorganization — Current Review Index (October 15, 2026)
+
+**Status:** isolated draft [PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39), not deployed or merged. Main: `f5b1347...`. Parallel live Gate3 engineering remains separate [PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36), not assumed passed or merged.
+
+## Read in this order
+
+1. [Oct 15 complete main + PR36 inventory](inventories/README.md), including 1,162 historical/current main tracked blobs, 151 changed paths in Gate3 draft.
+2. [Oct 15 complete SEPmd path-by-path proposed migration map](2026-10-15_SEPMD_EXACT_PATH_MAPPING_AND_CASE_CONFLICT.md) and [CSV source-to-destination map](manifests/2026-10-15_SEPMD_MAIN_AND_PR36_PATH_MAPPING.csv).
+3. [Oct 15 historical PR36 deletion safety review](2026-10-15_PR36_REMOVALS_AND_FREEZE_SAFETY_REVIEW.md) — including absent AGENTS.md.
+4. [Oct 15 source-level Gate3 path references](2026-10-15_GATE3_EXACT_PATH_REFERENCE_SAMPLE.md).
+5. [Oct 15 initial full audit and two-wave plan](2026-10-15_PRE_GATE3_REORGANIZATION_AUDIT_AND_EXECUTION_PLAN.md).
+6. [Oct 15 scanner/CI verification](2026-10-15_REFERENCE_AUDIT_SCANNER_FIXTURE_AND_CI_GATE.md).
+
+## Boundaries
+
+Zero deletions and zero existing file renames in this PR as of this index. Phase2G qualified historical YSSY source 231/229 remains unchanged; original formal Gate2 and live Gate3 are not certified by repository housekeeping. No Replit Agent, deployment, paid API, SQL/ObjectStorage or source retention action is performed.
+
+## Next exact gate
+
+Read latest four CI results and the `REPO_CLEANUP_UNRESOLVED_OPERATIONAL=` line from full offline Actions run on the exact reviewed PR SHA. Manually adjudicate unresolved references, then create a dependency-validated small no-impact move batch only if source paths have no blocking consumers. Full SEPmd→data-collection move stays HOLD.
