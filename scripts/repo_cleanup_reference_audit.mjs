@@ -35,7 +35,7 @@ const textNames = new Set([
   "Makefile", "Procfile"
 ]);
 const protectedRoots = [
-  "SEPmd/", "artifacts/", "attached_assets/", "researchPapers/",
+  "SEPmd/", "artifacts/", "attached_assets/", "data-collection/research-papers/",
   "migrations/", ".github/workflows/"
 ];
 const protectedFileNames = new Set(["AGENTS.md", "replit.md"]);

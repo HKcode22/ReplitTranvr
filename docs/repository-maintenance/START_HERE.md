@@ -8,6 +8,10 @@
 - [All 108 original scientific SEPmd files](../../data-collection/ALL_SEPMD_FILES.md), [58 Phase2G dated documents](../../data-collection/phase2g/ALL_REPORTS.md), [all 352 original machine evidence files](../../data-collection/evidence/ARTIFACTS_START_HERE.md).
 - [Complete 460-original-record catalog checkpoint](2026-10-15_COMPLETE_460_SOURCE_EVIDENCE_DIRECTORY_CHECKPOINT.md), a dated **pre-merge** report. Wave A had 11 unchanged-content historic root moves, [exact Git blob manifest](manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv). No original `SEPmd/` or `artifacts/` data moved.
 
+## October 4 plan: real historic folder moves
+
+- [October 15 actual root-folder cleanup](2026-10-15_OCT04_WAVEB_SAFE_ROOT_DIRECTORY_MOVES.md): research-paper extracts and old UI screenshots moved byte-for-byte; ignored tool metadata removed with original preserved in old archive snapshot. Remaining scientific core folder migration separately gated.
+
 ## What remains
 
 **Wave B physical file relocation is HOLD**, because current executable preflight/manifest code and historical signed source references use the existing `SEPmd` and `artifacts` paths. The [concrete Wave B compatibility gate](../../data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) documents exact code consumers, case-insensitive Mac collision, integrity constraints and coordination with unmerged PR36. A safe, *browsable* directory is already available without physical relocation.

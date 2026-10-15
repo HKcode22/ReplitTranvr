@@ -1,6 +1,6 @@
 # Aviation Research References — Initial Navigation Index
 
-These eight Markdown research-paper extracts already existed in `researchPapers/`. They are **not** being moved or deleted as part of the October 15 read-only inventory wave. Paper title alone does not establish permission, evidentiary quality, or exact findings; verify bibliographic attribution, methods, and original source links before citing.
+These eight original Markdown research-paper extracts were relocated intact from the former root `researchPapers/` into `data-collection/research-papers/`. The eight original content blobs remain identical; the updated README is navigation rather than scientific source. Paper title alone does not establish permission, evidentiary quality, or exact findings; verify bibliographic attribution, methods, and original source links before citing.
 
 | Existing source file | General subject from filename |
 |---|---|
@@ -13,4 +13,4 @@ These eight Markdown research-paper extracts already existed in `researchPapers/
 | [ML for Air Traffic Flow Management survey](MachineLearningforAirTrafficFlowManagement:ASurvey.md) | Literature survey |
 | [Queue Up for Takeoff](QUEUE_UP_FOR_TAKEOFF:A_TRANSFERABLE_DEEP_LEARNING_FRAMEWORK_FOR_FLIGHT_DELAY_PREDICTION.md) | Transferable delay prediction |
 
-**Planned follow-up**: verify source title/author/year/DOI/license and whether each paper actually supports the target departure/runway-delay problem. Avoid mistaking arrival-time prediction for the same label as runway departure delay.
+**Future literature validation**: verify source title/author/year/DOI/license and whether each paper actually supports the target departure/runway-delay problem. Avoid mistaking arrival-time prediction for the same label as runway departure delay.
