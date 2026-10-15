@@ -18,6 +18,14 @@ try {
     u.pathname==="/v39_ci" && !process.env.AERODATABOX_API_KEY;
 }catch{}
 const suite=allowed?describe:describe.skip;
+// Other no-provider tests intentionally COMMIT immutable FAILED receipts
+// into the same disposable /v39_ci DB. Filter the real production WHERE
+// predicate to *this* SAVEPOINT-scoped fixture ID so their unrelated
+// committed receipts cannot create nondeterministic LIMIT 1 results.
+// The live preparer still uses the unmodified global LIMIT 1 query.
+const fixtureScopedSql=`SELECT * FROM (
+  ${GATE3_PRIOR_OWNER_ADMISSION_SQL_V39.replace(/LIMIT 1\\s*$/, "")}
+) AS possible_owner WHERE possible_owner.session_id=$1`;
 
 suite("Gate3 PREPARED admission real-PG: unresolved FAILED != safe new canary",()=>{
   it("keeps every ambiguous account failure blocking but not an ordinary settled credit-gap research failure",async()=>{
@@ -43,7 +51,7 @@ suite("Gate3 PREPARED admission real-PG: unresolved FAILED != safe new canary",(
           SET state='FAILED',failure_reason=$2,
               evidence_sha256=$3,terminal_at_utc=now()
           WHERE session_id=$1`,[id,failureCode,"b".repeat(64)]);
-        const q=await c.query(GATE3_PRIOR_OWNER_ADMISSION_SQL_V39);
+        const q=await c.query(fixtureScopedSql,[id]);
         if(faultCodes.includes(failureCode)){
           expect(q.rowCount).toBe(1);
           expect(q.rows[0]).toMatchObject({
@@ -65,7 +73,7 @@ suite("Gate3 PREPARED admission real-PG: unresolved FAILED != safe new canary",(
       const q=await c.query(GATE3_PRIOR_OWNER_ADMISSION_SQL_V39);
       expect(q.rows[0]).toMatchObject({session_id:id,state:"PREPARED"});
       await c.query("ROLLBACK TO SAVEPOINT pending_owner");
-      expect((await c.query(GATE3_PRIOR_OWNER_ADMISSION_SQL_V39)).rowCount).toBe(0);
+      expect((await c.query(fixtureScopedSql,[id])).rowCount).toBe(0);
     }finally {
       await c.query("ROLLBACK").catch(()=>undefined);
       await c.end();
