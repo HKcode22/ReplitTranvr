@@ -16,7 +16,10 @@ import {
 
 const PREPROBE_PATH = join(
   process.cwd(),
-  "artifacts",
+  "data-collection",
+  "evidence",
+  "original-artifacts",
+  "other",
   "preprobe-reference-freeze-record.json",
 );
 const PREPROBE_SHA =

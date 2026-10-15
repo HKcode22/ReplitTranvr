@@ -3,7 +3,7 @@ import { readFileSync } from "fs";
 import type { ProbeTimeClassConfig } from "./probeExecution_v39";
 
 export const PHASE2G_YSSY_LOCAL_OPERATING_HOURS_PROTOCOL_ARTIFACT_PATH =
-  "artifacts/phase2g-yssy-local-operating-hours-protocol-freeze-20261003.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-yssy-local-operating-hours-protocol-freeze-20261003.json";
 
 export interface Phase2gYssyOperatingHoursProtocolV39 {
   schema: "v39.phase2g-yssy-local-operating-hours-protocol.v1";

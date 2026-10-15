@@ -10,37 +10,37 @@ import {
 } from "./yssyOperatingHours_v39";
 
 export const PHASE2G_COMPACT6_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-amendment-freeze-20260921.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-amendment-freeze-20260921.json";
 export const PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-p2g07-provider502-recovery-freeze-20260922.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g07-provider502-recovery-freeze-20260922.json";
 export const PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-p2g08-balance502-recovery-freeze-20260922.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g08-balance502-recovery-freeze-20260922.json";
 export const PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-p2g09-hostreset-recovery-freeze-20260922.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g09-hostreset-recovery-freeze-20260922.json";
 export const PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-p2g10-secret-mismatch-recovery-freeze-20260923.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g10-secret-mismatch-recovery-freeze-20260923.json";
 export const PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-identity-v2-recovery-freeze-20260925.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-identity-v2-recovery-freeze-20260925.json";
 export const PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-p2g17-mmun-delivery-gap-recovery-freeze-20261001.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g17-mmun-delivery-gap-recovery-freeze-20261001.json";
 export const PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-early-pilot-scope-reduction-freeze-20261002.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-early-pilot-scope-reduction-freeze-20261002.json";
 export const PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH =
-  "artifacts/phase2g-early-pilot-scope-operating-hours-correction-freeze-20261002.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-scope-operating-hours-correction-freeze-20261002.json";
 export const PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH =
-  "artifacts/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json";
 export const PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json";
 
 export const PHASE2G_P2G23_YSSY_FROZEN_PATH =
-  "artifacts/phase2g-early-pilot-yssy-p2g23-recovery-freeze-20261009.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p2g23-recovery-freeze-20261009.json";
 
 export const PHASE2G_P2G23_YSSY_CANDIDATE_PATH =
-  "artifacts/phase2g-early-pilot-yssy-p2g23-recovery-candidate-20261009.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p2g23-recovery-candidate-20261009.json";
 export const PHASE2G_P25_YSSY_FROZEN_PATH =
-  "artifacts/phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json";
 export const PHASE2G_P25_YSSY_DRAFT_PATH =
-  "artifacts/phase2g-early-pilot-yssy-p25-draft-20261011.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p25-draft-20261011.json";
 
 export type Phase2gIdentityV2RecoveryIcaoV39 =
   | "WSSS"
@@ -678,10 +678,10 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     const completeness = 259 / 260;
 
     const adminClosePath =
-      "artifacts/phase2g-p2g22-yssy-final-admin-close-20261007T004620179Z.json";
+      "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g22-yssy-final-admin-close-20261007T004620179Z.json";
 
     const cleanupPath =
-      "artifacts/phase2g-exact-session-purpose-cleanup-P2G22-YSSY-DELIVERY-GAP-1791286919308.json";
+      "data-collection/evidence/original-artifacts/phase2g/phase2g-exact-session-purpose-cleanup-P2G22-YSSY-DELIVERY-GAP-1791286919308.json";
 
     if (
       p2g22.authorized !== true ||
@@ -777,9 +777,9 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     const parentPath =
       PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH;
     const closePath =
-      "artifacts/phase2g-p2g23-yssy-callback-outage-final-closeout-20261008.json";
+      "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-yssy-callback-outage-final-closeout-20261008.json";
     const decisionPath =
-      "artifacts/phase2g-p2g23-project-lead-approval-20261009.json";
+      "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-project-lead-approval-20261009.json";
 
     if (
       ![
@@ -1012,7 +1012,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     if(JSON.stringify(clone)!==JSON.stringify(original))
       throw Error("REFUSED_P2G25_NON_ADDITIVE_SCIENCE_CHANGE");
     if(p25.project_lead_decision_file!==
-         "artifacts/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json"||
+         "data-collection/evidence/original-artifacts/phase2g/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json"||
        !/^[a-f0-9]{64}$/.test(p25.project_lead_decision_sha256)||
        !existsSync(p25.project_lead_decision_file)||
        sha256(readFileSync(p25.project_lead_decision_file,"utf8"))!==
