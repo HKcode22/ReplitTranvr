@@ -1,4 +1,7 @@
 # TECHNICAL GUIDE — Why we did Phase 2, what Phases 3–6 prove, and when ML starts
+
+> **October 14 scientific interpretation correction:** Valid YSSY-like observed records are **not rejected scientifically** merely for the 231 vs229 credit mismatch. The owner already approved YSSY Tier-B exploratory use in PR37. A separate exact Gate3 instrumentation certificate, future Phase6 scientifically justified missingness criteria and existing valid received observations are three different decisions. Read the [full technical correction and dual-track code](2026-10-14_SCIENTIFIC_MISSINGNESS_VS_GATE3_INSTRUMENTATION_CORRECTION.md). No amount of accounting-credit arithmetic alone proves how many distinct flights or extreme-delay outcomes were missed.
+
 **Date:** 2026-10-14 PDT. **Owner-facing technical reference** for HKcode22/ReplitTranvr. **Source authority:** [V3.9 DataCollectPlan f.8](../V3.9_DataCollectPlan_f.8.md) and [Implementation Log](../V3.9_IMPLEMENTATION_LOG.md) §§A1.13–A1.18. The **separately documented, operator-approved qualified Phase2 exploratory exception** in draft [PR37](https://github.com/HKcode22/ReplitTranvr/pull/37) and **proposed** four-anchor amendment in draft [PR36](https://github.com/HKcode22/ReplitTranvr/pull/36) do NOT retroactively convert original strict Gate2 into PASS. This guide describes the full project, not a new scientific protocol or spending authorization.
 
 ## 0. First understand our model and why we cannot just scrape flight rows
