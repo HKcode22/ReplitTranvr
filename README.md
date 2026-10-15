@@ -36,7 +36,7 @@ This repository contains the Tranvr application, its V3.9 aviation data-collecti
 
 ## Organized historical materials
 
-- [Historical Phase0 analysis and V2 diagnostics](docs/history/README.md) — original bytes preserved, not current experimental instructions.
+- [Historical Phase0 analysis, V2 diagnostics and ML notebook](docs/history/README.md) — original bytes preserved, not current experimental instructions.
 - [Wave A path move receipt](docs/repository-maintenance/manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv) — trace old and new names without rewriting files.
 
 ## Organization rule for new work

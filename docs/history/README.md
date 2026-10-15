@@ -4,6 +4,6 @@ This area contains preserved, non-current project material moved out of the top-
 
 - [Phase 0 archived analyses](phase0/reviews/README.md): original AI review narratives and earlier discussions; the explicitly cited `gptP0analyze4.md` remains at repository root pending source citation review.
 - [Earlier Phase 0 learning request](phase0/requests/confused.md): undated raw request, reference only.
-- [Older V2 diagnostics](v2-diagnostics/README.md): saved historic Replit and CSV investigations; not current operator runbooks.
+- [Older V2 diagnostics and archived ML notebook](v2-diagnostics/README.md): saved historic Replit and CSV investigations and preserved `T3.ipynb`; not current operator runbooks.
 
 Source bytes are unchanged by Git tree path moves. Use the [move receipt](../repository-maintenance/manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv) to map old to new Git blob identities. No source deletions from Git history were attempted.

@@ -8,3 +8,4 @@ old_path,new_path,git_blob_sha,bytes,classification,action
 "gptP0analyze7.md","docs/history/phase0/reviews/gptP0analyze7.md","72468606ba162abdbdcefb96a56d2b7480df15c3",14825,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
 "analyze_csv.py","docs/history/v2-diagnostics/analyze_csv.py","9bf974ea6f9a0f218f568ba4ae1beedde4bb0474",6010,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
 "REPLIT_DIAGNOSTIC_2026-08-02.md","docs/history/v2-diagnostics/REPLIT_DIAGNOSTIC_2026-08-02.md","9eedcc42326802193b5e3762c155dbd218e50340",7731,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"T3.ipynb","docs/history/v2-diagnostics/notebooks/T3.ipynb","df60b3241f6e459fba6fe3ce79efff01fa090c37",92670,"SUPPORTING_HISTORICAL_NOTEBOOK","GIT_TREE_PATH_MOVE_EXACT_BLOB"

@@ -23,6 +23,10 @@ Zero deletions and zero existing file renames in this PR as of this index. Phase
 
 - [Oct 15 verified nine-file archive move, exact blob SHA custody](2026-10-15_WAVEA_FIRST_ROOT_HISTORY_MOVES_CHECKPOINT.md) and [move receipt](manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv). No `SEPmd` or `artifacts` files were moved. The active operator shell-only guardrail is explicitly protected in the proposed map.
 
+## Second small, offline-safe root move
+
+- [Wave A notebook preservation and exact-blob test](2026-10-15_WAVEA_NOTEBOOK_AND_BLOB_INTEGRITY_CHECKPOINT.md). Ten historical root paths now have identical Git blobs at their new tracked paths. The remaining plan PDF and uninspected ZIP remain unchanged.
+
 ## Next exact gate
 
 Read latest four CI results and the `REPO_CLEANUP_UNRESOLVED_OPERATIONAL=` line from full offline Actions run on the exact reviewed PR SHA. Manually adjudicate unresolved references, then create a dependency-validated small no-impact move batch only if source paths have no blocking consumers. Full SEPmd→data-collection move stays HOLD.
