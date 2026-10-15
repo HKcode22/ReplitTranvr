@@ -1,6 +1,7 @@
 import {randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {describe,expect,it} from "vitest";
+import pg from "pg";
 import {holdPrepaidAmbiguousCreateV39}
   from "../server/lib/disruption/prepaidAmbiguousCreateOwnerHold_v39";
 import {resolveAmbiguousPrepaidCreateV39}
@@ -113,4 +114,60 @@ describe("actual prepaid CREATE owner: strict LIST uncertainty is a HOLD",()=>{
     expect(receiver).toContain('state IN (\'armed\',\'active\',\'settling\')');
     expect(code).toContain("GATE3_PREARMED_PROVIDER_EXPOSURE_PENDING_OWNER_AND_HOST_PARITY");
   });
+});
+
+const localUrl=process.env.DATABASE_URL??"";
+let isGitHubPg=false;
+try{
+  const u=new URL(localUrl);
+  isGitHubPg=process.env.GITHUB_ACTIONS==="true" &&
+    ["localhost","127.0.0.1"].includes(u.hostname) &&
+    u.pathname==="/v39_ci"&&!process.env.AERODATABOX_API_KEY;
+}catch{}
+const pgSuite=isGitHubPg?describe:describe.skip;
+pgSuite("Gate3 unknown CREATE preserves a real disposable-PG receiving session",()=>{
+  it("LOGGED owner stays PREPARED, UNLOGGED session enters callback-accepting settling, no provider",async()=>{
+    const client=new pg.Client({connectionString:localUrl,connectionTimeoutMillis:8000});
+    const id=sid();
+    await client.connect();
+    try{
+      await client.query("BEGIN");
+      await client.query(`INSERT INTO clean.phase3_gate3_canary_owner_v39
+        (session_id,icao,authorization_evidence_sha256,
+         canary_credit_ceiling,fixed_exposure_seconds,expires_at_utc)
+        VALUES ($1,'YSSY',$2,20,300,now()+interval '1 hour')`,[id,"f".repeat(64)]);
+      await client.query(`INSERT INTO clean.prepaid_probe_session_runtime
+        (session_id,owner_kind,owner_probe_id,stage,icao,
+         state,created_at_utc,expires_at_utc)
+        VALUES ($1,'phase3_credit_canary',NULL,NULL,'YSSY','armed',
+                now(),now()+interval '30 minutes')`,[id]);
+      const held=await holdPrepaidAmbiguousCreateV39({
+        sessionId:id,windowStart:start,now:after,
+        keepSessionReceiving:async(session)=>{
+          const x=await client.query(`UPDATE clean.prepaid_probe_session_runtime
+            SET state='settling' WHERE session_id=$1 RETURNING session_id`,[session]);
+          if(x.rowCount!==1)throw Error("SQL_UPDATE_NOT_ACKNOWLEDGED");
+        },
+      });
+      expect(held.unloggedReceivingStateAcknowledged).toBe(true);
+      expect(held.result).toMatchObject({
+        status:"failed",reconciliationStatus:"UNRESOLVED",
+        subscriptionDeleted:false,cleanupVerifiedAtUtc:null,
+      });
+      const row=await client.query(`SELECT s.state AS runtime_state,
+        o.state AS logged_owner_state,
+        (s.state IN ('armed','active','settling')) AS callback_receiving,
+        (s.provider_subscription_id IS NOT NULL) AS provider_bound
+        FROM clean.prepaid_probe_session_runtime s
+        JOIN clean.phase3_gate3_canary_owner_v39 o USING(session_id)
+        WHERE s.session_id=$1`,[id]);
+      expect(row.rows[0]).toMatchObject({
+        runtime_state:"settling",logged_owner_state:"PREPARED",
+        callback_receiving:true,provider_bound:false,
+      });
+    }finally{
+      await client.query("ROLLBACK").catch(()=>undefined);
+      await client.end();
+    }
+  },30000);
 });
