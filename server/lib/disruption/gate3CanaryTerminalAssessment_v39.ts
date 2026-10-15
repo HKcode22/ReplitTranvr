@@ -17,6 +17,7 @@ import type {PrepaidLiveWindowResultV39}
 export interface Gate3TerminalAssessmentInputV39 {
   expectedSessionId:string;
   canaryCreditCeiling:number;
+  fixedExposureSeconds:number;
   result:PrepaidLiveWindowResultV39;
   sourceReadbackVerified:boolean;
   publishedReceiverParityVerified:boolean;
@@ -44,6 +45,7 @@ export function assessGate3CanaryTerminalV39(
 ):Gate3TerminalAssessmentV39{
   if(!input||!UUID.test(input.expectedSessionId??"")||
      !int(input.canaryCreditCeiling,100)||input.canaryCreditCeiling===0||
+     !int(input.fixedExposureSeconds,3600)||input.fixedExposureSeconds===0||
      !int(input.foreignActiveBillableCount,100000)||
      typeof input.sourceReadbackVerified!=="boolean"||
      typeof input.publishedReceiverParityVerified!=="boolean"||
@@ -60,6 +62,11 @@ export function assessGate3CanaryTerminalV39(
     reasons.push("WINDOW_NOT_SUCCESSFULLY_STOPPED");
   if(result.durationCensored!==false||result.stopReason!==null)
     reasons.push("WINDOW_STOPPED_EARLY_OR_ABNORMALLY");
+  const start=result.windowStart instanceof Date?result.windowStart.getTime():NaN;
+  const end=result.windowEnd instanceof Date?result.windowEnd.getTime():NaN;
+  if(!Number.isFinite(start)||!Number.isFinite(end)||
+     end-start < input.fixedExposureSeconds*1000)
+    reasons.push("ACTUAL_EXPOSURE_SHORTER_THAN_FROZEN_DURATION");
   if(result.subscriptionDeleted!==true)
     reasons.push("OWNED_SUBSCRIPTION_DELETE_NOT_VERIFIED");
   if(result.reconciliationStatus!=="MATCH")
