@@ -10,7 +10,8 @@ const base=()=>({
   nowUtc:new Date("2026-10-14T12:00:00Z"),
 });
 type Fault="none"|"connect"|"begin"|"advisory"|"owner_exists"|
-  "insert_owner"|"insert_session"|"commit"|"rollback";
+  "insert_owner"|"insert_session"|"commit"|"rollback"|
+  "failed_create"|"failed_delete"|"failed_bind"|"failed_settlement";
 function fixture(fault:Fault,priorFailure=false){
   const calls:string[]=[];
   const releases:boolean[]=[];
@@ -20,7 +21,7 @@ function fixture(fault:Fault,priorFailure=false){
         sql==="COMMIT"?"COMMIT":
         sql==="ROLLBACK"?"ROLLBACK":
         sql.startsWith("SELECT pg_advisory_xact_lock")?"ADVISORY":
-        sql.startsWith("SELECT session_id FROM clean.phase3")?"EXISTING":
+        sql.startsWith("SELECT session_id,state,failure_reason")?"EXISTING":
         sql.startsWith("INSERT INTO clean.phase3")?"INSERT_LOGGED":
         sql.startsWith("INSERT INTO clean.prepaid")?"INSERT_RUNTIME":"OTHER";
       calls.push(name);
@@ -32,9 +33,22 @@ function fixture(fault:Fault,priorFailure=false){
          (fault==="commit"&&name==="COMMIT")||
          (fault==="rollback"&&name==="ROLLBACK"))
         throw Error("SIMULATED_PG_ACK_LOST");
-      if(name==="EXISTING")
+      if(name==="EXISTING"){
+        const failureCodes:Record<string,string>={
+          failed_create:"CREATE_AMBIGUOUS_ACCOUNT_HOLD",
+          failed_delete:"OWNED_DELETE_UNVERIFIED",
+          failed_bind:"BIND_FAILED",
+          failed_settlement:"SETTLEMENT_UNRESOLVED",
+        };
+        const failureCode=failureCodes[fault];
+        if(failureCode)
+          return {rowCount:1,rows:[{
+            session_id:"previous-immutable-failure",state:"FAILED",
+            failure_reason:failureCode,
+          }]};
         return {rowCount:fault==="owner_exists"?1:0,
-          rows:fault==="owner_exists"?[{session_id:"existing"}]:[]};
+          rows:fault==="owner_exists"?[{session_id:"existing",state:"PREPARED"}]:[]};
+      }
       return {rowCount:1,rows:[]};
     },
     release(discard?:boolean){releases.push(discard===true);},
@@ -73,6 +87,18 @@ describe("Gate3 pool-owned PREPARED SQL reservation — no provider",()=>{
       .rejects.toThrow("GATE3_PREPARE_PRIOR_UNSETTLED_OWNER_HOLD");
     expect(h.calls).toEqual(["BEGIN","ADVISORY","EXISTING","ROLLBACK"]);
     expect(h.releases).toEqual([false]);
+  });
+  it("prior ambiguous FAILED provider outcomes refuse a second Gate3 reservation",async()=>{
+    for(const code of ["failed_create","failed_delete","failed_bind","failed_settlement"] as const){
+      const h=fixture(code);
+      await expect(prepareGate3CanaryDraftWithPoolV39(h.pool,base()))
+        .rejects.toThrow("GATE3_PREPARE_PRIOR_UNRESOLVED_ACCOUNT_FAILURE_HOLD");
+      expect(h.calls).toEqual(["BEGIN","ADVISORY","EXISTING","ROLLBACK"]);
+      expect(h.calls).not.toContain("INSERT_LOGGED");
+      expect(h.calls).not.toContain("INSERT_RUNTIME");
+      expect(h.calls).not.toContain("COMMIT");
+      expect(h.releases).toEqual([false]);
+    }
   });
   it("each pre-COMMIT SQL fault rolls back, no second CREATE attempt",async()=>{
     for(const fault of ["advisory","insert_owner","insert_session"] as const){
