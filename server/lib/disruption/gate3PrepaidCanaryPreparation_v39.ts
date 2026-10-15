@@ -36,6 +36,23 @@ export interface Gate3DraftPreparedV39 {
 const EXACT_ICAO=/^[A-Z]{4}$/;
 const EXACT_SHA=/^[0-9a-f]{64}$/;
 const EXPIRY_BUFFER_SECONDS=600;
+
+/**
+ * Existing durable FAILED incident can still carry an unverified subscription
+ * or billable balance. Never treat only PREPARED rows as the entire account
+ * exposure gate. A later independently documented provider clearance must
+ * be versioned/reviewed; no boolean self-clearance exists here.
+ * Exported only so real disposable-PG regression tests run this exact SQL.
+ */
+export const GATE3_PRIOR_OWNER_ADMISSION_SQL_V39=`SELECT session_id,state,failure_reason
+  FROM clean.phase3_gate3_canary_owner_v39
+ WHERE state='PREPARED'
+    OR (state='FAILED' AND failure_reason IN
+       ('CREATE_AMBIGUOUS_ACCOUNT_HOLD',
+        'BIND_FAILED',
+        'OWNED_DELETE_UNVERIFIED',
+        'SETTLEMENT_UNRESOLVED'))
+ LIMIT 1` as const;
 const canaryValid=(n:unknown,max:number)=>typeof n==="number"&&
   Number.isSafeInteger(n)&&n>=1&&n<=max;
 
@@ -87,17 +104,7 @@ export async function prepareGate3CanaryDraftV39(
     // require separate reviewed account recovery, not auto-retry or a waiver
     // based on the age of the receipt. Ordinary scientific mismatch does not
     // itself assert that another billable subscription is alive.
-    const existing=await client.query(
-      `SELECT session_id,state,failure_reason
-         FROM clean.phase3_gate3_canary_owner_v39
-        WHERE state='PREPARED'
-           OR (state='FAILED' AND failure_reason IN
-              ('CREATE_AMBIGUOUS_ACCOUNT_HOLD',
-               'BIND_FAILED',
-               'OWNED_DELETE_UNVERIFIED',
-               'SETTLEMENT_UNRESOLVED'))
-        LIMIT 1`,
-    );
+    const existing=await client.query(GATE3_PRIOR_OWNER_ADMISSION_SQL_V39);
     if(existing.rowCount!==0){
       if(existing.rows[0]?.state==="FAILED")
         throw Error("GATE3_PREPARE_PRIOR_UNRESOLVED_ACCOUNT_FAILURE_HOLD");
