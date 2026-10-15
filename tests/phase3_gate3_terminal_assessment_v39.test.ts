@@ -58,7 +58,7 @@ describe("Gate3 exact terminal candidate never grants paid authority",()=>{
       expect(y.safeMetadataDigestSha256).toBeNull();
     }
   });
-  it("historic-like two-credit discrepancy cannot pass with a forged MATCH label",()=>{
+  it("a two-credit difference cannot certify the original exact Gate3 test, but research is reviewed separately",()=>{
     const x=input();x.result.externalCredits=7;
     const a=assessGate3CanaryTerminalV39(x);
     expect(a.reasons).toContain("EXTERNAL_RECEIVED_ITEM_CREDITS_DIFFER");
