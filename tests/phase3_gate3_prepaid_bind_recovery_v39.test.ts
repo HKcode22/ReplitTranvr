@@ -67,6 +67,20 @@ describe("Real prepaid CREATE→SQL BIND failure must not leave a billable orpha
       expect(called).toBe(false);
     }
   });
+  it("unhandled watchdog errors still attempt strict provider deletion, never claim it succeeded",()=>{
+    const code=readFileSync("server/lib/disruption/prepaidProbeWindow_v39.ts","utf8");
+    const watcher=code.indexOf("try {\n  while (Date.now() < deadline)");
+    const safeStop=code.indexOf('liveStopReason = "prepaid_active_watchdog_unexpected_exception"');
+    const deletion=code.indexOf("subscriptionDeleted = await deleteOwnedSubscriptionVerifiedV39(sub.id)");
+    const ambiguous=code.indexOf("subscriptionDeleted = false;",deletion);
+    expect(watcher).toBeGreaterThan(0);
+    expect(safeStop).toBeGreaterThan(watcher);
+    expect(deletion).toBeGreaterThan(safeStop);
+    expect(ambiguous).toBeGreaterThan(deletion);
+    expect(code).toContain('stopReason: "subscription_delete_failed"');
+    expect(code).toContain('reconciliationStatus: "UNRESOLVED"');
+    expect(code).toContain('subscriptionDeleted: false');
+  });
   it("shared prepaid runner has compensation before exposing the live watch loop",()=>{
     const code=readFileSync("server/lib/disruption/prepaidProbeWindow_v39.ts","utf8");
     const create=code.indexOf('await createSubscription("FlightByAirportIcao"');
