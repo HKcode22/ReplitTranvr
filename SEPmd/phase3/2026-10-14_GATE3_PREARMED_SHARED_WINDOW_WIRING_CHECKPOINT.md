@@ -12,7 +12,7 @@
 
 ## Test status
 - Previously verified source+test `694809ae12dd01a1602465c9e36c5ff7ba80ef15` **4/4 no-provider GitHub CI SUCCESS**, full #38662225605, source tests of ledger/hash+prearmed session passed.
-- Latest new shared window code+source status test SHA `dcd4923784cb75c944d90c3ee4a456e0fc66e740`: **GitHub Actions were IN_PROGRESS on initial checkpoint creation.** Must recheck its exact four workflow conclusions and failure logs, including TypeScript and old Phase2 regressions, before claiming implementation-tested green. Earlier #38663101103 on prior code revision may be stale; latest source/test SHA is authoritative.
+- **Independently verified source/test SHA `dcd4923784cb75c944d90c3ee4a456e0fc66e740` is 4/4 GitHub no-provider CI SUCCESS.** Full offline [#38663180390](https://github.com/HKcode22/ReplitTranvr/actions/runs/38663180390), focused #38663180383, disposable real-PG faults #38663180516 and receiver read-only #38663180448 all passed. Full job #116188974086 log: V0065 successfully applied on disposable PostgreSQL, new **prearmed session selector tests 6/6 passed twice**, updated Gate3 source-compatibility tests 5/5 passed twice; full and offline suites each **1,241 passed / 19 skipped**. This proves compiled source and no-provider pathway only. **A Gate3 live authorization, signed paid execution owner, hosted receiver identity and provider accounting are NOT proven.**
 - No one ran a real paid canary; the explicit Gate3 provider hard-stop is present by design.
 
 ## Exact next engineering work and finish conditions
