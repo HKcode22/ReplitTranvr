@@ -2,7 +2,7 @@
 /**
  * READ-ONLY repository reorganization reference audit.
  * No provider/SQL/Blob/network calls, Git writes, or source mutations.
- * Run: node scripts/repo_cleanup_reference_audit.mjs [--json] [--strict]
+ * Run: node scripts/repo_cleanup_reference_audit.mjs [--json | --summary-json] [--strict]
  * --strict exits nonzero on suspected missing operational literal references.
  * All findings are candidates to REVIEW, never permission to delete.
  */
@@ -17,7 +17,7 @@ if (args.has("--help")) {
   console.log("node scripts/repo_cleanup_reference_audit.mjs [--json] [--strict]");
   process.exit(0);
 }
-if ([...args].some((arg) => !["--json", "--strict"].includes(arg))) {
+if ([...args].some((arg) => !["--json", "--strict", "--summary-json"].includes(arg))) {
   console.error("Unknown option. Use --help.");
   process.exit(2);
 }
@@ -124,7 +124,11 @@ const report = {
   ],
   references
 };
-if (args.has("--json")) {
+if (args.has("--summary-json")) {
+  const summary = { ...report };
+  delete summary.references;
+  process.stdout.write(JSON.stringify(summary) + "\n");
+} else if (args.has("--json")) {
   process.stdout.write(JSON.stringify(report, null, 2) + "\n");
 } else {
   const summary = { ...report };

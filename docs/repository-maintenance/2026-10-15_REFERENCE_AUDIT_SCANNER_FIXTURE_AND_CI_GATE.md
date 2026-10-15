@@ -1,0 +1,7 @@
+# 2026-10-15 — Verified safety scanner and CI gate
+
+- Exact Git blob of `scripts/repo_cleanup_reference_audit.mjs` was independently reproduced locally with `git hash-object`: `4012aa07667315ae41f270f9cb9075f5bd1c62c4`. `node --check` succeeded on that **exact blob** (Node 22).
+- A disposable local **10-file** Git repository fixture was committed and scanned; an existing `SEPmd/plan.md` source reference was detected as present, a fictitious `SEPmd/missing.md` reference as missing, and `--strict` returned exit code 2 as expected. No provider/production environment was involved. This is a unit fixture, **not** a full live branch dependency scan.
+- The current scanner now supports `--summary-json` for bounded automatic CI parsing, alongside full `--json` and human-readable default output. It remains entirely read-only.
+- New offline test `tests/repo_cleanup_reference_audit_v39.test.ts` runs the actual scanner inside GitHub's checked-out PR source and requires `AGENTS.md`, `replit.md`, `SEPmd/`, `artifacts/` and other protected paths to still be tracked. It logs **counts only**, not credentials or callback bodies. The test intentionally does **not** require zero missing historical references; those need manual adjudication before renames.
+- This commit is limited to auditor/test/checkpoint files. Main, Replit, live provider/DB, scientific files, authorization, frozen evidence, and protected snapshot are unchanged. CI run results must be inspected for the exact new commit before calling it PASS.
