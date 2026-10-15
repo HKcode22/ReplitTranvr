@@ -133,7 +133,7 @@ Only after enough meaningful Phase6 collection and according to the frozen split
 | Four prospective anchors | owner-chosen and draft solver 4/4 offline-tested | not yet final Phase5 approved/published calendar |
 | Gate3 additive SQL and atomic prearm | draft offline/disposable PG tests PASS on earlier SHA `ba54a387...` | not live provider credits |
 | Gate3 prepared session SELECT review | draft 4/4 CI PASS SHA `a91fab82...` | not independent AUTH |
-| Gate3 owner AUTH+session preflight | NEW `gate3OwnerAuthorizationPreflight_v39.ts`, negative tests; exact source commit listed in next dated checkpoint | not live provider/deployed |
+| Gate3 owner AUTH+session preflight | NEW `gate3OwnerAuthorizationPreflight_v39.ts`, negative tests; exact source+test SHA `694809ae12dd01a1602465c9e36c5ff7ba80ef15`: **4/4 GitHub no-provider CI PASSED**, full #38662225605, focused #38662225553, real PG #38662225555, read-only receiver #38662225629. **Only source/evidence consistency**, not paid-live acceptance | not live provider/deployed |
 | Gate3 official billable canary | **NOT RUN / HOLD** | historic YSSY/P2 smoke cannot stand in |
 | Gate0.5, Gate4 | **NOT PASSED** | source JSON/old synthetic tests |
 | Gate5 | **NOT PASSED** | hardcoded outside 0 |
