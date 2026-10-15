@@ -19,10 +19,12 @@ const fixture=():Gate3FailureReceiptInputV39=>({
 function fakePool(input:Gate3FailureReceiptInputV39, options?:{
   alreadyFailed?:boolean;missing?:boolean;
   rejectUpdate?:boolean;rejectCommit?:boolean;rejectBegin?:boolean;
+  rejectRollback?:boolean;
   rejectConnect?:boolean;
 }){
   const calls:string[]=[];
   let released=0;
+  const releases:boolean[]=[];
   const client={
     async query(sql:string){
       const op=sql.startsWith("SELECT session_id")?"SELECT":
@@ -31,6 +33,7 @@ function fakePool(input:Gate3FailureReceiptInputV39, options?:{
       if(op==="BEGIN"&&options?.rejectBegin)throw Error("BEGIN_ERROR");
       if(op==="COMMIT"&&options?.rejectCommit)throw Error("COMMIT_CONNECTION_LOST");
       if(op==="UPDATE"&&options?.rejectUpdate)throw Error("SQL_UPDATE_FAILED");
+      if(op==="ROLLBACK"&&options?.rejectRollback)throw Error("ROLLBACK_CONNECTION_LOST");
       if(op==="SELECT")return options?.missing?{rowCount:0,rows:[]}:{
         rowCount:1,rows:[{
           icao:input.icao,
@@ -42,7 +45,7 @@ function fakePool(input:Gate3FailureReceiptInputV39, options?:{
       };
       return {rowCount:1,rows:[{session_id:input.sessionId}]};
     },
-    release(){released++;},
+    release(discard?:boolean){released++;releases.push(discard===true);},
   };
   const pool={
     connect:async()=>{
@@ -50,7 +53,7 @@ function fakePool(input:Gate3FailureReceiptInputV39, options?:{
       return client;
     },
   } as unknown as Pick<Pool,"connect">;
-  return {pool,calls,get released(){return released;}};
+  return {pool,calls,releases,get released(){return released;}};
 }
 
 describe("Gate3 failure commit owner — one durable attempt, never paid",()=>{
@@ -59,6 +62,7 @@ describe("Gate3 failure commit owner — one durable attempt, never paid",()=>{
     const r=await commitGate3CanaryFailureV39(h.pool,x);
     expect(h.calls).toEqual(["BEGIN","SELECT","UPDATE","COMMIT"]);
     expect(h.released).toBe(1);
+    expect(h.releases).toEqual([false]);
     expect(r).toMatchObject({
       disposition:"DURABLY_FAILED",committed:true,providerCalls:0,
       authorizesAnotherRun:false,
@@ -69,6 +73,7 @@ describe("Gate3 failure commit owner — one durable attempt, never paid",()=>{
     const x=fixture(),h=fakePool(x,{alreadyFailed:true});
     const r=await commitGate3CanaryFailureV39(h.pool,x);
     expect(h.calls).toEqual(["BEGIN","SELECT","COMMIT"]);
+    expect(h.releases).toEqual([false]);
     expect(r.disposition).toBe("DURABLY_ALREADY_IDENTICAL_FAILED");
     expect(h.released).toBe(1);
   });
@@ -78,6 +83,7 @@ describe("Gate3 failure commit owner — one durable attempt, never paid",()=>{
       .toThrow("GATE3_FAILED_COMMIT_OUTCOME_UNKNOWN_DURABLE_AUDIT_REQUIRED");
     expect(h.calls).toEqual(["BEGIN","SELECT","UPDATE","COMMIT"]);
     expect(h.released).toBe(1);
+    expect(h.releases).toEqual([true]); // never recycle unknown COMMIT state
   });
   it("read or UPDATE failure rolls back; no false durability",async()=>{
     for(const settings of [{missing:true},{rejectUpdate:true}]){
@@ -86,6 +92,7 @@ describe("Gate3 failure commit owner — one durable attempt, never paid",()=>{
       expect(h.calls.at(-1)).toBe("ROLLBACK");
       expect(h.calls).not.toContain("COMMIT");
       expect(h.released).toBe(1);
+      expect(h.releases).toEqual([false]); // rollback acknowledged
     }
   });
   it("BEGIN/connect failure never enters provider or falsely commits",async()=>{
@@ -94,10 +101,19 @@ describe("Gate3 failure commit owner — one durable attempt, never paid",()=>{
       .toThrow("BEGIN_ERROR");
     expect(begin.calls).toEqual(["BEGIN"]);
     expect(begin.released).toBe(1);
+    expect(begin.releases).toEqual([true]); // BEGIN reply could have been lost
     const missing=fakePool(x,{rejectConnect:true});
     await expect(commitGate3CanaryFailureV39(missing.pool,x)).rejects
       .toThrow("GATE3_FAILED_COMMIT_CONNECT_FAILED_HOLD");
     expect(missing.calls).toEqual([]);
+  });
+  it("failed ROLLBACK discards uncertain PG connection, not recycled",async()=>{
+    const x=fixture(),h=fakePool(x,{missing:true,rejectRollback:true});
+    await expect(commitGate3CanaryFailureV39(h.pool,x)).rejects
+      .toThrow("GATE3_FAILED_RECEIPT_OWNER_NOT_FOUND");
+    expect(h.calls).toEqual(["BEGIN","SELECT","ROLLBACK"]);
+    expect(h.releases).toEqual([true]);
+    expect(h.released).toBe(1);
   });
   it("rejects invalid provider-free pool before any SQL",async()=>{
     await expect(commitGate3CanaryFailureV39({} as Pick<Pool,"connect">,fixture()))
