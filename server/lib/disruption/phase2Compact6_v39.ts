@@ -840,19 +840,33 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       throw new Error("REFUSED_COMPACT6_P2G23_RECOVERY_CONTRACT");
     }
 
+    // Frozen P2G23 records retain historical file names as signed evidence
+    // values. Resolve ONLY these three previously reviewed, immutable original
+    // receipts to their new on-disk locations. Never rewrite signed fields or
+    // accept a caller-provided arbitrary new path.
+    const relocatedHistoricalReceipts = new Map<string, string>([
+      ["artifacts/phase2g-p2g23-yssy-reconstruction-20261008T044128Z.json",
+       "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-yssy-reconstruction-20261008T044128Z.json"],
+      ["artifacts/phase2g-p2g23-yssy-callback-outage-blob-manifest-20261008.json",
+       "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-yssy-callback-outage-blob-manifest-20261008.json"],
+      ["artifacts/phase2g-exact-session-purpose-cleanup-P2G23-YSSY-CALLBACK-OUTAGE-1791435358585.json",
+       "data-collection/evidence/original-artifacts/phase2g/phase2g-exact-session-purpose-cleanup-P2G23-YSSY-CALLBACK-OUTAGE-1791435358585.json"],
+    ]);
     const verifiedJson = (
-      path: string,
+      historicalPath: string,
       expectedSha: string,
     ): any => {
+      const storedPath = relocatedHistoricalReceipts.get(historicalPath);
       if (
-        !existsSync(path) ||
-        sha256(readFileSync(path, "utf8")) !== expectedSha
+        !storedPath ||
+        !existsSync(storedPath) ||
+        sha256(readFileSync(storedPath, "utf8")) !== expectedSha
       ) {
         throw new Error(
-          `REFUSED_COMPACT6_P2G23_RECEIPT_HASH:${path}`,
+          `REFUSED_COMPACT6_P2G23_RECEIPT_HASH:${historicalPath}`,
         );
       }
-      return JSON.parse(readFileSync(path, "utf8"));
+      return JSON.parse(readFileSync(storedPath, "utf8"));
     };
 
     const parentOriginal = verifiedJson(

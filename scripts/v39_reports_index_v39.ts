@@ -7,12 +7,12 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 function main(): void {
-  const p = join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+  const p = join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
   let text: string;
   try {
     text = readFileSync(p, "utf8");
   } catch {
-    console.error("REPORTS-INDEX: cannot read SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+    console.error("REPORTS-INDEX: cannot read relocated evidence ledger");
     process.exit(1);
   }
   const ids = Array.from(

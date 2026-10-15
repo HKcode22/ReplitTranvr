@@ -64,7 +64,7 @@ async function getJson(url: string): Promise<{ status: number; json: any | null 
 }
 
 async function main(): Promise<void> {
-  const preprobePath = path.resolve(optional("--preprobe", "artifacts/preprobe-reference-freeze-record.json"));
+  const preprobePath = path.resolve(optional("--preprobe", "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json"));
   const smokePath = path.resolve(required("--smoke"));
   const smokeRuntimePath = path.resolve(required("--smoke-runtime-file"));
   const smokeRuntimeSha = required("--smoke-runtime-sha").toLowerCase();
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
     throw new Error(`BLOCKED:PHASE2F_HANDOFF_MISMATCH:expected=${expectedHandoff}:actual=${handoff.evidenceId}`);
   }
 
-  const ledgerPath = path.resolve("SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+  const ledgerPath = path.resolve("data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md");
   const ledger = fs.readFileSync(ledgerPath, "utf8");
   if (!ledger.includes(handoff.evidenceId) || !ledger.includes("- phase2f: PASS")) {
     throw new Error("BLOCKED:PHASE2F_PASS_HANDOFF_NOT_RECORDED");
