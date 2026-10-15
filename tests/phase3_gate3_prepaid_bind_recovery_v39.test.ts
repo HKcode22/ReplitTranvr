@@ -83,7 +83,7 @@ describe("Real prepaid CREATE→SQL BIND failure must not leave a billable orpha
   });
   it("shared prepaid runner has compensation before exposing the live watch loop",()=>{
     const code=readFileSync("server/lib/disruption/prepaidProbeWindow_v39.ts","utf8");
-    const create=code.indexOf('await createSubscription("FlightByAirportIcao"');
+    const create=code.indexOf("const creation = await resolveAmbiguousPrepaidCreateV39({");
     const recovery=code.indexOf("await bindOrCompensatePrepaidSubscriptionV39({");
     const monitor=code.indexOf("while (Date.now() < deadline)");
     const hold=code.indexOf("subscription_bind_failed_delete_unresolved_emergency_stop");
