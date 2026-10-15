@@ -32,7 +32,7 @@ export function sha256Text(value: string): string {
 }
 
 export function currentPlanSha256(root = process.cwd()): string {
-  return sha256Text(readFileSync(join(root, "SEPmd", "V3.9_DataCollectPlan_f.8.md"), "utf8"));
+  return sha256Text(readFileSync(join(root, "data-collection", "plans", "V3.9_DataCollectPlan_f.8.md"), "utf8"));
 }
 
 export function currentProviderContentInventorySha256(): string {

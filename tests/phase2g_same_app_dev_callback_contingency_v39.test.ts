@@ -12,7 +12,7 @@ const localLauncher = readFileSync(join(root, "scripts", "v39_phase2g_stage1_lau
 const resolver = readFileSync(join(root, "scripts", "v39_phase2g_resolve_incident24_v39.ts"), "utf8");
 const workflow = readFileSync(join(root, ".github", "workflows", "phase2g-paid-stage1.yml"), "utf8");
 const routes = readFileSync(join(root, "server", "routes_v3.ts"), "utf8");
-const freeze = JSON.parse(readFileSync(join(root, "artifacts", "phase2g-same-app-dev-callback-contingency-freeze-20260923.json"), "utf8"));
+const freeze = JSON.parse(readFileSync(join(root, "data-collection", "evidence", "original-artifacts", "phase2g", "phase2g-same-app-dev-callback-contingency-freeze-20260923.json"), "utf8"));
 
 describe("Phase-2G same-app development callback contingency", () => {
   it("freezes infrastructure only and preserves the scientific protocol", () => {

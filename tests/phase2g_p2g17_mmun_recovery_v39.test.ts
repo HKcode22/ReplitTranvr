@@ -9,7 +9,7 @@ import {
 } from "../server/lib/disruption/phase2Compact6_v39";
 
 const root = process.cwd();
-const preprobePath = join(root, "artifacts", "preprobe-reference-freeze-record.json");
+const preprobePath = join(root, "data-collection", "evidence", "original-artifacts", "other", "preprobe-reference-freeze-record.json");
 const preprobeSha = "b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870";
 const expectedAmendmentSha = "7ace48ceaf4b929189b2d65d97c6de5e6a6d06a7de88470133c197442b9d2568";
 
@@ -103,7 +103,7 @@ describe("P2G17 MMUN technical-invalid recovery contract", () => {
     expect(helper).toContain('BUDGET="P2G-S1-20261001-17"');
     expect(helper).toContain('AUTH_ID="AUTH-20261001-P2G18H1"');
     expect(helper).toContain(
-      'RUNTIME="artifacts/phase2g-gate2-runtime-P2G-S1-20261001-17-H1.json"',
+      'RUNTIME="data-collection/evidence/original-artifacts/phase2g/phase2g-gate2-runtime-P2G-S1-20261001-17-H1.json"',
     );
     expect(helper).toContain('AUTH_START="2026-10-01T11:00:00Z"');
     expect(helper).toContain('AUTH_EXPIRES="2026-10-01T15:10:00Z"');

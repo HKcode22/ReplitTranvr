@@ -20,7 +20,7 @@ import {
   type Stage1AttemptEvidence,
 } from "../scripts/v39_probe_stage1_owner_v39";
 
-const PREPROBE_PATH = join(process.cwd(), "artifacts", "preprobe-reference-freeze-record.json");
+const PREPROBE_PATH = join(process.cwd(), "data-collection", "evidence", "original-artifacts", "other", "preprobe-reference-freeze-record.json");
 const PREPROBE_SHA = "b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870";
 const COMPACT6_PATH = join(process.cwd(), PHASE2G_COMPACT6_ARTIFACT_PATH);
 const sha256 = (raw: string) => createHash("sha256").update(raw, "utf8").digest("hex");
