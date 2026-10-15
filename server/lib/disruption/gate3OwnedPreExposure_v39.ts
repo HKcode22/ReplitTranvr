@@ -44,6 +44,12 @@ export type Gate3OwnedPreExposureEvidenceV39=Gate3LedgerBoundPreparedV39 & Reado
   humanPaidAuthorizationVerified:false;
   paidCanaryCertified:false;
   providerSubscriptionCreatedHere:false;
+  /**
+   * Sensitive account starting credit balance IN PROCESS MEMORY ONLY.
+   * Never serialize this owner result to GitHub logs/durable SQL/Blob.
+   * Required by actual prepaid runner to compute exact billed SEND delta.
+   */
+  balanceBeforeInMemory:number;
 }>;
 export type Gate3OwnerPreExposureDepsV39=Readonly<{
   fetchImpl?:typeof fetch;
@@ -93,7 +99,7 @@ export async function reviewGate3CurrentProviderAccountV39(
   canaryCreditCeiling:number,
   getBalance:()=>Promise<StrictBalanceEvidence>=getBalanceEvidenceStrict,
   list:()=>Promise<WebhookSubscription[]>=listSubscriptionsStrictWithRetry,
-):Promise<void>{
+):Promise<number>{
   if(!Number.isSafeInteger(canaryCreditCeiling)||
      canaryCreditCeiling<1||canaryCreditCeiling>100)
     throw Error("GATE3_OWNER_INVALID_SMALL_BUDGET_HOLD");
@@ -123,6 +129,7 @@ export async function reviewGate3CurrentProviderAccountV39(
     throw Error("GATE3_OWNER_PROVIDER_INVENTORY_INVALID_HOLD");
   if(subscriptions.some(s=>s.isActive&&s.billingType==="CreditBased"))
     throw Error("GATE3_OWNER_ACTIVE_BILLABLE_SUBSCRIPTION_PRESENT_HOLD");
+  return remaining;
 }
 
 /**
@@ -153,7 +160,7 @@ export async function prepareGate3AfterLiveReadOnlyEvidenceV39(
   reviewGate3LedgerBoundPreparationV39(input,ledger);
   await verifyGate3PublishedPrepaidHostV39(
     input.expectedPublishedGitHead,deps.fetchImpl??fetch);
-  await reviewGate3CurrentProviderAccountV39(
+  const balanceBeforeInMemory=await reviewGate3CurrentProviderAccountV39(
     input.canaryCreditCeiling,
     deps.getBalanceEvidence??getBalanceEvidenceStrict,
     deps.getSubscriptions??listSubscriptionsStrictWithRetry,
@@ -173,5 +180,6 @@ export async function prepareGate3AfterLiveReadOnlyEvidenceV39(
     humanPaidAuthorizationVerified:false,
     paidCanaryCertified:false,
     providerSubscriptionCreatedHere:false,
+    balanceBeforeInMemory,
   };
 }

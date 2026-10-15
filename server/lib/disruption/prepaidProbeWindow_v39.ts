@@ -92,6 +92,14 @@ export interface PrepaidLiveWindowResultV39 {
 
 // Current frozen acceptance remains exact. A positive external-minus-received
 // gap is preserved as DELIVERY_GAP evidence, but is terminal/non-scoreable.
+/**
+ * Versioned source-level release seal. Deliberately NOT controlled by a
+ * mutable ENV var or caller-supplied "approved" boolean. The actual Gate3
+ * paid provider path must remain sealed until an independently reviewed
+ * release verifies real hosted signed-source custody and operator authority.
+ */
+export const GATE3_PROVIDER_EXPOSURE_RELEASED_V39 = false;
+
 export const PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 = 1;
 
 export function classifyProbeReconciliationV39(input: {
@@ -448,7 +456,8 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       } finally {client.release();}
     },
   });
-  if(input.ownerKind==="phase3_credit_canary") {
+  if(input.ownerKind==="phase3_credit_canary" &&
+     !GATE3_PROVIDER_EXPOSURE_RELEASED_V39) {
     // The prearmed source path now cannot allocate an accidental second
     // Phase2 UUID. But final versioned paid Gate3 owner, independently
     // verified deployed-host/source rights and provider preflight are NOT

@@ -167,6 +167,9 @@ describe("Gate3 actual published host + strict account + source owner preexposur
     });
     expect(d.sql).toEqual(["BEGIN","LOCK","EXISTING","OWNER","RUNTIME","COMMIT"]);
     expect(d.released).toEqual([false]);
+    // The live provider starting balance is needed by the exact window
+    // reconciler, but remains a process-local handoff, not a SQL receipt.
+    expect(x.balanceBeforeInMemory).toBe(2300);
     expect(x).toMatchObject({
       status:"SOURCE_PREPARED_LEDGER_MATCH_NOT_PAID_AUTH",
       stage:"REAL_HOST_AND_ACCOUNT_READS_SOURCE_PREPARED_ONLY",
