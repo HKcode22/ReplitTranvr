@@ -106,7 +106,7 @@ describe("actual prepaid CREATE owner: strict LIST uncertainty is a HOLD",()=>{
     expect(catchBlock).toContain("return held.result;");
     expect(catchBlock).not.toContain("cleanupOrDefer(");
     expect(catchBlock).not.toContain("cleanupPrepaidProbeSessionV39(");
-    expect(catchBlock).not.toContain("createSubscription(",);
+    expect(code.slice(failed,normal)).not.toContain("createSubscription(");
     expect(code).toContain("GATE3_PREARMED_PROVIDER_EXPOSURE_PENDING_OWNER_AND_HOST_PARITY");
   });
 });
