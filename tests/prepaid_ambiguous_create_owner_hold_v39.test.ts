@@ -26,12 +26,12 @@ describe("actual prepaid CREATE owner: strict LIST uncertainty is a HOLD",()=>{
     const writes:string[]=[];
     const held=await holdPrepaidAmbiguousCreateV39({
       sessionId:id,windowStart:start,
-      markSessionFailed:async(s)=>{writes.push("FAILED:"+s);},
+      keepSessionReceiving:async(s)=>{writes.push("SETTLING:"+s);},
       now:after,
     });
-    expect(writes).toEqual(["FAILED:"+id]);
+    expect(writes).toEqual(["SETTLING:"+id]);
     expect(held).toMatchObject({
-      unloggedFailureStateAcknowledged:true,
+      unloggedReceivingStateAcknowledged:true,
       providerSubscriptionAbsenceProved:false,
       sourceCleanupPerformed:false,
       paidRestartAuthorized:false,
@@ -55,13 +55,13 @@ describe("actual prepaid CREATE owner: strict LIST uncertainty is a HOLD",()=>{
     let writes=0;
     const held=await holdPrepaidAmbiguousCreateV39({
       sessionId:sid(),windowStart:start,
-      markSessionFailed:async()=>{writes++;throw Error("PG session gone");},
+      keepSessionReceiving:async()=>{writes++;throw Error("PG session gone");},
       now:after,
     });
     expect(writes).toBe(1);
-    expect(held.unloggedFailureStateAcknowledged).toBe(false);
+    expect(held.unloggedReceivingStateAcknowledged).toBe(false);
     expect(held.result.stopReason)
-      .toBe("subscription_create_provider_outcome_unverified_hold_runtime_write_unverified");
+      .toBe("subscription_create_provider_outcome_unverified_hold_runtime_receiving_unverified");
     expect(held.result.subscriptionDeleted).toBe(false);
     expect(held.sourceCleanupPerformed).toBe(false);
     expect(classifyGate3FailedWindowV39({
@@ -71,10 +71,10 @@ describe("actual prepaid CREATE owner: strict LIST uncertainty is a HOLD",()=>{
   });
   it("malformed input cannot silently perform an SQL callback or return a PASS",async()=>{
     const id=sid(), writes:string[]=[];
-    const base={sessionId:id,windowStart:start,markSessionFailed:async()=>{writes.push("FAILED");}};
+    const base={sessionId:id,windowStart:start,keepSessionReceiving:async()=>{writes.push("SETTLING");}};
     for(const patch of [
       {sessionId:"wrong"},{windowStart:new Date(NaN)},
-      {markSessionFailed:undefined},{now:undefined as any},
+      {keepSessionReceiving:undefined},{now:undefined as any},
     ]){
       // undefined optional now is legal; exercise only actual invalid fields
       if(Object.keys(patch)[0]==="now")continue;
@@ -86,7 +86,7 @@ describe("actual prepaid CREATE owner: strict LIST uncertainty is a HOLD",()=>{
   it("clock prior to CREATE clamps end to start; never negative elapsed duration",async()=>{
     const held=await holdPrepaidAmbiguousCreateV39({
       sessionId:sid(),windowStart:start,
-      markSessionFailed:async()=>{},
+      keepSessionReceiving:async()=>{},
       now:()=>new Date(start.getTime()-1000),
     });
     expect(held.result.windowEnd).toEqual(start);
@@ -107,6 +107,10 @@ describe("actual prepaid CREATE owner: strict LIST uncertainty is a HOLD",()=>{
     expect(catchBlock).not.toContain("cleanupOrDefer(");
     expect(catchBlock).not.toContain("cleanupPrepaidProbeSessionV39(");
     expect(code.slice(failed,normal)).not.toContain("createSubscription(");
+    expect(code).toContain('keepSessionReceiving:(id)=>setPrepaidProbeSessionStateV39(id,"settling")');
+    const receiver=readFileSync("server/lib/disruption/prepaidProbeRuntime_v39.ts","utf8");
+    expect(receiver).toContain('["armed", "active", "settling"].includes(state)');
+    expect(receiver).toContain('state IN (\'armed\',\'active\',\'settling\')');
     expect(code).toContain("GATE3_PREARMED_PROVIDER_EXPOSURE_PENDING_OWNER_AND_HOST_PARITY");
   });
 });
