@@ -8,8 +8,8 @@ const file=()=>readFileSync(join(process.cwd(),
 describe("Phase3 GitHub Actions: manual exact owner admission NEVER paid",()=>{
   it("exposes one manual dispatch and no scheduled, push or PR side entrance",()=>{
     const y=file();
-    expect(y).toMatch(/^on:\n  workflow_dispatch:/m);
-    expect(y).not.toMatch(/^  (?:push|pull_request|schedule|repository_dispatch|workflow_run):/m);
+    expect(y).toMatch(/^on:\n {2}workflow_dispatch:/m);
+    expect(y).not.toMatch(/^ {2}(?:push|pull_request|schedule|repository_dispatch|workflow_run):/m);
     expect(y).toContain("github.ref == 'refs/heads/main'");
     expect(y).toContain("inputs.confirm == 'READ_ONLY_GATE3_NO_PROVIDER'");
     expect(y).toContain('group: phase3-gate3-readonly-admission');
