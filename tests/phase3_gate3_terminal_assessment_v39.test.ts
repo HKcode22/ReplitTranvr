@@ -1,4 +1,5 @@
 import {randomUUID} from "node:crypto";
+import {readFileSync} from "node:fs";
 import {describe,expect,it} from "vitest";
 import {assessGate3CanaryTerminalV39} from
   "../server/lib/disruption/gate3CanaryTerminalAssessment_v39";
@@ -116,7 +117,7 @@ describe("Gate3 exact terminal candidate never grants paid authority",()=>{
     const a=assessGate3CanaryTerminalV39(input());
     const b=assessGate3CanaryTerminalV39(input());
     expect(a.safeMetadataDigestSha256).toBe(b.safeMetadataDigestSha256);
-    const source=require("node:fs").readFileSync(
+    const source=readFileSync(
       "server/lib/disruption/gate3CanaryTerminalAssessment_v39.ts","utf8",
     );
     const fragment=source.slice(source.indexOf("const safeMetadataDigestSha256=status"),source.indexOf("  return {\n    schema:",source.indexOf("const safeMetadataDigestSha256=status")));
