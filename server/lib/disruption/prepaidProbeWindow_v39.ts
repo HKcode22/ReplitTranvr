@@ -544,6 +544,10 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   }
   windowStart = new Date();
   const deadline = windowStart.getTime() + targetMs;
+  // Even source/SQL watcher exceptions MUST transition into the normal
+  // exact-owned provider deletion path. Otherwise the run could abandon a
+  // billable subscription after CREATE, despite valid watchdog stop rules.
+  try {
   while (Date.now() < deadline) {
     await sleep(Math.min(input.watchdogPollMs, Math.max(250, deadline - Date.now())));
 
@@ -650,9 +654,20 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       break;
     }
   }
+  } catch {
+    // A failed balance read, SQL callback ledger, or operator stop query
+    // cannot be trusted; terminate exposure and preserve failed evidence.
+    liveStopReason = "prepaid_active_watchdog_unexpected_exception";
+  }
   windowEnd = new Date();
 
-  subscriptionDeleted = await deleteOwnedSubscriptionVerifiedV39(sub.id);
+  try {
+    subscriptionDeleted = await deleteOwnedSubscriptionVerifiedV39(sub.id);
+  } catch {
+    // The DELETE outcome may be ambiguous after transport failure. Never
+    // mark subscription deleted unless strict readback verified it.
+    subscriptionDeleted = false;
+  }
   if (!subscriptionDeleted) {
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     return {
