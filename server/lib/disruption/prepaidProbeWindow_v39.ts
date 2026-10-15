@@ -502,7 +502,10 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     const held=await holdPrepaidAmbiguousCreateV39({
       sessionId:session.sessionId,
       windowStart,
-      markSessionFailed:(id)=>setPrepaidProbeSessionStateV39(id,"failed"),
+      // A real subscription may already be live; failed would reject
+      // callbacks and destroy future source visibility. settling is
+      // deliberately callback-accepting, NOT evidence of provider DELETE.
+      keepSessionReceiving:(id)=>setPrepaidProbeSessionStateV39(id,"settling"),
     });
     return held.result;
   }
