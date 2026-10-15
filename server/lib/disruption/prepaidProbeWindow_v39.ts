@@ -19,6 +19,8 @@ import {bindOrCompensatePrepaidSubscriptionV39}
   from "./prepaidSubscriptionBindingRecovery_v39";
 import {resolveAmbiguousPrepaidCreateV39}
   from "./prepaidAmbiguousCreateResolution_v39";
+import {holdPrepaidAmbiguousCreateV39}
+  from "./prepaidAmbiguousCreateOwnerHold_v39";
 import {
   armPrepaidProbeSessionV39,
   assertPrepaidProbePersistenceConfigV39,
@@ -481,14 +483,28 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   // thrown response EXACTLY as an empty-ID response: strict LIST by the
   // already-frozen airport + unique callback, never blindly retry CREATE.
   // Any failure/multiple match in strict LIST is an unresolved account HOLD.
-  const creation = await resolveAmbiguousPrepaidCreateV39({
-    createOnce:()=>createSubscription("FlightByAirportIcao", icao, {
-      url: webhookUrl,maxDeliveryRetries: 0,
-    }),
-    recoverExactUsingStrictList:()=>recoverAmbiguousSubscriptionCreateV39(
-      icao,webhookUrl,
-    ),
-  });
+  let creation:Awaited<ReturnType<typeof resolveAmbiguousPrepaidCreateV39<WebhookSubscription>>>;
+  try {
+    creation = await resolveAmbiguousPrepaidCreateV39({
+      createOnce:()=>createSubscription("FlightByAirportIcao", icao, {
+        url: webhookUrl,maxDeliveryRetries: 0,
+      }),
+      recoverExactUsingStrictList:()=>recoverAmbiguousSubscriptionCreateV39(
+        icao,webhookUrl,
+      ),
+    });
+  } catch {
+    // Provider CREATE/strict LIST had an indeterminate outcome. A billable
+    // subscription may ALREADY exist, and callbacks may be in transit.
+    // Return a visible terminal HOLD for later exact-owned independent
+    // provider recovery; never retry CREATE or cleanup retained originals.
+    const held=await holdPrepaidAmbiguousCreateV39({
+      sessionId:session.sessionId,
+      windowStart,
+      markSessionFailed:(id)=>setPrepaidProbeSessionStateV39(id,"failed"),
+    });
+    return held.result;
+  }
   let sub = creation.subscription;
 
   if (!sub?.id) {
