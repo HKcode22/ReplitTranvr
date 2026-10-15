@@ -31,6 +31,10 @@ Zero deletions and zero existing file renames in this PR as of this index. Phase
 
 - [New `data-collection/` entry point](../../data-collection/README.md) links the approved 8 research/operations subsections to the original source files. Unlike the future atomic rename, this is pure navigation and all old authority paths remain valid.
 
+## Remaining root decisions
+
+- [2026-10-15 case-sensitive root file review](2026-10-15_REMAINING_ROOT_FILES_AND_OPAQUE_ARTIFACT_REVIEW.md) and [machine root inventory](manifests/2026-10-15_REMAINING_REPO_ROOT_FILE_REVIEW.csv). The Gate0 checklist has not yet moved; opaque plan PDF and ZIP remain protected.
+
 ## Next exact gate
 
 Read latest four CI results and the `REPO_CLEANUP_UNRESOLVED_OPERATIONAL=` line from full offline Actions run on the exact reviewed PR SHA. Manually adjudicate unresolved references, then create a dependency-validated small no-impact move batch only if source paths have no blocking consumers. Full SEPmd→data-collection move stays HOLD.

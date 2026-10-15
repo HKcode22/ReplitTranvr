@@ -38,6 +38,9 @@ describe("repository cleanup reference scanner (offline, read-only)", () => {
       "gptP0analyze", "confused.md", "analyze_csv.py", "zipFile.zip",
       "T3.ipynb", "REPLIT_DIAGNOSTIC_2026-08-02.md",
       "V3.9_DataCollectPlanCurrent.pdf",
+      "GATE0_INPUT_CHECKLIST.md",
+      "gptP0analyze4.md",
+      "SEPmd/PHASE2G/OPERATOR_SHELL_ONLY_GUARDRAIL.md",
       "V3.9_Final_Document_Safety_Audit_2026-09-02.md",
     ];
     const candidateMatches = rootCandidates.map((needle) => {
