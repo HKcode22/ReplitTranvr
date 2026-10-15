@@ -15,6 +15,8 @@ import {
   type WebhookSubscription,
 } from "./aerodataboxLimiter_v3";
 import { runSettlement, type SettlementConfig } from "./settlement_v3";
+import {bindOrCompensatePrepaidSubscriptionV39}
+  from "./prepaidSubscriptionBindingRecovery_v39";
 import {
   armPrepaidProbeSessionV39,
   assertPrepaidProbePersistenceConfigV39,
@@ -510,7 +512,36 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     };
   }
 
-  await bindPrepaidProbeSubscriptionV39(session.sessionId, sub.id);
+  // Provider CREATE may have succeeded while SQL BIND fails (outage,
+  // timeout, lost UNLOGGED table). A billable subscription can exist even
+  // though no session successfully references it. Compensate with strict
+  // deletion of the exact provider ID before returning a terminal HOLD.
+  const bound = await bindOrCompensatePrepaidSubscriptionV39({
+    sessionId:session.sessionId,subscriptionId:sub.id,
+  },{
+    bind:bindPrepaidProbeSubscriptionV39,
+    deleteOwnedVerified:deleteOwnedSubscriptionVerifiedV39,
+  });
+  if(bound.status!=="BOUND"){
+    // Never cleanup incoming originals: callbacks could have arrived
+    // between provider CREATE and verified DELETE. Preserve for forensic
+    // reconciliation; a new paid session is NOT automatically admissible.
+    await setPrepaidProbeSessionStateV39(session.sessionId,"failed")
+      .catch(()=>undefined);
+    const internal = await prepaidProbeInternalCreditsV39(session.sessionId)
+      .catch(()=>0); // UNVERIFIED if SQL is unavailable; external NULL.
+    return {
+      status:"failed",runtimeSessionId:session.sessionId,
+      windowStart,windowEnd:new Date(),durationCensored:true,
+      stopReason:bound.subscriptionDeleted
+        ?"subscription_bind_failed_delete_verified_settlement_required"
+        :"subscription_bind_failed_delete_unresolved_emergency_stop",
+      reconciliationStatus:"UNRESOLVED",
+      externalCredits:null,internalSendCredits:internal,
+      maxObservedUnsettledCreditGap:0,settlementReads:0,metrics:null,
+      cleanupVerifiedAtUtc:null,subscriptionDeleted:bound.subscriptionDeleted,
+    };
+  }
   windowStart = new Date();
   const deadline = windowStart.getTime() + targetMs;
   while (Date.now() < deadline) {
