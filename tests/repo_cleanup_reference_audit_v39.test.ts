@@ -30,6 +30,44 @@ describe("repository cleanup reference scanner (offline, read-only)", () => {
       root_clutter_source_references: candidateRefs.slice(0, 30).map((r) => ({ from: r.from, target: r.target_literal })),
       requires_manual_review: true
     }));
+
+    // Read-only exact literal/name reference inventory for potential root clutter.
+    // Git grep status=1 means no matching tracked text; never use absence alone
+    // to approve deletion (dynamic file names and binary assets are out of scope).
+    const rootCandidates = [
+      "gptP0analyze", "confused.md", "analyze_csv.py", "zipFile.zip",
+      "T3.ipynb", "REPLIT_DIAGNOSTIC_2026-08-02.md",
+      "V3.9_DataCollectPlanCurrent.pdf",
+      "V3.9_Final_Document_Safety_Audit_2026-09-02.md",
+    ];
+    const candidateMatches = rootCandidates.map((needle) => {
+      let files: string[] = [];
+      try {
+        files = execFileSync("git", ["grep", "-I", "-l", "-F", "-e", needle, "--"], {
+          cwd: process.cwd(), encoding: "utf8", timeout: 15_000,
+          maxBuffer: 2 * 1024 * 1024,
+        }).trim().split("\n").filter(Boolean);
+      } catch (e) {
+        if ((e as { status?: number }).status !== 1) throw e;
+      }
+      const operational = files.filter((path) =>
+        /^(scripts|server|tests|shared|client|migrations|\.github)\//.test(path) &&
+        !path.startsWith("tests/repo_cleanup_reference_audit_")
+      );
+      return {
+        candidate: needle,
+        tracked_text_reference_files: files.length,
+        operational_reference_paths: operational.slice(0, 40),
+        note: "Review only; zero literal references would not certify no runtime usage",
+      };
+    });
+    console.log("REPO_CLEANUP_ROOT_CANDIDATE_REFERENCES=" + JSON.stringify({
+      exact_checkout_sha: audit.git_head,
+      candidateMatches,
+      changes_to_live_files: 0,
+      provider_calls: 0
+    }));
+
     console.log("REPO_CLEANUP_INVENTORY_READONLY=" + JSON.stringify({
       git_head: audit.git_head,
       tracked_files: audit.tracked_files,

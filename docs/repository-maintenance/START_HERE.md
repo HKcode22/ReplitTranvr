@@ -15,6 +15,10 @@
 
 Zero deletions and zero existing file renames in this PR as of this index. Phase2G qualified historical YSSY source 231/229 remains unchanged; original formal Gate2 and live Gate3 are not certified by repository housekeeping. No Replit Agent, deployment, paid API, SQL/ObjectStorage or source retention action is performed.
 
+## Latest complete scanner triage
+
+- [Oct 15 CI full 64-reference triage and missing literal provenance](2026-10-15_CI_UNRESOLVED_LITERALS_FULL_TRIAGE.md) — 4/4 zero-provider CI PASS at `fc5fd762e2159e187dc913d08f65bff872f55fc1`, 30 distinct unresolved strings (mostly placeholders/generated files, not automatically bugs).
+
 ## Next exact gate
 
 Read latest four CI results and the `REPO_CLEANUP_UNRESOLVED_OPERATIONAL=` line from full offline Actions run on the exact reviewed PR SHA. Manually adjudicate unresolved references, then create a dependency-validated small no-impact move batch only if source paths have no blocking consumers. Full SEPmd→data-collection move stays HOLD.
