@@ -21,10 +21,10 @@ describe("Phase3 zero-provider compatibility inventory",()=>{
   it("must see real source incompatibilities instead of treating YSSY approval as paid Gate3",()=>{
     const result=reviewGate3SourceCompatibilityV39(current());
     expect(result.status).toBe("BLOCKED_SOURCE_CONTRACT");
-    expect(result.blockers).toEqual(expect.arrayContaining([
-      "LEGACY_CANARY_STILL_USES_NONPREPAID_LEDGER",
-      "GATE3_WRAPPER_STILL_DELEGATES_LEGACY_CANARY",
-    ]));
+    expect(result.blockers).toContain("LEGACY_CANARY_STILL_USES_NONPREPAID_LEDGER");
+    // Retired canonical Gate3 CLI no longer delegates after AUTH.
+    expect(result.blockers).not.toContain("GATE3_WRAPPER_STILL_DELEGATES_LEGACY_CANARY");
+    expect(result.blockers).not.toContain("GATE3_WRAPPER_DIRECT_NO_GO_NOT_VERIFIED");
     // The dedicated owner-kind and draft prearmed runner are now present.
     // Original legacy wrapper remains deliberately NO-GO for real provider.
     expect(result.blockers).not.toContain(
@@ -34,6 +34,15 @@ describe("Phase3 zero-provider compatibility inventory",()=>{
     expect(result.livePublishedVerified).toBe(false);
     expect(result.providerCalls).toBe(0);
     expect(result.databaseMutations).toBe(0);
+  });
+  it("rejects restoring old paid-script delegation behind AUTH",()=>{
+    const s=current();
+    const v=reviewGate3SourceCompatibilityV39({
+      ...s,legacyWrapper:s.legacyWrapper+
+        ' spawnSync("npx", ["tsx", "scripts/credit_canary.ts", ...extra]);',
+    });
+    expect(v.blockers).toContain("GATE3_WRAPPER_STILL_DELEGATES_LEGACY_CANARY");
+    expect(v.authorizedPaidCanary).toBe(false);
   });
   it("fails closed when reviewed forward-only Gate3 owner SQL is removed",()=>{
     const snapshot=current();

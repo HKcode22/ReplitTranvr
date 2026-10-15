@@ -75,9 +75,15 @@ export function reviewGate3SourceCompatibilityV39(
     if (!legacyCanary.includes("clean.adb_ingest_events"))
       reject("LEGACY_CANARY_LEDGER_CHANGED_REVIEW_REQUIRED");
     else reject("LEGACY_CANARY_STILL_USES_NONPREPAID_LEDGER");
-    if (!legacyWrapper.includes('scripts/credit_canary.ts'))
-      reject("GATE3_WRAPPER_TARGET_CHANGED_REVIEW_REQUIRED");
-    else reject("GATE3_WRAPPER_STILL_DELEGATES_LEGACY_CANARY");
+    // The canonical command was intentionally retired: it MUST refuse
+    // without delegating to the incompatible legacy paid collector.
+    // Do not call its removal a broken target or reopen the old YSSY path.
+    if (legacyWrapper.includes("spawnSync(") ||
+        legacyWrapper.includes('scripts/credit_canary.ts", ...extra'))
+      reject("GATE3_WRAPPER_STILL_DELEGATES_LEGACY_CANARY");
+    else if (!legacyWrapper.includes("refuseLegacyGate3CanaryReceiverV39()") ||
+             !legacyWrapper.includes("process.exitCode=2"))
+      reject("GATE3_WRAPPER_DIRECT_NO_GO_NOT_VERIFIED");
     if (!legacyReadiness.includes("GATE3_LEGACY_CANARY_RECEIVER_INCOMPATIBLE"))
       reject("LEGACY_PAID_FAIL_CLOSED_SENTINEL_MISSING");
   }
