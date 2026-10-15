@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 function tracked(prefix:string){
@@ -56,5 +57,31 @@ describe("full original evidence and scientific source navigation",()=>{
       "data-collection/evidence/artifact-index/phase2g.md",
       "data-collection/evidence/artifact-index/other.md"
     ])expect(existsSync(page)).toBe(true);
+  });  it("resolves every scientific and artifact index Markdown link at current checkout",()=>{
+    const pages=[
+      "data-collection/START_HERE.md",
+      "data-collection/ALL_SEPMD_FILES.md",
+      "data-collection/phase2g/ALL_REPORTS.md",
+      "data-collection/evidence/ARTIFACTS_START_HERE.md",
+      "data-collection/evidence/artifact-index/phase2f.md",
+      "data-collection/evidence/artifact-index/phase2g.md",
+      "data-collection/evidence/artifact-index/other.md",
+    ];
+    let checked=0;
+    for(const page of pages){
+      const md=readFileSync(page,"utf8");
+      for(const hit of md.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)){
+        const url=hit[1];
+        if(/^(https?:|mailto:|#)/.test(url))continue;
+        const original=decodeURIComponent(url.split("#")[0]);
+        const target=resolve(dirname(page),original);
+        expect(target.startsWith(process.cwd()+"/"),"unsafe link traversal: "+page+" -> "+url).toBe(true);
+        expect(existsSync(target),"Broken navigation: "+page+" -> "+url).toBe(true);
+        checked++;
+      }
+    }
+    expect(checked).toBeGreaterThan(500);
+    console.log("REPO_CLEANUP_SOURCE_LINKS="+JSON.stringify({pages:pages.length,verified_local_targets:checked,broken:0,paid_provider_calls:0}));
   });
+
 });

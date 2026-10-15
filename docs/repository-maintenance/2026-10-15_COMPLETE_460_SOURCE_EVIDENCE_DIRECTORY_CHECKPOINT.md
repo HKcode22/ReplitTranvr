@@ -19,3 +19,7 @@
 - Decide whether the physical `SEPmd→data-collection` rename should happen now or after Gate3 PR36 integration. In either case, resolve original source paths removed on PR36 (notably `AGENTS.md`, original P25 AUTH and runtime freeze); amend all runtime/CI/dynamic path consumers *atomically*. Preserve original source blob SHAs and scientific ledgers unchanged. Do not touch live/released files without explicit owner review/permission.
 - 34MB root `zipFile.zip` and Plan PDF remain opaque unique candidates, deliberately not deleted or renamed.
 - Existing only macOS casefold collision `SEPmd/PHASE2G/README.md` versus `SEPmd/phase2g/README.md` must be fixed in any future structural move, not ignored.
+
+## Link QA correction before merge of this directory
+
+Automated exact-GitHub-tree verification of the first complete 108-file page found its initially generated `../filename` links did **not** preserve the `SEPmd/` directory segment. Corrected all 108 links to `../SEPmd/<original path>` before treating this index as complete. Added a dedicated zero-provider regression test that resolves every relative link from seven principal catalog pages against the checked-out filesystem and requires more than 500 valid local links; it reports `REPO_CLEANUP_SOURCE_LINKS` in CI. The correction affects the new navigation file only, never any original scientific file. Any GitHub CI from the earlier indexing commit is superseded and cannot by itself validate this fix.
