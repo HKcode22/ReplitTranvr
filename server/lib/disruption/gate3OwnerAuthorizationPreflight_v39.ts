@@ -123,7 +123,7 @@ export async function reviewGate3OwnerPreflightV39(
        !Number.isInteger(record.maxAlertCredits)||
        record.maxAlertCredits>100 || record.maxAlertCredits<1)
       reasons.push("AUTH_CREDIT_CEILING_NOT_EXACT");
-    if(!record.cleanupOwner || !record.cleanupOwner.trim())
+    if(typeof record.cleanupOwner!=="string"||!record.cleanupOwner.trim())
       reasons.push("AUTH_CLEANUP_OWNER_MISSING");
     if(record.maxRestUnitsByCategory!==null &&
        (!record.maxRestUnitsByCategory||
