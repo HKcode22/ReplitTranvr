@@ -97,7 +97,7 @@ describe("prepaid shared runner selects original Phase2 or prepared Gate3 identi
     const rt=readFileSync("server/lib/disruption/prepaidProbeRuntime_v39.ts","utf8");
     const chosen=w.indexOf("await selectPrepaidWindowSessionV39(input,");
     const hold=w.indexOf("GATE3_PREARMED_PROVIDER_EXPOSURE_PENDING_OWNER_AND_HOST_PARITY");
-    const create=w.indexOf('await createSubscription("FlightByAirportIcao"');
+    const create=w.indexOf("const creation = await resolveAmbiguousPrepaidCreateV39({");
     expect(chosen).toBeGreaterThan(0);
     expect(hold).toBeGreaterThan(chosen);
     expect(create).toBeGreaterThan(hold);
