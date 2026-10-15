@@ -2,7 +2,7 @@
 
 # Phase 2G — Paid-Pilot/Scientific Record Index
 
-**150 original source artifacts** retained at their existing `artifacts/` path (no copies, no deletion). Frozen original pilot and recovery evidence, including YSSY; filenames are not formal Gate2 pass status.
+**150 original source artifacts** physically relocated without rewriting source blobs in this DRAFT branch (not merged, no deletion of historical evidence). Frozen original pilot and recovery evidence, including YSSY; filenames are not formal Gate2 pass status.
 
 [Search all 352 original paths and Git blob IDs](../artifacts-catalog.csv).
 

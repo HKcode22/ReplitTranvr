@@ -4,7 +4,7 @@
 
 **Navigation index, NOT an active AUTH grant.** These are **32 existing tracked root JSON AUTH artifacts from `main=f5b1347...`**. Listing them here neither proves current signature validity nor grants a new paid window. The historical P25 authorization is in original root; separate PR36 currently has a different tree and must reconcile that difference prior to merge.
 
-The original JSON files are **not copied or moved** by this index. Each link resolves to the original exact path under `SEPmd/`. Evaluate signature, SHA, account, scope, budget, UTC time, single-flight protocol, and published-runtime source binding independently using current approved code and ledgers.
+The original JSON blobs are physically relocated on this draft review branch, without rewriting historical authorization content. Each link resolves to the new candidate location, while the historical original `SEPmd/` path remains recorded in the source catalog. Evaluate signature, SHA, account, scope, budget, UTC time, single-flight protocol, and published-runtime source binding independently using current approved code and ledgers.
 
 ## Gate 0 (1)
 

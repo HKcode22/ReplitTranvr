@@ -2,7 +2,7 @@
 
 # Phase 2F — Callback/Deployment Record Index
 
-**180 original source artifacts** retained at their existing `artifacts/` path (no copies, no deletion). Historical callback, workspace, binding and smoke evidence; similar timestamps are not proof of duplicate content.
+**180 original source artifacts** physically relocated without rewriting source blobs in this DRAFT branch (not merged, no deletion of historical evidence). Historical callback, workspace, binding and smoke evidence; similar timestamps are not proof of duplicate content.
 
 [Search all 352 original paths and Git blob IDs](../artifacts-catalog.csv).
 

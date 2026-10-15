@@ -2,7 +2,7 @@
 
 # Earlier Gates, Database Baseline and Preprobe Index
 
-**22 original source artifacts** retained at their existing `artifacts/` path (no copies, no deletion). Other artifacts include original preprobe, schema inventory and early gate records. Preserve original source custody.
+**22 original source artifacts** physically relocated without rewriting source blobs in this DRAFT branch (not merged, no deletion of historical evidence). Other artifacts include original preprobe, schema inventory and early gate records. Preserve original source custody.
 
 [Search all 352 original paths and Git blob IDs](../artifacts-catalog.csv).
 

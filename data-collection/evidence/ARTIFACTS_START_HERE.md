@@ -2,7 +2,7 @@
 
 # Find an original experimental artifact
 
-**All 352 originally tracked `artifacts/` files are now indexed without relocation or payload modification.** This is a search/navigation aid, not independent certification that every receipt is scientifically valid or sufficient to promote an experiment.
+**All 352 originally tracked `artifacts/` files are now linked to their candidate relocated paths, preserving original Git blobs without payload modification.** This is a search/navigation aid, not independent certification that every receipt is scientifically valid or sufficient to promote an experiment.
 
 ## Common starting points
 

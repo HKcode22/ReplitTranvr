@@ -18,6 +18,6 @@
 
 **Chronology:** Phase 0 established protocols and early gates; Phase 2/2G performed flight pilots and studied failures; YSSY P25 retained its original **231 billed / 229 received delivery gap**, distinct from qualified research use or formal Gate2 PASS. Phase 3/Gate3 is a separate engineering draft, not a deployed paid study.
 
-**What actually changed:** eleven old root files moved unchanged to [historical materials](../docs/history/README.md). All 108 original `SEPmd/` and 352 `artifacts/` files remain at exact prior paths, with catalogs and SHA checks. The [post-merge offline CI](https://github.com/HKcode22/ReplitTranvr/actions/runs/38812391951) passed.
+**What actually changed:** eleven old root files moved unchanged to [historical materials](../docs/history/README.md). In this draft migration branch, all 108 original `SEPmd/` and 352 original `artifacts/` blobs have been relocated without changing their Git bytes; the protected main branch still retains the original paths until a separate merge decision. The [post-merge offline CI](https://github.com/HKcode22/ReplitTranvr/actions/runs/38812391951) passed.
 
 A dated runbook can be historically useful without being a current run instruction. Check dates, source SHA, current owner approval and the prohibition on Replit AI Agent.

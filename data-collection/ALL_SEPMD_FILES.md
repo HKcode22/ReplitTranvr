@@ -2,7 +2,7 @@
 
 # Complete original scientific source file directory
 
-**108 original SEPmd tracked files**, linked to existing files and never copied or changed by this index. For exact Git blob ID and byte size consult [source catalog CSV](sepmd-source-catalog.csv). The list establishes existence, *not* that an older operational instruction is currently authorized.
+**108 original SEPmd tracked files**, now linked to relocated original Git blobs in this DRAFT branch. The catalog preserves each old path and original blob SHA. For exact Git blob ID and byte size consult [source catalog CSV](sepmd-source-catalog.csv). The list establishes existence, *not* that an older operational instruction is currently authorized.
 
 ## Root plans, implementation, authorization and original evidence (47)
 
@@ -121,4 +121,4 @@
 - [README.md](phase2g/legacy-uppercase/README.md)
 - [V3.9_PHASE2G_COMPACT6_RECONCILIATION_AMENDMENT_20260922.md](phase2g/legacy-uppercase/V3.9_PHASE2G_COMPACT6_RECONCILIATION_AMENDMENT_20260922.md)
 
-**macOS warning:** `SEPmd/PHASE2G/README.md` and `SEPmd/phase2g/README.md` are different Git blobs but their names collide on case-insensitive filesystems. Keep separate until an atomic safe rename is fully reviewed and tested.
+**macOS warning:** `SEPmd/PHASE2G/README.md` and `SEPmd/phase2g/README.md` are different Git blobs but their names collide on case-insensitive filesystems. They are separately located in this unmerged candidate; do not treat that layout as deployment approval.

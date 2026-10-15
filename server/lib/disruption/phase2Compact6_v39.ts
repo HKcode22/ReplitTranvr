@@ -678,10 +678,12 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     const completeness = 259 / 260;
 
     const adminClosePath =
-      "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g22-yssy-final-admin-close-20261007T004620179Z.json";
+      "artifacts/phase2g-p2g22-yssy-final-admin-close-20261007T004620179Z.json";
+    const adminCloseStoredPath = "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g22-yssy-final-admin-close-20261007T004620179Z.json";
 
     const cleanupPath =
-      "data-collection/evidence/original-artifacts/phase2g/phase2g-exact-session-purpose-cleanup-P2G22-YSSY-DELIVERY-GAP-1791286919308.json";
+      "artifacts/phase2g-exact-session-purpose-cleanup-P2G22-YSSY-DELIVERY-GAP-1791286919308.json";
+    const cleanupStoredPath = "data-collection/evidence/original-artifacts/phase2g/phase2g-exact-session-purpose-cleanup-P2G22-YSSY-DELIVERY-GAP-1791286919308.json";
 
     if (
       p2g22.authorized !== true ||
@@ -741,10 +743,10 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     }
 
     if (
-      !existsSync(adminClosePath) ||
+      !existsSync(adminCloseStoredPath) ||
       sha256(
         readFileSync(
-          adminClosePath,
+          adminCloseStoredPath,
           "utf8",
         ),
       ) !== p2g22.admin_close_sha256
@@ -755,10 +757,10 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     }
 
     if (
-      !existsSync(cleanupPath) ||
+      !existsSync(cleanupStoredPath) ||
       sha256(
         readFileSync(
-          cleanupPath,
+          cleanupStoredPath,
           "utf8",
         ),
       ) !== p2g22.cleanup_receipt_sha256
@@ -777,9 +779,11 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     const parentPath =
       PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH;
     const closePath =
-      "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-yssy-callback-outage-final-closeout-20261008.json";
+      "artifacts/phase2g-p2g23-yssy-callback-outage-final-closeout-20261008.json";
+    const closeStoredPath = "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-yssy-callback-outage-final-closeout-20261008.json";
     const decisionPath =
-      "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-project-lead-approval-20261009.json";
+      "artifacts/phase2g-p2g23-project-lead-approval-20261009.json";
+    const decisionStoredPath = "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-project-lead-approval-20261009.json";
 
     if (
       ![
@@ -870,10 +874,10 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       );
     }
     const lead = verifiedJson(
-      decisionPath, p23.project_lead_decision_sha256,
+      decisionStoredPath, p23.project_lead_decision_sha256,
     );
     const close = verifiedJson(
-      closePath, p23.p2g23_closeout_sha256,
+      closeStoredPath, p23.p2g23_closeout_sha256,
     );
 
     if (
@@ -1011,14 +1015,16 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     clone.frozen_at_utc=original.frozen_at_utc;
     if(JSON.stringify(clone)!==JSON.stringify(original))
       throw Error("REFUSED_P2G25_NON_ADDITIVE_SCIENCE_CHANGE");
+    const p25DecisionStoredPath =
+      "data-collection/evidence/original-artifacts/phase2g/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json";
     if(p25.project_lead_decision_file!==
-         "data-collection/evidence/original-artifacts/phase2g/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json"||
+         "artifacts/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json"||
        !/^[a-f0-9]{64}$/.test(p25.project_lead_decision_sha256)||
-       !existsSync(p25.project_lead_decision_file)||
-       sha256(readFileSync(p25.project_lead_decision_file,"utf8"))!==
+       !existsSync(p25DecisionStoredPath)||
+       sha256(readFileSync(p25DecisionStoredPath,"utf8"))!==
          p25.project_lead_decision_sha256)
       throw Error("REFUSED_P2G25_HUMAN_APPROVAL_RECEIPT_MISSING_OR_HASH_MISMATCH");
-    const decision=JSON.parse(readFileSync(p25.project_lead_decision_file,"utf8"));
+    const decision=JSON.parse(readFileSync(p25DecisionStoredPath,"utf8"));
     if(decision.schema!=="v39.phase2g-p25-prospective-recovery-decision.v1"||
        decision.status!=="PROJECT_LEAD_APPROVED_ONE_RECOVERY"||
        decision.target!=="YSSY"||decision.max_alert_credits!==500||
@@ -1162,7 +1168,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
         scope.yssy_local_time_protocol_required !== true ||
         scope.yssy_curfew_local_time !== "23:00-06:00 Australia/Sydney" ||
         scope.yssy_local_operating_hours_protocol_file !==
-          PHASE2G_YSSY_LOCAL_OPERATING_HOURS_PROTOCOL_ARTIFACT_PATH ||
+          "artifacts/phase2g-yssy-local-operating-hours-protocol-freeze-20261003.json" ||
         !/^[a-f0-9]{64}$/.test(
           String(scope.yssy_local_operating_hours_protocol_sha256 ?? ""),
         ) ||
@@ -1179,7 +1185,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       const yssyProtocol = loadYssyOperatingHoursProtocolV39({
         expectedSha256:
           scope.yssy_local_operating_hours_protocol_sha256!,
-        path: scope.yssy_local_operating_hours_protocol_file!,
+        path: PHASE2G_YSSY_LOCAL_OPERATING_HOURS_PROTOCOL_ARTIFACT_PATH,
       });
       if (
         yssyProtocol.protocol.parent_scope_sha256 !==
