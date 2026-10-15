@@ -2,6 +2,7 @@ import {describe,expect,it} from "vitest";
 import pg from "pg";
 import {
   prepareGate3CanaryDraftV39,validateGate3DraftPreparationV39,
+  GATE3_PRIOR_OWNER_ADMISSION_SQL_V39,
 } from "../server/lib/disruption/gate3PrepaidCanaryPreparation_v39";
 const sha="a".repeat(64);
 const base=()=>({
@@ -44,7 +45,27 @@ pgSuite("Gate3 draft preparation durable atomic source in disposable PG",()=>{
     let preparedSessionId:string|null=null;
     try{
       const input={...base(),nowUtc:new Date()};
-      const created=await prepareGate3CanaryDraftV39(client,input);
+      // Disposable CI shares one PostgreSQL database among real-PG suites.
+      // Other tests intentionally COMMIT immutable FAILED incident receipts.
+      // That is exactly what this new production admission protection must
+      // reject. A failed provider account is not disposable just because
+      // another test wants a fresh PREPARED row.
+      const blockers=await client.query(GATE3_PRIOR_OWNER_ADMISSION_SQL_V39);
+      if(blockers.rowCount && blockers.rows[0]?.state==="FAILED"){
+        await expect(prepareGate3CanaryDraftV39(client,input))
+          .rejects.toThrow("GATE3_PREPARE_PRIOR_UNRESOLVED_ACCOUNT_FAILURE_HOLD");
+        return; // SQL positive pairing is independently tested with ROLLBACK fixture
+      }
+      let created;
+      try {
+        created=await prepareGate3CanaryDraftV39(client,input);
+      } catch(err){
+        // Another CI test can finish a FAILED receipt after our first read.
+        if(err instanceof Error &&
+           err.message==="GATE3_PREPARE_PRIOR_UNRESOLVED_ACCOUNT_FAILURE_HOLD")
+          return;
+        throw err;
+      }
       preparedSessionId=created.sessionId;
       expect(created).toMatchObject({
         icao:"YSSY",state:"PREPARED",runtimeState:"armed",
