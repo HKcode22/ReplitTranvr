@@ -4,6 +4,8 @@ This is the **proposed final document structure**, introduced safely as navigati
 
 | Find | Open |
 |---|---|
+| **Lost? Start here in plain English** | [Start here](START_HERE.md) |
+| Every original SEPmd file by path | [Complete 108-file directory](ALL_SEPMD_FILES.md) |
 | Scientific baseline and history | [Plans](plans/README.md) |
 | V3.9 implementation, large running status ledger | [Implementation](implementation/README.md) |
 | Earlier gate proofs and Phase 2 | [Phase 2](phase2/README.md) |
