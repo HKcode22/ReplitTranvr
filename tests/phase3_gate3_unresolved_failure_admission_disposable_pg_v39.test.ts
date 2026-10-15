@@ -24,7 +24,7 @@ const suite=allowed?describe:describe.skip;
 // committed receipts cannot create nondeterministic LIMIT 1 results.
 // The live preparer still uses the unmodified global LIMIT 1 query.
 const fixtureScopedSql=`SELECT * FROM (
-  ${GATE3_PRIOR_OWNER_ADMISSION_SQL_V39.replace(/LIMIT 1\\s*$/, "")}
+  ${GATE3_PRIOR_OWNER_ADMISSION_SQL_V39.replace(/LIMIT 1\s*$/, "")}
 ) AS possible_owner WHERE possible_owner.session_id=$1`;
 
 suite("Gate3 PREPARED admission real-PG: unresolved FAILED != safe new canary",()=>{
@@ -70,7 +70,7 @@ suite("Gate3 PREPARED admission real-PG: unresolved FAILED != safe new canary",(
          canary_credit_ceiling,fixed_exposure_seconds,expires_at_utc)
         VALUES ($1,'YSSY',$2,20,300,now()+interval '20 minutes')`,
         [id,"a".repeat(64)]);
-      const q=await c.query(GATE3_PRIOR_OWNER_ADMISSION_SQL_V39);
+      const q=await c.query(fixtureScopedSql,[id]);
       expect(q.rows[0]).toMatchObject({session_id:id,state:"PREPARED"});
       await c.query("ROLLBACK TO SAVEPOINT pending_owner");
       expect((await c.query(fixtureScopedSql,[id])).rowCount).toBe(0);
