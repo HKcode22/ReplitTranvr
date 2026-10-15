@@ -32,6 +32,7 @@ function result():PrepaidLiveWindowResultV39{
 function input(){
   return {
     expectedSessionId:sid,canaryCreditCeiling:20,
+    fixedExposureSeconds:300,
     sourceReadbackVerified:true,
     publishedReceiverParityVerified:true,
     foreignActiveBillableCount:0,
@@ -74,6 +75,12 @@ describe("Gate3 exact terminal candidate never grants paid authority",()=>{
       const x=input();x.result={...x.result,...patch};
       expect(assessGate3CanaryTerminalV39(x).status).toBe("HOLD");
     }
+  });
+  it("fabricated uncensored flag cannot hide a window shorter than frozen exposure",()=>{
+    const x=input();
+    x.result.windowEnd=new Date(x.result.windowStart.getTime()+1000);
+    expect(assessGate3CanaryTerminalV39(x).reasons)
+      .toContain("ACTUAL_EXPOSURE_SHORTER_THAN_FROZEN_DURATION");
   });
   it("missing raw readback, receiver parity or provider isolation refuses",()=>{
     for(const patch of [
