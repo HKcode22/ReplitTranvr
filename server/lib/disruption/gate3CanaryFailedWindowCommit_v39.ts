@@ -63,7 +63,8 @@ export function classifyGate3FailedWindowV39(
       ?"OWNED_DELETE_UNVERIFIED"
     :r.stopReason?.startsWith("subscription_bind_failed_")
       ?"BIND_FAILED"
-    :r.stopReason==="subscription_create_failed_after_exact_reconciliation"
+    :r.stopReason?.startsWith("subscription_create_provider_outcome_unverified_hold")||
+     r.stopReason==="subscription_create_failed_after_exact_reconciliation"
       ?"CREATE_AMBIGUOUS_ACCOUNT_HOLD"
     :r.reconciliationStatus==="DELIVERY_GAP"||
      r.reconciliationStatus==="MISMATCH"
