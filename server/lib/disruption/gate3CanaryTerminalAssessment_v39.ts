@@ -7,6 +7,15 @@
  * evidence and provider session/account before calling this function, and
  * any database terminalization needs separate owner-verifiable evidence.
  *
+ * IMPORTANT: HOLD applies to the ORIGINAL isolated Gate3 exact-billing
+ * *instrumentation certificate only*. It is NOT a declaration that the
+ * valid received flights, YSSY-like historical windows, or an exploratory
+ * dataset must be discarded. For independent scientific qualification,
+ * use gate3CanaryDualTrackReview_v39.ts and the prospective research
+ * evaluator; keep the observed billed/received gap disclosed. Exact
+ * canary equality is a PROJECT protocol choice, not a theorem that any
+ * nonzero missingness invalidates statistical learning.
+ *
  * Absolute provider balance values and external spent credit deltas are
  * checked in memory only: neither enters evidenceDigestSha256.
  */
