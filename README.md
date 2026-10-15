@@ -1,51 +1,39 @@
-# ReplitTranvr — Aviation Data Collection & Experimental Evidence
+# ReplitTranvr — Aviation Data Collection & Research
 
-This repository contains the Tranvr application, its V3.9 aviation data-collection research, experimental authorization and evidence records, and tests. **Research observations and a successful paid deployment certification are different outcomes.** Never run a paid canary from a README without exact live preflight and owner authorization.
+The project includes a live-capable application, original V3.9 aviation scientific records, evidence receipts, scripts and tests.
 
-> **This navigation README is a proposed docs-only improvement on an isolated October 15, 2026 cleanup-review branch, not a change to published production.** The original main branch did not contain a root README at the audited SHA.
+**[Start here — plain-English research guide](data-collection/START_HERE.md)**. [Full data-collection navigation](data-collection/README.md) provides the phase-by-phase directory.
 
-## Start here
+## Find a document quickly
 
-**[Plain-English project guide — where to read first](data-collection/START_HERE.md)** · [Browse all research documents and original evidence](data-collection/README.md). If you are looking for an airport pilot, use [Phase2G reports by purpose](data-collection/phase2g/ALL_REPORTS.md); for a frozen receipt, use [the full artifacts browser](data-collection/evidence/ARTIFACTS_START_HERE.md).
-
-
-**[Open the new data-collection navigation structure](data-collection/README.md)** — links directly to original hash/path-bound plans, implementation, authorizations, evidence and Phase3 draft without duplicating or moving original scientific source files.
-
-| Goal | Read |
+| You are looking for | Open |
 |---|---|
-| Repository cleanup policy and original approvals | [Issue #24](https://github.com/HKcode22/ReplitTranvr/issues/24) |
-| Current cleanup safety assessment, exact inventory, and execution plan | [October 15 cleanup audit](docs/repository-maintenance/2026-10-15_PRE_GATE3_REORGANIZATION_AUDIT_AND_EXECUTION_PLAN.md) |
-| Phase 3/Gate 3 latest **draft**, not deployed | [PR #36 START_HERE](https://github.com/HKcode22/ReplitTranvr/blob/phase2g-pragmatic-science-and-checkpoints-20261012/SEPmd/phase3/START_HERE.md) |
-| Phase 2G current/historical reports | [Phase 2G index](SEPmd/phase2g/README.md) |
-| Historical original V3.9 protocol | [Plan f.8](SEPmd/V3.9_DataCollectPlan_f.8.md) |
-| Historical implementation ledger | [Implementation Log](SEPmd/V3.9_IMPLEMENTATION_LOG.md) |
-| Phase 2G/Gate 2 scientific fieldwork closeout (draft docs) | [PR #37](https://github.com/HKcode22/ReplitTranvr/pull/37) |
-| Current operator safety constraints | [AGENTS.md](AGENTS.md) |
+| What the experiment predicts and how it is defined | [Binding V3.9 Plan](SEPmd/V3.9_DataCollectPlan_f.8.md) |
+| Past pilots, errors and amendments | [58 Phase 2G dated documents](data-collection/phase2g/ALL_REPORTS.md) |
+| Machine evidence or receipts | [All 352 original artifacts](data-collection/evidence/ARTIFACTS_START_HERE.md) |
+| A specific original research file | [All 108 SEPmd records](data-collection/ALL_SEPMD_FILES.md) |
+| Implementation details | [Implementation Log navigation](data-collection/implementation/README.md) |
+| Phase 3 / Gate 3 engineering | [Phase 3 status](data-collection/phase3/README.md) |
+| Operator safety and runbooks | [Operations](data-collection/operations/README.md) |
+| Why filenames haven't all been relocated | [Wave B path-compatibility gate](data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) |
 
-## Current branch-level status (October 15 snapshot)
+## What's finished?
 
-- Released/default `main` is frozen at `f5b1347b7b9aebd6830302394ea2cc5775aedbf4` in this audit. The actual live Replit deployment needs its own runtime SHA verification.
-- Phase 2G five-site observations are closed for research purposes, but formal original Gate 2 five-anchor acceptance remains **HOLD**. P25 YSSY's 231 billed / 229 received discrepancy remains documented, with no retroactive strict PASS.
-- Phase 3 Gate 3 preparation is being developed in separate **draft PR #36**; the one-airport paid canary remains sealed/not certified. Do not run it from unreviewed source.
-- `SEPmd/` and `artifacts/` are **existing compatibility-critical names**. The approved future name is `data-collection/`, but that migration has NOT happened on main or in this audit commit.
+**Wave A is merged on `main`** through [PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39), merge commit [`4075cce8`](https://github.com/HKcode22/ReplitTranvr/commit/4075cce8aa33c159487a436127199264a4e8954c). All four PR CI checks and the automatic [post-merge offline main check](https://github.com/HKcode22/ReplitTranvr/actions/runs/38812391951) passed. Eleven historical root files moved byte-for-byte into [`docs/history/`](docs/history/README.md) with [exact original Git blob identities](docs/repository-maintenance/manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv). The original **108 `SEPmd/` files and 352 `artifacts/` files remain untouched** at their old paths, indexed with verified source identities and links.
 
-## Current repository areas
+**Wave B (physical original-file rename) remains on HOLD.** Source code and signed experimental records depend on those exact paths, and Gate 3 engineering remains in [unmerged draft PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36). An organized index is useful now without damaging those dependencies.
 
-- `client/`, `server/`, `shared/`: current application and scientific processing code.
-- `scripts/`, `tests/`, `.github/workflows/`: experiment and application operations, CI, and regression tests.
-- `migrations/`: active versioned database baseline and migrations; do not move generically into experiment documents.
-- `SEPmd/`: existing scientific plans, authorizations, Phase2G reports/incident records and more; historically mixed active/reference content.
-- `artifacts/`: frozen source/evidence records with fixed references in code and approvals; don't bulk move.
-- `researchPapers/`: research reading/source material awaiting a traceable index.
-- `attached_assets/`: historical attachments requiring selective import/alias reference checks before cleanup.
+## Repository map
 
-## Organized historical materials
+| Directory | Purpose |
+|---|---|
+| `data-collection/` | **Human-friendly project home** and links to original research/evidence |
+| `SEPmd/`, `artifacts/` | Compatibility-protected scientific Plan, AUTH, frozen original data and reports |
+| `client/`, `server/`, `shared/` | Application |
+| `scripts/`, `tests/`, `.github/workflows/` | Tests, scripts and GitHub Actions |
+| `migrations/` | Database baseline and schema migration |
+| `researchPapers/`, `attached_assets/` | Research reading and historical attachments |
+| `docs/history/` | Historical archive |
+| `docs/repository-maintenance/` | [Cleanup checkpoints and current status](docs/repository-maintenance/START_HERE.md) |
 
-- [Historical Phase0 analysis, V2 diagnostics and ML notebook](docs/history/README.md) — original bytes preserved, not current experimental instructions.
-- [Wave A path move receipt](docs/repository-maintenance/manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv) — trace old and new names without rewriting files.
-
-## Organization rule for new work
-
-Use ISO-dated records, distinct plan/amendment/incident/report/runbook categories and a newest-first phase README. Do not append dozens of indistinguishable checkpoints without a single authoritative current-status landing page. Keep approved scientific failures visible; classify historical artifacts before any cleanup.
-
-**Protected operations:** No paid AeroDataBox run, live SQL/object deletion, Replit AI Agent or production publication/branch merge is authorized by this README.
+**Safety and science:** YSSY P25 originally recorded 231 provider-billed versus 229 received; the original delivery gap and formal Gate 2 acceptance hold are not retroactively changed by repo cleanup. No deployment or paid provider call is implied by a GitHub merge. Do not use Replit AI Agent. Follow [`AGENTS.md`](AGENTS.md) and the [ACTIVE shell-only guardrail](SEPmd/PHASE2G/OPERATOR_SHELL_ONLY_GUARDRAIL.md); paid, SQL, blob and retention mutations require separate explicit authorization.
