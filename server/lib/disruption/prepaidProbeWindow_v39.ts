@@ -1,3 +1,11 @@
+import {readFileSync} from "node:fs";
+import {join} from "node:path";
+import {v39Pool} from "./db_v39";
+import {reviewGate3OwnerPreflightV39} from "./gate3OwnerAuthorizationPreflight_v39";
+import {
+  selectPrepaidWindowSessionV39,
+  type Gate3PrearmedSessionV39,
+} from "./prepaidWindowSessionSelection_v39";
 import {
   createSubscription,
   defaultWebhookUrl,
@@ -23,6 +31,9 @@ import {
 
 export interface PrepaidLiveWindowInputV39 {
   ownerKind: PrepaidProbeOwnerKindV39;
+  // Version-gated prepared Gate3 identity. Never available to Phase2 owners;
+  // source+auth review cannot, on its own, unblock provider CREATE.
+  prearmedGate3?: Gate3PrearmedSessionV39;
   ownerProbeId?: number | null;
   stage?: 1 | 2 | null;
   icao: string;
@@ -364,6 +375,11 @@ function validateInput(input: PrepaidLiveWindowInputV39): void {
     throw new Error("PREPAID_WINDOW_WATCHDOG_POLL_INVALID");
   }
   if (!String(input.deletionRunId ?? "").trim()) throw new Error("PREPAID_WINDOW_DELETION_RUN_ID_REQUIRED");
+  if (input.ownerKind === "phase3_credit_canary" &&
+      (!input.prearmedGate3 || input.deferCleanup!==true ||
+       input.onSessionArmed!==undefined)) {
+    throw new Error("GATE3_PREARMED_EXTERNAL_OWNER_AND_DEFERRED_CLEANUP_REQUIRED");
+  }
   if (input.deferCleanup != null && typeof input.deferCleanup !== "boolean") {
     throw new Error("PREPAID_WINDOW_DEFER_CLEANUP_INVALID");
   }
@@ -400,13 +416,39 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   };
 
   const icao = input.icao.toUpperCase();
-  const session = await armPrepaidProbeSessionV39({
-    ownerKind: input.ownerKind,
-    ownerProbeId: input.ownerProbeId ?? null,
-    stage: input.stage ?? null,
-    icao: input.ownerKind === "anchor_probe" ? icao : null,
-    lifetimeHours: 24,
+  const session = await selectPrepaidWindowSessionV39(input, {
+    armHistorical:armPrepaidProbeSessionV39,
+    reviewPrearmedGate3:async(expected)=>{
+      // Load the checked-in evidence ledger ourselves: caller-provided text
+      // cannot substitute an independently hash-approved AUTH artifact.
+      const ledger=readFileSync(join(
+        process.cwd(),"SEPmd","V3.9_RUN_REPORTS_AND_EVIDENCE.md",
+      ),"utf8");
+      const client=await v39Pool.connect();
+      try {
+        return await reviewGate3OwnerPreflightV39(client,{
+          authArtifactRaw:expected.authArtifactRaw,
+          evidenceLedgerRaw:ledger,
+          expectedAuthId:expected.expectedAuthId,
+          expectedAirportFilterWindow:expected.expectedAirportFilterWindow,
+          expectedSession:{
+            sessionId:expected.sessionId,
+            icao:expected.icao,
+            authorizationEvidenceSha256:expected.authorizationEvidenceSha256,
+            canaryCreditCeiling:expected.canaryCreditCeiling,
+            fixedExposureSeconds:expected.fixedExposureSeconds,
+          },
+        });
+      } finally {client.release();}
+    },
   });
+  if(input.ownerKind==="phase3_credit_canary") {
+    // The prearmed source path now cannot allocate an accidental second
+    // Phase2 UUID. But final versioned paid Gate3 owner, independently
+    // verified deployed-host/source rights and provider preflight are NOT
+    // completed. This hard NO-GO belongs before *any* provider SDK call.
+    throw new Error("GATE3_PREARMED_PROVIDER_EXPOSURE_PENDING_OWNER_AND_HOST_PARITY");
+  }
   if (input.onSessionArmed) await input.onSessionArmed(session.sessionId);
   const webhookUrl = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), session.sessionId);
   const targetMs = input.targetHours * 3_600_000;
