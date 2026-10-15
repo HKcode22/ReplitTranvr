@@ -1,0 +1,12 @@
+old_path,new_path,git_blob_sha,bytes,classification,action
+"confused.md","docs/history/phase0/requests/confused.md","c611b806199d84e6777807ff9bbe1ab0e24fe332",1690,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"gptP0analyze.md","docs/history/phase0/reviews/gptP0analyze.md","58e833c491783901a8f9025ed966a83fe5c67c5e",19490,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"gptP0analyze2.md","docs/history/phase0/reviews/gptP0analyze2.md","030ca3722ceeac3c7315a45bbf47046478946e56",16290,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"gptP0analyze3.md","docs/history/phase0/reviews/gptP0analyze3.md","2c65785db085e4a85375821af0419085923592d8",16560,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"gptP0analyze5.md","docs/history/phase0/reviews/gptP0analyze5.md","d7a7ee5ea56ed5ad6e33ed0e1b4d92bf97b4f990",21359,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"gptP0analyze6.md","docs/history/phase0/reviews/gptP0analyze6.md","a825cab9f6186b673f431d71e2e33aec01925356",64221,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"gptP0analyze7.md","docs/history/phase0/reviews/gptP0analyze7.md","72468606ba162abdbdcefb96a56d2b7480df15c3",14825,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"analyze_csv.py","docs/history/v2-diagnostics/analyze_csv.py","9bf974ea6f9a0f218f568ba4ae1beedde4bb0474",6010,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"REPLIT_DIAGNOSTIC_2026-08-02.md","docs/history/v2-diagnostics/REPLIT_DIAGNOSTIC_2026-08-02.md","9eedcc42326802193b5e3762c155dbd218e50340",7731,"SUPPORTING_HISTORICAL","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"T3.ipynb","docs/history/v2-diagnostics/notebooks/T3.ipynb","df60b3241f6e459fba6fe3ce79efff01fa090c37",92670,"SUPPORTING_HISTORICAL_NOTEBOOK","GIT_TREE_PATH_MOVE_EXACT_BLOB"
+"GATE0_INPUT_CHECKLIST.md","docs/history/phase1/GATE0_INPUT_CHECKLIST.md","560bb06eb155e5d24a5b19c0e176afa422c4deba",7159,"HISTORICAL_GATE0_CHECKLIST","GIT_TREE_PATH_MOVE_EXACT_BLOB"
