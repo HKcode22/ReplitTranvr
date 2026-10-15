@@ -93,8 +93,8 @@ describe("Gate3 immutable LOGGED SETTLED candidate — provider-free SQL transac
       {publishedReceiverParityVerified:false},
       {foreignActiveBillableCount:1},
     ]){
-      const x=fixture();
-      x.assessment={...x.assessment,...patch};
+      const f=fixture();
+      const x={...f,assessment:{...f.assessment,...patch}};
       const h=fakePool(x);
       await expect(commitGate3SettledCandidateV39(h.pool,x))
         .rejects.toThrow("GATE3_SETTLED_CANDIDATE_ASSESSMENT_HOLD");
@@ -212,11 +212,15 @@ pgSuite("Gate3 SETTLED candidate real disposable PG immutable commit",()=>{
       expect(row.rows[0].terminal_at_utc).toBeTruthy();
       expect((await commitGate3SettledCandidateV39(p,x)).disposition)
         .toBe("ALREADY_IDENTICAL_SETTLED_CANDIDATE");
-      const conflict=fixture();
-      conflict.sessionId=x.sessionId;
-      conflict.assessment.expectedSessionId=x.sessionId;
-      conflict.assessment.result.runtimeSessionId=x.sessionId;
-      conflict.assessment.result.settlementReads=5;
+      const other=fixture();
+      const conflict={
+        ...other,sessionId:x.sessionId,
+        assessment:{
+          ...other.assessment,expectedSessionId:x.sessionId,
+          result:{...other.assessment.result,
+            runtimeSessionId:x.sessionId,settlementReads:5},
+        },
+      };
       await expect(commitGate3SettledCandidateV39(p,conflict))
         .rejects.toThrow("GATE3_SETTLED_TERMINAL_CONFLICT");
       await expect(p.query(`UPDATE clean.phase3_gate3_canary_owner_v39
