@@ -22,10 +22,13 @@ describe("Phase3 zero-provider compatibility inventory",()=>{
     const result=reviewGate3SourceCompatibilityV39(current());
     expect(result.status).toBe("BLOCKED_SOURCE_CONTRACT");
     expect(result.blockers).toEqual(expect.arrayContaining([
-      "DEDICATED_GATE3_SESSION_OWNER_KIND_NOT_IMPLEMENTED",
       "LEGACY_CANARY_STILL_USES_NONPREPAID_LEDGER",
       "GATE3_WRAPPER_STILL_DELEGATES_LEGACY_CANARY",
     ]));
+    // The dedicated owner-kind and draft prearmed runner are now present.
+    // Original legacy wrapper remains deliberately NO-GO for real provider.
+    expect(result.blockers).not.toContain(
+      "DEDICATED_GATE3_SESSION_OWNER_KIND_NOT_IMPLEMENTED");
     expect(result.blockers).not.toContain("UNSAFE_LEGACY_CANARY_OWNER_GUARD_NOT_VERIFIED");
     expect(result.authorizedPaidCanary).toBe(false);
     expect(result.livePublishedVerified).toBe(false);
