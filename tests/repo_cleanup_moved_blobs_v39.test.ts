@@ -57,13 +57,13 @@ const moved = [
     "GATE0_INPUT_CHECKLIST.md",
     "docs/history/phase1/GATE0_INPUT_CHECKLIST.md",
     "560bb06eb155e5d24a5b19c0e176afa422c4deba"
-  ]
+  ],
+  ["gptP0analyze4.md", "docs/history/phase0/reviews/gptP0analyze4.md", "ed76774bae16866ca58752da6237f3eb19cde5ff"],
+  ["V3.9_DataCollectPlanCurrent.pdf", "data-collection/plans/reference-pdfs/V3.9_DataCollectPlanCurrent.pdf", "b81436b4509b4dc1fa86f60755feb6de15c1befd"],
+  ["zipFile.zip", "docs/history/unreviewed-archives/zipFile.zip", "114bdc2df7b78ffa36d4d4ad310b9b870075183d"]
 ] as const;
 const preserved = [
   "AGENTS.md",
-  "gptP0analyze4.md",
-  "V3.9_DataCollectPlanCurrent.pdf",
-  "zipFile.zip",
   "SEPmd/V3.9_DataCollectPlan_f.8.md",
   "SEPmd/V3.9_IMPLEMENTATION_LOG.md",
   "SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md",
@@ -74,7 +74,7 @@ const preserved = [
 ] as const;
 
 describe("Wave A original bytes, historical links and guardrail invariants", () => {
-  it("preserves the exact original Git blobs for eleven archival renames", () => {
+  it("preserves the exact original Git blobs for fourteen archival renames", () => {
     for (const [before, after, expectedBlob] of moved) {
       expect(existsSync(before), "old tracked path retained: " + before).toBe(false);
       expect(existsSync(after), "missing relocated path: " + after).toBe(true);

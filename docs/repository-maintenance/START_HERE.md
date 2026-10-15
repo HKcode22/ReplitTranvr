@@ -12,6 +12,10 @@
 
 - [October 15 actual root-folder cleanup](2026-10-15_OCT04_WAVEB_SAFE_ROOT_DIRECTORY_MOVES.md): research-paper extracts and old UI screenshots moved byte-for-byte; ignored tool metadata removed with original preserved in old archive snapshot. Remaining scientific core folder migration separately gated.
 
+## Additional root-only reorganized original files
+
+- [Reviewed exact-root file relocations checkpoint](2026-10-15_OCT04_LEGACY_ROOT_PDF_ZIP_GPT_HISTORY_MOVE.md): the historical Phase0 analysis, 300KB V3.9 reference PDF and uninspected 34MB ZIP are moved **byte-identically** into archival/reference locations. Their old root paths are absent; neither PDF nor ZIP was deleted or adjudicated as obsolete.
+
 ## What remains
 
 **Wave B physical file relocation is HOLD**, because current executable preflight/manifest code and historical signed source references use the existing `SEPmd` and `artifacts` paths. The [concrete Wave B compatibility gate](../../data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) documents exact code consumers, case-insensitive Mac collision, integrity constraints and coordination with unmerged PR36. A safe, *browsable* directory is already available without physical relocation.

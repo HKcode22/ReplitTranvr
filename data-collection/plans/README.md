@@ -5,4 +5,4 @@
 - [Phase 2 amendment proposal](../../SEPmd/V3.9_PHASE2_PLAN_AMENDMENT_PROPOSAL.md): a proposal is not approval.
 - [Exact proposed future migration map](../../docs/repository-maintenance/2026-10-15_SEPMD_EXACT_PATH_MAPPING_AND_CASE_CONFLICT.md): navigation-only; not executed.
 
-**Do not confuse** the root PDF `V3.9_DataCollectPlanCurrent.pdf` with the signed/hashed canonical Markdown simply because the title sounds newer. The PDF's lineage and completeness require independent verification; it has not been moved.
+**Do not confuse** the [relocated original PDF](reference-pdfs/V3.9_DataCollectPlanCurrent.pdf) (`V3.9_DataCollectPlanCurrent.pdf`) with the signed/hashed canonical Markdown simply because the title sounds newer. The PDF's lineage and completeness require independent verification; it has not been moved.
