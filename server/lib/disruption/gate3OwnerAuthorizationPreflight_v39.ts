@@ -48,6 +48,8 @@ const GATE="Phase 3 / Gate 3";
 const AUTH_ID=/^AUTH-\d{8}-[A-Z0-9]+$/;
 const UTC=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 
+const ICAO=/^[A-Z]{4}$/;
+const SHA=/^[0-9a-f]{64}$/;
 function evidenceIds(raw:string):string[]{
   return Array.from(new Set(
     Array.from(raw.matchAll(/\b((?:RUN|GATE|AUTH|ISS|DEC)-\d{8}-[0-9A-Z]+)\b/g))
@@ -66,6 +68,14 @@ export async function reviewGate3OwnerPreflightV39(
      !AUTH_ID.test(input.expectedAuthId)||
      typeof input.expectedAirportFilterWindow!=="string"||
      !input.expectedSession||
+     !ICAO.test(input.expectedSession.icao)||
+     !SHA.test(input.expectedSession.authorizationEvidenceSha256)||
+     !Number.isSafeInteger(input.expectedSession.canaryCreditCeiling)||
+     input.expectedSession.canaryCreditCeiling<1||
+     input.expectedSession.canaryCreditCeiling>100||
+     !Number.isSafeInteger(input.expectedSession.fixedExposureSeconds)||
+     input.expectedSession.fixedExposureSeconds<1||
+     input.expectedSession.fixedExposureSeconds>3600||
      !(input.nowUtc===undefined||
        (input.nowUtc instanceof Date&&Number.isFinite(input.nowUtc.getTime())))){
     throw Error("GATE3_OWNER_PREFLIGHT_INPUT_INVALID");
@@ -76,7 +86,11 @@ export async function reviewGate3OwnerPreflightV39(
   let prepared=false;
   let record:AuthRecord|null=null;
   try{
-    record=JSON.parse(input.authArtifactRaw);
+    const parsed:unknown=JSON.parse(input.authArtifactRaw);
+    if(!parsed||typeof parsed!=="object"||Array.isArray(parsed)||
+       !Array.isArray((parsed as AuthRecord).predecessorEvidenceIds))
+      throw Error("AUTH_SHAPE_INVALID");
+    record=parsed as AuthRecord;
   }catch{
     reasons.push("AUTH_ARTIFACT_JSON_INVALID");
   }
@@ -96,8 +110,13 @@ export async function reviewGate3OwnerPreflightV39(
       reasons.push("AUTH_ID_NOT_EXACT_MATCH");
     const icao=input.expectedSession.icao;
     const scope=input.expectedAirportFilterWindow;
-    if(!UTC.test(scope.slice(icao.length+12).split("+")[0]??"") ||
-       !scope.startsWith(icao+"/departures/") ||
+    const prefix=icao+"/departures/";
+    const tail=scope.startsWith(prefix)?scope.slice(prefix.length):"";
+    const plus=tail.lastIndexOf("+");
+    const stamp=plus<0?"":tail.slice(0,plus);
+    const lengthToken=plus<0?"":tail.slice(plus+1);
+    if(!UTC.test(stamp)||!Number.isFinite(Date.parse(stamp))||
+       lengthToken!==String(input.expectedSession.fixedExposureSeconds)+"s"||
        record.airportFilterWindow!==scope)
       reasons.push("AUTH_AIRPORT_WINDOW_SCOPE_NOT_EXACT");
     if(record.maxAlertCredits!==input.expectedSession.canaryCreditCeiling ||
@@ -107,7 +126,9 @@ export async function reviewGate3OwnerPreflightV39(
     if(!record.cleanupOwner || !record.cleanupOwner.trim())
       reasons.push("AUTH_CLEANUP_OWNER_MISSING");
     if(record.maxRestUnitsByCategory!==null &&
-       Object.values(record.maxRestUnitsByCategory).some(v=>v!==0))
+       (!record.maxRestUnitsByCategory||
+        typeof record.maxRestUnitsByCategory!=="object"||
+        Object.values(record.maxRestUnitsByCategory).some(v=>v!==0)))
       reasons.push("AUTH_REST_UNITS_NOT_ZERO");
     if(!Array.isArray(record.predecessorEvidenceIds)||
        record.predecessorEvidenceIds.length===0)
