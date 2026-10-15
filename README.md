@@ -6,6 +6,8 @@ This repository contains the Tranvr application, its V3.9 aviation data-collecti
 
 ## Start here
 
+**[Open the new data-collection navigation structure](data-collection/README.md)** — links directly to original hash/path-bound plans, implementation, authorizations, evidence and Phase3 draft without duplicating or moving original scientific source files.
+
 | Goal | Read |
 |---|---|
 | Repository cleanup policy and original approvals | [Issue #24](https://github.com/HKcode22/ReplitTranvr/issues/24) |
