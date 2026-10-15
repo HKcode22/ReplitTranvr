@@ -56,7 +56,9 @@ export async function holdPrepaidAmbiguousCreateV39(input:{
       windowStart:input.windowStart,
       windowEnd,
       durationCensored:true,
-      stopReason:"subscription_create_provider_outcome_unverified_hold",
+      stopReason:acknowledged
+        ?"subscription_create_provider_outcome_unverified_hold"
+        :"subscription_create_provider_outcome_unverified_hold_runtime_write_unverified",
       reconciliationStatus:"UNRESOLVED",
       externalCredits:null,
       internalSendCredits:0, // unknown live value; NOT proof no callbacks
