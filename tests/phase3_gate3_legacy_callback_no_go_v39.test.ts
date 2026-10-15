@@ -42,4 +42,13 @@ describe("legacy raw-after-ACK contract and incompatible paid Gate3 NO-GO",()=>{
     expect(i).toBeLessThan(owner.indexOf("  const b1 = await getBalance();"));
     expect(i).toBeLessThan(owner.indexOf("  const sub = await createSubscription("));
   });
+  it("canonical Gate3 CLI refuses without spawning incompatible paid code",()=>{
+    const cli=readFileSync(join(process.cwd(),"scripts/v39_gate3_canary_v39.ts"),"utf8");
+    expect(cli).toContain("refuseLegacyGate3CanaryReceiverV39()");
+    expect(cli).toContain("process.exitCode=2");
+    expect(cli).not.toContain("spawnSync(");
+    expect(cli).not.toContain("enforcePaidGuard(");
+    expect(cli).not.toContain("createSubscription(");
+    expect(cli).not.toContain("getBalance(");
+  });
 });
