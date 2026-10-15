@@ -1,0 +1,143 @@
+name: Phase3 Gate3 Exact Owner Admission (Manual, Read-Only, No Provider)
+# This is NOT a paid canary workflow. Do not add cron/push/PR triggers.
+# The main branch must contain a reviewed Gate3 executable before use.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type READ_ONLY_GATE3_NO_PROVIDER'
+        required: true
+        type: string
+      expected_head:
+        description: 'Exact reviewed main commit (40 hex)'
+        required: true
+        type: string
+      auth_id:
+        description: 'Exact independently approved AUTH id'
+        required: true
+        type: string
+      auth_file:
+        description: 'Exact tracked approved AUTH artifact path under SEPmd (not raw bytes)'
+        required: true
+        type: string
+      session_id:
+        description: 'Exact prepared Gate3 session UUID'
+        required: true
+        type: string
+      icao:
+        description: 'One approved uppercase ICAO'
+        required: true
+        type: string
+      credits:
+        description: 'Approved small canary ceiling 1–100; READ ONLY'
+        required: true
+        type: string
+      seconds:
+        description: 'Approved fixed exposure seconds 1–3600; READ ONLY'
+        required: true
+        type: string
+      airport_filter_window:
+        description: 'Exact ICAO/departures/UTC timestamp+seconds'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase3-gate3-readonly-admission
+  cancel-in-progress: false
+
+jobs:
+  exact-read-only-admission:
+    # Draft PR runs are never accepted; no provider credentials in this job.
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirm == 'READ_ONLY_GATE3_NO_PROVIDER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: phase3-readonly
+    steps:
+      - name: Require exact reviewed SHA before any secrets or code
+        shell: bash
+        env:
+          REVIEWED_HEAD: ${{ inputs.expected_head }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$REVIEWED_HEAD" =~ ^[0-9a-f]{40}$ ]] || { echo 'REFUSED: expected SHA invalid'; exit 2; }
+          [[ "$REVIEWED_HEAD" == "$GITHUB_SHA" ]] || { echo 'REFUSED: source SHA mismatch'; exit 2; }
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install pinned source dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate committed AUTH path and EXACT run scope (no provider)
+        shell: bash
+        env:
+          AUTH_FILE: ${{ inputs.auth_file }}
+          AUTH_ID: ${{ inputs.auth_id }}
+          ICAO: ${{ inputs.icao }}
+          SESSION: ${{ inputs.session_id }}
+          CREDITS: ${{ inputs.credits }}
+          SECONDS: ${{ inputs.seconds }}
+          AIRPORT_WINDOW: ${{ inputs.airport_filter_window }}
+        run: |
+          set -Eeuo pipefail
+          # Prevent path traversal, environment expansion and untracked files.
+          [[ "$AUTH_FILE" =~ ^SEPmd/[A-Za-z0-9_./-]+\.json$ ]] || { echo 'REFUSED: AUTH file path'; exit 2; }
+          [[ "$AUTH_FILE" != *'..'* ]] || { echo 'REFUSED: traversal'; exit 2; }
+          [[ -f "$AUTH_FILE" ]] || { echo 'REFUSED: AUTH file missing'; exit 2; }
+          git ls-files --error-unmatch -- "$AUTH_FILE" >/dev/null || { echo 'REFUSED: AUTH not tracked'; exit 2; }
+          [[ "$AUTH_ID" =~ ^AUTH-[0-9]{8}-[A-Z0-9]+$ ]] || exit 2
+          [[ "$ICAO" =~ ^[A-Z]{4}$ ]] || exit 2
+          [[ "$SESSION" =~ ^[0-9a-fA-F-]{36}$ ]] || exit 2
+          [[ "$CREDITS" =~ ^[1-9][0-9]{0,2}$ ]] || exit 2
+          (( CREDITS <= 100 )) || exit 2
+          [[ "$SECONDS" =~ ^[1-9][0-9]{0,3}$ ]] || exit 2
+          (( SECONDS <= 3600 )) || exit 2
+          [[ "$AIRPORT_WINDOW" == "$ICAO/departures/"* ]] || exit 2
+          [[ "$AIRPORT_WINDOW" == *"+${SECONDS}s" ]] || exit 2
+          echo 'REVIEWED_SOURCE_AND_SCOPE=CONFIRMED_NOT_PAID'
+
+      - name: Inspect existing durable Gate3 owner via READ ONLY transaction
+        shell: bash
+        env:
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          AUTH_FILE: ${{ inputs.auth_file }}
+          AUTH_ID: ${{ inputs.auth_id }}
+          ICAO: ${{ inputs.icao }}
+          SESSION: ${{ inputs.session_id }}
+          CREDITS: ${{ inputs.credits }}
+          SECONDS: ${{ inputs.seconds }}
+          AIRPORT_WINDOW: ${{ inputs.airport_filter_window }}
+        run: |
+          set -Eeuo pipefail
+          [[ -n "${V39_DATABASE_RUNTIME_URL:-}" ]] || { echo 'REFUSED: no READONLY DB connection configured'; exit 2; }
+          # No AeroDataBox API key; no POST, no mutation, no provider request.
+          npm run v39:gate3:owner:read-only -- \
+            --auth-id "$AUTH_ID" \
+            --auth-file "$AUTH_FILE" \
+            --session-id "$SESSION" \
+            --icao "$ICAO" \
+            --credits "$CREDITS" \
+            --seconds "$SECONDS" \
+            --airport-filter-window "$AIRPORT_WINDOW"
+
+      - name: Explicit non-paid terminal summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Gate3 read-only admission (NOT a paid launch)'
+            echo '- This job does not create or delete provider subscriptions.'
+            echo '- This job does not send signed test callbacks or modify the production database.'
+            echo '- No provider balance or financial source custody was checked.'
+            echo '- Result does NOT authorize Gate3 paid exposure or Gate0.5.'
+          } >> "$GITHUB_STEP_SUMMARY"
