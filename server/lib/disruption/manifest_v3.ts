@@ -146,9 +146,9 @@ export const V39_MANIFEST: ManifestEntry[] = [
     "explicit existing-database baseline adoption CLI",
   ),
 
-  current("document", "SEPmd/V3.9_DataCollectPlan_f.8.md", "binding Plan §§0-21"),
-  current("document", "SEPmd/V3.9_IMPLEMENTATION_LOG.md", "implementation/status/manual subordinate to Plan"),
-  current("document", "SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md", "append-only evidence ledger"),
+  current("document", "data-collection/plans/V3.9_DataCollectPlan_f.8.md", "binding Plan §§0-21"),
+  current("document", "data-collection/implementation/V3.9_IMPLEMENTATION_LOG.md", "implementation/status/manual subordinate to Plan"),
+  current("document", "data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md", "append-only evidence ledger"),
 ];
 
 export function getManifestSummary() {
