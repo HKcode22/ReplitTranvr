@@ -1,3 +1,11 @@
+## OCT 14 EVENING — deadline-aware Gate3 pooled PostgreSQL recovery and P2G24 operator action
+
+**Use [new self-contained checkpoint](2026-10-14_GATE3_DEADLINE_P0_POOL_RECOVERY_AND_RETENTION_HANDOFF.md) for today's exact source SHA, CI run IDs, next actions, scope and original retention dates.** The new Gate3 acknowledged-COMMIT failure-receipt wrapper had a safety gap: unknown transaction-state PG connection was returned to pool. Draft source/test SHA **`872d80e169ac36ef585a07fd93fd6404da956137`** now discards that connection on ambiguous COMMIT/BEGIN or failed ROLLBACK; test cases assert release behavior. At checkpoint creation full CI #38670273902 was IN_PROGRESS, focused #38670273897, realPG #38670273906 and read-only receiver #38670273907 later reached SUCCESS. Recheck all 4 before claiming full green.
+
+**User action before Oct 15 ~21:02 PDT**: run existing **protected-main P2G24 30-original read-only audit** on existing Replit workspace, NOT on PR36 branch, then share redacted aggregate status. Exact nonmutating command in checkpoint; no `--apply`, no raw data export, no reset/publish/provider paid run. If chat lost, resume with this task plus Gate3 actual owner/publication parity and conditional Oct20 phase deadline. Gate3 provider CREATE remains deliberately BLOCKED.
+
+---
+
 **FINAL CI VERIFIED, Oct 14 PDT:** Exact Gate3 failure-COMMIT executable SHA `8cdf474152a04366256c1f8d6d09f7b81c1bd5aa` now **4/4 workflows SUCCESS** (full #38669263295, focused #38669263296, real-PG receiver #38669263302, read-only receiver #38669263288). Full suite **1,283 passed / 19 skipped**; new failure-commit tests **7/7 including disposable PG**. [Latest restart checkpoint with precise evidence and unfinished live gates](2026-10-14_GATE3_FAILURE_COMMIT_TRANSACTION_OWNER_RESTART_CHECKPOINT.md). Gate3 paid run STILL NOT AUTHORIZED. GitHub draft code is NOT published Replit.
 
 ## MOST RECENT Oct 14 handoff — Gate3 FAILED receipt now has an acknowledged COMMIT owner
