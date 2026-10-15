@@ -1,3 +1,9 @@
+## Latest critical-path fix — provider CREATE then SQL BIND gap (October 14)
+
+The shared prepaid owner had a **real exact-ID subscription exposure problem**: after successful paid provider CREATE, a failing PostgreSQL session BIND could exit without owner DELETE. We added exact-owned subscription deletion compensation and hard "UNRESOLVED" accounting on that failure path, plus negative regression tests. This does **not** establish the historical YSSY gap's root cause or enable paid Gate3. See [the dated CREATE→BIND recovery checkpoint](2026-10-14_GATE3_PROVIDER_CREATE_TO_DB_BIND_FAILURE_RECOVERY_CHECKPOINT.md). The earlier [prearmed Gate3 selection checkpoint](2026-10-14_GATE3_PREARMED_SHARED_WINDOW_WIRING_CHECKPOINT.md) remains the baseline for the double-arm fix.
+
+The real Gate3 paid owner/published-host source and provider accounting proof are still NOT DONE. Neither new safe recovery code nor green offline CI can start a billable subscription; the deliberate Gate3 hard STOP before provider CREATE remains in place. Active stage deadlines are in [issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38).
+
 # Phase 3–6: current status entrypoint
 
 **Last updated 2026-10-14 PDT.** For the user-facing explanation, begin with **[the latest dated plain-language Phase 3 report](2026-10-14_START_HERE_PLAIN_LANGUAGE_PHASE3_PROGRESS_AND_NEXT_STEPS.md)**. For exact source/test/CI and approval boundaries, use **[the October 14 technical continuity checkpoint](2026-10-14_PHASE3_GATE3_SCHEMA_WORKING_DAY_ESTIMATES_AND_FRAME_REFRESH_CHECKPOINT.md)**. All drafts in [PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36) are **not deployed or authorized for a paid canary**. Qualified Phase 2 early-pilot closeout has separate draft [PR #37](https://github.com/HKcode22/ReplitTranvr/pull/37); original strict historical Gate2 remains NOT_PASSED.
