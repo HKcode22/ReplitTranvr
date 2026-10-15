@@ -11,7 +11,7 @@ const base=()=>({
 });
 type Fault="none"|"connect"|"begin"|"advisory"|"owner_exists"|
   "insert_owner"|"insert_session"|"commit"|"rollback";
-function fixture(fault:Fault){
+function fixture(fault:Fault,priorFailure=false){
   const calls:string[]=[];
   const releases:boolean[]=[];
   const client={
@@ -24,7 +24,8 @@ function fixture(fault:Fault){
         sql.startsWith("INSERT INTO clean.phase3")?"INSERT_LOGGED":
         sql.startsWith("INSERT INTO clean.prepaid")?"INSERT_RUNTIME":"OTHER";
       calls.push(name);
-      if((fault==="begin"&&name==="BEGIN")||
+      if((priorFailure&&name==="ADVISORY")||
+         (fault==="begin"&&name==="BEGIN")||
          (fault==="advisory"&&name==="ADVISORY")||
          (fault==="insert_owner"&&name==="INSERT_LOGGED")||
          (fault==="insert_session"&&name==="INSERT_RUNTIME")||
@@ -97,19 +98,8 @@ describe("Gate3 pool-owned PREPARED SQL reservation — no provider",()=>{
       .rejects.toThrow("GATE3_PREPARE_BEGIN_OUTCOME_UNKNOWN_DURABLE_AUDIT_REQUIRED");
     expect(begin.calls).toEqual(["BEGIN"]);
     expect(begin.releases).toEqual([true]);
-    // Force rollback failure after a prior query, not a normal observed rollback.
-    const rollback=fixture("rollback");
-    const inner=rollback.pool.connect;
-    rollback.pool.connect=async()=>{
-      const client=await inner();
-      const query=client.query.bind(client);
-      client.query=async (sql:string,...args:any[])=>{
-        if(sql==="SELECT pg_advisory_xact_lock(39003,3)")
-          throw Error("ORIGINAL_ADVISORY_FAILED");
-        return query(sql,...args);
-      };
-      return client;
-    };
+    // Simulate a failed advisory query followed by a lost ROLLBACK ACK.
+    const rollback=fixture("rollback",true);
     await expect(prepareGate3CanaryDraftWithPoolV39(rollback.pool,base()))
       .rejects.toThrow("GATE3_PREPARE_ROLLBACK_FAILED_DURABLE_AUDIT_REQUIRED");
     expect(rollback.calls).toContain("ROLLBACK");
