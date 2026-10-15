@@ -1,7 +1,8 @@
 # Historical Documents Index — ReplitTranvr
 
-This area contains preserved, non-current project material moved out of the top-level working directory in the October 15 repository cleanup draft. It is distinct from binding V3.9 plans, production and paid safety ledgers, and current scientific incidents.
+This area contains preserved, non-current project material moved out of the top-level working directory during October 2026 repository organization. It is distinct from binding V3.9 plans, production and paid safety ledgers, and current scientific incidents.
 
+- [Historic website screenshots](travnr-ui-screenshots/README.md): four original unchanged Travnr UI images moved from the old root folder.
 - [Phase 0 archived analyses](phase0/reviews/README.md): original AI review narratives and earlier discussions; the explicitly cited `gptP0analyze4.md` remains at repository root pending source citation review.
 - [Earlier Phase 0 learning request](phase0/requests/confused.md): undated raw request, reference only.
 - [Historical Gate 0 checklist](phase1/README.md): September 2026 account/preflight guidance preserved verbatim, **not** an active or reusable AUTH grant.

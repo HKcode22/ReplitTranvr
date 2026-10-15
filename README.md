@@ -12,6 +12,8 @@ The project includes a live-capable application, original V3.9 aviation scientif
 | Past pilots, errors and amendments | [58 Phase 2G dated documents](data-collection/phase2g/ALL_REPORTS.md) |
 | Machine evidence or receipts | [All 352 original artifacts](data-collection/evidence/ARTIFACTS_START_HERE.md) |
 | A specific original research file | [All 108 SEPmd records](data-collection/ALL_SEPMD_FILES.md) |
+| Research literature and prediction models | [Research paper extracts](data-collection/research-papers/README.md) |
+| Historic website screenshots | [Screenshots archive](docs/history/travnr-ui-screenshots/README.md) |
 | Implementation details | [Implementation Log navigation](data-collection/implementation/README.md) |
 | Phase 3 / Gate 3 engineering | [Phase 3 status](data-collection/phase3/README.md) |
 | Operator safety and runbooks | [Operations](data-collection/operations/README.md) |
@@ -32,7 +34,7 @@ The project includes a live-capable application, original V3.9 aviation scientif
 | `client/`, `server/`, `shared/` | Application |
 | `scripts/`, `tests/`, `.github/workflows/` | Tests, scripts and GitHub Actions |
 | `migrations/` | Database baseline and schema migration |
-| `researchPapers/`, `attached_assets/` | Research reading and historical attachments |
+| `data-collection/research-papers/`, `attached_assets/` | Research reading and historical attachments |
 | `docs/history/` | Historical archive |
 | `docs/repository-maintenance/` | [Cleanup checkpoints and current status](docs/repository-maintenance/START_HERE.md) |
 

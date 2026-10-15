@@ -6,6 +6,7 @@
 
 | Area | Read |
 |---|---|
+| Research literature and prior prediction methods | [Research paper extracts](research-papers/README.md) |
 | Scientific Plan and its history | [Plans](plans/README.md) |
 | Implementation and original ledger | [Implementation](implementation/README.md) |
 | Earlier gate proofs and Phase 2 | [Phase 2](phase2/README.md) |
