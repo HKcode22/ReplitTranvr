@@ -13,7 +13,8 @@ import {dirname,resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {
   loadYssyOperatingHoursProtocolV39,
-  yssyStage1TimeClassStatusV39
+  yssyStage1TimeClassStatusV39,
+  PHASE2G_YSSY_LOCAL_OPERATING_HOURS_PROTOCOL_ARTIFACT_PATH
 } from "../server/lib/disruption/yssyOperatingHours_v39";
 
 export const YSSY_20261012_UTC_START_V39="2026-10-12T03:00:00.000Z";
@@ -91,7 +92,7 @@ function main(){
   const out=ix>=0?String(args[ix+1]??"").trim():"";
   if(!out||out.startsWith("-")||args.length!==2)
     throw Error("USAGE:node --import tsx scripts/v39_phase2g_yssy_20261012_zero_credit_prep_v39.ts --out <new-artifact-path>");
-  const protocolRaw=readFileSync(YSSY_FROZEN_LOCAL_TIME_FILE_V39);
+  const protocolRaw=readFileSync(PHASE2G_YSSY_LOCAL_OPERATING_HOURS_PROTOCOL_ARTIFACT_PATH);
   const protocolSha=hash(protocolRaw);
   const frozen=loadYssyOperatingHoursProtocolV39({
     expectedSha256:YSSY_FROZEN_LOCAL_TIME_SHA256_V39
