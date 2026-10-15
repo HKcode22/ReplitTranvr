@@ -13,7 +13,7 @@
  * not authority to restart automatically or charge another provider credit.
  */
 import {randomUUID} from "node:crypto";
-import type {PoolClient} from "pg";
+import type {Pool,PoolClient} from "pg";
 
 export interface Gate3DraftPreparationV39 {
   icao:string;
@@ -105,11 +105,15 @@ export async function prepareGate3CanaryDraftV39(
     commitAttempted=true;
     await client.query("COMMIT");
   }catch(err){
-    if(began&&!commitAttempted){
-      await client.query("ROLLBACK").catch(()=>undefined);
-    }
     if(commitAttempted)
       throw Error("GATE3_PREPARE_COMMIT_OUTCOME_UNKNOWN_DURABLE_AUDIT_REQUIRED");
+    if(!began)
+      throw Error("GATE3_PREPARE_BEGIN_OUTCOME_UNKNOWN_DURABLE_AUDIT_REQUIRED");
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      throw Error("GATE3_PREPARE_ROLLBACK_FAILED_DURABLE_AUDIT_REQUIRED");
+    }
     throw err;
   }
   return {
@@ -119,4 +123,42 @@ export async function prepareGate3CanaryDraftV39(
     sessionExpiresAtUtc:expires.toISOString(),
     approvalVerifiedHere:false,authorizedPaidProviderCalls:false,
   };
+}
+
+
+/**
+ * Actual pool-owned PREPARED reservation entrypoint for the future reviewed
+ * Gate3 operator. Unlike passing around a borrowed PoolClient, this wrapper
+ * destroys any PG connection whose transaction state cannot be established.
+ * A lost COMMIT acknowledgment may have committed the LOGGED owner already:
+ * NEVER auto-generate/prepare a second UUID to "retry" an ambiguous outcome.
+ *
+ * This only commits source identity and an armed UNLOGGED runtime session.
+ * It does not verify signed human authorization, published receiver/host
+ * parity, provider subscription inventory, provider balance, or retention
+ * rights. It does not create, authorize, or touch a paid subscription.
+ */
+export async function prepareGate3CanaryDraftWithPoolV39(
+  pool:Pick<Pool,"connect">,
+  input:Gate3DraftPreparationV39,
+):Promise<Gate3DraftPreparedV39>{
+  // Reject corrupt scope before acquiring a client / touching SQL.
+  validateGate3DraftPreparationV39(input);
+  if(!pool||typeof pool.connect!=="function")
+    throw Error("GATE3_PREPARE_POOL_REQUIRED");
+  let client:PoolClient;
+  try { client=await pool.connect(); }
+  catch { throw Error("GATE3_PREPARE_POOL_CONNECT_FAILED_HOLD"); }
+  let destroy=false;
+  try {
+    return await prepareGate3CanaryDraftV39(client,input);
+  } catch(error) {
+    const message=error instanceof Error?error.message:"";
+    destroy=message==="GATE3_PREPARE_COMMIT_OUTCOME_UNKNOWN_DURABLE_AUDIT_REQUIRED"||
+      message==="GATE3_PREPARE_BEGIN_OUTCOME_UNKNOWN_DURABLE_AUDIT_REQUIRED"||
+      message==="GATE3_PREPARE_ROLLBACK_FAILED_DURABLE_AUDIT_REQUIRED";
+    throw error;
+  } finally {
+    client.release(destroy);
+  }
 }
