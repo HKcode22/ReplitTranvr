@@ -116,7 +116,7 @@ describe("Gate3 actual published host + strict account + source owner preexposur
   });
   it("current provider balance and inventory gates enforce protected floor, no foreign billables",async()=>{
     await expect(reviewGate3CurrentProviderAccountV39(12,
-      async()=>balance(),list)).resolves.toBeUndefined();
+      async()=>balance(),list)).resolves.toBe(2300);
     for(const remaining of [1400,1000,900,0]){
       await expect(reviewGate3CurrentProviderAccountV39(12,
         async()=>balance(remaining),list))
@@ -128,7 +128,7 @@ describe("Gate3 actual published host + strict account + source owner preexposur
       }])).rejects.toThrow("GATE3_OWNER_ACTIVE_BILLABLE_SUBSCRIPTION_PRESENT_HOLD");
     await expect(reviewGate3CurrentProviderAccountV39(12,
       async()=>balance(),async()=>[{id:"old",isActive:false,
-        billingType:"CreditBased"}])).resolves.toBeUndefined();
+        billingType:"CreditBased"}])).resolves.toBe(2300);
   });
   it("invalid ledger AUTH never opens host GET, provider account or DB",async()=>{
     const d=db(),h=host();let provider=0;
