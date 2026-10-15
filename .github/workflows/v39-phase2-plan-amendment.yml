@@ -34,6 +34,6 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add SEPmd/V3.9_DataCollectPlan_f.8.md
+          git add data-collection/plans/V3.9_DataCollectPlan_f.8.md
           git commit -m "V3.9-f.8: bind pre-probe open traffic reference semantics"
           git push origin HEAD:v39-p-phase2-closure-audit-20260911

@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-LOG = Path("SEPmd/V3.9_IMPLEMENTATION_LOG.md")
+LOG = Path("data-collection/implementation/V3.9_IMPLEMENTATION_LOG.md")
 STATUS = Path("artifacts/phase2-current-status.json")
 MARKER = "<!-- V39_PHASE2_STATUS_20260913 -->"
 TERMINATOR = "**Plan ownership:**"

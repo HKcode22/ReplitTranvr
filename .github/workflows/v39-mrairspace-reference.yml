@@ -17,7 +17,7 @@ on:
       - 'server/lib/disruption/trafficReference_v39.ts'
       - 'server/lib/disruption/trafficReferenceFreshness_v39.ts'
       - 'server/lib/disruption/regionMapping_v39.ts'
-      - 'SEPmd/V3.9_PHASE2_REFERENCE_FREEZE.md'
+      - 'data-collection/phase2/V3.9_PHASE2_REFERENCE_FREEZE.md'
 
 permissions:
   contents: read
