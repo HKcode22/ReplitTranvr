@@ -95,3 +95,13 @@ No hidden background operations, no production mutations; checkpoint is durable 
 ### Additional GitHub branch verification
 
 GitHub branch API returned **404 `Branch not found`** for `release/p25-reviewed-publish-20261012`, while branch API for `main` returned exact SHA `f5b1347b7b9aebd6830302394ea2cc5775aedbf4`. So **BOTH** the observed local `bb44fc1...` commit and its named local release branch are presently not visible through GitHub branch/commit endpoints; they may simply exist only in the Replit clone. This strengthens the need for the **READ-ONLY** local ancestry+protected filename diff before deciding which tested source to publish, rather than guessing that a mismatch means corrupted receiver code. No GitHub branch or production deployment was mutated by these reads.
+
+## FINAL CI VERIFICATION — exact code/test SHA `90aec1d64077110b3672d4a63c6cadeb8e3f5219`
+
+**ALL FOUR no-provider GitHub workflows completed `SUCCESS`**, superseding the initial in-progress snapshot:
+- [Full V3.9 Offline Safety #38678434460](https://github.com/HKcode22/ReplitTranvr/actions/runs/38678434460): **SUCCESS**, job `116237243894` confirmed completed and all steps finished, TypeScript/tests/lint/Phase0 preflight/build.
+- [Focused no-provider #38678434600](https://github.com/HKcode22/ReplitTranvr/actions/runs/38678434600): **SUCCESS**.
+- [Disposable real PG receiver faults #38678434684](https://github.com/HKcode22/ReplitTranvr/actions/runs/38678434684): **SUCCESS**.
+- [Public receiver identity, read-only #38678434615](https://github.com/HKcode22/ReplitTranvr/actions/runs/38678434615): **SUCCESS**.
+
+This proves **the exact new DRAFT terminal-SQL routing source and tests pass CI**, not a real published Gate3 execution owner and not a provider-backed canary. Source file revisions since this executable SHA are documentation-only and do not imply a newly tested production binary. **The actual two hosted blockers remain independently observed**: Git HEAD mismatch `f5b... != bb44...` and `autoscale != reserved-vm`. Next resume at read-only local Git ancestry / changed-file list, then reviewed host release and separate permission; do NOT use paid provider to resolve a source/config mismatch.
