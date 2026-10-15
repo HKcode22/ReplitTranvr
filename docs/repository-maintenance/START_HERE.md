@@ -43,6 +43,11 @@ Historical root reorganization has completed **11 verified byte-identical Git re
 
 - [Oct 15 failed archive-test tuple diagnosis and fix](2026-10-15_GATE0_MOVE_CI_TEST_TUPLE_REPAIR.md). Previous commit's full CI failed solely in the new path-test tuple; this was fixed without rewriting historical files. New exact SHA CI must pass before any merge.
 
+## Complete readable directory — start here
+
+- [Plain-English reading guide](../../data-collection/START_HERE.md), [all 108 original SEPmd files](../../data-collection/ALL_SEPMD_FILES.md), [58 dated Phase2G documents by purpose](../../data-collection/phase2g/ALL_REPORTS.md), and [all 352 artifacts by phase and original Git identity](../../data-collection/evidence/ARTIFACTS_START_HERE.md).
+- [October 15 full 460-record catalog checkpoint](2026-10-15_COMPLETE_460_SOURCE_EVIDENCE_DIRECTORY_CHECKPOINT.md). Sources are original links, not copies. The proposed `SEPmd` physical rename remains HOLD.
+
 ## Next exact gate
 
 Verify new exact GitHub SHA's 4 no-provider CI runs (including 11-blob identity and casefold collision test). Keep uninspected binary ZIP/PDF and all scientific paths untouched. Only propose SEPmd→data-collection atomic migration with complete path/ref/hash and Gate3 branch merge review.

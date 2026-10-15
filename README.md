@@ -6,6 +6,9 @@ This repository contains the Tranvr application, its V3.9 aviation data-collecti
 
 ## Start here
 
+**[Plain-English project guide — where to read first](data-collection/START_HERE.md)** · [Browse all research documents and original evidence](data-collection/README.md). If you are looking for an airport pilot, use [Phase2G reports by purpose](data-collection/phase2g/ALL_REPORTS.md); for a frozen receipt, use [the full artifacts browser](data-collection/evidence/ARTIFACTS_START_HERE.md).
+
+
 **[Open the new data-collection navigation structure](data-collection/README.md)** — links directly to original hash/path-bound plans, implementation, authorizations, evidence and Phase3 draft without duplicating or moving original scientific source files.
 
 | Goal | Read |

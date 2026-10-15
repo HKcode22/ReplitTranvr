@@ -1,5 +1,7 @@
 # Phase 2G — Methods, Attempts, Original Evidence
 
+**[Find any of the 58 original Phase2G reports, incidents, amendments or runbooks](ALL_REPORTS.md)**, organized by purpose and dated name.
+
 **Status warning:** `main` contains **two different September indexes that each say “canonical”**, but they contain statements from different historical dates and methods. They are kept separate and source-identifiable, not silently combined or granted present-day authority.
 
 - [Lowercase original Phase 2G index (Sep 25/26 era)](../../SEPmd/phase2g/README.md) — original source preserved; historical claims must be dated.
