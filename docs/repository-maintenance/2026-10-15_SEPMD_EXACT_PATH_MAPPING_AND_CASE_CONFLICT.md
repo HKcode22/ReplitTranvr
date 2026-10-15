@@ -9,7 +9,7 @@
 
 ## Confirmed case-sensitivity hazard
 
-The repository has **`SEPmd/PHASE2G/README.md`** and **`SEPmd/phase2g/README.md`**. They are distinct tracked files in Git and collide on the same canonical path on default case-insensitive macOS checkout behavior. Simple lowercase/case-only bulk rename is unsafe. In this proposal the former **uppercase three-file historical section** has a distinct path `data-collection/phase2g/legacy-uppercase/` while the full lowercase folder becomes `data-collection/phase2g/`.
+The repository has **`SEPmd/PHASE2G/README.md`** and **`SEPmd/phase2g/README.md`**. They are distinct tracked files in Git and collide on the same canonical path on default case-insensitive macOS checkout behavior. Simple lowercase/case-only bulk rename is unsafe. In this proposal the **two historically conflicting uppercase index/amendment files** have distinct proposed paths under `data-collection/phase2g/legacy-uppercase/`, while **the ACTIVE `OPERATOR_SHELL_ONLY_GUARDRAIL.md` goes under `data-collection/phase2g/operations/`** to remain prominent. The original lowercase folder becomes `data-collection/phase2g/`.
 
 This separation is a future path candidate, **not** an endorsement that either conflicting historical README is authoritative. Create a reconciled current index and preserve original dated historical assertions.
 

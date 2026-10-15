@@ -19,6 +19,10 @@ Zero deletions and zero existing file renames in this PR as of this index. Phase
 
 - [Oct 15 CI full 64-reference triage and missing literal provenance](2026-10-15_CI_UNRESOLVED_LITERALS_FULL_TRIAGE.md) — 4/4 zero-provider CI PASS at `fc5fd762e2159e187dc913d08f65bff872f55fc1`, 30 distinct unresolved strings (mostly placeholders/generated files, not automatically bugs).
 
+## First actual root cleanup
+
+- [Oct 15 verified nine-file archive move, exact blob SHA custody](2026-10-15_WAVEA_FIRST_ROOT_HISTORY_MOVES_CHECKPOINT.md) and [move receipt](manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv). No `SEPmd` or `artifacts` files were moved. The active operator shell-only guardrail is explicitly protected in the proposed map.
+
 ## Next exact gate
 
 Read latest four CI results and the `REPO_CLEANUP_UNRESOLVED_OPERATIONAL=` line from full offline Actions run on the exact reviewed PR SHA. Manually adjudicate unresolved references, then create a dependency-validated small no-impact move batch only if source paths have no blocking consumers. Full SEPmd→data-collection move stays HOLD.

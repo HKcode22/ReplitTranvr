@@ -34,6 +34,11 @@ This repository contains the Tranvr application, its V3.9 aviation data-collecti
 - `researchPapers/`: research reading/source material awaiting a traceable index.
 - `attached_assets/`: historical attachments requiring selective import/alias reference checks before cleanup.
 
+## Organized historical materials
+
+- [Historical Phase0 analysis and V2 diagnostics](docs/history/README.md) — original bytes preserved, not current experimental instructions.
+- [Wave A path move receipt](docs/repository-maintenance/manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv) — trace old and new names without rewriting files.
+
 ## Organization rule for new work
 
 Use ISO-dated records, distinct plan/amendment/incident/report/runbook categories and a newest-first phase README. Do not append dozens of indistinguishable checkpoints without a single authoritative current-status landing page. Keep approved scientific failures visible; classify historical artifacts before any cleanup.
