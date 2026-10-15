@@ -6,6 +6,12 @@
 
 **Next execution:** continue Phase3 Gate3 after verified offline LOGGED owner+UNLOGGED prepaid session draft and session readiness review. Build the actual **signed, prearmed** prepaid canary owner with a reviewed existing receiver path; a source-shape/PG test is not a live authorization. Then prove hosted callback parity without provider spend before asking for fresh exact capped paid authorization. Do not invoke the legacy paid Gate3 canary or deploy/migrate/change live Replit without approval. After real Gate3 PASS, finish Phase3 Gate0.5 and Gate4, Phase4 Gate5, Phase5 final four-anchor FREEZE, then Phase6 paid collection. Phase3 goal Oct20, fallback Oct22; milestone targets are conditional.
 
+## Latest Oct 14 Gate3 progress (most recent)
+
+The shared prepaid-window runner now supports a **separately versioned PREARMED Gate3 session-selection path** in draft PR36. Gate3 never calls the Phase2 session armer; the old Phase2 owner behavior is unchanged. The new path checks AUTH evidence from the local ledger and the matching SQL prepared owner, then explicitly **REFUSES before provider subscription CREATE** because the paid Gate3 execution owner/deployed hosted parity is still not approved. This is **not a live Gate3 PASS**.
+
+Start with the [Oct 14 prearmed-window wiring checkpoint](2026-10-14_GATE3_PREARMED_SHARED_WINDOW_WIRING_CHECKPOINT.md). Source code tests and latest per-commit CI are documented there. The next coding goal is the true reviewed Gate3 paid owner and live hosted zero-provider proof, not another Phase2 pilot or an infrastructure redesign.
+
 **Latest independently verified executable revision as of this entry:** `a91fab82c8bc6083e04d80b5ab07a4406db6fcb4`, 4/4 no-provider CI successful (full #38661378862, focused #38661378825, realPG #38661378818, receiver read-only #38661378811). The later doc-only commits will have distinct CI state. User Replit workspace release SHA `bb44fc1d122868e20664b2c149406f99bb10cb86` is clean locally but did not resolve on connected GitHub; do not claim publish parity.
 
 **Documentation update rule:** every substantive session updates the dated Markdown report/checkpoint, issue #38 and this stable index if links change. Record exact SHA, tests, verified vs unverified, financial and production side effects, approval boundary and next starting point. Never treat a success on synthetic/disposable PostgreSQL as a passed provider credit canary.
