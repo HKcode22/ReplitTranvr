@@ -35,8 +35,9 @@ export type Gate3CommittedFailureV39 = Readonly<{
  * Uses an exclusive checked-out connection. No transaction is assumed active.
  * There is precisely ONE BEGIN and ONE COMMIT attempt, no SQL/provider retry.
  *
- * If COMMIT throws, the database may already have committed; release the
- * connection and fail with an explicit UNKNOWN receipt. Caller must perform
+ * If COMMIT throws, the database may already have committed; DESTROY the
+ * checked-out connection rather than recycling unknown transaction state,
+ * and fail with an explicit UNKNOWN receipt. Caller must perform
  * a separate read-only verification before any subsequent paid action.
  */
 export async function commitGate3CanaryFailureV39(
@@ -51,6 +52,7 @@ export async function commitGate3CanaryFailureV39(
 
   let began=false;
   let commitAttempted=false;
+  let discardConnection=false;
   try{
     // recordGate3CanaryFailureV39 validates exact UUID/auth/scope/failure
     // before issuing SELECT ... FOR UPDATE or UPDATE.
@@ -75,13 +77,22 @@ export async function commitGate3CanaryFailureV39(
   }catch(err){
     if(commitAttempted){
       // A failed/timeout COMMIT response can hide a successful write.
+      // PostgreSQL transaction state on this connection is unknown:
+      // force node-postgres to DISCARD it instead of returning it to pool.
       // Do not rollback/retry or pronounce it absent; operator must
       // reconcile against LOGGED owner via an independent connection.
+      discardConnection=true;
       throw Error("GATE3_FAILED_COMMIT_OUTCOME_UNKNOWN_DURABLE_AUDIT_REQUIRED");
     }
-    if(began) await client.query("ROLLBACK").catch(()=>undefined);
+    if(began){
+      try{await client.query("ROLLBACK");}
+      catch{discardConnection=true;}
+    }else{
+      // BEGIN may have reached PostgreSQL despite a lost response.
+      discardConnection=true;
+    }
     throw err;
   }finally{
-    client.release();
+    client.release(discardConnection);
   }
 }
