@@ -39,6 +39,10 @@ Historical root reorganization has completed **11 verified byte-identical Git re
 
 - [Oct 15 third bounded root move + 11 exact-blob preservation tests](2026-10-15_WAVEA_GATE0_HISTORY_MOVE_AND_CASEFOLD_GUARD.md), including one known macOS case-insensitive collision in `SEPmd/PHASE2G/README.md` vs `SEPmd/phase2g/README.md`.
 
+## Most recent exact-CI repair
+
+- [Oct 15 failed archive-test tuple diagnosis and fix](2026-10-15_GATE0_MOVE_CI_TEST_TUPLE_REPAIR.md). Previous commit's full CI failed solely in the new path-test tuple; this was fixed without rewriting historical files. New exact SHA CI must pass before any merge.
+
 ## Next exact gate
 
 Verify new exact GitHub SHA's 4 no-provider CI runs (including 11-blob identity and casefold collision test). Keep uninspected binary ZIP/PDF and all scientific paths untouched. Only propose SEPmd→data-collection atomic migration with complete path/ref/hash and Gate3 branch merge review.

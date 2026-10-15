@@ -54,14 +54,14 @@ const moved = [
     "df60b3241f6e459fba6fe3ce79efff01fa090c37"
   ],
   [
-      "docs/history/phase1/GATE0_INPUT_CHECKLIST.md",
+    "GATE0_INPUT_CHECKLIST.md",
+    "docs/history/phase1/GATE0_INPUT_CHECKLIST.md",
     "560bb06eb155e5d24a5b19c0e176afa422c4deba"
   ]
 ] as const;
 const preserved = [
   "AGENTS.md",
   "gptP0analyze4.md",
-  "GATE0_INPUT_CHECKLIST.md",
   "V3.9_DataCollectPlanCurrent.pdf",
   "zipFile.zip",
   "SEPmd/V3.9_DataCollectPlan_f.8.md",
