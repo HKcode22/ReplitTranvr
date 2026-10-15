@@ -52,6 +52,10 @@ const moved = [
     "T3.ipynb",
     "docs/history/v2-diagnostics/notebooks/T3.ipynb",
     "df60b3241f6e459fba6fe3ce79efff01fa090c37"
+  ],
+  [
+      "docs/history/phase1/GATE0_INPUT_CHECKLIST.md",
+    "560bb06eb155e5d24a5b19c0e176afa422c4deba"
   ]
 ] as const;
 const preserved = [
@@ -70,7 +74,7 @@ const preserved = [
 ] as const;
 
 describe("Wave A original bytes, historical links and guardrail invariants", () => {
-  it("preserves the exact original Git blobs for ten archival renames", () => {
+  it("preserves the exact original Git blobs for eleven archival renames", () => {
     for (const [before, after, expectedBlob] of moved) {
       expect(existsSync(before), "old tracked path retained: " + before).toBe(false);
       expect(existsSync(after), "missing relocated path: " + after).toBe(true);
@@ -94,6 +98,7 @@ describe("Wave A original bytes, historical links and guardrail invariants", () 
     const links = [
       "docs/history/README.md",
       "docs/history/phase0/reviews/README.md",
+      "docs/history/phase1/README.md",
       "docs/history/v2-diagnostics/README.md",
       "docs/history/v2-diagnostics/notebooks/README.md",
       "docs/repository-maintenance/manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv",

@@ -13,7 +13,7 @@
 
 ## Boundaries
 
-Zero deletions and zero existing file renames in this PR as of this index. Phase2G qualified historical YSSY source 231/229 remains unchanged; original formal Gate2 and live Gate3 are not certified by repository housekeeping. No Replit Agent, deployment, paid API, SQL/ObjectStorage or source retention action is performed.
+Historical root reorganization has completed **11 verified byte-identical Git renames** in draft PR39; historical Git content is retained. **Zero source/scientific/authority file contents have been modified, and no SEPmd/ or artifacts/ paths have moved.** Phase2G qualified historical YSSY source 231/229 remains unchanged; original formal Gate2 and live Gate3 are not certified by repository housekeeping. No Replit Agent, deployment, paid API, SQL/ObjectStorage or source retention action is performed.
 
 ## Latest complete scanner triage
 
@@ -33,8 +33,12 @@ Zero deletions and zero existing file renames in this PR as of this index. Phase
 
 ## Remaining root decisions
 
-- [2026-10-15 case-sensitive root file review](2026-10-15_REMAINING_ROOT_FILES_AND_OPAQUE_ARTIFACT_REVIEW.md) and [machine root inventory](manifests/2026-10-15_REMAINING_REPO_ROOT_FILE_REVIEW.csv). The Gate0 checklist has not yet moved; opaque plan PDF and ZIP remain protected.
+- [2026-10-15 case-sensitive root file review](2026-10-15_REMAINING_ROOT_FILES_AND_OPAQUE_ARTIFACT_REVIEW.md) and [machine root inventory](manifests/2026-10-15_REMAINING_REPO_ROOT_FILE_REVIEW.csv). The old root snapshot contained Gate0 checklist; it has now been moved unchanged to `docs/history/phase1/GATE0_INPUT_CHECKLIST.md`. Opaque plan PDF and ZIP remain protected.
+
+## Historical Gate 0 checklist and cross-platform collision guard
+
+- [Oct 15 third bounded root move + 11 exact-blob preservation tests](2026-10-15_WAVEA_GATE0_HISTORY_MOVE_AND_CASEFOLD_GUARD.md), including one known macOS case-insensitive collision in `SEPmd/PHASE2G/README.md` vs `SEPmd/phase2g/README.md`.
 
 ## Next exact gate
 
-Read latest four CI results and the `REPO_CLEANUP_UNRESOLVED_OPERATIONAL=` line from full offline Actions run on the exact reviewed PR SHA. Manually adjudicate unresolved references, then create a dependency-validated small no-impact move batch only if source paths have no blocking consumers. Full SEPmd→data-collection move stays HOLD.
+Verify new exact GitHub SHA's 4 no-provider CI runs (including 11-blob identity and casefold collision test). Keep uninspected binary ZIP/PDF and all scientific paths untouched. Only propose SEPmd→data-collection atomic migration with complete path/ref/hash and Gate3 branch merge review.
