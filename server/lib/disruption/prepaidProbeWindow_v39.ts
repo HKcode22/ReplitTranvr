@@ -483,9 +483,9 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   // thrown response EXACTLY as an empty-ID response: strict LIST by the
   // already-frozen airport + unique callback, never blindly retry CREATE.
   // Any failure/multiple match in strict LIST is an unresolved account HOLD.
-  let creation:Awaited<ReturnType<typeof resolveAmbiguousPrepaidCreateV39<WebhookSubscription>>>;
+  let sub:WebhookSubscription|null=null;
   try {
-    creation = await resolveAmbiguousPrepaidCreateV39({
+    const creation = await resolveAmbiguousPrepaidCreateV39({
       createOnce:()=>createSubscription("FlightByAirportIcao", icao, {
         url: webhookUrl,maxDeliveryRetries: 0,
       }),
@@ -493,6 +493,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
         icao,webhookUrl,
       ),
     });
+    sub=creation.subscription;
   } catch {
     // Provider CREATE/strict LIST had an indeterminate outcome. A billable
     // subscription may ALREADY exist, and callbacks may be in transit.
@@ -505,7 +506,6 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     });
     return held.result;
   }
-  let sub = creation.subscription;
 
   if (!sub?.id) {
     await setPrepaidProbeSessionStateV39(
