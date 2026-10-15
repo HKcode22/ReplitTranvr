@@ -49,7 +49,7 @@ if (record.expiresAtUtc) {
 
 const hash = sha256HexString(raw);
 const token = `AUTH_ARTIFACT_SHA256:${hash}`;
-const ledgerPath = join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+const ledgerPath = join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
 let ledger = "";
 try { ledger = readFileSync(ledgerPath, "utf8"); }
 catch (e: any) { die(`cannot read evidence ledger: ${e?.message ?? e}`); }
@@ -67,4 +67,4 @@ if (!ledger.includes(token)) {
 console.log(`phase_gate=${record.phaseGate}`);
 console.log(`artifact_sha256=${hash}`);
 console.log("paid_or_mutating_authorization=false");
-console.log("ledger=SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+console.log("ledger=data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md");

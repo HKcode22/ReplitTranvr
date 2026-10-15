@@ -118,15 +118,15 @@ function classifyMatch(term: string, line: string, file: string): string {
 function scan(): MatchResult[] {
   const results: MatchResult[] = [];
   /*
-   * Current authoritative scanner inputs both live in SEPmd/.
+   * Current authoritative inputs now live under data-collection/plans and data-collection/implementation.
    * Missing declared authority is fatal rather than silently
    * skipped.
    */
   const basePaths: Record<string, string> = {
     'V3.9_DataCollectPlan_f.8.md':
-      join(process.cwd(), 'SEPmd'),
+      join(process.cwd(), 'data-collection', 'plans'),
     'V3.9_IMPLEMENTATION_LOG.md':
-      join(process.cwd(), 'SEPmd'),
+      join(process.cwd(), 'data-collection', 'implementation'),
   };
 
   for (const fileName of NORMATIVE_FILES) {

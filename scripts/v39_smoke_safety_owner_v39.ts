@@ -21,7 +21,7 @@ import { parseArgs, resolveOwnerAuthorization, verifyAuthFile } from "./v39_paid
 const SCOPE = "Phase 2 / safety smoke";
 const PROTECTED_ALERT_FLOOR = 1000;
 const DEFAULT_ARTIFACT = "artifacts/v39-phase2-safety-smoke.json";
-const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
+const DEFAULT_PREPROBE = "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json";
 
 type IngressKind = "production-deployment" | "replit-workspace-live";
 interface NormalizedIngress {

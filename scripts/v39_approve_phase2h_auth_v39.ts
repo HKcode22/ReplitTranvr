@@ -9,7 +9,7 @@ import { loadStage1PromotionHandoffV39 } from "../server/lib/disruption/phase2St
 
 const PHASE = "Phase 2 / Gate 2 Stage 2";
 const LEDGER = join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
-const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
+const DEFAULT_PREPROBE = "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json";
 const DEFAULT_SMOKE = "artifacts/v39-phase2-safety-smoke.json";
 const DEFAULT_PROMOTION = "artifacts/v39-stage1-promotion-handoff.json";
 

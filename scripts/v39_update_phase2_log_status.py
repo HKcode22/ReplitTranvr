@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 LOG = Path("data-collection/implementation/V3.9_IMPLEMENTATION_LOG.md")
-STATUS = Path("artifacts/phase2-current-status.json")
+STATUS = Path("data-collection/evidence/original-artifacts/other/phase2-current-status.json")
 MARKER = "<!-- V39_PHASE2_STATUS_20260913 -->"
 TERMINATOR = "**Plan ownership:**"
 
@@ -149,7 +149,7 @@ def render(data: dict[str, Any]) -> str:
             "|---|---|---|---|",
             *rows,
             "",
-            f"**Current pointer:** `{pointer}`. The machine-readable source of truth is `artifacts/phase2-current-status.json`; earlier PASS evidence is preserved even when a later integrity check supersedes an input generation.",
+            f"**Current pointer:** `{pointer}`. The machine-readable source of truth is `data-collection/evidence/original-artifacts/other/phase2-current-status.json`; earlier PASS evidence is preserved even when a later integrity check supersedes an input generation.",
             "",
         ]
     )

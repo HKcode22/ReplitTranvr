@@ -7,7 +7,7 @@ import {
   loadPhase2FSmokeRuntimeV39,
 } from "../server/lib/disruption/phase2SmokeRuntime_v39";
 
-const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
+const DEFAULT_PREPROBE = "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json";
 const LEDGER = join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
 
 function required(name: string): string {
