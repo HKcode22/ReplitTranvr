@@ -15,6 +15,10 @@
 
 These are proven **examples**, not an exhaustive dynamic-path audit. Additional references exist in other code, tests, runbooks, workflows and signed records. Do not confuse a comment/citation with an executable path reader.
 
+## Current Gate3 original P25 ledger append hold
+
+The latest independently inspected Gate3 PR36 standalone ledger is an exact prefix of current main's original ledger but **omits its final 31-line `AUTH-20261013-P2G25` append**, which binds the original P25 authorization JSON, runtime record and historical non-execution restrictions. An ordinary GitHub PR merge may preserve this append; standalone draft branch contents are not a valid substitute for present main custody. The [offline P25 ledger preservation test](../../tests/repo_waveb_p25_ledger_append_guard_v39.test.ts) must pass in any future Gate3/science migration, and the [dated review checkpoint](../../docs/repository-maintenance/2026-10-15_WAVEB_P25_LEDGER_APPEND_PRESERVATION_CHECKPOINT.md) records the exact risk.
+
 ## How to finish Wave B without undermining the experiment
 
 1. Review last-inspected Gate3 [draft PR36](https://github.com/HKcode22/ReplitTranvr/pull/36) `318e2c3...` against current main. Its *standalone branch tree* lacks some original main records, including `AGENTS.md`, P25 signed AUTH and P25 runtime freeze, and its Plan and Implementation Log blobs differ. This is **not** a claim that GitHub's merge diff deletes them; do not build/deploy from an incomplete standalone branch.
