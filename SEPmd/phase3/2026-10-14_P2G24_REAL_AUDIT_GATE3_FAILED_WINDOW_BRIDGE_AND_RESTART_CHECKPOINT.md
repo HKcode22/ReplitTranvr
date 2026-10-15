@@ -54,3 +54,14 @@ Four prospective HUBs **WSSS/OMAA/SKBO/YSSY** + per-day independently chosen **t
 4. Following actual Gate3 paid evidence, Gate0.5 real provider T/cutoff/target/FIDS data, Gate4 bounded controller proof, Phase4 independent FIDS frame, Phase5 four-HUB 31-day schedule+Q3 2026 traffic reference refresh/freezer, Phase6 actual signed paid start; Phase7 ML **not now**.
 
 **Financial/production boundary:** GitHub draft-only source/tests/docs/comments were changed by this chat; 0 paid provider calls, 0 provider credits, 0 new subscriptions/refills, 0 production DB schema/DML, 0 deployment/publish, 0 raw blob mutation, 0 incident closure, 0 PR merge, 0 historical data reclassification. No new user actions beyond the completed P2G24 audit required until a specific approved hosted check or credit canary is actually prepared.
+
+## FINAL EXACT-SHA CI VERIFICATION — supersedes initial QUEUED snapshot
+
+**Executable source/test revision `2e59f7f1b955a67bbe55f67ba11619f92e9678fe`: ALL FOUR GitHub no-provider workflows completed SUCCESS** after this checkpoint was first created:
+
+- [V3.9 full Offline Safety **#38671154345**](https://github.com/HKcode22/ReplitTranvr/actions/runs/38671154345) — **SUCCESS**, job `116214344027` completed successfully, no failed steps; full suites, TypeScript/lint/preflight/build pipeline green.
+- [Focused Release no-provider **#38671154410**](https://github.com/HKcode22/ReplitTranvr/actions/runs/38671154410) — **SUCCESS**.
+- [Real-PG Receiver Faults no-paid-provider **#38671154424**](https://github.com/HKcode22/ReplitTranvr/actions/runs/38671154424) — **SUCCESS**.
+- [Public Receiver Identity read-only **#38671154374**](https://github.com/HKcode22/ReplitTranvr/actions/runs/38671154374) — **SUCCESS**.
+
+**Qualification:** These are Github Actions offline/test PostgreSQL checks, not actual published Replit end-to-end Gate3 exercise; the newly added failure bridge remains separate from a licensed/authorized paid owner and the pre-provider hard STOP is unchanged. Docs commit after source SHA does not modify executable code. Last actual Replit evidence is the P2G24 30/30 read-only operator audit above, NOT a new provider balance/subscription inventory or hosted Gate3 callback proof. Next actual code milestone is the reviewed execution-owner admission/host-parity/provider-credits and finalization path, before separately approved minimal hosted and paid checks.
