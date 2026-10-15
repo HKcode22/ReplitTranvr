@@ -9,8 +9,8 @@
  * This module is provider-free. keepSessionReceiving may itself fail if the
  * UNLOGGED runtime disappeared. The state must stay callback-accepting
  * ('settling') because a live subscription might exist. Only a separate
- * LOGGED Gate3 owner can independently record the failed outcome. This result is NOT durable
- * SQL confirmation or paid authorization.
+ * LOGGED Gate3 owner can independently record the failed outcome. This
+ * return value is NOT durable SQL confirmation or paid authorization.
  */
 import type {PrepaidLiveWindowResultV39} from "./prepaidProbeWindow_v39";
 
@@ -24,7 +24,7 @@ export type PrepaidAmbiguousCreateHoldV39 =Readonly<{
   paidRestartAuthorized:false;
 }>;
 
-/** Exactly one best-effort SQL FAILED transition. No source deletion. */
+/** One best-effort callback-accepting 'settling' state request; NO deletion. */
 export async function holdPrepaidAmbiguousCreateV39(input:{
   sessionId:string;
   windowStart:Date;
