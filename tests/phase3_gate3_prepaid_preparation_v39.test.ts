@@ -51,10 +51,13 @@ pgSuite("Gate3 draft preparation durable atomic source in disposable PG",()=>{
       // reject. A failed provider account is not disposable just because
       // another test wants a fresh PREPARED row.
       const blockers=await client.query(GATE3_PRIOR_OWNER_ADMISSION_SQL_V39);
-      if(blockers.rowCount && blockers.rows[0]?.state==="FAILED"){
+      if(blockers.rowCount){
+        const expected=blockers.rows[0]?.state==="FAILED"
+          ?"GATE3_PREPARE_PRIOR_UNRESOLVED_ACCOUNT_FAILURE_HOLD"
+          :"GATE3_PREPARE_PRIOR_UNSETTLED_OWNER_HOLD";
         await expect(prepareGate3CanaryDraftV39(client,input))
-          .rejects.toThrow("GATE3_PREPARE_PRIOR_UNRESOLVED_ACCOUNT_FAILURE_HOLD");
-        return; // SQL positive pairing is independently tested with ROLLBACK fixture
+          .rejects.toThrow(expected);
+        return; // exact PG owner/runtime pairing has separate ROLLBACK fixture
       }
       let created;
       try {
@@ -62,7 +65,8 @@ pgSuite("Gate3 draft preparation durable atomic source in disposable PG",()=>{
       } catch(err){
         // Another CI test can finish a FAILED receipt after our first read.
         if(err instanceof Error &&
-           err.message==="GATE3_PREPARE_PRIOR_UNRESOLVED_ACCOUNT_FAILURE_HOLD")
+           (err.message==="GATE3_PREPARE_PRIOR_UNRESOLVED_ACCOUNT_FAILURE_HOLD"||
+            err.message==="GATE3_PREPARE_PRIOR_UNSETTLED_OWNER_HOLD"))
           return;
         throw err;
       }
