@@ -16,6 +16,14 @@ The owner found the reorganized repo hard to use despite preserving all scientif
 - `attached_assets/`, `client/`, `server/`, `shared/`, `scripts/`, `.github/workflows/`, `vite.config.ts`, runtime, backups, live credits, SQL, object storage, signed historical values and branch refs are unchanged.
 - Original YSSY P25 outcome stays **231 billed / 229 received, failed/DELIVERY_GAP**. Gate 3 remains separate [draft PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36); published Replit parity is not certified. Do not use Replit AI Agent.
 
+## CI investigation and Wave C1 test correction (follow-up)
+
+- Initial draft commit `b414cac59f368d44864379097a405ea5db00c447` passed [public receiver identity #38843939347](https://github.com/HKcode22/ReplitTranvr/actions/runs/38843939347), [focused no-provider #38843939389](https://github.com/HKcode22/ReplitTranvr/actions/runs/38843939389), and [real PG receiver faults #38843939394](https://github.com/HKcode22/ReplitTranvr/actions/runs/38843939394).
+- Initial [full offline run #38843939350](https://github.com/HKcode22/ReplitTranvr/actions/runs/38843939350) had **1 failed, 1,135 passing, 19 skipped**; TypeScript and disposable PostgreSQL setup passed. Failure: `tests/repo_waveb_branch_neutral_navigation_v39.test.ts` expected the obsolete literal `merge status is independent` in the human-facing maintenance README, while Wave B PR #46 is now merged.
+- Narrow fix in the same draft PR: change the test to assert actual merged Wave B status **and** independently unverified published Replit parity, rather than reinserting historically misleading text. No production or experimental source touched by this follow-up.
+- Independent Git tree scan of initial draft head: **168 local Markdown links resolved**, **zero casefold collisions**, **352 original machine artifacts and 32 original AUTH JSON** unchanged; Plan, Log and Ledger SHA unchanged.
+- **Final-head CI after this follow-up is mandatory**; initial pass statuses never transfer automatically to a new head.
+
 ## Review/CI acceptance — finish before merge
 - [ ] GitHub branch compare must show only documentation/index changes, a Git-identity-preserved offline experimental source move and its one test import change. Zero changes to source ledgers, 460 originals, AUTH JSON, application runtime, asset alias or GitHub Actions.
 - [ ] Resolve and case-check all new local Markdown navigation links, test macOS casefold paths.
