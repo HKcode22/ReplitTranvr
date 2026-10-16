@@ -8,7 +8,7 @@ const verifier=readFileSync("scripts/v39_phase2g_verify_live_callback_v39.ts","u
 
 describe("P25 production callback source-custody feature-gate binding, no provider",()=>{
   it("operator read-only schema diagnostic fails closed when V0064 is missing",()=>{
-    const handoff=readFileSync("SEPmd/phase2g/reports/2026-10-11_P25_YSSY_LAST_MILE_READONLY_OPERATOR_HANDOFF.md","utf8");
+    const handoff=readFileSync("data-collection/phase2g/reports/2026-10-11_P25_YSSY_LAST_MILE_READONLY_OPERATOR_HANDOFF.md","utf8");
     expect(handoff).toContain("q.rows[0]?.has_v0064_source_intent===true");
     expect(handoff).toContain("q.rows[0]?.has_v0064_guard_trigger===true");
     expect(handoff).toContain("current_schema_gate_pass:schemaGatePass");
@@ -31,7 +31,7 @@ describe("P25 production callback source-custody feature-gate binding, no provid
     expect(block).not.toContain("V39_PROVIDER_BLOB_BUCKET_ID");
   });
   it("historical incident #30 audit is read-only and never promotes a missing UNLOGGED session to cleanup proof",()=>{
-    const handoff=readFileSync("SEPmd/phase2g/reports/2026-10-11_P25_YSSY_LAST_MILE_READONLY_OPERATOR_HANDOFF.md","utf8");
+    const handoff=readFileSync("data-collection/phase2g/reports/2026-10-11_P25_YSSY_LAST_MILE_READONLY_OPERATOR_HANDOFF.md","utf8");
     expect(handoff).toContain("runtime_missing_is_not_cleanup_proof:runtime.rowCount===0");
     expect(handoff).toContain("cleanup_journal_table_present:journalExist.rows[0]?.present===true");
     expect(handoff).toContain("incident30_administrative_clearance_authorized:false");

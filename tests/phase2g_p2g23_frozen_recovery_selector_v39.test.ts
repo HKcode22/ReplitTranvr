@@ -22,7 +22,7 @@ const PREPROBE_SHA =
   "b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870";
 
 const preprobe = loadFrozenProbeArtifact(
-  "artifacts/preprobe-reference-freeze-record.json",
+  "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json",
   PREPROBE_SHA,
 );
 
@@ -336,7 +336,7 @@ describe("P2G23 final bounded recovery", () => {
 });
 
 describe("P2G25 distinct prospective YSSY one-recovery only, fail closed",()=>{
-  const path="artifacts/phase2g-early-pilot-yssy-p25-draft-20261011.json";
+  const path="data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p25-draft-20261011.json";
   const proposed=JSON.parse(readFileSync(path,"utf8"));
   const draft=proposed.p2g25_yssy_published_infrastructure_recovery_rerun;
   const signedOnlyForSelector={

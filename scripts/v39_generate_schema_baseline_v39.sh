@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="$ROOT/migrations/baseline"
 OUT_SQL="$OUT_DIR/B0062__v39_schema_baseline_20261001.sql"
 OUT_MANIFEST="$OUT_DIR/B0062__manifest.json"
-INVENTORY="$ROOT/artifacts/database-baseline/live-schema-inventory-20261001.json"
+INVENTORY="$ROOT/data-collection/evidence/original-artifacts/database-baseline/live-schema-inventory-20261001.json"
 RAW_SQL="$OUT_DIR/.B0062__raw_pg_dump.sql"
 
 if [[ -z "${DATABASE_URL:-}" ]]; then
@@ -110,7 +110,7 @@ const manifest = {
   baseline_version: 62,
   baseline_file: "B0062__v39_schema_baseline_20261001.sql",
   baseline_sha256: baselineSha,
-  live_schema_inventory_file: "artifacts/database-baseline/live-schema-inventory-20261001.json",
+  live_schema_inventory_file: "data-collection/evidence/original-artifacts/database-baseline/live-schema-inventory-20261001.json",
   live_schema_inventory_sha256: inventorySha,
   source_git_head: headSha,
   included_schemas: ["clean", "public"],

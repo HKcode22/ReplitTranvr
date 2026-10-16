@@ -32,7 +32,7 @@ import {
 } from "../scripts/v39_probe_stage1_owner_v39";
 
 const PREPROBE =
-  "artifacts/preprobe-reference-freeze-record.json";
+  "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json";
 
 const PREPROBE_SHA =
   "b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870";
@@ -283,7 +283,7 @@ describe(
           );
 
         expect(helper).toContain(
-          'AMENDMENT="artifacts/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json"',
+          'AMENDMENT="data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json"',
         );
 
         expect(helper).toContain(
@@ -295,7 +295,7 @@ describe(
         );
 
         expect(helper).not.toContain(
-          'const amendmentPath="artifacts/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json";',
+          'const amendmentPath="data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json";',
         );
       },
     );

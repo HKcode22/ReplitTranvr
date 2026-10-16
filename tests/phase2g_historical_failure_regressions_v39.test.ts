@@ -17,9 +17,9 @@ const watchdog = read("scripts/v39_phase2g_github_actions_watchdog_v39.ts");
 const paidWorkflow = read(".github/workflows/phase2g-paid-stage1.yml");
 const zeroCreditWorkflow = read(".github/workflows/phase2g-zero-credit-callback-binding.yml");
 const placeholderRegression = read("tests/phase2g_prepaid_item_sql_placeholders_v39.test.ts");
-const register = read("SEPmd/phase2g/FAILURE_REGISTER_AND_PREVENTION_MATRIX.md");
-const omaa = read("SEPmd/phase2g/reports/2026-09-16_P2G02_OMAA_SUCCESS.md");
-const history = JSON.parse(read("artifacts/phase2g-historical-attempt-register-20260923.json"));
+const register = read("data-collection/phase2g/FAILURE_REGISTER_AND_PREVENTION_MATRIX.md");
+const omaa = read("data-collection/phase2g/reports/2026-09-16_P2G02_OMAA_SUCCESS.md");
+const history = JSON.parse(read("data-collection/evidence/original-artifacts/phase2g/phase2g-historical-attempt-register-20260923.json"));
 
 describe("Phase2G historical failure regression matrix", () => {
   it("keeps the pre-Gate is_randomized NULL failure fixed", () => {

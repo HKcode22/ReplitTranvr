@@ -1,6 +1,6 @@
 /**
  * V3.9-f.8 AeroDataBox webhook + management routes.
- * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§0–21.
+ * Binding authority: data-collection/plans/V3.9_DataCollectPlan_f.8.md §§0–21.
  *
  * Webhook order:
  * raw envelope/items -> identity resolution/quarantine -> semantic events ->

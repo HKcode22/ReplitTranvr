@@ -76,7 +76,7 @@ validate_existing_chain() {
 import { readFileSync } from 'node:fs';
 const read = (p) => JSON.parse(readFileSync(p, 'utf8'));
 const sha64 = /^[a-f0-9]{64}$/i;
-const gate1 = read('artifacts/gate1-coverage.json');
+const gate1 = read('data-collection/evidence/original-artifacts/other/gate1-coverage.json');
 const reference = read('artifacts/reference-freeze-record.json');
 if (gate1.status !== 'PASS') throw new Error('BLOCKED:PHASE2B_EXISTING_GATE1_NOT_PASS');
 if (!sha64.test(String(gate1.artifact_sha256 ?? ''))) throw new Error('BLOCKED:PHASE2B_EXISTING_GATE1_HASH_INVALID');
@@ -135,9 +135,9 @@ import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 const read = (p) => JSON.parse(readFileSync(p, 'utf8'));
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
-const gate1 = read('artifacts/gate1-coverage.json');
+const gate1 = read('data-collection/evidence/original-artifacts/other/gate1-coverage.json');
 const reference = read('artifacts/reference-freeze-record.json');
-const preprobe = read('artifacts/preprobe-reference-freeze-record.json');
+const preprobe = read('data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json');
 if (gate1.status !== 'PASS') throw new Error('BLOCKED:PHASE2B_GATE1_NOT_PASS');
 if (reference.status !== 'READY_FROZEN_REFERENCE') throw new Error('BLOCKED:PHASE2C_REFERENCE_FREEZE_NOT_READY');
 if (preprobe.status !== 'READY_FROZEN_PREPROBE_REFERENCE') throw new Error('BLOCKED:PHASE2E_PREPROBE_NOT_READY');
@@ -157,7 +157,7 @@ console.log(JSON.stringify({
   frame_hash: preprobe.frame_hash,
   phase2e: 'PASS',
   preprobe_artifact_sha256: preprobe.artifact_sha256,
-  preprobe_file_sha256: sha('artifacts/preprobe-reference-freeze-record.json'),
+  preprobe_file_sha256: sha('data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json'),
   shortlist_count: preprobe.shortlist.length,
   next: 'MANDATORY STOP before separately authorized Phase 2F safety smoke',
 }, null, 2));

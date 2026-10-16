@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 
 describe("historical P25 AUTH append survives future Phase3 integration", () => {
   it("preserves exactly one original ledger section with signed JSON and runtime bindings", () => {
-    const ledger=readFileSync("SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md","utf8");
-    const auth=JSON.parse(readFileSync("SEPmd/V3.9_PHASE2G_AUTH_20261013_P2G25.json","utf8"));
-    const runtime=JSON.parse(readFileSync("artifacts/phase2g-gate2-runtime-P2G-S1-20261013-03.json","utf8"));
+    const ledger=readFileSync("data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md","utf8");
+    const auth=JSON.parse(readFileSync("data-collection/authorizations/V3.9_PHASE2G_AUTH_20261013_P2G25.json","utf8"));
+    const runtime=JSON.parse(readFileSync("data-collection/evidence/original-artifacts/phase2g/phase2g-gate2-runtime-P2G-S1-20261013-03.json","utf8"));
     const heading="### AUTH-20261013-P2G25 — approved Phase 2G Stage-1 authorization";
     const occurrences=ledger.split(heading).length-1;
     expect(occurrences,"main-only historical P25 append lost/duplicated").toBe(1);

@@ -6,10 +6,10 @@ import {loadPhase2gCompact6AmendmentV39} from "../server/lib/disruption/phase2Co
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
 describe("P25 exact prospective recovery must load under real V3.9 scientific gate",()=>{
  it("accepts exact hashed one-shot frozen amendment and linked project-lead decision",()=>{
-   const path="artifacts/phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json";
+   const path="data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json";
    const raw=readFileSync(path,"utf8");
-   const decision=readFileSync("artifacts/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json","utf8");
-   const pre=JSON.parse(readFileSync("artifacts/preprobe-reference-freeze-record.json","utf8"));
+   const decision=readFileSync("data-collection/evidence/original-artifacts/phase2g/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json","utf8");
+   const pre=JSON.parse(readFileSync("data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json","utf8"));
    const loaded=loadPhase2gCompact6AmendmentV39({
      path,expectedSha256:sha(raw),
      sourcePreprobeFileSha256:"b9113c26d7ec02e4abf036ec3c00837f36c5e741aa08b642d46868ace7ff1870",

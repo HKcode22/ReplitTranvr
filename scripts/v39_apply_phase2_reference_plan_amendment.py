@@ -2,12 +2,12 @@
 """Apply the reviewed Phase-2 open-reference amendment to the binding V3.9-f.8 Plan.
 
 This is intentionally assertion-driven. It changes only the exact §4.1/§4.5
-sentences reviewed in SEPmd/V3.9_PHASE2_PLAN_AMENDMENT_PROPOSAL.md. If the
+sentences reviewed in data-collection/phase2/V3.9_PHASE2_PLAN_AMENDMENT_PROPOSAL.md. If the
 binding Plan has drifted, it refuses instead of guessing.
 """
 from pathlib import Path
 
-PLAN = Path("SEPmd/V3.9_DataCollectPlan_f.8.md")
+PLAN = Path("data-collection/plans/V3.9_DataCollectPlan_f.8.md")
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:

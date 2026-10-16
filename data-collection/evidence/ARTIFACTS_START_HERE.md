@@ -1,13 +1,15 @@
+> **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
+
 # Find an original experimental artifact
 
-**All 352 originally tracked `artifacts/` files are now indexed without relocation or payload modification.** This is a search/navigation aid, not independent certification that every receipt is scientifically valid or sufficient to promote an experiment.
+**All 352 originally tracked `artifacts/` files are now linked to their relocated paths, preserving original Git blobs without payload modification.** This is a search/navigation aid, not independent certification that every receipt is scientifically valid or sufficient to promote an experiment.
 
 ## Common starting points
 
-- [preprobe-reference-freeze-record.json](../../artifacts/preprobe-reference-freeze-record.json)
-- [phase2g-historical-attempt-register-20260923.json](../../artifacts/phase2g-historical-attempt-register-20260923.json)
-- [phase2g-gate2-runtime-P2G-S1-20261013-03.json](../../artifacts/phase2g-gate2-runtime-P2G-S1-20261013-03.json)
-- [phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json](../../artifacts/phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json)
+- [preprobe-reference-freeze-record.json](original-artifacts/other/preprobe-reference-freeze-record.json)
+- [phase2g-historical-attempt-register-20260923.json](original-artifacts/phase2g/phase2g-historical-attempt-register-20260923.json)
+- [phase2g-gate2-runtime-P2G-S1-20261013-03.json](original-artifacts/phase2g/phase2g-gate2-runtime-P2G-S1-20261013-03.json)
+- [phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json](original-artifacts/phase2g/phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json)
 
 **P25 caveat:** The existence of a YSSY recovery freeze or runtime JSON does not negate the original 231 billed / 229 received delivery gap or convert formal Stage2/Gate2 acceptance into PASS.
 

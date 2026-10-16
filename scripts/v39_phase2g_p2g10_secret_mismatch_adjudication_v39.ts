@@ -9,14 +9,15 @@ const BUDGET_DAY = "P2G-S1-20260923-09";
 const PROBE_ID = 8;
 const SESSION_ID = "c7826b30-47ef-453a-86a6-dd853ce2a6f8";
 const INCIDENT_DOC = "SEPmd/phase2g/incidents/2026-09-23_P2G10_GITHUB_REPLIT_WEBHOOK_SECRET_MISMATCH.md";
+const INCIDENT_DOC_STORAGE = "data-collection/phase2g/incidents/2026-09-23_P2G10_GITHUB_REPLIT_WEBHOOK_SECRET_MISMATCH.md";
 
 function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
 async function main(): Promise<void> {
-  if (!fs.existsSync(INCIDENT_DOC)) throw new Error("P2G10_ADJUDICATION_REFUSED:INCIDENT_DOC_MISSING");
-  const docRaw = fs.readFileSync(INCIDENT_DOC, "utf8");
+  if (!fs.existsSync(INCIDENT_DOC_STORAGE)) throw new Error("P2G10_ADJUDICATION_REFUSED:INCIDENT_DOC_MISSING");
+  const docRaw = fs.readFileSync(INCIDENT_DOC_STORAGE, "utf8");
   if (!docRaw.includes("GitHub/Replit Webhook Secret Mismatch") ||
       !docRaw.includes(BUDGET_DAY) ||
       !docRaw.includes("Probe: 8") ||

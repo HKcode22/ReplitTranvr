@@ -132,7 +132,7 @@ function readAuth(authPath: string): { raw: string; record: AuthRecord; sha256: 
 }
 
 async function main(): Promise<void> {
-  const preprobePath = path.resolve(optional("--preprobe", "artifacts/preprobe-reference-freeze-record.json"));
+  const preprobePath = path.resolve(optional("--preprobe", "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json"));
   const smokePath = path.resolve(required("--smoke"));
   const smokeRuntimePath = path.resolve(required("--smoke-runtime-file"));
   const smokeRuntimeSha = required("--smoke-runtime-sha").toLowerCase();
@@ -307,7 +307,7 @@ async function main(): Promise<void> {
   }
   if (!String(auth.record.cleanupOwner ?? "").trim()) blockers.push("auth_cleanup_owner_missing");
 
-  const ledgerPath = path.resolve("SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+  const ledgerPath = path.resolve("data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md");
   const ledger = fs.readFileSync(ledgerPath, "utf8");
   const approvalHeading = `### ${auth.record.authorizationId} — approved Phase 2G Stage-1 authorization`;
   if (!ledger.includes(binding.smoke.evidenceId)) blockers.push("smoke_handoff_not_in_ledger");

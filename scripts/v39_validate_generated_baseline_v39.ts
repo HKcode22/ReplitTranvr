@@ -23,7 +23,7 @@ function fail(errors: string[]): never {
 const root = process.cwd();
 const baselinePath = path.resolve(root, arg("--baseline", "migrations/baseline/B0062__v39_schema_baseline_20261001.sql"));
 const manifestPath = path.resolve(root, arg("--manifest", "migrations/baseline/B0062__manifest.json"));
-const inventoryPath = path.resolve(root, arg("--inventory", "artifacts/database-baseline/live-schema-inventory-20261001.json"));
+const inventoryPath = path.resolve(root, arg("--inventory", "data-collection/evidence/original-artifacts/database-baseline/live-schema-inventory-20261001.json"));
 
 const errors: string[] = [];
 for (const p of [baselinePath, manifestPath, inventoryPath]) {

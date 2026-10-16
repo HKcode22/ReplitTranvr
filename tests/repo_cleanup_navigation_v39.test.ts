@@ -31,15 +31,15 @@ describe("navigation-only data-collection index (no source migration)", () => {
     expect(checked).toBeGreaterThan(35);
     const readme = readFileSync("data-collection/README.md", "utf8");
     expect(readme).toContain("navigation");
-    expect(existsSync("SEPmd/V3.9_DataCollectPlan_f.8.md")).toBe(true);
-    expect(existsSync("SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md")).toBe(true);
-    expect(existsSync("SEPmd/PHASE2G/OPERATOR_SHELL_ONLY_GUARDRAIL.md")).toBe(true);
-    expect(existsSync("SEPmd/phase2g/README.md")).toBe(true);
-    expect(existsSync("SEPmd/PHASE2G/README.md")).toBe(true);
+    expect(existsSync("data-collection/plans/V3.9_DataCollectPlan_f.8.md")).toBe(true);
+    expect(existsSync("data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md")).toBe(true);
+    expect(existsSync("data-collection/phase2g/operations/OPERATOR_SHELL_ONLY_GUARDRAIL.md")).toBe(true);
+    expect(existsSync("data-collection/phase2g/legacy-lowercase/README.md")).toBe(true);
+    expect(existsSync("data-collection/phase2g/legacy-uppercase/README.md")).toBe(true);
     console.log("REPO_CLEANUP_NAVIGATION_LINKS=" + JSON.stringify({
       pages_checked: pages.length,
       local_targets_checked: checked,
-      original_scientific_paths_unchanged: true,
+      original_scientific_blobs_preserved_at_new_paths: true,
       provider_calls: 0,
     }));
   });

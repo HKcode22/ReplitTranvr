@@ -7,7 +7,7 @@ import {
   loadPhase2FDeploymentBindingV39,
 } from "../server/lib/disruption/phase2DeploymentBinding_v39";
 
-const LEDGER = join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+const LEDGER = join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
 const DEFAULT_OUT = "artifacts/phase2f-deployment-binding.json";
 
 function arg(name: string): string | null {

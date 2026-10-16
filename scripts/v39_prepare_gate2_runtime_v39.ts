@@ -7,8 +7,8 @@ import { loadGate2RuntimeBindingV39 } from "../server/lib/disruption/phase2Gate2
 import { loadFrozenProbeArtifact } from "../server/lib/disruption/anchorPromotion_v39";
 import { loadPhase2gCompact6AmendmentV39 } from "../server/lib/disruption/phase2Compact6_v39";
 
-const LEDGER = join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
-const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
+const LEDGER = join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+const DEFAULT_PREPROBE = "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json";
 const DEFAULT_SMOKE = "artifacts/v39-phase2-safety-smoke.json";
 
 function required(name: string): string {

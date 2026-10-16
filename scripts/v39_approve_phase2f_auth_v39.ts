@@ -4,8 +4,8 @@ import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authR
 import { loadPhase2FSmokeRuntimeV39 } from "../server/lib/disruption/phase2SmokeRuntime_v39";
 
 const PHASE = "Phase 2 / safety smoke";
-const DEFAULT_PREPROBE = "artifacts/preprobe-reference-freeze-record.json";
-const LEDGER = join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+const DEFAULT_PREPROBE = "data-collection/evidence/original-artifacts/other/preprobe-reference-freeze-record.json";
+const LEDGER = join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
 
 function required(name: string): string {
   const index = process.argv.indexOf(name);

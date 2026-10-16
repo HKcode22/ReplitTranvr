@@ -10,37 +10,37 @@ import {
 } from "./yssyOperatingHours_v39";
 
 export const PHASE2G_COMPACT6_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-amendment-freeze-20260921.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-amendment-freeze-20260921.json";
 export const PHASE2G_COMPACT6_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-p2g07-provider502-recovery-freeze-20260922.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g07-provider502-recovery-freeze-20260922.json";
 export const PHASE2G_COMPACT6_P2G08_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-p2g08-balance502-recovery-freeze-20260922.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g08-balance502-recovery-freeze-20260922.json";
 export const PHASE2G_COMPACT6_P2G09_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-p2g09-hostreset-recovery-freeze-20260922.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g09-hostreset-recovery-freeze-20260922.json";
 export const PHASE2G_COMPACT6_P2G10_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-p2g10-secret-mismatch-recovery-freeze-20260923.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g10-secret-mismatch-recovery-freeze-20260923.json";
 export const PHASE2G_COMPACT6_IDENTITY_V2_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-identity-v2-recovery-freeze-20260925.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-identity-v2-recovery-freeze-20260925.json";
 export const PHASE2G_COMPACT6_P2G17_MMUN_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-p2g17-mmun-delivery-gap-recovery-freeze-20261001.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-p2g17-mmun-delivery-gap-recovery-freeze-20261001.json";
 export const PHASE2G_COMPACT6_EARLY_PILOT_SCOPE_ARTIFACT_PATH =
-  "artifacts/phase2g-compact6-early-pilot-scope-reduction-freeze-20261002.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-compact6-early-pilot-scope-reduction-freeze-20261002.json";
 export const PHASE2G_EARLY_PILOT_OPERATING_HOURS_CORRECTION_ARTIFACT_PATH =
-  "artifacts/phase2g-early-pilot-scope-operating-hours-correction-freeze-20261002.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-scope-operating-hours-correction-freeze-20261002.json";
 export const PHASE2G_EARLY_PILOT_YSSY_LOCAL_TIME_SCOPE_ARTIFACT_PATH =
-  "artifacts/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-local-time-scope-freeze-20261003.json";
 export const PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH =
-  "artifacts/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p2g22-recovery-freeze-20261007.json";
 
 export const PHASE2G_P2G23_YSSY_FROZEN_PATH =
-  "artifacts/phase2g-early-pilot-yssy-p2g23-recovery-freeze-20261009.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p2g23-recovery-freeze-20261009.json";
 
 export const PHASE2G_P2G23_YSSY_CANDIDATE_PATH =
-  "artifacts/phase2g-early-pilot-yssy-p2g23-recovery-candidate-20261009.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p2g23-recovery-candidate-20261009.json";
 export const PHASE2G_P25_YSSY_FROZEN_PATH =
-  "artifacts/phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p25-recovery-freeze-20261011.json";
 export const PHASE2G_P25_YSSY_DRAFT_PATH =
-  "artifacts/phase2g-early-pilot-yssy-p25-draft-20261011.json";
+  "data-collection/evidence/original-artifacts/phase2g/phase2g-early-pilot-yssy-p25-draft-20261011.json";
 
 export type Phase2gIdentityV2RecoveryIcaoV39 =
   | "WSSS"
@@ -679,9 +679,11 @@ export function loadPhase2gCompact6AmendmentV39(input: {
 
     const adminClosePath =
       "artifacts/phase2g-p2g22-yssy-final-admin-close-20261007T004620179Z.json";
+    const adminCloseStoredPath = "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g22-yssy-final-admin-close-20261007T004620179Z.json";
 
     const cleanupPath =
       "artifacts/phase2g-exact-session-purpose-cleanup-P2G22-YSSY-DELIVERY-GAP-1791286919308.json";
+    const cleanupStoredPath = "data-collection/evidence/original-artifacts/phase2g/phase2g-exact-session-purpose-cleanup-P2G22-YSSY-DELIVERY-GAP-1791286919308.json";
 
     if (
       p2g22.authorized !== true ||
@@ -741,10 +743,10 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     }
 
     if (
-      !existsSync(adminClosePath) ||
+      !existsSync(adminCloseStoredPath) ||
       sha256(
         readFileSync(
-          adminClosePath,
+          adminCloseStoredPath,
           "utf8",
         ),
       ) !== p2g22.admin_close_sha256
@@ -755,10 +757,10 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     }
 
     if (
-      !existsSync(cleanupPath) ||
+      !existsSync(cleanupStoredPath) ||
       sha256(
         readFileSync(
-          cleanupPath,
+          cleanupStoredPath,
           "utf8",
         ),
       ) !== p2g22.cleanup_receipt_sha256
@@ -778,8 +780,10 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH;
     const closePath =
       "artifacts/phase2g-p2g23-yssy-callback-outage-final-closeout-20261008.json";
+    const closeStoredPath = "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-yssy-callback-outage-final-closeout-20261008.json";
     const decisionPath =
       "artifacts/phase2g-p2g23-project-lead-approval-20261009.json";
+    const decisionStoredPath = "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-project-lead-approval-20261009.json";
 
     if (
       ![
@@ -836,19 +840,40 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       throw new Error("REFUSED_COMPACT6_P2G23_RECOVERY_CONTRACT");
     }
 
+    // Frozen P2G23 records retain historical file names as signed evidence
+    // values. Resolve ONLY these three previously reviewed, immutable original
+    // receipts to their new on-disk locations. Never rewrite signed fields or
+    // accept a caller-provided arbitrary new path.
+    const relocatedHistoricalReceipts = new Map<string, string>([
+      ["artifacts/phase2g-p2g23-yssy-reconstruction-20261008T044128Z.json",
+       "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-yssy-reconstruction-20261008T044128Z.json"],
+      ["artifacts/phase2g-p2g23-yssy-callback-outage-blob-manifest-20261008.json",
+       "data-collection/evidence/original-artifacts/phase2g/phase2g-p2g23-yssy-callback-outage-blob-manifest-20261008.json"],
+      ["artifacts/phase2g-exact-session-purpose-cleanup-P2G23-YSSY-CALLBACK-OUTAGE-1791435358585.json",
+       "data-collection/evidence/original-artifacts/phase2g/phase2g-exact-session-purpose-cleanup-P2G23-YSSY-CALLBACK-OUTAGE-1791435358585.json"],
+    ]);
     const verifiedJson = (
-      path: string,
+      historicalPath: string,
       expectedSha: string,
     ): any => {
+      const whitelistedStoredPaths = new Set([
+        PHASE2G_COMPACT6_P2G22_YSSY_RECOVERY_ARTIFACT_PATH,
+        decisionStoredPath,
+        closeStoredPath,
+      ]);
+      const storedPath = whitelistedStoredPaths.has(historicalPath)
+        ? historicalPath
+        : relocatedHistoricalReceipts.get(historicalPath);
       if (
-        !existsSync(path) ||
-        sha256(readFileSync(path, "utf8")) !== expectedSha
+        !storedPath ||
+        !existsSync(storedPath) ||
+        sha256(readFileSync(storedPath, "utf8")) !== expectedSha
       ) {
         throw new Error(
-          `REFUSED_COMPACT6_P2G23_RECEIPT_HASH:${path}`,
+          `REFUSED_COMPACT6_P2G23_RECEIPT_HASH:${historicalPath}`,
         );
       }
-      return JSON.parse(readFileSync(path, "utf8"));
+      return JSON.parse(readFileSync(storedPath, "utf8"));
     };
 
     const parentOriginal = verifiedJson(
@@ -870,10 +895,10 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       );
     }
     const lead = verifiedJson(
-      decisionPath, p23.project_lead_decision_sha256,
+      decisionStoredPath, p23.project_lead_decision_sha256,
     );
     const close = verifiedJson(
-      closePath, p23.p2g23_closeout_sha256,
+      closeStoredPath, p23.p2g23_closeout_sha256,
     );
 
     if (
@@ -1011,14 +1036,16 @@ export function loadPhase2gCompact6AmendmentV39(input: {
     clone.frozen_at_utc=original.frozen_at_utc;
     if(JSON.stringify(clone)!==JSON.stringify(original))
       throw Error("REFUSED_P2G25_NON_ADDITIVE_SCIENCE_CHANGE");
+    const p25DecisionStoredPath =
+      "data-collection/evidence/original-artifacts/phase2g/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json";
     if(p25.project_lead_decision_file!==
          "artifacts/phase2g-p25-yssy-prospective-project-lead-approval-20261011.json"||
        !/^[a-f0-9]{64}$/.test(p25.project_lead_decision_sha256)||
-       !existsSync(p25.project_lead_decision_file)||
-       sha256(readFileSync(p25.project_lead_decision_file,"utf8"))!==
+       !existsSync(p25DecisionStoredPath)||
+       sha256(readFileSync(p25DecisionStoredPath,"utf8"))!==
          p25.project_lead_decision_sha256)
       throw Error("REFUSED_P2G25_HUMAN_APPROVAL_RECEIPT_MISSING_OR_HASH_MISMATCH");
-    const decision=JSON.parse(readFileSync(p25.project_lead_decision_file,"utf8"));
+    const decision=JSON.parse(readFileSync(p25DecisionStoredPath,"utf8"));
     if(decision.schema!=="v39.phase2g-p25-prospective-recovery-decision.v1"||
        decision.status!=="PROJECT_LEAD_APPROVED_ONE_RECOVERY"||
        decision.target!=="YSSY"||decision.max_alert_credits!==500||
@@ -1162,7 +1189,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
         scope.yssy_local_time_protocol_required !== true ||
         scope.yssy_curfew_local_time !== "23:00-06:00 Australia/Sydney" ||
         scope.yssy_local_operating_hours_protocol_file !==
-          PHASE2G_YSSY_LOCAL_OPERATING_HOURS_PROTOCOL_ARTIFACT_PATH ||
+          "artifacts/phase2g-yssy-local-operating-hours-protocol-freeze-20261003.json" ||
         !/^[a-f0-9]{64}$/.test(
           String(scope.yssy_local_operating_hours_protocol_sha256 ?? ""),
         ) ||
@@ -1179,7 +1206,7 @@ export function loadPhase2gCompact6AmendmentV39(input: {
       const yssyProtocol = loadYssyOperatingHoursProtocolV39({
         expectedSha256:
           scope.yssy_local_operating_hours_protocol_sha256!,
-        path: scope.yssy_local_operating_hours_protocol_file!,
+        path: PHASE2G_YSSY_LOCAL_OPERATING_HOURS_PROTOCOL_ARTIFACT_PATH,
       });
       if (
         yssyProtocol.protocol.parent_scope_sha256 !==

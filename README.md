@@ -1,3 +1,5 @@
+> **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
+
 # ReplitTranvr — Aviation Data Collection & Research
 
 The project includes a live-capable application, original V3.9 aviation scientific records, evidence receipts, scripts and tests.
@@ -8,7 +10,7 @@ The project includes a live-capable application, original V3.9 aviation scientif
 
 | You are looking for | Open |
 |---|---|
-| What the experiment predicts and how it is defined | [Binding V3.9 Plan](SEPmd/V3.9_DataCollectPlan_f.8.md) |
+| What the experiment predicts and how it is defined | [Binding V3.9 Plan](data-collection/plans/V3.9_DataCollectPlan_f.8.md) |
 | Past pilots, errors and amendments | [58 Phase 2G dated documents](data-collection/phase2g/ALL_REPORTS.md) |
 | Machine evidence or receipts | [All 352 original artifacts](data-collection/evidence/ARTIFACTS_START_HERE.md) |
 | A specific original research file | [All 108 SEPmd records](data-collection/ALL_SEPMD_FILES.md) |
@@ -19,20 +21,22 @@ The project includes a live-capable application, original V3.9 aviation scientif
 | Implementation details | [Implementation Log navigation](data-collection/implementation/README.md) |
 | Phase 3 / Gate 3 engineering | [Phase 3 status](data-collection/phase3/README.md) |
 | Operator safety and runbooks | [Operations](data-collection/operations/README.md) |
-| Why filenames haven't all been relocated | [Wave B path-compatibility gate](data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) |
+| Physical relocation compatibility and safety decisions | [Wave B path-compatibility gate](data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) |
 
-## What's finished?
+## Repository organization and source custody
 
-**Wave A is merged on `main`** through [PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39), merge commit [`4075cce8`](https://github.com/HKcode22/ReplitTranvr/commit/4075cce8aa33c159487a436127199264a4e8954c). All four PR CI checks and the automatic [post-merge offline main check](https://github.com/HKcode22/ReplitTranvr/actions/runs/38812391951) passed. Eleven historical root files moved byte-for-byte into [`docs/history/`](docs/history/README.md) with [exact original Git blob identities](docs/repository-maintenance/manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv). The original **108 `SEPmd/` files and 352 `artifacts/` files remain untouched** at their old paths, indexed with verified source identities and links.
+**Wave A:** [PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39) organized navigation and moved 11 historical root files, retaining their Git identities. **Wave B:** [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46) is the separately reviewed physical relocation of all **108 original `SEPmd/` source files and 352 original `artifacts/` evidence files**. The links on this page point to the moved, byte-identical originals in the tree containing this README.
 
-**Wave B (physical original-file rename) remains on HOLD.** Source code and signed experimental records depend on those exact paths, and Gate 3 engineering remains in [unmerged draft PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36). An organized index is useful now without damaging those dependencies.
+Wave B's **merge status, current tests, and deployment boundaries** must be checked on [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46) and [maintenance Issue #24](https://github.com/HKcode22/ReplitTranvr/issues/24); a copied README or an old signed authorization is not evidence that the published Replit deployment matches this code. [Complete 460-file original-to-relocated SHA manifest](docs/repository-maintenance/manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv).
+
+[Phase 3 / Gate 3](data-collection/phase3/README.md) still requires a **separate** review of [draft PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36). Do not replace the authoritative signed P25 evidence ledger with the draft's shorter historical version.
 
 ## Repository map
 
 | Directory | Purpose |
 |---|---|
-| `data-collection/` | **Human-friendly project home** and links to original research/evidence |
-| `SEPmd/`, `artifacts/` | Compatibility-protected scientific Plan, AUTH, frozen original data and reports |
+| `data-collection/` | **Project home**; original Plans, AUTH, evidence and historical scientific records at relocated paths |
+| `artifacts/` when created at runtime | New **generated/temporary outputs**, not the 352 archived original blobs; output paths must remain isolated |
 | `client/`, `server/`, `shared/` | Application |
 | `scripts/`, `tests/`, `.github/workflows/` | Tests, scripts and GitHub Actions |
 | `migrations/` | Database baseline and schema migration |
@@ -40,4 +44,4 @@ The project includes a live-capable application, original V3.9 aviation scientif
 | `docs/history/` | Historical archive |
 | `docs/repository-maintenance/` | [Cleanup checkpoints and current status](docs/repository-maintenance/START_HERE.md) |
 
-**Safety and science:** YSSY P25 originally recorded 231 provider-billed versus 229 received; the original delivery gap and formal Gate 2 acceptance hold are not retroactively changed by repo cleanup. No deployment or paid provider call is implied by a GitHub merge. Do not use Replit AI Agent. Follow [`AGENTS.md`](AGENTS.md) and the [ACTIVE shell-only guardrail](SEPmd/PHASE2G/OPERATOR_SHELL_ONLY_GUARDRAIL.md); paid, SQL, blob and retention mutations require separate explicit authorization.
+**Safety and science:** YSSY P25 originally recorded 231 provider-billed versus 229 received; the original delivery gap and formal Gate 2 acceptance hold are not retroactively changed by repo cleanup. No deployment or paid provider call is implied by a GitHub merge. Do not use Replit AI Agent. Follow [`AGENTS.md`](AGENTS.md) and the [ACTIVE shell-only guardrail](data-collection/phase2g/operations/OPERATOR_SHELL_ONLY_GUARDRAIL.md); paid, SQL, blob and retention mutations require separate explicit authorization.

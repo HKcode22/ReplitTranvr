@@ -1,7 +1,7 @@
 /**
  * Historical as-of feature store — V3.9-f.8 §12.2 / §12.2.1.
  *
- * Binding authority: SEPmd/V3.9_DataCollectPlan_f.8.md §§0–21.
+ * Binding authority: data-collection/plans/V3.9_DataCollectPlan_f.8.md §§0–21.
  * Historical facts are append-only and bitemporal. At prediction cutoff T a
  * feature is eligible only when information_available_at <= T, valid_from <= T,
  * and valid_to is null or > T.
