@@ -40,7 +40,9 @@ Wave B's **merge status, current tests, and deployment boundaries** must be chec
 | `client/`, `server/`, `shared/` | Application |
 | `scripts/`, `tests/`, `.github/workflows/` | Tests, scripts and GitHub Actions |
 | `migrations/` | Database baseline and schema migration |
-| `data-collection/research-papers/`, `attached_assets/` | Research reading and historical attachments |
+| `data-collection/research-papers/` | Aviation research literature |
+| `client/src/assets/images/` | Frontend PNG images, including the 18 original root-attached images moved byte-identically in proposed Wave C3 |
+| `docs/history/travnr-pasted-prompts/`, `docs/history/unreviewed-archives/` | Archived original pasted requests and opaque ZIPs; these are not frontend images |
 | `docs/history/` | Historical archive |
 | `docs/repository-maintenance/` | [Cleanup checkpoints and current status](docs/repository-maintenance/START_HERE.md) |
 

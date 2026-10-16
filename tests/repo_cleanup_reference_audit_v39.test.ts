@@ -17,6 +17,8 @@ describe("repository cleanup reference scanner (offline, read-only)", () => {
     expect(audit.absent_protected_roots).toEqual([]);
     expect(audit.tracked_counts_by_protected_root["data-collection/plans/"]).toBeGreaterThan(0);
     expect(audit.tracked_counts_by_protected_root["data-collection/evidence/"]).toBeGreaterThan(0);
+    expect(audit.tracked_counts_by_protected_root["client/src/assets/images/"]).toBeGreaterThanOrEqual(24);
+    expect(audit.tracked_counts_by_protected_root["docs/history/travnr-pasted-prompts/"]).toBeGreaterThan(0);
     expect(typeof audit.git_head).toBe("string");
     expect(audit.git_head).toMatch(/^[a-f0-9]{40}$/);
     const missing = audit.references.filter((r) => r.source_role === "OPERATIONAL_OR_TEST" && !r.present_as_tracked_path);
