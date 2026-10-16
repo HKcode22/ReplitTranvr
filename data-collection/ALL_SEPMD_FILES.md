@@ -8,7 +8,7 @@
 
 - [V3.1-3.8DataCollectFoundationalPlanHistory.md](plans/history/V3.1-3.8DataCollectFoundationalPlanHistory.md)
 - [V3.9_DataCollectPlan_f.8.md](plans/V3.9_DataCollectPlan_f.8.md)
-- [V3.9_Final_Document_Safety_Audit_2026-09-02.md](history/zero-byte-audit-stubs/V3.9_Final_Document_Safety_Audit_2026-09-02.md)
+- [V3.9_Final_Document_Safety_Audit_2026-09-02.md](plans/history/V3.9_Final_Document_Safety_Audit_2026-09-02.md)
 - [V3.9_GATE0_ACCOUNT_EVIDENCE_20260910.json](evidence/early-gates/V3.9_GATE0_ACCOUNT_EVIDENCE_20260910.json)
 - [V3.9_GATE0_AUTH_20260910_G0A.json](authorizations/V3.9_GATE0_AUTH_20260910_G0A.json)
 - [V3.9_GATE0_FORMAL_RESULT_20260910.json](evidence/early-gates/V3.9_GATE0_FORMAL_RESULT_20260910.json)

@@ -10,7 +10,6 @@ This map explains the **existing physical folder structure**, not a scientific d
 | [`evidence/ledgers/`](evidence/README.md) | Original pilot/run ledgers | Verifying historical decisions |
 | [`evidence/original-artifacts/`](evidence/ARTIFACTS_START_HERE.md) | **352 machine-record files**: Phase 2F (180), Phase 2G (150), DB baseline (7), other/preprobe (15) | Recovering frozen receipts by index |
 | [`authorizations/`](authorizations/README.md) | 32 old signed AUTH JSON artifacts | Auditing historical approvals, never for authorization reuse |
-| [`history/`](history/zero-byte-audit-stubs/V3.9_Final_Document_Safety_Audit_2026-09-02.md) | One 0-byte historic audit placeholder | Historical existence only |
 | [`../docs/history/`](../docs/history/README.md) | Older app, screenshots and unrelated prior project documentation | Understanding older application history |
 | [`analysis/`](analysis/README.md) | Offline standalone research calculations | Reproducing non-production arithmetic |
 
@@ -22,9 +21,9 @@ This map explains the **existing physical folder structure**, not a scientific d
 
 Together the **32 original JSON authorization files occupy roughly 31 KiB**. Their dates, scope and original cryptographic identity can matter when reconstructing past operations and failed trials. None currently authorizes a new paid operation merely by existing on GitHub.
 
-## Why preserve the zero-byte stub?
+## Why was an empty historical file retained?
 
-[`V3.9_Final_Document_Safety_Audit_2026-09-02.md`](history/zero-byte-audit-stubs/V3.9_Final_Document_Safety_Audit_2026-09-02.md) is **empty**, Git blob `e69de29bb2d1d6434b8b29ae775ad8c2e48c5391`; it **does not** contain or prove a completed audit. It is part of the earlier 108-source preservation mapping. Keeping the original in place costs zero content bytes and avoids silently invalidating path-based evidence checks.
+The original [`V3.9_Final_Document_Safety_Audit_2026-09-02.md`](plans/history/V3.9_Final_Document_Safety_Audit_2026-09-02.md) is **0 bytes** and **not a completed audit**. Its exact Git blob `e69de29bb2d1d6434b8b29ae775ad8c2e48c5391` is one of the preserved 108 original scientific source records. We consolidated it under the existing `plans/history/` folder so a pointless `history/zero-byte-audit-stubs/` folder no longer appears. The original [Wave B manifest](../docs/repository-maintenance/manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv) stays unchanged; the [Wave D second-hop custody record](../docs/repository-maintenance/2026-10-16_WAVED_ZERO_BYTE_PLACEHOLDER_SAFE_RELOCATION_CHECKPOINT.md) records the new location.
 
 **YSSY P25** remains **231 provider-billed / 229 received, failed/DELIVERY_GAP**. Navigation or mathematical screening never reverses that outcome.
 

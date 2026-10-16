@@ -4,6 +4,7 @@
 
 - [V3.9-f.8 binding Data Collection Plan](V3.9_DataCollectPlan_f.8.md): authoritative *historical baseline* at its relocated location with its original Git blob and bytes. Do not edit, silently replace or reinterpret locked scientific clauses.
 - [V3.1–V3.8 foundational plan history](history/V3.1-3.8DataCollectFoundationalPlanHistory.md): earlier design lineage, reference only unless cited by approved later protocol.
+- [Original empty audit placeholder](history/V3.9_Final_Document_Safety_Audit_2026-09-02.md): **0 bytes and NOT a completed audit**; retained only for original source identity, consolidated from the confusing standalone folder with a [second-hop custody record](../../docs/repository-maintenance/2026-10-16_WAVED_ZERO_BYTE_PLACEHOLDER_SAFE_RELOCATION_CHECKPOINT.md).
 - [Phase 2 amendment proposal](../phase2/V3.9_PHASE2_PLAN_AMENDMENT_PROPOSAL.md): a proposal is not approval.
 - [Historical original-to-new migration mapping](../../docs/repository-maintenance/2026-10-15_SEPMD_EXACT_PATH_MAPPING_AND_CASE_CONFLICT.md): historical mapping reference; [actual 460-blob relocation CSV](../../docs/repository-maintenance/manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv) records what moved.
 
