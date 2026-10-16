@@ -14,3 +14,7 @@
 **Engineering state:** Gate 3 canary source/tests are being reconciled and reviewed under a separate GitHub draft. A passing no-provider CI means only the particular Git source passed tests, **not** that Gate3/0.5/4 live passed. Legacy Gate3 paid canary remains hard NO-GO; additive SQL V0065 is only a draft until a separately approved production migration.
 
 YSSY P25 remains **231 billed / 229 received**, original formal `FAILED/DELIVERY_GAP`. Prospective science proposals cannot change its status, and owner authorization for a new paid experiment remains a separate gate.
+
+### Gate 3 SQL release control — not yet approved
+
+The additive `V0065__phase3_gate3_prepaid_canary_owner_v39.sql` is retained byte-identically under [`migrations/staged/`](../../migrations/staged/V0065__phase3_gate3_prepaid_canary_owner_v39.sql), **not** `migrations/current/`. Normal full-application `applyBootMigrations()` scans `migrations/current/`, so this draft must not auto-apply V0065 merely from a checkout/startup. A dedicated GitHub no-provider CI step copies staged SQL into the **ephemeral disposable PostgreSQL 16 runner only** and executes the exact owner/schema constraint test; it never connects to production. Future controlled activation requires a separate reviewed/authorized migration release PR, fresh runtime parity, and operator-approved deployment. No direct production `--apply` until that boundary is satisfied.

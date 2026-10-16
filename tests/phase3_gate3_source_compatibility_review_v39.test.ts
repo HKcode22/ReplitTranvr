@@ -15,7 +15,7 @@ const current=():Gate3SourceSnapshotV39=>({
   legacyWrapper:sourceFile("scripts/v39_gate3_canary_v39.ts"),
   legacyReadiness:sourceFile("server/lib/disruption/gate3CanaryReceiverReadiness_v39.ts"),
   baselineSessionSchema:sourceFile("migrations/baseline/B0062__v39_schema_baseline_20261001.sql"),
-  additiveCanarySchema:sourceFile("migrations/current/V0065__phase3_gate3_prepaid_canary_owner_v39.sql"),
+  additiveCanarySchema:sourceFile("migrations/staged/V0065__phase3_gate3_prepaid_canary_owner_v39.sql"),
 });
 describe("Phase3 zero-provider compatibility inventory",()=>{
   it("must see real source incompatibilities instead of treating YSSY approval as paid Gate3",()=>{

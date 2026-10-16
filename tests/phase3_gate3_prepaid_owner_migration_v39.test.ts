@@ -3,7 +3,7 @@ import {describe,expect,it} from "vitest";
 import {loadMigrationFilesV39,planPendingMigrationsV39}
   from "../server/lib/disruption/schemaMigration_v39";
 const name="V0065__phase3_gate3_prepaid_canary_owner_v39.sql";
-const sql=readFileSync(`migrations/current/${name}`,"utf8");
+const sql=readFileSync(`migrations/staged/${name}`,"utf8");
 describe("Phase3 Gate3 additive SQL is owned, logged and NO paid authorization",()=>{
   it("keeps historical owner kind, adds independent canary kind and positive guard",()=>{
     expect(sql).toContain("DROP CONSTRAINT prepaid_probe_session_runtime_owner_kind_check");
@@ -54,17 +54,19 @@ describe("Phase3 Gate3 additive SQL is owned, logged and NO paid authorization",
     expect(sql).toContain("CREATE TRIGGER phase3_gate3_canary_owner_guard_v39");
     expect(sql).not.toMatch(/CREATE SUBSCRIPTION|HTTP|CALL .*provider/i);
   });
-  it("is planned AFTER baseline, Phase2 cleanup V63 and V64 without executing SQL",async()=>{
+  it("is staged separately and never auto-planned by production boot",async()=>{
     const files=await loadMigrationFilesV39();
     const b=files.find(x=>x.kind==="BASELINE"&&x.version===62);
     expect(b).toBeDefined();
     const pending=planPendingMigrationsV39(files,[{
       version:62,kind:"BASELINE",file:b!.file,checksumSha256:b!.checksumSha256,
     }]);
+    // Gate3 migration remains STAGED and absent from the default
+    // production boot planner until separately released.
     expect(pending.map(x=>x.file)).toEqual([
       "V0063__phase2g_cleanup_journal_v39.sql",
       "V0064__phase2g_prepaid_source_pending_intent_v39.sql",
-      name,
     ]);
+    expect(files.some(x=>x.version===65)).toBe(false);
   });
 });

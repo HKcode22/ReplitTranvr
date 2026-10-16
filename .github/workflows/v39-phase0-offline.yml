@@ -125,3 +125,20 @@ jobs:
 
       - name: Production build
         run: npm run v39:build
+
+      - name: Test STAGED Gate3 V0065 explicitly in disposable PG16 ONLY
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          test -z "${AERODATABOX_API_KEY:-}"
+          # The checked-in migration is NOT in the production boot-scanned
+          # migrations/current directory. This COPY is CI-runner-local only.
+          test ! -e migrations/current/V0065__phase3_gate3_prepaid_canary_owner_v39.sql
+          test -f migrations/staged/V0065__phase3_gate3_prepaid_canary_owner_v39.sql
+          cp migrations/staged/V0065__phase3_gate3_prepaid_canary_owner_v39.sql migrations/current/
+          npx tsx scripts/v39_schema_migrate_v39.ts --apply
+          npx vitest run tests/phase3_gate3_prepaid_owner_disposable_pg_v39.test.ts
+          echo "GATE3_STAGED_SQL_REAL_PG16_CI_ONLY=PASS"
+          echo "PROVIDER_CALLS=0"
