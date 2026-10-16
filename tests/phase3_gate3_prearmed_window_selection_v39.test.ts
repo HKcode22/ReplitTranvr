@@ -104,6 +104,6 @@ describe("prepaid shared runner selects original Phase2 or prepared Gate3 identi
     expect(w).not.toContain("armPrepaidProbeSessionV39({\n    ownerKind: input.ownerKind");
     expect(rt).toContain("GATE3_GENERIC_PHASE2_SESSION_ARM_FORBIDDEN");
     expect(w).toContain("reviewGate3OwnerPreflightV39(client,");
-    expect(w).toContain('join(\n        process.cwd(),"SEPmd","V3.9_RUN_REPORTS_AND_EVIDENCE.md"');
+    expect(w).toMatch(/process\.cwd\(\),"data-collection","evidence","ledgers","V3\.9_RUN_REPORTS_AND_EVIDENCE\.md"/);
   });
 });
