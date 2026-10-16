@@ -5,6 +5,8 @@ const paths=[
  "server/lib/disruption/gate3LedgerBoundSessionPreparation_v39.ts",
  "server/lib/disruption/gate3OwnedPreExposure_v39.ts",
  "scripts/v39_gate3_owner_readonly_v39.ts",
+ "server/lib/disruption/prepaidProbeWindow_v39.ts",
+ "server/routes_v3.ts",
 ];
 describe("Phase3 Gate3 migrated active readers and manual-only source security",()=>{
  it("uses the current immutable original ledger location rather than the removed SEPmd root",()=>{
@@ -12,7 +14,7 @@ describe("Phase3 Gate3 migrated active readers and manual-only source security",
   expect(bytes.byteLength).toBeGreaterThan(0);
   for(const path of paths){
    const source=readFileSync(path,"utf8");
-   expect(source,path).toContain('"data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md"');
+   expect(source,path).toMatch(/"data-collection"\s*,\s*"evidence"\s*,\s*"ledgers"\s*,\s*"V3\.9_RUN_REPORTS_AND_EVIDENCE\.md"/);
    expect(source,path).not.toContain('"SEPmd","V3.9_RUN_REPORTS_AND_EVIDENCE.md"');
   }
  });

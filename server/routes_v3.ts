@@ -182,7 +182,7 @@ function managementGuard(req: Request, res: Response, next: NextFunction): void 
   next();
 }
 function loadLedgerText(): string {
-  try { return readFileSync(join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md"), "utf8"); }
+  try { return readFileSync(join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md"), "utf8"); }
   catch { return ""; }
 }
 function loadLedgerEvidenceIds(): string[] {

@@ -436,7 +436,7 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       // Load the checked-in evidence ledger ourselves: caller-provided text
       // cannot substitute an independently hash-approved AUTH artifact.
       const ledger=readFileSync(join(
-        process.cwd(),"SEPmd","V3.9_RUN_REPORTS_AND_EVIDENCE.md",
+        process.cwd(),"data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md",
       ),"utf8");
       const client=await v39Pool.connect();
       try {
