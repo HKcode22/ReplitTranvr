@@ -1,8 +1,8 @@
 > **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
 
-# Historical and current-source authorization artifacts (navigation only)
+# Historical authorizations — retained records, not active approvals
 
-**Navigation index, NOT an active AUTH grant.** These are **32 existing tracked root JSON AUTH artifacts from `main=f5b1347...`**. Listing them here neither proves current signature validity nor grants a new paid window. The historical P25 authorization is in original root; separate PR36 currently has a different tree and must reconcile that difference prior to merge.
+**Historical record index, NOT an active AUTH grant.** These are **32 unchanged old authorization JSON records**, grouped by their gate and phase, and retained for provenance. The historical [P25 AUTH](V3.9_PHASE2G_AUTH_20261013_P2G25.json) is now **in this folder** following merged Wave B PR #46, not in the old root. Existing files do not prove current signature validity or grant permission to spend, deploy or run again. [Study Hub](../STUDY_HUB.md) · [Folder Guide](../FOLDER_GUIDE.md).
 
 The original JSON blobs are physically relocated into this repository tree, without rewriting historical authorization content. Each link resolves to the new documented storage location, while the historical original `SEPmd/` path remains recorded in the source catalog. Evaluate signature, SHA, account, scope, budget, UTC time, single-flight protocol, and published-runtime source binding independently using current approved code and ledgers.
 

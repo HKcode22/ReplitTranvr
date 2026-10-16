@@ -4,13 +4,13 @@
 
 The project includes a live-capable application, original V3.9 aviation scientific records, evidence receipts, scripts and tests.
 
-**[Start here — plain-English research guide](data-collection/START_HERE.md)**. [Full data-collection navigation](data-collection/README.md) provides the phase-by-phase directory.
+**[START HERE — V3.9 Study Hub: Plan, Log and Ledger](data-collection/STUDY_HUB.md)**. Also see the [simple guide](data-collection/START_HERE.md), [folder explanation](data-collection/FOLDER_GUIDE.md), and [advanced navigation](data-collection/README.md).
 
 ## Find a document quickly
 
 | You are looking for | Open |
 |---|---|
-| What the experiment predicts and how it is defined | [Binding V3.9 Plan](data-collection/plans/V3.9_DataCollectPlan_f.8.md) |
+| Scientific Plan + Implementation Log + Ledger on one page | [Open Study Hub](data-collection/STUDY_HUB.md) |\n| Why repeated phase folders or old evidence exist | [Folder Guide](data-collection/FOLDER_GUIDE.md) |\n| What the experiment predicts and how it is defined | [Binding V3.9 Plan](data-collection/plans/V3.9_DataCollectPlan_f.8.md) |
 | Past pilots, errors and amendments | [58 Phase 2G dated documents](data-collection/phase2g/ALL_REPORTS.md) |
 | Machine evidence or receipts | [All 352 original artifacts](data-collection/evidence/ARTIFACTS_START_HERE.md) |
 | A specific original research file | [All 108 SEPmd records](data-collection/ALL_SEPMD_FILES.md) |
@@ -27,7 +27,7 @@ The project includes a live-capable application, original V3.9 aviation scientif
 
 **Wave A:** [PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39) organized navigation and moved 11 historical root files, retaining their Git identities. **Wave B:** [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46) is the separately reviewed physical relocation of all **108 original `SEPmd/` source files and 352 original `artifacts/` evidence files**. The links on this page point to the moved, byte-identical originals in the tree containing this README.
 
-Wave B's **merge status, current tests, and deployment boundaries** must be checked on [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46) and [maintenance Issue #24](https://github.com/HKcode22/ReplitTranvr/issues/24); a copied README or an old signed authorization is not evidence that the published Replit deployment matches this code. [Complete 460-file original-to-relocated SHA manifest](docs/repository-maintenance/manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv).
+Wave B **PR #46 was merged on October 15, 2026**. Live Replit deployment parity and current tests must still be checked independently on [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46) and [maintenance Issue #24](https://github.com/HKcode22/ReplitTranvr/issues/24); a copied README or an old signed authorization is not evidence that the published Replit deployment matches this code. [Complete 460-file original-to-relocated SHA manifest](docs/repository-maintenance/manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv).
 
 [Phase 3 / Gate 3](data-collection/phase3/README.md) still requires a **separate** review of [draft PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36). Do not replace the authoritative signed P25 evidence ledger with the draft's shorter historical version.
 
