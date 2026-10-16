@@ -1,4 +1,4 @@
-# Repository Maintenance — current status
+# Repository Maintenance — current status\n\n**Wave C1 review (Oct 15):** [V3.9 Study Hub](../../data-collection/STUDY_HUB.md), [Folder Guide](../../data-collection/FOLDER_GUIDE.md), [offline analysis](../../data-collection/analysis/README.md), [Wave C1 checkpoint](2026-10-15_WAVEC1_PHYSICAL_NAVIGATION_CHECKPOINT.md), and [Issue #47](https://github.com/HKcode22/ReplitTranvr/issues/47). [Wave B PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46) is **merged to main** at the Wave C1 audit; Replit deployment parity still needs separate verification. Historical entries below document earlier stages; their old draft status no longer describes PR #46 today.\n
 
 **October 15, 2026:** Wave A organization [PR #39 merged](https://github.com/HKcode22/ReplitTranvr/pull/39), main merge commit [`4075cce8`](https://github.com/HKcode22/ReplitTranvr/commit/4075cce8aa33c159487a436127199264a4e8954c), [automatic post-merge V3.9 offline CI SUCCESS](https://github.com/HKcode22/ReplitTranvr/actions/runs/38812391951). Separate Gate3 [PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36) remains unmerged at last inspected `318e2c3...`.
 
@@ -6,7 +6,7 @@
 
 - [Plain-language project guide](../../data-collection/START_HERE.md) and [repository homepage](../../README.md).
 - [All 108 original scientific SEPmd files](../../data-collection/ALL_SEPMD_FILES.md), [58 Phase2G dated documents](../../data-collection/phase2g/ALL_REPORTS.md), [all 352 original machine evidence files](../../data-collection/evidence/ARTIFACTS_START_HERE.md).
-- [Complete 460-original-record catalog checkpoint](2026-10-15_COMPLETE_460_SOURCE_EVIDENCE_DIRECTORY_CHECKPOINT.md), a dated **pre-Wave-B** report. Wave A had 11 unchanged-content historic root moves, [exact Git blob manifest](manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv). Wave B subsequently moved **108 original `SEPmd/` and 352 original `artifacts/` blobs on draft PR #46**, without rewriting them; review [the actual 460-row relocation manifest](manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv).
+- [Complete 460-original-record catalog checkpoint](2026-10-15_COMPLETE_460_SOURCE_EVIDENCE_DIRECTORY_CHECKPOINT.md), a dated **pre-Wave-B** report. Wave A had 11 unchanged-content historic root moves, [exact Git blob manifest](manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv). Wave B subsequently moved **108 original `SEPmd/` and 352 original `artifacts/` blobs in merged PR #46**, without rewriting them; review [the actual 460-row relocation manifest](manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv).
 
 ## October 4 plan: real historic folder moves
 
@@ -18,11 +18,11 @@
 
 ## Physical scientific-core migration — current review
 
-The actual original-source physical migration **has been implemented on [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46)**, but that PR's **merge status is independent** and must be checked before claiming that the default `main` branch is reorganized. A verified migration contains 108 original `SEPmd/` scientific sources and 352 originally tracked `artifacts/` evidence blobs at documented new paths, preserving all original SHA/bytes/modes.
+The original-source physical migration was **merged through [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46)** into GitHub `main` on October 15. GitHub merge does **not** imply published Replit runtime parity. A verified migration contains 108 original `SEPmd/` scientific sources and 352 originally tracked `artifacts/` evidence blobs at documented new paths, preserving all original SHA/bytes/modes.
 
-**Last reviewed CI head:** [`a4d19f9f`](https://github.com/HKcode22/ReplitTranvr/commit/a4d19f9f446118e034051e76e87f86c43ba9ac1d) passed the four no-provider workflows, including 1,134 passing tests and 19 skipped. New commits require their **own** checks. The [dated relocation checkpoint](2026-10-15_WAVEB_PHYSICAL_RELOCATION_AND_SCIENTIFIC_COMPATIBILITY_CI_CHECKPOINT.md), [path classification](../../data-collection/operations/WAVE_B_RUNTIME_PATH_CLASSIFICATION.md), and [historic pre-migration gate](../../data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) explain what changed and why a green read-only published-identity job is **not** proof that Replit has been republished.
+**Earlier pre-merge CI head:** [`a4d19f9f`](https://github.com/HKcode22/ReplitTranvr/commit/a4d19f9f446118e034051e76e87f86c43ba9ac1d) passed the four no-provider workflows, including 1,134 passing tests and 19 skipped. New commits require their **own** checks. The [dated relocation checkpoint](2026-10-15_WAVEB_PHYSICAL_RELOCATION_AND_SCIENTIFIC_COMPATIBILITY_CI_CHECKPOINT.md), [path classification](../../data-collection/operations/WAVE_B_RUNTIME_PATH_CLASSIFICATION.md), and [historic pre-migration gate](../../data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) explain what changed and why a green read-only published-identity job is **not** proof that Replit has been republished.
 
-**Not yet automatically complete:** separate merge authorization, verification after merge, controlled Replit workspace/runtime source parity review, and independent integration of 47 PR36-only draft scientific records (without overwriting the signed original P25 ledger). [Issue #24](https://github.com/HKcode22/ReplitTranvr/issues/24) tracks the final closeout.
+**Still unresolved after GitHub merge:** controlled Replit workspace/runtime source parity review, and independent integration of 47 PR36-only draft scientific records (without overwriting the signed original P25 ledger). [Issue #24](https://github.com/HKcode22/ReplitTranvr/issues/24) tracks the final closeout.
 
 ## Historical evidence and previous decisions
 
@@ -32,3 +32,7 @@ The actual original-source physical migration **has been implemented on [PR #46]
 - [Original nine-file archive](2026-10-15_WAVEA_FIRST_ROOT_HISTORY_MOVES_CHECKPOINT.md), [notebook history](2026-10-15_WAVEA_NOTEBOOK_AND_BLOB_INTEGRITY_CHECKPOINT.md), [11th Gate0 historic source and Mac path conflict](2026-10-15_WAVEA_GATE0_HISTORY_MOVE_AND_CASEFOLD_GUARD.md), [fixed earlier test regression](2026-10-15_GATE0_MOVE_CI_TEST_TUPLE_REPAIR.md), [opaque ZIP and PDF hold](2026-10-15_REMAINING_ROOT_FILES_AND_OPAQUE_ARTIFACT_REVIEW.md).
 
 The historical original YSSY P25 231 billed/229 received delivery gap remains unchanged. Do not dispatch paid provider workflows, use Replit AI Agent, change published deployment, delete object/SQL records or reclassify scientific outcomes from a cleanup commit.
+
+## Integrated review
+
+- [Wave C4 integration checkpoint](2026-10-15_WAVEC4_INTEGRATED_ORGANIZATION_DRAFT_CHECKPOINT.md) — combined Phase 0/1, Phase 2G analysis, and legacy attachment path changes; draft-only until exact-head tests and owner merge review.

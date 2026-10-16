@@ -1,4 +1,4 @@
-# Aviation V3.9 data collection — organized navigation
+# Aviation V3.9 data collection — organized navigation\n\n**Recommended: [Study Hub (Plan + Log + Ledger)](STUDY_HUB.md)**. To distinguish similarly named folders, see the [Folder Guide](FOLDER_GUIDE.md). The formerly root `experiments/phase2g_rehearsal/` offline script has its new home at [analysis/](analysis/README.md).
 
 [**Plain-English Start Here**](START_HERE.md) · [**All 108 original scientific source files**](ALL_SEPMD_FILES.md) · [**All 352 original evidence artifacts**](evidence/ARTIFACTS_START_HERE.md)
 
@@ -6,7 +6,10 @@
 
 | Area | Read |
 |---|---|
+| Offline scientific mathematical research | [Analysis](analysis/README.md) |
 | Research literature and prior prediction methods | [Research paper extracts](research-papers/README.md) |
+| Historical Phase 0 scientific reviews and request | [Phase 0](phase0/README.md) |
+| Historical Phase 1/Gate 0 checklist | [Phase 1](phase1/README.md) |
 | Scientific Plan and its history | [Plans](plans/README.md) |
 | Implementation and original ledger | [Implementation](implementation/README.md) |
 | Earlier gate proofs and Phase 2 | [Phase 2](phase2/README.md) |

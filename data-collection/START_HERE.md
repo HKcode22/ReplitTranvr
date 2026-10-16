@@ -1,13 +1,16 @@
 > **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
 
-# Start Here — Understand the aviation research repository
+# Start Here — Understand the aviation research repository\n\n**[Study Hub: scientific Plan + Implementation Log + Evidence Ledger](STUDY_HUB.md)** is the best first click. The [Folder Guide](FOLDER_GUIDE.md) explains the repeated Phase 2G folders and historic evidence.
 
 **Wave A organization is merged into `main`** ([PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39)). This page helps you find original material; it is not a new scientific protocol or paid-run permission.
 
 | Question | Read |
 |---|---|
+| How can I find the Plan, Log and Ledger together? | [Study Hub](STUDY_HUB.md) |
+| Where is the offline experiment source? | [Offline mathematical analysis](analysis/README.md) |
 | What is being predicted and measured? | [Original V3.9 scientific Plan](plans/V3.9_DataCollectPlan_f.8.md) |
 | How is the experiment implemented? | [Implementation guide](implementation/README.md) |
+| Where are Phase 0/1 historical science records? | [Phase 0](phase0/README.md) and [Phase 1](phase1/README.md) — historical, not paid authorizations |
 | What happened in the airport pilot runs? | [Phase 2G overview](phase2g/README.md) and [all 58 dated Phase2G records](phase2g/ALL_REPORTS.md) |
 | Where are original machine receipts? | [Evidence index](evidence/ARTIFACTS_START_HERE.md) |
 | Where can I find any specific research source? | [All 108 original SEPmd file links](ALL_SEPMD_FILES.md) |

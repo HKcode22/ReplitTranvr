@@ -1,6 +1,6 @@
 import {describe,expect,it} from "vitest";
 import {readFileSync} from "node:fs";
-import {researchOnlyBilledGapV39} from "../experiments/phase2g_rehearsal/prospective_billed_gap_research_only_v39";
+import {researchOnlyBilledGapV39} from "../data-collection/analysis/prospective_billed_gap_research_only_v39";
 
 const base={receivedCostItemContradictions:0,durationCensored:false,settlementVerified:true};
 describe("P25 prospective mathematical gap audit — NOT scientific acceptance",()=>{
