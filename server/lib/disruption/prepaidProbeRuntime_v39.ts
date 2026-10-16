@@ -26,7 +26,7 @@ import type {
   WebhookIdentityPersistence,
 } from "./flightInstanceCanonical_v3";
 
-export type PrepaidProbeOwnerKindV39 = "phase2_safety_smoke" | "anchor_probe";
+export type PrepaidProbeOwnerKindV39 = "phase2_safety_smoke" | "anchor_probe" | "phase3_credit_canary";
 export type PrepaidProbeSessionStateV39 = "armed" | "active" | "settling" | "completed" | "failed" | "abandoned";
 
 export interface PrepaidProbeSessionV39 {
@@ -736,6 +736,11 @@ export async function armPrepaidProbeSessionV39(input: {
   const lifetimeHours = input.lifetimeHours ?? SESSION_MAX_HOURS;
   if (!Number.isFinite(lifetimeHours) || lifetimeHours <= 0 || lifetimeHours > SESSION_MAX_HOURS) {
     throw new Error("PREPAID_PROBE_SESSION_LIFETIME_INVALID");
+  }
+  if (input.ownerKind === "phase3_credit_canary") {
+    // Gate3 has a separate LOGGED owner + same-ID UNLOGGED session transaction.
+    // The generic historical Phase2 armer MUST NOT mint another UUID.
+    throw new Error("GATE3_GENERIC_PHASE2_SESSION_ARM_FORBIDDEN");
   }
   if (input.ownerKind === "anchor_probe") {
     if (!Number.isInteger(input.ownerProbeId) || !input.ownerProbeId || ![1, 2].includes(Number(input.stage)) || !input.icao) {

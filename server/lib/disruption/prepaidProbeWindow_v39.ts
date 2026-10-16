@@ -1,3 +1,11 @@
+import {readFileSync} from "node:fs";
+import {join} from "node:path";
+import {v39Pool} from "./db_v39";
+import {reviewGate3OwnerPreflightV39} from "./gate3OwnerAuthorizationPreflight_v39";
+import {
+  selectPrepaidWindowSessionV39,
+  type Gate3PrearmedSessionV39,
+} from "./prepaidWindowSessionSelection_v39";
 import {
   createSubscription,
   defaultWebhookUrl,
@@ -7,6 +15,12 @@ import {
   type WebhookSubscription,
 } from "./aerodataboxLimiter_v3";
 import { runSettlement, type SettlementConfig } from "./settlement_v3";
+import {bindOrCompensatePrepaidSubscriptionV39}
+  from "./prepaidSubscriptionBindingRecovery_v39";
+import {resolveAmbiguousPrepaidCreateV39}
+  from "./prepaidAmbiguousCreateResolution_v39";
+import {holdPrepaidAmbiguousCreateV39}
+  from "./prepaidAmbiguousCreateOwnerHold_v39";
 import {
   armPrepaidProbeSessionV39,
   assertPrepaidProbePersistenceConfigV39,
@@ -23,6 +37,9 @@ import {
 
 export interface PrepaidLiveWindowInputV39 {
   ownerKind: PrepaidProbeOwnerKindV39;
+  // Version-gated prepared Gate3 identity. Never available to Phase2 owners;
+  // source+auth review cannot, on its own, unblock provider CREATE.
+  prearmedGate3?: Gate3PrearmedSessionV39;
   ownerProbeId?: number | null;
   stage?: 1 | 2 | null;
   icao: string;
@@ -75,6 +92,14 @@ export interface PrepaidLiveWindowResultV39 {
 
 // Current frozen acceptance remains exact. A positive external-minus-received
 // gap is preserved as DELIVERY_GAP evidence, but is terminal/non-scoreable.
+/**
+ * Versioned source-level release seal. Deliberately NOT controlled by a
+ * mutable ENV var or caller-supplied "approved" boolean. The actual Gate3
+ * paid provider path must remain sealed until an independently reviewed
+ * release verifies real hosted signed-source custody and operator authority.
+ */
+export const GATE3_PROVIDER_EXPOSURE_RELEASED_V39 = false;
+
 export const PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 = 1;
 
 export function classifyProbeReconciliationV39(input: {
@@ -364,6 +389,11 @@ function validateInput(input: PrepaidLiveWindowInputV39): void {
     throw new Error("PREPAID_WINDOW_WATCHDOG_POLL_INVALID");
   }
   if (!String(input.deletionRunId ?? "").trim()) throw new Error("PREPAID_WINDOW_DELETION_RUN_ID_REQUIRED");
+  if (input.ownerKind === "phase3_credit_canary" &&
+      (!input.prearmedGate3 || input.deferCleanup!==true ||
+       input.onSessionArmed!==undefined)) {
+    throw new Error("GATE3_PREARMED_EXTERNAL_OWNER_AND_DEFERRED_CLEANUP_REQUIRED");
+  }
   if (input.deferCleanup != null && typeof input.deferCleanup !== "boolean") {
     throw new Error("PREPAID_WINDOW_DEFER_CLEANUP_INVALID");
   }
@@ -400,13 +430,40 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   };
 
   const icao = input.icao.toUpperCase();
-  const session = await armPrepaidProbeSessionV39({
-    ownerKind: input.ownerKind,
-    ownerProbeId: input.ownerProbeId ?? null,
-    stage: input.stage ?? null,
-    icao: input.ownerKind === "anchor_probe" ? icao : null,
-    lifetimeHours: 24,
+  const session = await selectPrepaidWindowSessionV39(input, {
+    armHistorical:armPrepaidProbeSessionV39,
+    reviewPrearmedGate3:async(expected)=>{
+      // Load the checked-in evidence ledger ourselves: caller-provided text
+      // cannot substitute an independently hash-approved AUTH artifact.
+      const ledger=readFileSync(join(
+        process.cwd(),"SEPmd","V3.9_RUN_REPORTS_AND_EVIDENCE.md",
+      ),"utf8");
+      const client=await v39Pool.connect();
+      try {
+        return await reviewGate3OwnerPreflightV39(client,{
+          authArtifactRaw:expected.authArtifactRaw,
+          evidenceLedgerRaw:ledger,
+          expectedAuthId:expected.expectedAuthId,
+          expectedAirportFilterWindow:expected.expectedAirportFilterWindow,
+          expectedSession:{
+            sessionId:expected.sessionId,
+            icao:expected.icao,
+            authorizationEvidenceSha256:expected.authorizationEvidenceSha256,
+            canaryCreditCeiling:expected.canaryCreditCeiling,
+            fixedExposureSeconds:expected.fixedExposureSeconds,
+          },
+        });
+      } finally {client.release();}
+    },
   });
+  if(input.ownerKind==="phase3_credit_canary" &&
+     !GATE3_PROVIDER_EXPOSURE_RELEASED_V39) {
+    // The prearmed source path now cannot allocate an accidental second
+    // Phase2 UUID. But final versioned paid Gate3 owner, independently
+    // verified deployed-host/source rights and provider preflight are NOT
+    // completed. This hard NO-GO belongs before *any* provider SDK call.
+    throw new Error("GATE3_PREARMED_PROVIDER_EXPOSURE_PENDING_OWNER_AND_HOST_PARITY");
+  }
   if (input.onSessionArmed) await input.onSessionArmed(session.sessionId);
   const webhookUrl = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), session.sessionId);
   const targetMs = input.targetHours * 3_600_000;
@@ -430,13 +487,36 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   let lastObservedProviderBalance =
     input.balanceBefore;
 
-  let sub = await createSubscription("FlightByAirportIcao", icao, {
-    url: webhookUrl,
-    maxDeliveryRetries: 0,
-  });
-
-  if (!sub?.id) {
-    sub = await recoverAmbiguousSubscriptionCreateV39(icao, webhookUrl);
+  // CREATE can throw *after* the remote provider has committed a billable
+  // subscription but before its HTTP response reaches this owner. Treat a
+  // thrown response EXACTLY as an empty-ID response: strict LIST by the
+  // already-frozen airport + unique callback, never blindly retry CREATE.
+  // Any failure/multiple match in strict LIST is an unresolved account HOLD.
+  let sub:WebhookSubscription|null=null;
+  try {
+    const creation = await resolveAmbiguousPrepaidCreateV39({
+      createOnce:()=>createSubscription("FlightByAirportIcao", icao, {
+        url: webhookUrl,maxDeliveryRetries: 0,
+      }),
+      recoverExactUsingStrictList:()=>recoverAmbiguousSubscriptionCreateV39(
+        icao,webhookUrl,
+      ),
+    });
+    sub=creation.subscription;
+  } catch {
+    // Provider CREATE/strict LIST had an indeterminate outcome. A billable
+    // subscription may ALREADY exist, and callbacks may be in transit.
+    // Return a visible terminal HOLD for later exact-owned independent
+    // provider recovery; never retry CREATE or cleanup retained originals.
+    const held=await holdPrepaidAmbiguousCreateV39({
+      sessionId:session.sessionId,
+      windowStart,
+      // A real subscription may already be live; failed would reject
+      // callbacks and destroy future source visibility. settling is
+      // deliberately callback-accepting, NOT evidence of provider DELETE.
+      keepSessionReceiving:(id)=>setPrepaidProbeSessionStateV39(id,"settling"),
+    });
+    return held.result;
   }
 
   if (!sub?.id) {
@@ -468,9 +548,42 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     };
   }
 
-  await bindPrepaidProbeSubscriptionV39(session.sessionId, sub.id);
+  // Provider CREATE may have succeeded while SQL BIND fails (outage,
+  // timeout, lost UNLOGGED table). A billable subscription can exist even
+  // though no session successfully references it. Compensate with strict
+  // deletion of the exact provider ID before returning a terminal HOLD.
+  const bound = await bindOrCompensatePrepaidSubscriptionV39({
+    sessionId:session.sessionId,subscriptionId:sub.id,
+  },{
+    bind:bindPrepaidProbeSubscriptionV39,
+    deleteOwnedVerified:deleteOwnedSubscriptionVerifiedV39,
+  });
+  if(bound.status!=="BOUND"){
+    // Never cleanup incoming originals: callbacks could have arrived
+    // between provider CREATE and verified DELETE. Preserve for forensic
+    // reconciliation; a new paid session is NOT automatically admissible.
+    await setPrepaidProbeSessionStateV39(session.sessionId,"failed")
+      .catch(()=>undefined);
+    const internal = await prepaidProbeInternalCreditsV39(session.sessionId)
+      .catch(()=>0); // UNVERIFIED if SQL is unavailable; external NULL.
+    return {
+      status:"failed",runtimeSessionId:session.sessionId,
+      windowStart,windowEnd:new Date(),durationCensored:true,
+      stopReason:bound.subscriptionDeleted
+        ?"subscription_bind_failed_delete_verified_settlement_required"
+        :"subscription_bind_failed_delete_unresolved_emergency_stop",
+      reconciliationStatus:"UNRESOLVED",
+      externalCredits:null,internalSendCredits:internal,
+      maxObservedUnsettledCreditGap:0,settlementReads:0,metrics:null,
+      cleanupVerifiedAtUtc:null,subscriptionDeleted:bound.subscriptionDeleted,
+    };
+  }
   windowStart = new Date();
   const deadline = windowStart.getTime() + targetMs;
+  // Even source/SQL watcher exceptions MUST transition into the normal
+  // exact-owned provider deletion path. Otherwise the run could abandon a
+  // billable subscription after CREATE, despite valid watchdog stop rules.
+  try {
   while (Date.now() < deadline) {
     await sleep(Math.min(input.watchdogPollMs, Math.max(250, deadline - Date.now())));
 
@@ -577,9 +690,20 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       break;
     }
   }
+  } catch {
+    // A failed balance read, SQL callback ledger, or operator stop query
+    // cannot be trusted; terminate exposure and preserve failed evidence.
+    liveStopReason = "prepaid_active_watchdog_unexpected_exception";
+  }
   windowEnd = new Date();
 
-  subscriptionDeleted = await deleteOwnedSubscriptionVerifiedV39(sub.id);
+  try {
+    subscriptionDeleted = await deleteOwnedSubscriptionVerifiedV39(sub.id);
+  } catch {
+    // The DELETE outcome may be ambiguous after transport failure. Never
+    // mark subscription deleted unless strict readback verified it.
+    subscriptionDeleted = false;
+  }
   if (!subscriptionDeleted) {
     await setPrepaidProbeSessionStateV39(session.sessionId, "failed").catch(() => undefined);
     return {

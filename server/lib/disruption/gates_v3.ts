@@ -248,6 +248,73 @@ export interface Gate05Measurement {
 }
 
 /**
+ * Gate 0.5 measurements are loaded from external JSON at runtime, even though
+ * their TypeScript interface claims numbers/booleans. Reject invalid/missing
+ * values before reporting an offline PASS. In particular, a JSON string
+ * "false" must not be truthy in Object.values(results).every(...).
+ *
+ * This validates shape and types, NOT observational provenance. The owner
+ * still needs an independently reviewed evidence/source manifest before a
+ * real scientific Gate 0.5 can be certified.
+ */
+export function validateGate05InputV39(
+  measurements: Gate05Measurement,
+  criteria: Gate05SampleCriteria = DEFAULT_GATE_05_CRITERIA,
+): void {
+  if (measurements === null || typeof measurements !== "object" || Array.isArray(measurements)) {
+    throw new Error("INVALID_GATE05_MEASUREMENT:object");
+  }
+  if (criteria === null || typeof criteria !== "object" || Array.isArray(criteria)) {
+    throw new Error("INVALID_GATE05_CRITERIA:object");
+  }
+
+  const countKeys = [
+    "notificationsReceived", "uniqueFlights", "completedFlights",
+    "airborneFlights", "airbornePoints",
+  ] as const;
+  for (const key of countKeys) {
+    const n = measurements[key];
+    if (typeof n !== "number" || !Number.isSafeInteger(n) || n < 0) {
+      throw new Error(`INVALID_GATE05_MEASUREMENT:${key}`);
+    }
+  }
+  if (typeof measurements.pilotDurationMinutes !== "number" ||
+      !Number.isFinite(measurements.pilotDurationMinutes) ||
+      measurements.pilotDurationMinutes < 0) {
+    throw new Error("INVALID_GATE05_MEASUREMENT:pilotDurationMinutes");
+  }
+
+  const booleanKeys = [
+    "payloadFieldInventory", "providerTimestampSemantics", "tConstructibility",
+    "primaryTargetConstructibility", "fidsMaxRange", "fidsBoundaryBehavior",
+    "withLegBehavior", "codeshareAmbiguity", "observationCadence",
+    "trajectoryCompleteness", "arrivalNotificationLatency", "censoringGrace",
+    "rateLimit", "unsettledAlertCreditBurst",
+  ] as const;
+  for (const key of booleanKeys) {
+    if (typeof measurements[key] !== "boolean") {
+      throw new Error(`INVALID_GATE05_MEASUREMENT:${key}`);
+    }
+  }
+
+  const thresholdCountKeys = [
+    "minNotifications", "minUniqueFlights", "minCompletedFlights",
+    "minAirborneFlights", "minAirbornePoints",
+  ] as const;
+  for (const key of thresholdCountKeys) {
+    const n = criteria[key];
+    if (typeof n !== "number" || !Number.isSafeInteger(n) || n <= 0) {
+      throw new Error(`INVALID_GATE05_CRITERIA:${key}`);
+    }
+  }
+  if (typeof criteria.minPilotDurationMinutes !== "number" ||
+      !Number.isFinite(criteria.minPilotDurationMinutes) ||
+      criteria.minPilotDurationMinutes <= 0) {
+    throw new Error("INVALID_GATE05_CRITERIA:minPilotDurationMinutes");
+  }
+}
+
+/**
  * Gate 0.5: evaluate pilot sample adequacy.
  * Returns PASS/FAIL with specific evidence per measurement.
  */
@@ -255,6 +322,7 @@ export function evaluateGate05(
   measurements: Gate05Measurement,
   criteria: Gate05SampleCriteria = DEFAULT_GATE_05_CRITERIA,
 ): { passed: boolean; reason: string | null; measurements: Record<string, { value: number | boolean; threshold: number | boolean; passed: boolean }> } {
+  validateGate05InputV39(measurements, criteria);
   const results: Record<string, { value: number | boolean; threshold: number | boolean; passed: boolean }> = {};
 
   results.notificationsReceived = { value: measurements.notificationsReceived, threshold: criteria.minNotifications, passed: measurements.notificationsReceived >= criteria.minNotifications };

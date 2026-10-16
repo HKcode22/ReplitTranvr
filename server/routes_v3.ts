@@ -417,7 +417,22 @@ export function registerV3Routes(app:Express):void{
       try{
         const committed=await persistRawDeliveryTransaction({subscriptionId:subId,batchId:sampling?.batchId??null,httpMethod:req.method??"POST",httpPath:req.originalUrl??req.path??null,rawBody:body,providerPublishedUtc:deliveryEvidence.notificationGeneratedUtc,providerNotificationGeneratedUtc:deliveryEvidence.notificationGeneratedUtc,receivedAtUtc:receivedAt,adbDeliveryId:deliveryEvidence.attemptId,adbCostCredits:deliveryEvidence.costCredits,notificationId:deliveryEvidence.notificationId,deliveryAttemptSeqNo:deliveryEvidence.attemptSeqNo,deliveryAttemptUtc:deliveryEvidence.attemptUtc,deliveryAttemptCostCredits:deliveryEvidence.costCredits},flights.map((flight:any,i:number)=>({itemIndex:i,flightNumber:typeof flight?.number==="string"&&flight.number?String(flight.number):typeof flight?.callSign==="string"?String(flight.callSign):null,carrierIata:flight?.airline?.iata??null,carrierIcao:flight?.airline?.icao??null,status:flight?.status!=null?String(flight.status):null,statusCode:typeof flight?.status==="number"?Math.trunc(flight.status):null,rawItem:flight,lastUpdatedUtc:dateOrNull(flight?.lastUpdatedUtc),departureScheduledUtc:dateOrNull(flight?.departure?.scheduledTime?.utc),arrivalScheduledUtc:dateOrNull(flight?.arrival?.scheduledTime?.utc),parsingOutcome:"pending",canonicalFlightInstanceId:null})));
         rawDeliveryId=committed.deliveryId;rawCommittedAtUtc=committed.committedAtUtc;
-      }catch(rawErr:any){console.error("[adb-v3-webhook] raw delivery persistence failed — returning 5xx:",rawErr?.message||rawErr);await recordIncident("raw-persistence",{error:String(rawErr?.message??rawErr),subscriptionId:subId});res.status(500).json({error:"Raw persistence failed; please retry"});return;}
+      }catch(rawErr:any){
+        // Before raw durability we must return an unambiguous 5xx promptly.
+        // A failed/unavailable diagnostic SQL path cannot delay or swallow it.
+        // The independent incident write remains best-effort and sanitized.
+        console.error("[adb-v3-webhook] raw persistence failed — returning HTTP 500 (redacted)");
+        try{
+          void recordIncident("raw-persistence",{
+            error:String(rawErr?.name??"RAW_PERSISTENCE_FAILURE").slice(0,80),
+            subscriptionId:subId,
+          }).catch(()=>console.error("[adb-v3-webhook] secondary raw incident write unavailable (redacted)"));
+        }catch{
+          console.error("[adb-v3-webhook] secondary raw incident start failed (redacted)");
+        }
+        if(!res.headersSent)res.status(500).json({error:"Raw persistence failed; please retry"});
+        return;
+      }
       rawDeliveryIdForCatch=rawDeliveryId;
 
       const extracted:ExtractedWebhookRow[]=[];let skipped=0;flights.forEach((flight:any,rawIndex:number)=>{const row=extractFlightNotification(flight,{subscription,balance,receivedAt,index:rawIndex,sampling});if(!row){skipped++;return;}extracted.push({row,rawIndex,rawFlight:flight,rawItemSha256:hashJson(flight)});});
@@ -434,10 +449,24 @@ export function registerV3Routes(app:Express):void{
       console.log(`[adb-v3-webhook] received=${flights.length} resolved=${rows.length} quarantined=${extracted.length-resolved.length} skipped=${skipped} stored=${stats.stored} sub=${subId??"-"} ms=${Date.now()-startedAt}`);res.status(200).json({received:true,flights:flights.length,stored:stats.stored,skipped});
     }catch(err:any){
       console.error("[adb-v3-webhook] semantic processing error after raw durability:",err?.message||err);
-      if(rawDeliveryIdForCatch){await recordIncident("persistence",{deliveryId:rawDeliveryIdForCatch,subscriptionId:typeof req.body?.subscription?.id==="string"?req.body.subscription.id:null,error:String(err?.message||"error").slice(0,500)});await updateRawDeliveryOutcome(rawDeliveryIdForCatch,"failed",flightsForCatch.length,String(err?.message||"error").slice(0,500));}
+      // A secondary diagnostic failure must NEVER swallow an HTTP 5xx.
+      // The original legacy handler incorrectly returned HTTP 200 on
+      // semantic-processing failure after raw durability.
+      if(rawDeliveryIdForCatch){
+        try{
+          await recordIncident("persistence",{deliveryId:rawDeliveryIdForCatch,subscriptionId:typeof req.body?.subscription?.id==="string"?req.body.subscription.id:null,error:String(err?.message||"error").slice(0,500)});
+        }catch{console.error("[adb-v3-webhook] secondary incident write failed (redacted)");}
+        try{
+          await updateRawDeliveryOutcome(rawDeliveryIdForCatch,"failed",flightsForCatch.length,String(err?.message||"error").slice(0,500));
+        }catch{console.error("[adb-v3-webhook] secondary outcome update failed (redacted)");}
+      }
       try{await pool.query(`INSERT INTO clean.adb_ingest_events(subscription_id,batch_id,notification_items,delivery_failure,error) VALUES($1,$2,0,true,$3)`,[typeof req.body?.subscription?.id==="string"?req.body.subscription.id:null,samplingForCatch?.batchId??null,String(err?.message||"error").slice(0,500)]);}catch(ledgerErr:any){console.error("[adb-v3-webhook] failure-ledger write failed:",ledgerErr?.message||ledgerErr);}
       try{if(rawDeliveryIdForCatch)await persistProcessingAttempt({deliveryId:rawDeliveryIdForCatch,attemptIndex:1,parserVersion:"flightNotificationExtractor_v3",schemaVersion:"v3.9-f.8",outcome:"failed",itemsReceived:flightsForCatch.length,itemsParsed:0,itemsStored:0,itemsSkipped:0,itemsFailed:flightsForCatch.length,validationErrors:null,parseErrors:[String(err?.message||"error").slice(0,500)],storageErrors:null,errorMessage:String(err?.message||"error").slice(0,500),startedAtUtc:receivedAtForCatch??new Date(startedAt),completedAtUtc:new Date(),durationMs:Date.now()-startedAt,upsertResult:null,researchEventsAppended:false,ingestEventWritten:false});}catch(attemptErr:any){console.error("[adb-v3-webhook] failed-attempt write failed:",attemptErr?.message||attemptErr);}
-      res.status(200).json({received:true,error:err?.message||"error"});
+      // Raw original has already committed: ACK durable reception.
+      // Semantic repair remains an incident-backed downstream task.
+      // A 503 here would encourage billable upstream retries even though
+      // the original was safely stored; never leak the thrown error details.
+      if(!res.headersSent)res.status(200).json({received:true,error:"semantic_processing_failed_after_raw_durability"});
     }
   };
 
