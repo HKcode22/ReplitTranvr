@@ -8,6 +8,7 @@
 |---|---|
 | What is being predicted and measured? | [Original V3.9 scientific Plan](plans/V3.9_DataCollectPlan_f.8.md) |
 | How is the experiment implemented? | [Implementation guide](implementation/README.md) |
+| What happened in earlier Phase 0 and Phase 1? | [Phase 0 archive](phase0/README.md) and [Phase 1 Gate 0 history](phase1/README.md) (not current authorization) |
 | What happened in the airport pilot runs? | [Phase 2G overview](phase2g/README.md) and [all 58 dated Phase2G records](phase2g/ALL_REPORTS.md) |
 | Where are original machine receipts? | [Evidence index](evidence/ARTIFACTS_START_HERE.md) |
 | Where can I find any specific research source? | [All 108 original SEPmd file links](ALL_SEPMD_FILES.md) |

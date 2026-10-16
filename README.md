@@ -11,6 +11,8 @@ The project includes a live-capable application, original V3.9 aviation scientif
 | You are looking for | Open |
 |---|---|
 | What the experiment predicts and how it is defined | [Binding V3.9 Plan](data-collection/plans/V3.9_DataCollectPlan_f.8.md) |
+| Historical Phase 0 research/reviews | [Phase 0](data-collection/phase0/README.md) |
+| Historical Phase 1 / Gate 0 checklist | [Phase 1](data-collection/phase1/README.md) |
 | Past pilots, errors and amendments | [58 Phase 2G dated documents](data-collection/phase2g/ALL_REPORTS.md) |
 | Machine evidence or receipts | [All 352 original artifacts](data-collection/evidence/ARTIFACTS_START_HERE.md) |
 | A specific original research file | [All 108 SEPmd records](data-collection/ALL_SEPMD_FILES.md) |
@@ -35,7 +37,7 @@ Wave B's **merge status, current tests, and deployment boundaries** must be chec
 
 | Directory | Purpose |
 |---|---|
-| `data-collection/` | **Project home**; original Plans, AUTH, evidence and historical scientific records at relocated paths |
+| `data-collection/` | **Project home**; Phase 0 through Phase 3 scientific records, original Plans, AUTH and evidence |
 | `artifacts/` when created at runtime | New **generated/temporary outputs**, not the 352 archived original blobs; output paths must remain isolated |
 | `client/`, `server/`, `shared/` | Application |
 | `scripts/`, `tests/`, `.github/workflows/` | Tests, scripts and GitHub Actions |

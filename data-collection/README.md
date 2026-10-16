@@ -9,6 +9,8 @@
 | Research literature and prior prediction methods | [Research paper extracts](research-papers/README.md) |
 | Scientific Plan and its history | [Plans](plans/README.md) |
 | Implementation and original ledger | [Implementation](implementation/README.md) |
+| Historical Phase 0 analysis and reviews | [Phase 0](phase0/README.md) |
+| Historical Phase 1 / Gate 0 input checklist | [Phase 1](phase1/README.md) |
 | Earlier gate proofs and Phase 2 | [Phase 2](phase2/README.md) |
 | Airport pilots, reports and methods | [Phase 2G](phase2g/README.md) |
 | Next engineering phase, separate draft PR36 | [Phase 3](phase3/README.md) |
