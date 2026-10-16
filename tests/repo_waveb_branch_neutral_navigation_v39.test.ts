@@ -29,7 +29,7 @@ describe("Wave B readable navigation remains accurate after future merge",()=>{
    expect(text,path).not.toContain("On **protected `main`**, the original directories remain");
   }
   expect(readFileSync("README.md","utf8")).toContain("original-to-relocated SHA manifest");
-  expect(readFileSync("README.md","utf8")).toContain("new **generated/temporary outputs**");
+  expect(readFileSync("README.md","utf8")).toContain("New **generated/temporary outputs**");
  });
  it("distinguishes historical source record counts, PR36 future inputs and merge status",()=>{
   const home=readFileSync("data-collection/README.md","utf8");
