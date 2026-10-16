@@ -21,11 +21,13 @@ describe("Phase3 staged schema release isolation",()=>{
   expect(plan.map(x=>x.version)).not.toContain(65);
   expect(plan.some(x=>x.file===filename)).toBe(false);
  });
- it("retains explicit disposable-PG CI apply only after source tests",()=>{
+ it("retains explicit disposable-PG SQL fixture without exposing production auto-migrations",()=>{
   const workflow=readFileSync(".github/workflows/v39-phase0-offline.yml","utf8");
-  expect(workflow).toContain("STAGED Gate3 V0065 explicitly in disposable PG16 ONLY");
+  expect(workflow).toContain("Load STAGED Gate3 V0065 to disposable PG16 after boot no-op check");
   expect(workflow).toContain("test ! -e migrations/current/V0065__phase3_gate3_prepaid_canary_owner_v39.sql");
-  expect(workflow).toContain("cp migrations/staged/V0065__phase3_gate3_prepaid_canary_owner_v39.sql migrations/current/");
+  expect(workflow).toContain('psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0065__phase3_gate3_prepaid_canary_owner_v39.sql');
+  expect(workflow).not.toContain("cp migrations/staged/");
+  expect(workflow).not.toContain("npx tsx scripts/v39_schema_migrate_v39.ts --apply");
   expect(workflow).toContain("tests/phase3_gate3_prepaid_owner_disposable_pg_v39.test.ts");
   expect(workflow).toContain('test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"');
  });

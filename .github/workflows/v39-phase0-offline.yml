@@ -99,6 +99,21 @@ jobs:
       - name: Verify current schema and triggers
         run: npm run v39:migrate:check
 
+      - name: Load STAGED Gate3 V0065 to disposable PG16 after boot no-op check
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
+          test -z "${AERODATABOX_API_KEY:-}"
+          # Never put V0065 in the auto-discovered current/ source directory.
+          # Apply directly to the isolated workflow's disposable v39_ci DB.
+          test ! -e migrations/current/V0065__phase3_gate3_prepaid_canary_owner_v39.sql
+          test -f migrations/staged/V0065__phase3_gate3_prepaid_canary_owner_v39.sql
+          psql "${DATABASE_URL}" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0065__phase3_gate3_prepaid_canary_owner_v39.sql
+          test "$(psql "${DATABASE_URL}" -XAt -v ON_ERROR_STOP=1 -c "SELECT to_regclass('clean.phase3_gate3_canary_owner_v39') IS NOT NULL")" = "t"
+          echo "GATE3_STAGED_SQL_DISPOSABLE_PG16_ONLY=APPLIED_AFTER_DEFAULT_BOOT_NOOP"
+
       - name: TypeScript
         run: npm run v39:typecheck
 
@@ -126,19 +141,14 @@ jobs:
       - name: Production build
         run: npm run v39:build
 
-      - name: Test STAGED Gate3 V0065 explicitly in disposable PG16 ONLY
+      - name: Verify STAGED Gate3 V0065 behavior in disposable PG16 ONLY
         shell: bash
         run: |
           set -Eeuo pipefail
           test "${GITHUB_ACTIONS}" = "true"
           test "${DATABASE_URL}" = "postgresql://postgres:postgres@localhost:5432/v39_ci?sslmode=disable"
           test -z "${AERODATABOX_API_KEY:-}"
-          # The checked-in migration is NOT in the production boot-scanned
-          # migrations/current directory. This COPY is CI-runner-local only.
           test ! -e migrations/current/V0065__phase3_gate3_prepaid_canary_owner_v39.sql
-          test -f migrations/staged/V0065__phase3_gate3_prepaid_canary_owner_v39.sql
-          cp migrations/staged/V0065__phase3_gate3_prepaid_canary_owner_v39.sql migrations/current/
-          npx tsx scripts/v39_schema_migrate_v39.ts --apply
           npx vitest run tests/phase3_gate3_prepaid_owner_disposable_pg_v39.test.ts
           echo "GATE3_STAGED_SQL_REAL_PG16_CI_ONLY=PASS"
           echo "PROVIDER_CALLS=0"
