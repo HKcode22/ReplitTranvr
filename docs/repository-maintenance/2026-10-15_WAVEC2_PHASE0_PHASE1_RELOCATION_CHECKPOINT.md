@@ -36,10 +36,13 @@ YSSY P25 original 231 billed / 229 received stays **failed/DELIVERY_GAP**; neith
 
 ## CI and review checklist
 
-- [ ] Full V3.9 Offline Safety, no-provider release and PostgreSQL path readers on exact proposed head.
-- [ ] Verify nine original Git blob identities and zero old `docs/history/phase0|phase1` paths in new tree.
-- [ ] Verify navigation/relative Markdown targets for touched files.
-- [ ] Confirm merge order with Wave C1 PR #48; both are unmerged and neither is automatic.
+- [x] Four exact source-head workflows **SUCCESS at validation commit `07819487541c22d4860471427400542d325c1f21`**: [full V3.9 offline safety](https://github.com/HKcode22/ReplitTranvr/actions/runs/38846082548), [focused P25 no-provider](https://github.com/HKcode22/ReplitTranvr/actions/runs/38846082637), [real PG receiver-fault tests](https://github.com/HKcode22/ReplitTranvr/actions/runs/38846082789), [public receiver identity read-only](https://github.com/HKcode22/ReplitTranvr/actions/runs/38846082639). This checkpoint note is documentation-only; check final review head independently if new commits appear.
+- [x] Nine original Git blob identities exactly match original source and no `docs/history/phase0|phase1` paths remain in proposed tree. No case-fold Git path collisions.
+- [x] All 83 relative local links across 9 changed/new navigation documents resolved at `ec439e1504553b20e1ecfafc9921d933481d7e7f`; subsequent code change affects only a test, not these paths.
+- [x] Earlier `ec439e15` CI legitimately failed **two stale Wave A test path assertions**, even though the new C2 custody test passed. Follow-up commit `0781948` correctly updates the old historical path test, retaining original immutable SHA expectations; it does not change or hide the old failed run.
+- [ ] Confirm merge order and resolve shared root/data-collection README changes with independent Wave C1 PR #48; both are unmerged and neither is automatic.
 - [ ] Owner reviews draft before merge or history/branch/asset cleanout.
 
-**Next session starts:** inspect Wave C2 CI, fix only demonstrated test/navigation failures, then perform targeted asset import scan and review named fully-contained branches for possible later deletion **with owner's explicit approval**.
+**Next session starts:** review [draft PR #49](https://github.com/HKcode22/ReplitTranvr/pull/49) with the above exact workflows; compare root/data-collection README changes against draft PR #48 before choosing merge order. Then perform a focused whole-repo app-path scan for `attached_assets/` before proposing a separately reviewed client-asset move, and check named old branches against 63-branch census in [Issue #47](https://github.com/HKcode22/ReplitTranvr/issues/47) before any explicit owner-authorized deletion. No deletion or paid action was performed.
+
+**Factual research/engineering guidance consulted:** [FAIR Principles](https://www.nature.com/articles/sdata201618) (findability, metadata/provenance, not mandated folder names), [Vite asset handling](https://vite.dev/guide/assets.html) (imported assets vs `public/`), [GitHub branch-deletion guidance](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-branches-in-your-repository/deleting-and-restoring-branches-in-a-pull-request) (open PR heads must not be removed) and [Actions artifact retention/deletion](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/remove-workflow-artifacts) (deletions are unrecoverable; do not treat run count as code size).
