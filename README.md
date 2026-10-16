@@ -40,7 +40,7 @@ Wave B's **merge status, current tests, and deployment boundaries** must be chec
 | `client/`, `server/`, `shared/` | Application |
 | `scripts/`, `tests/`, `.github/workflows/` | Tests, scripts and GitHub Actions |
 | `migrations/` | Database baseline and schema migration |
-| `data-collection/research-papers/`, `attached_assets/` | Research reading and historical attachments |
+| `data-collection/research-papers/`, `client/src/assets/images/legacy-attachments/`, `docs/history/legacy-replit-attachments/` | Research reading, archived PNG uploads and older pasted text/ZIP inputs |
 | `docs/history/` | Historical archive |
 | `docs/repository-maintenance/` | [Cleanup checkpoints and current status](docs/repository-maintenance/START_HERE.md) |
 
