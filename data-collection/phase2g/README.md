@@ -1,10 +1,10 @@
-> **DRAFT migration branch only:** Links below follow relocated original Git blobs. Signed source paths and runtime consumers still require verification.
+> **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
 
 # Phase 2G — Methods, Attempts, Original Evidence
 
 **[Find any of the 58 original Phase2G reports, incidents, amendments or runbooks](ALL_REPORTS.md)**, organized by purpose and dated name.
 
-**Status warning:** `main` contains **two different September indexes that each say “canonical”**, but they contain statements from different historical dates and methods. They are kept separate and source-identifiable, not silently combined or granted present-day authority.
+**Status warning:** The preserved historical sources include **two different September indexes that each say “canonical”**, but they contain statements from different historical dates and methods. They are kept separate and source-identifiable, not silently combined or granted present-day authority.
 
 - [Lowercase original Phase 2G index (Sep 25/26 era)](legacy-lowercase/README.md) — original source preserved; historical claims must be dated.
 - [Uppercase original Phase 2G index (Sep 22 era)](legacy-uppercase/README.md) — distinct historic file; preserve separate from lowercase on macOS/case-insensitive filesystem.

@@ -6,7 +6,7 @@
 
 - [Plain-language project guide](../../data-collection/START_HERE.md) and [repository homepage](../../README.md).
 - [All 108 original scientific SEPmd files](../../data-collection/ALL_SEPMD_FILES.md), [58 Phase2G dated documents](../../data-collection/phase2g/ALL_REPORTS.md), [all 352 original machine evidence files](../../data-collection/evidence/ARTIFACTS_START_HERE.md).
-- [Complete 460-original-record catalog checkpoint](2026-10-15_COMPLETE_460_SOURCE_EVIDENCE_DIRECTORY_CHECKPOINT.md), a dated **pre-merge** report. Wave A had 11 unchanged-content historic root moves, [exact Git blob manifest](manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv). No original `SEPmd/` or `artifacts/` data moved.
+- [Complete 460-original-record catalog checkpoint](2026-10-15_COMPLETE_460_SOURCE_EVIDENCE_DIRECTORY_CHECKPOINT.md), a dated **pre-Wave-B** report. Wave A had 11 unchanged-content historic root moves, [exact Git blob manifest](manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv). Wave B subsequently moved **108 original `SEPmd/` and 352 original `artifacts/` blobs on draft PR #46**, without rewriting them; review [the actual 460-row relocation manifest](manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv).
 
 ## October 4 plan: real historic folder moves
 
@@ -16,9 +16,13 @@
 
 - [Reviewed exact-root file relocations checkpoint](2026-10-15_OCT04_LEGACY_ROOT_PDF_ZIP_GPT_HISTORY_MOVE.md): the historical Phase0 analysis, 300KB V3.9 reference PDF and uninspected 34MB ZIP are moved **byte-identically** into archival/reference locations. Their old root paths are absent; neither PDF nor ZIP was deleted or adjudicated as obsolete.
 
-## What remains
+## Physical scientific-core migration — current review
 
-**Wave B physical file relocation is HOLD**, because current executable preflight/manifest code and historical signed source references use the existing `SEPmd` and `artifacts` paths. The [concrete Wave B compatibility gate](../../data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) documents exact code consumers, case-insensitive Mac collision, integrity constraints and coordination with unmerged PR36. A safe, *browsable* directory is already available without physical relocation.
+The actual original-source physical migration **has been implemented on [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46)**, but that PR's **merge status is independent** and must be checked before claiming that the default `main` branch is reorganized. A verified migration contains 108 original `SEPmd/` scientific sources and 352 originally tracked `artifacts/` evidence blobs at documented new paths, preserving all original SHA/bytes/modes.
+
+**Last reviewed CI head:** [`a4d19f9f`](https://github.com/HKcode22/ReplitTranvr/commit/a4d19f9f446118e034051e76e87f86c43ba9ac1d) passed the four no-provider workflows, including 1,134 passing tests and 19 skipped. New commits require their **own** checks. The [dated relocation checkpoint](2026-10-15_WAVEB_PHYSICAL_RELOCATION_AND_SCIENTIFIC_COMPATIBILITY_CI_CHECKPOINT.md), [path classification](../../data-collection/operations/WAVE_B_RUNTIME_PATH_CLASSIFICATION.md), and [historic pre-migration gate](../../data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) explain what changed and why a green read-only published-identity job is **not** proof that Replit has been republished.
+
+**Not yet automatically complete:** separate merge authorization, verification after merge, controlled Replit workspace/runtime source parity review, and independent integration of 47 PR36-only draft scientific records (without overwriting the signed original P25 ledger). [Issue #24](https://github.com/HKcode22/ReplitTranvr/issues/24) tracks the final closeout.
 
 ## Historical evidence and previous decisions
 

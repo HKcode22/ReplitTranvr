@@ -1,4 +1,4 @@
-> **DRAFT migration branch only:** Links below follow relocated original Git blobs. Signed source paths and runtime consumers still require verification.
+> **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
 
 # All dated Phase 2G research records, by purpose
 

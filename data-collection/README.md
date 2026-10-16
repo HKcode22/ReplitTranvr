@@ -2,7 +2,7 @@
 
 [**Plain-English Start Here**](START_HERE.md) · [**All 108 original scientific source files**](ALL_SEPMD_FILES.md) · [**All 352 original evidence artifacts**](evidence/ARTIFACTS_START_HERE.md)
 
-**Wave A is merged on GitHub `main`** ([PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39); [post-merge safety CI SUCCESS](https://github.com/HKcode22/ReplitTranvr/actions/runs/38812391951)). These pages navigate original scientific records; this draft moves their Git blobs while retaining signed historical values and **does not change any published production deployment**.
+**Wave A is merged on GitHub `main`** ([PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39); [post-merge safety CI SUCCESS](https://github.com/HKcode22/ReplitTranvr/actions/runs/38812391951)). These pages navigate the 460 original scientific/evidence Git blobs at their reorganized paths, without rewriting historical signed values or changing the published production deployment.
 
 | Area | Read |
 |---|---|
@@ -17,4 +17,4 @@
 | Replit shell-only boundaries | [Operations](operations/README.md) |
 | Wave B physical relocation and remaining compatibility checks | [Wave B compatibility gate](operations/WAVE_B_COMPATIBILITY_GATE.md) |
 
-On **this isolated draft PR #46**, all 108 original `SEPmd/` and 352 original `artifacts/` Git blobs have been physically relocated without changing their bytes. On **protected `main`**, the original directories remain until the migration receives explicit integration clearance. YSSY P25's 231 billed/229 received discrepancy remains the historical delivery gap, not silently strict-PASS. The [155-path main + PR36 mapping proposal](../docs/repository-maintenance/2026-10-15_SEPMD_EXACT_PATH_MAPPING_AND_CASE_CONFLICT.md) is **not authorization** to rename, delete, redeploy or run a paid canary.
+All **108 original `SEPmd/`** scientific sources and **352 original `artifacts/`** evidence blobs in this repository tree have moved to the linked `data-collection/` paths with identical original Git blob identities. Check [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46) for merge status and [the exact relocation manifest](../docs/repository-maintenance/manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv) for provenance. YSSY P25 still records **231 billed / 229 received, failed/DELIVERY_GAP**. The separate [155-file mapping review](../docs/repository-maintenance/2026-10-15_SEPMD_EXACT_PATH_MAPPING_AND_CASE_CONFLICT.md) also covers **47 unmerged PR36-only files**, which are *not* part of the 460-file main-source relocation.

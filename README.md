@@ -1,4 +1,4 @@
-> **DRAFT migration branch only:** Links below follow physically relocated original Git blobs. Historical signed references, source compatibility and release safety remain under review; no paid execution is authorized.
+> **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
 
 # ReplitTranvr — Aviation Data Collection & Research
 
@@ -21,20 +21,22 @@ The project includes a live-capable application, original V3.9 aviation scientif
 | Implementation details | [Implementation Log navigation](data-collection/implementation/README.md) |
 | Phase 3 / Gate 3 engineering | [Phase 3 status](data-collection/phase3/README.md) |
 | Operator safety and runbooks | [Operations](data-collection/operations/README.md) |
-| Why filenames haven't all been relocated | [Wave B path-compatibility gate](data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) |
+| Physical relocation compatibility and safety decisions | [Wave B path-compatibility gate](data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md) |
 
-## What's finished?
+## Repository organization and source custody
 
-**Wave A is merged on `main`** through [PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39), merge commit [`4075cce8`](https://github.com/HKcode22/ReplitTranvr/commit/4075cce8aa33c159487a436127199264a4e8954c). All four PR CI checks and the automatic [post-merge offline main check](https://github.com/HKcode22/ReplitTranvr/actions/runs/38812391951) passed. Eleven historical root files moved byte-for-byte into [`docs/history/`](docs/history/README.md) with [exact original Git blob identities](docs/repository-maintenance/manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv). The original **108 `SEPmd/` files and 352 `artifacts/` files remain untouched** at their old paths, indexed with verified source identities and links.
+**Wave A:** [PR #39](https://github.com/HKcode22/ReplitTranvr/pull/39) organized navigation and moved 11 historical root files, retaining their Git identities. **Wave B:** [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46) is the separately reviewed physical relocation of all **108 original `SEPmd/` source files and 352 original `artifacts/` evidence files**. The links on this page point to the moved, byte-identical originals in the tree containing this README.
 
-**Wave B (physical original-file rename) remains on HOLD.** Source code and signed experimental records depend on those exact paths, and Gate 3 engineering remains in [unmerged draft PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36). An organized index is useful now without damaging those dependencies.
+Wave B's **merge status, current tests, and deployment boundaries** must be checked on [PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46) and [maintenance Issue #24](https://github.com/HKcode22/ReplitTranvr/issues/24); a copied README or an old signed authorization is not evidence that the published Replit deployment matches this code. [Complete 460-file original-to-relocated SHA manifest](docs/repository-maintenance/manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv).
+
+[Phase 3 / Gate 3](data-collection/phase3/README.md) still requires a **separate** review of [draft PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36). Do not replace the authoritative signed P25 evidence ledger with the draft's shorter historical version.
 
 ## Repository map
 
 | Directory | Purpose |
 |---|---|
-| `data-collection/` | **Human-friendly project home** and links to original research/evidence |
-| `SEPmd/`, `artifacts/` | Compatibility-protected scientific Plan, AUTH, frozen original data and reports |
+| `data-collection/` | **Project home**; original Plans, AUTH, evidence and historical scientific records at relocated paths |
+| `artifacts/` when created at runtime | New **generated/temporary outputs**, not the 352 archived original blobs; output paths must remain isolated |
 | `client/`, `server/`, `shared/` | Application |
 | `scripts/`, `tests/`, `.github/workflows/` | Tests, scripts and GitHub Actions |
 | `migrations/` | Database baseline and schema migration |

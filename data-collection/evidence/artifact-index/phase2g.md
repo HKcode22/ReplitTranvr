@@ -1,8 +1,8 @@
-> **DRAFT migration branch only:** Links below follow relocated original Git blobs. No signed-path or operational approval is implied.
+> **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
 
 # Phase 2G — Paid-Pilot/Scientific Record Index
 
-**150 original source artifacts** physically relocated without rewriting source blobs in this DRAFT branch (not merged, no deletion of historical evidence). Frozen original pilot and recovery evidence, including YSSY; filenames are not formal Gate2 pass status.
+**150 original source artifacts** relocated without rewriting source blobs or deleting historical evidence. Frozen original pilot and recovery evidence, including YSSY; filenames are not formal Gate2 pass status.
 
 [Search all 352 original paths and Git blob IDs](../artifacts-catalog.csv).
 

@@ -1,8 +1,8 @@
-> **DRAFT migration branch only:** Links below follow physically relocated original Git blobs. Historical signed references, source compatibility and release safety remain under review; no paid execution is authorized.
+> **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
 
 # Find an original experimental artifact
 
-**All 352 originally tracked `artifacts/` files are now linked to their candidate relocated paths, preserving original Git blobs without payload modification.** This is a search/navigation aid, not independent certification that every receipt is scientifically valid or sufficient to promote an experiment.
+**All 352 originally tracked `artifacts/` files are now linked to their relocated paths, preserving original Git blobs without payload modification.** This is a search/navigation aid, not independent certification that every receipt is scientifically valid or sufficient to promote an experiment.
 
 ## Common starting points
 

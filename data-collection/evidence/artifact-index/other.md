@@ -1,8 +1,8 @@
-> **DRAFT migration branch only:** Links below follow relocated original Git blobs. No signed-path or operational approval is implied.
+> **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
 
 # Earlier Gates, Database Baseline and Preprobe Index
 
-**22 original source artifacts** physically relocated without rewriting source blobs in this DRAFT branch (not merged, no deletion of historical evidence). Other artifacts include original preprobe, schema inventory and early gate records. Preserve original source custody.
+**22 original source artifacts** relocated without rewriting source blobs or deleting historical evidence. Other artifacts include original preprobe, schema inventory and early gate records. Preserve original source custody.
 
 [Search all 352 original paths and Git blob IDs](../artifacts-catalog.csv).
 
