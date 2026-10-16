@@ -15,7 +15,7 @@ import { sha256HexString, type AuthRecord } from "../server/lib/disruption/authR
 import {isExactStage1ProviderSubscriptionOwnerV39} from "./v39_phase2g_subscription_exact_owner_match_v39";
 
 const PHASE = "Phase 2 / Gate 2 Stage 1";
-const LEDGER = path.join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+const LEDGER = path.join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function required(name: string): string {

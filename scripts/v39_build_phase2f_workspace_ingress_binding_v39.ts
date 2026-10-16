@@ -9,7 +9,7 @@ import {
   PHASE2F_WORKSPACE_ROUTE_OWNER_V39,
 } from "../server/lib/disruption/phase2WorkspaceIngressBinding_v39";
 
-const LEDGER = path.join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
+const LEDGER = path.join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md");
 const SOURCE_PATHS = [
   "server/routes_v3.ts",
   "server/lib/disruption/prepaidProbeRuntime_v39.ts",
