@@ -90,7 +90,7 @@ export async function inspectGate3OwnerReadonly(
   let raw:string,ledger:string;
   try{
     raw=load(args.authFile);
-    ledger=load(join(process.cwd(),"SEPmd","V3.9_RUN_REPORTS_AND_EVIDENCE.md"));
+    ledger=load(join(process.cwd(),"data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md"));
   }catch{return hold(["GATE3_READONLY_ARTIFACT_OR_LEDGER_MISSING"],args.sessionId);}
   if(typeof raw!=="string"||typeof ledger!=="string")
     return hold(["GATE3_READONLY_ARTIFACT_FORMAT_INVALID"],args.sessionId);

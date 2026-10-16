@@ -20,6 +20,8 @@ describe("Phase3 GitHub Actions: manual exact owner admission NEVER paid",()=>{
     const y=file();
     expect(y).toContain('[[ "$REVIEWED_HEAD" == "$GITHUB_SHA" ]]');
     expect(y).toContain("git ls-files --error-unmatch");
+    expect(y).toContain("^data-collection/authorizations/");
+    expect(y).not.toContain("^SEPmd/");
     expect(y).toContain("v39:gate3:owner:read-only");
     expect(y).toContain("V39_DATABASE_RUNTIME_URL:");
     expect(y).toContain("environment: phase3-readonly");

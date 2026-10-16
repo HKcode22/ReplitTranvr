@@ -146,7 +146,7 @@ export async function prepareGate3LedgerBoundSessionV39(
   let ledgerRaw:string;
   try {
     ledgerRaw=readFileSync(join(process.cwd(),
-      "SEPmd","V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8");
+      "data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8");
   } catch {
     throw Error("GATE3_LEDGER_PREPARE_REVIEWED_LEDGER_FILE_MISSING_HOLD");
   }

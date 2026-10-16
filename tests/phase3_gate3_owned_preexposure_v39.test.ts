@@ -30,7 +30,7 @@ vi.mock("node:fs",async(loader)=>{
   const actual=await loader<typeof import("node:fs")>();
   return {...actual,readFileSync:(path:Parameters<typeof actual.readFileSync>[0],
     encoding?:BufferEncoding)=>{
-    if(String(path).endsWith("SEPmd/V3.9_RUN_REPORTS_AND_EVIDENCE.md"))
+    if(String(path).endsWith("data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md"))
       return ledger;
     return actual.readFileSync(path,encoding);
   }};

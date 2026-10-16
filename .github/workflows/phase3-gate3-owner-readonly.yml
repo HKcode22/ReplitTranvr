@@ -17,7 +17,7 @@ on:
         required: true
         type: string
       auth_file:
-        description: 'Exact tracked approved AUTH artifact path under SEPmd (not raw bytes)'
+        description: 'Exact tracked approved AUTH JSON under data-collection/authorizations/ (not raw bytes)'
         required: true
         type: string
       session_id:
@@ -91,7 +91,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           # Prevent path traversal, environment expansion and untracked files.
-          [[ "$AUTH_FILE" =~ ^SEPmd/[A-Za-z0-9_./-]+\.json$ ]] || { echo 'REFUSED: AUTH file path'; exit 2; }
+          [[ "$AUTH_FILE" =~ ^data-collection/authorizations/[A-Za-z0-9_.-]+\.json$ ]] || { echo 'REFUSED: AUTH file path'; exit 2; }
           [[ "$AUTH_FILE" != *'..'* ]] || { echo 'REFUSED: traversal'; exit 2; }
           [[ -f "$AUTH_FILE" ]] || { echo 'REFUSED: AUTH file missing'; exit 2; }
           git ls-files --error-unmatch -- "$AUTH_FILE" >/dev/null || { echo 'REFUSED: AUTH not tracked'; exit 2; }

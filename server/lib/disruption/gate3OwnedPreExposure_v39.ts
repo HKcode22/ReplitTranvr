@@ -153,7 +153,7 @@ export async function prepareGate3AfterLiveReadOnlyEvidenceV39(
   let ledger:string;
   try{
     ledger=readFileSync(join(process.cwd(),
-      "SEPmd","V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8");
+      "data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8");
   }catch{
     throw Error("GATE3_OWNER_CHECKED_IN_LEDGER_MISSING_HOLD");
   }
