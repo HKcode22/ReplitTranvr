@@ -5,37 +5,37 @@ import { describe, expect, it } from "vitest";
 const moved = [
   [
     "confused.md",
-    "docs/history/phase0/requests/confused.md",
+    "data-collection/phase0/requests/confused.md",
     "c611b806199d84e6777807ff9bbe1ab0e24fe332"
   ],
   [
     "gptP0analyze.md",
-    "docs/history/phase0/reviews/gptP0analyze.md",
+    "data-collection/phase0/reviews/gptP0analyze.md",
     "58e833c491783901a8f9025ed966a83fe5c67c5e"
   ],
   [
     "gptP0analyze2.md",
-    "docs/history/phase0/reviews/gptP0analyze2.md",
+    "data-collection/phase0/reviews/gptP0analyze2.md",
     "030ca3722ceeac3c7315a45bbf47046478946e56"
   ],
   [
     "gptP0analyze3.md",
-    "docs/history/phase0/reviews/gptP0analyze3.md",
+    "data-collection/phase0/reviews/gptP0analyze3.md",
     "2c65785db085e4a85375821af0419085923592d8"
   ],
   [
     "gptP0analyze5.md",
-    "docs/history/phase0/reviews/gptP0analyze5.md",
+    "data-collection/phase0/reviews/gptP0analyze5.md",
     "d7a7ee5ea56ed5ad6e33ed0e1b4d92bf97b4f990"
   ],
   [
     "gptP0analyze6.md",
-    "docs/history/phase0/reviews/gptP0analyze6.md",
+    "data-collection/phase0/reviews/gptP0analyze6.md",
     "a825cab9f6186b673f431d71e2e33aec01925356"
   ],
   [
     "gptP0analyze7.md",
-    "docs/history/phase0/reviews/gptP0analyze7.md",
+    "data-collection/phase0/reviews/gptP0analyze7.md",
     "72468606ba162abdbdcefb96a56d2b7480df15c3"
   ],
   [
@@ -55,10 +55,10 @@ const moved = [
   ],
   [
     "GATE0_INPUT_CHECKLIST.md",
-    "docs/history/phase1/GATE0_INPUT_CHECKLIST.md",
+    "data-collection/phase1/GATE0_INPUT_CHECKLIST.md",
     "560bb06eb155e5d24a5b19c0e176afa422c4deba"
   ],
-  ["gptP0analyze4.md", "docs/history/phase0/reviews/gptP0analyze4.md", "ed76774bae16866ca58752da6237f3eb19cde5ff"],
+  ["gptP0analyze4.md", "data-collection/phase0/reviews/gptP0analyze4.md", "ed76774bae16866ca58752da6237f3eb19cde5ff"],
   ["V3.9_DataCollectPlanCurrent.pdf", "data-collection/plans/reference-pdfs/V3.9_DataCollectPlanCurrent.pdf", "b81436b4509b4dc1fa86f60755feb6de15c1befd"],
   ["zipFile.zip", "docs/history/unreviewed-archives/zipFile.zip", "114bdc2df7b78ffa36d4d4ad310b9b870075183d"]
 ] as const;
@@ -73,8 +73,8 @@ const preserved = [
   "data-collection/evidence/original-artifacts/phase2g/phase2g-gate2-runtime-P2G-S1-20261013-03.json",
 ] as const;
 
-describe("Wave A original bytes, historical links and guardrail invariants", () => {
-  it("preserves the exact original Git blobs for fourteen archival renames", () => {
+describe("Wave A and Wave C2 original bytes, historical links and guardrail invariants", () => {
+  it("preserves exact original Git blobs through the initial archive and later Phase 0/1 relocation", () => {
     for (const [before, after, expectedBlob] of moved) {
       expect(existsSync(before), "old tracked path retained: " + before).toBe(false);
       expect(existsSync(after), "missing relocated path: " + after).toBe(true);
@@ -97,8 +97,8 @@ describe("Wave A original bytes, historical links and guardrail invariants", () 
   it("checks the primary historical navigation links without network or filesystem changes", () => {
     const links = [
       "docs/history/README.md",
-      "docs/history/phase0/reviews/README.md",
-      "docs/history/phase1/README.md",
+      "data-collection/phase0/reviews/README.md",
+      "data-collection/phase1/README.md",
       "docs/history/v2-diagnostics/README.md",
       "docs/history/v2-diagnostics/notebooks/README.md",
       "docs/repository-maintenance/manifests/2026-10-15_WAVEA_ROOT_HISTORY_MOVES.csv",

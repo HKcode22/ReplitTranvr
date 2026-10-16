@@ -38,7 +38,8 @@ describe("Wave B readable navigation remains accurate after future merge",()=>{
   expect(home).toContain("47 unmerged PR36-only files");
   const status=readFileSync("docs/repository-maintenance/START_HERE.md","utf8");
   expect(status).toContain("actual 460-row relocation manifest");
-  expect(status).toContain("merge status is independent");
+  expect(status).toContain("was **merged through");
+  expect(status).toContain("does **not** imply published Replit runtime parity");
   expect(readFileSync("data-collection/operations/WAVE_B_COMPATIBILITY_GATE.md","utf8")).toContain("Historical pre-migration decision");
   const s=readFileSync("data-collection/evidence/README.md","utf8");
   expect(s).toContain("original unchanged Git blobs");
