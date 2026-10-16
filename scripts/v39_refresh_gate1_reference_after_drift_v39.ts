@@ -73,7 +73,7 @@ function readJsonFile<T>(path: string, label: string): { raw: string; value: T }
 }
 
 function currentFrozenInputs(root: string) {
-  const planPath = join(root, "SEPmd", "V3.9_DataCollectPlan_f.8.md");
+  const planPath = join(root, "data-collection", "plans", "V3.9_DataCollectPlan_f.8.md");
   if (!existsSync(planPath)) throw new Error("BLOCKED:BINDING_PLAN_MISSING");
   const p = loadVerifiedPrerequisitePPass(root);
   const trafficPath = process.env.V39_TRAFFIC_REFERENCE_FILE || join(root, "artifacts", "traffic-reference-frozen.json");

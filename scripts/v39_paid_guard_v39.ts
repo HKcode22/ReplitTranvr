@@ -41,7 +41,7 @@ export function parseArgs(argv: string[]): { auth: string | null; evidenceId: st
 
 function loadLedgerEvidenceIds(): string[] {
   try {
-    const ledger = readFileSync(join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md"), "utf8");
+    const ledger = readFileSync(join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md"), "utf8");
     return Array.from(new Set(Array.from(
       ledger.matchAll(/\b((?:RUN|GATE|AUTH|ISS|DEC)-\d{8}-[0-9A-Z]+)\b/g),
     ).map((m) => m[1])));
@@ -53,7 +53,7 @@ function loadLedgerEvidenceIds(): string[] {
 export function loadApprovedArtifactHashes(): string[] {
   try {
     return approvedArtifactHashesFromLedger(
-      readFileSync(join(process.cwd(), "SEPmd", "V3.9_RUN_REPORTS_AND_EVIDENCE.md"), "utf8"),
+      readFileSync(join(process.cwd(), "data-collection", "evidence", "ledgers", "V3.9_RUN_REPORTS_AND_EVIDENCE.md"), "utf8"),
     );
   } catch {
     return [];

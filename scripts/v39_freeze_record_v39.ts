@@ -103,7 +103,7 @@ function readJson(path: string, label: string): unknown {
 }
 
 function loadInputs(root: string): LoadedInputs {
-  const planPath = join(root, "SEPmd", "V3.9_DataCollectPlan_f.8.md");
+  const planPath = join(root, "data-collection", "plans", "V3.9_DataCollectPlan_f.8.md");
   if (!existsSync(planPath)) throw new Error("BLOCKED:BINDING_PLAN_MISSING");
   const planSha256 = sha256(readFileSync(planPath));
 
