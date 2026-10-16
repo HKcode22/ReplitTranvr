@@ -15,3 +15,9 @@
 - [Detailed overall experimental ledger](../evidence/README.md).
 
 **Key unchanged history:** P25 was 231 billed credits vs 229 received; retain original `failed/DELIVERY_GAP` outcome, separate any qualified scientific secondary use from formal P25 or Gate2 PASS. Do not unilaterally clean raw source objects, change the 168h retention boundary, or relabel an open incident.
+
+## October 14 qualified early-pilot owner decision (separate from formal Gate 2)
+
+The project-owner-approved **qualified early-pilot closeout** is preserved as an administrative exception, **not** a historical five-anchor Gate 2 PASS or authorization for new credit spending. This separate [Phase 2 closeout provenance inventory](../../docs/repository-maintenance/manifests/2026-10-16_PHASE2G_PR37_QUALIFIED_CLOSEOUT_CUSTODY.csv) maps all 11 PR #37 originals, including six records not already imported from PR #36. Key preserved originals: [owner scope decision](amendments/2026-10-14_APPROVED_PHASE2_QUALIFIED_EARLY_PILOT_EXCEPTION_AND_PHASE3_BOUNDARY.md), [operator approval metadata](reports/2026-10-14_PHASE2_QUALIFIED_PILOT_OPERATOR_APPROVAL_RECORD.json), [pre-approval fieldwork record](reports/2026-10-14_PHASE2G_GATE2_EARLY_PILOT_FIELDWORK_CLOSEOUT_RECORD.json), and [historical terminal disposition](reports/2026-10-14_PHASE2G_TERMINAL_DISPOSITION_AND_ENTRY_EXCEPTION_DRAFT.json).
+
+These documents retain historical `SEPmd/` / `artifacts/` **strings** verbatim for provenance. Use the mapped current physical file location rather than treating those old paths as executable instructions. The six originals are content-identical, and historical contradictory pre-approval/draft states must be read in their dated sequence; none overrides the frozen original P25 231-billed/229-received `FAILED/DELIVERY_GAP` record. PR #54 remains an unmerged offline-engineering draft; production Gate 3 and paid authorization are **still NO-GO**.

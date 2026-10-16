@@ -16,6 +16,13 @@ The old 264-commit PR #36 predates Wave B/C/D physical migration and GitHub curr
 
 [Source-to-destination 47-row SHA/byte manifest](manifests/2026-10-16_GATE3_PR36_SOURCE_PATH_REVIEW.csv).
 
+## Oct 16 follow-up — PR #37 administrative science predecessor reconciliation (DRAFT)
+
+- Exact source PR #37 head `9ed8b673d508f023e650042fd30eb40c6dfcf7df` contains **11 historical records**: 5 match PR #54 originals by full Git blob SHA and 6 are distinct previously unported originals (3 Markdown + 3 JSON). All six are copied byte-for-byte under `data-collection/phase2g/` in the draft; the originals' embedded old-path strings are not silently rewritten. [Immutable 11-row two-branch map](manifests/2026-10-16_PHASE2G_PR37_QUALIFIED_CLOSEOUT_CUSTODY.csv).
+- The qualified pilot was **explicitly approved by the project owner on Oct 14**, but only as a *qualified/early exploratory Phase2 closeout*. Original strict five-anchor Gate2 remains `NOT_PASSED` and YSSY 231/229 remains `FAILED/DELIVERY_GAP`. This owner approval never authorized the new Gate3 paid canary, migration, deployment or deleting scientific evidence.
+- The shared prepaid runner now checks the unreleased Gate3 source-level paid seal **before DB prearmed-session review**, preserving the seal `false` and all Phase2 code paths. Updated negative/source-order regression and PR37 exact-blob plus decision-permission regression checks were added.
+- These are draft changes only. Validate all four no-provider CI jobs on the **new exact head** and preserve main SHA `ebdfbbf19d7d52121f0c9b3317ac1da2ad290524` unchanged.
+
 ## Gate status
 - **Gate2 historical strict:** NOT PASSED five-anchor confirmatory strict Gate2, with qualified early-pilot research under separate operator exception and review PR37.
 - **Gate3 OFFLINE:** draft code under CI and integration review; not yet a live billing or data-ingress certificate.
@@ -27,7 +34,7 @@ The old 264-commit PR #36 predates Wave B/C/D physical migration and GitHub curr
 1. Run full offline V3.9, no-provider focused, disposable PostgreSQL, and read-only published public-identity jobs on exact candidate SHA. **Do not certify passed until observed.**
 2. Inspect all old-root path references in new code and YAML; adapt active readers to `data-collection/` while preserving signed original string identities.
 3. Review imported `.github/workflows/phase3-gate3-owner-readonly.yml` as strictly manual `READ_ONLY_GATE3_NO_PROVIDER`. No paid workflow dispatch, cron or provider credentials.
-4. Reconcile PR37 qualification documents and prospective four-anchor proposal/Plan additions separately before any science-contract change.
+4. PR37's eleven source originals now appear content-identically in this draft with an explicit mapping. Distinguish its approved qualified administrative disposition from earlier proposed pre-approval documents. Prospective four-anchor proposal/Plan additions still require separate science-contract review.
 5. Independently establish Replit published workspace/source parity, direct published callback+source custody and real account statuses through owner-executed safe Shell/read-only preflight; no Replit AI Agent permitted by root `AGENTS.md`.
 6. Keep draft code separate from `main` pending owner reviewed scope, successful exact-head tests and conscious release decision. A GitHub merge does not publish Replit.
 

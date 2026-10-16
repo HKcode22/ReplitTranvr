@@ -8,6 +8,8 @@
 - [Oct 15 real host/account source pre-exposure checkpoint](2026-10-15_GATE3_REAL_PUBLISHED_HOST_PROVIDER_ACCOUNT_PREEXPOSURE_INTEGRATION_REPORT.md).
 - [Current original Plan](../plans/V3.9_DataCollectPlan_f.8.md), [original implementation Log](../implementation/V3.9_IMPLEMENTATION_LOG.md), and [immutable ledger](../evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md) are preserved at their existing identical Git blobs.
 - [Cross-branch source provenance and safety checkpoint](../../docs/repository-maintenance/2026-10-16_GATE3_MAIN_BASED_INTEGRATION_CHECKPOINT.md).
+- [Phase 2 owner-approved qualified early-pilot scope](../phase2g/amendments/2026-10-14_APPROVED_PHASE2_QUALIFIED_EARLY_PILOT_EXCEPTION_AND_PHASE3_BOUNDARY.md) — an administrative predecessor, **not** original strict Gate 2 PASS or a Gate 3 spend token.
+- [Eleven-source exact PR #37 qualified-closeout custody index](../../docs/repository-maintenance/manifests/2026-10-16_PHASE2G_PR37_QUALIFIED_CLOSEOUT_CUSTODY.csv) — five already matched, six newly preserved.
 
 **Engineering state:** Gate 3 canary source/tests are being reconciled and reviewed under a separate GitHub draft. A passing no-provider CI means only the particular Git source passed tests, **not** that Gate3/0.5/4 live passed. Legacy Gate3 paid canary remains hard NO-GO; additive SQL V0065 is only a draft until a separately approved production migration.
 

@@ -415,6 +415,14 @@ function validateInput(input: PrepaidLiveWindowInputV39): void {
 export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39): Promise<PrepaidLiveWindowResultV39> {
   validateInput(input);
 
+  // Check source-level paid release BEFORE session selection, SQL, persistence
+  // configuration, provider SDK or webhook IO. Neither a checked-in AUTH
+  // hash nor a fabricated prepared session can bypass an unreleased Gate3.
+  if (input.ownerKind === "phase3_credit_canary" &&
+      !GATE3_PROVIDER_EXPOSURE_RELEASED_V39) {
+    throw new Error("GATE3_PREARMED_PROVIDER_EXPOSURE_PENDING_OWNER_AND_HOST_PARITY");
+  }
+
   // When cleanup is local, require the local Replit Object Storage boundary.
   // Under deferred cleanup the callback receiver is the already-deployed
   // Travnr service, so the GitHub owner must not require Replit-local object
@@ -456,14 +464,6 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       } finally {client.release();}
     },
   });
-  if(input.ownerKind==="phase3_credit_canary" &&
-     !GATE3_PROVIDER_EXPOSURE_RELEASED_V39) {
-    // The prearmed source path now cannot allocate an accidental second
-    // Phase2 UUID. But final versioned paid Gate3 owner, independently
-    // verified deployed-host/source rights and provider preflight are NOT
-    // completed. This hard NO-GO belongs before *any* provider SDK call.
-    throw new Error("GATE3_PREARMED_PROVIDER_EXPOSURE_PENDING_OWNER_AND_HOST_PARITY");
-  }
   if (input.onSessionArmed) await input.onSessionArmed(session.sessionId);
   const webhookUrl = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), session.sessionId);
   const targetMs = input.targetHours * 3_600_000;

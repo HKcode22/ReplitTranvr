@@ -99,8 +99,10 @@ describe("prepaid shared runner selects original Phase2 or prepared Gate3 identi
     const hold=w.indexOf("GATE3_PREARMED_PROVIDER_EXPOSURE_PENDING_OWNER_AND_HOST_PARITY");
     const create=w.indexOf("const creation = await resolveAmbiguousPrepaidCreateV39({");
     expect(chosen).toBeGreaterThan(0);
-    expect(hold).toBeGreaterThan(chosen);
-    expect(create).toBeGreaterThan(hold);
+    expect(hold).toBeGreaterThan(0);
+    expect(hold).toBeLessThan(chosen);
+    expect(create).toBeGreaterThan(chosen);
+    expect(w).toContain("GATE3_PROVIDER_EXPOSURE_RELEASED_V39 = false");
     expect(w).not.toContain("armPrepaidProbeSessionV39({\n    ownerKind: input.ownerKind");
     expect(rt).toContain("GATE3_GENERIC_PHASE2_SESSION_ARM_FORBIDDEN");
     expect(w).toContain("reviewGate3OwnerPreflightV39(client,");
