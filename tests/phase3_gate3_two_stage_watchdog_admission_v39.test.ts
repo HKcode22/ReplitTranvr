@@ -3,6 +3,7 @@ import {
   assertGate3TwoStagePreparationTimingV39,
   parseGate3WatchdogRunAndCommentV39,
   awaitGate3LiveWatchdogAndStartV39,
+  assertGate3BeforeCreateUtcV39,
 } from "../server/lib/disruption/gate3TwoStageWatchdogAdmission_v39";
 import type {Gate3WatchdogLeaseScopeV39,Gate3WatchdogLeaseV39}
   from "../server/lib/disruption/gate3WatchdogLiveLease_v39";
@@ -36,6 +37,17 @@ describe("Gate3 two-stage watchdog owner admission (all offline)",()=>{
     expect(()=>assertGate3TwoStagePreparationTimingV39(
       start,"2026-10-20T12:12:00Z",d("2026-10-20T11:54:00Z")
     )).toThrow("SESSION_EXPIRES");
+  });
+  it("enforces freshly pinned UTC at the last reversible pre-CREATE guard",()=>{
+    expect(()=>assertGate3BeforeCreateUtcV39(
+      start,d("2026-10-20T12:00:00Z"))).not.toThrow();
+    expect(()=>assertGate3BeforeCreateUtcV39(
+      start,d("2026-10-20T12:00:15Z"))).not.toThrow();
+    for(const now of ["2026-10-20T11:59:59Z",
+      "2026-10-20T12:00:16Z"]){
+      expect(()=>assertGate3BeforeCreateUtcV39(start,d(now)))
+        .toThrow("CREATE_OUTSIDE_EXACT_UTC_BOUNDARY");
+    }
   });
   it("parses only two exact, safe, untrusted numeric GitHub IDs",()=>{
     expect(parseGate3WatchdogRunAndCommentV39("39000001111 6229000000"))
