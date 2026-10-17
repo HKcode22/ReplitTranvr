@@ -99,6 +99,12 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
      !process.env.V39_DATABASE_RUNTIME_URL||
      !process.env.AERODATABOX_API_KEY)
     stop("GATE3_OPERATOR_ENVIRONMENT_NOT_READY");
+  // Two GitHub REST reads every 5s for up to ~18min exceed the public
+  // unauthenticated 60-request/hour limit. Require a real token BEFORE
+  // creating a durable PREPARED row, not after a paid run has begun.
+  if(![process.env.GITHUB_TOKEN,process.env.GH_TOKEN]
+      .some(v=>typeof v==="string"&&v.trim().length>=10))
+    stop("GATE3_OPERATOR_AUTHENTICATED_GITHUB_API_REQUIRED");
   let sourceTree:string,headTree:string;
   try{
     const git=(...a:string[])=>execFileSync("git",a,{encoding:"utf8"}).trim();
