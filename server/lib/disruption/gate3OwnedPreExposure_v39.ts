@@ -152,8 +152,12 @@ export async function prepareGate3AfterLiveReadOnlyEvidenceV39(
   // AUTH must be checked BEFORE any provider/host I/O.
   let ledger:string;
   try{
+    // Keep the Wave B historical evidence byte-for-byte immutable; Gate3
+    // prospective approval is in its separately tracked source addendum.
     ledger=readFileSync(join(process.cwd(),
-      "data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8");
+      "data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8") + "\n" +
+      readFileSync(join(process.cwd(),"data-collection","phase3",
+        "2026-10-16_GATE3_WSSS_AUTH_SHA_APPROVAL_ADDENDUM.md"),"utf8");
   }catch{
     throw Error("GATE3_OWNER_CHECKED_IN_LEDGER_MISSING_HOLD");
   }
