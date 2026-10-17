@@ -39,3 +39,14 @@ Real-world missing notifications and a small historical external/internal mismat
 Check PR59 latest head and four workflows, correct any reproduced CI problems, resolve UTC cutoff / elapsed-duration interaction, test before-CREATE owner loss and GitHub bot heartbeat negative cases, source-review and merge only with three paid source seals closed. After separately checked final AUTH/source release, user-shell checkout reviewed HEAD (no Replit AI Agent), publish and verify the exact Replit git head/receiver, fresh account preflight, one prepared UUID, manually dispatch independent GitHub job, enter bot RUN_ID + COMMENT_ID, confirm fresh verified ARM/ACTIVE lease and exact UTC gate, then one WSSS paid CREATE only if all checks remain green. Collect actual provider DELETE/settlement/custody receipts and truthful Gate3 outcome, then start Gate0.5 native T/FIDS, Gate4 safety cap and Phase4 Gate5 on the revised deadline.
 
 **Do not rerun Phase2/P25 audits, publish without reviewing, or mark Gate3 completed from offline mocks.**
+
+
+## 2026-10-17 UTC — Source-only clock + liveness follow-up (supersedes initial clock blocker)
+
+At initial source review independent watchdog cut off at frozen UTC+600s whereas paid owner counted full duration from actual CREATE/BIND, potentially producing a scientifically censored canary even under ordinary provider startup latency. This mismatch is addressed in the CURRENT DRAFT source, but NOT yet released or paid-validated: owner CREATE admission is limited to UTC start through +15s; independent watchdog exact stop occurs by UTC+630s, allowing bounded 30s startup/BIND jitter, while existing owner still targets 600s of actual subscribed observation. The 50-credit soft stop and other emergency stop conditions still take precedence. Sidecar rescue monitor extends through UTC+930s, which is NOT a 930s scientific measurement window. An unusually slow CREATE/BIND still triggers stop and honest censored classification. This bounded start-skew policy requires release review and does not create a provider-side hard 50-credit cap.
+
+Additional fail-closed source review fix: independent sidecar now checks runtime state. A failed or settling UNLOGGED session is NOT an active receiving owner even when the row and UUID exist. When an exact-owned billable subscription remains active, such runtime state should trigger exact-owned stop/recovery, not a false MONITOR. Missing source or ambiguous identity remains HOLD with no additional CREATE permission.
+
+Before this checkpoint text edit, branch HEAD was 51dbeb8ce703613964f066f72b429bd7b747a13a. Recheck all **4 workflows on the final exact-HEAD** after this documentation commit, and do not borrow green status from an older SHA.
+
+Source seals are still FALSE, no production host/DB/provider mutation from this draft, and Gate3 NOT PASSED.
