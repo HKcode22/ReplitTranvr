@@ -34,6 +34,7 @@ on:
 
 permissions:
   contents: read
+  issues: write # publish one metadata-only ARMED/heartbeat/STOPPED lease in issue #38
 
 concurrency:
   group: phase3-gate3-one-wsss-independent-safety
@@ -52,6 +53,7 @@ jobs:
       V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
       AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
       AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+      GITHUB_TOKEN: ${{ github.token }}
       WEBHOOK_BASE_URL: https://replit-tranvr--hk84164.replit.app
 
     steps:
