@@ -35,7 +35,10 @@ export interface Gate3DraftPreparedV39 {
 }
 const EXACT_ICAO=/^[A-Z]{4}$/;
 const EXACT_SHA=/^[0-9a-f]{64}$/;
-const EXPIRY_BUFFER_SECONDS=600;
+// Gate3 pre-arm waits for a separately launched GitHub runner; keep exact
+// callback custody through the 600s window and 300s rescue grace, including
+// cold-start lead and later settlement. A stale PREPARED row still blocks retry.
+const EXPIRY_BUFFER_SECONDS=1500;
 
 /**
  * Existing durable FAILED incident can still carry an unverified subscription
