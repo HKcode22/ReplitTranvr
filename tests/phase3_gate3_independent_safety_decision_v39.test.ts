@@ -42,12 +42,19 @@ describe("independent Gate3 WSSS safety decision; pure, no provider mutations",(
     expect(a.exactOwnedSubscriptionId).toBe(exact.id);
     expect(a.reason).toBe("SOFT_FIFTY_CREDITS_REACHED");
   });
-  it("stops at 10-minute boundary regardless of credit consumption",()=>{
+  it("does not preempt a full 600s subscribed exposure from small CREATE lag",()=>{
     const a=decideGate3IndependentSafetyV39({
       ...base,observedAtUtc:"2026-10-20T12:10:00Z"
     });
+    expect(a.decision).toBe("MONITOR");
+    expect(a.guaranteesCreditCeiling).toBe(false);
+  });
+  it("stops at 10 minutes plus bounded 30s startup skew",()=>{
+    const a=decideGate3IndependentSafetyV39({
+      ...base,observedAtUtc:"2026-10-20T12:10:30Z"
+    });
     expect(a.decision).toBe("DELETE_EXACT_OWNED");
-    expect(a.reason).toBe("TEN_MINUTE_WALL_CLOCK_EXPIRED");
+    expect(a.reason).toBe("TEN_MINUTE_EXPOSURE_PLUS_BOUNDED_START_SKEW_EXPIRED");
   });
   it("stops exact owned active subscription after UNLOGGED state loss",()=>{
     const a=decideGate3IndependentSafetyV39({

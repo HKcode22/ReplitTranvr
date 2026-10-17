@@ -120,7 +120,7 @@ export function reviewGate3LedgerBoundPreparationV39(
   // Creating a reservation for an already-past or far-off window risks
   // leaving a stale LOGGED owner and subsequent billable duplicate attempts.
   // No overlong reservations or silent automatic rescheduling.
-  if(start<now.getTime()||start>now.getTime()+120_000)
+  if(start<now.getTime()||start>now.getTime()+480_000)
     throw Error("GATE3_LEDGER_PREPARE_WINDOW_NOT_IMMINENT_HOLD");
   const exp=record.expiresAtUtc?Date.parse(record.expiresAtUtc):NaN;
   const begin=record.startNotBeforeUtc?Date.parse(record.startNotBeforeUtc):NaN;

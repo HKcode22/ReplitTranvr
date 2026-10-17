@@ -51,6 +51,12 @@ export interface PrepaidLiveWindowInputV39 {
   deletionRunId: string;
   watchdogPollMs: number;
   onSessionArmed?: (sessionId: string) => Promise<void>;
+  /** Gate3-only fresh authenticated independent-watchdog + account/UTC
+   * check IMMEDIATELY before provider CREATE, after SQL source selection.
+   * Absent or failed callback => HOLD before POST, never report ambiguous CREATE.
+   * Never trust an operator-supplied boolean. Source remains PAID SEALED.
+   */
+  beforeProviderCreate?: () => Promise<void>;
   /**
    * Independent-owner/watchdog fail-closed handshake.
    *
@@ -441,6 +447,10 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   // Travnr service, so the GitHub owner must not require Replit-local object
   // storage credentials. Callback persistence is proven prospectively by the
   // frozen zero-credit live-callback verification artifact.
+  if (input.ownerKind === "phase3_credit_canary" &&
+      typeof input.beforeProviderCreate !== "function") {
+    throw new Error("GATE3_FRESH_WATCHDOG_BEFORE_CREATE_REQUIRED");
+  }
   if (!input.deferCleanup) {
     assertPrepaidProbePersistenceConfigV39();
   }
@@ -506,6 +516,14 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
   // already-frozen airport + unique callback, never blindly retry CREATE.
   // Any failure/multiple match in strict LIST is an unresolved account HOLD.
   let sub:WebhookSubscription|null=null;
+  // The earlier Stage-B verification can become stale during source DB
+  // selection. Reauthenticate LIVE GH lease, UTC and clean provider inventory
+  // at the exact last reversible step before CREATE. This guard is placed
+  // OUTSIDE the ambiguous-CREATE catch so a failed preflight cannot be
+  // misclassified as a remotely committed paid subscription.
+  if (input.ownerKind === "phase3_credit_canary") {
+    await input.beforeProviderCreate!();
+  }
   try {
     const creation = await resolveAmbiguousPrepaidCreateV39({
       createOnce:()=>createSubscription("FlightByAirportIcao", icao, {

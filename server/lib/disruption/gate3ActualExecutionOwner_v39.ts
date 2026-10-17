@@ -37,6 +37,7 @@ export type Gate3ActualOwnerInputV39=Readonly<{
   deletionRunId:string;
   settlement:SettlementConfig;
   externalStopCheck:()=>Promise<string|null>;
+  beforeProviderCreate?:()=>Promise<void>;
   /** Exact published Git commit required to transition a real success into a
    *  reviewed, durable SOURCE-custody candidate; missing => HOLD. */
   expectedPublishedGitHead?:string;
@@ -120,6 +121,7 @@ export function buildGate3ExactPaidWindowV39(
     settlement:input.settlement,
     watchdogPollMs:5000,
     externalStopCheck:input.externalStopCheck,
+    beforeProviderCreate:input.beforeProviderCreate,
     deferCleanup:true,
   };
 }

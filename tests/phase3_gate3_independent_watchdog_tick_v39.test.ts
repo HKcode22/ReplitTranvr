@@ -59,7 +59,7 @@ describe("actual Gate3 independent provider watchdog tick, disposable providers 
     expect(f.list).toHaveBeenCalledTimes(3);
   });
   it("DELETE at wall time regardless of credit count",async()=>{
-    const f=fixture({now:"2026-10-20T12:10:00Z",after:[]});
+    const f=fixture({now:"2026-10-20T12:10:30Z",after:[]});
     expect((await runGate3IndependentWatchdogTickV39(scope,f.d)).status)
       .toBe("STOP_VERIFIED");
   });

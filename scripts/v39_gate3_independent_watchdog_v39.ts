@@ -69,7 +69,7 @@ export function validateGate3SidecarInputsV39(
   const start=Date.parse(x.startUtc);
   if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(x.startUtc)||
      !Number.isFinite(start)||start<now.getTime()-15000||
-     start>now.getTime()+180000)
+     start>now.getTime()+600000)
     stop("GATE3_SIDECAR_NOT_IMMINENT");
   let raw:string,ledger:string;
   try{
@@ -149,7 +149,7 @@ export async function executeGate3WatchdogSidecarV39(
                o.icao,o.authorization_evidence_sha256,
                o.fixed_exposure_seconds,o.canary_credit_ceiling,
                s.session_id::text AS runtime_session_id,
-               s.owner_kind,s.provider_subscription_id
+               s.owner_kind,s.state AS runtime_state,s.provider_subscription_id
         FROM clean.phase3_gate3_canary_owner_v39 o
         LEFT JOIN clean.prepaid_probe_session_runtime s ON s.session_id=o.session_id
         WHERE o.session_id=$1::uuid
@@ -163,8 +163,11 @@ export async function executeGate3WatchdogSidecarV39(
         authorizationEvidenceSha256:String(z.authorization_evidence_sha256),
         fixedExposureSeconds:Number(z.fixed_exposure_seconds),
         canaryCreditCeiling:Number(z.canary_credit_ceiling),
+        // A persisted UNLOGGED row in failed/settling state is not an
+        // ACTIVE receiver. Treat it as lost while a paid sub remains alive.
         runtimeSessionVisible:z.runtime_session_id===x.sessionId&&
-          z.owner_kind==="phase3_credit_canary",
+          z.owner_kind==="phase3_credit_canary"&&
+          ["armed","active"].includes(String(z.runtime_state)),
         boundProviderSubscriptionId:z.provider_subscription_id===null
           ?null:String(z.provider_subscription_id),
       };
@@ -230,7 +233,11 @@ export async function executeGate3WatchdogSidecarV39(
     };
     // Grace AFTER target 600s allows continuing recovery if owner disappears;
     // GitHub workflow has a separate 25-minute total job timeout.
-    const stopAfter=auth.start+900_000;
+    // UTC start is the earliest allowed CREATE. The 30s bounded activation
+    // jitter permits a full 600s owner-controlled subscribed interval without
+    // marking a normal network/BIND lag as early rescue. Total rescue grace
+    // remains 300s, and this watchdog NEVER creates a subscription.
+    const stopAfter=auth.start+930_000;
     let lastStatus="",haveSeenOwned=false;
     while(Date.now()<stopAfter){
       const tick=await runGate3IndependentWatchdogTickV39(scope,{

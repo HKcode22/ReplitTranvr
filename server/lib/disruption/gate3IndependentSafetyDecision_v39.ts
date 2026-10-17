@@ -114,9 +114,13 @@ export function decideGate3IndependentSafetyV39(
   if(!x.runtimeSessionVisible)
     return output("DELETE_EXACT_OWNED",
       "UNLOGGED_SESSION_LOST_WHILE_PROVIDER_ACTIVE",subscriptionId,spent);
-  if(now>=start+600_000)
+  // A provider CREATE at the authorized UTC instant needs bounded network/BIND
+  // startup time. Allow at most 30s of start skew, NOT extra 600s of exposure.
+  // The owner itself targets 600s of actual elapsed subscribed time. The
+  // sidecar's independent wall-clock rescue cutoff is start+600s+30s.
+  if(now>=start+600_000+30_000)
     return output("DELETE_EXACT_OWNED",
-      "TEN_MINUTE_WALL_CLOCK_EXPIRED",subscriptionId,spent);
+      "TEN_MINUTE_EXPOSURE_PLUS_BOUNDED_START_SKEW_EXPIRED",subscriptionId,spent);
   if(spent>=50)
     return output("DELETE_EXACT_OWNED",
       "SOFT_FIFTY_CREDITS_REACHED",subscriptionId,spent);
