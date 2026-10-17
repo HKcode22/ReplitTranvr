@@ -147,6 +147,8 @@ export async function prepareGate3LedgerBoundSessionV39(
   try {
     ledgerRaw=readFileSync(join(process.cwd(),
       "data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8");
+    ledgerRaw += "\n" + readFileSync(join(process.cwd(),
+      "data-collection","phase3","2026-10-16_GATE3_WSSS_AUTH_SHA_APPROVAL_ADDENDUM.md"),"utf8");
   } catch {
     throw Error("GATE3_LEDGER_PREPARE_REVIEWED_LEDGER_FILE_MISSING_HOLD");
   }
