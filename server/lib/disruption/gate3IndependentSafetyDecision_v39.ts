@@ -58,18 +58,18 @@ export function decideGate3IndependentSafetyV39(
   if(!x||!UUID.test(x.sessionId)||x.ownerSessionId!==x.sessionId||
      !SHA.test(x.approvedAuthSha256)||
      x.ownerAuthSha256!==x.approvedAuthSha256||
-     x.ownerState!=="PREPARED"||x.icao!=="WSSS"||
+     !["PREPARED","FAILED","SETTLED"].includes(String(x.ownerState))||
+     x.icao!=="WSSS"||
      x.fixedSeconds!==600||x.softStopCredits!==50||
      typeof x.callbackUrl!=="string"||
      !x.callbackUrl.startsWith("https://")||
-     !x.callbackUrl.includes("/prepaid/"+x.sessionId)||
+     !x.callbackUrl.endsWith("/prepaid/"+x.sessionId)||
      !Number.isSafeInteger(x.baselineCredits)||
      x.baselineCredits<1500||
      !Array.isArray(x.subscriptions))
     return output("HOLD","MISSING_EXACT_LOGGED_OWNER_OR_AUTH",null,null);
   const start=Date.parse(x.startUtc),now=Date.parse(x.observedAtUtc);
-  if(!Number.isFinite(start)||!Number.isFinite(now)||
-     now<start-120_000||now>start+24*3600_000)
+  if(!Number.isFinite(start)||!Number.isFinite(now))
     return output("HOLD","INVALID_OBSERVATION_WINDOW",null,null);
   if(x.subscriptions.some(s=>
      !s||typeof s.id!=="string"||s.id.length===0||
@@ -99,6 +99,12 @@ export function decideGate3IndependentSafetyV39(
     return output("DELETE_EXACT_OWNED",
       "PROVIDER_BALANCE_INCREASE_IS_CONTAMINATION",subscriptionId,null);
   const spent=x.baselineCredits-current;
+  if(x.ownerState!=="PREPARED")
+    return output("DELETE_EXACT_OWNED",
+      "TERMINAL_LOGGED_OWNER_WITH_ACTIVE_PROVIDER_SUBSCRIPTION",subscriptionId,spent);
+  if(now<start-120_000)
+    return output("DELETE_EXACT_OWNED",
+      "SUBSCRIPTION_ACTIVE_BEFORE_AUTHORIZED_WINDOW",subscriptionId,spent);
   if(!x.runtimeSessionVisible)
     return output("DELETE_EXACT_OWNED",
       "UNLOGGED_SESSION_LOST_WHILE_PROVIDER_ACTIVE",subscriptionId,spent);
