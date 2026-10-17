@@ -26,6 +26,8 @@ import {
 } from "./gate3CanaryTerminalOwner_v39";
 import type {Gate3OwnedPreExposureEvidenceV39}
   from "./gate3OwnedPreExposure_v39";
+import {finalizeGate3LiveSettledCandidateV39}
+  from "./gate3LiveSettledFinalizer_v39";
 
 export type Gate3ActualOwnerInputV39=Readonly<{
   prepared:Gate3OwnedPreExposureEvidenceV39;
@@ -35,14 +37,20 @@ export type Gate3ActualOwnerInputV39=Readonly<{
   deletionRunId:string;
   settlement:SettlementConfig;
   externalStopCheck:()=>Promise<string|null>;
+  /** Exact published Git commit required to transition a real success into a
+   *  reviewed, durable SOURCE-custody candidate; missing => HOLD. */
+  expectedPublishedGitHead?:string;
 }>;
 export type Gate3ActualOwnerOutcomeV39=Readonly<{
   schema:"v39.phase3.gate3.actual-owner-outcome.v1";
-  status:"FAILED_DURABLY_RECORDED"|"HOLD_SUCCESS_REQUIRES_SOURCE_AUTHENTICITY";
+  status:"FAILED_DURABLY_RECORDED"|"HOLD_SUCCESS_REQUIRES_SOURCE_AUTHENTICITY"|
+    "SETTLED_CANDIDATE_RECORDED_NOT_CRYPTOGRAPHIC_ORIGIN_PASS";
   sessionId:string;
   liveGate3Certified:false;
   authorizesAnotherPaidRun:false;
   terminalReceipt?:Gate3TerminalOwnerReceiptV39;
+  originalEvidenceSha256?:string;
+  verifiedDeliveryCount?:number;
 }>;
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -169,5 +177,22 @@ export async function executeGate3ActualWindowV39(
     throw Error("GATE3_OWNER_PAID_PATH_NOT_RELEASED_BEFORE_ANY_IO");
   const plan=buildGate3ExactPaidWindowV39(input);
   const result=await runPrepaidLiveWindowV39(plan);
+  if(result.status==="settling" && input.expectedPublishedGitHead){
+    // NEVER trust a fabricated `sourceReadbackVerified:true` bool. The
+    // finalizer itself reads exact original bytes, durable session/owner SQL,
+    // real hosted identity, current provider LIST and closing balance before
+    // committing an immutable metadata-only SETTLED candidate. Any failure
+    // leaves the session/owner on HOLD for independent recovery, not retry.
+    const receipt=await finalizeGate3LiveSettledCandidateV39(pool,{
+      plan,result,expectedPublishedGitHead:input.expectedPublishedGitHead,
+    });
+    return {
+      schema:"v39.phase3.gate3.actual-owner-outcome.v1",
+      status:receipt.status,sessionId:receipt.sessionId,
+      liveGate3Certified:false,authorizesAnotherPaidRun:false,
+      originalEvidenceSha256:receipt.originalEvidenceSha256,
+      verifiedDeliveryCount:receipt.verifiedDeliveryCount,
+    };
+  }
   return recordGate3ActualWindowOutcomeV39(pool,plan,result);
 }
