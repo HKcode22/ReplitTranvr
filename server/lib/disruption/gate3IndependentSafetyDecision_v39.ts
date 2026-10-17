@@ -91,6 +91,12 @@ export function decideGate3IndependentSafetyV39(
       "ZERO_EXACT_ACTIVE_NOT_PROOF_OF_SETTLEMENT",null,null);
 
   const subscriptionId=exact[0].id;
+  // An unrelated active credit-based subscription contaminates account-wide
+  // balance evidence. Stop OUR exact subscription, never the foreign one.
+  if(x.subscriptions.some(s=>
+       s.isActive&&s.billingType==="CreditBased"&&s.id!==subscriptionId))
+    return output("DELETE_EXACT_OWNED",
+      "FOREIGN_ACTIVE_BILLABLE_CONTAMINATION",subscriptionId,null);
   const current=x.currentCredits;
   if(current===null||!Number.isSafeInteger(current)||current<0)
     return output("DELETE_EXACT_OWNED",
