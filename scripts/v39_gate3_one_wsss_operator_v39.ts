@@ -153,7 +153,7 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
   await awaitGate3LiveWatchdogAndStartV39(
     scope,prepared.balanceBeforeInMemory,{
       now:()=>new Date(),
-      sleep:(ms)=>new Promise(resolve=>setTimeout(resolve,ms)),
+      sleep:(ms)=>new Promise<void>(resolve=>setTimeout(resolve,ms)),
       verifyLease:verifyGate3WatchdogLiveLeaseFromGitHubV39,
       readCleanProviderBalance:()=>reviewGate3CurrentProviderAccountV39(50),
       shouldStop:()=>requestedStop!==null,
