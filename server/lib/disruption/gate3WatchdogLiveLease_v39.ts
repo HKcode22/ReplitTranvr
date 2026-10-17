@@ -148,7 +148,7 @@ export async function publishGate3WatchdogLeaseV39(
      !ISO.test(lease.heartbeatUtc))
     throw Error("GATE3_WATCHDOG_LEASE_PUBLISH_SCOPE_INVALID");
   const update=priorCommentId!==undefined;
-  if(update&&(!Number.isSafeInteger(priorCommentId)||priorCommentId!<=0))
+  if(update&&(!Number.isSafeInteger(priorCommentId)||priorCommentId <= 0))
     throw Error("GATE3_WATCHDOG_LEASE_COMMENT_ID_INVALID");
   const path=update?
     `https://api.github.com/repos/${REPO}/issues/comments/${priorCommentId}`:
