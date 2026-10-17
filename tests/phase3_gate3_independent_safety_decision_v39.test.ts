@@ -42,6 +42,13 @@ describe("independent Gate3 WSSS safety decision; pure, no provider mutations",(
     expect(a.exactOwnedSubscriptionId).toBe(exact.id);
     expect(a.reason).toBe("SOFT_FIFTY_CREDITS_REACHED");
   });
+  it("does not preempt a full 600s subscribed exposure from small CREATE lag",()=>{
+    const a=decideGate3IndependentSafetyV39({
+      ...base,observedAtUtc:"2026-10-20T12:10:00Z"
+    });
+    expect(a.decision).toBe("MONITOR");
+    expect(a.guaranteesCreditCeiling).toBe(false);
+  });
   it("stops at 10 minutes plus bounded 30s startup skew",()=>{
     const a=decideGate3IndependentSafetyV39({
       ...base,observedAtUtc:"2026-10-20T12:10:30Z"
