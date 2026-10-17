@@ -73,6 +73,7 @@ export async function finalizeGate3LiveSettledCandidateV39(
      result.durationCensored!==false||result.stopReason!==null||
      !Number.isSafeInteger(result.settlementReads)||result.settlementReads<3||
      !result.metrics||
+     typeof result.externalCredits!=="number"||
      !Number.isSafeInteger(result.externalCredits)||
      result.externalCredits<1||
      result.externalCredits!==result.internalSendCredits||
