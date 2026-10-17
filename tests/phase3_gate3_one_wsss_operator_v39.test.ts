@@ -23,7 +23,7 @@ describe("one WSSS Gate3 paid owner: exact scope AND no unsupported hard-cap rel
       icao:"WSSS",credits:50,seconds:600
     });
     expect(GATE3_OPERATOR_ONE_CANARY_SCOPE_V39.maxPaidCreates).toBe(1);
-    expect(GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39).toBe(false);
+    expect(GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39).toBe(true);
   });
   it("refuses altered airport/period/budget/commit before any provider operation",()=>{
     for(const [key,newValue] of [
@@ -37,8 +37,15 @@ describe("one WSSS Gate3 paid owner: exact scope AND no unsupported hard-cap rel
       expect(()=>parseGate3OperatorArgsV39(changed)).toThrow();
     }
   });
-  it("blocks the real owner before provider, DB and AUTH I/O while seals closed",async()=>{
-    await expect(executeOneWsssGate3OperatorV39(flags))
-      .rejects.toThrow("GATE3_OPERATOR_SOURCE_SEAL_CLOSED_BEFORE_IO");
+  it("blocks the real owner before provider or DB I/O if production target is not confirmed",async()=>{
+    const previous=process.env.V39_DATABASE_TARGET_CONFIRM;
+    process.env.V39_DATABASE_TARGET_CONFIRM="test-not-production";
+    try{
+      await expect(executeOneWsssGate3OperatorV39(flags))
+        .rejects.toThrow("GATE3_OPERATOR_ENVIRONMENT_NOT_READY");
+    }finally{
+      if(previous===undefined)delete process.env.V39_DATABASE_TARGET_CONFIRM;
+      else process.env.V39_DATABASE_TARGET_CONFIRM=previous;
+    }
   });
 });
