@@ -384,23 +384,24 @@ export function registerV3Routes(app:Express):void{
       res.status(200).json({received:true,items:persisted.itemCount,duplicate:persisted.duplicate});
     }catch(err:any){
       console.error("[adb-v3-prepaid] durable persistence failed — returning 5xx (provider details redacted)");
-      // A lost outside-lock admission COMMIT reply may have already
-      // committed its request counter. Do NOT guess the outcome by
-      // incrementing again. Preserve an unresolved incident for review.
+      // Original durability failed or is uncertain. Return the definitive
+      // failure response BEFORE secondary PostgreSQL diagnostics: the same
+      // unavailable DB must not delay HTTP 500 past the provider deadline.
+      // This does not authorize a provider retry or infer the COMMIT outcome.
+      if(!res.headersSent)
+        res.status(500).json({error:"Prepaid probe persistence failed; please retry"});
+      // Best-effort secondary diagnostics run after the response. A lost
+      // admission COMMIT acknowledgment must never double-count failure.
       if (!err?.phase2gFailureRecorded &&
           !err?.phase2gCallbackAccountingUncertain) {
-        await recordPrepaidProbeCallbackFailureV39(
+        void recordPrepaidProbeCallbackFailureV39(
           sessionId,
         ).catch(() => undefined);
       }
-      // Incident reporting depends on the same PostgreSQL/hosting path
-      // that may have failed to persist this callback. Never let failure of
-      // this SECONDARY diagnostic suppress a definitive HTTP 5xx response.
-      // This 5xx is not an AeroDataBox retry authorization.
-      await recordIncident("raw-persistence",{mode:"prepaid_probe",sessionId,error:String(err?.message??"error").slice(0,240)})
-        .catch(()=>undefined);
-      if(!res.headersSent)
-        res.status(500).json({error:"Prepaid probe persistence failed; please retry"});
+      void recordIncident("raw-persistence",{
+        mode:"prepaid_probe",sessionId,
+        error:String(err?.message??"error").slice(0,240),
+      }).catch(()=>undefined);
     }
   };
   const webhookIngress=async(req:Request,res:Response)=>{
