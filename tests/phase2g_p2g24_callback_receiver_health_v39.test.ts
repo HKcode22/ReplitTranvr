@@ -48,19 +48,22 @@ describe("P2G24 published callback startup and diagnostics hardening", () => {
     expect(supervisor).not.toContain("JSON.stringify(process.env)");
   });
 
-  it("the real prepaid receiver still answers with HTTP 500 when secondary incident logging also fails",()=>{
+  it("the prepaid receiver sends HTTP 500 before secondary incident logging can stall",()=>{
     const routes=readFileSync(join(root,"server/routes_v3.ts"),"utf8");
     const start=routes.indexOf('console.error("[adb-v3-prepaid] durable persistence failed');
     const end=routes.indexOf("const webhookIngress=async",start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const prepaid=routes.slice(start,end);
-    const reporter=prepaid.indexOf('await recordIncident("raw-persistence"');
+    const respond=prepaid.indexOf('res.status(500).json({error:"Prepaid probe persistence failed; please retry"})');
+    const reporter=prepaid.indexOf('void recordIncident("raw-persistence"',respond);
     const catchFailure=prepaid.indexOf(".catch(()=>undefined)",reporter);
-    const respond=prepaid.indexOf('res.status(500).json({error:"Prepaid probe persistence failed; please retry"})',catchFailure);
-    expect(reporter).toBeGreaterThan(0);
+    const counter=prepaid.indexOf("void recordPrepaidProbeCallbackFailureV39(",respond);
+    expect(respond).toBeGreaterThan(0);
+    expect(reporter).toBeGreaterThan(respond);
     expect(catchFailure).toBeGreaterThan(reporter);
-    expect(respond).toBeGreaterThan(catchFailure);
+    expect(counter).toBeGreaterThan(respond);
+    expect(prepaid.slice(0,respond)).not.toContain('await recordIncident("raw-persistence"');
     expect(prepaid).toContain("if(!res.headersSent)");
     expect(prepaid).not.toContain("res.status(200)");
   });
