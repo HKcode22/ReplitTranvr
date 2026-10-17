@@ -122,7 +122,9 @@ export async function verifyGate3WatchdogLiveLeaseFromGitHubV39(
 ):Promise<Gate3WatchdogLeaseV39>{
   if(!Number.isSafeInteger(scope?.commentId)||!Number.isSafeInteger(scope?.githubRunId))
     throw Error("GATE3_WATCHDOG_LEASE_INVALID_SCOPE");
-  const token=process.env.GITHUB_TOKEN||process.env.GH_TOKEN;
+  // Replit operator may pass a separately authenticated GitHub CLI GH_TOKEN;
+  // Github Actions sidecar itself uses its built-in GITHUB_TOKEN.
+  const token=process.env.GH_TOKEN||process.env.GITHUB_TOKEN;
   const [comment,run]=await Promise.all([
     getJson(`https://api.github.com/repos/${REPO}/issues/comments/${scope.commentId}`,token),
     getJson(`https://api.github.com/repos/${REPO}/actions/runs/${scope.githubRunId}`,token)
