@@ -35,6 +35,7 @@ import {
   assertGate3TwoStagePreparationTimingV39,
   parseGate3WatchdogRunAndCommentV39,
   awaitGate3LiveWatchdogAndStartV39,
+  assertGate3BeforeCreateUtcV39,
 } from "../server/lib/disruption/gate3TwoStageWatchdogAdmission_v39";
 
 const REVIEWED=/^[0-9a-f]{40}$/;
@@ -182,7 +183,19 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
         initialWaitSeconds:20,pollIntervalSeconds:15,
         stableReadCount:3,timeoutSeconds:240
       },
-      externalStopCheck
+      externalStopCheck,
+      beforeProviderCreate:async()=>{
+        if(requestedStop)
+          stop("GATE3_OPERATOR_STOP_REQUESTED_BEFORE_CREATE");
+        assertGate3BeforeCreateUtcV39(startUtc,new Date());
+        await verifyGate3WatchdogLiveLeaseFromGitHubV39(scope);
+        const current=await reviewGate3CurrentProviderAccountV39(50);
+        if(current!==prepared.balanceBeforeInMemory)
+          stop("GATE3_OPERATOR_ACCOUNT_CHANGED_BEFORE_CREATE");
+        assertGate3BeforeCreateUtcV39(startUtc,new Date());
+        if(requestedStop)
+          stop("GATE3_OPERATOR_STOP_REQUESTED_BEFORE_CREATE");
+      }
     });
     return {status:outcome.status,sessionId:prepared.sessionId,
       paidCanaryCertified:false,anotherRunAuthorized:false};
