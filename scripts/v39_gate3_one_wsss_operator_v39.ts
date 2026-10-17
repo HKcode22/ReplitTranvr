@@ -1,16 +1,16 @@
 /**
  * Gate3 ONLY — prospective single WSSS canary owner. Production executable
- * is SEALED pending a separately reviewed exact paid-source release.
+ * is SOURCE-RELEASED for a separately reviewed exact paid run only.
  *
- * NO paid CREATE, session reservation, or even provider GET is possible while
- * GATE3_PROVIDER_EXPOSURE_RELEASED_V39=false. Never use legacy credit_canary.
+ * No paid CREATE is permitted without an exact ledger-pinned AUTH, published
+ * source parity, real clean provider inventory, and authenticated watchdog. Never use legacy credit_canary.
  *
  * The provider API has no server-side maximum-credit subscription parameter.
  * A local 5s watchdog and independent safety owner can REDUCE exposure but
  * cannot enforce a provider-side 50-credit hard cap. The user explicitly
  * authorized a 50-credit SOFT stopping target with possible overrun, not an
- * unlimited subscription. Launch remains separately sealed until the actual
- * independent watchdog is implemented, reviewed and started.
+ * unlimited subscription. Launch still fails closed until the independent GitHub watchdog is
+ * genuinely running with a fresh exact-match lease.
  * Source enablement and existing AUTH hash check are necessary, NOT sufficient.
  */
 import "dotenv/config";
@@ -79,7 +79,7 @@ function stop(code:string):never {throw Error(code)}
  * exact owned subscription. The 50-credit value remains a SOFT stop threshold
  * and an overrun may still FAIL exact <=50 Gate3 scoreability.
  */
-export const GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39=false;
+export const GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39=true;
 export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Promise<Readonly<{
   status:string;sessionId:string|null;paidCanaryCertified:false;
   anotherRunAuthorized:false;
