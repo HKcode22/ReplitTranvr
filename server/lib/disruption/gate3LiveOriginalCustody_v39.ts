@@ -120,7 +120,7 @@ export async function verifyGate3OriginalCustodyV39(
        ORDER BY d.delivery_id
        LIMIT 257
     `,[scope.sessionId]);
-    if(deliveries.rowCount<1||deliveries.rowCount>256)
+    if(deliveries.rows.length<1||deliveries.rows.length>256)
       throw Error("GATE3_READBACK_DELIVERY_COUNT_INVALID");
     sourceRows=deliveries.rows;
 
@@ -138,7 +138,7 @@ export async function verifyGate3OriginalCustodyV39(
        ORDER BY delivery_id,item_index
        LIMIT 1001
     `,[scope.sessionId]);
-    if(items.rowCount>1000)
+    if(items.rows.length>1000)
       throw Error("GATE3_READBACK_ITEM_COUNT_LIMIT");
     itemRows=items.rows;
     await client.query("ROLLBACK");
