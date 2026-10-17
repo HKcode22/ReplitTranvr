@@ -292,13 +292,21 @@ describe("Phase2G callback and cleanup evidence ordering", () => {
     "utf8",
   );
 
-  it("counts prepaid callback failures at the HTTP boundary", () => {
+  it("preserves failure accounting without waiting for secondary SQL before HTTP 500", () => {
     expect(runtime).toContain("export async function recordPrepaidProbeCallbackFailureV39");
     // A COMMIT reply may be lost after admission counted the request;
-    // the route must also suppress speculative second increments then.
+    // a best-effort secondary diagnostic must not increment it again.
     expect(routes).toContain("if (!err?.phase2gFailureRecorded &&");
     expect(routes).toContain("!err?.phase2gCallbackAccountingUncertain");
-    expect(routes).toContain("await recordPrepaidProbeCallbackFailureV39(");
+    const failedIngress=routes.indexOf('console.error("[adb-v3-prepaid] durable persistence failed');
+    const nextHandler=routes.indexOf("const webhookIngress=async",failedIngress);
+    expect(failedIngress).toBeGreaterThan(0);
+    expect(nextHandler).toBeGreaterThan(failedIngress);
+    const handler=routes.slice(failedIngress,nextHandler);
+    const response=handler.indexOf('res.status(500).json({error:"Prepaid probe persistence failed; please retry"})');
+    const count=handler.indexOf("void recordPrepaidProbeCallbackFailureV39(",response);
+    expect(response).toBeGreaterThan(0);
+    expect(count).toBeGreaterThan(response);
     expect(runtime).toContain("SAVEPOINT phase2g_callback_payload");
     expect(runtime).toContain("ROLLBACK TO SAVEPOINT phase2g_callback_payload");
     expect(runtime).toContain("callback_failures=callback_failures+1");

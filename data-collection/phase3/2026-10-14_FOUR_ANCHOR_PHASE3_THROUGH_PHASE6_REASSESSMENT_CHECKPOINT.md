@@ -1,0 +1,51 @@
+# 2026-10-14 PDT — four-anchor Phase3→4→5→6 execution checkpoint
+
+**Project** HKcode22/ReplitTranvr, draft PR36, no merge or deployment. Phase2 qualified pilot owner-approved in separate draft PR37. Original strict five-anchor Gate2 outcome remains NOT_PASSED; P25 YSSY retains historical failed/DELIVERY_GAP.
+
+## Owner's clarified decisions
+- Use FOUR prospective equally scheduled anchor HUBs: WSSS, OMAA, SKBO, YSSY. MMUN below historic 60/h capacity and is not a future anchor.
+- No Cloudflare or other additional routing architecture; reuse current Replit prepaid callback, source durability and GitHub owners.
+- Finish Phase3 (Gate3, Gate0.5, Gate4), Phase4 (Gate5), Phase5 (calendar/FREEZE), then start and finish Phase6 MAIN collection. No exploratory ML priority before meaningful Phase6 data; model work is Phase7, the named post-collection last phase.
+- Avoid optional/unbounded hardening but preserve exact live budget/callback safeguards, provider-native target/cutoff, provenance, population denominators, source rights, and human paid approval.
+
+## Measured four-site context and limits
+- WSSS Changi: primarily international, operator reports about 170 directly linked cities. OMAA Zayed: international network of more than 100 destinations.
+- SKBO El Dorado: published 2025 destination counts 45 domestic and 57 international. YSSY Sydney: 2025 Q3 domestic/regional traffic 6.4m passengers and international 4.28m. These establish network breadth, NOT AeroDataBox webhook/FIDS coverage, observed route count, or phase6 representativeness.
+- Original sampling design is FOUR sampled airport slots per parent batch: one rotating anchor HUB plus two MID and one REGIONAL. Four prospective anchors do NOT mean only four airports in entire 31-window study. Regions, clock slots, eligibility and future provider population/capture measures remain necessary. Thus there are nominally 31*4=124 airport-slot exposures with repetition/replay, NOT 124 independent distinct airports.
+- Historical YSSY P25: 7203.639 seconds full uncensored, 58 verified saved source envelopes/308832 bytes, 229 observed item/cost claims, 231 external billed units, 2 gap, 107 resolved distinct physical-v2 identities, 8 quarantined saved items. Historical original accepted capacity rows/hour NULL and protocol failed/DELIVERY_GAP; not a reason to omit YSSY from a separately prospective exploratory study, but no claim that old probe MATCH or that 100% original provider SEND coverage is proven.
+
+## GitHub edits done in this work session
+- Added research-only solveV39FourAnchorExploratoryDraft in server/lib/disruption/experimentCalendarSolver_v39.ts, initial source commit 80c1ed6cdf33b7ac4522fedd9d9fe753f86eaaa9. It requires exactly WSSS/OMAA/SKBO/YSSY, rejects MMUN/duplicates, keeps 31 windows, five matched Crossover PAIRS, 26 four-hour + 3 split + 2 capped-six-hour shapes, UTC slot cycle, pair replay and per-day 1900 and proposed run-total 57900 ceilings. Its hash is domain-separated from original five-anchor calendar. Always returns operationalPhase6StartAuthorized=false and historicalYssyCreditReconciliationPassed=false.
+- Historical original solveV39Calendar stays strict FIVE and production-facing. Existing 3-anchor study draft remains a non-production historical alternative; owner-selected FOUR is the only proposed forward study. No main Phase6 controller/wrapper/manifest has been authorized or wired to the draft four-anchor result.
+- New tests/calendar_solver_four_anchor_exploratory_draft_v39.test.ts negative and SAT fixture coverage. INITIAL full CI failure #38588544856 was diagnosed via downloaded Actions logs: draft test seeded-order fixture hashed raw string, while actual calendar canonical hash JSON.stringify-ed the seed. Also older 3-site draft test had same fixture bug. Both test fixtures corrected in 54efd864613f96f6b846827cad9f14114e8c329c and 8faabd3dd122bffd8c47d99ef3eb8a10428d7c73.
+- **Exact corrected executable code/test SHA 8faabd3dd122bffd8c47d99ef3eb8a10428d7c73 has 4/4 successful no-provider GitHub Actions:** full offline #38589931318, focused no-provider #38589931361, real disposable-PG faults #38589931320 and public receiver identity source/read-only #38589931454. This is draft solver proof on synthetic frozen inputs, NOT a real live Phase5 SAT calendar, hosted receiver compatibility, real Gate3 credit match, provider FIDS coverage or paid authorization.
+- Rewrote SEPmd/phase3/2026-10-14_PROPOSED_PROSPECTIVE_SMALL_ANCHOR_MAIN_STUDY_AMENDMENT.md to four-site scientific proposal including YSSY and measured route-denominator/capture framework. Rewrote SEPmd/phase3/2026-10-14_EXECUTION_SPRINT_ROADMAP_DEADLINES_AND_EVIDENCE_GATES.md to phase-completion targets and postponed ML Phase7. Updated issue #38. All GitHub draft-only.
+
+## Targets — California timezone (PDT October; PST after November 1)
+| Stage | Completion target | Contingency | Exact stop/go evidence |
+|---|---|---|---|
+| Phase3 | Tue Oct20 | Thu Oct22 | Real prepaid-compatible tiny Gate3 canary (human exact AUTH) + Gate0.5 dedicated adequately sampled T/actual-target/FIDS/clock pilot + Gate4 real cap100/soft10 controller and tiny authorized live check. No simulated PASS. |
+| Phase4 | Thu Oct22 | Sat Oct24 | Real FIDS provider-observable population and webhook/outcome numerator/denominator by airport and domestic/international route/slot/direction; outside population not hardcoded 0. |
+| Phase5 | Sun Oct25 | Wed Oct28 | Owner-reviewed prospective four-site methods and scope, genuine 31-window SAT/crossover/time/washout, versioned 4-anchor production binding, 1900 per-day ceiling and 57900 maximum run design, actual current Alert/API headroom and 1000 protected floor, source/incident rights, target clocks, hashed manifest and authorization evidence. |
+| Phase6 first paid budget day | Oct26–29 earliest | Conditional HOLD on real blockers | Independently reviewed real receiver/code/manifest/parity, zero uncontrolled subscriptions or safety incident, fresh bounded paid owner AUTH. A due date does not dispatch a billable provider call. |
+| Phase6 all 31 days | roughly Dec1–4 closure if starts Oct26–29 | Dec11–18 with limited pauses | Existing six-on/one-off construction places day31 startDate+35 calendar days, then window/settlement. Starting Oct26 gives last day approximately Nov30 plus closeout; Oct29 gives Dec3 plus closeout. More pauses/washout may move final date. |
+| Phase7 later | after meaningful main data | separate design | Model training, protected evaluation, ML plan after acquisition. |
+
+## Truly necessary versus deferred
+- Mandatory Phase3 Gate3: legacy scripts/credit_canary.ts is incompatible with prepaid-only published route. Existing Phase2 session runtime SQL has CHECK restrictions to Phase2, so add distinct Gate3 owner/session/LOGGED source credit journal and tiny no-provider real-path tests. Must not alias canary as old anchor, loosen live exact accounting or spend without new AUTH.
+- Mandatory Gate0.5: independently observed provider-native T, real-vs-estimated primary target, actual FIDS role/range/time boundaries, minimum sample adequacy, censoring/latency evidence, rather than unchecked JSON booleans.
+- Mandatory Gate4: correct SEND-aware credit budget stop, scaled cap100/margin10 and real controller test, tiny authorized live second-start/balance check. No need to spend through 1850 to prove it.
+- Mandatory Phase4 Gate5: actual independently constructed FIDS population, incoming capture and outside-population denominators. Current Gate5 owner substitutes outside=0; not scientific evidence.
+- Mandatory Phase5: versioned four-site sampling change needs independent owner-reviewed prospective freeze; current freeze command checks manifest inventory and is not full experiment freeze. Real calendar inputs not fabricated. Potential global inter-day washout and weekday/time-class/crossovers need negative proof, not just fixture SAT.
+- Deferred or excluded: Cloudflare/multi-provider redesign, Quinn support reply, blanket new two-hour hosted simulation, rerunning YSSY Stage1 or automatic Stage2, optional GNN, parallel early ML during collection phases and unlimited hypothetical resilience features.
+- Source custody: P2G24 original expiry starts Oct15 21:02 PDT; YSSY P25 58 received originals expire Oct19 20:06–22:02 PDT. Prior qualified research metadata stays subject to rights; no premature deletion or raw Github export; separate operator-approved post-expiry deletion/tombstones and incident31 closure later. This does NOT require repeating YSSY.
+
+## Exact continuation point and action boundaries
+1. Check PR36 branch head, PR37 docs head and CI latest; exact source/test 8faabd3 is 4/4 PASS, later docs commits have separate workflows.
+2. Advance genuine Phase3 minimal prepaid-compatible Gate3 owner/additive SQL constraint and crash-safe LOGGED credit+source journal, reuse Phase2 receiver and settlement, execute no-provider disposable-PG/HTTP negatives first. Do not invoke legacy paid canary.
+3. Next Gate0.5 dedicated meaningful pilot/actual target and Gate4 controller safety; then Gate5 actual denominators; then versioned four-anchor calendar/manifest freeze production wiring with no bypass and real outside route coverage. Review only actual P0 blockers; update completion issue38.
+4. Any paid action (provider API mutation/subscription/refill, live canary, Phase6) needs fresh exact separately bounded authorization after gates. Same for production deployment/merge and raw source deletion. No such action occurred in this work session.
+
+**Actual side effects:** only draft GitHub code/tests/docs/issue edits, public external source checks and GitHub no-provider CI. Provider paid calls 0, new subscription 0, live balance mutation 0, production DB writes 0, object deletions 0, Replit publish 0, main merges 0, original P25 result modifications 0.
+
+**Reference Plan/Log:** SEPmd/V3.9_DataCollectPlan_f.8.md §§3,8,9,11,16–17; SEPmd/V3.9_IMPLEMENTATION_LOG.md §§1.8–1.12; owner-approved qualified Phase2 exception in PR37; four-site proposed science in this branch. Science sources: NIST RDaF https://nvlpubs.nist.gov/nistpubs/SpecialPublications/1500-18/NIST.SP.1500-18r2.html and STROBE https://pmc.ncbi.nlm.nih.gov/articles/PMC2636253/ .

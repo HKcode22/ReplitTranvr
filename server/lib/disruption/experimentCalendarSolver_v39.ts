@@ -102,12 +102,41 @@ function samePairSet(a: FrozenPairAirportSet | null, b: FrozenPairAirportSet | n
   );
 }
 
-export function solveV39Calendar(input: FrozenCalendarDesignInput): CalendarSolveResult {
+/** The ORIGINAL five-anchor solver remains authoritative for V3.9-f.8. */
+function solveCalendarByAnchorPolicy(
+  input: FrozenCalendarDesignInput,
+  mode: "original-five" | "draft-exploratory-three" | "draft-exploratory-four",
+): CalendarSolveResult {
   const start = parseDate(input.startDate);
   if (!start) return { status: "UNSAT", reason: "invalid startDate", days: [], calendarHash: null };
   if (!input.seed || !input.anchorSeed) return { status: "UNSAT", reason: "missing frozen calendar/anchor seed", days: [], calendarHash: null };
-  if (input.anchorPool.length !== 5 || new Set(input.anchorPool.map(x => x.icao.toUpperCase())).size !== 5 || input.anchorPool.some(x => !x.region)) {
-    return { status: "UNSAT", reason: "anchorPool must be exact five unique mapped anchors", days: [], calendarHash: null };
+  const unique = new Set(input.anchorPool.map(x => x.icao.trim().toUpperCase()));
+  if (mode === "original-five") {
+    if (input.anchorPool.length !== 5 || unique.size !== 5 || input.anchorPool.some(x => !x.region?.trim())) {
+      return { status: "UNSAT", reason: "anchorPool must be exact five unique mapped anchors", days: [], calendarHash: null };
+    }
+  } else if (mode === "draft-exploratory-three") {
+    // Deliberately versioned PROPOSAL only; never treat the resulting SAT as
+    // an operational Phase6 permit or as a retrospective Gate2 five-anchor PASS.
+    // The three Stage1-eligible anchors are recorded independently of YSSY-B
+    // and the below-capacity MMUN context.
+    const required = ["OMAA", "SKBO", "WSSS"];
+    if (input.anchorPool.length !== 3 || unique.size !== 3 ||
+        required.some(icao => !unique.has(icao)) ||
+        input.anchorPool.some(x => !x.region?.trim())) {
+      return { status: "UNSAT", reason: "draft exploratory anchors require exactly WSSS OMAA SKBO with mapped regions", days: [], calendarHash: null };
+    }
+  } else {
+    // Independently versioned FOUR-airport prospective design. Unlike the
+    // historical Stage1 score, YSSY is included as a scientifically useful
+    // but qualified Tier-B observation; its original DELIVERY_GAP does NOT
+    // become a historical Gate2 PASS or claim 100% provider completeness.
+    const required = ["OMAA", "SKBO", "WSSS", "YSSY"];
+    if (input.anchorPool.length !== 4 || unique.size !== 4 ||
+        required.some(icao => !unique.has(icao)) ||
+        input.anchorPool.some(x => !x.region?.trim())) {
+      return { status: "UNSAT", reason: "draft four-anchor selection requires WSSS OMAA SKBO YSSY and mapped regions", days: [], calendarHash: null };
+    }
   }
   for (const slot of ["MID_A", "MID_B", "REGIONAL"] as const) {
     const r = normalizedRegionSet(input.eligibleRegionsBySlot?.[slot] ?? []);
@@ -124,6 +153,15 @@ export function solveV39Calendar(input: FrozenCalendarDesignInput): CalendarSolv
   }
   if (!Number.isFinite(input.projectedRestUnitsTotal) || !Number.isFinite(input.protectedRestBudget) || input.projectedRestUnitsTotal > input.protectedRestBudget) {
     return { status: "UNSAT", reason: "REST budget infeasible/unknown", days: [], calendarHash: null };
+  }
+  if (mode !== "original-five") {
+    const projectedTotal = Array.from({ length: 31 }, (_, index) =>
+      input.projectedAlertCreditsByRunDay[String(index + 1)])
+      .reduce((sum, value) => sum + value, 0);
+    // Frozen original Plan ceiling, NOT a 31 x 1900 spending target.
+    if (!Number.isSafeInteger(projectedTotal) || projectedTotal > 57_900) {
+      return { status: "UNSAT", reason: "draft exploratory total projected Alert credits exceeds original 57900 design ceiling", days: [], calendarHash: null };
+    }
   }
   for (let p = 1; p <= 5; p++) {
     if (input.evaluationPartitionByRunDay[String(p)] !== input.evaluationPartitionByRunDay[String(p + 6)]) {
@@ -176,10 +214,10 @@ export function solveV39Calendar(input: FrozenCalendarDesignInput): CalendarSolv
         pairAirportSet = input.pairAirportSets[pairId(p)];
         const pairRegions = Object.fromEntries((Object.keys(pairAirportSet) as SlotId[]).map(s => [s, pairAirportSet![s].region])) as Record<SlotId, string>;
         if ((Object.keys(slotRegions) as SlotId[]).some(s => slotRegions[s] !== pairRegions[s])) {
-          return { status: "UNSAT", reason: `${pairId(p)} airport-set region does not match frozen slot-region template`, days: [], calendarHash: null };
+          return { status: "UNSAT", reason: `${pairId(p)} airport-set region does not match frozen slot-region template; scheduled=${JSON.stringify(slotRegions)} pair=${JSON.stringify(pairRegions)}`, days: [], calendarHash: null };
         }
         if (pairAirportSet.HUB.icao.toUpperCase() !== anchor.icao.toUpperCase()) {
-          return { status: "UNSAT", reason: `${pairId(p)} HUB airport does not match frozen anchor rotation`, days: [], calendarHash: null };
+          return { status: "UNSAT", reason: `${pairId(p)} HUB airport does not match frozen anchor rotation; scheduled=${anchor.icao} paired=${pairAirportSet.HUB.icao}`, days: [], calendarHash: null };
         }
       }
       newDrawIndex += 1;
@@ -212,7 +250,77 @@ export function solveV39Calendar(input: FrozenCalendarDesignInput): CalendarSolv
 
   const validation = validateV39Calendar(days, input);
   if (validation.length) return { status: "UNSAT", reason: validation.join("; "), days: [], calendarHash: null };
-  return { status: "SAT", reason: null, days, calendarHash: hash(days) };
+  return {
+    status: "SAT", reason: null, days,
+    // Distinct hash domain prevents passing an exploratory-design calendar
+    // as if it were the frozen five-anchor original study.
+    calendarHash: mode === "original-five" ? hash(days) :
+      hash({ studyVersion: mode === "draft-exploratory-three" ?
+        "V39_EXPLORATORY_THREE_ANCHOR_DRAFT_1" : "V39_EXPLORATORY_FOUR_ANCHOR_DRAFT_1",
+        anchorPool: input.anchorPool, days }),
+  };
+}
+
+/** Original production-facing contract: STILL exactly five distinct anchors. */
+export function solveV39Calendar(input: FrozenCalendarDesignInput): CalendarSolveResult {
+  return solveCalendarByAnchorPolicy(input, "original-five");
+}
+
+export type ThreeAnchorDraftCalendarResult = CalendarSolveResult & {
+  studyVersion: "V39_EXPLORATORY_THREE_ANCHOR_DRAFT_1";
+  researchScope: "selected_airport_time_operational_frame_only";
+  originalFiveAnchorGate2Passed: false;
+  operationalPhase6StartAuthorized: false;
+};
+/**
+ * RESEARCH-DESIGN-ONLY: tests whether the same crossover/calendar arithmetic
+ * is constructible with three verified anchors. Five crossover PAIRS still
+ * exist, but are NOT five independent airports. Requires a separately approved
+ * prospective methods/manifest amendment and authorization before live use.
+ * No production start controller imports this symbol as authorization.
+ */
+export function solveV39ThreeAnchorExploratoryDraft(
+  input: FrozenCalendarDesignInput,
+): ThreeAnchorDraftCalendarResult {
+  return {
+    ...solveCalendarByAnchorPolicy(input, "draft-exploratory-three"),
+    studyVersion: "V39_EXPLORATORY_THREE_ANCHOR_DRAFT_1",
+    researchScope: "selected_airport_time_operational_frame_only",
+    originalFiveAnchorGate2Passed: false,
+    operationalPhase6StartAuthorized: false,
+  };
+}
+
+export type FourAnchorDraftCalendarResult = CalendarSolveResult & {
+  studyVersion: "V39_EXPLORATORY_FOUR_ANCHOR_DRAFT_1";
+  researchScope: "four_anchor_stratified_operational_frame_only";
+  anchorIcaos: readonly ["WSSS", "OMAA", "SKBO", "YSSY"];
+  historicalYssyCreditReconciliationPassed: false;
+  historicalOriginalFiveAnchorGate2Passed: false;
+  operationalPhase6StartAuthorized: false;
+};
+/**
+ * RESEARCH-DESIGN-ONLY / NO PROVIDER SIDE EFFECTS. Versioned future plan:
+ * WSSS/OMAA/SKBO plus qualified YSSY; MMUN excluded from anchor rotation.
+ * Keeps 5 paired WINDOW comparisons despite only 4 distinct anchors, the
+ * 1 HUB + 2 MID + 1 REGIONAL slot allocation and all frozen time/budget
+ * constraints. Does NOT make this a confirmatory five-anchor study.
+ *
+ * This helper is NOT wired to Phase6 launch, the live calendar writer,
+ * or the paid canary. Formal sampling-scope + manifest review required.
+ */
+export function solveV39FourAnchorExploratoryDraft(
+  input: FrozenCalendarDesignInput,
+): FourAnchorDraftCalendarResult {
+  return {
+    ...solveCalendarByAnchorPolicy(input, "draft-exploratory-four"),
+    studyVersion: "V39_EXPLORATORY_FOUR_ANCHOR_DRAFT_1",
+    researchScope: "four_anchor_stratified_operational_frame_only",
+    anchorIcaos: ["WSSS", "OMAA", "SKBO", "YSSY"],
+    historicalYssyCreditReconciliationPassed: false,
+    historicalOriginalFiveAnchorGate2Passed: false,
+    operationalPhase6StartAuthorized: false,
+  };
 }
 
 export function validateV39Calendar(days: SolvedRunDay[], input: FrozenCalendarDesignInput): string[] {

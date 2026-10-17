@@ -47,6 +47,7 @@
     "v39:probe:stage1": "tsx scripts/v39_probe_stage1_v39.ts",
     "v39:probe:stage2": "tsx scripts/v39_probe_stage2_v39.ts",
     "v39:gate3:canary": "tsx scripts/v39_gate3_canary_v39.ts",
+    "v39:gate3:owner:read-only": "tsx scripts/v39_gate3_owner_readonly_v39.ts",
     "v39:gate05:pilot": "tsx scripts/v39_gate05_pilot_v39.ts",
     "v39:gate4:live-check": "tsx scripts/v39_gate4_live_v39.ts",
     "v39:gate5:population": "tsx scripts/v39_gate5_population_v39.ts",
