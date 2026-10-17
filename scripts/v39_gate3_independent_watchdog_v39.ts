@@ -76,7 +76,9 @@ export function validateGate3SidecarInputsV39(
   try{
     raw=readFileSync(x.authFile,"utf8");
     ledger=readFileSync(join("data-collection","evidence","ledgers",
-      "V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8");
+      "V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8") + "\n" +
+      readFileSync(join("data-collection","phase3",
+        "2026-10-16_GATE3_WSSS_AUTH_SHA_APPROVAL_ADDENDUM.md"),"utf8");
   }catch{stop("GATE3_SIDECAR_AUTH_OR_LEDGER_UNAVAILABLE")}
   if(sha256HexString(raw)!==x.authSha)
     stop("GATE3_SIDECAR_AUTH_SHA_MISMATCH");
