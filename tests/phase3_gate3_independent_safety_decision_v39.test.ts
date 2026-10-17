@@ -90,6 +90,14 @@ describe("independent Gate3 WSSS safety decision; pure, no provider mutations",(
     expect(a.decision).toBe("NO_EXACT_ACTIVE_SUBSCRIPTION");
     expect(a.exactOwnedSubscriptionId).toBeNull();
   });
+  it("stops ONLY our exact subscription if a foreign billable appears",()=>{
+    const a=decideGate3IndependentSafetyV39({
+      ...base,subscriptions:[exact,foreign]
+    });
+    expect(a.decision).toBe("DELETE_EXACT_OWNED");
+    expect(a.exactOwnedSubscriptionId).toBe(exact.id);
+    expect(a.reason).toBe("FOREIGN_ACTIVE_BILLABLE_CONTAMINATION");
+  });
   it("never guesses among two exact callback subscriptions",()=>{
     const a=decideGate3IndependentSafetyV39({
       ...base,subscriptions:[exact,{...exact,id:"another-exact"}]
