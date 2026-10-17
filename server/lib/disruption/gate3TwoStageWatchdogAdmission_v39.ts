@@ -15,7 +15,9 @@ import type {Gate3WatchdogLeaseScopeV39,Gate3WatchdogLeaseV39}
 const UTC=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const MAX_PREP_LEAD_MS=480_000;
 const MIN_PREP_LEAD_MS=180_000;
-const MAX_CREATE_LATENESS_MS=30_000;
+// Reserve up to 15s for CREATE response and SQL BIND under the sidecar
+// start+600s+30s rescue deadline; late arrival must be recorded as censored.
+const MAX_CREATE_LATENESS_MS=15_000;
 
 function validDate(d:Date):boolean {
   return d instanceof Date&&Number.isFinite(d.getTime());
