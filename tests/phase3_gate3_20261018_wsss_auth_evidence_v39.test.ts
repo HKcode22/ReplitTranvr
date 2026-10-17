@@ -9,12 +9,13 @@ import {reviewGate3LedgerBoundPreparationV39} from
 
 const authFile="data-collection/authorizations/V3.9_PHASE3_GATE3_AUTH_20261018_WSSS01.json";
 const ledgerFile="data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md";
+const approvalAddendum="data-collection/phase3/2026-10-16_GATE3_WSSS_AUTH_SHA_APPROVAL_ADDENDUM.md";
 const frozenSha="7ef03886961fa8a84677062862c675a00a1a6b646eb1407269be4e3831cb2746";
 const window="WSSS/departures/2026-10-18T03:00:00Z+600s";
 const id="AUTH-20261018-G3WSSS01";
 const preflightAt=new Date("2026-10-18T02:54:00Z");
 const raw=()=>readFileSync(authFile,"utf8");
-const ledger=()=>readFileSync(ledgerFile,"utf8");
+const ledger=()=>readFileSync(ledgerFile,"utf8")+"\n"+readFileSync(approvalAddendum,"utf8");
 const args=()=>({
   authArtifactRaw:raw(),expectedAuthId:id,
   expectedAirportFilterWindow:window,
