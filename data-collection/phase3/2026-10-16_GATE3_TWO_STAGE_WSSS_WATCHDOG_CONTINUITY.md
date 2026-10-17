@@ -50,3 +50,10 @@ Additional fail-closed source review fix: independent sidecar now checks runtime
 Before this checkpoint text edit, branch HEAD was 51dbeb8ce703613964f066f72b429bd7b747a13a. Recheck all **4 workflows on the final exact-HEAD** after this documentation commit, and do not borrow green status from an older SHA.
 
 Source seals are still FALSE, no production host/DB/provider mutation from this draft, and Gate3 NOT PASSED.
+
+
+## 2026-10-17 UTC — Actual provider CREATE last-moment safety review
+
+Source review found a real time-of-check/time-of-use race: Stage B may authenticate the GH lease and provider account, but the shared prepaid runner performs additional SQL source session authorization before the actual provider CREATE. A GH job can stop or a provider account can change between the original Stage B review and the POST. This is now mitigated in **source-only draft** by a new Gate3-specific beforeProviderCreate callback in the existing prepaid runner, called AFTER SQL source/session selection and IMMEDIATELY BEFORE POST, outside the ambiguous-CREATE catch path. The real WSSS operator rechecks exact in-progress GH Actions bot lease+heartbeat, the authorized UTC start through +15s, and strict 0-active provider inventory with identical initial credit balance (and operator cancellation), refusing with HOLD if any check fails. The callback is required for paid Gate3 when the source seal is eventually separately opened; Phase2 historical pathways remain unchanged. Pure exact UTC tests added. A failed preflight is NOT a remotely committed provider subscription, and the source PREPARED row requires reviewed recovery/no duplicate session.
+
+Corresponding new source edits: prepaidProbeWindow_v39.ts, gate3ActualExecutionOwner_v39.ts, scripts/v39_gate3_one_wsss_operator_v39.ts, gate3TwoStageWatchdogAdmission_v39.ts and its tests. Exact draft head immediately before this documentation commit: a3e196ef31a4f77098fc0ec2002676c2984f309f. The prior green three/four CI checks are superseded: **recheck latest exact commit for all four green workflows**. No live release, no WSSS provider charge, no production mutation, no Gate3 PASS yet.
