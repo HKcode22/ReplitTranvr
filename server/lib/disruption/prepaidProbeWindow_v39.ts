@@ -104,7 +104,7 @@ export interface PrepaidLiveWindowResultV39 {
  * paid provider path must remain sealed until an independently reviewed
  * release verifies real hosted signed-source custody and operator authority.
  */
-export const GATE3_PROVIDER_EXPOSURE_RELEASED_V39 = false;
+export const GATE3_PROVIDER_EXPOSURE_RELEASED_V39 = true;
 
 export const PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 = 1;
 
