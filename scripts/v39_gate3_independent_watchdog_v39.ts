@@ -149,7 +149,7 @@ export async function executeGate3WatchdogSidecarV39(
                o.icao,o.authorization_evidence_sha256,
                o.fixed_exposure_seconds,o.canary_credit_ceiling,
                s.session_id::text AS runtime_session_id,
-               s.owner_kind,s.provider_subscription_id
+               s.owner_kind,s.state AS runtime_state,s.provider_subscription_id
         FROM clean.phase3_gate3_canary_owner_v39 o
         LEFT JOIN clean.prepaid_probe_session_runtime s ON s.session_id=o.session_id
         WHERE o.session_id=$1::uuid
@@ -163,8 +163,11 @@ export async function executeGate3WatchdogSidecarV39(
         authorizationEvidenceSha256:String(z.authorization_evidence_sha256),
         fixedExposureSeconds:Number(z.fixed_exposure_seconds),
         canaryCreditCeiling:Number(z.canary_credit_ceiling),
+        // A persisted UNLOGGED row in failed/settling state is not an
+        // ACTIVE receiver. Treat it as lost while a paid sub remains alive.
         runtimeSessionVisible:z.runtime_session_id===x.sessionId&&
-          z.owner_kind==="phase3_credit_canary",
+          z.owner_kind==="phase3_credit_canary"&&
+          ["armed","active"].includes(String(z.runtime_state)),
         boundProviderSubscriptionId:z.provider_subscription_id===null
           ?null:String(z.provider_subscription_id),
       };
