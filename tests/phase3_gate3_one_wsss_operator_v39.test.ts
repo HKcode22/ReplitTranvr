@@ -37,6 +37,25 @@ describe("one WSSS Gate3 paid owner: exact scope AND no unsupported hard-cap rel
       expect(()=>parseGate3OperatorArgsV39(changed)).toThrow();
     }
   });
+  it("requires authenticated GitHub API capacity before reserving a paid session",async()=>{
+    const names=["V39_DATABASE_TARGET_CONFIRM","V39_DATABASE_RUNTIME_URL",
+      "AERODATABOX_API_KEY","GITHUB_TOKEN","GH_TOKEN"] as const;
+    const previous=Object.fromEntries(names.map(k=>[k,process.env[k]]));
+    process.env.V39_DATABASE_TARGET_CONFIRM="production";
+    process.env.V39_DATABASE_RUNTIME_URL="synthetic-offline-no-connection";
+    process.env.AERODATABOX_API_KEY="synthetic-offline-no-provider";
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.GH_TOKEN;
+    try{
+      await expect(executeOneWsssGate3OperatorV39(flags))
+        .rejects.toThrow("GATE3_OPERATOR_AUTHENTICATED_GITHUB_API_REQUIRED");
+    }finally{
+      for(const name of names){
+        if(previous[name]===undefined)delete process.env[name];
+        else process.env[name]=previous[name];
+      }
+    }
+  });
   it("blocks the real owner before provider or DB I/O if production target is not confirmed",async()=>{
     const previous=process.env.V39_DATABASE_TARGET_CONFIRM;
     process.env.V39_DATABASE_TARGET_CONFIRM="test-not-production";
