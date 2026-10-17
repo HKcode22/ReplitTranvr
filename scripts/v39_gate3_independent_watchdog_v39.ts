@@ -1,9 +1,10 @@
 /**
  * Manual GitHub Actions WSSS Gate3 SAFETY SIDECAR, not an experiment owner.
  *
- * PAID/MUTATING RELEASE INDEPENDENTLY SEALED. A workflow-dispatch alone can
- * never cause provider GET/DELETE, SQL mutation or subscription CREATE until
- * a separately reviewed source release toggles this constant.
+ * SOURCE-RELEASE CANDIDATE: manual workflow only, pinned main SHA, exact AUTH,
+ * prepared owner, production environment and independently checked host.
+ * Sidecar has NO subscription CREATE path; it can only inspect and stop
+ * the exact owned subscription after all authorization checks.
  *
  * Once reviewed/released, the sidecar must ARM before the paid-owner CREATE:
  * exact checked-in AUTH SHA, published source, prepared LOGGED owner and
@@ -34,7 +35,7 @@ import {publishGate3WatchdogLeaseV39,
   from "../server/lib/disruption/gate3WatchdogLiveLease_v39";
 
 /** Must never be an ENV/CLI flag. Requires separate reviewed source change. */
-export const GATE3_WATCHDOG_LIVE_RELEASED_V39=false;
+export const GATE3_WATCHDOG_LIVE_RELEASED_V39=true;
 const PINNED_BASE="https://replit-tranvr--hk84164.replit.app";
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const SHA=/^[a-f0-9]{64}$/;
