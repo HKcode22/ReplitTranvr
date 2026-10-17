@@ -1,6 +1,7 @@
 /**
  * Direct Gate3 runner regression: no DB session review, provider SDK, or
- * callback IO may occur while the source-level paid release seal is false.
+ * callback IO may occur without a freshly authenticated independent watchdog
+ * before-CREATE hook even if the source release switch is true.
  * Both potentially sensitive dependencies are mock-blocked in this test.
  */
 import {randomUUID} from "node:crypto";
@@ -23,9 +24,9 @@ vi.mock("../server/lib/disruption/aerodataboxLimiter_v3",async load=>{
    listSubscriptionsStrictWithRetry:forbidden};
 });
 
-describe("Gate3 direct runner paid-release seal: refuse before any IO",()=>{
+describe("Gate3 direct runner: mandatory independent watchdog hook before IO",()=>{
  it("rejects a syntactically valid synthetic prearmed Gate3 session before DB or provider",async()=>{
-   expect(GATE3_PROVIDER_EXPOSURE_RELEASED_V39).toBe(false);
+   expect(GATE3_PROVIDER_EXPOSURE_RELEASED_V39).toBe(true);
    const id=randomUUID();
    const input:PrepaidLiveWindowInputV39={
      ownerKind:"phase3_credit_canary",
@@ -45,6 +46,6 @@ describe("Gate3 direct runner paid-release seal: refuse before any IO",()=>{
      deferCleanup:true,
    };
    await expect(runPrepaidLiveWindowV39(input)).rejects.toThrow(
-     "GATE3_PREARMED_PROVIDER_EXPOSURE_PENDING_OWNER_AND_HOST_PARITY");
+     "GATE3_FRESH_WATCHDOG_BEFORE_CREATE_REQUIRED");
  });
 });

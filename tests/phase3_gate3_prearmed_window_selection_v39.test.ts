@@ -92,7 +92,7 @@ describe("prepaid shared runner selects original Phase2 or prepared Gate3 identi
       expect(h.arms).toBe(0);
     }
   });
-  it("runner integration remains hard-held before provider create for Gate3",()=>{
+  it("released Gate3 runner still requires exact prepared identity and fresh independent watchdog before CREATE",()=>{
     const w=readFileSync("server/lib/disruption/prepaidProbeWindow_v39.ts","utf8");
     const rt=readFileSync("server/lib/disruption/prepaidProbeRuntime_v39.ts","utf8");
     const chosen=w.indexOf("await selectPrepaidWindowSessionV39(input,");
@@ -102,7 +102,11 @@ describe("prepaid shared runner selects original Phase2 or prepared Gate3 identi
     expect(hold).toBeGreaterThan(0);
     expect(hold).toBeLessThan(chosen);
     expect(create).toBeGreaterThan(chosen);
-    expect(w).toContain("GATE3_PROVIDER_EXPOSURE_RELEASED_V39 = false");
+    expect(w).toContain("GATE3_PROVIDER_EXPOSURE_RELEASED_V39 = true");
+    expect(w).toContain("GATE3_FRESH_WATCHDOG_BEFORE_CREATE_REQUIRED");
+    const immediateWatchdogCheck=w.indexOf("await input.beforeProviderCreate!();");
+    expect(immediateWatchdogCheck).toBeGreaterThan(chosen);
+    expect(immediateWatchdogCheck).toBeLessThan(create);
     expect(w).not.toContain("armPrepaidProbeSessionV39({\n    ownerKind: input.ownerKind");
     expect(rt).toContain("GATE3_GENERIC_PHASE2_SESSION_ARM_FORBIDDEN");
     expect(w).toContain("reviewGate3OwnerPreflightV39(client,");

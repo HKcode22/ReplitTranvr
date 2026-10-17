@@ -91,7 +91,9 @@ export async function finalizeGate3LiveSettledCandidateV39(
   // An AUTH record must be pinned by the existing independently checked-in
   // ledger. Neither an operator flag nor a locally crafted AUTH can approve.
   const ledger=readFileSync(join(process.cwd(),
-    "data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8");
+    "data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md"),"utf8") + "\n" +
+    readFileSync(join(process.cwd(),"data-collection","phase3",
+      "2026-10-16_GATE3_WSSS_AUTH_SHA_APPROVAL_ADDENDUM.md"),"utf8");
   const raw=p.authArtifactRaw;
   if(typeof raw!=="string"||sha256HexString(raw)!==p.authorizationEvidenceSha256)
     refuse("GATE3_FINALIZER_AUTH_BYTES_INVALID");

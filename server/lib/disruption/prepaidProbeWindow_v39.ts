@@ -104,7 +104,7 @@ export interface PrepaidLiveWindowResultV39 {
  * paid provider path must remain sealed until an independently reviewed
  * release verifies real hosted signed-source custody and operator authority.
  */
-export const GATE3_PROVIDER_EXPOSURE_RELEASED_V39 = false;
+export const GATE3_PROVIDER_EXPOSURE_RELEASED_V39 = true;
 
 export const PROBE_DELIVERY_COMPLETENESS_FLOOR_V39 = 1;
 
@@ -468,6 +468,8 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
       // cannot substitute an independently hash-approved AUTH artifact.
       const ledger=readFileSync(join(
         process.cwd(),"data-collection","evidence","ledgers","V3.9_RUN_REPORTS_AND_EVIDENCE.md",
+      ),"utf8") + "\n" + readFileSync(join(process.cwd(),
+        "data-collection","phase3","2026-10-16_GATE3_WSSS_AUTH_SHA_APPROVAL_ADDENDUM.md",
       ),"utf8");
       const client=await v39Pool.connect();
       try {

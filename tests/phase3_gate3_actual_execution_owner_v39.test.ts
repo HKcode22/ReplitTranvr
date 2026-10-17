@@ -85,7 +85,7 @@ function pool(){
   return {db,calls,released};
 }
 
-describe("Gate3 integrated ACTUAL window handoff is sealed pending real host+signed source",()=>{
+describe("Gate3 integrated ACTUAL window handoff is watchdog-gated before paid IO",()=>{
   it("derives the actual shared prepaid runner's ONE prearmed UUID/scope; no Phase2 fallback",()=>{
     const p=buildGate3ExactPaidWindowV39(input);
     expect(p).toMatchObject({
@@ -122,10 +122,10 @@ describe("Gate3 integrated ACTUAL window handoff is sealed pending real host+sig
     }
   });
 
-  it("actual provider-capable run is blocked BEFORE any database, SDK or subscription",async()=>{
+  it("actual provider-capable run requires a before-CREATE watchdog hook BEFORE database or provider IO",async()=>{
     const d=pool();
     await expect(executeGate3ActualWindowV39(d.db,input))
-      .rejects.toThrow("GATE3_OWNER_PAID_PATH_NOT_RELEASED_BEFORE_ANY_IO");
+      .rejects.toThrow("GATE3_FRESH_WATCHDOG_BEFORE_CREATE_REQUIRED");
     expect(d.calls).toEqual([]);
   });
 

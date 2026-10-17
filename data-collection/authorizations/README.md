@@ -1,10 +1,16 @@
 > **Source integrity:** Original historical files are preserved byte-for-byte at the linked locations. Historical receipts and runbooks are not new authorization for paid execution or deployment.
 
-# Historical authorizations — retained records, not active approvals
+# Authorization index — historical evidence and one prospective Gate3 AUTH
 
-**Historical record index, NOT an active AUTH grant.** These are **32 unchanged old authorization JSON records**, grouped by their gate and phase, and retained for provenance. The historical [P25 AUTH](V3.9_PHASE2G_AUTH_20261013_P2G25.json) is now **in this folder** following merged Wave B PR #46, not in the old root. Existing files do not prove current signature validity or grant permission to spend, deploy or run again. [Study Hub](../STUDY_HUB.md) · [Folder Guide](../FOLDER_GUIDE.md).
+**Historical records are NOT active AUTH grants.** The 32 unchanged old authorization JSON records below are grouped by phase and retained for provenance. A separate, explicitly time-bound **prospective Phase3/Gate3 AUTH** is indexed first and cannot initiate a paid run by itself. The historical [P25 AUTH](V3.9_PHASE2G_AUTH_20261013_P2G25.json) is now **in this folder** following merged Wave B PR #46, not in the old root. Existing files do not prove current signature validity or grant permission to spend, deploy or run again. [Study Hub](../STUDY_HUB.md) · [Folder Guide](../FOLDER_GUIDE.md).
 
 The original JSON blobs are physically relocated into this repository tree, without rewriting historical authorization content. Each link resolves to the new documented storage location, while the historical original `SEPmd/` path remains recorded in the source catalog. Evaluate signature, SHA, account, scope, budget, UTC time, single-flight protocol, and published-runtime source binding independently using current approved code and ledgers.
+
+## Phase 3 / Gate 3 — prospective one-time WSSS (1; paid run NOT STARTED)
+
+- [`V3.9_PHASE3_GATE3_AUTH_20261018_WSSS01.json`](V3.9_PHASE3_GATE3_AUTH_20261018_WSSS01.json) — `AUTH-20261018-G3WSSS01`, owner-confirmed Saturday Oct 17 2026 at 8:00 PM PDT / Sunday Oct 18 03:00 UTC; ONE WSSS departures 600-second canary; 50-credit **soft** stop (provider has no guaranteed hard cap, possible overshoot), no paid REST or refill, and no repeat CREATE. Exact SHA256 `7ef03886961fa8a84677062862c675a00a1a6b646eb1407269be4e3831cb2746` approved in the new [Phase3 SHA approval addendum](../phase3/2026-10-16_GATE3_WSSS_AUTH_SHA_APPROVAL_ADDENDUM.md), read alongside the byte-preserved historical evidence ledger. Approval is NOT proof that protected GitHub workflow is ARMED, that the receiver is republished, that provider account is clear, or that the run already happened. See [scientific tolerance and one-canary runbook](../phase3/2026-10-16_GATE3_WSSS_SCIENTIFIC_TOLERANCE_AND_OCT17_LIVE_RUNBOOK.md). Time-bound AUTH expires Sunday 04:00 UTC; any late start requires a newly reviewed explicit authorization, not a silent extension.
+
+## Historical records (32; no active authorization)
 
 ## Gate 0 (1)
 

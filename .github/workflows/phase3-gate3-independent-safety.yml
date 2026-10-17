@@ -1,6 +1,6 @@
-name: Phase3 Gate3 WSSS Independent Safety Sidecar (Manual, Sealed)
+name: Phase3 Gate3 WSSS Independent Safety Sidecar (Manual, Source-Reviewed)
 # NO schedule, push or PR triggers. This is not the paid OWNER and cannot CREATE
-# subscriptions. Its source gate is hardcoded FALSE until independently reviewed.
+# subscriptions. All real use requires exact AUTH, protected environment and pinned published SHA.
 on:
   workflow_dispatch:
     inputs:
@@ -106,9 +106,8 @@ jobs:
           EXPECTED: ${{ inputs.expected_head }}
         run: |
           set -Eeuo pipefail
-          # As checked in, this MUST return GATE3_SIDECAR_SOURCE_NOT_RELEASED
-          # BEFORE ANY DB or provider GET/DELETE call. Code review separately
-          # required before enabling. NEVER use this job to CREATE a sub.
+          # Prechecks, reviewed one-run AUTH, published SHA and prepared UUID
+          # are mandatory. NEVER use this job to CREATE a subscription.
           npx tsx scripts/v39_gate3_independent_watchdog_v39.ts \
             --confirm WATCH_G3_WSSS_EXACT_NO_CREATE \
             --head "$EXPECTED" \
@@ -125,7 +124,7 @@ jobs:
           {
             echo '### Gate3 independent safety sidecar'
             echo '- No CREATE code exists in this job.'
-            echo '- No provider deletion is permitted while the source-level release seal is FALSE.'
+            echo '- Safety deletion is allowed ONLY for the exact owned subscription after reviewed AUTH, host and session verification.'
             echo '- A queued/running Actions job is NOT an ARMED acknowledgment.'
             echo '- An ARMED receipt is required before any separate paid-owner CREATE.'
             echo '- A STOP_VERIFIED receipt is NOT final credit reconciliation or Gate3 scientific PASS.'
