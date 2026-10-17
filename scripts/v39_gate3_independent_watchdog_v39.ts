@@ -29,6 +29,9 @@ import {defaultWebhookUrl,getBalanceEvidenceStrict,
 import {runGate3IndependentWatchdogTickV39,
   type Gate3WatchdogOwnerRowV39}
   from "../server/lib/disruption/gate3IndependentWatchdogTick_v39";
+import {publishGate3WatchdogLeaseV39,
+  type Gate3WatchdogLeaseV39}
+  from "../server/lib/disruption/gate3WatchdogLiveLease_v39";
 
 /** Must never be an ENV/CLI flag. Requires separate reviewed source change. */
 export const GATE3_WATCHDOG_LIVE_RELEASED_V39=false;
@@ -110,6 +113,7 @@ export async function executeGate3WatchdogSidecarV39(
      !process.env.V39_DATABASE_RUNTIME_URL||
      !process.env.AERODATABOX_API_KEY||
      !process.env.AERODATABOX_WEBHOOK_SECRET||
+     !process.env.GITHUB_TOKEN||
      !process.env.GITHUB_SHA||
      process.env.V39_DATABASE_TARGET_CONFIRM!=="production"||
      process.env.WEBHOOK_BASE_URL!==PINNED_BASE)
@@ -188,17 +192,37 @@ export async function executeGate3WatchdogSidecarV39(
        baseline-50<1000||balance.quota.apiUnitsRemaining<1)
       stop("GATE3_SIDECAR_BASELINE_INVALID");
 
-    // Owner MUST externally verify this live run's ARMED receipt before CREATE.
-    // No provider balance values, webhook secret or raw provider IDs are logged.
+    // The Actions BOT creates one durable metadata-only lease comment after
+    // exact prearm checks. The paid owner independently verifies the bot actor,
+    // exact AUTH/session/run/SHA, freshness AND in_progress GitHub job.
+    // No provider account values, raw IDs or secret URL are ever published.
+    const runId=Number(process.env.GITHUB_RUN_ID);
+    if(!Number.isSafeInteger(runId)||runId<=0)
+      stop("GATE3_SIDECAR_GITHUB_RUN_ID_INVALID");
+    const lease=(status:Gate3WatchdogLeaseV39["status"]):Gate3WatchdogLeaseV39=>({
+      schema:"v39.gate3.wsss-watchdog-lease.v1",
+      status,githubRunId:runId,expectedGitHead:x.expectedGitHead,
+      authSha256:x.authSha,sessionId:x.sessionId,startUtc:x.startUtc,
+      heartbeatUtc:new Date().toISOString(),
+      providerCreatesByWatchdog:0,hardCreditLimitGuaranteed:false,
+    });
+    const token=process.env.GITHUB_TOKEN;
+    let leaseCommentId=await publishGate3WatchdogLeaseV39(token,lease("ARMED"));
+    let lastHeartbeatAt=Date.now();
     console.log(JSON.stringify({
-      schema:"v39.gate3.independent-watchdog-armed.v1",
+      schema:"v39.gate3.independent-watchdog-armed.v2",
       status:"ARMED_MONITOR_ONLY_NO_CREATE",
-      github_run_id:process.env.GITHUB_RUN_ID,
+      github_run_id:runId,github_comment_id:leaseCommentId,
       source_sha:x.expectedGitHead,auth_id:x.authId,
       session_id:x.sessionId,start_utc:x.startUtc,
       paid_create_by_sidecar:0,
       hard_credit_cap_guaranteed:false
     }));
+    const heartbeat=async(state:Gate3WatchdogLeaseV39["status"])=>{
+      leaseCommentId=await publishGate3WatchdogLeaseV39(token,lease(state),
+        leaseCommentId);
+      lastHeartbeatAt=Date.now();
+    };
     const scope={
       sessionId:x.sessionId,authSha256:x.authSha,
       callbackUrl:callback,startUtc:x.startUtc,
@@ -232,9 +256,21 @@ export async function executeGate3WatchdogSidecarV39(
         lastStatus=tick.status;
       }
       if(tick.ownsProviderSubscription)haveSeenOwned=true;
-      if(tick.status==="STOP_VERIFIED")
+      // GH API heartbeat failure cannot change subscription ownership. It
+      // makes the paid owner's 25s lease stale and must cause it to STOP; the
+      // independent sidecar itself keeps monitoring and attempting safe DELETE.
+      if(Date.now()-lastHeartbeatAt>=15000){
+        await heartbeat("ACTIVE").catch(()=>{
+          console.error(JSON.stringify({status:"HOLD",
+            reason:"GATE3_WATCHDOG_LEASE_HEARTBEAT_UNAVAILABLE"}));
+        });
+      }
+      if(tick.status==="STOP_VERIFIED"){
+        await heartbeat("STOPPED").catch(()=>undefined);
         return {status:"STOP_VERIFIED_NOT_PAID_GATE3_PASS",providerCreateCount:0};
+      }
       if(tick.status==="ZERO_EXACT_SUBSCRIPTIONS"&&haveSeenOwned){
+        await heartbeat("STOPPED").catch(()=>undefined);
         // Do not claim settlement. Owner may have performed its own DELETE.
         return {status:"OWNED_NOT_ACTIVE_SETTLEMENT_SEPARATE",providerCreateCount:0};
       }
@@ -247,8 +283,10 @@ export async function executeGate3WatchdogSidecarV39(
       deleteExact:deleteSubscriptionVerifiedStrict,now:()=>new Date()
     });
     if(final.status==="STOP_VERIFIED"||
-       final.status==="ZERO_EXACT_SUBSCRIPTIONS")
+       final.status==="ZERO_EXACT_SUBSCRIPTIONS"){
+      await heartbeat("STOPPED").catch(()=>undefined);
       return {status:"WATCH_ENDED_EXACT_ABSENCE_NOT_SETTLEMENT",providerCreateCount:0};
+    }
     stop("GATE3_SIDECAR_EXPIRED_WITH_UNCONFIRMED_SUBSCRIPTION");
   }finally{await pool.end()}
 }
