@@ -120,3 +120,12 @@ export async function awaitGate3LiveWatchdogAndStartV39(
   if(deps.shouldStop())
     throw Error("GATE3_TWO_STAGE_OWNER_REQUESTED_STOP");
 }
+
+/** Last-moment pure UTC check for the runner's after-DB, before-POST gate. */
+export function assertGate3BeforeCreateUtcV39(startUtc:string,now:Date):void {
+  const start=Date.parse(startUtc);
+  if(!UTC.test(startUtc)||!Number.isFinite(start)||!validDate(now)||
+     now.getTime()<start||
+     now.getTime()>start+MAX_CREATE_LATENESS_MS)
+    throw Error("GATE3_TWO_STAGE_CREATE_OUTSIDE_EXACT_UTC_BOUNDARY");
+}
