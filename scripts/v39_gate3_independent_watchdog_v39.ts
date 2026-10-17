@@ -69,7 +69,7 @@ export function validateGate3SidecarInputsV39(
   const start=Date.parse(x.startUtc);
   if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(x.startUtc)||
      !Number.isFinite(start)||start<now.getTime()-15000||
-     start>now.getTime()+180000)
+     start>now.getTime()+600000)
     stop("GATE3_SIDECAR_NOT_IMMINENT");
   let raw:string,ledger:string;
   try{
