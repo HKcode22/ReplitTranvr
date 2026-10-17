@@ -1,0 +1,131 @@
+name: Phase3 Gate3 WSSS Independent Safety Sidecar (Manual, Sealed)
+# NO schedule, push or PR triggers. This is not the paid OWNER and cannot CREATE
+# subscriptions. Its source gate is hardcoded FALSE until independently reviewed.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        required: true
+        description: 'Exact WATCH_G3_WSSS_EXACT_NO_CREATE'
+        type: string
+      expected_head:
+        required: true
+        description: 'Reviewed main commit SHA'
+        type: string
+      auth_id:
+        required: true
+        type: string
+      auth_file:
+        required: true
+        description: 'Exact checked-in Gate3 AUTH JSON path'
+        type: string
+      auth_sha:
+        required: true
+        description: 'Exact checked-in AUTH SHA256'
+        type: string
+      session_id:
+        required: true
+        description: 'Prepared Gate3 owner UUID'
+        type: string
+      start_utc:
+        required: true
+        description: 'Exact imminent UTC start YYYY-MM-DDTHH:MM:SSZ'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase3-gate3-one-wsss-independent-safety
+  cancel-in-progress: false
+
+jobs:
+  independently-monitor-owned-subscription:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirm == 'WATCH_G3_WSSS_EXACT_NO_CREATE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Reuse existing explicitly protected paid environment only for the
+    # independent safety job; no other branch or environment may run.
+    environment: phase2g-paid
+    env:
+      V39_DATABASE_TARGET_CONFIRM: production
+      V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+      AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+      WEBHOOK_BASE_URL: https://replit-tranvr--hk84164.replit.app
+
+    steps:
+      - name: Refuse non-pinned source BEFORE using secrets
+        shell: bash
+        env:
+          EXPECTED: ${{ inputs.expected_head }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$EXPECTED" =~ ^[0-9a-f]{40}$ ]] || exit 2
+          [[ "$EXPECTED" == "$GITHUB_SHA" ]] || exit 2
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_head }}
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Pinned npm dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Exact AUTH and UUID shape (no provider side effects)
+        shell: bash
+        env:
+          AUTH_ID: ${{ inputs.auth_id }}
+          AUTH_FILE: ${{ inputs.auth_file }}
+          AUTH_SHA: ${{ inputs.auth_sha }}
+          SID: ${{ inputs.session_id }}
+          START: ${{ inputs.start_utc }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$AUTH_ID" =~ ^AUTH-[0-9]{8}-[A-Z0-9]+$ ]] || exit 2
+          [[ "$AUTH_FILE" =~ ^data-collection/authorizations/[A-Za-z0-9_.-]+\.json$ ]] || exit 2
+          [[ "$AUTH_FILE" != *'..'* ]] || exit 2
+          [[ "$AUTH_SHA" =~ ^[a-f0-9]{64}$ ]] || exit 2
+          [[ "$SID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]] || exit 2
+          [[ "$START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || exit 2
+          [[ -f "$AUTH_FILE" ]] || exit 2
+          git ls-files --error-unmatch -- "$AUTH_FILE" >/dev/null
+          test "$(sha256sum "$AUTH_FILE" | awk '{print $1}')" = "$AUTH_SHA" || exit 2
+      - name: Execute separately reviewed source-sealed safety sidecar
+        shell: bash
+        env:
+          AUTH_ID: ${{ inputs.auth_id }}
+          AUTH_FILE: ${{ inputs.auth_file }}
+          AUTH_SHA: ${{ inputs.auth_sha }}
+          SID: ${{ inputs.session_id }}
+          START: ${{ inputs.start_utc }}
+          EXPECTED: ${{ inputs.expected_head }}
+        run: |
+          set -Eeuo pipefail
+          # As checked in, this MUST return GATE3_SIDECAR_SOURCE_NOT_RELEASED
+          # BEFORE ANY DB or provider GET/DELETE call. Code review separately
+          # required before enabling. NEVER use this job to CREATE a sub.
+          npx tsx scripts/v39_gate3_independent_watchdog_v39.ts \
+            --confirm WATCH_G3_WSSS_EXACT_NO_CREATE \
+            --head "$EXPECTED" \
+            --auth-id "$AUTH_ID" \
+            --auth-file "$AUTH_FILE" \
+            --auth-sha "$AUTH_SHA" \
+            --session-id "$SID" \
+            --start-utc "$START" \
+            --callback-base "$WEBHOOK_BASE_URL"
+      - name: Record conservative safety summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Gate3 independent safety sidecar'
+            echo '- No CREATE code exists in this job.'
+            echo '- No provider deletion is permitted while the source-level release seal is FALSE.'
+            echo '- A queued/running Actions job is NOT an ARMED acknowledgment.'
+            echo '- An ARMED receipt is required before any separate paid-owner CREATE.'
+            echo '- A STOP_VERIFIED receipt is NOT final credit reconciliation or Gate3 scientific PASS.'
+            echo '- Unknown stop/owner/provider state requires independent manual recovery.'
+          } >> "$GITHUB_STEP_SUMMARY"
