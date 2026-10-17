@@ -327,6 +327,19 @@ export async function waitForPrepaidProbeAccountingQuiescenceV39(
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const LIVE_PROVIDER_BALANCE_POLL_MS_V39 = 60_000;
+const GATE3_PROVIDER_BALANCE_POLL_MS_V39 = 5_000;
+/**
+ * Gate3 is one <=50-credit SOFT-stop candidate at a busy airport.
+ * Use faster FREE provider balance reads during Gate3 only. This reduces
+ * detection latency but can never enforce a provider-side hard spend cap:
+ * sent flight items may be billed between polls or before DELETE completes.
+ * Historical Phase2 cadence and scoring remain unchanged.
+ */
+export function providerBalancePollMsV39(owner:PrepaidProbeOwnerKindV39):number {
+  return owner==="phase3_credit_canary"
+    ? GATE3_PROVIDER_BALANCE_POLL_MS_V39
+    : LIVE_PROVIDER_BALANCE_POLL_MS_V39;
+}
 const LIVE_PROVIDER_BALANCE_FAILED_POLL_LIMIT_V39 = 3;
 
 async function getBalanceWithTransientRetryV39(): Promise<Awaited<ReturnType<typeof getBalance>>> {
@@ -598,12 +611,13 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
 
     const internal = await prepaidProbeInternalCreditsV39(session.sessionId);
 
-    // The 5-second watchdog remains local and protects the soft cap from
-    // received SEND evidence. Provider balance is a control-plane cross-check,
-    // not something we need to hammer every watchdog tick.
+    // The local watchdog checks SEND ledger continuously. During Gate3 also
+    // check the independent provider balance at most once per 5s to reduce
+    // soft-budget overshoot risk; a 5s poll cannot be a hard provider cap.
     if (Date.now() >= nextProviderBalancePollAt) {
       const balance = await getBalanceWithTransientRetryV39();
-      nextProviderBalancePollAt = Date.now() + LIVE_PROVIDER_BALANCE_POLL_MS_V39;
+      nextProviderBalancePollAt =
+        Date.now() + providerBalancePollMsV39(input.ownerKind);
       if (balance) {
         consecutiveFailedProviderBalancePolls = 0;
 

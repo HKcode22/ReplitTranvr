@@ -6,9 +6,11 @@
  * GATE3_PROVIDER_EXPOSURE_RELEASED_V39=false. Never use legacy credit_canary.
  *
  * The provider API has no server-side maximum-credit subscription parameter.
- * A local 5s/60s watchdog can reduce but NOT ABSOLUTELY CAP consumption:
- * therefore no run may proceed on an owner-provided strict <=50 credit budget
- * without an independent, reviewed bounded-loss policy / provider hard limit.
+ * A local 5s watchdog and independent safety owner can REDUCE exposure but
+ * cannot enforce a provider-side 50-credit hard cap. The user explicitly
+ * authorized a 50-credit SOFT stopping target with possible overrun, not an
+ * unlimited subscription. Launch remains separately sealed until the actual
+ * independent watchdog is implemented, reviewed and started.
  * Source enablement and existing AUTH hash check are necessary, NOT sufficient.
  */
 import "dotenv/config";
@@ -61,10 +63,11 @@ export function parseGate3OperatorArgsV39(argv:readonly string[]):Gate3OperatorA
 
 function stop(code:string):never {throw Error(code)}
 /**
- * This function is deliberately not enabled for production as part of PR55.
- * The budget is a negotiated maximum, while flight bursts can incur charges
- * before the watchdog detects them. Do not claim a strict <=50 guarantee.
+ * Not executable until a reviewed independent process can observe/DELETE the
+ * exact owned subscription. The 50-credit value remains a SOFT stop threshold
+ * and an overrun may still FAIL exact <=50 Gate3 scoreability.
  */
+export const GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39=false;
 export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Promise<Readonly<{
   status:string;sessionId:string|null;paidCanaryCertified:false;
   anotherRunAuthorized:false;
@@ -72,14 +75,13 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
   // ZERO I/O when source seal is CLOSED.
   if(!GATE3_PROVIDER_EXPOSURE_RELEASED_V39)
     stop("GATE3_OPERATOR_SOURCE_SEAL_CLOSED_BEFORE_IO");
-  // Fail closed independently until an actual provider-side credit cap or an
-  // explicitly approved possible overshoot policy is present. Never implement
-  // this as an environment toggle or an unchecked operator boolean.
-  stop("GATE3_OPERATOR_PROVIDER_HARD_CREDIT_CEILING_NOT_SUPPORTED_HOLD");
+  // User accepted possible overrun, but one isolated watchdog PROCESS must be
+  // running and reviewed first. This source-level stop is NOT an ENV override.
+  if(!GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39)
+    stop("GATE3_OPERATOR_INDEPENDENT_WATCHDOG_NOT_RELEASED_HOLD");
 
-  // This branch documents the reviewed composition but remains unreachable
-  // while exact 50-credit HARD budget protection has not been established.
-  // The same explicit AUTH/session verification still applies.
+  // Even after watchdog release, full human AUTH/source and session checks
+  // remain mandatory; no extra subscription or retry is permitted.
   const args=parseGate3OperatorArgsV39(argv);
   if(process.env.V39_DATABASE_TARGET_CONFIRM!=="production"||
      !process.env.V39_DATABASE_RUNTIME_URL||

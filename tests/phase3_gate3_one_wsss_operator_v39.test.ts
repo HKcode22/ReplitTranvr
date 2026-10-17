@@ -1,6 +1,7 @@
 import {describe,expect,it} from "vitest";
 import {
   GATE3_OPERATOR_ONE_CANARY_SCOPE_V39,
+  GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39,
   parseGate3OperatorArgsV39,
   executeOneWsssGate3OperatorV39
 } from "../scripts/v39_gate3_one_wsss_operator_v39";
@@ -22,6 +23,7 @@ describe("one WSSS Gate3 paid owner: exact scope AND no unsupported hard-cap rel
       icao:"WSSS",credits:50,seconds:600
     });
     expect(GATE3_OPERATOR_ONE_CANARY_SCOPE_V39.maxPaidCreates).toBe(1);
+    expect(GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39).toBe(false);
   });
   it("refuses altered airport/period/budget/commit before any provider operation",()=>{
     for(const [key,newValue] of [
