@@ -26,6 +26,12 @@ STROBE observational reporting references:
 - https://www.strobe-statement.org/fileadmin/Strobe/uploads/checklists/STROBE_checklist_v4_combined.pdf — addresses missingness and sensitivity analysis, does not impose a universal zero-missing rule.
 - https://pmc.ncbi.nlm.nih.gov/articles/PMC2636253/ — report numbers with missing variables, analytical handling and sensitivity.
 
+## One concrete GitHub watchdog heartbeat prerequisite (Oct16 source review)
+
+The Replit owner makes authenticated GitHub REST calls to check both workflow run state and the Actions-bot lease issue comment **at least every 5 seconds** during the wait+live period. Without authentication, GitHub's official public REST limit is **60 calls/hour**, far short of the hundreds needed. Source now fails closed **BEFORE** Stage A PREPARED/SQL/provider work if neither `GITHUB_TOKEN` nor `GH_TOKEN` is present. Prefer an existing authenticated **Replit Shell** GitHub CLI `GH_TOKEN` exported only in the operator process. Do not store or print its value in the GitHub issue, Replit deployment logs, shell command trace, or chat. The separate GitHub Actions sidecar automatically receives its own `GITHUB_TOKEN`. Authentic GitHub API lease/run validation remains mandatory; token existence by itself is NOT authentication proof.
+
+Before Stage A, on Replit Shell with `set +x`, use `gh auth status` and `gh api rate_limit --jq '.resources.core | {limit,remaining}'` (the output is only numeric); if authenticated remaining budget is inadequate for hundreds of checks, HOLD rather than run. For operator invocation, `export GH_TOKEN="$(gh auth token)"` can securely pass the existing CLI credential to Node if `gh auth token` succeeds, without printing it. GitHub docs: https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api (unauthenticated 60/h, normal authenticated 5000/h, GitHub Actions built-in token 1000/h per repo).
+
 ## Actual operator sequence for Saturday — no Replit AI Agent
 
 1. **Now / prior to window:** exact-head CI for the PR with this frozen AUTH and SHA ledger; human review, merge once. Save final **main** commit SHA after merge. Do NOT treat earlier PR60 head tests as tests of the new AUTH commit.
