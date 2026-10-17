@@ -82,7 +82,7 @@ describe("Gate3 two-stage watchdog owner admission (all offline)",()=>{
     expect(f.stats().providerReads).toBe(0);
   });
   it("HOLD on startup after UTC allowance, no provider read",async()=>{
-    const f=fake(Date.parse(start)+31_000);
+    const f=fake(Date.parse(start)+16_000);
     await expect(awaitGate3LiveWatchdogAndStartV39(scope,1600,f.deps))
       .rejects.toThrow("ARMED_TOO_LATE");
     expect(f.stats().providerReads).toBe(0);
