@@ -230,7 +230,11 @@ export async function executeGate3WatchdogSidecarV39(
     };
     // Grace AFTER target 600s allows continuing recovery if owner disappears;
     // GitHub workflow has a separate 25-minute total job timeout.
-    const stopAfter=auth.start+900_000;
+    // UTC start is the earliest allowed CREATE. The 30s bounded activation
+    // jitter permits a full 600s owner-controlled subscribed interval without
+    // marking a normal network/BIND lag as early rescue. Total rescue grace
+    // remains 300s, and this watchdog NEVER creates a subscription.
+    const stopAfter=auth.start+930_000;
     let lastStatus="",haveSeenOwned=false;
     while(Date.now()<stopAfter){
       const tick=await runGate3IndependentWatchdogTickV39(scope,{
