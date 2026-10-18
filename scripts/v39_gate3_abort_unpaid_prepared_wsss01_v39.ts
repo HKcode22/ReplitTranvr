@@ -32,6 +32,14 @@ const OLD_WINDOW="WSSS/departures/2026-10-18T03:00:00Z+600s";
 const CONFIRM="ABORT_UNPAID_PREPARED_WSSS01_NO_PROVIDER_MUTATIONS";
 const HEAD=/^[a-f0-9]{40}$/;
 
+// The shared admission query uses LIMIT 1 (sufficient to block NEW sources).
+// Recovery must detect *another* unsettled owner before terminalizing the
+// original; LIMIT 1 would conceal a second row. Read at most two.
+export const GATE3_UNPAID_ABORT_UNSETTLED_SQL_V39 =
+  GATE3_PRIOR_OWNER_ADMISSION_SQL_V39.replace(/\bLIMIT 1\s*$/, "LIMIT 2");
+if (GATE3_UNPAID_ABORT_UNSETTLED_SQL_V39===GATE3_PRIOR_OWNER_ADMISSION_SQL_V39)
+  throw Error("GATE3_UNPAID_ABORT_ADMISSION_QUERY_SHAPE_CHANGED_HOLD");
+
 export type OldGate3OwnerRow=Readonly<{
   session_id:string;icao:string;authorization_evidence_sha256:string;
   canary_credit_ceiling:number;fixed_exposure_seconds:number;
@@ -107,7 +115,7 @@ async function readOwnerAndUnsettled():Promise<{
        LEFT JOIN clean.prepaid_probe_session_runtime s
          ON s.session_id=o.session_id
        WHERE o.session_id=$1::uuid`,[OLD_UUID]),
-      c.query(GATE3_PRIOR_OWNER_ADMISSION_SQL_V39)
+      c.query(GATE3_UNPAID_ABORT_UNSETTLED_SQL_V39)
     ]);
     return {row:o.rows[0] as OldGate3OwnerRow|undefined,
       unsettled:u.rows.map(z=>({session_id:String(z.session_id),state:String(z.state)}))};
