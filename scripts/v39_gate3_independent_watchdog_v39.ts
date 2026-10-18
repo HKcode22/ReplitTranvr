@@ -291,7 +291,7 @@ export async function executeGate3WatchdogSidecarV39(
       // later good tick cannot silently re-arm the same paid exposure.
       // Continue safety polling/exact-owned recovery after the revoke.
       const leaseDecision=decideGate3IndependentLeaseAfterTickV39(
-        leaseRevoked,tick.status);
+        leaseRevoked,tick.status,tick.otherBillablePresent);
       const justRevoked=!leaseRevoked&&leaseDecision.revoked;
       leaseRevoked=leaseDecision.revoked;
       if(justRevoked){
