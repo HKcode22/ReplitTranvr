@@ -81,18 +81,27 @@ async function findVerifiedLease(
 export async function autoArmGate3WatchdogV39(
   req:Gate3AutoArmRequestV39,
   deps:Gate3AutoArmDepsV39=productionDeps(),
+  shouldStop:()=>boolean=()=>false,
 ):Promise<Gate3WatchdogLeaseScopeV39>{
   validate(req,deps.now());
+  const assertNotStopped=()=>{
+    if(shouldStop())throw Error("GATE3_AUTOARM_OWNER_STOP_REQUESTED_HOLD");
+  };
+  assertNotStopped();
   const previous=await findVerifiedLease(req,deps);
+  assertNotStopped();
   if(previous)return previous;
   // A failed/unknown workflow-dispatch response may still have launched.
   // Never retry a dispatch, even if no bot comment becomes visible.
+  assertNotStopped();
   try{await deps.dispatchOnce(req)}
   catch{throw Error("GATE3_AUTOARM_DISPATCH_AMBIGUOUS_NO_RETRY_HOLD")}
   const deadline=Math.min(Date.parse(req.startUtc)-20_000,
                           deps.now().getTime()+150_000);
   while(deps.now().getTime()<deadline){
+    assertNotStopped();
     const lease=await findVerifiedLease(req,deps);
+    assertNotStopped();
     if(lease)return lease;
     await deps.sleep(4000);
   }
