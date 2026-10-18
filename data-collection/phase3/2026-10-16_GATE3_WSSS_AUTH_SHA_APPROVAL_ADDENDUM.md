@@ -57,3 +57,21 @@
 - A verified callback receipt, exact owned DELETE, three stable provider credit readbacks, source custody and prospective scientific disposition are *outcomes to observe*, not assumed by approval. A documented small scientific gap may be separately research-qualified but not silently relabeled exact-match PASS.
 - paid_provider_creates_by_this_addendum: 0
 - no_authorized_automatic_renewal_or_retry: true
+
+---
+
+## AUTH-20261018-G3WSSS04 — owner-approved 10:00 PM PDT single WSSS canary
+
+- User explicitly approved a new exact 10:00 PM Pacific Saturday October 17, 2026 attempt in conversation, retaining 600 seconds, WSSS departures, 50 Alert-credit SOFT stop, at most one paid CREATE, no automatic retry and mandatory independent watchdog.
+- Exact provider window: `WSSS/departures/2026-10-18T05:00:00Z+600s`.
+- Paid CREATE allowed only `2026-10-18T05:00:00Z` through `2026-10-18T05:00:15Z`, after all safety conditions.
+- Stage A preparation only 04:52–04:57 UTC (9:52–9:57 PM Pacific).
+- New immutable file: `data-collection/authorizations/V3.9_PHASE3_GATE3_AUTH_20261018_WSSS04.json`.
+- AUTH_ARTIFACT_SHA256:61c5516ad60fe85865f7ed67acc0a779f118042bdeb0077f75bf8957d19fa485
+- Preparation not before 04:35 UTC; authorization expiry 06:00 UTC.
+- WSSS01 and WSSS02 were previous unpaid preparations, both durably terminalized as OPERATOR_ABORTED with separate evidence. WSSS03 was HOLD / NO-RUN because its preparation window expired without a new prepared source.
+- Exact source-tree review, published Replit SHA parity, provider account isolation, zero active CreditBased subscriptions, available balance floor, independent GitHub Actions BOT ARMED lease and owned terminal cleanup are mandatory before any paid CREATE.
+- The 50-credit bound is a SOFT stop, not a provider-guaranteed hard cap. No unlimited spend, manual unguarded CREATE, foreign DELETE, automatic retry or silent time extension is approved.
+- This prospective authorization records approval only; no provider balance, live subscription, callbacks, paid success, scientific match or terminal settlement is inferred.
+- paid_provider_creates_by_this_addendum: 0
+- no_authorized_automatic_renewal_or_retry: true
