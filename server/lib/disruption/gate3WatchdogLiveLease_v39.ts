@@ -70,7 +70,8 @@ export function assertGate3WatchdogLiveLeaseV39(
     throw Error("GATE3_WATCHDOG_LEASE_NOT_TRUSTED_GITHUB_ACTIONS_COMMENT");
   if(run.id!==scope.githubRunId||run.head_sha!==scope.expectedGitHead||
      run.event!=="workflow_dispatch"||run.status!=="in_progress"||
-     run.conclusion!==null||run.path!==WORKFLOW||
+     run.conclusion!==null||
+     ![`${WORKFLOW}@main`,`${WORKFLOW}@refs/heads/main`].includes(String(run.path))||
      run.repository?.full_name!==REPO)
     throw Error("GATE3_WATCHDOG_LEASE_JOB_NOT_ACTIVE_OR_NOT_EXACT_WORKFLOW");
   let lease:Gate3WatchdogLeaseV39;
