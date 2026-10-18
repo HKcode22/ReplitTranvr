@@ -14,14 +14,14 @@
  * Source enablement and existing AUTH hash check are necessary, NOT sufficient.
  */
 import "dotenv/config";
-import {createInterface} from "node:readline/promises";
-import {stdin,stdout} from "node:process";
 import {readFileSync} from "node:fs";
 import {Pool} from "pg";
 import {execFileSync} from "node:child_process";
 import {v39Pool} from "../server/lib/disruption/db_v39";
 import {readGate3PrecreateContinuityV39} from
   "../server/lib/disruption/gate3PrecreateContinuity_v39";
+import {autoArmGate3WatchdogV39} from
+  "../server/lib/disruption/gate3WatchdogAutoArm_v39";
 import {GATE3_PROVIDER_EXPOSURE_RELEASED_V39} from
   "../server/lib/disruption/prepaidProbeWindow_v39";
 import {prepareGate3AfterLiveReadOnlyEvidenceV39} from
@@ -36,7 +36,6 @@ import {verifyGate3WatchdogLiveLeaseFromGitHubV39} from
   "../server/lib/disruption/gate3WatchdogLiveLease_v39";
 import {
   assertGate3TwoStagePreparationTimingV39,
-  parseGate3WatchdogRunAndCommentV39,
   awaitGate3LiveWatchdogAndStartV39,
   assertGate3BeforeCreateUtcV39,
 } from "../server/lib/disruption/gate3TwoStageWatchdogAdmission_v39";
@@ -105,6 +104,16 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
   // Two GitHub REST reads every 5s for up to ~18min exceed the public
   // unauthenticated 60-request/hour limit. Require a real token BEFORE
   // creating a durable PREPARED row, not after a paid run has begun.
+  // Read the already-authenticated gh token privately if an environment
+  // token was not explicitly provided. Never echo or persist credentials.
+  if(![process.env.GITHUB_TOKEN,process.env.GH_TOKEN]
+      .some(v=>typeof v==="string"&&v.trim().length>=10)){
+    try{
+      const t=execFileSync("gh",["auth","token"],{encoding:"utf8",
+        timeout:6000,stdio:["ignore","pipe","pipe"]}).trim();
+      if(t.length>=10)process.env.GH_TOKEN=t;
+    }catch{}
+  }
   if(![process.env.GITHUB_TOKEN,process.env.GH_TOKEN]
       .some(v=>typeof v==="string"&&v.trim().length>=10))
     stop("GATE3_OPERATOR_AUTHENTICATED_GITHUB_API_REQUIRED");
@@ -118,11 +127,7 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
 
   const raw=readFileSync(args.authFile,"utf8");
   let requestedStop:string|null=null;
-  const promptAbort=new AbortController();
-  const signalStop=(code:string):void=>{
-    requestedStop=code;
-    promptAbort.abort(); // Unblock readline immediately; no hung owner.
-  };
+  const signalStop=(code:string):void=>{requestedStop=code};
   process.once("SIGINT",()=>signalStop("operator_SIGINT"));
   process.once("SIGTERM",()=>signalStop("operator_SIGTERM"));
 
@@ -173,34 +178,28 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
     };
     monitorTimer=setInterval(heartbeat,10_000);
 
-  // Deliberately no automatic workflow dispatch from this paid owner.
-  // Operator dispatches the already-reviewed independent workflow with the
-  // exact prepared UUID and copies its run ID / Actions-bot lease comment ID.
-  // These two untrusted numeric selectors NEVER replace GitHub verification.
+  // SINGLE-PROCESS, NONINTERACTIVE handoff. Independent GitHub Actions
+  // watchdog still verifies the session and posts its own authenticated
+  // fresh bot lease. Neither RUN_ID nor COMMENT_ID is user input.
   console.log(JSON.stringify({
     schema:"v39.gate3.two-stage-owner-prepared.v1",status:"PREPARED_NO_CREATE",
     session_id:prepared.sessionId,auth_sha256:prepared.authArtifactSha256,
     expected_head:args.head,start_utc:startUtc,
     independent_watchdog_required:true,provider_created:false
   }));
-  const rl=createInterface({input:stdin,output:stdout});
-  let identifiers:string;
-  try{
-    identifiers=await rl.question(
-      "Enter independent GitHub watchdog RUN_ID COMMENT_ID: ",
-      {signal:promptAbort.signal});
-  }catch{
-    if(requestedStop)
-      stop("GATE3_OPERATOR_STOPPED_DURING_WATCHDOG_PROMPT_HOLD");
-    stop("GATE3_OPERATOR_WATCHDOG_PROMPT_INTERRUPTED_HOLD");
-  }finally{rl.close()}
   await verifyContinuity();
-  const watch=parseGate3WatchdogRunAndCommentV39(identifiers);
-  const scope={
-    ...watch,expectedGitHead:args.head,
+  const scope=await autoArmGate3WatchdogV39({
+    sessionId:prepared.sessionId,
+    authId:args.authId,authFile:args.authFile,
     authSha256:prepared.authArtifactSha256,
-    sessionId:prepared.sessionId,startUtc,
-  };
+    startUtc,expectedGitHead:args.head
+  });
+  await verifyContinuity();
+  console.log(JSON.stringify({
+    status:"GATE3_AUTOMATIC_INDEPENDENT_WATCHDOG_ARMED",
+    session_id:prepared.sessionId,provider_created:false,
+    independent_lease_authenticated:true
+  }));
   await awaitGate3LiveWatchdogAndStartV39(
     scope,prepared.balanceBeforeInMemory,{
       now:()=>new Date(),
