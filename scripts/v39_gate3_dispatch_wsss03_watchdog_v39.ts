@@ -23,7 +23,7 @@ const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]
 const HEAD=/^[0-9a-f]{40}$/;
 const BOT="github-actions[bot]";
 
-export function reviewWsss02DispatchInputsV39(sessionId:string,head:string,
+export function reviewWsss03DispatchInputsV39(sessionId:string,head:string,
  now:Date=new Date()):void{
  if(!UUID.test(sessionId)||!HEAD.test(head)||
     sessionId==="b010a425-7ad6-4490-893d-534bd1bb59b9"||
@@ -70,7 +70,7 @@ async function main(){
     process.argv[4]!=="--expected-head")
   throw Error("GATE3_WSSS03_DISPATCH_EXACT_ARGUMENTS_REQUIRED");
  const sessionId=process.argv[3],head=process.argv[5];
- reviewWsss02DispatchInputsV39(sessionId,head);
+ reviewWsss03DispatchInputsV39(sessionId,head);
  const token=process.env.GH_TOKEN ||
   execFileSync("gh",["auth","token"],{encoding:"utf8"}).trim();
  if(token.length<10)throw Error("GATE3_WSSS03_GITHUB_AUTH_MISSING");
