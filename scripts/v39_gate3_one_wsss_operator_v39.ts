@@ -193,7 +193,7 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
     authId:args.authId,authFile:args.authFile,
     authSha256:prepared.authArtifactSha256,
     startUtc,expectedGitHead:args.head
-  });
+  },undefined,()=>requestedStop!==null);
   await verifyContinuity();
   console.log(JSON.stringify({
     status:"GATE3_AUTOMATIC_INDEPENDENT_WATCHDOG_ARMED",
