@@ -8,7 +8,7 @@ const start="2026-10-21T06:20:00Z";
 const req={
   sessionId:"64315edd-6036-40dc-b73b-adee3144c11f",
   authId:"AUTH-20261021-G3WSSS06",
-  authFile:"data-collection/authorizations/V3.9_PHASE3_GATE3_AUTH_20261021_G3WSSS06.json",
+  authFile:"data-collection/authorizations/V3.9_PHASE3_GATE3_AUTH_20261021_WSSS06.json",
   authSha256:"a".repeat(64),startUtc:start,
   expectedGitHead:"b".repeat(40),
 };
