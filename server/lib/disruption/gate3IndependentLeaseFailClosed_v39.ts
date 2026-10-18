@@ -18,11 +18,13 @@ export type Gate3IndependentLeaseDecisionV39=Readonly<{
 export function decideGate3IndependentLeaseAfterTickV39(
   previouslyRevoked:boolean,
   tickStatus:Gate3WatchdogTickResultV39["status"],
+  otherBillablePresent:boolean|null,
 ):Gate3IndependentLeaseDecisionV39{
   if(typeof previouslyRevoked!=="boolean"||
+    !(otherBillablePresent===null||typeof otherBillablePresent==="boolean")||
     !["HOLD","MONITOR","ZERO_EXACT_SUBSCRIPTIONS","STOP_VERIFIED"].includes(tickStatus))
     throw Error("GATE3_INDEPENDENT_LEASE_TICK_INVALID_HOLD");
-  const revoked=previouslyRevoked||
+  const revoked=previouslyRevoked||otherBillablePresent===true||
     tickStatus==="HOLD"||tickStatus==="STOP_VERIFIED";
   return revoked?
     {revoked:true,status:"STOPPED",reason:"INDEPENDENT_PROOF_LOST_LATCHED"}:
