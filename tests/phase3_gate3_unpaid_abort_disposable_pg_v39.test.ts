@@ -30,7 +30,7 @@ const suite=safe?describe:describe.skip;
 // Scope the *real production predicate* to this uncommitted UUID, rather
 // than letting the global LIMIT 1 see other suites' unrelated fixtures.
 const fixtureScopedSql=`SELECT * FROM (
-  ${GATE3_PRIOR_OWNER_ADMISSION_SQL_V39.replace(/LIMIT 1\\s*$/,"")}
+  ${GATE3_PRIOR_OWNER_ADMISSION_SQL_V39.replace(/LIMIT 1\s*$/,"")}
 ) AS candidate WHERE candidate.session_id=$1::uuid`;
 suite("Gate3 real disposable PostgreSQL unpaid abort — ZERO provider",()=>{
  it("replays exact prepared source, terminal FAILED SQL and full transaction rollback",async()=>{
