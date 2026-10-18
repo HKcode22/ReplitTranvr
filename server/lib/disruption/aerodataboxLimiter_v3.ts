@@ -60,7 +60,14 @@ function throttledFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
   return slot.then(async () => {
     let resp = await fetchWithAdbTimeout(input, init);
     let attempt = 0;
-    while (resp.status === 429 && attempt < RATE_LIMIT_MAX_RETRIES) {
+    // A 429 is NOT proof that a billable POST/DELETE mutation did not
+    // reach the provider. Only retry idempotent READ requests here.
+    // In particular Gate3 allows ONE subscription CREATE HTTP attempt,
+    // followed by read-only exact-account reconciliation if ambiguous.
+    const method = String(init?.method ?? "GET").toUpperCase();
+    const mayRetryRead = method === "GET" || method === "HEAD";
+    while (mayRetryRead && resp.status === 429 &&
+           attempt < RATE_LIMIT_MAX_RETRIES) {
       const backoff = RATE_LIMIT_BACKOFF_MS * (attempt + 1);
       console.warn(`[adb-v3] rate-limited (429) — retrying in ${backoff}ms (attempt ${attempt + 1}/${RATE_LIMIT_MAX_RETRIES})`);
       await sleep(backoff);
