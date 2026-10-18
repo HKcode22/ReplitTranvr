@@ -91,6 +91,10 @@ For the **Oct17 only** release, `AUTH-20261018-G3WSSS01` approves one airport-wi
 
 ### Preservation / relocation history
 
+**Historical navigation compatibility label:** All 108 original `SEPmd/` scientific source files and 352 original `artifacts/` evidence files (460 source/evidence blobs) are preserved at their mapped current locations. The historical [Wave B PR #46](https://github.com/HKcode22/ReplitTranvr/pull/46) and [460-blob mapping manifest](../docs/repository-maintenance/manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv) document the physical move. This paragraph retains the old `SEPmd/` and `artifacts/` identifiers deliberately so provenance checks and peers searching older documents still find the original names; **those names are not active writable folder locations**.
+
+
+
 Original **108 `SEPmd/` scientific sources + 352 `artifacts/` evidence blobs (460 total)** were reorganized under `data-collection/` with Git-blob identity preservation and tracked path mappings [Wave B compatibility](operations/WAVE_B_COMPATIBILITY_GATE.md) · [relocation manifest](../docs/repository-maintenance/manifests/2026-10-15_WAVEB_ACTUAL_460_BLOB_RELOCATION.csv). [Phase0/1 historical material](phase0/README.md) and [Wave C2 checkpoint](../docs/repository-maintenance/2026-10-15_WAVEC2_PHASE0_PHASE1_RELOCATION_CHECKPOINT.md) preserve separate original reviews/checklist. Old `SEPmd/` strings inside historically signed text remain intentionally unchanged; consult the path manifest before executing an old command. A new “README” can be rewritten for clarity; original record blobs must not be silently rewritten.
 
 [**Next: read the 60-second boss briefing and deep case study →**](PROJECT_STORY_FOR_PEERS_AND_MANAGEMENT.md)
