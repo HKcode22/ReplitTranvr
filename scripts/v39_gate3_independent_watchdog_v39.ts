@@ -30,6 +30,8 @@ import {defaultWebhookUrl,getBalanceEvidenceStrict,
 import {runGate3IndependentWatchdogTickV39,
   type Gate3WatchdogOwnerRowV39}
   from "../server/lib/disruption/gate3IndependentWatchdogTick_v39";
+import {decideGate3IndependentLeaseAfterTickV39}
+  from "../server/lib/disruption/gate3IndependentLeaseFailClosed_v39";
 import {publishGate3WatchdogLeaseV39,
   type Gate3WatchdogLeaseV39}
   from "../server/lib/disruption/gate3WatchdogLiveLease_v39";
@@ -259,7 +261,7 @@ export async function executeGate3WatchdogSidecarV39(
     // marking a normal network/BIND lag as early rescue. Total rescue grace
     // remains 300s, and this watchdog NEVER creates a subscription.
     const stopAfter=auth.start+930_000;
-    let lastStatus="",haveSeenOwned=false;
+    let lastStatus="",haveSeenOwned=false,leaseRevoked=false;
     while(Date.now()<stopAfter){
       const tick=await runGate3IndependentWatchdogTickV39(scope,{
         readOwner,
@@ -284,11 +286,32 @@ export async function executeGate3WatchdogSidecarV39(
         lastStatus=tick.status;
       }
       if(tick.ownsProviderSubscription)haveSeenOwned=true;
-      // GH API heartbeat failure cannot change subscription ownership. It
-      // makes the paid owner's 25s lease stale and must cause it to STOP; the
-      // independent sidecar itself keeps monitoring and attempting safe DELETE.
+      // HOLD is loss of the independent authority to certify billing/owner
+      // state. It MUST revoke the paid owner's LIVE lease immediately; a
+      // later good tick cannot silently re-arm the same paid exposure.
+      // Continue safety polling/exact-owned recovery after the revoke.
+      const leaseDecision=decideGate3IndependentLeaseAfterTickV39(
+        leaseRevoked,tick.status,tick.otherBillablePresent);
+      const justRevoked=!leaseRevoked&&leaseDecision.revoked;
+      leaseRevoked=leaseDecision.revoked;
+      if(justRevoked){
+        console.error(JSON.stringify({
+          status:"HOLD",reason:"GATE3_INDEPENDENT_LEASE_REVOKED",
+          paid_owner_must_stop:true,provider_create_by_sidecar:0
+        }));
+        await heartbeat("STOPPED").catch(()=>{
+          // Failure to PATCH cannot become another ACTIVE lease. The
+          // existing heartbeat expires; run state remains independently
+          // observable and the sidecar keeps monitoring for safe DELETE.
+          console.error(JSON.stringify({status:"HOLD",
+            reason:"GATE3_WATCHDOG_REVOKE_PUBLISH_UNAVAILABLE"}));
+        });
+      }
+      // A failed GitHub PATCH can NEVER revive ACTIVE after a HOLD.
+      // The 25s lease will stale and make the owner stop even if PATCH
+      // remains unavailable; the independent sidecar stays on duty.
       if(Date.now()-lastHeartbeatAt>=15000){
-        await heartbeat("ACTIVE").catch(()=>{
+        await heartbeat(leaseDecision.status).catch(()=>{
           console.error(JSON.stringify({status:"HOLD",
             reason:"GATE3_WATCHDOG_LEASE_HEARTBEAT_UNAVAILABLE"}));
         });
