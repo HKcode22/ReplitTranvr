@@ -149,7 +149,7 @@ describe("unpaid gate3 BEFORE provider CREATE self-closure — no provider",()=>
    }
    const path=code.slice(witnessFirst,paid);
    expect(path).toContain("return await abortBeforePaidExecution()");
-   expect(path).toContain("GATE3_OPERATOR_PRECREATE_ABORT_UNRECONCILED_HOLD");
+   expect(code).toContain("GATE3_OPERATOR_PRECREATE_ABORT_UNRECONCILED_HOLD");
    expect(path).not.toContain("deleteSubscriptionVerifiedStrict(");
  });
  it("owner records terminal ONLY inside pre-execution watchdog guard",()=>{
