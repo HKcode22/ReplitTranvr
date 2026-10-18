@@ -3,6 +3,10 @@ import {readFileSync} from "node:fs";
 import {
   autoArmGate3WatchdogV39,type Gate3AutoArmDepsV39
 } from "../server/lib/disruption/gate3WatchdogAutoArm_v39";
+import {awaitGate3LiveWatchdogAndStartV39,assertGate3BeforeCreateUtcV39}
+  from "../server/lib/disruption/gate3TwoStageWatchdogAdmission_v39";
+import type {Gate3WatchdogLeaseV39}
+  from "../server/lib/disruption/gate3WatchdogLiveLease_v39";
 
 const start="2026-10-21T06:20:00Z";
 const req={
@@ -91,6 +95,73 @@ describe("automatic Gate3 independently verified GH sidecar handoff; no provider
         .rejects.toThrow("REQUEST_OR_CLOCK");
       expect(f.state().dispatched).toBe(0);
     }
+  });
+  it("an operator STOP before or during sidecar polling cannot dispatch/advance",async()=>{
+    const f=make();
+    await expect(autoArmGate3WatchdogV39(req,f.deps,()=>true))
+      .rejects.toThrow("OWNER_STOP_REQUESTED");
+    expect(f.state().dispatched).toBe(0);
+    const after=make();
+    let stopped=false,reads=0;
+    const deps:Gate3AutoArmDepsV39={...after.deps,
+      listComments:async()=>{
+        const result=await after.deps.listComments();
+        reads++;
+        if(reads>=2)stopped=true;
+        return result;
+      }
+    };
+    await expect(autoArmGate3WatchdogV39(req,deps,()=>stopped))
+      .rejects.toThrow("OWNER_STOP_REQUESTED");
+    expect(after.state().dispatched).toBe(1);
+  });
+  it("offline one-process dress rehearsal: dispatch, verified lease, exact UTC start, no provider mutations",async()=>{
+    const f=make();
+    const bot=await autoArmGate3WatchdogV39(req,f.deps);
+    let leaseReads=0,accountReads=0;
+    const evidence:Gate3WatchdogLeaseV39={
+      schema:"v39.gate3.wsss-watchdog-lease.v1",
+      status:"ARMED",githubRunId:bot.githubRunId,
+      expectedGitHead:req.expectedGitHead,
+      authSha256:req.authSha256,sessionId:req.sessionId,
+      startUtc:req.startUtc,heartbeatUtc:start,
+      providerCreatesByWatchdog:0,hardCreditLimitGuaranteed:false
+    };
+    await awaitGate3LiveWatchdogAndStartV39(bot,2056,{
+      now:f.deps.now,sleep:f.deps.sleep,
+      verifyLease:async(scope)=>{
+        leaseReads++;
+        expect(scope).toEqual(bot);
+        return evidence;
+      },
+      readCleanProviderBalance:async()=>{accountReads++;return 2056},
+      shouldStop:()=>false,
+    });
+    expect(f.state().dispatched).toBe(1);
+    expect(leaseReads).toBeGreaterThan(2);
+    expect(accountReads).toBe(1);
+    expect(f.state().ms).toBe(Date.parse(start));
+    expect(()=>assertGate3BeforeCreateUtcV39(start,new Date(f.state().ms)))
+      .not.toThrow();
+    // Mock has no SQL connection and no provider CREATE/DELETE code.
+  });
+  it("offline rehearsal fails closed if account balance changes before CREATE",async()=>{
+    const f=make();
+    const bot=await autoArmGate3WatchdogV39(req,f.deps);
+    let accountReads=0;
+    await expect(awaitGate3LiveWatchdogAndStartV39(bot,2056,{
+      now:f.deps.now,sleep:f.deps.sleep,
+      verifyLease:async()=>({
+        schema:"v39.gate3.wsss-watchdog-lease.v1",status:"ACTIVE",
+        githubRunId:bot.githubRunId,expectedGitHead:req.expectedGitHead,
+        authSha256:req.authSha256,sessionId:req.sessionId,startUtc:req.startUtc,
+        heartbeatUtc:start,providerCreatesByWatchdog:0,
+        hardCreditLimitGuaranteed:false
+      }),
+      readCleanProviderBalance:async()=>{accountReads++;return 2055},
+      shouldStop:()=>false,
+    })).rejects.toThrow("PROVIDER_BALANCE_CHANGED_AFTER_PREPARE");
+    expect(accountReads).toBe(1);
   });
   it("paid owner must have no readline or numeric-ID prompt and still verify lease before provider CREATE",()=>{
     const owner=readFileSync("scripts/v39_gate3_one_wsss_operator_v39.ts","utf8");
