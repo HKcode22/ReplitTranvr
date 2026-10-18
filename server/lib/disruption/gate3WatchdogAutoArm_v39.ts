@@ -96,8 +96,10 @@ export async function autoArmGate3WatchdogV39(
   assertNotStopped();
   try{await deps.dispatchOnce(req)}
   catch{throw Error("GATE3_AUTOARM_DISPATCH_AMBIGUOUS_NO_RETRY_HOLD")}
+  // Allow a cold GitHub runner and npm ci up to five minutes, but NEVER
+  // extend past the exact scientific CREATE start or a stale bot lease.
   const deadline=Math.min(Date.parse(req.startUtc)-20_000,
-                          deps.now().getTime()+150_000);
+                          deps.now().getTime()+300_000);
   while(deps.now().getTime()<deadline){
     assertNotStopped();
     const lease=await findVerifiedLease(req,deps);
