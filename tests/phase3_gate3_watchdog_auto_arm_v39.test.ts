@@ -84,7 +84,7 @@ describe("automatic Gate3 independently verified GH sidecar handoff; no provider
     for(const override of [
       {sessionId:"wrong"},{expectedGitHead:"wrong"},
       {authSha256:"wrong"},{authFile:"/tmp/auth.json"},
-      {startUtc:"2026-10-21T06:19:00Z"},
+      {startUtc:"2026-10-21T06:30:00Z"},
     ]){
       const f=make();
       await expect(autoArmGate3WatchdogV39({...req,...override},f.deps))
