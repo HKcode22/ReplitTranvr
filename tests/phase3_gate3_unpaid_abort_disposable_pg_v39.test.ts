@@ -26,6 +26,12 @@ try{
       u.pathname==="/v39_ci"&&!process.env.AERODATABOX_API_KEY;
 }catch{}
 const suite=safe?describe:describe.skip;
+// Shared disposable CI has independently committed fixture receipts.
+// Scope the *real production predicate* to this uncommitted UUID, rather
+// than letting the global LIMIT 1 see other suites' unrelated fixtures.
+const fixtureScopedSql=`SELECT * FROM (
+  ${GATE3_PRIOR_OWNER_ADMISSION_SQL_V39.replace(/LIMIT 1\\s*$/,"")}
+) AS candidate WHERE candidate.session_id=$1::uuid`;
 suite("Gate3 real disposable PostgreSQL unpaid abort — ZERO provider",()=>{
  it("replays exact prepared source, terminal FAILED SQL and full transaction rollback",async()=>{
    const client=new pg.Client({connectionString:raw,connectionTimeoutMillis:8000});
@@ -60,7 +66,7 @@ suite("Gate3 real disposable PostgreSQL unpaid abort — ZERO provider",()=>{
        now:()=>at,
        readSource:async()=>{
          const q=await client.query(GATE3_PRECREATE_ABORT_SOURCE_SQL_V39,[sessionId]);
-         const u=await client.query(GATE3_PRIOR_OWNER_ADMISSION_SQL_V39);
+         const u=await client.query(fixtureScopedSql,[sessionId]);
          return {
            row:q.rows[0] as UnpaidPrecreateSourceV39,
            unsettled:u.rows.map(x=>({session_id:String(x.session_id),
