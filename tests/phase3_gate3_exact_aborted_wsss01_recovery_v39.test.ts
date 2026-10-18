@@ -1,5 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {reviewGate3UnpaidOriginalAbortV39,
+  GATE3_UNPAID_ABORT_UNSETTLED_SQL_V39,
   type OldGate3OwnerRow}
   from "../scripts/v39_gate3_abort_unpaid_prepared_wsss01_v39";
 
@@ -20,6 +21,10 @@ function owner(change:Partial<OldGate3OwnerRow>={}):OldGate3OwnerRow{
 }
 const unsettled=[{session_id:UUID,state:"PREPARED"}];
 describe("WSSS01 aborted-before-paid gate3 recovery — fail-closed source guard",()=>{
+ it("reads a second unresolved owner instead of hiding it behind LIMIT 1",()=>{
+  expect(GATE3_UNPAID_ABORT_UNSETTLED_SQL_V39).toMatch(/\bLIMIT 2$/);
+  expect(GATE3_UNPAID_ABORT_UNSETTLED_SQL_V39).toMatch(/CREATE_AMBIGUOUS_ACCOUNT_HOLD/);
+ });
  it("accepts exclusively the original UNLOGGED-lost owner, never produces a paid authorization",()=>{
   expect(()=>reviewGate3UnpaidOriginalAbortV39(owner(),unsettled,NOW)).not.toThrow();
  });
