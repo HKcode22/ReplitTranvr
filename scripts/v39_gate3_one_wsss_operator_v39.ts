@@ -147,24 +147,60 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
   assertGate3TwoStagePreparationTimingV39(
     startUtc,new Date(Date.now()+2_100_000).toISOString(),new Date());
   const prepared=await prepareGate3AfterLiveReadOnlyEvidenceV39(v39Pool,input);
-  assertGate3TwoStagePreparationTimingV39(
-    startUtc,prepared.sessionExpiresAtUtc,new Date());
+  // All operations from this point until the paid execution owner are
+  // confirmed pre-CREATE. Recover an UNUSED source only after two fresh,
+  // identical, clean provider inventories and an immutable SQL readback.
+  // A failed/unknown COMMIT during initial preparation has NO trustworthy
+  // sessionId here and deliberately remains manual-recovery HOLD.
+  const abortBeforePaidExecution=async():Promise<never>=>{
+    try{
+      const digest=await terminateUnpaidGate3PrecreateRealV39(v39Pool,{
+        sessionId:prepared.sessionId,icao:"WSSS",
+        authSha256:prepared.authArtifactSha256,
+        credits:50,seconds:600,startUtc,
+        baselineCredits:prepared.balanceBeforeInMemory
+      });
+      console.log(JSON.stringify({
+        status:"GATE3_UNPAID_PRECREATE_DURABLY_ABORTED",
+        session_id:prepared.sessionId,evidence_sha256:digest,
+        provider_create_by_this_owner:0,another_run_authorized:false
+      }));
+    }catch{
+      stop("GATE3_OPERATOR_PRECREATE_ABORT_UNRECONCILED_HOLD");
+    }
+    stop("GATE3_OPERATOR_PRECREATE_ABORTED_NO_CREATE");
+  };
+  try{
+    assertGate3TwoStagePreparationTimingV39(
+      startUtc,prepared.sessionExpiresAtUtc,new Date());
+  }catch{
+    return await abortBeforePaidExecution();
+  }
 
-  // NEON / PostgreSQL can suspend or restart while waiting for a human
-  // watchdog selector. Keep this *read-only* connection active and demand
-  // stable postmaster epoch + exact surviving UNLOGGED armed source.
-  // Never reconstruct source rows or silently mint another UUID.
-  const witnessPool=new Pool({
-    connectionString:process.env.V39_DATABASE_RUNTIME_URL,
-    max:1,connectionTimeoutMillis:5000,query_timeout:7000,
-    options:"-c default_transaction_read_only=on -c statement_timeout=6000",
-  });
+  // Keep a read-only Neon connection active and demand stable postmaster
+  // identity and the same original UNLOGGED armed source. Initialization
+  // itself can fail AFTER PREPARED: route that through exact unused recovery.
+  let witnessPool:Pool;
+  try{
+    witnessPool=new Pool({
+      connectionString:process.env.V39_DATABASE_RUNTIME_URL,
+      max:1,connectionTimeoutMillis:5000,query_timeout:7000,
+      options:"-c default_transaction_read_only=on -c statement_timeout=6000",
+    });
+  }catch{
+    return await abortBeforePaidExecution();
+  }
   let monitorFault:string|null=null;
   let monitorInFlight:Promise<void>|null=null;
   let monitorTimer:ReturnType<typeof setInterval>|null=null;
   try{
-    const epoch=await readGate3PrecreateContinuityV39(
-      witnessPool,prepared.sessionId,null);
+    let epoch:Awaited<ReturnType<typeof readGate3PrecreateContinuityV39>>;
+    try{
+      epoch=await readGate3PrecreateContinuityV39(
+        witnessPool,prepared.sessionId,null);
+    }catch{
+      return await abortBeforePaidExecution();
+    }
     const verifyContinuity=async():Promise<void>=>{
       if(monitorFault)stop(monitorFault);
       if(requestedStop)stop("GATE3_OPERATOR_STOP_REQUESTED_BEFORE_CREATE");
@@ -226,22 +262,7 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
   }catch{
     if(monitorTimer!==null){clearInterval(monitorTimer);monitorTimer=null;}
     if(monitorInFlight!==null)await monitorInFlight;
-    try{
-      const digest=await terminateUnpaidGate3PrecreateRealV39(v39Pool,{
-        sessionId:prepared.sessionId,icao:"WSSS",
-        authSha256:prepared.authArtifactSha256,
-        credits:50,seconds:600,startUtc,
-        baselineCredits:prepared.balanceBeforeInMemory
-      });
-      console.log(JSON.stringify({
-        status:"GATE3_UNPAID_PRECREATE_DURABLY_ABORTED",
-        session_id:prepared.sessionId,evidence_sha256:digest,
-        provider_create_by_this_owner:0,another_run_authorized:false
-      }));
-    }catch{
-      stop("GATE3_OPERATOR_PRECREATE_ABORT_UNRECONCILED_HOLD");
-    }
-    stop("GATE3_OPERATOR_PRECREATE_ABORTED_NO_CREATE");
+    return await abortBeforePaidExecution();
   }
   // Stage B only: the reviewed one-window owner, after fresh account
   // isolation and a fresh authenticated in-progress GitHub bot heartbeat.
