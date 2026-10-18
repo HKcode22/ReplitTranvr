@@ -29,7 +29,7 @@ const comment={
 const run={
   id:scope.githubRunId,status:"in_progress",conclusion:null,
   head_sha:scope.expectedGitHead,event:"workflow_dispatch",
-  path:".github/workflows/phase3-gate3-independent-safety.yml",
+  path:".github/workflows/phase3-gate3-independent-safety.yml@main",
   name:"Phase3 Gate3 WSSS Independent Safety Sidecar (Manual, Sealed)",
   repository:{full_name:"HKcode22/ReplitTranvr"}
 };
@@ -37,6 +37,24 @@ afterEach(()=>{vi.unstubAllGlobals()});
 describe("GitHub exact WSSS watchdog ARM/heartbeat evidence (not a paid source release)",()=>{
   it("accepts only a fresh exact Actions-bot lease from the same running job",()=>{
     expect(assertGate3WatchdogLiveLeaseV39(scope,comment,run,now)).toEqual(lease);
+  });
+  it("accepts only the actual GitHub REST workflow path on main",()=>{
+    const fullPath=".github/workflows/phase3-gate3-independent-safety.yml";
+    expect(assertGate3WatchdogLiveLeaseV39(scope,comment,{...run,path:fullPath},now)).toEqual(lease);
+    for(const suffix of ["@main","@refs/heads/main"]){
+      expect(assertGate3WatchdogLiveLeaseV39(scope,comment,{
+        ...run,path:fullPath+suffix
+      },now)).toEqual(lease);
+    }
+    for(const path of [
+      fullPath+"@other",fullPath+"@refs/heads/feature",
+      fullPath+"@main/extra",fullPath+"@refs/tags/main",
+      ".github/workflows/other.yml@main"
+    ]){
+      expect(()=>assertGate3WatchdogLiveLeaseV39(scope,comment,{
+        ...run,path
+      },now)).toThrow("GATE3_WATCHDOG_LEASE_JOB_NOT_ACTIVE_OR_NOT_EXACT_WORKFLOW");
+    }
   });
   it("rejects forged non-bot comment even with matching JSON",()=>{
     expect(()=>assertGate3WatchdogLiveLeaseV39(scope,{

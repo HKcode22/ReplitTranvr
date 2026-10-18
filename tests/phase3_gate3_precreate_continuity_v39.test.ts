@@ -66,10 +66,11 @@ describe("WSSS Gate3 Neon/UNLOGGED continuity until paid CREATE — NO PROVIDER"
     } as any,SID,EPOCH)).rejects.toThrow(/POSTGRES_READ_FAILED/);
     expect(called).toBe(1);
   });
-  it("actual paid owner monitors while awaiting selectors and rechecks immediately before POST",()=>{
+  it("actual paid owner monitors source and obtains independent bot lease noninteractively",()=>{
     const code=readFileSync("scripts/v39_gate3_one_wsss_operator_v39.ts","utf8");
-    expect(code).toContain("const promptAbort=new AbortController()");
-    expect(code).toContain("{signal:promptAbort.signal}");
+    expect(code).not.toContain("const promptAbort=new AbortController()");
+    expect(code).not.toContain("rl.question(");
+    expect(code).toContain("await autoArmGate3WatchdogV39(");
     expect(code).toContain("setInterval(heartbeat,10_000)");
     expect(code).toContain("await verifyContinuity();");
     const last=code.indexOf("await verifyContinuity();",code.indexOf("beforeProviderCreate:async"));
