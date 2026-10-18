@@ -20,6 +20,8 @@ import {execFileSync} from "node:child_process";
 import {v39Pool} from "../server/lib/disruption/db_v39";
 import {readGate3PrecreateContinuityV39} from
   "../server/lib/disruption/gate3PrecreateContinuity_v39";
+import {terminateUnpaidGate3PrecreateRealV39} from
+  "../server/lib/disruption/gate3UnpaidPrecreateAbort_v39";
 import {autoArmGate3WatchdogV39} from
   "../server/lib/disruption/gate3WatchdogAutoArm_v39";
 import {GATE3_PROVIDER_EXPOSURE_RELEASED_V39} from
@@ -187,35 +189,60 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
     expected_head:args.head,start_utc:startUtc,
     independent_watchdog_required:true,provider_created:false
   }));
-  await verifyContinuity();
-  const scope=await autoArmGate3WatchdogV39({
-    sessionId:prepared.sessionId,
-    authId:args.authId,authFile:args.authFile,
-    authSha256:prepared.authArtifactSha256,
-    startUtc,expectedGitHead:args.head
-  },undefined,()=>requestedStop!==null);
-  await verifyContinuity();
-  console.log(JSON.stringify({
-    status:"GATE3_AUTOMATIC_INDEPENDENT_WATCHDOG_ARMED",
-    session_id:prepared.sessionId,provider_created:false,
-    independent_lease_authenticated:true
-  }));
-  await awaitGate3LiveWatchdogAndStartV39(
-    scope,prepared.balanceBeforeInMemory,{
-      now:()=>new Date(),
-      sleep:async(ms)=>{
-        await new Promise<void>(resolve=>setTimeout(resolve,ms));
-        await verifyContinuity();
-      },
-      verifyLease:verifyGate3WatchdogLiveLeaseFromGitHubV39,
-      readCleanProviderBalance:()=>reviewGate3CurrentProviderAccountV39(50),
-      shouldStop:()=>requestedStop!==null,
-    });
-  // Stop the pre-CREATE heartbeat before the runtime changes state on
-  // binding; after CREATE the existing independent watchdog owns safety.
-  if(monitorTimer!==null){clearInterval(monitorTimer);monitorTimer=null;}
-  if(monitorInFlight!==null)await monitorInFlight;
-  await verifyContinuity();
+  // Everything below remains strictly PRE-PROVIDER until the boundary
+  // before executeGate3ActualWindowV39. A watchdog failure, stale lease,
+  // owner STOP, or account drift can therefore be closed safely, provided
+  // two fresh provider inventories and the exact UNUSED source still match.
+  // An ambiguous account/source must stay PREPARED for human reconciliation.
+  let scope:Awaited<ReturnType<typeof autoArmGate3WatchdogV39>>;
+  try{
+    await verifyContinuity();
+    scope=await autoArmGate3WatchdogV39({
+      sessionId:prepared.sessionId,
+      authId:args.authId,authFile:args.authFile,
+      authSha256:prepared.authArtifactSha256,
+      startUtc,expectedGitHead:args.head
+    },undefined,()=>requestedStop!==null);
+    await verifyContinuity();
+    console.log(JSON.stringify({
+      status:"GATE3_AUTOMATIC_INDEPENDENT_WATCHDOG_ARMED",
+      session_id:prepared.sessionId,provider_created:false,
+      independent_lease_authenticated:true
+    }));
+    await awaitGate3LiveWatchdogAndStartV39(
+      scope,prepared.balanceBeforeInMemory,{
+        now:()=>new Date(),
+        sleep:async(ms)=>{
+          await new Promise<void>(resolve=>setTimeout(resolve,ms));
+          await verifyContinuity();
+        },
+        verifyLease:verifyGate3WatchdogLiveLeaseFromGitHubV39,
+        readCleanProviderBalance:()=>reviewGate3CurrentProviderAccountV39(50),
+        shouldStop:()=>requestedStop!==null,
+      });
+    if(monitorTimer!==null){clearInterval(monitorTimer);monitorTimer=null;}
+    if(monitorInFlight!==null)await monitorInFlight;
+    await verifyContinuity();
+  }catch{
+    if(monitorTimer!==null){clearInterval(monitorTimer);monitorTimer=null;}
+    if(monitorInFlight!==null)await monitorInFlight;
+    try{
+      const digest=await terminateUnpaidGate3PrecreateRealV39(v39Pool,{
+        sessionId:prepared.sessionId,icao:"WSSS",
+        authSha256:prepared.authArtifactSha256,
+        credits:50,seconds:600,startUtc,
+        baselineCredits:prepared.balanceBeforeInMemory
+      });
+      console.log(JSON.stringify({
+        status:"GATE3_UNPAID_PRECREATE_DURABLY_ABORTED",
+        session_id:prepared.sessionId,evidence_sha256:digest,
+        provider_create_by_this_owner:0,another_run_authorized:false
+      }));
+    }catch{
+      stop("GATE3_OPERATOR_PRECREATE_ABORT_UNRECONCILED_HOLD");
+    }
+    stop("GATE3_OPERATOR_PRECREATE_ABORTED_NO_CREATE");
+  }
   // Stage B only: the reviewed one-window owner, after fresh account
   // isolation and a fresh authenticated in-progress GitHub bot heartbeat.
   const externalStopCheck=async():Promise<string|null>=>{
