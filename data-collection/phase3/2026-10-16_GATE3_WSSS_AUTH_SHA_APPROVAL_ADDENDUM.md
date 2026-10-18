@@ -40,3 +40,20 @@
 - Historical ledger `data-collection/evidence/ledgers/V3.9_RUN_REPORTS_AND_EVIDENCE.md` and original AUTH01 JSON remain byte-for-byte unchanged.
 - paid_provider_creates_by_this_addendum: 0
 - authorizes_automatic_second_paid_create: false
+
+---
+
+## AUTH-20261018-G3WSSS03 — owner-approved 9:30 PM PDT, replacement after unpaid watchdog failure
+
+- **Owner approval**: in current conversation on Saturday 2026-10-17 at approximately 21:11 PDT, owner replied `i approve` to explicitly proposed **single 9:30 PM Pacific** canary with **WSSS/departures**, **600 seconds**, **50 Alert-credit SOFT stop** (no provider hard cap), **one provider CREATE maximum**, **no automatic retry**, and authentic independently ARMED safety watchdog. No permission to exceed the safety conditions or to start outside exact time.
+- Scope: `WSSS/departures/2026-10-18T04:30:00Z+600s`, paid CREATE only `2026-10-18T04:30:00Z` through `04:30:15Z`. Source Stage A only `04:22–04:27Z` (3–8 minutes ahead).
+- New immutable authorization file: `data-collection/authorizations/V3.9_PHASE3_GATE3_AUTH_20261018_WSSS03.json`. Do not alter original WSSS01 or WSSS02 bytes.
+- AUTH_ARTIFACT_SHA256:cf6ffea3db5672aad5305a7a307b0ebc1f5fb9c9324dab8772c2a7c22b085ebf
+- Preparation not before `2026-10-18T04:05:00.000Z`; authorization expires `2026-10-18T05:30:00.000Z`. Maximum one paid CREATE total under this AUTH, no automatic retry or rollover.
+- Predecessors: two original historic `RUN-20260915-...` references plus `AUTH-20261018-G3WSSS02` already listed above.
+- **WSSS02 failed before payment**: independent GitHub safety run `39095409271` failed at approximately `2026-10-18T03:57:45Z` with `GATE3_SIDECAR_CALLBACK_URL_MISMATCH`, `provider_create_count=0`; owner source `7985f9d2-b20f-49fa-b7ae-0ec62348d291` returned `PREPARED_NO_CREATE` and no authenticated watchdog lease. Original 04:00Z CREATE window passed; it is NOT permission for a late run. **WSSS02 is NOT marked terminal or settled by this addendum.**
+- **Hard prospective gate**: shut down stale WSSS02 operator; independently verify live provider account inventory and unchanged balance, zero bound ID/callback use, original WSSS02 owner and no competing unsettled owners, then write and re-read the exact original `OPERATOR_ABORTED` LOGGED failure receipt using reviewed `scripts/v39_gate3_abort_unpaid_prepared_wsss02_v39.ts`. Any ambiguity or failed/partial receipt => HOLD. A new session MUST NOT be prepared while the earlier WSSS02 owner remains PREPARED.
+- Source-reviewed HTTPS :443 callback fix, new GitHub main/source tree and published Replit SHA parity, exact approved auth SHA readback, provider >=1500 baseline and >=1000 projected after soft50, zero active CreditBased subscriptions, protected GitHub manual safety job and verified authentic live `github-actions[bot]` ARMED lease are also mandatory prior to paid CREATE. No sidecar CREATE, no foreign deletion, no refill, no new REST spending.
+- A verified callback receipt, exact owned DELETE, three stable provider credit readbacks, source custody and prospective scientific disposition are *outcomes to observe*, not assumed by approval. A documented small scientific gap may be separately research-qualified but not silently relabeled exact-match PASS.
+- paid_provider_creates_by_this_addendum: 0
+- no_authorized_automatic_renewal_or_retry: true
