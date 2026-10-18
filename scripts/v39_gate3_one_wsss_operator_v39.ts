@@ -17,8 +17,11 @@ import "dotenv/config";
 import {createInterface} from "node:readline/promises";
 import {stdin,stdout} from "node:process";
 import {readFileSync} from "node:fs";
+import {Pool} from "pg";
 import {execFileSync} from "node:child_process";
 import {v39Pool} from "../server/lib/disruption/db_v39";
+import {readGate3PrecreateContinuityV39} from
+  "../server/lib/disruption/gate3PrecreateContinuity_v39";
 import {GATE3_PROVIDER_EXPOSURE_RELEASED_V39} from
   "../server/lib/disruption/prepaidProbeWindow_v39";
 import {prepareGate3AfterLiveReadOnlyEvidenceV39} from
@@ -115,8 +118,13 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
 
   const raw=readFileSync(args.authFile,"utf8");
   let requestedStop:string|null=null;
-  process.once("SIGINT",()=>{requestedStop="operator_SIGINT"});
-  process.once("SIGTERM",()=>{requestedStop="operator_SIGTERM"});
+  const promptAbort=new AbortController();
+  const signalStop=(code:string):void=>{
+    requestedStop=code;
+    promptAbort.abort(); // Unblock readline immediately; no hung owner.
+  };
+  process.once("SIGINT",()=>signalStop("operator_SIGINT"));
+  process.once("SIGTERM",()=>signalStop("operator_SIGTERM"));
 
   const input={
     authArtifactRaw:raw,expectedAuthId:args.authId,
@@ -135,6 +143,36 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
   assertGate3TwoStagePreparationTimingV39(
     startUtc,prepared.sessionExpiresAtUtc,new Date());
 
+  // NEON / PostgreSQL can suspend or restart while waiting for a human
+  // watchdog selector. Keep this *read-only* connection active and demand
+  // stable postmaster epoch + exact surviving UNLOGGED armed source.
+  // Never reconstruct source rows or silently mint another UUID.
+  const witnessPool=new Pool({
+    connectionString:process.env.V39_DATABASE_RUNTIME_URL,
+    max:1,connectionTimeoutMillis:5000,query_timeout:7000,
+    options:"-c default_transaction_read_only=on -c statement_timeout=6000",
+  });
+  let monitorFault:string|null=null;
+  let monitorInFlight:Promise<void>|null=null;
+  let monitorTimer:ReturnType<typeof setInterval>|null=null;
+  try{
+    const epoch=await readGate3PrecreateContinuityV39(
+      witnessPool,prepared.sessionId,null);
+    const verifyContinuity=async():Promise<void>=>{
+      if(monitorFault)stop(monitorFault);
+      if(requestedStop)stop("GATE3_OPERATOR_STOP_REQUESTED_BEFORE_CREATE");
+      await readGate3PrecreateContinuityV39(
+        witnessPool,prepared.sessionId,epoch);
+    };
+    const heartbeat=():void=>{
+      if(monitorFault||monitorInFlight!==null)return;
+      monitorInFlight=verifyContinuity().catch(()=>{
+        monitorFault="GATE3_OPERATOR_PRECREATE_CONTINUITY_LOST_HOLD";
+        signalStop("gate3_precreate_continuity_lost");
+      }).finally(()=>{monitorInFlight=null});
+    };
+    monitorTimer=setInterval(heartbeat,10_000);
+
   // Deliberately no automatic workflow dispatch from this paid owner.
   // Operator dispatches the already-reviewed independent workflow with the
   // exact prepared UUID and copies its run ID / Actions-bot lease comment ID.
@@ -149,8 +187,14 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
   let identifiers:string;
   try{
     identifiers=await rl.question(
-      "Enter independent GitHub watchdog RUN_ID COMMENT_ID: ");
+      "Enter independent GitHub watchdog RUN_ID COMMENT_ID: ",
+      {signal:promptAbort.signal});
+  }catch{
+    if(requestedStop)
+      stop("GATE3_OPERATOR_STOPPED_DURING_WATCHDOG_PROMPT_HOLD");
+    stop("GATE3_OPERATOR_WATCHDOG_PROMPT_INTERRUPTED_HOLD");
   }finally{rl.close()}
+  await verifyContinuity();
   const watch=parseGate3WatchdogRunAndCommentV39(identifiers);
   const scope={
     ...watch,expectedGitHead:args.head,
@@ -160,11 +204,19 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
   await awaitGate3LiveWatchdogAndStartV39(
     scope,prepared.balanceBeforeInMemory,{
       now:()=>new Date(),
-      sleep:(ms)=>new Promise<void>(resolve=>setTimeout(resolve,ms)),
+      sleep:async(ms)=>{
+        await new Promise<void>(resolve=>setTimeout(resolve,ms));
+        await verifyContinuity();
+      },
       verifyLease:verifyGate3WatchdogLiveLeaseFromGitHubV39,
       readCleanProviderBalance:()=>reviewGate3CurrentProviderAccountV39(50),
       shouldStop:()=>requestedStop!==null,
     });
+  // Stop the pre-CREATE heartbeat before the runtime changes state on
+  // binding; after CREATE the existing independent watchdog owns safety.
+  if(monitorTimer!==null){clearInterval(monitorTimer);monitorTimer=null;}
+  if(monitorInFlight!==null)await monitorInFlight;
+  await verifyContinuity();
   // Stage B only: the reviewed one-window owner, after fresh account
   // isolation and a fresh authenticated in-progress GitHub bot heartbeat.
   const externalStopCheck=async():Promise<string|null>=>{
@@ -198,6 +250,9 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
         const current=await reviewGate3CurrentProviderAccountV39(50);
         if(current!==prepared.balanceBeforeInMemory)
           stop("GATE3_OPERATOR_ACCOUNT_CHANGED_BEFORE_CREATE");
+        // The final reversible gate before HTTP CREATE. A resumed Neon
+        // compute with lost UNLOGGED runtime must NEVER initiate paid work.
+        await verifyContinuity();
         assertGate3BeforeCreateUtcV39(startUtc,new Date());
         if(requestedStop)
           stop("GATE3_OPERATOR_STOP_REQUESTED_BEFORE_CREATE");
@@ -220,6 +275,11 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
         await deleteSubscriptionVerifiedStrict(q.rows[0].provider_subscription_id);
     }catch{/* Account recovery remains separately required, no retries. */}
     stop("GATE3_OPERATOR_OUTCOME_HOLD_EXACT_ACCOUNT_RECOVERY_REQUIRED");
+  }
+  }finally{
+    if(monitorTimer!==null)clearInterval(monitorTimer);
+    if(monitorInFlight!==null)await monitorInFlight;
+    await witnessPool.end().catch(()=>undefined);
   }
 }
 
