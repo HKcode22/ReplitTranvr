@@ -40,6 +40,24 @@ const PINNED_BASE="https://replit-tranvr--hk84164.replit.app";
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const SHA=/^[a-f0-9]{64}$/;
 const HEAD=/^[a-f0-9]{40}$/;
+
+/**
+ * Verify the precise owned callback without treating HTTPS's explicit :443
+ * as a different origin. Keep the original URL bytes for the provider
+ * subscriber identity; parsing is for validation only, never mutation.
+ */
+export function isGate3PinnedOwnedCallbackUrlV39(
+  callback:string,sessionId:string,webhookSecret:string,
+):boolean{
+  if(!UUID.test(sessionId)||!webhookSecret)return false;
+  let url:URL;
+  try{url=new URL(callback)}catch{return false}
+  return url.protocol==="https:" &&
+    url.origin===PINNED_BASE &&
+    url.username==="" && url.password==="" &&
+    url.search==="" && url.hash==="" &&
+    url.pathname===`/api/v1/webhooks/aerodatabox/${encodeURIComponent(webhookSecret)}/prepaid/${sessionId}`;
+}
 function stop(code:string):never{throw Error(code)}
 function wait(ms:number):Promise<void>{
   return new Promise(resolve=>setTimeout(resolve,ms));
@@ -133,8 +151,8 @@ export async function executeGate3WatchdogSidecarV39(
   const auth=validateGate3SidecarInputsV39(x,current);
   await verifyGate3PublishedPrepaidHostV39(x.expectedGitHead);
   const callback=prepaidProbeWebhookUrlV39(defaultWebhookUrl(),x.sessionId);
-  if(!callback.startsWith(PINNED_BASE+"/api/v1/webhooks/aerodatabox/")||
-     !callback.endsWith("/prepaid/"+x.sessionId))
+  if(!isGate3PinnedOwnedCallbackUrlV39(
+       callback,x.sessionId,process.env.AERODATABOX_WEBHOOK_SECRET))
     stop("GATE3_SIDECAR_CALLBACK_URL_MISMATCH");
 
   const pool=new pg.Pool({
