@@ -333,6 +333,7 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
       return "gate3_durable_owner_stop";
     return null;
   };
+  let lastPreCreateGuardRejected=false;
   try{
     const outcome=await executeGate3ActualWindowV39(v39Pool,{
       prepared,authArtifactRaw:raw,expectedAuthId:args.authId,
@@ -345,6 +346,7 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
       },
       externalStopCheck,
       beforeProviderCreate:async()=>{
+        try{
         if(requestedStop)
           stop("GATE3_OPERATOR_STOP_REQUESTED_BEFORE_CREATE");
         assertGate3BeforeCreateUtcV39(startUtc,new Date());
@@ -358,6 +360,13 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
         assertGate3BeforeCreateUtcV39(startUtc,new Date());
         if(requestedStop)
           stop("GATE3_OPERATOR_STOP_REQUESTED_BEFORE_CREATE");
+        }catch{
+          // The actual paid window invokes this hook OUTSIDE its CREATE
+          // try block. A rejected hook proves this process has not sent a
+          // subscription POST. Keep this distinct from an ambiguous POST.
+          lastPreCreateGuardRejected=true;
+          throw Error("GATE3_OPERATOR_LAST_PRECREATE_GUARD_HOLD");
+        }
       }
     });
     return {status:outcome.status,sessionId:prepared.sessionId,
@@ -366,6 +375,11 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
         callbackHealth.recoveredHealthAwaitingScienceAudit,
       paidCanaryCertified:false,anotherRunAuthorized:false};
   }catch{
+    // This narrow path is proven to occur before the single provider POST.
+    // The same exact UNBOUND/unused source and two clean provider inventories
+    // are still required; account drift leaves it on HOLD for reconciliation.
+    if(lastPreCreateGuardRejected)
+      return await abortBeforePaidExecution();
     // Compensate ONLY a provider id already durably bound to our exact new
     // session. Never delete a foreign id or re-CREATE another subscription.
     try{
