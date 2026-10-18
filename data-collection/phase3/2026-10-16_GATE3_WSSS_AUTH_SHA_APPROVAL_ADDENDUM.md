@@ -75,3 +75,19 @@
 - This prospective authorization records approval only; no provider balance, live subscription, callbacks, paid success, scientific match or terminal settlement is inferred.
 - paid_provider_creates_by_this_addendum: 0
 - no_authorized_automatic_renewal_or_retry: true
+
+---
+
+## AUTH-20261018-G3WSSS05 — owner-approved 11:20 PM PDT single WSSS canary (October 17)
+
+- **Exact user approval:** Saturday October 17, 2026 at approximately 22:51 PDT, user replied `yes i do lets begin` to the question explicitly asking to authorize 11:20 PM PDT tonight, one WSSS departures Gate 3 experiment, 600 seconds, **50-credit SOFT stopping target with possible overshoot**, maximum one provider CREATE, no automatic retry, and mandatory independent watchdog. This is exactly **Sunday 2026-10-18T06:20:00Z**.
+- Scope: `WSSS/departures/2026-10-18T06:20:00Z+600s`, paid CREATE only from **06:20:00 to 06:20:15 UTC** after all live source, strict account and bot lease gates. Stage A only **06:12–06:17Z**; no late or automatic rollover.
+- Exact immutable AUTH artifact: `data-collection/authorizations/V3.9_PHASE3_GATE3_AUTH_20261018_WSSS05.json`.
+- AUTH_ARTIFACT_SHA256:6f1a780a616aa5d0dc45421a32c750980b2932695359ffa0121df549f85556ac
+- Preparation not-before: `2026-10-18T05:55:00.000Z`; expiry `2026-10-18T07:20:00.000Z`, after full 600s measurement and additional independent rescue horizon.
+- Predecessor evidence IDs: the two unchanged 2026-09-15 historical RUN references and AUTH-20261018-G3WSSS04 (historical, terminalized, not reusable). WSSS01, WSSS02 and WSSS04 are recorded `FAILED/OPERATOR_ABORTED`; WSSS03 was HOLD/NO-RUN. There has been **no successful paid Gate3 outcome**.
+- PR #68 merged new 10-second Neon PostgreSQL source-continuity heartbeat and final postmaster/runtime check, requiring live exact source through PRE-CREATE; any reset/missing source is HOLD. This reduces but does not guarantee continuous database availability. Replit exact reviewed Git HEAD/public source parity must be freshly verified for final AUTH05 release.
+- Live provider active-billable=0, balance >=1500, protected floor >=1000, quota and exact independent bot ARMED lease are **conditions to verify when executing**, never assumed from this document. 50 credits is a **soft** stopping target and a provider-enforced hard cap is not guaranteed. No second CREATE, direct unguarded manual HTTP POST, foreign subscription DELETE, automatic retry or late start is approved.
+- The project retains prospective scientific gap-tolerance policies, but measurement/data-delivery gaps and mismatch must be recorded truthfully and never silently recoded as exact match or successful instrumented Gate3 PASS.
+- paid_provider_creates_by_this_addendum: 0
+- another_run_automatically_authorized: false
