@@ -55,7 +55,9 @@ export function assertUnpaidPrecreateAbortScopeV39(
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(s.startUtc)||
     !Number.isFinite(start)||!(now instanceof Date)||
     !Number.isFinite(now.getTime())||
-    now.getTime()>=start+15_000||
+    // Only the owner path *before* executeGate3ActualWindowV39 is eligible.
+    // Allow late failed-precreate reconciliation through rescue deadline.
+    now.getTime()>=start+900_000||
     !Number.isSafeInteger(s.baselineCredits)||s.baselineCredits<1500)
    throw Error("GATE3_PRECREATE_ABORT_SCOPE_OR_CLOCK_INVALID_HOLD");
 }
