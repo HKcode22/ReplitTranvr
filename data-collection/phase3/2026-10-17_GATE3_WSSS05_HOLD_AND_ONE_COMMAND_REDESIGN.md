@@ -1,0 +1,37 @@
+# Gate 3 launch simplification — failure analysis and redesign (2026-10-17 PDT)
+
+**Status: design checkpoint. No deployment, no new paid authorization, no paid provider operations, no production SQL write by this document.**
+
+## Current factual failure
+
+After a series of earlier time-scoped attempts, WSSS05 was approved for 2026-10-18T06:20:00Z, fixed WSSS departures 600 seconds, 50 Alert-credit SOFT stopping target with possible overshoot, one paid CREATE max and no automatic retry. Code AUTH05 and separate GitHub sidecar wrapper were merged as PR #70, main df20c7805d2744237257774305d735422189a00e, public Replit source parity PASS. At 23:11 PDT preflight provider read-only showed 2056 credits, zero active billable, no unsettled Gate3 owners.
+
+Stage A at 23:12–23:17 PDT prepared exactly one source UUID **64315edd-6036-40dc-b73b-adee3144c11f** (PREPARED_NO_CREATE, auth sha256 6f1a780a616aa5d0dc45421a32c750980b2932695359ffa0121df549f85556ac). It was launched through Bash heredoc so the child Node operator waiting for terminal watchdog IDs received noninteractive stdin. The guarded separate dispatcher was attempted twice: both **HOLD_ORIGINAL_OWNER_STDIN_NOT_INTERACTIVE**, before dispatch. No verified GitHub bot ARMED lease. The immutable 06:20:15Z CREATE deadline passed and AUTH05 must not be used for a new time. No paid subscription CREATE confirmed, not proof of all-actors historical absence.
+
+Latest operator read-only evidence: PID **4224** with exact matching AUTH05 args; durable owner **PREPARED**, UNLOGGED runtime **armed**, `provider_subscription_id` unbound, provider remaining 2056, no active CreditBased subscription. **Terminal cleanup NOT performed**, no right to create another source. Owner needs identity-scoped SIGTERM (new PR68 process handler) and verification of exit; then two independent clean live account inventories, source/written owner verification, immutable terminal FAILED/OPERATOR_ABORTED receipt under reviewed narrow recovery. The WSSS04 recovery script **is NOT reusable**: it requires the UNLOGGED source be missing whereas WSSS05 still has it. Never just DELETE runtime/owner.
+
+## Primary design mistakes
+
+1. **Interactive API in noninteractive automation:** source-prepared paid owner requires human entry of two numeric GitHub run/comment IDs; in a heredoc, first Shell cannot provide interactive input. Those values are *selectors, not secrets*, and must be discovered and checked by program.
+2. **Manual two-Shell orchestration:** a separable GitHub Actions safety service can remain independent while dispatch/discovery are orchestrated automatically from one local owner process. Preserve independently authenticated bot heartbeat, exact run HEAD/session/AUTH/start.
+3. **Tight runtime-only setup:** code releases, GitHub builds, Replit publishing and environment validation occur in the precious 3–8 minute Stage A window; they should all finish in a deliberate PRE-READY checklist earlier. Exact timestamp guard still matters scientifically.
+4. **Main SHA tied to every single authorization:** checked-in JSON SHA approval requires a main commit, CI and republish each reschedule. Migrate to reusable stable audited executable release and independently approved immutable per-run authorization. The protected environment can accept only signed/hash-pinned run manifest after explicit owner authorization, and watch service must verify that manifest and live published source. This is a prospective architectural migration, not permission to skip approvals.
+5. **CI job coupling:** fast scoped PR CI must verify changed Gate3 code, policy, AUTH and first-party data-custody tests; slower full matrix should be required for shared runtime/migration changes before release, not rerun merely to change a start timestamp. Document rigor and regression coverage, never replace actual full build/tests for real code changes.
+
+## Proposed operator UX
+
+- One-time code release + CI + Replit public parity BEFORE choosing paid time. A fast explicit `gate3 doctor` should report READY, BLOCKED with one reason, or EXPIRED, with no SQL mutations/provider CREATE.
+- User approves immutable airport, window, 600s, soft50, possible overshoot, max one CREATE. System records authorization separately without rebuilding the web app.
+- At prestart, one `gate3 launch --auth ...` script is **noninteractive**: OS lock + SQL serialized single-owner admission; obtains source UUID once, independently dispatches one GitHub Actions safety job and polls the authenticated GitHub bot lease automatically, keeps Neon custody alive, and waits until start. No second Shell or copy/paste run/comment IDs.
+- On any ambiguous GitHub dispatch, no automatic redispatch; inspect existing exact job/lease or HOLD. Never skip independent safety job; no provider CREATE until job is *in_progress* on exact SHA with fresh ARMED/ACTIVE heartbeat. Protect 50-credit SOFT stopping target and exact owned DELETE.
+- An expired unpaid prearm reservation should enter recoverable FAILED status automatically only after proof the operator is stopped, no bound sub/callback and independent zero-active stable provider inventories; preserve immutable receipt and make reconciliation human-readable. Never falsely infer no provider charge from an unbound row.
+- After paid window: report actual created/delete verified state, callback delivery and source custody, data/credit reconciliation, certified vs exploratory quality flags. Save a single daily GitHub checkpoint rather than dozens of PRs.
+
+## Work that must be completed before any more paid Gate3
+
+- Safely STOP + reconcile current WSSS05 PREPARED, preserving exact evidence and no direct SQL shortcuts.
+- Implement tested single-shell noninteractive dispatcher and verified lease autodiscovery; timeout and SIGTERM/EOF race tests, duplicate attempt tests, cancelled process tests, missing-source tests, ambiguous dispatch tests, account drift tests and only-one-CREATE tests, including disposable PG.
+- Define simpler secure per-run authorization independent of app republish; all trust-bearing requirements and audit record retained. Verify GitHub/Neon rate, GH protected environment and provider source retention before using it.
+- Demonstrate complete offline dress rehearsal from start through terminal cleanup, no provider use. Then use a fresh user-approved window for one actual canary. No rerun of AUTH05.
+
+**Checkpoint source:** GitHub prior PRs #66–#70; exact user's terminal outputs above; WSSS05 not terminal as of writing.
