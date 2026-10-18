@@ -38,7 +38,7 @@ test -z "$(git status --porcelain)" || {
 
 # Parse authoritative checked-in AUTH. Stage A is strictly 3–8min before
 # CREATE and cannot be extended or used again under a different UTC start.
-FIELDS="$(node --input-type=module -- "$AUTH_FILE" <<'AUTH_INSPECT'
+FIELDS="$(node --input-type=module - "$AUTH_FILE" <<'AUTH_INSPECT'
 import {readFileSync} from "node:fs";
 const file=process.argv[2];
 const a=JSON.parse(readFileSync(file,"utf8"));
