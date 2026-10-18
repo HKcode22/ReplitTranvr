@@ -40,13 +40,14 @@ describe("GitHub exact WSSS watchdog ARM/heartbeat evidence (not a paid source r
   });
   it("accepts only the actual GitHub REST workflow path on main",()=>{
     const fullPath=".github/workflows/phase3-gate3-independent-safety.yml";
+    expect(assertGate3WatchdogLiveLeaseV39(scope,comment,{...run,path:fullPath},now)).toEqual(lease);
     for(const suffix of ["@main","@refs/heads/main"]){
       expect(assertGate3WatchdogLiveLeaseV39(scope,comment,{
         ...run,path:fullPath+suffix
       },now)).toEqual(lease);
     }
     for(const path of [
-      fullPath,fullPath+"@other",fullPath+"@refs/heads/feature",
+      fullPath+"@other",fullPath+"@refs/heads/feature",
       fullPath+"@main/extra",fullPath+"@refs/tags/main",
       ".github/workflows/other.yml@main"
     ]){
