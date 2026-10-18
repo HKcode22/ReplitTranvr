@@ -30,7 +30,8 @@ const reply=(run=39100000000,id=6230000000)=>({
 });
 const make=(opts?:{
   existing?:boolean;duplicate?:boolean;dispatchError?:boolean;
-  neverArmed?:boolean;verifyError?:boolean;readError?:boolean
+  neverArmed?:boolean;verifyError?:boolean;readError?:boolean;
+  botVisibleAfterReads?:number
 })=>{
   let ms=Date.parse(start)-240000;
   let dispatched=0,verified=0,listed=0;
@@ -42,7 +43,8 @@ const make=(opts?:{
       if(opts?.readError)throw Error("synthetic github outage");
       if(opts?.duplicate)return [reply(),reply(39100000001,6230000001)];
       if(opts?.existing)return [reply()];
-      if(dispatched&& !opts?.neverArmed)return [reply()];
+      if(dispatched&&!opts?.neverArmed&&
+         listed>=(opts?.botVisibleAfterReads??0))return [reply()];
       return [];
     },
     dispatchOnce:async()=>{dispatched++;if(opts?.dispatchError)
@@ -71,6 +73,14 @@ describe("automatic Gate3 independently verified GH sidecar handoff; no provider
     await expect(autoArmGate3WatchdogV39(req,f.deps))
       .rejects.toThrow("DISPATCH_AMBIGUOUS_NO_RETRY");
     expect(f.state().dispatched).toBe(1);
+  });
+  it("accepts delayed independent GH runner beyond previous 150s timeout, without changing start",async()=>{
+    const f=make({botVisibleAfterReads:46}); // 45 * 4s ~= 180s cold build
+    const bot=await autoArmGate3WatchdogV39(req,f.deps);
+    expect(bot.sessionId).toBe(req.sessionId);
+    expect(f.state().dispatched).toBe(1);
+    expect(f.state().ms).toBeGreaterThan(Date.parse(start)-90_000);
+    expect(f.state().ms).toBeLessThan(Date.parse(start)-20_000);
   });
   it("fails closed if no authenticated ARMED bot ever appears",async()=>{
     const f=make({neverArmed:true});
