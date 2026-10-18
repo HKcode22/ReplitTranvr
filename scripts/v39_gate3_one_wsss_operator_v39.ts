@@ -95,6 +95,8 @@ export const GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39=true;
 export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Promise<Readonly<{
   status:string;sessionId:string|null;paidCanaryCertified:false;
   anotherRunAuthorized:false;
+  callbackWatchdogPolicy?:"six-plus-six";
+  callbackHealthAuditPending?:boolean;
 }>>{
   // ZERO I/O when source seal is CLOSED.
   if(!GATE3_PROVIDER_EXPOSURE_RELEASED_V39)
