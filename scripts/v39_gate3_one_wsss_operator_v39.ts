@@ -22,6 +22,14 @@ import {readGate3PrecreateContinuityV39} from
   "../server/lib/disruption/gate3PrecreateContinuity_v39";
 import {terminateUnpaidGate3PrecreateRealV39} from
   "../server/lib/disruption/gate3UnpaidPrecreateAbort_v39";
+import {performance} from "node:perf_hooks";
+import {
+  GATE3_CALLBACK_POLL_MS_V39,GATE3_CALLBACK_MAX_CHECKS_V39,
+  GATE3_CALLBACK_WALL_MS_V39,GATE3_CALLBACK_POLICY_V39,
+  checkGate3PublishedCallbackHealthV39,
+  advanceGate3CallbackHealthV39,
+  initialGate3CallbackHealthStateV39,
+} from "../server/lib/disruption/gate3CallbackSixPlusSix_v39";
 import {autoArmGate3WatchdogV39} from
   "../server/lib/disruption/gate3WatchdogAutoArm_v39";
 import {GATE3_PROVIDER_EXPOSURE_RELEASED_V39} from
@@ -87,6 +95,8 @@ export const GATE3_INDEPENDENT_WATCHDOG_RELEASED_V39=true;
 export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Promise<Readonly<{
   status:string;sessionId:string|null;paidCanaryCertified:false;
   anotherRunAuthorized:false;
+  callbackWatchdogPolicy?:"six-plus-six";
+  callbackHealthAuditPending?:boolean;
 }>>{
   // ZERO I/O when source seal is CLOSED.
   if(!GATE3_PROVIDER_EXPOSURE_RELEASED_V39)
@@ -147,24 +157,60 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
   assertGate3TwoStagePreparationTimingV39(
     startUtc,new Date(Date.now()+2_100_000).toISOString(),new Date());
   const prepared=await prepareGate3AfterLiveReadOnlyEvidenceV39(v39Pool,input);
-  assertGate3TwoStagePreparationTimingV39(
-    startUtc,prepared.sessionExpiresAtUtc,new Date());
+  // All operations from this point until the paid execution owner are
+  // confirmed pre-CREATE. Recover an UNUSED source only after two fresh,
+  // identical, clean provider inventories and an immutable SQL readback.
+  // A failed/unknown COMMIT during initial preparation has NO trustworthy
+  // sessionId here and deliberately remains manual-recovery HOLD.
+  const abortBeforePaidExecution=async():Promise<never>=>{
+    try{
+      const digest=await terminateUnpaidGate3PrecreateRealV39(v39Pool,{
+        sessionId:prepared.sessionId,icao:"WSSS",
+        authSha256:prepared.authArtifactSha256,
+        credits:50,seconds:600,startUtc,
+        baselineCredits:prepared.balanceBeforeInMemory
+      });
+      console.log(JSON.stringify({
+        status:"GATE3_UNPAID_PRECREATE_DURABLY_ABORTED",
+        session_id:prepared.sessionId,evidence_sha256:digest,
+        provider_create_by_this_owner:0,another_run_authorized:false
+      }));
+    }catch{
+      stop("GATE3_OPERATOR_PRECREATE_ABORT_UNRECONCILED_HOLD");
+    }
+    stop("GATE3_OPERATOR_PRECREATE_ABORTED_NO_CREATE");
+  };
+  try{
+    assertGate3TwoStagePreparationTimingV39(
+      startUtc,prepared.sessionExpiresAtUtc,new Date());
+  }catch{
+    return await abortBeforePaidExecution();
+  }
 
-  // NEON / PostgreSQL can suspend or restart while waiting for a human
-  // watchdog selector. Keep this *read-only* connection active and demand
-  // stable postmaster epoch + exact surviving UNLOGGED armed source.
-  // Never reconstruct source rows or silently mint another UUID.
-  const witnessPool=new Pool({
-    connectionString:process.env.V39_DATABASE_RUNTIME_URL,
-    max:1,connectionTimeoutMillis:5000,query_timeout:7000,
-    options:"-c default_transaction_read_only=on -c statement_timeout=6000",
-  });
+  // Keep a read-only Neon connection active and demand stable postmaster
+  // identity and the same original UNLOGGED armed source. Initialization
+  // itself can fail AFTER PREPARED: route that through exact unused recovery.
+  let witnessPool:Pool;
+  try{
+    witnessPool=new Pool({
+      connectionString:process.env.V39_DATABASE_RUNTIME_URL,
+      max:1,connectionTimeoutMillis:5000,query_timeout:7000,
+      options:"-c default_transaction_read_only=on -c statement_timeout=6000",
+    });
+  }catch{
+    return await abortBeforePaidExecution();
+  }
   let monitorFault:string|null=null;
   let monitorInFlight:Promise<void>|null=null;
   let monitorTimer:ReturnType<typeof setInterval>|null=null;
   try{
-    const epoch=await readGate3PrecreateContinuityV39(
-      witnessPool,prepared.sessionId,null);
+    let epoch:Awaited<ReturnType<typeof readGate3PrecreateContinuityV39>>;
+    try{
+      epoch=await readGate3PrecreateContinuityV39(
+        witnessPool,prepared.sessionId,null);
+    }catch{
+      return await abortBeforePaidExecution();
+    }
     const verifyContinuity=async():Promise<void>=>{
       if(monitorFault)stop(monitorFault);
       if(requestedStop)stop("GATE3_OPERATOR_STOP_REQUESTED_BEFORE_CREATE");
@@ -204,6 +250,12 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
       startUtc,expectedGitHead:args.head
     },undefined,()=>requestedStop!==null);
     await verifyContinuity();
+    // Verify the same four endpoint/secret/DB callback contracts as P2G
+    // before entering the paid source window. This is a ZERO provider
+    // CREATE/DELETE check and is covered by guarded unpaid closeout.
+    const callbackPreflight=await checkGate3PublishedCallbackHealthV39(args.head);
+    if(!callbackPreflight.healthy)
+      stop("GATE3_CALLBACK_HEALTH_PRESTART_HOLD");
     console.log(JSON.stringify({
       status:"GATE3_AUTOMATIC_INDEPENDENT_WATCHDOG_ARMED",
       session_id:prepared.sessionId,provider_created:false,
@@ -226,26 +278,50 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
   }catch{
     if(monitorTimer!==null){clearInterval(monitorTimer);monitorTimer=null;}
     if(monitorInFlight!==null)await monitorInFlight;
-    try{
-      const digest=await terminateUnpaidGate3PrecreateRealV39(v39Pool,{
-        sessionId:prepared.sessionId,icao:"WSSS",
-        authSha256:prepared.authArtifactSha256,
-        credits:50,seconds:600,startUtc,
-        baselineCredits:prepared.balanceBeforeInMemory
-      });
-      console.log(JSON.stringify({
-        status:"GATE3_UNPAID_PRECREATE_DURABLY_ABORTED",
-        session_id:prepared.sessionId,evidence_sha256:digest,
-        provider_create_by_this_owner:0,another_run_authorized:false
-      }));
-    }catch{
-      stop("GATE3_OPERATOR_PRECREATE_ABORT_UNRECONCILED_HOLD");
-    }
-    stop("GATE3_OPERATOR_PRECREATE_ABORTED_NO_CREATE");
+    return await abortBeforePaidExecution();
   }
-  // Stage B only: the reviewed one-window owner, after fresh account
-  // isolation and a fresh authenticated in-progress GitHub bot heartbeat.
+  // Stage B only: retained independent GH stop and payment controls,
+  // PLUS the same P2G six primary + six contingency published callback
+  // health policy, sampled every 15s (180s combined wall ceiling).
+  // Health recovery never asserts scientifically complete notification
+  // delivery: the original source/credit evidence must still be reconciled.
+  let callbackHealth=initialGate3CallbackHealthStateV39();
+  let callbackStop:string|null=null;
+  let callbackNextAt=performance.now();
+  let callbackInflight:Promise<void>|null=null;
+  const pollCallbackHealth=():void=>{
+    const now=performance.now();
+    if(callbackStop||callbackInflight!==null||now<callbackNextAt)return;
+    callbackNextAt=now+GATE3_CALLBACK_POLL_MS_V39;
+    callbackInflight=checkGate3PublishedCallbackHealthV39(args.head)
+      .then(health=>{
+        const decision=advanceGate3CallbackHealthV39(
+          callbackHealth,health,performance.now());
+        callbackHealth=decision.state;
+        if(decision.action==="STOP_OWNER")
+          callbackStop="gate3_six_plus_six_callback_watchdog_stop";
+        if(!health.healthy||decision.phase==="RECOVERING")
+          console.log(JSON.stringify({
+            schema:"v39.gate3.callback-health-six-plus-six.v1",
+            policy:GATE3_CALLBACK_POLICY_V39,
+            interval_ms:GATE3_CALLBACK_POLL_MS_V39,
+            primary_checks:6,contingency_checks:6,
+            max_consecutive:GATE3_CALLBACK_MAX_CHECKS_V39,
+            max_wall_ms:GATE3_CALLBACK_WALL_MS_V39,
+            phase:decision.phase,action:decision.action,
+            reason:decision.reason,
+            consecutive_failures:decision.state.consecutiveFailures,
+            scientific_audit_pending:
+              decision.state.recoveredHealthAwaitingScienceAudit,
+            provider_mutations_by_monitor:0
+          }));
+      }).catch(()=>{
+        callbackStop="gate3_callback_watchdog_internal_failure";
+      }).finally(()=>{callbackInflight=null;});
+  };
   const externalStopCheck=async():Promise<string|null>=>{
+    pollCallbackHealth();
+    if(callbackStop)return callbackStop;
     if(requestedStop)return requestedStop;
     try{await verifyGate3WatchdogLiveLeaseFromGitHubV39(scope)}
     catch{return "gate3_independent_watchdog_lease_lost"}
@@ -285,6 +361,9 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
       }
     });
     return {status:outcome.status,sessionId:prepared.sessionId,
+      callbackWatchdogPolicy:GATE3_CALLBACK_POLICY_V39,
+      callbackHealthAuditPending:
+        callbackHealth.recoveredHealthAwaitingScienceAudit,
       paidCanaryCertified:false,anotherRunAuthorized:false};
   }catch{
     // Compensate ONLY a provider id already durably bound to our exact new
