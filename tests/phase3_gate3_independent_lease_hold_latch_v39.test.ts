@@ -6,8 +6,9 @@ import {assertGate3WatchdogLiveLeaseV39}
   from "../server/lib/disruption/gate3WatchdogLiveLease_v39";
 
 const act=(previous:boolean,
-  status:"HOLD"|"MONITOR"|"ZERO_EXACT_SUBSCRIPTIONS"|"STOP_VERIFIED")=>
-  decideGate3IndependentLeaseAfterTickV39(previous,status);
+  status:"HOLD"|"MONITOR"|"ZERO_EXACT_SUBSCRIPTIONS"|"STOP_VERIFIED",
+  otherBillablePresent:boolean|null=null)=>
+  decideGate3IndependentLeaseAfterTickV39(previous,status,otherBillablePresent);
 describe("Independent GitHub bot lease fail-closed on watchdog blind spot",()=>{
  it("normal exact-owned provider monitor stays ACTIVE",()=>{
    expect(act(false,"MONITOR")).toMatchObject({
@@ -15,6 +16,14 @@ describe("Independent GitHub bot lease fail-closed on watchdog blind spot",()=>{
    });
    expect(act(false,"ZERO_EXACT_SUBSCRIPTIONS")).toMatchObject({
      status:"ACTIVE",revoked:false
+   });
+ });
+ it("foreign active billable also revokes, even before an owned subscription exists",()=>{
+   expect(act(false,"ZERO_EXACT_SUBSCRIPTIONS",true)).toMatchObject({
+     status:"STOPPED",revoked:true
+   });
+   expect(act(false,"MONITOR",true)).toMatchObject({
+     status:"STOPPED",revoked:true
    });
  });
  it("HOLD must become STOPPED immediately (no 15s publish grace)",()=>{
@@ -38,11 +47,12 @@ describe("Independent GitHub bot lease fail-closed on watchdog blind spot",()=>{
  });
  it("rejects malformed tick rather than granting ACTIVE",()=>{
    expect(()=>decideGate3IndependentLeaseAfterTickV39(
-     false,"unknown" as "HOLD")).toThrow("TICK_INVALID");
+     false,"unknown" as "HOLD",null)).toThrow("TICK_INVALID");
  });
  it("sidecar itself publishes STOPPED on HOLD and NEVER unconditionally ACTIVE",()=>{
    const src=readFileSync("scripts/v39_gate3_independent_watchdog_v39.ts","utf8");
    expect(src).toContain("decideGate3IndependentLeaseAfterTickV39(");
+   expect(src).toContain("tick.otherBillablePresent");
    expect(src).toContain("const justRevoked=!leaseRevoked&&leaseDecision.revoked");
    expect(src).toContain('await heartbeat("STOPPED")');
    expect(src).toContain('await heartbeat(leaseDecision.status)');
