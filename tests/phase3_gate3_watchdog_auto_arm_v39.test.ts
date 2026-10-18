@@ -1,5 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
+import {execFileSync} from "node:child_process";
 import {
   autoArmGate3WatchdogV39,type Gate3AutoArmDepsV39
 } from "../server/lib/disruption/gate3WatchdogAutoArm_v39";
@@ -162,6 +163,20 @@ describe("automatic Gate3 independently verified GH sidecar handoff; no provider
       shouldStop:()=>false,
     })).rejects.toThrow("PROVIDER_BALANCE_CHANGED_AFTER_PREPARE");
     expect(accountReads).toBe(1);
+  });
+  it("one-command Shell launcher is valid bash, noninteractive, time and OS-lock gated",()=>{
+    const filename="scripts/v39_gate3_launch_v39.sh";
+    expect(()=>execFileSync("bash",["-n",filename])).not.toThrow();
+    const shell=readFileSync(filename,"utf8");
+    expect(shell).toContain("flock -n 9");
+    expect(shell).toContain("GATE3_LAUNCH_OUTSIDE_APPROVED_STAGE_A_HOLD");
+    expect(shell).toContain("git status --porcelain");
+    expect(shell).toContain("gh api repos/HKcode22/ReplitTranvr/git/ref/heads/main");
+    expect(shell).toContain("exec node --import tsx scripts/v39_gate3_one_wsss_operator_v39.ts");
+    expect(shell).not.toContain("RUN_ID COMMENT_ID");
+    expect(shell).not.toContain("read -p");
+    expect(shell).not.toContain("git commit");
+    expect(shell).not.toContain("git push");
   });
   it("paid owner must have no readline or numeric-ID prompt and still verify lease before provider CREATE",()=>{
     const owner=readFileSync("scripts/v39_gate3_one_wsss_operator_v39.ts","utf8");
