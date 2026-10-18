@@ -129,6 +129,29 @@ describe("unpaid gate3 BEFORE provider CREATE self-closure — no provider",()=>
    await expect(terminateUnpaidGate3PrecreateV39(scope,second.deps))
      .rejects.toThrow(/DURABLE_READBACK/);
  });
+ it("routes post-PREPARED timing, DB witness setup and first read failures to exact no-charge closeout",()=>{
+   const code=readFileSync("scripts/v39_gate3_one_wsss_operator_v39.ts","utf8");
+   const prepared=code.indexOf("const prepared=await prepareGate3AfterLiveReadOnlyEvidenceV39(");
+   const helper=code.indexOf("const abortBeforePaidExecution=async():Promise<never>");
+   const timing=code.indexOf("assertGate3TwoStagePreparationTimingV39(",prepared);
+   const witnessCtor=code.indexOf("witnessPool=new Pool(",prepared);
+   const witnessFirst=code.indexOf("epoch=await readGate3PrecreateContinuityV39(",prepared);
+   const paid=code.indexOf("executeGate3ActualWindowV39(v39Pool");
+   expect(prepared).toBeGreaterThan(0);
+   expect(helper).toBeGreaterThan(prepared);
+   expect(timing).toBeGreaterThan(helper);
+   expect(witnessCtor).toBeGreaterThan(timing);
+   expect(witnessFirst).toBeGreaterThan(witnessCtor);
+   expect(paid).toBeGreaterThan(witnessFirst);
+   for(const from of [timing,witnessCtor,witnessFirst]){
+     const after=code.slice(from,code.indexOf("const heartbeat=",from));
+     expect(after).toContain("return await abortBeforePaidExecution()");
+   }
+   const path=code.slice(witnessFirst,paid);
+   expect(path).toContain("return await abortBeforePaidExecution()");
+   expect(path).toContain("GATE3_OPERATOR_PRECREATE_ABORT_UNRECONCILED_HOLD");
+   expect(path).not.toContain("deleteSubscriptionVerifiedStrict(");
+ });
  it("owner records terminal ONLY inside pre-execution watchdog guard",()=>{
    const script=readFileSync("scripts/v39_gate3_one_wsss_operator_v39.ts","utf8");
    expect(script).toContain("terminateUnpaidGate3PrecreateRealV39");
