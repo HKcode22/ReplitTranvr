@@ -51,11 +51,13 @@ export function inspectGate05ExactAuthArtifactV39(
   const actualDigest=createHash("sha256").update(bytes).digest("hex");
   if(actualDigest!==pins.independentlyReviewedArtifactSha256)
     fail("REVIEWED_DIGEST_MISMATCH");
-  let a:Record<string,any>;
-  try{a=JSON.parse(bytes.toString("utf8"));}
+  let parsed:unknown;
+  try{parsed=JSON.parse(bytes.toString("utf8"));}
   catch{return fail("JSON");}
-  if(!a||Array.isArray(a)||typeof a!=="object"||
-     Object.keys(a).sort().join("|")!==[...keys].sort().join("|"))
+  if(parsed===null||Array.isArray(parsed)||typeof parsed!=="object")
+    fail("FIELDS");
+  const a=parsed as Record<string,any>;
+  if(Object.keys(a).sort().join("|")!==[...keys].sort().join("|"))
     fail("FIELDS");
   if(a.schema!=="v39.gate05.fids-feasibility-auth.v1"||
      a.purpose!=="TWO_QUERY_FEASIBILITY_NOT_SCIENTIFIC_PILOT"||
