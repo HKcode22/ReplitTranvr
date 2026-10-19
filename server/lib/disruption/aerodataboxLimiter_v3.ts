@@ -567,6 +567,8 @@ export interface FidsFetchOptions {
   budgetOwner?: FidsAttemptBudgetOwner;
   fetchImpl?: typeof fetch;
   sleepImpl?: (ms: number) => Promise<void>;
+  /** Optional caller-owned cancellation; existing callers unchanged. */
+  signal?: AbortSignal;
 }
 
 export async function fetchFidsAirport(
@@ -594,11 +596,19 @@ export async function fetchFidsAirport(
     });
     const url = `${BASE_URL}/flights/airports/icao/${encodeURIComponent(icao)}/${encodeURIComponent(fromLocal)}/${encodeURIComponent(toLocal)}?${params}`;
     for (let attempt = 1; attempt <= 3; attempt++) {
+      if (opts?.signal?.aborted) return null;
       const category: FidsRestCategory = attempt === 1 ? (opts?.category ?? "fids_base") : "fids_retry";
       await owner.reserve(category, FIDS_REST_UNITS_PER_ATTEMPT, attempt);
+      // A stop may arrive after this durable reservation but before fetch.
+      // The reservation must NEVER be refunded (ambiguous provider dispatch).
+      if (opts?.signal?.aborted) return null;
       let resp: Response;
       try {
-        resp = await fetchImpl(url, { headers: headers(), signal: AbortSignal.timeout(15_000) });
+        const deadline = AbortSignal.timeout(15_000);
+        resp = await fetchImpl(url, {
+          headers: headers(),
+          signal: opts?.signal ? AbortSignal.any([opts.signal, deadline]) : deadline,
+        });
       } catch (error) {
         if (attempt === 3) throw error;
         await sleepImpl(RATE_LIMIT_BACKOFF_MS * attempt);

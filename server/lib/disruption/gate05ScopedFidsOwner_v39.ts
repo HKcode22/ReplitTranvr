@@ -86,12 +86,14 @@ export async function fetchGate05ScopedFidsV39(args:{
   /** Injectable only to run mock HTTP in tests. Production passes none. */
   fetchImpl?:typeof fetch;
   sleepImpl?:(ms:number)=>Promise<void>;
+  /** Pilot controller may abort an in-flight GET, never refunds reservation. */
+  signal?:AbortSignal;
 }):Promise<FidsAirportResult|null>{
   const ledger=makeGate05ScopedFidsBudgetOwnerV39(args.db,args.owner,args.query);
   // No fallback to global category ledger or other direction flags.
   return fetchFidsAirport(args.query.icao,args.query.fromLocal,args.query.toLocal,{
     direction:"Departure",withLeg:true,withLocation:args.query.withLocation,
     category:"fids_base",budgetOwner:ledger,
-    fetchImpl:args.fetchImpl,sleepImpl:args.sleepImpl
+    fetchImpl:args.fetchImpl,sleepImpl:args.sleepImpl,signal:args.signal
   });
 }
