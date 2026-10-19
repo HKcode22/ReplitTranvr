@@ -1,3 +1,14 @@
+> **LATEST HANDOFF (updated after WSSS06):** The historical checkpoint below
+> describes the earlier pre-run preparation. **DO NOT interpret its
+> "ready for Stage A" / "WSSS06 not authorized yet" wording as current.**
+> WSSS06 ran, STOPPED on callback identity mismatch, and is terminal
+> `FAILED/WINDOW_STOPPED`. No active billable subscriptions remained at
+> postrun inspection, and credits stayed at 2,056. The narrow callback-origin
+> correction was merged as PR #77 at
+> `b4c0f35778c28f6bc17236ff5fc3f5931d9bdcda` but is **NOT YET PUBLISHED
+> TO REPLIT**. WSSS06 approval is expired/consumed; **do not rerun it**.
+> Read the **Postrun and PR77 release handoff** appended below before any action.
+
 # Phase 3 / Gate 3 — WSSS next-run continuity checkpoint
 
 **Date:** 2026-10-18 (Pacific local).  
@@ -95,3 +106,37 @@ GATE3_READONLY_PREFLIGHT_HOLD
 7. After a real approved canary: verify exact-owned DELETE and subscription absence, durable settlement, credit/notification/raw-source reconciliation, and record the scientific missingness classification. Nothing here asserts that has occurred.
 
 **Starting point if ChatGPT context is lost:** read **this checkpoint PR**, the October 18 PR #74 discussion, then the actual Replit Shell output above. The workspace sync is **already successfully completed**. Do **not** ask the operator to rerun the historical divergence/checkout script. Proceed with the remaining *deployment and watchdog integration plan*, preserving the authorization boundary and updating this checkpoint with exact new results. 
+
+---
+
+## Postrun and PR77 release handoff — verified late Oct 18 / Oct 19 UTC, 2026
+
+**This section supersedes the preceding pre-run status and is the mandatory next starting point.**
+
+### WSSS06 actually ran, then the watchdog revoked authorization
+
+- Human approval: Sunday Oct 18 2026 **7 PM PDT** = Monday Oct 19 **02:00:00Z**. Exact WSSS06 session UUID `4fb87aca-d599-4601-9008-bc035ae3f2c9`, AUTH `AUTH-20261019-G3WSSS06`, SHA256 `4c70a9c9b2f0e479f7afee73dc4f8da7496791a4226cd194489cb1694cae41d4`, source `91b0c16786d9bad0481396e82636b0edf0ecef8a`.
+- Real user-operated one-shot launcher ran during approved Stage A; `PREPARED_NO_CREATE`, then `GATE3_AUTOMATIC_INDEPENDENT_WATCHDOG_ARMED` with authenticated GitHub bot lease. Independent GitHub run `39187302692`, job `117852320407`, lease issue #38 comment `6257966615`. This validates an actually live authenticated Actions watchdog (not merely offline mocks). Actions run ultimately **completed SUCCESS** as a workflow, but **paid Gate3 experiment did NOT succeed**.
+- Sidecar sequence: `ZERO_EXACT_SUBSCRIPTIONS` -> `HOLD / BOUND_SUBSCRIPTION_ACTIVE_WITH_DIFFERENT_CALLBACK` -> `GATE3_INDEPENDENT_LEASE_REVOKED` with `paid_owner_must_stop=true`. Subsequent zero subscription tick did **not** restore ACTIVE. The authenticated BOT lease was later `STOPPED`.
+- User's actual postrun read-only Neon join: exact owner `found=true, owner_state=FAILED, failure_reason=WINDOW_STOPPED, runtime_state=failed, subscription_bound=true, callback_requests=0, callback_success=0, callback_failures=0`. A provider subscription ID was bound, so do **not** falsely report there was no provider CREATE.
+- User's actual provider strict GET/LIST postrun: balance `2056`, same as pre-run observed `2056`; **zero observed net credit difference**, `active_billable_count=0`, `active_wsss_count=0`, bound subscription ID **not returned in inventory**, `quota_units_remaining=60000`. This snapshot supports no current active billable subscription, **not** proof of provider transaction history or exact DELETE acknowledgment. Original WSSS06 is *not* authorized for reuse. No delivered callbacks or successful science measurement.
+- The user asked to stop and retry. No new paid operation, provider DELETE, manual workflow cancel, new SQL source or Replit deploy was invoked during investigation. The independently running GH sidecar was permitted to complete and was observed completed.
+
+### Confirmed code divergence and how PR #77 repairs it
+
+- In the **published old source** `prepaidProbeWindow_v39.ts`, real paid Gate3 chose `prepaidProbeWebhookUrlV39(defaultWebhookUrl(), session.sessionId)`. `defaultWebhookUrl()` falls back to `REPLIT_DOMAINS` (often a dev domain) or `https://travnr.com` if `WEBHOOK_BASE_URL` absent. Operator's actual diagnostic: `configured_webhook_base_present=false`, `expected_callback_uses_published_origin=false`. The independent GitHub safety sidecar has explicit published `WEBHOOK_BASE_URL=https://replit-tranvr--hk84164.replit.app`, causing inconsistent deterministic subscriber URLs. Strict callback matching is **correctly safety-fail-closed**; it was comparing two differently derived callback strings.
+- We **cannot reconstruct the vanished provider subscriber URL bytes** from the new provider LIST, so avoid claiming the precise historical URL or that port `:443` alone caused the fault. The misconfiguration and code divergence are directly demonstrated; a repaired future run must still independently verify actual provider/owner ID and host.
+- [Merged PR #77](https://github.com/HKcode22/ReplitTranvr/pull/77) was reviewed and merged after **4/4 exact-head no-paid-provider GitHub CI successes**. PR head `9ddbd91c77d1a55a24e19d11d620a42b6b029a88`; merge/latest GitHub `main=b4c0f35778c28f6bc17236ff5fc3f5931d9bdcda`. Files: new shared `server/lib/disruption/gate3PinnedCallbackOrigin_v39.ts`, real `prepaidProbeWindow_v39.ts`, independent sidecar `scripts/v39_gate3_independent_watchdog_v39.ts`, `scripts/v39_gate3_one_wsss_operator_v39.ts`, one new regression file, plus existing operator offline fixture. Same pure builder for paid CREATE and sidecar uses **exact published origin with identical callback bytes and no optional :443**, requires a nonempty secret, **refuses explicit conflicting base before PREPARED**, but permits absent base because the immutable reviewed source pins it. Other Phase2 callback paths remain unchanged, strict identity/delete safeguards remain strict.
+- Exact-head CI: Public Receiver Identity `39189714205` PASS; Focused Release No Provider `39189714229` PASS; Real PostgreSQL Faults `39189714193` PASS; V3.9 Offline Safety `39189714198` PASS, including full test suite, TypeScript, production build, and disposable PG.
+- **Critical:** None of the PR #77 code was published to Replit. At last known deployment the live receiver identifies prior `91b0c167...`, while Replit local postpublish HEAD was `a3c6d55470cddcaa5ae311981eb6c00f31a6e3a7` with tree equal to old main. **Do not attempt paid WSSS07 from that old live deployment.**
+
+### Next sequence — DO NOT re-use WSSS06
+
+1. Obtain user approval for **a new explicit future WSSS07 date/time** with the same or separately adjusted budget (600s, 50-credit soft stop acknowledging possible overrun, maximum one paid CREATE, no retry, 6+6 callback-health checks, independent Actions-bot safety lease).
+2. Prepare a new **immutable WSSS07 AUTH** file and append checked-in SHA-256 approval token to `data-collection/phase3/2026-10-16_GATE3_WSSS_AUTH_SHA_APPROVAL_ADDENDUM.md`. Before permitting future run, consider additional read-only settlement/source checks for terminal WSSS06; never mask scientific failure.
+3. Run exact new-head CI and merge the prospective AUTH on top of **PR77-reviewed main**, then perform **ONE** guarded safe Replit fast-forward-to-new-main-tree while preserving backup/publish commits. The exact local commit may differ but full reviewed Git tree must match; no force reset.
+4. Publish Replit **once** with the final AUTH+PR77 code and verify published public `/__v39/workspace-runtime` reports exact new main SHA, 168-hour custody/route, real callback secret/DB HMAC probes and that the **actual provider CREATE callback derivation matches the GitHub sidecar's same pinned published origin**, not a dev/fallback URL.
+5. Immediately before new authorized Stage A, do fresh read-only account strict GET/LIST (0 active CreditBased, >=1500 floor and >=1000 protected floor), exact SQL admission (no unresolved owner), and real Actions workflow/secret readiness. Stage A only 3–8 minutes before exact new start; run one reviewed one-command owner **ONCE**. No manual bot ID copy or second CREATE.
+6. If sidecar `HOLD`, non-matching provider subscriber URL, stale bot lease, changed credits, missing original callback source or time overrun: **STOP, reconcile; do not retry**. Monitor actual source/credits/callbacks, exact owned DELETE/absence, and scientific receipt after run; publish new dated checkpoint.
+
+**User instruction:** Prefer Replit Shell over Replit AI Agent; no Cloudflare, no unnecessary multiple publishes or repeated broad audit loops. **No automatic background work is running from this checkpoint.** The user must choose/approve a future WSSS07 time before any new AUTH and paid work.
