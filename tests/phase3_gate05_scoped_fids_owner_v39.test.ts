@@ -134,13 +134,50 @@ onlyDisposable("Gate05 exact stored reservation under real disposable PostgreSQL
         "FROM clean.gate05_fids_attempt_v39 WHERE scope_id=$1",[id]);
       expect(receipt.rows[0]).toEqual({n:6,units:12});
       await rejected(callSql,arg(sha1,3),/GATE05_WRONG_QUERY_DUPLICATE_OR_SEQUENCE_HOLD/);
-      await conn.query("UPDATE clean.gate05_fids_pilot_scope_v39 SET state='STOPPED' WHERE scope_id=$1",[id]);
+      const stopped=await conn.query(
+        "SELECT * FROM clean.stop_gate05_fids_pilot_v39($1::uuid,$2::text)",
+        [id,"OPERATOR_STOP"]);
+      expect(stopped.rows[0]).toMatchObject({
+        state:"STOPPED",reserved_attempts:"6",reserved_units:"12"
+      });
+      const stopAgain=await conn.query(
+        "SELECT * FROM clean.stop_gate05_fids_pilot_v39($1::uuid,$2::text)",
+        [id,"OPERATOR_STOP"]);
+      expect(stopAgain.rows[0].reserved_units).toBe("12");
+      const terminal=await conn.query(
+        "SELECT stop_reason,stopped_at_utc IS NOT NULL AS has_time "+
+        "FROM clean.gate05_fids_pilot_scope_v39 WHERE scope_id=$1",[id]);
+      expect(terminal.rows[0]).toMatchObject({
+        stop_reason:"OPERATOR_STOP",has_time:true
+      });
       await rejected(callSql,arg(sha0,1),/GATE05_OWNER_AUTH_CYCLE_OR_WINDOW_HOLD/);
       await rejected("UPDATE clean.gate05_fids_pilot_scope_v39 SET state='ACTIVE' WHERE scope_id=$1",
         [id],/GATE05_STOP_TERMINAL/);
       await rejected("DELETE FROM clean.gate05_fids_pilot_scope_v39 WHERE scope_id=$1",[id],/GATE05_SCOPE_CANNOT_DELETE/);
+      await rejected("UPDATE clean.gate05_fids_pilot_scope_v39 SET stop_reason='SAFETY_ABORT' WHERE scope_id=$1",[id],
+        /GATE05_STOP_TERMINAL/);
+      await rejected("SELECT clean.stop_gate05_fids_pilot_v39($1::uuid,$2::text)",[id,"CUSTOM_REASON"],
+        /GATE05_STOP_REASON_HOLD/);
       await rejected("UPDATE clean.gate05_fids_pilot_scope_v39 SET cycle_id='new' WHERE scope_id=$1",
-        [id],/GATE05_SCOPE_IDENTITY_IMMUTABLE/);
+        [id],/GATE05_SCOPE_IDENTITY_IMMUTABLE|GATE05_STOP_TERMINAL/);
+
+      // PostgreSQL default EXECUTE on functions is PUBLIC; staged V0066
+      // must explicitly revoke it from all new gate-05 functions.
+      const publicFns=await conn.query(
+        `SELECT p.proname,
+           EXISTS (SELECT 1 FROM aclexplode(
+             COALESCE(p.proacl,acldefault('f',p.proowner))) a
+             WHERE a.grantee=0 AND a.privilege_type='EXECUTE'
+           ) AS public_execute
+         FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+         WHERE n.nspname='clean'
+           AND p.proname IN (
+             'reserve_gate05_fids_attempt_v39',
+             'stop_gate05_fids_pilot_v39'
+           )`
+      );
+      expect(publicFns.rowCount).toBe(2);
+      expect(publicFns.rows.every(row=>row.public_execute===false)).toBe(true);
     }finally{
       await conn.query("ROLLBACK").catch(()=>undefined);
       await conn.end();

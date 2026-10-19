@@ -13,6 +13,12 @@ CREATE TABLE clean.gate05_fids_pilot_scope_v39 (
   starts_at_utc timestamptz NOT NULL,
   expires_at_utc timestamptz NOT NULL,
   state text NOT NULL DEFAULT 'PREPARED' CHECK (state IN ('PREPARED','ACTIVE','STOPPED')),
+  stopped_at_utc timestamptz,
+  stop_reason text CHECK (stop_reason IN ('OPERATOR_STOP','EXPIRED','SAFETY_ABORT')),
+  CONSTRAINT gate05_fids_stop_receipt_shape_v39 CHECK (
+    (state='STOPPED' AND stopped_at_utc IS NOT NULL AND stop_reason IS NOT NULL)
+    OR (state<>'STOPPED' AND stopped_at_utc IS NULL AND stop_reason IS NULL)
+  ),
   base_cap_units integer NOT NULL DEFAULT 4 CHECK (base_cap_units = 4),
   retry_cap_units integer NOT NULL DEFAULT 8 CHECK (retry_cap_units = 8),
   base_used_units integer NOT NULL DEFAULT 0 CHECK (base_used_units BETWEEN 0 AND 4),
@@ -70,8 +76,16 @@ BEGIN
          NEW.expires_at_utc,NEW.base_cap_units,NEW.retry_cap_units) THEN
     RAISE EXCEPTION 'GATE05_SCOPE_IDENTITY_IMMUTABLE';
   END IF;
-  IF OLD.state='STOPPED' AND NEW.state <> 'STOPPED' THEN
+  IF OLD.state='STOPPED' THEN
     RAISE EXCEPTION 'GATE05_STOP_TERMINAL';
+  END IF;
+  IF NEW.state='STOPPED' AND
+     (NEW.stopped_at_utc IS NULL OR NEW.stop_reason IS NULL) THEN
+    RAISE EXCEPTION 'GATE05_STOP_RECEIPT_REQUIRED';
+  END IF;
+  IF NEW.state<>'STOPPED' AND
+     (NEW.stopped_at_utc IS NOT NULL OR NEW.stop_reason IS NOT NULL) THEN
+    RAISE EXCEPTION 'GATE05_PREMATURE_STOP_RECEIPT_HOLD';
   END IF;
   IF OLD.state='PREPARED' AND NEW.state='ACTIVE' THEN
     IF NEW.base_used_units <> 0 OR NEW.retry_used_units <> 0 OR
@@ -136,7 +150,10 @@ CREATE FUNCTION clean.reserve_gate05_fids_attempt_v39(
   p_reservation_id uuid, p_scope_id uuid, p_authorization_id text,
   p_authorization_sha256 text, p_cycle_id text, p_icao text,
   p_query_sha256 text, p_category text, p_attempt integer, p_units integer
-) RETURNS boolean LANGUAGE plpgsql AS $gate05_reserve$
+) RETURNS boolean LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, clean, pg_temp
+AS $gate05_reserve$
 DECLARE o clean.gate05_fids_pilot_scope_v39%ROWTYPE;
         q clean.gate05_fids_allowed_query_v39%ROWTYPE;
 BEGIN
@@ -179,3 +196,55 @@ BEGIN
   RETURN true;
 END
 $gate05_reserve$;
+
+
+-- SECURITY REVIEW: default EXECUTE privileges on new PostgreSQL functions
+-- include PUBLIC. This staged migration explicitly withholds all reservation
+-- and stop execution grants, including ordinary application connections.
+-- A separate APPROVED release must grant only specific dedicated runtime
+-- identities; no runtime roles or human approval are invented here.
+REVOKE ALL ON TABLE clean.gate05_fids_pilot_scope_v39,
+  clean.gate05_fids_allowed_query_v39,
+  clean.gate05_fids_attempt_v39 FROM PUBLIC;
+REVOKE ALL ON FUNCTION clean.guard_gate05_fids_pilot_scope_v39() FROM PUBLIC;
+REVOKE ALL ON FUNCTION clean.guard_gate05_fids_allowed_query_v39() FROM PUBLIC;
+REVOKE ALL ON FUNCTION clean.reserve_gate05_fids_attempt_v39(
+  uuid,uuid,text,text,text,text,text,text,integer,integer
+) FROM PUBLIC;
+
+-- STOP owner is deliberately separated from the reservation caller.
+-- STOPPED is terminal; this function runs under its controlled owner
+-- and locks the same row as the reservation stored function. It therefore
+-- serializes STOP with new admissions. An HTTP GET already reserved before
+-- STOP commits may still be in flight and must be reconciled separately.
+CREATE FUNCTION clean.stop_gate05_fids_pilot_v39(
+  p_scope_id uuid, p_reason text
+) RETURNS TABLE(state text, reserved_attempts bigint, reserved_units bigint)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, clean, pg_temp
+AS $gate05_stop$
+DECLARE s text;
+BEGIN
+  IF p_reason NOT IN ('OPERATOR_STOP','EXPIRED','SAFETY_ABORT') THEN
+    RAISE EXCEPTION 'GATE05_STOP_REASON_HOLD';
+  END IF;
+  SELECT owner.state INTO s FROM clean.gate05_fids_pilot_scope_v39 owner
+    WHERE owner.scope_id=p_scope_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'GATE05_STOP_SCOPE_NOT_FOUND'; END IF;
+  IF s <> 'STOPPED' THEN
+    UPDATE clean.gate05_fids_pilot_scope_v39 owner
+      SET state='STOPPED', stopped_at_utc=clock_timestamp(),stop_reason=p_reason
+      WHERE owner.scope_id=p_scope_id;
+  END IF;
+  RETURN QUERY SELECT 'STOPPED'::text,count(*)::bigint,
+     coalesce(sum(a.units),0)::bigint
+     FROM clean.gate05_fids_attempt_v39 a WHERE a.scope_id=p_scope_id;
+END
+$gate05_stop$;
+
+REVOKE ALL ON FUNCTION clean.stop_gate05_fids_pilot_v39(uuid,text) FROM PUBLIC;
+
+-- Production release REQUIRES separate, reviewed role/credential isolation.
+-- Do not grant any of these to legacy broad database owner credentials and do
+-- not load this file as an automatic production migration.
