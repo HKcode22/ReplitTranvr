@@ -14,6 +14,8 @@
  * Source enablement and existing AUTH hash check are necessary, NOT sufficient.
  */
 import "dotenv/config";
+import {assertGate3PinnedCallbackConfigV39} from
+  "../server/lib/disruption/gate3PinnedCallbackOrigin_v39";
 import {readFileSync} from "node:fs";
 import {Pool} from "pg";
 import {execFileSync} from "node:child_process";
@@ -113,6 +115,12 @@ export async function executeOneWsssGate3OperatorV39(argv:readonly string[]):Pro
      !process.env.V39_DATABASE_RUNTIME_URL||
      !process.env.AERODATABOX_API_KEY)
     stop("GATE3_OPERATOR_ENVIRONMENT_NOT_READY");
+  // WSSS06 incident prevention: verify callback origin BEFORE allocating a
+  // durable PREPARED source. The owner and independent GH safety runner must
+  // derive the identical pinned, published receiver URL. Missing config is
+  // allowed (the pinned source wins); conflicting explicit config is HOLD.
+  assertGate3PinnedCallbackConfigV39(
+    process.env.AERODATABOX_WEBHOOK_SECRET,process.env.WEBHOOK_BASE_URL);
   // Two GitHub REST reads every 5s for up to ~18min exceed the public
   // unauthenticated 60-request/hour limit. Require a real token BEFORE
   // creating a durable PREPARED row, not after a paid run has begun.
