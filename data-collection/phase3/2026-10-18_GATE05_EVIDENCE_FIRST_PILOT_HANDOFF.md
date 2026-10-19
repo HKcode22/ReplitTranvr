@@ -104,6 +104,10 @@ The original WSSS08 scientific-population ambiguity is now **resolved** using al
 
 All nineteen status code `codeshareStatus=1` translate to `IsOperator` per pinned `flightNotificationExtractor_v3.ts` (name mapping); nineteen provisional schedule-route composite keys happened to be distinct, but **verified physical flight count remains unknown** and must not be inferred from a composite key alone. No flight-level `location` objects existed in any of the nineteen; airborne sample and trajectory measurement are **NOT ESTABLISHED** by this mini-canary.
 
+### Source capability risk: airborne positions are not yet demonstrated
+
+The current `fetchFidsAirport` client always sends `withLocation="false"` in its FIDS request, and this WSSS08 airport subscription yielded **zero** flight-item `location` objects despite ten EnRoute items across incoming/outgoing traffic. As written, the FIDS code is not asking its provider for airborne positions; Gate0.5 cannot presume its frozen `minAirborneFlights=30`/`minAirbornePoints=100` example minima will be satisfiable. **Before purchasing an adequately sampled dedicated pilot**, separately verify the covered and licensed provider-native position source, endpoint option/price, time stamps and expected empirical cadence or preserve scientific status `BLOCKED/INSUFFICIENT_SAMPLE`. Adding `withLocation=true` or new flight-status requests would alter REST cost and must be reviewed/budgeted/authorized, not silently toggled in production. The original callback absence is a sample fact, not a universal coverage claim.
+
 ### Exact next step: prospective Gate0.5 contract/data feasibility, NOT another WSSS08 analysis loop
 
 **Proceed to offline-reviewed dedicated pilot preparation:**
