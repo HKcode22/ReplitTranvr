@@ -1,0 +1,15 @@
+{
+  "authorizationId": "AUTH-20261019-G3WSSS07",
+  "phaseGate": "Phase 3 / Gate 3",
+  "airportFilterWindow": "WSSS/departures/2026-10-19T03:00:00Z+600s",
+  "maxAlertCredits": 50,
+  "maxRestUnitsByCategory": null,
+  "startNotBeforeUtc": "2026-10-19T02:35:00.000Z",
+  "expiresAtUtc": "2026-10-19T04:00:00.000Z",
+  "cleanupOwner": "scripts/v39_gate3_one_wsss_operator_v39.ts and .github/workflows/phase3-gate3-independent-safety.yml",
+  "predecessorEvidenceIds": [
+    "RUN-20260915-D61659402642563B6FEDF2AAA981474838BF088B67526528426F9702509C9D1B",
+    "RUN-20260915-03154BAC2FAFCC19104C44B2D355C6E3F7D1A07B5693177EEC84A3478B009B9D",
+    "AUTH-20261019-G3WSSS06"
+  ]
+}
