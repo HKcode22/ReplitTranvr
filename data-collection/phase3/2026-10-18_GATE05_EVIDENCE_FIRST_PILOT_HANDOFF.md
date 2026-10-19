@@ -1,3 +1,27 @@
+## 2026-10-19 PDT — DEADLINE-FIRST GATE 0.5 DECISION (official contract fingerprint + response assessor)
+
+**Reason for this checkpoint:** operator reports a deadline after ~4 hours of Gate0.5 work. Prioritize measurable scientific feasibility and one practical end-to-end path; do not add more generalized security framework or repeat Gate3 paid tests.
+
+### Newly verified official contract bytes (operator, no paid GET)
+- Source: `https://doc.aerodatabox.com/docs/openapi-rapidapi-v1.json`, official domain checked after HTTP fetch.
+- Exact live source result: `info.version=1.15.4.0`, **293112 bytes**, **SHA-256 `63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09`**, FIDS Tier2=true, `withLocation` option documented=true. Provider API units spent **0**, DB writes **0**. It is now **pinned and completed**; do not insist on another public fetch without documented contract change.
+- This SHA is the downloaded *contract* byte fingerprint, not the user's account tariff/retention license and not evidence that individual revised/runway timestamps are final actuals.
+
+### Work done this iteration
+- New pure `server/lib/disruption/gate05FidsResponseFeasibility_v39.ts` and negative tests `tests/phase3_gate05_fids_response_feasibility_v39.test.ts`, draft commit `531fd32d9d7c87e3c0e0662a22ab85cbbe1d2833`.
+- Assesses **two separately retrieved** provider FIDS snapshots (without/with location), differentiates departures vs arrivals and *explicitly WSSS-originating* records, reports scheduled/revised/runway field pairs, location object, geographically valid `location.lat/lon`, valid `reportedAtUtc`, and potential FIDS truncation. Emits only aggregate values, no raw flight IDs or coordinates.
+- Always reports `gate05ScientificPass=false`, `verifiedUniquePhysicalFlights=null`, `verifiedAirborneTrajectories=null`, selected prediction T and primary actual departure label `null`. Single or two snapshots do not prove trajectories, actual-vs-estimated milestones, sampling adequacy, availability before cutoff or source licensing. Pure assessor makes no provider calls or SQL writes.
+- Verify **final exact-HEAD CI** before accepting implementation; initially running. This is developer-side source preparation only. No Replit deployment, no live REST call, no SQL migration, no Alert CREATE, no spending, no changed GitHub main.
+
+### Go/no-go before any paid measurement
+1. **Engineering:** new assessor and protective scoped FIDS client full CI green on one exact HEAD. V0066/V0067 scoped authorization, grants and emergency stop currently **staged only**, not installed in production. Do not turn on legacy category-wide FIDS budgets.
+2. **Independent business/authorization:** user's specific active RapidAPI plan/retention/derived-work terms; current-cycle **project** allocation and Tier2 charge; human-approved exact one-run scope/UTC window and 12 unit max; official contract SHA above; verified operator approval/root; separate scoped dispatch vs STOP credentials, trusted commissioning/terminal watchdog. The previously checked 60,000/60,000 account units and Nov4 reset do not themselves grant spend authority.
+3. **FIRST scientific observation:** run **at most two approved FIDS REST requests** (same precise WSSS `direction=Departure` local window, `withLocation=false/true`) with at most three attempts each, 4 base + 8 retry locally reserved = **12-unit upper bound**, after production role and auth release. Record separate retrieval/availability clocks, provider unit delta, role composition, optional position availability, candidate movement field coverage; never infer actual label from presence.
+4. **DECISION after pilot feasibility:** If usable departure FIDS/population and actual-vs-estimated target prove constructible, **prospectively freeze sample minima, duration and budget** for a separate sufficiently powered dedicated scientific pilot. If not, record the source-specific blocker / unavailable target and choose different source, endpoint or scientifically justified revised design. No manual measurement-booleans-based PASS. Current historic criteria defaults **100/50/20/30/100/60** are NOT empirically met or automatically mandatory no matter feasibility.
+5. **Communicate clearly:** Stage0 and contract fingerprint complete; offline safeguards tested in draft; REST two-query feasibility not yet performed; full Gate0.5 scientific PASS not attained. A fixed deadline must not be met by falsely certifying missing outcome/trajectory evidence.
+
+**Current verified Gate3 / Gate0.5 starting evidence unchanged:** 19 billed = 19 delivered items, 7/7 original bytes verified, 6 WSSS outbound / 13 inbound, zero position objects; completed operational Gate3 without any Gate0.5 scientific acceptance.
+
 ## 2026-10-19 PDT — detached Ed25519 math verification for Gate0.5 reviewed AUTH bytes (offline-only)
 
 **Problem:** An authorization artifact's SHA-256 digest, though sufficient to detect modification, does **not** prove who authorized it. Passing a self-chosen `expectedSha256=sha256(file)` is not independently trusted approval. This has been a long-running paid Gate0.5 admission blocker.
