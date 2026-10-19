@@ -126,3 +126,23 @@
 - Provider 50 credits is a **soft** stop and possible overrun remains explicit; never claim hard cap, another paid CREATE, foreign DELETE, second rescue POST or scientific completion merely from a positive Actions workflow conclusion.
 - paid_provider_creates_by_this_addendum: 0
 - another_run_automatically_authorized: false
+
+---
+
+## AUTH-20261019-G3WSSS07 — WITHDRAWN BEFORE 8 PM EXPOSURE
+
+- **Owner's most recent explicit instruction supersedes earlier 8 PM approval:** On Sunday 2026-10-18 at approximately 7:50 PM Pacific, owner requested “just set it up for 9pm at this point.” The earlier approved **8 PM PDT WSSS07** is therefore **WITHDRAWN for new paid CREATE** without changing its already merged immutable AUTH or its previous approval SHA record. This entry is a human revocation / audit addendum; the software may not interpret it automatically, so the operator MUST NOT execute any WSSS07 8 PM launch.
+- Historical WSSS07 `AUTH_ARTIFACT_SHA256:ea1778c4eff98e5aa761cae4d37ebedd73bde363ed81fb702991f3526b9e6367` is retained only for evidence; NO database PREPARED, callback run or paid provider CREATE has been authorized here by this addendum.
+- Do not convert WSSS07's original 8 PM JSON in place, reuse its AUTH ID, rerun WSSS06, or attempt a paid POST after an expired clock window.
+
+## AUTH-20261019-G3WSSS08 — explicit replacement at 9 PM Pacific Oct 18, 2026
+
+- **Latest owner-approved replacement:** The owner first requested a 9 PM WSSS07 candidate, then explicitly approved 8 PM, and finally changed the request to **9 PM tonight**. To preserve historical immutable 8 PM authorization, the replacement uses the next unique **WSSS08** identifier, not WSSS07. Exact target Sunday **2026-10-18 21:00:00 PDT** = Monday **2026-10-19T04:00:00Z**. Owner's previous 600-second WSSS/departures, 50 Alert-credit **SOFT** stop (possible overshoot), MAX **ONE** billable provider CREATE, **no automatic CREATE retry**, 6 primary + 6 contingency callback-host health probes, and independent authenticated GitHub Actions safety watchdog constraints carry forward. The user explicitly says “just set it up for 9pm”; this approval is **conditional on every independent live safety gate**, not advance consent to bypass them.
+- Exact unique AUTH ID: `AUTH-20261019-G3WSSS08`. Exact provider filter: `WSSS/departures/2026-10-19T04:00:00Z+600s`. Checked-in authorization file: `data-collection/authorizations/V3.9_PHASE3_GATE3_AUTH_20261019_WSSS08.json`.
+- AUTH_ARTIFACT_SHA256:63f09aaca80160d07268c855fb0d85b5382df5febf21b482cc2bcd65009a2746
+- Start-not-before `2026-10-19T03:35:00.000Z` / expire `2026-10-19T05:00:00.000Z` (late expiry is for accounting rescue ONLY). Strict Stage A owner preparation `2026-10-19T03:52:00Z–03:57:00Z` = **8:52–8:57 PM PDT**, and the sole permitted paid CREATE `2026-10-19T04:00:00Z–04:00:15Z` = **9:00–9:00:15 PM PDT**. Earlier or later launch => HOLD, no same-authorization retry.
+- Approved prereqs: full reviewed source with merged PR #77 exact shared published callback for actual CREATE and independent watchdog, strict exact Replit configured `WEBHOOK_BASE_URL=https://replit-tranvr--hk84164.replit.app` if configured (including user's newly added masked secret), verified published `git_head` equal to final immutable reviewed GitHub main, clean local source TREE, 168-hour callback original blob custody, signed webhook and DB HMAC binding, current provider GET/LIST with zero active billables and available protected floor/quota, SQL zero unresolved owners, actual continuously running authenticated GitHub bot ARMED/ACTIVE lease, and fresh final pre-CREATE UTC/account/source/identity checks. The existence of this ledger token DOES NOT prove any prerequisite has occurred.
+- WSSS06 `AUTH-20261019-G3WSSS06` terminal `FAILED/WINDOW_STOPPED`; user observed 0 active billable subscriptions, unchanged 2056 credits, no successful callbacks. This historical cleanup must be rechecked before new session; no new paid CREATE until all guards pass.
+- 50-credit target remains **soft** and can overrun; 6+6 refers ONLY to callback-health probes (not provider CREATE or delivery retries); exact owned subscription DELETE only; scientific missingness is recorded without relaxing unsafe billing/identity controls.
+- `paid_provider_creates_by_this_addendum: 0`
+- `authorizes_second_create_or_new_window: false`
