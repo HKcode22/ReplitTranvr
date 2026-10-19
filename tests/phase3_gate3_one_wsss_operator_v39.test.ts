@@ -39,11 +39,14 @@ describe("one WSSS Gate3 paid owner: exact scope AND no unsupported hard-cap rel
   });
   it("requires authenticated GitHub API capacity before reserving a paid session",async()=>{
     const names=["V39_DATABASE_TARGET_CONFIRM","V39_DATABASE_RUNTIME_URL",
-      "AERODATABOX_API_KEY","GITHUB_TOKEN","GH_TOKEN"] as const;
+      "AERODATABOX_API_KEY","AERODATABOX_WEBHOOK_SECRET",
+      "WEBHOOK_BASE_URL","GITHUB_TOKEN","GH_TOKEN"] as const;
     const previous=Object.fromEntries(names.map(k=>[k,process.env[k]]));
     process.env.V39_DATABASE_TARGET_CONFIRM="production";
     process.env.V39_DATABASE_RUNTIME_URL="synthetic-offline-no-connection";
     process.env.AERODATABOX_API_KEY="synthetic-offline-no-provider";
+    process.env.AERODATABOX_WEBHOOK_SECRET="synthetic-offline-webhook";
+    delete process.env.WEBHOOK_BASE_URL;
     delete process.env.GITHUB_TOKEN;
     delete process.env.GH_TOKEN;
     try{
