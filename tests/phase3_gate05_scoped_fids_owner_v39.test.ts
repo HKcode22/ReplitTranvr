@@ -103,6 +103,9 @@ onlyDisposable("Gate05 exact stored reservation under real disposable PostgreSQL
       await conn.query("BEGIN");
       const sql=readFileSync("migrations/staged/V0066__gate05_scoped_fids_budget_v39.sql","utf8");
       await conn.query(sql);
+      await conn.query(readFileSync(
+        "migrations/staged/V0067__gate05_fids_function_only_roles_v39.sql","utf8"
+      ));
       await conn.query(
         "INSERT INTO clean.gate05_fids_pilot_scope_v39 "+
         "(scope_id,authorization_id,authorization_sha256,cycle_id,icao,starts_at_utc,expires_at_utc) "+
@@ -115,6 +118,54 @@ onlyDisposable("Gate05 exact stored reservation under real disposable PostgreSQL
       );
       await rejected(callSql,arg(sha0,1),/GATE05_OWNER_AUTH_CYCLE_OR_WINDOW_HOLD/);
       await conn.query("UPDATE clean.gate05_fids_pilot_scope_v39 SET state='ACTIVE' WHERE scope_id=$1",[id]);
+
+
+      // These are NOLOGIN roles; even in the disposable DB they must only
+      // acquire function EXECUTE, not any direct ledger/table writing powers.
+      const grants=await conn.query(`
+        SELECT
+          has_function_privilege('gate05_fids_dispatch_v39',
+            'clean.reserve_gate05_fids_attempt_v39(uuid,uuid,text,text,text,text,text,text,integer,integer)','EXECUTE') AS dispatch_reserve,
+          has_function_privilege('gate05_fids_dispatch_v39',
+            'clean.stop_gate05_fids_pilot_v39(uuid,text)','EXECUTE') AS dispatch_stop,
+          has_function_privilege('gate05_fids_safety_v39',
+            'clean.stop_gate05_fids_pilot_v39(uuid,text)','EXECUTE') AS safety_stop,
+          has_function_privilege('gate05_fids_safety_v39',
+            'clean.reserve_gate05_fids_attempt_v39(uuid,uuid,text,text,text,text,text,text,integer,integer)','EXECUTE') AS safety_reserve,
+          has_table_privilege('gate05_fids_dispatch_v39',
+            'clean.gate05_fids_pilot_scope_v39','UPDATE') AS dispatch_table_update,
+          has_table_privilege('gate05_fids_safety_v39',
+            'clean.gate05_fids_pilot_scope_v39','UPDATE') AS safety_table_update,
+          has_function_privilege('gate05_fids_commission_v39',
+            'clean.reserve_gate05_fids_attempt_v39(uuid,uuid,text,text,text,text,text,text,integer,integer)','EXECUTE') AS commission_reserve
+      `);
+      expect(grants.rows[0]).toEqual({
+        dispatch_reserve:true,dispatch_stop:false,safety_stop:true,
+        safety_reserve:false,dispatch_table_update:false,safety_table_update:false,
+        commission_reserve:false
+      });
+
+      // Exercise the actual permission boundary as a non-superuser role.
+      // All role test mutations are undone by their own SAVEPOINTs.
+      await conn.query("SAVEPOINT dispatch_privilege_test");
+      await conn.query("SET LOCAL ROLE gate05_fids_dispatch_v39");
+      expect((await conn.query(callSql,arg(sha0,1))).rows[0].reserved).toBe(true);
+      await rejected("SELECT * FROM clean.stop_gate05_fids_pilot_v39($1::uuid,$2::text)",
+        [id,"SAFETY_ABORT"],/permission denied/);
+      await rejected("UPDATE clean.gate05_fids_pilot_scope_v39 SET state='STOPPED' WHERE scope_id=$1",
+        [id],/permission denied/);
+      await conn.query("ROLLBACK TO SAVEPOINT dispatch_privilege_test");
+      await conn.query("RELEASE SAVEPOINT dispatch_privilege_test");
+
+      await conn.query("SAVEPOINT safety_privilege_test");
+      await conn.query("SET LOCAL ROLE gate05_fids_safety_v39");
+      expect((await conn.query("SELECT * FROM clean.stop_gate05_fids_pilot_v39($1::uuid,$2::text)",
+        [id,"SAFETY_ABORT"])).rows[0].state).toBe("STOPPED");
+      await rejected(callSql,arg(sha0,1),/permission denied/);
+      await rejected("UPDATE clean.gate05_fids_pilot_scope_v39 SET state='ACTIVE' WHERE scope_id=$1",
+        [id],/permission denied/);
+      await conn.query("ROLLBACK TO SAVEPOINT safety_privilege_test");
+      await conn.query("RELEASE SAVEPOINT safety_privilege_test");
 
       await rejected(callSql,arg(sha0,1,{cycleId:"wrong-cycle"}),/GATE05_OWNER_AUTH_CYCLE_OR_WINDOW_HOLD/);
       await rejected(callSql,arg(sha0,1,{authorizationId:"AUTH-WRONG00001"}),/GATE05_OWNER_AUTH_CYCLE_OR_WINDOW_HOLD/);
