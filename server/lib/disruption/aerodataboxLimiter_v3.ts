@@ -561,6 +561,8 @@ export const fidsRestLedger: FidsAttemptBudgetOwner = {
 export interface FidsFetchOptions {
   direction?: "Departure" | "Arrival" | "Both";
   withLeg?: boolean;
+  /** Optional, explicitly requested. Default false, no silent position REST spend. */
+  withLocation?: boolean;
   category?: "fids_base" | "fids_split" | "validation" | "outcome";
   budgetOwner?: FidsAttemptBudgetOwner;
   fetchImpl?: typeof fetch;
@@ -575,6 +577,8 @@ export async function fetchFidsAirport(
 ): Promise<FidsAirportResult | null> {
   const direction = opts?.direction ?? "Both";
   const withLeg = opts?.withLeg ?? true;
+  const withLocation = opts?.withLocation ?? false;
+  if (typeof withLocation !== "boolean") throw new Error("FIDS_WITH_LOCATION_BOOLEAN_REQUIRED");
   const owner = opts?.budgetOwner ?? fidsRestLedger;
   const fetchImpl = opts?.fetchImpl ?? fetch;
   const sleepImpl = opts?.sleepImpl ?? sleep;
@@ -585,7 +589,7 @@ export async function fetchFidsAirport(
       withCodeshared: "true",
       withCargo: "false",
       withPrivate: "false",
-      withLocation: "false",
+      withLocation: withLocation ? "true" : "false",
       withLeg: withLeg ? "true" : "false",
     });
     const url = `${BASE_URL}/flights/airports/icao/${encodeURIComponent(icao)}/${encodeURIComponent(fromLocal)}/${encodeURIComponent(toLocal)}?${params}`;

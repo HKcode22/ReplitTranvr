@@ -48,7 +48,7 @@ describe("Gate0.5 FIDS feasibility preview cannot issue provider calls",()=>{
     expect(plan.maxReservedApiUnits).toBe(12);
     expect(plan.providerApiCalls).toBe(0);
     expect(plan.canAuthorizePilot).toBe(false);
-    expect(plan.currentFidsClientSupportsWithLocationTrue).toBe(false);
+    expect(plan.currentFidsClientSupportsWithLocationTrue).toBe(true);
     expect(plan.tariffIndependentlyConfirmed).toBe(false);
   });
 });

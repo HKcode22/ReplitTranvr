@@ -24,6 +24,8 @@ export interface FidsCensusParams {
   withCodeshared: boolean;
   withCargo?: boolean;
   withPrivate?: boolean;
+  /** Optional; default false; must be included in recorded raw request options. */
+  withLocation?: boolean;
   direction?: "Departure" | "Arrival" | "Both";
   serviceWindowStartUtc: Date;
   serviceWindowEndUtc: Date;
@@ -431,7 +433,7 @@ export async function fetchFidsPopulation(
     params.airportIcao,
     params.fromLocal,
     params.toLocal,
-    { direction, withLeg: true, category: params.restCategory },
+    { direction, withLeg: true, withLocation: params.withLocation ?? false, category: params.restCategory },
   );
   if (!fids) return null;
 
@@ -441,6 +443,7 @@ export async function fetchFidsPopulation(
     fromLocal: params.fromLocal,
     toLocal: params.toLocal,
     ianaTimezone: params.ianaTimezone,
+    queryOptions: { direction, withLeg: true, withLocation: params.withLocation ?? false },
     departures: fids.departures,
     arrivals: fids.arrivals,
     fetchedAtUtc: retrievalUtc.toISOString(),

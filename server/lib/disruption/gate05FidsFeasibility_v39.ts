@@ -24,8 +24,8 @@ export function previewGate05FidsFeasibilityV39() {
     maxReservedApiUnits:scenarios.reduce((n,s)=>n+s.theoreticalMaxUnits,0),
     theoreticalRequests:scenarios.length,
     providerApiCalls:0 as const,
-    // The reviewed current FIDS wrapper hardcodes withLocation=false.
-    currentFidsClientSupportsWithLocationTrue:false as const,
+    // Draft adapter now supports this opt-in. Still no authorization to call.
+    currentFidsClientSupportsWithLocationTrue:true as const,
     tariffIndependentlyConfirmed:false as const,
     sourcePositionCoverageVerified:false as const,
     canonicalDepartureLabelVerified:false as const,
