@@ -94,7 +94,8 @@ describe("Gate05 Ed25519 detached signature never auto-enrolls an operator",()=>
   it("rejects modification with new matching artifact hash but old signature",()=>{
     const f=fixture();
     const newBytes=Buffer.from(f.authorizationBytes.toString("utf8").replace(
-      '"scopeId":"','"scopeId":"1'));
+      "AUTH-20261020-G05SIGNED001","AUTH-20261020-G05SIGNED002"));
+    expect(newBytes.equals(f.authorizationBytes)).toBe(false);
     expect(()=>verifyGate05DetachedApprovalSignatureV39({
       ...f,
       authorizationBytes:newBytes,
@@ -102,7 +103,7 @@ describe("Gate05 Ed25519 detached signature never auto-enrolls an operator",()=>
         ...f.independentPins,
         independentlyReviewedArtifactSha256:sha(newBytes)
       }
-    })).toThrow();
+    })).toThrow("GATE05_SIGNER_SIGNATURE_NOT_VALID_HOLD");
   });
   it("does not accept arbitrary signer algorithm or PEM as SPKI DER base64",()=>{
     const f=fixture();
