@@ -29,6 +29,7 @@ export interface Gate05ReadOnlyAdmissionV39 {
     restLedgerDbConfigurationConfirmed:boolean;
     restLedgerPresent:boolean;
     restLedgerCategoriesValid:boolean;
+    restLedgerPreviewHeadroom:boolean;
     sufficientApiUnitsForTheoreticalTwoQueryPreview:boolean;
   };
   blockers:string[];
@@ -80,6 +81,8 @@ export function evaluateGate05ReadOnlyAdmissionV39(
     restLedgerDbConfigurationConfirmed:x.configuredRestDbSameAsV39,
     restLedgerPresent:x.restBudgetTablePresent,
     restLedgerCategoriesValid:restValid,
+    restLedgerPreviewHeadroom:((categories.find(r=>r.category==="fids_base")?.remainingUnits??0)>=4 &&
+      (categories.find(r=>r.category==="fids_retry")?.remainingUnits??0)>=8),
     sufficientApiUnitsForTheoreticalTwoQueryPreview:x.apiUnitsRemaining>=12
   };
   return {
