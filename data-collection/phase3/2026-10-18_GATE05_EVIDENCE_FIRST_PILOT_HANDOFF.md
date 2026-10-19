@@ -59,6 +59,35 @@ The 0 `id` field count makes the project’s schedule-/carrier-/route-aware phys
 
 **Updated next action:** verify the correct `location.lat/lon/reportedAtUtc` shape, map observed status/codeshare categories to numerical codes, count provisional duplicate observation keys and airport/flight-time pairs, report only aggregated counts. Then design the separate pilot’s FIDS REST budget and target-semantics proof; no paid WSSS rerun and no legacy Gate05 JSON `PASS` claim.
 
+## WSSS08 Stage 0 corrected-field and subscription-scope investigation — 2026-10-19 PDT
+
+**Owner-executed, real bytes, READ ONLY.** `GATE05_CORRECTED_DIAGNOSTIC` returned the following aggregates over seven SHA-checked WSSS08 original envelopes (19 items); provider API calls=0, SQL writes=0, blob writes=0, Gate05 PASS=false:
+
+| Observed measure | Result |
+|---|---:|
+| Items / provisional distinct leg composite keys | 19 / 19 |
+| Identity-v2 certified unique operated physical flight legs | **unknown**; do not convert 19 provisional hashes to 19 confirmed physical flights |
+| `codeshareStatus=1` | 19 (= `IsOperator` under `flightNotificationExtractor_v3.ts`) |
+| `status=1`, Expected | 1 |
+| `status=2`, EnRoute | 10 |
+| `status=5`, GateClosed | 1 |
+| `status=6`, Departed | 3 |
+| `status=7`, Delayed | 1 |
+| `status=9`, Arrived | 3 |
+| `departure.runwayTime.utc` | 5, all with status code 2 (EnRoute); **does not prove runwayTime is independently verified actual wheels-off** |
+| `departure.revisedTime.utc` | 17 |
+| `departure.airport.icao == WSSS` | **6** of 19 |
+| Live `location` object, `lat`, `lon`, `reportedAtUtc` | **0** of 19; no trajectory points measurable here |
+| `aircraft.reg` / `aircraft.modeS` / `callSign` | 14 / 16 / 16 |
+
+**Specific direction-contract finding:** Actual reviewed `runPrepaidLiveWindowV39` calls `createSubscription("FlightByAirportIcao", icao, {url:webhookUrl,maxDeliveryRetries:0})`; underlying `createSubscription` POSTs `/subscriptions/webhook/FlightByAirportIcao/WSSS` with a JSON body containing **only URL and maxDeliveryRetries**, and **no flight direction / departure-only filter**. `WSSS/departures/2026-10-19T04:00:00Z+600s` in human AUTH is an internal expected label and fixed window, NOT proven as a provider-enforced departures-only parameter. The official AeroDataBox Flight Alert API documentation lists airport and flight-number subject types, but no subscription direction parameter. This is **not** a WSSS08 billing/settlement contradiction; the canary paid and received 19 airport-related notifications with exact 19=19 settled account arithmetic. It **is** a substantive sampling-scope ambiguity for prospective scientific use.
+
+**NEXT DIAGNOSTIC BEFORE PAID GATE0.5:** Verify `departure.airport.icao` vs `arrival.airport.icao` relative to WSSS for all 19 authenticated source items, source `subscription.subject.type/id` if present, missing/dual/neither coverage and status cross-tabs. Categorize as `WSSS_DEPARTURE` / `WSSS_ARRIVAL` / `WSSS_BOTH` / `WSSS_NEITHER`, with item counts only (no IDs/flight numbers/raw source printed). A count of 13 WSSS arrivals is **plausible**, not yet verified. If `WSSS_NEITHER>0`, classify and investigate source scope carefully, without rewriting settled callback/ledger, charging provider or claiming fabricated filtered coverage.
+
+**Scientific scope guard:** An airport-wide webhook is not the independent FIDS departures-only denominator. Gate0.5 must use distinct direction-labeled FIDS `direction=Departure` queries (separately budgeted API units and fixed query boundaries) to validate research population scope. `FlightByAirportIcao` airport notifications may cover both arrivals/departures, so scientific PRE/POST selection must filter by physical origin/destination and `populationRole`; inbound flights must not be counted as WSSS departures. No 0 live location objects in this canary ≠ proof the provider offers no ADS-B location; prospective sample adequacy for AIRBORNE remains unestablished.
+
+**No-go remains:** no Gate0.5 pilot AUTH, no FIDS REST calls, no new paid subscriptions, no Gate0.5 PASS. Gate3 WSSS08 LOGGED terminal still SETTLED with 19=19, seven recoverable originals. Reviewed source `main` pinned `acd084dc22e00dc94b4aa3cb4bf2c65558991e4e` unchanged.
+
 ## Stage 1 — exact prospective pilot protocol to review BEFORE spending
 
 1. **Freeze provenance and sample logic**: source SHA and API/OpenAPI contract/version and marketplace/account; airport(s), direction/role, local IANA zones, UTC interval, query identities and half-open `[start,end)` semantics, `withLeg`, `withCodeshared`, `withCargo=false`, `withPrivate=false`, and flight identity/dedup policy. FIDS and webhook observations must be tied to independently grounded physical-leg identity; unresolved codeshares remain ambiguous.
