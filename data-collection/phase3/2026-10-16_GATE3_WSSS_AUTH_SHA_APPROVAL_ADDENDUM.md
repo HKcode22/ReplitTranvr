@@ -91,3 +91,21 @@
 - The project retains prospective scientific gap-tolerance policies, but measurement/data-delivery gaps and mismatch must be recorded truthfully and never silently recoded as exact match or successful instrumented Gate3 PASS.
 - paid_provider_creates_by_this_addendum: 0
 - another_run_automatically_authorized: false
+
+---
+
+## AUTH-20261019-G3WSSS06 — explicitly approved Sunday October 18, 2026 at 7:00 PM PDT
+
+- **Current explicit user approval:** On Sunday 2026-10-18 PDT the owner answered `yes i approve continue` to the exact question asking approval for **7:00 PM Pacific Sunday October 18** WSSS06, one paid CREATE for a 600-second WSSS departures window, 50-credit **SOFT** stop with possible overshoot, **no automatic CREATE retry**, plus independent watchdog and previously accepted 6 primary + 6 contingency callback-health checks at a nominal 15-second cadence. This is **Monday 2026-10-19T02:00:00Z**.
+- Unique immutable AUTH ID: `AUTH-20261019-G3WSSS06` (UTC-date filename, not local-calendar date). Exact window `WSSS/departures/2026-10-19T02:00:00Z+600s`; paid CREATE only between `02:00:00Z` and `02:00:15Z`. Stage A exact reservation is allowed only between `01:52:00Z` and `01:57:00Z` under 3–8min lead; do not prepare early or launch late.
+- Exact immutable JSON artifact: `data-collection/authorizations/V3.9_PHASE3_GATE3_AUTH_20261019_WSSS06.json`.
+- AUTH_ARTIFACT_SHA256:4c70a9c9b2f0e479f7afee73dc4f8da7496791a4226cd194489cb1694cae41d4
+- Authorization not-before `2026-10-19T01:35:00.000Z`; expiry `2026-10-19T03:00:00.000Z` for limited rescue/settlement, **not** permission to CREATE after `02:00:15Z`.
+- Predecessor IDs: two immutable historical `RUN-20260915-...` records and `AUTH-20261018-G3WSSS05`, documented above as terminal `FAILED/OPERATOR_ABORTED` by later verified recovery; do **not** reuse WSSS05 session or subscription.
+- **Soft budget is not enforced provider-side:** one *attempted* HTTP CREATE only, no duplicate POST on transport ambiguity, no automatic new AUTH, no retry of paid experimental execution, and stop on observed 50 credits or 600 seconds as independently monitored. Exposure overrun is possible and is not approved as unlimited provider spending.
+- **Separate policies:** six-plus-six refers ONLY to continuous published callback host **health probes** (six primary and six contingency, nominal 15 seconds, bounded 180s cumulative outage); provider `maxDeliveryRetries:0` remains unchanged and HTTP GET retry up to three is unrelated. Hard callback identity/secret errors and loss of independent provider/owner oversight trigger immediate STOP. Scientific source missingness or delivery gaps remain explicitly recorded.
+- **Must hold until live gates**: reviewed exact merged GitHub SHA, synchronised clean Replit workspace and matching **published** public `git_head`, 168-hour original custody, valid callback/secret/DB bindings, production GH `phase2g-paid` protected environment job actually running with authenticated exact GitHub Actions bot `ARMED`/`ACTIVE` heartbeat, current provider balance/quota floor and no active billable subscriptions, zero unresolved durable Gate3 owner, exact single immutable PREPARED UUID, final UTC/balance/source checks. No Green-CI-only GO.
+- At approval time, latest GitHub main was `0382115d73f5ab059a182762ab0b62dab7a9c54b`, but public Replit source was **older** `df20c7805d2744237257774305d735422189a00e`; Replit editor had safely checked out GitHub main. Thus this approval DOES NOT claim live release parity, authenticated BOT lease, ready-to-collect scientific source or paid exposure has occurred.
+- **Operational HOLD:** this approval file alone never triggers subscription CREATE, GH safety dispatch, Replit publish or SQL mutation; fail closed if remaining integrated safety gates cannot be completed by the exact 7:00 PM PDT boundary. No rollover to another time without new explicit approval.
+- paid_provider_creates_by_this_addendum: 0
+- authorizes_automatic_second_paid_create: false
