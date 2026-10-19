@@ -36,6 +36,29 @@ Safe metrics to report: number of original callback envelopes and notification i
 
 An observed `19` items must not be substituted for `minUniqueFlights`, `minCompletedFlights` or `minAirborneFlights`. Avoid collecting/printing raw arrays. If any blob is now unavailable, report the specific class of failure and keep the original settlement intact.
 
+## Actual WSSS08 Stage 0 field-inventory result — owner-executed, zero-provider, 2026-10-19 PDT
+
+The operator executed the approved `GATE05_FIELD_INVENTORY` read-only Node/PG/Replit-object-storage command against exact WSSS08 session `386efd78-9155-4264-9533-7939d814d521`. It re-downloaded SHA-verified seven original callback envelopes (19 notification items, 27,387 bytes), did not print raw content, and printed `status=WSSS08_GATE05_FREE_FIELD_INVENTORY`, `provider_api_calls=0`, `database_writes=0`, `blob_writes=0`, `gate05_pass=false`, `unique_flights_certified=false`, `target_semantics_certified=false`.
+
+| Per-item path checked | Populated out of 19 | Valid UTC strings |
+|---|---:|---:|
+| `number`, `status`, `codeshareStatus`, `departure.airport.icao`, `arrival.airport.icao` | 19 each | n/a |
+| `departure.scheduledTime.utc` | 19 | 19 |
+| `departure.revisedTime.utc` | 17 | 17 |
+| `departure.runwayTime.utc` | 5 | 5 |
+| `arrival.scheduledTime.utc` | 19 | 19 |
+| `arrival.revisedTime.utc` | 16 | 16 |
+| `arrival.runwayTime.utc` | 0 | 0 |
+| `lastUpdatedUtc` | 19 | 19 |
+| `id`, `flightNumber` | 0 | n/a |
+| `location.reportedTime.utc`, `location.reportedAtUtc`, `location.reportedTimeUtc`, `location.latitude`, `location.longitude` | 0 each | n/a |
+
+**Interpretation and schema correction:** The 19/19 scheduled departure timestamps and 5/19 departure runway timestamps are promising *field presence* only. Actuality and gate-vs-runway semantics are NOT verified. A one-airport departures-only 10-minute canary is not expected to evidence completed arrivals for all items. The first field inventory used the *wrong latitude/longitude property names*: the existing `flightNotificationExtractor_v3.ts` actually reads `flight.location.lat`, `flight.location.lon`, `flight.location.reportedAtUtc`, not `location.latitude`/`location.longitude`; the `reportedAtUtc` path **was** inspected and absent, but latitude/longitude at `lat/lon` remain UNMEASURED. The extractor also understands numerical `status` and `codeshareStatus` enum codes. A subsequent zero-provider, read-only corrected-path audit is necessary. Provider schema change page: https://aerodatabox.com/breaking-changes-2023-10/ .
+
+The 0 `id` field count makes the project’s schedule-/carrier-/route-aware physical-leg identity handling especially important: **do not deduplicate by `number` alone**, and do not infer 19 unique flights. Distinguish field counts, provisional unique observation fingerprints and independently resolved physical-leg identities. Do not backfill transient rows after the Neon restart.
+
+**Updated next action:** verify the correct `location.lat/lon/reportedAtUtc` shape, map observed status/codeshare categories to numerical codes, count provisional duplicate observation keys and airport/flight-time pairs, report only aggregated counts. Then design the separate pilot’s FIDS REST budget and target-semantics proof; no paid WSSS rerun and no legacy Gate05 JSON `PASS` claim.
+
 ## Stage 1 — exact prospective pilot protocol to review BEFORE spending
 
 1. **Freeze provenance and sample logic**: source SHA and API/OpenAPI contract/version and marketplace/account; airport(s), direction/role, local IANA zones, UTC interval, query identities and half-open `[start,end)` semantics, `withLeg`, `withCodeshared`, `withCargo=false`, `withPrivate=false`, and flight identity/dedup policy. FIDS and webhook observations must be tied to independently grounded physical-leg identity; unresolved codeshares remain ambiguous.
