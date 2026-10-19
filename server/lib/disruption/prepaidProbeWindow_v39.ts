@@ -14,6 +14,7 @@ import {
   listSubscriptionsStrictWithRetry,
   type WebhookSubscription,
 } from "./aerodataboxLimiter_v3";
+import {gate3PinnedPrepaidCallbackUrlV39} from "./gate3PinnedCallbackOrigin_v39";
 import { runSettlement, type SettlementConfig } from "./settlement_v3";
 import {bindOrCompensatePrepaidSubscriptionV39}
   from "./prepaidSubscriptionBindingRecovery_v39";
@@ -490,7 +491,11 @@ export async function runPrepaidLiveWindowV39(input: PrepaidLiveWindowInputV39):
     },
   });
   if (input.onSessionArmed) await input.onSessionArmed(session.sessionId);
-  const webhookUrl = prepaidProbeWebhookUrlV39(defaultWebhookUrl(), session.sessionId);
+  const webhookUrl = input.ownerKind==="phase3_credit_canary"
+    ? gate3PinnedPrepaidCallbackUrlV39(
+        session.sessionId,process.env.AERODATABOX_WEBHOOK_SECRET,
+        process.env.WEBHOOK_BASE_URL)
+    : prepaidProbeWebhookUrlV39(defaultWebhookUrl(),session.sessionId);
   const targetMs = input.targetHours * 3_600_000;
   let subscriptionDeleted = false;
   let windowStart = new Date();

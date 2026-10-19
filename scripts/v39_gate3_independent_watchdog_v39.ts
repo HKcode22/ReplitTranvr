@@ -22,9 +22,10 @@ import {approvedArtifactHashesFromLedger,sha256HexString,
   "../server/lib/disruption/authRecord_v39";
 import {verifyGate3PublishedPrepaidHostV39} from
   "../server/lib/disruption/gate3OwnedPreExposure_v39";
-import {prepaidProbeWebhookUrlV39} from
-  "../server/lib/disruption/prepaidProbeRuntime_v39";
-import {defaultWebhookUrl,getBalanceEvidenceStrict,
+import {GATE3_PINNED_RECEIVER_ORIGIN_V39,
+  gate3PinnedPrepaidCallbackUrlV39} from
+  "../server/lib/disruption/gate3PinnedCallbackOrigin_v39";
+import {getBalanceEvidenceStrict,
   listSubscriptionsStrictWithRetry,deleteSubscriptionVerifiedStrict}
   from "../server/lib/disruption/aerodataboxLimiter_v3";
 import {runGate3IndependentWatchdogTickV39,
@@ -38,7 +39,7 @@ import {publishGate3WatchdogLeaseV39,
 
 /** Must never be an ENV/CLI flag. Requires separate reviewed source change. */
 export const GATE3_WATCHDOG_LIVE_RELEASED_V39=true;
-const PINNED_BASE="https://replit-tranvr--hk84164.replit.app";
+const PINNED_BASE=GATE3_PINNED_RECEIVER_ORIGIN_V39;
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const SHA=/^[a-f0-9]{64}$/;
 const HEAD=/^[a-f0-9]{40}$/;
@@ -152,7 +153,9 @@ export async function executeGate3WatchdogSidecarV39(
   const current=new Date();
   const auth=validateGate3SidecarInputsV39(x,current);
   await verifyGate3PublishedPrepaidHostV39(x.expectedGitHead);
-  const callback=prepaidProbeWebhookUrlV39(defaultWebhookUrl(),x.sessionId);
+  const callback=gate3PinnedPrepaidCallbackUrlV39(
+    x.sessionId,process.env.AERODATABOX_WEBHOOK_SECRET,
+    process.env.WEBHOOK_BASE_URL);
   if(!isGate3PinnedOwnedCallbackUrlV39(
        callback,x.sessionId,process.env.AERODATABOX_WEBHOOK_SECRET))
     stop("GATE3_SIDECAR_CALLBACK_URL_MISMATCH");
