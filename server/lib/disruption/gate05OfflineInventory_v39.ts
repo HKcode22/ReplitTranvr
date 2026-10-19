@@ -5,7 +5,13 @@
 import {createHash} from "node:crypto";
 
 export type AirportRole = "departure"|"arrival"|"both"|"neither";
-export interface RoleCounts {items:number; departureRunwayCandidates:number; statuses:Record<string,number>}
+export interface RoleCounts {
+  items:number;
+  departureRunwayCandidates:number;
+  scheduledRevisedPairs:number;
+  scheduledRunwayPairs:number;
+  statuses:Record<string,number>;
+}
 export interface Gate05OfflineInventory {
   schema:"v39.gate05.offline-inventory.v1";
   airportIcao:string;
@@ -19,6 +25,9 @@ export interface Gate05OfflineInventory {
   independentlyVerifiedActualTargets:null;
   independentlyVerifiedAirborneFlights:null;
   independentlyVerifiedFidsDenominator:null;
+  selectedTMilestone:null;
+  selectedPrimaryTarget:null;
+  departureActualMovementLabel:null;
   gate05PilotCertified:false;
 }
 
@@ -56,7 +65,7 @@ function status(v:unknown):string{
     "Departed","Delayed","Approaching","Arrived","Canceled","Diverted","CanceledUncertain"];
   return typeof v==="string"&&known.includes(v)?v:"unknown_or_unrecognized";
 }
-function blank():RoleCounts{return {items:0,departureRunwayCandidates:0,statuses:{}}}
+function blank():RoleCounts{return {items:0,departureRunwayCandidates:0,scheduledRevisedPairs:0,scheduledRunwayPairs:0,statuses:{}}}
 
 /** Provisional composite keys are not verified physical-flight identities. */
 export function inventoryGate05OfflineItems(input:{
@@ -82,7 +91,12 @@ export function inventoryGate05OfflineItems(input:{
     b.items++;
     const s=status(f.status);
     b.statuses[s]=(b.statuses[s]??0)+1;
-    if(timestamp(path(f,"departure.runwayTime.utc")))b.departureRunwayCandidates++;
+    const scheduled=timestamp(path(f,"departure.scheduledTime.utc"));
+    const revised=timestamp(path(f,"departure.revisedTime.utc"));
+    const runway=timestamp(path(f,"departure.runwayTime.utc"));
+    if(runway)b.departureRunwayCandidates++;
+    if(scheduled&&revised)b.scheduledRevisedPairs++;
+    if(scheduled&&runway)b.scheduledRunwayPairs++;
     for(const p of paths)if(nonempty(p,path(f,p)))fieldsPresent[p]++;
     const num=typeof f.number==="string"?f.number.trim().toUpperCase():"";
     const carrier=path(f,"airline.iata")??path(f,"airline.icao");
@@ -101,6 +115,7 @@ export function inventoryGate05OfflineItems(input:{
     unkeyedItems,
     independentlyVerifiedUniqueFlights:null,independentlyVerifiedActualTargets:null,
     independentlyVerifiedAirborneFlights:null,independentlyVerifiedFidsDenominator:null,
+    selectedTMilestone:null,selectedPrimaryTarget:null,departureActualMovementLabel:null,
     gate05PilotCertified:false
   };
 }
