@@ -19,6 +19,36 @@ const owner=(scopeId=randomUUID(),querySha256=hash0)=>({
 });
 
 describe("Gate05 pilot-scoped FIDS adapter refuses any unbound request",()=>{
+  it("rejects a 200 response with missing departures, not misleading zero flights",async()=>{
+    const db={query:vi.fn(async()=>({rowCount:1,rows:[{reserved:true}]}))};
+    const http=vi.fn(async()=>new Response(JSON.stringify({arrivals:[]}),{status:200}));
+    const response=await fetchGate05ScopedFidsV39({
+      db:db as any,owner:owner(),query:noLocation,fetchImpl:http as any
+    });
+    expect(response).toBeNull();
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(http).toHaveBeenCalledTimes(1);
+  });
+  it("waits before retrying 429 without Retry-After instead of zero-delay retry",async()=>{
+    let n=0;
+    const db={query:vi.fn(async()=>({rowCount:1,rows:[{reserved:true}]}))};
+    const http=vi.fn(async()=>{
+      n++;
+      return n===1 ? new Response(null,{status:429}):
+        new Response(JSON.stringify({departures:[],arrivals:[]}),{status:200});
+    });
+    const sleep=vi.fn(async (_ms:number)=>{});
+    const response=await fetchGate05ScopedFidsV39({
+      db:db as any,owner:owner(),query:noLocation,
+      fetchImpl:http as any,sleepImpl:sleep
+    });
+    expect(response).toEqual({departures:[],arrivals:[]});
+    expect(http).toHaveBeenCalledTimes(2);
+    expect(db.query).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep.mock.calls[0][0]).toBeGreaterThan(0);
+  });
+
   it("fingerprints the full actual FIDS option shape (including opt-in location)",()=>{
     expect(hash0).toMatch(/^[0-9a-f]{64}$/);
     expect(hash0).not.toBe(hash1);
