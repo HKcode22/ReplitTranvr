@@ -1,3 +1,20 @@
+## October 20, 2026 PDT — expiry guard clock/calendar regression hardening (DRAFT, NO PAID)
+
+**Exact working branch:** `phase3/gate05-evidence-first-20261018`, draft PR #80, unchanged default `main` at `acd084dc22e00dc94b4aa3cb4bf2c65558991e4e` at initial read.
+
+**Verified starting checkpoint:** prior PR source HEAD `d8629a8f98ec86328d2cf5a475b75bd296a9d204` completed four of four non-provider workflows successfully. Its signed PREPARED rehearsal remains a **disposable transaction**, not authentic human consent or an installed production commissioner.
+
+**This continuation:**
+- `a8aa9d341d101d54335701efa4636345ef0ba398`: in draft `gate05ScopedFidsStop_v39.ts`, the expiry guard now rejects JavaScript's silently normalized impossible calendar dates (round-trips canonical UTC second fields), and detects a substantial clock rollback relative to the *last* observed time, not merely the initial clock.
+- `cb0db9e46a48ac79524e6634436ea91864f32cdc`: adds negative tests for February 30, April 31, and a non-leap February 29; verifies legitimate leap day; simulates a forward-jumping clock that then regresses while remaining above the initial timestamp. Mock-only STOP DB queries, **no actual provider calls or production DB operations**.
+- Latest exact-head CI at the first check of `cb0db9...`: Public Receiver Identity **SUCCESS**; Focused Release, Real PG Receiver Faults and V3.9 Offline Safety **IN PROGRESS**. **Do not claim 4/4 for this new source until all final results are checked.**
+
+**Scope and safety boundary:** No production V0068 DDL, no Replit publication, no activation, no Alert-subscription CREATE, no FIDS GET, no production role/credential issuance, no paid API units, and no new owner paid AUTH in this session. Previously verified production V0066/V0067 must not be reapplied. V0068 remains staged. The draft `runGate05ExpiryGuardV39` is a core helper, **not an independently deployed supervisor, uptime proof or a substitute for PostgreSQL's authoritative per-attempt expiration gate**. Existing short-lived safety/dispatch credentials were due to expire Oct 20 02:00 PDT; password expiry by itself does not terminate already-open sessions.
+
+**NEXT EXACT START:** check all four GitHub workflows on `cb0db9...` (or checkpoint-following HEAD), inspect actual failed job logs if red, and separately review the one-use least-privilege production commissioner, externally authenticated owner signer/trust root, operational independent STOP/expiry process, applicable account-specific Tier2 billing/storage terms and fresh future WSSS time/query hashes. Owner's Oct20 roughly 15:00 PDT review remains **informational only**, not a paid execution window. Seek distinct exact approval before any production schema write, deployment or paid provider request.
+
+---
+
 ## October 20, 01:xx PDT — signed PREPARED atomic transaction integration test (draft only)
 
 **New source/test commits:** `f9ebcab2864793023365bac656b4ab0cb710d4ef`, narrowed `pg.Client` typing fix `f5e20a4631c264fa6573e98589f2c4c2cf8d9989`. Added `tests/phase3_gate05_signed_prepared_atomic_disposable_pg_v39.test.ts`. It is guarded to GitHub Actions `NODE_ENV=test` on **literal localhost** PostgreSQL `v39_ci` with empty `AERODATABOX_API_KEY`. No production SQL path or deployable commissioning entrypoint was added.
