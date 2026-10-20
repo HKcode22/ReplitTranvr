@@ -2,7 +2,7 @@ import {describe,it,expect} from "vitest";
 import {createHash,randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
 import pg from "pg";
-import {inspectGate05ExactAuthArtifactV39,previewGate05PreparedScopeRowsV39,planGate05PreparedOnlySqlV39,verifyGate05PreparedReadbackV39} from "../server/lib/disruption/gate05AuthorizationArtifact_v39";
+import {inspectGate05ExactAuthArtifactV39,previewGate05PreparedScopeRowsV39,planGate05PreparedOnlySqlV39,verifyGate05PreparedReadbackV39,gate05PreparedCommissionInventorySqlV39,verifyGate05PreparedCommissionInventoryV39} from "../server/lib/disruption/gate05AuthorizationArtifact_v39";
 import {gate05FidsQueryFingerprintV39} from "../server/lib/disruption/gate05ScopedFidsOwner_v39";
 const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const core={icao:"WSSS",fromLocal:"2026-10-20T09:00",toLocal:"2026-10-20T10:00"};
@@ -281,6 +281,57 @@ describe("Gate05 strict PREPARED scope read-back: no partial, stale or forged ro
   });
 });
 
+
+describe("Gate05 PREPARED-only exclusivity inventory (no provider or DB I/O)",()=>{
+  const values=(overrides:Record<string,unknown>={})=>[{
+    open_scopes:0,matching_prepared:0,matching_active:0,
+    matching_queries:0,matching_attempts:0,...overrides
+  }];
+  it("has a scope-bound fixed SQL query and correct BEFORE/AFTER count contracts",()=>{
+    const id=randomUUID(),q=gate05PreparedCommissionInventorySqlV39(id);
+    expect(q.params).toEqual([id]);
+    expect(q.sql).toContain("state IN ('PREPARED','ACTIVE')");
+    expect(q.sql).toContain("WHERE scope_id=$1::uuid");
+    expect(q.sql).not.toContain(id);
+    expect(q.sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|GRANT|COMMIT)\b/);
+    expect(verifyGate05PreparedCommissionInventoryV39(values(),"BEFORE"))
+      .toMatchObject({status:"NO_CONCURRENT_OPEN_SCOPE_VERIFIED",
+        paidPilotAuthorized:false,providerRequests:0});
+    expect(verifyGate05PreparedCommissionInventoryV39(values({
+      open_scopes:1,matching_prepared:1,matching_queries:2
+    }),"AFTER")).toMatchObject({
+      status:"ONE_EXCLUSIVE_PREPARED_SCOPE_VERIFIED",activationAuthorized:false
+    });
+  });
+  it("rejects races, other open scopes, early ACTIVE, reserved attempts and broken counts",()=>{
+    const invalidBefore=[
+      {open_scopes:1},{matching_prepared:1},{matching_active:1},
+      {matching_queries:2},{matching_attempts:1},
+      {open_scopes:"0"},{open_scopes:-1},{open_scopes:1.5}
+    ];
+    for(const patch of invalidBefore){
+      expect(()=>verifyGate05PreparedCommissionInventoryV39(
+        values(patch),"BEFORE")).toThrow("GATE05_AUTH_COMMISSION_INVENTORY_HOLD");
+    }
+    const expected={
+      open_scopes:1,matching_prepared:1,matching_queries:2
+    };
+    for(const patch of [
+      {open_scopes:2},{matching_prepared:0},{matching_active:1},
+      {matching_queries:1},{matching_queries:3},{matching_attempts:1},
+      {open_scopes:null},{matching_queries:NaN}
+    ]){
+      expect(()=>verifyGate05PreparedCommissionInventoryV39(
+        values({...expected,...patch}),"AFTER"))
+        .toThrow("GATE05_AUTH_COMMISSION_INVENTORY_HOLD");
+    }
+    expect(()=>verifyGate05PreparedCommissionInventoryV39([], "AFTER"))
+      .toThrow("GATE05_AUTH_COMMISSION_INVENTORY_HOLD");
+    expect(()=>gate05PreparedCommissionInventorySqlV39("wrong"))
+      .toThrow("GATE05_AUTH_COMMISSION_INVENTORY_SCOPE_HOLD");
+  });
+});
+
 const pgUrl=process.env.DATABASE_URL??"";
 let disposableGate05Db=false;
 try{
@@ -331,10 +382,46 @@ offlinePg("Gate05 reviewed prepared-only SQL against disposable PostgreSQL16",()
         expectedIanaTimezone:"Asia/Singapore",
         observedNowUtc:new Date(Date.now()-60_000).toISOString()
       });
+      const inventory=gate05PreparedCommissionInventorySqlV39(a.scopeId);
+      const initially=(await conn.query(inventory.sql,[...inventory.params])).rows;
+      expect(verifyGate05PreparedCommissionInventoryV39(initially,"BEFORE").status)
+        .toBe("NO_CONCURRENT_OPEN_SCOPE_VERIFIED");
+
+      // Inject a mid-commission failure after the scope INSERT: no orphan
+      // owner row or counter may survive a transaction SAVEPOINT rollback.
+      await conn.query("SAVEPOINT simulated_partial_commission");
+      expect((await conn.query(plan.commands[0].sql,[...plan.commands[0].params])).rowCount)
+        .toBe(1);
+      await conn.query("ROLLBACK TO SAVEPOINT simulated_partial_commission");
+      await conn.query("RELEASE SAVEPOINT simulated_partial_commission");
+      const afterFailure=(await conn.query(inventory.sql,[...inventory.params])).rows;
+      expect(verifyGate05PreparedCommissionInventoryV39(afterFailure,"BEFORE").status)
+        .toBe("NO_CONCURRENT_OPEN_SCOPE_VERIFIED");
+
       for(const cmd of plan.commands){
         const result=await conn.query(cmd.sql,[...cmd.params]);
         expect(result.rowCount).toBe(cmd===plan.commands[0]?1:2);
       }
+      const afterPrepare=(await conn.query(inventory.sql,[...inventory.params])).rows;
+      expect(verifyGate05PreparedCommissionInventoryV39(afterPrepare,"AFTER").status)
+        .toBe("ONE_EXCLUSIVE_PREPARED_SCOPE_VERIFIED");
+
+      // Simulate another PREPARED scope from a conflicting commissioner:
+      // global exclusivity must reject even if our own 3 rows match.
+      await conn.query("SAVEPOINT other_open_scope");
+      await conn.query(
+        "INSERT INTO clean.gate05_fids_pilot_scope_v39 "+
+        "(scope_id,authorization_id,authorization_sha256,cycle_id,icao,"+
+        "starts_at_utc,expires_at_utc) "+
+        "VALUES($1::uuid,$2,$3,$4,'WSSS',$5::timestamptz,$6::timestamptz)",
+        [randomUUID(),a.authorizationId,sha(bytes),a.cycleId,a.startsAtUtc,a.expiresAtUtc]
+      );
+      const conflict=(await conn.query(inventory.sql,[...inventory.params])).rows;
+      expect(()=>verifyGate05PreparedCommissionInventoryV39(conflict,"AFTER"))
+        .toThrow("GATE05_AUTH_COMMISSION_INVENTORY_HOLD");
+      await conn.query("ROLLBACK TO SAVEPOINT other_open_scope");
+      await conn.query("RELEASE SAVEPOINT other_open_scope");
+
       const rows=(await conn.query(
         "SELECT state,base_cap_units,retry_cap_units,base_used_units,retry_used_units "+
         "FROM clean.gate05_fids_pilot_scope_v39 WHERE scope_id=$1",
