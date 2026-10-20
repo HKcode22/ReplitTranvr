@@ -74,7 +74,7 @@ describe("Gate05 pilot-scoped FIDS adapter refuses any unbound request",()=>{
         .toThrow("GATE05_FIDS_QUERY_SHAPE_HOLD");
     }
     expect(()=>gate05FidsQueryFingerprintV39({
-      ...noLocation,fromLocal:"2028-02-29T09:00"
+      ...noLocation,fromLocal:"2028-02-29T09:00",toLocal:"2028-02-29T10:00"
     })).not.toThrow();
   });
   it("never sends mock HTTP when authorization scope hash does not bind the query",async()=>{
