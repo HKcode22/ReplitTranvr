@@ -134,6 +134,22 @@ describe("Gate05 two-query evidence respects request-role and scientific boundar
     const y={...x,noLocation:{...x.noLocation,arrivals:new Array(499).fill(mk("EGLL"))}};
     expect(assessGate05FidsFeasibilityV39(y).possibleTruncation).toBe(true);
   });
+  it("does not count impossible calendar dates as valid observation clocks or delay timestamps",()=>{
+    const x=input();
+    const bad=mk("WSSS",{
+      lat:1.35,lon:103.98,reportedAtUtc:"2026-02-30T04:00:00Z"
+    });
+    bad.departure.scheduledTime.utc="2026-02-30T04:00:00Z";
+    x.withLocation.departures=[bad];
+    const r=assessGate05FidsFeasibilityV39(x);
+    expect(r.location.eligibleWsssDepartures).toBe(1);
+    expect(r.location.candidateScheduled).toBe(0);
+    expect(r.location.candidateScheduledRunwayPairs).toBe(0);
+    expect(r.location.validPositionPairs).toBe(1);
+    expect(r.location.validPositionPairsWithReportedClock).toBe(0);
+    expect(r.location.missingPositionObservationClock).toBe(1);
+    expect(r.locationReturnedForAtLeastOneExplicitWsssDeparture).toBe(false);
+  });
   it("never infers provider request sent, distinct flights, or actual labels from status code",()=>{
     const x=input();
     x.withLocation.departures=[mk("WSSS",{lat:1.3,lon:103.7,reportedAtUtc:"2026-10-19T04:00:00Z"}),
