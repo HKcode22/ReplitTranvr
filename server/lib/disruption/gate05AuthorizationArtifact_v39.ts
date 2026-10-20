@@ -163,3 +163,53 @@ export function previewGate05PreparedScopeRowsV39(
     providerRequests:0 as const
   };
 }
+
+
+/**
+ * Parameterized SQL *review plan* for a transaction that would persist only
+ * a PREPARED owner scope and its TWO immutable FIDS queries.
+ *
+ * No connection, BEGIN, COMMIT, GRANT, role, HTTP, file or SQL execution.
+ * A separately approved identity-bearing authorization commissioner must
+ * attest rights and choose whether to execute these fixed statements.
+ * NEVER substitute this pure plan for human approval or run it with the
+ * legacy app's general-purpose DATABASE_URL during paid collection.
+ */
+export function planGate05PreparedOnlySqlV39(bytes:Buffer,pins:TrustPins){
+  const rows=previewGate05PreparedScopeRowsV39(bytes,pins);
+  const o=rows.scope,q=rows.queries;
+  const commands=[
+    {
+      sql:"INSERT INTO clean.gate05_fids_pilot_scope_v39 "+
+        "(scope_id,authorization_id,authorization_sha256,cycle_id,icao,"+
+        "starts_at_utc,expires_at_utc,state,base_cap_units,retry_cap_units,"+
+        "base_used_units,retry_used_units) "+
+        "VALUES ($1::uuid,$2,$3,$4,$5,$6::timestamptz,$7::timestamptz,"+
+        "'PREPARED',4,8,0,0)",
+      params:[o.scope_id,o.authorization_id,o.authorization_sha256,
+        o.cycle_id,o.icao,o.starts_at_utc,o.expires_at_utc]
+    },
+    {
+      sql:"INSERT INTO clean.gate05_fids_allowed_query_v39 "+
+        "(scope_id,query_sha256,query_index,with_location,last_reserved_attempt) "+
+        "VALUES ($1::uuid,$2,1,false,0),($1::uuid,$3,2,true,0)",
+      params:[o.scope_id,q[0].query_sha256,q[1].query_sha256]
+    }
+  ] as const;
+  return {
+    schema:"v39.gate05.prepared-scope-sql-review.v1" as const,
+    status:"PARAMETERIZED_SQL_PLAN_ONLY_NO_COMMISSION_AUTH" as const,
+    scopeId:o.scope_id,
+    reviewedAuthorizationSha256:o.authorization_sha256,
+    exactRowsSha256:rows.exactRowsSha256,
+    commands,
+    // A real commissioner must wrap statements in a reviewed atomic
+    // transaction and validate exact post-write rows before COMMIT.
+    includesBeginOrCommit:false as const,
+    canActivatePilot:false as const,
+    canAuthorizeProviderSpend:false as const,
+    signerAndPlanRightsAttested:false as const,
+    databaseWrites:0 as const,
+    providerRequests:0 as const
+  };
+}
