@@ -20,6 +20,42 @@ const input=()=>({
   })]}
 });
 describe("Gate05 two-query evidence respects request-role and scientific boundaries",()=>{
+  it("counts FIDS implicit origin and movement-only flight without overstating identity",()=>{
+    const x=input();
+    const implicit=mk("WSSS",{lat:1.35,lon:103.98,reportedAtUtc:"2026-10-19T03:59:59Z"});
+    delete (implicit.departure.airport as any).icao;
+    const movementOnly={
+      number:"NOT-EXPORTED",status:"EnRoute",
+      movement:{
+        scheduledTime:{utc:"2026-10-19T04:00:00Z"},
+        revisedTime:{utc:"2026-10-19T04:05:00Z"},
+        runwayTime:{utc:"2026-10-19T04:09:00Z"}
+      },
+      location:{lat:1.35,lon:103.98,reportedAtUtc:"2026-10-19T04:00:00Z"}
+    };
+    x.withLocation.departures=[implicit,movementOnly] as any;
+    const r=assessGate05FidsFeasibilityV39(x);
+    expect(r.location.explicitlyWsssDepartures).toBe(0);
+    expect(r.location.impliedWsssDeparturesFromFidsList).toBe(2);
+    expect(r.location.eligibleWsssDepartures).toBe(2);
+    expect(r.location.candidateScheduledRunwayPairs).toBe(2);
+    expect(r.location.statusCounts.EnRoute).toBe(1);
+    expect(r.location.validPositionPairsWithReportedClock).toBe(2);
+    expect(r.verifiedUniquePhysicalFlights).toBeNull();
+    expect(r.gate05ScientificPass).toBe(false);
+    expect(JSON.stringify(r)).not.toContain("NOT-EXPORTED");
+  });
+  it("does not accept malformed or contradictory departure movement shapes",()=>{
+    const x=input();
+    x.withLocation.departures=[
+      {number:"a",status:"Expected"},
+      {number:"b",status:"Departed",departure:{scheduledTime:{utc:"2026-10-19T04:00:00Z"}},movement:{}}
+    ] as any;
+    const r=assessGate05FidsFeasibilityV39(x);
+    expect(r.location.eligibleWsssDepartures).toBe(0);
+    expect(r.location.unknownDepartureOrigin).toBe(2);
+  });
+
   it("reports real requested-airport departure position without claiming trajectory",()=>{
     const r=assessGate05FidsFeasibilityV39(input());
     expect(r.base.returnedDepartures).toBe(1);
