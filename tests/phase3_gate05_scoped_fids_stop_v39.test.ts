@@ -2,7 +2,7 @@ import {describe,it,expect,vi} from "vitest";
 import {randomUUID} from "node:crypto";
 import {fetchGate05ScopedFidsV39,gate05FidsQueryFingerprintV39}
   from "../server/lib/disruption/gate05ScopedFidsOwner_v39";
-import {stopGate05ScopedFidsV39,stopGate05IndependentlyV39}
+import {stopGate05ScopedFidsV39,stopGate05IndependentlyV39,runGate05ExpiryGuardV39}
   from "../server/lib/disruption/gate05ScopedFidsStop_v39";
 const query={icao:"WSSS",fromLocal:"2026-10-19T09:00",toLocal:"2026-10-19T10:00",withLocation:false};
 const identity=()=>({
@@ -179,5 +179,92 @@ describe("Gate05 STOP receipt shape rejects lossy numeric coercion",()=>{
     await expect(stopGate05IndependentlyV39({
       db:db as any,scopeId:randomUUID(),reason:"OPERATOR_STOP"
     })).resolves.toMatchObject({state:"STOPPED",reservedAttempts:0,reservedUnits:0});
+  });
+});
+
+
+describe("Gate05 independent expiry guard is bounded and cannot authorize a pilot",()=>{
+  const scope=()=>randomUUID();
+  it("never issues STOP before expiry; uses independent safety DB only at expiry",async()=>{
+    let clock=Date.parse("2026-10-21T01:00:00Z");
+    const expiration="2026-10-21T01:01:05Z";
+    const sleeps:number[]=[];
+    const db={query:vi.fn(async(sql:string,params:unknown[])=>{
+      expect(clock).toBe(Date.parse(expiration));
+      expect(sql).toContain("stop_gate05_fids_pilot_v39");
+      expect(params[1]).toBe("EXPIRED");
+      return {rowCount:1,rows:[{
+        state:"STOPPED",reserved_attempts:"0",reserved_units:"0"
+      }]};
+    })};
+    const receipt=await runGate05ExpiryGuardV39({
+      db:db as any,scopeId:scope(),expiresAtUtc:expiration,
+      nowMs:()=>clock,sleepMs:async(ms:number)=>{
+        expect(db.query).not.toHaveBeenCalled();
+        sleeps.push(ms);
+        clock+=ms;
+      }
+    });
+    expect(sleeps).toEqual([30000,30000,5000]);
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(receipt).toMatchObject({
+      state:"STOPPED",reservedAttempts:0,reservedUnits:0,
+      localAbortRequested:false
+    });
+  });
+  it("overdue scope invokes terminal STOP immediately without sleeping",async()=>{
+    const sleep=vi.fn(),db={query:vi.fn(async()=>({
+      rowCount:1,rows:[{
+        state:"STOPPED",reserved_attempts:"2",reserved_units:"4"
+      }]
+    }))};
+    const receipt=await runGate05ExpiryGuardV39({
+      db:db as any,scopeId:scope(),expiresAtUtc:"2026-10-21T02:00:00Z",
+      nowMs:()=>Date.parse("2026-10-21T02:00:01Z"),sleepMs:sleep
+    });
+    expect(sleep).not.toHaveBeenCalled();
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(receipt.reservedUnits).toBe(4);
+  });
+  it("rejects malformed dates, invalid scope and >24h horizon without SQL",async()=>{
+    const db={query:vi.fn()},sleep=vi.fn();
+    for(const expiry of [
+      "2026-10-21T01:00:00+00:00","2026-10-21T01:00:00",
+      "invalid","2026-10-21T01:00:00.1234Z"
+    ]){
+      await expect(runGate05ExpiryGuardV39({
+        db:db as any,scopeId:scope(),expiresAtUtc:expiry,
+        nowMs:()=>Date.parse("2026-10-21T00:00:00Z"),sleepMs:sleep
+      })).rejects.toThrow("GATE05_EXPIRY_GUARD_INPUT_HOLD");
+    }
+    await expect(runGate05ExpiryGuardV39({
+      db:db as any,scopeId:"bad-uuid",expiresAtUtc:"2026-10-21T01:00:00Z",
+      nowMs:()=>Date.parse("2026-10-21T00:00:00Z"),sleepMs:sleep
+    })).rejects.toThrow("GATE05_EXPIRY_GUARD_INPUT_HOLD");
+    await expect(runGate05ExpiryGuardV39({
+      db:db as any,scopeId:scope(),expiresAtUtc:"2026-10-23T01:00:00Z",
+      nowMs:()=>Date.parse("2026-10-21T00:00:00Z"),sleepMs:sleep
+    })).rejects.toThrow("GATE05_EXPIRY_GUARD_CLOCK_HOLD");
+    expect(db.query).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+  it("fails closed on clock regression or stalled sleeper",async()=>{
+    let clock=Date.parse("2026-10-21T00:00:00Z");
+    const db={query:vi.fn()},sleep=vi.fn(async()=>{
+      clock=Date.parse("2026-10-20T23:57:00Z");
+    });
+    await expect(runGate05ExpiryGuardV39({
+      db:db as any,scopeId:scope(),expiresAtUtc:"2026-10-21T00:01:00Z",
+      nowMs:()=>clock,sleepMs:sleep
+    })).rejects.toThrow("GATE05_EXPIRY_GUARD_CLOCK_HOLD");
+    expect(db.query).not.toHaveBeenCalled();
+  });
+  it("propagates safety SQL denial and cannot claim STOP",async()=>{
+    const db={query:vi.fn(async()=>{throw Error("permission denied")})};
+    await expect(runGate05ExpiryGuardV39({
+      db:db as any,scopeId:scope(),expiresAtUtc:"2026-10-21T00:00:00Z",
+      nowMs:()=>Date.parse("2026-10-21T00:00:01Z"),sleepMs:async()=>{}
+    })).rejects.toThrow("permission denied");
+    expect(db.query).toHaveBeenCalledTimes(1);
   });
 });
