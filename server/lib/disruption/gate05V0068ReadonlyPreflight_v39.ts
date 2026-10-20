@@ -34,7 +34,10 @@ export function gate05V0068ReadonlyPreflightSqlV39(){
       " coalesce((SELECT NOT rolcanlogin FROM pg_roles WHERE rolname='gate05_fids_dispatch_v39'),false) AS dispatch_group_nonlogin,",
       " coalesce((SELECT NOT rolcanlogin FROM pg_roles WHERE rolname='gate05_fids_safety_v39'),false) AS safety_group_nonlogin,",
       " coalesce((SELECT NOT rolcanlogin FROM pg_roles WHERE rolname='gate05_fids_commission_v39'),false) AS commission_group_nonlogin,",
-      " to_regclass('clean.gate05_fids_one_open_scope_v39') IS NOT NULL AS v0068_index_name_exists"
+      " (to_regclass('clean.gate05_fids_one_open_scope_v39') IS NOT NULL OR",
+      " to_regclass('clean.gate05_fids_one_authorization_id_v39') IS NOT NULL OR",
+      " to_regclass('clean.gate05_fids_one_authorization_sha_v39') IS NOT NULL)",
+      " AS v0068_index_name_exists"
     ].join("\n"),
     // Run only if ALL required prior schema/catalog checks passed.
     // Historical STOPPED evidence is not a reason to delete or suppress.
