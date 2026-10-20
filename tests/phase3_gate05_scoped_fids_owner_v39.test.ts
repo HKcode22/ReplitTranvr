@@ -60,6 +60,23 @@ describe("Gate05 pilot-scoped FIDS adapter refuses any unbound request",()=>{
     expect(()=>gate05FidsQueryFingerprintV39({...noLocation,withLocation:"true" as any}))
       .toThrow("GATE05_FIDS_QUERY_SHAPE_HOLD");
   });
+  it("refuses impossible calendar days and clock values before a query can be bound",()=>{
+    const invalid=[
+      {fromLocal:"2026-02-30T09:00"},
+      {fromLocal:"2026-02-29T09:00"},
+      {fromLocal:"2026-04-31T09:00"},
+      {toLocal:"2026-10-19T25:00"},
+      {fromLocal:"2026-10-19T09:60"},
+      {fromLocal:"2026-13-19T09:00"}
+    ];
+    for(const patch of invalid){
+      expect(()=>gate05FidsQueryFingerprintV39({...noLocation,...patch}))
+        .toThrow("GATE05_FIDS_QUERY_SHAPE_HOLD");
+    }
+    expect(()=>gate05FidsQueryFingerprintV39({
+      ...noLocation,fromLocal:"2028-02-29T09:00"
+    })).not.toThrow();
+  });
   it("never sends mock HTTP when authorization scope hash does not bind the query",async()=>{
     const db={query:vi.fn()},http=vi.fn();
     await expect(fetchGate05ScopedFidsV39({
