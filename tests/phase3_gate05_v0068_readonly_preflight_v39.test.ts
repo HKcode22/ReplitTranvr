@@ -23,6 +23,10 @@ const inventory=()=>({
   stopped_history_count:0,total_scope_count:0,
   total_query_count:0,total_attempt_count:0
 });
+const wrapMock=(x:unknown)=>Array.isArray(x)?x:[x];
+const reviewMock=(c:unknown,i:unknown)=>
+  reviewGate05V0068ReadonlyPreflightV39(wrapMock(c),wrapMock(i));
+
 describe("Gate05 staged V0068 read-only preflight semantics: no DDL or paid AUTH",()=>{
   it("builds exactly two read-only catalog/inventory SELECTs",()=>{
     const s=gate05V0068ReadonlyPreflightSqlV39();
@@ -37,7 +41,7 @@ describe("Gate05 staged V0068 read-only preflight semantics: no DDL or paid AUTH
     expect(s.paidPilotAuthorized).toBe(false);
   });
   it("accepts unused schema and ignores only terminal audit history",()=>{
-    const r=reviewGate05V0068ReadonlyPreflightV39(catalog(),{
+    const r=reviewMock(catalog(),{
       ...inventory(),stopped_history_count:3,total_scope_count:3,
       total_query_count:6,total_attempt_count:14
     });
@@ -53,22 +57,26 @@ describe("Gate05 staged V0068 read-only preflight semantics: no DDL or paid AUTH
   });
   it("refuses absent prior schema, roles with LOGIN, index already existing",()=>{
     for(const key of Object.keys(catalog()).filter(k=>k!=="v0068_index_name_exists")){
-      expect(()=>reviewGate05V0068ReadonlyPreflightV39({
+      expect(()=>reviewMock({
         ...catalog(),[key]:false
       },inventory())).toThrow("GATE05_V0068_PRIOR_SCHEMA_HOLD");
     }
     for(const present of [true,null,"false",undefined]){
-      expect(()=>reviewGate05V0068ReadonlyPreflightV39({
+      expect(()=>reviewMock({
         ...catalog(),v0068_index_name_exists:present
       },inventory())).toThrow("GATE05_V0068_INDEX_EXISTING_OR_UNKNOWN_HOLD");
     }
   });
+  it("rejects unframed plain-object snapshots from callers",()=>{
+    expect(()=>reviewGate05V0068ReadonlyPreflightV39(catalog(),inventory()))
+      .toThrow("GATE05_V0068_RESULT_SHAPE_HOLD");
+  });
   it("rejects open scope, contradictory counts, malformed/forged snapshots",()=>{
     const open={...inventory(),open_scope_count:1,
       prepared_scope_count:1,total_scope_count:1};
-    expect(()=>reviewGate05V0068ReadonlyPreflightV39(catalog(),open))
+    expect(()=>reviewMock(catalog(),open))
       .toThrow("GATE05_V0068_EXISTING_OPEN_SCOPE_HOLD");
-    expect(()=>reviewGate05V0068ReadonlyPreflightV39(catalog(),{
+    expect(()=>reviewMock(catalog(),{
       ...inventory(),open_scope_count:1,total_scope_count:1
     })).toThrow("GATE05_V0068_ACCOUNTING_HOLD");
     for(const bad of [
@@ -77,11 +85,11 @@ describe("Gate05 staged V0068 read-only preflight semantics: no DDL or paid AUTH
       {...inventory(),total_query_count:NaN},
       {...inventory(),stopped_history_count:1.5}
     ]){
-      expect(()=>reviewGate05V0068ReadonlyPreflightV39(catalog(),bad))
+      expect(()=>reviewMock(catalog(),bad))
         .toThrow("GATE05_V0068_COUNTS_HOLD");
     }
     for(const shape of [[],null,[catalog(),catalog()],[null]]){
-      expect(()=>reviewGate05V0068ReadonlyPreflightV39(shape,[inventory()]))
+      expect(()=>reviewMock(shape,[inventory()]))
         .toThrow("GATE05_V0068_RESULT_SHAPE_HOLD");
     }
   });
