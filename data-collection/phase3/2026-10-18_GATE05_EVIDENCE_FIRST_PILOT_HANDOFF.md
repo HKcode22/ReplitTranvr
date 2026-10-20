@@ -1,3 +1,22 @@
+## 2026-10-19 PDT — GATE0.5 PRODUCTION SCHEMA independently VERIFIED, installation blocker CLOSED
+
+**Operator-executed post-commit read-only catalog evidence** printed `GATE05_POSTCOMMIT_SCHEMA_VERIFIED` after previously recorded explicit `GATE05_SCHEMA_ONLY_COMMITTED_WITH_SCOPED_RUNTIME_ACL_REVOKE`.
+
+Verified installed objects: **3 clean-scoped pilot tables, 4 stored functions (two guard, reservation and STOP), 2 enabled guard triggers, 3 NOLOGIN role groups**. Separate returned table counts **scopes=0, queries=0, attempts=0**, no activation. Exact SQL privilege audit independently confirmed:
+- V39 normal app runtime: `can_reserve=false`, `can_stop=false`, `can_update_pilot=false`.
+- Dedicated NOLOGIN dispatch group: `can_reserve=true`, `can_stop=false`, `can_update_pilot=false`.
+- Dedicated NOLOGIN safety group: `can_reserve=false`, `can_stop=true`, `can_update_pilot=false`.
+- Inert NOLOGIN commissioner: none of reserve/stop/update.
+- Post-commit verification **database_writes=0, provider_requests=0, pilot_activated=false**. Previous structural release itself used production admin DDL but issued **zero FIDS requests, zero provider credits and no app deploy**.
+
+**CLOSE**: do not reapply V0066/V0067, do not continue investigating a supposedly uninstalled schema. Earlier rollback of original attempt was clean and the corrected targeted runtime-table ACL revocation succeeded. No need for repeat installation tests merely to restate this pass.
+
+**NEXT ACTUAL DEPENDENCY**: one narrowly scoped feasibility operation is still NOT authorized or runnable. `DATABASE_URL` is privileged and must not be casually reused as an unrestricted FIDS dispatcher; existing group roles are NOLOGIN and normal app runtime has no function EXECUTE. Need independently approved operator-controlled commissioner with exact WSSS query manifest/UTC window, two complementary FIDS option hashes, 12 max reserved API units (2 base requests and up to 4 retries), current plan usage/retention, securely provisioned LIMITED dispatch and independent STOP access and expiry/terminal ledger; no blanket role grants to general app. For the feasibility snapshot prefer a local WSSS departure window straddling retrieval instant to give meaningful chances of observed runway-time/position candidates rather than a future-only schedule window; separately record `retrieved_at_utc` and service-event window, do NOT conflate pilot execution period with FIDS flight-event window. Always return only aggregate field counts; if provider replies with no positions/actual timestamps, publish FAIL/BLOCKED instead of fabricating them. **Two GETs can establish feasibility only**, not statistical/sampling/trajectory full Gate0.5 scientific PASS. Once specific scope and spend are owner-approved, execute and reconcile, with separate full pilot decisions later.
+
+**Provider contractual source current Oct2026**: official Sept07 announcement `https://aerodatabox.com/2026-09-terms-update` states existing-subscriber terms change generally Nov07, **but FIDS page-size changes apply immediately**, and 7-day raw caching by default (some exceptions/derived works); official pricing `https://aerodatabox.com/pricing` clarifies changes to endpoint Tier/API-unit billing may affect grandfathered plans immediately. Existing 60k/60k quota is account capacity, not unlimited project authority. Plan for a conservative in-memory aggregate report only, no public raw flight redistribution, until exact account rights verified.
+
+**GitHub** PR#80 remains a draft, production `main` at `acd084dc22e00dc94b4aa3cb4bf2c65558991e4e` and Replit published code unchanged. This checkpoint records real production SQL infrastructure only, not deployed draft FIDS/assessor code, nor any paid feasibility request.
+
 ## 2026-10-19 PDT — PRODUCTION V0066 + V0067 SCHEMA-ONLY RELEASE COMMITTED (OWNER EXECUTED)
 
 **Evidence from owner-executed Replit Shell (explicit revised schema-only approval):**
