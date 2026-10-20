@@ -19,6 +19,8 @@ export type Gate05AggregateV39={
   returnedDepartures:number;
   returnedArrivals:number;
   explicitlyWsssDepartures:number;
+  impliedWsssDeparturesFromFidsList:number;
+  eligibleWsssDepartures:number;
   unknownDepartureOrigin:number;
   otherOriginMisclassified:number;
   candidateScheduled:number;
@@ -49,15 +51,21 @@ function localMinute(x:string):boolean{
   const d=new Date(x+":00Z");
   return Number.isFinite(d.getTime())&&d.toISOString().slice(0,16)===x;
 }
+const officialStatuses=new Set([
+  "Unknown","Expected","EnRoute","CheckIn","Boarding","GateClosed",
+  "Departed","Delayed","Approaching","Arrived","Canceled","Diverted",
+  "CanceledUncertain"
+]);
 function acceptableStatus(x:unknown):string {
-  // Group unknowns instead of echoing untrusted free-form provider content.
+  if(typeof x==="string"&&officialStatuses.has(x))return x;
   return typeof x==="number"&&Number.isInteger(x)&&x>=0&&x<=12
-    ? String(x) : "other_or_unknown";
+    ? "legacy_numeric_"+String(x) : "other_or_unknown";
 }
 function stats(fids:{departures:unknown[];arrivals:unknown[]},airport:string):Gate05AggregateV39{
   const r:Gate05AggregateV39={
     returnedDepartures:fids.departures.length,returnedArrivals:fids.arrivals.length,
-    explicitlyWsssDepartures:0,unknownDepartureOrigin:0,otherOriginMisclassified:0,
+    explicitlyWsssDepartures:0,impliedWsssDeparturesFromFidsList:0,
+    eligibleWsssDepartures:0,unknownDepartureOrigin:0,otherOriginMisclassified:0,
     candidateScheduled:0,candidateRevised:0,candidateRunway:0,
     candidateScheduledRevisedPairs:0,candidateScheduledRunwayPairs:0,
     presentLocationObjects:0,validPositionPairs:0,
@@ -68,19 +76,29 @@ function stats(fids:{departures:unknown[];arrivals:unknown[]},airport:string):Ga
   for(const flight of fids.departures){
     if(!flight||typeof flight!=="object"||Array.isArray(flight))
       throw Error("GATE05_FIDS_ITEM_SHAPE_HOLD");
+    const dep=at(flight,"departure"),mov=at(flight,"movement");
+    const hasDep=dep!==null&&typeof dep==="object"&&!Array.isArray(dep);
+    const hasMov=mov!==null&&typeof mov==="object"&&!Array.isArray(mov);
+    // Official AirportFlightContract: movement replaces departure/arrival.
+    if(hasDep===hasMov){r.unknownDepartureOrigin++;continue;}
     const origin=at(flight,"departure.airport.icao");
-    if(typeof origin!=="string" || !origin.trim()){
-      r.unknownDepartureOrigin++;continue;
+    if(typeof origin==="string"&&origin.trim()){
+      if(origin.trim().toUpperCase()!==airport){
+        r.otherOriginMisclassified++;continue;
+      }
+      r.explicitlyWsssDepartures++;
+    }else{
+      // Airport can be omitted when equal to requested WSSS.
+      // List-derived provenance is distinct from explicit ICAO evidence.
+      r.impliedWsssDeparturesFromFidsList++;
     }
-    if(origin.trim().toUpperCase()!==airport){
-      r.otherOriginMisclassified++;continue;
-    }
-    r.explicitlyWsssDepartures++;
+    r.eligibleWsssDepartures++;
     const code=acceptableStatus(at(flight,"status"));
     r.statusCounts[code]=(r.statusCounts[code]??0)+1;
-    const scheduled=validUtc(at(flight,"departure.scheduledTime.utc"));
-    const revised=validUtc(at(flight,"departure.revisedTime.utc"));
-    const runway=validUtc(at(flight,"departure.runwayTime.utc"));
+    const field=hasDep?"departure":"movement";
+    const scheduled=validUtc(at(flight,field+".scheduledTime.utc"));
+    const revised=validUtc(at(flight,field+".revisedTime.utc"));
+    const runway=validUtc(at(flight,field+".runwayTime.utc"));
     if(scheduled)r.candidateScheduled++;
     if(revised)r.candidateRevised++;
     if(runway)r.candidateRunway++;
