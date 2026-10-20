@@ -382,6 +382,28 @@ offlinePg("Gate05 reviewed prepared-only SQL against disposable PostgreSQL16",()
         expectedIanaTimezone:"Asia/Singapore",
         observedNowUtc:new Date(Date.now()-60_000).toISOString()
       });
+      // Terminal history is audit evidence, not another live pilot.
+      // Keep it in the same rolled-back disposable transaction to prove
+      // new runs are not arbitrarily blocked by earlier STOPPED scopes.
+      const terminalScopeId=randomUUID();
+      await conn.query(
+        "INSERT INTO clean.gate05_fids_pilot_scope_v39 "+
+        "(scope_id,authorization_id,authorization_sha256,cycle_id,icao,"+
+        "starts_at_utc,expires_at_utc) "+
+        "VALUES($1::uuid,$2,$3,$4,'WSSS',$5::timestamptz,$6::timestamptz)",
+        [terminalScopeId,a.authorizationId,sha(bytes),a.cycleId,
+         a.startsAtUtc,a.expiresAtUtc]
+      );
+      const closed=await conn.query(
+        "SELECT * FROM clean.stop_gate05_fids_pilot_v39($1::uuid,'OPERATOR_STOP')",
+        [terminalScopeId]
+      );
+      expect(closed.rows[0]).toMatchObject({state:"STOPPED"});
+      expect((await conn.query(
+        "SELECT count(*)::int AS stopped FROM clean.gate05_fids_pilot_scope_v39 "+
+        "WHERE state='STOPPED'"
+      )).rows[0].stopped).toBe(1);
+
       const inventory=gate05PreparedCommissionInventorySqlV39(a.scopeId);
       const initially=(await conn.query(inventory.sql,[...inventory.params])).rows;
       expect(verifyGate05PreparedCommissionInventoryV39(initially,"BEFORE").status)
