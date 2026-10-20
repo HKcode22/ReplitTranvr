@@ -131,7 +131,11 @@ export async function runGate05ExpiryGuardV39(args:{
      !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(args.expiresAtUtc))
     throw Error("GATE05_EXPIRY_GUARD_INPUT_HOLD");
   const deadline=Date.parse(args.expiresAtUtc);
-  if(!Number.isFinite(deadline)||new Date(deadline).getTime()!==deadline)
+  // Date.parse silently normalizes impossible calendar days in some engines.
+  // Round-trip the UTC calendar fields before trusting a safety deadline.
+  if(!Number.isSafeInteger(deadline)||
+     new Date(deadline).toISOString().slice(0,19)!==
+       args.expiresAtUtc.slice(0,19))
     throw Error("GATE05_EXPIRY_GUARD_TIME_HOLD");
   const now=args.nowMs??Date.now;
   const sleep=args.sleepMs??((ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms)));
@@ -140,10 +144,15 @@ export async function runGate05ExpiryGuardV39(args:{
   const initial=now();
   if(!Number.isSafeInteger(initial)||deadline-initial>86_400_000)
     throw Error("GATE05_EXPIRY_GUARD_CLOCK_HOLD");
+  let lastObserved=initial;
   for(let checks=0;checks<2882;checks++){
     const present=now();
-    if(!Number.isSafeInteger(present)||present<initial-120_000)
+    // A process clock may jump forward and then roll backward. Comparing
+    // only against the initial timestamp misses this later regression.
+    if(!Number.isSafeInteger(present)||
+       present<initial-120_000||present<lastObserved-120_000)
       throw Error("GATE05_EXPIRY_GUARD_CLOCK_HOLD");
+    lastObserved=present;
     const remaining=deadline-present;
     if(remaining<=0){
       return stopGate05IndependentlyV39({
