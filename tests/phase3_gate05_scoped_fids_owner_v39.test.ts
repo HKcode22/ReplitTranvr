@@ -101,6 +101,7 @@ onlyDisposable("Gate05 exact stored reservation under real disposable PostgreSQL
     ];
     try{
       await conn.query("BEGIN");
+      await conn.query("SELECT pg_advisory_xact_lock(hashtext('gate05_staged_schema_test_v39'))");
       const sql=readFileSync("migrations/staged/V0066__gate05_scoped_fids_budget_v39.sql","utf8");
       await conn.query(sql);
       await conn.query(readFileSync(

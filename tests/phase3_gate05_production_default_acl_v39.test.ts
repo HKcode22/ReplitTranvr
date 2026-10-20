@@ -31,6 +31,7 @@ onlySafe("Gate05 per-table default ACL mitigation on disposable PG16",()=>{
     const runtime="gate05_acl_fixture_"+randomUUID().replace(/-/g,"").slice(0,22);
     try{
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('gate05_staged_schema_test_v39'))");
       await client.query('CREATE ROLE "'+runtime+'" NOLOGIN NOINHERIT');
       await client.query('ALTER DEFAULT PRIVILEGES IN SCHEMA clean GRANT UPDATE ON TABLES TO "'+runtime+'"');
       const before=await client.query(
