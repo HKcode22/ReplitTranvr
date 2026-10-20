@@ -233,7 +233,7 @@ export function verifyGate05PreparedReadbackV39(
     return x as Record<string,unknown>;
   };
   if(!Array.isArray(scopeRows)||scopeRows.length!==1||
-     !Array.isArray(queryRows)||queryRows.length!==2)deny();
+     !Array.isArray(queryRows)||queryRows.length!==2)return deny();
   const s=record(scopeRows[0]),expected=planned.scope;
   const simple=[
     "scope_id","authorization_id","authorization_sha256","cycle_id",
