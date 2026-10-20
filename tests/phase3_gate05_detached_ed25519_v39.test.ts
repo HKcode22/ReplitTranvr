@@ -7,6 +7,7 @@ import {
   verifyGate05DetachedApprovalSignatureV39
 } from "../server/lib/disruption/gate05DetachedEd25519Approval_v39";
 import {gate05FidsQueryFingerprintV39} from "../server/lib/disruption/gate05ScopedFidsOwner_v39";
+import {reviewGate05SignedPreparedCommissionV39} from "../server/lib/disruption/gate05SignedPreparedCommissionReview_v39";
 
 const sha=(bytes:Buffer)=>createHash("sha256").update(bytes).digest("hex");
 const query={icao:"WSSS",fromLocal:"2026-10-20T09:00",toLocal:"2026-10-20T10:00"};
@@ -110,5 +111,48 @@ describe("Gate05 Ed25519 detached signature never auto-enrolls an operator",()=>
     expect(()=>verifyGate05DetachedApprovalSignatureV39({
       ...f,signerPublicKeySpkiDerBase64:"---BEGIN PUBLIC KEY---"
     })).toThrow("GATE05_SIGNER_ROOT_PIN_HOLD");
+  });
+});
+
+
+describe("Gate05 signature-to-PREPARED commission plan binds immutable reviewed artifacts",()=>{
+  it("requires cryptographic verification before exposing the bounded 3-row plan",()=>{
+    const v=fixture();
+    const r=reviewGate05SignedPreparedCommissionV39(v);
+    expect(r.status).toBe("VALID_SIGNATURE_PREPARED_SQL_REVIEW_ONLY_NO_LIVE_AUTH");
+    expect(r.cryptographicSignatureVerified).toBe(true);
+    expect(r.independentlyAttestedOwnerIdentity).toBe(false);
+    expect(r.explicitHumanPaidAuthorizationVerified).toBe(false);
+    expect(r.providerTariffAndRetentionEntitlementsVerified).toBe(false);
+    expect(r.productionCommissioningAuthorized).toBe(false);
+    expect(r.productionActivationAuthorized).toBe(false);
+    expect(r.paidPilotAuthorized).toBe(false);
+    expect(r.productionDatabaseWrites).toBe(0);
+    expect(r.providerRequests).toBe(0);
+    expect(r.exactRowsSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(r.plannedCommands).toHaveLength(2);
+    expect(r.plannedCommands[0].sql).toContain("'PREPARED',4,8,0,0");
+    expect(r.plannedCommands[1].sql).toContain("($1::uuid,$3,2,true,0)");
+    expect(r.inventoryQuery.sql).toContain("state IN ('PREPARED','ACTIVE')");
+    expect(r.inventoryQuery.params).toEqual([r.scopeId]);
+    expect(JSON.stringify(r)).not.toContain("PRIVATE KEY");
+  });
+  it("rejects unsigned, tampered, mismatched signer and self-pinned substituted keys",()=>{
+    const v=fixture(),other=fixture();
+    expect(()=>reviewGate05SignedPreparedCommissionV39({
+      ...v,detachedSignatureBase64:Buffer.alloc(64,0).toString("base64")
+    })).toThrow("GATE05_SIGNER_SIGNATURE_NOT_VALID_HOLD");
+    expect(()=>reviewGate05SignedPreparedCommissionV39({
+      ...v,authorizationBytes:Buffer.concat([v.authorizationBytes,Buffer.from(" ")])
+    })).toThrow("GATE05_AUTH_REVIEWED_DIGEST_MISMATCH_HOLD");
+    expect(()=>reviewGate05SignedPreparedCommissionV39({
+      ...v,signerPublicKeySpkiDerBase64:other.signerPublicKeySpkiDerBase64,
+      detachedSignatureBase64:other.detachedSignatureBase64
+    })).toThrow("GATE05_SIGNER_ROOT_PIN_MISMATCH_HOLD");
+    // Merely passing attacker-controlled key fingerprints is not authority:
+    // the returned review must explicitly keep owner identity/paid approval false.
+    const substituted=reviewGate05SignedPreparedCommissionV39(other);
+    expect(substituted.productionCommissioningAuthorized).toBe(false);
+    expect(substituted.paidPilotAuthorized).toBe(false);
   });
 });
