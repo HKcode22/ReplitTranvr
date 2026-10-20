@@ -1,3 +1,29 @@
+## 2026-10-19 19:13 PDT — EXACT WSSS FIDS FEASIBILITY WINDOW PROPOSED, NOT PAID-AUTHORIZED
+
+**Owner ran an offline, zero-provider `GATE05_FIDS_FEASIBILITY_PROPOSAL_ONLY` local-time/hash computation** after independent production Gate05 V0066/V0067 post-COMMIT verification. This freezes a proposed snapshot for review **ONLY**; zero DB writes, zero API requests or provider unit spend. No auth row, actor membership or activation exists.
+
+| Pin | Exact proposed value |
+| --- | --- |
+| Airport/timezone | `WSSS` / `Asia/Singapore` |
+| Planned execution `startsAtUtc` | `2026-10-20T02:45:00.000Z` = 2026-10-19 **19:45 PDT** |
+| Planned execution `expiresAtUtc` | `2026-10-20T03:25:00.000Z` = 2026-10-19 **20:25 PDT** |
+| FIDS flight service interval | `2026-10-20T10:15` to `2026-10-20T11:15` **SGT**; UTC `02:15–03:15` |
+| Query 1 `withLocation=false` | `dd770165bdb65916e1e24bfe4a24d07fa04812884df7ae9a1cb791698d18704d` |
+| Query 2 `withLocation=true` | `5dee8f7c2e6e90b6ac46c391b24b588e17792d5cf17defba7d051ac5e8ea4dfc` |
+| FIDS flags for both | `direction=Departure,withLeg=true,withCancelled=true,withCodeshared=true,withCargo=false,withPrivate=false` |
+| Proposed budget | **2 base physical requests / 4 units; ≤4 retry physical requests / 8 units; ≤6 total attempts / 12 API units** |
+| Official API contract SHA256 | `63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09` |
+| Provider reset | `2026-11-04T02:21:21Z` (observed account read-only) |
+| Paid authority | **NONE**; explicit `paidRequestAuthorized=false` |
+
+**Independent reproduction:** Both 64-hex query hashes have been recomputed from the exact ordered canonical object definition in `gate05FidsQueryFingerprintV39` and **match** owner Shell output, including `withLocation`. Flight data and execution time are distinct clocks; do not require the full FIDS flight service window to lie inside request execution window: the former intentionally spans `T−30m` to `T+30m` of planned start, while the latter is 40m for a future HTTP operation. Requests after FIDS service `toLocal` may retrieve additional completed records; log exact response/retrieval clocks. WSSS DST is not relevant here (SGT UTC+8).
+
+**TIME-SENSITIVE HARD HOLD:** The start was computed at approximately **19:13 PDT**, giving ~32m lead to **19:45 PDT**. The producer is still not commissioned; preflight was a proposal, not a scheduled automation. **Never secretly auto-run at 19:45 or silently reuse the same old hashes** after local window expiration. If issuance/approval/isolated operators/STOP cannot be established in time, **EXPIRE THIS PROPOSAL** and recompute an entirely new query pair plus exact approval. Do NOT insert a past-dated `PREPARED` record, waive the pre-exposure checks, use broad `DATABASE_URL` as an unrestricted runner, or change `main` to rush a paid experiment.
+
+**Confirmed release stage:** V0066/V0067 production catalog independently audited (`GATE05_POSTCOMMIT_SCHEMA_VERIFIED`): 3 tables, 4 functions, 2 enabled triggers, 3 NOLOGIN groups; 0 scopes, 0 queries, 0 reservations; normal runtime cannot reserve/STOP/UPDATE, dedicated dispatch can only reserve and dedicated safety can only STOP. GitHub PR#80 code remains **DRAFT and not published**, so `fetchGate05ScopedFidsV39` exists only in reviewed source; dedicated scoped LOGIN credentials not provisioned, authorization artifact/trusted human signature not established, and independent STOP/expiry supervision not wired.
+
+**Next exact practical implementation/decision:** one approved, separated human/operator-issued commissioning scope and role-specific dispatch/safety (NOT normal app login), then one paired controlled provider GET measurement while `startsAtUtc<now<expiresAtUtc` and after reviewing pricing/retention; record source identity, actual provider billed API-unit delta and in-memory aggregates from `gate05FidsResponseFeasibility_v39.ts`. Two FIDS GETs are ONLY target feasibility, not full scientific Gate0.5 PASS (no independently verified actual departure outcome, trajectory/sample adequacy, or frozen T yet). This checkpoint does NOT constitute a spending permit.
+
 ## 2026-10-19 PDT — GATE0.5 PRODUCTION SCHEMA independently VERIFIED, installation blocker CLOSED
 
 **Operator-executed post-commit read-only catalog evidence** printed `GATE05_POSTCOMMIT_SCHEMA_VERIFIED` after previously recorded explicit `GATE05_SCHEMA_ONLY_COMMITTED_WITH_SCOPED_RUNTIME_ACL_REVOKE`.
