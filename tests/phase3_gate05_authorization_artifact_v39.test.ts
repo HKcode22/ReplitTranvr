@@ -2,7 +2,7 @@ import {describe,it,expect} from "vitest";
 import {createHash,randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
 import pg from "pg";
-import {inspectGate05ExactAuthArtifactV39,previewGate05PreparedScopeRowsV39,planGate05PreparedOnlySqlV39} from "../server/lib/disruption/gate05AuthorizationArtifact_v39";
+import {inspectGate05ExactAuthArtifactV39,previewGate05PreparedScopeRowsV39,planGate05PreparedOnlySqlV39,verifyGate05PreparedReadbackV39} from "../server/lib/disruption/gate05AuthorizationArtifact_v39";
 import {gate05FidsQueryFingerprintV39} from "../server/lib/disruption/gate05ScopedFidsOwner_v39";
 const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const core={icao:"WSSS",fromLocal:"2026-10-20T09:00",toLocal:"2026-10-20T10:00"};
@@ -198,6 +198,89 @@ describe("Gate05 parameterized only-PREPARED SQL review plan",()=>{
   });
 });
 
+
+describe("Gate05 strict PREPARED scope read-back: no partial, stale or forged rows",()=>{
+  function state(){
+    const a=raw();
+    const bytes=Buffer.from(JSON.stringify(a));
+    const pins={
+      independentlyReviewedArtifactSha256:sha(bytes),
+      expectedSourceCommit:source,
+      expectedOpenapiSha256:openapi,
+      expectedProviderResetUtc:a.providerResetUtc,
+      expectedIanaTimezone:"Asia/Singapore",
+      observedNowUtc:"2026-10-19T23:59:00.000Z"
+    };
+    const scope=[{
+      scope_id:a.scopeId,authorization_id:a.authorizationId,
+      authorization_sha256:sha(bytes),cycle_id:a.cycleId,icao:"WSSS",
+      starts_at_utc:new Date(a.startsAtUtc),
+      expires_at_utc:new Date(a.expiresAtUtc),
+      state:"PREPARED",base_cap_units:4,retry_cap_units:8,
+      base_used_units:0,retry_used_units:0,
+      stopped_at_utc:null,stop_reason:null
+    }];
+    const queries=[
+      {scope_id:a.scopeId,query_sha256:a.noLocationQuerySha256,
+        query_index:1,with_location:false,last_reserved_attempt:0},
+      {scope_id:a.scopeId,query_sha256:a.locationQuerySha256,
+        query_index:2,with_location:true,last_reserved_attempt:0}
+    ];
+    return {bytes,pins,scope,queries};
+  }
+  const check=(x:ReturnType<typeof state>)=>
+    verifyGate05PreparedReadbackV39(x.bytes,x.pins,x.scope,x.queries);
+  it("accepts only one PREPARED row and exactly two paired queries",()=>{
+    const x=state(),out=check(x);
+    expect(out.status).toBe("EXACT_THREE_PREPARED_ROWS_MATCH_NO_LIVE_AUTH");
+    expect(out.rowsVerified).toBe(3);
+    expect(out.usedApiUnitsVerified).toBe(0);
+    expect(out.paidPilotAuthorized).toBe(false);
+    expect(out.providerRequests).toBe(0);
+    expect(out.exactRowsSha256).toMatch(/^[a-f0-9]{64}$/);
+    x.queries.reverse();
+    expect(check(x).exactRowsSha256).toBe(out.exactRowsSha256);
+  });
+  it("refuses missing, duplicate or extra rows",()=>{
+    const x=state();
+    for(const bad of [[],[...x.scope,...x.scope]]){
+      expect(()=>check({...x,scope:bad})).toThrow("GATE05_AUTH_PREPARED_READBACK_HOLD");
+    }
+    for(const bad of [[],[x.queries[0]],[...x.queries,x.queries[0]]]){
+      expect(()=>check({...x,queries:bad})).toThrow("GATE05_AUTH_PREPARED_READBACK_HOLD");
+    }
+  });
+  it("rejects activation, STOP, reservation counters, identities and expiry changes",()=>{
+    const x=state();
+    const mutate=(changes:Record<string,unknown>)=>
+      check({...x,scope:[{...x.scope[0],...changes}]});
+    for(const changes of [
+      {state:"ACTIVE"},{state:"STOPPED"},
+      {base_used_units:2},{retry_used_units:2},
+      {base_cap_units:6},{retry_cap_units:10},
+      {icao:"EGLL"},{cycle_id:"substituted-cycle"},
+      {authorization_sha256:"0".repeat(64)},
+      {stopped_at_utc:new Date(x.scope[0].starts_at_utc)},
+      {stop_reason:"SAFETY_ABORT"},
+      {starts_at_utc:new Date(Date.parse(x.scope[0].starts_at_utc.toISOString())+1000)},
+      {expires_at_utc:null}
+    ]){
+      expect(()=>mutate(changes)).toThrow("GATE05_AUTH_PREPARED_READBACK_HOLD");
+    }
+  });
+  it("refuses substituted hash, location, query index or nonzero attempt",()=>{
+    const x=state();
+    for(const changes of [
+      {query_sha256:"0".repeat(64)},
+      {query_index:2},{with_location:true},
+      {last_reserved_attempt:1},{scope_id:randomUUID()}
+    ]){
+      const q=[{...x.queries[0],...changes},x.queries[1]];
+      expect(()=>check({...x,queries:q})).toThrow("GATE05_AUTH_PREPARED_READBACK_HOLD");
+    }
+  });
+});
+
 const pgUrl=process.env.DATABASE_URL??"";
 let disposableGate05Db=false;
 try{
@@ -272,6 +355,29 @@ offlinePg("Gate05 reviewed prepared-only SQL against disposable PostgreSQL16",()
         {query_index:2,query_sha256:a.locationQuerySha256,
           with_location:true,last_reserved_attempt:0}
       ]);
+      const scopeRows=(await conn.query(
+        "SELECT scope_id,authorization_id,authorization_sha256,cycle_id,icao,"+
+        "starts_at_utc,expires_at_utc,state,base_cap_units,retry_cap_units,"+
+        "base_used_units,retry_used_units,stopped_at_utc,stop_reason "+
+        "FROM clean.gate05_fids_pilot_scope_v39 WHERE scope_id=$1",
+        [a.scopeId]
+      )).rows;
+      const queryRows=(await conn.query(
+        "SELECT scope_id,query_sha256,query_index,with_location,last_reserved_attempt "+
+        "FROM clean.gate05_fids_allowed_query_v39 WHERE scope_id=$1 ORDER BY query_index",
+        [a.scopeId]
+      )).rows;
+      expect(verifyGate05PreparedReadbackV39(bytes,{
+        independentlyReviewedArtifactSha256:sha(bytes),
+        expectedSourceCommit:source,
+        expectedOpenapiSha256:openapi,
+        expectedProviderResetUtc:reset,
+        expectedIanaTimezone:"Asia/Singapore",
+        observedNowUtc:new Date(Date.now()-60_000).toISOString()
+      },scopeRows,queryRows)).toMatchObject({
+        status:"EXACT_THREE_PREPARED_ROWS_MATCH_NO_LIVE_AUTH",
+        rowsVerified:3,activeScopesVerified:0,usedApiUnitsVerified:0
+      });
       await conn.query("SAVEPOINT prevent_duplicate");
       await expect(conn.query(plan.commands[1].sql,[...plan.commands[1].params]))
         .rejects.toThrow();
