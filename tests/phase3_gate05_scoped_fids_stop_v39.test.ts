@@ -259,6 +259,47 @@ describe("Gate05 independent expiry guard is bounded and cannot authorize a pilo
     })).rejects.toThrow("GATE05_EXPIRY_GUARD_CLOCK_HOLD");
     expect(db.query).not.toHaveBeenCalled();
   });
+  it("refuses impossible calendar dates rather than trusting Date.parse normalization",async()=>{
+    const db={query:vi.fn()},sleep=vi.fn();
+    for(const expiry of [
+      "2026-02-30T01:00:00Z",
+      "2026-04-31T01:00:00Z",
+      "2025-02-29T01:00:00Z"
+    ]){
+      await expect(runGate05ExpiryGuardV39({
+        db:db as any,scopeId:scope(),expiresAtUtc:expiry,
+        nowMs:()=>Date.parse("2025-02-01T00:00:00Z"),sleepMs:sleep
+      })).rejects.toThrow("GATE05_EXPIRY_GUARD_TIME_HOLD");
+    }
+    expect(db.query).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+  it("accepts a real leap-day deadline when already expired",async()=>{
+    const db={query:vi.fn(async()=>({rowCount:1,rows:[{
+      state:"STOPPED",reserved_attempts:"0",reserved_units:"0"
+    }]}))};
+    const result=await runGate05ExpiryGuardV39({
+      db:db as any,scopeId:scope(),expiresAtUtc:"2028-02-29T01:00:00Z",
+      nowMs:()=>Date.parse("2028-02-29T01:00:01Z"),sleepMs:async()=>{}
+    });
+    expect(result.state).toBe("STOPPED");
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+  it("rejects regression after a later observation even if still above initial time",async()=>{
+    const initial=Date.parse("2026-10-21T00:00:00Z");
+    let clock=initial,cycle=0;
+    const db={query:vi.fn()};
+    await expect(runGate05ExpiryGuardV39({
+      db:db as any,scopeId:scope(),expiresAtUtc:"2026-10-21T00:30:00Z",
+      nowMs:()=>clock,
+      sleepMs:async()=>{
+        cycle++;
+        clock=cycle===1?initial+600_000:initial+240_000;
+      }
+    })).rejects.toThrow("GATE05_EXPIRY_GUARD_CLOCK_HOLD");
+    expect(cycle).toBe(2);
+    expect(db.query).not.toHaveBeenCalled();
+  });
   it("propagates safety SQL denial and cannot claim STOP",async()=>{
     const db={query:vi.fn(async()=>{throw Error("permission denied")})};
     await expect(runGate05ExpiryGuardV39({
