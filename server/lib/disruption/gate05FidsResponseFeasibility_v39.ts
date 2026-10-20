@@ -46,7 +46,9 @@ function at(x:unknown,path:string):unknown{
 function validUtc(x:unknown):boolean{
   return typeof x==="string" &&
     /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(x) &&
-    Number.isFinite(Date.parse(x));
+    Number.isFinite(Date.parse(x)) &&
+    // Prevent JS Date.parse from normalizing invalid dates like Feb 30.
+    new Date(x.slice(0,10)+"T00:00:00Z").toISOString().slice(0,10)===x.slice(0,10);
 }
 function localMinute(x:string):boolean{
   if(typeof x!=="string"||!/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(x))return false;
