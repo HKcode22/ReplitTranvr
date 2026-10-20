@@ -563,6 +563,8 @@ export interface FidsFetchOptions {
   withLeg?: boolean;
   /** Optional, explicitly requested. Default false, no silent position REST spend. */
   withLocation?: boolean;
+  /** A null/missing departure list cannot stand for a measured zero-count. */
+  strictDepartureList?: boolean;
   category?: "fids_base" | "fids_split" | "validation" | "outcome";
   budgetOwner?: FidsAttemptBudgetOwner;
   fetchImpl?: typeof fetch;
@@ -616,7 +618,9 @@ export async function fetchFidsAirport(
       }
       if (resp.ok) {
         const raw: any = await readJsonOrNull(resp);
-        if (!raw || typeof raw !== "object") throw new Error("FIDS response schema invalid");
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("FIDS response schema invalid");
+        if (opts?.strictDepartureList && !Array.isArray(raw.departures))
+          throw new Error("FIDS_DEPARTURES_ARRAY_UNAVAILABLE");
         return {
           departures: Array.isArray(raw.departures) ? raw.departures : [],
           arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
@@ -624,8 +628,12 @@ export async function fetchFidsAirport(
       }
       const retryable = resp.status === 429 || [500, 502, 503, 504].includes(resp.status);
       if (!retryable || attempt === 3) return null;
-      const retryAfter = Number(resp.headers.get("retry-after"));
-      await sleepImpl(Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : RATE_LIMIT_BACKOFF_MS * attempt);
+      const rawRetryAfter = resp.headers.get("retry-after");
+      // Number(null)=0; missing Retry-After must NOT trigger immediate retry.
+      const retryAfter = rawRetryAfter===null ? NaN : Number(rawRetryAfter);
+      const delay = Number.isFinite(retryAfter) && retryAfter >= 0 && retryAfter<=60
+        ? retryAfter*1000 : RATE_LIMIT_BACKOFF_MS*attempt;
+      await sleepImpl(delay);
     }
     return null;
   } catch {
