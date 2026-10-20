@@ -166,12 +166,10 @@ onlyCI("Gate05 signed PREPARED transaction is all-or-nothing on disposable PG16"
       await db.query("ROLLBACK").catch(()=>{});
       // Staged schemas and roles were created inside the same transaction.
       // Nothing, not even the V0068 indexes, may survive test rollback.
-      if(db._connected){
-        const check=await db.query(
-          "SELECT to_regclass('clean.gate05_fids_pilot_scope_v39') AS scope"
-        ).catch(()=>null);
-        if(check)expect(check.rows[0].scope).toBeNull();
-      }
+      const check=await db.query(
+        "SELECT to_regclass('clean.gate05_fids_pilot_scope_v39') AS scope"
+      ).catch(()=>null);
+      if(check)expect(check.rows[0].scope).toBeNull();
       await db.end().catch(()=>{});
     }
   },40000);
