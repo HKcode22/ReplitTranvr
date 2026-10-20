@@ -39,12 +39,23 @@ async function durableStop(
     "SELECT state,reserved_attempts,reserved_units FROM clean.stop_gate05_fids_pilot_v39($1::uuid,$2::text)",
     [scopeId,reason]
   );
-  if(r.rowCount!==1||r.rows[0]?.state!=="STOPPED")
+  if(r.rowCount!==1||!Array.isArray(r.rows)||r.rows.length!==1||
+     r.rows[0]?.state!=="STOPPED")
     throw Error("GATE05_STOP_DURABLE_RECEIPT_HOLD");
-  const attempts=Number(r.rows[0].reserved_attempts);
-  const units=Number(r.rows[0].reserved_units);
-  if(!Number.isSafeInteger(attempts)||attempts<0||attempts>6||
-     !Number.isSafeInteger(units)||units!==attempts*2||units>12)
+  // node-postgres normally returns COUNT(bigint) and SUM(bigint) as decimal
+  // strings. Number(null), Number("") and Number(" ") all equal zero, but
+  // absent/ambiguous receipts must never be interpreted as zero attempts.
+  const counter=(x:unknown):number=>{
+    if(typeof x==="number"&&Number.isSafeInteger(x)&&x>=0)return x;
+    if(typeof x==="string"&&/^(?:0|[1-9][0-9]*)$/.test(x)){
+      const n=Number(x);
+      if(Number.isSafeInteger(n))return n;
+    }
+    throw Error("GATE05_STOP_ACCOUNTING_HOLD");
+  };
+  const attempts=counter(r.rows[0].reserved_attempts);
+  const units=counter(r.rows[0].reserved_units);
+  if(attempts>6||units!==attempts*2||units>12)
     throw Error("GATE05_STOP_ACCOUNTING_HOLD");
   return {
     state:"STOPPED",reservedAttempts:attempts,reservedUnits:units,
