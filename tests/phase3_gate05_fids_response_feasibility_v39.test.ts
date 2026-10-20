@@ -41,6 +41,9 @@ describe("Gate05 two-query evidence respects request-role and scientific boundar
     expect(r.location.candidateScheduledRunwayPairs).toBe(2);
     expect(r.location.statusCounts.EnRoute).toBe(1);
     expect(r.location.validPositionPairsWithReportedClock).toBe(2);
+    expect(r.location.explicitlyWsssPositionPairsWithReportedClock).toBe(0);
+    expect(r.location.impliedWsssPositionPairsWithReportedClock).toBe(2);
+    expect(r.locationReturnedForAtLeastOneExplicitWsssDeparture).toBe(false);
     expect(r.verifiedUniquePhysicalFlights).toBeNull();
     expect(r.gate05ScientificPass).toBe(false);
     expect(JSON.stringify(r)).not.toContain("NOT-EXPORTED");
@@ -61,6 +64,8 @@ describe("Gate05 two-query evidence respects request-role and scientific boundar
     expect(r.base.returnedDepartures).toBe(1);
     expect(r.base.returnedArrivals).toBe(1);
     expect(r.location.validPositionPairsWithReportedClock).toBe(1);
+    expect(r.location.explicitlyWsssPositionPairsWithReportedClock).toBe(1);
+    expect(r.location.impliedWsssPositionPairsWithReportedClock).toBe(0);
     expect(r.locationReturnedForAtLeastOneExplicitWsssDeparture).toBe(true);
     expect(r.location.candidateScheduledRevisedPairs).toBe(1);
     expect(r.location.candidateScheduledRunwayPairs).toBe(1);
@@ -83,7 +88,25 @@ describe("Gate05 two-query evidence respects request-role and scientific boundar
     expect(r.location.impliedWsssDeparturesFromFidsList).toBe(1);
     expect(r.location.eligibleWsssDepartures).toBe(1);
     expect(r.location.validPositionPairsWithReportedClock).toBe(1);
+    expect(r.location.explicitlyWsssPositionPairsWithReportedClock).toBe(0);
+    expect(r.location.impliedWsssPositionPairsWithReportedClock).toBe(1);
+    expect(r.locationReturnedForAtLeastOneExplicitWsssDeparture).toBe(false);
     expect(r.gate05ScientificPass).toBe(false);
+  });
+  it("rejects a conflicting ICAO in the movement leg instead of inferring WSSS",()=>{
+    const x=input();
+    x.withLocation.departures=[{
+      movement:{
+        airport:{icao:"EGLL"},
+        scheduledTime:{utc:"2026-10-19T04:00:00Z"}
+      },
+      location:{lat:1.35,lon:103.98,reportedAtUtc:"2026-10-19T04:00:00Z"}
+    }] as any;
+    const r=assessGate05FidsFeasibilityV39(x);
+    expect(r.location.otherOriginMisclassified).toBe(1);
+    expect(r.location.eligibleWsssDepartures).toBe(0);
+    expect(r.location.validPositionPairsWithReportedClock).toBe(0);
+    expect(r.locationReturnedForAtLeastOneExplicitWsssDeparture).toBe(false);
   });
   it("distinguishes valid coordinates from observation-clock availability",()=>{
     const x=input();
