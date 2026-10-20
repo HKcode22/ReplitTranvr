@@ -2,7 +2,7 @@ import {describe,it,expect,vi} from "vitest";
 import {randomUUID} from "node:crypto";
 import {fetchGate05ScopedFidsV39,gate05FidsQueryFingerprintV39}
   from "../server/lib/disruption/gate05ScopedFidsOwner_v39";
-import {stopGate05ScopedFidsV39}
+import {stopGate05ScopedFidsV39,stopGate05IndependentlyV39}
   from "../server/lib/disruption/gate05ScopedFidsStop_v39";
 const query={icao:"WSSS",fromLocal:"2026-10-19T09:00",toLocal:"2026-10-19T10:00",withLocation:false};
 const identity=()=>({
@@ -85,5 +85,61 @@ describe("Gate05 local abort and separate durable terminal stop",()=>{
       db:db as any,scopeId:id,reason:"OPERATOR_STOP",controller
     })).rejects.toThrow("GATE05_STOP_ACCOUNTING_HOLD");
     expect(controller.signal.aborted).toBe(true);
+  });
+});
+
+describe("Gate05 independently operable safety STOP — no shared dispatcher controller",()=>{
+  it("durably stops through only the scoped SQL safety function",async()=>{
+    const id=randomUUID(),calls:string[]=[];
+    const db={query:vi.fn(async(sql:string,args:unknown[])=>{
+      calls.push("sql-stop");
+      expect(sql).toContain("clean.stop_gate05_fids_pilot_v39");
+      expect(args).toEqual([id,"EXPIRED"]);
+      return {rowCount:1,rows:[{
+        state:"STOPPED",reserved_attempts:"3",reserved_units:"6"
+      }]};
+    })};
+    const receipt=await stopGate05IndependentlyV39({
+      db:db as any,scopeId:id,reason:"EXPIRED"
+    });
+    expect(receipt).toEqual({
+      state:"STOPPED",reservedAttempts:3,reservedUnits:6,
+      localAbortRequested:false,
+      providerRequestAlreadySentMayBeBilled:true,
+      paidProviderMutationByStop:0
+    });
+    expect(calls).toEqual(["sql-stop"]);
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+  it("refuses invalid scope or reason without touching database",async()=>{
+    const db={query:vi.fn()};
+    await expect(stopGate05IndependentlyV39({
+      db:db as any,scopeId:"unreviewed",reason:"SAFETY_ABORT"
+    })).rejects.toThrow("GATE05_STOP_SCOPE_OR_REASON_HOLD");
+    await expect(stopGate05IndependentlyV39({
+      db:db as any,scopeId:randomUUID(),reason:"CLEAR" as any
+    })).rejects.toThrow("GATE05_STOP_SCOPE_OR_REASON_HOLD");
+    expect(db.query).not.toHaveBeenCalled();
+  });
+  it("rejects forged or inconsistent receipts; cannot assert terminal stop",async()=>{
+    const db={query:vi.fn(async()=>({rowCount:1,rows:[{
+      state:"ACTIVE",reserved_attempts:"0",reserved_units:"0"
+    }]}))};
+    await expect(stopGate05IndependentlyV39({
+      db:db as any,scopeId:randomUUID(),reason:"OPERATOR_STOP"
+    })).rejects.toThrow("GATE05_STOP_DURABLE_RECEIPT_HOLD");
+    db.query.mockResolvedValueOnce({rowCount:1,rows:[{
+      state:"STOPPED",reserved_attempts:"7",reserved_units:"14"
+    }]});
+    await expect(stopGate05IndependentlyV39({
+      db:db as any,scopeId:randomUUID(),reason:"SAFETY_ABORT"
+    })).rejects.toThrow("GATE05_STOP_ACCOUNTING_HOLD");
+  });
+  it("propagates SQL denial: no fabricated STOP receipt or fallback",async()=>{
+    const db={query:vi.fn(async()=>{throw Error("permission denied for function")})};
+    await expect(stopGate05IndependentlyV39({
+      db:db as any,scopeId:randomUUID(),reason:"SAFETY_ABORT"
+    })).rejects.toThrow("permission denied");
+    expect(db.query).toHaveBeenCalledTimes(1);
   });
 });
