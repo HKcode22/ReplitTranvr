@@ -367,6 +367,15 @@ offlinePg("Gate05 reviewed prepared-only SQL against disposable PostgreSQL16",()
       expect(index[0].indexdef).toContain("UNIQUE INDEX");
       expect(index[0].indexdef).toContain("'PREPARED'");
       expect(index[0].indexdef).toContain("'ACTIVE'");
+      const oneUse=(await conn.query(
+        "SELECT indexname FROM pg_indexes WHERE schemaname='clean' "+
+        "AND indexname IN ('gate05_fids_one_authorization_id_v39',"+
+        "'gate05_fids_one_authorization_sha_v39')"
+      )).rows;
+      expect(oneUse.map(r=>r.indexname).sort()).toEqual([
+        "gate05_fids_one_authorization_id_v39",
+        "gate05_fids_one_authorization_sha_v39"
+      ]);
       const start=new Date(Date.now()+10*60_000).toISOString();
       const end=new Date(Date.now()+40*60_000).toISOString();
       const reset=new Date(Date.now()+14*86_400_000).toISOString();
@@ -404,7 +413,7 @@ offlinePg("Gate05 reviewed prepared-only SQL against disposable PostgreSQL16",()
         "(scope_id,authorization_id,authorization_sha256,cycle_id,icao,"+
         "starts_at_utc,expires_at_utc) "+
         "VALUES($1::uuid,$2,$3,$4,'WSSS',$5::timestamptz,$6::timestamptz)",
-        [terminalScopeId,a.authorizationId,sha(bytes),a.cycleId,
+        [terminalScopeId,"AUTH-G05HISTORICAL0001","b".repeat(64),a.cycleId,
          a.startsAtUtc,a.expiresAtUtc]
       );
       const closed=await conn.query(
@@ -449,7 +458,7 @@ offlinePg("Gate05 reviewed prepared-only SQL against disposable PostgreSQL16",()
         "starts_at_utc,expires_at_utc) "+
         "VALUES($1::uuid,$2,$3,$4,'WSSS',$5::timestamptz,$6::timestamptz)";
       const competingValues=()=>[
-        randomUUID(),a.authorizationId,sha(bytes),a.cycleId,
+        randomUUID(),"AUTH-G05NEXT0002","c".repeat(64),a.cycleId,
         a.startsAtUtc,a.expiresAtUtc
       ];
       await conn.query("SAVEPOINT other_open_scope");
@@ -470,6 +479,24 @@ offlinePg("Gate05 reviewed prepared-only SQL against disposable PostgreSQL16",()
         [a.scopeId]
       );
       expect(stopped.rows[0].state).toBe("STOPPED");
+      // A terminal scope frees the open-slot index, but its authorization
+      // ID and its exact byte SHA are permanently one-use.
+      await conn.query("SAVEPOINT replay_id");
+      await expect(conn.query(competingSql,[
+        randomUUID(),a.authorizationId,"d".repeat(64),a.cycleId,
+        a.startsAtUtc,a.expiresAtUtc
+      ])).rejects.toMatchObject({code:"23505",
+        constraint:"gate05_fids_one_authorization_id_v39"});
+      await conn.query("ROLLBACK TO SAVEPOINT replay_id");
+      await conn.query("RELEASE SAVEPOINT replay_id");
+      await conn.query("SAVEPOINT replay_sha");
+      await expect(conn.query(competingSql,[
+        randomUUID(),"AUTH-G05DIFFERENT0001",sha(bytes),a.cycleId,
+        a.startsAtUtc,a.expiresAtUtc
+      ])).rejects.toMatchObject({code:"23505",
+        constraint:"gate05_fids_one_authorization_sha_v39"});
+      await conn.query("ROLLBACK TO SAVEPOINT replay_sha");
+      await conn.query("RELEASE SAVEPOINT replay_sha");
       expect((await conn.query(competingSql,competingValues())).rowCount).toBe(1);
       await conn.query("ROLLBACK TO SAVEPOINT new_run_after_terminal_stop");
       await conn.query("RELEASE SAVEPOINT new_run_after_terminal_stop");
