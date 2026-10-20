@@ -31,6 +31,8 @@ export type Gate05AggregateV39={
   presentLocationObjects:number;
   validPositionPairs:number;
   validPositionPairsWithReportedClock:number;
+  explicitlyWsssPositionPairsWithReportedClock:number;
+  impliedWsssPositionPairsWithReportedClock:number;
   missingPositionObservationClock:number;
   statusCounts:Record<string,number>;
 };
@@ -69,7 +71,8 @@ function stats(fids:{departures:unknown[];arrivals:unknown[]},airport:string):Ga
     candidateScheduled:0,candidateRevised:0,candidateRunway:0,
     candidateScheduledRevisedPairs:0,candidateScheduledRunwayPairs:0,
     presentLocationObjects:0,validPositionPairs:0,
-    validPositionPairsWithReportedClock:0,missingPositionObservationClock:0,
+    validPositionPairsWithReportedClock:0,explicitlyWsssPositionPairsWithReportedClock:0,
+    impliedWsssPositionPairsWithReportedClock:0,missingPositionObservationClock:0,
     statusCounts:{}
   };
   // Count only items in departures, never the arrivals list or the opposite leg.
@@ -81,11 +84,16 @@ function stats(fids:{departures:unknown[];arrivals:unknown[]},airport:string):Ga
     const hasMov=mov!==null&&typeof mov==="object"&&!Array.isArray(mov);
     // Official AirportFlightContract: movement replaces departure/arrival.
     if(hasDep===hasMov){r.unknownDepartureOrigin++;continue;}
-    const origin=at(flight,"departure.airport.icao");
+    const field=hasDep?"departure":"movement";
+    // Check the current-airport leg, whether modeled as departure or movement.
+    // A contradictory explicit airport must never be treated as implied WSSS.
+    const origin=at(flight,field+".airport.icao");
+    let isExplicitWsss=false;
     if(typeof origin==="string"&&origin.trim()){
       if(origin.trim().toUpperCase()!==airport){
         r.otherOriginMisclassified++;continue;
       }
+      isExplicitWsss=true;
       r.explicitlyWsssDepartures++;
     }else{
       // Airport can be omitted when equal to requested WSSS.
@@ -95,7 +103,6 @@ function stats(fids:{departures:unknown[];arrivals:unknown[]},airport:string):Ga
     r.eligibleWsssDepartures++;
     const code=acceptableStatus(at(flight,"status"));
     r.statusCounts[code]=(r.statusCounts[code]??0)+1;
-    const field=hasDep?"departure":"movement";
     const scheduled=validUtc(at(flight,field+".scheduledTime.utc"));
     const revised=validUtc(at(flight,field+".revisedTime.utc"));
     const runway=validUtc(at(flight,field+".runwayTime.utc"));
@@ -112,9 +119,11 @@ function stats(fids:{departures:unknown[];arrivals:unknown[]},airport:string):Ga
       typeof lon==="number"&&Number.isFinite(lon)&&Math.abs(lon)<=180;
     if(validCoords){
       r.validPositionPairs++;
-      if(validUtc(at(location,"reportedAtUtc")))
+      if(validUtc(at(location,"reportedAtUtc"))){
         r.validPositionPairsWithReportedClock++;
-      else r.missingPositionObservationClock++;
+        if(isExplicitWsss)r.explicitlyWsssPositionPairsWithReportedClock++;
+        else r.impliedWsssPositionPairsWithReportedClock++;
+      }else r.missingPositionObservationClock++;
     }
   }
   return r;
@@ -149,7 +158,7 @@ export function assessGate05FidsFeasibilityV39(v:Gate05FidsQueryResultsV39){
     location,
     possibleTruncation,
     locationReturnedForAtLeastOneExplicitWsssDeparture:
-      location.validPositionPairsWithReportedClock>0,
+      location.explicitlyWsssPositionPairsWithReportedClock>0,
     verifiedUniquePhysicalFlights:null,
     verifiedAirborneTrajectories:null,
     independentlyVerifiedActualGateOut:null,
