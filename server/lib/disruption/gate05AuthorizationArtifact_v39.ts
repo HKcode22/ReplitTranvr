@@ -276,3 +276,69 @@ export function verifyGate05PreparedReadbackV39(
     providerRequests:0 as const
   };
 }
+
+
+/**
+ * Exact, read-only inventory query for an exclusively commissioned pilot.
+ * Intended for use under a SERIALIZED, independently authenticated future
+ * transaction. The query alone cannot prevent a second writer racing in.
+ *
+ * Prior terminal STOPPED scopes are legitimate durable history and are
+ * intentionally NOT a global blocker; only unclosed PREPARED/ACTIVE scopes
+ * conflict with a newly prepared exclusive one-use pilot.
+ */
+export function gate05PreparedCommissionInventorySqlV39(scopeId:string){
+  if(typeof scopeId!=="string"||!uuid.test(scopeId))
+    fail("COMMISSION_INVENTORY_SCOPE");
+  return {
+    sql:"SELECT "+
+      "(SELECT count(*)::int FROM clean.gate05_fids_pilot_scope_v39 "+
+      "WHERE state IN ('PREPARED','ACTIVE')) AS open_scopes,"+
+      "(SELECT count(*)::int FROM clean.gate05_fids_pilot_scope_v39 "+
+      "WHERE scope_id=$1::uuid AND state='PREPARED') AS matching_prepared,"+
+      "(SELECT count(*)::int FROM clean.gate05_fids_pilot_scope_v39 "+
+      "WHERE scope_id=$1::uuid AND state='ACTIVE') AS matching_active,"+
+      "(SELECT count(*)::int FROM clean.gate05_fids_allowed_query_v39 "+
+      "WHERE scope_id=$1::uuid) AS matching_queries,"+
+      "(SELECT count(*)::int FROM clean.gate05_fids_attempt_v39 "+
+      "WHERE scope_id=$1::uuid) AS matching_attempts",
+    params:[scopeId] as const
+  };
+}
+
+/**
+ * Necessary accounting/exclusivity evidence BEFORE or AFTER a PREPARED-only
+ * rehearsal transaction. Does not mint owner AUTH, grant privileges, or
+ * perform SQL itself.
+ */
+export function verifyGate05PreparedCommissionInventoryV39(
+  rows:unknown,phase:"BEFORE"|"AFTER"
+){
+  const bad=():never=>fail("COMMISSION_INVENTORY");
+  if(phase!=="BEFORE"&&phase!=="AFTER")return bad();
+  if(!Array.isArray(rows)||rows.length!==1)return bad();
+  const r=rows[0];
+  if(!r||typeof r!=="object"||Array.isArray(r))return bad();
+  const x=r as Record<string,unknown>;
+  const keys=[
+    "open_scopes","matching_prepared","matching_active",
+    "matching_queries","matching_attempts"
+  ] as const;
+  if(keys.some(k=>!Number.isSafeInteger(x[k])||
+    (x[k] as number)<0))return bad();
+  const expected=phase==="BEFORE"?
+    [0,0,0,0,0]:[1,1,0,2,0];
+  if(keys.some((k,i)=>x[k]!==expected[i]))return bad();
+  return {
+    schema:"v39.gate05.prepared-exclusivity-v1" as const,
+    status:phase==="BEFORE"?
+      "NO_CONCURRENT_OPEN_SCOPE_VERIFIED" as const:
+      "ONE_EXCLUSIVE_PREPARED_SCOPE_VERIFIED" as const,
+    phase,
+    noActiveScopeVerified:true as const,
+    noAttemptsForTargetVerified:true as const,
+    providerRequests:0 as const,
+    activationAuthorized:false as const,
+    paidPilotAuthorized:false as const
+  };
+}
