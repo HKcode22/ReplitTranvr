@@ -104,3 +104,62 @@ export function inspectGate05ExactAuthArtifactV39(
     paidPilotAuthorized:false as const
   };
 }
+
+
+/**
+ * Deterministic, IO-FREE plan for the EXACT 3-row Gate05 schema representation.
+ * This is not an installer or an approval. The artifact and external pins
+ * still do not identify/attest an owner signer; real DB scope preparation and
+ * subsequent activation require separately approved commissioning.
+ *
+ * Deliberately fixes state PREPARED, zero consumption, 4+8=12 cap, and exactly
+ * one no-location and one with-location query. No caller-provided SQL allowed.
+ */
+export function previewGate05PreparedScopeRowsV39(
+  bytes:Buffer,pins:TrustPins
+){
+  const reviewed=inspectGate05ExactAuthArtifactV39(bytes,pins);
+  if(reviewed.airportIcao!=="WSSS"||
+     pins.expectedIanaTimezone!=="Asia/Singapore")
+    fail("PREPARED_WSSS_SCOPE_ONLY");
+
+  const scope={
+    scope_id:reviewed.scopeId,
+    authorization_id:reviewed.authorizationId,
+    authorization_sha256:reviewed.reviewedByteSha256,
+    cycle_id:reviewed.cycleId,
+    icao:"WSSS" as const,
+    starts_at_utc:reviewed.startsAtUtc,
+    expires_at_utc:reviewed.expiresAtUtc,
+    state:"PREPARED" as const,
+    base_cap_units:4 as const,
+    retry_cap_units:8 as const,
+    base_used_units:0 as const,
+    retry_used_units:0 as const
+  };
+  const queries=[
+    {scope_id:reviewed.scopeId,
+     query_sha256:reviewed.allowedQuerySha256[0],
+     query_index:1 as const,with_location:false as const,
+     last_reserved_attempt:0 as const},
+    {scope_id:reviewed.scopeId,
+     query_sha256:reviewed.allowedQuerySha256[1],
+     query_index:2 as const,with_location:true as const,
+     last_reserved_attempt:0 as const}
+  ] as const;
+  const exactRowsSha256=createHash("sha256")
+    .update(JSON.stringify({scope,queries})).digest("hex");
+
+  return {
+    schema:"v39.gate05.prepared-scope-rows-review.v1" as const,
+    status:"ROWS_PREVIEW_ONLY_UNAUTHORIZED_NO_SQL" as const,
+    scope,queries,exactRowsSha256,
+    independentlyAuthenticatedOwnerSigner:false as const,
+    independentlyAttestedProviderPlanAndRetention:false as const,
+    approvedCommissioner:false as const,
+    approvedActivation:false as const,
+    paidPilotAuthorized:false as const,
+    databaseWrites:0 as const,
+    providerRequests:0 as const
+  };
+}
