@@ -213,3 +213,66 @@ export function planGate05PreparedOnlySqlV39(bytes:Buffer,pins:TrustPins){
     providerRequests:0 as const
   };
 }
+
+
+/**
+ * PREPARED read-back verification for a future one-use, atomic commissioner.
+ *
+ * Requires DB SELECT results independently read within the SAME transaction
+ * as the two parameterized INSERTs. Readback equality is necessary but NOT
+ * sufficient: no signer trust, plan entitlement, production role, activation
+ * or spending authority is established here.
+ */
+export function verifyGate05PreparedReadbackV39(
+  bytes:Buffer,pins:TrustPins,scopeRows:unknown,queryRows:unknown
+){
+  const planned=previewGate05PreparedScopeRowsV39(bytes,pins);
+  const deny=():never=>fail("PREPARED_READBACK");
+  const record=(x:unknown):Record<string,unknown>=>{
+    if(x===null||typeof x!=="object"||Array.isArray(x))return deny();
+    return x as Record<string,unknown>;
+  };
+  if(!Array.isArray(scopeRows)||scopeRows.length!==1||
+     !Array.isArray(queryRows)||queryRows.length!==2)deny();
+  const s=record(scopeRows[0]),expected=planned.scope;
+  const simple=[
+    "scope_id","authorization_id","authorization_sha256","cycle_id",
+    "icao","state","base_cap_units","retry_cap_units",
+    "base_used_units","retry_used_units"
+  ] as const;
+  if(simple.some(k=>s[k]!==expected[k]))deny();
+  const exactInstant=(actual:unknown,expectedUtc:string):boolean=>{
+    const ms=actual instanceof Date ? actual.getTime():
+      typeof actual==="string" ? Date.parse(actual):NaN;
+    return Number.isFinite(ms)&&ms===Date.parse(expectedUtc);
+  };
+  if(!exactInstant(s.starts_at_utc,expected.starts_at_utc)||
+     !exactInstant(s.expires_at_utc,expected.expires_at_utc)||
+     s.stopped_at_utc!==null||s.stop_reason!==null)deny();
+
+  const actualQueries=queryRows.map(record).sort(
+    (a,b)=>Number(a.query_index)-Number(b.query_index)
+  );
+  for(let i=0;i<planned.queries.length;i++){
+    const got=actualQueries[i],wanted=planned.queries[i];
+    if(got.scope_id!==wanted.scope_id||
+       got.query_sha256!==wanted.query_sha256||
+       got.query_index!==wanted.query_index||
+       got.with_location!==wanted.with_location||
+       got.last_reserved_attempt!==wanted.last_reserved_attempt)deny();
+  }
+  return {
+    schema:"v39.gate05.prepared-readback-review.v1" as const,
+    status:"EXACT_THREE_PREPARED_ROWS_MATCH_NO_LIVE_AUTH" as const,
+    scopeId:planned.scope.scope_id,
+    exactRowsSha256:planned.exactRowsSha256,
+    reviewedAuthorizationSha256:planned.scope.authorization_sha256,
+    rowsVerified:3 as const,
+    activeScopesVerified:0 as const,
+    usedApiUnitsVerified:0 as const,
+    signerIdentityAttested:false as const,
+    activationGranted:false as const,
+    paidPilotAuthorized:false as const,
+    providerRequests:0 as const
+  };
+}
