@@ -354,6 +354,19 @@ offlinePg("Gate05 reviewed prepared-only SQL against disposable PostgreSQL16",()
       await conn.query(readFileSync(
         "migrations/staged/V0067__gate05_fids_function_only_roles_v39.sql","utf8"
       ));
+      // V0068 is deliberately STAGED. Exercise under rollback in disposable
+      // CI only, never infer it exists in production.
+      await conn.query(readFileSync(
+        "migrations/staged/V0068__gate05_single_open_scope_v39.sql","utf8"
+      ));
+      const index=(await conn.query(
+        "SELECT indexdef FROM pg_indexes WHERE schemaname='clean' "+
+        "AND indexname='gate05_fids_one_open_scope_v39'"
+      )).rows;
+      expect(index).toHaveLength(1);
+      expect(index[0].indexdef).toContain("UNIQUE INDEX");
+      expect(index[0].indexdef).toContain("'PREPARED'");
+      expect(index[0].indexdef).toContain("'ACTIVE'");
       const start=new Date(Date.now()+10*60_000).toISOString();
       const end=new Date(Date.now()+40*60_000).toISOString();
       const reset=new Date(Date.now()+14*86_400_000).toISOString();
@@ -428,21 +441,41 @@ offlinePg("Gate05 reviewed prepared-only SQL against disposable PostgreSQL16",()
       expect(verifyGate05PreparedCommissionInventoryV39(afterPrepare,"AFTER").status)
         .toBe("ONE_EXCLUSIVE_PREPARED_SCOPE_VERIFIED");
 
-      // Simulate another PREPARED scope from a conflicting commissioner:
-      // global exclusivity must reject even if our own 3 rows match.
-      await conn.query("SAVEPOINT other_open_scope");
-      await conn.query(
-        "INSERT INTO clean.gate05_fids_pilot_scope_v39 "+
+      // V0068 fails the second PREPARED scope in PostgreSQL itself,
+      // including when two independent transactions could otherwise both
+      // observe BEFORE=zero. No cooperative in-process lock is sufficient.
+      const competingSql="INSERT INTO clean.gate05_fids_pilot_scope_v39 "+
         "(scope_id,authorization_id,authorization_sha256,cycle_id,icao,"+
         "starts_at_utc,expires_at_utc) "+
-        "VALUES($1::uuid,$2,$3,$4,'WSSS',$5::timestamptz,$6::timestamptz)",
-        [randomUUID(),a.authorizationId,sha(bytes),a.cycleId,a.startsAtUtc,a.expiresAtUtc]
-      );
-      const conflict=(await conn.query(inventory.sql,[...inventory.params])).rows;
-      expect(()=>verifyGate05PreparedCommissionInventoryV39(conflict,"AFTER"))
-        .toThrow("GATE05_AUTH_COMMISSION_INVENTORY_HOLD");
+        "VALUES($1::uuid,$2,$3,$4,'WSSS',$5::timestamptz,$6::timestamptz)";
+      const competingValues=()=>[
+        randomUUID(),a.authorizationId,sha(bytes),a.cycleId,
+        a.startsAtUtc,a.expiresAtUtc
+      ];
+      await conn.query("SAVEPOINT other_open_scope");
+      await expect(conn.query(competingSql,competingValues()))
+        .rejects.toMatchObject({code:"23505"});
       await conn.query("ROLLBACK TO SAVEPOINT other_open_scope");
       await conn.query("RELEASE SAVEPOINT other_open_scope");
+      expect(verifyGate05PreparedCommissionInventoryV39(
+        (await conn.query(inventory.sql,[...inventory.params])).rows,"AFTER"
+      ).status).toBe("ONE_EXCLUSIVE_PREPARED_SCOPE_VERIFIED");
+
+      // Once a scope is terminally STOPPED, the same index allows the
+      // subsequent pilot without deleting historical evidence. Rewind both
+      // changes afterward so the remaining test can inspect the first plan.
+      await conn.query("SAVEPOINT new_run_after_terminal_stop");
+      const stopped=await conn.query(
+        "SELECT * FROM clean.stop_gate05_fids_pilot_v39($1::uuid,'OPERATOR_STOP')",
+        [a.scopeId]
+      );
+      expect(stopped.rows[0].state).toBe("STOPPED");
+      expect((await conn.query(competingSql,competingValues())).rowCount).toBe(1);
+      await conn.query("ROLLBACK TO SAVEPOINT new_run_after_terminal_stop");
+      await conn.query("RELEASE SAVEPOINT new_run_after_terminal_stop");
+      expect(verifyGate05PreparedCommissionInventoryV39(
+        (await conn.query(inventory.sql,[...inventory.params])).rows,"AFTER"
+      ).status).toBe("ONE_EXCLUSIVE_PREPARED_SCOPE_VERIFIED");
 
       const rows=(await conn.query(
         "SELECT state,base_cap_units,retry_cap_units,base_used_units,retry_used_units "+
