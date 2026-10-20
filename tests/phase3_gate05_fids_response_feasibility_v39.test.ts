@@ -72,15 +72,17 @@ describe("Gate05 two-query evidence respects request-role and scientific boundar
     expect(r.providerCallsByAssessor).toBe(0);
     expect(JSON.stringify(r)).not.toContain("SENSITIVE");
   });
-  it("does not promote arrivals/unknown or mismatching departure origin",()=>{
+  it("rejects contradictory origin while distinguishing list-implied WSSS from explicit evidence",()=>{
     const x=input();
     x.withLocation.departures=[mk("EGLL",{lat:1,lon:2,reportedAtUtc:"2026-10-19T04:00:00Z"}),
       mk("",{lat:1,lon:2,reportedAtUtc:"2026-10-19T04:00:00Z"})];
     const r=assessGate05FidsFeasibilityV39(x);
     expect(r.location.explicitlyWsssDepartures).toBe(0);
     expect(r.location.otherOriginMisclassified).toBe(1);
-    expect(r.location.unknownDepartureOrigin).toBe(1);
-    expect(r.location.validPositionPairsWithReportedClock).toBe(0);
+    expect(r.location.unknownDepartureOrigin).toBe(0);
+    expect(r.location.impliedWsssDeparturesFromFidsList).toBe(1);
+    expect(r.location.eligibleWsssDepartures).toBe(1);
+    expect(r.location.validPositionPairsWithReportedClock).toBe(1);
     expect(r.gate05ScientificPass).toBe(false);
   });
   it("distinguishes valid coordinates from observation-clock availability",()=>{
