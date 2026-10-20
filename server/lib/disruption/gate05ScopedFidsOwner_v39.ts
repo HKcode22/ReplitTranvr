@@ -29,9 +29,12 @@ export interface Gate05ScopedFidsQueryV39 {
 }
 function safeId(x:string):boolean{return /^[a-fA-F0-9]{8}-(?:[a-fA-F0-9]{4}-){3}[a-fA-F0-9]{12}$/.test(x)}
 function validLocal(v:string):boolean {
-  return typeof v==="string" &&
-    /^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(v) &&
-    Number.isFinite(Date.parse(v+":00Z"));
+  if(typeof v!=="string"||
+     !/^\d{4}-\d\d-\d\dT\d\d:\d\d$/.test(v))return false;
+  const d=new Date(v+":00Z");
+  // Date.parse normalizes impossible calendar dates (such as February 30).
+  // Never authorize a FIDS request for a silently normalized service window.
+  return Number.isFinite(d.getTime())&&d.toISOString().slice(0,16)===v;
 }
 export function gate05FidsQueryFingerprintV39(q:Gate05ScopedFidsQueryV39):string {
   if(!q||typeof q.icao!=="string"||!/^[A-Z]{4}$/.test(q.icao)||
