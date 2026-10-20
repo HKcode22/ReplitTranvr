@@ -143,3 +143,41 @@ describe("Gate05 independently operable safety STOP — no shared dispatcher con
     expect(db.query).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe("Gate05 STOP receipt shape rejects lossy numeric coercion",()=>{
+  it.each([null,undefined,""," ","00"," 0","0.0","-1","1e0",NaN,1.5])(
+    "refuses malformed reserved attempts: %s",
+    async (invalid)=>{
+      const db={query:vi.fn(async()=>({rowCount:1,rows:[{
+        state:"STOPPED",reserved_attempts:invalid,reserved_units:"0"
+      }]}))};
+      await expect(stopGate05IndependentlyV39({
+        db:db as any,scopeId:randomUUID(),reason:"EXPIRED"
+      })).rejects.toThrow("GATE05_STOP_ACCOUNTING_HOLD");
+    }
+  );
+  it.each([null,undefined,""," ","00"," 0","2.0","-1","2e0",NaN,1.5])(
+    "refuses malformed reserved units: %s",
+    async(invalid)=>{
+      const db={query:vi.fn(async()=>({rowCount:1,rows:[{
+        state:"STOPPED",reserved_attempts:"1",reserved_units:invalid
+      }]}))};
+      await expect(stopGate05IndependentlyV39({
+        db:db as any,scopeId:randomUUID(),reason:"SAFETY_ABORT"
+      })).rejects.toThrow("GATE05_STOP_ACCOUNTING_HOLD");
+    }
+  );
+  it("rejects conflicting result size and accepts exact zero receipt",async()=>{
+    const db={query:vi.fn(async()=>({rowCount:1,rows:[]}))};
+    await expect(stopGate05IndependentlyV39({
+      db:db as any,scopeId:randomUUID(),reason:"OPERATOR_STOP"
+    })).rejects.toThrow("GATE05_STOP_DURABLE_RECEIPT_HOLD");
+    db.query.mockResolvedValueOnce({rowCount:1,rows:[{
+      state:"STOPPED",reserved_attempts:"0",reserved_units:"0"
+    }]});
+    await expect(stopGate05IndependentlyV39({
+      db:db as any,scopeId:randomUUID(),reason:"OPERATOR_STOP"
+    })).resolves.toMatchObject({state:"STOPPED",reservedAttempts:0,reservedUnits:0});
+  });
+});
