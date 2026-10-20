@@ -101,3 +101,58 @@ export async function stopGate05IndependentlyV39(args:{
   const receipt=await durableStop(args.db,args.scopeId,args.reason);
   return {...receipt,localAbortRequested:false};
 }
+
+
+/**
+ * Independent expiry guard CORE, not a deployed supervisor.
+ *
+ * The operator must provision an independently running process with the
+ * dedicated safety LOGIN and an authenticated, immutable scope expiry. This
+ * function does not look up the expiry from the DB (safety LOGIN has no
+ * table SELECT rights), mint approval, activate scope or touch AeroDataBox.
+ *
+ * SQL reservation already checks clock_timestamp() < expires_at_utc; that is
+ * the authoritative fail-closed deadline even if this process crashes.
+ * This optional guard durably records STOPPED at/after that deadline.
+ *
+ * A process crash, machine sleep or network outage can delay its receipt;
+ * do not represent invocation as a watchdog uptime guarantee.
+ */
+export async function runGate05ExpiryGuardV39(args:{
+  db:Pick<Pool,"query">;
+  scopeId:string;
+  expiresAtUtc:string;
+  /** Injectable clock/sleep allow fake-time testing without provider/DB. */
+  nowMs?:()=>number;
+  sleepMs?:(ms:number)=>Promise<void>;
+}):Promise<Gate05IndependentStopReceiptV39>{
+  if(!args||!safeUuid(args.scopeId)||
+     typeof args.expiresAtUtc!=="string"||
+     !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(args.expiresAtUtc))
+    throw Error("GATE05_EXPIRY_GUARD_INPUT_HOLD");
+  const deadline=Date.parse(args.expiresAtUtc);
+  if(!Number.isFinite(deadline)||new Date(deadline).getTime()!==deadline)
+    throw Error("GATE05_EXPIRY_GUARD_TIME_HOLD");
+  const now=args.nowMs??Date.now;
+  const sleep=args.sleepMs??((ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms)));
+  // A long-running process is intentionally NOT an auth or deployment
+  // mechanism. A maximum one-day horizon bounds stale supervisor inputs.
+  const initial=now();
+  if(!Number.isSafeInteger(initial)||deadline-initial>86_400_000)
+    throw Error("GATE05_EXPIRY_GUARD_CLOCK_HOLD");
+  for(let checks=0;checks<2882;checks++){
+    const present=now();
+    if(!Number.isSafeInteger(present)||present<initial-120_000)
+      throw Error("GATE05_EXPIRY_GUARD_CLOCK_HOLD");
+    const remaining=deadline-present;
+    if(remaining<=0){
+      return stopGate05IndependentlyV39({
+        db:args.db,scopeId:args.scopeId,reason:"EXPIRED"
+      });
+    }
+    // Independent guard wakes at least twice each minute; it cannot force
+    // already dispatched HTTP requests to unbill.
+    await sleep(Math.min(remaining,30_000));
+  }
+  throw Error("GATE05_EXPIRY_GUARD_BOUNDED_WAIT_HOLD");
+}
