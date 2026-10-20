@@ -13,3 +13,11 @@
 CREATE UNIQUE INDEX gate05_fids_one_open_scope_v39
   ON clean.gate05_fids_pilot_scope_v39 ((1))
   WHERE state IN ('PREPARED','ACTIVE');
+
+-- A STOPPED pilot releases the single-open-slot but must NEVER make its
+-- already-consumed authorization reusable. These are independent global
+-- one-use constraints, retained through terminal historical records.
+CREATE UNIQUE INDEX gate05_fids_one_authorization_id_v39
+  ON clean.gate05_fids_pilot_scope_v39 (authorization_id);
+CREATE UNIQUE INDEX gate05_fids_one_authorization_sha_v39
+  ON clean.gate05_fids_pilot_scope_v39 (authorization_sha256);
