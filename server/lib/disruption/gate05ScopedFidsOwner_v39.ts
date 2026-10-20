@@ -93,7 +93,7 @@ export async function fetchGate05ScopedFidsV39(args:{
   // No fallback to global category ledger or other direction flags.
   return fetchFidsAirport(args.query.icao,args.query.fromLocal,args.query.toLocal,{
     direction:"Departure",withLeg:true,withLocation:args.query.withLocation,
-    category:"fids_base",budgetOwner:ledger,
+    strictDepartureList:true,category:"fids_base",budgetOwner:ledger,
     fetchImpl:args.fetchImpl,sleepImpl:args.sleepImpl,signal:args.signal
   });
 }
