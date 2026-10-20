@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash,randomUUID} from "node:crypto";
-import {inspectGate05ExactAuthArtifactV39} from "../server/lib/disruption/gate05AuthorizationArtifact_v39";
+import {inspectGate05ExactAuthArtifactV39,previewGate05PreparedScopeRowsV39} from "../server/lib/disruption/gate05AuthorizationArtifact_v39";
 import {gate05FidsQueryFingerprintV39} from "../server/lib/disruption/gate05ScopedFidsOwner_v39";
 const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const core={icao:"WSSS",fromLocal:"2026-10-20T09:00",toLocal:"2026-10-20T10:00"};
@@ -88,5 +88,65 @@ describe("Gate05 exact authorization artifact binding — review is NOT live AUT
       .toThrow("GATE05_AUTH_FIELDS_HOLD");
     expect(()=>review({...raw(),fromLocal:"2026-10-20T10:00",toLocal:"2026-10-20T09:00"}))
       .toThrow("GATE05_FIDS_QUERY_SHAPE_HOLD");
+  });
+});
+
+
+describe("Gate05 PREPARED three-row review is deterministic and never an SQL authority",()=>{
+  function planned(a:Record<string,any>){
+    const bytes=Buffer.from(JSON.stringify(a));
+    const pins={
+      independentlyReviewedArtifactSha256:sha(bytes),
+      expectedSourceCommit:source,
+      expectedOpenapiSha256:openapi,
+      expectedProviderResetUtc:a.providerResetUtc,
+      expectedIanaTimezone:"Asia/Singapore",
+      observedNowUtc:"2026-10-19T23:59:00.000Z"
+    };
+    return previewGate05PreparedScopeRowsV39(bytes,pins);
+  }
+  it("produces one exact PREPARED row and two immutable paired query rows, NO SQL",()=>{
+    const a=raw(),out=planned(a);
+    expect(out.status).toBe("ROWS_PREVIEW_ONLY_UNAUTHORIZED_NO_SQL");
+    expect(out.scope).toEqual({
+      scope_id:a.scopeId,
+      authorization_id:a.authorizationId,
+      authorization_sha256:sha(Buffer.from(JSON.stringify(a))),
+      cycle_id:a.cycleId,icao:"WSSS",
+      starts_at_utc:a.startsAtUtc,expires_at_utc:a.expiresAtUtc,
+      state:"PREPARED",base_cap_units:4,retry_cap_units:8,
+      base_used_units:0,retry_used_units:0
+    });
+    expect(out.queries).toEqual([
+      {scope_id:a.scopeId,query_sha256:a.noLocationQuerySha256,
+       query_index:1,with_location:false,last_reserved_attempt:0},
+      {scope_id:a.scopeId,query_sha256:a.locationQuerySha256,
+       query_index:2,with_location:true,last_reserved_attempt:0}
+    ]);
+    expect(out.exactRowsSha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(planned(a).exactRowsSha256).toBe(out.exactRowsSha256);
+    expect(out.approvedActivation).toBe(false);
+    expect(out.approvedCommissioner).toBe(false);
+    expect(out.independentlyAuthenticatedOwnerSigner).toBe(false);
+    expect(out.paidPilotAuthorized).toBe(false);
+    expect(out.providerRequests).toBe(0);
+    expect(out.databaseWrites).toBe(0);
+  });
+  it("rejects mismatched hashes, higher API cap, canceled airport and expired window",()=>{
+    expect(()=>planned({...raw(),noLocationQuerySha256:"0".repeat(64)}))
+      .toThrow("GATE05_AUTH_FIDS_QUERY_FINGERPRINT_HOLD");
+    expect(()=>planned({...raw(),maxRetryUnits:9}))
+      .toThrow("GATE05_AUTH_SCOPE_OR_LIMITS_HOLD");
+    expect(()=>planned({...raw(),airportIcao:"EGLL",
+      fromLocal:"2026-10-20T09:00",toLocal:"2026-10-20T10:00",
+      noLocationQuerySha256:gate05FidsQueryFingerprintV39({
+        icao:"EGLL",fromLocal:core.fromLocal,toLocal:core.toLocal,withLocation:false
+      }),
+      locationQuerySha256:gate05FidsQueryFingerprintV39({
+        icao:"EGLL",fromLocal:core.fromLocal,toLocal:core.toLocal,withLocation:true
+      })
+    })).toThrow("GATE05_AUTH_PREPARED_WSSS_SCOPE_ONLY");
+    expect(()=>planned({...raw(),startsAtUtc:"2026-10-18T00:55:00.000Z"}))
+      .toThrow("GATE05_AUTH_TIME_WINDOW_OR_CYCLE_HOLD");
   });
 });
