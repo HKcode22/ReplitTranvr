@@ -122,66 +122,83 @@ export async function startGate05IndependentStopProcessV39(
     throw Error("GATE05_SIDE_SIGNED_SOURCE_DIVERGENCE_HOLD");
 
   const opts=previewGate05IndependentStopDbTimeoutPolicyV39().settings;
-  const client=new pg.Client({
-    connectionString:env.GATE05_SAFETY_DATABASE_URL,
-    ...opts
-  });
-  let connected=false;
-  try{
-    await client.connect();connected=true;
-    const initial=(await client.query(
-      "SELECT current_database() AS db,session_user AS login,"+
-      "current_user AS role,pg_is_in_recovery() AS replica"
-    )).rows[0];
-    if(initial?.db!==config.targetDatabase||
-       initial?.login!==config.safetyLogin||
-       initial?.role!==config.safetyLogin||
-       initial?.replica!==false)
-      throw Error("GATE05_SIDE_DB_IDENTITY_HOLD");
-    await client.query("SET ROLE gate05_fids_safety_v39");
-    const active=(await client.query(
-      "SELECT current_user AS role"
-    )).rows[0];
-    if(active?.role!==config.requiredGroup)
-      throw Error("GATE05_SIDE_ROLE_HOLD");
-
-    console.log(JSON.stringify({
-      status:"GATE05_SAFETY_WATCH_STARTED_NO_PROVIDER",
-      scopeId:reviewed.scopeId,
-      authSha256:reviewed.reviewedAuthorizationSha256,
-      expiresAtUtc:reviewed.expiresAtUtc,
-      sourceCommit:checked,
-      providerRequests:0,
-      independentSupervisorAttested:false
-    }));
-    const receipt=await rehearseGate05BoundedExpiryStopRecoveryV39({
-      signedAuthorization:{
-        authorizationBytes:Buffer.from(bundle.authorizationBytesBase64,"base64"),
-        detachedSignatureBase64:bundle.detachedSignatureBase64,
-        signerPublicKeySpkiDerBase64:bundle.signerPublicKeySpkiDerBase64,
-        independentPins
-      },
-      db:client,
-      onUnconfirmedStop:incident=>{
-        console.error(JSON.stringify({
-          ...incident,
-          alertDeliveryAttested:false,
-          independentlySupervised:false
-        }));
-      }
+  // Do not keep one vulnerable DB socket idle for the entire wait.
+  // Every STOP attempt, including retries after connection loss, establishes
+  // a FRESH restricted session and checks its role before the SQL function.
+  async function withSafetySession<T>(
+    action:(client:pg.Client)=>Promise<T>
+  ):Promise<T>{
+    const client=new pg.Client({
+      connectionString:env.GATE05_SAFETY_DATABASE_URL,
+      ...opts
     });
-    console.log(JSON.stringify({
-      status:"GATE05_STOP_SQL_RECEIPT_RETURNED_POSTCOMMIT_REVIEW_REQUIRED",
-      scopeId:receipt.scopeId,
-      attemptedStops:receipt.attemptedStops,
-      reservedAttempts:receipt.receipt.reservedAttempts,
-      reservedUnits:receipt.receipt.reservedUnits,
-      providerRequests:0,
-      independentlySupervised:false
-    }));
-  }finally{
-    if(connected)await client.end().catch(()=>{});
+    let connected=false;
+    try{
+      await client.connect();connected=true;
+      const identity=(await client.query(
+        "SELECT current_database() AS db,session_user AS login,"+
+        "current_user AS role,pg_is_in_recovery() AS replica"
+      )).rows[0];
+      if(identity?.db!==config.targetDatabase||
+         identity?.login!==config.safetyLogin||
+         identity?.role!==config.safetyLogin||
+         identity?.replica!==false)
+        throw Error("GATE05_SIDE_DB_IDENTITY_HOLD");
+      await client.query("SET ROLE gate05_fids_safety_v39");
+      if((await client.query("SELECT current_user AS role")).rows[0]?.role!==
+         config.requiredGroup)
+        throw Error("GATE05_SIDE_ROLE_HOLD");
+      return await action(client);
+    }finally{
+      if(connected)await client.end().catch(()=>{});
+    }
   }
+
+  // Pre-arm login success is NOT evidence the service stays alive or
+  // the future STOP will commit. Separate Actions job/liveness proofs remain.
+  await withSafetySession(async()=>undefined);
+  console.log(JSON.stringify({
+    status:"GATE05_SAFETY_WATCH_STARTED_NO_PROVIDER",
+    scopeId:reviewed.scopeId,
+    authSha256:reviewed.reviewedAuthorizationSha256,
+    expiresAtUtc:reviewed.expiresAtUtc,
+    sourceCommit:checked,
+    providerRequests:0,
+    independentSupervisorAttested:false
+  }));
+
+  // The bounded recovery helper's db.query callback is now connection-
+  // resilient: retry attempts never reuse a broken PostgreSQL client.
+  const separateStopDb={
+    query:async (sql:string,params:unknown[])=>
+      withSafetySession(client=>client.query(sql,params))
+  } as unknown as Pick<pg.Pool,"query">;
+
+  const receipt=await rehearseGate05BoundedExpiryStopRecoveryV39({
+    signedAuthorization:{
+      authorizationBytes:Buffer.from(bundle.authorizationBytesBase64,"base64"),
+      detachedSignatureBase64:bundle.detachedSignatureBase64,
+      signerPublicKeySpkiDerBase64:bundle.signerPublicKeySpkiDerBase64,
+      independentPins
+    },
+    db:separateStopDb,
+    onUnconfirmedStop:incident=>{
+      console.error(JSON.stringify({
+        ...incident,
+        alertDeliveryAttested:false,
+        independentlySupervised:false
+      }));
+    }
+  });
+  console.log(JSON.stringify({
+    status:"GATE05_STOP_SQL_RECEIPT_RETURNED_POSTCOMMIT_REVIEW_REQUIRED",
+    scopeId:receipt.scopeId,
+    attemptedStops:receipt.attemptedStops,
+    reservedAttempts:receipt.receipt.reservedAttempts,
+    reservedUnits:receipt.receipt.reservedUnits,
+    providerRequests:0,
+    independentlySupervised:false
+  }));
 }
 
 if(import.meta.url===`file://${process.argv[1]}`){
