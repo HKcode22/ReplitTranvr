@@ -50,10 +50,18 @@ onlyDisposable("Gate05 real PG16 separate function-only dispatch/safety ACL, no 
     const expectNoDirectTables=async()=>{
       for(const table of allTables){
         for(const p of ["SELECT","INSERT","UPDATE","DELETE"]){
+          // Role commission has intentionally NO USAGE on schema clean.
+          // Passing a schema-qualified name to has_table_privilege can
+          // raise 42501 at name resolution before examining table grants.
+          // Resolve the object OID from the readable system catalog instead.
+          const rel=table.split(".")[1];
           const q=await db.query(
-            "SELECT has_table_privilege(current_user,$1,$2) AS allowed",
-            [table,p]
+            "SELECT has_table_privilege(current_user,c.oid,$2) AS allowed "+
+            "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "+
+            "WHERE n.nspname='clean' AND c.relname=$1",
+            [rel,p]
           );
+          expect(q.rowCount).toBe(1);
           expect(q.rows[0].allowed).toBe(false);
         }
       }
