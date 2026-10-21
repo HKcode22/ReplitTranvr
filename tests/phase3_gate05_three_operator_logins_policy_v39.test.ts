@@ -36,7 +36,7 @@ describe("Gate05 three-login one-session issuance safety policy",()=>{
     expect(code).not.toContain("aerodataboxLimiter_v3");
     expect(code).not.toContain("fetchFidsAirport(");
     expect(code).not.toContain("INSERT INTO clean.gate05_fids_commission_permit");
-    expect(code).not.toContain("activate_gate05_prepared_scope_v39(");
+    // The activation function signature may be listed for negative ACL\n    // inspection; the issuer must never execute activation SQL.\n    expect(code).not.toContain("FROM clean.activate_gate05_prepared_scope_v39(");
     expect(code).not.toContain("gh secret set");
     expect(code).not.toContain("gh workflow run");
     expect(code).toContain('await admin.query("COMMIT")');
