@@ -1,0 +1,100 @@
+name: Gate05 Synthetic STOP Failure Escalation Drill (TEST ONLY)
+run-name: Gate05 TEST ONLY STOP failure trigger ${{ github.run_id }}
+
+# Completely independent from the protected production safety workflow.
+# Does NOT reference the gate05-safety environment or any secrets.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Enter EXACTLY GATE05_SYNTHETIC_FAILURE_TEST_ONLY"
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  simulated-stop-failure:
+    name: Intentional synthetic failure (never touches database or provider)
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'GATE05_SYNTHETIC_FAILURE_TEST_ONLY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    steps:
+      - name: Assert no service, database, or provider action; fail intentionally
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo 'GATE05_TEST_ONLY_INTENTIONAL_FAILURE_EXPECTED'
+          echo 'No database connection, secret, scoped permit, or AeroDataBox request.'
+          exit 42
+
+  simulated-failure-incident:
+    name: Separate failure-dependent TEST issue escalation
+    needs: simulated-stop-failure
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'GATE05_SYNTHETIC_FAILURE_TEST_ONLY' && needs.simulated-stop-failure.result == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Independently issue and reread an owner-assigned TEST failure
+        id: issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner='HKcode22', repo='ReplitTranvr';
+            if(context.repo.owner!==owner||context.repo.repo!==repo||
+              context.eventName!=='workflow_dispatch' ||
+              context.ref!=='refs/heads/main' ||
+              context.payload.inputs?.confirmation!=='GATE05_SYNTHETIC_FAILURE_TEST_ONLY'){
+              throw Error('GATE05_TEST_ESCALATION_MANUAL_EXACT_MAIN_CONFIRM_HOLD');
+            }
+            const title=`[GATE05 SYNTHETIC STOP FAILURE — TEST ONLY] Run ${context.runId}`;
+            const url=`${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const body=[
+              '**THIS IS A TEST — NO REAL STOP FAILURE OCCURRED.**',
+              '',
+              'The synthetic upstream job intentionally exited 42. This',
+              'separate downstream job observed needs.result=failure.',
+              `Synthetic Actions run: ${url}`,
+              '',
+              'NO PostgreSQL access, database credentials, live scopes,',
+              'AeroDataBox paid requests, signed AUTH, or STOP actions.',
+              '',
+              'Owner: after reading this issue, comment exactly:',
+              '`GATE05_SYNTHETIC_FAILURE_ALERT_ACK`',
+              '',
+              'Issue creation is NOT proof of actual STOP success or of',
+              'external email/push delivery. Production STOP remains NO-GO',
+              'until independently verified worker health and receipt.'
+            ].join('\n');
+            const created=await github.rest.issues.create({
+              owner,repo,title,body,assignees:[owner]
+            });
+            const readback=await github.rest.issues.get({
+              owner,repo,issue_number:created.data.number
+            });
+            if(readback.data.state!=='open'||readback.data.title!==title||
+               !readback.data.assignees?.some(a=>a.login===owner))
+              throw Error('GATE05_TEST_ESCALATION_ISSUE_READBACK_HOLD');
+            core.notice(`GATE05_SYNTHETIC_FAILURE_ISSUE_VERIFIED #${created.data.number} ${created.data.html_url}`);
+            core.setOutput('issue_url',created.data.html_url);
+      - name: Explain expected overall workflow FAILURE
+        if: success()
+        env:
+          ISSUE_URL: ${{ steps.issue.outputs.issue_url }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$ISSUE_URL"
+          {
+            echo "### Synthetic Gate05 failure-branch test"
+            echo
+            echo "Expected: overall workflow conclusion FAILURE due to deliberate exit 42."
+            echo "Expected: separate downstream issue job SUCCESS."
+            echo "Verified TEST issue: $ISSUE_URL"
+            echo "Owner must comment: GATE05_SYNTHETIC_FAILURE_ALERT_ACK"
+            echo "No provider or database action was possible in this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
