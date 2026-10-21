@@ -80,7 +80,8 @@ function cli(args:string[]){
     ["--head","--openapi-file","--output-dir","--confirm","--start-utc"].sort().join("|"))
     hold("CLI");
   return {head:m.get("--head")!,openapiFile:m.get("--openapi-file")!,
-    output:m.get("--output-dir")!,confirm:m.get("--confirm")!,\n    requestedStartUtc:m.get("--start-utc")!};
+    output:m.get("--output-dir")!,confirm:m.get("--confirm")!,
+    requestedStartUtc:m.get("--start-utc")!};
 }
 export async function createGate05WsssOwnerSignedBundleV39(
   input:ReturnType<typeof cli>){
