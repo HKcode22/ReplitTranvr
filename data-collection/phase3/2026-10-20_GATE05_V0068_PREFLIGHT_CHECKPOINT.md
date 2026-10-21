@@ -1,3 +1,25 @@
+## October 20/21, 2026 — PR #87 harmless GitHub Actions notification drill RELEASED; manual ACK test PENDING
+
+**Exact released source:** [PR #87](https://github.com/HKcode22/ReplitTranvr/pull/87), review head `ea08db37d71c805c9786068fdccf30c8f58b10d3` with **four/four no-provider CI SUCCESS**; squash merged to `main=64acd820cfa04d0333c32e3d7448291026a527d6`, independently confirmed by GitHub `git/ref/heads/main` lookup. `.github/workflows/phase3-gate05-alert-ack-drill.yml` was fetched from exact merged commit. Focused two-file release: manual-only no-provider alert test workflow plus offline source-contract regression `tests/phase3_gate05_alert_ack_drill_contract_v39.test.ts`.
+
+**What it can prove when executed:** On exact main, manual `workflow_dispatch` with `confirmation=GATE05_TEST_NOTIFICATION_ONLY`, job-level `issues:write` only, GitHub REST creates one issue clearly titled `[GATE05 NOTIFICATION DRILL — TEST ONLY] Run <run id>`, assigns HKcode22, rereads issue state/title/assignee and displays test issue URL. User must actually see issue and comment `GATE05_TEST_ALERT_ACK_RECEIVED`; green workflow alone is *not* delivered/acknowledged alert evidence. **No drill has been dispatched yet; no test issue exists from merging this PR.** This specific drill proves issue API delivery and owner ACK, not the actual STOP failure branch or external redundancy.
+
+**Exact owner Replit Shell action (NO PROVIDER):**
+```bash
+cd ~/workspace
+gh workflow view phase3-gate05-alert-ack-drill.yml --repo HKcode22/ReplitTranvr
+gh workflow run phase3-gate05-alert-ack-drill.yml \
+  --repo HKcode22/ReplitTranvr --ref main \
+  -f confirmation=GATE05_TEST_NOTIFICATION_ONLY
+gh run list --repo HKcode22/ReplitTranvr \
+  --workflow phase3-gate05-alert-ack-drill.yml --limit 3
+```
+Read matching run, owner-assigned GitHub TEST issue, and owner ACK as separate observations. No DB credentials, AeroDataBox token or production scope is involved. If `gh workflow view` or dispatch fails, HOLD and inspect GitHub Actions registration/permissions, no blind retry.
+
+**Next parallel audit:** Remaining genuine commissioning P0: live actual restricted commission/activation/dispatch LOGIN authentication (existing CI uses SET ROLE), production one-session private secrets custody and post-commit permit readback, independently healthy same-scope STOP runner and real STOP-failure trigger/ACK. Do not confuse adding opt-in test with fulfilling those until owner reports evidence. Current actual released SHA supersedes old signer pins and outdated proposed 5pm command. Paid Gate05 stays NO-GO, no need to reinstall migrations or republish Replit.
+
+---
+
 ## 2026-10-20 ~23:00 PDT — PR #86 **MERGED**: full no-provider PG16 lifecycle and STOP-failure escalation job
 
 **Exact release facts:** [PR #86](https://github.com/HKcode22/ReplitTranvr/pull/86), review head `7c5d29cfcffc4dd9bce37ae97bb1c1368fe06d21`, passed **4/4 no-provider GitHub CI** (V3.9 Offline Safety incl. TypeScript, offline suite, full suite, lint, registry, traceability, aggregate and production build; plus three YSSY focus workflows). Squash merged into actual released `main` at `1f6ef7af395cf7b8b7832e766778719beb962bb8`; a separate GitHub `git/ref/heads/main` read matched this exact SHA, and `fetch_file` at this SHA independently confirmed both the new test and STOP issue job exist. No Replit publish, provider request, database write, new role, activation, GH workflow dispatch or GitHub issue was made by the release.
