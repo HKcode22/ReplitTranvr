@@ -185,24 +185,20 @@ export async function startGate05IndependentStopProcessV39(
 }
 
 if(import.meta.url===`file://${process.argv[1]}`){
-  let launch:ReturnType<typeof cli>;
-  try{launch=cli(process.argv.slice(2));}
-  catch{
-    console.error("GATE05_SIDE_INVALID_CLI_HOLD");
+  const start=async()=>{
+    const args=cli(process.argv.slice(2));
+    await startGate05IndependentStopProcessV39(args);
+  };
+  start().catch(e=>{
+    const msg=e instanceof Error?e.message:"";
+    const reason=/^GATE05_[A-Z0-9_]+$/.test(msg)?
+      msg:"GATE05_SIDE_UNEXPECTED_FAILURE_HOLD";
+    console.error(JSON.stringify({
+      status:"GATE05_SIDE_UNCONFIRMED_OPERATOR_ACTION_REQUIRED",
+      reason,providerRequests:0,
+      stopVerified:false,
+      alertDeliveryAttested:false
+    }));
     process.exitCode=2;
-  }
-  if(launch!){
-    startGate05IndependentStopProcessV39(launch!).catch(e=>{
-      const msg=e instanceof Error?e.message:"";
-      const reason=/^GATE05_[A-Z0-9_]+$/.test(msg)?
-        msg:"GATE05_SIDE_UNEXPECTED_FAILURE_HOLD";
-      console.error(JSON.stringify({
-        status:"GATE05_SIDE_UNCONFIRMED_OPERATOR_ACTION_REQUIRED",
-        reason,providerRequests:0,
-        stopVerified:false,
-        alertDeliveryAttested:false
-      }));
-      process.exitCode=2;
-    });
-  }
+  });
 }
