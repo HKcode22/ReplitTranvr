@@ -1,3 +1,18 @@
+## October 20, 2026 — pre-paid code audit changed readiness to NO-GO; PR #85 live STOP enforcement fix
+
+**User asked directly whether ready given prior Gate3 repeated failed paid attempts. Answer: NO.** Production V0068/V0069/V0070 and protected GH environment do not prove that an active safety worker and exact owner-scoped FIDS dispatcher function correctly in a live run. Zero spent in the previous revoked auth.
+
+**Concrete release-blocking defects found in exact deployed main `341e3901c2e6a5ce949435a03a101dbe8ef57e91`:**
+1. `scripts/v39_gate05_scoped_fids_feasibility_operator_v39.ts` defined `verifyLiveSafety()` but **never actually invoked it**. Therefore prior statements that it enforced GitHub worker liveness before paid GET were materially incorrect. The actual FIDS adapter hides internal GET retry calls within `fetchFidsAirport`; checking once at script startup would be insufficient.
+2. GitHub worker identity checked source/head/step but was **not bound to exact AUTH SHA + scope ID**. A live job for a different signed scope might have passed that insufficient check.
+3. Even with source fixed, actual GH STOP job ARMED evidence, failure alert acknowledgment, restricted commissioner and activation login issuance, private signed bundle custody and provider-rights verification are **still missing**; no experimental GO.
+
+**Corrective release PR #85:** https://github.com/HKcode22/ReplitTranvr/pull/85, branch `release/gate05-actual-safety-gate-before-fids-20261020`, exact head `77489b8e99c2bdd78e2cb41401a9721e1af6c3a5`, based directly on unchanged main. Seven reviewed files: scoped FIDS adapter calls injected `beforeAttempt` before every SQL unit reservation AND every real GET, retries included; operator actually calls `verifyLiveSafety` plus window before each attempt and fails closed if safety proof lost; GH manual safety workflow accepts `scope_id` and `authorization_sha256`, places them in deterministic run-name, and worker compares them with verified signed auth before connection/STOP wait; operator requires matching in-progress job run-title. Offline mock regression tests check safety, reservation, HTTP order for base+retry, guard-loss before/after reservation, and signed-scope cross-run mismatch. Initial focused PR code and CI must pass all 4 before merge; no main release yet at time of this note.
+
+**Scientific readiness:** Gate0.5 **NO-GO** until (a) source guard fix merged/tested, (b) future exact single AUTH and matching two query hashes approved, (c) all restricted credentials and private outputs persist or are provisioned in one session, (d) protected GH independent STOP job genuinely running for **same** scope/digest with external alert/heartbeat observed, (e) activation and commissioner function path proven with zero provider operations, (f) account rights/cycle/budget and output/schema preflight current, (g) post-run STOP+provider/db reconciliation verified. No paid retry during code- or credential-debugging. Existing target Wed Oct21 20:00 PDT is **conditional** and should move rather than spend before these pass. Source-level tests never count as live supervisor proof.
+
+---
+
 ## 2026-10-20 ~22:00 PDT — owner production audit confirms clean state; PR84 FIX RELEASED to main
 
 **Authoritative user-run 2026-10-21T05:00:19.337Z read-only audit:**
