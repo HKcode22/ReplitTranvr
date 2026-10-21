@@ -34,12 +34,24 @@ import {
 const SHA=/^[0-9a-f]{40}$/;
 const CONFIRM="I_APPROVE_ONE_WSSS_12_UNIT_FEASIBILITY_AUTH";
 function hold(message:string):never{throw Error("GATE05_AUTH_BUILDER_HOLD_"+message);}
-export function planGate05WsssSignedWindowV39(now:number){
+export function planGate05WsssSignedWindowV39(
+  now:number,requestedStartUtc:string
+){
   if(!Number.isSafeInteger(now)||now<Date.parse("2026-10-01T00:00:00Z"))
     hold("CLOCK");
+  // Explicit user-selected target; never silently create a 30-minute
+  // countdown that expires while permits/secrets/workflows are prepared.
+  if(typeof requestedStartUtc!=="string"||
+     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\.000Z$/.test(requestedStartUtc))
+    hold("EXACT_START_REQUIRED");
+  const start=Date.parse(requestedStartUtc);
   const quarter=15*60000;
-  // Lead 30–45 minutes, leaving time for independent watcher arming.
-  const start=Math.ceil((now+30*60000)/quarter)*quarter;
+  if(!Number.isSafeInteger(start)||
+     new Date(start).toISOString()!==requestedStartUtc||
+     start%quarter!==0||
+     start<now+2*3600000||
+     start>now+20*3600000)
+    hold("START_LEAD_2H_TO_20H");
   const end=start+40*60000;
   const sg=(ms:number)=>{
     const pieces=new Intl.DateTimeFormat("en-CA",{
@@ -57,7 +69,7 @@ export function planGate05WsssSignedWindowV39(now:number){
   };
 }
 function cli(args:string[]){
-  if(args.length!==8)hold("CLI");
+  if(args.length!==10)hold("CLI");
   const m=new Map<string,string>();
   for(let i=0;i<args.length;i+=2){
     if(!args[i].startsWith("--")||!args[i+1]||m.has(args[i]))
@@ -65,10 +77,11 @@ function cli(args:string[]){
     m.set(args[i],args[i+1]);
   }
   if([...m.keys()].sort().join("|")!==
-    ["--head","--openapi-file","--output-dir","--confirm"].sort().join("|"))
+    ["--head","--openapi-file","--output-dir","--confirm","--start-utc"].sort().join("|"))
     hold("CLI");
   return {head:m.get("--head")!,openapiFile:m.get("--openapi-file")!,
-    output:m.get("--output-dir")!,confirm:m.get("--confirm")!};
+    output:m.get("--output-dir")!,confirm:m.get("--confirm")!,
+    requestedStartUtc:m.get("--start-utc")!};
 }
 export async function createGate05WsssOwnerSignedBundleV39(
   input:ReturnType<typeof cli>){
@@ -97,7 +110,9 @@ export async function createGate05WsssOwnerSignedBundleV39(
   const reset=balance.quota.apiUnitsResetAtUtc;
   if(typeof reset!=="string"||!Number.isFinite(Date.parse(reset)))
     hold("CYCLE_RESET");
-  const now=Date.now(),window=planGate05WsssSignedWindowV39(now);
+  const now=Date.now(),window=planGate05WsssSignedWindowV39(
+    now,input.requestedStartUtc
+  );
   if(Date.parse(window.expiresAtUtc)>=Date.parse(reset))hold("CYCLE_WINDOW");
   const cycleId="RAPIDAPI-RESET-"+reset.replace(/[^0-9]/g,"");
   const scopeId=randomUUID(),suffix=randomUUID().slice(0,8).toUpperCase();
