@@ -32,10 +32,6 @@ jobs:
     # exists for Gate3; a dedicated Gate05 protected environment is preferable.
     environment: phase2g-paid
     env:
-      GATE05_SAFETY_DATABASE_URL: ${{ secrets.GATE05_SAFETY_DATABASE_URL }}
-      GATE05_EXPECTED_DB_HOST: ${{ secrets.GATE05_EXPECTED_DB_HOST }}
-      GATE05_SIGNED_BUNDLE_B64: ${{ secrets.GATE05_SIGNED_BUNDLE_B64 }}
-      GATE05_INDEPENDENT_PINS_B64: ${{ secrets.GATE05_INDEPENDENT_PINS_B64 }}
       EXPECTED: ${{ inputs.expected_head }}
     steps:
       - name: Reject unreviewed source before secrets are used
@@ -62,6 +58,11 @@ jobs:
       - name: Materialize independently reviewed exact AUTH (no keys logged)
         id: secrets
         shell: bash
+        env:
+          GATE05_SIGNED_BUNDLE_B64: ${{ secrets.GATE05_SIGNED_BUNDLE_B64 }}
+          GATE05_INDEPENDENT_PINS_B64: ${{ secrets.GATE05_INDEPENDENT_PINS_B64 }}
+          GATE05_SAFETY_DATABASE_URL: ${{ secrets.GATE05_SAFETY_DATABASE_URL }}
+          GATE05_EXPECTED_DB_HOST: ${{ secrets.GATE05_EXPECTED_DB_HOST }}
         run: |
           set -Eeuo pipefail
           test -n "$GATE05_SAFETY_DATABASE_URL"
@@ -77,6 +78,9 @@ jobs:
       - name: Run independent safety-only signed expiry STOP
         if: steps.secrets.outputs.inputs_materialized == 'true'
         shell: bash
+        env:
+          GATE05_SAFETY_DATABASE_URL: ${{ secrets.GATE05_SAFETY_DATABASE_URL }}
+          GATE05_EXPECTED_DB_HOST: ${{ secrets.GATE05_EXPECTED_DB_HOST }}
         run: |
           set -Eeuo pipefail
           # NO AERODATABOX_API_KEY / general DATABASE_URL is provided here.
