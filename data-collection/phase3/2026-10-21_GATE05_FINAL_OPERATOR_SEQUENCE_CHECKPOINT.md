@@ -1,3 +1,26 @@
+## 2026-10-21 05:09 PDT — REAL production scope PREPARED; 6:45 AM target retained
+
+**Owner Replit Shell evidence (reported directly by owner, no secret values):** reviewed main `ffb5c142e51ab8bb3d9ce7ca944ccc1216a73814` (PR #94, owner-approved ONLY 90-minute lead). All four no-provider CI PASS. Official OpenAPI v1.15.4.0, SHA `63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09`. Fresh real signed WSSS AUTH:
+- `scopeId=10f158dd-3bce-4f9e-896c-78c961071107`
+- `authorizationId=AUTH-20261021-G05WSSS-B0AE8CBF`
+- `authorizationByteSha256=d9b50f8171a98ad078d136e2168bff5374334d7e0ae40043a08c06a558d682de`
+- `signerPublicKeyFingerprintSha256=bf18bc886980198f984a3aae0ef899a3c782034086c08008767a1f8bc28a616d`
+- `startsAtUtc=2026-10-21T13:45:00.000Z` = 06:45 PDT; `expiresAtUtc=2026-10-21T14:25:00.000Z` = 07:25 PDT. Singapore source query interval 21:50–22:00 SGT October 21. `maxTotalUnits=12` (4 base + 8 retries), provider cycle reset `2026-11-04T02:21:21Z`, balance sampled 60000 API units. Signer ephemeral locally cryptographically checked, **NOT externally attested**.
+- Temporary sensitive artifacts on OWNER Replit instance **ONLY**, never record contents in Git: `/tmp/gate05-wsss.hhs6OC/signed-auth/` (`authorization.json`, `signed-bundle.json`, `independent-pins.json`); reviewed SHA worktree `/tmp/gate05-release.yolrNY`; private three-login credential file `/tmp/gate05-wsss.hhs6OC/restricted-operator-logins.json`. These paths are owner-instance-local, not available in assistant container and must be retained until finalized.
+- **SAFETY-only production login** `gate05_fids_safety_login_20261021_e87d3bd618`, `VALID UNTIL 2026-10-21T18:05:00.228Z`; restricted authenticated STOP-only role checks PASS; protected GH `gate05-safety` environment URL and host-pin secrets ROTATED.
+- Three distinct real production operator LOGINs (commission, activate, dispatch) random-password authenticated PASS at owner Shell, expire `2026-10-21T18:07:41.488Z`; private file written mode0600 and not pasted to chat.
+- **PRODUCTION COMMISSION SUCCESS:** `GATE05_COMMISSION_PREPARED_VERIFIED` returned exact scope and AUTH sha above, `scopeState=PREPARED`, `providerRequests=0`, `workerArmed=false`, `paidGo=false`, private receipt `/tmp/gate05-wsss.hhs6OC/commission-receipt.json`. Unique immutable permit inserted and consumed; do not repeat signed auth, operator issuer, safety issuer, or commission scripts for this scope. No provider FIDS attempted, no activated scope yet.
+- User explicitly requested hard **06:45 PDT** target with NO moving the time; treat 06:45 without safety PASS as **NO-GO**, not arbitrary postponement, not skipping STOP.
+- Critical workflow timing: `.github/workflows/phase3-gate05-independent-stop.yml` `safety-only-stop` job uses `timeout-minutes:100`. Starting at ~05:11 PDT risks timeout near 06:51 PDT, **before authorized 07:25 terminal STOP**. Owner should dispatch around **06:00 PDT** to leave ~15m cushion beyond 07:25 signed expiry. No paid GO merely from workflow dispatch/queued/approval; GitHub required environment reviewer may need explicit owner approve-and-deploy. Attestation requires exact job `Run independent safety-only signed expiry STOP` **in_progress** with right scope, AUTH SHA and main SHA; log should print `GATE05_SAFETY_WATCH_STARTED_NO_PROVIDER`, no shared provider key. Confirm alert channel/owner receipt; synthetic incident #90 test owner acknowledgment was absent at latest check, not claimed.
+- Exact candidate workflow dispatch command (owner Shell only, NOT to run before 06:00 PDT):
+  `gh workflow run phase3-gate05-independent-stop.yml --repo HKcode22/ReplitTranvr --ref main -f confirm=WATCH_G05_SAFETY_ONLY_NO_PROVIDER -f expected_head=ffb5c142e51ab8bb3d9ce7ca944ccc1216a73814 -f scope_id=10f158dd-3bce-4f9e-896c-78c961071107 -f authorization_sha256=d9b50f8171a98ad078d136e2168bff5374334d7e0ae40043a08c06a558d682de`.
+  **Don't launch twice**, don't use `gh run watch` until completion (will wait past 6:45), don't activate until GH role readback and worker running.
+- At **06:45 PDT**, signed window open, the released `scripts/v39_gate05_activate_after_safety_once_v39.ts` may be explicitly run through ACTIVATE-only login (confirmation `OWNER_APPROVED_G05_ACTIVATE_AFTER_ARMED_SAFETY_NO_PROVIDER`) *only* after current exact GH safety job proof. Then separate paid authorization is still required before `v39_gate05_scoped_fids_feasibility_operator_v39.ts` (maximum 12 units). Keep unchanged current main because signed AUTH pins exact source commit.
+- Do not create additional PRs, artifacts requiring new source SHA, repeated general preflights or broad database privilege changes while active signed AUTH is live. After STOP, reconcile durable STOP SQL and provider account debit/attempt ledger, then formally report science observations; pilot is NOT automatically scientific success.
+- Snapshot recorded on draft evidence-first branch only; **does not change main or invalidate the signed source SHA**.
+
+---
+
 # Gate 0.5 WSSS — Finite Owner Operating Sequence (as of 2026-10-21)
 
 **Current operating status:** **PAID NO-GO until owner explicitly reviews and executes every step, including a fresh one-time paid GO.** This is a *prospective operator procedure*, NOT evidence these production steps were executed.
