@@ -28,9 +28,10 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' && inputs.confirm == 'WATCH_G05_SAFETY_ONLY_NO_PROVIDER' }}
     runs-on: ubuntu-latest
     timeout-minutes: 100
-    # Do not substitute a general unprotected environment. This one already
-    # exists for Gate3; a dedicated Gate05 protected environment is preferable.
-    environment: phase2g-paid
+    # Dedicated Gate0.5 safety-only environment. Required reviewer and
+    # main-only deployment branch rule are provisioned separately by owner.
+    # Never borrow broader phase2g-paid secrets or provider credentials.
+    environment: gate05-safety
     env:
       EXPECTED: ${{ inputs.expected_head }}
     steps:
