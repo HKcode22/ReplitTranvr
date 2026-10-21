@@ -53,7 +53,8 @@ export function gate05FidsQueryFingerprintV39(q:Gate05ScopedFidsQueryV39):string
 export function makeGate05ScopedFidsBudgetOwnerV39(
   pool:Pick<Pool,"query">,
   owner:Gate05ScopedFidsIdentityV39,
-  query:Gate05ScopedFidsQueryV39
+  query:Gate05ScopedFidsQueryV39,
+  beforeReserve?:()=>Promise<void>|void
 ):FidsAttemptBudgetOwner {
   const hash=gate05FidsQueryFingerprintV39(query);
   if(!owner||!safeId(owner.scopeId)||
@@ -68,6 +69,9 @@ export function makeGate05ScopedFidsBudgetOwnerV39(
          !Number.isInteger(attemptNumber)||attemptNumber<1||attemptNumber>3||
          category!==(attemptNumber===1?"fids_base":"fids_retry"))
         throw Error("GATE05_SCOPED_ATTEMPT_CATEGORY_HOLD");
+      // Verify externally guarded runtime/expiry BEFORE any durable unit
+      // reservation, including internal 429/5xx retry reservations.
+      await beforeReserve?.();
       const reservationId=randomUUID();
       // One atomic PostgreSQL statement. The stored function locks the owner
       // then the allowlisted query and commits counters + receipt together.
@@ -89,14 +93,25 @@ export async function fetchGate05ScopedFidsV39(args:{
   /** Injectable only to run mock HTTP in tests. Production passes none. */
   fetchImpl?:typeof fetch;
   sleepImpl?:(ms:number)=>Promise<void>;
+  /** Called immediately before EVERY reservation AND actual HTTP GET. */
+  beforeAttempt?:()=>Promise<void>|void;
   /** Pilot controller may abort an in-flight GET, never refunds reservation. */
   signal?:AbortSignal;
 }):Promise<FidsAirportResult|null>{
-  const ledger=makeGate05ScopedFidsBudgetOwnerV39(args.db,args.owner,args.query);
+  const ledger=makeGate05ScopedFidsBudgetOwnerV39(
+    args.db,args.owner,args.query,args.beforeAttempt
+  );
+  // The second check is mandatory: STOP may occur between a committed
+  // reservation and physical HTTP dispatch. On failure reservation remains
+  // charged conservatively; no provider request can be made afterwards.
+  const guardedFetch:typeof fetch=async(input,init)=>{
+    await args.beforeAttempt?.();
+    return (args.fetchImpl??fetch)(input,init);
+  };
   // No fallback to global category ledger or other direction flags.
   return fetchFidsAirport(args.query.icao,args.query.fromLocal,args.query.toLocal,{
     direction:"Departure",withLeg:true,withLocation:args.query.withLocation,
     strictDepartureList:true,category:"fids_base",budgetOwner:ledger,
-    fetchImpl:args.fetchImpl,sleepImpl:args.sleepImpl,signal:args.signal
+    fetchImpl:guardedFetch,sleepImpl:args.sleepImpl,signal:args.signal
   });
 }
