@@ -1,0 +1,93 @@
+name: Gate05 Owner Alert Delivery Drill (No Provider)
+
+# This exercise is opt-in and creates ONE clearly labeled GitHub issue.
+# It does not call provider, database, independent STOP, or any external URL.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Enter GATE05_TEST_NOTIFICATION_ONLY (creates a TEST issue)"
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  issue-delivery-drill:
+    name: Create and read back owner-assigned TEST issue
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Send harmless test incident and verify issue assignment
+        id: test_issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner='HKcode22';
+            const repo='ReplitTranvr';
+            const confirm='GATE05_TEST_NOTIFICATION_ONLY';
+            if(context.repo.owner!==owner || context.repo.repo!==repo ||
+               context.eventName!=='workflow_dispatch' ||
+               context.ref!=='refs/heads/main' ||
+               context.payload.inputs?.confirmation!==confirm){
+              throw new Error('GATE05_ALERT_DRILL_EXACT_MAIN_AND_CONFIRM_REQUIRED');
+            }
+
+            // No keys, signed bytes, DB URL or pilot scope is accessible here.
+            const title=`[GATE05 NOTIFICATION DRILL — TEST ONLY] Run ${context.runId}`;
+            const runUrl=`${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const body=[
+              '**THIS IS A HARMLESS TEST — NOT A REAL STOP FAILURE.**',
+              '',
+              'Goal: verify that a no-secret GitHub Actions job can create',
+              'an owner-assigned issue and that the owner can SEE and ACK it.',
+              '',
+              `Workflow: ${runUrl}`,
+              '',
+              'No AeroDataBox calls, no paid credits, no PostgreSQL operation,',
+              'no WSSS scope activation and no real STOP request occurred.',
+              '',
+              '**Owner acceptance step:** leave a comment on THIS issue:',
+              '`GATE05_TEST_ALERT_ACK_RECEIVED`',
+              'Only after seeing that comment should we count delivery as',
+              'human-acknowledged. A green workflow alone is NOT delivery.',
+              '',
+              'This does not independently prove actual failed-STOP triggers.',
+              'The production STOP failure branch still requires rehearsal.'
+            ].join('\n');
+
+            const created=await github.rest.issues.create({
+              owner,repo,title,body,assignees:[owner]
+            });
+            const issue=await github.rest.issues.get({
+              owner,repo,issue_number:created.data.number
+            });
+            if(issue.data.title!==title ||
+               !issue.data.assignees?.some(x=>x.login===owner) ||
+               issue.data.state!=='open'){
+              throw new Error('GATE05_ALERT_DRILL_ISSUE_READBACK_OR_ASSIGNEE_HOLD');
+            }
+            core.notice(`GATE05_TEST_ISSUE_CREATED #${issue.data.number}: ${issue.data.html_url}`);
+            core.setOutput('issue_number',String(issue.data.number));
+            core.setOutput('issue_url',issue.data.html_url);
+      - name: Summarize evidence and owner ACK instructions
+        env:
+          ISSUE_URL: ${{ steps.test_issue.outputs.issue_url }}
+        run: |
+          set -Eeuo pipefail
+          test -n "${ISSUE_URL}"
+          {
+            echo "## Gate05 harmless notification drill"
+            echo
+            echo "Created and reread an owner-assigned TEST GitHub issue:"
+            echo "${ISSUE_URL}"
+            echo
+            echo "Owner must open the issue and comment:"
+            echo "`GATE05_TEST_ALERT_ACK_RECEIVED`"
+            echo
+            echo "This is not evidence the live STOP worker can STOP a scope."
+            echo "No database or provider operations occurred."
+          } >> "${GITHUB_STEP_SUMMARY}"
