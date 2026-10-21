@@ -116,3 +116,54 @@ jobs:
             echo '- A green GitHub job does not replace actual receipt and credit reconciliation.'
             echo '- On job failure, STOP is UNCONFIRMED and owner intervention is necessary.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Distinct notification job: starts only when the safety job did not
+  # complete successfully. It has NO PostgreSQL or provider secret access.
+  # Issue creation/owner assignment is trackable, NOT confirmed push/email
+  # delivery; operator ACK remains a separate physical readiness check.
+  alert-owner-on-stop-failure:
+    name: Gate05 STOP failure incident (best effort)
+    needs: safety-only-stop
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.safety-only-stop.result != 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Create owner-assigned STOP UNCONFIRMED issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // No DB URL, provider key, authorization bytes or pins in issue.
+            // GitHub job failure may prevent this step from running, so an
+            // incident ISSUE is evidence of escalation, not its guarantee.
+            const {owner,repo}=context.repo;
+            const runUrl=`${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const title=`[GATE05 STOP UNCONFIRMED] Safety run ${context.runId}`;
+            const body=[
+              'Gate0.5 independent STOP safety job did not succeed.',
+              '',
+              'Status: **UNCONFIRMED — do not activate or make any paid FIDS GET.**',
+              'A database expiration check prevents new reservations after',
+              'the signed deadline, but DOES NOT prove STOP receipt or refund',
+              'requests that might already have been accepted by the provider.',
+              '',
+              `Review exact protected workflow run: ${runUrl}`,
+              '',
+              'Operator follow-up required: independently inspect current',
+              'pilot state, signed scope ID, STOP receipt, live worker status,',
+              'attempt ledger and AeroDataBox unit balance. Escalate outside',
+              'GitHub if this issue notification is not received/acknowledged.',
+              '',
+              'This issue is not proof of successful STOP or delivered alert.'
+            ].join('\\n');
+            const issue=await github.rest.issues.create({
+              owner,repo,title,body,assignees:['HKcode22']
+            });
+            core.notice(`GATE05_STOP_FAILURE_ISSUE_CREATED #${issue.data.number}`);
+      - name: Report notification failure if issue creation could not run
+        if: failure()
+        run: |
+          echo 'GATE05_STOP_ALERT_DELIVERY_NOT_ATTESTED' >&2
+          exit 1
