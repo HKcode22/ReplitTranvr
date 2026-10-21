@@ -67,20 +67,35 @@ export async function rehearseGate05BoundedExpiryStopRecoveryV39(args:{
   let attemptedStops=0;
   let lastError:unknown;
   const maxStopAttempts=3;
+  const now=args.nowMs??Date.now;
+  const expiryMs=Date.parse(signed.expiresAtUtc);
+  // Count real SQL STOP invocations, not merely expiry-guard calls.
+  const countedDb={
+    query:(sql:string,params:unknown[])=>{
+      attemptedStops++;
+      return args.db.query(sql,params);
+    }
+  } as unknown as Pick<Pool,"query">;
   for(let n=1;n<=maxStopAttempts;n++){
     try{
       // First attempt waits for the signed expiry and runs the SQL STOP.
       // Thereafter, only an expired, once-failed STOP is re-attempted.
       // Do NOT silently restart the full wait after a socket failure.
-      attemptedStops=n;
+      // A sleeper error before expiry must NEVER trigger a premature
+      // EXPIRED STOP on retry. The signed deadline is authoritative input.
+      if(n>1){
+        const current=now();
+        if(!Number.isSafeInteger(current)||current<expiryMs)
+          throw Error("GATE05_STOP_RECOVERY_TIME_HOLD");
+      }
       const receipt=n===1?
         await runGate05ExpiryGuardV39({
-          db:args.db,scopeId:signed.scopeId,
+          db:countedDb,scopeId:signed.scopeId,
           expiresAtUtc:signed.expiresAtUtc,
           nowMs:args.nowMs,sleepMs:args.sleepMs
         }):
         await stopGate05IndependentlyV39({
-          db:args.db,scopeId:signed.scopeId,reason:"EXPIRED"
+          db:countedDb,scopeId:signed.scopeId,reason:"EXPIRED"
         });
       return {
         schema:"v39.gate05.expiry-stop-recovery-rehearsal.v1" as const,
@@ -101,7 +116,7 @@ export async function rehearseGate05BoundedExpiryStopRecoveryV39(args:{
       // Errors before the first STOP attempt (invalid clock, bogus deadline,
       // bounded wait) cannot justify calling STOP without expiry evidence.
       const msg=error instanceof Error?error.message:"";
-      if(/^GATE05_EXPIRY_GUARD_/.test(msg)||
+      if(/^GATE05_(?:EXPIRY_GUARD_|STOP_RECOVERY_TIME_HOLD)/.test(msg)||
          permanentFailure(error))break;
       if(n<maxStopAttempts){
         // A retry delay is bounded. Real deployment must impose SQL timeout
