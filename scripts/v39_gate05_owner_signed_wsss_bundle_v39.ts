@@ -110,7 +110,9 @@ export async function createGate05WsssOwnerSignedBundleV39(
   const reset=balance.quota.apiUnitsResetAtUtc;
   if(typeof reset!=="string"||!Number.isFinite(Date.parse(reset)))
     hold("CYCLE_RESET");
-  const now=Date.now(),window=planGate05WsssSignedWindowV39(\n    now,input.requestedStartUtc\n  );
+  const now=Date.now(),window=planGate05WsssSignedWindowV39(
+    now,input.requestedStartUtc
+  );
   if(Date.parse(window.expiresAtUtc)>=Date.parse(reset))hold("CYCLE_WINDOW");
   const cycleId="RAPIDAPI-RESET-"+reset.replace(/[^0-9]/g,"");
   const scopeId=randomUUID(),suffix=randomUUID().slice(0,8).toUpperCase();
