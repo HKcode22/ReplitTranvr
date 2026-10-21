@@ -57,7 +57,7 @@ jobs:
               '',
               'This does not independently prove actual failed-STOP triggers.',
               'The production STOP failure branch still requires rehearsal.'
-            ].join('\\n');
+            ].join('\n');
 
             const created=await github.rest.issues.create({
               owner,repo,title,body,assignees:[owner]
