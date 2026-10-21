@@ -1,3 +1,15 @@
+## October 20, 2026 23:07 PDT — GitHub TEST notification run succeeded; human ACK pending
+
+**Owner executed exactly one no-paid notification workflow:** manual `gh workflow run phase3-gate05-alert-ack-drill.yml --repo HKcode22/ReplitTranvr --ref main -f confirmation=GATE05_TEST_NOTIFICATION_ONLY`. GitHub run **[39553484191](https://github.com/HKcode22/ReplitTranvr/actions/runs/39553484191)** independently fetched: `status=completed`, `conclusion=success`, `event=workflow_dispatch`, `head_branch=main`, `head_sha=64acd820cfa04d0333c32e3d7448291026a527d6`, one job `Create and read back owner-assigned TEST issue` succeeded.
+
+**Direct issue evidence (not inferred from CI):** the job log printed `GATE05_TEST_ISSUE_CREATED #88`. Independently fetched **[issue #88](https://github.com/HKcode22/ReplitTranvr/issues/88)**: exact title `[GATE05 NOTIFICATION DRILL — TEST ONLY] Run 39553484191`, `state=open`, `assignees=[HKcode22]`, body explicitly states no DB/provider/STOP action, instructions to add comment `GATE05_TEST_ALERT_ACK_RECEIVED`. Independently fetched issue comments at audit: **[] empty**. Thus GitHub's issue-create/API-assignee/readback path PASSED; **human ACK PENDING**. Owner must open issue #88, SEE it and personally comment exact marker. Recheck GitHub comment before calling delivery ACK confirmed. Do not re-dispatch the drill just because initial `gh run list` momentarily showed 0. No duplicate test issues needed.
+
+**Scope of proof:** the test workflow is independent of production STOP; no production database connection, FIDS provider request, signed authorization or scope activation. Creating/assigning one TEST issue is not proof email/push notification reached the owner nor that the *real failed-STOP* branch executes under a GitHub Actions failure. Acknowledgment of issue shows owner saw issue by at least one channel; separate real STOP failure-path and restricted full credential rehearsal still NO-GO prerequisites. No paid provider GET during this work.
+
+**Next focus:** after owner ACK, perform no-paid failure-path simulation with explicit test-only GH Actions issue (guard against confusing real STOP incident), then real restricted login commissioner/activation end-to-end rehearsal. Do not mint a fresh signed live WSSS scope before these pass. Current main `64acd820cfa04d0333c32e3d7448291026a527d6` at test execution; any later merge changes signed source pin.
+
+---
+
 ## October 20/21, 2026 — PR #87 harmless GitHub Actions notification drill RELEASED; manual ACK test PENDING
 
 **Exact released source:** [PR #87](https://github.com/HKcode22/ReplitTranvr/pull/87), review head `ea08db37d71c805c9786068fdccf30c8f58b10d3` with **four/four no-provider CI SUCCESS**; squash merged to `main=64acd820cfa04d0333c32e3d7448291026a527d6`, independently confirmed by GitHub `git/ref/heads/main` lookup. `.github/workflows/phase3-gate05-alert-ack-drill.yml` was fetched from exact merged commit. Focused two-file release: manual-only no-provider alert test workflow plus offline source-contract regression `tests/phase3_gate05_alert_ack_drill_contract_v39.test.ts`.
