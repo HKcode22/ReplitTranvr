@@ -199,6 +199,9 @@ async function execute(){
       );
       await admin.query('GRANT "'+group+'" TO "'+n+
         '" WITH ADMIN FALSE, INHERIT FALSE, SET TRUE');
+      // Explicit, narrowly scoped CONNECT avoids dependence on a
+      // deployment-specific PUBLIC CONNECT grant.
+      await admin.query('GRANT CONNECT ON DATABASE "neondb" TO "'+n+'"');
     }
     // Write PRIVATE credentials before COMMIT: if file write fails, no roles.
     writeFileSync(output,JSON.stringify(saved)+"\n",{
