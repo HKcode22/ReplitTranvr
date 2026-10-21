@@ -1,4 +1,5 @@
 name: Phase3 Gate0.5 WSSS Independent STOP (Manual, Safety-Only)
+run-name: Gate05 STOP ${{ inputs.scope_id }} ${{ inputs.authorization_sha256 }}
 # DRAFT / NOT RELEASED: no push, PR, cron or implicit paid deployment.
 # Even when released to main, requires exact HEAD, owner-signed authority,
 # protected environment secrets and a separate live operator GO.
@@ -13,6 +14,14 @@ on:
         type: string
       expected_head:
         description: 'Reviewed released main SHA matching signed AUTH source'
+        required: true
+        type: string
+      scope_id:
+        description: 'Exact signed authorization scope UUID'
+        required: true
+        type: string
+      authorization_sha256:
+        description: 'Exact signed authorization bytes SHA256'
         required: true
         type: string
 
@@ -82,6 +91,8 @@ jobs:
         env:
           GATE05_SAFETY_DATABASE_URL: ${{ secrets.GATE05_SAFETY_DATABASE_URL }}
           GATE05_EXPECTED_DB_HOST: ${{ secrets.GATE05_EXPECTED_DB_HOST }}
+          GATE05_EXPECTED_SCOPE_ID: ${{ inputs.scope_id }}
+          GATE05_EXPECTED_AUTH_SHA256: ${{ inputs.authorization_sha256 }}
         run: |
           set -Eeuo pipefail
           # NO AERODATABOX_API_KEY / general DATABASE_URL is provided here.

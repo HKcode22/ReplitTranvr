@@ -72,6 +72,22 @@ export function validateGate05IndependentStopLaunchV39(
   };
 }
 
+/**
+ * A GH job for the same HEAD but a different AUTH cannot supervise this
+ * scope. These public invocation inputs are signed-artifact comparisons,
+ * not an independently trusted signature root by themselves.
+ */
+export function assertGate05IndependentStopScopeBindingV39(
+  reviewed:{scopeId:string;reviewedAuthorizationSha256:string},
+  env:Record<string,string|undefined>
+){
+  if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(
+    env.GATE05_EXPECTED_SCOPE_ID??"")||
+    !/^[0-9a-f]{64}$/.test(env.GATE05_EXPECTED_AUTH_SHA256??"")||
+    env.GATE05_EXPECTED_SCOPE_ID!==reviewed.scopeId||
+    env.GATE05_EXPECTED_AUTH_SHA256!==reviewed.reviewedAuthorizationSha256)
+    throw Error("GATE05_SIDE_WORKFLOW_SCOPE_OR_AUTH_MISMATCH_HOLD");
+}
 function cli(argv:string[]){
   const flags=new Map<string,string>();
   if(argv.length!==8)throw Error("GATE05_SIDE_CLI_HOLD");
@@ -120,6 +136,7 @@ export async function startGate05IndependentStopProcessV39(
   });
   if(reviewed.sourceCommit!==checked)
     throw Error("GATE05_SIDE_SIGNED_SOURCE_DIVERGENCE_HOLD");
+  assertGate05IndependentStopScopeBindingV39(reviewed,env);
 
   const opts=previewGate05IndependentStopDbTimeoutPolicyV39().settings;
   // Do not keep one vulnerable DB socket idle for the entire wait.

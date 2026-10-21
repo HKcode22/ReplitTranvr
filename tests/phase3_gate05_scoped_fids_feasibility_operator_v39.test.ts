@@ -22,15 +22,18 @@ describe("Gate05 paid dispatcher startup isolation (pure no-IO)",()=>{
     expect(p).not.toHaveProperty("password");
   });
   it("requires a real in-progress main safety STOP workflow step",()=>{
+    const scope="32273d90-f8f1-46e7-a7e8-82f02edebed9";
+    const digest="a".repeat(64);
     const active={
       id:39535000000,status:"in_progress",event:"workflow_dispatch",
+      display_title:`Gate05 STOP ${scope} ${digest}`,
       head_branch:"main",head_sha:head,run_attempt:1,
       path:".github/workflows/phase3-gate05-independent-stop.yml@refs/heads/main"
     };
     const jobs={jobs:[{name:"safety-only-stop",status:"in_progress",
       steps:[{name:"Run independent safety-only signed expiry STOP",
         status:"in_progress"}]}]};
-    expect(assertGate05SafetyJobLiveV39(active,jobs,head))
+    expect(assertGate05SafetyJobLiveV39(active,jobs,head,scope,digest))
       .toMatchObject({headSha:head,safetyStepActive:true});
     for(const bad of [
       {...active,status:"completed"},
@@ -38,15 +41,17 @@ describe("Gate05 paid dispatcher startup isolation (pure no-IO)",()=>{
       {...active,head_sha:"b".repeat(40)},
       {...active,head_branch:"feature"},
       {...active,path:"phase3-gate3-independent-safety.yml"},
-      {...active,run_attempt:2}
-    ])expect(()=>assertGate05SafetyJobLiveV39(bad,jobs,head))
+      {...active,run_attempt:2},
+      {...active,display_title:`Gate05 STOP ${scope} ${"b".repeat(64)}`},
+      {...active,display_title:"Unbound Gate05 safety job"}
+    ])expect(()=>assertGate05SafetyJobLiveV39(bad,jobs,head,scope,digest))
       .toThrow("GATE05_DISPATCH_HOLD_INDEPENDENT_SAFETY_NOT_LIVE");
-    expect(()=>assertGate05SafetyJobLiveV39(active,{jobs:[]},head))
+    expect(()=>assertGate05SafetyJobLiveV39(active,{jobs:[]},head,scope,digest))
       .toThrow("GATE05_DISPATCH_HOLD_INDEPENDENT_SAFETY_NOT_LIVE");
     expect(()=>assertGate05SafetyJobLiveV39(active,{
       jobs:[{name:"safety-only-stop",status:"completed",
         steps:jobs.jobs[0].steps}]
-    },head)).toThrow("GATE05_DISPATCH_HOLD_INDEPENDENT_SAFETY_NOT_LIVE");
+    },head,scope,digest)).toThrow("GATE05_DISPATCH_HOLD_INDEPENDENT_SAFETY_NOT_LIVE");
   });
   it("refuses missing provider credentials, general DB, mismatch host",()=>{
     const good=secrets();
