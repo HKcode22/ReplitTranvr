@@ -1,3 +1,33 @@
+## October 21, 2026 ~00:00 PDT — PR #92 released owner-run non-billable LIVE foundation read-only audit
+
+**Authoritative GitHub verification:** [PR #92](https://github.com/HKcode22/ReplitTranvr/pull/92) exact review head `9462d6f227b23e6ae466fc88356ebf519b831f46`, **4/4 exact-head no-provider CI PASS**, including V3.9 TS/offline/full tests/lint/registry/traceability/scanner/aggregate preflight/build. Squash merged; `main=0c2305bb84945b16ebc1fcd085c83a1c3e3f50bb` re-fetched independently and matches expected. Script fetched at merged SHA. No GH workflow dispatch/DB connection made by the code review or merge.
+
+**New manual-only operator script:** `scripts/v39_gate05_owner_live_foundation_readonly_v39.ts`. It requires `--head` matching both checkout Git SHA and actual GitHub main, confirms owner/admin identity and `gate05-safety` reviewer + exact main-only environment restrictions, reads only secret NAMES (not encrypted values), connects via `BEGIN READ ONLY` to verify exact production primary `neondb`/`neondb_owner`, all four `NOLOGIN NOINHERIT` roles and exclusive function-only grants by real catalog OID, zero direct pilot-table UPDATE, zero PREPARED or ACTIVE pilot scopes and zero unused nonrevoked permits, and lists login names/expiries with no password disclosure. Offline synthetic-policy tests force HOLD on altered source/DB, privilege bleed, scope/permit blockers and missing environment safety; they always return `paidGo:false`, even if basic foundation passes. No migrations, role issuance, signed auth, GH secret upload, provider API or activation occur.
+
+**Next exact OWNER execution (read-only, no paid, no long-lived local file requirement):**
+```bash
+set -Eeuo pipefail
+cd ~/workspace
+ROOT="$PWD"
+PIN="0c2305bb84945b16ebc1fcd085c83a1c3e3f50bb"
+git fetch --no-tags origin main
+test "$(git rev-parse origin/main)" = "$PIN" || { echo "HOLD: main changed"; exit 1; }
+WORK="$(mktemp -d /tmp/gate05-foundation.XXXXXX)"
+rmdir "$WORK"
+git worktree add --detach "$WORK" "$PIN"
+ln -s "$ROOT/node_modules" "$WORK/node_modules"
+cd "$WORK"
+DOTENV_CONFIG_PATH="$ROOT/.env" node --import tsx \
+  scripts/v39_gate05_owner_live_foundation_readonly_v39.ts --head "$PIN"
+```
+The output `GATE05_LIVE_FOUNDATION_READONLY` provides actual current role matrix, revoked historical permit counts, older login expiry and GH metadata. A `FOUNDATION_VERIFIED_BUT_PAID_NO_GO` is *not* permission for paid FIDS; `FOUNDATION_HOLD` must be diagnosed from exact holds. User should paste only sanitized output; NEVER print secrets. Expected under currently known evidence: no open scopes or unused permit, prior aborted scope terminally revoked, old LOGIN expired, two signed safety bundle/pin encrypted secrets still missing because no new AUTH. Do NOT sign yet.
+
+**Escalation status:** [issue #90](https://github.com/HKcode22/ReplitTranvr/issues/90) synthetic failure-to-issue path already passed (upstream intentionally failed, separate incident job succeeded). At this session's start, owner comment `GATE05_SYNTHETIC_FAILURE_ALERT_ACK` was still ABSENT; owner may add it once, no rerun of test needed. Human acknowledgment of first test #88 was already verified.
+
+**Remaining pre-paid P0:** all-new four scoped PRODUCTION LOGIN issuance/custody and role verification, truly independently ARMED GH STOP worker with matching signed AUTH+expiry and delivered alert, one-use permit and PREPARED scope under approved signer/trust, separate reviewed activation, provider plan/data retention grant and final receipt reconciliation. SQL dry run tests passed but **production operation not yet rehearsed**. The old proposed 8pm Pacific run was contingent; no automatic run has been scheduled and no paid authorization exists. Treat paid Gate0.5 as NO-GO until each proof is independently recorded.
+
+---
+
 ## October 21, 2026 ~00:10 PDT — distinct real authenticated PG16 login rehearsal PR #91 MERGED (4/4 CI)
 
 **Owner synthetic failure issue ACK check:** GitHub issue [#90](https://github.com/HKcode22/ReplitTranvr/issues/90) confirmed open and assigned `HKcode22`; fetched comments `[]` at the start and later during this engineering session. **ACK `GATE05_SYNTHETIC_FAILURE_ALERT_ACK` remains PENDING.** The synthetic failure-run jobs did pass technical acceptance; do not rerun run [39556064980](https://github.com/HKcode22/ReplitTranvr/actions/runs/39556064980), which intentionally concluded FAILURE.
