@@ -157,7 +157,7 @@ jobs:
               'GitHub if this issue notification is not received/acknowledged.',
               '',
               'This issue is not proof of successful STOP or delivered alert.'
-            ].join('\\n');
+            ].join('\n');
             const issue=await github.rest.issues.create({
               owner,repo,title,body,assignees:['HKcode22']
             });
