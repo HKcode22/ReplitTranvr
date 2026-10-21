@@ -42,7 +42,7 @@ export function planGate05WsssSignedWindowV39(
   // Explicit user-selected target; never silently create a 30-minute
   // countdown that expires while permits/secrets/workflows are prepared.
   if(typeof requestedStartUtc!=="string"||
-     !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:00\\.000Z$/.test(requestedStartUtc))
+     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\.000Z$/.test(requestedStartUtc))
     hold("EXACT_START_REQUIRED");
   const start=Date.parse(requestedStartUtc);
   const quarter=15*60000;
