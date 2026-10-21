@@ -63,7 +63,7 @@ describe("Gate05 sidecar launch isolation contract (NO I/O)",()=>{
     expect(()=>validateGate05IndependentStopLaunchV39(args,{
       ...good,
       GATE05_SAFETY_DATABASE_URL:
-        "postgresql://gate05_fids_safety_login_test:p@localhost/neondb?sslmode=verify-full",
+        "postgresql://gate05_fids_safety_login_20261021_test:p@localhost/neondb?sslmode=verify-full",
       GATE05_EXPECTED_DB_HOST:"localhost"
     })).toThrow("GATE05_SIDE_DB_HOST_PIN_HOLD");
   });
