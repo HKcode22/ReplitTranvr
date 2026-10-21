@@ -20,12 +20,21 @@ describe("Gate05 safety-only one-session rotation timing (NO I/O)",()=>{
       environment:"gate05-safety"
     });
   });
-  it("rejects before the 2h lead and after the 5h credential window",()=>{
+  it("rejects before the 90min lead and after the 5h credential window",()=>{
     for(const date of [
       "2026-10-22T01:45:00.000Z","2026-10-22T05:15:00.000Z"
     ])expect(()=>planGate05SafetyCredentialRotationV39(
       now,date,HEAD,CONFIRM
-    )).toThrow("GATE05_SAFETY_PROVISION_HOLD_ROTATION_TIME_WINDOW_2_TO_5_HOURS");
+    )).toThrow("GATE05_SAFETY_PROVISION_HOLD_ROTATION_TIME_WINDOW_90_MIN_TO_5_HOURS");
+  });
+  it("accepts exact 90 minutes and rejects one millisecond less",()=>{
+    const start="2026-10-22T03:00:00.000Z";
+    expect(planGate05SafetyCredentialRotationV39(
+      Date.parse(start)-90*60000,start,HEAD,CONFIRM
+    ).startUtc).toBe(start);
+    expect(()=>planGate05SafetyCredentialRotationV39(
+      Date.parse(start)-90*60000+1,start,HEAD,CONFIRM
+    )).toThrow("GATE05_SAFETY_PROVISION_HOLD_ROTATION_TIME_WINDOW_90_MIN_TO_5_HOURS");
   });
   it("refuses near matches, malformed clocks and unauthorized source",()=>{
     for(const bad of [
