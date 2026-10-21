@@ -3,7 +3,8 @@
  * calls, process spawn, signed owner AUTH or activation.
  */
 import {describe,it,expect} from "vitest";
-import {validateGate05IndependentStopLaunchV39} from
+import {validateGate05IndependentStopLaunchV39,
+  assertGate05IndependentStopScopeBindingV39} from
   "../scripts/v39_gate05_independent_stop_process_v39";
 
 const SHA="a".repeat(40);
@@ -27,6 +28,25 @@ describe("Gate05 sidecar launch isolation contract (NO I/O)",()=>{
       independentlyDeployedAttested:false
     });
     expect(result).not.toHaveProperty("password");
+  });
+  it("binds actual signed scope/digest to protected GH workflow invocation",()=>{
+    const reviewed={scopeId:"32273d90-f8f1-46e7-a7e8-82f02edebed9",
+      reviewedAuthorizationSha256:"a".repeat(64)};
+    const expected={
+      GATE05_EXPECTED_SCOPE_ID:reviewed.scopeId,
+      GATE05_EXPECTED_AUTH_SHA256:reviewed.reviewedAuthorizationSha256
+    };
+    expect(()=>assertGate05IndependentStopScopeBindingV39(
+      reviewed,expected)).not.toThrow();
+    for(const wrong of [
+      {...expected,GATE05_EXPECTED_SCOPE_ID:"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"},
+      {...expected,GATE05_EXPECTED_AUTH_SHA256:"b".repeat(64)},
+      {...expected,GATE05_EXPECTED_AUTH_SHA256:"not-a-sha"},
+      {}
+    ])expect(()=>assertGate05IndependentStopScopeBindingV39(
+      reviewed,wrong)).toThrow(
+      "GATE05_SIDE_WORKFLOW_SCOPE_OR_AUTH_MISMATCH_HOLD"
+    );
   });
   it("rejects stale or unauthorized launch inputs before any I/O",()=>{
     expect(()=>validateGate05IndependentStopLaunchV39(
