@@ -71,6 +71,7 @@ guarded("Gate05 real distinct TCP LOGINs + function ACL + full lifecycle (DISPOS
       dispatch:"gate05_fids_dispatch_v39",
       safety:"gate05_fids_safety_v39"
     };
+    const functionOids={} as Record<RoleType,number>;
     const credentials:Record<RoleType,string>={
       commission:randomBytes(32).toString("hex"),
       activate:randomBytes(32).toString("hex"),
@@ -154,10 +155,12 @@ guarded("Gate05 real distinct TCP LOGINs + function ACL + full lifecycle (DISPOS
       }
       // Confirm the ephemeral functions are the production candidate bodies.
       for(const type of types){
-        expect((await admin.query(
-          "SELECT to_regprocedure($1) IS NOT NULL AS exists",
+        const oid=(await admin.query(
+          "SELECT to_regprocedure($1)::oid::integer AS oid",
           [procedures[type]]
-        )).rows[0].exists).toBe(true);
+        )).rows[0]?.oid;
+        expect(Number.isInteger(oid)).toBe(true);
+        functionOids[type]=oid;
       }
       await root.query("REVOKE CONNECT ON DATABASE "+qIdent(dbName)+" FROM PUBLIC");
       const until=new Date(Date.now()+10*60000).toISOString();
@@ -186,11 +189,14 @@ guarded("Gate05 real distinct TCP LOGINs + function ACL + full lifecycle (DISPOS
         for(const fn of types){
           const has=(await clients[type]!.query(
             "SELECT has_function_privilege(current_user, "+
-            "to_regprocedure($1),'EXECUTE') AS allowed",
-            [procedures[fn]]
+            "$1::oid,'EXECUTE') AS allowed",
+            [functionOids[fn]]
           )).rows[0].allowed;
           expect(has).toBe(false); // explicit SET ROLE required, NOINHERIT
         }
+        expect((await clients[type]!.query(
+          "SELECT has_schema_privilege(current_user,'clean','USAGE') AS allowed"
+        )).rows[0].allowed).toBe(false);
         // No ability to assume a different functional identity.
         const wrong=types.find(k=>k!==type)!;
         await expect(clients[type]!.query(
@@ -204,8 +210,8 @@ guarded("Gate05 real distinct TCP LOGINs + function ACL + full lifecycle (DISPOS
           for(const fn of types){
             const has=(await clients[type]!.query(
               "SELECT has_function_privilege(current_user,"+
-              "to_regprocedure($1),'EXECUTE') AS allowed",
-              [procedures[fn]]
+              "$1::oid,'EXECUTE') AS allowed",
+              [functionOids[fn]]
             )).rows[0].allowed;
             expect(has).toBe(fn===type);
           }
