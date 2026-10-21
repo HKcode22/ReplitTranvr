@@ -49,6 +49,54 @@ describe("Gate05 pilot-scoped FIDS adapter refuses any unbound request",()=>{
     expect(sleep.mock.calls[0][0]).toBeGreaterThan(0);
   });
 
+  it("enforces live safety before EACH reservation and EACH physical GET, including retries",async()=>{
+    const calls:string[]=[];
+    const beforeAttempt=vi.fn(async()=>{calls.push("safety-proof");});
+    const db={query:vi.fn(async()=>{calls.push("reserve");return {
+      rowCount:1,rows:[{reserved:true}]
+    };})};
+    let attempt=0;
+    const http=vi.fn(async()=>{calls.push("http-get");attempt++;
+      return attempt===1?new Response(null,{status:429}):
+        new Response(JSON.stringify({departures:[],arrivals:[]}),{status:200});
+    });
+    const res=await fetchGate05ScopedFidsV39({
+      db:db as any,owner:owner(),query:noLocation,
+      beforeAttempt,fetchImpl:http as any,sleepImpl:async()=>{}
+    });
+    expect(res?.departures).toEqual([]);
+    expect(calls).toEqual([
+      "safety-proof","reserve","safety-proof","http-get",
+      "safety-proof","reserve","safety-proof","http-get"
+    ]);
+  });
+  it("blocks all spend when safety proof is missing before reservation",async()=>{
+    const db={query:vi.fn()},http=vi.fn();
+    const res=await fetchGate05ScopedFidsV39({
+      db:db as any,owner:owner(),query:noLocation,
+      beforeAttempt:()=>{throw Error("SAFETY_OFFLINE")},
+      fetchImpl:http as any
+    });
+    expect(res).toBeNull();
+    expect(db.query).not.toHaveBeenCalled();
+    expect(http).not.toHaveBeenCalled();
+  });
+  it("never dispatches paid HTTP if safety is lost after a reserved unit",async()=>{
+    let checks=0;
+    const beforeAttempt=vi.fn(async()=>{
+      if(++checks===2)throw Error("SAFETY_DIED_AFTER_RESERVE");
+    });
+    const db={query:vi.fn(async()=>({rowCount:1,rows:[{reserved:true}]}))};
+    const http=vi.fn();
+    const res=await fetchGate05ScopedFidsV39({
+      db:db as any,owner:owner(),query:noLocation,
+      beforeAttempt,fetchImpl:http as any
+    });
+    expect(res).toBeNull();
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(http).not.toHaveBeenCalled();
+    // The reservation remains accounted as potentially spent; never refund.
+  });
   it("fingerprints the full actual FIDS option shape (including opt-in location)",()=>{
     expect(hash0).toMatch(/^[0-9a-f]{64}$/);
     expect(hash0).not.toBe(hash1);
