@@ -1,3 +1,19 @@
+## October 20, 2026 — consolidated commissioner + independent STOP release design; inert commissioner negative test (DRAFT / NO PAID)
+
+**Verified input baseline:** PR #80 `ceac25255e8ebafb39eb96ad68bb25e23e50b86b` is open/draft/unmerged and **4/4 SUCCESS** on exact GitHub Actions checks. This does not imply released/published source equivalence.
+
+**New canonical design:** `226a97c470a632fb63fa1957a31bef890f806fea` added `data-collection/phase3/GATE05_ONE_USE_COMMISSIONER_INDEPENDENT_STOP_RELEASE_DESIGN.md`. This supersedes scattered verbal completion assumptions with a **single release/authority decision sequence**: owner-account Tier2 rights and independently trusted signer evidence; accurate production READ-ONLY provenance; V0068 separately authorized schema installation; narrowly privileged one-use PREPARED commissioner and distinct activation; independently authenticated/supervised STOP process with actual timeout, restart, independently acknowledged alerts and committed receipt; exact deployment/source identity; then one fresh WSSS local+UTC two-query scope with separate explicit <=12-unit owner paid approval. Stages A/B may progress draft/read-only by their own approved boundary; stages C–F are not authorized here. No scientific Gate0.5 PASS is implied by source feasibility.
+
+**Additional targeted engineering:** `7829cca3966469e72eb52166ea8e5c45e13cb313` strengthened the existing disposable-PG16 `tests/phase3_gate05_function_only_stop_disposable_pg_v39.test.ts` to switch to `gate05_fids_commission_v39`, verify no direct `SELECT/INSERT/UPDATE/DELETE` on any Gate05 pilot tables and deny reservation/STOP/direct activation or mutation, before verifying existing dispatcher-versus-safety role separation. **This is a test of the current commission role's intentionally inert ACL**; it is *not* evidence that the one-use commissioner has been implemented. The test's staged V0066/V0067/V0068 installation and fixture DML take place only inside a single disposable PG transaction that ALWAYS ROLLBACKS, with exact localhost CI/empty provider key guards.
+
+**CI:** New commits triggered fresh workflows. The prior 4/4 green result belongs only to `ceac25255...`. Do not report final test/CI success on `7829cca...` or this checkpoint until their exact-head GitHub Actions complete. Inspect any failed job logs before further modification.
+
+**Still NO-GO:** No actual owner paid AUTH/signer trust root; no effective provider-specific tariff or data retention proof; previous live provider quota/current-cycle inventory is stale; expired Oct20 02:00 PDT dispatcher/safety credentials; no current real independent STOP process, commissioner, activation or protected V0068 production indexes; no live WSSS run window selected. All October 19 proposed windows/hashes remain canceled. No provider FIDS GET, subscription create, API spend, real PostgreSQL access/change, role credential issuance, deployment, PR merge, scope activation or production publish executed during this session.
+
+**Exact next start:** Verify GitHub CI for newest PR HEAD. Next meaningful milestone is collecting authoritative *owner-specific provider terms*, separately reviewing and approving production V0068 and least-privilege commissioner/safety architecture, and proving the operating independent STOP service. Do not repeat mock-only CI as a substitute for evidence. Request independent explicit approval at each production/paid boundary.
+
+---
+
 ## October 20, 2026 — safety-only PostgreSQL timeout policy and actual disposable DB cancellation tests (DRAFT / NO PAID)
 
 **Exact initial source baseline:** `b293dfa6cdc089e88c16df31efccdef78255f841`, draft PR #80, **4/4 GitHub workflows SUCCESS** after independent recheck. Default `main` remains a separate released source ref; no new live deployment or production database evidence has been claimed.
