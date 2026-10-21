@@ -1,3 +1,22 @@
+## October 21, 2026 — owner ACK on issue #88 verified; synthetic failed-job escalation PR #89 RELEASED
+
+**Human acknowledgment is verified, no longer pending:** GitHub fetched [issue #88](https://github.com/HKcode22/ReplitTranvr/issues/88), title `[GATE05 NOTIFICATION DRILL — TEST ONLY] Run 39553484191`, `state=open`, `assignees=[HKcode22]`, and fetched exact comment `GATE05_TEST_ALERT_ACK_RECEIVED` by `HKcode22`, [permalink](https://github.com/HKcode22/ReplitTranvr/issues/88#issuecomment-6309385046). GitHub Actions run [39553484191](https://github.com/HKcode22/ReplitTranvr/actions/runs/39553484191) had completed success. This establishes owner personally saw and acknowledged a harmless GitHub issue. It does **not** prove push/email delivered, real STOP receipt, or failure-dependent job escalation. Do not rerun this first drill.
+
+**Focused failure-to-escalation drill release:** [PR #89](https://github.com/HKcode22/ReplitTranvr/pull/89), exact passing review head `a3dab528b8aa10f4a2533a30b34e1f3542d75650`, **4/4 GitHub no-provider CI success**, squash merged into **main `9d1e1c18bc0878385dd45861c5194ffd93e1ed44`**. Main ref independently verified exactly; `.github/workflows/phase3-gate05-stop-failure-escalation-drill.yml` fetched at that exact SHA. Two files only: manual-only synthetic STOP-failure workflow and source-contract test. No execution on merge, no environment secrets, no production DB/STOP worker/FIDS GETs. CI initially caught an overbroad test that rejected the phrase "secrets." appearing in a documentation comment; corrected to assert actual GitHub `${{ secrets.* }}` expressions absent, preserving no-secret policy.
+
+**New drill behavior (not yet executed):** exact `workflow_dispatch` on released main, confirmation `GATE05_SYNTHETIC_FAILURE_TEST_ONLY`. One isolated upstream test job deliberately exits 42 (overall workflow **FAILURE expected**); downstream distinct job with `always() && needs.simulated-stop-failure.result == 'failure'` attempts to create and reread a clearly named `[GATE05 SYNTHETIC STOP FAILURE — TEST ONLY] Run <runId>` issue assigned to `HKcode22`. For acceptance, upstream job must be FAILURE, downstream alert job SUCCESS, issue title/assignee/state verified, and owner personally comments `GATE05_SYNTHETIC_FAILURE_ALERT_ACK`. No pilot scope, DB URL, provider key or real signed AUTH available.
+
+**Owner manual next action (one time, NO PROVIDER, no rerun):**
+```bash
+cd ~/workspace || exit 1
+gh workflow view phase3-gate05-stop-failure-escalation-drill.yml --repo HKcode22/ReplitTranvr || exit 1
+gh workflow run phase3-gate05-stop-failure-escalation-drill.yml --repo HKcode22/ReplitTranvr --ref main -f confirmation=GATE05_SYNTHETIC_FAILURE_TEST_ONLY
+gh run list --repo HKcode22/ReplitTranvr --workflow phase3-gate05-stop-failure-escalation-drill.yml --limit 3
+```
+Afterwards check the exact run's TWO jobs and any issue. Do not misclassify intentional overall failure as operational CI failure. If downstream fails/issue absent, classify alert-path HOLD and diagnose non-billably. Even if test is fully accepted, real production STOP independent process liveness/terminal SQL readback and live restricted commissioner/activation login rehearsal remain P0, so **paid Gate0.5 remains NO-GO**.
+
+---
+
 ## October 21, 2026 UTC — OWNER ACK verified on harmless GitHub issue #88
 
 GitHub Actions run [39553484191](https://github.com/HKcode22/ReplitTranvr/actions/runs/39553484191) completed SUCCESS on released main `64acd820cfa04d0333c32e3d7448291026a527d6`, opt-in notification drill. Independently fetched [issue #88](https://github.com/HKcode22/ReplitTranvr/issues/88), OPEN and assigned `HKcode22`; independently fetched comments yielded **exact comment `GATE05_TEST_ALERT_ACK_RECEIVED` authored by `HKcode22`**, URL [issuecomment-6309385046](https://github.com/HKcode22/ReplitTranvr/issues/88#issuecomment-6309385046). **No rerun necessary.** Thus test-only GitHub issue creation+assignment+human acknowledgment VERIFIED.
