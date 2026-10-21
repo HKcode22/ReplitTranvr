@@ -82,7 +82,8 @@ describe("Gate05 signed expiration -> independent STOP, mock-only offline rehear
         await sleep(ms);
       }
     });
-    expect(sql).toHaveBeenCalledExactlyOnceWith(
+    expect(sql).toHaveBeenCalledTimes(1);
+    expect(sql).toHaveBeenCalledWith(
       expect.stringContaining("clean.stop_gate05_fids_pilot_v39"),
       [fixture.scopeId,"EXPIRED"]
     );
