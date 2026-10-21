@@ -1,7 +1,7 @@
 /** Source-only contract. Absolutely no database or provider call in tests. */
 import {describe,it,expect} from "vitest";
 import {
-  inspectGate05DispatcherLaunchV39
+  inspectGate05DispatcherLaunchV39,assertGate05SafetyJobLiveV39
 } from "../scripts/v39_gate05_scoped_fids_feasibility_operator_v39";
 const head="a".repeat(40);
 const input={head,confirm:"OWNER_APPROVED_WSSS12_PAID_GET"};
@@ -20,6 +20,33 @@ describe("Gate05 paid dispatcher startup isolation (pure no-IO)",()=>{
       maximumApiUnits:12,activationAllowed:false,
       dedicatedDispatchRequired:true});
     expect(p).not.toHaveProperty("password");
+  });
+  it("requires a real in-progress main safety STOP workflow step",()=>{
+    const active={
+      id:39535000000,status:"in_progress",event:"workflow_dispatch",
+      head_branch:"main",head_sha:head,run_attempt:1,
+      path:".github/workflows/phase3-gate05-independent-stop.yml@refs/heads/main"
+    };
+    const jobs={jobs:[{name:"safety-only-stop",status:"in_progress",
+      steps:[{name:"Run independent safety-only signed expiry STOP",
+        status:"in_progress"}]}]};
+    expect(assertGate05SafetyJobLiveV39(active,jobs,head))
+      .toMatchObject({headSha:head,safetyStepActive:true});
+    for(const bad of [
+      {...active,status:"completed"},
+      {...active,event:"pull_request"},
+      {...active,head_sha:"b".repeat(40)},
+      {...active,head_branch:"feature"},
+      {...active,path:"phase3-gate3-independent-safety.yml"},
+      {...active,run_attempt:2}
+    ])expect(()=>assertGate05SafetyJobLiveV39(bad,jobs,head))
+      .toThrow("GATE05_DISPATCH_HOLD_INDEPENDENT_SAFETY_NOT_LIVE");
+    expect(()=>assertGate05SafetyJobLiveV39(active,{jobs:[]},head))
+      .toThrow("GATE05_DISPATCH_HOLD_INDEPENDENT_SAFETY_NOT_LIVE");
+    expect(()=>assertGate05SafetyJobLiveV39(active,{
+      jobs:[{name:"safety-only-stop",status:"completed",
+        steps:jobs.jobs[0].steps}]
+    },head)).toThrow("GATE05_DISPATCH_HOLD_INDEPENDENT_SAFETY_NOT_LIVE");
   });
   it("refuses missing provider credentials, general DB, mismatch host",()=>{
     const good=secrets();
