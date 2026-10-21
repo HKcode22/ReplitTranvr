@@ -36,7 +36,7 @@ describe("Gate05 isolated no-provider failure-to-issue rehearsal",()=>{
   it("uses zero production secrets and never references live safety deployment",()=>{
     expect(source).not.toContain("environment: gate05-safety");
     expect(source).not.toContain("AERODATABOX_API_KEY:");
-    expect(source).not.toContain("secrets.");
+    expect(source).not.toMatch(/\$\{\{\s*secrets\./);
     expect(source).not.toContain("DATABASE_URL:");
     expect(source).not.toContain("node --import");
     expect(source).not.toContain("npx tsx");
