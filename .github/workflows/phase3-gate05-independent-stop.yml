@@ -1,0 +1,107 @@
+name: Phase3 Gate0.5 WSSS Independent STOP (Manual, Safety-Only)
+# DRAFT / NOT RELEASED: no push, PR, cron or implicit paid deployment.
+# Even when released to main, requires exact HEAD, owner-signed authority,
+# protected environment secrets and a separate live operator GO.
+# It can only execute terminal STOP; NEVER provider FIDS or activation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Exact WATCH_G05_SAFETY_ONLY_NO_PROVIDER'
+        required: true
+        type: string
+      expected_head:
+        description: 'Reviewed released main SHA matching signed AUTH source'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase3-gate05-independent-stop-one-pilot
+  cancel-in-progress: false
+
+jobs:
+  safety-only-stop:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirm == 'WATCH_G05_SAFETY_ONLY_NO_PROVIDER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    # Dedicated Gate0.5 safety-only environment. Required reviewer and
+    # main-only deployment branch rule are provisioned separately by owner.
+    # Never borrow broader phase2g-paid secrets or provider credentials.
+    environment: gate05-safety
+    env:
+      EXPECTED: ${{ inputs.expected_head }}
+    steps:
+      - name: Reject unreviewed source before secrets are used
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          [[ "$EXPECTED" =~ ^[0-9a-f]{40}$ ]] || exit 2
+          test "$EXPECTED" = "$GITHUB_SHA" || exit 2
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_head }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install reviewed lockfile dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Materialize independently reviewed exact AUTH (no keys logged)
+        id: secrets
+        shell: bash
+        env:
+          GATE05_SIGNED_BUNDLE_B64: ${{ secrets.GATE05_SIGNED_BUNDLE_B64 }}
+          GATE05_INDEPENDENT_PINS_B64: ${{ secrets.GATE05_INDEPENDENT_PINS_B64 }}
+          GATE05_SAFETY_DATABASE_URL: ${{ secrets.GATE05_SAFETY_DATABASE_URL }}
+          GATE05_EXPECTED_DB_HOST: ${{ secrets.GATE05_EXPECTED_DB_HOST }}
+        run: |
+          set -Eeuo pipefail
+          test -n "$GATE05_SAFETY_DATABASE_URL"
+          test -n "$GATE05_EXPECTED_DB_HOST"
+          test -n "$GATE05_SIGNED_BUNDLE_B64"
+          test -n "$GATE05_INDEPENDENT_PINS_B64"
+          umask 077
+          printf '%s' "$GATE05_SIGNED_BUNDLE_B64" | base64 --decode > "$RUNNER_TEMP/gate05_signed_bundle.json"
+          printf '%s' "$GATE05_INDEPENDENT_PINS_B64" | base64 --decode > "$RUNNER_TEMP/gate05_independent_pins.json"
+          chmod 0600 "$RUNNER_TEMP/gate05_signed_bundle.json" "$RUNNER_TEMP/gate05_independent_pins.json"
+          echo 'inputs_materialized=true' >> "$GITHUB_OUTPUT"
+
+      - name: Run independent safety-only signed expiry STOP
+        if: steps.secrets.outputs.inputs_materialized == 'true'
+        shell: bash
+        env:
+          GATE05_SAFETY_DATABASE_URL: ${{ secrets.GATE05_SAFETY_DATABASE_URL }}
+          GATE05_EXPECTED_DB_HOST: ${{ secrets.GATE05_EXPECTED_DB_HOST }}
+        run: |
+          set -Eeuo pipefail
+          # NO AERODATABOX_API_KEY / general DATABASE_URL is provided here.
+          # A GitHub job being queued is NOT a safety ARMED receipt.
+          npx tsx scripts/v39_gate05_independent_stop_process_v39.ts \
+            --signed-bundle "$RUNNER_TEMP/gate05_signed_bundle.json" \
+            --pins "$RUNNER_TEMP/gate05_independent_pins.json" \
+            --head "$EXPECTED" \
+            --confirm WATCH_G05_SAFETY_ONLY_NO_PROVIDER
+
+      - name: Destroy worker-local AUTH material
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/gate05_signed_bundle.json" "$RUNNER_TEMP/gate05_independent_pins.json"
+          {
+            echo '### Gate0.5 independent STOP candidate'
+            echo '- No provider API key or FIDS dispatch is passed to this job.'
+            echo '- This job can only call the narrowly granted STOP SQL function.'
+            echo '- The live scope must not be activated without independent ARMED and alert-delivery proof.'
+            echo '- A green GitHub job does not replace actual receipt and credit reconciliation.'
+            echo '- On job failure, STOP is UNCONFIRMED and owner intervention is necessary.'
+          } >> "$GITHUB_STEP_SUMMARY"
