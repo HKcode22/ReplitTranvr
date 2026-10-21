@@ -1,3 +1,15 @@
+## October 20, 2026 — scoped commissioner test correction from exact CI error (DRAFT / NO PAID)
+
+**Observed CI incident (source/test ONLY):** On test commit `7829cca3966469e72eb52166ea8e5c45e13cb313`, workflow `V3.9 Offline Safety` run **39525193315** failed its offline test stage: one failure in `tests/phase3_gate05_function_only_stop_disposable_pg_v39.test.ts`, at `expectNoDirectTables`, SQLSTATE `42501 permission denied for schema clean`. This was **not a production outage or evidence commissioner obtained excess privileges**. In V0067, the inert commissioner lacks `USAGE` on `clean`, so calling `has_table_privilege(current_user,'clean.object',...) ` using a schema-qualified text name first triggers schema-name lookup denial. The test was incorrectly interpreting the catalog lookup failure as an ACL failure; the production security isolation remains unaltered.
+
+**Narrow fix:** `4e958255e25fa7af15bb3412ca0cecdb33c35ef1` changes ONLY the disposable CI test helper to resolve `pg_class.oid` through `pg_catalog` and call `has_table_privilege(current_user,c.oid,...) `, checking one matched row and false direct table rights. It **does not** grant schema `USAGE`, relax expected denial, change V0066/V0067, reissue credentials, install migration, or touch production. This checks the stronger fact that the role has no table privileges even when it cannot resolve names through the restricted schema.
+
+**CI integrity:** Do not claim latest 4/4 while `4e958255...` or checkpoint-following HEAD checks are in progress. Examine exact replacement job and any subsequent failure logs; if still red, preserve NO-GO and correct only with evidence.
+
+**Live authorization unchanged:** No paid FIDS calls, actual PostgreSQL access/write, credentials, deploy/publish, commissioner setup, scope activation or paid GO. The single canonical remaining-work document is `data-collection/phase3/GATE05_ONE_USE_COMMISSIONER_INDEPENDENT_STOP_RELEASE_DESIGN.md`. Oct19 proposed windows/hashes canceled.
+
+---
+
 ## October 20, 2026 — consolidated commissioner + independent STOP release design; inert commissioner negative test (DRAFT / NO PAID)
 
 **Verified input baseline:** PR #80 `ceac25255e8ebafb39eb96ad68bb25e23e50b86b` is open/draft/unmerged and **4/4 SUCCESS** on exact GitHub Actions checks. This does not imply released/published source equivalence.
