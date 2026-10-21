@@ -1,3 +1,23 @@
+## October 20, 2026 — disposable PostgreSQL function-only STOP proof (draft / no paid)
+
+**Before this change:** Exact PR #80 commit `2f328d2950b2a0bf9810fc570f218ae4596450cd` passed 4/4 non-provider GitHub Actions workflows. PR is still open/draft/unmerged; there is no inference that published Replit source matches the PR.
+
+**New source/test:** `c13075bce5bfc82d21dfe87c252a5ee91c31c9e8` adds `tests/phase3_gate05_function_only_stop_disposable_pg_v39.test.ts`, an **actual PostgreSQL 16 authorization test** with the exact established CI-only guard (`GITHUB_ACTIONS=true`, `NODE_ENV=test`, literal localhost `v39_ci` URL, provider API key absent). It applies staged V0066/V0067/V0068 only in one `BEGIN` transaction and **always ROLLBACKs**. Within that disposable transaction, an administrator seeds an ACTIVE fixture (this is **not** the missing production commissioner), then `SET LOCAL ROLE` demonstrates effective database group privileges:
+
+- Dispatch: reserve function permitted; STOP function denied (`42501`); direct pilot-table SELECT/INSERT/UPDATE/DELETE denied.
+- Safety: STOP function permitted; reserve function and direct table updates denied (`42501`); direct pilot-table access denied.
+- STOP with `SAFETY_ABORT` returns a one-attempt/two-unit receipt; a repeated STOP returns the same receipt; a subsequent dispatch attempt fails against the terminal STOPPED scope, without another attempt row. Final state and accounting are inspected inside the disposable transaction.
+
+**Evidence limitation:** A PostgreSQL `SET LOCAL ROLE` simulation proves function-level ACL behavior, **not** independent short-lived LOGIN/password authentication, separate physical deployment/process uptime, committed production STOP durability or real outage recovery. The STOP row is rolled back at test end. Existing October 19 production login tests were historical and the old passwords expired October 20 at 02:00 PDT. Existing production V0066/V0067 must **not** be reapplied. V0068 remains staged/not approved.
+
+**Exact-source CI:** Workflows for `c13075bc...` were running on initial review; three focused non-provider workflows later completed SUCCESS, V3.9 Offline Safety TypeScript and offline V3.9 tests SUCCESS, full-suite/aggregate initially pending. Check the final 4/4 conclusion on the newest checkpoint HEAD; don't attribute a previous commit's success to this new one.
+
+**Next safety acceptance gates (no shortcuts):** independently rooted owner-signed exact AUTH and separate human paid approval; source/runtime pin; owner-specific current Tier2 FIDS tariff, quota cycle and raw-data/derived-data rights; a separately authorized V0068 production change; least-privilege one-use commissioner and activation; independently authenticating restricted STOP and dispatcher LOGINs; genuinely detached STOP/expiry process with bounded DB query/connection timeout, heartbeat/alerts/restart handling, independently confirmed STOP after dispatcher failure, and in-flight reservation reconciliation. Only afterward propose one **fresh** WSSS observation/execution window (old October 19 proposals canceled) and obtain explicit approval of exact scope and maximum **12 API units**. No full scientific Gate0.5 PASS can be inferred from two paid snapshots.
+
+**Safe next operator step:** No Replit shell command or paid scheduling is necessary now. Continue exact-head CI review and disposable safety-process tests; request new separate production-change authority before accessing production. **NO-GO for live operation.**
+
+---
+
 ## October 20, 2026 — bounded, independently initiated STOP recovery (DRAFT / ZERO PAID)
 
 **Verified before this work:** PR #80 head `0b8c326d9d3e7fff679ce73d3a6fa08f9b931880` had 4/4 non-provider GitHub Actions **SUCCESS**. Draft PR is not merged; released `main` and Replit published runtime were not changed.
