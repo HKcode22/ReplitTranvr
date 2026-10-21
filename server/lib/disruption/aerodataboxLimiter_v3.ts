@@ -561,10 +561,16 @@ export const fidsRestLedger: FidsAttemptBudgetOwner = {
 export interface FidsFetchOptions {
   direction?: "Departure" | "Arrival" | "Both";
   withLeg?: boolean;
+  /** Optional, explicitly requested. Default false, no silent position REST spend. */
+  withLocation?: boolean;
+  /** A null/missing departure list cannot stand for a measured zero-count. */
+  strictDepartureList?: boolean;
   category?: "fids_base" | "fids_split" | "validation" | "outcome";
   budgetOwner?: FidsAttemptBudgetOwner;
   fetchImpl?: typeof fetch;
   sleepImpl?: (ms: number) => Promise<void>;
+  /** Optional caller-owned cancellation; existing callers unchanged. */
+  signal?: AbortSignal;
 }
 
 export async function fetchFidsAirport(
@@ -575,6 +581,8 @@ export async function fetchFidsAirport(
 ): Promise<FidsAirportResult | null> {
   const direction = opts?.direction ?? "Both";
   const withLeg = opts?.withLeg ?? true;
+  const withLocation = opts?.withLocation ?? false;
+  if (typeof withLocation !== "boolean") throw new Error("FIDS_WITH_LOCATION_BOOLEAN_REQUIRED");
   const owner = opts?.budgetOwner ?? fidsRestLedger;
   const fetchImpl = opts?.fetchImpl ?? fetch;
   const sleepImpl = opts?.sleepImpl ?? sleep;
@@ -585,16 +593,24 @@ export async function fetchFidsAirport(
       withCodeshared: "true",
       withCargo: "false",
       withPrivate: "false",
-      withLocation: "false",
+      withLocation: withLocation ? "true" : "false",
       withLeg: withLeg ? "true" : "false",
     });
     const url = `${BASE_URL}/flights/airports/icao/${encodeURIComponent(icao)}/${encodeURIComponent(fromLocal)}/${encodeURIComponent(toLocal)}?${params}`;
     for (let attempt = 1; attempt <= 3; attempt++) {
+      if (opts?.signal?.aborted) return null;
       const category: FidsRestCategory = attempt === 1 ? (opts?.category ?? "fids_base") : "fids_retry";
       await owner.reserve(category, FIDS_REST_UNITS_PER_ATTEMPT, attempt);
+      // A stop may arrive after this durable reservation but before fetch.
+      // The reservation must NEVER be refunded (ambiguous provider dispatch).
+      if (opts?.signal?.aborted) return null;
       let resp: Response;
       try {
-        resp = await fetchImpl(url, { headers: headers(), signal: AbortSignal.timeout(15_000) });
+        const deadline = AbortSignal.timeout(15_000);
+        resp = await fetchImpl(url, {
+          headers: headers(),
+          signal: opts?.signal ? AbortSignal.any([opts.signal, deadline]) : deadline,
+        });
       } catch (error) {
         if (attempt === 3) throw error;
         await sleepImpl(RATE_LIMIT_BACKOFF_MS * attempt);
@@ -602,7 +618,9 @@ export async function fetchFidsAirport(
       }
       if (resp.ok) {
         const raw: any = await readJsonOrNull(resp);
-        if (!raw || typeof raw !== "object") throw new Error("FIDS response schema invalid");
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("FIDS response schema invalid");
+        if (opts?.strictDepartureList && !Array.isArray(raw.departures))
+          throw new Error("FIDS_DEPARTURES_ARRAY_UNAVAILABLE");
         return {
           departures: Array.isArray(raw.departures) ? raw.departures : [],
           arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
@@ -610,8 +628,12 @@ export async function fetchFidsAirport(
       }
       const retryable = resp.status === 429 || [500, 502, 503, 504].includes(resp.status);
       if (!retryable || attempt === 3) return null;
-      const retryAfter = Number(resp.headers.get("retry-after"));
-      await sleepImpl(Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter * 1000 : RATE_LIMIT_BACKOFF_MS * attempt);
+      const rawRetryAfter = resp.headers.get("retry-after");
+      // Number(null)=0; missing Retry-After must NOT trigger immediate retry.
+      const retryAfter = rawRetryAfter===null ? NaN : Number(rawRetryAfter);
+      const delay = Number.isFinite(retryAfter) && retryAfter >= 0 && retryAfter<=60
+        ? retryAfter*1000 : RATE_LIMIT_BACKOFF_MS*attempt;
+      await sleepImpl(delay);
     }
     return null;
   } catch {
