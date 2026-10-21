@@ -1,3 +1,13 @@
+## October 21, 2026 UTC — OWNER ACK verified on harmless GitHub issue #88
+
+GitHub Actions run [39553484191](https://github.com/HKcode22/ReplitTranvr/actions/runs/39553484191) completed SUCCESS on released main `64acd820cfa04d0333c32e3d7448291026a527d6`, opt-in notification drill. Independently fetched [issue #88](https://github.com/HKcode22/ReplitTranvr/issues/88), OPEN and assigned `HKcode22`; independently fetched comments yielded **exact comment `GATE05_TEST_ALERT_ACK_RECEIVED` authored by `HKcode22`**, URL [issuecomment-6309385046](https://github.com/HKcode22/ReplitTranvr/issues/88#issuecomment-6309385046). **No rerun necessary.** Thus test-only GitHub issue creation+assignment+human acknowledgment VERIFIED.
+
+**Important limits:** Acknowledging a GitHub test issue demonstrates that the owner saw this issue (perhaps through manually navigating); it does **not** prove GitHub push/email notification, real STOP-failure escalation `needs` dependency, physical SQL STOP receipt, or response time. No provider FIDS HTTP, scope activation, DB mutation or production secrets were involved in this test.
+
+**Next P0 rehearsal:** separate opt-in workflow with synthetic failing job and independent `needs` notification job; must label incident unmistakably TEST ONLY and avoid real Gate05 STOP secrets, scope, live worker or API key. Verify generated issue, owner assignment and ACK. Then return to real restricted commissioner/activation LOGIN and one-session secret-custody acceptance. Paid gate remains NO-GO.
+
+---
+
 ## October 20, 2026 23:07 PDT — GitHub TEST notification run succeeded; human ACK pending
 
 **Owner executed exactly one no-paid notification workflow:** manual `gh workflow run phase3-gate05-alert-ack-drill.yml --repo HKcode22/ReplitTranvr --ref main -f confirmation=GATE05_TEST_NOTIFICATION_ONLY`. GitHub run **[39553484191](https://github.com/HKcode22/ReplitTranvr/actions/runs/39553484191)** independently fetched: `status=completed`, `conclusion=success`, `event=workflow_dispatch`, `head_branch=main`, `head_sha=64acd820cfa04d0333c32e3d7448291026a527d6`, one job `Create and read back owner-assigned TEST issue` succeeded.
