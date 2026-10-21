@@ -49,8 +49,8 @@ export function planGate05ThreeLoginIssueV39(
   if(!Number.isSafeInteger(now)||!Number.isSafeInteger(start)||
      new Date(start).toISOString()!==startUtc||
      start%(15*60000)!==0)hold("START_FORMAT");
-  if(start-now<2*3600000||start-now>5*3600000)
-    hold("MUST_ISSUE_2_TO_5_HOURS_BEFORE_START");
+  if(start-now<90*60000||start-now>5*3600000)
+    hold("MUST_ISSUE_90_MIN_TO_5_HOURS_BEFORE_START");
   const expiresUtc=new Date(now+6*3600000).toISOString();
   if(Date.parse(expiresUtc)<start+3600000)
     hold("EXPIRY_NOT_COVERING_TERMINAL_STOP");
