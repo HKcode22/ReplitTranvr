@@ -22,7 +22,7 @@ describe("Gate05 safety-only one-session rotation timing (NO I/O)",()=>{
   });
   it("rejects before the 90min lead and after the 5h credential window",()=>{
     for(const date of [
-      "2026-10-22T01:45:00.000Z","2026-10-22T05:15:00.000Z"
+      "2026-10-22T01:15:00.000Z","2026-10-22T05:15:00.000Z"
     ])expect(()=>planGate05SafetyCredentialRotationV39(
       now,date,HEAD,CONFIRM
     )).toThrow("GATE05_SAFETY_PROVISION_HOLD_ROTATION_TIME_WINDOW_90_MIN_TO_5_HOURS");
