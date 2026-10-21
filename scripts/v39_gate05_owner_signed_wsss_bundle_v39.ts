@@ -49,9 +49,9 @@ export function planGate05WsssSignedWindowV39(
   if(!Number.isSafeInteger(start)||
      new Date(start).toISOString()!==requestedStartUtc||
      start%quarter!==0||
-     start<now+2*3600000||
+     start<now+90*60000||
      start>now+20*3600000)
-    hold("START_LEAD_2H_TO_20H");
+    hold("START_LEAD_90M_TO_20H");
   const end=start+40*60000;
   const sg=(ms:number)=>{
     const pieces=new Intl.DateTimeFormat("en-CA",{

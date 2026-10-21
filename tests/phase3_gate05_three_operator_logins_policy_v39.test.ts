@@ -20,6 +20,15 @@ describe("Gate05 three-login one-session issuance safety policy",()=>{
     expect(p.automaticActivation).toBe(false);
     expect(Date.parse(p.expiresUtc)).toBe(clock+6*3600000);
   });
+  it("accepts exact 90 minutes, rejects 1ms less",()=>{
+    const instant=Date.parse(start)-90*60000;
+    expect(planGate05ThreeLoginIssueV39(
+      instant,start,head,confirm
+    ).startUtc).toBe(start);
+    expect(()=>planGate05ThreeLoginIssueV39(
+      instant+1,start,head,confirm
+    )).toThrow("GATE05_OPERATOR_ISSUE_HOLD_MUST_ISSUE_90_MIN_TO_5_HOURS_BEFORE_START");
+  });
   it("rejects unreviewed time, wrong SHA, early/late window and confirmation",()=>{
     for(const [now,utc,h,c] of [
       [clock,start,"bad",confirm],

@@ -40,10 +40,10 @@ export function planGate05SafetyCredentialRotationV39(
   const start=Date.parse(startUtc);
   if(!Number.isFinite(start)||new Date(start).toISOString()!==startUtc||
      start%(15*60000)!==0)fail("START_FORMAT");
-  // Issue when the pilot is a few hours away, not a full day ahead:
+  // Owner-approved 90-minute lead (2026-10-21), not a full day ahead:
   // 6-hour-login VALID UNTIL must cover 40-minute pilot plus STOP.
-  if(!Number.isSafeInteger(now)||start-now<2*3600000||
-     start-now>5*3600000)fail("ROTATION_TIME_WINDOW_2_TO_5_HOURS");
+  if(!Number.isSafeInteger(now)||start-now<90*60000||
+     start-now>5*3600000)fail("ROTATION_TIME_WINDOW_90_MIN_TO_5_HOURS");
   const expiresUtc=new Date(now+6*3600000).toISOString();
   if(Date.parse(expiresUtc)<start+3600000)
     fail("LOGIN_EXPIRES_BEFORE_STOP");
