@@ -84,13 +84,13 @@ describe("Gate05 pilot-scoped FIDS adapter refuses any unbound request",()=>{
   it("never dispatches paid HTTP if safety is lost after a reserved unit",async()=>{
     let checks=0;
     const beforeAttempt=vi.fn(async()=>{
-      if(++checks===2)throw Error("SAFETY_DIED_AFTER_RESERVE");
+      if(++checks>=2)throw Error("SAFETY_DIED_AFTER_RESERVE");
     });
     const db={query:vi.fn(async()=>({rowCount:1,rows:[{reserved:true}]}))};
     const http=vi.fn();
     const res=await fetchGate05ScopedFidsV39({
       db:db as any,owner:owner(),query:noLocation,
-      beforeAttempt,fetchImpl:http as any
+      beforeAttempt,fetchImpl:http as any,sleepImpl:async()=>{}
     });
     expect(res).toBeNull();
     expect(db.query).toHaveBeenCalledTimes(1);
