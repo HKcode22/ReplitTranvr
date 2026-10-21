@@ -121,7 +121,8 @@ export async function rehearseGate05BoundedExpiryStopRecoveryV39(args:{
       if(n<maxStopAttempts){
         // A retry delay is bounded. Real deployment must impose SQL timeout
         // and an independently supervised alert/restart policy.
-        await sleep(5000);
+        try{await sleep(5000);}
+        catch(sleepError){lastError=sleepError;break;}
       }
     }
   }
