@@ -1,3 +1,22 @@
+## 2026-10-20 afternoon PDT — signed expiry supervisor input binding (DRAFT / NO PAID)
+
+**Baseline independently rechecked:** PR #80 remains OPEN/DRAFT and unmerged; exact previous HEAD `e2f862e2de3ad5387de080eef58e87fbdcfc8279` finished **4/4 SUCCESS**: YSSY P25 Focused Release, Real PG Receiver Faults, Public Receiver Identity, V3.9 Offline Safety. This proves non-provider source/CI only, **NOT** production deployment, renewed credentials, STOP liveness, or human spend permission. Main was `acd084dc22e00dc94b4aa3cb4bf2c65558991e4e` at PR review.
+
+**New GitHub-draft-only work:**
+- `9954c760d998ccb59375d51f6374b37726bf5dba`: `gate05SignedExpiryGuardPlan_v39.ts` requires exact reviewed AUTH bytes, independent artifact SHA + signer SPKI pin and mathematically valid domain-separated Ed25519 signature before deriving the safety guard's `scopeId` and `expiresAtUtc`. It deliberately does NOT accept independently typed replacement scope/deadline fields.
+- `51ca69f9894da744e06d3d991a21006bd764d4dc`: added draft-only tests for exact signed binding; rejecting changed expiry bytes, recomputed digest with stale signature, forged signature, substituted signer and untrusted pin; and refusing caller-supplied expiry/scope override. All keys are ephemeral test keys, **NOT owner approval**.
+- **New HEAD CI still needs a fresh exact-commit check.** Prior 4/4 green belongs only to `e2f862e2...`; never reuse it as evidence of these commits.
+
+**Trust and STOP separation:** An Ed25519 signature verified against an *unverified/self-supplied* key fingerprint proves cryptography, **not who signed it or whether the human owner approved payment**. The new function is solely an offline plan. The existing `runGate05ExpiryGuardV39` is an in-process helper, not a running independent watchdog; production SQL's immutable expiry reservation check is a separate hard stop on *new* admissions, but does not terminate already dispatched GETs or produce continuous STOP receipts. An independently supervised process, correctly authenticated restricted safety role, failure/restart tests, independently verified approved signer trust root and operator-approved commissioning are still missing.
+
+**Production and account boundaries unchanged:** V0066/V0067 were previously reported installed and dispatch/STOP independently tested on Oct19; **do not reapply**. V0068 is staged only. Former restricted LOGIN passwords had an Oct20 02:00 PDT expiry and are not valid authority for fresh sessions; PostgreSQL expiry alone does not terminate existing sessions. Historical 0/0/0 pilot counts and 60,000 API-unit quota are *stale*, not newly observed here. The owner-specific RapidAPI plan/Tier2 unit charge, effective retention/storage rights, live provider cycle and source deployed on Replit are unverified. AeroDataBox's Sept7 terms notice describes seven-day default raw caching with plan/grace exceptions, but must never be substituted for the account's actual entitlement.
+
+**Readiness sequence (all controlled and separable):** (1) verify current exact-head CI and review code; (2) collect independently trusted signer/consent and owner-specific plan/rights evidence read-only; (3) separately request production change approval for V0068, restricted one-use commissioner and fresh short-lived independent STOP/dispatch credentials; (4) test an actually independently running STOP process, restarts, expiry, cross-role privileges, bound AUTH and source-to-runtime identity; (5) only then construct fresh future WSSS observation/execution windows, exact hashes and a separate human paid GO not exceeding 12 API units. A two-FIDS-query experiment is **source feasibility**, not a scientific Gate0.5 PASS.
+
+**NO GO.** October 19 22:30/23:00/23:30 PDT proposals and any authorization/hash material are canceled and must not be reused. No paid provider requests, production PostgreSQL reads/writes, new credentials, migrations, Replit publishing or pilot activation in this work. No fresh paid window proposed while mandatory controls remain unsatisfied.
+
+---
+
 ## October 20, 2026 PDT — expiry guard clock/calendar regression hardening (DRAFT, NO PAID)
 
 **Exact working branch:** `phase3/gate05-evidence-first-20261018`, draft PR #80, unchanged default `main` at `acd084dc22e00dc94b4aa3cb4bf2c65558991e4e` at initial read.
