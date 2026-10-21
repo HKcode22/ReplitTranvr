@@ -90,9 +90,14 @@ function extractTime(start:string,end:string,now:number){
  */
 export function assertGate05SafetyJobLiveV39(
   run:Record<string,any>,jobs:Record<string,any>,
-  expectedHead:string
+  expectedHead:string,scopeId:string,authorizationSha256:string
 ){
-  const validRun=run?.status==="in_progress" &&
+  if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(scopeId)||
+     !/^[0-9a-f]{64}$/.test(authorizationSha256))
+    refuse("SAFETY_SCOPE_INPUT");
+  const expectedTitle=`Gate05 STOP ${scopeId} ${authorizationSha256}`;
+  const validRun=run?.display_title===expectedTitle &&
+    run?.status==="in_progress" &&
     run?.event==="workflow_dispatch"&&run?.head_branch==="main" &&
     run?.head_sha===expectedHead && run?.run_attempt===1 &&
     typeof run?.path==="string"&&
@@ -107,7 +112,8 @@ export function assertGate05SafetyJobLiveV39(
     refuse("INDEPENDENT_SAFETY_NOT_LIVE");
   return {observedRunId:run.id,headSha:expectedHead,safetyStepActive:true};
 }
-function verifyLiveSafety(inputRun:string,sha:string){
+function verifyLiveSafety(inputRun:string,sha:string,
+  scopeId:string,authorizationSha256:string){
   if(!/^[1-9][0-9]{7,13}$/.test(inputRun))
     refuse("SAFETY_RUN_ID");
   try{
@@ -121,7 +127,7 @@ function verifyLiveSafety(inputRun:string,sha:string){
         inputRun+"/jobs?per_page=100"
     ],{encoding:"utf8",timeout:10000,maxBuffer:1024*1024,
       stdio:["ignore","pipe","pipe"]}));
-    assertGate05SafetyJobLiveV39(run,jobs,sha);
+    assertGate05SafetyJobLiveV39(run,jobs,sha,scopeId,authorizationSha256);
   }catch{refuse("INDEPENDENT_SAFETY_CHECK");}
 }
 export async function runGate05SignedFidsOperatorV39(input:ReturnType<typeof cli>,
@@ -156,7 +162,8 @@ export async function runGate05SignedFidsOperatorV39(input:ReturnType<typeof cli
   const guardPaidAttempt=()=>{
     try{
       extractTime(a.startsAtUtc,a.expiresAtUtc,Date.now());
-      verifyLiveSafety(input.safetyRun,checked);
+      verifyLiveSafety(input.safetyRun,checked,
+        reviewed.scopeId,reviewed.reviewedAuthorizationSha256);
     }catch(e){safetyCheckFailed=true;throw e;}
   };
   guardPaidAttempt();
