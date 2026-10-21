@@ -95,6 +95,21 @@ onlyDisposable("Gate05 real PG16 separate function-only dispatch/safety ACL, no 
         "SET state='ACTIVE' WHERE scope_id=$1",[scopeId]
       );
 
+      // The existing commission group must remain INERT until a separately
+      // approved function-only one-use commissioner has been implemented.
+      // Never give the commissioning account generic INSERT/UPDATE rights.
+      await db.query("SET LOCAL ROLE gate05_fids_commission_v39");
+      expect((await db.query("SELECT current_user AS role")).rows[0].role)
+        .toBe("gate05_fids_commission_v39");
+      await expectNoDirectTables();
+      await expectDenied(reserveSql,attempt(offHash,1,"fids_base"));
+      await expectDenied(stopSql,[scopeId,"SAFETY_ABORT"]);
+      await expectDenied(
+        "UPDATE clean.gate05_fids_pilot_scope_v39 SET state='STOPPED' "+
+        "WHERE scope_id=$1",[scopeId]
+      );
+      await db.query("RESET ROLE");
+
       await db.query("SET LOCAL ROLE gate05_fids_dispatch_v39");
       expect((await db.query("SELECT current_user AS role")).rows[0].role)
         .toBe("gate05_fids_dispatch_v39");
