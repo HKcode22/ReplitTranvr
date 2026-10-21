@@ -201,11 +201,14 @@ ciOnly("Gate05 full synthetic no-provider one-use lifecycle PG16",()=>{
       // 12 reserved units is NOT "12 billed units"; the network was off.
     } finally{
       await db.query("ROLLBACK").catch(()=>{});
-      if((await db.query(
-        "SELECT to_regclass('clean.gate05_fids_pilot_scope_v39') AS object"
-      ).catch(()=>({rows:[]}))).rows[0]?.object!==null)
-        throw Error("GATE05_CI_SCHEMA_LEAK_AFTER_ROLLBACK");
-      await db.end().catch(()=>{});
+      try {
+        const check=await db.query(
+          "SELECT to_regclass('clean.gate05_fids_pilot_scope_v39') AS object"
+        );
+        expect(check.rows[0]?.object).toBeNull();
+      }finally{
+        await db.end().catch(()=>{});
+      }
     }
   },55000);
 });
