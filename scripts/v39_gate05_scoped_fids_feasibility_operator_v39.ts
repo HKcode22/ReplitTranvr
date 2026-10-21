@@ -168,7 +168,7 @@ export async function runGate05SignedFidsOperatorV39(input:ReturnType<typeof cli
       // A null API or schema result is UNKNOWN, never zero flights.
       const departures=res===null?null:res.departures.length;
       output.push({withLocation,
-        response:"RECEIVED"=== (res===null?"MISSING":"RECEIVED")?"RECEIVED":"MISSING",
+        response:res===null?"MISSING":"RECEIVED",
         departures,
         departureFieldNames:res===null?[]:[
           ...new Set(res.departures.flatMap((d:unknown)=>
