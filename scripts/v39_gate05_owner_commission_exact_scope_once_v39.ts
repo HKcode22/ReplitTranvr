@@ -148,6 +148,36 @@ async function run(){
   let secrets=0,permitCommitted=false,prepared=false;
   let admin:pg.Client|null=null,commission:pg.Client|null=null;
   try{
+    // Before changing ANY encrypted safety secret, independently verify
+    // that there is no already-open scope whose STOP worker may depend on
+    // existing signed bundle/pins. Recheck under write transaction below.
+    if(!process.env.DATABASE_URL)hold("ADMIN_URL");
+    admin=new pg.Client({connectionString:process.env.DATABASE_URL,
+      connectionTimeoutMillis:7000,statement_timeout:9000,
+      query_timeout:13000,lock_timeout:2000});
+    await admin.connect();
+    await admin.query("BEGIN READ ONLY");
+    let readTx=true;
+    try{
+      const db=(await admin.query(
+        "SELECT current_database() AS db,current_user AS who,"+
+        "pg_is_in_recovery() AS replica"
+      )).rows[0];
+      if(db.db!=="neondb"||db.who!=="neondb_owner"||
+         db.replica!==false)hold("DB_IDENTITY_BEFORE_SECRET_UPLOAD");
+      const scope=(await admin.query(
+        "SELECT "+
+        "(SELECT count(*)::int FROM clean.gate05_fids_pilot_scope_v39 "+
+        " WHERE state IN ('PREPARED','ACTIVE')) AS open,"+
+        "(SELECT count(*)::int FROM clean.gate05_fids_commission_permit_v39 "+
+        " WHERE consumed_at_utc IS NULL AND revoked_at_utc IS NULL) AS unused"
+      )).rows[0];
+      if(scope.open!==0||scope.unused!==0)
+        hold("EXISTING_SCOPE_BEFORE_SECRET_UPLOAD");
+      await admin.query("ROLLBACK");readTx=false;
+    }finally{
+      if(readTx)await admin.query("ROLLBACK").catch(()=>{});
+    }
     // Materialize only exact signed artifact + reviewed pins as protected
     // encrypted secrets; these are not DATABASE login passwords.
     // Fail here BEFORE introducing an unused one-time SQL permit.
@@ -171,11 +201,6 @@ async function run(){
     record({...initial,status:"SIGNED_SAFETY_SECRETS_UPLOADED",
       encryptedSecretCount:secrets,scopeState:"ABSENT"});
 
-    if(!process.env.DATABASE_URL)hold("ADMIN_URL");
-    admin=new pg.Client({connectionString:process.env.DATABASE_URL,
-      connectionTimeoutMillis:7000,statement_timeout:9000,
-      query_timeout:13000,lock_timeout:2000});
-    await admin.connect();
     await admin.query("BEGIN");
     let tx=true;
     try{
