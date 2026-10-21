@@ -56,7 +56,7 @@ export function inspectGate05DispatcherLaunchV39(
     maximumApiUnits:12};
 }
 function cli(argv:string[]){
-  if(argv.length!==10)refuse("CLI");
+  if(argv.length!==12)refuse("CLI");
   const m=new Map<string,string>();
   for(let i=0;i<argv.length;i+=2){
     if(!argv[i].startsWith("--")||!argv[i+1]||m.has(argv[i]))
@@ -64,11 +64,11 @@ function cli(argv:string[]){
     m.set(argv[i],argv[i+1]);
   }
   if([...m.keys()].sort().join("|")!==
-     ["--bundle","--pins","--head","--confirm","--output"].sort().join("|"))
+     ["--bundle","--pins","--head","--confirm","--output","--safety-run"].sort().join("|"))
     refuse("CLI");
   return {head:m.get("--head")!,confirm:m.get("--confirm")!,
     bundle:m.get("--bundle")!,pins:m.get("--pins")!,
-    output:m.get("--output")!};
+    output:m.get("--output")!,safetyRun:m.get("--safety-run")!};
 }
 function loadPrivate(path:string):any{
   if(!path.startsWith("/")||path.length>1024)refuse("FILE");
@@ -82,6 +82,47 @@ function extractTime(start:string,end:string,now:number){
   if(!Number.isFinite(st)||!Number.isFinite(en)||
      now<st||now>=en-15000||en-st>3600000)
     refuse("WINDOW");
+}
+/**
+ * A separate in-progress GitHub safety step is a necessary operational
+ * precondition, NOT an uptime guarantee. Read current GitHub state before
+ * each billable FIDS request, including after a first successful GET.
+ */
+export function assertGate05SafetyJobLiveV39(
+  run:Record<string,any>,jobs:Record<string,any>,
+  expectedHead:string
+){
+  const validRun=run?.status==="in_progress" &&
+    run?.event==="workflow_dispatch"&&run?.head_branch==="main" &&
+    run?.head_sha===expectedHead && run?.run_attempt===1 &&
+    typeof run?.path==="string"&&
+    run.path.includes("phase3-gate05-independent-stop.yml");
+  const matching=Array.isArray(jobs?.jobs)?jobs.jobs.filter(
+    (x:any)=>x.name==="safety-only-stop"&&x.status==="in_progress"&&
+      Array.isArray(x.steps)&&x.steps.some((step:any)=>
+        step.name==="Run independent safety-only signed expiry STOP"&&
+        step.status==="in_progress")
+  ):[];
+  if(!validRun||matching.length!==1)
+    refuse("INDEPENDENT_SAFETY_NOT_LIVE");
+  return {observedRunId:run.id,headSha:expectedHead,safetyStepActive:true};
+}
+function verifyLiveSafety(inputRun:string,sha:string){
+  if(!/^[1-9][0-9]{7,13}$/.test(inputRun))
+    refuse("SAFETY_RUN_ID");
+  try{
+    const args=["api","-H","Accept: application/vnd.github+json"];
+    const run=JSON.parse(execFileSync("gh",[
+      ...args,"repos/HKcode22/ReplitTranvr/actions/runs/"+inputRun
+    ],{encoding:"utf8",timeout:10000,maxBuffer:1024*1024,
+      stdio:["ignore","pipe","pipe"]}));
+    const jobs=JSON.parse(execFileSync("gh",[
+      ...args,"repos/HKcode22/ReplitTranvr/actions/runs/"+
+        inputRun+"/jobs?per_page=100"
+    ],{encoding:"utf8",timeout:10000,maxBuffer:1024*1024,
+      stdio:["ignore","pipe","pipe"]}));
+    assertGate05SafetyJobLiveV39(run,jobs,sha);
+  }catch{refuse("INDEPENDENT_SAFETY_CHECK");}
 }
 export async function runGate05SignedFidsOperatorV39(input:ReturnType<typeof cli>,
  env:NodeJS.ProcessEnv=process.env){
