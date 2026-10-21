@@ -149,7 +149,17 @@ export async function runGate05SignedFidsOperatorV39(input:ReturnType<typeof cli
   const hashOn=gate05FidsQueryFingerprintV39({...queryBase,withLocation:true});
   if(a.noLocationQuerySha256!==hashOff||
      a.locationQuerySha256!==hashOn)refuse("QUERY_BINDING");
-  extractTime(a.startsAtUtc,a.expiresAtUtc,Date.now());
+  let safetyCheckFailed=false;
+  // A static function definition never enforced anything in prior releases.
+  // Require fresh GH runtime proof and signed window check on EVERY reserve
+  // and EVERY physical GET including retries, not merely at process startup.
+  const guardPaidAttempt=()=>{
+    try{
+      extractTime(a.startsAtUtc,a.expiresAtUtc,Date.now());
+      verifyLiveSafety(input.safetyRun,checked);
+    }catch(e){safetyCheckFailed=true;throw e;}
+  };
+  guardPaidAttempt();
 
   // FREE account GETs. Do not send a billable FIDS GET without fresh quota
   // and zero external subscription conflicts.
@@ -195,10 +205,10 @@ export async function runGate05SignedFidsOperatorV39(input:ReturnType<typeof cli
       {flag:"wx",mode:0o600});
     const output:any[]=[];
     for(const withLocation of [false,true]){
-      extractTime(a.startsAtUtc,a.expiresAtUtc,Date.now());
+      guardPaidAttempt();
       const query={...queryBase,withLocation};
       const res=await fetchGate05ScopedFidsV39({
-        db:client,query,owner:{
+        db:client,query,beforeAttempt:guardPaidAttempt,owner:{
           scopeId:reviewed.scopeId,
           authorizationId:reviewed.authorizationId,
           authorizationSha256:reviewed.reviewedAuthorizationSha256,
@@ -206,6 +216,10 @@ export async function runGate05SignedFidsOperatorV39(input:ReturnType<typeof cli
           querySha256:withLocation?hashOn:hashOff
         }
       });
+      // fetchFidsAirport returns null on transport/schema/guard failures.
+      // A lost safety proof MUST stop subsequent queries rather than getting
+      // recorded as ordinary source missingness.
+      if(safetyCheckFailed)refuse("INDEPENDENT_SAFETY_LOST");
       // A null API or schema result is UNKNOWN, never zero flights.
       const departures=res===null?null:res.departures.length;
       output.push({withLocation,
