@@ -75,7 +75,7 @@ export function createGate4PrebindPgStoreV39(
         throw Error("GATE4_PREBIND_SQL_COMMIT_UNCONFIRMED");
       }finally{client.release();}
     },
-    async readBackOriginal(scopeId,originalSha256){
+    async readBackOriginal(o){
       // A second query after COMMIT is essential. It may be backed by a
       // different connection, but it is NOT an independently protected store.
       const x=await pool.query(
@@ -84,15 +84,13 @@ export function createGate4PrebindPgStoreV39(
         " claimed_provider_subscription_id,original_wire "+
         "FROM clean.gate4_alert_prebind_original_v39 "+
         "WHERE scope_id=$1::uuid AND original_sha256=$2",
-        [scopeId,originalSha256]
+        [o.scopeId,o.originalSha256]
       );
       const row=x.rows.length===1?x.rows[0]:null;
-      const ok=!!row&&row.scope_id===scopeId&&
-        row.original_sha256===originalSha256&&
-        Buffer.isBuffer(row.original_wire)&&
-        createHash("sha256").update(row.original_wire).digest("hex")===
-          originalSha256;
-      return {scopeId,originalSha256,committed:ok,originalBytesVerified:ok};
+      // Digest alone does NOT prove the source/auth/airport/claimed-ID
+      // metadata is identical to what was transactionally committed.
+      const ok=same(row,o);
+      return receipt(o,ok);
     }
   };
 }
