@@ -117,7 +117,7 @@ describe("Gate4 Alert ingress: reject historical published prepaid-only route",(
     const app=readFileSync(new URL("index.ts",base),"utf8");
     const healthModule=readFileSync(new URL(
       "lib/disruption/workspaceRuntimeHealth_v39.ts",base),"utf8");
-    expect(minimal).toContain("gate4AlertIngressRegistered: false");
+    expect(minimal).toContain("gate4AlertIngressRegistered: gate4AdditiveEnabled");
     expect(minimal).toContain("prepaidPath.test(req.path)");
     expect(minimal).not.toContain("gate4AlertIngressRegistered: true");
     expect(app).toContain("gate4AlertIngressRegistered: true");
