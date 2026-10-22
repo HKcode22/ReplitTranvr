@@ -29,3 +29,48 @@ An independently discovered foreign billable subscription must not PREVENT attem
 Owner ran exact pinned Gate4-only `GATE4_ISOLATED_READONLY` Shell procedure using HEAD `664d9f64a0c293362659cf9b61d53db5d9d3d288`, expected published `f5b1347b7b9aebd6830302394ea2cc5775aedbf4`, proposed cap20 and extra reserve10. The CLI emitted only `{"schema":"v39.gate4.isolated-preflight.v1","status":"HOLD_READONLY_FOUNDATION_FAILED","gate4LivePassed":false,"paidAuthorization":false,"alertCreateRequests":0,"databaseWrites":0}`. No later success banner or billed CREATE appeared. The source catch suppressed the root stage and error, so **do not attribute the HOLD to the host, provider or database without evidence**; no reason for override, no repeat of identical diagnostic.
 
 Follow-up Gate4-only source patch (proposed) adds whitelisted per-stage report `failedStage` (host verification vs free provider LIST vs strict balance #1/#2/#3 vs DB connect/identity/query vs account policy) and a **redacted, fixed reasonCode** known for host, strict balance and strict inventory errors; unknown exceptions print only `REDACTED_STAGE_FAILURE`. This change must pass CI and owner rerun before asserting readiness. No Phase2/YSSY administrative action authorized. Source still cannot create/delete subscriptions or start Phase6; published prepaid host contract remains only compatibility, not Gate4 callback proof.
+
+## 2026-10-22 02:54 PDT — redacted-stage diagnostic committed, CI verified; owner rerun still required
+
+**Exact verified GitHub state (not runtime readiness):**
+- Production `main` = `ffb5c142e51ab8bb3d9ce7ca944ccc1216a73814` (verified unchanged).
+- Gate4 research source diagnostics commit = `1345c548d6fdfde175505179a39e1408cfe019ef` (parent `664d9f64a0c293362659cf9b61d53db5d9d3d288`). Draft [PR #95](https://github.com/HKcode22/ReplitTranvr/pull/95) is OPEN, DRAFT, unmerged, base main unchanged.
+- Exact source commit GitHub workflows: **4/4 completed SUCCESS**: V3.9 Offline Safety run [39756693741](https://github.com/HKcode22/ReplitTranvr/actions/runs/39756693741); YSSY P25 Public Receiver Identity (No Provider) [39756693799](https://github.com/HKcode22/ReplitTranvr/actions/runs/39756693799); Real PG Receiver Faults (No Paid Provider) [39756693797](https://github.com/HKcode22/ReplitTranvr/actions/runs/39756693797); Focused Release (No Provider) [39756693723](https://github.com/HKcode22/ReplitTranvr/actions/runs/39756693723). Offline Safety job reported SUCCESS for TypeScript, offline V3.9 tests, full suite, lint and production build; this is NOT evidence of live provider correctness.
+- The preflight exception handler now prints `v39.gate4.isolated-preflight.v2` including fixed `failedStage` and whitelisted/redacted `failureCode`; it does not print raw caught network/DB errors or tokens. Verified at [commit](https://github.com/HKcode22/ReplitTranvr/commit/1345c548d6fdfde175505179a39e1408cfe019ef).
+- **The actual root cause of the earlier `HOLD_READONLY_FOUNDATION_FAILED` is still UNKNOWN.** There has been NO verified post-fix live preflight result in this checkpoint. Do not infer a host outage, bad provider account, or database failure from the older v1 output.
+
+**Next owner operator action — separate, scoped READONLY diagnostic only (no PR merge, checkout, subscription CREATE/DELETE, credit refill, Phase6 or DB writes):**
+
+```bash
+bash <<'GATE4_DIAG_V2_ISOLATED_READONLY'
+set -Eeuo pipefail
+set +x
+cd ~/workspace
+ROOT="$PWD"
+MAIN="ffb5c142e51ab8bb3d9ce7ca944ccc1216a73814"
+BRANCH="research/gate4-sendaware-safety-20261021"
+PIN="1345c548d6fdfde175505179a39e1408cfe019ef"
+HOST_HEAD="f5b1347b7b9aebd6830302394ea2cc5775aedbf4"
+test "$(git ls-remote origin refs/heads/main | awk '{print $1}')" = "$MAIN"
+git fetch --no-tags origin "refs/heads/$BRANCH"
+test "$(git rev-parse FETCH_HEAD)" = "$PIN"
+test -d "$ROOT/node_modules"
+test -f "$ROOT/.env"
+CHECK="$(mktemp -d /tmp/gate4-diag-v2.XXXXXX)"
+git archive "$PIN" | tar -x -C "$CHECK"
+ln -s "$ROOT/node_modules" "$CHECK/node_modules"
+cd "$CHECK"
+if DOTENV_CONFIG_PATH="$ROOT/.env" node --import tsx \
+  scripts/v39_gate4_isolated_preflight_v39.ts \
+  --dry-run --published-head "$HOST_HEAD" --cap 20 --reserve 10
+then
+  RC=0
+else
+  RC=$?
+fi
+printf 'GATE4_READONLY_DIAGNOSTIC_EXIT=%s\n' "$RC"
+printf 'ALERT_CREATE=0 DATABASE_WRITES=0 PHASE6_NOT_STARTED\n'
+GATE4_DIAG_V2_ISOLATED_READONLY
+```
+
+**Result interpretation:** `HOLD_READONLY_FOUNDATION_FAILED` plus `failedStage`/`failureCode` is a fail-closed, actionable diagnostic, not a canary PASS; `ACCOUNT_SAFETY_HOLD` plus `reason` means actual account safety policy was evaluated and refused. `ACCOUNT_AND_PREPAID_HOST_READONLY_READY` allows only consideration of the next engineering/authorization review, not paid execution. All three outcomes keep `gate4LivePassed:false`, `paidAuthorization:false`, and independent STOP / exact canary callback proof incomplete. On result, capture only sanitized status, stage/code/reason, exit code and reviewed source SHA in the next checkpoint. No correction or override until evidence inspected.
