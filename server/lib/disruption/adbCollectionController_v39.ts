@@ -573,9 +573,14 @@ export async function writeManifest(): Promise<void> { throw new Error("REFUSED_
 export async function readManifest(): Promise<Record<string, unknown> | null> { const raw = await readMeta("manifest"); if (!raw) return null; try { return JSON.parse(raw); } catch { return null; } }
 
 let watchdogStarted = false;
+// Prevent overlapping local watchdog ticks. Cross-process exclusion still
+// requires a real durable lease and cannot be proved by this in-memory latch.
+let watchdogTickInFlight = false;
 export function startCollectionWatchdog(): void {
   if (watchdogStarted) return; watchdogStarted = true;
   const timer = setInterval(async () => {
+    if (watchdogTickInFlight) return;
+    watchdogTickInFlight = true;
     try {
       const active = await getActiveBatch();
       if (active) {
@@ -652,6 +657,8 @@ export function startCollectionWatchdog(): void {
       } catch {
         console.error("[adb-v39] GATE4_WATCHDOG_STOP_NOT_CONFIRMED");
       }
+    } finally {
+      watchdogTickInFlight = false;
     }
   }, COLLECTOR_CONFIG.watchdogSeconds * 1000);
   timer.unref?.();
