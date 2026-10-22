@@ -38,7 +38,7 @@ export type Gate4PrebindReceiptV39=Readonly<{
 export type Gate4PrebindOriginalStoreV39=Readonly<{
   writeOriginal:(original:Gate4PrebindOriginalV39)=>
     Promise<Gate4PrebindReceiptV39>;
-  readBackOriginal:(scopeId:string,originalSha256:string)=>
+  readBackOriginal:(original:Gate4PrebindOriginalV39)=>
     Promise<Gate4PrebindReceiptV39>;
 }>;
 export type Gate4PrebindIngressResultV39=Readonly<{
@@ -119,7 +119,7 @@ export async function quarantineGate4PrebindOriginalV39(
     const committed=await store.writeOriginal(original);
     if(!consistentReceipt(committed,scope.scopeId,sha))
       return result("HOLD","DURABLE_WRITE_NOT_CONFIRMED",503);
-    const verified=await store.readBackOriginal(scope.scopeId,sha);
+    const verified=await store.readBackOriginal(original);
     if(!consistentReceipt(verified,scope.scopeId,sha))
       return result("HOLD","DURABLE_READBACK_NOT_CONFIRMED",503);
   }catch{
