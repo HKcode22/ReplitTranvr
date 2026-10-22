@@ -51,10 +51,11 @@ export function gate4PrebindAdditiveConfigV39(
 }
 /** Must pass before app starts listening. Rejects current broad runtime role. */
 export async function gate4CheckAdditivePgRoleV39(
- pool:Pick<Pool,"query">,expectedRole:string
+ pool:Pick<Pool,"query">,expectedRole:string,
+ expectedDatabase="neondb"
 ):Promise<void>{
  const x=await pool.query(
-  "SELECT current_database()='neondb' AS db_ok,"+
+  "SELECT current_database()=$2 AS db_ok,"+
   "current_user=$1 AS role_ok,"+
   "has_schema_privilege(current_user,'clean','USAGE') AS schema_read,"+
   "has_schema_privilege(current_user,'clean','CREATE') AS schema_create,"+
@@ -72,7 +73,7 @@ export async function gate4CheckAdditivePgRoleV39(
     "'clean.gate4_alert_owned_binding_v39','INSERT') AS write_owner,"+
   "(SELECT rolcreaterole OR rolsuper FROM pg_roles "+
     "WHERE rolname=current_user) AS role_admin",
-  [expectedRole]
+  [expectedRole,expectedDatabase]
  );
  const a=x.rows?.[0];
  if(x.rows.length!==1||a?.db_ok!==true||a?.role_ok!==true||
