@@ -40,10 +40,7 @@ DECLARE existing_role record;
 BEGIN
   FOR existing_role IN
     SELECT rolname FROM pg_roles
-    WHERE rolname ~ '^travnr_v39_runtime(_recovery[0-9]+)?
-
-COMMIT;
-
+    WHERE rolname ~ '^travnr_v39_runtime(_recovery[0-9]+)?$'
   LOOP
     EXECUTE format(
       'REVOKE ALL PRIVILEGES ON TABLE clean.gate4_alert_prebind_original_v39 FROM %I',
