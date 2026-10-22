@@ -41,7 +41,8 @@ describe("Gate4 Alert ingress: reject historical published prepaid-only route",(
       gate4_alert_callback_proven:true
     },head);
     expect(r.status).toBe("HOLD");
-    expect(r.reason).toBe("PUBLISHED_PREPAID_ONLY_ALERT_ROUTE_BLOCKED");
+    expect(r.reason).toBe("UNREVIEWED_DELIVERY_PROOF_FLAG");
+    expect(r.callbackDeliveryAndAckProven).toBe(false);
   });
   it("unknown legacy health field is HOLD even if app owner is full",()=>{
     const legacy={...health,route_owner:full};
