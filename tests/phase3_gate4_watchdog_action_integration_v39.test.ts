@@ -27,7 +27,8 @@ describe("Gate4 real watchdog safety-action execution — injected offline failu
      independentTerminalStopVerified:false,
      providerRequestsByHelper:0
    });
-   expect(x.stop).toHaveBeenCalledExactlyOnceWith("gate4_SOFT_STOP_THRESHOLD");
+   expect(x.stop).toHaveBeenCalledTimes(1);
+   expect(x.stop).toHaveBeenCalledWith("gate4_SOFT_STOP_THRESHOLD");
    expect(x.proceed).not.toHaveBeenCalled();
    expect(x.incident).not.toHaveBeenCalled();
  });
