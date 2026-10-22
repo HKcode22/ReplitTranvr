@@ -43,6 +43,16 @@ export async function executeGate4SafetyActionV39(
     await deps.proceed();
     return {status:"CONTINUED",incidentRecorded:null,...base};
   }
+  // First attempt the owned STOP. A slow or failing incident-ledger write
+  // must not postpone a billable provider subscription DELETE.
+  let stopConfirmedLocally=false;
+  try {
+    const stopped=await deps.stopOwned("gate4_"+decision.reason);
+    stopConfirmedLocally=stopped?.status==="CLOSED" &&
+      stopped.batchId===deps.expectedBatchId;
+  } catch {
+    stopConfirmedLocally=false;
+  }
   let incidentRecorded:null|boolean=null;
   if(decision.action==="HOLD_STOP"){
     try {
@@ -50,15 +60,11 @@ export async function executeGate4SafetyActionV39(
       incidentRecorded=true;
     } catch {
       incidentRecorded=false;
-      // Even if the durable incident cannot be recorded, STOP must be tried.
     }
   }
-  try {
-    const stopped=await deps.stopOwned("gate4_"+decision.reason);
-    if(stopped?.status!=="CLOSED"||stopped.batchId!==deps.expectedBatchId)
-      return {status:"STOP_UNCONFIRMED",incidentRecorded,...base};
-    return {status:"STOP_ATTEMPT_RETURNED",incidentRecorded,...base};
-  } catch {
-    return {status:"STOP_UNCONFIRMED",incidentRecorded,...base};
-  }
+  return {
+    status:stopConfirmedLocally
+      ? "STOP_ATTEMPT_RETURNED" : "STOP_UNCONFIRMED",
+    incidentRecorded,...base
+  };
 }
