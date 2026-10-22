@@ -16,6 +16,13 @@ import express,{type Request,type Response,type NextFunction,type Express} from 
 import {createServer} from "node:http";
 import {timingSafeEqual} from "node:crypto";
 import {registerV3Routes} from "./routes_v3";
+import {getV39Pool} from "./lib/disruption/db_v39";
+import {createGate4PrebindPgStoreV39} from "./lib/disruption/gate4PrebindPgStore_v39";
+import {quarantineGate4PrebindOriginalV39,
+  checkGate4PrebindScopeV39,
+  type Gate4PrebindScopeV39,
+  type Gate4PrebindOriginalStoreV39} from
+  "./lib/disruption/gate4PrebindIngress_v39";
 import {assessGate4AlertIngressScopeV39,
   type Gate4AlertIngressScopeV39} from
   "./lib/disruption/gate4AlertIngressScope_v39";
@@ -27,7 +34,7 @@ function required(key:string):string{
 }
 export function gate4AlertReceiverLaunchReviewV39(
   env:NodeJS.ProcessEnv
-):Gate4AlertIngressScopeV39{
+):Gate4AlertIngressScopeV39|Gate4PrebindScopeV39{
   if(env.V39_GATE4_ALERT_RECEIVER_ONLY!=="1"||
      env.V39_CALLBACK_ONLY_RUNTIME!=="1"||
      env.ADB_AUTO_COLLECT!=="false"||
@@ -43,6 +50,9 @@ export function gate4AlertReceiverLaunchReviewV39(
   if(!/^[a-f0-9]{40}$/.test(source)||
      env.V39_GATE4_APPROVED_SOURCE_COMMIT!==source)
     throw Error("GATE4_ALERT_RECEIVER_SOURCE_PIN_HOLD");
+  const prebind=env.V39_GATE4_ALERT_PREBIND_MODE==="1";
+  if(prebind&&env.V39_GATE4_OWNED_SUBSCRIPTION_ID)
+    throw Error("GATE4_PREBIND_CANNOT_ASSUME_ID");
   const scope:Gate4AlertIngressScopeV39={
     sourceCommit:source,
     scopeId:String(env.V39_GATE4_SCOPE_ID??""),
@@ -53,23 +63,42 @@ export function gate4AlertReceiverLaunchReviewV39(
   // Validate structural configuration WITHOUT fabricating a provider event.
   if(!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(scope.scopeId)||
     !/^[a-f0-9]{64}$/.test(scope.authorizationSha256)||
-    !/^[A-Za-z0-9_-]{6,128}$/.test(scope.subscriptionId)||
+    (!prebind&&!/^[A-Za-z0-9_-]{6,128}$/.test(scope.subscriptionId))||
     !/^[A-Z]{4}$/.test(scope.airportIcao))
     throw Error("GATE4_ALERT_RECEIVER_CUSTODY_CONFIG_HOLD");
+  if(prebind){
+    const unbound:Gate4PrebindScopeV39={
+      sourceCommit:scope.sourceCommit,scopeId:scope.scopeId,
+      authorizationSha256:scope.authorizationSha256,
+      airportIcao:scope.airportIcao
+    };
+    if(!checkGate4PrebindScopeV39(unbound))
+      throw Error("GATE4_PREBIND_SCOPE_INVALID");
+    return unbound;
+  }
   return scope;
 }
 export function createGate4AlertReceiverCandidateV39(
-  scope:Gate4AlertIngressScopeV39,
+  scope:Gate4AlertIngressScopeV39|Gate4PrebindScopeV39,
   secret:string,
-  registerRoutes:(app:Express)=>void=registerV3Routes
+  registerRoutes:(app:Express)=>void=registerV3Routes,
+  prebindStore?:Gate4PrebindOriginalStoreV39
 ){
+  const prebind=!("subscriptionId" in scope);
+  if(prebind&&!prebindStore)
+    throw Error("GATE4_PREBIND_DURABLE_STORE_REQUIRED");
   if(!secret||secret.length<32)
     throw Error("GATE4_ALERT_RECEIVER_SECRET_HOLD");
   const app=express();
   app.disable("x-powered-by");
   app.set("trust proxy",1);
   const alertPath=/^\/api\/v1\/webhooks\/aerodatabox\/([^/]+)\/?$/;
-  const parser=express.json({limit:"2mb",type:"application/json"});
+  const parser=express.json({
+    limit:"2mb",type:"application/json",
+    verify:(req,_res,buf)=>{
+      (req as Request&{rawBody?:Buffer}).rawBody=Buffer.from(buf);
+    }
+  });
   app.get("/",(_req,res)=>res.status(200).json({
     status:"ok",service:"gate4-alert-receiver-candidate",
     provider_call:false,provider_mutation:false,
@@ -99,7 +128,28 @@ export function createGate4AlertReceiverCandidateV39(
     }
     parser(req,res,(err?:unknown)=>{
       if(err){res.status(400).json({error:"Invalid envelope"});return;}
-      const result=assessGate4AlertIngressScopeV39(scope,req.body);
+      if(prebind){
+        // Pre-CREATE: persist exactly received bytes and verify post-COMMIT
+        // readback. Never call the downstream science handler or infer owner.
+        const raw=(req as Request&{rawBody?:Buffer}).rawBody;
+        void quarantineGate4PrebindOriginalV39(
+          scope as Gate4PrebindScopeV39,
+          raw as Buffer,
+          prebindStore!
+        ).then(out=>{
+          res.status(out.httpStatus).json({
+            received:out.responseAcknowledged,
+            status:out.status,
+            attribution:"none",
+            paid_authorization:false
+          });
+        }).catch(()=>{
+          res.status(503).json({received:false,status:"HOLD"});
+        });
+        return;
+      }
+      const result=assessGate4AlertIngressScopeV39(
+        scope as Gate4AlertIngressScopeV39,req.body);
       if(!result.allowed){
         // Non-2xx may trigger billed retries; a foreign/unowned ID must
         // never receive 2xx or be persisted as this Gate4's trial.
@@ -122,7 +172,10 @@ function launch(){
   if(!Number.isInteger(port)||port<1||port>65535)
     throw Error("GATE4_ALERT_RECEIVER_PORT_HOLD");
   const app=createGate4AlertReceiverCandidateV39(
-    scope,required("AERODATABOX_WEBHOOK_SECRET")
+    scope,required("AERODATABOX_WEBHOOK_SECRET"),
+    registerV3Routes,
+    "subscriptionId" in scope ? undefined :
+      createGate4PrebindPgStoreV39(getV39Pool())
   );
   createServer(app).listen({port,host:"0.0.0.0"},()=>{
     console.log("GATE4_DRAFT_ALERT_RECEIVER_LISTENING");
