@@ -13,6 +13,9 @@ on:
       - "server/gate4AlertReceiverOnly.ts"
       - "server/lib/disruption/gate4PrebindIngress_v39.ts"
       - "server/lib/disruption/gate4PrebindPgStore_v39.ts"
+      - "server/lib/disruption/gate4PrebindAdditiveRoute_v39.ts"
+      - "tests/phase3_gate4_prebind_additive_v39.test.ts"
+      - "migrations/staged/V0073__gate4_existing_neon_role_grants_v39.sql"
       - "tests/phase3_gate4_prebind_ingress_v39.test.ts"
       - "tests/phase3_gate4_prebind_real_pg_v39.test.ts"
       - "migrations/staged/V0071__gate4_alert_prebind_quarantine_v39.sql"
@@ -74,7 +77,8 @@ jobs:
             tests/phase3_gate4_alert_receiver_only_v39.test.ts \
             tests/phase3_gate4_alert_route_readiness_v39.test.ts \
             tests/phase3_gate4_prebind_ingress_v39.test.ts \
-            tests/phase3_gate4_verified_owner_binding_v39.test.ts
+            tests/phase3_gate4_verified_owner_binding_v39.test.ts \
+            tests/phase3_gate4_prebind_additive_v39.test.ts
       - name: Verify separate candidate receiver build
         run: |
           set -Eeuo pipefail
