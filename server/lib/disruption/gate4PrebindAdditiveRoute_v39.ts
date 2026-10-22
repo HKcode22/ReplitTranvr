@@ -96,7 +96,13 @@ export function mountGate4PrebindAdditiveRouteV39(
  const raw=express.raw({type:"application/json",limit:"2mb"});
  app.post("/api/v1/webhooks/aerodatabox/:secret",raw,
   async(req:Request,res)=>{
-   const supplied=Buffer.from(req.params.secret??"");
+   // Express permits string[] params for wildcard shapes; reject any
+   // ambiguous URL param before comparing a bearer secret.
+   const candidate=req.params.secret;
+   if(typeof candidate!=="string"){
+     res.status(404).json({error:"Not found"});return;
+   }
+   const supplied=Buffer.from(candidate);
    const expected=Buffer.from(secret);
    if(supplied.length!==expected.length||
       !timingSafeEqual(supplied,expected)){
