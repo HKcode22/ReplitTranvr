@@ -177,7 +177,7 @@ describe("Gate4 standalone Alert receiver strict scope — zero-provider tests",
     const minimal=readFileSync(
       new URL("../server/phase2gCallbackOnly.ts",import.meta.url),"utf8");
     expect(minimal).toContain("prepaidPath.test(req.path)");
-    expect(minimal).toContain("gate4AlertIngressRegistered: false");
+    expect(minimal).toContain("gate4AlertIngressRegistered: gate4AdditiveEnabled");
     expect(minimal).not.toContain("gate4AlertIngressRegistered: true");
   });
 });
