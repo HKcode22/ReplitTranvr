@@ -27,7 +27,9 @@ export async function runGate4Owner():Promise<number> {
     verifiedRealSendOvershootBound:false,
     verifiedRealSecondStart:false
   }));
-  return ready?0:1;
+  // This wrapper is named 'live-check' and treats exit 0 as a LIVE PASS.
+  // Offline-only evidence must exit nonzero until independently certified.
+  return ready?2:1;
 }
 if(import.meta.url==="file://"+process.argv[1]){
   runGate4Owner().then(code=>{process.exitCode=code}).catch(error=>{

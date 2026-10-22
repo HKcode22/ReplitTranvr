@@ -64,5 +64,6 @@ describe("Gate4 no-provider decision and reviewed watchdog wiring",()=>{
     const owner=readFileSync(new URL(
       "../scripts/v39_gate4_owner_v39.ts",import.meta.url),"utf8");
     expect(owner).toContain("formalGate4Passed:false");
+    expect(owner).toContain("return ready?2:1;");
   });
 });
