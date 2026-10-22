@@ -44,6 +44,24 @@ describe("Gate4 real watchdog safety-action execution — injected offline failu
    expect(x.stop).toHaveBeenCalledOnce();
    expect(x.proceed).not.toHaveBeenCalled();
  });
+ it("tries STOP before writing any HOLD incident to avoid delayed deletion",async()=>{
+   const d=assessGate4SpendV39({...input,currentBalance:null});
+   const order:string[]=[];
+   const x=witness();
+   const r=await executeGate4SafetyActionV39(d,{
+     ...x.deps,
+     stopOwned:async reason=>{
+       order.push("stop:"+reason);
+       return {batchId:"D1",status:"CLOSED"};
+     },
+     writeIncident:async reason=>{order.push("incident:"+reason);}
+   });
+   expect(r.status).toBe("STOP_ATTEMPT_RETURNED");
+   expect(order).toEqual([
+     "stop:gate4_PROVIDER_BALANCE_UNAVAILABLE",
+     "incident:PROVIDER_BALANCE_UNAVAILABLE"
+   ]);
+ });
  it("no false STOP when provider deletion throws",async()=>{
    const x=witness();
    x.stop.mockRejectedValueOnce(Error("DELETE_FAILED"));
