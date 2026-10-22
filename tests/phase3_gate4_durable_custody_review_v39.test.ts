@@ -93,9 +93,9 @@ const signed=()=>{
 
 describe("Gate4 independent anchored custody review — offline only",()=>{
   it("PREPARED has zero claimed ownership or DELETE eligibility",()=>{
+    const p=prepared();
     expect(reviewGate4CustodySnapshotV39(
-      ...Object.values(prepared()) as [Gate4CustodyEntryV39[],
-        Gate4CustodyExternalAnchorV39]
+      p.entries,p.anchor
     )).toMatchObject({
       status:"NO_POSITIVE_OWNED_ID_HOLD",allowExactOwnedStop:false,
       durableSourceCustodyVerified:false,
