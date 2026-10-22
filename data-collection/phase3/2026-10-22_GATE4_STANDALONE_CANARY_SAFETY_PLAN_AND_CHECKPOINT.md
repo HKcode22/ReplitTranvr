@@ -53,7 +53,8 @@ PIN="1345c548d6fdfde175505179a39e1408cfe019ef"
 HOST_HEAD="f5b1347b7b9aebd6830302394ea2cc5775aedbf4"
 test "$(git ls-remote origin refs/heads/main | awk '{print $1}')" = "$MAIN"
 git fetch --no-tags origin "refs/heads/$BRANCH"
-test "$(git rev-parse FETCH_HEAD)" = "$PIN"
+test "$(git cat-file -t "$PIN")" = "commit"
+git merge-base --is-ancestor "$PIN" FETCH_HEAD
 test -d "$ROOT/node_modules"
 test -f "$ROOT/.env"
 CHECK="$(mktemp -d /tmp/gate4-diag-v2.XXXXXX)"
@@ -72,5 +73,7 @@ printf 'GATE4_READONLY_DIAGNOSTIC_EXIT=%s\n' "$RC"
 printf 'ALERT_CREATE=0 DATABASE_WRITES=0 PHASE6_NOT_STARTED\n'
 GATE4_DIAG_V2_ISOLATED_READONLY
 ```
+
+**Source pin versus moving review branch:** GitHub checkpoint updates advance the DRAFT branch beyond source commit `1345c548...`; the exact `git archive "$PIN"` remains cryptographically pinned to the CI-passed code. The `merge-base --is-ancestor` gate verifies the pinned source remains on the fetched branch without incorrectly requiring the branch head to equal the historical code pin. No `main` changes.
 
 **Result interpretation:** `HOLD_READONLY_FOUNDATION_FAILED` plus `failedStage`/`failureCode` is a fail-closed, actionable diagnostic, not a canary PASS; `ACCOUNT_SAFETY_HOLD` plus `reason` means actual account safety policy was evaluated and refused. `ACCOUNT_AND_PREPAID_HOST_READONLY_READY` allows only consideration of the next engineering/authorization review, not paid execution. All three outcomes keep `gate4LivePassed:false`, `paidAuthorization:false`, and independent STOP / exact canary callback proof incomplete. On result, capture only sanitized status, stage/code/reason, exit code and reviewed source SHA in the next checkpoint. No correction or override until evidence inspected.
