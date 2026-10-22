@@ -31,3 +31,21 @@ Offline source DRAFT. Do not merge, publish, turn on PHASE6_READY, create a subs
 ## Separate earlier Gate05 offline test report
 
 User ran the aggregate-only Gate05 tests on initial draft SHA 8fd6a2e...: 4 passed, 1 failed because the privacy assertion searched for substring 'lat', matching 'withLocation' and 'population'. That is a TEST FALSE-POSITIVE, not an observed coordinate leak. Fixed on its SEPARATE branch research/gate05-aggregate-evidence-20261021 at SHA 5f681e631850ba441a16af9fe8ab4318e7ec51d4, by checking actual JSON coordinate key. Rerun before claiming 5/5 green. No source normalization or production behavior changed for this fix.
+## Verified owner-shell focused test checkpoint and new injected fault tests
+
+Owner ran `PHASE3_FOCUSED_OFFLINE_VERIFY` in isolated Replit Shell checkouts with no provider keys or production writes:
+
+- Gate4 original draft at commit `8393b339d5ef2ff82df5b5fd7b1bd31259262aea`: **6/6 focused tests PASS**, `tsc --noEmit` **PASS**.
+- Corrected Gate05 scientific draft at `5f681e631850ba441a16af9fe8ab4318e7ec51d4`: **5/5 focused tests PASS**. The prior substring `lat` failure was a fixture assertion false positive, not a coordinate leak.
+- Owner terminal confirms `PAID_PROVIDER_REQUESTS=0`, `PRODUCTION_DB_WRITES=0`, `NO_DEPLOYMENT_OR_MERGE` for this check.
+
+These passes do **not** apply automatically to later commits, so they do not certify the new Gate4 watchdog-action orchestration yet.
+
+New Gate4 code after that passing checkpoint:
+
+- New pure `gate4WatchdogAction_v39.ts`, invoked by the actual `adbCollectionController_v39.ts` watchdog; its injected dependencies allow fail-path tests to exercise owned STOP attempts and return `STOP_UNCONFIRMED` rather than fictitious PASS when delete/DB results fail or refer to a different batch.
+- New `tests/phase3_gate4_watchdog_action_integration_v39.test.ts`: six additional fixture-driven cases for soft STOP, failing incident write, deleted subscription failure, wrong batch/status, permitted CONTINUE, and malformed batch scope. These are **injected offline faults**, **not** a live disposable-Postgres or provider integration certificate.
+- Existing six Gate4 decision/source checks updated for real helper wiring and named witness/readback failure output. An account witness error is `HOLD_STOP` and still attempts the owned stop.
+- **Tests, compile, GitHub CI on the latest branch commit: PENDING execution**. Need the new exact SHA before any conclusion.
+
+**New decisive Gate4 limitations:** A returned `CLOSED` from an owned stop function is not independent durable-provider deletion verification. Internal `adb_ingest_events` is not true SEND-side ingress on undelivered calls. Local watchdog latch does not serialize multiple published processes or protect against process death. Gate4 remains HOLD for live admission until disposable PostgreSQL/provider-failure injection, independent safety process and bounded live trial are proven. No hard guarantee of the intended provider alert-credit cap has been established.
