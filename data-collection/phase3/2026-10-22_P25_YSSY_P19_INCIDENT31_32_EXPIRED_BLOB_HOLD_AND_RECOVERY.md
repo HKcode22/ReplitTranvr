@@ -52,3 +52,26 @@ The owner executed the **exact 58-object read-only storage exists** operator **t
 5. Only then rerun strict zero-billable-subscriptions/account-baseline and Gate4 live admission prerequisites. A Gate4 live Alert canary remains **separately authorized** and **not yet complete**, even if historical administrative records are closed.
 
 **Zero change performed by this document:** no blob deletes, tombstones, incident updates, budget state transitions, Replit publish, provider CREATE, paid GET, or merge to main. Only GitHub report updated.
+
+## 2026-10-22 — OWNER-EXECUTED EXACT DELETION SUCCEEDED (independent reread pending)
+
+**This section supersedes the earlier pre-deletion status above, which is retained as a historical audit trail.** Owner explicitly authorized permanent deletion of the EXACT 58 expired YSSY P25 probe19 raw-provider objects and corresponding individualized verified DB tombstones. Owner ran detached, exact-SHA-pinned source `repair/p25-exact-58-expired-20261022` commit `1c09d4014c8b5749cdb4edacc693a46a7fa4e19d`, after all four no-provider GitHub CI workflows passed, using manual Replit Shell and explicit terminal phrase `DELETE 58 YSSY P25`.
+
+**Dry-run receipt** (user-supplied output):
+- schema `v39.p25.exact-58-expiry.v1`, mode `DRY_RUN`, status `READY_EXACT_58_ONLY`, `YSSY_P25_PROBE19_ONLY`
+- SHA-256 manifest `b1d06b0f0e46b2c5f11f284695544402b232927eda70ff8fb5d3d8fd0f9c499b`; dedicated bucket fingerprint `b47bb516cb2b8fa9f635376309c2add0f1a81076ca5eaee3aa91587ea013109b`
+- targetObjects 58, targetBytes 308832, `presentAndVerifiedByExists=58`, latest expiry `2026-10-20T05:02:12.501Z`
+- scientific fingerprint `failed/DELIVERY_GAP`, external 231/internal 229/gap 2; no provider paid requests, deletes, or SQL writes during DRY_RUN.
+
+**Apply receipt** (user-supplied output):
+- schema `v39.p25.exact-58-expiry.v1`, mode `APPLY`, status **`EXACT_58_DELETED_AND_TOMBSTONED`**
+- **same pinned manifest SHA** `b1d06b0f0e46b2c5f11f284695544402b232927eda70ff8fb5d3d8fd0f9c499b`
+- **`physicallyAbsent=58`; `tombstonesVerified=58`; `deletedBytes=308832`**
+- `historicalProbeStillRequired=failed/DELIVERY_GAP`, external=231/internal=229/gap=2; `incidentUpdates=0`, `budgetUpdates=0`, `aerodataboxRequests=0`, `adminCloseoutStillRequired=true`.
+- No error or partial HOLD; finished `EXACT CLEANUP OPERATOR FINISHED`.
+
+**Verification class:** successful in-operator post-delete provider-storage `exists()` and SQL tombstone readback, NOT YET independently rechecked by a separate fresh read-only process/connection. `independentlyPublishedHostVerified=false` is a limitation of the receipt and should not be misread as object-storage deletion failure. No evidence that other objects were accessed or deleted outside the reviewed exact-58 source scope; absence of other collateral changes is not yet independently audited.
+
+**Next independent step:** original production `main=ffb5c142e51ab8bb3d9ce7ca944ccc1216a73814` Replit Shell, fresh PostgreSQL `BEGIN READ ONLY`, independent direct object-store `exists` count for the 58 rows, verify 58/58 markers and all 58 absent, unique single deletion-run ID, 58 SHA refs / 308832 original bytes, unchanged historical scientific 231/229 gap and `failed` probe, open incidents 31/32 and budget unchanged. If any physical object exists, missing marker, or read error: HOLD, no automatic re-apply.
+
+**After independent success:** propose new separately reviewed and explicitly authorized administrative reconciliation of BOTH incidents 31/32 and the one OPEN P25 budget day. The old Incident31-only closeout is not sufficient while budget remains OPEN and cannot resolve ID32. NO incident/budget changes are authorized by the already-granted blob-deletion approval. Gate4 live certification remains separately authorized.
