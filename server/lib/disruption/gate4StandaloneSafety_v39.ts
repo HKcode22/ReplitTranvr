@@ -113,7 +113,7 @@ export async function stopGate4ExactOwnedV39(
   if(!Array.isArray(before))
     return hold("PRE_STOP_INVENTORY_MALFORMED");
   const active=before.filter(v=>v?.isActive&&v.billingType==="CreditBased");
-  const candidate=active.find(v=>v.id===scope.subscriptionId);
+  const candidates=active.filter(v=>v.id===scope.subscriptionId);
   if(active.length===0) {
     // A currently empty inventory can show zero active, but not prove
     // provider SEND credit settlement or a preceding physical DELETE.
@@ -124,8 +124,9 @@ export async function stopGate4ExactOwnedV39(
   // Emergency STOP must still attempt deletion of our exact known ID
   // even if another subscription appears concurrently. Refuse to DELETE
   // the unrelated resource; final all-account-clear remains a HOLD.
-  if(!candidate || candidate.subject?.type!==scope.subjectType ||
-     candidate.subject?.id!==scope.subjectId)
+  if(candidates.length!==1 ||
+     candidates[0].subject?.type!==scope.subjectType ||
+     candidates[0].subject?.id!==scope.subjectId)
     return hold("OWNED_ID_ABSENT_OR_SUBJECT_MISMATCH");
   let returned=false;
   try {returned=await deps.deleteExactVerified(scope.subscriptionId)===true;}
