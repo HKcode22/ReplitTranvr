@@ -16,7 +16,7 @@
 
 ## Highest-priority commissioning decisions (owner actions needed)
 
-1. **Choose and prepare an actually separate STOP runtime.** Preferred trust separation: a protected, pinned-commit GitHub Actions safety job or separately hosted, continuously supervised worker **outside the Replit controller's process**. A second Replit app alone separates application lifecycles but may share the same platform outage domain. The workspace and this chat cannot create an independently trusted account or attest service liveness automatically. The connected Replit app name search for `gate4` found no matching app on October 22; this is NOT proof that a safety service under a different name is absent.
+1. **Choose and prepare an actually separate STOP runtime.** **Required runtime separation:** a separately hosted, continuously running and supervised STOP worker **outside the Replit controller's lifecycle**, with independent custody and incident escalation. A GitHub Actions *environment* is useful for protected approval and release-secret access, and GitHub Actions may provide a supplementary manual audit/recovery job, **but GitHub scheduled Actions must NOT be the sole deadline/heartbeat/STOP watchdog**: the minimum cron interval is 5 minutes and scheduled events may be delayed or dropped. A second Replit app alone separates application lifecycles but may share the same platform outage domain. The workspace and this chat cannot create an independently trusted account or attest service liveness automatically. The connected Replit app name search for `gate4` found no matching app on October 22; this is NOT proof that a safety service under a different name is absent.
 2. **Provision credentials privately, not in GitHub source or chat.** The safety worker needs independently attested source+trial AUTH and an authenticated read-only custody channel. The exact-owned STOP gateway needs strictly reviewed provider READ/LIST + DELETE privileges for **one** positively owned ID. The AeroDataBox account-level key may not support provider-side DELETE-only scoping; if the provider does not support it, a separate narrow proxy/reviewed exception is required and must be disclosed. No generic app DB URL/CREATE or production application secrets in the worker.
 3. **Separately approve the staged receiver environment and database permissions before changing real infrastructure.** Migrations in `migrations/staged`, especially `V0071`, must stay out of automatic boot. The receiver's trial-specific callback secret, byte-preserving data store, retention, monitoring and zero-authority prebinding mode must be proven on a separated staging identity before any paid CREATE. Production SQL/deploy is NOT approved by reading this plan.
 4. **Resolve ID handoff as a release blocker.** When AeroDataBox returns the exact subscription ID from CREATE, independently verify matching account ownership/subject and sign/pin an exact CREATE receipt outside the untrusted POST body. In one durable atomic operation, bind trial and ID; quarantine replay may classify science **only after** authentic binding. A first-seen body ID must never count as a CREATE receipt; unknown remote CREATE outcome remains HOLD requiring manual rescue.
@@ -56,3 +56,31 @@ The user explicitly prefers **Replit Shell commands, not Replit AI Agent**, and 
 **Unresolved authenticity vs verified field consistency:** The source cannot prove the outside actor witnessed AeroDataBox CREATE, that the reviewed CREATE receipt was genuinely from the account, that the signer identity is trusted, that the external anchor is rollback-resistant, or that the provider's real subject encoding is identical to the simulated fixtures. Before commissioning, independently attest these with separate, restricted credentials and immutable source evidence, then test the receiver's binding handoff without converting quarantined content to science on incomplete custody.
 
 **Remaining real blockers:** (1) GitHub `gate4-safety` environment and protected secrets/reviewer controls (could not inspect environment using currently connected GitHub read operations; do not assume configured); (2) physically distinct supervised STOP gateway/worker and external custody anchor, with owner-acknowledged escalation; (3) reviewed/published dedicated ordinary Alert receiver and approved STAGED schema/roles; (4) fresh read-only provider foundation and independent paid GO; (5) actual bounded paid CREATE, webhook measurements, exact STOP, and >=3 stable settlement balances. Production/main/Phase6 and published Replit were untouched here. Real Gate4 remains **HOLD**, regardless of synthetic CI success.
+
+## 2026-10-22 — STOP runtime architecture correction (verified with GitHub documentation)
+
+**Do not commission only a GitHub Actions cron as the independent STOP.** GitHub's [scheduled workflows reference](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule) states a **five-minute minimum schedule** and that scheduled runs can be delayed or dropped. For a short AeroDataBox Alert test where each attempted SEND may consume credits, this is **not a deterministic STOP-clock guarantee**. The project previously suggested a protected GitHub Actions safety job as a preferable alternative to an independent worker; that advice is revised: Actions is useful as a **release/authorization/backup-audit plane only**, NOT as the sole real-time STOP protection.
+
+**Target minimal deployment topology (not yet built or authorized):**
+
+```text
+Owner-controlled GitHub gate4-safety environment
+   | approves exact source / trial / expiry; no raw provider key in the PR
+   v
+Dedicated Gate4 STOP host — continuously supervised; NOT controller Replit lifecycle
+   | independent clock + exact signed ticket + durable read-only owner custody
+   | strict LIST + owned-id-only DELETE via restricted gateway
+   | independent ACKed human alert / fail-closed deadline and crash recovery
+   v
+Independent custody anchor + credential-filtered STOP gateway
+
+Replit published original Phase2G receiver: UNCHANGED
+Separate Gate4 Alert receiver: DRAFT, needs reviewed publish and V0071/V0072 roles
+AeroDataBox paid CREATE: FORBIDDEN until all above are genuinely armed
+```
+
+**Owner action (no secret disclosure):** Visit [repository Environments settings](https://github.com/HKcode22/ReplitTranvr/settings/environments), check/create `gate4-safety`. Protect the environment/branch where available; inspect protection availability for the actual repo plan/visibility. Do **not** add secrets yet. The currently connected GitHub tool set does not expose repository Environment GET/CREATE or protection-rule writes, so configuration cannot be attested in chat. The environment alone does **not** deploy the STOP worker or prove privileges. The owner must also authorize a truly separate host and later review its credential boundary as a **distinct infrastructure decision**, before any publish/SQL mutation. No Cloudflare or Replit AI Agent.
+
+**Minimum external-worker acceptance before LIVE Gate4:** The host is online before any paid CREATE; has isolated runtime identity and separately provisioned narrowly scoped read-only custody credential and exact-ID STOP gateway credential; enforces independently reviewed trial expiry and loss-of-controller-heartbeat STOP; survives/reconciles its own restart/unknown DELETE response; produces durable STOP evidence plus separately acknowledged alert; and confirms exact owned ID deletion and strict LIST/credit settlement. A test success in GitHub Actions is not evidence of these live properties.
+
+**Current source milestone:** source `a5e0f82b54078174698a713ae87146544eeb0e1c` passed **5/5 GitHub provider-free workflows** (V3.9 Offline Safety, focused release, public receiver, disposable PG faults, and dedicated Gate4 Alert+V0072 real disposable PG16). PR #95 remains unmerged; V0071/V0072 unapplied. The next action is operational host/environment commissioning and human-reviewed authorization, *not another generic mocked STOP helper*. 
