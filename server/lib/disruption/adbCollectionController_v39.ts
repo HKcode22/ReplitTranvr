@@ -31,6 +31,7 @@ import {
 import { externalSpend, reconcileSpend, runSettlement, type SettlementConfig } from "./settlement_v3";
 import { assessGate4SpendV39, assessGate4SecondStartV39 } from "./gate4SendAwareDecision_v39";
 import {executeGate4SafetyActionV39} from "./gate4WatchdogAction_v39";
+import {assertGate4TransactionalAdmissionV39} from "./gate4TransactionalAdmission_v39";
 
 export type AirportTier = "HUB" | "MID" | "REGIONAL";
 
@@ -399,6 +400,9 @@ export async function startBatch(): Promise<StartBatchResult> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // Recheck under a transaction-scoped PG lock; two Replit processes
+    // MUST NOT pass separate unprotected prechecks and both CREATE.
+    await assertGate4TransactionalAdmissionV39(client);
     await client.query(`INSERT INTO clean.adb_collection_batches
       (batch_id,batch_seq,random_seed,status,started_at,window_start,window_end,credit_budget,tier_mix,airports,window_shape,anchor_icao,sampling_strategy,
        balance_before,run_day_index,budget_day_id,calendar_hash,config_hash,experiment_day_id,crossover_group_id,crossover_period,pair_role,evaluation_partition)
