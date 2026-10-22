@@ -16,7 +16,7 @@
 import "dotenv/config";
 import {randomBytes} from "node:crypto";
 import {execFileSync} from "node:child_process";
-import {readFileSync,writeFileSync,mkdirSync,unlinkSync,existsSync}
+import {readFileSync,writeFileSync,mkdirSync,existsSync}
  from "node:fs";
 import {dirname,join,resolve} from "node:path";
 import {homedir} from "node:os";
@@ -73,7 +73,7 @@ type Facts={db:string;admin:string;create:boolean;createRole:boolean;
 async function facts(db:pg.Client):Promise<Facts>{
  const x=(await db.query(
    "SELECT current_database() AS db,current_user AS admin,"+
-   "has_schema_privilege(current_user,'clean','CREATE') AS create,"+
+   "has_schema_privilege(current_user,'clean','CREATE') AS allow_clean_create,"+
    "(SELECT rolcreaterole FROM pg_roles "+
    "WHERE rolname=current_user) AS create_role,"+
    "(SELECT rolsuper FROM pg_roles "+
@@ -86,7 +86,7 @@ async function facts(db:pg.Client):Promise<Facts>{
    "WHERE obj IS NOT NULL) AS before_tables",
    [names]
  )).rows[0];
- return {db:x.db,admin:x.admin,create:x.create,
+ return {db:x.db,admin:x.admin,create:x.allow_clean_create,
   createRole:x.create_role,isSuper:x.super_user,
   beforeTables:x.before_tables,existingRoles:x.existing_roles};
 }
