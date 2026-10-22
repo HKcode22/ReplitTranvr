@@ -56,6 +56,8 @@ describe("Gate4 no-provider decision and reviewed watchdog wiring",()=>{
     expect(source).toContain('await stopBatch("gate4_"+decision.reason)');
     expect(source).toContain("assessGate4SecondStartV39(predecessor.status)");
     expect(source).toContain("REFUSED_GATE4_SECOND_START:");
+    expect(source).toContain("GATE4_UNHANDLED_WATCHDOG_FAULT_STOP_UNCONFIRMED_DB");
+    expect(source).toContain("GATE4_WATCHDOG_STOP_NOT_CONFIRMED");
     const owner=readFileSync(new URL(
       "../scripts/v39_gate4_owner_v39.ts",import.meta.url),"utf8");
     expect(owner).toContain("formalGate4Passed:false");
