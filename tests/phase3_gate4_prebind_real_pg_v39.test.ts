@@ -10,6 +10,8 @@ import {createHash} from "node:crypto";
 import pg from "pg";
 import {createGate4PrebindPgStoreV39} from
   "../server/lib/disruption/gate4PrebindPgStore_v39";
+import {createGate4OwnedBindingPgStoreV39} from
+  "../server/lib/disruption/gate4OwnedBindingPgStore_v39";
 import {quarantineGate4PrebindOriginalV39} from
   "../server/lib/disruption/gate4PrebindIngress_v39";
 
@@ -112,6 +114,48 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
       originalSha256:digest(wire),originalBytes:wire
     });
     expect(wrongAuth.committed).toBe(false);
+    // STAGED V0072 is applied to this disposable CI database only.
+    const ddlBind=readFileSync(new URL(
+      "../migrations/staged/V0072__gate4_owned_binding_v39.sql",
+      import.meta.url),"utf8");
+    expect(ddlBind).toContain("STAGED");
+    await pool.query(ddlBind);
+    const bindStore=createGate4OwnedBindingPgStoreV39(pool);
+    const binding={
+      ...scope,subscriptionId:"exactOwned99",
+      reviewedCreateReceiptSha256:"c".repeat(64),
+      signedStopTicketSha256:"d".repeat(64)
+    };
+    // Adapter intentionally needs airportIcao/sourceCommit/authorizationSha256,
+    // and rejects any attempt to rewrite this trial to another provider ID.
+    expect(await bindStore.bindOnce(binding)).toMatchObject({
+      committed:true,exactFieldsVerified:true
+    });
+    expect(await bindStore.readBack(binding)).toMatchObject({
+      committed:true,exactFieldsVerified:true
+    });
+    expect(await bindStore.bindOnce(binding)).toMatchObject({
+      committed:true,exactFieldsVerified:true
+    });
+    const foreign={...binding,subscriptionId:"foreignID"};
+    await expect(bindStore.bindOnce(foreign)).rejects.toThrow(
+      "GATE4_BIND_COMMIT_UNCERTAIN_HOLD"
+    );
+    expect(await bindStore.readBack(foreign)).toMatchObject({
+      committed:false,exactFieldsVerified:false
+    });
+    const foreignAuth={...binding,authorizationSha256:"e".repeat(64)};
+    expect((await bindStore.readBack(foreignAuth)).committed).toBe(false);
+    const duplicateIdOtherScope={
+      ...binding,scopeId:"22222222-3333-4444-5555-666666666666"
+    };
+    await expect(bindStore.bindOnce(duplicateIdOtherScope)).rejects.toThrow(
+      "GATE4_BIND_COMMIT_UNCERTAIN_HOLD"
+    );
+    expect((await pool.query(
+      "SELECT count(*)::int AS n FROM clean.gate4_alert_owned_binding_v39"
+    )).rows[0].n).toBe(1);
+    console.log("GATE4_DISPOSABLE_PG_OWNER_BIND_WRITE_ONCE_PASS");
     console.log("GATE4_DISPOSABLE_PG_ORIGINAL_AND_READBACK_PASS");
     console.log("PROVIDER_CALLS=0");
   }finally{await pool.end();}
