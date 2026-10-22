@@ -68,8 +68,17 @@ export function decideGate4ActionsTickV39(
   if(accountCredits===null||!Number.isSafeInteger(accountCredits)||
     accountCredits<0)
     return verdict("HOLD","STRICT_BALANCE_UNAVAILABLE",null,null);
-  const spent=Math.max(0,scope.observedStartingCredits-accountCredits);
-  const active=strictInventory.filter(x=>x?.isActive&&x.billingType==="CreditBased");
+  // A balance increase is unrelated account activity/refill, NOT a safe
+  // negative consumption reading. This invalidates this trial's baseline.
+  if(accountCredits>scope.observedStartingCredits)
+    return verdict("HOLD","UNEXPECTED_ACCOUNT_CREDIT_INCREASE",null,null);
+  const spent=scope.observedStartingCredits-accountCredits;
+  // Malformed rows must not be silently discarded as inactive.
+  if(strictInventory.some(x=>!x||typeof x.id!=="string"||
+    typeof x.isActive!=="boolean"||
+    !["CreditBased","LifetimeBased"].includes(x.billingType)))
+    return verdict("HOLD","STRICT_INVENTORY_ROW_MALFORMED",null,spent);
+  const active=strictInventory.filter(x=>x.isActive&&x.billingType==="CreditBased");
   // A second active subscription is a known risk even if the owned ID can be
   // deleted; this policy never authorizes deletion of the other subscription.
   if(boundProviderId!==null && !id.test(boundProviderId))
@@ -80,6 +89,7 @@ export function decideGate4ActionsTickV39(
         null,spent);
     if(now>=Date.parse(scope.stopUtc))
       return verdict("HOLD","WINDOW_EXPIRED_NO_OWNED_ID",null,spent);
+    if(spent>0)return verdict("HOLD","SPEND_WITHOUT_OWNED_ID",null,spent);
     return verdict("WATCH","NO_ACTIVE_OWNED_ID_YET",null,spent);
   }
   const owned=active.filter(x=>x.id===boundProviderId&&
@@ -90,10 +100,22 @@ export function decideGate4ActionsTickV39(
       return verdict("HOLD","OWNED_ID_SUBJECT_CHANGED",null,spent);
     if(active.length>0)
       return verdict("HOLD","UNRELATED_ACTIVE_BILLABLE",null,spent);
-    return verdict("WATCH","NO_ACTIVE_OWNED_SUBSCRIPTION",null,spent);
+    // Absence of active provider ID cannot certify the prior physical DELETE,
+    // lingering paid SENDs, delivery/ACK or three stable settlement balances.
+    return verdict("HOLD","OWNED_ID_NOT_ACTIVE_SETTLEMENT_UNPROVEN",null,spent);
   }
   if(owned.length!==1)
     return verdict("HOLD","DUPLICATE_OWNED_PROVIDER_ID",null,spent);
+  // Emergency policy: remove our exact verified ID when ANY unrelated active
+  // billable resource appears. The other ID is never deleted by this worker;
+  // account-wide clean settlement must remain a separate HOLD.
+  if(active.some(x=>x.id!==boundProviderId))
+    return verdict("STOP_EXACT_OWNED","UNRELATED_ACTIVE_BILLABLE_STOP_OWNED",
+      boundProviderId,spent);
+  // CREATE before its approved UTC window requires immediate exact STOP.
+  if(now<Date.parse(scope.startUtc))
+    return verdict("STOP_EXACT_OWNED","ACTIVE_OWNED_BEFORE_APPROVED_START",
+      boundProviderId,spent);
   if(now>=Date.parse(scope.stopUtc))
     return verdict("STOP_EXACT_OWNED","HARD_TIME_DEADLINE",
       boundProviderId,spent);
