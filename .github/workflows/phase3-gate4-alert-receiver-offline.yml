@@ -11,6 +11,10 @@ on:
       - "server/index.ts"
       - "server/phase2gCallbackOnly.ts"
       - "server/gate4AlertReceiverOnly.ts"
+      - "server/lib/disruption/gate4PrebindIngress_v39.ts"
+      - "server/lib/disruption/gate4PrebindPgStore_v39.ts"
+      - "tests/phase3_gate4_prebind_ingress_v39.test.ts"
+      - "migrations/staged/V0071__gate4_alert_prebind_quarantine_v39.sql"
       - "server/lib/disruption/workspaceRuntimeHealth_v39.ts"
       - "server/lib/disruption/gate4AlertIngressScope_v39.ts"
       - "server/lib/disruption/gate4AlertRouteReadiness_v39.ts"
@@ -63,7 +67,7 @@ jobs:
         run: |
           npx vitest run \
             tests/phase3_gate4_alert_receiver_only_v39.test.ts \
-            tests/phase3_gate4_alert_route_readiness_v39.test.ts
+            tests/phase3_gate4_alert_route_readiness_v39.test.ts             tests/phase3_gate4_prebind_ingress_v39.test.ts
       - name: Verify separate candidate receiver build
         run: |
           set -Eeuo pipefail
