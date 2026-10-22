@@ -12,7 +12,8 @@
  * protected runtime/DB privileges, live delivery/ACK/retention proof and
  * independently armed STOP. This source itself verifies none of those.
  */
-import express,{type Request,type Response,type NextFunction} from "express";
+import express,{type Request,type Response,type NextFunction,type Express} from "express";
+import {pathToFileURL} from "node:url";
 import {createServer} from "node:http";
 import {timingSafeEqual} from "node:crypto";
 import {registerV3Routes} from "./routes_v3";
@@ -60,7 +61,8 @@ export function gate4AlertReceiverLaunchReviewV39(
 }
 export function createGate4AlertReceiverCandidateV39(
   scope:Gate4AlertIngressScopeV39,
-  secret:string
+  secret:string,
+  registerRoutes:(app:Express)=>void=registerV3Routes
 ){
   if(!secret||secret.length<32)
     throw Error("GATE4_ALERT_RECEIVER_SECRET_HOLD");
@@ -109,7 +111,7 @@ export function createGate4AlertReceiverCandidateV39(
   });
   // All management, prepaid and full-app routes are registered AFTER a
   // strict allowlist, so only the exact /:secret Alert POST can reach them.
-  registerV3Routes(app);
+  registerRoutes(app);
   app.use((_err:unknown,_req:Request,res:Response,_next:NextFunction)=>{
     if(!res.headersSent)res.status(500).json({error:"Receiver error"});
   });
@@ -130,6 +132,6 @@ function launch(){
   });
 }
 if(process.argv[1]&&
-  import.meta.url===new URL("file://"+process.argv[1]).href){
+  import.meta.url===pathToFileURL(process.argv[1]).href){
   launch();
 }
