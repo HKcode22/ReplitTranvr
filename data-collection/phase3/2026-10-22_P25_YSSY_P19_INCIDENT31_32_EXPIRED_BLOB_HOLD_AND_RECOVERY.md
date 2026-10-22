@@ -75,3 +75,18 @@ The owner executed the **exact 58-object read-only storage exists** operator **t
 **Next independent step:** original production `main=ffb5c142e51ab8bb3d9ce7ca944ccc1216a73814` Replit Shell, fresh PostgreSQL `BEGIN READ ONLY`, independent direct object-store `exists` count for the 58 rows, verify 58/58 markers and all 58 absent, unique single deletion-run ID, 58 SHA refs / 308832 original bytes, unchanged historical scientific 231/229 gap and `failed` probe, open incidents 31/32 and budget unchanged. If any physical object exists, missing marker, or read error: HOLD, no automatic re-apply.
 
 **After independent success:** propose new separately reviewed and explicitly authorized administrative reconciliation of BOTH incidents 31/32 and the one OPEN P25 budget day. The old Incident31-only closeout is not sufficient while budget remains OPEN and cannot resolve ID32. NO incident/budget changes are authorized by the already-granted blob-deletion approval. Gate4 live certification remains separately authorized.
+
+## 2026-10-22 fresh independent post-delete verification — PASS
+
+After the owner's exact 58-object deletion receipt, the owner ran a separate, original-main, fresh SQL `BEGIN READ ONLY` and provider object `exists()` check. **Terminal `P25_INDEPENDENT_58_OF_58_VERIFIED`** confirms:
+
+- `physicallyAbsent=58`, `physicallyPresent=0`, `storageReadErrors=0` in the exact bucket matching the deletion receipt.
+- `verifiedTombstones=58`, `uniqueDeletionRuns=1`, `rowsInDeletionRun=58`; no other provider-content reference shares that run ID.
+- Confirmed immutable YSSY P25 probe19 `failed/DELIVERY_GAP`, external credits 231, internal credits 229, gap 2; shared budget still `OPEN`, incidents IDs 31 and 32 still `OPEN`.
+- Verification itself reported `databaseWrites=0`, `storageDeletes=0`, `aerodataboxRequests=0`; no repeated deletion required or authorized.
+
+**Disposition:** exact source-retention cleanup has passed its independent storage+DB audit. The original source bytes are irreversibly deleted, while essential SHA/byte/tombstone/historical reconciliation metadata remains. The expired-source remediation is now complete; **historical administrative settlement remains outstanding**, not a source-retention blocker anymore.
+
+To address the remaining blockers a distinct [draft PR #97](https://github.com/HKcode22/ReplitTranvr/pull/97) was authored on `review/p25-probe19-admin-closeout-20261022`, source `699ad32f3bfd25e97812942b1c946acfa42cb61d`. It contains a strictly read-only dry-run reviewer for both incidents and the one budget, preserving the scientific failed/DELIVERY_GAP result. It does **not** carry authority to update the incidents/budget; tests and owner output are initially pending.
+
+**Next exact starting point:** verify PR97 CI source/tests, then run `scripts/v39_p25_admin31_32_readonly_review_v39.ts --dry-run` from a detached, SHA-pinned original-source copy in Replit Shell and review the result. Only after that may a distinct case-specific administrative `APPLY` be designed and independently authorized. Gate4 live/paid proof and Gate3/Gate05 scientific closeouts remain separate.
