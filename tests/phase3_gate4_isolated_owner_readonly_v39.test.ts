@@ -1,7 +1,9 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
-import {parseGate4StandaloneArgsV39} from
- "../scripts/v39_gate4_isolated_preflight_v39";
+import {
+  parseGate4StandaloneArgsV39,
+  gate4ReadonlySafeFailureCodeV39
+} from "../scripts/v39_gate4_isolated_preflight_v39";
 
 const actual="f5b1347b7b9aebd6830302394ea2cc5775aedbf4";
 describe("Gate4 standalone owner READONLY: signed source + cap parser",()=>{
@@ -36,5 +38,49 @@ describe("Gate4 standalone owner READONLY: signed source + cap parser",()=>{
   expect(s).toContain("independentStopProcessArmed:false");
   expect(s).toContain("gate4CanaryCallbackRouteProven:false");
   expect(s).toContain("gate4LivePassed:false,paidAuthorization:false");
+ });
+});
+
+describe("Gate4 preflight failed-stage diagnostics redact all raw errors",()=>{
+ it("recognizes only fixed, safe provider, host and DB error classifications",()=>{
+   expect(gate4ReadonlySafeFailureCodeV39(
+     new Error("GATE3_OWNER_PUBLISHED_HOST_CONTRACT_MISMATCH_HOLD")))
+       .toBe("PUBLISHED_HOST_IDENTITY_OR_AVAILABILITY_HOLD");
+   expect(gate4ReadonlySafeFailureCodeV39(
+     new Error("BALANCE_UNAVAILABLE: HTTP 429 secret=abc")))
+       .toBe("STRICT_PROVIDER_BALANCE_GET_HOLD");
+   expect(gate4ReadonlySafeFailureCodeV39(
+     new Error("R1_LIST_UNAVAILABLE: HTTP 403 secret=abc")))
+       .toBe("STRICT_PROVIDER_INVENTORY_GET_HOLD");
+   expect(gate4ReadonlySafeFailureCodeV39(
+     new Error("GATE4_WRONG_DATABASE_IDENTITY")))
+       .toBe("PRODUCTION_DATABASE_IDENTITY_MISMATCH");
+ });
+ it("never echoes arbitrary secrets from PostgreSQL, transport or runtime",()=>{
+   for(const message of [
+     "password=really_private","HTTP 500 body apiKey=not-for-logs",
+     "SELECT secret from private_table",
+     "password authentication failed for user owner"
+   ]){
+     const result=gate4ReadonlySafeFailureCodeV39(new Error(message));
+     expect(result).toBe("REDACTED_STAGE_FAILURE");
+     expect(result).not.toContain(message);
+   }
+ });
+ it("source identifies exactly one failure stage without changing authority",()=>{
+   const source=readFileSync(new URL(
+    "../scripts/v39_gate4_isolated_preflight_v39.ts",import.meta.url
+   ),"utf8");
+   for(const st of [
+     "PUBLISHED_HOST_IDENTITY","STRICT_PROVIDER_LIST",
+     "STRICT_BALANCE_READ_","PRODUCTION_DB_CONNECT",
+     "PRODUCTION_DB_IDENTITY","PRODUCTION_BATCH_AND_SUBS_READ",
+     "GATE4_ACCOUNT_SAFETY_EVALUATION"
+   ]) expect(source).toContain(st);
+   expect(source).toContain("failedStage:stage");
+   expect(source).not.toContain("console.error(error)");
+   expect(source).not.toContain("createSubscription(");
+   expect(source).not.toContain("startBatch(");
+   expect(source).toContain("paidAuthorization:false");
  });
 });
