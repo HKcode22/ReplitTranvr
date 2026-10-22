@@ -61,10 +61,16 @@ export function assessGate4AlertRouteReadinessV39(
     !matched)
     return report("HOLD","PUBLISHED_SOURCE_OR_RUNTIME_NOT_MATCHED",matched,
       x.route_owner===PREPAID_OWNER,false);
-  if(x.route_owner===PREPAID_OWNER)
+  // Existing published prepaid app can now opt into ONE isolated Gate4
+  // route without replacing its prepaid handler. The route must have been
+  // declared after a separate database-role startup admission.
+  const mixed=x.route_owner===PREPAID_OWNER&&
+    x.prepaid_route_registered===true&&
+    x.gate4_alert_ingress_registered===true;
+  if(x.route_owner===PREPAID_OWNER&&!mixed)
     return report("HOLD","PUBLISHED_PREPAID_ONLY_ALERT_ROUTE_BLOCKED",
       true,true,false);
-  if(x.route_owner!==FULL_APP_OWNER)
+  if(x.route_owner!==FULL_APP_OWNER&&!mixed)
     return report("HOLD","UNREVIEWED_PUBLISHED_ROUTE_OWNER",true,false,false);
   // Unknown/missing fields from older deployments are NOT interpreted as true.
   if(x.gate4_alert_ingress_registered!==true)
