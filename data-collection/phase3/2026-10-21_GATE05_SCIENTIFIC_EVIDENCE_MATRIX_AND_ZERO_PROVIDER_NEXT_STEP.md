@@ -39,6 +39,20 @@ The Plan also requires schedule identity, arrival/departure role, local-time DST
 
 **Provider OpenAPI semantic shape is a *contract* only.** The repo's offline `inspectGate05OpenApiBytesV39` checks `scheduledTime`, `revisedTime`, `runwayTime` descriptions. It deliberately returns `sourceAuthenticityVerified:false`, `observedMovementActualityVerified:false`, `providerCurrentTariffVerified:false`. A structural description is not an observed proportion of actual runway times.
 
+## Additional provider-contract finding — actual versus estimated is not resolved by a non-null time
+
+The *public official* AeroDataBox OpenAPI **v1.15.4.0** ([source](https://doc.aerodatabox.com/docs/openapi-rapidapi-v1.json), `FlightAirportMovementContract`) describes:
+
+- `departure.scheduledTime`: **scheduled departure or arrival time**, without itself saying that it is a scheduled *runway* rather than gate milestone.
+- `departure.revisedTime`: **actual/estimated**; if `runwayTime` differs, this is gate-side, otherwise it **may** be gate or runway. It is unsafe to map it unconditionally to actual gate-out.
+- `departure.runwayTime`: **actual/estimated** runway take-off for departures, *if known*. Thus presence alone does not establish a verified actual runway departure timestamp.
+- `departure.quality`: a quality-indicator array with possible `Basic`, `Live`, `Approximate`; this is **not an unequivocal per-timestamp boolean** `isActual`. Whether flight status/quality makes any particular runway value scientifically actual needs demonstrated semantics, not inference from the field's presence.
+- With `withLeg=true`, `AirportFlightContract` can have `departure` and `arrival` and the opposite airport is context; keep population role distinct.
+
+The controlling Plan f.8 §6.3 explicitly separates **gate-out delay** (`actual_gate_out − scheduled_gate_out`) from **wheels-off/runway delay** (`actual_wheels_off − scheduled_wheels_off`). `scheduledTime` without proven runway semantics cannot silently be used for `scheduled_wheels_off`. This distinction is central to the project's desired **departure-runway delay** target; it is a P0 scientific admissibility issue, not mere missing-data bookkeeping. It does not invalidate tonight's 30/30 two-query technical success.
+
+Any future aggregate-only observer should count `quality` categories and fields separately, but label `actuality=UNKNOWN` when the provider contract/observed status does not unambiguously prove actual. Avoid guessing by comparing times, by 'Completed' status alone, or by a convenient fallback from revised to runway. A second endpoint/source may be needed to validate semantics, only after separate source-rights and spend approval.
+
 ## Finite continuation: zero provider spending now
 
 1. **Preserve closure and audit trail.** Do not rerun the paid operator, reactivate the old scope, replay signed auth, create a new STOP worker, or rewrite its private receipt. Existing total 4 units and terminal STOP are final for this authorization.
