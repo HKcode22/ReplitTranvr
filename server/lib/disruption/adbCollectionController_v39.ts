@@ -32,6 +32,7 @@ import { externalSpend, reconcileSpend, runSettlement, type SettlementConfig } f
 import { assessGate4SpendV39, assessGate4SecondStartV39 } from "./gate4SendAwareDecision_v39";
 import {executeGate4SafetyActionV39} from "./gate4WatchdogAction_v39";
 import {assertGate4TransactionalAdmissionV39} from "./gate4TransactionalAdmission_v39";
+import {attemptGate4AllOwnedDeletesV39} from "./gate4OwnedStopDelete_v39";
 import {runGate4OwnedSubscriptionCreatesV39} from "./gate4OwnedCreateRecovery_v39";
 
 export type AirportTier = "HUB" | "MID" | "REGIONAL";
@@ -337,16 +338,32 @@ async function segmentInternalItems(segmentId: string): Promise<number> {
 }
 async function settleAndCloseActiveSegment(batch: CollectionBatch, seg: SegmentRow, reason: string, config: FrozenRuntimeConfig): Promise<number> {
   const subs = await pool.query("SELECT subscription_id FROM clean.adb_collection_subs WHERE segment_id=$1 AND ended_at IS NULL", [seg.segment_id]);
-  let deletionFailure = false;
-  for (const r of subs.rows) {
-    const id = String(r.subscription_id);
-    if (await deleteSubscription(id)) await pool.query("UPDATE clean.adb_collection_subs SET ended_at=now() WHERE subscription_id=$1", [id]);
-    else deletionFailure = true;
-  }
-  if (deletionFailure) {
-    await writeIncident("deletion", { batchId: batch.batchId, segmentId: seg.segment_id });
-    await pool.query("UPDATE clean.adb_collection_segments SET status='FAILED',stop_reason=$2 WHERE segment_id=$1", [seg.segment_id, "delete_failed"]);
-    throw new Error("INCIDENT_STOP: provider subscription deletion failed");
+  // A single failed provider DELETE must never suppress the rest of the
+  // known-owned deletion attempts. This readback does not prove that a
+  // remote resource lacking a persisted ID does not exist.
+  const cleanup = await attemptGate4AllOwnedDeletesV39(
+    subs.rows.map((r:any)=>String(r.subscription_id)),{
+      deleteOwned: async id => await deleteSubscription(id),
+      markEnded: async id => {
+        const result=await pool.query(
+          "UPDATE clean.adb_collection_subs SET ended_at=now() WHERE subscription_id=$1 AND ended_at IS NULL",
+          [id]);
+        return result.rowCount===1;
+      }
+    });
+  if (!cleanup.allKnownOwnedClosed) {
+    // Independently attempt both SQL records; either can fail during
+    // an outage, but physical deletion attempts already happened.
+    await Promise.allSettled([
+      pool.query("UPDATE clean.adb_collection_segments SET status='FAILED',stop_reason=$2 WHERE segment_id=$1",
+        [seg.segment_id, "owned_delete_unconfirmed"]),
+      writeIncident("deletion", {
+        batchId:batch.batchId,segmentId:seg.segment_id,
+        attempted:cleanup.attempted,unconfirmed:cleanup.unconfirmed,
+        reason:"owned_delete_unconfirmed"
+      })
+    ]);
+    throw new Error("INCIDENT_STOP: provider subscription deletion unconfirmed");
   }
   const settlement = await runSettlement(config.settlement, async () => (await getBalance())?.creditsRemaining ?? null);
   if (settlement.status !== "settled") {
