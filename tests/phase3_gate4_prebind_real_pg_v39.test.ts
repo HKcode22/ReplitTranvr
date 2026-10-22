@@ -12,6 +12,8 @@ import {createGate4PrebindPgStoreV39} from
   "../server/lib/disruption/gate4PrebindPgStore_v39";
 import {createGate4OwnedBindingPgStoreV39} from
   "../server/lib/disruption/gate4OwnedBindingPgStore_v39";
+import {gate4CheckAdditivePgRoleV39} from
+  "../server/lib/disruption/gate4PrebindAdditiveRoute_v39";
 import {quarantineGate4PrebindOriginalV39} from
   "../server/lib/disruption/gate4PrebindIngress_v39";
 
@@ -51,6 +53,14 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
       db:"gate4_prebind_ci",actor:"gate4_fixture"
     });
     await pool.query("CREATE SCHEMA clean");
+    // Recreate the real V3.9 default grant behavior on the disposable
+    // admin account; Gate4 tables must REVOKE its future broad DML.
+    await pool.query("CREATE ROLE travnr_v39_runtime NOLOGIN");
+    await pool.query(
+      "ALTER DEFAULT PRIVILEGES IN SCHEMA clean "+
+      "GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES "+
+      "TO travnr_v39_runtime"
+    );
     const ddl=readFileSync(new URL(
       "../migrations/staged/V0071__gate4_alert_prebind_quarantine_v39.sql",
       import.meta.url),"utf8");
@@ -120,6 +130,70 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
       import.meta.url),"utf8");
     expect(ddlBind).toContain("STAGED");
     await pool.query(ddlBind);
+    // Current runtime broad role must receive NONE of the new V0071/V0072
+    // table grants, even when its default privileges applied at CREATE.
+    const noBroad=(await pool.query(
+      "SELECT "+
+      "has_table_privilege('travnr_v39_runtime',"+
+      "'clean.gate4_alert_prebind_original_v39','SELECT') AS raw_select,"+
+      "has_table_privilege('travnr_v39_runtime',"+
+      "'clean.gate4_alert_prebind_original_v39','INSERT') AS raw_insert,"+
+      "has_table_privilege('travnr_v39_runtime',"+
+      "'clean.gate4_alert_owned_binding_v39','SELECT') AS bound_select"
+    )).rows[0];
+    expect(noBroad).toEqual({
+      raw_select:false,raw_insert:false,bound_select:false
+    });
+    // V0073 is intentionally STAGED: only a synthetic disposable PG
+    // already containing the two restricted logins can GRANT permissions.
+    await pool.query("CREATE ROLE gate4_receiver_20261022 LOGIN");
+    await pool.query("CREATE ROLE gate4_safety_reader_20261022 LOGIN");
+    const ddlGrants=readFileSync(new URL(
+      "../migrations/staged/V0073__gate4_existing_neon_role_grants_v39.sql",
+      import.meta.url),"utf8");
+    expect(ddlGrants).toContain("STAGED / NOT AUTO-APPLIED");
+    const disposableOnly=ddlGrants.replace(
+      "GRANT CONNECT ON DATABASE neondb",
+      "GRANT CONNECT ON DATABASE gate4_prebind_ci"
+    );
+    expect(disposableOnly).not.toBe(ddlGrants);
+    await pool.query(disposableOnly);
+    const receiver=await pool.connect();
+    try{
+      await receiver.query("SET ROLE gate4_receiver_20261022");
+      await gate4CheckAdditivePgRoleV39(receiver,
+        "gate4_receiver_20261022","gate4_prebind_ci");
+      // A real restricted role can SELECT its own raw table but cannot
+      // query the positive binding table or alter original rows.
+      expect((await receiver.query(
+        "SELECT count(*)::int AS n FROM "+
+        "clean.gate4_alert_prebind_original_v39"
+      )).rows[0].n).toBe(2);
+      await expect(receiver.query(
+        "SELECT count(*) FROM clean.gate4_alert_owned_binding_v39"
+      )).rejects.toThrow();
+      await expect(receiver.query(
+        "UPDATE clean.gate4_alert_prebind_original_v39 "+
+        "SET airport_icao='KLAX'"
+      )).rejects.toThrow();
+    }finally{
+      await receiver.query("RESET ROLE").catch(()=>undefined);
+      receiver.release();
+    }
+    const safety=await pool.connect();
+    try{
+      await safety.query("SET ROLE gate4_safety_reader_20261022");
+      const p=(await safety.query(
+        "SELECT has_table_privilege(current_user,"+
+        "'clean.gate4_alert_owned_binding_v39','SELECT') AS can_read,"+
+        "has_table_privilege(current_user,"+
+        "'clean.gate4_alert_owned_binding_v39','INSERT') AS can_write"
+      )).rows[0];
+      expect(p).toEqual({can_read:true,can_write:false});
+    }finally{
+      await safety.query("RESET ROLE").catch(()=>undefined);
+      safety.release();
+    }
     const bindStore=createGate4OwnedBindingPgStoreV39(pool);
     const binding={
       ...scope,subscriptionId:"exactOwned99",
@@ -155,6 +229,7 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
     expect((await pool.query(
       "SELECT count(*)::int AS n FROM clean.gate4_alert_owned_binding_v39"
     )).rows[0].n).toBe(1);
+    console.log("GATE4_DISPOSABLE_PG_RESTRICTED_ROLES_AND_DEFAULT_GRANTS_PASS");
     console.log("GATE4_DISPOSABLE_PG_OWNER_BIND_WRITE_ONCE_PASS");
     console.log("GATE4_DISPOSABLE_PG_ORIGINAL_AND_READBACK_PASS");
     console.log("PROVIDER_CALLS=0");
