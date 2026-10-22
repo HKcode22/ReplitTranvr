@@ -16,7 +16,7 @@ import {
   deleteSubscription,
   getBalance,
   listFeedAirports,
-  listSubscriptions,
+  listSubscriptionsStrict,
   type FeedService,
 } from "./aerodataboxLimiter_v3";
 import { AIRPORT_CATALOG, tierForIcao } from "./adbAirportCatalog_v3";
@@ -211,11 +211,13 @@ async function nextCalendarDay(): Promise<CalendarDayRow> {
   return r.rows[0] as CalendarDayRow;
 }
 async function assertR1Exclusive(): Promise<void> {
-  const provider = await listSubscriptions();
+  // NEVER use the UI reader here: listSubscriptions() converts provider
+  // failures to [], which would create a false-clear billable account.
+  const provider = await listSubscriptionsStrict();
   const owned = await pool.query("SELECT subscription_id FROM clean.adb_collection_subs WHERE ended_at IS NULL");
   const ids = new Set(owned.rows.map((r: any) => String(r.subscription_id)));
   const foreign = provider.filter(s => s.isActive && s.billingType !== "LifetimeBased" && !ids.has(String(s.id)));
-  if (foreign.length) throw new Error(`REFUSED_R1_FOREIGN_ACTIVE:${foreign.map(x => x.id).join(",")}`);
+  if (foreign.length) throw new Error("REFUSED_R1_FOREIGN_ACTIVE_COUNT="+foreign.length);
 }
 
 async function loadFrameAndStates(): Promise<{ frame: FrameSamplingCandidate[]; states: AirportSamplingState[] }> {
@@ -364,6 +366,29 @@ async function settleAndCloseActiveSegment(batch: CollectionBatch, seg: SegmentR
       })
     ]);
     throw new Error("INCIDENT_STOP: provider subscription deletion unconfirmed");
+  }
+  // Before even trying to settle billing, independently inventory the
+  // provider account using the STRICT (fail-closed) free LIST endpoint.
+  // The DELETE response and local ended_at timestamps are not themselves
+  // proof the billable subscription was actually disabled.
+  let activeBillableCount:number|null=null;
+  try {
+    const inventory=await listSubscriptionsStrict();
+    activeBillableCount=inventory.filter(x=>x.isActive && x.billingType!=="LifetimeBased").length;
+  } catch {
+    activeBillableCount=null;
+  }
+  if (activeBillableCount===null || activeBillableCount!==0) {
+    await Promise.allSettled([
+      pool.query("UPDATE clean.adb_collection_segments SET status='FAILED',stop_reason=$2 WHERE segment_id=$1",
+        [seg.segment_id, "provider_inventory_unverified"]),
+      writeIncident("deletion",{
+        batchId:batch.batchId,segmentId:seg.segment_id,
+        reason:"provider_inventory_unverified",
+        activeBillableCount
+      })
+    ]);
+    throw new Error("INCIDENT_STOP: strict provider subscription inventory unverified");
   }
   const settlement = await runSettlement(config.settlement, async () => (await getBalance())?.creditsRemaining ?? null);
   if (settlement.status !== "settled") {
