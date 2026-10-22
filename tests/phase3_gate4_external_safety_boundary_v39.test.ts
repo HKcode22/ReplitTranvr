@@ -37,7 +37,6 @@ describe("Gate4 external supervisor config: offline trust-boundary candidate",()
       externalSupervisorArmed:false,alertAcknowledged:false,
       restrictedCredentialsProven:false,
       deploymentIdentityIndependentlyAttested:false,
-      rollbackResistantAnchorAttested:undefined,
       providerRequests:0,databaseWrites:0
     });
     expect(JSON.stringify(check())).not.toContain("s".repeat(48));
