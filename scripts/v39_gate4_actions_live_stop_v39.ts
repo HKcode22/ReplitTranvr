@@ -28,7 +28,6 @@ import {
 export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;
 const EXACT_CONFIRM="WATCH_G4_EXACT_ID_STOP_NO_CREATE";
 const sleep=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms));
-const HEAD=/^[a-f0-9]{40}$/,SHA=/^[a-f0-9]{64}$/;
 const name=/^gate4_safety_reader_[a-z0-9_]{4,60}$/;
 function hold(reason:string):never{throw Error("GATE4_ACTIONS_"+reason+"_HOLD");}
 function requireEnv(env:NodeJS.ProcessEnv,key:string):string{
