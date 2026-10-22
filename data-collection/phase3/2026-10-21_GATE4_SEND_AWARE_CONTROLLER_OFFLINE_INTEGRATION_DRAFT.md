@@ -57,3 +57,9 @@ The latest Gate4 draft now adds `gate4TransactionalAdmission_v39.ts` and `tests/
 Five offline negative/positive tests cover fresh start, lock contention, active batch, unsettled predecessor and source code order. **These tests are not an actual multi-connection PG concurrency test and have not yet been verified as passed on the updated branch.** Future terminal production release still needs a real backend concurrency challenge, failing provider DEL/settlement and source verified independent watchdog, rather than promising a hard credit cap.
 
 Latest source review head after this change is `97d9faa931794bc4d4777fcb7eeb317278f948e9`. Passing earlier six Gate4 focused tests and five separate Gate05 focused tests remain historical specific-commit evidence, not automatic green for this SHA.
+
+## Stop-first ordering hardening (post-offline test snapshot)
+
+The injectable watchdog action now attempts the exact owned STOP **before** attempting to write a failure incident to PostgreSQL. A stalled incident SQL write must never be a prerequisite for a DELETE attempt. The helper still returns `STOP_UNCONFIRMED` if deletion, ownership, or the local CLOSED receipt is missing; even `STOP_ATTEMPT_RETURNED` explicitly requires later independent provider/DB/account terminal readback. The seventh watchdog action fixture asserts STOP-before-incident ordering. It **has not yet been proven on a real provider**, nor has the seven-test suite been verified green at this SHA.
+
+No existing paid authorization is used. Any new live Gate4 proof requires independently signed source, an allowed billable CREATE scope, time and protected-credit controls, a separate non-billable independent owner/delete rescue, 3 stable provider balance reads, immutable error receipts, and owner approval after a clear overrun warning. A local `setInterval` catch and transaction-scoped lock alone are insufficient.
