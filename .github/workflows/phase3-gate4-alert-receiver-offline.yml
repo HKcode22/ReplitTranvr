@@ -16,6 +16,10 @@ on:
       - "tests/phase3_gate4_prebind_ingress_v39.test.ts"
       - "tests/phase3_gate4_prebind_real_pg_v39.test.ts"
       - "migrations/staged/V0071__gate4_alert_prebind_quarantine_v39.sql"
+      - "migrations/staged/V0072__gate4_owned_binding_v39.sql"
+      - "server/lib/disruption/gate4VerifiedOwnerBinding_v39.ts"
+      - "server/lib/disruption/gate4OwnedBindingPgStore_v39.ts"
+      - "tests/phase3_gate4_verified_owner_binding_v39.test.ts"
       - "server/lib/disruption/workspaceRuntimeHealth_v39.ts"
       - "server/lib/disruption/gate4AlertIngressScope_v39.ts"
       - "server/lib/disruption/gate4AlertRouteReadiness_v39.ts"
@@ -69,7 +73,8 @@ jobs:
           npx vitest run \
             tests/phase3_gate4_alert_receiver_only_v39.test.ts \
             tests/phase3_gate4_alert_route_readiness_v39.test.ts \
-            tests/phase3_gate4_prebind_ingress_v39.test.ts
+            tests/phase3_gate4_prebind_ingress_v39.test.ts \
+            tests/phase3_gate4_verified_owner_binding_v39.test.ts
       - name: Verify separate candidate receiver build
         run: |
           set -Eeuo pipefail
