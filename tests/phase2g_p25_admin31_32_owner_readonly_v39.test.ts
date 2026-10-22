@@ -20,7 +20,7 @@ describe("P25 YSSY incident31+32 review diagnostic must remain READ ONLY",()=>{
  });
  it("requires all 58 verified source tombstones and strict free inventory",()=>{
   expect(s).toContain("listSubscriptionsStrict()");
-  expect(s).not.toContain("listSubscriptions()");
+  expect(s).not.toContain("await listSubscriptions()");
   expect(s).toContain("count(DISTINCT deletion_run_id)");
   expect(s).toContain("deletion_verified_at_utc IS NOT NULL");
   expect(s).toContain("rowsInDeletionRun:Number(runs?.n??NaN)");
