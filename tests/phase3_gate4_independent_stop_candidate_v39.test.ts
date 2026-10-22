@@ -4,7 +4,8 @@ import {
   assessGate4IndependentStopCandidateV39,
   executeGate4IndependentStopCandidateV39,
   type Gate4IndependentStopTicketV39,
-  type Gate4IndependentStopPinsV39
+  type Gate4IndependentStopPinsV39,
+  type Gate4IndependentHeartbeatEvidenceV39
 } from "../server/lib/disruption/gate4IndependentStopCandidate_v39";
 import type {WebhookSubscription} from
   "../server/lib/disruption/aerodataboxLimiter_v3";
@@ -23,10 +24,14 @@ const ticket:Gate4IndependentStopTicketV39={
   subscriptionId:pins.exactOwnedSubscriptionId,
   subjectType:"FlightByAirportIcao",subjectId:"WSSS",
   startAtUtc:"2026-10-22T20:00:00.000Z",
-  stopAtUtc:"2026-10-22T20:10:00.000Z",
-  controllerHeartbeatUtc:"2026-10-22T20:02:55.000Z"
+  stopAtUtc:"2026-10-22T20:10:00.000Z"
 };
 const T=(ts:string)=>"2026-10-22T"+ts+".000Z";
+const evidence:Gate4IndependentHeartbeatEvidenceV39={
+  scopeId:pins.scopeId,authorizationSha256:pins.authorizationSha256,
+  observedAtUtc:T("20:03:00"),
+  controllerHeartbeatUtc:T("20:02:55")
+};
 const sub=(id="exactID99",airport="WSSS"):WebhookSubscription=>({
   id,isActive:true,billingType:"CreditBased",
   subject:{type:"FlightByAirportIcao",id:airport}
@@ -39,7 +44,7 @@ const deps=()=>{
 
 describe("Gate4 proposed independent STOP — fail-closed pure decision",()=>{
   it("does not arm a service or authorize a paid trial from a healthy ticket",()=>{
-    const v=assessGate4IndependentStopCandidateV39(ticket,pins,T("20:03:00"));
+    const v=assessGate4IndependentStopCandidateV39(ticket,pins,T("20:03:00"),evidence);
     expect(v).toMatchObject({
       action:"WATCH",reason:"WITHIN_WINDOW_HEARTBEAT_RECENT",
       independentSupervisorArmed:false,
@@ -49,26 +54,35 @@ describe("Gate4 proposed independent STOP — fail-closed pure decision",()=>{
   it("stops at exact signed deadline, including after controller process death",()=>{
     for(const clock of [T("20:10:00"),T("20:15:00")]){
       expect(assessGate4IndependentStopCandidateV39(
-        {...ticket,controllerHeartbeatUtc:null},pins,clock
+        ticket,pins,clock,null
       )).toMatchObject({action:"STOP",reason:"SIGNED_STOP_DEADLINE_REACHED"});
     }
     expect(assessGate4IndependentStopCandidateV39(
-      ticket,pins,T("19:59:59")
+      ticket,pins,T("19:59:59"),null
     )).toMatchObject({action:"WATCH",reason:"BEFORE_SIGNED_START"});
   });
-  it("requires STOP for missing, stale or future heartbeat during active window",()=>{
-    expect(assessGate4IndependentStopCandidateV39({
-      ...ticket,controllerHeartbeatUtc:null
-    },pins,T("20:03:00")).reason).toBe("CONTROLLER_HEARTBEAT_MISSING");
-    expect(assessGate4IndependentStopCandidateV39({
-      ...ticket,controllerHeartbeatUtc:T("20:02:29")
-    },pins,T("20:03:00")).reason).toBe("CONTROLLER_HEARTBEAT_STALE");
-    expect(assessGate4IndependentStopCandidateV39({
-      ...ticket,controllerHeartbeatUtc:T("20:03:06")
-    },pins,T("20:03:00")).reason).toBe("CONTROLLER_CLOCK_SKEW");
-    expect(assessGate4IndependentStopCandidateV39({
-      ...ticket,controllerHeartbeatUtc:T("20:02:30")
-    },pins,T("20:03:00")).action).toBe("WATCH");
+  it("requires fresh, separately observed heartbeat evidence during active window",()=>{
+    expect(assessGate4IndependentStopCandidateV39(
+      ticket,pins,T("20:03:00"),null
+    ).reason).toBe("HEARTBEAT_EVIDENCE_MISSING_OR_WRONG_SCOPE");
+    expect(assessGate4IndependentStopCandidateV39(
+      ticket,pins,T("20:03:00"),{...evidence,scopeId:"other"}
+    ).reason).toBe("HEARTBEAT_EVIDENCE_MISSING_OR_WRONG_SCOPE");
+    expect(assessGate4IndependentStopCandidateV39(
+      ticket,pins,T("20:03:00"),{...evidence,observedAtUtc:T("20:02:44")}
+    ).reason).toBe("HEARTBEAT_EVIDENCE_STALE_OR_FUTURE");
+    expect(assessGate4IndependentStopCandidateV39(
+      ticket,pins,T("20:03:00"),{...evidence,controllerHeartbeatUtc:null}
+    ).reason).toBe("CONTROLLER_HEARTBEAT_MISSING");
+    expect(assessGate4IndependentStopCandidateV39(
+      ticket,pins,T("20:03:00"),{...evidence,controllerHeartbeatUtc:T("20:02:29")}
+    ).reason).toBe("CONTROLLER_HEARTBEAT_STALE");
+    expect(assessGate4IndependentStopCandidateV39(
+      ticket,pins,T("20:03:00"),{...evidence,controllerHeartbeatUtc:T("20:03:06")}
+    ).reason).toBe("CONTROLLER_CLOCK_SKEW");
+    expect(assessGate4IndependentStopCandidateV39(
+      ticket,pins,T("20:03:00"),{...evidence,controllerHeartbeatUtc:T("20:02:30")}
+    ).action).toBe("WATCH");
   });
   it("holds on missing ID, scope/hash/source mismatch, noncanonical clock or wide window",()=>{
     const cases:Array<[Gate4IndependentStopTicketV39,
@@ -85,7 +99,7 @@ describe("Gate4 proposed independent STOP — fail-closed pure decision",()=>{
       [{...ticket,stopAtUtc:"invalid"},pins,T("20:10:00")]
     ];
     for(const [t,p,now] of cases){
-      expect(assessGate4IndependentStopCandidateV39(t,p,now).action)
+      expect(assessGate4IndependentStopCandidateV39(t,p,now,evidence).action)
         .toBe("HOLD");
     }
   });
@@ -95,7 +109,7 @@ describe("Gate4 injectable STOP — no-provider fault simulation",()=>{
   it("a WATCH never calls even free LIST, much less DELETE",async()=>{
     const d=deps();
     const out=await executeGate4IndependentStopCandidateV39(
-      ticket,pins,T("20:03:00"),d
+      ticket,pins,T("20:03:00"),evidence,d
     );
     expect(out).toMatchObject({
       decision:{action:"WATCH"},stopResult:null,
@@ -107,7 +121,7 @@ describe("Gate4 injectable STOP — no-provider fault simulation",()=>{
   it("untrusted or missing exact-owned ID never invokes remote provider",async()=>{
     const d=deps();
     const out=await executeGate4IndependentStopCandidateV39(
-      {...ticket,subscriptionId:null},pins,T("20:10:00"),d
+      {...ticket,subscriptionId:null},pins,T("20:10:00"),null,d
     );
     expect(out.decision.action).toBe("HOLD");
     expect(out.stopResult).toBeNull();
@@ -119,7 +133,7 @@ describe("Gate4 injectable STOP — no-provider fault simulation",()=>{
     d.listStrict.mockResolvedValueOnce([sub()])
       .mockResolvedValueOnce([]);
     const out=await executeGate4IndependentStopCandidateV39(
-      {...ticket,controllerHeartbeatUtc:null},pins,T("20:10:00"),d
+      ticket,pins,T("20:10:00"),null,d
     );
     expect(d.deleteExactVerified).toHaveBeenCalledExactlyOnceWith("exactID99");
     expect(d.listStrict).toHaveBeenCalledTimes(2);
@@ -137,7 +151,7 @@ describe("Gate4 injectable STOP — no-provider fault simulation",()=>{
     const d=deps();
     d.listStrict.mockResolvedValueOnce([sub("exactID99","KLAX")]);
     const out=await executeGate4IndependentStopCandidateV39(
-      ticket,pins,T("20:10:00"),d
+      ticket,pins,T("20:10:00"),null,d
     );
     expect(out.stopResult?.status).toBe("HOLD_UNCONFIRMED");
     expect(d.deleteExactVerified).not.toHaveBeenCalled();
@@ -147,7 +161,7 @@ describe("Gate4 injectable STOP — no-provider fault simulation",()=>{
     d.listStrict.mockResolvedValueOnce([sub(),sub("otherSubID","KLAX")])
       .mockResolvedValueOnce([sub("otherSubID","KLAX")]);
     const out=await executeGate4IndependentStopCandidateV39(
-      ticket,pins,T("20:10:00"),d
+      ticket,pins,T("20:10:00"),null,d
     );
     expect(d.deleteExactVerified).toHaveBeenCalledExactlyOnceWith("exactID99");
     expect(out.stopResult?.status).toBe("HOLD_UNCONFIRMED");
@@ -157,7 +171,7 @@ describe("Gate4 injectable STOP — no-provider fault simulation",()=>{
     const d=deps();
     d.listStrict.mockRejectedValueOnce(new Error("secret provider error"));
     const out=await executeGate4IndependentStopCandidateV39(
-      ticket,pins,T("20:10:00"),d
+      ticket,pins,T("20:10:00"),null,d
     );
     expect(out.stopResult?.status).toBe("HOLD_UNCONFIRMED");
     expect(d.deleteExactVerified).not.toHaveBeenCalled();
@@ -168,13 +182,13 @@ describe("Gate4 injectable STOP — no-provider fault simulation",()=>{
     d.listStrict.mockResolvedValue([sub()]);
     d.deleteExactVerified.mockResolvedValue(false);
     const failed=await executeGate4IndependentStopCandidateV39(
-      ticket,pins,T("20:10:00"),d
+      ticket,pins,T("20:10:00"),null,d
     );
     expect(failed.stopResult?.status).toBe("HOLD_UNCONFIRMED");
     const d2=deps();
     d2.listStrict.mockResolvedValue([sub()]);
     const stillActive=await executeGate4IndependentStopCandidateV39(
-      ticket,pins,T("20:10:00"),d2
+      ticket,pins,T("20:10:00"),null,d2
     );
     expect(stillActive.stopResult?.status).toBe("HOLD_UNCONFIRMED");
   });
