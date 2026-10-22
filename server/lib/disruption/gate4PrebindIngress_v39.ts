@@ -104,7 +104,7 @@ export async function quarantineGate4PrebindOriginalV39(
   if(!subject||typeof subject!=="object"||Array.isArray(subject))
     return result("HOLD","SUBJECT_CLAIM_MISSING",422);
   const s=subject as Record<string,unknown>;
-  if(!CLAIM.test(sub.id as string??"")||
+  if(typeof sub.id!=="string"||!CLAIM.test(sub.id)||
     s.type!=="FlightByAirportIcao"||
     s.id!==scope.airportIcao||
     !Array.isArray(e.flights)||e.flights.length>250)
