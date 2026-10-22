@@ -102,7 +102,7 @@ describe("Gate4 offline independent STOP crash/restart rehearsal",()=>{
     const first=await run(q,{
       listStrict:async()=>[ownerSub],deleteExactVerified
     });
-    expect(first.stopResult.stopResult?.status).toBe("HOLD_UNCONFIRMED");
+    expect(first.stopResult?.stopResult?.status).toBe("HOLD_UNCONFIRMED");
     // Simulated process is destroyed. A new reader rehydrates the same
     // separately pinned STOP_UNCONFIRMED journal and verifies signature again.
     const listStrict=vi.fn().mockResolvedValueOnce([ownerSub])
@@ -113,10 +113,10 @@ describe("Gate4 offline independent STOP crash/restart rehearsal",()=>{
     expect(deleteExactVerified).toHaveBeenCalledTimes(2);
     expect(deleteExactVerified).toHaveBeenNthCalledWith(1,id);
     expect(deleteExactVerified).toHaveBeenNthCalledWith(2,id);
-    expect(second.stopResult.stopResult?.status)
+    expect(second.stopResult?.stopResult?.status)
       .toBe("DELETE_VERIFIED_PENDING_SETTLEMENT");
-    expect(second.stopResult.creditSettlementVerified).toBe(false);
-    expect(second.stopResult.independentSupervisorArmed).toBe(false);
+    expect(second.stopResult?.creditSettlementVerified).toBe(false);
+    expect(second.stopResult?.independentSupervisorArmed).toBe(false);
   });
   it("on lost DELETE ACK, reboot sees zero active and does not DELETE again",async()=>{
     const q=pending();
@@ -129,11 +129,11 @@ describe("Gate4 offline independent STOP crash/restart rehearsal",()=>{
       deleteExactVerified
     };
     const first=await run(q,deps);
-    expect(first.stopResult.stopResult?.status).toBe("HOLD_UNCONFIRMED");
+    expect(first.stopResult?.stopResult?.status).toBe("HOLD_UNCONFIRMED");
     const second=await run(q,deps);
-    expect(second.stopResult.stopResult?.status).toBe("NO_ACTIVE_OWNED");
+    expect(second.stopResult?.stopResult?.status).toBe("NO_ACTIVE_OWNED");
     expect(deleteExactVerified).toHaveBeenCalledTimes(1);
-    expect(second.stopResult.creditSettlementVerified).toBe(false);
+    expect(second.stopResult?.creditSettlementVerified).toBe(false);
   });
   it("unknown remote CREATE outcome cannot infer an ID on restart",async()=>{
     const q=custody(["PREPARED","CREATE_AMBIGUOUS"]);
@@ -177,7 +177,7 @@ describe("Gate4 offline independent STOP crash/restart rehearsal",()=>{
       listStrict:async()=>{throw Error("private endpoint and token");},
       deleteExactVerified
     });
-    expect(result.stopResult.stopResult?.status).toBe("HOLD_UNCONFIRMED");
+    expect(result.stopResult?.stopResult?.status).toBe("HOLD_UNCONFIRMED");
     expect(JSON.stringify(result)).not.toContain("private endpoint");
     expect(deleteExactVerified).not.toHaveBeenCalled();
   });
@@ -192,7 +192,7 @@ describe("Gate4 offline independent STOP crash/restart rehearsal",()=>{
       deleteExactVerified
     });
     expect(deleteExactVerified).toHaveBeenCalledExactlyOnceWith(id);
-    expect(result.stopResult.stopResult?.status).toBe("HOLD_UNCONFIRMED");
-    expect(result.stopResult.creditSettlementVerified).toBe(false);
+    expect(result.stopResult?.stopResult?.status).toBe("HOLD_UNCONFIRMED");
+    expect(result.stopResult?.creditSettlementVerified).toBe(false);
   });
 });
