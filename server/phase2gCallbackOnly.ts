@@ -150,6 +150,7 @@ registerV3Routes(app);
 registerWorkspaceRuntimeHealthV39(app, {
   routeOwner:
     "server/phase2gCallbackOnly.ts+server/routes_v3.ts",
+  gate4AlertIngressRegistered: false,
 });
 
 app.use((
