@@ -657,6 +657,15 @@ export function startCollectionWatchdog(): void {
         return;
       }
       if (!emergency) return;
+      // Stop-first: writing an incident can block on the very DB fault
+      // we are trying to recover from. Never put it before an owned STOP.
+      try {
+        const stopped = await stopBatch("gate4_unhandled_watchdog_fault");
+        if(stopped?.batchId!==emergency.batchId || stopped.status!=="CLOSED")
+          console.error("[adb-v39] GATE4_WATCHDOG_STOP_NOT_CONFIRMED");
+      } catch {
+        console.error("[adb-v39] GATE4_WATCHDOG_STOP_NOT_CONFIRMED");
+      }
       try {
         await writeIncident("reconciliation", {
           batchId: emergency.batchId,
@@ -664,11 +673,6 @@ export function startCollectionWatchdog(): void {
         });
       } catch {
         console.error("[adb-v39] GATE4_WATCHDOG_INCIDENT_WRITE_FAILED");
-      }
-      try {
-        await stopBatch("gate4_unhandled_watchdog_fault");
-      } catch {
-        console.error("[adb-v39] GATE4_WATCHDOG_STOP_NOT_CONFIRMED");
       }
     } finally {
       watchdogTickInFlight = false;

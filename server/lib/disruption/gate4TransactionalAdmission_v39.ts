@@ -36,8 +36,9 @@ export async function assertGate4TransactionalAdmissionV39(
   if(p===undefined)return;
   if(p.status!=="CLOSED" || p.reconciliation_status!=="MATCH" ||
      p.reconcile_acked!==true ||
-     typeof p.credits_consumed_actual!=="number" && 
-     typeof p.credits_consumed_actual!=="string")
+     !(typeof p.credits_consumed_actual==="number" ||
+       (typeof p.credits_consumed_actual==="string" &&
+        /^\d+$/.test(p.credits_consumed_actual))))
     throw Error("REFUSED_GATE4_UNSETTLED_PREDECESSOR_TRANSACTION");
   const credits=Number(p.credits_consumed_actual);
   if(!Number.isSafeInteger(credits)||credits<0)

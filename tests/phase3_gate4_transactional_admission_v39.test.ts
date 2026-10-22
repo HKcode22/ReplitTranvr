@@ -52,7 +52,8 @@ describe("Gate4 no-provider transactional second-start admission",()=>{
    for(const change of [
      {status:"ACTIVE"},{reconciliation_status:"UNSETTLED"},
      {reconcile_acked:false},{credits_consumed_actual:null},
-     {credits_consumed_actual:"NaN"}
+     {credits_consumed_actual:"NaN"},{credits_consumed_actual:""},
+     {credits_consumed_actual:" 4 "}
    ]){
      const bad=mockPg({predecessor:{...valid,...change}});
      await expect(assertGate4TransactionalAdmissionV39(bad.db)).rejects.toThrow();
