@@ -8,6 +8,14 @@ import {subscribePrepaidStageTimingV39} from "./lib/disruption/phase2gPrepaidSta
 import {observePrepaidHttpTransportV39} from "./lib/disruption/phase2gPrepaidHttpTransportTelemetry_v39";
 import { registerV3Routes } from "./routes_v3";
 import {
+ gate4PrebindAdditiveConfigV39,
+ gate4PrebindAlertPathV39,
+ mountGate4PrebindAdditiveRouteV39,
+ openGate4PrebindAdditiveStoreV39
+} from "./lib/disruption/gate4PrebindAdditiveRoute_v39";
+import type {Gate4PrebindOriginalStoreV39} from
+ "./lib/disruption/gate4PrebindIngress_v39";
+import {
   registerWorkspaceRuntimeHealthV39,
 } from "./lib/disruption/workspaceRuntimeHealth_v39";
 
@@ -68,6 +76,10 @@ if(process.env.V39_PREPAID_STAGE_TELEMETRY==="1"){
     }));
   });
 }
+// Additive opt-in: the existing prepaid-only binary stays the default.
+const gate4Config=gate4PrebindAdditiveConfigV39(process.env);
+const gate4AdditiveEnabled=gate4Config!==null;
+let gate4DurableStore:Gate4PrebindOriginalStoreV39|null=null;
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
@@ -110,6 +122,11 @@ app.use((req, res, next) => {
     (
       req.method === "POST" &&
       prepaidPath.test(req.path)
+    ) ||
+    (
+      gate4AdditiveEnabled &&
+      req.method === "POST" &&
+      gate4PrebindAlertPathV39(req.path)
     );
 
   if (!allowed) {
@@ -129,6 +146,23 @@ app.use((req,res,next)=>{
   }
   next();
 });
+
+// The Gate4 route MUST be registered before ordinaryJson (which would
+// otherwise consume the bytes), and only after the global allowlist.
+if(gate4Config){
+  const bridge:Gate4PrebindOriginalStoreV39={
+    writeOriginal:async original=>{
+      if(!gate4DurableStore)throw Error("GATE4_ADDON_NOT_ARMED");
+      return gate4DurableStore.writeOriginal(original);
+    },
+    readBackOriginal:async original=>{
+      if(!gate4DurableStore)throw Error("GATE4_ADDON_NOT_ARMED");
+      return gate4DurableStore.readBackOriginal(original);
+    }
+  };
+  mountGate4PrebindAdditiveRouteV39(
+    app,gate4Config.scope,gate4Config.secret,bridge);
+}
 
 const ordinaryJson = express.json({
   limit: "2mb",
@@ -150,7 +184,7 @@ registerV3Routes(app);
 registerWorkspaceRuntimeHealthV39(app, {
   routeOwner:
     "server/phase2gCallbackOnly.ts+server/routes_v3.ts",
-  gate4AlertIngressRegistered: false,
+  gate4AlertIngressRegistered: gate4AdditiveEnabled,
 });
 
 app.use((
@@ -174,14 +208,27 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error("INVALID_SERVER_PORT");
 }
 
-createServer(app).listen(
-  { port, host: "0.0.0.0" },
-  () => {
-    console.log(
-      "V39_CALLBACK_ONLY_SERVER_LISTENING",
-    );
-    console.log("AUTO_COLLECTION=false");
-    console.log("BOOT_MIGRATIONS=DISABLED");
-    console.log("STRIPE_STARTUP=DISABLED");
-  },
-);
+// The existing prepaid endpoint remains enabled in both modes. In add-on
+// mode, fail CLOSED before listening if the Gate4 isolated writer is not
+// installed/privileged; do not disrupt the normal prepaid-only boot path.
+async function startCallbackOnlyV39():Promise<void>{
+  if(gate4Config){
+    const opened=await openGate4PrebindAdditiveStoreV39(gate4Config);
+    gate4DurableStore=opened.store;
+  }
+  createServer(app).listen(
+    { port, host: "0.0.0.0" },
+    () => {
+      console.log("V39_CALLBACK_ONLY_SERVER_LISTENING");
+      console.log("AUTO_COLLECTION=false");
+      console.log("BOOT_MIGRATIONS=DISABLED");
+      console.log("STRIPE_STARTUP=DISABLED");
+      console.log("GATE4_ADDON_ROUTE="+(gate4AdditiveEnabled?"DECLARED_NOT_LIVE_PROVEN":"DISABLED"));
+    }
+  );
+}
+void startCallbackOnlyV39().catch(()=>{
+  // No secret, credential, original wire or provider ID in startup logs.
+  console.error("GATE4_ADDON_STARTUP_HOLD");
+  process.exitCode=2;
+});
