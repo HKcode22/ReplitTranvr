@@ -13,7 +13,6 @@
  * independently armed STOP. This source itself verifies none of those.
  */
 import express,{type Request,type Response,type NextFunction,type Express} from "express";
-import {pathToFileURL} from "node:url";
 import {createServer} from "node:http";
 import {timingSafeEqual} from "node:crypto";
 import {registerV3Routes} from "./routes_v3";
@@ -131,7 +130,8 @@ function launch(){
     console.log("STOP_NOT_ARMED");
   });
 }
-if(process.argv[1]&&
-  import.meta.url===pathToFileURL(process.argv[1]).href){
+// Only the separately opted-in esbuild bundle has this constant defined.
+// Imported source/tests and the ordinary app MUST never start the receiver.
+if(process.env.V39_GATE4_RECEIVER_EXECUTION_ENTRYPOINT==="1"){
   launch();
 }
