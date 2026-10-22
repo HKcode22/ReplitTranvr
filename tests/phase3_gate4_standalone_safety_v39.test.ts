@@ -87,6 +87,17 @@ describe("Gate4 independently callable exact-ID provider STOP",()=>{
    expect(r.status).toBe("HOLD_UNCONFIRMED");
    expect(del).not.toHaveBeenCalled();
  });
+ it("refuses ambiguous duplicate provider IDs rather than deleting",async()=>{
+   const del=vi.fn().mockResolvedValue(true);
+   const r=await stopGate4ExactOwnedV39(scope,{
+     listStrict:async()=>[sub(),sub("exactID99","KLAX")],
+     deleteExactVerified:del
+   });
+   expect(r).toMatchObject({
+     status:"HOLD_UNCONFIRMED",creditSettlementVerified:false
+   });
+   expect(del).not.toHaveBeenCalled();
+ });
  it("tries exact OWNED STOP even if foreign active subscription appears",async()=>{
    const del=vi.fn().mockResolvedValue(true);
    const inventory=vi.fn()
