@@ -1,0 +1,33 @@
+# Phase 3 / Gate 4 preflight HOLD — historical YSSY P25 probe 19 incidents 31 and 32, expired blob references
+**Observed:** 2026-10-22 UTC. **Status:** PRODUCTION READONLY / NO REMEDIATION APPROVED. **Source:** `main=ffb5c142e51ab8bb3d9ce7ca944ccc1216a73814`.
+
+## Exact observed production evidence supplied by owner (not inferred)
+- `clean.adb_incident_stop`: **ID31** open, `reconciliation/stage1_supervisor_recovery/provider_subscription_isolation_lost`, `providerDeleteVerified=true`, `providerDeleteAttempted=false`, `runtimeCleanupVerified=false`; **ID32** open, `reconciliation/prepaid_probe_failed`, `cleanupVerified=false`, `reconciliationStatus=DELIVERY_GAP`, `stopReason=external_internal_delivery_gap`.
+- Both refer to P25 **YSSY probe ID 19**, budget `P2G-S1-20261013-03`, durable session UUID `b0077437-edc1-459a-9d63-8c6e6e50c4f2`. Probe `failed / DELIVERY_GAP` with `duration_censored=false`; historical reconciliation **external 231 / internal 229 / gap 2**. **Never relabel a failed source record as PASS/MATCH**.
+- Budget day: **OPEN**, cap 500, one open budget globally. No active probes; exact P25 runtime has **0 sessions, 0 deliveries, 0 items**. Source code-specified in-memory runtime cleanup marker is absent; no argument that absent rows prove the owner completed every step.
+- **58 `clean.provider_content_blob_ref` rows**, metadata SHA refs 58, total **308,832 bytes**, class/contract failures 0. Latest permitted expiry: `2026-10-20T05:02:12.501Z` (**already passed**). **0 `deletion_verified_at_utc` markers, 58 unmarked/live references**. A null deletion marker does **not prove** the physical object still exists. Source bytes not independently inventoried during this audit.
+- Strict free provider LIST/balance at `2026-10-22T07:20:38Z`: **0 active billable subscriptions**, alert credits **2037**, REST units **59996**. No V3.9 active/blocked collection batches, no unended V3.9 local subscriptions; no Gate4 live authorization. This is an account snapshot and does not prove historical source retention compliance.
+- All owner diagnostic commands used `BEGIN READ ONLY`, performed **0 DB/provider mutations**, did not alter incident flags, and logged no raw provider flight data.
+
+## Existing source-backed recovery paths and HOLD reasons
+1. `scripts/v39_p25_yssy_incident31_expiry_closeout_v39.ts --dry-run` is an exact **Incident 31 only** evaluator. Its `assessIncident31ExpiryCloseoutV39` requires **openBudgetDays=0**, all 58 `deletion_verified_at_utc` markers, zero live reference rows, runtime/provider quiescence and immutable 231/229 gap. Current **one OPEN budget day + 58 unverified deletions** means `--apply` is ineligible. It also cannot resolve Incident 32.
+2. `scripts/v39_phase2g_failed_stage1_adjudication_prepare/apply_v39.ts` is expressly for a *different* **WSSS failed/censored/UNRESOLVED** 500-unit probe and will reject this **YSSY uncensored/DELIVERY_GAP** case; do not adapt/reuse silently.
+3. `scripts/v39_p25_yssy_readonly_original_readback_v39.ts --verify-objects` explicitly rejects **expired** reference rows. It was designed for *pre-expiry* byte-level source assessment and should **not** be used as an expiry cleanup substitute or forced past its guard.
+4. Phase-2 only `scripts/v39_phase2_retention_v39.ts` is an existing fail-closed operator with a dedicated blob adapter: **default DRY_RUN**, and `--apply` requires strict `V39_PHASE2_RETENTION_SCOPE_EVIDENCE`, arming, required `V39_PROVIDER_BLOB_MODE=required`, explicit dedicated bucket ID and retention-hours validation. It can process **other** expired material; do not call `--apply` on it merely to clear these incidents without an exact object scope and explicit approved deletion plan. `providerBlobExpiry_v39.ts` marks tombstones only **after** provider storage DELETE then `exists()===false`; it writes deletion incidents on failure.
+5. `ReplitProviderBlobStoreV39` implements read-only `exists(objectName)` for dedicated bucket. A targeted **exists-only** audit of exactly 58 metadata-validated, expired P25 refs can distinguish `PRESENT`, `ABSENT`, and `UNKNOWN/READ_ERROR` without downloading raw bytes, deleting anything or modifying PostgreSQL.
+
+## NEXT safe investigation — no deletion, no provider calls
+- Use `DATABASE_URL` on the previously verified `neondb/neondb_owner` for **BEGIN READ ONLY**, exact P25 `source_kind=webhook/source_record_id LIKE prepaid:<session>:%`, verify 58 refs, 308832 bytes and no contract deviations; require `expires_at_utc <= now`.
+- Require provider blob mode `required` and exact named dedicated bucket environment; never print the bucket ID, opaque object names, hashes, raw contents, session bodies or credentials. `@replit/object-storage` / `createRequiredProviderBlobStoreV39` read-only `exists` must query each exact row. Aggregate **physicallyPresent, physicallyAbsent, readError** counts. No `downloadBytes`, no `delete`, no `--apply`, no provider API.
+- **PRESENT:** expired bytes may require a separately scoped, user-approved deletion/tombstone operation after resolving reference/retention scope; do not represent DB marker update alone as a deletion.
+- **ABSENT:** object is already missing; separately evidence provider object identity and readback, then consider guarded administrative metadata reconciliation/tombstone, not blind `UPDATE deleted=true`.
+- **UNKNOWN:** retain HOLD and investigate credentials/bucket/permissions or transient store failures.
+- Following separately approved physical/storage correction and independent audit, prepare a **new exact administrative reconciliation** of the single budget day and both incidents together, preserving YSSY `failed/DELIVERY_GAP` and the original 2-credit difference. No wholesale override of scientific gates.
+
+## Phase3 and cost boundaries
+- Gate4 draft [PR95](https://github.com/HKcode22/ReplitTranvr/pull/95) has independent offline CI source safety PASS but **LIVE Gate4 NOT CERTIFIED**.
+- WSSS FIDS Gate0.5 prior signed pilot spent 4 units and terminally STOPPED: no reuse of that authorization.
+- Gate3 prepaid and Gate0.5 true T/runway label source semantics remain separate Phase3 blockers. At provider balance **2037 Alert credits**, full Phase6 frozen 1900-unit day plus 1000-credit floor is not affordable. Do **not** start Phase6 to prove Gate4.
+- The user's Friday Oct23 deadline is a target, not authority for raw deletion, billable Alert CREATE or bypass of safety gates.
+
+**Checkpoint-next exact starting point:** operator pastes only aggregate existence readback of 58 YSSY P25 expired blobs. Reconcile any unknown physical-vs-DB mismatch before planning a guarded cleanup. No mutation approval is presumed.
