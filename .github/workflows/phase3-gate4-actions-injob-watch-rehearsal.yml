@@ -1,0 +1,75 @@
+name: Phase3 Gate4 Actions In-Job Watch — NO PROVIDER
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase3-gate4-actions-injob-watch-rehearsal.yml"
+      - "server/lib/disruption/gate4ActionsWatchdogPolicy_v39.ts"
+      - "scripts/v39_gate4_actions_supervisor_rehearsal_v39.ts"
+      - "tests/phase3_gate4_actions_watchdog_policy_v39.test.ts"
+      - "tests/phase3_gate4_actions_supervisor_rehearsal_v39.test.ts"
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Exact NO_PROVIDER_REHEARSAL_ONLY (does not touch AeroDataBox)'
+        required: true
+        type: string
+      expected_head:
+        description: 'Full reviewed source commit SHA'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: gate4-watch-rehearsal-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  no-provider-watch:
+    name: Rehearse continuously running 5-second in-job ticks
+    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.confirm == 'NO_PROVIDER_REHEARSAL_ONLY' && github.ref == 'refs/heads/main') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    # Intentionally no environment secrets and no provider/production DB.
+    env:
+      AERODATABOX_API_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Reject provider or production credentials
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+      - name: Checkout must match requested reviewed HEAD for manual run
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          APPROVED_HEAD: ${{ inputs.expected_head }}
+        run: |
+          set -Eeuo pipefail
+          test "$APPROVED_HEAD" = "$(git rev-parse HEAD)"
+      - run: npm ci --no-audit --no-fund
+      - name: Unit simulation — deadline, soft limit, unknown owner
+        run: |
+          npx vitest run \
+            tests/phase3_gate4_actions_watchdog_policy_v39.test.ts \
+            tests/phase3_gate4_actions_supervisor_rehearsal_v39.test.ts
+      - name: Actual GH in-job 5-second heartbeat loop (synthetic only)
+        run: node --import tsx scripts/v39_gate4_actions_supervisor_rehearsal_v39.ts
+      - name: Record honest readiness
+        if: always()
+        run: |
+          {
+            echo '## Gate4 in-job Actions watchdog rehearsal'
+            echo 'Provider CREATE=0; provider DELETE=0; production DB writes=0.'
+            echo 'Simulated 5-second ticks while same Actions job is continuously running.'
+            echo 'No cron dependence, but runner uptime and queue delay are not guaranteed.'
+            echo 'NOT a live independent STOP; no provider hard cap is proven.'
+          } >> "$GITHUB_STEP_SUMMARY"
