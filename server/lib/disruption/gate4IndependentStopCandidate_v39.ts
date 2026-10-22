@@ -22,6 +22,13 @@ export type Gate4IndependentStopTicketV39=Readonly<{
   subjectId:string;
   startAtUtc:string;
   stopAtUtc:string;
+}>;
+
+/** Separately observed: never accept mutable heartbeat inside signed ticket. */
+export type Gate4IndependentHeartbeatEvidenceV39=Readonly<{
+  scopeId:string;
+  authorizationSha256:string;
+  observedAtUtc:string;
   controllerHeartbeatUtc:string|null;
 }>;
 
@@ -50,6 +57,7 @@ const ICAO=/^[A-Z]{4}$/;
 const UTC=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const MAX_WINDOW_MS=40*60*1000;
 const MAX_HEARTBEAT_AGE_MS=30*1000;
+const MAX_OBSERVATION_AGE_MS=15*1000;
 const MAX_FUTURE_HEARTBEAT_MS=5*1000;
 
 function time(s:unknown):number|null{
@@ -71,7 +79,8 @@ Gate4IndependentStopDecisionV39=>({
 export function assessGate4IndependentStopCandidateV39(
   ticket:Gate4IndependentStopTicketV39,
   pins:Gate4IndependentStopPinsV39,
-  nowUtc:string
+  nowUtc:string,
+  heartbeatEvidence:Gate4IndependentHeartbeatEvidenceV39|null
 ):Gate4IndependentStopDecisionV39 {
   if(!ticket||!pins||ticket.schema!=="v39.gate4.independent-stop-ticket.v1"||
     !SHA40.test(ticket.sourceCommit)||!SHA40.test(pins.sourceCommit)||
@@ -99,10 +108,18 @@ export function assessGate4IndependentStopCandidateV39(
   if(now>=stop)return decision("STOP","SIGNED_STOP_DEADLINE_REACHED");
   if(now<start)return decision("WATCH","BEFORE_SIGNED_START");
 
-  // During the signed window, loss of controller heartbeat mandates STOP,
-  // rather than indefinite WATCH. A future-dated heartbeat also fails safe.
-  const heartbeat=ticket.controllerHeartbeatUtc===null
-    ? null:time(ticket.controllerHeartbeatUtc);
+  // Heartbeat evidence must be an independently retrieved, freshly timestamped
+  // observation bound to this signed scope. A ticket cannot self-report health.
+  if(!heartbeatEvidence ||
+     heartbeatEvidence.scopeId!==pins.scopeId||
+     heartbeatEvidence.authorizationSha256!==pins.authorizationSha256)
+    return decision("STOP","HEARTBEAT_EVIDENCE_MISSING_OR_WRONG_SCOPE");
+  const observed=time(heartbeatEvidence.observedAtUtc);
+  if(observed===null || observed>now+MAX_FUTURE_HEARTBEAT_MS ||
+    now-observed>MAX_OBSERVATION_AGE_MS)
+    return decision("STOP","HEARTBEAT_EVIDENCE_STALE_OR_FUTURE");
+  const heartbeat=heartbeatEvidence.controllerHeartbeatUtc===null
+    ? null:time(heartbeatEvidence.controllerHeartbeatUtc);
   if(heartbeat===null)return decision("STOP","CONTROLLER_HEARTBEAT_MISSING");
   if(heartbeat>now+MAX_FUTURE_HEARTBEAT_MS)
     return decision("STOP","CONTROLLER_CLOCK_SKEW");
@@ -126,9 +143,12 @@ export async function executeGate4IndependentStopCandidateV39(
   ticket:Gate4IndependentStopTicketV39,
   pins:Gate4IndependentStopPinsV39,
   nowUtc:string,
+  heartbeatEvidence:Gate4IndependentHeartbeatEvidenceV39|null,
   deps:Gate4ExactOwnedStopDepsV39
 ):Promise<Gate4IndependentStopCandidateResultV39> {
-  const d=assessGate4IndependentStopCandidateV39(ticket,pins,nowUtc);
+  const d=assessGate4IndependentStopCandidateV39(
+    ticket,pins,nowUtc,heartbeatEvidence
+  );
   let stopResult:Gate4StopResultV39|null=null;
   if(d.action==="STOP"){
     // All five exact-owner, authorization and source bindings were verified
