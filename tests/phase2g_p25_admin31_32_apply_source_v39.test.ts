@@ -30,7 +30,7 @@ describe("P25 YSSY P19 exact admin31+32 atomic APPLY — source only",()=>{
   expect(s).toContain("historicalScientificPass:false");
  });
  it("original failed-delivery-gap 231/229 remains immutable",()=>{
-  expect(s).toContain('historical_reconciliation_preserved');
+  expect(s).toContain('historic_reconciliation_preserved');
   expect(s).toContain('YSSY_P25_FAILED_PROBE_EXPIRED_SOURCE_ADMIN_CLOSED');
   expect(s).toContain('unchanged[0].status!=="failed"');
   expect(s).toContain('unchanged[0].reconciliation_status!=="DELIVERY_GAP"');
