@@ -4,6 +4,8 @@ on:
     paths:
       - ".github/workflows/phase3-gate4-actions-injob-watch-rehearsal.yml"
       - "server/lib/disruption/gate4ActionsWatchdogPolicy_v39.ts"
+      - "server/lib/disruption/gate4ActionsStopIntegration_v39.ts"
+      - "tests/phase3_gate4_actions_stop_integration_v39.test.ts"
       - "scripts/v39_gate4_actions_supervisor_rehearsal_v39.ts"
       - "tests/phase3_gate4_actions_watchdog_policy_v39.test.ts"
       - "tests/phase3_gate4_actions_supervisor_rehearsal_v39.test.ts"
