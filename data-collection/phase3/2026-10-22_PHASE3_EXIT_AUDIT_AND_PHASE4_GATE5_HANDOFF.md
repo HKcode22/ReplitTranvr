@@ -41,3 +41,21 @@ The active roadmap's **Phase3 Oct20 target / Oct22 contingency has reached its l
 - User explicitly prefers **free GitHub Actions**, the already-used Replit receiver, no Cloudflare, no Replit AI Agent, no unnecessary new hosting, tolerable documented scientific delivery gaps (distinct from invented financial accounting).
 - **Actual action taken:** draft PR #95 source/tests/doc updates and no-provider CI only. No production DB migration, paid AeroDataBox CREATE/DELETE/refill, Replit publish, protected-main merge, Phase6 or raw-source export.
 - **User input only when essential:** operator approval to apply narrowly staged migrations/publish a reviewed callback receiver, configure GitHub environment rules and limited secrets privately, and separate bounded paid test authorization. Never paste credentials into GitHub Markdown, chat or PR comment.
+
+## Final exact-code CI and safest next actual operator action
+
+**Verified** all **6/6 no-provider GitHub workflows SUCCESS** at immutable code/test commit `46d4359e53c6a9506be6da2a20327137ba4b3d22`: [full V3.9 offline safety](https://github.com/HKcode22/ReplitTranvr/actions/runs/39867054144), [Gate4 5-second in-job watch](https://github.com/HKcode22/ReplitTranvr/actions/runs/39867054120), [Gate4 Alert Receiver Candidate incl. disposable PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/39867054089), [public receiver identity](https://github.com/HKcode22/ReplitTranvr/actions/runs/39867054149), [real PG receiver faults](https://github.com/HKcode22/ReplitTranvr/actions/runs/39867054087) and [focused release](https://github.com/HKcode22/ReplitTranvr/actions/runs/39867054358). This proves the six policy-regression cases and synthetic runner tests, **not a live STOP or financial gate**.
+
+**Source re-audit of existing on-main Gate0.5 infrastructure** found `scripts/v39_gate05_owner_live_foundation_readonly_v39.ts` (zero provider requests / zero mutations), which checks production DB identity/privileges and the EXISTING owner-configured `gate05-safety` GitHub environment via `gh api` GET. The owner's screenshot shows `gate05-safety` with **two protection rules and four environment secrets** (names/values not independently inspected) and `gate4-safety` created. Thus do not require a new paid host or redundantly recreate Gate0.5 roles before running the live READ-ONLY audit. It is a prerequisite review, **not** Gate0.5 sample/measurement or signed paid permission.
+
+**Single optional owner-shell command for next operator handoff** on Replit, without Replit Agent or paid provider operations:
+```bash
+cd ~/workspace || exit 1
+echo "LOCAL_HEAD=$(git rev-parse HEAD)"
+echo "REMOTE_MAIN=$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+node --import tsx scripts/v39_gate05_owner_live_foundation_readonly_v39.ts \
+  --head ffb5c142e51ab8bb3d9ce7ca944ccc1216a73814
+```
+If this returns `LOCAL_HEAD` mismatch, `FOUNDATION_HOLD` or `GH_READ`, do **not** try a different SHA or mutate DB/secrets to force PASS; return sanitized status only. The script reads GitHub API and PostgreSQL catalogs in `BEGIN READ ONLY` and explicitly performs **0 provider requests, 0 SQL writes, 0 GH mutations**. Do not paste API keys, PG URLs or raw user data. This only locates the actual Gate0.5 remaining infrastructure P0 without another speculative architecture draft.
+
+**No new paid action approved**. The Phase3 Gate3 official canary, Gate0.5 real provider-native pilot and Gate4 live cap/short reconciliation still need factual receipts in master-log order. Phase4 Gate5 cannot be formally PASSED from Phase2/Phase3 source tests and must not be replaced by Phase7 ML.
