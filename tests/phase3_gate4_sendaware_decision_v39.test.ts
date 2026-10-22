@@ -52,12 +52,13 @@ describe("Gate4 no-provider decision and reviewed watchdog wiring",()=>{
       "../server/lib/disruption/adbCollectionController_v39.ts",
       import.meta.url),"utf8");
     expect(source).toContain("assessGate4SpendV39({");
-    expect(source).toContain('await stopBatch("gate4_budget_read_failed")');
-    expect(source).toContain('await stopBatch("gate4_"+decision.reason)');
+    expect(source).toContain("BUDGET_WITNESS_READ_FAILED");
+    expect(source).toContain("executeGate4SafetyActionV39(decision,");
     expect(source).toContain("assessGate4SecondStartV39(predecessor.status)");
     expect(source).toContain("REFUSED_GATE4_SECOND_START:");
     expect(source).toContain("GATE4_UNHANDLED_WATCHDOG_FAULT_STOP_UNCONFIRMED_DB");
     expect(source).toContain("GATE4_WATCHDOG_STOP_NOT_CONFIRMED");
+    expect(source).toContain("GATE4_OWNED_STOP_NOT_CONFIRMED");
     expect(source).toContain("if (watchdogTickInFlight) return;");
     expect(source).toContain("watchdogTickInFlight = false;");
     const owner=readFileSync(new URL(

@@ -30,6 +30,7 @@ import {
 } from "./phase6SamplingDecision_v39";
 import { externalSpend, reconcileSpend, runSettlement, type SettlementConfig } from "./settlement_v3";
 import { assessGate4SpendV39, assessGate4SecondStartV39 } from "./gate4SendAwareDecision_v39";
+import {executeGate4SafetyActionV39} from "./gate4WatchdogAction_v39";
 
 export type AirportTier = "HUB" | "MID" | "REGIONAL";
 
@@ -589,8 +590,8 @@ export function startCollectionWatchdog(): void {
         const dayR = await pool.query("SELECT config_hash FROM clean.adb_phase6_calendar_day WHERE run_day_index=$1", [active.batchSeq]);
         if (!dayR.rowCount) throw new Error("REFUSED_CALENDAR");
         const config = await loadRuntimeConfig(dayR.rows[0].config_hash);
-        // Gate4: use provider SEND delta AND received items, never missing
-        // balance as zero or as permission to keep collecting.
+        // This is the same decision + owned stop orchestration exercised in
+        // offline fault tests. It does not itself prove provider shutdown.
         let decision: ReturnType<typeof assessGate4SpendV39>;
         try {
           const [balance, parent, events] = await Promise.all([
@@ -608,22 +609,30 @@ export function startCollectionWatchdog(): void {
             deliveryFailures: failures
           });
         } catch {
-          // An unavailable account witness is a mandatory STOP attempt.
-          // If delete/settlement fails, this is NOT a confirmed hard stop.
-          try { await writeIncident("reconciliation", {
-            batchId:active.batchId,reason:"gate4_budget_read_failed"
-          }); } finally { await stopBatch("gate4_budget_read_failed"); }
-          return;
+          decision = {
+            action: "HOLD_STOP",reason:"BUDGET_WITNESS_READ_FAILED",
+            observedExternalSpend:null,observedInternalUnits:null,
+            threshold:null,providerRequests:0,liveHardCapCertified:false
+          };
         }
-        if (decision.action !== "CONTINUE") {
-          if (decision.action === "HOLD_STOP") {
-            try { await writeIncident("reconciliation", {
-              batchId:active.batchId,reason:decision.reason
-            }); } finally { await stopBatch("gate4_"+decision.reason); }
-          } else await stopBatch("gate4_"+decision.reason);
-          return;
-        }
-        await advanceBatch(active); return;
+        const result = await executeGate4SafetyActionV39(decision,{
+          expectedBatchId: active.batchId,
+          writeIncident: async reason => {
+            await writeIncident("reconciliation",{
+              batchId:active.batchId,reason
+            });
+          },
+          stopOwned: async reason => {
+            const current = await getActiveBatch();
+            if(current?.batchId!==active.batchId)
+              throw Error("GATE4_BOUND_BATCH_CHANGED_HOLD");
+            return await stopBatch(reason);
+          },
+          proceed: async () => { await advanceBatch(active); }
+        });
+        if(result.status==="STOP_UNCONFIRMED")
+          console.error("[adb-v39] GATE4_OWNED_STOP_NOT_CONFIRMED");
+        return;
       }
       // Pre-Phase6 watchdog is strictly read-only. Auto-start requires both the
       // explicit auto flag and an exact frozen authorization hash.
