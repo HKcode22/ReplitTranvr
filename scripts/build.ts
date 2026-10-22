@@ -46,6 +46,10 @@ function resolveBuildGitHead(): string {
 async function buildAll() {
   const buildGitHead = resolveBuildGitHead();
   const callbackOnlyBuild = process.env.V39_CALLBACK_ONLY_BUILD === "1";
+  const gate4AlertReceiverBuild =
+    process.env.V39_GATE4_ALERT_RECEIVER_BUILD === "1";
+  if(callbackOnlyBuild && gate4AlertReceiverBuild)
+    throw Error("GATE4_ALERT_BUILD_MUST_BE_SEPARATE_FROM_PREPAID");
   console.log(`V39 build git head: ${buildGitHead}`);
   await rm("dist", { recursive: true, force: true });
 
@@ -61,7 +65,10 @@ async function buildAll() {
   const externals = allDeps.filter((dep) => !allowlist.includes(dep));
 
   await esbuild({
-    entryPoints: [callbackOnlyBuild ? "server/phase2gCallbackOnly.ts" : "server/index.ts"],
+    entryPoints: [
+      gate4AlertReceiverBuild ? "server/gate4AlertReceiverOnly.ts" :
+      callbackOnlyBuild ? "server/phase2gCallbackOnly.ts" : "server/index.ts"
+    ],
     platform: "node",
     bundle: true,
     format: "esm",
