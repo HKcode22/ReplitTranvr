@@ -166,16 +166,33 @@ export function createGate4AlertReceiverCandidateV39(
   });
   return app;
 }
-function launch(){
+async function launch():Promise<void>{
   const scope=gate4AlertReceiverLaunchReviewV39(process.env);
   const port=Number(required("PORT"));
   if(!Number.isInteger(port)||port<1||port>65535)
     throw Error("GATE4_ALERT_RECEIVER_PORT_HOLD");
+  const prebind=!("subscriptionId" in scope);
+  // No advertised health/listener until the STAGED quarantine table is
+  // installed and the active runtime DB role can INSERT and SELECT.
+  // These permissions are necessary only: separate restricted-role review,
+  // external custody and provider-side first-SEND readiness remain required.
+  if(prebind){
+    const pool=getV39Pool();
+    const r=await pool.query(
+      "SELECT to_regclass('clean.gate4_alert_prebind_original_v39') AS tbl,"+
+      "has_table_privilege(current_user,"+
+      "'clean.gate4_alert_prebind_original_v39','INSERT') AS can_insert,"+
+      "has_table_privilege(current_user,"+
+      "'clean.gate4_alert_prebind_original_v39','SELECT') AS can_read"
+    );
+    if(r.rows[0]?.tbl!=="clean.gate4_alert_prebind_original_v39"||
+       r.rows[0]?.can_insert!==true||r.rows[0]?.can_read!==true)
+      throw Error("GATE4_PREBIND_TABLE_OR_PRIVILEGES_NOT_READY");
+  }
   const app=createGate4AlertReceiverCandidateV39(
     scope,required("AERODATABOX_WEBHOOK_SECRET"),
     registerV3Routes,
-    "subscriptionId" in scope ? undefined :
-      createGate4PrebindPgStoreV39(getV39Pool())
+    prebind?createGate4PrebindPgStoreV39(getV39Pool()):undefined
   );
   createServer(app).listen({port,host:"0.0.0.0"},()=>{
     console.log("GATE4_DRAFT_ALERT_RECEIVER_LISTENING");
@@ -186,5 +203,9 @@ function launch(){
 // Only the separately opted-in esbuild bundle has this constant defined.
 // Imported source/tests and the ordinary app MUST never start the receiver.
 if(process.env.V39_GATE4_RECEIVER_EXECUTION_ENTRYPOINT==="1"){
-  launch();
+  launch().catch(()=>{
+    // Deliberately redact DB/auth transport detail from startup logs.
+    console.error("GATE4_ALERT_RECEIVER_STARTUP_HOLD");
+    process.exitCode=2;
+  });
 }
