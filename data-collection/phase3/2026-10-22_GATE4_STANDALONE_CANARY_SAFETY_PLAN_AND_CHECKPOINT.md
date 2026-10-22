@@ -19,3 +19,7 @@ Source baseline [Gate4 PR #95](https://github.com/HKcode22/ReplitTranvr/pull/95)
 5. Following distinct signed paid approval: one real small subscription, independent DELETE readback, ≥3 stable post-STOP balances, internal received/SEND discrepancy, confirmed second-start refusal if prior unsettled, durable incident receipt. Only these together can certify live Gate4. Gate3 and Gate05 remain separately assessed for Phase3 overall.
 
 No Replit AI Agent, Cloudflare, Phase2 administrative work, SQL writes, billable provider mutations, or Phase6 collection authorized by this draft.
+
+## P0 STOP safety correction before certification
+
+An independently discovered foreign billable subscription must not PREVENT attempted DELETE of the *already positively owned exact ID*. The source was revised so the STOP helper still calls the exact `deleteExactVerified(ownedId)` if the owned ID and subject match, even when another active billable subscription appears. It NEVER deletes an unrelated ID; the terminal all-account-clear remains a `HOLD_UNCONFIRMED` if that foreign resource persists. A new no-provider negative test checks exact owned DELETE under foreign coexistence. This prevents an over-conservative ownership guard from prolonging a known billable exposure. No live subscription has been created or deleted; tests are pending at the new commit.

@@ -78,16 +78,27 @@ describe("Gate4 independently callable exact-ID provider STOP",()=>{
    expect(r.status).toBe("HOLD_UNCONFIRMED");
    expect(del).not.toHaveBeenCalled();
  });
- it("refuses other subjects or coexisting foreign active billables",async()=>{
+ it("refuses to delete a subscription ID with the wrong subject",async()=>{
    const del=vi.fn().mockResolvedValue(true);
-   for(const list of [[sub("exactID99","KLAX")],
-     [sub(),sub("foreignID")]]){
-     const r=await stopGate4ExactOwnedV39(scope,{
-       listStrict:async()=>list,deleteExactVerified:del
-     });
-     expect(r.status).toBe("HOLD_UNCONFIRMED");
-   }
+   const r=await stopGate4ExactOwnedV39(scope,{
+     listStrict:async()=>[sub("exactID99","KLAX")],
+     deleteExactVerified:del
+   });
+   expect(r.status).toBe("HOLD_UNCONFIRMED");
    expect(del).not.toHaveBeenCalled();
+ });
+ it("tries exact OWNED STOP even if foreign active subscription appears",async()=>{
+   const del=vi.fn().mockResolvedValue(true);
+   const inventory=vi.fn()
+      .mockResolvedValueOnce([sub(),sub("foreignID")])
+      .mockResolvedValueOnce([sub("foreignID")]);
+   const r=await stopGate4ExactOwnedV39(scope,{
+      listStrict:inventory,deleteExactVerified:del
+   });
+   expect(del).toHaveBeenCalledTimes(1);
+   expect(del).toHaveBeenCalledWith("exactID99");
+   expect(r.status).toBe("HOLD_UNCONFIRMED");
+   expect(r.creditSettlementVerified).toBe(false);
  });
  it("never treats failure, missing DELETE, or post STOP active as verified",async()=>{
    const del=vi.fn().mockRejectedValue(Error("network lost"));

@@ -121,10 +121,12 @@ export async function stopGate4ExactOwnedV39(
       independentAccountReadbackVerified:true,
       creditSettlementVerified:false,liveGate4Certified:false};
   }
-  if(active.length!==1 || !candidate ||
-     candidate.subject?.type!==scope.subjectType ||
+  // Emergency STOP must still attempt deletion of our exact known ID
+  // even if another subscription appears concurrently. Refuse to DELETE
+  // the unrelated resource; final all-account-clear remains a HOLD.
+  if(!candidate || candidate.subject?.type!==scope.subjectType ||
      candidate.subject?.id!==scope.subjectId)
-    return hold("FOREIGN_OR_UNBOUND_SUBSCRIPTION_PRESENT");
+    return hold("OWNED_ID_ABSENT_OR_SUBJECT_MISMATCH");
   let returned=false;
   try {returned=await deps.deleteExactVerified(scope.subscriptionId)===true;}
   catch {returned=false;}
