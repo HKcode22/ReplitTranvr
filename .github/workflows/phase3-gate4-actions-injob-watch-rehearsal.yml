@@ -5,6 +5,9 @@ on:
       - ".github/workflows/phase3-gate4-actions-injob-watch-rehearsal.yml"
       - "server/lib/disruption/gate4ActionsWatchdogPolicy_v39.ts"
       - "server/lib/disruption/gate4ActionsStopIntegration_v39.ts"
+      - "scripts/v39_gate4_actions_live_stop_v39.ts"
+      - "tests/phase3_gate4_actions_live_stop_seal_v39.test.ts"
+      - ".github/workflows/phase3-gate4-live-exact-stop-candidate.yml"
       - "tests/phase3_gate4_actions_stop_integration_v39.test.ts"
       - "scripts/v39_gate4_actions_supervisor_rehearsal_v39.ts"
       - "tests/phase3_gate4_actions_watchdog_policy_v39.test.ts"
@@ -63,7 +66,8 @@ jobs:
           npx vitest run \
             tests/phase3_gate4_actions_watchdog_policy_v39.test.ts \
             tests/phase3_gate4_actions_supervisor_rehearsal_v39.test.ts \
-            tests/phase3_gate4_actions_stop_integration_v39.test.ts
+            tests/phase3_gate4_actions_stop_integration_v39.test.ts \
+            tests/phase3_gate4_actions_live_stop_seal_v39.test.ts
       - name: Actual GH in-job 5-second heartbeat loop (synthetic only)
         run: node --import tsx scripts/v39_gate4_actions_supervisor_rehearsal_v39.ts
       - name: Record honest readiness
