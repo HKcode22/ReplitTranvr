@@ -331,6 +331,7 @@ app.use((req, res, next) => {
   // identity or falling through to Vite HTML at this path.
   registerWorkspaceRuntimeHealthV39(app, {
     routeOwner: "server/index.ts+server/routes_v3.ts",
+    gate4AlertIngressRegistered: true,
   });
 
   await registerRoutes(httpServer, app);
