@@ -394,3 +394,14 @@ The dedicated workflow proved the Gate4 candidate can be **bundled as a separate
 4. Only after 1–3: fresh provider read-only preflight, protected credit floor, separately requested human GO for **one small paid Gate4 Alert subscription** and explicit overrun disclosure; perform short bounded real trial and prove end-to-end reception, SEND/inflight discrepancy, exact DELETE and at least three stable post-stop balance observations. Full Phase6 remains separately gated.
 
 **Never claim:** provider hard cap, live Gate4 PASS, a real deployed Alert receiver/independent worker, or a completed Phase3 based solely on this CI. No Replit AI Agent, no Cloudflare, no source merge, no publish, no provider billable CREATE/DELETE/refill, no production SQL writes or Phase6 start occurred here.
+
+### Gate4 prebind exact-head verification — all five CI workflows SUCCESS
+
+At exact source commit `6caf6bdcecf6743f251ecd926e96657c0b6abef7`, **all FIVE GitHub no-paid workflows now completed SUCCESS**:
+- [Gate4 Alert-only receiver candidate](https://github.com/HKcode22/ReplitTranvr/actions/runs/39773209135) — both dedicated build/mocked HTTP and disposable PG16 V0071 original-byte/readback jobs SUCCESS.
+- [V3.9 Offline Safety](https://github.com/HKcode22/ReplitTranvr/actions/runs/39773209157) — TypeScript, offline and full tests, lint, registry, traceability, contradiction scan, aggregate preflight/build SUCCESS.
+- [YSSY P25 Real PG Receiver Faults](https://github.com/HKcode22/ReplitTranvr/actions/runs/39773209206) — SUCCESS, disposable no-provider.
+- [YSSY P25 Focused Release](https://github.com/HKcode22/ReplitTranvr/actions/runs/39773209240) — SUCCESS, no provider.
+- [YSSY P25 Public Receiver Identity](https://github.com/HKcode22/ReplitTranvr/actions/runs/39773209224) — SUCCESS, read-only no-provider.
+
+**Handoff:** The implementation/checkpoint is SOURCE-VERIFIED, **NOT DEPLOYED**, with three remaining practical certification gates: trusted after-CREATE exact-ID binding and time-bounded prearm, *real independent STOP and custody*, and an independently authorized tiny paid Alert run with provider DELETE/settlement receipts. Due to the 2026-10-22 Phase3 contingency target having arrived, do not claim live Gate4 is done on the original roadmap. Main/published deployment unchanged, Stage V0071 NOT APPLIED, provider API credit spend ZERO for this engineering check. Next work must focus on these three operational gates, not another broad policy-module cycle.
