@@ -626,7 +626,33 @@ export function startCollectionWatchdog(): void {
       const day = await nextCalendarDay(); const config = await loadRuntimeConfig(day.config_hash); requireAutomationAuthorization(config);
       const start = dayStart(day), now = Date.now();
       if (now >= start.getTime() && now - start.getTime() <= config.startGraceSeconds * 1000) await startBatch();
-    } catch (e: any) { console.warn(`[adb-v39] watchdog: ${e?.message ?? e}`); }
+    } catch (e: any) {
+      console.warn(`[adb-v39] watchdog: ${e?.message ?? e}`);
+      // An unexpected failure in pre-budget reads, source/authorization
+      // checks or segment advancement cannot silently continue collecting.
+      // Try the owned STOP once; if the DB or provider is unavailable,
+      // report UNCONFIRMED and require independent incident recovery.
+      let emergency: CollectionBatch | null = null;
+      try { emergency = await getActiveBatch(); }
+      catch {
+        console.error("[adb-v39] GATE4_UNHANDLED_WATCHDOG_FAULT_STOP_UNCONFIRMED_DB");
+        return;
+      }
+      if (!emergency) return;
+      try {
+        await writeIncident("reconciliation", {
+          batchId: emergency.batchId,
+          reason: "gate4_unhandled_watchdog_fault"
+        });
+      } catch {
+        console.error("[adb-v39] GATE4_WATCHDOG_INCIDENT_WRITE_FAILED");
+      }
+      try {
+        await stopBatch("gate4_unhandled_watchdog_fault");
+      } catch {
+        console.error("[adb-v39] GATE4_WATCHDOG_STOP_NOT_CONFIRMED");
+      }
+    }
   }, COLLECTOR_CONFIG.watchdogSeconds * 1000);
   timer.unref?.();
 }
