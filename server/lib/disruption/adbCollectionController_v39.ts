@@ -32,6 +32,7 @@ import { externalSpend, reconcileSpend, runSettlement, type SettlementConfig } f
 import { assessGate4SpendV39, assessGate4SecondStartV39 } from "./gate4SendAwareDecision_v39";
 import {executeGate4SafetyActionV39} from "./gate4WatchdogAction_v39";
 import {assertGate4TransactionalAdmissionV39} from "./gate4TransactionalAdmission_v39";
+import {runGate4OwnedSubscriptionCreatesV39} from "./gate4OwnedCreateRecovery_v39";
 
 export type AirportTier = "HUB" | "MID" | "REGIONAL";
 
@@ -284,26 +285,40 @@ async function createSegmentSubscriptions(batchId: string, segmentId: string, de
     const health = await checkAirportFeeds(s.icao);
     if (!health) throw new Error(`REFUSED_COVERAGE:${s.icao}`);
   }
-  const created: CreatedSub[] = [];
-  try {
-    for (const s of decision.selections) {
-      const sub = await createSubscription("FlightByAirportIcao", s.icao, { maxDeliveryRetries: 0 });
-      if (!sub) throw new Error(`CREATE_FAILED:${s.icao}`);
+  // The owner ID must be tracked IMMEDIATELY after provider CREATE, before
+  // attempting the database INSERT. Ambiguous remote CREATE outcomes remain
+  // incident/HOLD, never proof that no billable subscription exists.
+  const result=await runGate4OwnedSubscriptionCreatesV39(decision.selections,{
+    create:async s=>{
+      const sub=await createSubscription("FlightByAirportIcao",s.icao,{
+        maxDeliveryRetries:0
+      });
+      return sub?.id??null;
+    },
+    persist:async(s,id)=>{
       await pool.query(`INSERT INTO clean.adb_collection_subs
         (subscription_id,batch_id,segment_id,icao,tier,is_randomized,airport_layer_design_probability,planned_share,sampling_weight)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULL)`, [sub.id, batchId, segmentId, s.icao, tierForSlot(s.slotId), s.isRandomized, s.designProbability, s.plannedShare]);
-      created.push({ icao: s.icao, tier: tierForSlot(s.slotId), subscriptionId: sub.id });
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULL)`,
+        [id,batchId,segmentId,s.icao,tierForSlot(s.slotId),
+         s.isRandomized,s.designProbability,s.plannedShare]);
+    },
+    deleteOwned:async id=>await deleteSubscription(id),
+    markEnded:async id=>{
+      await pool.query(
+        "UPDATE clean.adb_collection_subs SET ended_at=now() WHERE subscription_id=$1",
+        [id]);
+    },
+    incident:async(code,createdCount,unconfirmedCount)=>{
+      await writeIncident("deletion",{
+        batchId,segmentId,reason:code,createdCount,unconfirmedCount
+      });
     }
-    return created;
-  } catch (error) {
-    let deletionFailed = false;
-    for (const c of created) {
-      if (await deleteSubscription(c.subscriptionId)) await pool.query("UPDATE clean.adb_collection_subs SET ended_at=now() WHERE subscription_id=$1", [c.subscriptionId]);
-      else deletionFailed = true;
-    }
-    if (deletionFailed) await writeIncident("deletion", { batchId, segmentId, reason: "create rollback delete failed" });
-    throw error;
-  }
+  });
+  return result.map(x=>({
+    icao:x.selection.icao,
+    tier:tierForSlot(x.selection.slotId),
+    subscriptionId:x.subscriptionId
+  }));
 }
 
 async function activeSegment(batchId: string): Promise<SegmentRow | null> {
