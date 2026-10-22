@@ -29,6 +29,7 @@ import {
   type SamplingSelection,
 } from "./phase6SamplingDecision_v39";
 import { externalSpend, reconcileSpend, runSettlement, type SettlementConfig } from "./settlement_v3";
+import { assessGate4SpendV39, assessGate4SecondStartV39 } from "./gate4SendAwareDecision_v39";
 
 export type AirportTier = "HUB" | "MID" | "REGIONAL";
 
@@ -154,7 +155,7 @@ function validateRuntimeConfig(raw: unknown, expectedHash: string): FrozenRuntim
   if (!raw || typeof raw !== "object") throw new Error("REFUSED_RUNTIME_CONFIG: missing frozen runtime config");
   const c = raw as FrozenRuntimeConfig;
   if (sha(c) !== expectedHash) throw new Error("REFUSED_RUNTIME_CONFIG: config hash mismatch");
-  if (c.hardCapCredits !== 1900 || c.protectedAlertFloor < 1000 || c.endingAlertMarginCredits < 0 || c.unsettledBurstMarginCredits < 0 || c.phase6AlertSpendCeiling <= 0 || c.softStopMarginCredits < 0 || c.softStopMarginCredits >= 1900 || c.productionReconcileTolerance < 0 || c.startGraceSeconds < 0) throw new Error("REFUSED_RUNTIME_CONFIG: invalid frozen safety values");
+  if (c.hardCapCredits !== 1900 || c.protectedAlertFloor < 1000 || c.endingAlertMarginCredits < 0 || c.unsettledBurstMarginCredits < 0 || c.phase6AlertSpendCeiling <= 0 || c.softStopMarginCredits < c.unsettledBurstMarginCredits || c.softStopMarginCredits >= 1900 || c.productionReconcileTolerance < 0 || c.startGraceSeconds < 0) throw new Error("REFUSED_RUNTIME_CONFIG: invalid frozen safety values");
   if (!/^[0-9a-f]{64}$/i.test(c.authorizationRecordHash)) throw new Error("REFUSED_RUNTIME_CONFIG: authorization hash missing");
   if (!c.settlement || c.settlement.stableReadCount < 3 || c.settlement.timeoutSeconds <= 0 || c.settlement.pollIntervalSeconds < 0 || c.settlement.initialWaitSeconds < 0) throw new Error("REFUSED_RUNTIME_CONFIG: settlement config invalid");
   return c;
@@ -372,6 +373,9 @@ async function closeParent(batch: CollectionBatch, reason: string, stableBalance
 export async function startBatch(): Promise<StartBatchResult> {
   if (!isPhase6Ready()) throw new Error("REFUSED_PHASE6_READY: authorized Phase-6 transition is absent");
   if (await getActiveBatch()) throw new Error("REFUSED_ACTIVE_BATCH: stop active batch first");
+  const predecessor = await getLastBudgetDay();
+  const guard = assessGate4SecondStartV39(predecessor.status);
+  if (!guard.allowed) throw new Error("REFUSED_GATE4_SECOND_START:" + guard.reason);
   await assertNoOpenIncident();
   await assertR1Exclusive();
   const day = await nextCalendarDay();
@@ -580,8 +584,40 @@ export function startCollectionWatchdog(): void {
         const dayR = await pool.query("SELECT config_hash FROM clean.adb_phase6_calendar_day WHERE run_day_index=$1", [active.batchSeq]);
         if (!dayR.rowCount) throw new Error("REFUSED_CALENDAR");
         const config = await loadRuntimeConfig(dayR.rows[0].config_hash);
-        const spent = await actualBatchSpend(active.batchId);
-        if (spent >= 1900 - config.softStopMarginCredits) { await stopBatch("soft_stop"); return; }
+        // Gate4: use provider SEND delta AND received items, never missing
+        // balance as zero or as permission to keep collecting.
+        let decision: ReturnType<typeof assessGate4SpendV39>;
+        try {
+          const [balance, parent, events] = await Promise.all([
+            getBalance(),
+            pool.query("SELECT balance_before FROM clean.adb_collection_batches WHERE batch_id=$1", [active.batchId]),
+            pool.query("SELECT COALESCE(sum(notification_items),0)::bigint AS n FROM clean.adb_ingest_events WHERE batch_id=$1", [active.batchId])
+          ]);
+          decision = assessGate4SpendV39({
+            cap: config.hardCapCredits,
+            softStopMargin: config.softStopMarginCredits,
+            unsettledBurstReserve: config.unsettledBurstMarginCredits,
+            openingBalance: parent.rows[0]?.balance_before == null ? null : Number(parent.rows[0].balance_before),
+            currentBalance: balance?.creditsRemaining ?? null,
+            receivedItemUnits: Number(events.rows[0]?.n ?? NaN),
+            deliveryFailures: failures
+          });
+        } catch {
+          // An unavailable account witness is a mandatory STOP attempt.
+          // If delete/settlement fails, this is NOT a confirmed hard stop.
+          try { await writeIncident("reconciliation", {
+            batchId:active.batchId,reason:"gate4_budget_read_failed"
+          }); } finally { await stopBatch("gate4_budget_read_failed"); }
+          return;
+        }
+        if (decision.action !== "CONTINUE") {
+          if (decision.action === "HOLD_STOP") {
+            try { await writeIncident("reconciliation", {
+              batchId:active.batchId,reason:decision.reason
+            }); } finally { await stopBatch("gate4_"+decision.reason); }
+          } else await stopBatch("gate4_"+decision.reason);
+          return;
+        }
         await advanceBatch(active); return;
       }
       // Pre-Phase6 watchdog is strictly read-only. Auto-start requires both the
