@@ -77,3 +77,78 @@ GATE4_DIAG_V2_ISOLATED_READONLY
 **Source pin versus moving review branch:** GitHub checkpoint updates advance the DRAFT branch beyond source commit `1345c548...`; the exact `git archive "$PIN"` remains cryptographically pinned to the CI-passed code. The `merge-base --is-ancestor` gate verifies the pinned source remains on the fetched branch without incorrectly requiring the branch head to equal the historical code pin. No `main` changes.
 
 **Result interpretation:** `HOLD_READONLY_FOUNDATION_FAILED` plus `failedStage`/`failureCode` is a fail-closed, actionable diagnostic, not a canary PASS; `ACCOUNT_SAFETY_HOLD` plus `reason` means actual account safety policy was evaluated and refused. `ACCOUNT_AND_PREPAID_HOST_READONLY_READY` allows only consideration of the next engineering/authorization review, not paid execution. All three outcomes keep `gate4LivePassed:false`, `paidAuthorization:false`, and independent STOP / exact canary callback proof incomplete. On result, capture only sanitized status, stage/code/reason, exit code and reviewed source SHA in the next checkpoint. No correction or override until evidence inspected.
+
+## 2026-10-22 — owner v2 preflight pinned-source result: PUBLISHED_HOST_IDENTITY HOLD
+
+The owner executed the corrected, GitHub CI-passed **isolated read-only preflight** from exact source commit `1345c548d6fdfde175505179a39e1408cfe019ef` in Replit. Main pin remained `ffb5c142e51ab8bb3d9ce7ca944ccc1216a73814`; dependencies existed; no local `.env`, so Replit injected environment used. Verified output:
+
+```json
+{
+  "schema": "v39.gate4.isolated-preflight.v2",
+  "status": "HOLD_READONLY_FOUNDATION_FAILED",
+  "failedStage": "PUBLISHED_HOST_IDENTITY",
+  "failureCode": "PUBLISHED_HOST_IDENTITY_OR_AVAILABILITY_HOLD",
+  "action": "REVIEW_EXACT_FAILED_STAGE_NO_OVERRIDE",
+  "gate4LivePassed": false,
+  "paidAuthorization": false,
+  "alertCreateRequests": 0,
+  "databaseWrites": 0
+}
+```
+
+Shell also reported `PREFLIGHT_EXIT_CODE=2`, `PHASE6_NOT_STARTED`. **No real provider LIST, three strict balances, or database identity/query were reached**: these conditions are UNKNOWN, not PASS or FAIL. Distinct public-host causes remain (a) GET/timeout/HTTP availability failure vs (b) status 200 but runtime JSON contract or pinned deployed git-head mismatch. The `gate4ReadonlySafeFailureCodeV39` currently intentionally groups these to prevent raw-error leakage. Replit network endpoint observations are still absent; do not claim the published deployment failed, changed SHA, or needs republishing. No paid provider action, Cloudflare, Replit AI Agent, SQL writes or Phase6 collector is authorized.
+
+### Next *one* targeted public-host GET only; no provider calls
+
+From owner's `~/workspace` Shell, run this code via Node; no secrets/response body/bucket names are emitted. It compares the exact public host runtime contract used by `verifyGate3PublishedPrepaidHostV39` without altering any state. Route and SHA are hard-coded to verified source, **not** caller supplied:
+
+```bash
+node --input-type=module <<'NODE'
+const expected="f5b1347b7b9aebd6830302394ea2cc5775aedbf4";
+const url="https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime";
+const report={schema:"v39.gate4.public-host-diagnostic.v1",method:"GET",
+  providerRequests:0,alertCreateRequests:0,databaseWrites:0,phase6Started:false};
+try {
+ const response=await fetch(url,{
+   method:"GET",headers:{accept:"application/json"},
+   signal:AbortSignal.timeout(12000),redirect:"manual"
+ });
+ report.httpStatus=response.status;
+ let d=null;
+ if(response.status===200) {
+   try { d=await response.json(); } catch { report.jsonParseOk=false; }
+ }
+ const object=d && typeof d==="object" && !Array.isArray(d) ? d:null;
+ const checks={
+   http200:response.status===200,
+   validJsonObject:object!==null,
+   schema:object?.schema==="v39.phase2f-workspace-runtime.v1",
+   status:object?.status==="PASS",
+   pinnedGitHead:object?.git_head===expected,
+   prepaidRoute:object?.prepaid_route_registered===true,
+   prepaidSourceCustody:object?.prepaid_source_custody_ready===true,
+   retentionHours:object?.retention_hours===168,
+   noProviderMutation:object?.provider_mutation===false,
+   ownerMode:object?.runtime_owner_mode==="replit-published-deployment",
+   publishedDeployment:object?.published_deployment===true,
+   durability:["autoscale","reserved-vm"].includes(String(object?.runtime_durability_class)),
+   bucketPrefixForm:typeof object?.bucket_prefix==="string" &&
+      object.bucket_prefix.startsWith("replit-objstore")
+ };
+ report.failedChecks=Object.entries(checks).filter(([,ok])=>!ok).map(([name])=>name);
+ report.observedGitHead=/^[a-f0-9]{40}$/.test(object?.git_head??"") ?
+   object.git_head : null;
+ report.status=report.failedChecks.length===0?"HOST_CONTRACT_MATCH":
+   "HOLD_HOST_HTTP_OR_CONTRACT";
+ if(report.failedChecks.length) process.exitCode=2;
+} catch(e) {
+ report.status="HOLD_HOST_GET_EXCEPTION";
+ report.exceptionClass=["TimeoutError","AbortError","TypeError"].includes(e?.name)?
+   e.name:"REDACTED_EXCEPTION";
+ process.exitCode=2;
+}
+console.log(JSON.stringify(report,null,2));
+NODE
+```
+
+**Review rule:** If transport/HTTP failed, investigate the published URL/availability from Replit (read-only first). If `pinnedGitHead` alone failed, investigate release identity and owner-controlled publishing separately; do not silently accept a new head. If other contract fields failed, inspect live deployment/runtime capability read-only; do not weaken Gate4 or assume Gate3-compatible prepaid route proves Gate4 Alert callback. On exact host PASS, rerun the preflight only after a fresh review; do not create subscriptions. Record the operator's sanitized diagnostic and exact next action in this checkpoint. All broad Gate4 and paid/Phase6 approval remain closed.
