@@ -61,8 +61,9 @@ export function createGate4PrebindPgStoreV39(
           " authorization_sha256,airport_icao,"+
           " claimed_provider_subscription_id,original_wire "+
           "FROM clean.gate4_alert_prebind_original_v39 "+
-          "WHERE scope_id=$1::uuid AND original_sha256=$2 "+
-          "FOR SHARE",[o.scopeId,o.originalSha256]
+          "WHERE scope_id=$1::uuid AND original_sha256=$2",[
+            o.scopeId,o.originalSha256
+          ]
         );
         if(x.rows.length!==1||!same(x.rows[0],o))
           throw Error("GATE4_PREBIND_DUPLICATE_ORIGINAL_CONFLICT");
