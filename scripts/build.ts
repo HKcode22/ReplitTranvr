@@ -79,6 +79,8 @@ async function buildAll() {
     define: {
       "process.env.NODE_ENV": '"production"',
       "process.env.V39_DEPLOYED_GIT_HEAD": JSON.stringify(buildGitHead),
+      "process.env.V39_GATE4_RECEIVER_EXECUTION_ENTRYPOINT":
+        JSON.stringify(gate4AlertReceiverBuild ? "1" : "0"),
     },
     minify: true,
     external: externals,
