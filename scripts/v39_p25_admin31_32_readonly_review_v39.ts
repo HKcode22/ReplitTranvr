@@ -83,6 +83,8 @@ export async function main(argv=process.argv.slice(2)):Promise<number> {
    "count(*) FILTER(WHERE deletion_verified_at_utc IS NOT NULL)::int AS tombstones,"+
    "count(*) FILTER(WHERE deletion_verified_at_utc IS NULL)::int AS unmarked,"+
    "count(DISTINCT deletion_run_id)::int AS run_count,"+
+   "count(deletion_run_id)::int AS run_assigned,"+
+   "count(deleted_at_utc)::int AS deleted_at_count,"+
    "count(*) FILTER(WHERE storage_kind<>'replit_app_storage' "+
     "OR content_class<>'raw_provider_content' "+
     "OR contract_version<>'provider-blob-contract-v39@1.0.0')::int AS bad,"+
@@ -143,6 +145,8 @@ export async function main(argv=process.argv.slice(2)):Promise<number> {
    unmarkedRefs:Number(z?.unmarked??NaN),
    deletionRunCount:Number(z?.run_count??NaN),
    rowsInDeletionRun:Number(runs?.n??NaN),
+   assignedDeletionRunCount:Number(z?.run_assigned??NaN),
+   markedDeletedAtCount:Number(z?.deleted_at_count??NaN),
    invalidContractCount:Number(z?.bad??NaN)
   };
   const verdict=assessP25AdministrativeReviewV39(w);

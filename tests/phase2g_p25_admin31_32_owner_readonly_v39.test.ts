@@ -24,6 +24,8 @@ describe("P25 YSSY incident31+32 review diagnostic must remain READ ONLY",()=>{
   expect(s).toContain("count(DISTINCT deletion_run_id)");
   expect(s).toContain("deletion_verified_at_utc IS NOT NULL");
   expect(s).toContain("rowsInDeletionRun:Number(runs?.n??NaN)");
+  expect(s).toContain("count(deletion_run_id)::int AS run_assigned");
+  expect(s).toContain("count(deleted_at_utc)::int AS deleted_at_count");
   expect(s).toContain("paidProviderCalls:0,databaseWrites:0,blobDeletes:0");
  });
 });

@@ -38,6 +38,8 @@ export interface P25AdminWitnessV39 {
   unmarkedRefs:number;
   deletionRunCount:number;
   rowsInDeletionRun:number;
+  assignedDeletionRunCount:number;
+  markedDeletedAtCount:number;
   invalidContractCount:number;
 }
 export type P25AdminVerdictV39={
@@ -81,6 +83,7 @@ export function assessP25AdministrativeReviewV39(
  if(w.refCount!==58||w.refShaCount!==58||w.refBytes!==308832||
     w.tombstones!==58||w.unmarkedRefs!==0||
     w.deletionRunCount!==1||w.rowsInDeletionRun!==58||
+    w.assignedDeletionRunCount!==58||w.markedDeletedAtCount!==58||
     w.invalidContractCount!==0)
    blockers.push("EXACT_58_RETENTION_TOMBSTONES_INCOMPLETE");
  return {

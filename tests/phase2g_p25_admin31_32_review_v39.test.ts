@@ -16,7 +16,8 @@ const base:P25AdminWitnessV39={
  unendedV39Subscriptions:0,incidentOpenIds:[31,32],
  incident31Fingerprint:true,incident32Fingerprint:true,
  refCount:58,refShaCount:58,refBytes:308832,tombstones:58,
- unmarkedRefs:0,deletionRunCount:1,rowsInDeletionRun:58,invalidContractCount:0
+ unmarkedRefs:0,deletionRunCount:1,rowsInDeletionRun:58,
+ assignedDeletionRunCount:58,markedDeletedAtCount:58,invalidContractCount:0
 };
 describe("P25 YSSY probe19 exact historical administrative REVIEW only",()=>{
  it("successful evidence remains strictly REVIEW, never a write/paid/science PASS",()=>{
@@ -36,7 +37,8 @@ describe("P25 YSSY probe19 exact historical administrative REVIEW only",()=>{
    for(const x of [{incidentOpenIds:[31]},
      {incidentOpenIds:[31,33]},{incident32Fingerprint:false},
      {incident31Fingerprint:false},{tombstones:57},{refCount:59},
-     {rowsInDeletionRun:57},{deletionRunCount:2}])
+     {rowsInDeletionRun:57},{deletionRunCount:2},
+     {assignedDeletionRunCount:57},{markedDeletedAtCount:57}])
      expect(assess({...base,...x}).eligibleForReview).toBe(false);
  });
  it("refuses active subscriptions, runtime, unexpected budget state",()=>{
