@@ -31,3 +31,24 @@
 - The user's Friday Oct23 deadline is a target, not authority for raw deletion, billable Alert CREATE or bypass of safety gates.
 
 **Checkpoint-next exact starting point:** operator pastes only aggregate existence readback of 58 YSSY P25 expired blobs. Reconcile any unknown physical-vs-DB mismatch before planning a guarded cleanup. No mutation approval is presumed.
+
+## 2026-10-22 owner-confirmed physical existence follow-up (two independent repeats)
+
+The owner executed the **exact 58-object read-only storage exists** operator **twice**, each time with identical terminal output:
+
+- `EXPIRED_REFERENCE_METADATA_PASS`, `EXPECTED_OBJECTS=58`, `EXPECTED_BYTES=308832`.
+- `physicallyPresent=58`, `physicallyAbsent=0`, `readErrors=0`, `metadataDeletionMarked=0`.
+- Dedicated provider bucket configured, but `historicalBucketIdentityIndependentlyVerified=false` in the operator's own report; do not falsely upgrade to independently verified historical custody.
+- `rawPayloadsDownloaded=0`, `storageDeletes=0`, `databaseWrites=0`, `aerodataboxRequests=0`. The operator printed `P25_EXISTENCE_INVENTORY_COMPLETED` and `NO_DELETION_AUTHORIZED` both times.
+
+**Disposition:** Physical presence in the currently configured bucket is established for **all 58** referenced opaque object names, so the earlier "maybe absent but untombstoned" hypothesis is excluded for that configured bucket at those two checks. **Expiry is not automatic deletion**; their timestamps are already past the October 20 2026 retention deadline. A deletion of raw provider content and durable provider-content tombstones is the next narrowly scoped, separately authorized recovery operation. No original bytes were downloaded; only existence and DB metadata were read. No mutation is implied by this checkpoint.
+
+### Exact bounded deletion plan — NOT YET AUTHORIZED
+
+1. Build/review a **YSSY P25 probe 19 ONLY** operator. Its dry-run must re-fetch the exact 58 refs via `source_kind='webhook'`, `source_record_id LIKE 'prepaid:b0077437-edc1-459a-9d63-8c6e6e50c4f2:%'`, compare 58 rows / 58 distinct names / total 308832 bytes / validated contract / expected SHA metadata / expiry already elapsed / 0 existing tombstones / correct required dedicated provider bucket, and refuse on any mismatch.
+2. Separately obtain **explicit owner approval** for **irreversible physical deletion of exactly these 58 expired provider raw blobs plus their individual durable deletion tombstones**, including whether the official retention policy mandates deletion and permitted source-rights handling. Other App Storage blobs, Phase2G P2G24 sources, live data, GitHub evidence and historical scientific counts must remain untouched. Never run the broad `v39_retention_expiry_v39.ts --apply` or `v39_phase2_retention_v39.ts --apply` without a corresponding scope review; those can select unrelated expired candidates.
+3. For every *exact* approved row: `deleteProviderBlobAtExpiryV39` requires physical `store.delete` then `store.exists===false` before a matching `clean.provider_content_blob_ref` row receives `deleted_at_utc`, `deletion_verified_at_utc`, `deletion_run_id`. On any deletion or metadata-commit ambiguity, HOLD for independent audit rather than blindly replay or fabricate 58/58. Report only aggregate counts; never export raw provider bytes or opaque object names to GitHub.
+4. Perform **independent fresh readback** confirming no blobs exist, 58/58 tombstones and zero unexpected collateral changes. The owner then needs a **separate, specifically approved, evidence-preserving** administrative closeout of **one OPEN P25 budget day and BOTH incidents #31/#32**. Old Incident31-only operator requires open budget days=0 and cannot do this ordering by itself. Preserve immutable `failed/DELIVERY_GAP`, external 231 / internal 229 / gap 2, and any appropriate inability to prove exact SEND delivery completeness.
+5. Only then rerun strict zero-billable-subscriptions/account-baseline and Gate4 live admission prerequisites. A Gate4 live Alert canary remains **separately authorized** and **not yet complete**, even if historical administrative records are closed.
+
+**Zero change performed by this document:** no blob deletes, tombstones, incident updates, budget state transitions, Replit publish, provider CREATE, paid GET, or merge to main. Only GitHub report updated.
