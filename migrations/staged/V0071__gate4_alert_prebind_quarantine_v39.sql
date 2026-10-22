@@ -31,4 +31,25 @@ CREATE TABLE IF NOT EXISTS clean.gate4_alert_prebind_original_v39 (
 -- reviewed provider custody is atomically established elsewhere.
 REVOKE ALL ON clean.gate4_alert_prebind_original_v39 FROM PUBLIC;
 
+-- The existing V3.9 provisioning script grants *default* future clean-table
+-- DML to travnr_v39_runtime and its recovery logins. New Gate4 custody tables
+-- must not inherit that broad application access. This revokes ONLY this new
+-- object, not any historical tables or long-lived runtime credentials.
+DO $gate4$
+DECLARE existing_role record;
+BEGIN
+  FOR existing_role IN
+    SELECT rolname FROM pg_roles
+    WHERE rolname ~ '^travnr_v39_runtime(_recovery[0-9]+)?
+
+COMMIT;
+
+  LOOP
+    EXECUTE format(
+      'REVOKE ALL PRIVILEGES ON TABLE clean.gate4_alert_prebind_original_v39 FROM %I',
+      existing_role.rolname
+    );
+  END LOOP;
+END $gate4$;
+
 COMMIT;
