@@ -1,3 +1,5 @@
+> **HISTORICAL / SUPERSEDED:** This is the 9:42 PM interim snapshot. The signed expiry STOP later completed successfully and the independent production database readback verified `STOPPED / EXPIRED` at `2026-10-22T05:10:01.235Z`, 2 attempts, 4 units and zero open scopes. Read [FINAL TECHNICAL CLOSEOUT](2026-10-21_GATE05_WSSS12_TERMINAL_STOP_VERIFIED_FINAL_TECHNICAL_CLOSEOUT.md) for the controlling result. Scientific Gate 0.5 feasibility remains pending.
+
 # Phase 3 Gate 0.5 — WSSS 12-unit feasibility pilot: paid interim reconciliation (STOP pending)
 
 **Status at 2026-10-21 ~21:42 PDT / 2026-10-22 ~04:42 UTC:** PAID TWO-QUERY RESPONSES RECEIVED; reservation/account-delta consistency PASS; **terminal STOP not yet verified**. This document is an interim evidence checkpoint, **not a final Gate 0.5 scientific PASS**, and does not authorize more paid calls. Prepared as a documentation-only branch based on the reviewed source; keep `main` unchanged until the live safety run is terminal.
