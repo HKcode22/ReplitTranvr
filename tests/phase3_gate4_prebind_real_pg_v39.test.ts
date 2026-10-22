@@ -92,10 +92,26 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
       "SELECT count(*)::int AS n FROM "+
       "clean.gate4_alert_prebind_original_v39"
     )).rows[0].n).toBe(2);
-    const last=await store.readBackOriginal(scope.scopeId,digest(wire));
+    const last=await store.readBackOriginal({
+      ...scope,claimedSubscriptionId:"earlyId99",
+      originalSha256:digest(wire),originalBytes:wire
+    });
     expect(last).toMatchObject({
       committed:true,originalBytesVerified:true
     });
+    // The exact persisted SHA must not be accepted with substituted
+    // authorization or the wrong claimed provider identity.
+    const wrongMeta=await store.readBackOriginal({
+      ...scope,claimedSubscriptionId:"foreignID",
+      originalSha256:digest(wire),originalBytes:wire
+    });
+    expect(wrongMeta).toMatchObject({committed:false,originalBytesVerified:false});
+    const wrongAuth=await store.readBackOriginal({
+      ...scope,authorizationSha256:"e".repeat(64),
+      claimedSubscriptionId:"earlyId99",
+      originalSha256:digest(wire),originalBytes:wire
+    });
+    expect(wrongAuth.committed).toBe(false);
     console.log("GATE4_DISPOSABLE_PG_ORIGINAL_AND_READBACK_PASS");
     console.log("PROVIDER_CALLS=0");
   }finally{await pool.end();}
