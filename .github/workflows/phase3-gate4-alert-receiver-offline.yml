@@ -14,6 +14,7 @@ on:
       - "server/lib/disruption/gate4PrebindIngress_v39.ts"
       - "server/lib/disruption/gate4PrebindPgStore_v39.ts"
       - "tests/phase3_gate4_prebind_ingress_v39.test.ts"
+      - "tests/phase3_gate4_prebind_real_pg_v39.test.ts"
       - "migrations/staged/V0071__gate4_alert_prebind_quarantine_v39.sql"
       - "server/lib/disruption/workspaceRuntimeHealth_v39.ts"
       - "server/lib/disruption/gate4AlertIngressScope_v39.ts"
@@ -67,7 +68,8 @@ jobs:
         run: |
           npx vitest run \
             tests/phase3_gate4_alert_receiver_only_v39.test.ts \
-            tests/phase3_gate4_alert_route_readiness_v39.test.ts             tests/phase3_gate4_prebind_ingress_v39.test.ts
+            tests/phase3_gate4_alert_route_readiness_v39.test.ts \
+            tests/phase3_gate4_prebind_ingress_v39.test.ts
       - name: Verify separate candidate receiver build
         run: |
           set -Eeuo pipefail
@@ -106,3 +108,47 @@ jobs:
             echo '- Exact provider ID is assigned after CREATE: the pre-arm race is unresolved.'
             echo '- Dedicated STOP service and actual callback ACK are NOT certified.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  gate4-prebind-postgres:
+    name: Staged V0071 original-wire PostgreSQL16 readback (disposable only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gate4_fixture
+          POSTGRES_PASSWORD: only_for_ci
+          POSTGRES_DB: gate4_prebind_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gate4_fixture -d gate4_prebind_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      GATE4_PREBIND_PG_TEST_URL: "postgresql://gate4_fixture:only_for_ci@127.0.0.1:5432/gate4_prebind_ci"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+    steps:
+      - name: Checkout exact reviewed PR source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Locked install, no provider
+        run: npm ci --no-audit --no-fund
+      - name: Apply STAGED schema only inside disposable PG; verify original receipts
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          npx vitest run tests/phase3_gate4_prebind_real_pg_v39.test.ts
+          echo 'PRODUCTION_DATABASE_WRITES=0'
+          echo 'PAID_PROVIDER_REQUESTS=0'
