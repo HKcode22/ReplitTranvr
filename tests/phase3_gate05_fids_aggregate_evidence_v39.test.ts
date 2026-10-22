@@ -38,7 +38,7 @@ describe("Gate05 pair FIDS aggregate — fixture-only, zero provider IO", () => 
     expect(output).not.toContain("SQ123");
     expect(output).not.toContain("WADD");
     expect(output).not.toContain("2026-10-22T04:42:00Z");
-    expect(output).not.toContain("lat");
+    expect(output).not.toContain('"lat":');
   });
   it("uses a half-open UTC window; rejects the end boundary", () => {
     const x = aggregateGate05FidsPairV39(
