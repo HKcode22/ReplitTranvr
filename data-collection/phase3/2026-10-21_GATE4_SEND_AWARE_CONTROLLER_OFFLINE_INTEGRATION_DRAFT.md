@@ -21,3 +21,13 @@ A lagging balance read, missing provider SEND, billing after DELETE and simultan
 
 ## Status and boundaries
 Offline source DRAFT. Do not merge, publish, turn on PHASE6_READY, create a subscription, issue a paid call or approve Phase4 from these tests. Gate3 prepaid and Gate0.5 scientific certificates remain separate Phase3 requirements. This report documents a real defect fix proposal and a finite verification plan; deadline is not permission to bypass safety.
+## 2026-10-21 implementation supplement (source patch after initial draft)
+
+- Added watchdog outer-fault STOP attempt on failures in the earlier delivery-failure/config/calendar reads, not just account-balance failure. If the database or provider prevents the stop, logs must explicitly say STOP_UNCONFIRMED; do not claim that a source-level catch ensures physical cancellation.
+- Added a local non-overlap latch for setInterval watchdog ticks to avoid simultaneous in-process STOP/CREATE paths. This is NOT a cross-process durable lock and is not independent supervisor evidence.
+- Updated synthetic test source-contract assertions to require the outer fault path and single-flight latch. The new branch HEAD must be re-pinned for each focused test. Tests are still NOT verified as passed.
+- Production rollout is still blocked on disposable-PostgreSQL and mocked-provider fault injection, concrete SEND inflight worst-case margin and a newly independently authorized, limited live Gate4 test. A future hard cap cannot be asserted solely from a soft polling threshold.
+
+## Separate earlier Gate05 offline test report
+
+User ran the aggregate-only Gate05 tests on initial draft SHA 8fd6a2e...: 4 passed, 1 failed because the privacy assertion searched for substring 'lat', matching 'withLocation' and 'population'. That is a TEST FALSE-POSITIVE, not an observed coordinate leak. Fixed on its SEPARATE branch research/gate05-aggregate-evidence-20261021 at SHA 5f681e631850ba441a16af9fe8ab4318e7ec51d4, by checking actual JSON coordinate key. Rerun before claiming 5/5 green. No source normalization or production behavior changed for this fix.
