@@ -49,3 +49,11 @@ New Gate4 code after that passing checkpoint:
 - **Tests, compile, GitHub CI on the latest branch commit: PENDING execution**. Need the new exact SHA before any conclusion.
 
 **New decisive Gate4 limitations:** A returned `CLOSED` from an owned stop function is not independent durable-provider deletion verification. Internal `adb_ingest_events` is not true SEND-side ingress on undelivered calls. Local watchdog latch does not serialize multiple published processes or protect against process death. Gate4 remains HOLD for live admission until disposable PostgreSQL/provider-failure injection, independent safety process and bounded live trial are proven. No hard guarantee of the intended provider alert-credit cap has been established.
+
+## Cross-process START safety hardening (subsequent draft commit)
+
+The latest Gate4 draft now adds `gate4TransactionalAdmission_v39.ts` and `tests/phase3_gate4_transactional_admission_v39.test.ts`. `startBatch` invokes the guard **after BEGIN and before INSERT**, on the **same PostgreSQL transaction client**. `pg_try_advisory_xact_lock(3904,20261021)` rejects contention rather than waiting indefinitely, then rechecks that no ACTIVE batch exists and the most recent parent is CLOSED/MATCH, acknowledged, and has valid settled credits. A second Replit V3.9 controller cooperating with that same lock cannot concurrently pass the gate across separate connection pools. Separate unmatched legacy/unreviewed writers remain outside this protection; a database unique active-batch constraint and real concurrent PostgreSQL test should be evaluated before production release.
+
+Five offline negative/positive tests cover fresh start, lock contention, active batch, unsettled predecessor and source code order. **These tests are not an actual multi-connection PG concurrency test and have not yet been verified as passed on the updated branch.** Future terminal production release still needs a real backend concurrency challenge, failing provider DEL/settlement and source verified independent watchdog, rather than promising a hard credit cap.
+
+Latest source review head after this change is `97d9faa931794bc4d4777fcb7eeb317278f948e9`. Passing earlier six Gate4 focused tests and five separate Gate05 focused tests remain historical specific-commit evidence, not automatic green for this SHA.
