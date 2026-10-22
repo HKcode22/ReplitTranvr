@@ -245,3 +245,13 @@ NODE
 - Prior STOP candidate checkpoint source `6edb855cf62e97cdb5c388035857ad8fb918cd6c`: all four no-paid GitHub workflows completed SUCCESS, including broad V3.9 Offline Safety.
 - At the time of this section, new `d6e41d4...` GitHub workflows were still running: Public Receiver Identity and Focused Release completed SUCCESS; Real PG Receiver Faults completed SUCCESS at last job check; broad V3.9 Offline Safety was in TypeScript processing. **Do not say 4/4 passed before the final status is checked.**
 - On exact-head full green, next engineer: add a **pure durable-custody/monotonic-revision policy** with tamper/rollback and post-CREATE unknown-ID failure cases, then a separate Gate4-only service review for independent launch/ACK and mock-provider crash/restart exercises. Do not launch a safety process in Replit Shell and do not use Gate05/FIDS permissions for Gate4 Alert STOP.
+
+### Verified CI addendum — exact Ed25519 Gate4 code pin (4/4 successful)
+
+GitHub source commit **`d6e41d4c6da86f75ebc3f20bdcc69902a2661a3d`** (the implementation plus 12 new crypto tests; no deployment) has **4/4 completed SUCCESS** no-provider workflow runs:
+- [Offline V3.9 Safety / TypeScript, offline/full tests, lint and build](https://github.com/HKcode22/ReplitTranvr/actions/runs/39764315992) — completed SUCCESS.
+- [YSSY P25 Real PG Receiver Faults (disposable PostgreSQL, no paid provider)](https://github.com/HKcode22/ReplitTranvr/actions/runs/39764316022) — completed SUCCESS.
+- [YSSY P25 Focused Release (no provider)](https://github.com/HKcode22/ReplitTranvr/actions/runs/39764316041) — completed SUCCESS.
+- [YSSY P25 Public Receiver Identity (read-only, no provider)](https://github.com/HKcode22/ReplitTranvr/actions/runs/39764315999) — completed SUCCESS.
+
+This confirms offline code/tests/CI at the immutable exact code pin, **not the live independent STOP process** or actual provider DELETE/credit-settlement behavior. The earlier account foundation was read-only PASS with 2,037 credits and 0 active subscriptions as a timestamped observation; no live provider requests were made by this coding session. The PR remains DRAFT; production main and the published deployment are unchanged. **Next start point:** design/test durable exact-ID custody with independent monotonic revision/anti-rollback trust anchor, then external safety-only worker provisioning, heartbeat and alert-ACK verification. Keep all paid, production, deployment and Phase6 authority closed.
