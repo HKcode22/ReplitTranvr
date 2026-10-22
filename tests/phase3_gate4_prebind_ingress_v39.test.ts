@@ -35,10 +35,12 @@ function durable():Gate4PrebindOriginalStoreV39{
      return {scopeId:o.scopeId,originalSha256:o.originalSha256,
        committed:true,originalBytesVerified:true};
    },
-   async readBackOriginal(scopeId,hash){
-     const current=saved.get(hash);
-     const ok=!!current&&sha(current)===hash;
-     return {scopeId,originalSha256:hash,
+   async readBackOriginal(original){
+     const current=saved.get(original.originalSha256);
+     const ok=!!current&&sha(current)===original.originalSha256 &&
+       current.equals(original.originalBytes);
+     return {scopeId:original.scopeId,
+       originalSha256:original.originalSha256,
        committed:ok,originalBytesVerified:ok};
    }
  };
@@ -56,8 +58,8 @@ describe("Gate4 pre-CREATE original-byte quarantine — mocks, no provider",()=>
      paidAuthorization:false,providerRequests:0
    });
    expect(write).toHaveBeenCalledTimes(1);
-   expect(read).toHaveBeenCalledExactlyOnceWith(scope.scopeId,sha(wire));
    const original=write.mock.calls[0][0];
+   expect(read).toHaveBeenCalledExactlyOnceWith(original);
    expect(original.originalBytes.equals(wire)).toBe(true);
    expect(original.claimedSubscriptionId).toBe("earlyId99");
    expect(JSON.stringify(out)).not.toContain("earlyId99");
@@ -82,9 +84,10 @@ describe("Gate4 pre-CREATE original-byte quarantine — mocks, no provider",()=>
    const store=durable();
    const out=await quarantineGate4PrebindOriginalV39(scope,wire,{
      ...store,
-     readBackOriginal:async(id,h)=>({
-       scopeId:id,originalSha256:h,committed:true,
-       originalBytesVerified:false
+     readBackOriginal:async original=>({
+       scopeId:original.scopeId,
+       originalSha256:original.originalSha256,
+       committed:true,originalBytesVerified:false
      })
    });
    expect(out).toMatchObject({httpStatus:503,responseAcknowledged:false});
