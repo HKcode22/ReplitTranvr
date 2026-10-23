@@ -1,4 +1,5 @@
 import {describe,it,expect} from "vitest";
+import {readFileSync} from "node:fs";
 import {GATE4_ACTIONS_LIVE_STOP_RELEASED_V39,
   reviewGate4LiveWatchLaunchV39,runGate4LiveStopWatchV39}
  from "../scripts/v39_gate4_actions_live_stop_v39";
@@ -30,6 +31,33 @@ describe("Gate4 live Actions STOP entrypoint is source-sealed and cannot do I/O"
   expect(reviewGate4LiveWatchLaunchV39(scope,
     "WATCH_G4_EXACT_ID_STOP_NO_CREATE",env)).toBe(false);
  });
+  it("never interpolates dispatch data into bash or supplies secrets during checkout/install",()=>{
+    const yaml=readFileSync(new URL(
+      "../.github/workflows/phase3-gate4-live-exact-stop-candidate.yml",
+      import.meta.url),"utf8");
+    const marker="      - name: Run reviewed STOP-only implementation";
+    const i=yaml.indexOf(marker);
+    expect(i).toBeGreaterThan(0);
+    const preparation=yaml.slice(0,i);
+    const execution=yaml.slice(i);
+    // Provider key and restricted DB URL exist only on the STOP execution step.
+    expect(preparation).not.toContain("secrets.AERODATABOX_API_KEY");
+    expect(preparation).not.toContain("secrets.GATE4_SAFETY_READONLY_DATABASE_URL");
+    expect(execution).toContain("AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}");
+    expect(execution).toContain("GATE4_SAFETY_READONLY_DATABASE_URL: ${{ secrets.GATE4_SAFETY_READONLY_DATABASE_URL }}");
+    const run=execution.split("        run: |")[1]?.split("      - name: Honest STOP")[0]??"";
+    expect(run).not.toMatch(/\$\{\{\s*inputs\./);
+    for(const variable of ["SCOPE_ID","AUTH_SHA","ICAO","START_UTC",
+      "STOP_UTC","STARTING_CREDITS","SOFT_TARGET","PROTECTED_FLOOR"]){
+      expect(run).toContain('" when source seal is closed",async()=>{
+  await expect(runGate4LiveStopWatchV39(scope,
+    "WATCH_G4_EXACT_ID_STOP_NO_CREATE",{}))
+    .rejects.toThrow("GATE4_ACTIONS_RELEASE_OR_ENV_NOT_APPROVED_HOLD");
+ });
+});
++variable+'"');
+    }
+  });
  it("provider and DB are never contacted when source seal is closed",async()=>{
   await expect(runGate4LiveStopWatchV39(scope,
     "WATCH_G4_EXACT_ID_STOP_NO_CREATE",{}))
