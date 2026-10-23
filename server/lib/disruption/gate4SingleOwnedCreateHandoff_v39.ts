@@ -15,6 +15,13 @@ import type {Gate4CustodyExternalAnchorV39} from
 import type {Gate4SignedStopTicketInputV39} from
  "./gate4SignedStopCustody_v39";
 
+export type Gate4PositiveCreateReceiptV39=Readonly<{
+ // Hash the exact positive provider CREATE HTTP response bytes in the real
+ // adapter before JSON parsing. Never derive from a callback or LIST.
+ subscription:WebhookSubscription;
+ rawCreateResponseSha256:string;
+}>;
+const receiptSha=/^[a-f0-9]{64}$/;
 export type Gate4HandoffEvidenceV39=Readonly<{
  binding:Gate4OwnedBindingV39;
  custodyAnchor:Gate4CustodyExternalAnchorV39;
@@ -24,7 +31,7 @@ export type Gate4HandoffDepsV39=Readonly<{
  independentlyConfirmArmedStop:()=>Promise<boolean>;
  strictBalance:()=>Promise<number>;
  strictInventory:()=>Promise<WebhookSubscription[]>;
- createExactlyOne:()=>Promise<WebhookSubscription|null>;
+ createExactlyOne:()=>Promise<Gate4PositiveCreateReceiptV39|null>;
  prepareIndependentEvidence:(created:WebhookSubscription)=>
    Promise<Gate4HandoffEvidenceV39>;
  bindingStore:Gate4OwnedBindingStoreV39;
@@ -83,10 +90,12 @@ export async function runGate4SingleOwnedCreateHandoffV39(
 
  // One attempt only. Null/timeout/invalid response MUST NOT infer ownership
  // from LIST, because a payment-capable subscription may already exist.
- let created:WebhookSubscription|null=null;
- try{created=await deps.createExactlyOne();}
+ let response:Gate4PositiveCreateReceiptV39|null=null;
+ try{response=await deps.createExactlyOne();}
  catch{/* unconfirmed provider CREATE */}
- if(!matches(created,scope)){
+ const created=response?.subscription??null;
+ if(!receiptSha.test(response?.rawCreateResponseSha256??"")||
+    !matches(created,scope)){
    try{await deps.recordIncident("CREATE_RESPONSE_AMBIGUOUS",false,true);}
    catch{/* still unsafe */}
    hold("UNKNOWN_CREATE_RESULT_OPERATOR_RESCUE");
@@ -95,6 +104,7 @@ export async function runGate4SingleOwnedCreateHandoffV39(
  try{
    const e=await deps.prepareIndependentEvidence(created);
    if(!e?.binding||e.binding.subscriptionId!==id||
+      e.binding.reviewedCreateReceiptSha256!==response?.rawCreateResponseSha256||
       e.binding.airportIcao!==scope.airportIcao||
       e.binding.scopeId!==scope.scopeId||
       e.binding.sourceCommit!==scope.sourceCommit||
