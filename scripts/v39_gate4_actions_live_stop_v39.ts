@@ -90,6 +90,18 @@ export function gate4IndependentApprovalPinsMatchV39(
    env.GATE4_SAFETY_APPROVED_SOFT_TARGET===String(scope.softCreditTarget)&&
    env.GATE4_SAFETY_APPROVED_PROTECTED_FLOOR===String(scope.protectedCreditFloor);
 }
+/**
+ * Separately pinned GitHub Actions runner SHA. The published Replit receiver
+ * SHA is the independently approved scope.sourceCommit, NOT the runner SHA.
+ * Without this dual review a legitimate STOP-code release changes main and
+ * invalidates receiver attribution. Neither value may approve the other.
+ */
+export function gate4IndependentRunnerSourcePinnedV39(
+ env:NodeJS.ProcessEnv
+):boolean{
+ return /^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")&&
+   env.GATE4_SAFETY_APPROVED_RUNNER_SHA===env.GITHUB_SHA;
+}
 export function reviewGate4LiveWatchLaunchV39(
  scope:Gate4ActionsWatchScopeV39,
  confirmation:string,
@@ -101,7 +113,7 @@ export function reviewGate4LiveWatchLaunchV39(
      env.GITHUB_ACTIONS!=="true"||
      env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
      env.GITHUB_REF!=="refs/heads/main"||
-     env.GITHUB_SHA!==scope.sourceCommit||
+     !gate4IndependentRunnerSourcePinnedV39(env)||
      !gate4IndependentApprovalPinsMatchV39(scope,env)||
      env.GATE4_SAFETY_ENV_NAME!=="gate4-safety"||
      !env.GITHUB_RUN_ID||
@@ -133,8 +145,8 @@ export async function runGate4LiveStopWatchV39(
    hold("RELEASE_OR_ENV_NOT_APPROVED");
  if(execFileSync("git",["rev-parse","HEAD"],{
     encoding:"utf8",stdio:["ignore","pipe","ignore"]
-   }).trim()!==scope.sourceCommit)
-   hold("REVIEWED_CHECKOUT_SHA");
+   }).trim()!==env.GITHUB_SHA)
+   hold("REVIEWED_RUNNER_CHECKOUT_SHA");
  const start=Date.parse(scope.startUtc),stop=Date.parse(scope.stopUtc);
  const now=Date.now();
  if(start<now-60_000||start>now+10*60_000||stop<=now+30_000)
