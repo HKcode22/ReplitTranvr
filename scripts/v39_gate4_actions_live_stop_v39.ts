@@ -1,8 +1,8 @@
 /**
- * DRAFT: one continuously running Actions STOP watcher for ONE Gate4 trial.
- * SOURCE SEAL CLOSED: cannot call provider or DB until separately reviewed
- * Gate4 runtime release. Unlike the no-provider rehearsal, after release
- * this would perform strict free GET/LIST and exact-owned provider DELETE.
+ * Reviewed opt-in exact-ID STOP watcher for ONE Gate4 trial.
+ * SOURCE RELEASED: still requires protected GH environment reviewer,
+ * exact two-source pins, approved narrow window and manual dispatch. It
+ * performs strict free GET/LIST and only exact-owned provider DELETE.
  * No subscription CREATE code; no cron and no Phase6 owner.
  *
  * Caveats: Github runner can stop unexpectedly; callbacks may be charged on
@@ -24,9 +24,9 @@ import {
   reviewGate4ActionsWatchScopeV39,type Gate4ActionsWatchScopeV39
 } from "../server/lib/disruption/gate4ActionsWatchdogPolicy_v39";
 
-// Changing this constant is a distinct owner-reviewed paid-risk release;
-// a workflow_dispatch input or environment variable CANNOT open the seal.
-export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;
+// This ONLY unlocks protected manual STOP admission, NOT CREATE permission.
+// A workflow_dispatch input or environment variable cannot change source.
+export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=true;
 const EXACT_CONFIRM="WATCH_G4_EXACT_ID_STOP_NO_CREATE";
 /** A missing or disputed owner after CREATE is an emergency human
  * reconciliation incident. No ID is guessed or deleted. No second CREATE.
