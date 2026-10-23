@@ -122,8 +122,13 @@ export async function quarantineGate4PrebindOriginalV39(
     const verified=await store.readBackOriginal(original);
     if(!consistentReceipt(verified,scope.scopeId,sha))
       return result("HOLD","DURABLE_READBACK_NOT_CONFIRMED",503);
-  }catch{
-    return result("HOLD","DURABLE_STORAGE_OR_READBACK_UNAVAILABLE",503);
+  }catch(e){
+    // Return only a fixed, reviewed code to the authenticated callback
+    // caller. Never surface PostgreSQL details, SQL strings or secrets.
+    const candidate=e instanceof Error?e.message:"";
+    const reason=/^GATE4_PREBIND_(ACQUIRE|BEGIN|INSERT|TX_READBACK|TX_COMPARE|COMMIT|POST_COMMIT_QUERY)_HOLD$/.test(candidate)
+      ?candidate:"DURABLE_STORAGE_OR_READBACK_UNAVAILABLE";
+    return result("HOLD",reason,503);
   }
   return result("QUARANTINED_DURABLY_PENDING_ID_BINDING",
     "ORIGINAL_ONLY_NO_OWNER_CLAIM",200);
