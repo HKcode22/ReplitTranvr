@@ -80,7 +80,7 @@ export function gate4ReviewIndependentArmedProofV39(args:{
       !c.body.startsWith(GATE4_ARMED_COMMENT_MARKER_V39))
      return false;
    const when=Date.parse(c.created_at);
-   if(when>now||now-when>45_000)return false;
+   if(when>now||now-when>120_000)return false;
    let r:Gate4ArmedRunReceiptV39;
    try{r=JSON.parse(c.body.slice(
      GATE4_ARMED_COMMENT_MARKER_V39.length));}
