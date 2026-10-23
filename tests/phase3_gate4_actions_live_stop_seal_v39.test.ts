@@ -3,6 +3,7 @@ import {readFileSync} from "node:fs";
 import {
  GATE4_ACTIONS_LIVE_STOP_RELEASED_V39,
  gate4IndependentApprovalPinsMatchV39,
+ gate4StopRunnerTerminalHoldV39,
  reviewGate4LiveWatchLaunchV39,runGate4LiveStopWatchV39
 } from "../scripts/v39_gate4_actions_live_stop_v39";
 const scope={
@@ -79,6 +80,28 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
   for(const variable of ["SCOPE_ID","AUTH_SHA","ICAO","START_UTC",
     "STOP_UTC","STARTING_CREDITS","SOFT_TARGET","PROTECTED_FLOOR"])
     expect(shell).toContain('"$'+variable+'"');
+ });
+ it("unknown owned ID or custody failure triggers immediate terminal rescue",()=>{
+  for(const reason of [
+    "BILLABLE_ACTIVE_WITHOUT_OWNER_ID",
+    "SPEND_WITHOUT_OWNED_ID",
+    "OWNER_CUSTODY_READ_FAILED",
+    "OWNER_CUSTODY_SCOPE_MISMATCH",
+    "STRICT_INVENTORY_UNAVAILABLE"
+  ]){
+   expect(gate4StopRunnerTerminalHoldV39({
+     status:"HOLD_OWNER_REQUIRED",reason
+   })).toBe("EXACT_OWNER_RESCUE_REQUIRED");
+  }
+  expect(gate4StopRunnerTerminalHoldV39({
+    status:"STOP_UNCONFIRMED",reason:"EXACT_DELETE_UNCONFIRMED"
+  })).toBe("EXACT_STOP_UNCONFIRMED");
+  expect(gate4StopRunnerTerminalHoldV39({
+    status:"WATCH",reason:"NO_ACTIVE_OWNED_ID_YET"
+  })).toBeNull();
+  expect(gate4StopRunnerTerminalHoldV39({
+    status:"STOPPED_EXACT_PENDING_SETTLEMENT",reason:"HARD_TIME_DEADLINE"
+  })).toBeNull();
  });
  it("provider and DB are never contacted while source seal is closed",async()=>{
   await expect(runGate4LiveStopWatchV39(scope,
