@@ -14,7 +14,13 @@ import {
   gate4CheckAdditivePgRoleV39
 } from "../server/lib/disruption/gate4PrebindAdditiveRoute_v39";
 
-describe("Gate4 limited release: actual restricted PG16 quarantine",()=>{
+// The full offline suite runs without a database service. Skip there; the
+// dedicated disposable-PG16 job must set BOTH exact test-only sentinels.
+const DISPOSABLE_ONLY=process.env.CI==="true"&&
+  process.env.GATE4_DISPOSABLE_DB_ACK==="GATE4_PG16_ONLY";
+describe.skipIf(!DISPOSABLE_ONLY)(
+  "Gate4 limited release: actual restricted PG16 quarantine",()=>{
+
  it("prepaid runtime no grants; exact dedicated receiver bytes+readback and no V0072",async()=>{
   if(process.env.CI!=="true"||
     process.env.GATE4_DISPOSABLE_DB_ACK!=="GATE4_PG16_ONLY")
