@@ -205,6 +205,34 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
     await pool.query("GRANT USAGE ON SCHEMA clean TO gate4_writer_ci");
     await pool.query("GRANT SELECT,INSERT ON TABLE "+
       "clean.gate4_alert_owned_binding_v39 TO gate4_writer_ci");
+    // Mirror the scope-limited production RLS design (disposable PG only).
+    // Owner bypasses RLS; writer and safety reader do not.
+    await pool.query(
+      "ALTER TABLE clean.gate4_alert_owned_binding_v39 ENABLE ROW LEVEL SECURITY"
+    );
+    await pool.query(
+      "CREATE POLICY gate4_test_safety_select ON "+
+      "clean.gate4_alert_owned_binding_v39 FOR SELECT TO "+
+      "gate4_safety_reader_20261022 USING (true)"
+    );
+    const allowed="scope_id='"+scope.scopeId+"'::uuid"+
+      " AND authorization_sha256='"+scope.authorizationSha256+"'"+
+      " AND source_commit='"+scope.sourceCommit+"'"+
+      " AND airport_icao='"+scope.airportIcao+"'";
+    await pool.query(
+      "CREATE POLICY gate4_test_writer_select ON "+
+      "clean.gate4_alert_owned_binding_v39 FOR SELECT TO "+
+      "gate4_writer_ci USING ("+allowed+")"
+    );
+    await pool.query(
+      "CREATE POLICY gate4_test_writer_insert ON "+
+      "clean.gate4_alert_owned_binding_v39 FOR INSERT TO "+
+      "gate4_writer_ci WITH CHECK ("+allowed+")"
+    );
+    expect((await pool.query(
+      "SELECT relrowsecurity AS enabled FROM pg_class "+
+      "WHERE oid='clean.gate4_alert_owned_binding_v39'::regclass"
+    )).rows[0].enabled).toBe(true);
     const writerUrl=localUrl.replace(
       "gate4_fixture:only_for_ci",
       "gate4_writer_ci:disposable_writer_only");
@@ -276,6 +304,7 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
         await watch.query("RESET ROLE").catch(()=>undefined);
         watch.release();
       }
+      console.log("GATE4_DISPOSABLE_PG_EXACT_SCOPE_RLS_WRITER_PASS");
       console.log("GATE4_DISPOSABLE_PG_INSERT_SELECT_ONLY_WRITER_PASS");
     }finally{
       await writerPool.end();
