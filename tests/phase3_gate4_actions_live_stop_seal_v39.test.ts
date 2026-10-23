@@ -47,7 +47,8 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
    expect(gate4IndependentApprovalPinsMatchV39(scope,{
      ...approvals,[key]:"FOREIGN_OR_UNAPPROVED"
    })).toBe(false);
-   const { [key]:_ignored,...without }=approvals;
+   const without={...approvals};
+   delete without[key];
    expect(gate4IndependentApprovalPinsMatchV39(scope,without)).toBe(false);
   }
  });
