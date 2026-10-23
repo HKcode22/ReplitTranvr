@@ -5,6 +5,8 @@ import {
  gate4PublishedReceiverMatchesStopScopeV39,
  gate4IndependentRunnerSourcePinnedV39,
  gate4IndependentApprovalPinsMatchV39,
+ GATE4_ARMED_PROOF_HEARTBEAT_MS,
+ gate4ArmedProofRefreshDueV39,
  GATE4_POSITIVE_OWNER_BIND_GRACE_MS,
  gate4MayWaitForPositiveOwnerBindingV39,
  gate4StopRunnerTerminalHoldV39,
