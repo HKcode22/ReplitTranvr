@@ -1,6 +1,7 @@
 import {describe,it,expect,vi} from "vitest";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
-import {runGate4SingleOwnedCreateHandoffV39} from
+import {runGate4SingleOwnedCreateHandoffV39,
+ type Gate4PositiveCreateReceiptV39} from
  "../server/lib/disruption/gate4SingleOwnedCreateHandoff_v39";
 import {gate4StopTicketSigningMessageV39} from
  "../server/lib/disruption/gate4SignedStopCustody_v39";
@@ -18,6 +19,9 @@ const scope={
 const created:WebhookSubscription={
  id:"ownedSynthetic123",isActive:true,billingType:"CreditBased",
  subject:{type:"FlightByAirportIcao",id:"WSSS"}
+};
+const response:Gate4PositiveCreateReceiptV39={
+ subscription:created,rawCreateResponseSha256:"c".repeat(64)
 };
 const binding={
  scopeId:scope.scopeId,authorizationSha256:scope.authorizationSha256,
@@ -69,7 +73,7 @@ function deps(){
    listCall++;
    return listCall===1?[]:[created];
   }),
-  createExactlyOne:vi.fn(async():Promise<WebhookSubscription|null>=>created),
+  createExactlyOne:vi.fn(async():Promise<Gate4PositiveCreateReceiptV39|null>=>response),
   prepareIndependentEvidence:vi.fn(async()=>evidence),
   bindingStore:{
    bindOnce:vi.fn(async()=>({committed:true,exactFieldsVerified:true})),
@@ -140,6 +144,16 @@ describe("Gate4 single Alert CREATE->V0072 handoff (INJECTED MOCKS ONLY)",()=>{
   expect(d.deleteExactOwned).toHaveBeenCalledExactlyOnceWith(created.id);
   expect(d.recordIncident).toHaveBeenCalledWith(
    "POST_CREATE_V0072_BIND_UNCONFIRMED",true,true);
+ });
+ it("mismatched raw CREATE HTTP response hash cannot bind V0072",async()=>{
+  const d=deps();
+  d.createExactlyOne.mockResolvedValue({
+   ...response,rawCreateResponseSha256:"e".repeat(64)
+  });
+  await expect(runGate4SingleOwnedCreateHandoffV39(scope,d))
+   .rejects.toThrow("GATE4_HANDOFF_COMPENSATED_NEEDS_THREE_BALANCE_SETTLEMENT_HOLD");
+  expect(d.bindingStore.bindOnce).not.toHaveBeenCalled();
+  expect(d.deleteExactOwned).toHaveBeenCalledExactlyOnceWith(created.id);
  });
  it("no duplicate second CREATE after bad signature or database refusal",async()=>{
   const d=deps();
