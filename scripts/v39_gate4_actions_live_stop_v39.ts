@@ -85,6 +85,15 @@ export function gate4MayWaitForPositiveOwnerBindingV39(
    Number.isSafeInteger(nowMs)&&Number.isSafeInteger(stopMs)&&
    nowMs<stopMs;
 }
+/** Refresh authentic bot proof during live STOP WATCH only. */
+export const GATE4_ARMED_PROOF_HEARTBEAT_MS=45_000;
+export function gate4ArmedProofRefreshDueV39(
+ lastMs:number,nowMs:number,stopMs:number
+):boolean{
+ return [lastMs,nowMs,stopMs].every(Number.isSafeInteger)&&
+   nowMs>=lastMs+GATE4_ARMED_PROOF_HEARTBEAT_MS&&
+   nowMs<stopMs;
+}
 const sleep=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms));
 const name=/^gate4_safety_reader_[a-z0-9_]{4,60}$/;
 function hold(reason:string):never{throw Error("GATE4_ACTIONS_"+reason+"_HOLD");}
@@ -232,29 +241,29 @@ export async function runGate4LiveStopWatchV39(
    const runId=Number(env.GITHUB_RUN_ID);
    if(!Number.isSafeInteger(runId)||runId<=0)
      hold("ARMED_RECEIPT_RUN_ID_INVALID");
-   const receiptBody=gate4ArmedCommentBodyV39(
-     scope,runId,requireEnv(env,"GITHUB_SHA"),new Date().toISOString());
    const token=requireEnv(env,"GATE4_STOP_ARMED_COMMENT_TOKEN");
-   let post:Response;
-   try{
-     post=await fetch(
-       "https://api.github.com/repos/HKcode22/ReplitTranvr/issues/38/comments",{
-       method:"POST",redirect:"error",signal:AbortSignal.timeout(8000),
-       headers:{
-         Accept:"application/vnd.github+json",
-         Authorization:"Bearer "+token,
-         "Content-Type":"application/json",
-         "X-GitHub-Api-Version":"2022-11-28"
-       },
-       body:JSON.stringify({body:receiptBody})
-     });
-   }catch{hold("ARMED_RECEIPT_POST_UNCONFIRMED");}
-   if(post.status!==201)hold("ARMED_RECEIPT_NOT_COMMITTED");
-   let receipt:unknown;
-   try{receipt=await post.json();}catch{hold("ARMED_RECEIPT_ACK_UNCONFIRMED");}
-   const ack=receipt as {id?:number;body?:string}|null;
-   if(!Number.isSafeInteger(ack?.id)||ack?.body!==receiptBody)
-     hold("ARMED_RECEIPT_ACK_MISMATCH");
+   const emitArmedProof=async():Promise<boolean>=>{
+     const receiptBody=gate4ArmedCommentBodyV39(
+       scope,runId,requireEnv(env,"GITHUB_SHA"),new Date().toISOString());
+     try{
+       const response=await fetch(
+         "https://api.github.com/repos/HKcode22/ReplitTranvr/issues/38/comments",{
+         method:"POST",redirect:"error",signal:AbortSignal.timeout(8000),
+         headers:{
+           Accept:"application/vnd.github+json",
+           Authorization:"Bearer "+token,
+           "Content-Type":"application/json",
+           "X-GitHub-Api-Version":"2022-11-28"
+         },
+         body:JSON.stringify({body:receiptBody})
+       });
+       if(response.status!==201)return false;
+       const ack=await response.json() as {id?:number;body?:string}|null;
+       return Number.isSafeInteger(ack?.id)&&ack?.body===receiptBody;
+     }catch{return false;}
+   };
+   if(!await emitArmedProof())hold("ARMED_RECEIPT_POST_UNCONFIRMED");
+   let lastArmedReceiptAtMs=Date.now();
    console.log(JSON.stringify({
       status:"GATE4_ACTIONS_ARMED_NO_CREATE",
       scope:scope.scopeId,source:scope.sourceCommit,
@@ -314,6 +323,23 @@ export async function runGate4LiveStopWatchV39(
          scientificGate4Passed:false
        }));
        return;
+     }
+     // Missing heartbeat never stops the independently protective
+     // STOP watcher. It only prevents later CREATE authorization.
+     if(outcome.status==="WATCH"&&
+        gate4ArmedProofRefreshDueV39(
+          lastArmedReceiptAtMs,Date.now(),stop)){
+       if(await emitArmedProof()){
+         lastArmedReceiptAtMs=Date.now();
+         console.log(JSON.stringify({
+           status:"GATE4_ACTIONS_ARMED_HEARTBEAT_NO_CREATE",
+           scope:scope.scopeId,providerCreates:0
+         }));
+       }else{
+         console.warn(JSON.stringify({
+           status:"GATE4_ARMED_HEARTBEAT_UNCONFIRMED_CREATE_MUST_HOLD"
+         }));
+       }
      }
      if(outcome.status!=="WATCH"){
        console.error(JSON.stringify({
