@@ -24,6 +24,21 @@ describe("Gate4 writer production commissioning source guard — NO PROVIDER",()
   expect(src).toContain("if(head!==expected)err");
   expect(src).toContain("x.ownedRows===0");
  });
+ it("production INSERT is scope-bound by RLS, never broad multi-trial",()=>{
+  for(const pin of [
+    "GATE4_WRITER_APPROVED_SCOPE_ID",
+    "GATE4_WRITER_APPROVED_AUTH_SHA256",
+    "GATE4_WRITER_APPROVED_MAIN_SHA",
+    "GATE4_WRITER_APPROVED_AIRPORT_ICAO"
+  ])expect(src).toContain(pin);
+  expect(src).toContain("ENABLE ROW LEVEL SECURITY");
+  expect(src).toContain("gate4_safety_select_v39");
+  expect(src).toContain("gate4_writer_select_20261023");
+  expect(src).toContain("gate4_writer_insert_20261023");
+  expect(src).toContain("WITH CHECK ("+ '"'+ "+predicate+"+'"' +")");
+  expect(src).toContain("SCOPED_RLS_NOT_INSTALLED");
+  expect(src).toContain("x.rlsEnabled===false&&x.policyCount===0");
+ });
  it("role cannot CREATE/schema mutate, read raw V0071 or edit V0072",()=>{
   expect(src).toContain("gate4_owner_writer_20261023");
   expect(src).toContain("NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE");
