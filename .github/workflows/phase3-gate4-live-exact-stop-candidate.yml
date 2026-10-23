@@ -50,6 +50,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: gate4-live-one-owner
@@ -116,6 +117,7 @@ jobs:
           PROTECTED_FLOOR: ${{ inputs.protected_floor }}
           # Keep provider key and narrow DB credential out of checkout/npm steps.
           # Only available within the protected reviewed STOP-only step.
+          GATE4_STOP_ARMED_COMMENT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
           GATE4_SAFETY_READONLY_DATABASE_URL: ${{ secrets.GATE4_SAFETY_READONLY_DATABASE_URL }}
           GATE4_SAFETY_EXPECTED_DB_HOST: ${{ secrets.GATE4_SAFETY_EXPECTED_DB_HOST }}
