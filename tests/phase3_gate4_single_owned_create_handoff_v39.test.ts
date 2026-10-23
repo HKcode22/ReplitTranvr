@@ -148,6 +148,19 @@ describe("Gate4 single Alert CREATE->V0072 handoff (INJECTED MOCKS ONLY)",()=>{
   expect(d.recordIncident).toHaveBeenCalledWith(
    "POST_CREATE_V0072_BIND_UNCONFIRMED",true,true);
  });
+ it("missing raw receipt with positive owned ID triggers exact-ID compensation",async()=>{
+  const d=deps();
+  d.createExactlyOne.mockResolvedValue({
+   ...response,rawCreateResponseSha256:""
+  });
+  await expect(runGate4SingleOwnedCreateHandoffV39(scope,d))
+   .rejects.toThrow("GATE4_HANDOFF_COMPENSATED_NEEDS_THREE_BALANCE_SETTLEMENT_HOLD");
+  expect(d.createExactlyOne).toHaveBeenCalledTimes(1);
+  expect(d.deleteExactOwned).toHaveBeenCalledExactlyOnceWith(created.id);
+  expect(d.bindingStore.bindOnce).not.toHaveBeenCalled();
+  expect(d.recordIncident).toHaveBeenCalledWith(
+   "POST_CREATE_V0072_BIND_UNCONFIRMED",true,false);
+ });
  it("mismatched raw CREATE HTTP response hash cannot bind V0072",async()=>{
   const d=deps();
   d.createExactlyOne.mockResolvedValue({
