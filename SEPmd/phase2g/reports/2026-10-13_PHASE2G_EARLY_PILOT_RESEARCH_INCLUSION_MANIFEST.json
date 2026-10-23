@@ -1,0 +1,98 @@
+{
+  "schema": "v39.phase2g.early-pilot-research-inclusion.v1",
+  "created_from_verified_evidence_utc": "2026-10-13",
+  "status": "DRAFT_RESEARCH_INVENTORY_NOT_CONFIRMATORY_GATE2",
+  "authority": {
+    "original_plan": "SEPmd/V3.9_DataCollectPlan_f.8.md",
+    "early_pilot_freeze": "artifacts/phase2g-compact6-early-pilot-scope-reduction-freeze-20261002.json",
+    "scope": "early pilot only; automatic Stage2 confirmations retired; no paid action authorized",
+    "immutable_production_source_sha": "f5b1347b7b9aebd6830302394ea2cc5775aedbf4"
+  },
+  "labels": {
+    "green_check_definition": "120-minute received-data acquisition and independently verified source integrity; not historical strict protocol acceptance",
+    "tier_A": "A_VERIFIED_PRIMARY: exact final MATCH and source acceptance",
+    "tier_B": "B_DEGRADED_OBSERVED_ONLY: independently verified received observations with missingness disclosed; inferential sensitivity not complete",
+    "protocol_results_immutable": true
+  },
+  "cohort": [
+    {
+      "icao": "WSSS",
+      "accepted_probe_id": 11,
+      "original_reconciliation": "MATCH",
+      "research_inventory_included": true,
+      "research_tier": "A_VERIFIED_PRIMARY",
+      "confirmed_capacity_gate": "PASS",
+      "evidence": "prior frozen finalizer/probe11"
+    },
+    {
+      "icao": "OMAA",
+      "accepted_probe_id": 12,
+      "original_reconciliation": "MATCH",
+      "research_inventory_included": true,
+      "research_tier": "A_VERIFIED_PRIMARY",
+      "confirmed_capacity_gate": "PASS",
+      "evidence": "prior frozen finalizer/probe12"
+    },
+    {
+      "icao": "MMUN",
+      "accepted_probe_id": 14,
+      "original_reconciliation": "MATCH",
+      "research_inventory_included": true,
+      "research_tier": "A_VERIFIED_PRIMARY",
+      "confirmed_capacity_gate": "FAIL",
+      "evidence": "early pilot freeze baseline; retained as observational contrast rather than final anchor pool"
+    },
+    {
+      "icao": "SKBO",
+      "accepted_probe_id": 15,
+      "original_reconciliation": "MATCH",
+      "research_inventory_included": true,
+      "research_tier": "A_VERIFIED_PRIMARY",
+      "confirmed_capacity_gate": "NOT_RECHECKED_IN_THIS_MANIFEST",
+      "evidence": "prior frozen finalizer/probe15"
+    },
+    {
+      "icao": "YSSY",
+      "probe_id": 19,
+      "original_reconciliation": "DELIVERY_GAP",
+      "original_database_status": "failed",
+      "historical_confirmatory_pass": false,
+      "research_inventory_included": true,
+      "research_collection_complete_green_check": true,
+      "research_tier": "B_DEGRADED_OBSERVED_ONLY",
+      "source_integrity_proven": true,
+      "original_object_count": 58,
+      "sha256_verified_objects": 58,
+      "verified_original_bytes": 308832,
+      "saved_item_count": 229,
+      "saved_body_cost_claim_credits": 229,
+      "external_settled_spend_credits": 231,
+      "unexplained_billed_credit_units": 2,
+      "observed_credit_completeness": 0.9913419913419913,
+      "recorded_callback_2xx": 58,
+      "recorded_callback_failures": 0,
+      "observed_window_seconds": 7203.639,
+      "duration_censored": false,
+      "identity_health": "PASS_WITH_AMBIGUITY",
+      "identity_hard_violations": 0,
+      "retained_source_expiry_earliest_utc": "2026-10-20T03:06:15.502Z",
+      "local_aggregate_report_sha256": "a42a3736ac362ad38398e51f268273ae10c20103e5a53e21b0852c0f4e063fcf",
+      "raw_payloads_archived_in_git": false,
+      "protocol_score_eligibility": "NO_UNDER_FROZEN_P25",
+      "research_primary_inference_ready": false,
+      "reason": "missingness and time/identity sensitivity not yet independently established",
+      "provider_sender_attempt_truth": "UNKNOWN",
+      "open_cleanup_incident_id": 31
+    }
+  ],
+  "next": {
+    "no_additional_paid_yssy_run": true,
+    "prepare_validity_review_for_early_pilot": true,
+    "new_paid_probe_authorized": false,
+    "original_provider_objects_preserve_until_scoped_research_and_retention_disposition": true,
+    "no_automatic_stage2_confirmation": true,
+    "original_formal_history_preserved": true,
+    "source_item_count_and_cost_reconstructed": true,
+    "exact_missing_credit_root_cause": "UNKNOWN_AFTER_BOUNDED_REVIEW"
+  }
+}
