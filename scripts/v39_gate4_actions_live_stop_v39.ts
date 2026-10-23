@@ -41,6 +41,31 @@ export function gate4StopRunnerTerminalHoldV39(
    return "EXACT_STOP_UNCONFIRMED";
  return null;
 }
+/**
+ * The published Replit Alert receiver pins its prebind scope to its built
+ * source SHA, while this GitHub STOP job pins V0072 to its reviewed main SHA.
+ * A mismatch could make real callbacks impossible to reconcile to the owned
+ * subscription. Public status is ONLY a route/source consistency witness,
+ * not proof a real provider Alert callback has arrived.
+ */
+export function gate4PublishedReceiverMatchesStopScopeV39(
+ observed:unknown,expectedSource:string
+):boolean{
+ if(!/^[a-f0-9]{40}$/.test(expectedSource)||
+    !observed||typeof observed!=="object"||Array.isArray(observed))
+   return false;
+ const x=observed as Record<string,unknown>;
+ return x.status==="PASS"&&
+   x.git_head===expectedSource&&
+   x.published_deployment===true&&
+   x.prepaid_route_registered===true&&
+   x.gate4_alert_ingress_registered===true&&
+   x.runtime_owner_mode==="replit-published-deployment"&&
+   x.provider_mutation===false;
+}
+// No user-controlled URL or credential is sent to the public health endpoint.
+const RECEIVER_STATUS_URL=
+ "https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime";
 const sleep=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms));
 const name=/^gate4_safety_reader_[a-z0-9_]{4,60}$/;
 function hold(reason:string):never{throw Error("GATE4_ACTIONS_"+reason+"_HOLD");}
@@ -114,6 +139,23 @@ export async function runGate4LiveStopWatchV39(
  const now=Date.now();
  if(start<now-60_000||start>now+10*60_000||stop<=now+30_000)
    hold("WINDOW_NOT_IMMINENT");
+ // This network request is public, read-only, and occurs BEFORE DB or
+ // AeroDataBox GET/LIST. Fail closed if source or ingress is not aligned.
+ let published:unknown=null;
+ try{
+   const response=await fetch(RECEIVER_STATUS_URL,{
+     method:"GET",redirect:"error",cache:"no-store",
+     headers:{Accept:"application/json"},
+     signal:AbortSignal.timeout(6000)
+   });
+   if(!response.ok)hold("RECEIVER_HTTP_NOT_OK");
+   const body=await response.text();
+   if(body.length>8192)hold("RECEIVER_HEALTH_TOO_LARGE");
+   published=JSON.parse(body);
+ }catch{hold("RECEIVER_PUBLIC_HEALTH_UNAVAILABLE");}
+ if(!gate4PublishedReceiverMatchesStopScopeV39(
+   published,scope.sourceCommit))
+   hold("RECEIVER_SOURCE_OR_INGRESS_MISMATCH");
  const client=new pg.Client({
    connectionString:requireEnv(env,"GATE4_SAFETY_READONLY_DATABASE_URL"),
    connectionTimeoutMillis:6000,query_timeout:9000,
