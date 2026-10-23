@@ -44,7 +44,7 @@ describe("Gate4 writer production commissioning source guard — NO PROVIDER",()
   expect(src).toContain("NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE");
   expect(src).toContain("NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 1");
   expect(src).toContain(
-   "GRANT SELECT,INSERT ON TABLE clean.gate4_alert_owned_binding_v39");
+   '"GRANT SELECT,INSERT ON TABLE "+TABLE+" TO "+ROLE');
   expect(src).not.toContain(
    "GRANT UPDATE ON TABLE clean.gate4_alert_owned_binding_v39");
   expect(src).not.toContain(
