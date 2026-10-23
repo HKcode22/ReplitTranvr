@@ -28,8 +28,8 @@ const approvals:NodeJS.ProcessEnv={
  GATE4_SAFETY_APPROVED_PROTECTED_FLOOR:String(scope.protectedCreditFloor)
 };
 describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
- it("source seal remains OFF, never opened by a dispatch or env",()=>{
-  expect(GATE4_ACTIONS_LIVE_STOP_RELEASED_V39).toBe(false);
+ it("reviewed STOP-only source release still refuses without independent approval",()=>{
+  expect(GATE4_ACTIONS_LIVE_STOP_RELEASED_V39).toBe(true);
   const env={
    ...approvals,
    GITHUB_ACTIONS:"true",GITHUB_EVENT_NAME:"workflow_dispatch",
@@ -64,6 +64,37 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
     ...approved,GITHUB_SHA:"not-a-sha",
     GATE4_SAFETY_APPROVED_RUNNER_SHA:"not-a-sha"
   })).toBe(false);
+ });
+ it("admits only an actual separately pinned GH runner and receiver, no CREATE permission",()=>{
+  const runner="c".repeat(40);
+  const env:NodeJS.ProcessEnv={
+    ...approvals,
+    GITHUB_ACTIONS:"true",GITHUB_EVENT_NAME:"workflow_dispatch",
+    GITHUB_REF:"refs/heads/main",GITHUB_SHA:runner,
+    GATE4_SAFETY_APPROVED_RUNNER_SHA:runner,
+    GATE4_SAFETY_ENV_NAME:"gate4-safety",GITHUB_RUN_ID:"999",
+    AERODATABOX_API_KEY:"mock-must-not-call",
+    GATE4_SAFETY_READONLY_DATABASE_URL:
+      "postgresql://gate4_safety_reader_local01:fake@never.example/db?sslmode=verify-full",
+    GATE4_SAFETY_EXPECTED_DB_HOST:"never.example"
+  };
+  expect(reviewGate4LiveWatchLaunchV39(scope,
+    "WATCH_G4_EXACT_ID_STOP_NO_CREATE",env)).toBe(true);
+  for(const key of [
+    "GATE4_SAFETY_APPROVED_RUNNER_SHA","GATE4_SAFETY_APPROVED_SOURCE",
+    "GATE4_SAFETY_APPROVED_START_UTC","GATE4_SAFETY_APPROVED_STOP_UTC",
+    "AERODATABOX_API_KEY","GATE4_SAFETY_READONLY_DATABASE_URL"
+  ]){
+    expect(reviewGate4LiveWatchLaunchV39(scope,
+      "WATCH_G4_EXACT_ID_STOP_NO_CREATE",
+      {...env,[key]:undefined})).toBe(false);
+  }
+  expect(reviewGate4LiveWatchLaunchV39(scope,
+      "WATCH_G4_EXACT_ID_STOP_NO_CREATE",
+      {...env,GATE4_PROVIDER_CREATE_ALLOWED:"1"})).toBe(false);
+  expect(reviewGate4LiveWatchLaunchV39(scope,
+      "WATCH_G4_EXACT_ID_STOP_NO_CREATE",
+      {...env,GITHUB_REF:"refs/heads/feature"})).toBe(false);
  });
  it("every independently protected source/trial/window/limit pin must match",()=>{
   expect(gate4IndependentApprovalPinsMatchV39(scope,approvals)).toBe(true);
@@ -141,9 +172,9 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
     "../scripts/v39_gate4_actions_live_stop_v39.ts",import.meta.url),"utf8");
   expect(src).toContain('}).trim()!==env.GITHUB_SHA)');
   expect(src).toContain('gate4IndependentRunnerSourcePinnedV39(env)');
-  expect(src).toContain('GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;');
+  expect(src).toContain('GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=true;');
  });
- it("provider and DB are never contacted while source seal is closed",async()=>{
+ it("provider and DB are never contacted without mandatory independent approvals",async()=>{
   await expect(runGate4LiveStopWatchV39(scope,
     "WATCH_G4_EXACT_ID_STOP_NO_CREATE",{}))
     .rejects.toThrow("GATE4_ACTIONS_RELEASE_OR_ENV_NOT_APPROVED_HOLD");
@@ -202,6 +233,6 @@ describe("Gate4 independent STOP published receiver identity before paid trial",
      .toBeLessThan(body.indexOf("new pg.Client("));
    expect(body.indexOf("fetch(RECEIVER_STATUS_URL,"))
      .toBeLessThan(body.indexOf("listSubscriptionsStrictWithRetry()"));
-   expect(src).toContain("GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;");
+   expect(src).toContain("GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=true;");
  });
 });
