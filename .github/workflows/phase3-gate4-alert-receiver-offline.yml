@@ -1,0 +1,163 @@
+name: Phase3 Gate4 Alert Receiver Candidate — OFFLINE ONLY
+
+# DRAFT PR review only. Never dispatch, schedule, deploy, call the provider,
+# create subscriptions, access production DB or run any payment action.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase3-gate4-alert-receiver-offline.yml"
+      - "scripts/build.ts"
+      - "scripts/v39_gate4_alert_route_readonly_v39.ts"
+      - "server/index.ts"
+      - "server/phase2gCallbackOnly.ts"
+      - "server/gate4AlertReceiverOnly.ts"
+      - "server/lib/disruption/gate4PrebindIngress_v39.ts"
+      - "server/lib/disruption/gate4PrebindPgStore_v39.ts"
+      - "server/lib/disruption/gate4PrebindAdditiveRoute_v39.ts"
+      - "tests/phase3_gate4_prebind_additive_v39.test.ts"
+      - "migrations/staged/V0073__gate4_existing_neon_role_grants_v39.sql"
+      - "tests/phase3_gate4_prebind_ingress_v39.test.ts"
+      - "tests/phase3_gate4_prebind_real_pg_v39.test.ts"
+      - "migrations/staged/V0071__gate4_alert_prebind_quarantine_v39.sql"
+      - "migrations/staged/V0072__gate4_owned_binding_v39.sql"
+      - "server/lib/disruption/gate4VerifiedOwnerBinding_v39.ts"
+      - "server/lib/disruption/gate4OwnedBindingPgStore_v39.ts"
+      - "tests/phase3_gate4_verified_owner_binding_v39.test.ts"
+      - "server/lib/disruption/workspaceRuntimeHealth_v39.ts"
+      - "server/lib/disruption/gate4AlertIngressScope_v39.ts"
+      - "server/lib/disruption/gate4AlertRouteReadiness_v39.ts"
+      - "tests/phase3_gate4_alert_receiver_only_v39.test.ts"
+      - "tests/phase3_gate4_alert_route_readiness_v39.test.ts"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate4-alert-offline-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate4-alert-offline:
+    name: Build candidate binary; mocked HTTP only
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NODE_ENV: test
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      V39_GATE4_ALERT_RECEIVER_BUILD: "1"
+      V39_CALLBACK_ONLY_BUILD: "0"
+      V39_BUILD_GIT_HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact reviewed PR commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Prove no production/proprietary provider environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$RAPIDAPI_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test "$V39_BUILD_GIT_HEAD" = "$(git rev-parse HEAD)"
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: No-provider local HTTP and route-custody regression tests
+        run: |
+          npx vitest run \
+            tests/phase3_gate4_alert_receiver_only_v39.test.ts \
+            tests/phase3_gate4_alert_route_readiness_v39.test.ts \
+            tests/phase3_gate4_prebind_ingress_v39.test.ts \
+            tests/phase3_gate4_verified_owner_binding_v39.test.ts \
+            tests/phase3_gate4_prebind_additive_v39.test.ts
+      - name: Verify separate candidate receiver build
+        run: |
+          set -Eeuo pipefail
+          npm run build
+          test -s dist/index.mjs
+          node --check dist/index.mjs
+          grep -q 'GATE4_DRAFT_ALERT_RECEIVER_LISTENING' dist/index.mjs
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const data=JSON.parse(fs.readFileSync('dist/v39-build-meta.json','utf8'));
+          if(data.schema!=='v39.build-meta.v1'||
+             data.git_head!==process.env.V39_BUILD_GIT_HEAD)
+            throw Error('GATE4_RECEIVER_BUILD_HEAD_NOT_PINNED');
+          console.log('GATE4_CANDIDATE_BUNDLE_OFFLINE_PASS');
+          NODE
+      - name: Ensure cannot select prepaid and Gate4 binaries simultaneously
+        run: |
+          set -Eeuo pipefail
+          if V39_GATE4_ALERT_RECEIVER_BUILD=1 \
+             V39_CALLBACK_ONLY_BUILD=1 npm run build \
+             > /tmp/gate4-build-conflict.log 2>&1; then
+            echo 'GATE4_PREPAID_BUILD_CONFLICT_NOT_BLOCKED'
+            exit 2
+          fi
+          grep -q 'GATE4_ALERT_BUILD_MUST_BE_SEPARATE_FROM_PREPAID' \
+            /tmp/gate4-build-conflict.log
+          rm -f /tmp/gate4-build-conflict.log
+      - name: Report limitations
+        if: always()
+        run: |
+          {
+            echo '### Gate4 Alert receiver — offline candidate'
+            echo '- Local HTTP mock tests only. No real provider callback sent.'
+            echo '- No production database, no paid CREATE/DELETE, no deployment.'
+            echo '- Published Phase2G callback-only runtime still blocks Alert POST.'
+            echo '- Exact provider ID is assigned after CREATE: the pre-arm race is unresolved.'
+            echo '- Dedicated STOP service and actual callback ACK are NOT certified.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  gate4-prebind-postgres:
+    name: Staged V0071 original-wire PostgreSQL16 readback (disposable only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gate4_fixture
+          POSTGRES_PASSWORD: only_for_ci
+          POSTGRES_DB: gate4_prebind_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gate4_fixture -d gate4_prebind_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      GATE4_PREBIND_PG_TEST_URL: "postgresql://gate4_fixture:only_for_ci@127.0.0.1:5432/gate4_prebind_ci"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+    steps:
+      - name: Checkout exact reviewed PR source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Locked install, no provider
+        run: npm ci --no-audit --no-fund
+      - name: Apply STAGED schema only inside disposable PG; verify original receipts
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          npx vitest run tests/phase3_gate4_prebind_real_pg_v39.test.ts
+          echo 'PRODUCTION_DATABASE_WRITES=0'
+          echo 'PAID_PROVIDER_REQUESTS=0'

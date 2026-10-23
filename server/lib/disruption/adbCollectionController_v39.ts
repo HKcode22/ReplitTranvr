@@ -16,7 +16,7 @@ import {
   deleteSubscription,
   getBalance,
   listFeedAirports,
-  listSubscriptions,
+  listSubscriptionsStrict,
   type FeedService,
 } from "./aerodataboxLimiter_v3";
 import { AIRPORT_CATALOG, tierForIcao } from "./adbAirportCatalog_v3";
@@ -29,6 +29,11 @@ import {
   type SamplingSelection,
 } from "./phase6SamplingDecision_v39";
 import { externalSpend, reconcileSpend, runSettlement, type SettlementConfig } from "./settlement_v3";
+import { assessGate4SpendV39, assessGate4SecondStartV39 } from "./gate4SendAwareDecision_v39";
+import {executeGate4SafetyActionV39} from "./gate4WatchdogAction_v39";
+import {assertGate4TransactionalAdmissionV39} from "./gate4TransactionalAdmission_v39";
+import {attemptGate4AllOwnedDeletesV39} from "./gate4OwnedStopDelete_v39";
+import {runGate4OwnedSubscriptionCreatesV39} from "./gate4OwnedCreateRecovery_v39";
 
 export type AirportTier = "HUB" | "MID" | "REGIONAL";
 
@@ -154,7 +159,7 @@ function validateRuntimeConfig(raw: unknown, expectedHash: string): FrozenRuntim
   if (!raw || typeof raw !== "object") throw new Error("REFUSED_RUNTIME_CONFIG: missing frozen runtime config");
   const c = raw as FrozenRuntimeConfig;
   if (sha(c) !== expectedHash) throw new Error("REFUSED_RUNTIME_CONFIG: config hash mismatch");
-  if (c.hardCapCredits !== 1900 || c.protectedAlertFloor < 1000 || c.endingAlertMarginCredits < 0 || c.unsettledBurstMarginCredits < 0 || c.phase6AlertSpendCeiling <= 0 || c.softStopMarginCredits < 0 || c.softStopMarginCredits >= 1900 || c.productionReconcileTolerance < 0 || c.startGraceSeconds < 0) throw new Error("REFUSED_RUNTIME_CONFIG: invalid frozen safety values");
+  if (c.hardCapCredits !== 1900 || c.protectedAlertFloor < 1000 || c.endingAlertMarginCredits < 0 || c.unsettledBurstMarginCredits < 0 || c.phase6AlertSpendCeiling <= 0 || c.softStopMarginCredits < c.unsettledBurstMarginCredits || c.softStopMarginCredits >= 1900 || c.productionReconcileTolerance < 0 || c.startGraceSeconds < 0) throw new Error("REFUSED_RUNTIME_CONFIG: invalid frozen safety values");
   if (!/^[0-9a-f]{64}$/i.test(c.authorizationRecordHash)) throw new Error("REFUSED_RUNTIME_CONFIG: authorization hash missing");
   if (!c.settlement || c.settlement.stableReadCount < 3 || c.settlement.timeoutSeconds <= 0 || c.settlement.pollIntervalSeconds < 0 || c.settlement.initialWaitSeconds < 0) throw new Error("REFUSED_RUNTIME_CONFIG: settlement config invalid");
   return c;
@@ -206,11 +211,13 @@ async function nextCalendarDay(): Promise<CalendarDayRow> {
   return r.rows[0] as CalendarDayRow;
 }
 async function assertR1Exclusive(): Promise<void> {
-  const provider = await listSubscriptions();
+  // NEVER use the UI reader here: listSubscriptions() converts provider
+  // failures to [], which would create a false-clear billable account.
+  const provider = await listSubscriptionsStrict();
   const owned = await pool.query("SELECT subscription_id FROM clean.adb_collection_subs WHERE ended_at IS NULL");
   const ids = new Set(owned.rows.map((r: any) => String(r.subscription_id)));
   const foreign = provider.filter(s => s.isActive && s.billingType !== "LifetimeBased" && !ids.has(String(s.id)));
-  if (foreign.length) throw new Error(`REFUSED_R1_FOREIGN_ACTIVE:${foreign.map(x => x.id).join(",")}`);
+  if (foreign.length) throw new Error("REFUSED_R1_FOREIGN_ACTIVE_COUNT="+foreign.length);
 }
 
 async function loadFrameAndStates(): Promise<{ frame: FrameSamplingCandidate[]; states: AirportSamplingState[] }> {
@@ -281,26 +288,40 @@ async function createSegmentSubscriptions(batchId: string, segmentId: string, de
     const health = await checkAirportFeeds(s.icao);
     if (!health) throw new Error(`REFUSED_COVERAGE:${s.icao}`);
   }
-  const created: CreatedSub[] = [];
-  try {
-    for (const s of decision.selections) {
-      const sub = await createSubscription("FlightByAirportIcao", s.icao, { maxDeliveryRetries: 0 });
-      if (!sub) throw new Error(`CREATE_FAILED:${s.icao}`);
+  // The owner ID must be tracked IMMEDIATELY after provider CREATE, before
+  // attempting the database INSERT. Ambiguous remote CREATE outcomes remain
+  // incident/HOLD, never proof that no billable subscription exists.
+  const result=await runGate4OwnedSubscriptionCreatesV39(decision.selections,{
+    create:async s=>{
+      const sub=await createSubscription("FlightByAirportIcao",s.icao,{
+        maxDeliveryRetries:0
+      });
+      return sub?.id??null;
+    },
+    persist:async(s,id)=>{
       await pool.query(`INSERT INTO clean.adb_collection_subs
         (subscription_id,batch_id,segment_id,icao,tier,is_randomized,airport_layer_design_probability,planned_share,sampling_weight)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULL)`, [sub.id, batchId, segmentId, s.icao, tierForSlot(s.slotId), s.isRandomized, s.designProbability, s.plannedShare]);
-      created.push({ icao: s.icao, tier: tierForSlot(s.slotId), subscriptionId: sub.id });
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,NULL)`,
+        [id,batchId,segmentId,s.icao,tierForSlot(s.slotId),
+         s.isRandomized,s.designProbability,s.plannedShare]);
+    },
+    deleteOwned:async id=>await deleteSubscription(id),
+    markEnded:async id=>{
+      await pool.query(
+        "UPDATE clean.adb_collection_subs SET ended_at=now() WHERE subscription_id=$1",
+        [id]);
+    },
+    incident:async(code,createdCount,unconfirmedCount)=>{
+      await writeIncident("deletion",{
+        batchId,segmentId,reason:code,createdCount,unconfirmedCount
+      });
     }
-    return created;
-  } catch (error) {
-    let deletionFailed = false;
-    for (const c of created) {
-      if (await deleteSubscription(c.subscriptionId)) await pool.query("UPDATE clean.adb_collection_subs SET ended_at=now() WHERE subscription_id=$1", [c.subscriptionId]);
-      else deletionFailed = true;
-    }
-    if (deletionFailed) await writeIncident("deletion", { batchId, segmentId, reason: "create rollback delete failed" });
-    throw error;
-  }
+  });
+  return result.map(x=>({
+    icao:x.selection.icao,
+    tier:tierForSlot(x.selection.slotId),
+    subscriptionId:x.subscriptionId
+  }));
 }
 
 async function activeSegment(batchId: string): Promise<SegmentRow | null> {
@@ -319,16 +340,55 @@ async function segmentInternalItems(segmentId: string): Promise<number> {
 }
 async function settleAndCloseActiveSegment(batch: CollectionBatch, seg: SegmentRow, reason: string, config: FrozenRuntimeConfig): Promise<number> {
   const subs = await pool.query("SELECT subscription_id FROM clean.adb_collection_subs WHERE segment_id=$1 AND ended_at IS NULL", [seg.segment_id]);
-  let deletionFailure = false;
-  for (const r of subs.rows) {
-    const id = String(r.subscription_id);
-    if (await deleteSubscription(id)) await pool.query("UPDATE clean.adb_collection_subs SET ended_at=now() WHERE subscription_id=$1", [id]);
-    else deletionFailure = true;
+  // A single failed provider DELETE must never suppress the rest of the
+  // known-owned deletion attempts. This readback does not prove that a
+  // remote resource lacking a persisted ID does not exist.
+  const cleanup = await attemptGate4AllOwnedDeletesV39(
+    subs.rows.map((r:any)=>String(r.subscription_id)),{
+      deleteOwned: async id => await deleteSubscription(id),
+      markEnded: async id => {
+        const result=await pool.query(
+          "UPDATE clean.adb_collection_subs SET ended_at=now() WHERE subscription_id=$1 AND ended_at IS NULL",
+          [id]);
+        return result.rowCount===1;
+      }
+    });
+  if (!cleanup.allKnownOwnedClosed) {
+    // Independently attempt both SQL records; either can fail during
+    // an outage, but physical deletion attempts already happened.
+    await Promise.allSettled([
+      pool.query("UPDATE clean.adb_collection_segments SET status='FAILED',stop_reason=$2 WHERE segment_id=$1",
+        [seg.segment_id, "owned_delete_unconfirmed"]),
+      writeIncident("deletion", {
+        batchId:batch.batchId,segmentId:seg.segment_id,
+        attempted:cleanup.attempted,unconfirmed:cleanup.unconfirmed,
+        reason:"owned_delete_unconfirmed"
+      })
+    ]);
+    throw new Error("INCIDENT_STOP: provider subscription deletion unconfirmed");
   }
-  if (deletionFailure) {
-    await writeIncident("deletion", { batchId: batch.batchId, segmentId: seg.segment_id });
-    await pool.query("UPDATE clean.adb_collection_segments SET status='FAILED',stop_reason=$2 WHERE segment_id=$1", [seg.segment_id, "delete_failed"]);
-    throw new Error("INCIDENT_STOP: provider subscription deletion failed");
+  // Before even trying to settle billing, independently inventory the
+  // provider account using the STRICT (fail-closed) free LIST endpoint.
+  // The DELETE response and local ended_at timestamps are not themselves
+  // proof the billable subscription was actually disabled.
+  let activeBillableCount:number|null=null;
+  try {
+    const inventory=await listSubscriptionsStrict();
+    activeBillableCount=inventory.filter(x=>x.isActive && x.billingType!=="LifetimeBased").length;
+  } catch {
+    activeBillableCount=null;
+  }
+  if (activeBillableCount===null || activeBillableCount!==0) {
+    await Promise.allSettled([
+      pool.query("UPDATE clean.adb_collection_segments SET status='FAILED',stop_reason=$2 WHERE segment_id=$1",
+        [seg.segment_id, "provider_inventory_unverified"]),
+      writeIncident("deletion",{
+        batchId:batch.batchId,segmentId:seg.segment_id,
+        reason:"provider_inventory_unverified",
+        activeBillableCount
+      })
+    ]);
+    throw new Error("INCIDENT_STOP: strict provider subscription inventory unverified");
   }
   const settlement = await runSettlement(config.settlement, async () => (await getBalance())?.creditsRemaining ?? null);
   if (settlement.status !== "settled") {
@@ -372,6 +432,9 @@ async function closeParent(batch: CollectionBatch, reason: string, stableBalance
 export async function startBatch(): Promise<StartBatchResult> {
   if (!isPhase6Ready()) throw new Error("REFUSED_PHASE6_READY: authorized Phase-6 transition is absent");
   if (await getActiveBatch()) throw new Error("REFUSED_ACTIVE_BATCH: stop active batch first");
+  const predecessor = await getLastBudgetDay();
+  const guard = assessGate4SecondStartV39(predecessor.status);
+  if (!guard.allowed) throw new Error("REFUSED_GATE4_SECOND_START:" + guard.reason);
   await assertNoOpenIncident();
   await assertR1Exclusive();
   const day = await nextCalendarDay();
@@ -394,6 +457,9 @@ export async function startBatch(): Promise<StartBatchResult> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // Recheck under a transaction-scoped PG lock; two Replit processes
+    // MUST NOT pass separate unprotected prechecks and both CREATE.
+    await assertGate4TransactionalAdmissionV39(client);
     await client.query(`INSERT INTO clean.adb_collection_batches
       (batch_id,batch_seq,random_seed,status,started_at,window_start,window_end,credit_budget,tier_mix,airports,window_shape,anchor_icao,sampling_strategy,
        balance_before,run_day_index,budget_day_id,calendar_hash,config_hash,experiment_day_id,crossover_group_id,crossover_period,pair_role,evaluation_partition)
@@ -569,9 +635,14 @@ export async function writeManifest(): Promise<void> { throw new Error("REFUSED_
 export async function readManifest(): Promise<Record<string, unknown> | null> { const raw = await readMeta("manifest"); if (!raw) return null; try { return JSON.parse(raw); } catch { return null; } }
 
 let watchdogStarted = false;
+// Prevent overlapping local watchdog ticks. Cross-process exclusion still
+// requires a real durable lease and cannot be proved by this in-memory latch.
+let watchdogTickInFlight = false;
 export function startCollectionWatchdog(): void {
   if (watchdogStarted) return; watchdogStarted = true;
   const timer = setInterval(async () => {
+    if (watchdogTickInFlight) return;
+    watchdogTickInFlight = true;
     try {
       const active = await getActiveBatch();
       if (active) {
@@ -580,9 +651,49 @@ export function startCollectionWatchdog(): void {
         const dayR = await pool.query("SELECT config_hash FROM clean.adb_phase6_calendar_day WHERE run_day_index=$1", [active.batchSeq]);
         if (!dayR.rowCount) throw new Error("REFUSED_CALENDAR");
         const config = await loadRuntimeConfig(dayR.rows[0].config_hash);
-        const spent = await actualBatchSpend(active.batchId);
-        if (spent >= 1900 - config.softStopMarginCredits) { await stopBatch("soft_stop"); return; }
-        await advanceBatch(active); return;
+        // This is the same decision + owned stop orchestration exercised in
+        // offline fault tests. It does not itself prove provider shutdown.
+        let decision: ReturnType<typeof assessGate4SpendV39>;
+        try {
+          const [balance, parent, events] = await Promise.all([
+            getBalance(),
+            pool.query("SELECT balance_before FROM clean.adb_collection_batches WHERE batch_id=$1", [active.batchId]),
+            pool.query("SELECT COALESCE(sum(notification_items),0)::bigint AS n FROM clean.adb_ingest_events WHERE batch_id=$1", [active.batchId])
+          ]);
+          decision = assessGate4SpendV39({
+            cap: config.hardCapCredits,
+            softStopMargin: config.softStopMarginCredits,
+            unsettledBurstReserve: config.unsettledBurstMarginCredits,
+            openingBalance: parent.rows[0]?.balance_before == null ? null : Number(parent.rows[0].balance_before),
+            currentBalance: balance?.creditsRemaining ?? null,
+            receivedItemUnits: Number(events.rows[0]?.n ?? NaN),
+            deliveryFailures: failures
+          });
+        } catch {
+          decision = {
+            action: "HOLD_STOP",reason:"BUDGET_WITNESS_READ_FAILED",
+            observedExternalSpend:null,observedInternalUnits:null,
+            threshold:null,providerRequests:0,liveHardCapCertified:false
+          };
+        }
+        const result = await executeGate4SafetyActionV39(decision,{
+          expectedBatchId: active.batchId,
+          writeIncident: async reason => {
+            await writeIncident("reconciliation",{
+              batchId:active.batchId,reason
+            });
+          },
+          stopOwned: async reason => {
+            const current = await getActiveBatch();
+            if(current?.batchId!==active.batchId)
+              throw Error("GATE4_BOUND_BATCH_CHANGED_HOLD");
+            return await stopBatch(reason);
+          },
+          proceed: async () => { await advanceBatch(active); }
+        });
+        if(result.status==="STOP_UNCONFIRMED")
+          console.error("[adb-v39] GATE4_OWNED_STOP_NOT_CONFIRMED");
+        return;
       }
       // Pre-Phase6 watchdog is strictly read-only. Auto-start requires both the
       // explicit auto flag and an exact frozen authorization hash.
@@ -590,7 +701,39 @@ export function startCollectionWatchdog(): void {
       const day = await nextCalendarDay(); const config = await loadRuntimeConfig(day.config_hash); requireAutomationAuthorization(config);
       const start = dayStart(day), now = Date.now();
       if (now >= start.getTime() && now - start.getTime() <= config.startGraceSeconds * 1000) await startBatch();
-    } catch (e: any) { console.warn(`[adb-v39] watchdog: ${e?.message ?? e}`); }
+    } catch (e: any) {
+      console.warn(`[adb-v39] watchdog: ${e?.message ?? e}`);
+      // An unexpected failure in pre-budget reads, source/authorization
+      // checks or segment advancement cannot silently continue collecting.
+      // Try the owned STOP once; if the DB or provider is unavailable,
+      // report UNCONFIRMED and require independent incident recovery.
+      let emergency: CollectionBatch | null = null;
+      try { emergency = await getActiveBatch(); }
+      catch {
+        console.error("[adb-v39] GATE4_UNHANDLED_WATCHDOG_FAULT_STOP_UNCONFIRMED_DB");
+        return;
+      }
+      if (!emergency) return;
+      // Stop-first: writing an incident can block on the very DB fault
+      // we are trying to recover from. Never put it before an owned STOP.
+      try {
+        const stopped = await stopBatch("gate4_unhandled_watchdog_fault");
+        if(stopped?.batchId!==emergency.batchId || stopped.status!=="CLOSED")
+          console.error("[adb-v39] GATE4_WATCHDOG_STOP_NOT_CONFIRMED");
+      } catch {
+        console.error("[adb-v39] GATE4_WATCHDOG_STOP_NOT_CONFIRMED");
+      }
+      try {
+        await writeIncident("reconciliation", {
+          batchId: emergency.batchId,
+          reason: "gate4_unhandled_watchdog_fault"
+        });
+      } catch {
+        console.error("[adb-v39] GATE4_WATCHDOG_INCIDENT_WRITE_FAILED");
+      }
+    } finally {
+      watchdogTickInFlight = false;
+    }
   }, COLLECTOR_CONFIG.watchdogSeconds * 1000);
   timer.unref?.();
 }

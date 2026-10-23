@@ -1,0 +1,107 @@
+name: Phase3 Gate4 Owner Commission — DISPOSABLE PG ONLY
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/phase3-gate4-owner-commission-offline.yml"
+      - "scripts/v39_gate4_owner_commission_v39.ts"
+      - "migrations/staged/V0071__gate4_alert_prebind_quarantine_v39.sql"
+      - "migrations/staged/V0072__gate4_owned_binding_v39.sql"
+      - "migrations/staged/V0073__gate4_existing_neon_role_grants_v39.sql"
+permissions:
+  contents: read
+concurrency:
+  group: gate4-owner-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  owner-commission-offline:
+    name: Owner roles and tables with no provider / disposable PG16
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gate4_fixture
+          POSTGRES_PASSWORD: only_for_ci
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gate4_fixture -d neondb"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      CI: "true"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: "postgres://gate4_dummy_runtime:runtime_ci_only@127.0.0.1:5432/neondb?sslmode=disable"
+      V39_PRODUCTION_DATABASE_OWNER_URL: "postgres://gate4_admin_owner:owner_ci_only@127.0.0.1:5432/neondb?sslmode=disable"
+      GATE4_OWNER_COMMISSION_CONFIRM: APPLY_GATE4_TABLES_AND_TWO_ROLES_NO_PROVIDER
+      GATE4_OWNER_REVIEWED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Make disposable PG owner and model existing broad defaults
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from "pg";
+          const db=new pg.Client({connectionString:
+            "postgresql://gate4_fixture:only_for_ci@127.0.0.1:5432/neondb?sslmode=disable"});
+          await db.connect();
+          try{
+            await db.query("CREATE ROLE gate4_admin_owner LOGIN CREATEROLE NOINHERIT PASSWORD 'owner_ci_only'");
+            await db.query("CREATE ROLE gate4_dummy_runtime LOGIN PASSWORD 'runtime_ci_only'");
+            await db.query("CREATE ROLE travnr_v39_runtime NOLOGIN");
+            await db.query("CREATE SCHEMA clean");
+            await db.query("GRANT USAGE,CREATE ON SCHEMA clean TO gate4_admin_owner");
+            await db.query("GRANT CONNECT ON DATABASE neondb TO gate4_admin_owner WITH GRANT OPTION");
+            await db.query("ALTER DEFAULT PRIVILEGES FOR ROLE gate4_admin_owner IN SCHEMA clean GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO travnr_v39_runtime");
+          }finally{await db.end();}
+          NODE
+      - name: Actual source-pinned one-time transaction in isolated PG
+        env:
+          HOME: ${{ runner.temp }}/gate4-owner-home
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test "$(git rev-parse HEAD)" = "$GATE4_OWNER_REVIEWED_SOURCE_SHA"
+          mkdir -p "$HOME"
+          node --import tsx scripts/v39_gate4_owner_commission_v39.ts --plan
+          node --import tsx scripts/v39_gate4_owner_commission_v39.ts --apply
+          file="$HOME/.config/replittranvr/gate4-owner-20261022/credentials.json"
+          test -f "$file"
+          test "$(stat -c %a "$file")" = 600
+          if node --import tsx scripts/v39_gate4_owner_commission_v39.ts --apply; then
+            echo "SECOND_APPLY_INCORRECTLY_ACCEPTED"
+            exit 2
+          fi
+          echo "GATE4_ISOLATED_OWNER_TRANSACTION_PASS"
+      - name: Verify scoped grants and schema, not provider
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from "pg";
+          const db=new pg.Client({connectionString:
+            "postgresql://gate4_fixture:only_for_ci@127.0.0.1:5432/neondb?sslmode=disable"});
+          await db.connect();
+          try{
+            const {rows:[x]}=await db.query(
+              "SELECT to_regclass('clean.gate4_alert_prebind_original_v39') IS NOT NULL AS raw,"+
+              "to_regclass('clean.gate4_alert_owned_binding_v39') IS NOT NULL AS owned,"+
+              "(SELECT count(*)::int FROM pg_roles WHERE rolname IN "+
+              "('gate4_receiver_20261022','gate4_safety_reader_20261022')) AS roles,"+
+              "has_table_privilege('travnr_v39_runtime','clean.gate4_alert_prebind_original_v39','SELECT') AS broad_raw,"+
+              "has_table_privilege('travnr_v39_runtime','clean.gate4_alert_owned_binding_v39','SELECT') AS broad_owner");
+            if(!x.raw||!x.owned||x.roles!==2||x.broad_raw||x.broad_owner)
+              throw Error("ROLE_GRANTS_NOT_ISOLATED");
+            console.log("GATE4_DISPOSABLE_OWNER_ROLES_AND_GRANTS_PASS");
+          }finally{await db.end();}
+          NODE
