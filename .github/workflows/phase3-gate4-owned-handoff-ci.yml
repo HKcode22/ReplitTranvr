@@ -1,0 +1,94 @@
+name: Gate4 Exact-ID Handoff — No Provider, Disposable PG16
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase3-gate4-owned-handoff-ci.yml"
+      - "server/lib/disruption/gate4*"
+      - "server/lib/disruption/aerodataboxLimiter_v3.ts"
+      - "scripts/v39_gate4_one_shot_writer_commission_v39.ts"
+      - "tests/phase3_gate4_*"
+permissions:
+  contents: read
+concurrency:
+  group: gate4-owned-handoff-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  exact-positive-id-and-scoped-rls:
+    name: Exact positive ID / signed custody / PostgreSQL16 restricted writer
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gate4_fixture
+          POSTGRES_PASSWORD: only_for_ci
+          POSTGRES_DB: gate4_prebind_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gate4_fixture -d gate4_prebind_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      GATE4_PREBIND_PG_TEST_URL: "postgresql://gate4_fixture:only_for_ci@127.0.0.1:5432/gate4_prebind_ci"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      V39_PRODUCTION_DATABASE_OWNER_URL: ""
+      GATE4_WRITER_APPLY_CONFIRM: ""
+      GATE4_WRITER_REVOKE_CONFIRM: ""
+      V39_PHASE6_PROCESS_ARMED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Prove nonproduction and exact reviewed source
+        shell: bash
+        env:
+          EXPECTED: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED"
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$RAPIDAPI_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test -z "$V39_PRODUCTION_DATABASE_OWNER_URL"
+          test -z "$GATE4_WRITER_APPLY_CONFIRM"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          grep -q '^export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;' scripts/v39_gate4_actions_live_stop_v39.ts
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: No-provider TypeScript source and standalone writer
+        run: |
+          npm run v39:typecheck
+          npx --no-install tsc --noEmit --strict --target es2020 --module esnext --moduleResolution bundler --esModuleInterop --skipLibCheck --types node scripts/v39_gate4_one_shot_writer_commission_v39.ts
+      - name: New focused exact owner, receipt and writer safety tests
+        run: |
+          npx --no-install vitest run \
+            tests/phase3_gate4_single_owned_create_handoff_v39.test.ts \
+            tests/phase3_gate4_positive_create_receipt_v39.test.ts \
+            tests/phase3_gate4_verified_owner_binding_v39.test.ts \
+            tests/phase3_gate4_one_shot_writer_source_seal_v39.test.ts
+      - name: Genuine disposable restricted PostgreSQL16 transaction + RLS
+        run: |
+          npx --no-install vitest run tests/phase3_gate4_prebind_real_pg_v39.test.ts
+          echo "GATE4_SCOPED_WRITER_PG16_REPRODUCED_PASS"
+          echo "PROVIDER_REQUESTS=0"
+          echo "PRODUCTION_DATABASE_WRITES=0"
+      - name: Report the actual safety boundary
+        if: always()
+        run: |
+          {
+            echo '## Gate4 owner source only; NO paid authorization'
+            echo 'Source checked into main is inert until separate owner/writer/signer commissioning.'
+            echo 'No production DB credential, provider key, subscription CREATE/DELETE or Phase6.'
+            echo 'Disposable PostgreSQL16 test cannot prove external signer or independent live STOP.'
+          } >> "$GITHUB_STEP_SUMMARY"
