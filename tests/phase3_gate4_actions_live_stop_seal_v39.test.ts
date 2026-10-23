@@ -130,6 +130,16 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
    expect(yaml).toContain('--head "$GATE4_SAFETY_APPROVED_SOURCE"');
    expect(yaml).not.toContain('--head "$GITHUB_SHA"');
  });
+ it("installs the STOP TypeScript loader even under production NODE_ENV",()=>{
+  const yml=readFileSync(new URL(
+   "../.github/workflows/phase3-gate4-live-exact-stop-candidate.yml",
+   import.meta.url),"utf8");
+  expect(yml).toContain("NODE_ENV: production");
+  expect(yml).toContain("npm ci --include=dev --no-audit --no-fund");
+  expect(yml).toContain("Assert reviewed STOP TypeScript loader is present");
+  expect(yml).toContain("node --import tsx scripts/v39_gate4_actions_live_stop_v39.ts");
+  expect(yml).toContain("environment: gate4-safety");
+ });
  it("keeps provider/DB secrets out of checkout and dispatch out of bash",()=>{
   const yaml=readFileSync(new URL(
     "../.github/workflows/phase3-gate4-live-exact-stop-candidate.yml",

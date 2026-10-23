@@ -101,7 +101,11 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-      - run: npm ci --no-audit --no-fund
+      # NODE_ENV=production would otherwise omit devDependency `tsx`,
+      # which the reviewed STOP script needs for `node --import tsx`.
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Assert reviewed STOP TypeScript loader is present
+        run: node --import tsx --input-type=module -e 'import "tsx"; console.log("GATE4_STOP_TSX_LOADER=PASS")'
       - name: Run protected STOP-only implementation (no CREATE)
         shell: bash
         env:
