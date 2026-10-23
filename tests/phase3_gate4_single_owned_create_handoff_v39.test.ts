@@ -65,13 +65,13 @@ const evidence={
  }
 };
 function deps(){
- let listCall=0;
+ let listCall=0,isActive=true;
  const v={
   independentlyConfirmArmedStop:vi.fn(async()=>true),
   strictBalance:vi.fn(async()=>2037),
   strictInventory:vi.fn(async()=>{
    listCall++;
-   return listCall===1?[]:[created];
+   return listCall===1?[]:(isActive?[created]:[]);
   }),
   createExactlyOne:vi.fn(async():Promise<Gate4PositiveCreateReceiptV39|null>=>response),
   prepareIndependentEvidence:vi.fn(async()=>evidence),
@@ -79,7 +79,10 @@ function deps(){
    bindOnce:vi.fn(async()=>({committed:true,exactFieldsVerified:true})),
    readBack:vi.fn(async()=>({committed:true,exactFieldsVerified:true}))
   },
-  deleteExactOwned:vi.fn(async (_id:string)=>true),
+  deleteExactOwned:vi.fn(async (_id:string)=>{
+   isActive=false;
+   return true;
+  }),
   recordIncident:vi.fn(async(_r:string,_known:boolean,_unknown:boolean)=>{})
  };
  return v;
