@@ -130,7 +130,7 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
   const yaml=readFileSync(new URL(
     "../.github/workflows/phase3-gate4-live-exact-stop-candidate.yml",
     import.meta.url),"utf8");
-  const marker="      - name: Run reviewed STOP-only implementation";
+  const marker="      - name: Run protected STOP-only implementation";
   const index=yaml.indexOf(marker);
   expect(index).toBeGreaterThan(0);
   const preparation=yaml.slice(0,index);
