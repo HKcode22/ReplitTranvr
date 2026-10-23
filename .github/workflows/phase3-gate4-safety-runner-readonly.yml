@@ -1,0 +1,140 @@
+name: Phase3 Gate4 Safety Host DB Attestation — READ ONLY
+
+# Manual, protected main only. No AeroDataBox token, provider calls,
+# paid subscriptions, production writes, deployments or STOP source release.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: "Exact 40-hex approved main source SHA"
+        required: true
+        type: string
+      confirmation:
+        description: "Exact READONLY_GATE4_SAFETY_DB_NO_PROVIDER"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate4-safety-readonly-attestation
+  cancel-in-progress: false
+
+jobs:
+  attest-restricted-safety-reader:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'READONLY_GATE4_SAFETY_DB_NO_PROVIDER' }}
+    runs-on: ubuntu-latest
+    environment: gate4-safety
+    timeout-minutes: 12
+    env:
+      NODE_ENV: test
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      GATE4_PROVIDER_CREATE_ALLOWED: ""
+    steps:
+      - name: Verify exact protected main source and read-only authorization
+        shell: bash
+        env:
+          EXPECTED_MAIN: ${{ inputs.expected_main_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$EXPECTED_MAIN" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          test "$GITHUB_SHA" = "$EXPECTED_MAIN"
+          test "$GITHUB_REF" = refs/heads/main
+          test "$CONFIRMATION" = READONLY_GATE4_SAFETY_DB_NO_PROVIDER
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_main_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked pure dependencies without secrets
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: GitHub-hosted restricted Neon READ ONLY proof
+        shell: bash
+        env:
+          # Credentials absent from checkout and npm steps.
+          GATE4_SAFETY_READONLY_DATABASE_URL: ${{ secrets.GATE4_SAFETY_READONLY_DATABASE_URL }}
+          GATE4_SAFETY_EXPECTED_DB_HOST: ${{ secrets.GATE4_SAFETY_EXPECTED_DB_HOST }}
+        run: |
+          set -Eeuo pipefail
+          node --input-type=module <<'NODE'
+          import pg from "pg";
+          const role="gate4_safety_reader_20261022";
+          let client;
+          try {
+            const uri=process.env.GATE4_SAFETY_READONLY_DATABASE_URL;
+            const host=process.env.GATE4_SAFETY_EXPECTED_DB_HOST;
+            if(!uri||!host)throw Error("CONFIGURATION");
+            const u=new URL(uri);
+            if(!["postgres:","postgresql:"].includes(u.protocol)||
+               decodeURIComponent(u.username)!==role||
+               !u.password||u.hostname!==host||
+               u.pathname!=="/neondb"||
+               u.searchParams.get("sslmode")!=="verify-full")
+              throw Error("SCOPED_CREDENTIALS");
+            client=new pg.Client({
+              connectionString:uri,
+              connectionTimeoutMillis:6000,
+              query_timeout:6000,
+              statement_timeout:6000,
+              application_name:"gate4_actions_runner_readonly_attestation",
+              options:"-c default_transaction_read_only=on"
+            });
+            await client.connect();
+            await client.query("BEGIN TRANSACTION READ ONLY");
+            const sql="SELECT current_database() AS db,current_user AS actor,"+
+              "current_setting('transaction_read_only') AS tx_read_only,"+
+              "(SELECT rolsuper FROM pg_roles WHERE rolname=current_user) AS superuser,"+
+              "has_schema_privilege(current_user,'clean','USAGE') AS schema_usage,"+
+              "has_schema_privilege(current_user,'clean','CREATE') AS schema_create,"+
+              "has_table_privilege(current_user,'clean.gate4_alert_owned_binding_v39','SELECT') AS can_select,"+
+              "has_table_privilege(current_user,'clean.gate4_alert_owned_binding_v39','INSERT') AS can_insert,"+
+              "has_table_privilege(current_user,'clean.gate4_alert_owned_binding_v39','UPDATE') AS can_update,"+
+              "has_table_privilege(current_user,'clean.gate4_alert_owned_binding_v39','DELETE') AS can_delete,"+
+              "has_table_privilege(current_user,'clean.gate4_alert_prebind_original_v39','SELECT') AS prebind_read";
+            const x=(await client.query(sql)).rows[0];
+            const count=(await client.query(
+              "SELECT count(*)::int AS total FROM clean.gate4_alert_owned_binding_v39"
+            )).rows[0]?.total;
+            await client.query("ROLLBACK");
+            const valid=x.db==="neondb"&&x.actor===role&&
+              x.tx_read_only==="on"&&x.superuser===false&&
+              x.schema_usage===true&&x.schema_create===false&&
+              x.can_select===true&&x.can_insert===false&&
+              x.can_update===false&&x.can_delete===false&&
+              x.prebind_read===false&&count===0;
+            console.log(JSON.stringify({
+              status:valid?"GATE4_GITHUB_SAFETY_DB_READONLY_PASS":"HOLD",
+              githubRunner:true,restrictedRole:valid,
+              existingOwnedBindings:Number.isSafeInteger(count)?count:null,
+              providerRequests:0,databaseWrites:0,
+              stopArmed:false,paidAuthorization:false
+            }));
+            if(!valid)process.exitCode=2;
+          }catch{
+            console.error("GATE4_GITHUB_SAFETY_READER_HOLD_REDACTED");
+            process.exitCode=2;
+          }finally{
+            if(client)await client.end().catch(()=>undefined);
+          }
+          NODE
+      - name: Never confuse read-only connectivity with live STOP
+        if: always()
+        run: |
+          {
+            echo '## Gate4 safety runner — restricted DB attestation only'
+            echo 'GitHub-hosted read-only database check; source pinned to main.'
+            echo 'No provider token, CREATE/DELETE or DB writes.'
+            echo 'Approving this is not paid Gate4 authorization.'
+            echo 'This does not prove an independent STOP worker is armed.'
+          } >> "$GITHUB_STEP_SUMMARY"
