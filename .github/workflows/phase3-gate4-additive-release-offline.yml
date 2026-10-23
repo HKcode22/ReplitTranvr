@@ -1,0 +1,101 @@
+name: Phase3 Gate4 Minimal Prepaid+Alert Release — NO PROVIDER
+on:
+  pull_request:
+    paths:
+      - "server/phase2gCallbackOnly.ts"
+      - "server/lib/disruption/workspaceRuntimeHealth_v39.ts"
+      - "server/lib/disruption/gate4PrebindAdditiveRoute_v39.ts"
+      - "server/lib/disruption/gate4PrebindIngress_v39.ts"
+      - "server/lib/disruption/gate4PrebindPgStore_v39.ts"
+      - "server/lib/disruption/gate4AlertRouteReadiness_v39.ts"
+      - "migrations/staged/V0071__gate4_alert_prebind_quarantine_v39.sql"
+      - "migrations/staged/V0072__gate4_owned_binding_v39.sql"
+      - "migrations/staged/V0073__gate4_existing_neon_role_grants_v39.sql"
+      - "tests/phase3_gate4_prebind_additive_v39.test.ts"
+      - "tests/phase3_gate4_additive_release_real_pg_v39.test.ts"
+      - ".github/workflows/phase3-gate4-additive-release-offline.yml"
+permissions:
+  contents: read
+concurrency:
+  group: gate4-minimal-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  limited-source-and-prepaid-build:
+    name: Additive HTTP/mock + original production prepaid binary build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AERODATABOX_API_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      NODE_ENV: test
+      V39_GATE4_PREBIND_ADD_ON_PREPAID: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Entire repo TypeScript validates same minimal release
+        run: npm run v39:typecheck
+      - name: Scoped original-wire and prepaid-route tests
+        run: npx vitest run tests/phase3_gate4_prebind_additive_v39.test.ts
+      - name: Build actual existing published prepaid binary with feature OFF
+        env:
+          V39_CALLBACK_ONLY_BUILD: "1"
+          V39_BUILD_GIT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: npm run build
+      - name: Default published mode remains prepaid without Gate4 secrets
+        run: |
+          set -Eeuo pipefail
+          test "$V39_GATE4_PREBIND_ADD_ON_PREPAID" = 0
+          test -f dist/index.mjs
+          test -f dist/v39-build-meta.json
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+  disposable-real-pg16:
+    name: V0071-73 narrow role/readback and denial on actual PostgreSQL16
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gate4_fixture
+          POSTGRES_PASSWORD: fixture_only
+          POSTGRES_DB: neondb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gate4_fixture -d neondb"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      CI: "true"
+      GATE4_DISPOSABLE_DB_ACK: GATE4_PG16_ONLY
+      GATE4_TEST_PG_URL: "postgres://gate4_fixture:fixture_only@127.0.0.1:5432/neondb?sslmode=disable"
+      AERODATABOX_API_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Exercise actual SQL and read/insert-only storage
+        run: npx vitest run tests/phase3_gate4_additive_release_real_pg_v39.test.ts
+      - name: No provider credentials or production writes
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
