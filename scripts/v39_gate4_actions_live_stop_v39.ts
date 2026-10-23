@@ -17,7 +17,8 @@ import {
   deleteSubscriptionVerifiedStrict
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
 import {
-  runGate4ActionsStopTickV39,type Gate4StopOwnerV39
+  runGate4ActionsStopTickV39,type Gate4StopOwnerV39,
+  type Gate4StopTickResultV39
 } from "../server/lib/disruption/gate4ActionsStopIntegration_v39";
 import {
   reviewGate4ActionsWatchScopeV39,type Gate4ActionsWatchScopeV39
@@ -27,6 +28,19 @@ import {
 // a workflow_dispatch input or environment variable CANNOT open the seal.
 export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;
 const EXACT_CONFIRM="WATCH_G4_EXACT_ID_STOP_NO_CREATE";
+/** A missing or disputed owner after CREATE is an emergency human
+ * reconciliation incident. No ID is guessed or deleted. No second CREATE.
+ * This pure result gate makes indefinite logging-without-escalation impossible.
+ */
+export function gate4StopRunnerTerminalHoldV39(
+ result:Pick<Gate4StopTickResultV39,"status"|"reason">
+):"EXACT_OWNER_RESCUE_REQUIRED"|"EXACT_STOP_UNCONFIRMED"|null{
+ if(result.status==="HOLD_OWNER_REQUIRED")
+   return "EXACT_OWNER_RESCUE_REQUIRED";
+ if(result.status==="STOP_UNCONFIRMED")
+   return "EXACT_STOP_UNCONFIRMED";
+ return null;
+}
 const sleep=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms));
 const name=/^gate4_safety_reader_[a-z0-9_]{4,60}$/;
 function hold(reason:string):never{throw Error("GATE4_ACTIONS_"+reason+"_HOLD");}
@@ -182,11 +196,12 @@ export async function runGate4LiveStopWatchV39(
          status:outcome.status,reason:outcome.reason,
          exactStopVerified:false,operatorRescueRequired:true
        }));
-       // If owner ID has not been bound, keep searching during the
-       // approved window (no foreign DELETE); do not claim protection.
-       if(outcome.status==="STOP_UNCONFIRMED"||
-          outcome.reason==="OWNER_CUSTODY_SCOPE_MISMATCH")
-          hold("EXACT_STOP_OR_CUSTODY_FAILED");
+       // A discovered billable subscription with no positive owned ID,
+       // failed owner-custody read, or unknown DELETE outcome is terminal
+       // and requires immediate operator incident response. Never remain
+       // silently in a 5-second poll loop while exposure can accumulate.
+       const terminal=gate4StopRunnerTerminalHoldV39(outcome);
+       if(terminal)hold(terminal);
      }
      await sleep(5_000);
    }
