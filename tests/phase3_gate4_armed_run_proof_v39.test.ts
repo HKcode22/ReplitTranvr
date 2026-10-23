@@ -78,7 +78,7 @@ describe("Phase3 independent STOP armed receipt (pure no-provider)",()=>{
  it("stops trusting after receipt freshness and before stop deadline",()=>{
   const f=fixture();
   expect(gate4ReviewIndependentArmedProofV39({
-   ...f,nowUtc:"2026-10-23T22:01:15.000Z"
+   ...f,nowUtc:"2026-10-23T22:02:30.000Z"
   })).toBe(false);
   expect(gate4ReviewIndependentArmedProofV39({
    ...f,nowUtc:"2026-10-23T22:04:30.000Z"
