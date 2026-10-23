@@ -34,6 +34,23 @@ function requireEnv(env:NodeJS.ProcessEnv,key:string):string{
   const x=env[key];if(!x)return hold("ENV_"+key);
   return x;
 }
+/** Admission pins are independent of the workflow-dispatch payload.
+ * This pure check is testable while the live STOP source seal stays closed.
+ * The actual provisioning authority is the protected GitHub environment.
+ */
+export function gate4IndependentApprovalPinsMatchV39(
+ scope:Gate4ActionsWatchScopeV39,env:NodeJS.ProcessEnv
+):boolean{
+ return !!scope&&!!env&&
+   env.GATE4_SAFETY_APPROVED_SOURCE===scope.sourceCommit&&
+   env.GATE4_SAFETY_APPROVED_SCOPE===scope.scopeId&&
+   env.GATE4_SAFETY_APPROVED_AUTH===scope.authorizationSha256&&
+   env.GATE4_SAFETY_APPROVED_ICAO===scope.airportIcao&&
+   env.GATE4_SAFETY_APPROVED_START_UTC===scope.startUtc&&
+   env.GATE4_SAFETY_APPROVED_STOP_UTC===scope.stopUtc&&
+   env.GATE4_SAFETY_APPROVED_SOFT_TARGET===String(scope.softCreditTarget)&&
+   env.GATE4_SAFETY_APPROVED_PROTECTED_FLOOR===String(scope.protectedCreditFloor);
+}
 export function reviewGate4LiveWatchLaunchV39(
  scope:Gate4ActionsWatchScopeV39,
  confirmation:string,
@@ -46,16 +63,7 @@ export function reviewGate4LiveWatchLaunchV39(
      env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
      env.GITHUB_REF!=="refs/heads/main"||
      env.GITHUB_SHA!==scope.sourceCommit||
-     env.GATE4_SAFETY_APPROVED_SOURCE!==scope.sourceCommit||
-     env.GATE4_SAFETY_APPROVED_SCOPE!==scope.scopeId||
-     env.GATE4_SAFETY_APPROVED_AUTH!==scope.authorizationSha256||
-     env.GATE4_SAFETY_APPROVED_ICAO!==scope.airportIcao||
-     // Separate protected environment-variable evidence; never echo or
-     // derive these values from workflow_dispatch inputs.
-     env.GATE4_SAFETY_APPROVED_START_UTC!==scope.startUtc||
-     env.GATE4_SAFETY_APPROVED_STOP_UTC!==scope.stopUtc||
-     env.GATE4_SAFETY_APPROVED_SOFT_TARGET!==String(scope.softCreditTarget)||
-     env.GATE4_SAFETY_APPROVED_PROTECTED_FLOOR!==String(scope.protectedCreditFloor)||
+     !gate4IndependentApprovalPinsMatchV39(scope,env)||
      env.GATE4_SAFETY_ENV_NAME!=="gate4-safety"||
      !env.GITHUB_RUN_ID||
      !env.AERODATABOX_API_KEY||
