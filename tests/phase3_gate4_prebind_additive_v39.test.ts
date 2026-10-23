@@ -183,6 +183,40 @@ describe("Gate4 additive prebind on existing prepaid runtime, no provider",()=>{
     expect((await r.json()).received).toBe(false);
   });
  });
+ it("reports only allowlisted failing storage stage to authenticated synthetic caller",async()=>{
+  const store=good();
+  await httpTest({...store,
+    writeOriginal:async()=>{throw Error("GATE4_PREBIND_INSERT_HOLD");}
+  },async base=>{
+    const r=await fetch(base+"/api/v1/webhooks/aerodatabox/"+secret,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:bytes
+    });
+    expect(r.status).toBe(503);
+    expect(await r.json()).toMatchObject({
+      received:false,status:"HOLD",reason:"GATE4_PREBIND_INSERT_HOLD",
+      attribution:"none",paidAuthorization:false
+    });
+  });
+ });
+ it("never leaks raw database errors or credentials through a 503",async()=>{
+  const store=good();
+  await httpTest({...store,
+    writeOriginal:async()=>{throw Error("password=PRIVATE_SQL_TOKEN host=db");}
+  },async base=>{
+    const r=await fetch(base+"/api/v1/webhooks/aerodatabox/"+secret,{
+      method:"POST",headers:{"content-type":"application/json"},
+      body:bytes
+    });
+    const text=await r.text();
+    expect(r.status).toBe(503);
+    expect(text).not.toContain("PRIVATE_SQL_TOKEN");
+    expect(text).not.toContain("host=db");
+    expect(JSON.parse(text).reason).toBe(
+      "DURABLE_STORAGE_OR_READBACK_UNAVAILABLE"
+    );
+  });
+ });
  it("published health differentiates pre-existing prepaid route from opted-in add-on",()=>{
   const host={
     schema:"v39.phase2f-workspace-runtime.v1",

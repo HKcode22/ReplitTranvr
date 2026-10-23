@@ -131,6 +131,7 @@ export function mountGate4PrebindAdditiveRouteV39(
    }
    res.status(receipt.httpStatus).json({
      received:receipt.responseAcknowledged,status:receipt.status,
+     reason:receipt.responseAcknowledged?undefined:receipt.reason,
      attribution:"none",paidAuthorization:false
    });
   });
