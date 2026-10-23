@@ -367,3 +367,21 @@ Thus existing hosted app now runs reviewed new `main`, reports **prepaid_route_r
 **NEXT ONE STEP (NO SECOND SYNTHETIC POST YET):** have owner run a strictly READ ONLY restricted `gate4_receiver_20261022` DB transaction using the already private `zero-provider-published-settings.json`, returning categorical `current_database` and role identity, schema USAGE + table SELECT/INSERT (no UPDATE/DELETE, no V0072), whether the V0071 table exists, whether PostgreSQL row security is enabled, number of `synthetic_%` rows **under exact private zero-provider scope**, and whether the SELECT of an existing original is permitted. Never display raw bytes, subscription IDs, secret, URI, DB hostname, or callback body. If rows present, POST might have committed but readback failed; if none, write or pre-commit path failed. On DB permission/connect failure, HOLD and fix access, not blindly CREATE/DELETE or republish.
 
 **Gate4 milestone status:** hosted route declared true and pretrained prepaid preserved, but **hosted durable ingress milestone NOT COMPLETE until a synthetic 200 + independent original byte readback PASS**. Do not proceed to paid canary or live STOP unseal merely based on endpoint health. No provider API calls or billable credits were intentionally used; unverified zero-provider original could already exist.
+
+## October 22 — hosted 503 isolated from direct Neon SQL; fixed-stage PR101
+
+Owner executed **production restricted Neon** database diagnostic with isolated private Gate4 receiver LOGIN, local zero-provider scope and an **explicit ROLLBACK transaction**. Observed exact terminal:
+```
+EXISTING_SYNTHETIC_TOTAL=0
+EXISTING_SYNTHETIC_LOCAL=0
+SQL_INSERT=PASS
+SQL_READBACK=PASS
+ROLLBACK=PASS
+GATE4_SQL_DIAGNOSTIC=PASS
+PROVIDER_REQUESTS=0
+```
+This validates existing restricted `gate4_receiver_20261022` account can issue the same V0071 original-wire INSERT and SELECT for the local synthetic scope. It does **not** prove post-COMMIT readback via a *different pool connection* and does not prove the published app has the same values as the local private file. The last published synthetic POST was HTTP503 with no durable ACK, no matching synthetic original rows under checked scope; **Gate4 hosted durable ingress remains HOLD**, not a completed milestone.
+
+Source review at new main `6da57dfd44c89930ab19f3183c47daf4257070ed`: ingress maps multiple DB/storage failures to HTTP503 and does not expose a safe diagnostic stage, so repeatedly retrying the same opaque HTTP POST cannot distinguish cause. Created limited [PR #101](https://github.com/HKcode22/ReplitTranvr/pull/101) based directly on new main at candidate `93117e7d2badfc75c6b5e644154062d727c5c7cf` to log **only** fixed backend stage + validated five-character SQLSTATE and return only an allowlisted category in authenticated non-2xx response; arbitrary SQL exception text / URL / provider secret / raw bytes never returned. App continues to require exact durable commit+postcommit readback before 200; no provider calls or new DB grants. New test asserts approved stage and redaction on arbitrary error. PR remains DRAFT until no-provider CI passes and is reviewed/merged. No new live publication has been made from PR101.
+
+**Next:** obtain no-provider CI 5/5; merge only the verified minimal diagnostic; preserve existing Replit local/backup branches, promote reviewed new SHA, republish without manual Git SHA secrets; issue ONE bounded zero-provider synthetic HTTP POST with private bearer and print *only* HTTP status, receipt status and safe reason; use fixed reason/SQLSTATE to fix true hosted storage problem. Do not run paid canary or unseal STOP based on only live route flags. Gate3 and paid Gate0.5 remain completed; do not repeat.
