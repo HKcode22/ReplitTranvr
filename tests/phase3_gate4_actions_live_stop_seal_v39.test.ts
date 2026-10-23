@@ -78,14 +78,16 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
     AERODATABOX_API_KEY:"mock-must-not-call",
     GATE4_SAFETY_READONLY_DATABASE_URL:
       "postgresql://gate4_safety_reader_local01:fake@never.example/db?sslmode=verify-full",
-    GATE4_SAFETY_EXPECTED_DB_HOST:"never.example"
+    GATE4_SAFETY_EXPECTED_DB_HOST:"never.example",
+    GATE4_STOP_ARMED_COMMENT_TOKEN:"test-token-not-live"
   };
   expect(reviewGate4LiveWatchLaunchV39(scope,
     "WATCH_G4_EXACT_ID_STOP_NO_CREATE",env)).toBe(true);
   for(const key of [
     "GATE4_SAFETY_APPROVED_RUNNER_SHA","GATE4_SAFETY_APPROVED_SOURCE",
     "GATE4_SAFETY_APPROVED_START_UTC","GATE4_SAFETY_APPROVED_STOP_UTC",
-    "AERODATABOX_API_KEY","GATE4_SAFETY_READONLY_DATABASE_URL"
+    "AERODATABOX_API_KEY","GATE4_SAFETY_READONLY_DATABASE_URL",
+    "GATE4_STOP_ARMED_COMMENT_TOKEN"
   ]){
     expect(reviewGate4LiveWatchLaunchV39(scope,
       "WATCH_G4_EXACT_ID_STOP_NO_CREATE",
@@ -140,6 +142,8 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
   expect(preparation).not.toContain("secrets.AERODATABOX_API_KEY");
   expect(preparation).not.toContain("secrets.GATE4_SAFETY_READONLY_DATABASE_URL");
   expect(execution).toContain("AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}");
+  expect(execution).toContain("GATE4_STOP_ARMED_COMMENT_TOKEN: ${{ secrets.GITHUB_TOKEN }}");
+  expect(yaml).toContain("  issues: write");
   expect(execution).toContain("GATE4_SAFETY_READONLY_DATABASE_URL: ${{ secrets.GATE4_SAFETY_READONLY_DATABASE_URL }}");
   const shell=execution.split("        run: |")[1]?.split("      - name: Honest STOP")[0]??"";
   expect(shell).not.toMatch(/\$\{\{\s*inputs\./);
