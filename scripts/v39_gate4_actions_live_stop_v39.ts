@@ -9,6 +9,8 @@
  * provider SEND even during a 5s polling cycle. Unknown CREATE ID requires
  * human rescue; this is NOT a provider hard credit cap.
  */
+import {gate4ArmedCommentBodyV39} from
+ "../server/lib/disruption/gate4ArmedRunProof_v39";
 import {execFileSync} from "node:child_process";
 import {pathToFileURL} from "node:url";
 import pg from "pg";
@@ -137,6 +139,7 @@ export function reviewGate4LiveWatchLaunchV39(
      !env.AERODATABOX_API_KEY||
      !env.GATE4_SAFETY_READONLY_DATABASE_URL||
      !env.GATE4_SAFETY_EXPECTED_DB_HOST||
+     !env.GATE4_STOP_ARMED_COMMENT_TOKEN||
      env.DATABASE_URL||env.V39_DATABASE_RUNTIME_URL||
      env.GATE4_PROVIDER_CREATE_ALLOWED)
     return false;
@@ -222,6 +225,36 @@ export async function runGate4LiveStopWatchV39(
    const initBalance=(await getBalanceEvidenceStrict()).balance.creditsRemaining;
    if(initBalance!==scope.observedStartingCredits)
       hold("PREARM_BALANCE_CHANGED");
+   // Issue comment is posted only AFTER independent GitHub protected-job
+   // admission, live receiver identity, restricted DB identity, strict
+   // zero-active LIST and fresh exact baseline. GitHub Actions token cannot
+   // CREATE a provider resource and never appears in logs or posted body.
+   const runId=Number(env.GITHUB_RUN_ID);
+   if(!Number.isSafeInteger(runId)||runId<=0)
+     hold("ARMED_RECEIPT_RUN_ID_INVALID");
+   const receiptBody=gate4ArmedCommentBodyV39(
+     scope,runId,requireEnv(env,"GITHUB_SHA"),new Date().toISOString());
+   const token=requireEnv(env,"GATE4_STOP_ARMED_COMMENT_TOKEN");
+   let post:Response;
+   try{
+     post=await fetch(
+       "https://api.github.com/repos/HKcode22/ReplitTranvr/issues/38/comments",{
+       method:"POST",redirect:"error",signal:AbortSignal.timeout(8000),
+       headers:{
+         Accept:"application/vnd.github+json",
+         Authorization:"Bearer "+token,
+         "Content-Type":"application/json",
+         "X-GitHub-Api-Version":"2022-11-28"
+       },
+       body:JSON.stringify({body:receiptBody})
+     });
+   }catch{hold("ARMED_RECEIPT_POST_UNCONFIRMED");}
+   if(post.status!==201)hold("ARMED_RECEIPT_NOT_COMMITTED");
+   let receipt:unknown;
+   try{receipt=await post.json();}catch{hold("ARMED_RECEIPT_ACK_UNCONFIRMED");}
+   const ack=receipt as {id?:number;body?:string}|null;
+   if(!Number.isSafeInteger(ack?.id)||ack?.body!==receiptBody)
+     hold("ARMED_RECEIPT_ACK_MISMATCH");
    console.log(JSON.stringify({
       status:"GATE4_ACTIONS_ARMED_NO_CREATE",
       scope:scope.scopeId,source:scope.sourceCommit,
