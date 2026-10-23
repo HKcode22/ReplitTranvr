@@ -50,6 +50,12 @@ export function reviewGate4LiveWatchLaunchV39(
      env.GATE4_SAFETY_APPROVED_SCOPE!==scope.scopeId||
      env.GATE4_SAFETY_APPROVED_AUTH!==scope.authorizationSha256||
      env.GATE4_SAFETY_APPROVED_ICAO!==scope.airportIcao||
+     // Separate protected environment-variable evidence; never echo or
+     // derive these values from workflow_dispatch inputs.
+     env.GATE4_SAFETY_APPROVED_START_UTC!==scope.startUtc||
+     env.GATE4_SAFETY_APPROVED_STOP_UTC!==scope.stopUtc||
+     env.GATE4_SAFETY_APPROVED_SOFT_TARGET!==String(scope.softCreditTarget)||
+     env.GATE4_SAFETY_APPROVED_PROTECTED_FLOOR!==String(scope.protectedCreditFloor)||
      env.GATE4_SAFETY_ENV_NAME!=="gate4-safety"||
      !env.GITHUB_RUN_ID||
      !env.AERODATABOX_API_KEY||
