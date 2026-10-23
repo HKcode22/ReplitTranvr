@@ -3,6 +3,7 @@ import {readFileSync} from "node:fs";
 import {
  GATE4_ACTIONS_LIVE_STOP_RELEASED_V39,
  gate4PublishedReceiverMatchesStopScopeV39,
+ gate4IndependentRunnerSourcePinnedV39,
  gate4IndependentApprovalPinsMatchV39,
  gate4StopRunnerTerminalHoldV39,
  reviewGate4LiveWatchLaunchV39,runGate4LiveStopWatchV39
@@ -42,6 +43,28 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
   expect(reviewGate4LiveWatchLaunchV39(scope,
     "WATCH_G4_EXACT_ID_STOP_NO_CREATE",env)).toBe(false);
  });
+ it("requires separate frozen receiver and independently reviewed runner source pins",()=>{
+  const runner="c".repeat(40);
+  const approved={...approvals,
+    GATE4_SAFETY_APPROVED_RUNNER_SHA:runner,
+    GITHUB_SHA:runner};
+  expect(runner).not.toBe(scope.sourceCommit);
+  expect(gate4IndependentRunnerSourcePinnedV39(approved)).toBe(true);
+  expect(gate4IndependentApprovalPinsMatchV39(scope,approved)).toBe(true);
+  expect(gate4IndependentRunnerSourcePinnedV39({
+    ...approved,GATE4_SAFETY_APPROVED_RUNNER_SHA:scope.sourceCommit
+  })).toBe(false);
+  expect(gate4IndependentRunnerSourcePinnedV39({
+    ...approved,GITHUB_SHA:scope.sourceCommit
+  })).toBe(false);
+  expect(gate4IndependentRunnerSourcePinnedV39({
+    ...approved,GATE4_SAFETY_APPROVED_RUNNER_SHA:undefined
+  })).toBe(false);
+  expect(gate4IndependentRunnerSourcePinnedV39({
+    ...approved,GITHUB_SHA:"not-a-sha",
+    GATE4_SAFETY_APPROVED_RUNNER_SHA:"not-a-sha"
+  })).toBe(false);
+ });
  it("every independently protected source/trial/window/limit pin must match",()=>{
   expect(gate4IndependentApprovalPinsMatchV39(scope,approvals)).toBe(true);
   expect(gate4IndependentApprovalPinsMatchV39(scope,{})).toBe(false);
@@ -62,6 +85,15 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
    expect(yaml).toContain(key+": ${{ vars."+key+" }}");
    expect(yaml).not.toContain(key+": ${{ inputs.");
   }
+ });
+ it("pins runner separately in workflow and passes reviewed receiver SHA",()=>{
+   const yaml=readFileSync(new URL(
+     "../.github/workflows/phase3-gate4-live-exact-stop-candidate.yml",
+     import.meta.url),"utf8");
+   expect(yaml).toContain("GATE4_SAFETY_APPROVED_RUNNER_SHA: ${{ vars.GATE4_SAFETY_APPROVED_RUNNER_SHA }}");
+   expect(yaml).toContain('test "${GATE4_SAFETY_APPROVED_RUNNER_SHA:-}" = "$GITHUB_SHA"');
+   expect(yaml).toContain('--head "$GATE4_SAFETY_APPROVED_SOURCE"');
+   expect(yaml).not.toContain('--head "$GITHUB_SHA"');
  });
  it("keeps provider/DB secrets out of checkout and dispatch out of bash",()=>{
   const yaml=readFileSync(new URL(
@@ -103,6 +135,13 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
   expect(gate4StopRunnerTerminalHoldV39({
     status:"STOPPED_EXACT_PENDING_SETTLEMENT",reason:"HARD_TIME_DEADLINE"
   })).toBeNull();
+ });
+ it("verifies GitHub checkout at runner SHA rather than receiver SHA",()=>{
+  const src=readFileSync(new URL(
+    "../scripts/v39_gate4_actions_live_stop_v39.ts",import.meta.url),"utf8");
+  expect(src).toContain('}).trim()!==env.GITHUB_SHA)');
+  expect(src).toContain('gate4IndependentRunnerSourcePinnedV39(env)');
+  expect(src).toContain('GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;');
  });
  it("provider and DB are never contacted while source seal is closed",async()=>{
   await expect(runGate4LiveStopWatchV39(scope,
