@@ -340,3 +340,20 @@ Owner Replit Shell output now **PASS** from `GATE4_SAFE_SOURCE_SWITCH`:
 - **PUBLIC NEW-GIT-SHA / ALERT STATUS PENDING**: assistant's environment cannot fetch `/__v39/workspace-runtime` from this host (direct GET disabled/no DNS), so source `6da57dfd...`, prepaid_route true and gate4_alert_ingress_registered true are NOT YET independently attested on the new published version. Need one owner Replit Shell read-only GET and then, only if PASS, a **synthetic** authenticated POST and independently checked V0071 original-wire SELECT to prove durable raw receipt; this does involve one intentionally synthetic DB INSERT, never provider paid mutations. If live Gate4 route is false/HOLD, do not repeatedly republish or change secret values blindly; reconcile **published** environment with Replit project secrets and role admission first.
 
 **Remaining Gate4 after hosted no-provider test:** actual CREATE-response exact subscription ownership V0072 binding, real `gate4-safety` GitHub Actions WATCH source release/independently ARMED before CREATE, then separate tiny paid user authorization, exact provider DELETE and 3 stable balance reads and send/receipt science reconciliation. Gate3 and paid Gate0.5 are finished. Do not declare Gate4 scientific PASS on Replit status alone.
+
+## October 22 — Published additive Gate4 route and prepaid route both proven
+
+**Exact operator-attested public host result (after successful source-preserving Replit republish):** Owner used `GET https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime`, checking exact expected merged PR100 Git SHA `6da57dfd44c89930ab19f3183c47daf4257070ed` and reported:
+```
+HTTP=PASS
+SOURCE=PASS
+PREPAID=PASS
+GATE4=PASS
+PUBLISHED=PASS
+GATE4_LIVE_ROUTES=PASS
+```
+Thus existing hosted app now runs reviewed new `main`, reports **prepaid_route_registered=true** and **gate4_alert_ingress_registered=true**, and is a published Replit-owned deployment with public HTTP 200. This is an actual source-and-route publication success, not merely a GitHub test or local binary build. Owner preserved previous local Replit Publish commit at `backup/gate4-local-publish-20261022`, lone local `replit.nix` tracked edit as private patch plus git stash. Pre-existing V0071–73 production tables and two restricted roles were operator-committed earlier.
+
+**Critical distinction:** This GET is declaration of routes and startup role-admission readiness, **not** proof an actual Alert POST reached HTTP200, persisted original bytes or was independently read back; host health retains `gate4_alert_callback_proven=false`. Next immediate zero-credit synthetic test reads private `~/.config/replittranvr/gate4-owner-20261022/zero-provider-published-settings.json` (no credentials exposed), sends one exact WSSS envelope to the published ordinary Alert POST with its private bearer and synthetic ID, then queries `clean.gate4_alert_prebind_original_v39` through **restricted receiver role in READ ONLY DB transaction** and validates exact sha256 original bytes, source, scope, ICAO and auth. No AeroDataBox provider API requests, subscription CREATE/DELETE, new deployment or paid credits; synthetic original remains quarantined, **not** scientific owned evidence. On any mismatch do NOT claim receiver verified, and never disclose private bearer or URI in Shell output/chat.
+
+**Remaining Gate4 operational work after this step:** positively authenticated provider CREATE receipt → append-only V0072 owned-ID binding (no callback body as authority); independent GitHub Actions 5-second in-job STOP source unsealed, exact owner's ID verified and safety job ARMED before provider CREATE; separately authorized short paid Alert canary with owner DELETE + three stable post-stop balance reads, reconciled original-vs-SEND credits and qualified scientific result. Gate3/0.5 remain owner-completed.
