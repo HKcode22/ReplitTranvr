@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       expected_head:
-        description: "Full reviewed main SHA"
+        description: "Full reviewed GitHub STOP-runner main SHA (different from receiver SHA)"
         required: true
         type: string
       scope_id:
@@ -63,6 +63,9 @@ jobs:
     env:
       NODE_ENV: production
       GATE4_SAFETY_ENV_NAME: gate4-safety
+      # Distinct independently reviewed GitHub runner release. This SHA
+      # may differ from the frozen published receiver source below.
+      GATE4_SAFETY_APPROVED_RUNNER_SHA: ${{ vars.GATE4_SAFETY_APPROVED_RUNNER_SHA }}
       GATE4_SAFETY_APPROVED_SOURCE: ${{ vars.GATE4_SAFETY_APPROVED_SOURCE }}
       GATE4_SAFETY_APPROVED_SCOPE: ${{ vars.GATE4_SAFETY_APPROVED_SCOPE }}
       GATE4_SAFETY_APPROVED_AUTH: ${{ vars.GATE4_SAFETY_APPROVED_AUTH }}
@@ -85,6 +88,8 @@ jobs:
           set -Eeuo pipefail
           [[ "$EXPECTED" =~ ^[a-f0-9]{40}$ ]] || exit 2
           test "$EXPECTED" = "$GITHUB_SHA"
+          test "${GATE4_SAFETY_APPROVED_RUNNER_SHA:-}" = "$GITHUB_SHA"
+          test -n "${GATE4_SAFETY_APPROVED_SOURCE:-}"
           test "$CONFIRM" = WATCH_G4_EXACT_ID_STOP_NO_CREATE
       - uses: actions/checkout@v4
         with:
@@ -117,7 +122,7 @@ jobs:
           set -Eeuo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node --import tsx scripts/v39_gate4_actions_live_stop_v39.ts \
-            --head "$GITHUB_SHA" \
+            --head "$GATE4_SAFETY_APPROVED_SOURCE" \
             --scope "$SCOPE_ID" \
             --auth "$AUTH_SHA" \
             --icao "$ICAO" \

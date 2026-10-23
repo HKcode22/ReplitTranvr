@@ -20,7 +20,10 @@ function fixture(){
     }]
   };
   const prepared=preparePrepaidProbeSourceV39(sessionId,body);
-  const persistedAt=new Date("2026-10-16T21:00:00Z").toISOString();
+  // Mock custody must be within the seven-day retention window whenever
+  // CI runs. The older fixed 2026-10-16 timestamp expired on Oct 23 and
+  // falsely pre-empted the intended independent tampering assertions.
+  const persistedAt=new Date(Date.now()-60*60*1000).toISOString();
   const expiresAt=new Date(Date.parse(persistedAt)+168*3600*1000).toISOString();
   const row={
     delivery_id:prepared.deliveryId,raw_body_sha256:prepared.bodySha256,
