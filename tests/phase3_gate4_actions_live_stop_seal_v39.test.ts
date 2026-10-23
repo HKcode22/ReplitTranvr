@@ -130,6 +130,21 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
    expect(yaml).toContain('--head "$GATE4_SAFETY_APPROVED_SOURCE"');
    expect(yaml).not.toContain('--head "$GITHUB_SHA"');
  });
+ it("refreshes bot ARMED receipt while running; never after stop deadline",()=>{
+   const now=Date.parse("2026-10-23T23:55:00.000Z");
+   const stop=now+300000;
+   expect(GATE4_ARMED_PROOF_HEARTBEAT_MS).toBe(45000);
+   expect(gate4ArmedProofRefreshDueV39(now,now+44999,stop)).toBe(false);
+   expect(gate4ArmedProofRefreshDueV39(now,now+45000,stop)).toBe(true);
+   expect(gate4ArmedProofRefreshDueV39(now,stop,stop)).toBe(false);
+   expect(gate4ArmedProofRefreshDueV39(NaN,now,stop)).toBe(false);
+   const src=readFileSync(new URL(
+     "../scripts/v39_gate4_actions_live_stop_v39.ts",import.meta.url),"utf8");
+   expect(src).toContain('if(!await emitArmedProof())hold("ARMED_RECEIPT_POST_UNCONFIRMED")');
+   expect(src).toContain('if(await emitArmedProof())');
+   expect(src).toContain("GATE4_ACTIONS_ARMED_HEARTBEAT_NO_CREATE");
+   expect(src).toContain("GATE4_ARMED_HEARTBEAT_UNCONFIRMED_CREATE_MUST_HOLD");
+ });
  it("installs the STOP TypeScript loader even under production NODE_ENV",()=>{
   const yml=readFileSync(new URL(
    "../.github/workflows/phase3-gate4-live-exact-stop-candidate.yml",
