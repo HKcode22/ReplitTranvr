@@ -13,6 +13,9 @@ import {reviewGate4ActionsWatchScopeV39} from "./gate4ActionsWatchdogPolicy_v39"
 
 export const GATE4_ARMED_COMMENT_MARKER_V39="GATE4_ACTIONS_ARMED_RECEIPT_V1\n";
 const SHA=/^[a-f0-9]{40}$/;
+const githubUtc=(x:unknown)=>typeof x==="string"&&
+  /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$/.test(x)&&
+  Number.isFinite(Date.parse(x));
 const safeId=(x:unknown)=>Number.isSafeInteger(x)&&Number(x)>0;
 const utc=(x:unknown)=>typeof x==="string"&&
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(x)&&
@@ -72,7 +75,7 @@ export function gate4ReviewIndependentArmedProofV39(args:{
  if(!live)return false;
  return comments.some(c=>{
    if(c.user?.login!=="github-actions[bot]"||
-      c.user?.id!==41898282||!utc(c.created_at)||
+      c.user?.id!==41898282||!githubUtc(c.created_at)||
       typeof c.body!=="string"||
       !c.body.startsWith(GATE4_ARMED_COMMENT_MARKER_V39))
      return false;
