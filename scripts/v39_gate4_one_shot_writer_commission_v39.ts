@@ -22,12 +22,17 @@ const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const DIR=join(homedir(),".config","replittranvr","gate4-owner-20261022");
 const FILE=join(DIR,"writer-20261023.json");
 const SHA=/^[a-f0-9]{40}$/;
+const HASH=/^[a-f0-9]{64}$/;
+const UUID=/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
+const ICAO=/^[A-Z]{4}$/;
+const TABLE="clean.gate4_alert_owned_binding_v39";
 const CONFIRM="COMMISSION_ONE_SHOT_V0072_WRITER_NO_PROVIDER";
 const REVOKE_CONFIRM="DISABLE_ONE_SHOT_V0072_WRITER_NO_PROVIDER";
 const err=(code:string):never=>{throw Error("GATE4_WRITER_"+code+"_HOLD");};
 type Facts={
  db:string;owner:string;canCreateRole:boolean;schemaCreate:boolean;
  superuser:boolean;tableExists:boolean;ownedRows:number;writerExists:boolean;
+ rlsEnabled:boolean;policyCount:number;
 };
 async function facts(c:pg.Client):Promise<Facts>{
  const z=(await c.query(
@@ -39,13 +44,24 @@ async function facts(c:pg.Client):Promise<Facts>{
   "(SELECT count(*)::int FROM pg_roles WHERE rolname=$1) AS num_roles",
   [ROLE]
  )).rows[0];
- let count=-1;
- if(z.has_table)count=(await c.query(
-  "SELECT count(*)::int AS n FROM clean.gate4_alert_owned_binding_v39"
- )).rows[0].n;
+ let count=-1,rlsEnabled=false,policyCount=-1;
+ if(z.has_table){
+  count=(await c.query(
+   "SELECT count(*)::int AS n FROM clean.gate4_alert_owned_binding_v39"
+  )).rows[0].n;
+  rlsEnabled=(await c.query(
+   "SELECT relrowsecurity FROM pg_class WHERE oid=$1::regclass",
+   [TABLE]
+  )).rows[0].relrowsecurity;
+  policyCount=(await c.query(
+   "SELECT count(*)::int AS n FROM pg_policies "+
+   "WHERE schemaname='clean' AND tablename='gate4_alert_owned_binding_v39'"
+  )).rows[0].n;
+ }
  return {db:z.db,owner:z.owner,canCreateRole:z.can_role,
   schemaCreate:z.can_ddl,superuser:z.superuser,
-  tableExists:z.has_table,ownedRows:count,writerExists:z.num_roles!==0};
+  tableExists:z.has_table,ownedRows:count,writerExists:z.num_roles!==0,
+  rlsEnabled,policyCount};
 }
 function approvedOwner(x:Facts,ownerUrl:string,receiverUrl:string):boolean{
  try{
@@ -55,6 +71,7 @@ function approvedOwner(x:Facts,ownerUrl:string,receiverUrl:string):boolean{
   return target(a)===target(b)&&x.db==="neondb"&&
     x.canCreateRole===true&&x.superuser===false&&
     x.tableExists===true&&x.ownedRows===0&&!x.writerExists&&
+    x.rlsEnabled===false&&x.policyCount===0&&
     x.owner===decodeURIComponent(a.username)&&
     x.owner!==decodeURIComponent(b.username);
  }catch{return false;}
@@ -100,6 +117,9 @@ async function run(){
       err("REVOKE_EXPLICIT_CONFIRM_MISSING");
     await c.query("BEGIN");tx=true;
     await c.query("SELECT pg_advisory_xact_lock(3904,20261023)");
+    // Removing writer policies does NOT remove reader SELECT policy.
+    await c.query("DROP POLICY IF EXISTS gate4_writer_select_20261023 ON "+TABLE);
+    await c.query("DROP POLICY IF EXISTS gate4_writer_insert_20261023 ON "+TABLE);
     await c.query("REVOKE SELECT,INSERT ON TABLE "+
       "clean.gate4_alert_owned_binding_v39 FROM "+ROLE);
     await c.query("REVOKE USAGE ON SCHEMA clean FROM "+ROLE);
@@ -132,6 +152,17 @@ async function run(){
   if(mode!=="--apply")return;
   if(process.env.GATE4_WRITER_APPLY_CONFIRM!==CONFIRM)
     err("EXPLICIT_APPLY_CONFIRMATION_MISSING");
+  // This writer MUST be database-scoped to one independent approved trial.
+  // No broad INSERT grant is permitted without exact source/AUTH/ICAO/UUID.
+  const scope=process.env.GATE4_WRITER_APPROVED_SCOPE_ID??"";
+  const auth=process.env.GATE4_WRITER_APPROVED_AUTH_SHA256??"";
+  const source=process.env.GATE4_WRITER_APPROVED_MAIN_SHA??"";
+  const icao=process.env.GATE4_WRITER_APPROVED_AIRPORT_ICAO??"";
+  if(!UUID.test(scope)||!HASH.test(auth)||!SHA.test(source)||
+     !ICAO.test(icao)||source===head)
+    err("INDEPENDENT_APPROVED_TRIAL_SCOPE_REQUIRED");
+  // The approved main SHA is distinct from this DRAFT commissioning source.
+  // It must come from a separately verified main/STOP release, not this file.
   if(existsSync(FILE))err("PRIVATE_CREDENTIAL_ALREADY_EXISTS");
   const parent=statSync(DIR);
   if((parent.mode&0o077)!==0)err("PRIVATE_DIR_PERMISSIONS");
@@ -145,6 +176,7 @@ async function run(){
   writeFileSync(FILE,JSON.stringify({
    schema:"v39.gate4.one-shot-writer-credential.v1",
    reviewedSource:head,role:ROLE,expiresUtc:expiry,
+   approvedMain:source,approvedScope:scope,approvedAuth:auth,approvedIcao:icao,
    writerUrl:scoped.toString(),
    warning:"PRIVATE. No repo/chat/CI. Revoke after one exact scope."
   },null,2)+"\n",{flag:"wx",mode:0o600});
@@ -162,9 +194,37 @@ async function run(){
    "' VALID UNTIL '"+expiry+"'");
   await c.query("GRANT CONNECT ON DATABASE neondb TO "+ROLE);
   await c.query("GRANT USAGE ON SCHEMA clean TO "+ROLE);
+  // Enable one-table RLS atomically with these three narrow policies.
+  // The already-restricted GitHub safety reader must retain SELECT,
+  // while this writer can only see/INSERT the ONE approved UUID/AUTH/source.
+  const predicate="scope_id='"+scope+"'::uuid"+
+    " AND authorization_sha256='"+auth+"'"+
+    " AND source_commit='"+source+"'"+
+    " AND airport_icao='"+icao+"'";
+  await c.query("ALTER TABLE "+TABLE+" ENABLE ROW LEVEL SECURITY");
   await c.query(
-   "GRANT SELECT,INSERT ON TABLE clean.gate4_alert_owned_binding_v39 TO "+ROLE
+    "CREATE POLICY gate4_safety_select_v39 ON "+TABLE+
+    " FOR SELECT TO gate4_safety_reader_20261022 USING (true)"
   );
+  await c.query(
+    "CREATE POLICY gate4_writer_select_20261023 ON "+TABLE+
+    " FOR SELECT TO "+ROLE+" USING ("+predicate+")"
+  );
+  await c.query(
+    "CREATE POLICY gate4_writer_insert_20261023 ON "+TABLE+
+    " FOR INSERT TO "+ROLE+" WITH CHECK ("+predicate+")"
+  );
+  await c.query(
+   "GRANT SELECT,INSERT ON TABLE "+TABLE+" TO "+ROLE
+  );
+  const rowPolicy=(await c.query(
+    "SELECT c.relrowsecurity AS enabled,"+
+    "(SELECT count(*)::int FROM pg_policies WHERE schemaname='clean' "+
+      "AND tablename='gate4_alert_owned_binding_v39') AS policy_count "+
+    "FROM pg_class c WHERE c.oid=$1::regclass",[TABLE]
+  )).rows[0];
+  if(rowPolicy?.enabled!==true||rowPolicy.policy_count!==3)
+    err("SCOPED_RLS_NOT_INSTALLED");
   const p=(await c.query(
    "SELECT has_table_privilege($1,'clean.gate4_alert_owned_binding_v39','SELECT') AS r,"+
    "has_table_privilege($1,'clean.gate4_alert_owned_binding_v39','INSERT') AS w,"+
