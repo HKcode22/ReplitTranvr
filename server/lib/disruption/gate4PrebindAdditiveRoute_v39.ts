@@ -20,13 +20,24 @@ import {createGate4PrebindPgStoreV39} from "./gate4PrebindPgStore_v39";
 const name=/^gate4_receiver_[a-z0-9_]{4,60}$/;
 type Config={scope:Gate4PrebindScopeV39;secret:string;databaseUrl:string;dbRole:string};
 function fail():never{throw Error("GATE4_PREBIND_ADDON_CONFIG_HOLD");}
+/**
+ * Production scripts/build.ts injects process.env.V39_DEPLOYED_GIT_HEAD
+ * into the server binary from reviewed Git HEAD. Never depend on a manually
+ * maintained Replit Secret for this build identity. The explicit optional pin
+ * remains a fail-closed FREEZE when a specific source is under review.
+ *
+ * In unit tests only, builtGitHead can be supplied as the audited fixture.
+ * No inferred source ID authorizes provider CREATE, DELETE or any paid run.
+ */
 export function gate4PrebindAdditiveConfigV39(
- env:NodeJS.ProcessEnv
+ env:NodeJS.ProcessEnv,
+ builtGitHead=String(process.env.V39_DEPLOYED_GIT_HEAD??"")
 ):Config|null{
  if(env.V39_GATE4_PREBIND_ADD_ON_PREPAID!=="1")return null;
- const deployed=String(env.V39_DEPLOYED_GIT_HEAD??"");
+ const deployed=builtGitHead.trim().toLowerCase();
+ const approved=String(env.GATE4_PREBIND_APPROVED_SOURCE_COMMIT??"").trim();
  if(!/^[a-f0-9]{40}$/.test(deployed)||
-   deployed!==env.GATE4_PREBIND_APPROVED_SOURCE_COMMIT||
+   (approved!==""&&approved!==deployed)||
    env.GATE4_PREBIND_RELEASE_REVIEW!=="EXPLICIT_NO_PROVIDER_RECEIVER"||
    env.ADB_AUTO_COLLECT!=="false")
    return fail();
