@@ -1,0 +1,72 @@
+name: Phase3 Gate4 Locked STOP Release — NO PROVIDER
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase3-gate4-locked-stop-ci.yml"
+      - ".github/workflows/phase3-gate4-live-exact-stop-candidate.yml"
+      - "server/lib/disruption/gate4ActionsWatchdogPolicy_v39.ts"
+      - "server/lib/disruption/gate4ActionsStopIntegration_v39.ts"
+      - "scripts/v39_gate4_actions_live_stop_v39.ts"
+      - "tests/phase3_gate4_actions_watchdog_policy_v39.test.ts"
+      - "tests/phase3_gate4_actions_stop_integration_v39.test.ts"
+      - "tests/phase3_gate4_actions_live_stop_seal_v39.test.ts"
+permissions:
+  contents: read
+concurrency:
+  group: gate4-minimal-locked-stop-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  source-sealed-exact-stop:
+    name: Strict source seal, STOP tests and TypeScript (no provider)
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_ENV: test
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      V39_PHASE6_PROCESS_ARMED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Confirm no provider/DB or Phase6 and exact source
+        shell: bash
+        env:
+          EXACT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_HEAD"
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$RAPIDAPI_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          grep -q '^export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;' scripts/v39_gate4_actions_live_stop_v39.ts
+          grep -q 'workflow_dispatch:' .github/workflows/phase3-gate4-live-exact-stop-candidate.yml
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Compile all project TypeScript
+        run: npm run v39:typecheck
+      - name: Focused STOP-only no-provider tests
+        run: |
+          npx --no-install vitest run \
+            tests/phase3_gate4_actions_watchdog_policy_v39.test.ts \
+            tests/phase3_gate4_actions_stop_integration_v39.test.ts \
+            tests/phase3_gate4_actions_live_stop_seal_v39.test.ts
+      - name: Prevent misinterpretation of PASS
+        if: always()
+        run: |
+          {
+            echo '## Gate4 LOCKED STOP: offline test only'
+            echo 'No provider/DB/Phase6 keys; no real STOP started.'
+            echo 'The STOP release flag remains false; no billing hard cap.'
+            echo 'A later separately reviewed operator release is REQUIRED.'
+          } >> "$GITHUB_STEP_SUMMARY"
