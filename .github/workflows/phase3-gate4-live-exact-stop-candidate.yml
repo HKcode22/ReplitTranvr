@@ -67,10 +67,6 @@ jobs:
       GATE4_SAFETY_APPROVED_SCOPE: ${{ inputs.scope_id }}
       GATE4_SAFETY_APPROVED_AUTH: ${{ inputs.authorization_sha256 }}
       GATE4_SAFETY_APPROVED_ICAO: ${{ inputs.airport_icao }}
-      # Not yet configured in gate4-safety. Never put secret values in PR.
-      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
-      GATE4_SAFETY_READONLY_DATABASE_URL: ${{ secrets.GATE4_SAFETY_READONLY_DATABASE_URL }}
-      GATE4_SAFETY_EXPECTED_DB_HOST: ${{ secrets.GATE4_SAFETY_EXPECTED_DB_HOST }}
       DATABASE_URL: ""
       V39_DATABASE_RUNTIME_URL: ""
     steps:
@@ -96,20 +92,34 @@ jobs:
       - name: Run reviewed STOP-only implementation (currently SOURCE SEALED)
         shell: bash
         env:
+          # Workflow-dispatch strings are data, never interpolated into a shell script.
           CONFIRM: ${{ inputs.confirmation }}
+          SCOPE_ID: ${{ inputs.scope_id }}
+          AUTH_SHA: ${{ inputs.authorization_sha256 }}
+          ICAO: ${{ inputs.airport_icao }}
+          START_UTC: ${{ inputs.start_utc }}
+          STOP_UTC: ${{ inputs.stop_utc }}
+          STARTING_CREDITS: ${{ inputs.starting_credits }}
+          SOFT_TARGET: ${{ inputs.soft_target }}
+          PROTECTED_FLOOR: ${{ inputs.protected_floor }}
+          # Keep provider key and narrow DB credential out of checkout/npm steps.
+          # Still SOURCE-SEALED and not a real paid or armed STOP release.
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          GATE4_SAFETY_READONLY_DATABASE_URL: ${{ secrets.GATE4_SAFETY_READONLY_DATABASE_URL }}
+          GATE4_SAFETY_EXPECTED_DB_HOST: ${{ secrets.GATE4_SAFETY_EXPECTED_DB_HOST }}
         run: |
           set -Eeuo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node --import tsx scripts/v39_gate4_actions_live_stop_v39.ts \
             --head "$GITHUB_SHA" \
-            --scope "${{ inputs.scope_id }}" \
-            --auth "${{ inputs.authorization_sha256 }}" \
-            --icao "${{ inputs.airport_icao }}" \
-            --start "${{ inputs.start_utc }}" \
-            --stop "${{ inputs.stop_utc }}" \
-            --balance "${{ inputs.starting_credits }}" \
-            --soft "${{ inputs.soft_target }}" \
-            --floor "${{ inputs.protected_floor }}" \
+            --scope "$SCOPE_ID" \
+            --auth "$AUTH_SHA" \
+            --icao "$ICAO" \
+            --start "$START_UTC" \
+            --stop "$STOP_UTC" \
+            --balance "$STARTING_CREDITS" \
+            --soft "$SOFT_TARGET" \
+            --floor "$PROTECTED_FLOOR" \
             --confirm "$CONFIRM"
       - name: Honest STOP status summary
         if: always()
