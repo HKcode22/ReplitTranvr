@@ -9,7 +9,7 @@
  * transport, billing, independent STOP, durable backup or provider receipt.
  */
 import {createHash} from "node:crypto";
-import type {Pool} from "pg";
+import type {Pool,PoolClient} from "pg";
 import type {
  Gate4PrebindOriginalV39,Gate4PrebindOriginalStoreV39,
  Gate4PrebindReceiptV39
@@ -57,7 +57,7 @@ export function createGate4PrebindPgStoreV39(
       // Never print SQL text, connection URLs, raw wire, ID or credentials.
       // Fixed stage + validated SQLSTATE are sufficient for operational
       // diagnosis of a genuine hosted 503 without revealing provider data.
-      let client:Awaited<ReturnType<typeof pool.connect>>;
+      let client:PoolClient;
       try{client=await pool.connect();}
       catch(e){
         logSafeGate4SqlFailureV39("ACQUIRE",e);
