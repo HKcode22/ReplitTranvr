@@ -69,7 +69,7 @@ export function gate4ReviewIndependentArmedProofV39(args:{
     run.workflow_id!==workflowId) return false;
  const live=jobs.some(j=>j.run_id===runId&&
     j.name==="gate4-live-stop"&&j.status==="in_progress"&&
-    j.steps?.some(s=>s.name===
+    j.steps?.some((s:{name?:string;status?:string})=>s.name===
       "Run protected STOP-only implementation (no CREATE)"&&
       s.status==="in_progress"));
  if(!live)return false;
