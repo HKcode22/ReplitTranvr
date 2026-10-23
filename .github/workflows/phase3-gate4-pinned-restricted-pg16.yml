@@ -1,0 +1,90 @@
+name: Gate4 Pinned Restricted-Writer PG16 — Disposable Only
+# No production DB, paid provider key, CREATE/DELETE, live STOP or publish.
+# A one-file, non-merge test PR checks out the exact reviewed draft Git SHA.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase3-gate4-pinned-restricted-pg16.yml"
+permissions:
+  contents: read
+concurrency:
+  group: gate4-pinned-restricted-pg16-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  gate4-pg16-restricted-writer:
+    name: Genuine PostgreSQL16 RLS + writer + reader, no provider
+    if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gate4_fixture
+          POSTGRES_PASSWORD: only_for_ci
+          POSTGRES_DB: gate4_prebind_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gate4_fixture -d gate4_prebind_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      GATE4_PREBIND_PG_TEST_URL: "postgresql://gate4_fixture:only_for_ci@127.0.0.1:5432/gate4_prebind_ci"
+      AERODATABOX_API_KEY: ""
+      RAPIDAPI_KEY: ""
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      V39_PRODUCTION_DATABASE_OWNER_URL: ""
+      GATE4_WRITER_APPLY_CONFIRM: ""
+      GATE4_WRITER_REVOKE_CONFIRM: ""
+      GATE4_TRIAL_PAID_AUTHORIZATION: ""
+    steps:
+      - name: Validate zero-provider and nonproduction environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -z "$AERODATABOX_API_KEY"
+          test -z "$RAPIDAPI_KEY"
+          test -z "$DATABASE_URL"
+          test -z "$V39_DATABASE_RUNTIME_URL"
+          test -z "$V39_PRODUCTION_DATABASE_OWNER_URL"
+          test -z "$GATE4_WRITER_APPLY_CONFIRM"
+          test -z "$GATE4_WRITER_REVOKE_CONFIRM"
+      - name: Checkout pinned existing Gate4 draft source (not main or the CI PR)
+        uses: actions/checkout@v4
+        with:
+          ref: "518b0f658b733ebab576718723a2159e8c01b48d"
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Assert reviewed draft checkout
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "518b0f658b733ebab576718723a2159e8c01b48d"
+          test -f tests/phase3_gate4_prebind_real_pg_v39.test.ts
+          test -f server/lib/disruption/gate4OwnedBindingPgStore_v39.ts
+          test -z "$AERODATABOX_API_KEY"
+      - name: Install dependencies without external credentials
+        run: npm ci --no-audit --no-fund
+      - name: Real disposable PostgreSQL16 scoped owner writer/RLS test
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx --no-install vitest run tests/phase3_gate4_prebind_real_pg_v39.test.ts
+          echo "GATE4_PINNED_DISPOSABLE_PG_WRITER_VERIFIED"
+          echo "PROVIDER_REQUESTS=0"
+          echo "PRODUCTION_DATABASE_WRITES=0"
+      - name: Report restricted database test limitations
+        if: always()
+        run: |
+          {
+            echo '## Gate4 disposable PostgreSQL16'
+            echo 'Exact pinned research source: 518b0f658b733ebab576718723a2159e8c01b48d.'
+            echo 'Only an ephemeral service DB used; no production credentials.'
+            echo 'No AeroDataBox, no subscription ID, no external STOP ARMING.'
+            echo 'This is PG writer/RLS privilege evidence, not Gate4 paid readiness.'
+          } >> "$GITHUB_STEP_SUMMARY"
