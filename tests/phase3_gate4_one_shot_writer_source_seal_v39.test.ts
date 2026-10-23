@@ -6,7 +6,7 @@ const src=readFileSync(new URL(
 
 describe("Gate4 writer production commissioning source guard — NO PROVIDER",()=>{
  it("source is explicit plan/apply only, not auto-running on import",()=>{
-  expect(src).toContain('["--plan","--apply"].includes(mode)');
+  expect(src).toContain('["--plan","--apply","--revoke"].includes(mode)');
   expect(src).toContain(
    'import.meta.url===pathToFileURL(process.argv[1]).href');
   expect(src).toContain('if(mode!=="--apply")return;');
@@ -36,6 +36,14 @@ describe("Gate4 writer production commissioning source guard — NO PROVIDER",()
    "GRANT DELETE ON TABLE clean.gate4_alert_owned_binding_v39");
   expect(src).toContain("p.u!==false||p.d!==false||");
   expect(src).toContain("p.raw!==false||p.privilege_escalation!==false");
+ });
+ it("has separately confirmed writer NOLOGIN and privilege-revoke path",()=>{
+  expect(src).toContain('mode==="--revoke"');
+  expect(src).toContain("GATE4_WRITER_REVOKE_CONFIRM");
+  expect(src).toContain("DISABLE_ONE_SHOT_V0072_WRITER_NO_PROVIDER");
+  expect(src).toContain('"REVOKE SELECT,INSERT ON TABLE "');
+  expect(src).toContain('"ALTER ROLE "+ROLE+" NOLOGIN"');
+  expect(src).toContain('if(check.r!==false||check.w!==false||check.login!==false)');
  });
  it("writes credential only outside repo in private file; 24h expiry",()=>{
   expect(src).toContain('"writer-20261023.json"');
