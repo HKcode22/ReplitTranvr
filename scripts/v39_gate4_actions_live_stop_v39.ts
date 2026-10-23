@@ -1,8 +1,8 @@
 /**
- * DRAFT: one continuously running Actions STOP watcher for ONE Gate4 trial.
- * SOURCE SEAL CLOSED: cannot call provider or DB until separately reviewed
- * Gate4 runtime release. Unlike the no-provider rehearsal, after release
- * this would perform strict free GET/LIST and exact-owned provider DELETE.
+ * Reviewed opt-in exact-ID STOP watcher for ONE Gate4 trial.
+ * SOURCE RELEASED: still requires protected GH environment reviewer,
+ * exact two-source pins, approved narrow window and manual dispatch. It
+ * performs strict free GET/LIST and only exact-owned provider DELETE.
  * No subscription CREATE code; no cron and no Phase6 owner.
  *
  * Caveats: Github runner can stop unexpectedly; callbacks may be charged on
@@ -24,9 +24,9 @@ import {
   reviewGate4ActionsWatchScopeV39,type Gate4ActionsWatchScopeV39
 } from "../server/lib/disruption/gate4ActionsWatchdogPolicy_v39";
 
-// Changing this constant is a distinct owner-reviewed paid-risk release;
-// a workflow_dispatch input or environment variable CANNOT open the seal.
-export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;
+// This ONLY unlocks protected manual STOP admission, NOT CREATE permission.
+// A workflow_dispatch input or environment variable cannot change source.
+export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=true;
 const EXACT_CONFIRM="WATCH_G4_EXACT_ID_STOP_NO_CREATE";
 /** A missing or disputed owner after CREATE is an emergency human
  * reconciliation incident. No ID is guessed or deleted. No second CREATE.
@@ -66,6 +66,23 @@ export function gate4PublishedReceiverMatchesStopScopeV39(
 // No user-controlled URL or credential is sent to the public health endpoint.
 const RECEIVER_STATUS_URL=
  "https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime";
+/**
+ * The CREATE HTTP response and the owner-only V0072 INSERT are not atomic.
+ * A STOP that sees the billable subscription in this brief gap must allow
+ * a short database-only readback window instead of exiting immediately.
+ * After the bound, hard deadline or failed DB read: fail closed; never infer
+ * an owner ID from the provider LIST.
+ */
+export const GATE4_POSITIVE_OWNER_BIND_GRACE_MS=8_000;
+export function gate4MayWaitForPositiveOwnerBindingV39(
+  result:Pick<Gate4StopTickResultV39,"status"|"reason">,
+  nowMs:number,stopMs:number
+):boolean{
+ return result.status==="HOLD_OWNER_REQUIRED"&&
+   result.reason==="BILLABLE_ACTIVE_WITHOUT_OWNER_ID"&&
+   Number.isSafeInteger(nowMs)&&Number.isSafeInteger(stopMs)&&
+   nowMs<stopMs;
+}
 const sleep=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms));
 const name=/^gate4_safety_reader_[a-z0-9_]{4,60}$/;
 function hold(reason:string):never{throw Error("GATE4_ACTIONS_"+reason+"_HOLD");}
@@ -237,6 +254,26 @@ export async function runGate4LiveStopWatchV39(
            maxAttempts:3
          })
        });
+     if(gate4MayWaitForPositiveOwnerBindingV39(outcome,Date.now(),stop)){
+       // At most eight seconds. No extra provider LIST, balance GET, CREATE,
+       // or DELETE; only exact-scope V0072 SELECT on restricted safety role.
+       const graceEnd=Math.min(
+         Date.now()+GATE4_POSITIVE_OWNER_BIND_GRACE_MS,stop);
+       console.warn(JSON.stringify({
+         status:"GATE4_POSITIVE_OWNER_BIND_GRACE_NO_PROVIDER",
+         maxGraceMs:GATE4_POSITIVE_OWNER_BIND_GRACE_MS
+       }));
+       let ownerAppeared=false;
+       while(Date.now()<graceEnd){
+         await sleep(1_000);
+         const r=await client.query(query,[scope.scopeId]);
+         if(r.rows.length>1)hold("AMBIGUOUS_OWNER_ROWS_IN_BIND_GRACE");
+         if(r.rows.length===1){ownerAppeared=true;break;}
+       }
+       // Next tick must independently verify all pinned owner fields and
+       // strict provider state before it may STOP any exact-owned ID.
+       if(ownerAppeared)continue;
+     }
      if(outcome.status==="STOPPED_EXACT_PENDING_SETTLEMENT"){
        console.log(JSON.stringify({
          status:outcome.status,exactStopVerified:true,

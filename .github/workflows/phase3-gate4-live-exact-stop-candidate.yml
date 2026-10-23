@@ -1,8 +1,9 @@
-name: Phase3 Gate4 Exact-Owned STOP Candidate — LOCKED
+name: Phase3 Gate4 Exact-Owned STOP — PROTECTED MANUAL
 
-# DRAFT. Manual only. Not a paid CREATE operator. Script's immutable
-# GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false rejects before API/PG I/O.
-# Releasing this requires a separate code review and owner approval.
+# MANUAL STOP-ONLY. Not a subscription CREATE operator. Entry requires
+# protected gate4-safety review, exact independently approved runner and
+# receiver source SHAs, WSSS scope, UTC window and credit limits.
+# No provider CREATE is present in this workflow.
 on:
   workflow_dispatch:
     inputs:
@@ -100,7 +101,7 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - name: Run reviewed STOP-only implementation (currently SOURCE SEALED)
+      - name: Run protected STOP-only implementation (no CREATE)
         shell: bash
         env:
           # Workflow-dispatch strings are data, never interpolated into a shell script.
@@ -114,7 +115,7 @@ jobs:
           SOFT_TARGET: ${{ inputs.soft_target }}
           PROTECTED_FLOOR: ${{ inputs.protected_floor }}
           # Keep provider key and narrow DB credential out of checkout/npm steps.
-          # Still SOURCE-SEALED and not a real paid or armed STOP release.
+          # Only available within the protected reviewed STOP-only step.
           AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
           GATE4_SAFETY_READONLY_DATABASE_URL: ${{ secrets.GATE4_SAFETY_READONLY_DATABASE_URL }}
           GATE4_SAFETY_EXPECTED_DB_HOST: ${{ secrets.GATE4_SAFETY_EXPECTED_DB_HOST }}
@@ -136,8 +137,8 @@ jobs:
         if: always()
         run: |
           {
-            echo '## Gate4 exact-owned STOP — draft/manual'
-            echo 'This candidate is SOURCE-SEALED and NOT paid/live-authorized.'
+            echo '## Gate4 exact-owned STOP — protected manual'
+            echo 'A launched job is NOT proof of ARMED: inspect the actual runner output.'
             echo 'If run failed, never claim exact provider STOP or completed settlement.'
             echo 'Provider hard billing cap is NOT guaranteed.'
             echo 'A job starting or being green is NOT a provider CREATE permission.'

@@ -64,7 +64,7 @@ jobs:
           test -z "$V39_PRODUCTION_DATABASE_OWNER_URL"
           test -z "$GATE4_WRITER_APPLY_CONFIRM"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          grep -q '^export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;' scripts/v39_gate4_actions_live_stop_v39.ts
+          grep -q '^export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=true;' scripts/v39_gate4_actions_live_stop_v39.ts
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: No-provider TypeScript source and standalone writer
         run: |

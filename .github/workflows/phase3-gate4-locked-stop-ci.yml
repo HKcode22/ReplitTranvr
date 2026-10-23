@@ -14,11 +14,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: gate4-minimal-locked-stop-${{ github.event.pull_request.number }}
+  group: gate4-protected-stop-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 jobs:
   source-sealed-exact-stop:
-    name: Strict source seal, STOP tests and TypeScript (no provider)
+    name: Protected STOP-only source, tests and TypeScript (no provider)
     if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -50,7 +50,7 @@ jobs:
           test -z "$DATABASE_URL"
           test -z "$V39_DATABASE_RUNTIME_URL"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
-          grep -q '^export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;' scripts/v39_gate4_actions_live_stop_v39.ts
+          grep -q '^export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=true;' scripts/v39_gate4_actions_live_stop_v39.ts
           grep -q 'workflow_dispatch:' .github/workflows/phase3-gate4-live-exact-stop-candidate.yml
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Compile all project TypeScript
@@ -65,7 +65,7 @@ jobs:
         if: always()
         run: |
           {
-            echo '## Gate4 LOCKED STOP: offline test only'
+            echo '## Gate4 protected STOP: offline test only; never dispatched'
             echo 'No provider/DB/Phase6 keys; no real STOP started.'
             echo 'The STOP release flag remains false; no billing hard cap.'
             echo 'A later separately reviewed operator release is REQUIRED.'
