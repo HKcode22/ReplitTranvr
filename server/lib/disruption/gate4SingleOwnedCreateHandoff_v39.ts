@@ -47,9 +47,9 @@ export type Gate4HandoffResultV39=Readonly<{
  creditSettlementVerified:false;
 }>;
 const validId=/^[A-Za-z0-9_-]{6,128}$/;
-const hold=(reason:string):never=>{
+function hold(reason:string):never{
  throw Error("GATE4_HANDOFF_"+reason+"_HOLD");
-};
+}
 function matches(s:WebhookSubscription|null,
  scope:Gate4ActionsWatchScopeV39):s is WebhookSubscription{
  return !!s&&validId.test(s.id)&&s.isActive===true&&
@@ -94,14 +94,17 @@ export async function runGate4SingleOwnedCreateHandoffV39(
  try{response=await deps.createExactlyOne();}
  catch{/* unconfirmed provider CREATE */}
  const created=response?.subscription??null;
- if(!receiptSha.test(response?.rawCreateResponseSha256??"")||
-    !matches(created,scope)){
+ if(!matches(created,scope)){
    try{await deps.recordIncident("CREATE_RESPONSE_AMBIGUOUS",false,true);}
    catch{/* still unsafe */}
    hold("UNKNOWN_CREATE_RESULT_OPERATOR_RESCUE");
  }
  const id=created.id; // Positive CREATE response only; never webhook/LIST.
  try{
+   // A valid known provider-created ID with malformed/missing raw receipt
+   // must be exact-deleted, NOT misclassified as an unknown subscription.
+   if(!receiptSha.test(response?.rawCreateResponseSha256??""))
+     hold("POSITIVE_ID_WITH_UNVERIFIED_RECEIPT");
    const e=await deps.prepareIndependentEvidence(created);
    if(!e?.binding||e.binding.subscriptionId!==id||
       e.binding.reviewedCreateReceiptSha256!==response?.rawCreateResponseSha256||
