@@ -194,7 +194,43 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
       await safety.query("RESET ROLE").catch(()=>undefined);
       safety.release();
     }
-    const bindStore=createGate4OwnedBindingPgStoreV39(pool);
+    // The adapter MUST work through a truly separate least-privilege
+    // connection: INSERT+SELECT only, NOT the fixture DB owner.
+    await pool.query(
+      "CREATE ROLE gate4_writer_ci LOGIN NOINHERIT "+
+      "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS "+
+      "PASSWORD 'disposable_writer_only'"
+    );
+    await pool.query("GRANT CONNECT ON DATABASE gate4_prebind_ci TO gate4_writer_ci");
+    await pool.query("GRANT USAGE ON SCHEMA clean TO gate4_writer_ci");
+    await pool.query("GRANT SELECT,INSERT ON TABLE "+
+      "clean.gate4_alert_owned_binding_v39 TO gate4_writer_ci");
+    const writerUrl=localUrl.replace(
+      "gate4_fixture:only_for_ci",
+      "gate4_writer_ci:disposable_writer_only");
+    expect(writerUrl).not.toBe(localUrl);
+    const writerPool=new pg.Pool({
+      connectionString:writerUrl,max:3,connectionTimeoutMillis:5000
+    });
+    try {
+      const priv=(await writerPool.query(
+        "SELECT current_user AS actor,"+
+        "has_table_privilege(current_user,"+
+        "'clean.gate4_alert_owned_binding_v39','SELECT') AS can_read,"+
+        "has_table_privilege(current_user,"+
+        "'clean.gate4_alert_owned_binding_v39','INSERT') AS can_insert,"+
+        "has_table_privilege(current_user,"+
+        "'clean.gate4_alert_owned_binding_v39','UPDATE') AS can_update,"+
+        "has_table_privilege(current_user,"+
+        "'clean.gate4_alert_owned_binding_v39','DELETE') AS can_delete,"+
+        "has_table_privilege(current_user,"+
+        "'clean.gate4_alert_prebind_original_v39','SELECT') AS raw_read"
+      )).rows[0];
+      expect(priv).toEqual({
+        actor:"gate4_writer_ci",can_read:true,can_insert:true,
+        can_update:false,can_delete:false,raw_read:false
+      });
+      const bindStore=createGate4OwnedBindingPgStoreV39(writerPool);
     const binding={
       ...scope,subscriptionId:"exactOwned99",
       reviewedCreateReceiptSha256:"c".repeat(64),
@@ -229,6 +265,21 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
     expect((await pool.query(
       "SELECT count(*)::int AS n FROM clean.gate4_alert_owned_binding_v39"
     )).rows[0].n).toBe(1);
+      const watch=await pool.connect();
+      try{
+        await watch.query("SET ROLE gate4_safety_reader_20261022");
+        const n=(await watch.query(
+          "SELECT count(*)::int AS n FROM clean.gate4_alert_owned_binding_v39"
+        )).rows[0].n;
+        expect(n).toBe(1);
+      }finally{
+        await watch.query("RESET ROLE").catch(()=>undefined);
+        watch.release();
+      }
+      console.log("GATE4_DISPOSABLE_PG_INSERT_SELECT_ONLY_WRITER_PASS");
+    }finally{
+      await writerPool.end();
+    }
     console.log("GATE4_DISPOSABLE_PG_RESTRICTED_ROLES_AND_DEFAULT_GRANTS_PASS");
     console.log("GATE4_DISPOSABLE_PG_OWNER_BIND_WRITE_ONCE_PASS");
     console.log("GATE4_DISPOSABLE_PG_ORIGINAL_AND_READBACK_PASS");
