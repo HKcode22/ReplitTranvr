@@ -2,6 +2,7 @@ import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
 import {
  GATE4_ACTIONS_LIVE_STOP_RELEASED_V39,
+ gate4PublishedReceiverMatchesStopScopeV39,
  gate4IndependentApprovalPinsMatchV39,
  gate4StopRunnerTerminalHoldV39,
  reviewGate4LiveWatchLaunchV39,runGate4LiveStopWatchV39
@@ -107,5 +108,61 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
   await expect(runGate4LiveStopWatchV39(scope,
     "WATCH_G4_EXACT_ID_STOP_NO_CREATE",{}))
     .rejects.toThrow("GATE4_ACTIONS_RELEASE_OR_ENV_NOT_APPROVED_HOLD");
+ });
+});
+
+describe("Gate4 independent STOP published receiver identity before paid trial",()=>{
+ const reported={
+   status:"PASS",git_head:scope.sourceCommit,
+   published_deployment:true,prepaid_route_registered:true,
+   gate4_alert_ingress_registered:true,
+   gate4_alert_callback_proven:false,
+   runtime_owner_mode:"replit-published-deployment",
+   provider_mutation:false
+ };
+ it("accepts source and both registered routes; does not require fake provider callback proof",()=>{
+   expect(gate4PublishedReceiverMatchesStopScopeV39(
+     reported,scope.sourceCommit)).toBe(true);
+ });
+ it("rejects older deployed Replit source, even if HTTP health is PASS",()=>{
+   expect(gate4PublishedReceiverMatchesStopScopeV39(
+     {...reported,git_head:"e655b009dc4d5bd349f2340ee90f6beb18b51896"},
+     scope.sourceCommit)).toBe(false);
+ });
+ it("rejects missing Alert ingress, offline app, failed health or wrong mode",()=>{
+   for(const patch of [
+     {gate4_alert_ingress_registered:false},
+     {prepaid_route_registered:false},
+     {published_deployment:false},
+     {status:"FAIL"},
+     {runtime_owner_mode:"replit-managed-project"},
+     {provider_mutation:true}
+   ]){
+     expect(gate4PublishedReceiverMatchesStopScopeV39(
+       {...reported,...patch},scope.sourceCommit)).toBe(false);
+   }
+ });
+ it("rejects malformed, missing or spoofed public status",()=>{
+   for(const payload of [null,undefined,[],{},{
+     ...reported,git_head:null
+   }]){
+     expect(gate4PublishedReceiverMatchesStopScopeV39(
+       payload,scope.sourceCommit)).toBe(false);
+   }
+   expect(gate4PublishedReceiverMatchesStopScopeV39(
+     reported,"INVALID")).toBe(false);
+ });
+ it("guard runs after source seal and before provider/Neon connections",()=>{
+   const src=readFileSync(new URL(
+     "../scripts/v39_gate4_actions_live_stop_v39.ts",import.meta.url),"utf8");
+   const live=src.indexOf("export async function runGate4LiveStopWatchV39(");
+   const body=src.slice(live);
+   expect(body.indexOf("reviewGate4LiveWatchLaunchV39("))
+     .toBeLessThan(body.indexOf("fetch(RECEIVER_STATUS_URL,"));
+   expect(body.indexOf("fetch(RECEIVER_STATUS_URL,"))
+     .toBeLessThan(body.indexOf("new pg.Client("));
+   expect(body.indexOf("fetch(RECEIVER_STATUS_URL,"))
+     .toBeLessThan(body.indexOf("listSubscriptionsStrictWithRetry()"));
+   expect(src).toContain("GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false;");
  });
 });
