@@ -11,10 +11,10 @@
  */
 import {randomBytes} from "node:crypto";
 import {execFileSync} from "node:child_process";
-import {readFileSync,writeFileSync,mkdirSync,existsSync,statSync} from "node:fs";
+import {writeFileSync,existsSync,statSync} from "node:fs";
 import {join,resolve,dirname} from "node:path";
 import {homedir} from "node:os";
-import {fileURLToPath} from "node:url";
+import {fileURLToPath,pathToFileURL} from "node:url";
 import pg from "pg";
 
 const ROLE="gate4_owner_writer_20261023";
@@ -100,7 +100,6 @@ async function run(){
   if((parent.mode&0o077)!==0)err("PRIVATE_DIR_PERMISSIONS");
   const password=randomBytes(40).toString("hex");
   const expiry=new Date(Date.now()+24*60*60*1000).toISOString();
-  const owner=new URL(ownerUrl);
   const scoped=new URL(ownerUrl);
   scoped.username=ROLE;scoped.password=password;
   scoped.searchParams.set("sslmode","verify-full");
@@ -157,9 +156,11 @@ async function run(){
   throw e;
  }finally{await c.end().catch(()=>{});}
 }
-void run().catch(e=>{
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+ void run().catch(e=>{
  const code=e instanceof Error?e.message:"";
  console.error(/^GATE4_WRITER_[A-Z0-9_]+_HOLD$/.test(code)?
   code:"GATE4_WRITER_UNVERIFIED_HOLD");
  process.exitCode=2;
-});
+ });
+}
