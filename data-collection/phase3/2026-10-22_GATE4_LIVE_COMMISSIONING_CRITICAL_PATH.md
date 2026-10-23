@@ -215,3 +215,23 @@ As of the final exact-source read of `dc9a2c91ad030cfcdd963de2138e23d9f319b2b3`,
 - [Public Receiver Identity #39875473517](https://github.com/HKcode22/ReplitTranvr/actions/runs/39875473517).
 
 **This is a verified no-provider source/test milestone only.** The exact new production schema commission requires the owner's separately configured privileged Neon connection and the owner-initiated reviewed Shell --apply from detached `dc9a2c91ad030cfcdd963de2138e23d9f319b2b3`, without modifying the existing local Replit release branch. Next, an independently verified feature-disabled main deployment and eventual opt-in Alert live smoke must be established. STOP Actions code remains source-sealed, and no paid CREATE has been approved.
+
+## 2026-10-22 — V0071–V0073 ACTUALLY INSTALLED, narrow main promotion PR #99
+
+**Direct owner-executed PRODUCTION commissioning receipt (not simulation):** In Replit Shell from an isolated reviewed worktree at exact source `dc9a2c91ad030cfcdd963de2138e23d9d459b147`, the owner executed `scripts/v39_gate4_owner_commission_v39.ts --plan` then explicitly authorized `--apply`. Printed results:
+- `GATE4_OWNER_SCOPE_AND_TARGET_PASS` twice; DB owner verified `neondb`, target matched standard runtime, permitted `CREATE` schema tables and restricted LOGIN roles; both V0071/V0072 tables and Gate4 roles initially absent
+- **`GATE4_V0071_V0072_V0073_COMMITTED_RESTRICTED_ROLES_VERIFIED`** with `newRoles=2`, `newTables=2`, `ownerRowCount=0`, `existingPrepaidTablesAltered=false`
+- `credentialFileWrittenOutsideRepository=true`; contents NOT shared, and script tests require 0600 mode at isolated CI; `providerCalls=0`, `deployments=0`, `phase6Starts=0`
+- Local Replit HEAD remains `7caa6bbcd481cd69a71ef1e77ab5f1bc137289c2` and published prepaid app did NOT republish. The platform SSL library emitted a warning about future `sslmode=require` semantics; new narrow role credential URLs explicitly use `sslmode=verify-full`.
+
+**Gate4 milestone 1 production schema/role installation = COMPLETE according to the operator's transaction receipt.** Do not rerun owner --apply; doing so should HOLD on already-installed roles/tables and credentials. A fresh positive read-only second-connection attestation can be taken during hosted receiver launch, not as another prerequisite to repeating the same migration.
+
+**Release isolation and why main still looked old:** Large DRAFT [PR #95](https://github.com/HKcode22/ReplitTranvr/pull/95) includes **68 changed files and ~148 commits**, many unrelated to the feature-off prepaid/Alert receiver. Created dedicated from protected `main=ffb5c142e51ab8bb3d9ce7ca944ccc1216a73814`, **13-file DRAFT [PR #99](https://github.com/HKcode22/ReplitTranvr/pull/99)** on `release/gate4-additive-receiver-no-provider-20261022` at exact source `cc7e7c83767bf9bf805dd759fa11e926f9bfe7a5`. Carries:
+- unchanged original `.replit` published build choice `V39_CALLBACK_ONLY_BUILD=1`; existing prepaid route always available
+- disabled-by-default Gate4 Alert POST add-on, raw before 2xx, separate receiver V0071 role and startup role admission, no provider CREATE/DELETE
+- staged SQL V0071–73 plus historical audited owner commission script (already applied once in Neon, never boot-auto-applied)
+- exact minimal mock HTTP test and disposable PG16 restricted role/readback test, separate [Gate4 Minimal Release CI](https://github.com/HKcode22/ReplitTranvr/actions/runs/39877022055), plus normal repo CI.
+
+**Operator path remaining:** finish PR99 CI; promote its reviewed feature-OFF source to `main` using GitHub branch protection, without force/reset. The existing local Replit `release/gate3-wsss08-9pm-20261018` is 12 behind + 1 local publish commit; preserve it and explicitly align source BEFORE clicking Replit Publish, otherwise another old prepaid build would be published. Then configure private restricted receiver URL and exact new Gate4 scope/secret, verify POST raw commit/readback against the live host with **zero provider API**. After this the live STOP workflow must be released/armed, provider CREATE-response ownership genuinely bound to V0072 (not claimed body), and an owner-approved tiny paid trial STOP+3 stable settlement balance reads performed. Gate3/Gate0.5 never rerun.
+
+**Do NOT mark Phase3 Gate4 scientifically LIVE PASS from the migrated database or a PR; this is Gate4 milestone 1 complete and one release candidate underway.** No further DB migration/DDL, paid AeroDataBox CREATE/DELETE/refill, Replit publish or Phase6 occurred during this assistant engineering pass.
