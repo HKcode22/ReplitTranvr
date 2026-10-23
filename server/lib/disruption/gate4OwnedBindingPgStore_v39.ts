@@ -50,7 +50,11 @@ export function createGate4OwnedBindingPgStoreV39(
            b.subscriptionId,b.reviewedCreateReceiptSha256,
            b.signedStopTicketSha256]
         );
-        const x=await client.query(SELECT+" FOR SHARE",[b.scopeId]);
+        // V0072 writer is deliberately INSERT+SELECT only. PostgreSQL
+        // requires UPDATE privilege for SELECT ... FOR SHARE. Uniqueness
+        // plus ON CONFLICT DO NOTHING and exact in-transaction readback
+        // protect against mismatched/duplicate inserts without UPDATE rights.
+        const x=await client.query(SELECT,[b.scopeId]);
         if(x.rows.length!==1||!same(x.rows[0],b))
           throw Error("GATE4_BIND_FOREIGN_OR_MUTATED_SCOPE_HOLD");
         await client.query("COMMIT");
