@@ -25,7 +25,8 @@ const bytes=Buffer.from(JSON.stringify({
 const digest=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const enabled={
  V39_GATE4_PREBIND_ADD_ON_PREPAID:"1",
- V39_DEPLOYED_GIT_HEAD:scope.sourceCommit,
+ // A stale editor/deployment Secret must never impersonate compiled source.
+ V39_DEPLOYED_GIT_HEAD:"c".repeat(40),
  GATE4_PREBIND_APPROVED_SOURCE_COMMIT:scope.sourceCommit,
  GATE4_PREBIND_RELEASE_REVIEW:"EXPLICIT_NO_PROVIDER_RECEIVER",
  GATE4_PREBIND_SCOPE_ID:scope.scopeId,
@@ -82,8 +83,21 @@ describe("Gate4 additive prebind on existing prepaid runtime, no provider",()=>{
    expect(gate4PrebindAlertPathV39(
     "/api/v1/webhooks/aerodatabox/secret")).toBe(true);
  });
- it("requires separate restricted login and explicit source pin",()=>{
-  expect(gate4PrebindAdditiveConfigV39(enabled)?.scope).toEqual(scope);
+ it("compiles the authoritative source SHA; optional freeze pin is fail closed",()=>{
+  // Unit fixture supplies the source SHA that production esbuild embeds.
+  const compiled=(env:NodeJS.ProcessEnv)=>gate4PrebindAdditiveConfigV39(
+    env,scope.sourceCommit
+  );
+  expect(compiled(enabled)?.scope).toEqual(scope);
+  const withoutManualPin={...enabled};
+  delete (withoutManualPin as Partial<typeof enabled>).GATE4_PREBIND_APPROVED_SOURCE_COMMIT;
+  expect(compiled(withoutManualPin)?.scope).toEqual(scope);
+  expect(()=>gate4PrebindAdditiveConfigV39(
+    withoutManualPin,""
+  )).toThrow("GATE4_PREBIND_ADDON_CONFIG_HOLD");
+  expect(()=>gate4PrebindAdditiveConfigV39(
+    withoutManualPin,"c".repeat(40)+"bad"
+  )).toThrow("GATE4_PREBIND_ADDON_CONFIG_HOLD");
   for(const x of [
     {GATE4_PREBIND_APPROVED_SOURCE_COMMIT:"c".repeat(40)},
     {GATE4_PREBIND_WEBHOOK_SECRET:"short"},
@@ -92,7 +106,7 @@ describe("Gate4 additive prebind on existing prepaid runtime, no provider",()=>{
     {GATE4_PREBIND_APPROVED_DB_HOST:"other.host"},
     {ADB_AUTO_COLLECT:"true"}
   ]){
-    expect(()=>gate4PrebindAdditiveConfigV39({...enabled,...x}))
+    expect(()=>compiled({...enabled,...x}))
       .toThrow("GATE4_PREBIND_ADDON_CONFIG_HOLD");
   }
  });
