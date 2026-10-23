@@ -276,3 +276,17 @@ After operator-reported `GATE4_PREPUBLISH_CHECK` **PASS** at pinned local review
 **Do not confuse publish status success with verified running source.** The public health `GET /__v39/workspace-runtime` could not be fetched from the assistant’s network environment. The next required evidence is a user-executed *read-only*, no-provider public GET returning **HTTP200**, `git_head=1ba5d0f35dc5a582da969a8f8dd0c04ff5c17f53`, `prepaid_route_registered=true`, `gate4_alert_ingress_registered=false`, `runtime_owner_mode=replit-published-deployment`. An unexpected SHA/route flag is a HOLD for any feature activation; do not blindly republish again.
 
 **Milestone statuses:** production DB schema+roles DONE; reviewed `main` merge DONE; local source switch/build DONE; existing Replit app feature-OFF publication **provider-verified published-success but public SHA/route health not yet attested**. Gate4 Alert feature ON / isolated original-byte hosted POST, strict signed CREATE response ID binding, released/ARMED GitHub Actions STOP and actual paid canary all remain UNFINISHED. No AeroDataBox CREATE/DELETE or provider credits were intentionally spent by the publish action, and no Phase6 action occurred.
+
+## 2026-10-22 — PUBLIC new-main published runtime health 5/5 PASS
+
+User executed live, read-only remote GET `https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime` after successful Replit deployment ID `ce096a13-62ff-4f7a-ae6f-3bc91af601d9`. **All five checks PASS** from public response:
+- `HTTP_200=PASS`
+- `SOURCE_MATCH=PASS`, `PUBLIC_HEAD=1ba5d0f35dc5a582da969a8f8dd0c04ff5c17f53` (the reviewed PR99 squash merge main)
+- `PREPAID_ROUTE=PASS`
+- `GATE4_STILL_OFF=PASS` (`gate4_alert_ingress_registered=false`)
+- `PUBLISHED_OWNER=PASS` (`runtime_owner_mode=replit-published-deployment`).
+- `GATE4_PUBLISHED_PREFLIGHT=PASS`
+
+**Milestone 2: feature-disabled Replit publication at new `main` is complete, not merely scheduled.** This proves published source/route declarations but does not imply ordinary Alert callback endpoint is active, provider ACK, external source ownership or credits. The owner has independently verified V0071/72/73 committed to existing Neon and 2 restricted roles. Next exact task: separately prepared ZERO-PROVIDER/NO-AUTH Alert receiver enablement using private production secrets and independent read-only restricted login test, then source-pinned published GET plus synthetic raw-body POST 200 and V0071 readback, while prepaid route stays registered. Use the existing Replit deployment; no Replit AI Agent, Cloudflare, new hosting or paid API mutations. Any dry-run scope/auth hash must NOT authorize later paid CREATE and must not be reused as a real source owner credential.
+
+**Remaining Gate4 gates:** (a) live Alert feature and durable original + prepaid coexistence, (b) trusted provider CREATE result to V0072 exact binding and pre-armed free GitHub Actions source-unsealed exact STOP, (c) separately authorized short paid Alert canary, exact DELETE and 3 stable balances/delivery accounting. Do not declare Phase3 Gate4 complete yet.
