@@ -5,6 +5,8 @@ import {
  gate4PublishedReceiverMatchesStopScopeV39,
  gate4IndependentRunnerSourcePinnedV39,
  gate4IndependentApprovalPinsMatchV39,
+ GATE4_POSITIVE_OWNER_BIND_GRACE_MS,
+ gate4MayWaitForPositiveOwnerBindingV39,
  gate4StopRunnerTerminalHoldV39,
  reviewGate4LiveWatchLaunchV39,runGate4LiveStopWatchV39
 } from "../scripts/v39_gate4_actions_live_stop_v39";
@@ -173,6 +175,31 @@ describe("Gate4 Actions STOP: source seal and independent exact approvals",()=>{
   expect(src).toContain('}).trim()!==env.GITHUB_SHA)');
   expect(src).toContain('gate4IndependentRunnerSourcePinnedV39(env)');
   expect(src).toContain('GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=true;');
+ });
+ it("bounds live CREATE-to-positive-ID write gap; never infers ownership",()=>{
+   const held={status:"HOLD_OWNER_REQUIRED" as const,
+     reason:"BILLABLE_ACTIVE_WITHOUT_OWNER_ID"};
+   const start=Date.parse("2026-10-23T22:00:00.000Z");
+   expect(GATE4_POSITIVE_OWNER_BIND_GRACE_MS).toBe(8000);
+   expect(gate4MayWaitForPositiveOwnerBindingV39(
+     held,start,start+300000)).toBe(true);
+   expect(gate4MayWaitForPositiveOwnerBindingV39(
+     held,start+300000,start+300000)).toBe(false);
+   for(const reason of ["SPEND_WITHOUT_OWNED_ID",
+     "OWNER_CUSTODY_READ_FAILED","STRICT_INVENTORY_UNAVAILABLE"]){
+     expect(gate4MayWaitForPositiveOwnerBindingV39(
+       {...held,reason},start,start+300000)).toBe(false);
+   }
+   expect(gate4MayWaitForPositiveOwnerBindingV39(
+     {...held,status:"WATCH"},start,start+300000)).toBe(false);
+   expect(gate4MayWaitForPositiveOwnerBindingV39(
+     held,NaN,start+300000)).toBe(false);
+   const src=readFileSync(new URL(
+     "../scripts/v39_gate4_actions_live_stop_v39.ts",import.meta.url),"utf8");
+   expect(src).toContain("Date.now()+GATE4_POSITIVE_OWNER_BIND_GRACE_MS");
+   expect(src).toContain("const r=await client.query(query,[scope.scopeId]);");
+   expect(src).toContain("if(ownerAppeared)continue;");
+   expect(src).toContain('hold("AMBIGUOUS_OWNER_ROWS_IN_BIND_GRACE")');
  });
  it("provider and DB are never contacted without mandatory independent approvals",async()=>{
   await expect(runGate4LiveStopWatchV39(scope,
