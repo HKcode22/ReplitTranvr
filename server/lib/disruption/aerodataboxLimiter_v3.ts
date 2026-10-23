@@ -302,7 +302,9 @@ export async function createGate4SingleWithRawReceiptV39(
   let callback:URL;
   try{callback=new URL(opts.url);}
   catch{throw Error("GATE4_CREATE_CALLBACK_INVALID_HOLD");}
-  if(callback.protocol!=="https:"||!callback.hostname||callback.username||
+  if(callback.protocol!=="https:"||
+     callback.hostname!=="replit-tranvr--hk84164.replit.app"||
+     callback.username||
      callback.password||callback.hash||callback.port||
      !callback.pathname.startsWith("/api/v1/webhooks/aerodatabox/"))
     throw Error("GATE4_CREATE_CALLBACK_INVALID_HOLD");
