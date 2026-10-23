@@ -29,6 +29,8 @@ function runtimeOwnerMode(): WorkspaceRuntimeOwnerModeV39 {
 export interface WorkspaceRuntimeHealthRegistrationV39 {
   routeOwner: string;
   startupGitHead?: string;
+  /** Routing only, not a live provider Alert callback delivery certificate. */
+  gate4AlertIngressRegistered?: boolean;
 }
 
 /**
@@ -76,6 +78,11 @@ export function registerWorkspaceRuntimeHealthV39(
         git_head: startupGitHead,
         route_owner: input.routeOwner,
         prepaid_route_registered: true,
+        // Explicit route-level witness. Prepaid compatibility is NOT an
+        // Alert callback receiver; this flag never implies delivery/ACK.
+        gate4_alert_ingress_registered:
+          input.gate4AlertIngressRegistered === true,
+        gate4_alert_callback_proven: false,
         // Public yes/no readiness only: no bucket ID, secret or credential.
         // These four immutable launch-gate flags control actual original
         // source custody, not merely whether its implementation is deployed.
@@ -100,6 +107,9 @@ export function registerWorkspaceRuntimeHealthV39(
         git_head: /^[a-f0-9]{40}$/.test(startupGitHead) ? startupGitHead : null,
         route_owner: input.routeOwner,
         prepaid_route_registered: true,
+        gate4_alert_ingress_registered:
+          input.gate4AlertIngressRegistered === true,
+        gate4_alert_callback_proven: false,
         provider_mutation: false,
         runtime_owner_mode: ownerMode,
         managed_replit_workflow: ownerMode === "replit-managed-project",
