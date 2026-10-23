@@ -63,10 +63,16 @@ jobs:
     env:
       NODE_ENV: production
       GATE4_SAFETY_ENV_NAME: gate4-safety
-      GATE4_SAFETY_APPROVED_SOURCE: ${{ inputs.expected_head }}
-      GATE4_SAFETY_APPROVED_SCOPE: ${{ inputs.scope_id }}
-      GATE4_SAFETY_APPROVED_AUTH: ${{ inputs.authorization_sha256 }}
-      GATE4_SAFETY_APPROVED_ICAO: ${{ inputs.airport_icao }}
+      GATE4_SAFETY_APPROVED_SOURCE: ${{ vars.GATE4_SAFETY_APPROVED_SOURCE }}
+      GATE4_SAFETY_APPROVED_SCOPE: ${{ vars.GATE4_SAFETY_APPROVED_SCOPE }}
+      GATE4_SAFETY_APPROVED_AUTH: ${{ vars.GATE4_SAFETY_APPROVED_AUTH }}
+      GATE4_SAFETY_APPROVED_ICAO: ${{ vars.GATE4_SAFETY_APPROVED_ICAO }}
+      # Independently set before dispatch in protected gate4-safety environment.
+      # Empty/mismatched values cause pre-provider refusal, even after source unseal.
+      GATE4_SAFETY_APPROVED_START_UTC: ${{ vars.GATE4_SAFETY_APPROVED_START_UTC }}
+      GATE4_SAFETY_APPROVED_STOP_UTC: ${{ vars.GATE4_SAFETY_APPROVED_STOP_UTC }}
+      GATE4_SAFETY_APPROVED_SOFT_TARGET: ${{ vars.GATE4_SAFETY_APPROVED_SOFT_TARGET }}
+      GATE4_SAFETY_APPROVED_PROTECTED_FLOOR: ${{ vars.GATE4_SAFETY_APPROVED_PROTECTED_FLOOR }}
       DATABASE_URL: ""
       V39_DATABASE_RUNTIME_URL: ""
     steps:
