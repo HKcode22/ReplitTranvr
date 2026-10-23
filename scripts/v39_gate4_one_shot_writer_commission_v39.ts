@@ -23,6 +23,7 @@ const DIR=join(homedir(),".config","replittranvr","gate4-owner-20261022");
 const FILE=join(DIR,"writer-20261023.json");
 const SHA=/^[a-f0-9]{40}$/;
 const CONFIRM="COMMISSION_ONE_SHOT_V0072_WRITER_NO_PROVIDER";
+const REVOKE_CONFIRM="DISABLE_ONE_SHOT_V0072_WRITER_NO_PROVIDER";
 const err=(code:string):never=>{throw Error("GATE4_WRITER_"+code+"_HOLD");};
 type Facts={
  db:string;owner:string;canCreateRole:boolean;schemaCreate:boolean;
@@ -60,7 +61,7 @@ function approvedOwner(x:Facts,ownerUrl:string,receiverUrl:string):boolean{
 }
 async function run(){
  const mode=process.argv[2];
- if(process.argv.length!==3||!["--plan","--apply"].includes(mode))
+ if(process.argv.length!==3||!["--plan","--apply","--revoke"].includes(mode))
    err("USAGE");
  const expected=process.env.GATE4_WRITER_REVIEWED_SOURCE_SHA??"";
  if(!SHA.test(expected))err("REVIEWED_SHA_MISSING");
@@ -83,6 +84,42 @@ async function run(){
   await c.query("BEGIN TRANSACTION READ ONLY");
   tx=true;
   const initial=await facts(c);
+  // Revocation is independently authorized and does not require zero rows:
+  // it must remain available AFTER actual provider CREATE/STOP settlement.
+  if(mode==="--revoke"){
+    const u=new URL(ownerUrl),v=new URL(receiverUrl);
+    const same=(x:URL)=>x.hostname.replace("-pooler.",".")+
+      ":"+(x.port||"5432")+x.pathname;
+    if(initial.db!=="neondb"||initial.superuser!==false||
+       initial.owner!==decodeURIComponent(u.username)||
+       initial.owner===decodeURIComponent(v.username)||
+       same(u)!==same(v)||!initial.writerExists)
+      err("REVOKE_PRODUCTION_IDENTITY_OR_ROLE_HOLD");
+    await c.query("ROLLBACK");tx=false;
+    if(process.env.GATE4_WRITER_REVOKE_CONFIRM!==REVOKE_CONFIRM)
+      err("REVOKE_EXPLICIT_CONFIRM_MISSING");
+    await c.query("BEGIN");tx=true;
+    await c.query("SELECT pg_advisory_xact_lock(3904,20261023)");
+    await c.query("REVOKE SELECT,INSERT ON TABLE "+
+      "clean.gate4_alert_owned_binding_v39 FROM "+ROLE);
+    await c.query("REVOKE USAGE ON SCHEMA clean FROM "+ROLE);
+    await c.query("REVOKE CONNECT ON DATABASE neondb FROM "+ROLE);
+    await c.query("ALTER ROLE "+ROLE+" NOLOGIN");
+    const check=(await c.query(
+      "SELECT has_table_privilege($1,'clean.gate4_alert_owned_binding_v39','SELECT') AS r,"+
+      "has_table_privilege($1,'clean.gate4_alert_owned_binding_v39','INSERT') AS w,"+
+      "(SELECT rolcanlogin FROM pg_roles WHERE rolname=$1) AS login",
+      [ROLE]
+    )).rows[0];
+    if(check.r!==false||check.w!==false||check.login!==false)
+      err("REVOKE_INCOMPLETE");
+    await c.query("COMMIT");tx=false;
+    console.log(JSON.stringify({
+      status:"GATE4_WRITER_DISABLED_AND_GRANTS_REVOKED",
+      role:ROLE,providerRequests:0,dbOwnerMutationOnly:true
+    }));
+    return;
+  }
   if(!approvedOwner(initial,ownerUrl,receiverUrl))
     err("PRODUCTION_OWNER_OR_EMPTY_BINDINGS_NOT_VERIFIED");
   await c.query("ROLLBACK");tx=false;
