@@ -1,0 +1,141 @@
+name: Phase3 Gate4 Exact-Owned STOP Candidate — LOCKED
+
+# DRAFT. Manual only. Not a paid CREATE operator. Script's immutable
+# GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=false rejects before API/PG I/O.
+# Releasing this requires a separate code review and owner approval.
+on:
+  workflow_dispatch:
+    inputs:
+      expected_head:
+        description: "Full reviewed main SHA"
+        required: true
+        type: string
+      scope_id:
+        description: "Exact reviewed trial UUID"
+        required: true
+        type: string
+      authorization_sha256:
+        description: "Exact approved trial AUTH SHA256 (not the secret)"
+        required: true
+        type: string
+      airport_icao:
+        description: "Reviewed ICAO"
+        required: true
+        type: string
+      start_utc:
+        description: "Approved UTC start with milliseconds/Z"
+        required: true
+        type: string
+      stop_utc:
+        description: "Approved UTC stop with milliseconds/Z"
+        required: true
+        type: string
+      starting_credits:
+        description: "Fresh strictly witnessed starting credit balance"
+        required: true
+        type: string
+      soft_target:
+        description: "Reviewed stop target 1..100 (not hard provider cap)"
+        required: true
+        type: string
+      protected_floor:
+        description: "Protected provider floor >=1000"
+        required: true
+        type: string
+      confirmation:
+        description: "Exact WATCH_G4_EXACT_ID_STOP_NO_CREATE"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate4-live-one-owner
+  cancel-in-progress: false
+
+jobs:
+  gate4-live-stop:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'WATCH_G4_EXACT_ID_STOP_NO_CREATE' }}
+    environment: gate4-safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 145
+    env:
+      NODE_ENV: production
+      GATE4_SAFETY_ENV_NAME: gate4-safety
+      GATE4_SAFETY_APPROVED_SOURCE: ${{ vars.GATE4_SAFETY_APPROVED_SOURCE }}
+      GATE4_SAFETY_APPROVED_SCOPE: ${{ vars.GATE4_SAFETY_APPROVED_SCOPE }}
+      GATE4_SAFETY_APPROVED_AUTH: ${{ vars.GATE4_SAFETY_APPROVED_AUTH }}
+      GATE4_SAFETY_APPROVED_ICAO: ${{ vars.GATE4_SAFETY_APPROVED_ICAO }}
+      # Independently set before dispatch in protected gate4-safety environment.
+      # Empty/mismatched values cause pre-provider refusal, even after source unseal.
+      GATE4_SAFETY_APPROVED_START_UTC: ${{ vars.GATE4_SAFETY_APPROVED_START_UTC }}
+      GATE4_SAFETY_APPROVED_STOP_UTC: ${{ vars.GATE4_SAFETY_APPROVED_STOP_UTC }}
+      GATE4_SAFETY_APPROVED_SOFT_TARGET: ${{ vars.GATE4_SAFETY_APPROVED_SOFT_TARGET }}
+      GATE4_SAFETY_APPROVED_PROTECTED_FLOOR: ${{ vars.GATE4_SAFETY_APPROVED_PROTECTED_FLOOR }}
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+    steps:
+      - name: Verify reviewed source and exact accepted command
+        shell: bash
+        env:
+          EXPECTED: ${{ inputs.expected_head }}
+          CONFIRM: ${{ inputs.confirmation }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$EXPECTED" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          test "$EXPECTED" = "$GITHUB_SHA"
+          test "$CONFIRM" = WATCH_G4_EXACT_ID_STOP_NO_CREATE
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_head }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Run reviewed STOP-only implementation (currently SOURCE SEALED)
+        shell: bash
+        env:
+          # Workflow-dispatch strings are data, never interpolated into a shell script.
+          CONFIRM: ${{ inputs.confirmation }}
+          SCOPE_ID: ${{ inputs.scope_id }}
+          AUTH_SHA: ${{ inputs.authorization_sha256 }}
+          ICAO: ${{ inputs.airport_icao }}
+          START_UTC: ${{ inputs.start_utc }}
+          STOP_UTC: ${{ inputs.stop_utc }}
+          STARTING_CREDITS: ${{ inputs.starting_credits }}
+          SOFT_TARGET: ${{ inputs.soft_target }}
+          PROTECTED_FLOOR: ${{ inputs.protected_floor }}
+          # Keep provider key and narrow DB credential out of checkout/npm steps.
+          # Still SOURCE-SEALED and not a real paid or armed STOP release.
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          GATE4_SAFETY_READONLY_DATABASE_URL: ${{ secrets.GATE4_SAFETY_READONLY_DATABASE_URL }}
+          GATE4_SAFETY_EXPECTED_DB_HOST: ${{ secrets.GATE4_SAFETY_EXPECTED_DB_HOST }}
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_gate4_actions_live_stop_v39.ts \
+            --head "$GITHUB_SHA" \
+            --scope "$SCOPE_ID" \
+            --auth "$AUTH_SHA" \
+            --icao "$ICAO" \
+            --start "$START_UTC" \
+            --stop "$STOP_UTC" \
+            --balance "$STARTING_CREDITS" \
+            --soft "$SOFT_TARGET" \
+            --floor "$PROTECTED_FLOOR" \
+            --confirm "$CONFIRM"
+      - name: Honest STOP status summary
+        if: always()
+        run: |
+          {
+            echo '## Gate4 exact-owned STOP — draft/manual'
+            echo 'This candidate is SOURCE-SEALED and NOT paid/live-authorized.'
+            echo 'If run failed, never claim exact provider STOP or completed settlement.'
+            echo 'Provider hard billing cap is NOT guaranteed.'
+            echo 'A job starting or being green is NOT a provider CREATE permission.'
+            echo 'Unknown provider ID requires separate recovery, never foreign deletion.'
+            echo 'Provider charging is on SEND, independent of callback ACK.'
+          } >> "$GITHUB_STEP_SUMMARY"
