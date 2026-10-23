@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomUUID,createHash } from "crypto";
 
 // ============================================================
 // v3 — AeroDataBox Flight Alert subscription manager.
@@ -254,6 +254,80 @@ export function resolveExperimentalRetries(requested: number | undefined): numbe
     throw new Error(`experimental maxDeliveryRetries must be 0, got ${requested} — refusing subscription creation`);
   }
   return 0;
+}
+
+/**
+ * Gate4 DRAFT positive CREATE-response custody transport.
+ * This method is not called by production owner/Phase6. It makes exactly
+ * one paid-capable POST if a distinct, prearmed approved controller invokes
+ * it. A timeout, non-2xx, malformed JSON, or uncertain schema is an
+ * UNKNOWN remote outcome: never retry CREATE or infer an ID from LIST.
+ *
+ * Raw response bytes are hashed BEFORE JSON normalization and raw bytes,
+ * URL, token or response bodies are never emitted to logs.
+ */
+export interface Gate4PositiveCreateReceiptTransportV39 {
+  subscription:WebhookSubscription;
+  rawCreateResponseSha256:string;
+}
+export function reviewGate4PositiveCreateResponseBytesV39(
+  raw:Uint8Array,icao:string
+):Gate4PositiveCreateReceiptTransportV39 {
+  if(!/^[A-Z]{4}$/.test(icao) || !(raw instanceof Uint8Array) ||
+     raw.byteLength<10||raw.byteLength>65536)
+    throw Error("GATE4_CREATE_RESPONSE_INVALID_HOLD");
+  const bytes=Buffer.from(raw);
+  let parsed:any;
+  try{parsed=JSON.parse(bytes.toString("utf8"));}
+  catch{throw Error("GATE4_CREATE_RESPONSE_UNPARSEABLE_HOLD");}
+  const subscription=normalizeSubscription(parsed?.subscription ?? parsed);
+  if(!subscription||
+     !/^[A-Za-z0-9_-]{6,128}$/.test(subscription.id)||
+     subscription.isActive!==true||
+     subscription.billingType!=="CreditBased"||
+     subscription.subject?.type!=="FlightByAirportIcao"||
+     subscription.subject?.id!==icao)
+    throw Error("GATE4_CREATE_RESPONSE_NOT_EXACT_OWNER_HOLD");
+  return {
+    subscription,
+    rawCreateResponseSha256:createHash("sha256").update(bytes).digest("hex")
+  };
+}
+export async function createGate4SingleWithRawReceiptV39(
+  icao:string,opts:{url:string;maxDeliveryRetries:0}
+):Promise<Gate4PositiveCreateReceiptTransportV39>{
+  if(!/^[A-Z]{4}$/.test(icao)||!opts||
+     opts.maxDeliveryRetries!==0||typeof opts.url!=="string")
+    throw Error("GATE4_CREATE_SCOPE_OR_RETRIES_INVALID_HOLD");
+  let callback:URL;
+  try{callback=new URL(opts.url);}
+  catch{throw Error("GATE4_CREATE_CALLBACK_INVALID_HOLD");}
+  if(callback.protocol!=="https:"||!callback.hostname||callback.username||
+     callback.password||callback.hash||callback.port||
+     !callback.pathname.startsWith("/api/v1/webhooks/aerodatabox/"))
+    throw Error("GATE4_CREATE_CALLBACK_INVALID_HOLD");
+  if(!apiKey())throw Error("GATE4_CREATE_PROVIDER_KEY_MISSING_HOLD");
+  let response:Response;
+  try{
+    response=await throttledFetch(
+      `${BASE_URL}/subscriptions/webhook/FlightByAirportIcao/${encodeURIComponent(icao)}`,{
+        method:"POST",
+        headers:headers(true),
+        body:JSON.stringify({url:opts.url,maxDeliveryRetries:0})
+      }
+    );
+  }catch{
+    throw Error("GATE4_CREATE_RESPONSE_AMBIGUOUS_OPERATOR_RESCUE_HOLD");
+  }
+  if(!response.ok)
+    throw Error("GATE4_CREATE_HTTP_OUTCOME_UNCONFIRMED_OPERATOR_RESCUE_HOLD");
+  let raw:Uint8Array;
+  try{
+    raw=new Uint8Array(await response.arrayBuffer());
+  }catch{
+    throw Error("GATE4_CREATE_BODY_UNCERTAIN_OPERATOR_RESCUE_HOLD");
+  }
+  return reviewGate4PositiveCreateResponseBytesV39(raw,icao);
 }
 
 export async function createSubscription(
