@@ -97,6 +97,18 @@ describe("Gate05 pair FIDS aggregate — fixture-only, zero provider IO", () => 
     expect(r.withoutLocation.runwayTimeUtcPresent).toBe(0);
     expect(r.pilotGate05Certified).toBe(false);
   });
+  it("accepts RFC3339 high-precision UTC and explicit +00:00 without false missingness", () => {
+    const highPrecision = entry("2026-10-22T04:36:00.1234567Z");
+    const withOffset = entry("2026-10-22T04:37:00.123456+00:00");
+    const foreignOffset = entry("2026-10-22T04:37:00+02:00");
+    const r = aggregateGate05FidsPairV39(
+      [highPrecision, withOffset, foreignOffset], [], bounds
+    );
+    expect(r.withoutLocation.scheduledTimeUtcPresent).toBe(2);
+    expect(r.withoutLocation.scheduledInsideWindow).toBe(2);
+    expect(r.withoutLocation.scheduledWindowUnassessable).toBe(1);
+    expect(r.withoutLocation.scheduledOutsideWindow).toBe(0);
+  });
   it("uses a half-open UTC window; rejects the end boundary", () => {
     const x = aggregateGate05FidsPairV39(
       [entry("2026-10-22T04:45:00Z")], [], bounds);
