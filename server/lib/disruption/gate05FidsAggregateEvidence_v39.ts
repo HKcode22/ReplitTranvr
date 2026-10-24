@@ -106,7 +106,7 @@ function variant(raw: unknown, enabled: boolean, bounds: Gate05FidsBoundsV39) {
       // the requested airport. The request's departures-array context is
       // therefore evidence of a primary departure movement, but it is NOT
       // independent confirmation of the leg identity, code share or airport.
-      if (!object(f.movement)) n.departurePrimaryByFidsContext++;
+      n.departurePrimaryByFidsContext++;
     }
     const scheduledUtc = field(d?.scheduledTime, "utc");
     const scheduled = utcInstant(scheduledUtc);
@@ -143,11 +143,20 @@ function variant(raw: unknown, enabled: boolean, bounds: Gate05FidsBoundsV39) {
 
     // Provisional matching is NEVER an independently verified canonical leg.
     const flightNumber = nonempty(f.number);
-    if (flightNumber && from && to && scheduled !== null &&
+    // In a FIDS *departures* response the current requested airport can be
+    // omitted from departure.airport. Use the declared array/request context
+    // ONLY for provisional inter-variant matching; do NOT count the fallback
+    // as independent airport or canonical operating-leg verification.
+    // Explicit foreign origins are kept out of this requested-airport cohort.
+    const primaryFrom =
+      from === null && d ? bounds.requestedAirportIcao : from;
+    if (flightNumber && primaryFrom && to && scheduled !== null &&
+        primaryFrom.toUpperCase() === bounds.requestedAirportIcao &&
+        to.toUpperCase() !== bounds.requestedAirportIcao &&
         cs === "IsOperator") {
       n.provisionalMatchableRows++;
       provisional.add(JSON.stringify([
-        flightNumber.toUpperCase(), from.toUpperCase(),
+        flightNumber.toUpperCase(), primaryFrom.toUpperCase(),
         to.toUpperCase(), new Date(scheduled).toISOString()
       ]));
     }
