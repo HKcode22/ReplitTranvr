@@ -58,7 +58,8 @@ describe("Gate4 NEXT2 additive one-transaction NO-PROVIDER commission",()=>{
   expect(source).toContain('if(existsSync(MANIFEST)||existsSync(INTENT))hold()');
   expect(source).toContain('m.providerCreateAuthorized!==false');
   expect(source).toContain('GATE4_NEXT2_APPLY_CONFIRM');
-  expect(source).toContain('if([INTENT,RECEIVER_CREDENTIAL,WRITER_CREDENTIAL]');
+  expect(source).toContain('if([INTENT,RECEIVER_CREDENTIAL,WRITER_CREDENTIAL,DEPLOYMENT]');
+  expect(source).toContain('writeOnce(DEPLOYMENT,');
   expect(source).toContain('writeOnce(INTENT,');
   expect(source).toContain('if(!await inspect(db,expectedActor,false,false))hold()');
   expect(source).toContain('if(!await inspect(db,expectedActor,false,true))hold()');
