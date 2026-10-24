@@ -89,6 +89,7 @@ jobs:
         run: |
           npx --no-install vitest run tests/phase3_gate4_prebind_real_pg_v39.test.ts
           npx --no-install vitest run tests/phase3_gate4_second_writer_retired_real_pg_v39.test.ts
+          npx --no-install vitest run tests/phase3_gate4_second_receiver_rls_real_pg_v39.test.ts
           echo "GATE4_SCOPED_WRITER_PG16_REPRODUCED_PASS"
           echo "PROVIDER_REQUESTS=0"
           echo "PRODUCTION_DATABASE_WRITES=0"
