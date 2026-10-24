@@ -7,11 +7,13 @@ import {GATE4_SECOND_RECEIVER_PRODUCTION_APPLY_RELEASED_V39} from
  "../scripts/v39_gate4_second_receiver_commission_v39";
 const file=new URL("../scripts/v39_gate4_second_receiver_commission_v39.ts",import.meta.url);
 const src=readFileSync(file,"utf8");
-describe("Gate4 second receiver V0071 commissioning — SOURCE-SEALED",()=>{
- it("rejects --apply BEFORE even reading credentials or making a DB connection",()=>{
-  expect(GATE4_SECOND_RECEIVER_PRODUCTION_APPLY_RELEASED_V39).toBe(false);
+describe("Gate4 second receiver V0071 commission — scope-frozen no-provider release",()=>{
+ it("requires private manifest BEFORE any production DB connection",()=>{
+  expect(GATE4_SECOND_RECEIVER_PRODUCTION_APPLY_RELEASED_V39).toBe(true);
   const seal='if(mode==="--apply"&&!GATE4_SECOND_RECEIVER_PRODUCTION_APPLY_RELEASED_V39)';
   expect(src).toContain(seal);
+  expect(src).toContain("readGate4ApprovedManifestV39()");
+  expect(src.indexOf("readGate4ApprovedManifestV39()")).toBeLessThan(src.indexOf("const cfg=cfgFromEnvironment()"));
   expect(src.indexOf(seal)).toBeLessThan(src.indexOf("const cfg=cfgFromEnvironment()"));
   expect(src.indexOf("const cfg=cfgFromEnvironment()"))
    .toBeLessThan(src.indexOf("await db.connect()"));
@@ -35,7 +37,7 @@ describe("Gate4 second receiver V0071 commissioning — SOURCE-SEALED",()=>{
    stderr=String((error as {stderr?:Buffer}).stderr??"");
   }
   expect(stderr).toContain(
-   "GATE4_SECOND_RECEIVER_PRODUCTION_APPLY_SOURCE_SEALED_HOLD"
+   "GATE4_SECOND_RECEIVER_PRIVATE_APPROVED_MANIFEST_HOLD"
   );
  });
  it("requires separate exact scope and private distinct receiver credential",()=>{
