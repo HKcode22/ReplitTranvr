@@ -113,6 +113,8 @@ describe("Owned Phase2G callback-only isolation", () => {
   it("allows only the two verified Replit profiles", () => {
     const owned = config.includes(
       "V39_CALLBACK_ONLY_BUILD=1"
+    ) || config.includes(
+      'build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]'
     );
 
     if (owned) {
