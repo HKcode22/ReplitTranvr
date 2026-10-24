@@ -55,7 +55,7 @@ function config():Cfg{
   receiverSource:String(process.env.GATE4_SECOND_WRITER_APPROVED_RECEIVER_SHA??""),
   icao:"WSSS"};
 }
-async function facts(c:pg.Client,cfg:Cfg){
+async function facts(c:pg.Client,cfg:Cfg,expectedReadOnly:boolean){
  const owner=new URL(cfg.ownerUrl);
  const m=(await c.query(
   "SELECT current_database() AS db,current_user AS actor,"+
@@ -65,7 +65,7 @@ async function facts(c:pg.Client,cfg:Cfg){
   "has_schema_privilege(current_user,'clean','CREATE') AS may_ddl"
  )).rows[0];
  if(m?.db!=="neondb"||m.actor!==decodeURIComponent(owner.username)||
-    m.ro!=="on"||m.superuser!==false||m.may_create_role!==true||
+    m.ro!==(expectedReadOnly?"on":"off")||m.superuser!==false||m.may_create_role!==true||
     m.may_ddl!==true)hold("PRODUCTION_OWNER");
  const counts=(await c.query(
   "SELECT count(*) FILTER(WHERE scope_id=$1::uuid)::int AS old_count,"+
@@ -153,7 +153,7 @@ async function main():Promise<void>{
   await db.query("BEGIN TRANSACTION READ ONLY");
   tx=true;
   await db.query("SET LOCAL statement_timeout='7000ms'");
-  const review=await facts(db,cfg);
+  const review=await facts(db,cfg,true);
   await db.query("ROLLBACK");tx=false;
   if(mode==="--plan"){
    console.log(JSON.stringify({status:"GATE4_SECOND_WRITER_REVIEW_ONLY_READY",
@@ -187,24 +187,79 @@ async function main():Promise<void>{
   privateFileMade=true;
   await db.query("BEGIN");tx=true;
   await db.query("SET LOCAL lock_timeout='2000ms'");
+  await db.query("SET LOCAL statement_timeout='7000ms'");
   await db.query("SELECT pg_advisory_xact_lock(3904,20261024)");
-  // Recheck exact current catalog state inside the transaction before writes.
-  await db.query("SET TRANSACTION READ ONLY");
-  await facts(db,cfg);
+  // Recheck the mutable catalog state in the SAME transaction that
+  // commissions the role and policies. Abort atomically on any drift.
+  const verified=await facts(db,cfg,false);
+  if(verified.statements.length!==5)hold("PLAN_CHANGED");
+  if(!/^[a-f0-9]{80}$/.test(password))hold("SECRET_FORMAT");
+  // cfg.role is whitelisted by reviewGate4SecondScopeRlsV39 above.
+  await db.query("CREATE ROLE "+cfg.role+
+   " LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE "+
+   "NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 1 PASSWORD '"+password+
+   "' VALID UNTIL '"+expires+"'");
+  for(const sql of verified.statements)await db.query(sql);
+  const granted=(await db.query(
+   "SELECT has_table_privilege($1,'clean.gate4_alert_owned_binding_v39','SELECT') AS r,"+
+   "has_table_privilege($1,'clean.gate4_alert_owned_binding_v39','INSERT') AS w,"+
+   "has_table_privilege($1,'clean.gate4_alert_owned_binding_v39','UPDATE') AS u,"+
+   "has_table_privilege($1,'clean.gate4_alert_owned_binding_v39','DELETE') AS d,"+
+   "has_table_privilege($1,'clean.gate4_alert_prebind_original_v39','SELECT') AS raw,"+
+   "has_schema_privilege($1,'clean','CREATE') AS ddl,"+
+   "(SELECT rolcanlogin AND rolinherit=false AND rolbypassrls=false "+
+   "AND rolsuper=false AND rolcreatedb=false AND rolcreaterole=false "+
+   "AND rolreplication=false FROM pg_roles WHERE rolname=$1) AS locked",
+   [cfg.role]
+  )).rows[0];
+  const policies=(await db.query(
+   "SELECT policyname,cmd,roles[1]::text=$1 AS role_ok,"+
+   "cardinality(roles)=1 AS one_role,"+
+   "permissive,with_check IS NULL AS no_check "+
+   "FROM pg_policies WHERE schemaname='clean' "+
+   "AND tablename='gate4_alert_owned_binding_v39' ORDER BY policyname",
+   [cfg.role]
+  )).rows;
+  const created=policies.filter(p=>
+   ["gate4_next_writer_select_v39","gate4_next_writer_insert_v39"]
+   .includes(p.policyname));
+  if(granted.r!==true||granted.w!==true||granted.u!==false||
+     granted.d!==false||granted.raw!==false||granted.ddl!==false||
+     granted.locked!==true||policies.length!==3||created.length!==2||
+     created.some(p=>p.role_ok!==true||p.one_role!==true||
+       p.permissive!=="PERMISSIVE")||
+     created.find(p=>p.policyname==="gate4_next_writer_select_v39")?.cmd!=="SELECT"||
+     created.find(p=>p.policyname==="gate4_next_writer_insert_v39")?.cmd!=="INSERT"||
+     created.find(p=>p.policyname==="gate4_next_writer_select_v39")?.no_check!==true||
+     created.find(p=>p.policyname==="gate4_next_writer_insert_v39")?.no_check!==false)
+   hold("TRANSACTIONAL_GRANTS_OR_POLICY");
+  const preserved=(await db.query(
+   "SELECT count(*) FILTER(WHERE scope_id=$1::uuid)::int AS old,"+
+   "count(*) FILTER(WHERE scope_id<>$1::uuid)::int AS other "+
+   "FROM clean.gate4_alert_owned_binding_v39",[OLD_SCOPE]
+  )).rows[0];
+  if(preserved.old!==1||preserved.other!==0)
+   hold("HISTORICAL_CUSTODY_CHANGED");
+  await db.query("COMMIT");tx=false;
+  // A committed but unreadable state is HOLD, never a second CREATE ROLE.
+  await db.query("BEGIN TRANSACTION READ ONLY");tx=true;
+  const final=(await db.query(
+   "SELECT (SELECT count(*)::int FROM pg_roles WHERE rolname=$1) AS role_count,"+
+   "(SELECT count(*)::int FROM pg_policies WHERE schemaname='clean' "+
+   "AND tablename='gate4_alert_owned_binding_v39') AS policy_count,"+
+   "(SELECT count(*)::int FROM clean.gate4_alert_owned_binding_v39) AS rows",
+   [cfg.role]
+  )).rows[0];
+  if(final.role_count!==1||final.policy_count!==3||final.rows!==1)
+   hold("POSTCOMMIT_RECONCILIATION");
   await db.query("ROLLBACK");tx=false;
-  // After the independent read-only check, obtain the same transaction-level
-  // advisory lock and recheck under READ WRITE for atomic future commissioning.
-  await db.query("BEGIN");tx=true;
-  await db.query("SET LOCAL lock_timeout='2000ms'");
-  await db.query("SELECT pg_advisory_xact_lock(3904,20261024)");
-  // facts() strictly requires a READ ONLY transaction; do not skip the
-  // owner/scope recheck just because an earlier independent SELECT passed.
-  await db.query("SET TRANSACTION READ ONLY");
-  await facts(db,cfg);
-  await db.query("ROLLBACK");tx=false;
-  // Intentionally no executable DDL below until a separately reviewed
-  // source release supplies one transaction that rechecks then mutates.
-  hold("PRODUCTION_DDL_IMPLEMENTATION_REQUIRES_REVIEW");
+  console.log(JSON.stringify({
+   status:"GATE4_SECOND_WRITER_COMMISSIONED_NO_PROVIDER",
+   role:cfg.role,reviewedSource:cfg.head,
+   expiresUtc:expires,privateCredentialStored:true,
+   oldOwnerReceiptPreserved:true,providerRequests:0,paidAuthorized:false,
+   stopArmed:false,receiverPublished:false
+  }));
  }catch(e){
   if(tx)await db.query("ROLLBACK").catch(()=>undefined);
   if(privateFileMade)
