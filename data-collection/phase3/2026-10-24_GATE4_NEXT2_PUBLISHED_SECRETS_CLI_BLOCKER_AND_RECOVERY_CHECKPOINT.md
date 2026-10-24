@@ -1,0 +1,63 @@
+# Gate 4 NEXT2 — published configuration automation blocker, exact resume, and continuity
+
+**Date:** 2026-10-24 (America/Los_Angeles).  
+**Checkpoint class:** Production release handoff, **not** a scientific qualified Gate 4 PASS.  
+**Status:** **NEXT2 DATABASE COMMISSIONED + REVIEWED RECEIVER SOURCE STAGED / PRODUCTION SECRET SYNCHRONIZATION BLOCKED / RECEIVER NOT REPUBLISHED / SYNTHETIC JSON NOT SENT / NO NEXT2 PAID CALLS**.
+
+> **Read in sequence:** [Phase 3 START HERE](START_HERE.md) → [original NEXT1 paid delivery-gap report](2026-10-24_GATE4_WSSS_NEXT1_PAID_CREATE_EXACT_STOP_46_CREDIT_DELIVERY_GAP.md) → [NEXT2 repaired receiver and scientific test plan](2026-10-24_GATE4_NEXT2_REPAIRED_RECEIVER_RELEASE_AND_RETEST_HANDOFF.md) → **this operational configuration blocker** → [issue #38, durable timestamped evidence](https://github.com/HKcode22/ReplitTranvr/issues/38). This checkpoint advances—not replaces—the original reports. Older Phase 3 text below the navigation headings is historical and may contradict the latest status.
+
+## Verified NEXT1 provenance and science boundary
+
+- Repo: [HKcode22/ReplitTranvr](https://github.com/HKcode22/ReplitTranvr); previously published frozen callback-only receiver SHA `97ed05bfcc8b34bd607a80dbcfec6945ffd0d11a`.
+- NEXT1 WSSS scope `d6c0fcac-798e-4913-bfd1-a561adb3dd82`: **one genuine provider CREATE**, positive private subscription ID and exact V0072 binding, protected independent exact-ID GitHub [STOP #40071053415](https://github.com/HKcode22/ReplitTranvr/actions/runs/40071053415). Three settled 1,991-credit / zero-active observations compared with 2,037 baseline: 46-credit delta, 0 matching V0071 original callbacks. Verdict remains `SAFETY_PASS_POSSIBLE_DELIVERY_GAP`. No proof of whose fault it was; 46 credits are not 46 delivery requests. **NEVER replay spent CREATE/STOP or reuse NEXT1 credentials/scope.**
+- Do not infer published real ingress success from a local PG16 integration test or the earlier correct-bearer HTTP 415 negative probe. Hosted receipt + PostgreSQL original SHA readback is still required.
+
+## Verified NEXT2 engineering, approval and production SQL (already done)
+
+- Approved by owner: one **NO-PROVIDER** NEXT2 production database role/scope commissioning, controlled reviewed receiver release and **ONE SYNTHETIC**, explicitly non-provider hosted JSON→V0071 original test. **No paid AeroDataBox CREATE, DELETE, provider retry, refill, or change to account protected floor authorized.**
+- [PR #125](https://github.com/HKcode22/ReplitTranvr/pull/125) introduced authenticated raw JSON, safe HTTP status logging; [PR #126](https://github.com/HKcode22/ReplitTranvr/pull/126) demonstrated full local HTTP→disposable PostgreSQL16 byte-exact SHA readback. Frozen receiver candidate / actual expected compiled SHA **`29d3e0dff8b8863f55f6d73e609e21480b8e46db`**.
+- [PR #127](https://github.com/HKcode22/ReplitTranvr/pull/127) merged one-use strictly synthetic hosted JSON acceptance source `scripts/v39_gate4_next2_hosted_no_provider_acceptance_v39.ts`, with immutable private no-retry intent and independent original-byte readback. Staged for later execution; **not executed**.
+- [PR #128](https://github.com/HKcode22/ReplitTranvr/pull/128) deployed source-only production READ ONLY inventory. Owner's real read-only database audit yielded 1 legacy original with matching SHA, 2 owner bindings (legacy + NEXT1), RLS enabled on both tables, no NEXT2 roles, but initially falsely reported policy mismatch. Owner's follow-up `pg_policies` metadata proved exactly **7 historical policies**, all one assigned role each, correct SELECT/INSERT/USING/WITH CHECK; no evidence of broken RLS.
+- [PR #129](https://github.com/HKcode22/ReplitTranvr/pull/129) fixed PostgreSQL `name[]` policy-role comparison using server-computed `cardinality(roles)` and `roles[1]::text`, added one-shot additive scope commissioner and true 7→11-policy disposable Postgres16 test. All 5 CI PASS, merged main **`0e5286af9f3f26d671890d8c322fafececdd697e`**.
+- User ran the exact-reviewed `--prepare`, `--plan`, `--apply` once in isolated Replit worktree. Verified result **`GATE4_NEXT2_NEW_ROLES_ADDITIVE_NO_PROVIDER_COMMISSIONED`**, 2 new NOINHERIT restricted roles, 4 additive policies, 7 historic policies preserved, legacy original count still 1 and earlier owner-binding count still 2. All private files were written; role credentials expire **2026-10-24T14:41:19.860Z (07:41:19 PDT)**. There is **no authorization to rerun** the spent one-shot commissioner or silently bypass/extend role expiry.
+- New NEXT2 scope `16f819c6-7c68-4d5a-82cf-3820e9294dc7`; roles `gate4_receiver_2026_next2` and `gate4_owner_writer_2026_next2`. Private settings bundle, receipt and credentials are **ONLY** under `~/.config/replittranvr/gate4-next2-20261024/` in Replit owner home (0700 parent / 0600 file). It includes `published-receiver-settings.json` with **10 environment entries**, including a database password-bearing restricted URL and a webhook bearer. **NEVER print/upload/post full bundle, raw values, provider IDs or secrets into GitHub, chat, screenshots, or server logs.**
+- Owner next executed `GATE4_NEXT2_STAGE_RECEIVER`: output **`NEXT2_PRIVATE_SETTINGS_VALIDATED`** (10/10, matching source/scope, expiry checked), local backup `backup/gate4-before-next2-publish-20261024`, clean isolated Replit **`~/workspace` detached at actual 29d source**, **`NEXT2_REPAIRED_RECEIVER_STAGED_PASS`**. Production deploy unchanged; last connected Replit deployment `ce096a13-62ff-4f7a-ae6f-3bc91af601d9` reported success before new publish, not proof of NEXT2 source live. Original 97ed runtime is last verified old compiled source.
+
+## NEW blocker: no supported published-deployment secret writer discovered in installed Replit Shell CLI
+
+Owner explicitly refuses repeated 10-field manual Production Secrets copying, rejects ChatGPT Work/browser delegation, rejects Replit AI Agent, and wants a **supported single-command** workflow via Replit Shell or a sustainable non-sensitive variable scheme. This constraint is mandatory, not a minor preference.
+
+Owner executed:
+```text
+replit --help
+COMMANDS: identity, identityv2, ai, shutdown, secrets, gitsafe, help
+replit secrets --help
+NAME: replit secrets - Read secrets explicitly from Replit
+COMMANDS: list (names only), get (one value to stdout), exec (pass selected secrets to child), help
+```
+No `set`, `put`, `update`, `deploy secrets` or equivalent writer appears. `replitctl` and `replit-cli` not installed. **CLI discovery only proves these command surfaces; it does not prove no other supported product API exists.** Replit documentation distinguishes encrypted private Secrets from nonsensitive Configurations, and published Autoscale secrets from preview/workspace state. See [Replit Secrets guidance](https://replit.com/help/answers/what-is-the-best-way-to-store-api-keys-securely-in-replit) and [Replit deployment separate configuration](https://replit.com/blog/deployments-launch).
+
+**Do NOT substitute** `gh secret set` (modifies GitHub Actions, not Replit Autoscale), `replit secrets get` (reads value, does not update), Shell `export` or `.env` (current workspace process, not reliable published env), `.replit` `userenv.shared` for a DB password/bearer (source-visible plaintext), speculative HTTP requests to undocumented Replit GraphQL, browser cookie/session token scraping, uploading private settings in build artifacts, or changing only the deployment metadata without verifying effective runtime state. **Never execute `replit secrets get` and paste its output into a public log.**
+
+### Practical options, ranked by safety and user effort
+
+**Path A — preferred if supported (needs verification, not yet available):** Locate a documented, authenticated Replit *published Autoscale* deployment-secret write or bulk-merge API/CLI workflow. Must permit updating the exact deployment's values from the private JSON without printing credentials, preserve every **unrelated existing production secret** (Phase2G prepaid, blob/object store, provider, runtime), verify secret names and new runtime effective configuration without echoing their values, and yield no provider calls. An apparent API for *project/workspace secrets* alone is insufficient. **Do not claim this path exists without official documented support.**
+
+**Path B — future reduced-churn design (requires distinct design/review, not a silent hotfix):** Commit non-sensitive scope/source/ICAO/feature-flag configuration in a reviewed *server-only* manifest or Replit Configurations; keep password-bearing restricted DB URL and secret webhook token in protected deployment Secrets. Add centralized startup validation and a durable source/scope mismatch HOLD. This changes repository source/compiled release SHA, so it **cannot** simply overwrite the already approved 29d receiver pin: review a new source, tighten new RLS/source admission, revalidate fresh scope credentials and published parity before any publish. Eliminates repeated *non-sensitive* manual fields, but does **not** automatically solve the remaining confidential deployment-secret injection. Do not reuse obsolete role passwords or weaken RLS to avoid setup work.
+
+**Path C — documented one-time fallback, owner currently declines:** Use a **native published-deployment** bulk editor if actually present; merge rather than replace all existing secrets. Generic project Secrets `Edit as JSON` is not evidence that published production implements identical safe merge semantics. Never paste only 10 entries into an editor that replaces the full inventory; it could delete prepaid/provider credentials. Do not present this as the chosen path.
+
+**No secret automation shortcut is implemented or approved yet**. Work is intentionally paused at the release-configuration boundary, not an unexplained Python or SQL blocker.
+
+## Exact next session starting point / decision gate
+
+1. **Do not** rerun `--prepare`, `--apply`, published republish, spent paid operator, paid STOP, or synthetic POST while new Production Secrets are unverified. Keep old live app healthy.
+2. From GitHub `main` and this checkpoint, check only official/supported production-secret writer capability. If one is demonstrably supported, implement a narrowly tested **private** atomic merge of the ten already generated values, verify existing production keys are untouched, prevent logging, and explicitly verify published runtime 29d source after a reviewed one-time Replit publish.
+3. If no writer is supported, prepare a separate reviewed reduced-configuration design (Path B) but do not represent it as a fix for the current unpublished 29d release. User should not be sent through speculative CLI probes or ten manual fields again.
+4. **Expiry**: role logins are six-hour limited through **14:41:19.860Z 2026-10-24**. If passed, STOP; obtain a separately reviewed renewal/rotation and an exact new private receipt before using any old login. No stale password bypass. Do not auto-run repeated commissioning.
+5. Only AFTER effective **published source, route, restricted DB login and new bearer** are verified, do the one-use **synthetic** JSON POST + 200 + matching SHA V0071 row, with private synthetic ID excluded from real provider science. Confirm new redacted `GATE4_ALERT_HTTP_V1` entry for the hosted request.
+6. A genuinely billable NEXT2 WSSS Alert retry requires **fresh specific human authorization**, independent signed GitHub STOP, new positive owner ID and current provider balance; last actual three strict samples 1,991 (below prior 2,000 floor). No 5-credit hard cap possible with busy-airport bursts. Do not progress Phase 4 based on the NEXT1 safety-only result.
+
+**Durable immutable work trail:** [#125](https://github.com/HKcode22/ReplitTranvr/pull/125), [#126](https://github.com/HKcode22/ReplitTranvr/pull/126), [#127](https://github.com/HKcode22/ReplitTranvr/pull/127), [#128](https://github.com/HKcode22/ReplitTranvr/pull/128), [#129](https://github.com/HKcode22/ReplitTranvr/pull/129), [issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38) including actual staged receiver [comment 6382181268](https://github.com/HKcode22/ReplitTranvr/issues/38#issuecomment-6382181268) and CLI investigation [comment 6383085688](https://github.com/HKcode22/ReplitTranvr/issues/38#issuecomment-6383085688).
+
+**Scientific truth at this checkpoint:** NEXT1 safety STOP passed; NEXT1 paid live delivery remains **UNVERIFIED**; NEXT2 role commission and local source stage passed; NEXT2 hosted acceptance and NEXT2 paid proof have **NOT** occurred. No provider call, refill, SQL modification, secret write or publish was made as part of this documentation update.
