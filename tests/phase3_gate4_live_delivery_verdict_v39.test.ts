@@ -35,7 +35,7 @@ describe("Gate4 scientific verdict — pure offline, no provider/db",()=>{
       ...previous,historicalSyntheticRows:17
     });
     expect(result.status).toBe("SAFETY_PASS_DELIVERY_NOT_OBSERVED");
-    expect(result.genuinePaidReceiverOriginalsObserved).toBe(0);
+    expect(result.shaVerifiedPositivePaidIdClaimRows).toBe(0);
   });
   it("flags billed SEND credits without any preserved receiver originals",()=>{
     const result=assessGate4LiveDeliveryV39({
@@ -53,7 +53,7 @@ describe("Gate4 scientific verdict — pure offline, no provider/db",()=>{
     });
     expect(result.status).toBe("QUALIFIED_LIVE_ALERT_FEASIBILITY_OBSERVED");
     expect(result.safetyPassed).toBe(true);
-    expect(result.genuinePaidReceiverOriginalsObserved).toBe(1);
+    expect(result.shaVerifiedPositivePaidIdClaimRows).toBe(1);
     expect(result.reliabilityPercent).toBeNull();
     expect(result.originalFullGate4RubricCertified).toBe(false);
   });
