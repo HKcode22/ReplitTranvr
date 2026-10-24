@@ -8,11 +8,13 @@ import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import pg from "pg";
+import express from "express";
+import {createServer} from "node:http";
 import {createGate4PrebindPgStoreV39} from
   "../server/lib/disruption/gate4PrebindPgStore_v39";
 import {createGate4OwnedBindingPgStoreV39} from
   "../server/lib/disruption/gate4OwnedBindingPgStore_v39";
-import {gate4CheckAdditivePgRoleV39} from
+import {gate4CheckAdditivePgRoleV39,mountGate4PrebindAdditiveRouteV39} from
   "../server/lib/disruption/gate4PrebindAdditiveRoute_v39";
 import {quarantineGate4PrebindOriginalV39} from
   "../server/lib/disruption/gate4PrebindIngress_v39";
@@ -32,10 +34,20 @@ const scope={
  sourceCommit:"a".repeat(40),
  airportIcao:"WSSS"
 };
+// Provider-shaped notification based on AeroDataBox official OpenAPI v1.15.4.0.
+// Synthetic fixture only, no actual flight data or external API calls.
 const wire=Buffer.from(JSON.stringify({
- subscription:{id:"earlyId99",
+ id:"80cc1332-1511-46a5-8ccc-e828c9c04790",
+ timestampUtc:"2026-10-24T06:48:00Z",
+ deliveryAttempt:{seqNo:0,costCredits:1,
+   timestampUtc:"2026-10-24T06:48:00Z"},
+ subscription:{id:"earlyId99",isActive:true,
+  createdOnUtc:"2026-10-24T06:45:00Z",
+  subscriber:{type:"Webhook",id:"disposable-ci"},
   subject:{type:"FlightByAirportIcao",id:"WSSS"}},
- flights:[{number:"SQ001"}]
+ flights:[{number:"SQ001",status:"Expected",
+   lastUpdatedUtc:"2026-10-24T06:47:59Z",
+   departure:{},arrival:{},codeshareStatus:"Unknown",isCargo:false}]
 }));
 const digest=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 
@@ -74,6 +86,47 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
     )).rows;
     expect(persist).toEqual([{mode:"p"}]); // LOGGED, survives clean restart
     const store=createGate4PrebindPgStoreV39(pool);
+    // Real disposable-PG end-to-end: HTTP application/json -> raw byte
+    // body -> quarantine -> independent post-COMMIT SELECT -> HTTP 200.
+    // No production DB, provider key, Replit publishing or charged CREATE.
+    const app=express();
+    const bearer="disposable-ci-secret-"+ "z".repeat(40);
+    mountGate4PrebindAdditiveRouteV39(app,scope,bearer,store);
+    app.use(express.json()); // must not pre-consume mounted raw route
+    const server=createServer(app);
+    await new Promise<void>((resolve,reject)=>{
+      server.once("error",reject);
+      server.listen(0,"127.0.0.1",()=>resolve());
+    });
+    const bound=server.address();
+    if(!bound||typeof bound==="string")throw Error("DISPOSABLE_BIND_UNAVAILABLE");
+    try{
+      const response=await fetch(
+        "http://127.0.0.1:"+bound.port+
+        "/api/v1/webhooks/aerodatabox/"+bearer,{
+          method:"POST",
+          headers:{"content-type":"application/json; charset=utf-8"},
+          body:wire,
+          signal:AbortSignal.timeout(10000)
+        });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        received:true,
+        status:"QUARANTINED_DURABLY_PENDING_ID_BINDING",
+        attribution:"none",
+        paidAuthorization:false
+      });
+    }finally{
+      await new Promise<void>(resolve=>server.close(()=>resolve()));
+    }
+    const httpOwned=(await pool.query(
+      "SELECT original_wire,original_sha256 FROM "+
+      "clean.gate4_alert_prebind_original_v39 "+
+      "WHERE scope_id=$1::uuid",[scope.scopeId]
+    )).rows;
+    expect(httpOwned).toHaveLength(1);
+    expect(httpOwned[0].original_wire.equals(wire)).toBe(true);
+    expect(httpOwned[0].original_sha256).toBe(digest(wire));
     const first=await quarantineGate4PrebindOriginalV39(scope,wire,store);
     expect(first).toMatchObject({
       httpStatus:200,status:"QUARANTINED_DURABLY_PENDING_ID_BINDING",
