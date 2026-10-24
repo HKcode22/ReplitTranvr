@@ -7,7 +7,9 @@
  * transaction. Do not run these without verification of current DB role
  * metadata, signed new AUTH, planned source and explicit production approval.
  *
- * Preserve historical V0071/V0072 evidence and policy names. Add two policies
+ * Requires independently verified retired legacy role (NOLOGIN) and only
+ * the safety-reader policy remaining. Preserve historical V0071/V0072 evidence.
+ * Add two policies
  * for a distinct NOINHERIT NOBYPASSRLS writer. Do not add permissive PUBLIC or
  * shared-role policies, or any UPDATE/DELETE right.
  */
@@ -22,6 +24,7 @@ export type Gate4SecondScopeRlsSpecV39=Readonly<{
   otherOwnedBindings:number;
   previousOriginalRows:number;
   previousWriterExists:boolean;
+  previousWriterLoginEnabled:boolean;
   nextWriterRoleExists:boolean;
   rlsEnabled:boolean;
   existingPolicyNames:readonly string[];
@@ -46,9 +49,7 @@ const hash=/^[a-f0-9]{64}$/;
 const sha=/^[a-f0-9]{40}$/;
 const role=/^gate4_owner_writer_(?:20[2-9][0-9])[a-z0-9_]{5,28}$/;
 const expectedPolicies=[
- "gate4_safety_select_v39",
- "gate4_writer_insert_20261023",
- "gate4_writer_select_20261023"
+ "gate4_safety_select_v39"
 ] as const;
 
 function result(status:Gate4SecondScopeRlsReviewV39["status"],
@@ -86,6 +87,7 @@ export function reviewGate4SecondScopeRlsV39(
     !Number.isSafeInteger(s.previousOriginalRows)||
     s.previousOriginalRows<1||
     s.previousWriterExists!==true||
+    s.previousWriterLoginEnabled!==false||
     s.nextWriterRoleExists!==false||
     s.rlsEnabled!==true||
     policies.length!==expectedPolicies.length||

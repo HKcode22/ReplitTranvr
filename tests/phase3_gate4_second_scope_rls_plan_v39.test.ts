@@ -15,12 +15,11 @@ const scope:Gate4SecondScopeRlsSpecV39={
  otherOwnedBindings:0,
  previousOriginalRows:1,
  previousWriterExists:true,
+ previousWriterLoginEnabled:false,
  nextWriterRoleExists:false,
  rlsEnabled:true,
  existingPolicyNames:[
-   "gate4_safety_select_v39",
-   "gate4_writer_insert_20261023",
-   "gate4_writer_select_20261023"
+   "gate4_safety_select_v39"
  ]
 };
 
@@ -69,9 +68,11 @@ describe("Gate4 next writer permission blueprint — PURE, not authorization",()
      {...scope,otherOwnedBindings:1},
      {...scope,previousOriginalRows:0},
      {...scope,previousWriterExists:false},
+     {...scope,previousWriterLoginEnabled:true},
+     {...scope,existingPolicyNames:["gate4_safety_select_v39","gate4_writer_insert_20261023","gate4_writer_select_20261023"]},
      {...scope,nextWriterRoleExists:true},
      {...scope,rlsEnabled:false},
-     {...scope,existingPolicyNames:["gate4_safety_select_v39"]},
+     {...scope,existingPolicyNames:[]},
      {...scope,existingPolicyNames:[
        ...scope.existingPolicyNames,"public_bypass"
      ]}
@@ -90,10 +91,9 @@ describe("Gate4 next writer permission blueprint — PURE, not authorization",()
      expect(r.statements).toEqual([]);
    }
  });
- it("does not let ordering differences in existing observed policy names invent a mismatch",()=>{
-   const p=reviewGate4SecondScopeRlsV39({
-     ...scope,existingPolicyNames:[...scope.existingPolicyNames].reverse()
-   });
-   expect(p.status).toBe("REVIEW_ONLY_READY");
+ it("requires exact post-retirement single-reader policy baseline",()=>{
+   expect(reviewGate4SecondScopeRlsV39(scope).status).toBe("REVIEW_ONLY_READY");
+   expect(reviewGate4SecondScopeRlsV39({...scope,previousWriterLoginEnabled:true}).status).toBe("HOLD_EXISTING_DB_STATE");
+   expect(reviewGate4SecondScopeRlsV39({...scope,existingPolicyNames:["gate4_safety_select_v39","gate4_writer_select_20261023"]}).status).toBe("HOLD_EXISTING_DB_STATE");
  });
 });
