@@ -22,14 +22,14 @@ describe("Gate4 new one-time WSSS paid operator — no automatic provider exposu
   expect(source).toContain("maxDeliveryRetries:0");
   expect(source).toContain("noSecondCreate:true");
   expect(source).toContain("writeOnce(INTENT");
-  expect(source.indexOf("writeOnce(INTENT")).toBeLessThan(source.indexOf("runGate4OnePositiveOwnerV39"));
+  expect(source.indexOf("writeOnce(INTENT")).toBeLessThan(source.indexOf("   const result=await runGate4OnePositiveOwnerV39"));
   expect(source).not.toContain("refillBalance(");
  });
  it("requires private positive provider ID, 20 minute bounded trial and no hard-cap fiction",()=>{
   expect(source).toContain("Date.parse(stop)-Date.parse(start)!==20*60_000");
   expect(source).toContain('const GO="EXECUTE_ONE_NEXT1_WSSS_ALERT_20MIN_SOFT5_NO_RETRY"');
   expect(source).toContain("GATE4_SAFETY_APPROVED_PROTECTED_FLOOR");
-  expect(source).toContain("hardProviderCreditCap");
+  expect(source).toContain("Does not claim provider hard billing cap");
   expect(source).toContain("positiveProviderIdCaptured:true");
   expect(source).toContain("exactScopedV0072ReadBack");
   expect(source).toContain("threeBalanceSettlementVerified:false");
