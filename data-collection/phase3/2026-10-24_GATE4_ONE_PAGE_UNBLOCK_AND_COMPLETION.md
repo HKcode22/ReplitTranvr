@@ -57,9 +57,9 @@ Retrieve actual old Replit published error logs (06:49–06:50Z) and, if obtaina
 - **Not authorized as a side effect:** deleting production secrets, rotating stable encryption keys, adding Cloudflare/Replit AI, reusing spent NEXT1 identities, broad RLS changes, synthetic production POST before valid NEXT2 scope, or a new paid Alert CREATE.
 - **Current NEXT ACTION:** verify local receiver Git source pin/clean working tree; then owner edits ONE deployment flag, not ten. After publish success, run one existing 200/200 parity check.
 
-## NEXT SINGLE COMMAND (after owner verified / and /__v39/workspace-runtime HTTP 200): source plus stable secret parity
+## NEXT SINGLE COMMAND (after owner verified two public HTTP 200 responses): source + stable secret parity
 
-Avoid Node fetch if the old Node public transport timed out while curl worked. This uses `curl` for each request and supplies **authenticated header material to curl via stdin `--config -`**, not in process arguments or logs; only redacted HTTP status codes are printed. It performs **no DB writes, App Storage writes, provider calls or paid CREATE**.
+Read-only. It uses curl, which worked when Node fetch timed out. Protected headers are passed to curl via **stdin config**, not command-line arguments, and are never logged. Do not paste any secret values into GitHub or ChatGPT.
 
 ```bash
 bash <<'GATE4_SOURCE_AND_PARITY_READONLY'
@@ -93,12 +93,11 @@ console.log(JSON.stringify({
 }));
 const secret=String(process.env.AERODATABOX_WEBHOOK_SECRET??'');
 const db=String(process.env.V39_DATABASE_RUNTIME_URL??'');
-if(secret.length<32||!db.startsWith('postgres')||/[
-]/.test(secret+db)){
+if(secret.length<32||!db.startsWith('postgres')||/[\r\n]/.test(secret+db)){
  console.log('LOCAL_STABLE_PARITY_ADMISSION_HOLD');process.exit(0);
 }
 function post(path,headers){
- const config=headers.map(h=>'header = '+JSON.stringify(h)).join('\\n')+'\\n';
+ const config=headers.map(h=>'header = '+JSON.stringify(h)).join('\n')+'\n';
  const r=curl(['--request','POST','--output','/dev/null',
   '--write-out','%{http_code}','--config','-',BASE+path],config);
  const status=String(r.stdout??'').trim();
@@ -124,4 +123,4 @@ NODE
 GATE4_SOURCE_AND_PARITY_READONLY
 ```
 
-**Boundaries:** No production mutation; do not execute an expired-role renewal or paid provider command until both HTTP checks and exact receiver source are verified.\n
+Interpret: sourcePinMatches + publishedDeployment + prepaidRouteRegistered + oldGate4AddonOff should be true, and webhookStatus=200, dbBindingStatus=200. If a check fails, do **not** assume published keys were deleted or run the rotation. No paid provider calls or PostgreSQL/storage writes occur here.
