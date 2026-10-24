@@ -120,7 +120,9 @@ async function main():Promise<void>{
    currentOwnerTableRlsEnabled:rls.enabled===true,
    currentOwnerTablePolicyCount:rls.count,
    currentOwnerTablePolicyNames:policies,
-   nextScopeInstalled:false,
+   // No new UUID/AUTH has been approved or queried; do not claim a
+   // hypothetical new binding is absent from an unscoped aggregate.
+   nextScopeInstalled:"NOT_ASSESSED_NO_NEW_SCOPE_APPROVED",
    nextScopeAuthorized:false,
    freshRoleAndScopedRlsReviewRequired:true,
    historicalRowsUntouched:true,
