@@ -78,6 +78,9 @@ export function reviewGate4SecondScopeRlsV39(
     !role.test(s.nextWriterRole)||
     s.nextWriterRole==="gate4_owner_writer_20261023")
   return result("HOLD_INVALID_NEXT_SCOPE");
+ if(!Array.isArray(s.existingPolicyNames)||
+    s.existingPolicyNames.some(x=>typeof x!=="string"))
+   return result("HOLD_EXISTING_DB_STATE");
  const policies=[...s.existingPolicyNames].sort();
  if(s.legacyOwnedBindings!==1||s.otherOwnedBindings!==0||
     !Number.isSafeInteger(s.previousOriginalRows)||
