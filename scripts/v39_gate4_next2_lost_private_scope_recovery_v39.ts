@@ -62,7 +62,7 @@ export function recoverNext2PredicateV39(
  const airport=extract("airport_icao","[A-Z]{4}");
  if(scope!==NEXT2_ID||source!==oldSource||airport!=="WSSS"||!auth)return null;
  // Reject any unanticipated extra comparison fields, which could widen RLS.
- const names=[...expression.matchAll(/\b([a-z_]+)\s*=/g)].map(x=>x[1]);
+ const names=[...expression.matchAll(/\b([a-z0-9_]+)\s*=/g)].map(x=>x[1]);
  if(names.length!==4||
   names.sort().join(",")!==
   ["scope_id","authorization_sha256","source_commit","airport_icao"].sort().join(","))
@@ -240,6 +240,7 @@ async function main():Promise<void>{
    GATE4_PREBIND_APPROVED_DB_HOST:ownerUrl.hostname,
    GATE4_PREBIND_WEBHOOK_SECRET:bearer
   },SOURCE);
+  mkdirSync(join(homedir(),".config"),{recursive:true,mode:0o700});
   protectedDirectory(ROOT);
   protectedDirectory(DIR);
   writePrivate("recovery-intent.json",{
