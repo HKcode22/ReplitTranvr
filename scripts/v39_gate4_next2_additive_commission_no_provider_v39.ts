@@ -164,20 +164,20 @@ async function inspect(db:pg.Client,actor:string,
     "gate4_safety_reader_20261022"]]
  )).rows;
  const exists=(n:string)=>roles.find(x=>x.rolname===n);
- const safe=(n:string,login?:boolean)=>{
+ const safe=(n:string,login?:boolean,newRole=false)=>{
   const x=exists(n);
   return !!x&&x.rolsuper===false&&x.rolbypassrls===false&&
    x.rolcreaterole===false&&x.rolcreatedb===false&&
    x.rolreplication===false&&
    (login===undefined||x.rolcanlogin===login)&&
-   (login!==true||x.rolinherit===false);
+   (!newRole||x.rolinherit===false);
  };
  if(!safe("gate4_receiver_20261022")||
     !safe("gate4_receiver_2026_next1")||
     !safe("gate4_safety_reader_20261022")||
     !safe("gate4_owner_writer_20261023",false)||
     !safe("gate4_owner_writer_2026_next1")||
-    (after?!(safe(NEXT2_RECEIVER,true)&&safe(NEXT2_WRITER,true)):
+    (after?!(safe(NEXT2_RECEIVER,true,true)&&safe(NEXT2_WRITER,true,true)):
      !!(exists(NEXT2_RECEIVER)||exists(NEXT2_WRITER))))return false;
  if(after){
   for(const [role,table,other] of [
