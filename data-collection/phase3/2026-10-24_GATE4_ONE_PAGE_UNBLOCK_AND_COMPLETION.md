@@ -179,3 +179,64 @@ GATE4_RUNTIME_SOURCE_READONLY
 ```
 
 **Interpretation:** If \`publishedGitHead\` is \`97ed05...\` or any other SHA, identify whether it represents old receiver code vs a generated Replit packaging commit before further work. \`scripts/build.ts\` compiles \`V39_DEPLOYED_GIT_HEAD\` from \`V39_BUILD_GIT_HEAD\` if set, otherwise \`git rev-parse HEAD\`. A successful workspace git pin does **not** establish what actual published binary reports. Keep production Gate4 fallback flag \`0\`, keep old seven policies/records preserved, do not spend credits. If published source already differs despite confirmed republish, inspect published deployment build logs and source selection before deciding any changes.
+
+## NEXT exact Replit source-provenance read-only command
+
+Purpose: Is the workspace/source snapshot truly equivalent to reviewed NEXT2 receiver `087dc...`, or just a different Replit auto-commit? Checks local existence of live commit object, ancestry and six **source file** comparisons; does not print or read secrets, does not contact provider, and changes no files.
+
+```bash
+bash <<'GATE4_REPLIT_PROVENANCE_READONLY'
+set -Eeuo pipefail
+set +x
+cd ~/workspace
+PIN=087dc948c29d004f88eca141e1fc8e83c2844e3f
+LIVE=758fce6dd77cba737f09468b899680816922674e
+
+for SHA in "$PIN" "$LIVE"; do
+  SHORT="$(printf '%s' "$SHA" | cut -c1-8)"
+  if git cat-file -e "$SHA^{commit}" 2>/dev/null; then
+    echo "COMMIT_$SHORT=LOCAL"
+  else
+    echo "COMMIT_$SHORT=NOT_LOCAL"
+  fi
+done
+
+if git merge-base --is-ancestor "$PIN" HEAD; then
+  echo "LOCAL_DESCENDS_FROM_REVIEWED=YES"
+else
+  echo "LOCAL_DESCENDS_FROM_REVIEWED=NO"
+fi
+
+for FILE in \
+  .replit \
+  scripts/build.ts \
+  server/phase2gCallbackOnly.ts \
+  server/lib/disruption/gate4Next2SealedBootstrap_v39.ts \
+  server/lib/disruption/gate4PrebindAdditiveRoute_v39.ts \
+  server/lib/disruption/workspaceRuntimeHealth_v39.ts
+do
+  if git diff --quiet "$PIN" HEAD -- "$FILE"; then
+    echo "WORKSPACE_MATCH $FILE"
+  else
+    echo "WORKSPACE_DIFFERS $FILE"
+  fi
+done
+
+if git cat-file -e "$LIVE^{commit}" 2>/dev/null; then
+  for FILE in \
+    .replit \
+    scripts/build.ts \
+    server/phase2gCallbackOnly.ts \
+    server/lib/disruption/gate4Next2SealedBootstrap_v39.ts
+  do
+    if git diff --quiet "$PIN" "$LIVE" -- "$FILE"; then
+      echo "PUBLISHED_OBJECT_MATCH $FILE"
+    else
+      echo "PUBLISHED_OBJECT_DIFFERS $FILE"
+    fi
+  done
+fi
+GATE4_REPLIT_PROVENANCE_READONLY
+```
+
+**Gate:** Even identical files are not enough to silently substitute the SHA used by encrypted-bundle location and RLS source filters. Do not spoof release commit, run role rotation, republish or spend provider credits until true published source provenance is established. Keep old add-on off (`0`), public GET 200, and two stable-secret challenge HTTP 200/200.
