@@ -10,6 +10,8 @@ import {createHash} from "node:crypto";
 import pg from "pg";
 import {gate4Next2RoleDDLV39,gate4Next2ScopedStatementsV39} from
  "../scripts/v39_gate4_next2_additive_commission_no_provider_v39";
+import {recoverNext2PredicateV39} from
+ "../scripts/v39_gate4_next2_lost_private_scope_recovery_v39";
 import {gate4Next2PoliciesMatchV39} from
  "../scripts/v39_gate4_next2_production_readonly_inventory_v39";
 
@@ -110,7 +112,8 @@ suite("Gate4 NEXT2 additive post-NEXT1 PostgreSQL16 scope custody",()=>{
    await db.query("ALTER TABLE "+own+" ENABLE ROW LEVEL SECURITY");
    const query="SELECT tablename,policyname,cmd,permissive,"+
     "cardinality(roles)::int AS role_count,roles[1]::text AS assigned_role,"+
-    "qual IS NOT NULL AS has_using,with_check IS NOT NULL AS has_check "+
+    "qual,with_check,qual IS NOT NULL AS has_using,"+
+    "with_check IS NOT NULL AS has_check "+
     "FROM pg_policies WHERE schemaname='clean' AND "+
     "tablename=ANY($1::text[])";
    const baseline=(await db.query(query,[[raw.split(".")[1],own.split(".")[1]]])).rows;
@@ -132,6 +135,15 @@ suite("Gate4 NEXT2 additive post-NEXT1 PostgreSQL16 scope custody",()=>{
    }
    const after=(await db.query(query,[[raw.split(".")[1],own.split(".")[1]]])).rows;
    expect(after).toHaveLength(11);
+   // PostgreSQL itself deparses VARCHAR comparisons with ::text casts.
+   // Recovered private authorization must match all four actual policies.
+   const next2Policies=after.filter(x=>x.policyname.startsWith("gate4_next2_"));
+   expect(next2Policies).toHaveLength(4);
+   for(const p of next2Policies){
+    const predicate=p.cmd==="SELECT"?p.qual:p.with_check;
+    expect(recoverNext2PredicateV39(predicate)).toBe(auth);
+   }
+
    expect(gate4Next2PoliciesMatchV39(after.filter(x=>!
     x.policyname.startsWith("gate4_next2_")),raw.split(".")[1])).toBe(true);
    expect(gate4Next2PoliciesMatchV39(after.filter(x=>!

@@ -50,24 +50,34 @@ export function recoverNext2PredicateV39(
 ):string|null {
  if(typeof expression!=="string"||expression.length>1200 ||
    /\b(OR|NOT|EXISTS|SELECT)\b/i.test(expression))return null;
- const extract=(field:string,pattern:string):string|null=>{
-  const m=expression.match(new RegExp("\\b"+field+"\\s*=\\s*'("+pattern+")'","g"));
-  if(!m||m.length!==1)return null;
-  const value=m[0].match(new RegExp("'("+pattern+")'"));
-  return value?.[1]??null;
- };
- const scope=extract("scope_id","[0-9a-f-]{36}");
- const auth=extract("authorization_sha256","[a-f0-9]{64}");
- const source=extract("source_commit","[a-f0-9]{40}");
- const airport=extract("airport_icao","[A-Z]{4}");
- if(scope!==NEXT2_ID||source!==oldSource||airport!=="WSSS"||!auth)return null;
- // Reject any unanticipated extra comparison fields, which could widen RLS.
- const names=[...expression.matchAll(/\b([a-z0-9_]+)\s*=/g)].map(x=>x[1]);
- if(names.length!==4||
-  names.sort().join(",")!==
-  ["scope_id","authorization_sha256","source_commit","airport_icao"].sort().join(","))
-  return null;
- return auth;
+ // pg_policies.qual/with_check is PostgreSQL-deparsed SQL: VARCHAR
+ // comparisons often appear as ((field)::text = 'value'::text), not as
+ // field = 'value'. Accept only the exact four AND-ed equalities; no OR,
+ // extra conditions, functions, unknown casts or loosened predicates.
+ const normalized=expression.replace(/::(?:text|uuid)\b/gi,"")
+  .replace(/[()]/g,"").replace(/\s+/g,"");
+ const clauses=normalized.split(/AND/i);
+ if(clauses.length!==4)return null;
+ const wanted=[
+  ["scope_id","[0-9a-f-]{36}"],["authorization_sha256","[a-f0-9]{64}"],
+  ["source_commit","[a-f0-9]{40}"],["airport_icao","[A-Z]{4}"]
+ ] as const;
+ const found=new Map<string,string>();
+ for(const clause of clauses){
+  let matched=false;
+  for(const [field,pattern] of wanted){
+   const m=clause.match(new RegExp("^"+field+"='("+pattern+")'$"));
+   if(m){
+    if(found.has(field))return null;
+    found.set(field,m[1]);matched=true;break;
+   }
+  }
+  if(!matched)return null;
+ }
+ if(found.size!==4||found.get("scope_id")!==NEXT2_ID||
+  found.get("source_commit")!==oldSource||
+  found.get("airport_icao")!=="WSSS")return null;
+ return found.get("authorization_sha256")??null;
 }
 function envReady():{ownerUrl:string;ownerActor:string;bucket:string}{
  const stable=String(process.env.V39_DATABASE_RUNTIME_URL??"");
@@ -113,8 +123,10 @@ async function verifyPublishedOldKeys():Promise<void>{
  await q.body?.cancel();
  if(q.status!==200)hold();
 }
-async function catalog(db:pg.Client,actor:string,readonly:boolean):
+async function catalog(db:pg.Client,actor:string,readonly:boolean,
+ mark:(guard:string)=>void=()=>{}):
  Promise<{authorization:string}> {
+ mark("OWNER_SESSION");
  const info=(await db.query(
   "SELECT current_database() AS db,current_user AS actor,"+
   "current_setting('transaction_read_only') AS readonly,"+
@@ -122,19 +134,25 @@ async function catalog(db:pg.Client,actor:string,readonly:boolean):
  )).rows[0];
  if(info?.db!=="neondb"||info.actor!==actor||
   info.readonly!==(readonly?"on":"off")||info.admin!==true)hold();
+ mark("RLS_TABLE_FLAGS");
  const flags=(await db.query(
-  "SELECT relname,relrowsecurity FROM pg_class WHERE oid=ANY($1::regclass[])",
-  [[ORIGINAL,BINDING]]
+  "SELECT c.relname,c.relrowsecurity FROM pg_class c "+
+  "JOIN pg_namespace n ON n.oid=c.relnamespace "+
+  "WHERE n.nspname='clean' AND c.relname=ANY($1::text[])",
+  [["gate4_alert_prebind_original_v39","gate4_alert_owned_binding_v39"]]
  )).rows;
  if(flags.length!==2||flags.some(x=>x.relrowsecurity!==true))hold();
+ mark("ORIGINAL_ROW_COUNT");
  const records=(await db.query(
   "SELECT scope_id::text AS s,count(*)::int AS n FROM "+ORIGINAL+
   " GROUP BY scope_id"
  )).rows;
  if(records.length!==1||records[0].s!==HISTORICAL_SCOPE||
   records[0].n!==1)hold();
+ mark("BINDING_ROW_COUNT");
  const bindings=(await db.query("SELECT count(*)::int AS n FROM "+BINDING)).rows;
  if(bindings.length!==1||bindings[0].n!==2)hold();
+ mark("RLS_POLICY_METADATA");
  const rows=(await db.query(
   "SELECT tablename,policyname,cmd,permissive,"+
   "cardinality(roles)::int AS role_count,roles[1]::text AS assigned_role,"+
@@ -145,12 +163,14 @@ async function catalog(db:pg.Client,actor:string,readonly:boolean):
   [["gate4_alert_prebind_original_v39","gate4_alert_owned_binding_v39"]]
  )).rows;
  if(rows.length!==11)hold();
+ mark("LEGACY_SEVEN_POLICIES");
  for(const table of ["gate4_alert_prebind_original_v39","gate4_alert_owned_binding_v39"]){
   if(!gate4Next2PoliciesMatchV39(
    rows.filter(p=>!p.policyname.startsWith("gate4_next2_")),table
   ))hold();
  }
  let authorization:string|undefined;
+ mark("NEXT2_POLICY_SHAPES");
  for(const required of POLICIES){
   const found=rows.filter(p=>p.policyname===required.name);
   if(found.length!==1)hold();
@@ -159,10 +179,12 @@ async function catalog(db:pg.Client,actor:string,readonly:boolean):
    p.assigned_role!==required.role||p.role_count!==1||
    p.permissive!=="PERMISSIVE"||
    (required.clause==="qual" ? p.with_check!==null : p.qual!==null))hold();
+  mark("NEXT2_PREDICATE_DEPARSE");
   const digest=recoverNext2PredicateV39(p[required.clause]);
   if(!digest||(authorization!==undefined&&authorization!==digest))hold();
   authorization=digest;
  }
+ mark("NEXT2_ROLE_FLAGS");
  const roles=(await db.query(
   "SELECT rolname,rolcanlogin,rolinherit,rolbypassrls FROM pg_roles "+
   "WHERE rolname=ANY($1::text[])",[[NEXT2_RECEIVER,NEXT2_WRITER]]
@@ -190,12 +212,13 @@ function connection(ownerUrl:string,role:string,password:string):string{
 }
 async function main():Promise<void>{
  let db:pg.Client|undefined,stage="ADMISSION",storageWrites=0;
- let dbChanged=false;
+ let dbChanged=false,auditMode=false,auditGuard="OWNER_CONNECTION";
  try{
   const mode=process.argv[2];
   if(process.argv.length!==3||
    !["--audit","--rotate-and-seal"].includes(mode))hold();
   const cfg=envReady();
+  auditMode=mode==="--audit";
   if(mode==="--rotate-and-seal")reviewed();
   stage="DB_READONLY";
   db=new pg.Client({connectionString:cfg.ownerUrl,
@@ -203,7 +226,7 @@ async function main():Promise<void>{
   await db.connect();
   await db.query("BEGIN TRANSACTION READ ONLY");
   let audit;
-  try{audit=await catalog(db,cfg.ownerActor,true);}
+  try{audit=await catalog(db,cfg.ownerActor,true,g=>{auditGuard=g;});}
   finally{await db.query("ROLLBACK").catch(()=>{});}
   if(mode==="--audit"){
    console.log(JSON.stringify({
@@ -327,7 +350,8 @@ async function main():Promise<void>{
  }catch{
   console.log(JSON.stringify({
    status:"GATE4_NEXT2_LOST_PRIVATE_RECOVERY_HOLD",
-   stage,privateEncryptedObjectWrites:storageWrites,
+   stage,...(auditMode?{failedGuard:auditGuard}:{}),
+   privateEncryptedObjectWrites:storageWrites,
    dbMutationCommitted:dbChanged,providerCalls:0,providerCreates:0,
    noAutomaticRetry:true
   }));

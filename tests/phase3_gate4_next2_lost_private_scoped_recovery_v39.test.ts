@@ -17,6 +17,17 @@ describe("NEXT2 original-policy-only recovery",()=>{
  it("extracts the existing SHA without printing or generating a new authorization",()=>{
   expect(recoverNext2PredicateV39(pred())).toBe(AUTH);
  });
+ it("accepts PostgreSQL 16 VARCHAR policy deparser with casts on both sides",()=>{
+  const sql="((((scope_id = '"+SCOPE+"'::uuid) AND "+
+   "((authorization_sha256)::text = '"+AUTH+"'::text)) AND "+
+   "((source_commit)::text = '"+OLD+"'::text)) AND "+
+   "((airport_icao)::text = 'WSSS'::text))";
+  expect(recoverNext2PredicateV39(sql)).toBe(AUTH);
+  expect(recoverNext2PredicateV39(
+   sql.replace("((airport_icao)::text","(unknown_function(airport_icao)::text")
+  )).toBeNull();
+  expect(recoverNext2PredicateV39(sql.replace("::text","::bpchar"))).toBeNull();
+ });
  it("refuses a source already retargeted or different from frozen commission",()=>{
   expect(recoverNext2PredicateV39(pred(NEXT))).toBeNull();
  });
