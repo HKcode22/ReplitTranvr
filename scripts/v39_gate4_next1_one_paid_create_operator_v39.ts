@@ -197,10 +197,10 @@ function scopeAndPins(
  const start=vars.GATE4_SAFETY_APPROVED_START_UTC??"";
  const stop=vars.GATE4_SAFETY_APPROVED_STOP_UTC??"";
  if(!start||!stop||Date.parse(stop)-Date.parse(start)!==20*60_000)
-    hold("EXACT_FIVE_MINUTE_WINDOW_NOT_APPROVED");
+    hold("EXACT_TWENTY_MINUTE_WINDOW_NOT_APPROVED");
  return {runner,scope:{
   sourceCommit:RECEIVER,scopeId:SCOPE,
-  authorizationSha256:writer.approvedAuth,airportIcao:"WSSS",
+  authorizationSha256:writer.authorizationSha256,airportIcao:"WSSS",
   startUtc:start,stopUtc:stop,
   observedStartingCredits:Number(
    process.env.GATE4_APPROVED_STARTING_CREDITS),
