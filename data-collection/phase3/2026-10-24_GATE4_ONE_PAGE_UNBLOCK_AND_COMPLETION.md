@@ -1,0 +1,54 @@
+# Gate 4 — one-page recovery and completion (2026-10-24)
+
+**Operator-facing CURRENT checkpoint.** Read this first; historical detail and immutable evidence stay in the linked prior reports. This is a no-Cloudflare, no-Replit-AI-Agent, no-blind-paid-calls procedure.
+
+## Stop confusion: three different secret locations
+
+1. **Production app secrets in Replit Publishing**: User screenshot on 2026-10-24 shows `AERODATABOX_WEBHOOK_SECRET`, `V39_DATABASE_RUNTIME_URL`, `V39_PRODUCTION_DATABASE_OWNER_URL` and the **eight** `GATE4_PREBIND_*` / `V39_GATE4_PREBIND_ADD_ON_PREPAID` published settings **listed**, masked. Their values are not established to be correct merely by presence, but they were **not removed by the recovery attempts**. **Do not manually copy ten NEXT2 settings.**
+2. **Workspace `.env` / workspace Secrets**: Replit Shell reads these. Workspace values need not equal production environment values; published authenticated parity is still *unproven* because current app HTTP is unavailable.
+3. **NEXT2 private temporary credential files**: `/home/runner/.config/replittranvr/gate4-next2-20261024/` is **absent**. This only means the draft NEXT2 local files were lost/never persisted to this Replit Shell; **not** that production app secrets were deleted. The reviewed encrypted App Storage bootstrap was designed to eliminate repeated ten-value manual entry; it has **not executed**.
+
+## Confirmed evidence
+
+- Paid historical **NEXT1**: one real positive subscription CREATE, V0072 binding, protected exact STOP, stable 2037 -> 1991 balance (**46 Alert credits**), **zero genuine V0071 originals**; scientific status `SAFETY_PASS_POSSIBLE_DELIVERY_GAP`. This event occurred about 06:49–06:50 UTC, **before** later database credential expiry. No proof of exact provider SEND status or full historical cause. [Original immutable incident report](2026-10-24_GATE4_WSSS_NEXT1_PAID_CREATE_EXACT_STOP_46_CREDIT_DELIVERY_GAP.md).
+- Production owner **NEXT2** read-only audit PASS: existing 2 restricted NEXT2 roles, 4 NEXT2 policies, 7 older policies, 1 historic original, 2 earlier ownership bindings; **zero writes**. [Recovery checkpoint](2026-10-24_GATE4_NEXT2_PUBLISHED_SECRETS_CLI_BLOCKER_AND_RECOVERY_CHECKPOINT.md).
+- Actual old restricted receiver role `gate4_receiver_2026_next1`: `rolvaliduntil = 2026-10-24 10:34:11.623+00`, `expired=true`. The older `gate4_receiver_20261022` has **no expiry**. This confirms expiration but not the actual live app's configured role.
+- Replit Shell network: DNS OK; Node public `/` and `/__v39/workspace-runtime` GET TIMEOUT; curl public root **HTTP 500**. Both published-key parity POSTs gave `NETWORK_OR_TIMEOUT`, **NOT proven secret mismatch**. Replit publisher metadata reports deployment `ce096a13-62ff-4f7a-ae6f-3bc91af601d9` as `success`, **not live HTTP PASS**.
+- Old published receiver `97ed05bfcc8b34bd607a80dbcfec6945ffd0d11a` calls `openGate4PrebindAdditiveStoreV39` **before** listening when `V39_GATE4_PREBIND_ADD_ON_PREPAID=1`. A failed/expired Gate4 restricted login triggers `GATE4_ADDON_STARTUP_HOLD` and prevents prepaid service startup. **Likely current HTTP 500 cause**, pending published startup-log correlation. Never claim this proves the older paid delivery gap.
+- Previously attempted NEXT2 `--rotate-and-seal` stopped at `PUBLISHED_OLD_KEY_PARITY` with App Storage writes **0**, DB mutations committed **false**, provider calls/CREATEs **0**; nothing to roll back. Existing NEXT2 roles/policies intact.
+- Exact reviewed NEXT2 **receiver binary candidate** `087dc948c29d004f88eca141e1fc8e83c2844e3f` (GitHub merged PR #131 7/7 CI). Exact reviewed **operator** `056c2f6e73881c926c28ebca98b43812e54165df` (PR #133 5/5 CI). **Never publish operator docs/latest main as if it were reviewed receiver.**
+
+## Minimal route — complete one stage before starting the next
+
+### 1. Bring Phase2G online without the expired NEXT1 Gate4 add-on (**user UI action, no paid provider**)
+
+**Do not delete/change the other secret entries.** In **Replit > Publishing > Production app secrets**, edit **only** `V39_GATE4_PREBIND_ADD_ON_PREPAID` to string `0` (temporary). Do NOT change `AERODATABOX_WEBHOOK_SECRET`, `V39_DATABASE_RUNTIME_URL`, owner URL, passwords, historical authorization digests, or any other `GATE4_PREBIND_*` value. Code: `gate4PrebindAdditiveConfigV39()` returns null immediately unless the flag is exactly `1`; this **disables only optional Gate4 Alert receiving**, not the Phase2G prepaid route. Do not disable auto-collection safety or enable any paid action.
+
+Before **Republish**, Replit Shell must verify `git rev-parse HEAD` is exactly receiver candidate `087dc948...` and the tracked source tree is clean. Last historical `GATE4_ADMISSION_READONLY` reached `SETTINGS_READ_OR_JSON` *after* comparing `HEAD` to `087dc...`, but reconfirm immediately before publishing. Replit publishing uses a current project snapshot; never deploy unrelated newest `main`.
+
+Then **Republish once** in the Publishing UI (or explicitly authorize a controlled Replit publish of that verified candidate). Replit production secret edits may require a new deployment to propagate. Verify **published** GET `/` -> 200, `/__v39/workspace-runtime` -> 200 and exact compiled `git_head` `087dc...`, old Phase2G route registered, Gate4 addon temporarily disabled. The platform's `success` label alone is not proof. If publish fails, inspect sanitized published logs for `GATE4_ADDON_STARTUP_HOLD` and old credentials; do not do paid calls or alter more secrets.
+
+### 2. Verify the TWO existing stable published keys (no provider)
+
+Re-run the already reviewed **read-only** `GATE4_PUBLISHED_KEY_PARITY_READONLY` two-endpoint script; expect HTTP **200/200** (stable webhook and exact runtime DB binding). This proves Shell matches published encryption-key inputs without revealing them. If one says 404/503, resolve only that discrepancy. The old full `SETTINGS_READ_OR_JSON` admission probe is obsolete and need not be rerun.
+
+### 3. Restore NEXT2 **without ten manual secrets** (user-authorized separate no-provider mutation)
+
+Only after **200/200**, rerun the reviewed one-shot scoped `--rotate-and-seal` operator `056c2f6e...` **once** in a separate detached Git worktree, with `~/workspace/.env`. It mints protected NEXT2 bearer/receiver/writer credentials, creates missing private NEXT2 file set with restricted permissions, seals ten receiver variables **into one AES-256-GCM encrypted object** in existing Replit private App Storage, rotates exactly two NEXT2 restricted roles (48h expiry), retargets exactly four NEXT2 RLS policies to compiled receiver `087dc...`. It does **not** change Production app secret entries, touch seven historical policies, or contact AeroDataBox. Treat any HOLD after partial work as **no automatic retry**. A reported READY is not yet hosted callback proof.
+
+### 4. Activate the reviewed NEXT2 receiver, then prove hosted ingestion (no provider)
+
+**Republish the SAME `087dc...` reviewed receiver** (not docs main). Its startup loader decrypts the sealed object using the two unchanged stable published secrets and overlays the NEXT2 configuration **in process memory**, including `V39_GATE4_PREBIND_ADD_ON_PREPAID=1`; the production UI flag can stay `0` as a safe fallback when the object is absent. Verify the actual published `git_head`, callback-only mode, old prepaid route and new Gate4 route, one valid-hosted synthetic JSON HTTP **200**, **independent scope-specific PostgreSQL V0071 raw bytes + SHA read-back**. Synthetic proof must NOT be counted as genuine provider delivery. The older acceptance script hard-pins `29d3...` and **must be updated/reviewed** to frozen `087dc...` before running—do not blindly execute it.
+
+### 5. Complete prospective Gate4 science under separately approved bounded risk
+
+Retrieve actual old Replit published error logs (06:49–06:50Z) and, if obtainable, AeroDataBox SEND attempts/HTTP response statuses to assess original failure without inventing a cause. Fresh Alert credits and a fresh **realistic exposure** decision are mandatory: old 5-credit soft target still allowed a 46-credit burst and is **not** a hard cost cap. Do not run an unapproved paid CREATE/refill. With fresh explicit owner authorization, use a NEW paid subscription/scope, positive provider-assigned ID and V0072 binding, protected independent exact STOP before sending, and post-STOP inactive settlement. At least **one authentic provider-origin V0071 original, exact byte SHA, matching scoped positive binding** establishes **end-to-end feasibility**, not long-run reliability. For a reliability proportion, use **number of unique provider SEND attempts** as the denominator—not the 46 charged credits or flight items. No fabricated >99% reliability.
+
+**After the time-limited experiment:** remove the temporary receiver from the published path / disable Gate4 add-on and republish a prepaid-only stable receiver BEFORE the NEXT2 48-hour login expiry to avoid repeating today's startup outage. Broader lifecycle resilience improvements are distinct engineering follow-up.
+
+## Decision/approval boundary
+
+- **Confirmed now:** user-visible production secret names present; role expiry; NEXT2 catalog PASS; failing public HTTP; zero recovery mutations; no paid work.
+- **Recommended immediate intervention:** only one production **flag value** changes to `0` followed by one reviewed publish. This is a user-managed production change; do not pretend it has happened until owner reports it.
+- **Not authorized as a side effect:** deleting production secrets, rotating stable encryption keys, adding Cloudflare/Replit AI, reusing spent NEXT1 identities, broad RLS changes, synthetic production POST before valid NEXT2 scope, or a new paid Alert CREATE.
+- **Current NEXT ACTION:** verify local receiver Git source pin/clean working tree; then owner edits ONE deployment flag, not ten. After publish success, run one existing 200/200 parity check.
