@@ -113,15 +113,13 @@ suite("Gate4 receiver additive two-scope RLS — disposable PG16",()=>{
     "UPDATE clean.gate4_alert_prebind_original_v39 "+
     "SET airport_icao='KLAX'"
    )).rejects.toThrow();
-   const access=(await newUser.query(
-    "SELECT has_table_privilege(current_user,"+
-    "'clean.gate4_alert_owned_binding_v39','SELECT') AS owner_read"
-   )).rows[0];
-   // The V0072 table is not created in this isolated database; new
-   // receiver receives NO V0072 GRANT or privilege via this plan.
+   // This isolated database has no V0072 owner table at all; the
+   // pure plan must not create or GRANT owner-binding access.
+   expect((await owner.query(
+    "SELECT to_regclass('clean.gate4_alert_owned_binding_v39') IS NULL AS absent"
+   )).rows[0].absent).toBe(true);
    expect(review.statements.join("\n")).not.toContain(
     "gate4_alert_owned_binding_v39");
-   expect(access).toBeDefined();
    const policyNames=(await owner.query(
     "SELECT policyname FROM pg_policies WHERE schemaname='clean' "+
     "AND tablename='gate4_alert_prebind_original_v39' ORDER BY policyname"
