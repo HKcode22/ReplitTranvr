@@ -15,6 +15,8 @@ import {
 } from "./lib/disruption/gate4PrebindAdditiveRoute_v39";
 import type {Gate4PrebindOriginalStoreV39} from
  "./lib/disruption/gate4PrebindIngress_v39";
+import {gate4Next2LoadPublishedConfigV39} from
+ "./lib/disruption/gate4Next2SealedBootstrap_v39";
 import {
   registerWorkspaceRuntimeHealthV39,
 } from "./lib/disruption/workspaceRuntimeHealth_v39";
@@ -77,7 +79,19 @@ if(process.env.V39_PREPAID_STAGE_TELEMETRY==="1"){
   });
 }
 // Additive opt-in: the existing prepaid-only binary stays the default.
-const gate4Config=gate4PrebindAdditiveConfigV39(process.env);
+// Existing Phase2G published secret set remains unchanged. In the paid-free
+// NEXT2 config handoff, encrypted settings can be loaded from the app's
+// already configured Replit bucket using *existing* protected runtime keys.
+// No provider call, no plaintext credential object and no deployment-secret
+// writer are needed. Absent bundle retains the former env behavior.
+const gate4ConfigEnv=process.env.V39_WORKSPACE_RUNTIME_OWNER_MODE===
+ "replit-published-deployment"
+ ? await gate4Next2LoadPublishedConfigV39(
+     process.env,String(process.env.V39_PROVIDER_BLOB_BUCKET_ID??""),
+     String(process.env.V39_DEPLOYED_GIT_HEAD??"")
+   )
+ : process.env;
+const gate4Config=gate4PrebindAdditiveConfigV39(gate4ConfigEnv);
 const gate4AdditiveEnabled=gate4Config!==null;
 let gate4DurableStore:Gate4PrebindOriginalStoreV39|null=null;
 const app = express();
