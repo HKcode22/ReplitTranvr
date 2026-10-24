@@ -1,3 +1,22 @@
+# Phase 3 — Start here (latest: October 24, 2026)
+
+**CURRENT OPERATIONAL TRUTH (supersedes the older October 14–15 material below):** Gate 3 and Gate 0.5 have progressed through their separately authorized tests. Gate 4 successfully executed one actual WSSS Alert CREATE, private V0072 exact positive binding, independently protected exact-ID STOP, and three stable post-STOP balance reads; **BUT paid live Alert delivery remains unverified: 46 credits spent, 0 matching V0071 originals**. Do not claim Gate 4 qualified PASS, do not start Phase 4 from it, and do not rerun the spent operator.
+
+**Read these current evidence and release documents FIRST, in this order:**
+
+- [NEXT2 repaired receiver, hosted valid-JSON acceptance, and prospective retest handoff](2026-10-24_GATE4_NEXT2_REPAIRED_RECEIVER_RELEASE_AND_RETEST_HANDOFF.md) — exact receiver source, new-scope commissioning boundaries, positive hosted JSON→V0071 synthetic acceptance, separate protected paid permission and scientific exit.
+- [Actual NEXT1 paid 46-credit/zero-original evidence report](2026-10-24_GATE4_WSSS_NEXT1_PAID_CREATE_EXACT_STOP_46_CREDIT_DELIVERY_GAP.md) — observed 2,037→1,991 credits, POST delivery uncertainty, successful independent STOP and no active subscription.
+- [Reviewed paid trial and operator source](2026-10-24_GATE4_NEXT_SCOPE_PAID_OPERATOR_REVIEW.md) — **HISTORICAL SPENT NEXT1 SOURCE: DO NOT REUSE**.
+- [Evidence/authorization continuity: GitHub issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38).
+
+**Current exact release identities:** repaired callback receiver candidate frozen at `29d3e0dff8b8863f55f6d73e609e21480b8e46db` (PRs #125/#126) is **reviewed but NOT published**; currently published receiver still at `97ed05bfcc8b34bd607a80dbcfec6945ffd0d11a`. NEXT2 scope/roles/deployment, hosted 200 rehearsal, STOP and paid CREATE **do not exist yet**. A newly staged one-use source-only acceptance tool lives in `scripts/v39_gate4_next2_hosted_no_provider_acceptance_v39.ts`; it must not run on old scope and its synthetic row is not positive provider science.
+
+**Operational constraints:** GitHub Actions + Replit only (no Cloudflare, no Replit AI Agent), preserve previous raw/owner evidence, no provider CREATE/refill without fresh explicit permission, no bypass of least-privilege production RLS, no unsupported hard 5-credit cap. The last 1,991-credit provider balance was below the former 2,000 protected floor, so any future payment risk must be reviewed on fresh real balance. Previously discussed 6+6 fallback relates to receiver-health resilience, **not** free provider SEND retries or an enforceable alert-credit cap.
+
+---
+
+## Archived historical progress below — October 14–15 status may be outdated
+
 ## OCT15 CURRENT — ACTUAL GATE3 PREPAID OWNER WIRED BUT PAID PATH DELIBERATELY SEALED
 
 **[READ FULL LATEST TECHNICAL REPORT](2026-10-15_GATE3_ACTUAL_EXECUTION_OWNER_WIRING_AND_PAID_RELEASE_SEAL_CHECKPOINT.md).** Draft PR36 one new integrated source+test+report commit: `gate3ActualExecutionOwner_v39.ts` now builds the **EXACT real `runPrepaidLiveWindowV39`** prepared UUID/ICAO/AUTH/budget/5s watchdog/3+ stable settlement arguments using **real provider balance stored only in process memory** by `gate3OwnedPreExposure_v39.ts`. Failed run -> existing durable LOGGED FAILED terminal; successful-looking window -> explicit HOLD/no SQL until independent signed callback original/raw-before-2xx/Blob+PG SHA readback (caller bool cannot fake success). New source-level `GATE3_PROVIDER_EXPOSURE_RELEASED_V39=false` seals BOTH the shared runner and the new owner before provider/SQL to avoid abandoned PREPARED reservations. Future release requires signed hosted original-source proof, reviewed V0065 schema/deployment and manual PAID AUTH; this is **not Gate3 PASS**. New exact commit and its four no-provider CI MUST be checked, prior `c84ab2f1...` was 4/4 success. Main/Replit publishing unchanged; no provider calls, credits, production SQL, hosted POST, merge, raw delete or auto-paid cron this session.
