@@ -152,6 +152,96 @@ describe("Gate4 additive prebind on existing prepaid runtime, no provider",()=>{
     expect(o.originalBytes.equals(bytes)).toBe(true);
   });
  });
+ it("accepts AeroDataBox-shaped JSON with charset and structured JSON media type",async()=>{
+   const body=Buffer.from(JSON.stringify({
+     id:"10c033f1-1b4c-4c36-b24a-73bc7ead4cdd",
+     timestampUtc:"2026-10-24T07:00:00.000Z",
+     subscription:{
+       id:"subscriptionTest999",isActive:true,
+       createdOnUtc:"2026-10-24T06:49:00Z",
+       subscriber:{type:"Webhook",id:"redacted-unit-fixture"},
+       subject:{type:"FlightByAirportIcao",id:"WSSS"}
+     },
+     deliveryAttempt:{
+       seqNo:0,costCredits:2,timestampUtc:"2026-10-24T07:00:00Z"
+     },
+     flights:[
+       {number:"SQ100",status:"Departed",isCargo:false},
+       {number:"SQ101",status:"Expected",isCargo:false}
+     ]
+   }));
+   const store=good();
+   const logs=vi.spyOn(console,"info").mockImplementation(()=>{});
+   try{
+     await httpTest(store,async base=>{
+       for(const contentType of [
+         "application/json; charset=utf-8",
+         "application/vnd.aerodatabox+json"
+       ]){
+         const r=await fetch(base+"/api/v1/webhooks/aerodatabox/"+secret,{
+           method:"POST",headers:{"content-type":contentType},body
+         });
+         expect(r.status).toBe(200);
+         expect((await r.json()).received).toBe(true);
+       }
+     });
+     expect(store.writeOriginal).toHaveBeenCalledTimes(2);
+     const all=logs.mock.calls.map(x=>x.join(" "));
+     expect(all.length).toBeGreaterThanOrEqual(2);
+     expect(all.every(x=>x.includes("GATE4_ALERT_HTTP_V1"))).toBe(true);
+     expect(all.join(" ")).not.toContain(secret);
+     expect(all.join(" ")).not.toContain("SQ100");
+     expect(all.join(" ")).not.toContain("subscriptionTest999");
+     const first=vi.mocked(store.writeOriginal).mock.calls[0][0];
+     expect(first.originalBytes.equals(body)).toBe(true);
+     expect(first.originalSha256).toBe(digest(body));
+   }finally{logs.mockRestore();}
+ });
+ it("rejects unsupported content types and oversized posts before storage",async()=>{
+   const store=good();
+   await httpTest(store,async base=>{
+     const url=base+"/api/v1/webhooks/aerodatabox/"+secret;
+     const text=await fetch(url,{
+       method:"POST",headers:{"content-type":"text/plain"},
+       body:bytes
+     });
+     expect(text.status).toBe(415);
+     const oversized=await fetch(url,{
+       method:"POST",headers:{"content-type":"application/json"},
+       body:Buffer.alloc(2*1024*1024+20,0x61)
+     });
+     expect(oversized.status).toBe(413);
+     expect(store.writeOriginal).not.toHaveBeenCalled();
+   });
+ });
+ it("records sanitized no-provider 4xx/5xx statuses without URL path tokens",async()=>{
+   const store=good();
+   const info=vi.spyOn(console,"info").mockImplementation(()=>{});
+   try{
+     await httpTest(store,async base=>{
+       const path="/api/v1/webhooks/aerodatabox/";
+       const wrong=await fetch(base+path+"wrong-secret",{
+         method:"POST",headers:{"content-type":"application/json"},
+         body:bytes
+       });
+       expect(wrong.status).toBe(404);
+       const rejected=await fetch(base+path+secret,{
+         method:"POST",headers:{"content-type":"application/json"},
+         body:Buffer.from('{"bad":true}')
+       });
+       expect(rejected.status).toBe(422);
+     });
+     const reports=info.mock.calls
+      .filter(x=>x[0]==="GATE4_ALERT_HTTP_V1")
+      .map(x=>JSON.parse(String(x[1])));
+     expect(reports.map(x=>x.httpStatus)).toEqual([404,422]);
+     expect(reports.every(x=>x.completed===true)).toBe(true);
+     const logged=JSON.stringify(info.mock.calls);
+     expect(logged).not.toContain(secret);
+     expect(logged).not.toContain("wrong-secret");
+     expect(logged).not.toContain("subscriptionTest999");
+   }finally{info.mockRestore();}
+ });
  it("wrong bearer secret and body mismatch cannot reach durable store",async()=>{
   const store=good();
   await httpTest(store,async base=>{
