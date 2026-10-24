@@ -1,8 +1,8 @@
 /**
- * Gate4 second-scope temporary V0072 writer — REVIEW CANDIDATE / SEALED.
+ * Gate4 second-scope temporary V0072 writer — FROZEN APPROVED SETUP ONLY.
  * --plan is an owner READ ONLY metadata/policy/role review. --apply is source-
- * sealed FALSE until a separate PR and independently documented production
- * approval. NEVER invokes AeroDataBox, Actions STOP, callbacks, or republish.
+ * released ONLY when exact owner private manifest + permission verified.
+ * NEVER invokes AeroDataBox, Actions STOP, callbacks, or republish.
  *
  * This MUST NOT recycle the Oct23 role, paid intent, historical binding or
  * credential. On uncertain commit, preserve private credential for manual
@@ -18,8 +18,10 @@ import {homedir} from "node:os";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {reviewGate4SecondScopeRlsV39} from
  "../server/lib/disruption/gate4SecondScopeRlsPlan_v39";
+import {readGate4ApprovedManifestV39} from
+ "./v39_gate4_approved_no_provider_scope_v39";
 
-export const GATE4_SECOND_WRITER_PRODUCTION_APPLY_RELEASED_V39=false;
+export const GATE4_SECOND_WRITER_PRODUCTION_APPLY_RELEASED_V39=true;
 const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const OLD_SCOPE="498dccd7-5da3-4687-a6ea-e0dc03b54398";
 const OLD_ROLE="gate4_owner_writer_20261023";
@@ -143,6 +145,16 @@ async function main():Promise<void>{
  // Immutable source seal BEFORE DB IO, secret creation, GRANT or any DDL.
  if(mode==="--apply"&&!GATE4_SECOND_WRITER_PRODUCTION_APPLY_RELEASED_V39)
    hold("PRODUCTION_APPLY_SOURCE_SEALED");
+ // A released DB apply remains limited to the owner's fresh PRIVATE, 0600
+ // exact-scope setup authorization. Check before DB/config connections.
+ if(mode==="--apply"){
+  const approved=readGate4ApprovedManifestV39();
+  if(process.env.GATE4_SECOND_WRITER_ROLE!==approved.writerRole||
+     process.env.GATE4_SECOND_WRITER_APPROVED_SCOPE_ID!==approved.scopeId||
+     process.env.GATE4_SECOND_WRITER_APPROVED_AUTH_SHA256!==approved.authorizationSha256||
+     process.env.GATE4_SECOND_WRITER_APPROVED_RECEIVER_SHA!==approved.proposedPublishedSourceSha)
+   hold("PRIVATE_APPROVED_SCOPE_MISMATCH");
+ }
  const cfg=config();
  const db=new pg.Client({connectionString:cfg.ownerUrl,
   connectionTimeoutMillis:6000,query_timeout:8000,
@@ -158,7 +170,7 @@ async function main():Promise<void>{
   if(mode==="--plan"){
    console.log(JSON.stringify({status:"GATE4_SECOND_WRITER_REVIEW_ONLY_READY",
     reviewedHead:cfg.head,proposedStatements:review.statements.length,
-    productionApplySealed:true,providerRequests:0,databaseWrites:0,
+    productionApplySealed:!GATE4_SECOND_WRITER_PRODUCTION_APPLY_RELEASED_V39,providerRequests:0,databaseWrites:0,
     newRoleCommissioned:false,paidAuthorized:false}));
    return;
   }
