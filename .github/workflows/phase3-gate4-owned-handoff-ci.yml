@@ -7,6 +7,7 @@ on:
       - "server/lib/disruption/gate4*"
       - "server/lib/disruption/aerodataboxLimiter_v3.ts"
       - "scripts/v39_gate4_one_shot_writer_commission_v39.ts"
+      - "scripts/v39_gate4_second_writer_commission_v39.ts"
       - "scripts/v39_gate4_single_live_create_operator_v39.ts"
       - "tests/phase3_gate4_*"
 permissions:
@@ -41,6 +42,7 @@ jobs:
       V39_PRODUCTION_DATABASE_OWNER_URL: ""
       GATE4_WRITER_APPLY_CONFIRM: ""
       GATE4_WRITER_REVOKE_CONFIRM: ""
+      GATE4_SECOND_WRITER_APPLY_CONFIRM: ""
       V39_PHASE6_PROCESS_ARMED: "0"
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +66,7 @@ jobs:
           test -z "$V39_DATABASE_RUNTIME_URL"
           test -z "$V39_PRODUCTION_DATABASE_OWNER_URL"
           test -z "$GATE4_WRITER_APPLY_CONFIRM"
+          test -z "$GATE4_SECOND_WRITER_APPLY_CONFIRM"
           test "$V39_PHASE6_PROCESS_ARMED" = 0
           grep -q '^export const GATE4_ACTIONS_LIVE_STOP_RELEASED_V39=true;' scripts/v39_gate4_actions_live_stop_v39.ts
       - run: npm ci --ignore-scripts --no-audit --no-fund
@@ -85,6 +88,7 @@ jobs:
       - name: Genuine disposable restricted PostgreSQL16 transaction + RLS
         run: |
           npx --no-install vitest run tests/phase3_gate4_prebind_real_pg_v39.test.ts
+          npx --no-install vitest run tests/phase3_gate4_second_writer_retired_real_pg_v39.test.ts
           echo "GATE4_SCOPED_WRITER_PG16_REPRODUCED_PASS"
           echo "PROVIDER_REQUESTS=0"
           echo "PRODUCTION_DATABASE_WRITES=0"
