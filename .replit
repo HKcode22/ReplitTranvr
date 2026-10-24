@@ -38,7 +38,7 @@ externalPort = 80
 [deployment]
 deploymentTarget = "autoscale"
 run = ["env", "V39_CALLBACK_ONLY_RUNTIME=1", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "V39_RUNTIME_DURABILITY_CLASS=autoscale", "node", "dist/index.mjs"]
-build = ["env", "V39_CALLBACK_ONLY_BUILD=1", "npm", "run", "build"]
+build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]
 
 [userenv]
 
