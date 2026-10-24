@@ -17,14 +17,43 @@ export const FROZEN_RECEIVER_SOURCE="29d3e0dff8b8863f55f6d73e609e21480b8e46db";
 export const HISTORICAL_SCOPE="498dccd7-5da3-4687-a6ea-e0dc03b54398";
 export const SPENT_NEXT1_SCOPE="d6c0fcac-798e-4913-bfd1-a561adb3dd82";
 
-const receiverPolicies=[
- "gate4_legacy_receiver_select_v39","gate4_legacy_receiver_insert_v39",
- "gate4_next_receiver_select_v39","gate4_next_receiver_insert_v39"
-].sort();
-const writerPolicies=[
- "gate4_safety_select_v39",
- "gate4_next_writer_select_v39","gate4_next_writer_insert_v39"
-].sort();
+/** Actual pg_policies.roles is name[]; node-postgres may return the
+ * text/array representation rather than a JavaScript string array.
+ * Resolve cardinality and roles[1] in PostgreSQL, not via x.roles.length.
+ * Required role/command/USING/WITH CHECK are checked in addition to names.
+ */
+export type Gate4PolicyMetadataV39=Readonly<{
+ tablename:string;policyname:string;cmd:string;permissive:string;
+ role_count:number;assigned_role:string;has_using:boolean;has_check:boolean;
+}>;
+const expectedPolicies:Readonly<Record<string,
+ readonly [string,string,string,boolean,boolean][]>>={
+ gate4_alert_prebind_original_v39:[
+  ["gate4_legacy_receiver_insert_v39","INSERT","gate4_receiver_20261022",false,true],
+  ["gate4_legacy_receiver_select_v39","SELECT","gate4_receiver_20261022",true,false],
+  ["gate4_next_receiver_insert_v39","INSERT","gate4_receiver_2026_next1",false,true],
+  ["gate4_next_receiver_select_v39","SELECT","gate4_receiver_2026_next1",true,false]
+ ],
+ gate4_alert_owned_binding_v39:[
+  ["gate4_next_writer_insert_v39","INSERT","gate4_owner_writer_2026_next1",false,true],
+  ["gate4_next_writer_select_v39","SELECT","gate4_owner_writer_2026_next1",true,false],
+  ["gate4_safety_select_v39","SELECT","gate4_safety_reader_20261022",true,false]
+ ]
+};
+export function gate4Next2PoliciesMatchV39(
+ policies:readonly Gate4PolicyMetadataV39[],table:string
+):boolean{
+ const expected=expectedPolicies[table];
+ if(!expected)return false;
+ const selected=policies.filter(x=>x.tablename===table);
+ if(selected.length!==expected.length)return false;
+ return expected.every(([name,cmd,role,using,check])=>
+  selected.filter(p=>p.policyname===name).length===1 &&
+  selected.some(p=>p.policyname===name && p.cmd===cmd &&
+   p.assigned_role===role && p.role_count===1 &&
+   p.permissive==="PERMISSIVE" &&
+   p.has_using===using && p.has_check===check));
+}
 
 export type Gate4Next2CatalogSummaryV39=Readonly<{
   correctDbOwner:boolean;transactionReadOnly:boolean;
@@ -106,7 +135,11 @@ export async function inspectGate4Next2ProductionV39():Promise<void>{
    [["gate4_alert_prebind_original_v39","gate4_alert_owned_binding_v39"]]
   )).rows;
   const policies=(await client.query(
-   "SELECT tablename,policyname,cmd,roles,permissive "+
+   "SELECT tablename,policyname,cmd,permissive,"+
+   "cardinality(roles)::int AS role_count,"+
+   "roles[1]::text AS assigned_role,"+
+   "qual IS NOT NULL AS has_using,"+
+   "with_check IS NOT NULL AS has_check "+
    "FROM pg_policies WHERE schemaname='clean' AND "+
    "tablename = ANY($1::text[])",
    [["gate4_alert_prebind_original_v39","gate4_alert_owned_binding_v39"]]
@@ -127,11 +160,7 @@ export async function inspectGate4Next2ProductionV39():Promise<void>{
    return !!x&&x.rolsuper===false&&x.rolbypassrls===false&&
     x.rolcreaterole===false&&x.rolcreatedb===false;
   };
-  const exact=(table:string,expected:string[])=>
-   JSON.stringify(policies.filter(x=>x.tablename===table)
-    .map(x=>x.policyname).sort())===JSON.stringify(expected)&&
-   policies.filter(x=>x.tablename===table).every(x=>
-    x.permissive==="PERMISSIVE"&&x.roles.length===1);
+
   const count=(scope:string,data:readonly {scope:string}[])=>
    data.filter(x=>x.scope===scope).length;
   const validRows=rows.every(x=>
@@ -151,8 +180,8 @@ export async function inspectGate4Next2ProductionV39():Promise<void>{
    ownedRows:ownedN,oldOwned:oldB,next1Owned:nextB,
    otherOwned:ownedN-oldB-nextB,
    allOriginalShaVerified:validRows,
-   receiverPoliciesExact:exact("gate4_alert_prebind_original_v39",receiverPolicies),
-   writerPoliciesExact:exact("gate4_alert_owned_binding_v39",writerPolicies),
+   receiverPoliciesExact:gate4Next2PoliciesMatchV39(policies,"gate4_alert_prebind_original_v39"),
+   writerPoliciesExact:gate4Next2PoliciesMatchV39(policies,"gate4_alert_owned_binding_v39"),
    legacyReceiverRolesScoped:safeReceiver("gate4_receiver_20261022")&&
     safeReceiver("gate4_receiver_2026_next1")&&
     safeReceiver("gate4_safety_reader_20261022"),
