@@ -2,9 +2,9 @@
 
 ## 2026-10-24 NEXT2 parity HOLD — next no-provider two-route diagnostic
 
-The old stable-key verification is two authenticated POST controls on the **existing** published receiver (one matching the existing \`AERODATABOX_WEBHOOK_SECRET\`, one HMAC using \`V39_DATABASE_RUNTIME_URL\`). Both should return HTTP 200. The operator reports a single \`PUBLISHED_OLD_KEY_PARITY\` HOLD if either fails. This diagnosis performs **no provider/DB/storage mutations** and prints only HTTP status codes; do not print tokens or URLs.
+The old stable-key verification is two authenticated POST controls on the **existing** published receiver (one matching the existing `AERODATABOX_WEBHOOK_SECRET`, one HMAC using `V39_DATABASE_RUNTIME_URL`). Both should return HTTP 200. The operator reports a single `PUBLISHED_OLD_KEY_PARITY` HOLD if either fails. This diagnosis performs **no provider/DB/storage mutations** and prints only HTTP status codes; do not print tokens or URLs.
 
-\`\`\`bash
+```bash
 bash <<'GATE4_PUBLISHED_KEY_PARITY_DIAG'
 set -Eeuo pipefail
 set +x
@@ -48,7 +48,7 @@ console.log(JSON.stringify({
 }));
 NODE
 GATE4_PUBLISHED_KEY_PARITY_DIAG
-\`\`\`
+```
 
 Interpret only the two codes:
 - **200/200:** stable keys currently appear to match. The previous HOLD may have been transient; do not infer rotation or sealed install is done.
