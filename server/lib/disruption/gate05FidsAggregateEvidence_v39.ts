@@ -17,7 +17,10 @@ const nonempty = (x: unknown): string | null =>
 
 function utcInstant(x: unknown): number | null {
   const s = nonempty(x);
-  if (!s || !/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d{1,3})?)?Z$/.test(s))
+  // RFC3339 UTC permits fractional seconds beyond millisecond precision and
+  // an explicit +00:00 offset; both must not be counted as missingness.
+  // Reject nonzero offsets here because DateTimeContract.utc denotes UTC.
+  if (!s || !/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d{1,9})?)?(?:Z|\+00:00)$/.test(s))
     return null;
   const ms = Date.parse(s);
   if (!Number.isFinite(ms)) return null;
