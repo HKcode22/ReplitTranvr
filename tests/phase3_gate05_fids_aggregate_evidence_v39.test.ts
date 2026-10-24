@@ -56,10 +56,36 @@ describe("Gate05 pair FIDS aggregate — fixture-only, zero provider IO", () => 
     expect(r.withoutLocation.departurePrimaryByFidsContext).toBe(1);
     expect(r.withoutLocation.departureRequestedAirportConfirmed).toBe(0);
     expect(r.withoutLocation.departureAirportUnverified).toBe(1);
+    expect(r.withoutLocation.provisionalMatchableRows).toBe(1);
+    expect(r.withoutLocation.provisionalDistinctKeys).toBe(1);
     expect(r.withoutLocation.qualityLive).toBe(1);
     expect(r.withoutLocation.runwayActualityProven).toBe(false);
     expect(r.withoutLocation.scheduledWheelsOffReferenceProven).toBe(false);
     expect(r.actualRunwayDelayLabelProven).toBe(false);
+  });
+  it("matches omitted-vs-explicit WSSS origins provisionally, not canonically", () => {
+    const omitted = entry("2026-10-22T04:40:00Z", {
+      departure: {scheduledTime: {utc:"2026-10-22T04:40:00Z"}}
+    });
+    const explicit = entry("2026-10-22T04:40:00Z");
+    const r = aggregateGate05FidsPairV39([omitted], [explicit], bounds);
+    expect(r.provisionalComparableOverlap).toBe(1);
+    expect(r.withoutLocation.departureRequestedAirportConfirmed).toBe(0);
+    expect(r.withoutLocation.departureAirportUnverified).toBe(1);
+    expect(r.withoutLocation.provisionalMatchableRows).toBe(1);
+    expect(r.matchingFlightIdentitiesProven).toBe(false);
+    expect(r.actualRunwayDelayLabelProven).toBe(false);
+  });
+  it("excludes an explicitly foreign departure airport from WSSS matching", () => {
+    const foreign = entry("2026-10-22T04:40:00Z", {
+      departure: {
+        airport:{icao:"WADD"},
+        scheduledTime:{utc:"2026-10-22T04:40:00Z"}
+      }
+    });
+    const r = aggregateGate05FidsPairV39([foreign], [foreign], bounds);
+    expect(r.withoutLocation.provisionalMatchableRows).toBe(0);
+    expect(r.provisionalComparableOverlap).toBe(0);
   });
   it("does not certify an actual flight or a cutoff from missing times", () => {
     const d = entry("2026-10-22T04:40:00Z", {
