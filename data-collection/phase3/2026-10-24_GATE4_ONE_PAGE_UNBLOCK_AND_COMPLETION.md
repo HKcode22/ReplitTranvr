@@ -97,31 +97,31 @@ if(secret.length<32||!db.startsWith('postgres')||/[
 ]/.test(secret+db)){
  console.log('LOCAL_STABLE_PARITY_ADMISSION_HOLD');process.exit(0);
 }
-function post(path,header){
- const config='header = '+JSON.stringify(header)+'\n';
+function post(path,headers){
+ const config=headers.map(h=>'header = '+JSON.stringify(h)).join('\\n')+'\\n';
  const r=curl(['--request','POST','--output','/dev/null',
   '--write-out','%{http_code}','--config','-',BASE+path],config);
  const status=String(r.stdout??'').trim();
  return r.status===0&&/^[1-5][0-9]{2}$/.test(status)
    ?Number(status):'TRANSPORT_HOLD';
 }
-const webhookStatus=post('/__v39/phase2g/webhook-secret-match',
- 'x-v39-phase2g-webhook-secret: '+secret);
+const webhookStatus=post('/__v39/phase2g/webhook-secret-match',[
+ 'x-v39-phase2g-webhook-secret: '+secret
+]);
 const challenge='gate4_custody_'+randomBytes(16).toString('hex');
 const proof=createHmac('sha256',db)
  .update('phase2g-db-binding:'+challenge).digest('hex');
-const dbBindingStatus=post('/__v39/phase2g/runtime-db-binding',
- 'x-v39-phase2g-db-challenge: '+challenge);
-const dbProofStatus=post('/__v39/phase2g/runtime-db-binding',
- 'x-v39-phase2g-db-challenge: '+challenge+'\r\nx-v39-phase2g-db-proof: '+proof);
+const dbBindingStatus=post('/__v39/phase2g/runtime-db-binding',[
+ 'x-v39-phase2g-db-challenge: '+challenge,
+ 'x-v39-phase2g-db-proof: '+proof
+]);
 console.log(JSON.stringify({
  status:'GATE4_STABLE_KEYS_PARITY_READONLY',
- webhookStatus,dbBindingStatus:dbProofStatus,
+ webhookStatus,dbBindingStatus,
  providerCalls:0,databaseWrites:0,storageWrites:0
 }));
 NODE
 GATE4_SOURCE_AND_PARITY_READONLY
 ```
 
-**Warning:** do not combine multiple HTTP header lines with CR/LF in a curl config header value; curl must receive `header = ...` on separate config lines. A strictly correct final command should construct each header as its own config directive. The published source and stable-key parity are read-only checks; they do not authorize role rotation or paid provider CREATE.
-
+**Boundaries:** No production mutation; do not execute an expired-role renewal or paid provider command until both HTTP checks and exact receiver source are verified.\n
