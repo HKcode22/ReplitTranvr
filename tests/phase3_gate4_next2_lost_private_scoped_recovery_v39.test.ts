@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {
- recoverNext2PredicateV39
+ recoverNext2PredicateV39,gate4Next2SafeCurlConfigV39
 } from "../scripts/v39_gate4_next2_lost_private_scope_recovery_v39";
 
 const SCOPE="16f819c6-7c68-4d5a-82cf-3820e9294dc7";
@@ -12,6 +12,35 @@ const pred=(source=OLD,airport="WSSS")=>
   "(authorization_sha256 = '"+AUTH+"'::text)) AND "+
   "(source_commit = '"+source+"'::text)) AND "+
   "(airport_icao = '"+airport+"'::text))";
+
+describe("NEXT2 published stable-key curl stdin attestation",()=>{
+ it("emits separate curl config directives, never argv header values",()=>{
+  const secret="a".repeat(64);
+  const challenge="gate4_custody_"+"b".repeat(32);
+  const proof="c".repeat(64);
+  expect(gate4Next2SafeCurlConfigV39([
+   "x-v39-phase2g-webhook-secret: "+secret
+  ])).toBe('header = "x-v39-phase2g-webhook-secret: '+secret+'"\n');
+  const config=gate4Next2SafeCurlConfigV39([
+   "x-v39-phase2g-db-challenge: "+challenge,
+   "x-v39-phase2g-db-proof: "+proof
+  ]);
+  expect(config.split("\n").filter(Boolean)).toHaveLength(2);
+  expect(config).toContain('header = "x-v39-phase2g-db-proof: '+proof+'"');
+ });
+ it("blocks line breaks, untrusted headers, quotes and empty inputs",()=>{
+  expect(()=>gate4Next2SafeCurlConfigV39([])).toThrow();
+  expect(()=>gate4Next2SafeCurlConfigV39([
+   "Authorization: "+"x".repeat(50)
+  ])).toThrow();
+  expect(()=>gate4Next2SafeCurlConfigV39([
+   "x-v39-phase2g-webhook-secret: "+("a".repeat(50))+"\r\nheader: injected"
+  ])).toThrow();
+  expect(()=>gate4Next2SafeCurlConfigV39([
+   'x-v39-phase2g-webhook-secret: '+('a'.repeat(40))+'"'
+  ])).toThrow();
+ });
+});
 
 describe("NEXT2 original-policy-only recovery",()=>{
  it("extracts the existing SHA without printing or generating a new authorization",()=>{

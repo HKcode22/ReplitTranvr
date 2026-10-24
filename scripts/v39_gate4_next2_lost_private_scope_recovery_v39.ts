@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import {join} from "node:path";
 import {homedir} from "node:os";
-import {execFileSync} from "node:child_process";
+import {execFileSync,spawnSync} from "node:child_process";
 import {pathToFileURL} from "node:url";
 import {ReplitProviderBlobStoreV39} from "../server/lib/disruption/replitProviderBlobStore_v39";
 import {
@@ -102,26 +102,51 @@ function reviewed():void{
   process.env.GATE4_NEXT2_ROTATE_GO!=="RECOVER_LOST_NEXT2_NO_PROVIDER")
   hold();
 }
-async function verifyPublishedOldKeys():Promise<void>{
- const r=await fetch(APP+"/__v39/phase2g/webhook-secret-match",{
-  method:"POST",redirect:"error",cache:"no-store",
-  headers:{"x-v39-phase2g-webhook-secret":
-   String(process.env.AERODATABOX_WEBHOOK_SECRET??"")},
-  signal:AbortSignal.timeout(10000)
+/**
+ * curl succeeds from the Replit owner shell where Node fetch can time out.
+ * Sensitive authentication headers are passed only through stdin (curl
+ * --config -), never CLI argv, GitHub, logs, URLs or error output.
+ * This exclusively queries two existing no-provider, read-only host routes.
+ */
+export function gate4Next2SafeCurlConfigV39(headers:string[]):string{
+ if(headers.length<1||headers.length>2)hold();
+ for(const h of headers){
+  if(!/^x-v39-phase2g-[a-z-]+: [\x21-\x7e]{32,256}$/.test(h)||
+     /[\r\n\\"]/.test(h))hold();
+ }
+ return headers.map(h=>"header = "+JSON.stringify(h)).join("\n")+"\n";
+}
+function publishedKeyStatusV39(path:string,headers:string[]):boolean{
+ if(![
+  "/__v39/phase2g/webhook-secret-match",
+  "/__v39/phase2g/runtime-db-binding"
+ ].includes(path))hold();
+ const config=gate4Next2SafeCurlConfigV39(headers);
+ const result=spawnSync("curl",[
+  "--silent","--request","POST",
+  "--output","/dev/null","--write-out","%{http_code}",
+  "--connect-timeout","5","--max-time","12",
+  "--retry","0","--proto","=https",
+  "--config","-",APP+path
+ ],{
+  input:config,encoding:"utf8",timeout:15000,maxBuffer:1024,
+  stdio:["pipe","pipe","pipe"]
  });
- await r.body?.cancel();
- if(r.status!==200)hold();
+ // Never expose child stderr/stdout other than comparing the private status.
+ return result.status===0&&String(result.stdout??"").trim()==="200";
+}
+async function verifyPublishedOldKeys():Promise<void>{
+ const secret=String(process.env.AERODATABOX_WEBHOOK_SECRET??"");
+ if(!publishedKeyStatusV39("/__v39/phase2g/webhook-secret-match",[
+  "x-v39-phase2g-webhook-secret: "+secret
+ ]))hold();
  const challenge="gate4_custody_"+randomBytes(16).toString("hex");
  const proof=createHmac("sha256",String(process.env.V39_DATABASE_RUNTIME_URL))
   .update("phase2g-db-binding:"+challenge).digest("hex");
- const q=await fetch(APP+"/__v39/phase2g/runtime-db-binding",{
-  method:"POST",redirect:"error",cache:"no-store",
-  headers:{"x-v39-phase2g-db-challenge":challenge,
-   "x-v39-phase2g-db-proof":proof},
-  signal:AbortSignal.timeout(10000)
- });
- await q.body?.cancel();
- if(q.status!==200)hold();
+ if(!publishedKeyStatusV39("/__v39/phase2g/runtime-db-binding",[
+  "x-v39-phase2g-db-challenge: "+challenge,
+  "x-v39-phase2g-db-proof: "+proof
+ ]))hold();
 }
 async function catalog(db:pg.Client,actor:string,readonly:boolean,
  mark:(guard:string)=>void=()=>{}):
