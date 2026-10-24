@@ -270,7 +270,7 @@ for TARGET in "$LIVE" HEAD; do
   echo "$LABEL DIFFERENT_FILE_COUNT=$COUNT"
   git diff --name-only "$PIN" "$TARGET" -- \
     .replit package.json package-lock.json server shared \
-    client/src scripts/build.ts vite.config.ts tsconfig.json | head -30
+    client/src scripts/build.ts vite.config.ts tsconfig.json | sed -n '1,30p'
 done
 GATE4_RUNTIME_SOURCE_DELTA_READONLY
 ```
