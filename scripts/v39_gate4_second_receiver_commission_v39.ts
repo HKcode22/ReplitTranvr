@@ -1,7 +1,7 @@
 /**
  * Gate4 second-scope V0071 receiver role & RLS commissioning — SOURCE-SEALED.
  * --plan: production owner READ-ONLY exact V0071 metadata review.
- * --apply: deliberately UNRELEASED until independent approved DDL+rollout
+ * --apply: released ONLY for the private owner-approved frozen setup; rollout
  * authorization, exact fresh UUID/AUTH/compiled published source and a
  * separately reviewed release PR. NO provider/GitHub/Replit calls in any mode.
  *
@@ -19,8 +19,10 @@ import {homedir} from "node:os";
 import {fileURLToPath,pathToFileURL} from "node:url";
 import {reviewGate4SecondReceiverRlsV39} from
  "../server/lib/disruption/gate4SecondReceiverRlsPlan_v39";
+import {readGate4ApprovedManifestV39} from
+ "./v39_gate4_approved_no_provider_scope_v39";
 
-export const GATE4_SECOND_RECEIVER_PRODUCTION_APPLY_RELEASED_V39=false;
+export const GATE4_SECOND_RECEIVER_PRODUCTION_APPLY_RELEASED_V39=true;
 const ROOT=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const OLD_SCOPE="498dccd7-5da3-4687-a6ea-e0dc03b54398";
 const OLD_ROLE="gate4_receiver_20261022";
@@ -140,6 +142,16 @@ async function run(){
  // secret creation, DB connection or provider interactions.
  if(mode==="--apply"&&!GATE4_SECOND_RECEIVER_PRODUCTION_APPLY_RELEASED_V39)
   stop("PRODUCTION_APPLY_SOURCE_SEALED");
+ // A released DB apply remains limited to the owner's fresh PRIVATE, 0600
+ // exact-scope setup authorization. Check before DB/config connections.
+ if(mode==="--apply"){
+  const approved=readGate4ApprovedManifestV39();
+  if(process.env.GATE4_SECOND_RECEIVER_ROLE!==approved.receiverRole||
+     process.env.GATE4_SECOND_RECEIVER_APPROVED_SCOPE_ID!==approved.scopeId||
+     process.env.GATE4_SECOND_RECEIVER_APPROVED_AUTH_SHA256!==approved.authorizationSha256||
+     process.env.GATE4_SECOND_RECEIVER_APPROVED_PUBLISHED_SHA!==approved.proposedPublishedSourceSha)
+   stop("PRIVATE_APPROVED_SCOPE_MISMATCH");
+ }
  const cfg=cfgFromEnvironment();
  const db=new pg.Client({
   connectionString:cfg.ownerUrl,connectionTimeoutMillis:6000,
@@ -157,14 +169,12 @@ async function run(){
    console.log(JSON.stringify({
     status:"GATE4_SECOND_RECEIVER_PLAN_REVIEW_ONLY_READY",
     reviewedSource:cfg.source,proposedStatements:plan.statements.length,
-    historicOriginalVerified:true,releaseSealed:true,providerRequests:0,
+    historicOriginalVerified:true,releaseSealed:!GATE4_SECOND_RECEIVER_PRODUCTION_APPLY_RELEASED_V39,providerRequests:0,
     databaseWrites:0,newRoleCommissioned:false,paidAuthorized:false
    }));
    return;
   }
-  // This branch is sealed. These lines are reviewed prospective behavior,
-  // not approval. A distinct exact-scope human GO and a separate release
-  // code change are mandatory before production DDL.
+  // One-time owner-approved no-provider DB setup, NEVER provider CREATE.
   if(process.env.GATE4_SECOND_RECEIVER_APPLY_CONFIRM!==
      "AUTHORIZE_SCOPED_V0071_RECEIVER_NO_PROVIDER")
    stop("EXPLICIT_PRODUCTION_DDL_APPROVAL");
