@@ -104,30 +104,67 @@ export function mountGate4PrebindAdditiveRouteV39(
 ):void{
  if(!checkGate4PrebindScopeV39(scope)||secret.length<32||!store)
   throw Error("GATE4_PREBIND_ADDON_ROUTE_NOT_READY");
- const raw=express.raw({type:"application/json",limit:"2mb"});
- app.post("/api/v1/webhooks/aerodatabox/:secret",raw,
-  async(req:Request,res)=>{
-   // Express permits string[] params for wildcard shapes; reject any
-   // ambiguous URL param before comparing a bearer secret.
+ // Authenticate BEFORE reading request bytes. Replit's provider sender may
+ // use application/json with charset or application/*+json; preserve the raw
+ // original as Buffer and never JSON.stringify a parsed transport envelope.
+ const raw=express.raw({type:()=>true,limit:"2mb"});
+ app.post("/api/v1/webhooks/aerodatabox/:secret",
+  (req:Request,res,next)=>{
+   // No secrets, URL, payload, subscription ID, flight identity or headers
+   // may be logged. Log one fixed categorical outcome for every incoming
+   // Gate4 POST, including failures before the durable storage stage.
+   const t=Date.now();
+   let finished=false;
+   res.once("finish",()=>{
+    finished=true;
+    console.info("GATE4_ALERT_HTTP_V1",JSON.stringify({
+     httpStatus:res.statusCode,completed:true,
+     elapsedMs:Math.max(0,Date.now()-t)
+    }));
+   });
+   res.once("close",()=>{
+    if(!finished)console.warn("GATE4_ALERT_HTTP_V1",JSON.stringify({
+     httpStatus:res.statusCode,completed:false,
+     elapsedMs:Math.max(0,Date.now()-t)
+    }));
+   });
    const candidate=req.params.secret;
    if(typeof candidate!=="string"){
-     res.status(404).json({error:"Not found"});return;
+    res.status(404).json({error:"Not found"});return;
    }
    const supplied=Buffer.from(candidate);
    const expected=Buffer.from(secret);
    if(supplied.length!==expected.length||
       !timingSafeEqual(supplied,expected)){
-     res.status(404).json({error:"Not found"});return;
+    res.status(404).json({error:"Not found"});return;
    }
-   if(req.originalUrl.includes("?")||!req.is("application/json")){
-     res.status(415).json({error:"Invalid envelope"});return;
+   // Valid queryless JSON media types; never assume raw middleware magically
+   // parsed an unsupported content type. A parameter such as charset=utf-8
+   // is accepted, as are structured syntax +json media types.
+   if(req.originalUrl.includes("?")||
+      !(req.is("application/json")||
+        req.is("application/*+json"))){
+    res.status(415).json({error:"Invalid envelope"});return;
+   }
+   raw(req,res,(error:unknown)=>{
+    if(error){
+     const kind=(error as {type?:unknown}|null)?.type;
+     res.status(kind==="entity.too.large"?413:400)
+      .json({received:false,status:"HOLD"});return;
+    }
+    next();
+   });
+  },
+  async(req:Request,res)=>{
+   if(!Buffer.isBuffer(req.body)){
+    res.status(400).json({received:false,status:"HOLD"});return;
    }
    let receipt;
    try{
-     receipt=await quarantineGate4PrebindOriginalV39(
-       scope,req.body as Buffer,store);
+    receipt=await quarantineGate4PrebindOriginalV39(
+      scope,req.body as Buffer,store);
    }catch{
-     res.status(503).json({received:false,status:"HOLD"});return;
+    res.status(503).json({received:false,status:"HOLD"});return;
    }
    res.status(receipt.httpStatus).json({
      received:receipt.responseAcknowledged,status:receipt.status,
@@ -135,6 +172,7 @@ export function mountGate4PrebindAdditiveRouteV39(
      attribution:"none",paidAuthorization:false
    });
   });
+
 }
 export async function openGate4PrebindAdditiveStoreV39(
  config:Config
