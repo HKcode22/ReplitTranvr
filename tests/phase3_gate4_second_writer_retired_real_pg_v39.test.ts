@@ -31,7 +31,7 @@ suite("Gate4 second writer strict post-retirement real PG16",()=>{
   const adminRoot=new pg.Pool({connectionString:fixture,max:1});
   const target=fixture.replace("/gate4_prebind_ci","/neondb");
   const db=new pg.Pool({connectionString:target,max:2});
-  let writer:pg.Pool|undefined,reader:pg.Pool|undefined;
+  let writer:pg.Pool|undefined;
   try{
    const identity=(await adminRoot.query(
     "SELECT current_database() AS db,current_user AS actor"
@@ -43,10 +43,15 @@ suite("Gate4 second writer strict post-retirement real PG16",()=>{
     "../migrations/staged/"+name,import.meta.url),"utf8");
    await db.query(migration("V0071__gate4_alert_prebind_quarantine_v39.sql"));
    await db.query(migration("V0072__gate4_owned_binding_v39.sql"));
-   await db.query(
-    "CREATE ROLE gate4_receiver_20261022 LOGIN PASSWORD 'fixtureonly'");
-   await db.query(
-    "CREATE ROLE gate4_safety_reader_20261022 LOGIN PASSWORD 'fixtureonly'");
+   // PostgreSQL roles are cluster-wide. The preceding established
+   // disposable-PG test already provisions these two fixed legacy roles.
+   // Reuse and verify them; do not CREATE duplicate global role names.
+   const inheritedRoles=(await db.query(
+    "SELECT rolname,rolcanlogin FROM pg_roles WHERE rolname=ANY($1::text[])",
+    [["gate4_receiver_20261022","gate4_safety_reader_20261022"]]
+   )).rows;
+   expect(inheritedRoles).toHaveLength(2);
+   expect(inheritedRoles.every(r=>r.rolcanlogin===true)).toBe(true);
    await db.query(migration("V0073__gate4_existing_neon_role_grants_v39.sql"));
    await db.query(
     "CREATE ROLE gate4_owner_writer_20261023 NOLOGIN NOINHERIT "+
@@ -132,13 +137,20 @@ suite("Gate4 second writer strict post-retirement real PG16",()=>{
    await expect(writer.query(
     "DELETE FROM clean.gate4_alert_owned_binding_v39 "+
     "WHERE scope_id=$1::uuid",[NEW])).rejects.toThrow();
-   const readerUrl=new URL(target);
-   readerUrl.username="gate4_safety_reader_20261022";
-   readerUrl.password="fixtureonly";
-   reader=new pg.Pool({connectionString:readerUrl.toString()});
-   expect(await count(reader)).toBe(2);
-   await expect(reader.query(insert,[NEW,NEXT_AUTH,NEXT_SHA,
+   // Verify SELECT as the actual restricted role via SET ROLE. The fixture
+   // already created this cluster-global role without a LOGIN password.
+   const safety=await db.connect();
+   try{
+    await safety.query("SET ROLE gate4_safety_reader_20261022");
+    expect((await safety.query(
+     "SELECT count(*)::int AS n FROM clean.gate4_alert_owned_binding_v39"
+    )).rows[0].n).toBe(2);
+    await expect(safety.query(insert,[NEW,NEXT_AUTH,NEXT_SHA,
      "readerWriteDenied99","e".repeat(64),"f".repeat(64)])).rejects.toThrow();
+   }finally{
+    await safety.query("RESET ROLE").catch(()=>undefined);
+    safety.release();
+   }
    const historical=(await db.query(
     "SELECT subscription_id,source_commit,authorization_sha256 "+
     "FROM clean.gate4_alert_owned_binding_v39 WHERE scope_id=$1::uuid",
@@ -153,7 +165,6 @@ suite("Gate4 second writer strict post-retirement real PG16",()=>{
    console.log("GATE4_POST_RETIREMENT_REAL_PG16_NEW_WRITER_ISOLATION_PASS");
    console.log("PROVIDER_REQUESTS=0 PRODUCTION_DATABASE_WRITES=0");
   }finally{
-   await reader?.end().catch(()=>undefined);
    await writer?.end().catch(()=>undefined);
    await db.end().catch(()=>undefined);
    await adminRoot.end().catch(()=>undefined);
