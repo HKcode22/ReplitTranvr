@@ -1,7 +1,7 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
 import {
- classifyGate4Next2CatalogV39,
+ classifyGate4Next2CatalogV39,gate4Next2PoliciesMatchV39,
  NEXT2_SCOPE,NEXT2_RECEIVER,NEXT2_WRITER,FROZEN_RECEIVER_SOURCE,
  type Gate4Next2CatalogSummaryV39
 } from "../scripts/v39_gate4_next2_production_readonly_inventory_v39";
@@ -46,6 +46,35 @@ describe("Gate4 NEXT2 production catalog/read-only snapshot",()=>{
   for(const delta of rejects)expect(classifyGate4Next2CatalogV39(
     {...good,...delta}
   )).toBe("NEXT2_READONLY_CATALOG_HOLD");
+ });
+ it("accepts the seven ACTUAL read-only policy metadata rows",()=>{
+  const rows=[
+   ["gate4_alert_owned_binding_v39","gate4_next_writer_insert_v39","INSERT","gate4_owner_writer_2026_next1",false,true],
+   ["gate4_alert_owned_binding_v39","gate4_next_writer_select_v39","SELECT","gate4_owner_writer_2026_next1",true,false],
+   ["gate4_alert_owned_binding_v39","gate4_safety_select_v39","SELECT","gate4_safety_reader_20261022",true,false],
+   ["gate4_alert_prebind_original_v39","gate4_legacy_receiver_insert_v39","INSERT","gate4_receiver_20261022",false,true],
+   ["gate4_alert_prebind_original_v39","gate4_legacy_receiver_select_v39","SELECT","gate4_receiver_20261022",true,false],
+   ["gate4_alert_prebind_original_v39","gate4_next_receiver_insert_v39","INSERT","gate4_receiver_2026_next1",false,true],
+   ["gate4_alert_prebind_original_v39","gate4_next_receiver_select_v39","SELECT","gate4_receiver_2026_next1",true,false]
+  ].map(([tablename,policyname,cmd,assigned_role,has_using,has_check])=>({
+   tablename,policyname,cmd,assigned_role,has_using,has_check,
+   role_count:1,permissive:"PERMISSIVE"
+  })) as any[];
+  for(const table of ["gate4_alert_prebind_original_v39","gate4_alert_owned_binding_v39"]){
+   expect(gate4Next2PoliciesMatchV39(rows,table)).toBe(true);
+  }
+  const base=rows[0];
+  for(const change of [
+   {role_count:2},{assigned_role:"public"},{cmd:"UPDATE"},
+   {permissive:"RESTRICTIVE"},{has_using:true},{has_check:false},
+   {policyname:"not-our-policy"}
+  ]){
+   const altered=rows.map((r,i)=>i===0?{...base,...change}:r);
+   expect(gate4Next2PoliciesMatchV39(
+    altered,"gate4_alert_owned_binding_v39")).toBe(false);
+  }
+  expect(gate4Next2PoliciesMatchV39(
+   rows.slice(1),"gate4_alert_owned_binding_v39")).toBe(false);
  });
  it("never connects with write capabilities or provider functions",()=>{
   expect(source).toContain('options:"-c default_transaction_read_only=on"');

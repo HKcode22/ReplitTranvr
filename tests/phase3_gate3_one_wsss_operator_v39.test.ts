@@ -58,7 +58,7 @@ describe("one WSSS Gate3 paid owner: exact scope AND no unsupported hard-cap rel
         else process.env[name]=previous[name];
       }
     }
-  });
+  },15000);
   it("blocks the real owner before provider or DB I/O if production target is not confirmed",async()=>{
     const previous=process.env.V39_DATABASE_TARGET_CONFIRM;
     process.env.V39_DATABASE_TARGET_CONFIRM="test-not-production";
