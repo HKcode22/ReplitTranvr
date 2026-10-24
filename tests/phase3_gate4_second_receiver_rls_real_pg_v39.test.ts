@@ -9,6 +9,8 @@ import {createHash} from "node:crypto";
 import pg from "pg";
 import {reviewGate4SecondReceiverRlsV39} from
  "../server/lib/disruption/gate4SecondReceiverRlsPlan_v39";
+import {createGate4PrebindPgStoreV39} from
+ "../server/lib/disruption/gate4PrebindPgStore_v39";
 const adminUrl="postgresql://gate4_fixture:only_for_ci@127.0.0.1:5432/gate4_prebind_ci";
 const safe=process.env.GITHUB_ACTIONS==="true"&&
  process.env.NODE_ENV==="test"&&
@@ -31,6 +33,7 @@ suite("Gate4 receiver additive two-scope RLS — disposable PG16",()=>{
   const nextUrl=adminUrl.replace("/gate4_prebind_ci","/gate4_receiver_ci");
   const owner=new pg.Pool({connectionString:nextUrl,max:3});
   let oldUser:pg.PoolClient|undefined,newUser:pg.PoolClient|undefined;
+  let scopedPool:pg.Pool|undefined;
   try{
    expect((await root.query(
     "SELECT current_database() AS db,current_user AS actor"
@@ -100,6 +103,30 @@ suite("Gate4 receiver additive two-scope RLS — disposable PG16",()=>{
    expect((await newUser.query(count)).rows[0].n).toBe(1);
    expect((await oldUser.query(count)).rows[0].n).toBe(1);
    expect((await owner.query(count)).rows[0].n).toBe(2);
+   // The real production V0071 adapter must work under RLS too:
+   // duplicate original is idempotent, byte-identical readback succeeds
+   // using the NEW least-privileged receiver, not the fixture DB owner.
+   const connection=new URL(nextUrl);
+   connection.username=RROLE;
+   connection.password="ci_fixture_only";
+   scopedPool=new pg.Pool({
+    connectionString:connection.toString(),max:2,
+    connectionTimeoutMillis:5000
+   });
+   const store=createGate4PrebindPgStoreV39(scopedPool);
+   const raw={
+    scopeId:NEXT,authorizationSha256:NEXT_AUTH,
+    sourceCommit:NEXT_SOURCE,airportIcao:"WSSS",
+    claimedSubscriptionId:"newOwnedClaim99",
+    originalSha256:digest(nextWire),originalBytes:nextWire
+   };
+   expect(await store.readBackOriginal(raw)).toMatchObject({
+    committed:true,originalBytesVerified:true
+   });
+   expect(await store.writeOriginal(raw)).toMatchObject({
+    committed:true,originalBytesVerified:true
+   });
+   expect((await owner.query(count)).rows[0].n).toBe(2);
    const values=(await owner.query(
     "SELECT scope_id::text, original_sha256,original_wire "+
     "FROM clean.gate4_alert_prebind_original_v39 ORDER BY scope_id"
@@ -131,6 +158,7 @@ suite("Gate4 receiver additive two-scope RLS — disposable PG16",()=>{
    newUser?.release();
    await oldUser?.query("RESET ROLE").catch(()=>undefined);
    oldUser?.release();
+   await scopedPool?.end().catch(()=>undefined);
    await owner.end().catch(()=>undefined);
    await root.end().catch(()=>undefined);
   }
