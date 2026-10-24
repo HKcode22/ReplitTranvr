@@ -242,3 +242,37 @@ GATE4_REPLIT_PROVENANCE_READONLY
 ```
 
 **Gate:** Even identical files are not enough to silently substitute the SHA used by encrypted-bundle location and RLS source filters. Do not spoof release commit, run role rotation, republish or spend provider credits until true published source provenance is established. Keep old add-on off (`0`), public GET 200, and two stable-secret challenge HTTP 200/200.
+
+## Next bounded read-only report: full runtime source delta
+
+This is the final source comparison (not another secrets investigation). Print **only filenames/counts**, never code contents or secrets. The published and reviewed Git objects both exist locally; source identity must be resolved before altering the SHA-bound NEXT2 encrypted bundle and PostgreSQL scope. PR #134 separately fixes the owner's Node-fetch parity transport issue, pending reviewed CI.
+
+```bash
+bash <<'GATE4_RUNTIME_SOURCE_DELTA_READONLY'
+set -Eeuo pipefail
+set +x
+cd ~/workspace
+PIN=087dc948c29d004f88eca141e1fc8e83c2844e3f
+LIVE=758fce6dd77cba737f09468b899680816922674e
+
+for TARGET in "$LIVE" HEAD; do
+  if [ "$TARGET" = HEAD ]; then LABEL=WORKSPACE; else LABEL=PUBLISHED_OBJECT; fi
+  if git merge-base --is-ancestor "$PIN" "$TARGET"; then
+    echo "$LABEL DESCENDS_FROM_REVIEWED=YES"
+  else
+    echo "$LABEL DESCENDS_FROM_REVIEWED=NO"
+  fi
+  echo "=== $LABEL RUNTIME SOURCE DELTA ==="
+  COUNT="$(git diff --name-only "$PIN" "$TARGET" -- \
+    .replit package.json package-lock.json server shared \
+    client/src scripts/build.ts vite.config.ts tsconfig.json \
+    | wc -l | tr -d ' ')"
+  echo "$LABEL DIFFERENT_FILE_COUNT=$COUNT"
+  git diff --name-only "$PIN" "$TARGET" -- \
+    .replit package.json package-lock.json server shared \
+    client/src scripts/build.ts vite.config.ts tsconfig.json | head -30
+done
+GATE4_RUNTIME_SOURCE_DELTA_READONLY
+```
+
+If both counts are zero, tracked server/build inputs match reviewed source despite differing Git SHA; implement a controlled content-validated compiled release identity. If any files differ, review those filenames before selecting a publication strategy. **No republish, rotation, provider calls or secret edits** from this command.
