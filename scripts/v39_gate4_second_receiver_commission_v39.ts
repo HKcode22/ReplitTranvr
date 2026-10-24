@@ -145,7 +145,9 @@ async function run(){
  // A released DB apply remains limited to the owner's fresh PRIVATE, 0600
  // exact-scope setup authorization. Check before DB/config connections.
  if(mode==="--apply"){
-  const approved=readGate4ApprovedManifestV39();
+  let approved:ReturnType<typeof readGate4ApprovedManifestV39>;
+  try{approved=readGate4ApprovedManifestV39();}
+  catch{stop("PRIVATE_APPROVED_MANIFEST");}
   if(process.env.GATE4_SECOND_RECEIVER_ROLE!==approved.receiverRole||
      process.env.GATE4_SECOND_RECEIVER_APPROVED_SCOPE_ID!==approved.scopeId||
      process.env.GATE4_SECOND_RECEIVER_APPROVED_AUTH_SHA256!==approved.authorizationSha256||
