@@ -1,5 +1,8 @@
 # Gate 4 NEXT2 — repaired receiver release, hosted valid-JSON rehearsal, then prospective paid science
 
+> **2026-10-24 LATER-SESSION STATUS OVERRIDE — mandatory:** The initial plan below was written **before** NEXT2 commissioning. The actual owner has **since** commissioned NEXT2 scope `16f819c6-7c68-4d5a-82cf-3820e9294dc7`, created private role credentials and Replit settings, and cleanly staged the frozen 29d receiver source. The reviewer-approved additive role plan [PR #129](https://github.com/HKcode22/ReplitTranvr/pull/129) passed 5/5 CI and merged at `0e5286af9f3f26d671890d8c322fafececdd697e`. **NO published Autoscale secret update, receiver republish, hosted synthetic POST, or paid NEXT2 CREATE has happened.** The `replit secrets --help` CLI shows only `list`, `get`, `exec`, `help` (no write). Owner explicitly refuses manual 10-field copy and Replit AI/Work. Restricted logins expire **2026-10-24T14:41:19.860Z**. **For CURRENT operational instructions read [Gate4 NEXT2 secret automation blocker and exact recovery checkpoint](2026-10-24_GATE4_NEXT2_PUBLISHED_SECRETS_CLI_BLOCKER_AND_RECOVERY_CHECKPOINT.md).** Keep the document below as original scientific/release design; its descriptions of role commissioning as pending are historical.
+
+
 **Date:** 2026-10-24 UTC. **Status:** NEXT2 engineering only / **NOT DEPLOYED** / **NO PROVIDER EXPOSED**.  
 **Priority:** Eliminate avoidable receiver-side ambiguity and complete *one* genuine paid delivery feasibility observation, without rerunning the already-spent NEXT1 experiment, weakening PostgreSQL custody, or repeating dozens of operator commands.
 
