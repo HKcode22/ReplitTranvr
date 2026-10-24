@@ -81,6 +81,15 @@ describe("Gate4 next writer permission blueprint — PURE, not authorization",()
      expect(r.statements).toEqual([]);
    }
  });
+ it("fails closed on absent or malformed runtime policy metadata",()=>{
+   for(const bad of [null,undefined,{},["gate4_safety_select_v39",8]]){
+     const r=reviewGate4SecondScopeRlsV39({
+       ...scope,existingPolicyNames:bad as unknown as string[]
+     });
+     expect(r.status).toBe("HOLD_EXISTING_DB_STATE");
+     expect(r.statements).toEqual([]);
+   }
+ });
  it("does not let ordering differences in existing observed policy names invent a mismatch",()=>{
    const p=reviewGate4SecondScopeRlsV39({
      ...scope,existingPolicyNames:[...scope.existingPolicyNames].reverse()
