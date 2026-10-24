@@ -1,5 +1,67 @@
 # Gate 4 NEXT2 — 2026-10-24 ADMISSION hold after PR #131 no-UI installer
 
+> **2026-10-24 ACTUAL PUBLISHED-KEY TRANSPORT DIAGNOSTIC — BOTH NETWORK_OR_TIMEOUT; NO AUTH VERDICT:** Owner executed the safe two-endpoint HTTP status diagnostic from Replit `~/workspace`, exact output: `{"status":"GATE4_PUBLISHED_KEY_PARITY_READONLY","webhookStatus":"NETWORK_OR_TIMEOUT","dbBindingStatus":"NETWORK_OR_TIMEOUT","providerCalls":0,"databaseWrites":0,"storageWrites":0}`. This means **neither endpoint supplied an HTTP status**, not HTTP 404, 503 or a proved mismatch of the protected keys. The immediate problem is **DNS, TLS, network/egress, timeout or a public-host outage**, not yet identified. The connected Replit publish API still reports `status=success`, deployment `ce096a13-62ff-4f7a-ae6f-3bc91af601d9`, public URL `https://replit-tranvr--hk84164.replit.app`; success is deployment metadata, NOT live HTTP reachability. Assistant-side DNS/HTTP probing was inconclusive due to tool-side network restrictions; DO NOT use it to attribute an outage to Replit. Owner also repeated the **old** admission diagnostic with `SETTINGS_READ_OR_JSON`, consistent with the previously verified missing `/home/runner/.config/replittranvr/gate4-next2-20261024` private directory. The earlier `--rotate-and-seal` stopped at `PUBLISHED_OLD_KEY_PARITY` with encrypted writes 0 and DB committed false, so no rotation/sealing is evidenced. **Do not rerun rotation, bypass published-binding parity, publish receiver or start paid AeroDataBox work**. Next is one read-only, redacted host DNS/TLS/GET diagnostic to tell whether hostname resolution, connection, SSL handshake, or HTTP status failed, then choose the *smallest* corrective action. Distinguish transient network failure from actual key disparity using authenticated HTTP results, not guesses. Prior 2-role/11-policy database PASS and original NEXT1 46-credit/zero-original scientific uncertainty unchanged.
+
+## One-command next step — read-only published-host transport classification
+
+Never prints token, DB connection URL, header, response body, or credentials. It checks DNS resolution, public GET, runtime GET with Node and curl, and returns only short pre-approved status/error class. No provider, DB, storage or external mutation. Uses exact currently returned Replit deployment URL. If HTTP gets through, repeat the authenticated parity diagnostic; do **not** run rotation until both actually return 200.
+
+```bash
+bash <<'GATE4_PUBLIC_TRANSPORT_READONLY'
+set -Eeuo pipefail
+set +x
+cd ~/workspace
+node --input-type=module <<'NODE'
+import dns from 'node:dns/promises';
+
+const hostname='replit-tranvr--hk84164.replit.app';
+const base='https://'+hostname;
+const approved=new Set([
+ 'ENOTFOUND','EAI_AGAIN','ECONNREFUSED','ECONNRESET','ETIMEDOUT',
+ 'UND_ERR_CONNECT_TIMEOUT','UND_ERR_HEADERS_TIMEOUT',
+ 'CERT_HAS_EXPIRED','UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+ 'SELF_SIGNED_CERT_IN_CHAIN','ERR_TLS_CERT_ALTNAME_INVALID',
+ 'EHOSTUNREACH','ENETUNREACH','UND_ERR_SOCKET'
+]);
+function code(e){
+ const c=String(e?.cause?.code??e?.code??'OTHER_TRANSPORT_ERROR');
+ return approved.has(c)?c:'OTHER_TRANSPORT_ERROR';
+}
+let dnsResult='OK';
+try{await dns.lookup(hostname);}catch(e){dnsResult=code(e);}
+async function get(path){
+ try{
+  const r=await fetch(base+path,{method:'GET',redirect:'manual',
+   cache:'no-store',signal:AbortSignal.timeout(9000)});
+  await r.body?.cancel();
+  return 'HTTP_'+r.status;
+ }catch(e){
+  return e?.name==='TimeoutError'?'TIMEOUT':code(e);
+ }
+}
+const root=await get('/');
+const runtime=await get('/__v39/workspace-runtime');
+console.log(JSON.stringify({
+ status:'GATE4_PUBLISHED_TRANSPORT_READONLY',
+ dns:dnsResult,root,runtime,
+ providerCalls:0,databaseWrites:0,storageWrites:0
+}));
+NODE
+if command -v curl >/dev/null 2>&1; then
+  CODE="$(curl --silent --output /dev/null \
+    --connect-timeout 5 --max-time 9 \
+    --write-out '%{http_code}' \
+    'https://replit-tranvr--hk84164.replit.app/' \
+    2>/dev/null)" && STATUS="OK" || STATUS="TRANSPORT_ERROR"
+  case "$CODE" in
+    200|301|302|307|308|401|403|404|429|500|502|503|504)
+      echo "CURL_ROOT_STATUS=HTTP_$CODE" ;;
+    *) echo "CURL_ROOT_STATUS=$STATUS" ;;
+  esac
+fi
+GATE4_PUBLIC_TRANSPORT_READONLY
+```
+
 ## 2026-10-24 NEXT2 parity HOLD — next no-provider two-route diagnostic
 
 The old stable-key verification is two authenticated POST controls on the **existing** published receiver (one matching the existing `AERODATABOX_WEBHOOK_SECRET`, one HMAC using `V39_DATABASE_RUNTIME_URL`). Both should return HTTP 200. The operator reports a single `PUBLISHED_OLD_KEY_PARITY` HOLD if either fails. This diagnosis performs **no provider/DB/storage mutations** and prints only HTTP status codes; do not print tokens or URLs.
