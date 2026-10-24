@@ -293,13 +293,110 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
     expect((await pool.query(
       "SELECT count(*)::int AS n FROM clean.gate4_alert_owned_binding_v39"
     )).rows[0].n).toBe(1);
+      // A SECOND scoped writer must coexist with the historical positive
+      // record and old per-role policies. Nothing is deleted or rebound.
+      const nextScope={
+        scopeId:"66666666-7777-4888-9999-aaaaaaaaaaaa",
+        authorizationSha256:"f".repeat(64),
+        sourceCommit:"e".repeat(40),
+        airportIcao:"WSSS"
+      };
+      const nextRole="gate4_writer_ci_next";
+      await pool.query("CREATE ROLE "+nextRole+
+        " LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE "+
+        "NOREPLICATION NOBYPASSRLS PASSWORD 'disposable_next_only'");
+      await pool.query("GRANT CONNECT ON DATABASE gate4_prebind_ci TO "+nextRole);
+      await pool.query("GRANT USAGE ON SCHEMA clean TO "+nextRole);
+      await pool.query("GRANT SELECT,INSERT ON TABLE "+
+        "clean.gate4_alert_owned_binding_v39 TO "+nextRole);
+      const nextPredicate="scope_id='"+nextScope.scopeId+"'::uuid"+
+        " AND authorization_sha256='"+nextScope.authorizationSha256+"'"+
+        " AND source_commit='"+nextScope.sourceCommit+"'"+
+        " AND airport_icao='"+nextScope.airportIcao+"'";
+      await pool.query("CREATE POLICY gate4_test_next_writer_select ON "+
+        "clean.gate4_alert_owned_binding_v39 FOR SELECT TO "+nextRole+
+        " USING ("+nextPredicate+")");
+      await pool.query("CREATE POLICY gate4_test_next_writer_insert ON "+
+        "clean.gate4_alert_owned_binding_v39 FOR INSERT TO "+nextRole+
+        " WITH CHECK ("+nextPredicate+")");
+      const nextWriterUrl=localUrl.replace("gate4_fixture:only_for_ci",
+        "gate4_writer_ci_next:disposable_next_only");
+      const nextPool=new pg.Pool({
+        connectionString:nextWriterUrl,max:2,connectionTimeoutMillis:5000
+      });
+      try{
+        const nextStore=createGate4OwnedBindingPgStoreV39(nextPool);
+        const nextBinding={
+          ...nextScope,subscriptionId:"nextOwned77",
+          reviewedCreateReceiptSha256:"1".repeat(64),
+          signedStopTicketSha256:"2".repeat(64)
+        };
+        // Before the new INSERT the next writer must not read the old owner.
+        expect((await nextPool.query(
+          "SELECT count(*)::int AS n FROM "+
+          "clean.gate4_alert_owned_binding_v39"
+        )).rows[0].n).toBe(0);
+        expect(await nextStore.bindOnce(nextBinding)).toMatchObject({
+          committed:true,exactFieldsVerified:true
+        });
+        expect((await pool.query(
+          "SELECT count(*)::int AS n FROM "+
+          "clean.gate4_alert_owned_binding_v39"
+        )).rows[0].n).toBe(2);
+        expect((await nextPool.query(
+          "SELECT count(*)::int AS n FROM "+
+          "clean.gate4_alert_owned_binding_v39"
+        )).rows[0].n).toBe(1);
+        // Old 20261023 writer still sees only its old UUID; no cross-read.
+        expect((await writerPool.query(
+          "SELECT count(*)::int AS n FROM "+
+          "clean.gate4_alert_owned_binding_v39"
+        )).rows[0].n).toBe(1);
+        // A second writer cannot forge a second provider ID for the first
+        // owner UUID, even while a permissive safety SELECT policy exists.
+        await expect(nextStore.bindOnce({
+          ...nextBinding,scopeId:scope.scopeId
+        })).rejects.toThrow("GATE4_BIND_COMMIT_UNCERTAIN_HOLD");
+        const oldBinding={
+          ...scope,subscriptionId:"exactOwned99",
+          reviewedCreateReceiptSha256:"c".repeat(64),
+          signedStopTicketSha256:"d".repeat(64)
+        };
+        expect((await bindStore.readBack(oldBinding)).committed).toBe(true);
+        expect((await pool.query(
+          "SELECT count(*)::int AS n FROM "+
+          "clean.gate4_alert_prebind_original_v39"
+        )).rows[0].n).toBe(2);
+        // The separately authorized safety reader must see BOTH exact
+        // bindings so it can independently stop the new owned ID.
+        const scopedSafety=await pool.connect();
+        try{
+          await scopedSafety.query("SET ROLE gate4_safety_reader_20261022");
+          expect((await scopedSafety.query(
+            "SELECT count(*)::int AS n FROM "+
+            "clean.gate4_alert_owned_binding_v39"
+          )).rows[0].n).toBe(2);
+          await expect(scopedSafety.query(
+            "INSERT INTO clean.gate4_alert_owned_binding_v39 "+
+            "(scope_id) VALUES ($1::uuid)",[nextScope.scopeId]
+          )).rejects.toThrow();
+        }finally{
+          await scopedSafety.query("RESET ROLE").catch(()=>undefined);
+          scopedSafety.release();
+        }
+      }finally{
+        await nextPool.end();
+      }
+      console.log("GATE4_SECOND_SCOPE_PG16_RLS_COEXISTENCE_PASS");
+      console.log("GATE4_PREVIOUS_POSITIVE_BINDING_UNCHANGED_PASS");
+      console.log("GATE4_SAFETY_READER_BOTH_SCOPES_SELECT_ONLY_PASS");
       const watch=await pool.connect();
       try{
         await watch.query("SET ROLE gate4_safety_reader_20261022");
         const n=(await watch.query(
           "SELECT count(*)::int AS n FROM clean.gate4_alert_owned_binding_v39"
         )).rows[0].n;
-        expect(n).toBe(1);
+        expect(n).toBe(2);
       }finally{
         await watch.query("RESET ROLE").catch(()=>undefined);
         watch.release();
