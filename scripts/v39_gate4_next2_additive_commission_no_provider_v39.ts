@@ -168,8 +168,9 @@ async function inspect(db:pg.Client,actor:string,
   const x=exists(n);
   return !!x&&x.rolsuper===false&&x.rolbypassrls===false&&
    x.rolcreaterole===false&&x.rolcreatedb===false&&
-   x.rolreplication===false&&x.rolinherit===false&&
-   (login===undefined||x.rolcanlogin===login);
+   x.rolreplication===false&&
+   (login===undefined||x.rolcanlogin===login)&&
+   (login!==true||x.rolinherit===false);
  };
  if(!safe("gate4_receiver_20261022")||
     !safe("gate4_receiver_2026_next1")||
