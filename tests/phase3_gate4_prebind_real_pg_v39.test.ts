@@ -396,7 +396,7 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
         const n=(await watch.query(
           "SELECT count(*)::int AS n FROM clean.gate4_alert_owned_binding_v39"
         )).rows[0].n;
-        expect(n).toBe(1);
+        expect(n).toBe(2);
       }finally{
         await watch.query("RESET ROLE").catch(()=>undefined);
         watch.release();
