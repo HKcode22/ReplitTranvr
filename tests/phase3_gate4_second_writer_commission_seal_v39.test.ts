@@ -9,12 +9,13 @@ import {GATE4_SECOND_WRITER_PRODUCTION_APPLY_RELEASED_V39} from
 const source=readFileSync(new URL(
  "../scripts/v39_gate4_second_writer_commission_v39.ts",import.meta.url),"utf8");
 
-describe("Gate4 second one-shot writer remains source SEALED — no provider",()=>{
- it("cannot run production DDL until a distinct reviewed release",()=>{
-  expect(GATE4_SECOND_WRITER_PRODUCTION_APPLY_RELEASED_V39).toBe(false);
+describe("Gate4 second scoped writer released ONLY for exact no-provider manifest",()=>{
+ it("requires exact private approval before production owner DB connection",()=>{
+  expect(GATE4_SECOND_WRITER_PRODUCTION_APPLY_RELEASED_V39).toBe(true);
   expect(source).toContain(
    'mode==="--apply"&&!GATE4_SECOND_WRITER_PRODUCTION_APPLY_RELEASED_V39'
   );
+  expect(source.indexOf("readGate4ApprovedManifestV39()")).toBeLessThan(source.indexOf("const cfg=config();"));
   expect(source.indexOf('if(mode==="--apply"&&!GATE4_SECOND_WRITER_PRODUCTION_APPLY_RELEASED_V39'))
    .toBeLessThan(source.indexOf("const cfg=config();"));
   expect(source.indexOf("const cfg=config();"))
@@ -40,7 +41,7 @@ describe("Gate4 second one-shot writer remains source SEALED — no provider",()
   }catch(e){
    err=String((e as {stderr?:Buffer}).stderr??"");
   }
-  expect(err).toContain("GATE4_SECOND_WRITER_PRODUCTION_APPLY_SOURCE_SEALED_HOLD");
+  expect(err).toContain("GATE4_SECOND_WRITER_PRIVATE_APPROVED_MANIFEST_HOLD");
  });
  it("uses exact old-custody and PostgreSQL server-side array membership checks",()=>{
   for(const needle of [
