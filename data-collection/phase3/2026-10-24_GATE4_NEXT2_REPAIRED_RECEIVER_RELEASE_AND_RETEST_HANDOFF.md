@@ -1,5 +1,42 @@
 # Gate 4 NEXT2 — repaired receiver release, hosted valid-JSON rehearsal, then prospective paid science
 
+## 2026-10-24 scientific reevaluation after NEXT1 and actual NEXT2 read-only HOLD
+
+**Do not confuse three independent questions.** The observed NEXT1 46-credit spent with no genuine V0071 original means **delivery feasibility was not proven**. It does not identify provider fault or the number of HTTP attempts. The subsequent NEXT2 local `DB_READONLY` HOLD is **a different problem**: a recovery/audit code path stopped before credential changes, **not** evidence that AeroDataBox delivery failed again. Earlier missing-home `PRIVATE_DIRECTORY_MISSING` explains installer ADMISSION but not the historic paid gap.
+
+### Causal findings from saved evidence
+
+| Observation | Established | Not established |
+|---|---|---|
+| NEXT1 one positive CREATE + V0072 binding + independent exact STOP | provider subscription safety/lifecycle | webhook ingestion |
+| 2037 -> 1991 credit balance, 0 matching V0071 originals | 46-credit debit and missing durable observation | 46 distinct HTTP calls, provider blame, whether any HTTP POST reached Node |
+| Old valid-bearer text/plain POST rejected with HTTP 415 | bearer route existed; negative parsing case | valid AeroDataBox JSON accepted and persisted |
+| PR #125/#126 local PG16 and HTTP raw JSON positive tests | code-level repairs and offline positive path | that code was published during NEXT1 |
+| PR #131 encrypted private NEXT2 installer, later absent Replit home | reviewed server configuration implementation | that NEXT2 receiver is live |
+| PR #132 recovery `--audit` output `DB_READONLY` with zero mutations | audit stopped before operator changes | which query/check failed or production RLS damage |
+| [PR #133](https://github.com/HKcode22/ReplitTranvr/pull/133) (in review) | labels each audit step and tests actual `pg_policies` deparsed VARCHAR casts | fixes actual live receiver or establishes a historic delivery root cause |
+
+**Working hypotheses to investigate, not assert:** wrong callback route/token/hostname, POST body or Content-Type rejection, timeout or 5xx/503 platform errors, DB role/RLS/connectivity, provider never issuing an HTTP request during the window, or absent observability. Access log or provider delivery-receipt evidence is needed to assign cause. The earlier published logs supplied did not cover the actual paid 06:49–06:50 UTC window. Relevant provider delivery billing guidance: https://aerodatabox.com/flight-alert-api-2026/ (last updated January 31, 2026).
+
+### Proportionate scientific acceptance — minimum necessary to advance Gate 4
+
+**A. Non-provider production plumbing PASS:** one **actual published** NEXT2 webhook authenticates one synthetic representative JSON request, returns HTTP 200 **and** independently read-back verifies one matching V0071 row: original-wire bytes / SHA-256; exact scope, authorization, compiled receiver SHA, airport, claimed *synthetic* ID; redacted public receiver log status 200. This proves one synthetic hosted ingestion. It is **not provider delivery science** and must be excluded from genuine delivery numerator and denominator. Exact SHA here is an *integrity check*, not an unrealistic requirement that every scientific aggregate/flight count match perfectly.
+
+**B. Independent paid provider feasibility PASS (separate explicit new authorization):** fresh unspent paid scope and source, real positive provider CREATE ID privately bound in V0072, at least **one genuinely provider-generated callback** with original bytes and SHA readback and matching claimed ID, while protective STOP successfully terminates the exact bound subscription and fresh settlement confirms no active item. Redacted published HTTP stage receipt and, ideally, provider delivery-status receipt should corroborate. One authentic match establishes **feasibility**, *not* long-run delivery reliability or full-event completeness. If none arrive, classify delivery unproven, obtain provider SEND evidence and HTTP status, **do not retry blindly**.
+
+**C. Reliability claim requires a denominator:** let `N` be independently observed unique provider SEND attempts (not alert credits and not flight items); `K` be verified distinct genuine notifications durably stored for exactly those SEND identifiers. Only when IDs or an independent provider attempt ledger support `N` should `K/N` be reported as observed ingestion proportion; use exact (Clopper-Pearson) or Wilson binomial 95% intervals and clearly mark the independence/stationarity assumptions. Duplicate/retry counting must be consistent and tested. Without `N`, report only `K` and an `unknown delivery denominator`, never invent 0/46 reliability. For one-sided zero-failure 95% lower confidence, `p_L=0.05^(1/N)` when all `N` independent attempts succeed; one success is extremely weak evidence for any high-reliability guarantee. Reference: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.binomtest.html . A small discrepancy in later ML aggregate counts can be scientifically assessed with explicit tolerance/provenance; it **cannot** replace raw-byte integrity or positive endpoint readback.
+
+**D. Paid exposure safety:** provider bills per flight item at SEND including unsuccessful attempts; a busy WSSS airport can charge many credits before a 5-second watchdog stops. The previous soft target 5 credits was **not a hard cap** and observed spend was 46; protected floor 2000 was exceeded. Confirm a **fresh balance** and agree realistic exposure/airport/scope in writing before another paid CREATE; existing owner permission covers only no-provider work, no refill/retry/paid CREATE. Existing NEXT1 exact STOP is spent.
+
+### Fastest scientifically defensible continuation
+
+1. Fix the **read-only NEXT2 recovery-audit diagnostic** and identify exactly why local `DB_READONLY` failed; do not repeat prior one-shot commission. Keep private DB secrets out of logs and GitHub.
+2. Restore the existing NEXT2 scope through a separately approved **no-provider** two-role credential rotation and encrypted App Storage handoff, after live owner catalog is valid. Avoid ten manual production secrets. Keep receiver published source fixed at `087dc948c29d004f88eca141e1fc8e83c2844e3f` and never deploy arbitrary newest operator/docs main SHA.
+3. Publish that reviewed callback-only receiver once and obtain **one** hosted 200 + exact V0071 synthetic original verification (update old `29d...` hard-coded acceptance operator through separate review before execution).
+4. Inspect real 2026-10-24 06:49–06:50 UTC published logs and provider SEND outcomes if recoverable, without treating missing logs as proof of delivery absence. Only thereafter agree a *new paid trial* with new independent STOP, fresh balance, and explicit authorization. Stop with a precise, uncertainty-labeled evidence report rather than inventing reliability.
+
+**Historical information elsewhere below is preserved for provenance; this section supersedes earlier statements that NEXT2 has not been commissioned at all.**
+
 > **2026-10-24 LATER-SESSION STATUS OVERRIDE — mandatory:** The initial plan below was written **before** NEXT2 commissioning. The actual owner has **since** commissioned NEXT2 scope `16f819c6-7c68-4d5a-82cf-3820e9294dc7`, created private role credentials and Replit settings, and cleanly staged the frozen 29d receiver source. The reviewer-approved additive role plan [PR #129](https://github.com/HKcode22/ReplitTranvr/pull/129) passed 5/5 CI and merged at `0e5286af9f3f26d671890d8c322fafececdd697e`. **NO published Autoscale secret update, receiver republish, hosted synthetic POST, or paid NEXT2 CREATE has happened.** The `replit secrets --help` CLI shows only `list`, `get`, `exec`, `help` (no write). Owner explicitly refuses manual 10-field copy and Replit AI/Work. Restricted logins expire **2026-10-24T14:41:19.860Z**. **For CURRENT operational instructions read [Gate4 NEXT2 secret automation blocker and exact recovery checkpoint](2026-10-24_GATE4_NEXT2_PUBLISHED_SECRETS_CLI_BLOCKER_AND_RECOVERY_CHECKPOINT.md).** Keep the document below as original scientific/release design; its descriptions of role commissioning as pending are historical.
 
 
