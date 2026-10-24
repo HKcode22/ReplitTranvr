@@ -27,6 +27,7 @@ const MANIFEST=join(PRIVATE,"setup-manifest.json");
 const INTENT=join(PRIVATE,"commission-once-intent.json");
 const RECEIVER_CREDENTIAL=join(PRIVATE,"receiver-credential.json");
 const WRITER_CREDENTIAL=join(PRIVATE,"writer-credential.json");
+const DEPLOYMENT=join(PRIVATE,"published-receiver-settings.json");
 const NEW_POLICIES=[
  "gate4_next2_receiver_select_v39",
  "gate4_next2_receiver_insert_v39",
@@ -296,7 +297,7 @@ export async function gate4Next2CommissionNoProviderV39(mode:string):Promise<voi
   }
   stage="PREPARE_SINGLE_COMMISSION";
   privateDir();
-  if([INTENT,RECEIVER_CREDENTIAL,WRITER_CREDENTIAL]
+  if([INTENT,RECEIVER_CREDENTIAL,WRITER_CREDENTIAL,DEPLOYMENT]
      .some(existsSync))hold();
   const passwordR=randomBytes(40).toString("hex");
   const passwordW=randomBytes(40).toString("hex");
@@ -322,6 +323,28 @@ export async function gate4Next2CommissionNoProviderV39(mode:string):Promise<voi
    authorizationSha256:manifest.authorizationSha256,
    expiresUtc,writerUrl:connection(ownerUrl,NEXT2_WRITER,passwordW)
   });
+  // Replit production Secret handoff stays in private 0700 directory/0600
+  // file. Never log this document, use it as published source code, upload it
+  // to GitHub, or confuse values presence with actual deployment readiness.
+  writeOnce(DEPLOYMENT,{
+   schema:"v39.gate4.next2.private-published-settings.v1",
+   scopeId:NEXT2_SCOPE,expectedCompiledSource:FROZEN_RECEIVER_SOURCE,
+   values:{
+    V39_GATE4_PREBIND_ADD_ON_PREPAID:"1",
+    ADB_AUTO_COLLECT:"false",
+    GATE4_PREBIND_RELEASE_REVIEW:"EXPLICIT_NO_PROVIDER_RECEIVER",
+    GATE4_PREBIND_APPROVED_SOURCE_COMMIT:FROZEN_RECEIVER_SOURCE,
+    GATE4_PREBIND_SCOPE_ID:NEXT2_SCOPE,
+    GATE4_PREBIND_AUTH_SHA256:manifest.authorizationSha256,
+    GATE4_PREBIND_AIRPORT_ICAO:"WSSS",
+    GATE4_PREBIND_DATABASE_URL:
+      connection(ownerUrl,NEXT2_RECEIVER,passwordR),
+    GATE4_PREBIND_APPROVED_DB_HOST:new URL(ownerUrl).hostname,
+    GATE4_PREBIND_WEBHOOK_SECRET:randomBytes(40).toString("hex")
+   },
+   providerCreateAuthorized:false,providerRefillAuthorized:false,
+   receiverDeployed:false
+  });
   stage="ATOMIC_SCOPED_ROLE_TRANSACTION";
   await db.query("BEGIN");tx=true;
   await db.query("SET LOCAL lock_timeout='2500ms'");
@@ -342,7 +365,7 @@ export async function gate4Next2CommissionNoProviderV39(mode:string):Promise<voi
    status:"GATE4_NEXT2_NEW_ROLES_ADDITIVE_NO_PROVIDER_COMMISSIONED",
    newRoleCount:2,newPolicies:4,allExistingPoliciesPreserved:true,
    oldOriginalRowsPreserved:1,oldOwnerBindingsPreserved:2,
-   privateCredentialsWritten:true,expiresUtc,
+   privateCredentialsWritten:true,privatePublishedSettingsWritten:true,expiresUtc,
    receiverPublished:false,syntheticPosted:false,
    paidAuthorized:false,providerRequests:0,databaseWrites:14
   }));
