@@ -168,12 +168,13 @@ async function inspect(db:pg.Client,actor:string,
   const x=exists(n);
   return !!x&&x.rolsuper===false&&x.rolbypassrls===false&&
    x.rolcreaterole===false&&x.rolcreatedb===false&&
+   x.rolreplication===false&&x.rolinherit===false&&
    (login===undefined||x.rolcanlogin===login);
  };
  if(!safe("gate4_receiver_20261022")||
     !safe("gate4_receiver_2026_next1")||
     !safe("gate4_safety_reader_20261022")||
-    !safe("gate4_owner_writer_20261023")||
+    !safe("gate4_owner_writer_20261023",false)||
     !safe("gate4_owner_writer_2026_next1")||
     (after?!(safe(NEXT2_RECEIVER,true)&&safe(NEXT2_WRITER,true)):
      !!(exists(NEXT2_RECEIVER)||exists(NEXT2_WRITER))))return false;
@@ -200,7 +201,7 @@ async function inspect(db:pg.Client,actor:string,
  }
  return true;
 }
-function roleDDL(role:string,password:string,expiry:string,limit:number):string{
+export function gate4Next2RoleDDLV39(role:string,password:string,expiry:string,limit:number):string{
  if(![NEXT2_RECEIVER,NEXT2_WRITER].includes(role as any)||
     !/^[a-f0-9]{80}$/.test(password)||
     !/^\d{4}-\d{2}-\d{2}T.*\.\d{3}Z$/.test(expiry)||
@@ -210,7 +211,7 @@ function roleDDL(role:string,password:string,expiry:string,limit:number):string{
   "NOREPLICATION NOBYPASSRLS CONNECTION LIMIT "+limit+
   " PASSWORD '"+password+"' VALID UNTIL '"+expiry+"'";
 }
-function statements(auth:string):string[]{
+export function gate4Next2ScopedStatementsV39(auth:string):string[]{
  if(!/^[a-f0-9]{64}$/.test(auth))hold();
  const raw="clean.gate4_alert_prebind_original_v39";
  const own="clean.gate4_alert_owned_binding_v39";
@@ -326,9 +327,9 @@ export async function gate4Next2CommissionNoProviderV39(mode:string):Promise<voi
   await db.query("SET LOCAL statement_timeout='7000ms'");
   await db.query("SELECT pg_advisory_xact_lock(3904,20261026)");
   if(!await inspect(db,expectedActor,false,false))hold();
-  await db.query(roleDDL(NEXT2_RECEIVER,passwordR,expiresUtc,4));
-  await db.query(roleDDL(NEXT2_WRITER,passwordW,expiresUtc,1));
-  for(const sql of statements(manifest.authorizationSha256))
+  await db.query(gate4Next2RoleDDLV39(NEXT2_RECEIVER,passwordR,expiresUtc,4));
+  await db.query(gate4Next2RoleDDLV39(NEXT2_WRITER,passwordW,expiresUtc,1));
+  for(const sql of gate4Next2ScopedStatementsV39(manifest.authorizationSha256))
    await db.query(sql);
   if(!await inspect(db,expectedActor,false,true))hold();
   await db.query("COMMIT");tx=false;
