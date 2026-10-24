@@ -78,7 +78,7 @@ export function reviewGate4ApprovedManifestV39(
   Buffer.from(recomputed,"hex"),
   Buffer.from(authorizationSha256 as string,"hex")
  ))return null;
- return m as Gate4ApprovedManifestV39;
+ return m as unknown as Gate4ApprovedManifestV39;
 }
 /** Local private READ ONLY. No DB/provider/GitHub IO. Fail closed. */
 export function readGate4ApprovedManifestV39(
