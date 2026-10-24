@@ -24,3 +24,9 @@ travnr_db_dump/
 # tool artifacts (never commit)
 .agents/
 .commandcode/
+
+# Never track Gate4 one-time deployment or temporary database credentials.
+**/next-wsss-deployment-values.json
+**/next-wsss-deployment.env
+**/receiver-gate4_receiver_2026_next1.json
+**/writer-gate4_owner_writer_2026_next1.json
