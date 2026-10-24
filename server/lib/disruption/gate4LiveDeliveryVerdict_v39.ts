@@ -51,7 +51,7 @@ export type Gate4LiveVerdictV39=Readonly<{
     "SAFETY_PASS_POSITIVE_ORIGINAL_ACCOUNT_UNSETTLED"|
     "QUALIFIED_LIVE_ALERT_FEASIBILITY_OBSERVED";
   safetyPassed:boolean;
-  genuinePaidReceiverOriginalsObserved:number;
+  shaVerifiedPositivePaidIdClaimRows:number;
   reliabilityPercent:number|null;
   independentProviderHmacAuthenticated:false;
   originalFullGate4RubricCertified:false;
@@ -71,7 +71,7 @@ export function assessGate4LiveDeliveryV39(
     safetyPassed:boolean):Gate4LiveVerdictV39=>({
     schema:"v39.gate4.exact-scope-live-evidence-verdict.v1",
     status,safetyPassed,
-    genuinePaidReceiverOriginalsObserved:
+    shaVerifiedPositivePaidIdClaimRows:
       nonnegative(e?.positivePaidIdClaimRows)?e.positivePaidIdClaimRows:0,
     // A source-backed provider notification denominator is essential.
     // SEND attempts are not distinct notifications; billable credits aren't
