@@ -126,3 +126,54 @@ GATE4_SOURCE_AND_PARITY_READONLY
 ```
 
 Interpret: sourcePinMatches + publishedDeployment + prepaidRouteRegistered + oldGate4AddonOff should be true, and webhookStatus=200, dbBindingStatus=200. If a check fails, do **not** assume published keys were deleted or run the rotation. No paid provider calls or PostgreSQL/storage writes occur here.
+
+## Next exact operator command after HTTP 200/200 — identify published SHA mismatch, NO writes
+
+Do not republish or rotate NEXT2 yet. The **existing two** stable secrets are proven matched; identify the actual deployed compiled source first. Command is read-only; it prints only public Git commit IDs, boolean conditions and local dirty count.
+
+```bash
+bash <<'GATE4_RUNTIME_SOURCE_READONLY'
+set -Eeuo pipefail
+set +x
+cd ~/workspace
+
+node --input-type=module <<'NODE'
+import {execFileSync,spawnSync} from 'node:child_process';
+import {existsSync,readFileSync} from 'node:fs';
+
+const PIN='087dc948c29d004f88eca141e1fc8e83c2844e3f';
+const URL='https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime';
+const sha=x=>typeof x==='string'&&/^[a-f0-9]{40}$/.test(x)?x:null;
+const out=spawnSync('curl',[
+ '--silent','--fail','--connect-timeout','5','--max-time','15',URL
+],{encoding:'utf8',timeout:18000,maxBuffer:120000});
+let live=null;
+try {if(out.status===0)live=JSON.parse(out.stdout);}catch{}
+let local=null,changes=null,buildMeta=null;
+try {local=sha(execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim());}catch{}
+try {
+ changes=execFileSync('git',['status','--porcelain','--untracked-files=no'],{
+  encoding:'utf8'
+ }).trim().split('\n').filter(Boolean).length;
+}catch{}
+if(existsSync('dist/v39-build-meta.json'))try{
+ buildMeta=sha(JSON.parse(readFileSync('dist/v39-build-meta.json','utf8')).git_head);
+}catch{}
+console.log(JSON.stringify({
+ status:'GATE4_PUBLISHED_COMPILED_SOURCE_READONLY',
+ publicRuntimeGet:out.status===0?'OK':'TRANSPORT_HOLD',
+ publishedGitHead:sha(live?.git_head),
+ publishedSourceIsReviewed:live?.git_head===PIN,
+ workspaceGitHead:local,
+ workspaceSourceIsReviewed:local===PIN,
+ localTrackedChangeCount:changes,
+ localBuildGitHead:buildMeta,
+ buildOverrideSet:!!process.env.V39_BUILD_GIT_HEAD,
+ providerCalls:0,databaseWrites:0,storageWrites:0
+}));
+NODE
+
+GATE4_RUNTIME_SOURCE_READONLY
+```
+
+**Interpretation:** If \`publishedGitHead\` is \`97ed05...\` or any other SHA, identify whether it represents old receiver code vs a generated Replit packaging commit before further work. \`scripts/build.ts\` compiles \`V39_DEPLOYED_GIT_HEAD\` from \`V39_BUILD_GIT_HEAD\` if set, otherwise \`git rev-parse HEAD\`. A successful workspace git pin does **not** establish what actual published binary reports. Keep production Gate4 fallback flag \`0\`, keep old seven policies/records preserved, do not spend credits. If published source already differs despite confirmed republish, inspect published deployment build logs and source selection before deciding any changes.
