@@ -1,5 +1,63 @@
 # Gate 4 NEXT2 — 2026-10-24 ADMISSION hold after PR #131 no-UI installer
 
+## 2026-10-24 NEXT2 parity HOLD — next no-provider two-route diagnostic
+
+The old stable-key verification is two authenticated POST controls on the **existing** published receiver (one matching the existing \`AERODATABOX_WEBHOOK_SECRET\`, one HMAC using \`V39_DATABASE_RUNTIME_URL\`). Both should return HTTP 200. The operator reports a single \`PUBLISHED_OLD_KEY_PARITY\` HOLD if either fails. This diagnosis performs **no provider/DB/storage mutations** and prints only HTTP status codes; do not print tokens or URLs.
+
+\`\`\`bash
+bash <<'GATE4_PUBLISHED_KEY_PARITY_DIAG'
+set -Eeuo pipefail
+set +x
+cd ~/workspace
+export DOTENV_CONFIG_PATH="$PWD/.env"
+node --input-type=module <<'NODE'
+import 'dotenv/config';
+import {createHmac,randomBytes} from 'node:crypto';
+
+const host="https://replit-tranvr--hk84164.replit.app";
+const secret=String(process.env.AERODATABOX_WEBHOOK_SECRET??"");
+const db=String(process.env.V39_DATABASE_RUNTIME_URL??"");
+if(secret.length<32||!/^postgres(?:ql)?:/.test(db)){
+ console.log('LOCAL_STABLE_KEYS_INVALID');
+ process.exit(0);
+}
+async function status(path,headers){
+ try{
+  const r=await fetch(host+path,{
+   method:'POST',headers,redirect:'error',cache:'no-store',
+   signal:AbortSignal.timeout(10000)
+  });
+  await r.body?.cancel();
+  return r.status;
+ }catch{return 'NETWORK_OR_TIMEOUT';}
+}
+const webhook=await status('/__v39/phase2g/webhook-secret-match',{
+ 'x-v39-phase2g-webhook-secret':secret
+});
+const challenge="gate4_custody_"+randomBytes(16).toString('hex');
+const proof=createHmac('sha256',db)
+ .update('phase2g-db-binding:'+challenge).digest('hex');
+const dbBinding=await status('/__v39/phase2g/runtime-db-binding',{
+ 'x-v39-phase2g-db-challenge':challenge,
+ 'x-v39-phase2g-db-proof':proof
+});
+console.log(JSON.stringify({
+ status:'GATE4_PUBLISHED_KEY_PARITY_READONLY',
+ webhookStatus:webhook,dbBindingStatus:dbBinding,
+ providerCalls:0,databaseWrites:0,storageWrites:0
+}));
+NODE
+GATE4_PUBLISHED_KEY_PARITY_DIAG
+\`\`\`
+
+Interpret only the two codes:
+- **200/200:** stable keys currently appear to match. The previous HOLD may have been transient; do not infer rotation or sealed install is done.
+- **404:** authentication failed or route unavailable; avoid guessing which until route and live compiled identity checked.
+- **503:** published key not configured or other service configuration failure.
+- **NETWORK_OR_TIMEOUT / 5xx:** transport/platform/runtime failure; preserve logs and avoid retrying writes.
+
+If one fails, **DO NOT** bypass or re-derive the encryption key from an unrelated environment. Correct the discrepancy between workspace and published stable secret material using supported private credential workflows, or implement a separately reviewed supported bootstrap. If both pass, reconfirm no partially installed private credentials/ciphertext before any new authorized execution. Never rerun the old spent NEXT2 commissioner or NEXT1 paid provider call.
+
 > **2026-10-24 ACTUAL PRODUCTION RECOVERY ATTEMPT — PUBLISHED OLD KEY PARITY HOLD, NO WRITES:** After the exact PASS read-only audit, owner explicitly ran reviewed `--rotate-and-seal` from isolated git worktree pinned to operator commit `056c2f6e73881c926c28ebca98b43812e54165df`. Output: `{"status":"GATE4_NEXT2_LOST_PRIVATE_RECOVERY_HOLD","stage":"PUBLISHED_OLD_KEY_PARITY","privateEncryptedObjectWrites":0,"dbMutationCommitted":false,"providerCalls":0,"providerCreates":0,"noAutomaticRetry":true}`. The production owner catalog passed internally before this stage. Recovery code invokes two existing published callback-only POST attestation routes: `/__v39/phase2g/webhook-secret-match` comparing `AERODATABOX_WEBHOOK_SECRET`, and `/__v39/phase2g/runtime-db-binding` comparing HMAC over the exact `V39_DATABASE_RUNTIME_URL` string. The code treats non-200 or network failure from **either** as one generic HOLD, so it is **not known which failed**. Both routes exist in the old compiled receiver; its runtime URL check compares the exact URL string, not merely canonicalized host/database. **DO NOT bypass parity or claim the encrypted bundle would decrypt live.** The warning from `pg-connection-string` about future SSL-mode alias behavior is advisory and unrelated to the recorded stage. No NEXT2 encrypted storage object, private-role rotation, policy retarget, publish, synthetic hosted webhook or provider requests occurred. **NEXT ACTION**: one read-only local, status-code-only two-endpoint diagnostic using the same `~/workspace/.env`; print only `WEBHOOK_MATCH=200|404|503|NETWORK_ERROR`, `DB_BINDING=...` and stable public runtime git_head, never secret values/DB URLs or response bodies. If either is not 200, resolve the actual workspace versus published credential divergence before using the existing encrypted-bootstrap design; do not rotate or re-run ambiguous mutations. Original NEXT1 46-credit zero-original gap remains scientifically unresolved and distinct. All historical Gate4 reports intact.
 
 > **2026-10-24 VERIFIED PRODUCTION READ-ONLY AUDIT PASS — NEXT2 EXISTING DB CUSTODY INTACT:** Owner ran isolated reviewed operator `056c2f6e73881c926c28ebca98b43812e54165df` from PR #133 using `~/workspace/.env`. Exact real result: `GATE4_NEXT2_EXISTING_SCOPE_RECOVERY_READONLY_PASS`, `existingScopedRoles=2`, `existingNext2Policies=4`, `oldPoliciesPreserved=7`, `legacyOriginalRows=1`, `previousOwnerBindings=2`, `providerCalls=0`, `databaseWrites=0`. The prior `DB_READONLY` generic HOLD was an audit implementation mismatch resolved by #133 (including PostgreSQL policy deparser handling and catalog query); which individual old guard failed was not reported, so do not attribute with certainty. **Owner's DB is now demonstrably intact under these exact checks.** The Replit private NEXT2 directory is still absent; no credentials have been restored, object encrypted or production SQL changed. NEXT2 compiled receiver source remains `087dc948c29d004f88eca141e1fc8e83c2844e3f` and has NOT been published. Next single production step requires **owner's conscious authorization** for `--rotate-and-seal`: mint replacement NEXT2-only private receiver/writer credentials + bearer, seal to Replit App Storage using existing stable published secrets, rotate ONLY 2 existing NEXT2 role passwords/expiry and retarget ONLY 4 NEXT2 RLS policies. Run approved operator in **isolated Git worktree**, not a bare `git archive`, because reviewed mutation mode checks `git rev-parse HEAD`; keep `~/workspace` staged receiver unchanged. Do not execute previous one-shot `--prepare`/`--apply` or rerun spent NEXT1 paid operator. If recovery returns HOLD, report stage and do not auto-retry/publish. Once READY, publish the fixed reviewed receiver and verify actual live `git_head`, webhook HTTP 200, exact V0071 SHA readback via one separately staged synthetic test. NEXT1 remains 46 credits/0 real originals with unknown exact cause; NO new AeroDataBox CREATE/refill/retry authorized. 
