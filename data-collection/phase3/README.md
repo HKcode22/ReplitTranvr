@@ -1,3 +1,13 @@
+# Phase 3 — current index and historical integration documentation
+
+**CURRENT 2026-10-24 STATE:** Gate4 NEXT1 genuinely created/stopped a billable WSSS subscription (46 credit account debit, 0 original V0071 callbacks; safety yes / paid delivery NOT QUALIFIED). NEXT2 is **no-provider database COMMISSIONED** (2 scoped roles, 4 new policies), source 29d staged locally in Replit, **production Secrets not transferred, no republish and no hosted synthetic POST**; `replit secrets` CLI only supports list/get/exec, and the owner declines manual bulk field entry, Replit AI Agent and Work. Do **not** replace published credentials with ordinary public variables. Restricted NEXT2 logins expire **2026-10-24T14:41:19.860Z**. A paid rerun is not authorized.
+
+**Canonical evidence and safe restart links:** [Phase 3 START HERE](START_HERE.md) → [NEXT1 genuine paid 46-credit delivery-gap report](2026-10-24_GATE4_WSSS_NEXT1_PAID_CREATE_EXACT_STOP_46_CREDIT_DELIVERY_GAP.md) → [NEXT2 repaired receiver and science handoff](2026-10-24_GATE4_NEXT2_REPAIRED_RECEIVER_RELEASE_AND_RETEST_HANDOFF.md) → [NEXT2 current published-Secrets CLI blocker and exact recovery checkpoint](2026-10-24_GATE4_NEXT2_PUBLISHED_SECRETS_CLI_BLOCKER_AND_RECOVERY_CHECKPOINT.md) → [GitHub issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38). Historical 2026-10-14–16 material preserved below but no longer describes live state.
+
+---
+
+## Historical source integration notes (2026-10-16; superseded as live-status text)
+
 # Phase 3 — integration review landing (NOT an authorized live gate)
 
 **Draft integration from [Gate 3 PR #36](https://github.com/HKcode22/ReplitTranvr/pull/36), original source SHA `318e2c3b8223bfc417757dbe571883aecdbca589`, onto current organized `main` `ebdfbbf19d7d52121f0c9b3317ac1da2ad290524`.** This landing page is proposed only, not merged into default main, published to Replit, migrated into production SQL, or approved for provider billing.
