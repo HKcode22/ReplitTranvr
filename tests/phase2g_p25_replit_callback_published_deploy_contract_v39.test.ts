@@ -8,10 +8,15 @@ const general=readFileSync("server/index.ts","utf8");
 const hook=readFileSync("scripts/post-merge.sh","utf8");
 
 describe("P25 Replit published callback release configuration",()=>{
- it("restores BOTH exact documented original callback-only deployment flags",()=>{
+ it("preserves callback-only deployment flags with a verified-source build",()=>{
   const section=deployment.match(/\[deployment\]\n([\s\S]*?)(?=\n\[|$)/)?.[1]??"";
   expect(section).toContain('deploymentTarget = "autoscale"');
-  expect(section).toContain('build = ["env", "V39_CALLBACK_ONLY_BUILD=1", "npm", "run", "build"]');
+  // Reviewer-pinned NEXT2 build wrapper performs the same callback-only build
+  // only after verifying runtime content and preserving snapshot provenance.
+  expect(section).toContain('build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]');
+  const wrapper=readFileSync("scripts/v39_gate4_reviewed_source_build_v39.sh","utf8");
+  expect(wrapper).toContain('V39_CALLBACK_ONLY_BUILD=1 V39_BUILD_GIT_HEAD="$PIN" npm run build');
+  expect(wrapper).toContain('git diff --quiet "$PIN" HEAD');
   expect(section).toContain('run = ["env", "V39_CALLBACK_ONLY_RUNTIME=1", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "V39_RUNTIME_DURABILITY_CLASS=autoscale", "node", "dist/index.mjs"]');
   expect(section).not.toContain('run = ["env", "V39_WORKSPACE_RUNTIME_OWNER_MODE=');
   expect(deployment).toContain('V39_PROVIDER_BLOB_BUCKET_ID = "replit-objstore-5aa4d2c4-399b-4933-9acf-0292f79d6d59"');
