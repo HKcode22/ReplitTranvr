@@ -4,6 +4,90 @@
 
 # Gate 4 NEXT2 — published configuration automation blocker, exact resume, and continuity
 
+## Owner read-only admission diagnostic — exact no-provider resume
+
+Run only in Replit Shell at the already detached reviewed source `087dc948c29d004f88eca141e1fc8e83c2844e3f`. Does not read out, log or upload credentials; no network, provider, database or object storage access. Return only the single printed `failedGuard`. **Do not republish on a diagnostic hold.**
+
+```bash
+bash <<'GATE4_ADMISSION_READONLY'
+set -Eeuo pipefail
+set +x
+cd ~/workspace
+export DOTENV_CONFIG_PATH="$PWD/.env"
+export GATE4_NEXT2_REVIEWED_BOOTSTRAP_SHA="087dc948c29d004f88eca141e1fc8e83c2844e3f"
+export GATE4_NEXT2_NO_UI_INSTALL_GO="SEAL_AND_RETARGET_NO_PROVIDER"
+node --import tsx --input-type=module <<'NODE'
+import 'dotenv/config';
+import {lstatSync,readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {homedir} from 'node:os';
+import {execFileSync} from 'node:child_process';
+import {gate4Next2ValidateValuesV39,NEXT2_ID}
+ from './server/lib/disruption/gate4Next2SealedBootstrap_v39.ts';
+const SOURCE='087dc948c29d004f88eca141e1fc8e83c2844e3f';
+const OLD='29d3e0dff8b8863f55f6d73e609e21480b8e46db';
+const ROOT=join(homedir(),'.config','replittranvr','gate4-next2-20261024');
+function report(failedGuard){
+ console.log(JSON.stringify({
+  status:'GATE4_NEXT2_ADMISSION_READONLY',failedGuard,
+  networkCalls:0,storageWrites:0,databaseWrites:0,providerCalls:0
+ }));
+ process.exit(0);
+}
+let head='';
+try{head=execFileSync('git',['rev-parse','HEAD'],
+ {encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();}
+catch{report('SOURCE_CHECKOUT');}
+if(head!==SOURCE||process.env.GATE4_NEXT2_REVIEWED_BOOTSTRAP_SHA!==SOURCE||
+ process.env.GATE4_NEXT2_NO_UI_INSTALL_GO!=='SEAL_AND_RETARGET_NO_PROVIDER')
+ report('SOURCE_PIN_OR_CONFIRM');
+let liveDb,ownerDb;
+try{liveDb=new URL(String(process.env.V39_DATABASE_RUNTIME_URL??''));}
+catch{report('RUNTIME_DB_URL_PARSE');}
+try{ownerDb=new URL(String(process.env.V39_PRODUCTION_DATABASE_OWNER_URL??''));}
+catch{report('OWNER_DB_URL_PARSE');}
+if(!['postgres:','postgresql:'].includes(liveDb.protocol)||
+ !liveDb.password||liveDb.pathname!=='/neondb')
+ report('RUNTIME_DB_URL_SHAPE');
+if(String(process.env.AERODATABOX_WEBHOOK_SECRET??'').length<32)
+ report('STABLE_WEBHOOK_SECRET');
+const bucket=String(process.env.V39_PROVIDER_BLOB_BUCKET_ID??'');
+if(!bucket.startsWith('replit-objstore-'))
+ report(bucket.startsWith('eplit-objstore-')?
+  'BLOB_BUCKET_LEGACY_PREFIX':'BLOB_BUCKET_CONFIG');
+if(!ownerDb.password||ownerDb.pathname!==liveDb.pathname||
+ ownerDb.hostname.replace('-pooler.','.')!==
+ liveDb.hostname.replace('-pooler.','.')||ownerDb.username===liveDb.username)
+ report('OWNER_DB_ROLE_OR_HOST');
+function privateRead(file,code){
+ let st,data;
+ try{
+  st=lstatSync(join(ROOT,file));
+  if(!st.isFile()||(st.mode&0o077)!==0)report(code+'_PERMISSIONS');
+  data=JSON.parse(readFileSync(join(ROOT,file),'utf8'));
+ }catch{report(code+'_READ_OR_JSON');}
+ return data;
+}
+const settings=privateRead('published-receiver-settings.json','SETTINGS');
+const receiver=privateRead('receiver-credential.json','RECEIVER');
+const manifest=privateRead('setup-manifest.json','MANIFEST');
+if(settings.scopeId!==NEXT2_ID||receiver.scope!==NEXT2_ID||
+ manifest.scopeId!==NEXT2_ID||settings.expectedCompiledSource!==OLD||
+ receiver.source!==OLD||manifest.sourceSha!==OLD||
+ settings.values?.GATE4_PREBIND_AUTH_SHA256!==manifest.authorizationSha256)
+ report('PRIVATE_SCOPE_SOURCE_OR_AUTH');
+try{
+ gate4Next2ValidateValuesV39({
+  ...settings.values,GATE4_PREBIND_APPROVED_SOURCE_COMMIT:SOURCE
+ },SOURCE);
+}catch{report('PRIVATE_TEN_VALUES_SCHEMA');}
+report('ADMISSION_PASS');
+NODE
+GATE4_ADMISSION_READONLY
+```
+
+If `ADMISSION_PASS`, the local validation issue is not reproducible under this environment; recheck the original installer entrypoint/args before continuing to next stage. If a specific guard fails, fix that guard only; any installer source edit creates a **new code SHA** requiring reviewed release/DB source parity rather than silently republishing. Keep NEXT1 evidence, NEXT2 identity and paid-authorization boundaries intact.
+
 > **2026-10-24 SAME-DAY IMPLEMENTATION UPDATE — Source solution MERGED, NOT DEPLOYED:** [PR #131](https://github.com/HKcode22/ReplitTranvr/pull/131) passed **7/7 GitHub CI** and merged at `087dc948c29d004f88eca141e1fc8e83c2844e3f`. Instead of manually entering ten Production Secrets (owner explicitly refuses) and instead of dubious Replit CLI write operations, the receiver now supports loading a per-actual-source AES-256-GCM-encrypted NEXT2 bundle from the **existing private Replit App Storage** bucket, with authenticated key material derived from two **already deployed protected Phase2G runtime credentials**. No secrets or plaintext URL in GitHub, HTTP, logs or storage. The one-command `scripts/v39_gate4_next2_no_ui_config_install_v39.ts --install` uses two existing no-provider published challenge endpoints to verify that workspace and deployed stable secrets match, uploads/readbacks encrypted settings from the existing private home bundle, adjusts only the four NEXT2 RLS policies to the **new actual compiled SHA**, and extends the two NEXT2 roles by 48 hours. It neither calls AeroDataBox nor automatically publishes. **Implementation is reviewed but the installer is NOT run, hosted Replit app still old source, and no synthetic/paid NEXT2 callback has been observed.** Owner must stage the approved binary SHA and run installer once; then the connected Replit publisher can deploy and we can verify public source and one private synthetic 200 + exact V0071 SHA readback. Treat historic CLI absence as still true, but no longer the preferred release blocker. The earlier 14:41Z credential expiry applies **until** the no-provider install renews roles. This is a faster non-UI alternative, not authorization for provider billing.
 
 
