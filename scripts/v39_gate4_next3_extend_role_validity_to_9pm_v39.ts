@@ -84,7 +84,9 @@ async function audit(db:pg.Client,auth:string,expected:string):Promise<Audit>{
    x.rolconnlimit!==(x.rolname===NEXT3_OWNER_ROLE_V39?1:4)||
    x.expiry!==expected))hold("ROLE_CATALOG");
  const policies=(await db.query(
-  "SELECT policyname,tablename,cmd,roles,qual,with_check "+
+  "SELECT policyname,tablename,cmd,"+
+  "cardinality(roles)::int AS role_count,"+
+  "roles[1]::text AS assigned_role,qual,with_check "+
   "FROM pg_policies WHERE schemaname='clean' AND "+
   "policyname LIKE 'gate4_next3_%_v39'"
  )).rows;
@@ -97,7 +99,7 @@ async function audit(db:pg.Client,auth:string,expected:string):Promise<Audit>{
  if(policies.length!==4||
     !expectedPolicies.every(([name,table,cmd,role])=>policies.some(p=>
       p.policyname===name&&p.tablename===table&&p.cmd===cmd&&
-      Array.isArray(p.roles)&&p.roles.length===1&&p.roles[0]===role&&
+      p.role_count===1&&p.assigned_role===role&&
       String(cmd==="SELECT"?p.qual:p.with_check).includes(NEXT3_ID)&&
       String(cmd==="SELECT"?p.qual:p.with_check).includes(auth)&&
       String(cmd==="SELECT"?p.qual:p.with_check).includes(NEXT3_SOURCE_V39)&&
