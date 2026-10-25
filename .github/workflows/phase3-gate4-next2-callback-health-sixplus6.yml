@@ -1,0 +1,67 @@
+name: Phase3 Gate4 NEXT2 Callback Health 6+6 — NO PROVIDER
+
+# Manual read-only hosted GET observer, entirely separate from credit/ID STOP.
+# Its STOP_OWNER output is a recommendation, NEVER a provider DELETE. The
+# protected exact-owned STOP must be independently armed for a paid trial.
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_head:
+        description: "Exact reviewed main SHA for this no-provider observer"
+        required: true
+        type: string
+      stop_utc:
+        description: "Short UTC deadline, YYYY-MM-DDTHH:MM:SS.000Z (max 60 min)"
+        required: true
+        type: string
+      confirmation:
+        description: "WATCH_NEXT2_CALLBACK_HEALTH_SIX_PLUS_SIX_NO_PROVIDER"
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: gate4-next2-health-observer
+  cancel-in-progress: false
+jobs:
+  gate4-hosted-health:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'WATCH_NEXT2_CALLBACK_HEALTH_SIX_PLUS_SIX_NO_PROVIDER' }}
+    environment: gate4-safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      NODE_ENV: production
+      GATE4_OBSERVER_GO: WATCH_NEXT2_CALLBACK_HEALTH_SIX_PLUS_SIX_NO_PROVIDER
+      GATE4_OBSERVER_STOP_UTC: ${{ inputs.stop_utc }}
+    steps:
+      - name: Pin reviewed observer SHA on main
+        shell: bash
+        env:
+          EXPECTED: ${{ inputs.reviewed_head }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$EXPECTED" =~ ^[a-f0-9]{40}$ ]]
+          test "$EXPECTED" = "$GITHUB_SHA"
+          test "$GITHUB_REF" = "refs/heads/main"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.reviewed_head }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Run NEXT2 live health 6+6 observations (never provider)
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_gate4_next2_live_6plus6_observer_v39.ts --watch
+      - name: Non-authoritative health status
+        if: always()
+        run: |
+          echo '## Gate4 NEXT2 Callback Health 6+6' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This run performs ONLY public hosted GET health checks.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No provider CREATE, DELETE, balance mutation or paid GO.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The separate protected exact-ID billing STOP must be ARMED independently.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'A green health GET does NOT demonstrate provider SEND delivery.' >> "$GITHUB_STEP_SUMMARY"
