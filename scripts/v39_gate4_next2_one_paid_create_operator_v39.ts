@@ -227,7 +227,7 @@ async function execute():Promise<void>{
   // No untrusted exception text, URLs, raw response or provider IDs in logs.
   const message=err instanceof Error?err.message:"";
   const safeReason=/^GATE4_(?:REAL_OWNER|NEXT2_PAID)_[A-Z0-9_]+_HOLD$/.test(message)
-    ?message:/^BALANCE_UNAVAILABLE: HTTP (?:429|5\\d\\d)$/.test(message)
+    ?message:/^BALANCE_UNAVAILABLE: HTTP (?:429|5\d\d)$/.test(message)
       ?message.replace("BALANCE_UNAVAILABLE: ","")
       :"REDACTED_OR_UNKNOWN";
   console.log(JSON.stringify({
