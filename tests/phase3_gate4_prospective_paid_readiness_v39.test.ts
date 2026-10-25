@@ -15,7 +15,7 @@ const prospective=():Gate4ProspectiveOwnerReadinessV39=>({
  airportIcao:"WSSS",
  startingCredits:1991,activeSubscriptions:0,
  softCreditTarget:5,protectedFloor:1900,
- providerMaxDeliveryRetries:0,
+ providerMaxDeliveryRetries:0,explicitPaidRetryChargesAccepted:false,
  schedulesStatus:"OK",liveStatus:"OK",adsbStatus:"OKPartial",
  exactNewScopeReceiverMounted:false,
  exactNewScopeScopedRlsInstalled:false,
@@ -53,6 +53,16 @@ describe("Gate4 authentic paid readiness with scientific 6+6 health",()=>{
    const c={...prospective(),newScopeId:id};
    expect(reviewGate4ProspectivePaidReadinessV39(c).missing)
     .toContain("NEW_UNSPENT_SCOPE_REQUIRED");
+  }
+ });
+ it("allows API valid one/two billed retries ONLY if separately approved",()=>{
+  for(const n of [1,2]){
+   const x=reviewGate4ProspectivePaidReadinessV39({
+    ...prospective(),providerMaxDeliveryRetries:n,
+    explicitPaidRetryChargesAccepted:true
+   });
+   expect(x.missing).not.toContain("PAID_PROVIDER_RETRIES_NOT_SEPARATELY_AUTHORIZED");
+   expect(x.liveCreateAuthorized).toBe(false);
   }
  });
  it("protects live reviewed source SHA separately from operator SHA",()=>{
