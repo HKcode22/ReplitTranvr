@@ -219,7 +219,6 @@ async function main():Promise<void>{
   intentWritten=true;
   if(!Buffer.from(await storage.downloadBytes(INTENT)).equals(intent))hold();
   stage="WRITE_PRIVATE_SEALED_WRITER";
-  const oldOwner=new URL(own);
   const pass=randomBytes(40).toString("hex");
   const newWriter=new URL(own);
   newWriter.username=ROLE;
