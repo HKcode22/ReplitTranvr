@@ -9,7 +9,7 @@ const source=readFileSync(new URL(
  "../scripts/v39_gate4_next2_recovered_hosted_synthetic_v39.ts",
  import.meta.url),"utf8");
 
-describe("Gate4 NEXT2 recovered-private hosted synthetic, no provider",()=>{
+describe("Gate4 NEXT2 sealed App Storage hosted synthetic, no provider",()=>{
  it("builds one unambiguously synthetic JSON Alert fixture",()=>{
   const wire=next2SyntheticWireV39(
    "g4synthetic_"+"b".repeat(24),
@@ -55,14 +55,14 @@ describe("Gate4 NEXT2 recovered-private hosted synthetic, no provider",()=>{
    'const SRC="087dc948c29d004f88eca141e1fc8e83c2844e3f"'
   );
   expect(source).toContain('const GO="STORE_ONE_SYNTHETIC_ORIGINAL_NO_PROVIDER"');
-  expect(source).toContain('readPrivate("receiver-credential.json")');
-  expect(source).toContain('readPrivate("published-receiver-settings.json")');
-  expect(source).toContain('readPrivate("sealed-release-install-result.json")');
-  expect(source).toContain('gate4Next2ValidateValuesV39(p.values,SRC)');
+  expect(source).toContain('gate4Next2OpenSealedValuesV39(');
+  expect(source).toContain('gate4Next2StorageKeyV39(SRC)');
+  expect(source).toContain('storageFromExistingEnv()');
+  expect(source).toContain('new ReplitProviderBlobStoreV39(b)');
   expect(source).toContain('new pg.Client({');
   expect(source).toContain('options:"-c default_transaction_read_only=on"');
-  expect(source).toContain('writePrivateOnce(INTENT');
-  expect(source).toContain('writePrivateOnce(RECEIPT');
+  expect(source).toContain('await storage.uploadBytes(INTENT,intentBytes)');
+  expect(source).toContain('await storage.uploadBytes(RECEIPT');
   expect(source).toContain('row.original_wire.equals(wire)');
   expect(source).toContain("providerQualifiedOriginal:false");
   expect(source).toContain('noAutomaticRetry:true');
