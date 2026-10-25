@@ -1,6 +1,5 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
-import {randomBytes} from "node:crypto";
 import {
  sealWriterOnlyV39,openWriterOnlyV39
 } from "../scripts/v39_gate4_next2_writer_only_durable_reissue_v39";
