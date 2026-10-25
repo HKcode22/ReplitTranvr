@@ -90,14 +90,11 @@ export function identityMatchV39(
   current[k]===expected[k]);
 }
 function liveStopQueued():boolean{
- for(const status of ["in_progress","queued","waiting","pending"]){
-  const x=gh("repos/"+REPO+"/actions/workflows/"+
-   "phase3-gate4-live-exact-stop-candidate.yml/runs?status="+status+
-   "&per_page=20");
-  if(!Array.isArray(x.workflow_runs))hold();
-  if(x.workflow_runs.length>0)return true;
- }
- return false;
+ const x=gh("repos/"+REPO+"/actions/workflows/"+
+  "phase3-gate4-live-exact-stop-candidate.yml/runs?per_page=100");
+ if(!Array.isArray(x.workflow_runs))hold();
+ return x.workflow_runs.some((r:any)=>
+  ["in_progress","queued","waiting","pending","requested"].includes(r.status));
 }
 async function main(){
  let stage="ADMISSION",changed=0;
