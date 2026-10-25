@@ -56,6 +56,62 @@ describe("Gate4 LIVE operator — mocked boundary, no network/provider",()=>{
   });
   expect(d.deleteKnownExact).not.toHaveBeenCalled();
  });
+ it("runs final STOP, balance, and LIST before immutable intent and CREATE",async()=>{
+  const d=deps();const order:string[]=[];
+  d.proveActualExternalStopArmed.mockImplementation(async()=>{
+   order.push("stop");return true;
+  });
+  d.strictBalance.mockImplementation(async()=>{
+   order.push("balance");return 2037;
+  });
+  d.strictInventory.mockImplementation(async()=>{
+   order.push("list");return [];
+  });
+  d.reserveOneShotImmediatelyBeforeCreate=vi.fn(async()=>{
+   order.push("durable_intent");
+  });
+  d.createExactlyOne.mockImplementation(async()=>{
+   order.push("post");return receipt;
+  });
+  await runGate4OnePositiveOwnerV39(scope,d);
+  expect(order.slice(0,5)).toEqual([
+   "stop","balance","list","durable_intent","post"
+  ]);
+  expect(d.reserveOneShotImmediatelyBeforeCreate).toHaveBeenCalledTimes(1);
+  expect(d.createExactlyOne).toHaveBeenCalledTimes(1);
+ });
+ it("pre-POST STOP or balance failure must NOT consume new intent",async()=>{
+  for(const mode of ["stop","balance","list"]){
+   const d=deps();
+   d.reserveOneShotImmediatelyBeforeCreate=vi.fn(async()=>{});
+   if(mode==="stop")d.proveActualExternalStopArmed.mockResolvedValue(false);
+   if(mode==="balance")d.strictBalance.mockRejectedValue(Error("429"));
+   if(mode==="list")d.strictInventory.mockRejectedValue(Error("429"));
+   await expect(runGate4OnePositiveOwnerV39(scope,d)).rejects.toThrow();
+   expect(d.reserveOneShotImmediatelyBeforeCreate).not.toHaveBeenCalled();
+   expect(d.createExactlyOne).not.toHaveBeenCalled();
+  }
+ });
+ it("uncertain durable intent write must not issue a provider POST",async()=>{
+  const d=deps();
+  d.reserveOneShotImmediatelyBeforeCreate=vi.fn(async()=>{
+   throw Error("ambiguous storage confirmation");
+  });
+  await expect(runGate4OnePositiveOwnerV39(scope,d))
+   .rejects.toThrow("ONE_SHOT_INTENT_UNCONFIRMED_NO_CREATE_HOLD");
+  expect(d.reserveOneShotImmediatelyBeforeCreate).toHaveBeenCalledTimes(1);
+  expect(d.createExactlyOne).not.toHaveBeenCalled();
+ });
+ it("ambiguous POST consumes exactly one intent and never retries",async()=>{
+  const d=deps();
+  d.reserveOneShotImmediatelyBeforeCreate=vi.fn(async()=>{});
+  d.createExactlyOne.mockRejectedValue(Error("connection lost"));
+  await expect(runGate4OnePositiveOwnerV39(scope,d))
+   .rejects.toThrow("CREATE_RESULT_UNKNOWN_MANUAL_RESCUE_HOLD");
+  expect(d.reserveOneShotImmediatelyBeforeCreate).toHaveBeenCalledTimes(1);
+  expect(d.createExactlyOne).toHaveBeenCalledTimes(1);
+  expect(d.deleteKnownExact).not.toHaveBeenCalled();
+ });
  it("won't touch account or CREATE unless actual GH job proof is positive",async()=>{
   const d=deps();
   d.proveActualExternalStopArmed.mockResolvedValue(false);
