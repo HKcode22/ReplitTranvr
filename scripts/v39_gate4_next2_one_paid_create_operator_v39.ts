@@ -138,6 +138,13 @@ async function execute():Promise<void>{
    hold("INDEPENDENT_STOP_NOT_LIVE_ARMED");
   if(!next2ObserverRunningV39(healthRunId,runnerSha))
    hold("SIX_PLUS_SIX_HEALTH_OBSERVER_NOT_LIVE");
+  stage="FRESH_PROVIDER_BASELINE_AND_ZERO_ACTIVE";
+  const balance=await getBalanceEvidenceStrict();
+  const inventory=await listSubscriptionsStrict();
+  if(balance.balance.creditsRemaining!==initial||
+     !Array.isArray(inventory)||
+     inventory.some(s=>s.isActive&&s.billingType==="CreditBased"))
+   hold("PROVIDER_BASELINE_CHANGED_OR_ACTIVE");
   stage="EXACT_SCOPED_WRITER";
   pool=new pg.Pool({connectionString:x.writerUrl,max:1,
    connectionTimeoutMillis:6000,query_timeout:7000,
