@@ -176,7 +176,7 @@ async function main():Promise<void>{
    console.log(JSON.stringify({
     status:"GATE4_NEXT3_ROLE_EXPIRY_9PM_VERIFIED",
     expiresUtc:NEXT3_EXTENDED_EXPIRES_V39,
-    receiverLoginValidity:true,writerLoginValidity:true,
+    receiverRoleCatalogValid:true,writerLoginValidity:true,
     sourceAndSignerUnchanged:true,
     scopedSyntheticOriginals:1,ownedProviderBindings:0,
     encryptedExtendedCustodyVerified:true,
