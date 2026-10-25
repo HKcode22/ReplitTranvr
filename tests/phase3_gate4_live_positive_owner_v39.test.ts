@@ -24,6 +24,7 @@ function deps(){
    listReads++;
    return listReads===1?[]:(live?[sub]:[]);
   }),
+  reserveOneShotImmediatelyBeforeCreate:vi.fn(async()=>{}),
   createExactlyOne:vi.fn(async()=>receipt),
   persistPositiveIdPrivately:vi.fn(async()=>{}),
   signedStopEvidence:vi.fn(async()=>({
