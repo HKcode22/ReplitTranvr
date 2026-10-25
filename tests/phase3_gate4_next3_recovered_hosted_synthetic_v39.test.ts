@@ -66,7 +66,7 @@ describe("Gate4 NEXT3 sealed App Storage hosted synthetic, no provider",()=>{
   expect(source).toContain('if(await storage.exists(INTENT)||await storage.exists(RECEIPT))hold()');
   expect(source).toContain('providerDelivered:false,paidScienceExcluded:true,noRetry:true');
   expect(source).toContain('if(existing?.n!==0)hold()');
-  expect(source).toContain('h.git_head===SRC');
+  expect(source).toContain('x.git_head===SRC');
   expect(source).not.toContain("gate4_receiver_2026_next2");
   expect(source).toContain('await storage.uploadBytes(RECEIPT');
   expect(source).toContain('row.original_wire.equals(wire)');
