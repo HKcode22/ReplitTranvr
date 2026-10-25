@@ -28,6 +28,10 @@ describe("Gate4 NEXT3 scoped role expiry renewal with no provider",()=>{
  it("requires old exact expiry and full four-policies source/auth scope readback",()=>{
   expect(code).toContain('const BEFORE="2026-10-25T13:20:25.382Z"');
   expect(code).toContain('if(original.writerExpiresUtc!==BEFORE)');
+  expect(code).toContain('cardinality(roles)::int AS role_count');
+  expect(code).toContain('roles[1]::text AS assigned_role');
+  expect(code).toContain('p.role_count===1&&p.assigned_role===role');
+  expect(code).not.toContain('Array.isArray(p.roles)');
   expect(code).toContain('if(policies.length!==4');
   expect(code).toContain('x.expiry!==expected');
   expect(code).toContain('String(cmd==="SELECT"?p.qual:p.with_check).includes(NEXT3_ID)');
