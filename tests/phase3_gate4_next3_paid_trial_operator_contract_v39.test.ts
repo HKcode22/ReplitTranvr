@@ -61,7 +61,7 @@ describe("Gate4 NEXT3 exact-scope ONE paid operator — NO launch on import",()=
   expect(paid).toContain("persistPositiveIdPrivately:");
  });
  it("ignores known synthetic V0071 as science and allows ONLY zero owned V0072",()=>{
-  expect(paid).toContain('"clean.gate4_alert_owned_binding_v39"');
+  expect(paid).toContain("clean.gate4_alert_owned_binding_v39");
   expect(paid).toContain('"gate4_owner_writer_2026_next3"');
   expect(paid).toContain("w.bindings!==0");
   expect(paid).not.toContain("gate4_alert_prebind_original_v39");
