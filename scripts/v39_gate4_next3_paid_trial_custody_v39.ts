@@ -13,6 +13,8 @@ import {
  NEXT3_SOURCE_V39,NEXT3_OWNER_BLOB_V39,NEXT3_OWNER_PREFIX_V39,
  NEXT3_OWNER_INTENT_V39,openNext3OwnerCustodyV39
 } from "./v39_gate4_next3_no_provider_writer_signer_seal_v39";
+import {next3EffectiveWriterExpiryV39} from
+ "./v39_gate4_next3_role_expiry_only_20261025";
 import {
  reviewGate4ActionsWatchScopeV39,
  type Gate4ActionsWatchScopeV39
@@ -50,12 +52,13 @@ export async function next3LoadPrivateV39():Promise<{
  const custody=openNext3OwnerCustodyV39(
   await storage.downloadBytes(NEXT3_OWNER_BLOB_V39),
   receiver.GATE4_PREBIND_AUTH_SHA256,process.env);
- if(Date.parse(custody.writerExpiresUtc)<Date.now()+45*60000)
-  hold("WRITER_EXPIRY");
+ // Original encrypted custody remains immutable; PostgreSQL is authoritative
+ // after the explicitly reviewed 9 PM VALID UNTIL-only role extension.
+ const effectiveExpiry=await next3EffectiveWriterExpiryV39(custody.writerUrl);
  return {
   storage,auth:receiver.GATE4_PREBIND_AUTH_SHA256,
   secret:receiver.GATE4_PREBIND_WEBHOOK_SECRET,
-  writerUrl:custody.writerUrl,writerExpiresUtc:custody.writerExpiresUtc,
+  writerUrl:custody.writerUrl,writerExpiresUtc:effectiveExpiry,
   signerPrivateDer:Buffer.from(custody.signerPrivatePkcs8Base64,"base64"),
   signerPublicDer:Buffer.from(custody.signerPublicSpkiBase64,"base64"),
   signerSpkiSha256:custody.signerSpkiSha256

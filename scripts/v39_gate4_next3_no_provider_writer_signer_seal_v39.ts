@@ -23,6 +23,8 @@ import {ReplitProviderBlobStoreV39} from
 import {
  NEXT3_ID,gate4Next3StorageKeyV39,gate4Next3OpenSealedValuesV39
 } from "../server/lib/disruption/gate4Next3SealedBootstrap_v39";
+import {next3EffectiveWriterExpiryV39} from
+ "./v39_gate4_next3_role_expiry_only_20261025";
 
 export const NEXT3_SOURCE_V39="5878b90eed04b2edfe2b226735ff0f02d9be25f3";
 export const NEXT3_OWNER_ROLE_V39="gate4_owner_writer_2026_next3";
@@ -194,12 +196,12 @@ async function run():Promise<void>{
       !await storage.exists(NEXT3_OWNER_BLOB_V39))hold();
    const data=openNext3OwnerCustodyV39(
     await storage.downloadBytes(NEXT3_OWNER_BLOB_V39),auth,process.env);
-   if(Date.parse(data.writerExpiresUtc)<Date.now()+10*60_000)hold();
+   const effectiveExpiry=await next3EffectiveWriterExpiryV39(data.writerUrl);
    await writerReadOnly(data.writerUrl);
    console.log(JSON.stringify({
     status:"GATE4_NEXT3_WRITER_SIGNER_CUSTODY_VERIFIED",
     signerSpkiSha256:data.signerSpkiSha256,
-    writerExpiresUtc:data.writerExpiresUtc,
+    writerExpiresUtc:effectiveExpiry,
     writerAuthenticatedReadOnly:true,encryptedReadback:true,
     providerCalls:0,databaseWrites:0,stopArmed:false,paidAuthorized:false
    }));
