@@ -189,6 +189,7 @@ describe("Gate4 additive prebind on existing prepaid runtime, no provider",()=>{
      const all=logs.mock.calls.map(x=>x.join(" "));
      expect(all.length).toBeGreaterThanOrEqual(2);
      expect(all.every(x=>x.includes("GATE4_ALERT_HTTP_V1"))).toBe(true);
+     expect(all.every(x=>x.includes('"stage":"ORIGINAL_STORED"'))).toBe(true);
      expect(all.join(" ")).not.toContain(secret);
      expect(all.join(" ")).not.toContain("SQ100");
      expect(all.join(" ")).not.toContain("subscriptionTest999");
@@ -235,12 +236,46 @@ describe("Gate4 additive prebind on existing prepaid runtime, no provider",()=>{
       .filter(x=>x[0]==="GATE4_ALERT_HTTP_V1")
       .map(x=>JSON.parse(String(x[1])));
      expect(reports.map(x=>x.httpStatus)).toEqual([404,422]);
+     expect(reports.map(x=>x.stage)).toEqual(["AUTH_REJECTED","QUARANTINE_REJECTED"]);
      expect(reports.every(x=>x.completed===true)).toBe(true);
      const logged=JSON.stringify(info.mock.calls);
      expect(logged).not.toContain(secret);
      expect(logged).not.toContain("wrong-secret");
      expect(logged).not.toContain("subscriptionTest999");
    }finally{info.mockRestore();}
+ });
+ it("classifies media and DB errors using safe fixed stages",async()=>{
+  const store=good();
+  const info=vi.spyOn(console,"info").mockImplementation(()=>{});
+  try{
+   await httpTest({
+    ...store,
+    writeOriginal:async()=>{throw Error("password=PRIVATE_STAGE_TOKEN");}
+   },async base=>{
+    const url=base+"/api/v1/webhooks/aerodatabox/"+secret;
+    const mime=await fetch(url,{
+     method:"POST",headers:{"content-type":"text/plain"},body:bytes
+    });
+    expect(mime.status).toBe(415);
+    const sql=await fetch(url,{
+     method:"POST",headers:{"content-type":"application/json"},body:bytes
+    });
+    expect(sql.status).toBe(503);
+    expect((await sql.json()).reason)
+     .toBe("DURABLE_STORAGE_OR_READBACK_UNAVAILABLE");
+   });
+   const reports=info.mock.calls
+    .filter(x=>x[0]==="GATE4_ALERT_HTTP_V1")
+    .map(x=>JSON.parse(String(x[1])));
+   expect(reports.map(x=>[x.httpStatus,x.stage,x.completed]))
+    .toEqual([[415,"MEDIA_REJECTED",true],
+              [503,"QUARANTINE_REJECTED",true]]);
+   const logged=JSON.stringify(info.mock.calls);
+   for(const forbidden of [
+    secret,"PRIVATE_STAGE_TOKEN","subscriptionTest999",
+    "password","application/json","text/plain"
+   ])expect(logged).not.toContain(forbidden);
+  }finally{info.mockRestore();}
  });
  it("wrong bearer secret and body mismatch cannot reach durable store",async()=>{
   const store=good();
