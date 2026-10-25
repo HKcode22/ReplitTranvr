@@ -16,6 +16,7 @@
  */
 import "dotenv/config";
 import pg from "pg";
+import {strictNext2PolicyAuditV39} from "./v39_gate4_next2_exact_rls_readonly_v39";
 import {
  createCipheriv,createDecipheriv,hkdfSync,randomBytes,createHash
 } from "node:crypto";
@@ -121,7 +122,8 @@ async function inspect(client:pg.Client,auth:string):Promise<Audit>{
   "WHERE rolname=ANY($1::name[])",
   [["gate4_receiver_2026_next2",ROLE]]);
  const policies=await client.query(
-  "SELECT policyname,tablename,cmd,roles::text AS roles "+
+  "SELECT policyname,tablename,cmd,permissive,cardinality(roles) AS role_count,"+
+  " roles[1]::text AS assigned_role,qual,with_check "+
   "FROM pg_policies WHERE schemaname='clean' AND "+
   "policyname=ANY($1::name[])",
   [[
@@ -142,18 +144,9 @@ async function inspect(client:pg.Client,auth:string):Promise<Audit>{
    !x.rolcanlogin||x.rolsuper||x.rolcreaterole||
    x.rolcreatedb||x.rolbypassrls||
    Date.parse(x.rolvaliduntil)<Date.now()+20*60_000))hold();
- // The existing 4 policy names must still be scoped to NEXT2 roles.
- if(policies.rows.length!==4)hold();
- const expected=[
-  ["gate4_next2_receiver_select_v39","SELECT","gate4_receiver_2026_next2"],
-  ["gate4_next2_receiver_insert_v39","INSERT","gate4_receiver_2026_next2"],
-  ["gate4_next2_writer_select_v39","SELECT",ROLE],
-  ["gate4_next2_writer_insert_v39","INSERT",ROLE]
- ] as const;
- for(const [name,cmd,role] of expected){
-  const p=policies.rows.find((x:any)=>x.policyname===name);
-  if(!p||p.cmd!==cmd||!String(p.roles).includes(role))hold();
- }
+ // Also require the COMPLETE reviewed scope/source/auth/WSSS predicates,
+ // not merely policy names or role names. Recheck at both admissions.
+ if(!strictNext2PolicyAuditV39(policies.rows,auth))hold();
  return {authorizationSha256:auth,rolesValid:true};
 }
 function ownerUrl():string{
