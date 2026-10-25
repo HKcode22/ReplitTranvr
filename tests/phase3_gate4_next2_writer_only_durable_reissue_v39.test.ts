@@ -75,6 +75,12 @@ describe("NEXT2 writer-only durable sealed custody, no provider",()=>{
   expect(script).toContain("providerCalls:0,providerCreates:0");
   expect(script).toContain("noAutomaticRetry:true");
  });
+ it("revalidates full RLS predicates inside both audit and reissue admission",()=>{
+  expect(script).toContain('strictNext2PolicyAuditV39(policies.rows,auth)');
+  expect(script).toContain("cardinality(roles) AS role_count");
+  expect(script).toContain("roles[1]::text AS assigned_role,qual,with_check");
+  expect(script).toContain("await inspect(client,v.GATE4_PREBIND_AUTH_SHA256)");
+ });
  it("read-only audit explicitly rejects synthetic ambiguity and existing paid binding",()=>{
   expect(script).toContain('if(rows.rows.length!==1||owners.rows[0]?.n!==0||');
   expect(script).toContain('/^g4synthetic_[a-f0-9]{24}$/');
