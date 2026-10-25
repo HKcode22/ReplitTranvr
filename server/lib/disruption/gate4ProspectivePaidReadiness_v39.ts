@@ -33,6 +33,7 @@ export type Gate4ProspectiveOwnerReadinessV39=Readonly<{
  softCreditTarget:number;
  protectedFloor:number;
  providerMaxDeliveryRetries:number;
+ explicitPaidRetryChargesAccepted:boolean;
  schedulesStatus:string;
  liveStatus:string;
  adsbStatus:string;
@@ -96,9 +97,11 @@ export function reviewGate4ProspectivePaidReadinessV39(
   "CREDIT_SOFT_POLICY_EXCEEDS_STARTING_BALANCE");
  require([0,1,2].includes(input.providerMaxDeliveryRetries),
   "INVALID_PROVIDER_RETRY_SETTING_NOT_6PLUS6");
- // Paid provider retries 1-2 may be valid technically, but would need
- // dedicated extra billable-send approval and fresh projected exposure.
- require(input.providerMaxDeliveryRetries===0,
+ // Paid provider retries 1 or 2 are API-valid but multiply possible paid
+ // SEND attempts. The owner must separately accept that charge exposure.
+ // This is NOT 6+6 callback-health polling, which never calls AeroDataBox.
+ require(input.providerMaxDeliveryRetries===0||
+  input.explicitPaidRetryChargesAccepted===true,
   "PAID_PROVIDER_RETRIES_NOT_SEPARATELY_AUTHORIZED");
  require(input.exactNewScopeReceiverMounted===true,
   "NEW_PAID_SCOPE_RECEIVER_NOT_MOUNTED");
