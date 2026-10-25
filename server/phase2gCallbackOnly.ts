@@ -17,6 +17,8 @@ import type {Gate4PrebindOriginalStoreV39} from
  "./lib/disruption/gate4PrebindIngress_v39";
 import {gate4Next2LoadPublishedConfigV39} from
  "./lib/disruption/gate4Next2SealedBootstrap_v39";
+import {gate4Next3LoadPublishedConfigV39} from
+ "./lib/disruption/gate4Next3SealedBootstrap_v39";
 import {
   registerWorkspaceRuntimeHealthV39,
 } from "./lib/disruption/workspaceRuntimeHealth_v39";
@@ -84,13 +86,21 @@ if(process.env.V39_PREPAID_STAGE_TELEMETRY==="1"){
 // already configured Replit bucket using *existing* protected runtime keys.
 // No provider call, no plaintext credential object and no deployment-secret
 // writer are needed. Absent bundle retains the former env behavior.
-const gate4ConfigEnv=process.env.V39_WORKSPACE_RUNTIME_OWNER_MODE===
- "replit-published-deployment"
- ? await gate4Next2LoadPublishedConfigV39(
-     process.env,String(process.env.V39_PROVIDER_BLOB_BUCKET_ID??""),
-     String(process.env.V39_DEPLOYED_GIT_HEAD??"")
-   )
- : process.env;
+// Preserve NEXT2 lookup for its historical compiled source and add an
+// isolated, private NEXT3 lookup; neither creates billing/provider activity.
+// If both appear in the SAME source SHA, NEXT3 refuses silent takeover.
+const published=process.env.V39_WORKSPACE_RUNTIME_OWNER_MODE===
+ "replit-published-deployment";
+const configBucket=String(process.env.V39_PROVIDER_BLOB_BUCKET_ID??"");
+const configSource=String(process.env.V39_DEPLOYED_GIT_HEAD??"");
+const previousScopedEnv=published
+ ?await gate4Next2LoadPublishedConfigV39(
+    process.env,configBucket,configSource)
+ :process.env;
+const gate4ConfigEnv=published
+ ?await gate4Next3LoadPublishedConfigV39(
+    previousScopedEnv,configBucket,configSource)
+ :previousScopedEnv;
 const gate4Config=gate4PrebindAdditiveConfigV39(gate4ConfigEnv);
 const gate4AdditiveEnabled=gate4Config!==null;
 let gate4DurableStore:Gate4PrebindOriginalStoreV39|null=null;
