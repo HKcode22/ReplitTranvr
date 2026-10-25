@@ -1,0 +1,47 @@
+# Gate 4 — post-synthetic owner provider baseline and next paid decision (2026-10-24)
+
+**Decision: NO PAID CREATE YET.** This is a factual checkpoint, not a subscription authorization, a STOP dispatch, a secret change, or a receiver deploy. Keep these distinctions for future sessions.
+
+## Verified completed engineering, not genuine provider-delivery science
+
+- User independently verified hosted public callback-only runtime all 5/5 true: status PASS, compiled source `087dc948c29d004f88eca141e1fc8e83c2844e3f`, Replit published, prepaid route preserved, NEXT2 Alert ingress registered.
+- Reviewed source-bound AES-GCM NEXT2 App Storage configuration and scoped PostgreSQL reader/writer credentials commissioned one time, with role expiration `2026-10-26T14:16:28.459Z`. Do NOT rotate these again just to redo synthetic data.
+- PR #137 (`af4fd2f64733541f75ebe425597d9e6763edc54d`, exact operator file blob `9b4a74807b2f932005f7af98aa71fc472fc9f1c5`, all five CI PASS) `--check` independently verified sealed config, hosted ingress, restricted read-only PG and zero NEXT2 original rows.
+- User explicitly authorized one synthetic WSSS Alert, and actual Replit Shell execution returned `GATE4_NEXT2_HOSTED_SYNTHETIC_V0071_DURABLE_PASS`, real published **HTTP 200**, original raw Buffer bytes and SHA256 independently exact-matched in V0071, reviewed compiled source, matching NEXT2 source/scope/auth/airport/claimed fake ID. The durable synthetic intent is spent. Original belongs ONLY to synthetic proof; NEVER count it as provider delivered or claim statistical delivery reliability. The scope now contains one synthetic original; no longer expect zero originals.
+- Historical NEXT1 2026-10-24 paid trial: positive provider CREATE, exact V0072 ownership bind and protected exact-ID STOP successful; balance 2037 -> 1991 (46 credit delta), **zero** verified provider-original rows. This is possible provider SEND/endpoint delivery gap; no origin blame or inferred 46 HTTP attempts. Old spent scope, signer/STOP ticket, role and one-shot operator are NOT reusable.
+
+## Actual new free/read-only AeroDataBox account receipt (owner Replit Shell)
+
+```json
+{"status":"GATE4_PROVIDER_READONLY_BASELINE","creditsRemaining":1991,"apiUnitsRemaining":59996,"activeSubscriptions":0,"totalSubscriptions":0,"wsssFeedsResponseAvailable":true,"wsssFeedFields":["flightSchedulesFeed","liveFlightUpdatesFeed","adsbUpdatesFeed","generalAvailability"],"subscriptionCreates":0,"providerMutations":0}
+```
+
+Interpretation: **1991** Alert credits (NOT the same as 59996 marketplace/API quota units), zero listed subscriptions, WSSS health endpoint returns its four recognized field names. **The feed statuses' VALUES were not collected.** It is an error to claim WSSS ADS-B/live feed is green from the presence of keys only. The read-only request made no subscription CREATE, DELETE or refill.
+
+## Provider-documented billing realities / sensible scientific risk
+
+Official AeroDataBox Flight Alert guide (last updated Jan 31, 2026): https://aerodatabox.com/flight-alert-api-2026/ :
+- Credit-based subscription CREATE is free; charges accrue on SEND attempts (even if endpoint fails), **one credit per flight item in each notification**. A single airport notification can include multiple flights. Default retries are zero for credit-based alerts if not requested; avoid enabling them in this feasibility experiment. One 46-credit delta is not 46 HTTP requests.
+- Busy-airport subscriptions can drain credits rapidly; the provider offers **no documented per-subscription hard spend cap**. A client-side balance watcher, 5- or 10-credit soft threshold, and an external STOP are best effort. A STOP cannot retroactively prevent costs already sent, and even exact STOP may be followed by late settlement.
+- The former 2000-credit protected floor was **already breached before this baseline** (1991). Do not quietly preserve an impossible 2000 threshold; equally do not quietly change to 1900 or refill without user's explicit risk acceptance. **Illustrative only:** an owner-approved floor of 1900 gives 91 credits of initial headroom, and a **soft** 10-credit watch target with immediate verified-positive-result STOP may reduce exposure; a burst can overshoot either. The observed 46-credit historical burst should inform user's choice, but cannot bound the next burst. No owner has approved this proposed floor/soft threshold yet.
+- Source/flight count tolerance: small scientific aggregate mismatches can be accepted; raw original byte SHA, independently provider-issued ID and exact STOP custody need positive verification.
+
+## Exact next authorized scope (ONLY planning, zero paid calls)
+
+1. One extra **FREE GET WSSS feed-health** to read the four actual status VALUES, not merely keys, with redacted summary. Consider whether WSSS airport-wide Alert is appropriate for modest credit exposure versus a lower-intensity airport/flight-number trial. An alternative flight subscription can prove general provider SEND-to-webhook feasibility but does not by itself establish WSSS airport-subscription behavior.
+2. Decide desired hypothesis and conditional risk: positive real owned-ID Alert must reach the **currently verified** public receiver, post to V0071, exact bytes/SHA, source/authorization/airport and positive provider ID. New paid scope needs proper RLS and new V0072 positive owner binding; synthetic NEXT2 cannot be silently repurposed. Scope roles expire Oct 26; avoid a rushed CREATE with an expiring writer.
+3. Review NEW one-shot owner operator and source, NEW AUTH/scope, private durable pre-CREATE intent, positive CREATE/owned ID custody, GitHub `gate4-safety` independently ACTIVE ARMED STOP (not merely workflow queued), strict fresh balance/zero active, private signing key, provider balance tolerance and maxDuration UTC. No retry after ambiguous positive CREATE result, no Cloudflare or Replit Agent; no production secret/manual SHA editing without review.
+4. Obtain **separate explicit authorization** for precisely one credit-based AeroDataBox paid exposure, including chosen soft watch target, protected reserve with potential overshoot, and time window. Do not use prior synthetic permission or historical NEXT1 authorization as consent.
+5. At most ONE real provider CREATE, any genuine original must be independently provenance-verified and excluded from synthetic; independently STOP the exact positive provider-assigned ID, verify zero active and at least three settlement reads, reconcile credit delta and log hosted route outcomes. One matched provider callback = **feasibility evidence**, not high delivery-reliability estimate. No paid SEND and no genuine original = **inconclusive**; paid charges with none = **possible delivery/ingestion gap** requiring provider SEND and HTTP status evidence, not blame.
+
+**Current acceptance state:** Gate4 HTTPS+PG *synthetic* receiver engineering **PASS**; genuine AeroDataBox SEND/owned original **UNPROVEN**. Phase4 is not unlocked.
+
+## Continuity / source-of-truth
+
+- [Phase3 Start Here](START_HERE.md)
+- [Full merged Gate4 handoff](2026-10-24_GATE4_MERGED_RELEASE_SAFE_REPLIT_HANDOFF.md)
+- [NEXT1 46-credit delivery gap](2026-10-24_GATE4_WSSS_NEXT1_PAID_CREATE_EXACT_STOP_46_CREDIT_DELIVERY_GAP.md)
+- [Finite scientific closeout](2026-10-23_GATE4_PAID_ALERT_LIVE_DELIVERY_FINITE_CLOSEOUT_PLAN.md)
+- [Issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38)
+
+**Next session starts with**: the exact new provider baseline above; inspect WSSS feed-health values, choose risk and new STOP scope without running any CREATE or refill. No more infrastructure republish or synthetic POST.
