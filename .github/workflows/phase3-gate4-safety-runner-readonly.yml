@@ -70,6 +70,7 @@ jobs:
           node --input-type=module <<'NODE'
           import pg from "pg";
           const role="gate4_safety_reader_20261022";
+          const next3Scope="15bec7e1-8efc-49e7-9ee8-63521a76d71c";
           let client;
           try {
             const uri=process.env.GATE4_SAFETY_READONLY_DATABASE_URL;
@@ -103,8 +104,12 @@ jobs:
               "has_table_privilege(current_user,'clean.gate4_alert_owned_binding_v39','DELETE') AS can_delete,"+
               "has_table_privilege(current_user,'clean.gate4_alert_prebind_original_v39','SELECT') AS prebind_read";
             const x=(await client.query(sql)).rows[0];
+            // Historical Gate4 V0072 rows belong to earlier trials and
+            // must not falsely block NEXT3's genuinely empty owned scope.
             const count=(await client.query(
-              "SELECT count(*)::int AS total FROM clean.gate4_alert_owned_binding_v39"
+              "SELECT count(*)::int AS total FROM clean.gate4_alert_owned_binding_v39 "+
+              "WHERE scope_id=$1::uuid",
+              [next3Scope]
             )).rows[0]?.total;
             await client.query("ROLLBACK");
             const valid=x.db==="neondb"&&x.actor===role&&
@@ -116,7 +121,7 @@ jobs:
             console.log(JSON.stringify({
               status:valid?"GATE4_GITHUB_SAFETY_DB_READONLY_PASS":"HOLD",
               githubRunner:true,restrictedRole:valid,
-              existingOwnedBindings:Number.isSafeInteger(count)?count:null,
+              next3OwnedBindings:Number.isSafeInteger(count)?count:null,
               providerRequests:0,databaseWrites:0,
               stopArmed:false,paidAuthorization:false
             }));
