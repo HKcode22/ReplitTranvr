@@ -8,7 +8,7 @@
  * USAGE clean and SELECT+INSERT on V0071; NO owner binding V0072 access.
  * Provider CREATE/DELETE/paid authority: NONE in this add-on.
  */
-import express,{type Express,type Request} from "express";
+import express,{type Express,type Request,type Response} from "express";
 import {timingSafeEqual} from "node:crypto";
 import {Pool} from "pg";
 import {quarantineGate4PrebindOriginalV39,
@@ -18,6 +18,18 @@ import {quarantineGate4PrebindOriginalV39,
 import {createGate4PrebindPgStoreV39} from "./gate4PrebindPgStore_v39";
 
 const name=/^gate4_receiver_[a-z0-9_]{4,60}$/;
+/** Categorical observability only. No URL, bearer, body, provider ID,
+ * SQL error message, headers or flight identity may enter the logger. */
+const SAFE_LOG_STAGES_V39=new Set([
+ "AUTH_CHECK","AUTH_REJECTED","BODY_READING","MEDIA_REJECTED",
+ "RAW_PARSER_REJECTED","ORIGINAL_BODY_MISSING","QUARANTINE_RUNNING",
+ "QUARANTINE_EXCEPTION","QUARANTINE_REJECTED","ORIGINAL_STORED"
+]);
+function safeLogStageV39(res:Response):string{
+ const candidate:unknown=res.locals.gate4StageV39;
+ return typeof candidate==="string"&&SAFE_LOG_STAGES_V39.has(candidate)
+  ?candidate:"UNKNOWN";
+}
 type Config={scope:Gate4PrebindScopeV39;secret:string;databaseUrl:string;dbRole:string};
 function fail():never{throw Error("GATE4_PREBIND_ADDON_CONFIG_HOLD");}
 /**
@@ -114,28 +126,33 @@ export function mountGate4PrebindAdditiveRouteV39(
    // may be logged. Log one fixed categorical outcome for every incoming
    // Gate4 POST, including failures before the durable storage stage.
    const t=Date.now();
+   res.locals.gate4StageV39="AUTH_CHECK";
    let finished=false;
    res.once("finish",()=>{
     finished=true;
     console.info("GATE4_ALERT_HTTP_V1",JSON.stringify({
      httpStatus:res.statusCode,completed:true,
+     stage:safeLogStageV39(res),
      elapsedMs:Math.max(0,Date.now()-t)
     }));
    });
    res.once("close",()=>{
     if(!finished)console.warn("GATE4_ALERT_HTTP_V1",JSON.stringify({
      httpStatus:res.statusCode,completed:false,
+     stage:safeLogStageV39(res),
      elapsedMs:Math.max(0,Date.now()-t)
     }));
    });
    const candidate=req.params.secret;
    if(typeof candidate!=="string"){
+    res.locals.gate4StageV39="AUTH_REJECTED";
     res.status(404).json({error:"Not found"});return;
    }
    const supplied=Buffer.from(candidate);
    const expected=Buffer.from(secret);
    if(supplied.length!==expected.length||
       !timingSafeEqual(supplied,expected)){
+    res.locals.gate4StageV39="AUTH_REJECTED";
     res.status(404).json({error:"Not found"});return;
    }
    // Valid queryless JSON media types; never assume raw middleware magically
@@ -144,10 +161,13 @@ export function mountGate4PrebindAdditiveRouteV39(
    if(req.originalUrl.includes("?")||
       !(req.is("application/json")||
         req.is("application/*+json"))){
+    res.locals.gate4StageV39="MEDIA_REJECTED";
     res.status(415).json({error:"Invalid envelope"});return;
    }
+   res.locals.gate4StageV39="BODY_READING";
    raw(req,res,(error:unknown)=>{
     if(error){
+     res.locals.gate4StageV39="RAW_PARSER_REJECTED";
      const kind=(error as {type?:unknown}|null)?.type;
      res.status(kind==="entity.too.large"?413:400)
       .json({received:false,status:"HOLD"});return;
@@ -157,15 +177,20 @@ export function mountGate4PrebindAdditiveRouteV39(
   },
   async(req:Request,res)=>{
    if(!Buffer.isBuffer(req.body)){
+    res.locals.gate4StageV39="ORIGINAL_BODY_MISSING";
     res.status(400).json({received:false,status:"HOLD"});return;
    }
+   res.locals.gate4StageV39="QUARANTINE_RUNNING";
    let receipt;
    try{
     receipt=await quarantineGate4PrebindOriginalV39(
       scope,req.body as Buffer,store);
    }catch{
+    res.locals.gate4StageV39="QUARANTINE_EXCEPTION";
     res.status(503).json({received:false,status:"HOLD"});return;
    }
+   res.locals.gate4StageV39=receipt.httpStatus===200
+    ?"ORIGINAL_STORED":"QUARANTINE_REJECTED";
    res.status(receipt.httpStatus).json({
      received:receipt.responseAcknowledged,status:receipt.status,
      reason:receipt.responseAcknowledged?undefined:receipt.reason,
