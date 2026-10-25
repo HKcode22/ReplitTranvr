@@ -19,6 +19,10 @@ import {
 } from "../server/lib/disruption/gate4ActionsWatchdogPolicy_v39";
 import {gate4ReviewIndependentArmedProofV39} from
  "../server/lib/disruption/gate4ArmedRunProof_v39";
+import {
+ NEXT3_EXPIRY_INTENT_V39,NEXT3_EXPIRY_BLOB_V39,
+ NEXT3_EXTENDED_EXPIRES_V39
+} from "./v39_gate4_next3_extend_role_validity_to_9pm_v39";
 
 export const NEXT3_REPO_V39="HKcode22/ReplitTranvr";
 export const NEXT3_SRC_V39=NEXT3_SOURCE_V39;
@@ -47,9 +51,22 @@ export async function next3LoadPrivateV39():Promise<{
     !await storage.exists(NEXT3_OWNER_BLOB_V39))hold("PRIVATE_OBJECTS_MISSING");
  const receiver=gate4Next3OpenSealedValuesV39(
   await storage.downloadBytes(receiverKey),NEXT3_SRC_V39,process.env);
- const custody=openNext3OwnerCustodyV39(
+ const original=openNext3OwnerCustodyV39(
   await storage.downloadBytes(NEXT3_OWNER_BLOB_V39),
   receiver.GATE4_PREBIND_AUTH_SHA256,process.env);
+ const hasIntent=await storage.exists(NEXT3_EXPIRY_INTENT_V39);
+ const hasExtended=await storage.exists(NEXT3_EXPIRY_BLOB_V39);
+ if(hasIntent!==hasExtended)hold("EXTENSION_PARTIAL_OR_UNCONFIRMED");
+ const custody=hasExtended?openNext3OwnerCustodyV39(
+  await storage.downloadBytes(NEXT3_EXPIRY_BLOB_V39),
+  receiver.GATE4_PREBIND_AUTH_SHA256,process.env):original;
+ if(hasExtended&&(
+  custody.writerExpiresUtc!==NEXT3_EXTENDED_EXPIRES_V39||
+  custody.writerUrl!==original.writerUrl||
+  custody.signerPrivatePkcs8Base64!==original.signerPrivatePkcs8Base64||
+  custody.signerPublicSpkiBase64!==original.signerPublicSpkiBase64||
+  custody.signerSpkiSha256!==original.signerSpkiSha256))
+  hold("EXTENSION_UNTRUSTED_OR_DRIFT");
  if(Date.parse(custody.writerExpiresUtc)<Date.now()+45*60000)
   hold("WRITER_EXPIRY");
  return {
