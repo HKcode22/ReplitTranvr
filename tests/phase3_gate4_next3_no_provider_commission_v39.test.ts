@@ -20,7 +20,7 @@ describe("Gate4 NEXT3 no-provider additive commissioning",()=>{
    expect(sql).toContain("NOCREATEROLE");
    expect(sql).toContain("NOBYPASSRLS");
    expect(sql).toContain("VALID UNTIL");
-   expect(sql).not.toMatch(/ALTER ROLE|DROP ROLE|SUPERUSER\b/);
+   expect(sql).not.toMatch(/ALTER ROLE|DROP ROLE|\bSUPERUSER\b/);
   }
   expect(receiver).toContain("CONNECTION LIMIT 4");
   expect(writer).toContain("CONNECTION LIMIT 1");
