@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Deterministic reviewed-content Gate4 NEXT2 build, no provider/database calls.
+# Deterministic reviewed-content Gate4 NEXT3 build, no provider/database calls.
 set -Eeuo pipefail
 set +x
 cd "$(git rev-parse --show-toplevel)"
-PIN=087dc948c29d004f88eca141e1fc8e83c2844e3f
+PIN=5878b90eed04b2edfe2b226735ff0f02d9be25f3
 EXPECTED='build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]'
 hold(){ echo "GATE4_VERIFIED_BUILD_SOURCE_HOLD" >&2; exit 2; }
 test "$#" -eq 0 || { test "$#" -eq 1 && test "$1" = "--verify-only"; } || hold
