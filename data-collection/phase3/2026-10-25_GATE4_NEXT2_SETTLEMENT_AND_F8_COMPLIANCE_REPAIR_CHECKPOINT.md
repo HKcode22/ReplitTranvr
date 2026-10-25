@@ -20,13 +20,16 @@ Phase 3 is provider/accounting/semantics/reliability validation: Gate 3 = R1/R3 
 | Binding requirement | Evidence at this checkpoint | Honest status |
 | --- | --- | --- |
 | R1/R3 Gate 3 isolated real canary and `C_external=C_internal`, `tol=0`, settled | Earlier separate Gate 3 evidence, not inferred from NEXT2 | Must rely on exact Gate 3 accepted report |
-| Gate 0.5 dedicated field/clock/T/target/cadence adequacy | Earlier separate pilot evidence, not a NEXT2 health result | Must rely on approved Gate 0.5 report/frozen values |
+| Gate 0.5 dedicated field/clock/T/target/cadence adequacy | [2026-10-23 Gate 0.5 science disposition](2026-10-23_GATE05_SCIENCE_DISPOSITION_AND_OFFLINE_AGGREGATE_HARNESS.md): real 2-request/4-unit WSSS FIDS microtest TECHNICAL PASS, but retained aggregates could not prove actual-vs-estimated runway, scheduled wheels-off T, complete sample adequacy, or canonical label | **Full scientific Gate 0.5 PASS NOT PROVEN**; separate targeted evidence/approved target definition needed before Phase6 |
 | Gate 4 offline scaled cap 100 / margin 10 / soft 90, production 1900−50=1850 | Plan §§11.3/16 and Implementation Log §1.8.3; NEXT2 soft 5/protected *account floor* 1900 is a small trial envelope, not this full budget-day mechanism | **Not certified by NEXT2**; verify full prior R2 controller tests |
 | SEND charged but webhook unreachable, raw persistence failure, unsettled burst, delivery failure → PAUSE/flag and no second start | Required as offline injections, with real production owner wiring | **Not certified by 109 public GETs**; verify tests, routing and refusal |
 | Live true positive provider CREATE ID → V0072 binding → genuine immutable V0071 raw original → exact-owned STOP → settled balance | NEXT2 did not produce positive ID/binding/raw original; STOP exit 2, three stable account reads | **Gate 4 live science HOLD**; do not claim PASS |
 | Automatic 31-batch-day schedule, role-aware population, manifest, separate Phase-6 GO | Later Phases 4/5/6 and separate owner approval | **NOT STARTED/NOT AUTHORIZED** |
 
 The plan is authoritative over the Log; a discrepancy is a document conflict, not an invitation to relax quantitative limits. Accept transparently bounded flight-count mismatches when scientifically defensible, but never a forged provider ID, false raw SHA, missing ledger dollars, or fabricated PASS. The 1900 *daily budget-day cap* is distinct from the temporary trial's 1900 *remaining account credit floor*. Provider SEND bursts mean neither is a prepaid provider-enforced hard limit.
+
+
+**Predecessor status clarification:** Gate 4 remains an engineering blocker, but even a later qualified positive Gate4 callback does *not* automatically complete Phase3. The October 23 scientific Gate 0.5 report explicitly says `GATE05_FULL_SCIENTIFIC_PASS=NOT_PROVEN`; do not silently elevate the 4-unit FIDS technical microtest to a valid runway-delay label or override §6.0/§6.4/§16. Record this as a distinct predecessor open item for Phase5/6, rather than charging Gate4 retries for a target-semantics issue.
 
 ## Root-cause narrowing and minimal reviewed repair
 
