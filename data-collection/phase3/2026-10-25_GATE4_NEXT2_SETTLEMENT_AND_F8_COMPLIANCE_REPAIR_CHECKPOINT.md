@@ -1,0 +1,45 @@
+# 2026-10-25 UTC — Phase 3 / Gate 4 NEXT2 factual closeout and narrow repair
+
+**Record type:** review-branch checkpoint; no paid provider operation, deployment, protected-environment edit, secret change, database write, or production `main` release from this document. **Normative scientific authority:** [V3.9-f.8 Plan §§0–21](../plans/V3.9_DataCollectPlan_f.8.md), especially §§11.1–11.3, 16–17, and the subordinate [V3.9 Implementation Log §1.8.3](../implementation/V3.9_IMPLEMENTATION_LOG.md). [Phase 3 START HERE](START_HERE.md) and [issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38) are the current operational index.
+
+## What Phase 3 proves, and what it is NOT
+
+Phase 3 is provider/accounting/semantics/reliability validation: Gate 3 = R1/R3 credit canary; Gate 0.5 = genuinely sampled provider-clock/T/target/cadence pilot; Gate 4 = SEND-aware delivery failures, credit-cap/budget-day safety, reliable raw ingress and pause/refusal tests, followed by a *small*, separately authorized live reconciliation/second-start test. It is not the full recurring Phase-6 flight collection scheduler. Phase 4/Gate 5 evaluates population observability; Phase 5 freezes the manifest, budgets, population/sampling/calendar; Phase 6 requires separate owner authorization to execute the 31-batch-day schedule; Phase 7 performs protected evaluation. A green status GET is NOT proof a paid webhook original arrived. A small exact-ID test does NOT alone prove the full budget-day cap and autonomous scheduler.
+
+## Grounded NEXT2 run results (reviewed GitHub main c7fb30b11c641751a201903bfdd57a442ed3de2c)
+
+- New protected GitHub STOP [#40164052136](https://github.com/HKcode22/ReplitTranvr/actions/runs/40164052136) started 2026-10-25T05:22Z; authentic GitHub Actions bot `GATE4_ACTIONS_ARMED_RECEIPT_V1` and heartbeats were present. It ran its real STOP-only step throughout approved 05:30–05:50Z and ended **failure**: at 05:50:03.943Z `HOLD_OWNER_REQUIRED / WINDOW_EXPIRED_NO_OWNED_ID`. No verified V0072 owner ID existed to delete, so no certified exact STOP was possible. This is a truthful refusal, not evidence a provider DELETE failed.
+- Independent [#40164050539](https://github.com/HKcode22/ReplitTranvr/actions/runs/40164050539) health observer ended **success**: `109` healthy public HTTPS GET checks, `hadAnyHealthOutage:false`. This is *status-endpoint health*, not 109 provider posts or 109 samples of genuine delivery.
+- Owner's reviewed one-time script `scripts/v39_gate4_next2_one_paid_create_operator_v39.ts` printed `status=GATE4_NEXT2_ONE_PAID_CREATE_HOLD`, `stage=PAID_ONE_PROVIDER_CREATE`, `intentWritten=true`, `createAttempted=true`. **The source set that boolean before another STOP and provider GET/LIST recheck, so whether a provider POST was actually dispatched remains UNKNOWN.** The returned exception was globally redacted; root cause is NOT proven. A later unrelated strict GET/LIST read hit recoverable HTTP 429; this alone cannot establish the earlier cause.
+- Owner's independent read-only custody+provider check: `intentExists=true`, `positiveReceiptExists=false`, `ownerBindings=0`, `providerRead=PASS`, `custodyRead=PASS`, `activeBillable=0`, `activeWSSS=0`, `creditsNow=1991` (baseline 1991), 0 provider mutations or DB writes. **Never replay this spent NEXT2 one-shot marker or invent a provider ID from LIST.**
+- Post-window separated read-only balance+inventory samples: 2026-10-25T05:56:48.695Z, 05:57:19.963Z, 05:57:51.226Z. Each returned **1991 Alert credits** and **0 active billable subscriptions**. This is three consistent observed samples across ~63 seconds, not a lifetime claim of zero future delayed charges. The owner-run result was `GATE4_NO_ACTIVE_BALANCE_STABLE`. More provider spend on NEXT2 is not authorized.
+- Prior NEXT1 had a separate 46-credit SEND-side debit (2037 → 1991) with no verified genuine original, exact STOP, and an unresolved provider-to-ingress gap. The NEXT2 zero-spend evidence must not erase NEXT1 loss or be treated as a successful paid delivery.
+
+## V3.9-f.8 compliance crosswalk — status must be narrow
+
+| Binding requirement | Evidence at this checkpoint | Honest status |
+| --- | --- | --- |
+| R1/R3 Gate 3 isolated real canary and `C_external=C_internal`, `tol=0`, settled | Earlier separate Gate 3 evidence, not inferred from NEXT2 | Must rely on exact Gate 3 accepted report |
+| Gate 0.5 dedicated field/clock/T/target/cadence adequacy | [2026-10-23 Gate 0.5 science disposition](2026-10-23_GATE05_SCIENCE_DISPOSITION_AND_OFFLINE_AGGREGATE_HARNESS.md): real 2-request/4-unit WSSS FIDS microtest TECHNICAL PASS, but retained aggregates could not prove actual-vs-estimated runway, scheduled wheels-off T, complete sample adequacy, or canonical label | **Full scientific Gate 0.5 PASS NOT PROVEN**; separate targeted evidence/approved target definition needed before Phase6 |
+| Gate 4 offline scaled cap 100 / margin 10 / soft 90, production 1900−50=1850 | Plan §§11.3/16 and Implementation Log §1.8.3; NEXT2 soft 5/protected *account floor* 1900 is a small trial envelope, not this full budget-day mechanism | **Not certified by NEXT2**; verify full prior R2 controller tests |
+| SEND charged but webhook unreachable, raw persistence failure, unsettled burst, delivery failure → PAUSE/flag and no second start | Required as offline injections, with real production owner wiring | **Not certified by 109 public GETs**; verify tests, routing and refusal |
+| Live true positive provider CREATE ID → V0072 binding → genuine immutable V0071 raw original → exact-owned STOP → settled balance | NEXT2 did not produce positive ID/binding/raw original; STOP exit 2, three stable account reads | **Gate 4 live science HOLD**; do not claim PASS |
+| Automatic 31-batch-day schedule, role-aware population, manifest, separate Phase-6 GO | Later Phases 4/5/6 and separate owner approval | **NOT STARTED/NOT AUTHORIZED** |
+
+The plan is authoritative over the Log; a discrepancy is a document conflict, not an invitation to relax quantitative limits. Accept transparently bounded flight-count mismatches when scientifically defensible, but never a forged provider ID, false raw SHA, missing ledger dollars, or fabricated PASS. The 1900 *daily budget-day cap* is distinct from the temporary trial's 1900 *remaining account credit floor*. Provider SEND bursts mean neither is a prepaid provider-enforced hard limit.
+
+
+**Predecessor status clarification:** Gate 4 remains an engineering blocker, but even a later qualified positive Gate4 callback does *not* automatically complete Phase3. The October 23 scientific Gate 0.5 report explicitly says `GATE05_FULL_SCIENTIFIC_PASS=NOT_PROVEN`; do not silently elevate the 4-unit FIDS technical microtest to a valid runway-delay label or override §6.0/§6.4/§16. Record this as a distinct predecessor open item for Phase5/6, rather than charging Gate4 retries for a target-semantics issue.
+
+## Root-cause narrowing and minimal reviewed repair
+
+The previous NEXT2 operator wrote immutable App Storage `paid-one-create-intent-v1.json` **before** calling `runGate4OnePositiveOwnerV39()`; that helper then performed additional independent STOP proof, strict balance and strict subscription LIST before reaching `createExactlyOne()`. Any late 429/outage or STOP proof timing gap could spend the intent without a sent POST. The top-level `catch{}` lost the reason. This is a demonstrable code sequence weakness; which actual branch caused NEXT2 remains unknown.
+
+**New review-only branch:** `research/gate4-next3-prepost-intent-admission-20261025` keeps `main` and the protected NEXT2 source unchanged while reviewing:
+1. Validate final STOP and strict provider state **before** the one-shot intent is written.
+2. Insert+read back the immutable intent immediately before the outbound CREATE adapter, and abort on any uncertain intent write; never call POST without a verified durable intent.
+3. Sanitize the admitted reason/stage; do not print token, raw response, URL, subscription ID, DB DSN or secret. Post-transport uncertainty still irrevocably forbids second CREATE.
+4. Offline mocked tests for STOP unavailable, strict 429/GET or LIST failure, failed durable write, one positive transport, ambiguous transport and no accidental retry. **No live functionality is authorized by tests.**
+5. Review and CI the small patch before any new paid session. NEXT2 source/scope/immutable intent are **spent** and remain unmodified; a separately versioned session needs a newly authorized scope/source, owner control, sealed receiver, reviewer pins, live STOP+observer and fresh GO, with no credential reset by default.
+
+**Owner status:** all further NEXT2 paid CREATE/refill are HOLD. Final Phase3/Gate4 certification remains BLOCKED on genuine owned provider callback/custody and complete Plan offline R2/cap assertions. Do not start Phase4 merely because a synthetic endpoint/health fixture passed; the owner explicitly requested Gate4 real-delivery evidence first ([2026-10-23 finite closeout plan](2026-10-23_GATE4_PAID_ALERT_LIVE_DELIVERY_FINITE_CLOSEOUT_PLAN.md)).

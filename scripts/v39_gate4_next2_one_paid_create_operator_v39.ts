@@ -155,35 +155,42 @@ async function execute():Promise<void>{
    " WHERE scope_id=$1::uuid) AS bindings",[SCOPE])).rows[0];
   if(w?.actor!=="gate4_owner_writer_2026_next2"||
      w.bindings!==0)hold("SCOPED_WRITER_OR_OWNER_BINDING");
-  stage="DURABLE_ONE_SHOT_INTENT";
-  await next2PutOnceV39(x.storage,INTENT,{
-   schema:"v39.gate4.next2.paid-one-create-intent.v1",
-   createdAtUtc:new Date().toISOString(),
-   sourceSha:SRC,scopeId:SCOPE,
-   authorizationSha256:x.auth,
-   reviewedRunnerSha:runnerSha,
-   independentStopRunId:stopRunId,
-   sixPlusSixObserverRunId:healthRunId,
-   startUtc:scope.startUtc,stopUtc:scope.stopUtc,
-   startingCredits:initial,softTarget:scope.softCreditTarget,
-   protectedFloor:scope.protectedCreditFloor,
-   providerCreateOutcomeMayBeUnknown:true,
-   neverSecondCreate:true
-  });
-  intentWritten=true;
-  stage="PAID_ONE_PROVIDER_CREATE";
-  createAttempted=true;
+  // The shared one-owner helper repeats STOP + strict balance/LIST checks.
+  // Leave the one-shot unused if one of those final checks fails.
+  stage="FINAL_PRE_CREATE_ADMISSION";
   const result=await runGate4OnePositiveOwnerV39(scope,{
    proveActualExternalStopArmed:async()=>
     next2StopArmedV39(scope,runnerSha,stopRunId)&&
     next2ObserverRunningV39(healthRunId,runnerSha),
    strictBalance:async()=>(await getBalanceEvidenceStrict()).balance.creditsRemaining,
    strictInventory:()=>listSubscriptionsStrict(),
-   createExactlyOne:()=>createGate4SingleWithRawReceiptV39("WSSS",{
-    url:HOST+"/api/v1/webhooks/aerodatabox/"+
-      encodeURIComponent(x.secret),
-    maxDeliveryRetries:0
-   }),
+   reserveOneShotImmediatelyBeforeCreate:async()=>{
+    stage="DURABLE_ONE_SHOT_INTENT";
+    await next2PutOnceV39(x.storage,INTENT,{
+     schema:"v39.gate4.next2.paid-one-create-intent.v1",
+     createdAtUtc:new Date().toISOString(),
+     sourceSha:SRC,scopeId:SCOPE,
+     authorizationSha256:x.auth,
+     reviewedRunnerSha:runnerSha,
+     independentStopRunId:stopRunId,
+     sixPlusSixObserverRunId:healthRunId,
+     startUtc:scope.startUtc,stopUtc:scope.stopUtc,
+     startingCredits:initial,softTarget:scope.softCreditTarget,
+     protectedFloor:scope.protectedCreditFloor,
+     providerCreateOutcomeMayBeUnknown:true,
+     neverSecondCreate:true
+    });
+    intentWritten=true;
+   },
+   createExactlyOne:()=>{
+    stage="PROVIDER_CREATE_TRANSPORT";
+    createAttempted=true; // transport invoked; HTTP dispatch/acceptance unknown
+    return createGate4SingleWithRawReceiptV39("WSSS",{
+     url:HOST+"/api/v1/webhooks/aerodatabox/"+
+       encodeURIComponent(x.secret),
+     maxDeliveryRetries:0
+    });
+   },
    persistPositiveIdPrivately:async(r:Gate4PositiveCreateReceiptTransportV39)=>{
     await next2PutOnceV39(x.storage,POSITIVE,{
      schema:"v39.gate4.next2.positive-create-receipt.v1",
@@ -216,10 +223,17 @@ async function execute():Promise<void>{
    noProviderIdPrinted:true,
    next:"VERIFY_GENUINE_V0071_STOP_THREE_SETTLEMENT_READS"
   }));
- }catch{
+ }catch(err){
+  // No untrusted exception text, URLs, raw response or provider IDs in logs.
+  const message=err instanceof Error?err.message:"";
+  const safeReason=/^GATE4_(?:REAL_OWNER|NEXT2_PAID)_[A-Z0-9_]+_HOLD$/.test(message)
+    ?message:/^BALANCE_UNAVAILABLE: HTTP (?:429|5\d\d)$/.test(message)
+      ?message.replace("BALANCE_UNAVAILABLE: ","")
+      :"REDACTED_OR_UNKNOWN";
   console.log(JSON.stringify({
-   status:"GATE4_NEXT2_ONE_PAID_CREATE_HOLD",stage,
+   status:"GATE4_NEXT2_ONE_PAID_CREATE_HOLD",stage,safeReason,
    intentWritten,createAttempted,
+   providerHttpPostAcceptanceUnconfirmed:true,
    neverRetryCreate:true,providerIdUnknownUnlessSealed:true
   }));
   process.exitCode=2;

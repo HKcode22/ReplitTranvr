@@ -14,11 +14,16 @@ describe("Gate4 NEXT2 integration source review",()=>{
   expect(source).toContain("next2ObserverRunningV39(healthRunId,runnerSha)");
   expect(custody).toContain("gate4ReviewIndependentArmedProofV39");
  });
- it("requires a durable intent before a one-shot external request",()=>{
-  const intent=source.indexOf("await next2PutOnceV39(x.storage,INTENT,{");
-  const op=source.indexOf("runGate4OnePositiveOwnerV39(scope,{");
-  expect(intent).toBeGreaterThan(0);
-  expect(op).toBeGreaterThan(intent);
+ it("reserves one-shot AFTER the final prechecks and BEFORE transport",()=>{
+  const call=source.indexOf("runGate4OnePositiveOwnerV39(scope,{");
+  const reserve=source.indexOf("reserveOneShotImmediatelyBeforeCreate:async()=>{");
+  const intent=source.indexOf("await next2PutOnceV39(x.storage,INTENT,{",reserve);
+  const transport=source.indexOf("createExactlyOne:()=>{",reserve);
+  expect(call).toBeGreaterThan(0);
+  expect(reserve).toBeGreaterThan(call);
+  expect(intent).toBeGreaterThan(reserve);
+  expect(transport).toBeGreaterThan(intent);
+  expect(source).toContain("intentWritten=true;");
   expect(source).toContain("neverSecondCreate:true");
   expect(source).toContain("neverRetryCreate:true");
  });

@@ -27,6 +27,10 @@ export type Gate4RealOwnerDepsV39=Readonly<{
  proveActualExternalStopArmed:()=>Promise<boolean>;
  strictBalance:()=>Promise<number>;
  strictInventory:()=>Promise<WebhookSubscription[]>;
+ /** Optional injected durable one-shot admission. Runs only AFTER final STOP
+  * and strict provider prechecks, immediately BEFORE the one CREATE transport.
+  * A failed/uncertain write forbids CREATE and must never be retried blindly. */
+ reserveOneShotImmediatelyBeforeCreate?:()=>Promise<void>;
  createExactlyOne:()=>Promise<Gate4PositiveCreateReceiptTransportV39>;
  persistPositiveIdPrivately:(r:Gate4PositiveCreateReceiptTransportV39)=>Promise<void>;
  signedStopEvidence:(r:Gate4PositiveCreateReceiptTransportV39)=>
@@ -44,7 +48,7 @@ export async function runGate4OnePositiveOwnerV39(
  createAttempts:1;exactOwnerReadBack:true;paidTrialComplete:false;
 }>{
  if(!reviewGate4ActionsWatchScopeV39(scope)||!d||
-   Object.values(d).some(fn=>typeof fn!=="function"&&
+   Object.values(d).some(fn=>fn!==undefined&&typeof fn!=="function"&&
      fn!==d.store)||
    !d.store||typeof d.store.bindOnce!=="function"||
    typeof d.store.readBack!=="function")
@@ -64,6 +68,13 @@ export async function runGate4OnePositiveOwnerV39(
       subs.some(x=>x.isActive&&x.billingType==="CreditBased"))
      fail("PREFLIGHT_CHANGED");
  }catch{fail("PROVIDER_PREFLIGHT_UNVERIFIED");}
+ // The last provider/STOP check has passed; consume immutable intent NOW,
+ // not before another fallible provider/account check. The intent must be
+ // durable before the first possible outbound POST; no second CREATE.
+ if(d.reserveOneShotImmediatelyBeforeCreate){
+   try{await d.reserveOneShotImmediatelyBeforeCreate();}
+   catch{fail("ONE_SHOT_INTENT_UNCONFIRMED_NO_CREATE");}
+ }
  let response:Gate4PositiveCreateReceiptTransportV39;
  try{response=await d.createExactlyOne();}
  catch{
