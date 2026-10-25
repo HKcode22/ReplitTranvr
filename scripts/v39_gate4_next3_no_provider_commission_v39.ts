@@ -156,8 +156,9 @@ function ownerConnection():{ownerUrl:string;actor:string}{
 }
 async function inspect(
  db:pg.Client,actor:string,readonly:boolean,phase:"before"|"after",
- baseline?:Audit
+ source:string,auth:string,baseline?:Audit
 ):Promise<Audit>{
+ if(!sha40.test(source)||!sha64.test(auth))stop();
  const m=(await db.query(
   "SELECT current_database() AS db,current_user AS actor,"+
   "current_setting('transaction_read_only') AS ro,"+
@@ -190,7 +191,9 @@ async function inspect(
  )).rows;
  if(owned.some(x=>String(x.scope_id)===NEXT3_ID))stop();
  const policyRows=(await db.query(
-  "SELECT tablename,policyname,cmd,permissive,roles,qual,with_check "+
+  "SELECT tablename,policyname,cmd,permissive,"+
+  "cardinality(roles)::int AS role_count,roles[1]::text AS assigned_role,"+
+  "qual,with_check "+
   "FROM pg_policies WHERE schemaname='clean' AND "+
   "tablename=ANY($1::text[]) ORDER BY tablename,policyname",
   [[RAW,OWNER]]
@@ -219,10 +222,14 @@ async function inspect(
   ];
   if(newPolicies.length!==4||!allowed.every(([table,name,cmd,role])=>
     newPolicies.some(p=>p.tablename===table&&p.policyname===name&&
-     p.cmd===cmd&&Array.isArray(p.roles)&&p.roles.length===1&&
-     p.roles[0]===role&&
+     p.cmd===cmd&&p.permissive==="PERMISSIVE"&&
+     p.role_count===1&&p.assigned_role===role&&
      (cmd==="SELECT"?!!p.qual&&!p.with_check:
-      !p.qual&&!!p.with_check))))stop();
+      !p.qual&&!!p.with_check)&&
+     String(cmd==="SELECT"?p.qual:p.with_check).includes(NEXT3_ID)&&
+     String(cmd==="SELECT"?p.qual:p.with_check).includes(source)&&
+     String(cmd==="SELECT"?p.qual:p.with_check).includes(auth)&&
+     String(cmd==="SELECT"?p.qual:p.with_check).includes("WSSS"))))stop();
   for(const [role,table,other] of [
    [NEXT3_RECEIVER_ROLE,RAW,OWNER],
    [NEXT3_WRITER_ROLE,OWNER,RAW]
@@ -300,7 +307,7 @@ export async function gate4Next3CommissionV39(
    application_name:"gate4_next3_one_time_no_provider"});
   await db.connect();
   await db.query("BEGIN READ ONLY");tx=true;
-  const before=await inspect(db,actor,true,"before");
+  const before=await inspect(db,actor,true,"before",source,m.authorizationSha256);
   await db.query("ROLLBACK");tx=false;
   if(mode==="--plan"){
    console.log(JSON.stringify({status:"GATE4_NEXT3_READONLY_PLAN_READY",
@@ -347,7 +354,7 @@ export async function gate4Next3CommissionV39(
   await db.query("SET LOCAL lock_timeout='2500ms'");
   await db.query("SET LOCAL statement_timeout='7000ms'");
   await db.query("SELECT pg_advisory_xact_lock(3904,20261025)");
-  const current=await inspect(db,actor,false,"before");
+  const current=await inspect(db,actor,false,"before",source,m.authorizationSha256);
   if(current.signature!==before.signature)stop();
   await db.query(gate4Next3RoleSQLV39(
    NEXT3_RECEIVER_ROLE,passwordR,expiresUtc,4));
@@ -355,11 +362,11 @@ export async function gate4Next3CommissionV39(
    NEXT3_WRITER_ROLE,passwordW,expiresUtc,1));
   for(const sql of gate4Next3PolicySQLV39(source,m.authorizationSha256))
    await db.query(sql);
-  await inspect(db,actor,false,"after",current);
+  await inspect(db,actor,false,"after",source,m.authorizationSha256,current);
   await db.query("COMMIT");tx=false;
   stage="POST_COMMIT_READONLY_VERIFICATION";
   await db.query("BEGIN READ ONLY");tx=true;
-  await inspect(db,actor,true,"after",current);
+  await inspect(db,actor,true,"after",source,m.authorizationSha256,current);
   await db.query("ROLLBACK");tx=false;
   console.log(JSON.stringify({
    status:"GATE4_NEXT3_SCOPED_ROLES_COMMISSIONED_NO_PROVIDER",
