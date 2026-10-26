@@ -22,6 +22,8 @@ import {
  gate4Next4ConfigStorageKeyV39,gate4Next4SealValuesV39,
  gate4Next4OpenSealedValuesV39,type Next4ValuesV39
 } from "../server/lib/disruption/gate4Next4SealedBootstrap_v39";
+import {NEXT3_ID} from "../server/lib/disruption/gate4Next3SealedBootstrap_v39";
+import {NEXT2_ID} from "../server/lib/disruption/gate4Next2SealedBootstrap_v39";
 import {gate4CheckAdditivePgRoleV39} from
  "../server/lib/disruption/gate4PrebindAdditiveRoute_v39";
 import {ReplitProviderBlobStoreV39} from
@@ -126,8 +128,10 @@ function privateSettings(m:Manifest,owner:string,host:string):Next4ValuesV39{
  };
 }
 export function next4PolicySQLV39(m:Pick<Manifest,"scope"|"source"|"authorizationSha256">):string[]{
- if(!UUID.test(m.scope)||!SHA40.test(m.source)||
-    !HEX64.test(m.authorizationSha256))hold();
+ if(!UUID.test(m.scope)||m.scope===NEXT3_ID||m.scope===NEXT2_ID||
+    m.scope==="d6c0fcac-798e-4913-bfd1-a561adb3dd82"||
+    m.scope==="498dccd7-5da3-4687-a6ea-e0dc03b54398"||
+    !SHA40.test(m.source)||!HEX64.test(m.authorizationSha256))hold();
  const pred="scope_id='"+m.scope+"'::uuid AND "+
   "authorization_sha256='"+m.authorizationSha256+"' AND "+
   "source_commit='"+m.source+"' AND airport_icao='WSSS'";
