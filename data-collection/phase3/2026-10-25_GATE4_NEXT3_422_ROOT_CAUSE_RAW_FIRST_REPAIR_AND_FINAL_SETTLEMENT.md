@@ -2,7 +2,7 @@
 
 **Observed:** Sunday 2026-10-25 PDT, accounting/trial ending 22:32–22:41 PDT (= Monday 2026-10-26 UTC). **Authoritative basis:** actual operator Replit Shell JSON, independent GitHub Actions run logs, *published Replit deployment's request logs* provided by owner, and source-controlled inspected deployment code. This document supersedes older `NEXT3 NOT AUTHORIZED`, `SQL ROLES EXPIRED`, and `PREPAID-ONLY ROUTE` handoff claims, which remain valid **historically only**. This is not a declaration of scientific Gate 4 PASS.
 
-See [Phase 3 START_HERE](START_HERE.md), [Plan f.8 §11.3 and §16](../plans/V3.9_DataCollectPlan_f.8.md), [Implementation Log §1.8.3](../implementation/V3.9_IMPLEMENTATION_LOG.md), [issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38), prior [NEXT1 delivery trace](2026-10-25_GATE4_NEXT1_46_CREDIT_DELIVERY_TRACE_NARROW_FINDINGS.md), and **draft [repair PR #163](https://github.com/HKcode22/ReplitTranvr/pull/163)**.
+See [Phase 3 START_HERE](START_HERE.md), [Plan f.8 §11.3 and §16](../plans/V3.9_DataCollectPlan_f.8.md), [immutable Implementation Log §1.8.3](../implementation/V3.9_IMPLEMENTATION_LOG.md), [latest Gate4 implementation addendum](../implementation/V3.9_GATE4_NEXT3_LIVE_422_REPAIR_ADDENDUM_20261025.md), [issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38), prior [NEXT1 delivery trace](2026-10-25_GATE4_NEXT1_46_CREDIT_DELIVERY_TRACE_NARROW_FINDINGS.md), and **draft [repair PR #163](https://github.com/HKcode22/ReplitTranvr/pull/163)**.
 
 ## Verified exact event sequence (avoid re-running paid operations)
 
