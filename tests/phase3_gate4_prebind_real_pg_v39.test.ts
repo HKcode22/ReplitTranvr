@@ -457,7 +457,7 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
         expect((await pool.query(
           "SELECT count(*)::int AS n FROM "+
           "clean.gate4_alert_prebind_original_v39"
-        )).rows[0].n).toBe(2);
+        )).rows[0].n).toBe(4); // two canonical + two raw-first quarantine variants
         // The separately authorized safety reader must see BOTH exact
         // bindings so it can independently stop the new owned ID.
         const scopedSafety=await pool.connect();
