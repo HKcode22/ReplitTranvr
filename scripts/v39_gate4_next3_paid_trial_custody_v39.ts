@@ -37,7 +37,7 @@ export function next3GitHubGetV39(path:string):any{
   stdio:["ignore","pipe","ignore"]
  }));
 }
-export async function next3LoadPrivateV39():Promise<{
+export async function next3LoadPrivateV39(options?:{allowExpiredWriterForReadOnly?:boolean}):Promise<{
  storage:ReplitProviderBlobStoreV39;auth:string;secret:string;
  writerUrl:string;writerExpiresUtc:string;signerPrivateDer:Buffer;
  signerPublicDer:Buffer;signerSpkiSha256:string;
@@ -70,8 +70,12 @@ export async function next3LoadPrivateV39():Promise<{
  // Do not impose a rolling 45-minute requirement after the owner has
  // approved a shorter trial ending safely before this restricted role expires.
  // The paid operator separately verifies validity beyond exact STOP deadline.
+ // READ-ONLY diagnostics may inspect previously verified AES custody even
+ // after the SQL role expires; they may neither authenticate as the writer
+ // nor issue a provider CREATE. The paid path retains the validity guard.
  if(!Number.isFinite(Date.parse(custody.writerExpiresUtc))||
-    Date.parse(custody.writerExpiresUtc)<=Date.now()+2*60000)
+    (!options?.allowExpiredWriterForReadOnly&&
+     Date.parse(custody.writerExpiresUtc)<=Date.now()+2*60000))
   hold("WRITER_EXPIRY");
  return {
   storage,auth:receiver.GATE4_PREBIND_AUTH_SHA256,

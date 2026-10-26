@@ -66,6 +66,30 @@ describe("Gate4 NEXT3 exact-scope ONE paid operator — NO launch on import",()=
   expect(paid).toContain("deleteKnownExact:");
   expect(paid).toContain("persistPositiveIdPrivately:");
  });
+ it("diagnoses expired sealed writer READ ONLY without weakening paid admission",()=>{
+  expect(custody).toContain("allowExpiredWriterForReadOnly?:boolean");
+  expect(custody).toContain("!options?.allowExpiredWriterForReadOnly&&");
+  expect(paid).toContain('allowExpiredWriterForReadOnly:mode==="--check"');
+  const start=paid.indexOf('if(mode==="--check"){');
+  const stop=paid.indexOf('stage="FUTURE_WINDOW_AND_OBSERVER"');
+  expect(start).toBeGreaterThan(0);
+  expect(stop).toBeGreaterThan(start);
+  const noProvider=paid.slice(start,stop);
+  expect(noProvider).toContain("GATE4_NEXT3_READONLY_STATUS_NO_PROVIDER");
+  expect(noProvider).toContain("sealedWriterExpiryReached:now>=expiry");
+  expect(noProvider).toContain("sealedWriterCoversStopBuffer:usable");
+  expect(noProvider).toContain("actualDatabaseRoleLoginVerified:false");
+  expect(noProvider).toContain("readyForPaidCreate:false");
+  expect(noProvider).toContain("providerCalls:0,databaseWrites:0");
+  expect(noProvider).not.toContain("getBalanceEvidenceStrict(");
+  expect(noProvider).not.toContain("listSubscriptionsStrict(");
+  expect(noProvider).not.toContain("new pg.Pool(");
+  expect(noProvider).not.toContain("createGate4SingleWithRawReceiptV39(");
+  const paidOnly=paid.slice(stop);
+  expect(paidOnly).toContain('hold("WRITER_EXPIRY_BEFORE_STOP_SETTLEMENT_BUFFER")');
+  expect(paidOnly).toContain("next3StopArmedV39(scope,runnerSha,stopRunId)");
+  expect(paidOnly).toContain("createAttempted=true");
+ });
  it("ignores known synthetic V0071 as science and allows ONLY zero owned V0072",()=>{
   expect(paid).toContain("clean.gate4_alert_owned_binding_v39");
   expect(paid).toContain('"gate4_owner_writer_2026_next3"');

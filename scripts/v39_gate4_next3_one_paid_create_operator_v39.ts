@@ -107,22 +107,36 @@ async function execute():Promise<void>{
   if(mode==="--execute-one"&&
      (process.env.GATE4_NEXT3_PAID_GO!==GO||!pinnedHead()))
    hold("EXACT_PAID_GO_OR_SHA");
-  const x=await next3LoadPrivateV39();
+  // --check remains useful after scheduled role expiry. This explicit mode
+  // never opens a writer SQL connection or sends a provider request.
+  const x=await next3LoadPrivateV39({
+   allowExpiredWriterForReadOnly:mode==="--check"
+  });
   if(await x.storage.exists(INTENT)||await x.storage.exists(POSITIVE))
    hold("SPENT_ONE_SHOT_INTENT");
   const initial=Number(process.env.GATE4_NEXT3_PAID_STARTING_CREDITS);
   const vars=next3ProtectedVariablesV39();
   const {scope,runnerSha}=next3ProtectedScopeV39(vars,x,initial);
   if(mode==="--check"){
+   const now=Date.now(),expiry=Date.parse(x.writerExpiresUtc);
+   const cutoff=Date.parse(scope.stopUtc);
+   const active=now>=Date.parse(scope.startUtc)&&now<cutoff-60_000;
+   const usable=expiry>now+2*60_000&&expiry>=cutoff+5*60_000;
    console.log(JSON.stringify({
-    status:"GATE4_NEXT3_ONE_PAID_PREFLIGHT_NO_PROVIDER_READY",
+    status:"GATE4_NEXT3_READONLY_STATUS_NO_PROVIDER",
     scopeId:SCOPE,sourceSha:SRC,
     exactProtectedSignerMatch:true,writerSealed:true,
     writerExpiresUtc:x.writerExpiresUtc,
-    startingCredits:initial,
-    softTarget:scope.softCreditTarget,
+    sealedWriterExpiryReached:now>=expiry,
+    approvedTrialWindowActive:active,
+    sealedWriterCoversStopBuffer:usable,
+    actualDatabaseRoleLoginVerified:false,
+    next:!usable?"REPAIR_SCOPED_LOGIN_BEFORE_NEW_TRIAL":
+      !active?"REAUTHORIZE_FRESH_TRIAL_WINDOW_AND_RUNNER":
+      "CHECK_GENUINE_STOP_AND_MONITOR_BEFORE_SEPARATE_GO",
+    startingCredits:initial,softTarget:scope.softCreditTarget,
     protectedFloor:scope.protectedCreditFloor,
-    paidCreateAuthorized:false,stopArmed:false,
+    readyForPaidCreate:false,paidCreateAuthorized:false,stopArmed:false,
     providerCalls:0,databaseWrites:0
    }));
    return;
@@ -230,7 +244,7 @@ async function execute():Promise<void>{
  }catch(err){
   // No untrusted exception text, URLs, raw response or provider IDs in logs.
   const message=err instanceof Error?err.message:"";
-  const safeReason=/^GATE4_(?:REAL_OWNER|NEXT3_PAID)_[A-Z0-9_]+_HOLD$/.test(message)
+  const safeReason=/^GATE4_(?:REAL_OWNER|NEXT3_PAID|NEXT3)_[A-Z0-9_]+_HOLD$/.test(message)
     ?message:/^BALANCE_UNAVAILABLE: HTTP (?:429|5\d\d)$/.test(message)
       ?message.replace("BALANCE_UNAVAILABLE: ","")
       :"REDACTED_OR_UNKNOWN";
