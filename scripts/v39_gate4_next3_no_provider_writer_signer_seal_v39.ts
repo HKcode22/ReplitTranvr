@@ -64,7 +64,8 @@ function validate(data:Next3OwnerCustodyV39):void{
     decodeURIComponent(url!.username)!==NEXT3_OWNER_ROLE_V39||
     !url!.password||url!.pathname!=="/neondb"||
     url!.searchParams.get("sslmode")!=="verify-full"||
-    !Number.isFinite(Date.parse(data.writerExpiresUtc)))hold();
+    !(data.writerExpiresUtc==="infinity"||
+      Number.isFinite(Date.parse(data.writerExpiresUtc))))hold();
  const pk=Buffer.from(data.signerPrivatePkcs8Base64,"base64");
  const spki=Buffer.from(data.signerPublicSpkiBase64,"base64");
  if(pk.length<40||pk.length>512||spki.length<40||spki.length>512||
