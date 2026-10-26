@@ -67,7 +67,11 @@ export async function next3LoadPrivateV39():Promise<{
   custody.signerPublicSpkiBase64!==original.signerPublicSpkiBase64||
   custody.signerSpkiSha256!==original.signerSpkiSha256))
   hold("EXTENSION_UNTRUSTED_OR_DRIFT");
- if(Date.parse(custody.writerExpiresUtc)<Date.now()+45*60000)
+ // Do not impose a rolling 45-minute requirement after the owner has
+ // approved a shorter trial ending safely before this restricted role expires.
+ // The paid operator separately verifies validity beyond exact STOP deadline.
+ if(!Number.isFinite(Date.parse(custody.writerExpiresUtc))||
+    Date.parse(custody.writerExpiresUtc)<=Date.now()+2*60000)
   hold("WRITER_EXPIRY");
  return {
   storage,auth:receiver.GATE4_PREBIND_AUTH_SHA256,
