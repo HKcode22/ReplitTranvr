@@ -414,6 +414,30 @@ describe("Gate4 additive prebind on existing prepaid runtime, no provider",()=>{
     );
   });
  });
+ it("raw-first variant never ACKs a failed durable original store",async()=>{
+   const bytes=Buffer.from(JSON.stringify({
+     unexpectedProviderEnvelope:true,
+     subscription:{subject:{type:"FlightByAirportIcao",id:null}},
+     flights:[]
+   }));
+   const invoked=vi.fn(async()=>{throw Error("simulated-original-storage-unavailable");});
+   const store:Gate4PrebindOriginalStoreV39={
+     writeOriginal:invoked,
+     readBackOriginal:vi.fn(async()=>{throw Error("readback-must-not-run");})
+   };
+   await httpTest(store,async base=>{
+     const resp=await fetch(base+"/api/v1/webhooks/aerodatabox/"+secret,{
+       method:"POST",headers:{"content-type":"application/json"},body:bytes
+     });
+     expect(resp.status).toBe(503);
+     expect(await resp.json()).toMatchObject({
+       received:false,status:"HOLD",attribution:"none",
+       paidAuthorization:false
+     });
+   });
+   expect(invoked).toHaveBeenCalledTimes(1);
+   expect(store.readBackOriginal).not.toHaveBeenCalled();
+ });
  it("published health differentiates pre-existing prepaid route from opted-in add-on",()=>{
   const host={
     schema:"v39.phase2f-workspace-runtime.v1",
