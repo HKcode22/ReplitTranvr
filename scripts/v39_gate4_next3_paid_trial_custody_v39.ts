@@ -23,6 +23,10 @@ import {
  NEXT3_EXPIRY_INTENT_V39,NEXT3_EXPIRY_BLOB_V39,
  NEXT3_EXTENDED_EXPIRES_V39
 } from "./v39_gate4_next3_extend_role_validity_to_9pm_v39";
+import {
+ NEXT3_NO_TTL_INTENT_V39,NEXT3_NO_TTL_BLOB_V39,
+ NEXT3_INFINITE_VALIDITY_V39
+} from "./v39_gate4_next3_no_expiry_roles_and_custody_v39";
 
 export const NEXT3_REPO_V39="HKcode22/ReplitTranvr";
 export const NEXT3_SRC_V39=NEXT3_SOURCE_V39;
@@ -67,23 +71,38 @@ export async function next3LoadPrivateV39(options?:{allowExpiredWriterForReadOnl
   custody.signerPublicSpkiBase64!==original.signerPublicSpkiBase64||
   custody.signerSpkiSha256!==original.signerSpkiSha256))
   hold("EXTENSION_UNTRUSTED_OR_DRIFT");
+ const noTtlIntent=await storage.exists(NEXT3_NO_TTL_INTENT_V39);
+ const noTtlBlob=await storage.exists(NEXT3_NO_TTL_BLOB_V39);
+ if(noTtlIntent!==noTtlBlob)hold("NO_EXPIRY_CUSTODY_PARTIAL");
+ if(noTtlBlob&&!hasExtended)hold("NO_EXPIRY_PREVIOUS_EXT_MISSING");
+ const current=noTtlBlob?openNext3OwnerCustodyV39(
+   await storage.downloadBytes(NEXT3_NO_TTL_BLOB_V39),
+   receiver.GATE4_PREBIND_AUTH_SHA256,process.env):custody;
+ if(noTtlBlob&&(
+   current.writerExpiresUtc!==NEXT3_INFINITE_VALIDITY_V39||
+   current.writerUrl!==custody.writerUrl||
+   current.signerPrivatePkcs8Base64!==custody.signerPrivatePkcs8Base64||
+   current.signerPublicSpkiBase64!==custody.signerPublicSpkiBase64||
+   current.signerSpkiSha256!==custody.signerSpkiSha256))
+   hold("NO_EXPIRY_CUSTODY_UNTRUSTED");
  // Do not impose a rolling 45-minute requirement after the owner has
  // approved a shorter trial ending safely before this restricted role expires.
  // The paid operator separately verifies validity beyond exact STOP deadline.
  // READ-ONLY diagnostics may inspect previously verified AES custody even
  // after the SQL role expires; they may neither authenticate as the writer
  // nor issue a provider CREATE. The paid path retains the validity guard.
- if(!Number.isFinite(Date.parse(custody.writerExpiresUtc))||
+ if(current.writerExpiresUtc!==NEXT3_INFINITE_VALIDITY_V39&&
+   (!Number.isFinite(Date.parse(current.writerExpiresUtc))||
     (!options?.allowExpiredWriterForReadOnly&&
-     Date.parse(custody.writerExpiresUtc)<=Date.now()+2*60000))
+     Date.parse(current.writerExpiresUtc)<=Date.now()+2*60000)))
   hold("WRITER_EXPIRY");
  return {
   storage,auth:receiver.GATE4_PREBIND_AUTH_SHA256,
   secret:receiver.GATE4_PREBIND_WEBHOOK_SECRET,
-  writerUrl:custody.writerUrl,writerExpiresUtc:custody.writerExpiresUtc,
-  signerPrivateDer:Buffer.from(custody.signerPrivatePkcs8Base64,"base64"),
-  signerPublicDer:Buffer.from(custody.signerPublicSpkiBase64,"base64"),
-  signerSpkiSha256:custody.signerSpkiSha256
+  writerUrl:current.writerUrl,writerExpiresUtc:current.writerExpiresUtc,
+  signerPrivateDer:Buffer.from(current.signerPrivatePkcs8Base64,"base64"),
+  signerPublicDer:Buffer.from(current.signerPublicSpkiBase64,"base64"),
+  signerSpkiSha256:current.signerSpkiSha256
  };
 }
 export function next3ProtectedScopeV39(
