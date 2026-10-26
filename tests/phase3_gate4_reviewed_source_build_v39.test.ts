@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 
 describe("Gate4 reviewed-content stable Replit build identity",()=>{
  it("validates source-equivalence with full local Git history when present",()=>{
-  const pin="5878b90eed04b2edfe2b226735ff0f02d9be25f3";
+  const pin="5c2eb8b2fd37ef6c490edd7928ee52e2aa06eb35";
   // GitHub Actions can shallow-checkout one PR commit; a shallow parent
   // graph is not a production publishing environment. The strict gate
   // remains mandatory for Replit's full local repository.
@@ -27,8 +27,8 @@ describe("Gate4 reviewed-content stable Replit build identity",()=>{
   const script=readFileSync(
    "scripts/v39_gate4_reviewed_source_build_v39.sh","utf8");
   const config=readFileSync(".replit","utf8");
-  expect(script).toContain("PIN=5878b90eed04b2edfe2b226735ff0f02d9be25f3");
-  expect(script).not.toContain("PIN=087dc948c29d004f88eca141e1fc8e83c2844e3f");
+  expect(script).toContain("PIN=5c2eb8b2fd37ef6c490edd7928ee52e2aa06eb35");
+  expect(script).not.toContain("PIN=5878b90eed04b2edfe2b226735ff0f02d9be25f3");
   expect(config).toContain(
    'build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]'
   );
@@ -36,6 +36,8 @@ describe("Gate4 reviewed-content stable Replit build identity",()=>{
   expect(script).toContain('git merge-base --is-ancestor "$PIN" HEAD');
   expect(script).toContain('V39_BUILD_GIT_HEAD="$PIN" npm run build');
   expect(script).toContain("actual_replit_snapshot_git_head:snapshot");
+  expect(script).toContain("client server shared package.json package-lock.json scripts/build.ts");
+  expect(script).toContain("components.json drizzle.config.ts .replit || hold");
   expect(script).toContain("reviewed_runtime_source_commit:reviewed");
   expect(script).not.toContain("AERODATABOX_API_KEY");
  });
