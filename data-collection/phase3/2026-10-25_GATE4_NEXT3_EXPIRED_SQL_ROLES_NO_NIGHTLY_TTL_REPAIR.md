@@ -46,3 +46,29 @@ Both identities exist but their password-validity cutoff had passed ~3m59s befor
 **Disposition:** the specific 9PM SQL-login expiration and sealed-metadata drift are **RESOLVED**; no more nightly TTL extension or rerun of `--extend-once`. The two scoped existing role passwords are now long-lived; rotate/revoke on scope retirement. This is a deliberately limited availability-vs-lifetime decision, NOT a blanket security exemption. The verification explicitly authenticated the owner-writer role; receiver role metadata/policies were verified, but **a separate new receiver-credential login was not demonstrated** by this three-stage stdout. The real published Replit webhook receiver's current health/identity remains a separate upcoming no-provider check.
 
 **Critical distinction:** `NEXT3` paid CREATE was **not attempted by this repair**; no new independent STOP or 6+6 job was armed, and there is still no observed genuinely delivered provider original for this scope. Its previous protected start/stop window is CLOSED, and source/runners require new current-reviewed pins before any separately authorized trial. Do not infer account balance or zero active subscriptions from the expiry repair. Gate4 remains `LIVE_SCIENCE_HOLD`, with Oct26 target / Oct28 contingency. Follow V3.9-f.8 and the linked implementation log, and preserve historical NEXT1/NEXT2/NEXT3 spend/outcome records.
+
+
+## OWNER NO-PROVIDER PUBLISHED-HOST + GITHUB SAFETY READINESS OBSERVATION — AFTER RESTORATION
+
+The owner next executed a standalone **read-only public GET + GitHub environment variable inspection** from Replit Shell. The output recorded \`status=GATE4_NEXT3_NO_PROVIDER_READINESS_OBSERVATION\` and:
+
+| Evidence field | Owner-observed value | Meaning |
+| --- | --- | --- |
+| Published hosted \`/__v39/workspace-runtime\` HTTP | \`200\` | Public health available |
+| \`receiverHeadMatches\` | \`true\` | Published receiver remains **\`5878b90eed04b2edfe2b226735ff0f02d9be25f3\`**; this is deliberately different from GitHub main |
+| \`publishedDeployment\` | \`true\` | Serving on the expected published Replit instance |
+| \`prepaidRouteRegistered\` | \`true\` | Previous prepaid route remains mounted |
+| \`gate4IngressRegistered\` | \`true\` | Gate4 callback ingress route registered |
+| \`genuineCallbackProven\` | \`false\` | **Still no demonstrated authentic provider-delivered Gate4 original** |
+| \`safetyVariablesReadable\` | \`true\` | Github \`gate4-safety\` environment variables readable |
+| \`runnerMatchesMain\` | \`false\` | Current approved STOP runner SHA **stale** relative to \`main\` |
+| \`approvedWindowCurrentlyActive\` | \`false\` | Old approved start/stop interval expired |
+| \`providerCalls\` / \`databaseWrites\` | \`0\` / \`0\` | This was not a trial |
+
+The observed GitHub \`main\` at that instant was \`5e7b446d0ce10ade3017904b8a0e46abb1186748\`. Subsequent documentation writes may advance \`main\` again; **read and freeze its fresh reviewed SHA only AFTER documentation is finished**, then set \`GATE4_SAFETY_APPROVED_RUNNER_SHA\` through reviewed, owner-authorized environment configuration for a new STOP run. Do not equate \`main\` and the separately frozen receiver SHA.
+
+**Immediate disposition:** repaired SQL/Custody **PASS**; hosted health/route **PASS**; exact published source **PASS**; authentic paid-original **NOT PROVEN**; protected runner pin **NEEDS UPDATE**; new start/stop approval **ABSENT**; STOP and 6+6 **NOT ARMED**; fresh provider balance/inventory **NOT READ BY THIS OBSERVATION**; new paid CREATE **NOT AUTHORIZED**. This is not an argument for synthetic callback tests or another 2-hour rehearsal.
+
+**Lean next sequence:** (1) finalize code/docs and freeze one fresh reviewed main SHA; (2) confirm private NEXT3 one-shot intent/positive objects and zero V0072 owner binding READ ONLY, plus separately verified actual receiver SQL access where practical; (3) request an exact new owner-approved WSSS one-CREATE trial window and conservative 5-credit soft stop / 1900 protected floor with explicit acknowledgement of possible provider SEND overshoot; (4) refresh protected main runner + window/source/scope/signer pins and dispatch one independently verified STOP + 6+6 GET health workflow, in the intended active window; (5) perform only one GO-gated provider CREATE after fresh strict baseline/zero active (no automatic retries), then true V0071 original/V0072 ownership, exact STOP and three settled balance reads. If no genuine callback, record \`DELIVERY_GAP\` and stop—not a synthetic PASS.
+
+**Deadline:** target Monday 2026-10-26 23:59 PDT, contingency Wednesday 2026-10-28 23:59 PDT (no implicit charge authorization). Keep Gate0.5 T/actual-label method as its separate science task, not a reason to repeat micro-tests.
