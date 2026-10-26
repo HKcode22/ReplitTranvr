@@ -19,6 +19,8 @@ import {gate4Next2LoadPublishedConfigV39} from
  "./lib/disruption/gate4Next2SealedBootstrap_v39";
 import {gate4Next3LoadPublishedConfigV39} from
  "./lib/disruption/gate4Next3SealedBootstrap_v39";
+import {gate4Next4LoadPublishedConfigV39} from
+ "./lib/disruption/gate4Next4SealedBootstrap_v39";
 import {
   registerWorkspaceRuntimeHealthV39,
 } from "./lib/disruption/workspaceRuntimeHealth_v39";
@@ -97,10 +99,16 @@ const previousScopedEnv=published
  ?await gate4Next2LoadPublishedConfigV39(
     process.env,configBucket,configSource)
  :process.env;
-const gate4ConfigEnv=published
+const next3ScopedEnv=published
  ?await gate4Next3LoadPublishedConfigV39(
     previousScopedEnv,configBucket,configSource)
  :previousScopedEnv;
+// NEXT4 loads only for its new built SHA and only if no earlier scope
+// is already enabled. Missing sealed object leaves the old safe default.
+const gate4ConfigEnv=published
+ ?await gate4Next4LoadPublishedConfigV39(
+    next3ScopedEnv,configBucket,configSource)
+ :next3ScopedEnv;
 const gate4Config=gate4PrebindAdditiveConfigV39(gate4ConfigEnv);
 const gate4AdditiveEnabled=gate4Config!==null;
 let gate4DurableStore:Gate4PrebindOriginalStoreV39|null=null;
