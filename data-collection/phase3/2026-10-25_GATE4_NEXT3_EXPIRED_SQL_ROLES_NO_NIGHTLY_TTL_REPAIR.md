@@ -72,3 +72,25 @@ The observed GitHub `main` at that instant was `5e7b446d0ce10ade3017904b8a0e46ab
 **Lean next sequence:** (1) finalize code/docs and freeze one fresh reviewed main SHA; (2) confirm private NEXT3 one-shot intent/positive objects and zero V0072 owner binding READ ONLY, plus separately verified actual receiver SQL access where practical; (3) request an exact new owner-approved WSSS one-CREATE trial window and conservative 5-credit soft stop / 1900 protected floor with explicit acknowledgement of possible provider SEND overshoot; (4) refresh protected main runner + window/source/scope/signer pins and dispatch one independently verified STOP + 6+6 GET health workflow, in the intended active window; (5) perform only one GO-gated provider CREATE after fresh strict baseline/zero active (no automatic retries), then true V0071 original/V0072 ownership, exact STOP and three settled balance reads. If no genuine callback, record `DELIVERY_GAP` and stop—not a synthetic PASS.
 
 **Deadline:** target Monday 2026-10-26 23:59 PDT, contingency Wednesday 2026-10-28 23:59 PDT (no implicit charge authorization). Keep Gate0.5 T/actual-label method as its separate science task, not a reason to repeat micro-tests.
+
+## FINAL NEXT3 ONE-SHOT AND TWO-LOGIN READ-ONLY CUSTODY PASS — 2026-10-25 PDT
+
+**This final follow-up is real operator Replit output, not GitHub CI simulation.** At reviewed GitHub main `40c9bfde9e5332af09e8f0c181f3f36441b56020`, owner ran the `NEXT3_FINAL_NONPAID_CUSTODY` script in a temporary detached worktree. The redacted terminal output was `status=NEXT3_NONPAID_CUSTODY_AND_SQL_PASS` for NEXT3 scope `15bec7e1-8efc-49e7-9ee8-63521a76d71c`. It proves the previous partial evidence gap is now closed:
+
+| Observed private state | Exact output |
+| --- | --- |
+| `paidIntentExists` | `false` — NEXT3 one-shot provider CREATE intent has **not** been consumed |
+| `positiveCreateReceiptExists` | `false` — no positive NEXT3 provider CREATE receipt |
+| `sealedWriterNonExpiring` | `true` — inspected encrypted V3 custody |
+| Writer restricted SQL role, READ ONLY | `roleMatches=true`, `readOnly=true`, `scopedRows=0` V0072 owned bindings |
+| Receiver restricted SQL role, READ ONLY | `roleMatches=true`, `readOnly=true`, `scopedRows=1` V0071 original |
+| Provider calls, DB writes, private storage writes | `0 / 0 / 0` |
+| New provider authorization | `paidAuthorized=false` |
+
+Both scoped SQL logins **really authenticated**, not merely passed role-catalog metadata. The **one** scoped V0071 original is historical/synthetic commissioning data, not a genuine provider-delivered notification; its existence does not meet the F8 Gate4 live source rubric. The unused NEXT3 intent is a necessary but insufficient prerequisite for a separately authorized paid trial.
+
+**GitHub state at this evidence check:** main `40c9bfde9e5332af09e8f0c181f3f36441b56020`, offline-safety GitHub Actions [run 40269647253](https://github.com/HKcode22/ReplitTranvr/actions/runs/40269647253) **completed SUCCESS**. This documentation append will advance main; refresh/freeze the final reviewed runner SHA after this commit rather than reusing `40c9...` or old approved env SHA.
+
+**What remains, in priority order:** (1) obtain fresh separately approved *Monday Oct26* WSSS one paid CREATE window/maximum risk acceptance; previous owner authorization was limited to the expired Oct25 trial and cannot be reused. Previously suggested 20:00–20:30 PDT Oct26 is only a **proposal**, not confirmed. (2) refresh the protected environment's `GATE4_SAFETY_APPROVED_RUNNER_SHA`, `START_UTC`, `STOP_UTC` after owner consent, leaving the *distinct immutable published Replit receiver SHA* as `5878b90eed04b2edfe2b226735ff0f02d9be25f3`. (3) read fresh provider account balance and strict inventory without a CREATE, preserving a 1900-credit reserve floor; note 5-credit soft stop is NOT a provider hard cap, SEND may overshoot. (4) independently dispatch/watch authenticated STOP and 6+6 GitHub Actions, require actual ARMED receipt and active observer before one operator GO; preserve one-shot intent semantics and no retry on unknown outcome. (5) verify genuine V0071 raw original+SHA, provider-returned positive V0072 exact ID, exact independent STOP/zero active, three settled balances and source-aware reliability limitations. Do not redo expired SQL role renewal, reenact previous prepaid microtests, or claim full Gate4/Phase6 GO from green CI.
+
+**Current disposition:** credential/custody/one-shot admission **READ-ONLY PASS**; hosted receiver registration **PASS**; independently approved future STOP and 6+6 **NOT ARMED**; authentic original **NOT PROVEN**; new paid permission **ABSENT**; Gate4 scientific status **LIVE_SCIENCE_HOLD**. Original target Oct26 23:59 PDT, contingency Oct28. This is now the authoritative latest NEXT3 checkpoint alongside the existing F8 and implementation-log links above.
