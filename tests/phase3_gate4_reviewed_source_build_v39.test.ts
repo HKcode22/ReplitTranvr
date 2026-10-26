@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 
 describe("Gate4 reviewed-content stable Replit build identity",()=>{
  it("validates source-equivalence with full local Git history when present",()=>{
-  const pin="5c2eb8b2fd37ef6c490edd7928ee52e2aa06eb35";
+  const pin="1885703c04ba8f24bf8d1183f873eb86d1f83d7c";
   // GitHub Actions can shallow-checkout one PR commit; a shallow parent
   // graph is not a production publishing environment. The strict gate
   // remains mandatory for Replit's full local repository.
@@ -27,7 +27,8 @@ describe("Gate4 reviewed-content stable Replit build identity",()=>{
   const script=readFileSync(
    "scripts/v39_gate4_reviewed_source_build_v39.sh","utf8");
   const config=readFileSync(".replit","utf8");
-  expect(script).toContain("PIN=5c2eb8b2fd37ef6c490edd7928ee52e2aa06eb35");
+  expect(script).toContain("PIN=1885703c04ba8f24bf8d1183f873eb86d1f83d7c");
+  expect(script).not.toContain("PIN=5c2eb8b2fd37ef6c490edd7928ee52e2aa06eb35");
   expect(script).not.toContain("PIN=5878b90eed04b2edfe2b226735ff0f02d9be25f3");
   expect(config).toContain(
    'build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]'

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Deterministic reviewed-content Gate4 raw-first (PR163) build, no provider/database calls.
+# Deterministic reviewed-content Gate4 raw-first + NEXT4 isolated receiver build, no provider/database calls.
+# New source verified in PR165; actual packaging commit is kept separately.
 # Runtime source was reviewed at 5c2eb8b2; post-merge docs-only commits
 # may have different packaging HEAD without changing any deployable inputs.
 set -Eeuo pipefail
 set +x
 cd "$(git rev-parse --show-toplevel)"
-PIN=5c2eb8b2fd37ef6c490edd7928ee52e2aa06eb35
+PIN=1885703c04ba8f24bf8d1183f873eb86d1f83d7c
 EXPECTED='build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]'
 hold(){ echo "GATE4_VERIFIED_BUILD_SOURCE_HOLD" >&2; exit 2; }
 test "$#" -eq 0 || { test "$#" -eq 1 && test "$1" = "--verify-only"; } || hold
