@@ -118,16 +118,19 @@ async function execute():Promise<void>{
   const vars=next3ProtectedVariablesV39();
   const {scope,runnerSha}=next3ProtectedScopeV39(vars,x,initial);
   if(mode==="--check"){
-   const now=Date.now(),expiry=Date.parse(x.writerExpiresUtc);
+   const now=Date.now(),nonExpiring=x.writerExpiresUtc==="infinity";
+   const expiry=nonExpiring?Infinity:Date.parse(x.writerExpiresUtc);
    const cutoff=Date.parse(scope.stopUtc);
    const active=now>=Date.parse(scope.startUtc)&&now<cutoff-60_000;
-   const usable=expiry>now+2*60_000&&expiry>=cutoff+5*60_000;
+   const usable=nonExpiring||
+     (expiry>now+2*60_000&&expiry>=cutoff+5*60_000);
    console.log(JSON.stringify({
     status:"GATE4_NEXT3_READONLY_STATUS_NO_PROVIDER",
     scopeId:SCOPE,sourceSha:SRC,
     exactProtectedSignerMatch:true,writerSealed:true,
     writerExpiresUtc:x.writerExpiresUtc,
-    sealedWriterExpiryReached:now>=expiry,
+    sealedWriterNonExpiring:nonExpiring,
+    sealedWriterExpiryReached:!nonExpiring&&now>=expiry,
     approvedTrialWindowActive:active,
     sealedWriterCoversStopBuffer:usable,
     actualDatabaseRoleLoginVerified:false,
@@ -147,7 +150,9 @@ async function execute():Promise<void>{
    hold("APPROVED_UTC_WINDOW_NOT_ACTIVE");
   // Ensure scoped writer survives the independently approved STOP deadline
   // and five additional minutes. Do not impose a rolling 45-min threshold.
-  if(Date.parse(x.writerExpiresUtc)<Date.parse(scope.stopUtc)+5*60000)
+  if(x.writerExpiresUtc!=="infinity"&&
+     (!Number.isFinite(Date.parse(x.writerExpiresUtc))||
+      Date.parse(x.writerExpiresUtc)<Date.parse(scope.stopUtc)+5*60000))
    hold("WRITER_EXPIRY_BEFORE_STOP_SETTLEMENT_BUFFER");
   if(!await hostedReady())hold("PUBLISHED_RECEIVER_IDENTITY");
   const stopRunId=Number(process.env.GATE4_NEXT3_STOP_RUN_ID??"");
