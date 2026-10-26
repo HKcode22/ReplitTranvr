@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Deterministic reviewed-content Gate4 NEXT3 build, no provider/database calls.
+# Deterministic reviewed-content Gate4 raw-first (PR163) build, no provider/database calls.
+# Runtime source was reviewed at 5c2eb8b2; post-merge docs-only commits
+# may have different packaging HEAD without changing any deployable inputs.
 set -Eeuo pipefail
 set +x
 cd "$(git rev-parse --show-toplevel)"
-PIN=5878b90eed04b2edfe2b226735ff0f02d9be25f3
+PIN=5c2eb8b2fd37ef6c490edd7928ee52e2aa06eb35
 EXPECTED='build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]'
 hold(){ echo "GATE4_VERIFIED_BUILD_SOURCE_HOLD" >&2; exit 2; }
 test "$#" -eq 0 || { test "$#" -eq 1 && test "$1" = "--verify-only"; } || hold
@@ -12,7 +14,7 @@ git merge-base --is-ancestor "$PIN" HEAD || hold
 git diff --quiet "$PIN" HEAD -- \
  client server shared package.json package-lock.json scripts/build.ts \
  vite.config.ts tsconfig.json postcss.config.js tailwind.config.ts \
- components.json drizzle.config.ts || hold
+ components.json drizzle.config.ts .replit || hold
 git diff --quiet HEAD -- client server shared package.json package-lock.json \
  scripts/build.ts vite.config.ts tsconfig.json postcss.config.js \
  tailwind.config.ts components.json drizzle.config.ts .replit \
