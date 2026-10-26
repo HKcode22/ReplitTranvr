@@ -1,0 +1,57 @@
+name: Phase3 Gate4 NEXT4 Independent GET Health (No Provider)
+on:
+  workflow_dispatch:
+    inputs:
+      runner_sha:
+        required: true
+        type: string
+      stop_utc:
+        required: true
+        type: string
+      confirmation:
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: gate4-next4-health
+  cancel-in-progress: false
+jobs:
+  gate4-next4-health:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'WATCH_NEXT4_NO_PROVIDER_6PLUS6' }}
+    runs-on: ubuntu-latest
+    environment: gate4-safety
+    timeout-minutes: 40
+    env:
+      GATE4_NEXT4_HEALTH_STOP_UTC: ${{ inputs.stop_utc }}
+      V39_PHASE6_PROCESS_ARMED: "0"
+      AERODATABOX_API_KEY: ""
+      V39_DATABASE_RUNTIME_URL: ""
+      DATABASE_URL: ""
+    steps:
+      - name: Source-locked NEXT4 observer
+        shell: bash
+        env:
+          EXPECTED: ${{ inputs.runner_sha }}
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$EXPECTED" = "$GITHUB_SHA"
+          test "$V39_PHASE6_PROCESS_ARMED" = 0
+          test -z "$AERODATABOX_API_KEY"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.runner_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Run NEXT4 public GET health observation
+        run: |
+          node --import tsx scripts/v39_gate4_next4_live_health_observer_v39.ts
+      - name: Explicit scope of observer result
+        if: always()
+        run: |
+          echo 'NEXT4 GET-only health: no provider CREATE/DELETE, no proof of real callback' >> "$GITHUB_STEP_SUMMARY"
