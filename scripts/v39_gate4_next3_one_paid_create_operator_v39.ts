@@ -131,6 +131,10 @@ async function execute():Promise<void>{
   if(Date.now()<Date.parse(scope.startUtc)||
      Date.now()>=Date.parse(scope.stopUtc)-60_000)
    hold("APPROVED_UTC_WINDOW_NOT_ACTIVE");
+  // Ensure scoped writer survives the independently approved STOP deadline
+  // and five additional minutes. Do not impose a rolling 45-min threshold.
+  if(Date.parse(x.writerExpiresUtc)<Date.parse(scope.stopUtc)+5*60000)
+   hold("WRITER_EXPIRY_BEFORE_STOP_SETTLEMENT_BUFFER");
   if(!await hostedReady())hold("PUBLISHED_RECEIVER_IDENTITY");
   const stopRunId=Number(process.env.GATE4_NEXT3_STOP_RUN_ID??"");
   const healthRunId=Number(process.env.GATE4_NEXT3_HEALTH_RUN_ID??"");
@@ -233,8 +237,8 @@ async function execute():Promise<void>{
   console.log(JSON.stringify({
    status:"GATE4_NEXT3_ONE_PAID_CREATE_HOLD",stage,safeReason,
    intentWritten,createAttempted,
-   providerHttpPostAcceptanceUnconfirmed:true,
-   neverRetryCreate:true,providerIdUnknownUnlessSealed:true
+   providerHttpPostAcceptanceUnconfirmed:createAttempted,
+   neverRetryCreate:true,providerIdUnknownUnlessSealed:createAttempted
   }));
   process.exitCode=2;
  }finally{await pool?.end().catch(()=>{});}

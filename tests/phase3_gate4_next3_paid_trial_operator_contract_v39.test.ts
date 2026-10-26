@@ -44,6 +44,12 @@ describe("Gate4 NEXT3 exact-scope ONE paid operator — NO launch on import",()=
   expect(paid).toContain("strictBalance");
   expect(paid).toContain("strictInventory");
   expect(paid).toContain("maxDeliveryRetries:0");
+  expect(custody).not.toContain("Date.now()+45*60000");
+  expect(custody).toContain("Date.now()+2*60000");
+  expect(paid).toContain("Date.parse(x.writerExpiresUtc)<Date.parse(scope.stopUtc)+5*60000");
+  expect(paid).toContain('hold("WRITER_EXPIRY_BEFORE_STOP_SETTLEMENT_BUFFER")');
+  expect(paid).toContain("if(!await hostedReady())");
+
   expect(paid).not.toContain("refillBalance(");
  });
  it("reserves durable intent BEFORE provider CREATE and cannot repeat",()=>{
@@ -55,8 +61,8 @@ describe("Gate4 NEXT3 exact-scope ONE paid operator — NO launch on import",()=
   expect(paid).toContain("if(await x.storage.exists(INTENT)||await x.storage.exists(POSITIVE))");
   expect(paid).toContain("createAttempted=true");
   expect(paid).toContain("neverRetryCreate:true");
-  expect(paid).toContain("providerHttpPostAcceptanceUnconfirmed:true");
-  expect(paid).toContain("providerIdUnknownUnlessSealed:true");
+  expect(paid).toContain("providerHttpPostAcceptanceUnconfirmed:createAttempted");
+  expect(paid).toContain("providerIdUnknownUnlessSealed:createAttempted");
   expect(paid).toContain("deleteKnownExact:");
   expect(paid).toContain("persistPositiveIdPrivately:");
  });
