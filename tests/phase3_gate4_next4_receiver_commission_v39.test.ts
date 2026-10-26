@@ -1,5 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
+import pg from "pg";
 import {
  NEXT4_WRITER_ROLE_V39,
  next4RoleSQLV39,next4PolicySQLV39
@@ -78,5 +79,28 @@ describe("NEXT4 prospective receiver and restricted writer SQL (no provider)",()
    "deleteSubscriptionVerifiedStrict","gh workflow run",
    "GATE4_NEXT3_APPLY_CONFIRM","DUMMY_PROVIDER_CREATE"
   ]) expect(src).not.toContain(forbidden);
+ });
+ it("receives native name[] and cast text[] through distinct pg OID decoders",()=>{
+  const sample="{gate4_receiver_2026_next4}";
+  const native=pg.types.getTypeParser(1003,"text")(sample);
+  const normalized=pg.types.getTypeParser(1009,"text")(sample);
+  // Whether current pg auto-decodes name[] or not, text[] is always parsed.
+  expect(normalized).toEqual(["gate4_receiver_2026_next4"]);
+  expect(typeof native==="string"||Array.isArray(native)).toBe(true);
+ });
+ it("normalizes PostgreSQL policy name[] and permits only one recovered no-provider SQL attempt",()=>{
+  const src=readFileSync(
+    "scripts/v39_gate4_next4_receiver_commission_v39.ts","utf8");
+  // Node pg does not reliably decode PostgreSQL name[] (OID 1003).
+  // A text[] cast (OID 1009) is required for p.roles[0] / p.roles.length.
+  expect(src).toContain("roles::text[] AS roles");
+  expect(src).toContain('mode==="--recover-once"');
+  expect(src).toContain('existsSync(RECOVER)');
+  expect(src).toContain("neverRetry:true");
+  expect(src).toContain("verifyExistingEncryptedRecoveryV39(source)");
+  expect(src).toContain("timingSafeEqual(original,recovered)");
+  expect(src).toContain("AUTHORIZE_NEXT4_RECOVER_ROLLED_BACK_SQL_NO_PROVIDER");
+  expect(src).toContain('stage="PRODUCTION_TRANSACTION_POST_AUDIT"');
+  expect(src).toContain("sqlstate:");
  });
 });

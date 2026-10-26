@@ -10,7 +10,7 @@
  */
 import "dotenv/config";
 import pg from "pg";
-import {createHash,randomBytes,randomUUID} from "node:crypto";
+import {createHash,randomBytes,randomUUID,hkdfSync,createDecipheriv,timingSafeEqual} from "node:crypto";
 import {readFileSync,writeFileSync,mkdirSync,existsSync,lstatSync,
  openSync,writeSync,fsyncSync,closeSync} from "node:fs";
 import {join} from "node:path";
@@ -40,6 +40,7 @@ const POLICY=[
 const ROOT=join(homedir(),".config","replittranvr","gate4-next4");
 const FILE=join(ROOT,"commission.json");
 const APPLY=join(ROOT,"apply-once-intent.json");
+const RECOVER=join(ROOT,"recover-once-intent.json");
 const SEAL=join(ROOT,"seal-once-intent.json");
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA40=/^[a-f0-9]{40}$/,HEX64=/^[a-f0-9]{64}$/;
@@ -65,6 +66,40 @@ function privateWrite(path:string,data:unknown){
  const fd=openSync(path,"wx",0o600);
  try{writeSync(fd,JSON.stringify(data)+"\n");fsyncSync(fd);}
  finally{closeSync(fd);}
+}
+async function verifyExistingEncryptedRecoveryV39(source:string):Promise<void>{
+ const bucket=new ReplitProviderBlobStoreV39(
+  String(process.env.V39_PROVIDER_BLOB_BUCKET_ID??""));
+ const backupKey="internal/gate4/next4/recovery/"+source+
+  "/commission-v1.aes256gcm.json";
+ if(!await bucket.exists(backupKey)||
+    await bucket.exists(gate4Next4ConfigStorageKeyV39(source)))hold();
+ const envelope=JSON.parse(Buffer.from(
+  await bucket.downloadBytes(backupKey)).toString("utf8"));
+ if(envelope.schema!=="v39.gate4.next4.commission-recovery.v1"||
+    envelope.source!==source)hold();
+ const runtime=String(process.env.V39_DATABASE_RUNTIME_URL??"");
+ const secret=String(process.env.AERODATABOX_WEBHOOK_SECRET??"");
+ if(!runtime||secret.length<32)hold();
+ const ikm=Buffer.from(runtime+"\0"+secret);
+ const key=Buffer.from(hkdfSync("sha256",ikm,
+  Buffer.from(envelope.salt,"base64"),
+  Buffer.from("replittranvr:gate4:next4:commission-recovery:v1"),32));
+ try{
+  const decipher=createDecipheriv("aes-256-gcm",key,
+   Buffer.from(envelope.iv,"base64"));
+  decipher.setAAD(Buffer.from("next4-recovery:"+source));
+  decipher.setAuthTag(Buffer.from(envelope.tag,"base64"));
+  const recovered=Buffer.concat([
+   decipher.update(Buffer.from(envelope.ciphertext,"base64")),
+   decipher.final()
+  ]);
+  const original=readFileSync(FILE);
+  try{
+   if(original.length!==recovered.length||
+      !timingSafeEqual(original,recovered))hold();
+  }finally{original.fill(0);recovered.fill(0);}
+ }finally{key.fill(0);ikm.fill(0);}
 }
 function privateLoad():Manifest{
  const st=lstatSync(FILE);
@@ -195,7 +230,7 @@ async function audit(db:pg.Client,actor:string,m:Manifest,phase:"before"|"after"
   "WHERE rolname=ANY($1::text[])",[[...ROLES]]
  )).rows;
  const policies=(await db.query(
-  "SELECT tablename,policyname,cmd,permissive,roles,qual,with_check "+
+  "SELECT tablename,policyname,cmd,permissive,roles::text[] AS roles,qual,with_check "+
   "FROM pg_policies WHERE schemaname='clean' AND "+
   "tablename=ANY($1::text[]) ORDER BY tablename,policyname",
   [[RAW,OWNED]]
@@ -248,7 +283,7 @@ async function audit(db:pg.Client,actor:string,m:Manifest,phase:"before"|"after"
  }),originals:items.length,bindings:bindings.length,policies:policies.length};
 }
 export async function gate4Next4CommissionV39(
- mode:"--prepare"|"--plan"|"--apply-once"|"--seal-once"|"--verify"
+ mode:"--prepare"|"--plan"|"--apply-once"|"--recover-once"|"--seal-once"|"--verify"
 ):Promise<void>{
  let stage="INIT",db:pg.Client|undefined,tx=false,intent=false;
  try{
@@ -256,7 +291,7 @@ export async function gate4Next4CommissionV39(
   privateRoot();
   if(mode==="--prepare"){
    stage="PREPARE_PRIVATE_ONLY";
-   if([FILE,APPLY,SEAL].some(existsSync))hold();
+   if([FILE,APPLY,RECOVER,SEAL].some(existsSync))hold();
    const m:Manifest={
     schema:"v39.gate4.next4.commission.v1",
     scope:randomUUID(),source,nonce:randomBytes(32).toString("hex"),
@@ -286,7 +321,8 @@ export async function gate4Next4CommissionV39(
    application_name:"gate4_next4_no_provider_commission"});
   await db.connect();
   await db.query("BEGIN READ ONLY");tx=true;
-  const before=await audit(db,c.ownerRole,m,existsSync(APPLY)?"after":"before");
+  const before=await audit(db,c.ownerRole,m,
+   mode==="--recover-once"?"before":existsSync(APPLY)?"after":"before");
   await db.query("ROLLBACK");tx=false;
   if(mode==="--plan"){
    if(existsSync(APPLY))hold();
@@ -297,27 +333,51 @@ export async function gate4Next4CommissionV39(
     providerCalls:0,databaseWrites:0,storageWrites:0,paidAuthorized:false}));
    return;
   }
-  if(mode==="--apply-once"){
-   stage="APPLY_ONLY_WITH_EXPLICIT_NO_PROVIDER_GO";
-   if(process.env.GATE4_NEXT4_COMMISSION_GO!==
-     "AUTHORIZE_NEXT4_NEW_SCOPED_SQL_ROLES_NO_PROVIDER"||
-      [APPLY,SEAL].some(existsSync))hold();
-   privateWrite(APPLY,{scope:m.scope,source,
-    createdAt:new Date().toISOString(),neverReapply:true});
+  if(mode==="--apply-once"||mode==="--recover-once"){
+   const recovery=mode==="--recover-once";
+   stage=recovery?"RECOVERY_CHECKS":"APPLY_ONLY_WITH_EXPLICIT_NO_PROVIDER_GO";
+   if(recovery){
+    if(process.env.GATE4_NEXT4_RECOVERY_GO!==
+       "AUTHORIZE_NEXT4_RECOVER_ROLLED_BACK_SQL_NO_PROVIDER"||
+       !existsSync(APPLY)||existsSync(RECOVER)||existsSync(SEAL))hold();
+    const st=lstatSync(APPLY);
+    if(!st.isFile()||(st.mode&0o077)!==0||st.size>1024)hold();
+    const prior=JSON.parse(readFileSync(APPLY,"utf8"));
+    if(prior.scope!==m.scope||prior.source!==source||
+       prior.neverReapply!==true)hold();
+    await verifyExistingEncryptedRecoveryV39(source);
+    privateWrite(RECOVER,{scope:m.scope,source,
+     createdAt:new Date().toISOString(),neverRetry:true});
+   }else{
+    if(process.env.GATE4_NEXT4_COMMISSION_GO!==
+      "AUTHORIZE_NEXT4_NEW_SCOPED_SQL_ROLES_NO_PROVIDER"||
+       [APPLY,RECOVER,SEAL].some(existsSync))hold();
+    privateWrite(APPLY,{scope:m.scope,source,
+     createdAt:new Date().toISOString(),neverReapply:true});
+   }
    intent=true;
-   stage="PRODUCTION_TRANSACTION";
+   stage="PRODUCTION_TRANSACTION_BEGIN";
    await db.query("BEGIN ISOLATION LEVEL SERIALIZABLE");tx=true;
    await db.query("SET LOCAL lock_timeout='2500ms'");
    await db.query("SET LOCAL statement_timeout='8000ms'");
    await db.query("SELECT pg_advisory_xact_lock(3904,20261026)");
+   stage="PRODUCTION_TRANSACTION_BASELINE_AUDIT";
    const current=await audit(db,c.ownerRole,m,"before");
    if(current.signature!==before.signature)hold();
+   stage="PRODUCTION_TRANSACTION_CREATE_RECEIVER";
    await db.query(next4RoleSQLV39(
     NEXT4_RECEIVER_ROLE_V39,m.receiverPassword,4));
+   stage="PRODUCTION_TRANSACTION_CREATE_WRITER";
    await db.query(next4RoleSQLV39(
     NEXT4_WRITER_ROLE_V39,m.writerPassword,1));
-   for(const sql of next4PolicySQLV39(m))await db.query(sql);
+   let sqlIndex=0;
+   for(const sql of next4PolicySQLV39(m)){
+    stage="PRODUCTION_TRANSACTION_SQL_"+(++sqlIndex);
+    await db.query(sql);
+   }
+   stage="PRODUCTION_TRANSACTION_POST_AUDIT";
    await audit(db,c.ownerRole,m,"after");
+   stage="PRODUCTION_TRANSACTION_COMMIT";
    await db.query("COMMIT");tx=false;
    stage="VERIFY_DB_POSTCOMMIT";
    await db.query("BEGIN READ ONLY");tx=true;
@@ -367,11 +427,13 @@ export async function gate4Next4CommissionV39(
    statusOnly:true,providerCalls:0,paidAuthorized:false,
    publishedDeploymentModified:false
   }));
- }catch{
+ }catch(e){
   if(tx)await db?.query("ROLLBACK").catch(()=>undefined);
   console.log(JSON.stringify({
    status:"GATE4_NEXT4_COMMISSION_HOLD",failedStage:stage,
    oneShotIntentMayExist:intent,noAutomaticRetry:true,
+   sqlstate:/^[A-Z0-9]{5}$/.test(String((e as {code?:unknown})?.code??""))
+    ?String((e as {code?:unknown}).code):"NONE",
    providerCalls:0,paidAuthorized:false
   }));
   process.exitCode=2;
@@ -380,10 +442,10 @@ export async function gate4Next4CommissionV39(
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const mode=process.argv[2];
  if(process.argv.length!==3||![
-  "--prepare","--plan","--apply-once","--seal-once","--verify"
+  "--prepare","--plan","--apply-once","--recover-once","--seal-once","--verify"
  ].includes(mode)){
   console.log("GATE4_NEXT4_COMMISSION_HOLD");process.exitCode=2;
  }else void gate4Next4CommissionV39(
-  mode as "--prepare"|"--plan"|"--apply-once"|"--seal-once"|"--verify"
+  mode as "--prepare"|"--plan"|"--apply-once"|"--recover-once"|"--seal-once"|"--verify"
  );
 }
