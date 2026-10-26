@@ -81,7 +81,7 @@ async function verifyExistingEncryptedRecoveryV39(source:string):Promise<void>{
  const runtime=String(process.env.V39_DATABASE_RUNTIME_URL??"");
  const secret=String(process.env.AERODATABOX_WEBHOOK_SECRET??"");
  if(!runtime||secret.length<32)hold();
- const ikm=Buffer.from(runtime+"\\0"+secret);
+ const ikm=Buffer.from(runtime+"\0"+secret);
  const key=Buffer.from(hkdfSync("sha256",ikm,
   Buffer.from(envelope.salt,"base64"),
   Buffer.from("replittranvr:gate4:next4:commission-recovery:v1"),32));
