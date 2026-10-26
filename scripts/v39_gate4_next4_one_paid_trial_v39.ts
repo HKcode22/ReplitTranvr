@@ -12,7 +12,7 @@ import {readFileSync,existsSync,lstatSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {pathToFileURL} from "node:url";
-import {createHash,createPrivateKey,generateKeyPairSync,randomBytes,hkdfSync,createCipheriv,createDecipheriv,sign} from "node:crypto";
+import {createHash,createPrivateKey,createPublicKey,generateKeyPairSync,randomBytes,hkdfSync,createCipheriv,createDecipheriv,sign} from "node:crypto";
 import {ReplitProviderBlobStoreV39} from "../server/lib/disruption/replitProviderBlobStore_v39";
 import {gate4Next4ConfigStorageKeyV39,gate4Next4OpenSealedValuesV39} from "../server/lib/disruption/gate4Next4SealedBootstrap_v39";
 import {NEXT4_WRITER_ROLE_V39} from "./v39_gate4_next4_receiver_commission_v39";
@@ -105,9 +105,10 @@ async function signerLoad(s:ReplitProviderBlobStoreV39):Promise<Signer>{
   d.setAAD(Buffer.from(SRC+":NEXT4:PAID_SIGNER"));
   d.setAuthTag(Buffer.from(enc.tag,"base64"));
   const privateDer=Buffer.concat([d.update(Buffer.from(enc.ciphertext,"base64")),d.final()]);
-  const publicFromPrivate=createPrivateKey({key:privateDer,format:"der",type:"pkcs8"})
-   .asymmetricKeyType;
-  if(publicFromPrivate!=="ed25519")hold("SIGNER_PRIVATE_KEY");
+  const p=createPrivateKey({key:privateDer,format:"der",type:"pkcs8"});
+  const derived=createPublicKey(p).export({format:"der",type:"spki"}) as Buffer;
+  if(p.asymmetricKeyType!=="ed25519"||!derived.equals(publicDer))
+   hold("SIGNER_PRIVATE_PUBLIC_MISMATCH");
   return {privateDer,publicDer,spki:enc.spki};
  }finally{key.fill(0);}
 }
@@ -272,7 +273,7 @@ async function run():Promise<void>{
   const mark=Date.now();
   dispatch(STOP_WORKFLOW,{
    expected_head:runner,scope_id:m.scope,authorization_sha256:m.authorizationSha256,
-   airport_icao:"WSS",start_utc:start,stop_utc:stop,
+   airport_icao:"WSSS",start_utc:start,stop_utc:stop,
    starting_credits:String(balance),soft_target:"5",protected_floor:"1900",
    confirmation:STOP_CONFIRM
   });
@@ -349,7 +350,104 @@ async function run():Promise<void>{
    paidTrialComplete:false,sciencePassed:false,
    next:"WAIT_INDEPENDENT_STOP_AND_VERIFY_RAW_SETTLEMENT"
   }));
-  // No automatic second CREATE, no assumption that published route guarantees SEND.
+  stage="WAIT_INDEPENDENT_STOP";
+  let stopSucceeded=false;
+  while(Date.now()<Date.parse(stop)+120000){
+   try{
+    const run=gh("repos/"+REPO+"/actions/runs/"+stopId);
+    if(run.status==="completed"){
+     stopSucceeded=run.conclusion==="success";
+     break;
+    }
+   }catch{}
+   await snooze(8000);
+  }
+  // The provider ID comes ONLY from the saved positive CREATE response.
+  const positive=JSON.parse(Buffer.from(
+   await s.downloadBytes(POSITIVE_KEY)).toString("utf8"));
+  if(positive.scope!==m.scope||positive.source!==SRC||
+     !/^[A-Za-z0-9_-]{6,128}$/.test(positive.providerAssignedId))
+   hold("POSITIVE_PROVIDER_ID_CUSTODY");
+  const subscriptionId=positive.providerAssignedId;
+  if(!stopSucceeded){
+   // Emergency compensation for exactly the previously verified V0072 owner.
+   const row=(await pool.query(
+    "SELECT subscription_id FROM clean.gate4_alert_owned_binding_v39 "+
+    "WHERE scope_id=$1::uuid AND source_commit=$2 AND authorization_sha256=$3",
+    [m.scope,SRC,m.authorizationSha256])).rows;
+   if(row.length===1&&row[0].subscription_id===subscriptionId){
+    const stopped=await deleteSubscriptionVerifiedStrict(subscriptionId,{
+     maxAttempts:3}).catch(()=>false);
+    console.log(JSON.stringify({status:"NEXT4_INDEPENDENT_STOP_NOT_CONFIRMED",
+     exactOwnedEmergencyDeleteAttempted:true,
+     exactOwnedEmergencyDeleteSucceeded:stopped,scientificPass:false}));
+   }
+   hold("INDEPENDENT_STOP_UNCONFIRMED");
+  }
+  stage="THREE_PROVIDER_SETTLEMENT_READS";
+  const balances:number[]=[];
+  let zeroActive=true;
+  for(let i=0;i<3;i++){
+   const credits=(await getBalanceEvidenceStrict()).balance.creditsRemaining;
+   const subs=await listSubscriptionsStrict();
+   balances.push(credits);
+   if(subs.some(x=>x.isActive&&x.billingType==="CreditBased"))
+    zeroActive=false;
+   if(i<2)await snooze(30_000);
+  }
+  const settled=zeroActive&&balances.every(x=>x===balances[0]);
+  stage="INDEPENDENT_ORIGINAL_WIRE_READBACK";
+  const owner=new pg.Client({
+   connectionString:process.env.V39_PRODUCTION_DATABASE_OWNER_URL,
+   connectionTimeoutMillis:6000,query_timeout:8000,
+   application_name:"next4_paid_scientific_raw_readonly"
+  });
+  let matched=0,validSha=0,total=0,ownerBound=false;
+  try{
+   await owner.connect();
+   await owner.query("BEGIN READ ONLY");
+   const rows=(await owner.query(
+    "SELECT source_commit,authorization_sha256,airport_icao,"+
+    "claimed_provider_subscription_id,original_sha256,original_wire "+
+    "FROM clean.gate4_alert_prebind_original_v39 WHERE scope_id=$1::uuid",
+    [m.scope])).rows;
+   total=rows.length;
+   for(const r of rows){
+    const sourceOk=r.source_commit===SRC&&
+     r.authorization_sha256===m.authorizationSha256&&r.airport_icao==="WSSS";
+    if(!sourceOk||!Buffer.isBuffer(r.original_wire))continue;
+    if(sha256(r.original_wire)===r.original_sha256){
+     validSha++;
+     if(r.claimed_provider_subscription_id===subscriptionId)matched++;
+    }
+   }
+   const bindings=(await owner.query(
+    "SELECT subscription_id,source_commit,authorization_sha256 "+
+    "FROM clean.gate4_alert_owned_binding_v39 WHERE scope_id=$1::uuid",
+    [m.scope])).rows;
+   ownerBound=bindings.length===1&&
+    bindings[0].subscription_id===subscriptionId&&
+    bindings[0].source_commit===SRC&&
+    bindings[0].authorization_sha256===m.authorizationSha256;
+   await owner.query("ROLLBACK");
+  }finally{await owner.query("ROLLBACK").catch(()=>{});await owner.end().catch(()=>{});}
+  const evidencePass=stopSucceeded&&settled&&ownerBound&&
+   total>0&&validSha===total&&matched>0;
+  console.log(JSON.stringify({
+   status:evidencePass?"NEXT4_ONE_GENUINE_PROVIDER_CALLBACK_SCIENCE_PASS":
+    "NEXT4_GENUINE_DELIVERY_OR_SETTLEMENT_UNPROVEN",
+   positiveCreateBound:true,verifiedOwnerBinding:ownerBound,
+   independentStopConfirmed:stopSucceeded,
+   threeBalanceReadingsStable:settled,zeroBillableActive:zeroActive,
+   actualCreditsSpent:balance-balances[0],
+   softCreditTarget:5,providerHardCreditCap:false,
+   originalRows:total,originalByteSha256Valid:validSha,
+   originalRowsMatchingPositiveProviderId:matched,
+   noOtherTrialCreated:true,phase6Authorized:false
+  }));
+  if(!evidencePass)process.exitCode=2;
+  // One authentic successful trial establishes feasibility, not a statistical
+  // reliability rate across airports, days or provider conditions.
  }catch(e){
   const reason=e instanceof Error?e.message:"UNKNOWN";
   console.log(JSON.stringify({status:"NEXT4_ONE_PAID_OPERATOR_HOLD",stage,
