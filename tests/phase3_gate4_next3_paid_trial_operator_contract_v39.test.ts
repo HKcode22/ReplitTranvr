@@ -76,7 +76,8 @@ describe("Gate4 NEXT3 exact-scope ONE paid operator — NO launch on import",()=
   expect(stop).toBeGreaterThan(start);
   const noProvider=paid.slice(start,stop);
   expect(noProvider).toContain("GATE4_NEXT3_READONLY_STATUS_NO_PROVIDER");
-  expect(noProvider).toContain("sealedWriterExpiryReached:now>=expiry");
+  expect(noProvider).toContain("sealedWriterNonExpiring:nonExpiring");
+  expect(noProvider).toContain("sealedWriterExpiryReached:!nonExpiring&&now>=expiry");
   expect(noProvider).toContain("sealedWriterCoversStopBuffer:usable");
   expect(noProvider).toContain("actualDatabaseRoleLoginVerified:false");
   expect(noProvider).toContain("readyForPaidCreate:false");
