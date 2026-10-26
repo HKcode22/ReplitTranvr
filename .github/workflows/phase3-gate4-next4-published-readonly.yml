@@ -1,0 +1,87 @@
+name: Phase3 Gate4 NEXT4 Published Source and Ingress — Read Only
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase3-gate4-next4-published-readonly.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gate4-next4-hosted-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      EXPECTED_SOURCE: 1885703c04ba8f24bf8d1183f873eb86d1f83d7c
+      HOSTED_RUNTIME_URL: https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime
+    steps:
+      - name: Request public published runtime status (GET only, no provider)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          BODY="${RUNNER_TEMP}/next4-live-response.json"
+          RESULT="${RUNNER_TEMP}/next4-live-attestation.json"
+          set +e
+          HTTP="$(curl --silent --show-error --location --max-redirs 2 \
+            --connect-timeout 8 --max-time 20 \
+            --header 'accept: application/json' \
+            --write-out '%{http_code}' \
+            --output "$BODY" "$HOSTED_RUNTIME_URL")"
+          CURL_EXIT=$?
+          set -e
+          node --input-type=module - "$BODY" "$RESULT" "$CURL_EXIT" "$HTTP" <<'NODE'
+          import fs from 'node:fs';
+          const [bodyPath,outPath,exitText,httpText]=process.argv.slice(2);
+          let health=null;
+          try{health=JSON.parse(fs.readFileSync(bodyPath,'utf8'));}catch{}
+          const code=Number(httpText);
+          const requested=String(process.env.EXPECTED_SOURCE);
+          const observed=String(health?.git_head??'');
+          const ok=Number(exitText)===0 && code===200 &&
+            health?.schema==='v39.phase2f-workspace-runtime.v1' &&
+            health?.status==='PASS' &&
+            observed===requested &&
+            health?.gate4_alert_ingress_registered===true &&
+            health?.published_deployment===true &&
+            health?.runtime_owner_mode==='replit-published-deployment' &&
+            health?.prepaid_route_registered===true &&
+            health?.provider_mutation===false;
+          const result={
+            schema:'v39.gate4.next4.live-readonly-attestation.v1',
+            checked_at_utc:new Date().toISOString(),
+            status:ok?'NEXT4_PUBLISHED_SOURCE_AND_INGRESS_READONLY_PASS':
+              'NEXT4_PUBLISHED_SOURCE_OR_INGRESS_HOLD',
+            http_status:Number.isFinite(code)?code:null,
+            expected_source_sha:requested,
+            observed_source_sha:/^[a-f0-9]{40}$/.test(observed)?observed:null,
+            published_deployment:health?.published_deployment===true,
+            runtime_owner_mode:health?.runtime_owner_mode??null,
+            gate4_alert_ingress_registered:health?.gate4_alert_ingress_registered===true,
+            callback_proven_by_public_get:false,
+            raw_retention_hours:Number.isInteger(health?.retention_hours)
+              ?health.retention_hours:null,
+            prepaid_source_custody_ready:health?.prepaid_source_custody_ready===true,
+            checked_using_public_get_only:true,
+            provider_requests:0,provider_mutations:0,paid_credits:0,
+            database_reads:0,database_writes:0
+          };
+          fs.writeFileSync(outPath,JSON.stringify(result,null,2)+'\n',{flag:'wx'});
+          console.log(JSON.stringify(result,null,2));
+          if(process.env.GITHUB_STEP_SUMMARY){
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              '### Gate4 NEXT4 public source/ingress (GET only)\n'+
+              '- '+result.status+'\n'+
+              '- HTTP '+result.http_status+'; source '+String(result.observed_source_sha??'unavailable')+'\n'+
+              '- Published registered Alert route: '+(result.gate4_alert_ingress_registered?'YES':'NO')+'\n'+
+              '- Public GET does NOT prove callback delivery, custody, positive provider ownership or paid approval.\n');
+          }
+          if(!ok)process.exitCode=2;
+          NODE
+      - name: Publish non-secret verification evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate4-next4-live-readonly-attestation
+          path: ${{ runner.temp }}/next4-live-attestation.json
+          if-no-files-found: warn
+          retention-days: 30
