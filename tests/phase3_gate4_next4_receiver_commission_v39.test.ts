@@ -79,4 +79,19 @@ describe("NEXT4 prospective receiver and restricted writer SQL (no provider)",()
    "GATE4_NEXT3_APPLY_CONFIRM","DUMMY_PROVIDER_CREATE"
   ]) expect(src).not.toContain(forbidden);
  });
+ it("normalizes PostgreSQL policy name[] and permits only one recovered no-provider SQL attempt",()=>{
+  const src=readFileSync(
+    "scripts/v39_gate4_next4_receiver_commission_v39.ts","utf8");
+  // Node pg does not reliably decode PostgreSQL name[] (OID 1003).
+  // A text[] cast (OID 1009) is required for p.roles[0] / p.roles.length.
+  expect(src).toContain("roles::text[] AS roles");
+  expect(src).toContain('mode==="--recover-once"');
+  expect(src).toContain('existsSync(RECOVER)');
+  expect(src).toContain("neverRetry:true");
+  expect(src).toContain("verifyExistingEncryptedRecoveryV39(source)");
+  expect(src).toContain("timingSafeEqual(original,recovered)");
+  expect(src).toContain("AUTHORIZE_NEXT4_RECOVER_ROLLED_BACK_SQL_NO_PROVIDER");
+  expect(src).toContain('stage="PRODUCTION_TRANSACTION_POST_AUDIT"');
+  expect(src).toContain("sqlstate:");
+ });
 });
