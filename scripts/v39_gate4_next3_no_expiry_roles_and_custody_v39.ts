@@ -40,8 +40,9 @@ const hold=(stage:string):never=>{
  throw Error("GATE4_NEXT3_EXPIRE_"+stage+"_HOLD");
 };
 const utc=(x:string):boolean=>
+ x==="infinity"||(
  /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(x)&&
- (Number.isFinite(Date.parse(x))&&new Date(x).toISOString()===x || x==="infinity");
+ Number.isFinite(Date.parse(x))&&new Date(x).toISOString()===x);
 export function next3InfinitySqlV39(role:string):string{
  if(![NEXT3_RECEIVER_ROLE,NEXT3_OWNER_ROLE_V39].includes(role))
   hold("FOREIGN_ROLE");
