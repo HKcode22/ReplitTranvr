@@ -127,9 +127,10 @@ async function execute():Promise<void>{
     scopeId:SCOPE,sourceSha:SRC,
     exactProtectedSignerMatch:true,writerSealed:true,
     writerExpiresUtc:x.writerExpiresUtc,
-    writerCredentialExpired:now>=expiry,
+    sealedWriterExpiryReached:now>=expiry,
     approvedTrialWindowActive:active,
-    writerValidThroughStopBuffer:usable,
+    sealedWriterCoversStopBuffer:usable,
+    actualDatabaseRoleLoginVerified:false,
     next:!usable?"REPAIR_SCOPED_LOGIN_BEFORE_NEW_TRIAL":
       !active?"REAUTHORIZE_FRESH_TRIAL_WINDOW_AND_RUNNER":
       "CHECK_GENUINE_STOP_AND_MONITOR_BEFORE_SEPARATE_GO",
