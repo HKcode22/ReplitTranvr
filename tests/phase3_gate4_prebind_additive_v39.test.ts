@@ -198,6 +198,66 @@ describe("Gate4 additive prebind on existing prepaid runtime, no provider",()=>{
      expect(first.originalSha256).toBe(digest(body));
    }finally{logs.mockRestore();}
  });
+ it("accepts nullable subject ID and archives unknown claimed ID as untrusted, no paid calls",async()=>{
+   const nullable=Buffer.from(JSON.stringify({
+     id:"a00a66b4-504a-4256-ad9c-1914567b76ee",
+     timestampUtc:"2026-10-26T05:30:30.000Z",
+     subscription:{id:"subscriptionTest999",
+       subject:{type:"FlightByAirportIcao",id:null}},
+     deliveryAttempt:{seqNo:0,costCredits:1},flights:[]
+   }));
+   const absentId=Buffer.from(JSON.stringify({
+     subscription:{subject:{type:"FlightByAirportIcao",id:"WSSS"}},
+     flights:[]
+   }));
+   const store=good(),info=vi.spyOn(console,"info").mockImplementation(()=>{});
+   try{
+     await httpTest(store,async base=>{
+       const url=base+"/api/v1/webhooks/aerodatabox/"+secret;
+       for(const body of [nullable,absentId]){
+         const response=await fetch(url,{
+           method:"POST",headers:{"content-type":"application/json"},body
+         });
+         expect(response.status).toBe(200);
+         expect(await response.json()).toMatchObject({
+           received:true,attribution:"none",paidAuthorization:false
+         });
+       }
+     });
+     const rows=vi.mocked(store.writeOriginal).mock.calls.map(x=>x[0]);
+     expect(rows).toHaveLength(2);
+     expect(rows[0].originalBytes.equals(nullable)).toBe(true);
+     expect(rows[0].originalSha256).toBe(digest(nullable));
+     expect(rows[0].claimedSubscriptionId).toBe("subscriptionTest999");
+     expect(rows[1].originalBytes.equals(absentId)).toBe(true);
+     expect(rows[1].claimedSubscriptionId).toBe("UNVERIFIED");
+     const log=info.mock.calls.filter(x=>x[0]==="GATE4_ALERT_HTTP_V1")
+       .map(x=>JSON.parse(String(x[1])));
+     expect(log.map(x=>x.reason)).toEqual([
+       "OFFICIAL_OPTIONAL_SUBJECT_ID_ABSENT",
+       "UNTRUSTED_SUBSCRIPTION_ID_INVALID"
+     ]);
+     expect(log.every(x=>x.stage==="ORIGINAL_STORED_VARIANT"))
+       .toBe(true);
+     const printed=JSON.stringify(log);
+     for(const privateValue of [secret,"subscriptionTest999"])
+       expect(printed).not.toContain(privateValue);
+   }finally{info.mockRestore();}
+ });
+ it("rejects structurally nonobject JSON and invalid JSON without storing",async()=>{
+   const store=good();
+   await httpTest(store,async base=>{
+     const url=base+"/api/v1/webhooks/aerodatabox/"+secret;
+     for(const [raw,status] of [
+       ["{not-json",400],["[1,2,3]",422]
+     ] as const){
+       const resp=await fetch(url,{method:"POST",
+         headers:{"content-type":"application/json"},body:raw});
+       expect(resp.status).toBe(status);
+     }
+     expect(store.writeOriginal).not.toHaveBeenCalled();
+   });
+ });
  it("rejects unsupported content types and oversized posts before storage",async()=>{
    const store=good();
    await httpTest(store,async base=>{
@@ -230,13 +290,25 @@ describe("Gate4 additive prebind on existing prepaid runtime, no provider",()=>{
          method:"POST",headers:{"content-type":"application/json"},
          body:Buffer.from('{"bad":true}')
        });
-       expect(rejected.status).toBe(422);
+       expect(rejected.status).toBe(200);
+       expect(await rejected.json()).toMatchObject({
+         received:true,attribution:"none",
+         status:"QUARANTINED_DURABLY_PENDING_ID_BINDING"
+       });
      });
      const reports=info.mock.calls
       .filter(x=>x[0]==="GATE4_ALERT_HTTP_V1")
       .map(x=>JSON.parse(String(x[1])));
-     expect(reports.map(x=>x.httpStatus)).toEqual([404,422]);
-     expect(reports.map(x=>x.stage)).toEqual(["AUTH_REJECTED","QUARANTINE_REJECTED"]);
+     expect(reports.map(x=>x.httpStatus)).toEqual([404,200]);
+     expect(reports.map(x=>x.stage)).toEqual([
+       "AUTH_REJECTED","ORIGINAL_STORED_VARIANT"
+     ]);
+     expect(reports.map(x=>x.reason)).toEqual([
+       "NONE","UNTRUSTED_SUBSCRIPTION_MISSING"
+     ]);
+     expect(store.writeOriginal).toHaveBeenCalledTimes(1);
+     expect(vi.mocked(store.writeOriginal).mock.calls[0][0]
+       .claimedSubscriptionId).toBe("UNVERIFIED");
      expect(reports.every(x=>x.completed===true)).toBe(true);
      const logged=JSON.stringify(info.mock.calls);
      expect(logged).not.toContain(secret);
