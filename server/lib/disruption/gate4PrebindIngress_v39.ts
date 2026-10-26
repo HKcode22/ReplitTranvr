@@ -89,30 +89,48 @@ export async function quarantineGate4PrebindOriginalV39(
     return result("HOLD","INDEPENDENT_SCOPE_OR_STORE_UNAVAILABLE",503);
   if(!Buffer.isBuffer(raw)||raw.length<2||raw.length>MAX_RAW_BYTES)
     return result("HOLD","ORIGINAL_BODY_UNAVAILABLE_OR_TOO_LARGE",400);
+  // Only the route's authenticated bearer path reaches this function.
+  // A provider-shaped but unfamiliar envelope must NOT be discarded before
+  // its original bytes are stored: charged SENDs cannot be reconstructed later.
+  // Quarantine remains untrusted and unattributed until separate, verified
+  // positive CREATE/V0072 ownership and offline contract review.
   let parsed:unknown;
   try{parsed=JSON.parse(raw.toString("utf8"));}
   catch{return result("HOLD","ORIGINAL_JSON_INVALID",400);}
   if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))
     return result("HOLD","ORIGINAL_ENVELOPE_INVALID",422);
   const e=parsed as Record<string,unknown>;
-  const subscription=e.subscription;
-  if(!subscription||typeof subscription!=="object"||
-     Array.isArray(subscription))
-    return result("HOLD","SUBSCRIPTION_CLAIM_MISSING",422);
-  const sub=subscription as Record<string,unknown>;
-  const subject=sub.subject;
-  if(!subject||typeof subject!=="object"||Array.isArray(subject))
-    return result("HOLD","SUBJECT_CLAIM_MISSING",422);
-  const s=subject as Record<string,unknown>;
-  if(typeof sub.id!=="string"||!CLAIM.test(sub.id)||
-    s.type!=="FlightByAirportIcao"||
-    s.id!==scope.airportIcao||
-    !Array.isArray(e.flights)||e.flights.length>250)
-    return result("HOLD","UNEXPECTED_ALERT_SCOPE_OR_ENVELOPE",422);
-  // "claimed" is untrusted: this must never become a signed owner receipt.
+  const sub=e.subscription&&typeof e.subscription==="object"&&
+    !Array.isArray(e.subscription)
+    ?e.subscription as Record<string,unknown>:null;
+  const claimedId=typeof sub?.id==="string"&&CLAIM.test(sub.id)
+    ?sub.id:"UNVERIFIED";
+  const subject=sub?.subject&&typeof sub.subject==="object"&&
+    !Array.isArray(sub.subject)
+    ?sub.subject as Record<string,unknown>:null;
+  // These safe fixed codes explain provider-contract divergence but reveal no
+  // payload value, flight identity, subscription ID or secret to logs.
+  let contractReason="ORIGINAL_ONLY_NO_OWNER_CLAIM";
+  if(!sub)contractReason="UNTRUSTED_SUBSCRIPTION_MISSING";
+  else if(claimedId==="UNVERIFIED")
+    contractReason="UNTRUSTED_SUBSCRIPTION_ID_INVALID";
+  else if(!subject)contractReason="UNTRUSTED_SUBJECT_MISSING";
+  else if(subject.type!=="FlightByAirportIcao")
+    contractReason="UNTRUSTED_SUBJECT_TYPE_DIFFERENT";
+  // Current official AeroDataBox schema permits a nullable subject.id.
+  // A null or absent subject ID is not grounds to destroy a paid original.
+  else if(subject.id!==scope.airportIcao&&
+     subject.id!==null&&subject.id!==undefined)
+    contractReason="UNTRUSTED_SUBJECT_ID_DIFFERENT";
+  else if(!Array.isArray(e.flights))
+    contractReason="UNTRUSTED_FLIGHTS_NOT_ARRAY";
+  else if(e.flights.length>250)
+    contractReason="UNTRUSTED_FLIGHTS_OVER_250";
+  else if(subject.id===null||subject.id===undefined)
+    contractReason="OFFICIAL_OPTIONAL_SUBJECT_ID_ABSENT";
   const sha=createHash("sha256").update(raw).digest("hex");
   const original:Gate4PrebindOriginalV39={
-    ...scope,claimedSubscriptionId:sub.id as string,
+    ...scope,claimedSubscriptionId:claimedId,
     originalSha256:sha,originalBytes:Buffer.from(raw)
   };
   try{
@@ -131,5 +149,5 @@ export async function quarantineGate4PrebindOriginalV39(
     return result("HOLD",reason,503);
   }
   return result("QUARANTINED_DURABLY_PENDING_ID_BINDING",
-    "ORIGINAL_ONLY_NO_OWNER_CLAIM",200);
+    contractReason,200);
 }

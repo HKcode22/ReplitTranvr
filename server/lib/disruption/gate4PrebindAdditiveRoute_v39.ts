@@ -23,12 +23,27 @@ const name=/^gate4_receiver_[a-z0-9_]{4,60}$/;
 const SAFE_LOG_STAGES_V39=new Set([
  "AUTH_CHECK","AUTH_REJECTED","BODY_READING","MEDIA_REJECTED",
  "RAW_PARSER_REJECTED","ORIGINAL_BODY_MISSING","QUARANTINE_RUNNING",
- "QUARANTINE_EXCEPTION","QUARANTINE_REJECTED","ORIGINAL_STORED"
+ "QUARANTINE_EXCEPTION","QUARANTINE_REJECTED","ORIGINAL_STORED",
+  "ORIGINAL_STORED_VARIANT"
 ]);
 function safeLogStageV39(res:Response):string{
  const candidate:unknown=res.locals.gate4StageV39;
  return typeof candidate==="string"&&SAFE_LOG_STAGES_V39.has(candidate)
   ?candidate:"UNKNOWN";
+}
+/** Emit only exact known stage reasons; no incoming bytes or field values. */
+const SAFE_LOG_REASONS_V39=new Set([
+  "ORIGINAL_ONLY_NO_OWNER_CLAIM","ORIGINAL_JSON_INVALID",
+  "ORIGINAL_ENVELOPE_INVALID","UNTRUSTED_SUBSCRIPTION_MISSING",
+  "UNTRUSTED_SUBSCRIPTION_ID_INVALID","UNTRUSTED_SUBJECT_MISSING",
+  "UNTRUSTED_SUBJECT_TYPE_DIFFERENT","UNTRUSTED_SUBJECT_ID_DIFFERENT",
+  "UNTRUSTED_FLIGHTS_NOT_ARRAY","UNTRUSTED_FLIGHTS_OVER_250",
+  "OFFICIAL_OPTIONAL_SUBJECT_ID_ABSENT"
+]);
+function safeLogReasonV39(res:Response):string{
+  const value:unknown=res.locals.gate4ReasonV39;
+  return typeof value==="string"&&SAFE_LOG_REASONS_V39.has(value)
+    ?value:"NONE";
 }
 type Config={scope:Gate4PrebindScopeV39;secret:string;databaseUrl:string;dbRole:string};
 function fail():never{throw Error("GATE4_PREBIND_ADDON_CONFIG_HOLD");}
@@ -132,14 +147,14 @@ export function mountGate4PrebindAdditiveRouteV39(
     finished=true;
     console.info("GATE4_ALERT_HTTP_V1",JSON.stringify({
      httpStatus:res.statusCode,completed:true,
-     stage:safeLogStageV39(res),
+     stage:safeLogStageV39(res),reason:safeLogReasonV39(res),
      elapsedMs:Math.max(0,Date.now()-t)
     }));
    });
    res.once("close",()=>{
     if(!finished)console.warn("GATE4_ALERT_HTTP_V1",JSON.stringify({
      httpStatus:res.statusCode,completed:false,
-     stage:safeLogStageV39(res),
+     stage:safeLogStageV39(res),reason:safeLogReasonV39(res),
      elapsedMs:Math.max(0,Date.now()-t)
     }));
    });
@@ -189,8 +204,11 @@ export function mountGate4PrebindAdditiveRouteV39(
     res.locals.gate4StageV39="QUARANTINE_EXCEPTION";
     res.status(503).json({received:false,status:"HOLD"});return;
    }
+   res.locals.gate4ReasonV39=receipt.reason;
    res.locals.gate4StageV39=receipt.httpStatus===200
-    ?"ORIGINAL_STORED":"QUARANTINE_REJECTED";
+    ?(receipt.reason==="ORIGINAL_ONLY_NO_OWNER_CLAIM"
+       ?"ORIGINAL_STORED":"ORIGINAL_STORED_VARIANT")
+    :"QUARANTINE_REJECTED";
    res.status(receipt.httpStatus).json({
      received:receipt.responseAcknowledged,status:receipt.status,
      reason:receipt.responseAcknowledged?undefined:receipt.reason,

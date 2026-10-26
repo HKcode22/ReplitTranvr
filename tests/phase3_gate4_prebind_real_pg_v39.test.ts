@@ -233,6 +233,44 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
       await receiver.query("RESET ROLE").catch(()=>undefined);
       receiver.release();
     }
+    // Live 422 regression: preserve authenticated provider-style JSON
+    // variant as exact bytes; do not attribute it to a paid provider owner.
+    const nullableOriginal=Buffer.from(JSON.stringify({
+      subscription:{id:"originalVariant999",
+        subject:{type:"FlightByAirportIcao",id:null}},
+      flights:[{number:"CI100",status:"Expected"}]
+    }));
+    expect(await quarantineGate4PrebindOriginalV39(
+      scope,nullableOriginal,store)).toMatchObject({
+      httpStatus:200,responseAcknowledged:true,
+      attributedToOwnedSubscription:false,sourceOwnerConfirmed:false,
+      paidAuthorization:false,
+      reason:"OFFICIAL_OPTIONAL_SUBJECT_ID_ABSENT"
+    });
+    const missingId=Buffer.from(JSON.stringify({
+      subscription:{subject:{type:"FlightByAirportIcao",id:"WSSS"}},
+      flights:[]
+    }));
+    expect(await quarantineGate4PrebindOriginalV39(
+      scope,missingId,store)).toMatchObject({
+      httpStatus:200,attributedToOwnedSubscription:false,
+      reason:"UNTRUSTED_SUBSCRIPTION_ID_INVALID"
+    });
+    const captured=(await pool.query(
+      "SELECT original_wire,original_sha256,claimed_provider_subscription_id "+
+      "FROM clean.gate4_alert_prebind_original_v39 "+
+      "WHERE scope_id=$1::uuid AND original_sha256 IN ($2,$3)",
+      [scope.scopeId,digest(nullableOriginal),digest(missingId)]
+    )).rows;
+    expect(captured).toHaveLength(2);
+    expect(captured.every(x=>Buffer.isBuffer(x.original_wire)&&
+      digest(x.original_wire)===x.original_sha256)).toBe(true);
+    const bySha=new Map(captured.map(x=>[x.original_sha256,x]));
+    expect(bySha.get(digest(nullableOriginal))?.original_wire
+      .equals(nullableOriginal)).toBe(true);
+    expect(bySha.get(digest(missingId))?.claimed_provider_subscription_id)
+      .toBe("UNVERIFIED");
+    console.log("GATE4_PG16_AUTH_RAW_FIRST_VARIANT_PERSISTED");
     const safety=await pool.connect();
     try{
       await safety.query("SET ROLE gate4_safety_reader_20261022");
@@ -419,7 +457,7 @@ suite("Gate4 staged prebind V0071 real disposable PG16 only",()=>{
         expect((await pool.query(
           "SELECT count(*)::int AS n FROM "+
           "clean.gate4_alert_prebind_original_v39"
-        )).rows[0].n).toBe(2);
+        )).rows[0].n).toBe(4); // two canonical + two raw-first quarantine variants
         // The separately authorized safety reader must see BOTH exact
         // bindings so it can independently stop the new owned ID.
         const scopedSafety=await pool.connect();
