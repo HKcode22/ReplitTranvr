@@ -91,9 +91,15 @@ function sgLocal(ms){
 }
 function validTime(x){
  const s=x?.utc;
- return typeof s==="string"&&
-  /^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d{1,9})?)?(?:Z|\+00:00)$/.test(s)&&
-  Number.isFinite(Date.parse(s));
+ // AeroDataBox examples include e.g. "2023-10-04 18:01Z" (space).
+ // .utc is not always strict RFC3339 T; allow either explicit UTC style.
+ if(typeof s!=="string"||
+    !/^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d(?:\.\d{1,9})?)?(?:Z|\+00:00)$/.test(s))
+   return false;
+ const normalized=s.replace(" ","T");
+ const ms=Date.parse(normalized);
+ return Number.isFinite(ms)&&
+   new Date(ms).toISOString().slice(0,16)===normalized.slice(0,16);
 }
 function survey(data,withLocation){
  if(!data||typeof data!=="object"||Array.isArray(data)||
@@ -103,6 +109,8 @@ function survey(data,withLocation){
  const out={
   withLocation,departureObjects:data.departures.length,malformedObjects:0,
   scheduledUtcPresent:0,revisedUtcPresent:0,runwayUtcPresent:0,
+  scheduledUtcNonempty:0,revisedUtcNonempty:0,runwayUtcNonempty:0,
+  sourceDepartureObjects:0,sourceMovementObjects:0,
   anyLiveQuality:0,operatorCodeshare:0,marketingCodeshare:0,
   unknownCodeshare:0,provisionalDistinctOperatingLegKeys:0,
   runwayTimestampActualityProven:false,
@@ -112,18 +120,27 @@ function survey(data,withLocation){
  };
  for(const x of data.departures){
   if(!x||typeof x!=="object"||Array.isArray(x)){out.malformedObjects++;continue;}
-  const d=x.departure&&typeof x.departure==="object"?x.departure:{};
+  const isObj=y=>y!==null&&typeof y==="object"&&!Array.isArray(y);
+  const dep=isObj(x.departure)?x.departure:null;
+  const mov=isObj(x.movement)?x.movement:null;
+  const d=dep??mov??{};
+  if(dep)out.sourceDepartureObjects++;
+  else if(mov)out.sourceMovementObjects++;
+  const nonempty=t=>typeof t?.utc==="string"&&t.utc.trim().length>0;
+  if(nonempty(d.scheduledTime))out.scheduledUtcNonempty++;
+  if(nonempty(d.revisedTime))out.revisedUtcNonempty++;
+  if(nonempty(d.runwayTime))out.runwayUtcNonempty++;
   if(validTime(d.scheduledTime))out.scheduledUtcPresent++;
   if(validTime(d.revisedTime))out.revisedUtcPresent++;
   if(validTime(d.runwayTime))out.runwayUtcPresent++;
-  if(Array.isArray(d.quality)&&d.quality.includes("Live"))out.anyLiveQuality++;
+  if((Array.isArray(d.quality)?d.quality:Array.isArray(x.quality)?x.quality:[]).includes("Live"))out.anyLiveQuality++;
   const cs=x.codeshareStatus;
   if(cs==="IsOperator")out.operatorCodeshare++;
   else if(cs==="IsCodeshared")out.marketingCodeshare++;
   else out.unknownCodeshare++;
   // Process-local keys only. Never written to JSON receipt/logs.
   const n=typeof x.number==="string"?x.number:"";
-  const a=x.arrival?.airport?.icao??"";
+  const a=x.arrival?.airport?.icao??mov?.airport?.icao??"";
   const sched=d.scheduledTime?.utc??"";
   if(cs==="IsOperator"&&n&&a&&validTime(d.scheduledTime))
     keys.add(JSON.stringify([n,a,sched]));
