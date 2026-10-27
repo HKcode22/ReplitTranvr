@@ -1,0 +1,90 @@
+import {beforeAll,afterAll,describe,it,expect} from "vitest";
+import {Pool} from "pg";
+import {readFileSync} from "node:fs";
+import {runInNewContext} from "node:vm";
+const incidentSource=readFileSync("scripts/v39_gate05e_wsss_one_prospective_fids_rawfirst_20261027.mjs","utf8");
+const forensicSource=readFileSync("scripts/v39_gate05e_paid_receipt_db_readonly_forensics_20261027.mjs","utf8");
+function sqlFromSource(source:string,start:string,end:string):string{
+ const a=source.indexOf(start),b=source.indexOf(end,a+start.length);
+ if(a<0||b<0)throw Error("GATE05E_SQL_SOURCE_DRIFT");
+ const sql=runInNewContext(source.slice(a+start.length,b),{}, {timeout:1000});
+ if(typeof sql!=="string"||!/^SELECT\s/i.test(sql))throw Error("SQL_NOT_SELECT");
+ return sql;
+}
+let pool:Pool;
+beforeAll(async()=>{
+ if(process.env.P2G_DISPOSABLE_POSTGRES!=="YES"||
+    process.env.AERODATABOX_API_KEY||process.env.V39_DATABASE_RUNTIME_URL)
+   throw Error("G05E_REQUIRE_NO_PROVIDER_DISPOSABLE_PG");
+ const u=new URL(process.env.P2G_FIXTURE_POSTGRES_URL??"");
+ if(u.hostname!=="127.0.0.1"||u.pathname!=="/p2g_stage1_fixture")
+   throw Error("G05E_DB_TARGET_NOT_FIXTURE");
+ pool=new Pool({connectionString:u.toString()});
+ await pool.query([
+ "CREATE SCHEMA IF NOT EXISTS clean;",
+ "CREATE TABLE clean.fids_query_response(",
+ "population_query_id uuid PRIMARY KEY,source_airport_icao text,",
+ "service_window_start_utc timestamptz,service_window_end_utc timestamptz,",
+ "fids_retrieval_utc timestamptz,raw_persisted_at_utc timestamptz,",
+ "available_at timestamptz,raw_expired_at_utc timestamptz,",
+ "response_hash text,raw_payload jsonb,fids_protocol_version text);",
+ "CREATE TABLE clean.flight_population(",
+ "id bigserial PRIMARY KEY,population_query_id uuid,",
+ "population_role text,codeshare_resolution_status text,",
+ "dep_scheduled_utc timestamptz,available_at timestamptz,",
+ "provider_content_expired_at_utc timestamptz);"
+ ].join(" "));
+ const id="282a663e-18ef-4af0-9181-c95cde9430e6";
+ await pool.query([
+ "INSERT INTO clean.fids_query_response",
+ "(population_query_id,source_airport_icao,service_window_start_utc,",
+ "service_window_end_utc,fids_retrieval_utc,raw_persisted_at_utc,",
+ "available_at,response_hash,raw_payload,fids_protocol_version)",
+ "VALUES ($1,'WSSS','2026-10-28T11:26:00Z','2026-10-28T11:36:00Z',",
+ "'2026-10-27T11:18:35Z','2026-10-27T11:18:38Z',",
+ "'2026-10-27T11:18:38Z',$2,'{}'::jsonb,",
+ "'gate05e.first-prospective-rawfirst@1')"
+ ].join(" "),[id,"a".repeat(64)]);
+ await pool.query([
+ "INSERT INTO clean.flight_population",
+ "(population_query_id,population_role,codeshare_resolution_status,",
+ "dep_scheduled_utc,available_at)",
+ "VALUES($1,'requested_airport_primary','confirmed_operating_leg',",
+ "'2026-10-28T11:30:00Z','2026-10-27T11:18:38Z')"
+ ].join(" "),[id]);
+});
+afterAll(async()=>{
+ if(!pool)return;
+ await pool.query("DROP TABLE IF EXISTS clean.flight_population");
+ await pool.query("DROP TABLE IF EXISTS clean.fids_query_response");
+ await pool.end();
+});
+describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("Gate05e original paid source SQL and zero-provider recovery",()=>{
+ it("parses repaired exact paid-readback SQL against actual PostgreSQL 16",async()=>{
+   const sql=sqlFromSource(incidentSource,
+     "const readback=await pool.query(",
+     ",[observed.populationQueryId]);");
+   expect(sql).not.toMatch(/,\s*FROM\s+clean\./i);
+   const q=await pool.query(sql,["282a663e-18ef-4af0-9181-c95cde9430e6"]);
+   expect(q.rows).toHaveLength(1);
+   expect(q.rows[0].raw_present).toBe(true);
+   expect(q.rows[0].rows).toBe(1);
+   expect(q.rows[0].before_t24).toBe(1);
+ });
+ it("confirms strictly READ ONLY recovery query syntax and real returned source counts",async()=>{
+   const sql=sqlFromSource(forensicSource,"const query=",";\nconst utc=");
+   expect(sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE)\b/i);
+   const client=await pool.connect();
+   try{
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    expect((await client.query("SHOW transaction_read_only")).rows[0].transaction_read_only).toBe("on");
+    const q=await client.query(sql,["gate05e.first-prospective-rawfirst@1",
+      "2026-10-27T11:00:00Z","2026-10-27T12:00:00Z"]);
+    expect(q.rows).toHaveLength(1);
+    expect(q.rows[0].has_raw).toBe(true);
+    expect(q.rows[0].normalized_rows).toBe(1);
+    expect(q.rows[0].before_t24).toBe(1);
+    expect(sql).not.toContain("SELECT q.raw_payload");
+   }finally{await client.query("ROLLBACK");client.release();}
+ });
+});
