@@ -10,10 +10,14 @@ function row(over: Record<string, unknown> = {}) {
   return {
     analytic_identity_id: "UA123_KLAX_KSFO_20260908_ab12cd34",
     dep_scheduled_utc: new Date("2026-09-09T12:00:00Z"),
+    first_observed_schedule_utc: new Date("2026-09-09T12:00:00Z"),
+    first_schedule_query_id:"first-verified-population-query",
+    available_at: new Date("2026-09-08T11:59:00Z"),
     population_query_id: "00000000-0000-0000-0000-000000000001",
     response_hash: "r".repeat(64),
     population_role: "requested_airport_primary",
     scope_classification: "confirmed_core",
+    codeshare_resolution_status: "confirmed_operating_leg",
     ...over,
   };
 }
@@ -27,12 +31,19 @@ function fakePool(rows: unknown[], insertRowCount = 1, onInsert: (params: unknow
   };
 }
 const CUTOFF = new Date("2026-09-08T12:00:00Z");
-const FROZEN_T = { milestone: "scheduled_gate_out_utc", version: "gate05-construct@1", artifactHash: "f".repeat(64) };
+const FROZEN_T = { milestone: "departure.scheduledTime.utc", version: "gate05-construct@1",
+  artifactHash: "f".repeat(64), semanticsEvidenceSha256: "e".repeat(64),
+  verifiedProviderNativeSchedule: true as const };
 
 describe("selected T and horizon eligibility", () => {
   it("uses the actual frozen selected-T resolver", () => {
     expect(resolveSelectedTMilestone(row(), FROZEN_T)?.toISOString()).toBe("2026-09-09T12:00:00.000Z");
     expect(resolveSelectedTMilestone(row(), { ...FROZEN_T, milestone: "unverified_field" })).toBeNull();
+    expect(resolveSelectedTMilestone(row({first_observed_schedule_utc:null}),FROZEN_T)).toBeNull();
+    // The latest retimed departure MUST NOT redefine T for prior snapshots.
+    expect(resolveSelectedTMilestone(row({
+      dep_scheduled_utc:new Date("2026-09-09T13:30:00Z")
+    }),FROZEN_T)?.toISOString()).toBe("2026-09-09T12:00:00.000Z");
     expect(resolveSelectedTMilestone(row(), { ...FROZEN_T, artifactHash: "not-a-hash" })).toBeNull();
   });
   it("computes horizon against selected T", () => {
@@ -40,7 +51,9 @@ describe("selected T and horizon eligibility", () => {
     expect(horizonEligibleForCutoff(t24, CUTOFF, "T-24h")).toBe(true);
     const t2 = new Date("2026-09-08T14:00:00Z");
     expect(horizonEligibleForCutoff(t2, CUTOFF, "T-24h")).toBe(false);
-    expect(horizonEligibleForCutoff(t2, CUTOFF, "T-90m")).toBe(true);
+    expect(horizonEligibleForCutoff(t2, CUTOFF, "T-90m")).toBe(false);
+    expect(horizonEligibleForCutoff(new Date("2026-09-08T13:30:00Z"), CUTOFF, "T-90m")).toBe(true);
+    expect(horizonEligibleForCutoff(new Date("2026-09-09T13:00:00Z"), CUTOFF, "T-24h")).toBe(false);
   });
 });
 
@@ -59,28 +72,54 @@ describe("materializePreSnapshotsForCutoff", () => {
     const result = await materializePreSnapshotsForCutoff(fakePool([row()], 1, (p) => inserted.push(p)), {
       cutoffUtc: CUTOFF, batchId: null, frameHash: "f", configHash: "c", selectedTMilestoneConfig: FROZEN_T,
     });
-    expect(result.built).toBe(3);
-    expect(result.inserted).toBe(3);
+    expect(result.built).toBe(1);
+    expect(result.inserted).toBe(1);
     expect(result.alreadyExisting).toBe(0);
-    expect(inserted).toHaveLength(3);
+    expect(inserted).toHaveLength(1);
   });
 
   it("distinguishes expected idempotent conflicts from failures", async () => {
     const result = await materializePreSnapshotsForCutoff(fakePool([row()], 0), {
       cutoffUtc: CUTOFF, batchId: null, frameHash: null, configHash: null, selectedTMilestoneConfig: FROZEN_T,
     });
-    expect(result.built).toBe(3);
+    expect(result.built).toBe(1);
     expect(result.inserted).toBe(0);
-    expect(result.alreadyExisting).toBe(3);
+    expect(result.alreadyExisting).toBe(1);
   });
 
   it("opposite movement never snapshots and missing T blocks as t_unavailable", async () => {
     const result = await materializePreSnapshotsForCutoff(fakePool([
       row({ population_role: "opposite_movement_context" }),
-      row({ analytic_identity_id: "OTHER", dep_scheduled_utc: null }),
+      row({ analytic_identity_id: "OTHER", dep_scheduled_utc: null, first_observed_schedule_utc: null }),
     ]), { cutoffUtc: CUTOFF, batchId: null, frameHash: null, configHash: null, selectedTMilestoneConfig: FROZEN_T });
     expect(result.built).toBe(0);
     expect(result.blocked).toEqual({ not_primary_role: 1, t_unavailable: 3 });
+  });
+
+  it("refuses marketing codeshare from PRE denominator",async()=>{
+    const result=await materializePreSnapshotsForCutoff(
+      fakePool([row({codeshare_resolution_status:"resolved_marketing"})]),{
+        cutoffUtc:CUTOFF,batchId:null,frameHash:null,configHash:null,
+        selectedTMilestoneConfig:FROZEN_T,horizons:["T-24h"]});
+    expect(result.built).toBe(0);
+    expect(result.blocked.unverified_operating_leg).toBe(1);
+  });
+
+  it("filters post-cutoff and absent population availability despite mock SELECT",async()=>{
+    for(const available_at of [new Date("2026-09-08T12:00:01Z"),null]){
+      const result=await materializePreSnapshotsForCutoff(fakePool([row({available_at})]),{
+        cutoffUtc:CUTOFF,batchId:null,frameHash:null,configHash:null,
+        selectedTMilestoneConfig:FROZEN_T,horizons:["T-24h"]});
+      expect(result.built).toBe(0);
+      expect(result.blocked.population_not_available_by_cutoff).toBe(1);
+    }
+  });
+  it("does not accept mere arbitrary SHA as verified T provenance",async()=>{
+    const result=await materializePreSnapshotsForCutoff(fakePool([row()]),{
+      cutoffUtc:CUTOFF,batchId:null,frameHash:null,configHash:null,
+      selectedTMilestoneConfig:{...FROZEN_T,semanticsEvidenceSha256:"INVALID"}});
+    expect(result.built).toBe(0);
+    expect(result.blocked.t_unavailable).toBe(3);
   });
 
   it("SELECT and INSERT DB failures throw fail-closed", async () => {
@@ -98,7 +137,7 @@ describe("materializePreSnapshotsForCutoff", () => {
       },
     };
     await expect(materializePreSnapshotsForCutoff(badInsert, {
-      cutoffUtc: CUTOFF, batchId: null, horizons: ["T-90m"], frameHash: null, configHash: null, selectedTMilestoneConfig: FROZEN_T,
+      cutoffUtc: CUTOFF, batchId: null, horizons: ["T-24h"], frameHash: null, configHash: null, selectedTMilestoneConfig: FROZEN_T,
     })).rejects.toThrow("insert failed");
     expect(calls).toBe(1);
   });

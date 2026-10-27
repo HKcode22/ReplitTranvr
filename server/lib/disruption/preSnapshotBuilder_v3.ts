@@ -1,5 +1,5 @@
 /** V3.9-f.8 PRE snapshot builder/materializer — Phase 0F. */
-export const PRE_SNAPSHOT_BUILDER_VERSION = "preSnapshotBuilder_v3@1.1.0";
+export const PRE_SNAPSHOT_BUILDER_VERSION = "preSnapshotBuilder_v3@1.2.0";
 export const PRE_HORIZONS = ["T-24h", "T-6h", "T-90m"] as const;
 export type PreHorizon = (typeof PRE_HORIZONS)[number];
 export const PRE_PREDICTION_STATE = "PRE_DEPARTURE" as const;
@@ -21,6 +21,8 @@ export interface PrePopulationInput {
   flightInstanceId: string;
   populationQueryId: string | null;
   populationMemberAtCutoff: boolean;
+  /** Durable system-availability of the qualifying population observation. */
+  populationObservationAvailableAtUtc: Date | null;
   horizonEligible: boolean;
   horizon: PreHorizon;
   selectedTMilestoneUtc: Date | null;
@@ -53,7 +55,7 @@ export interface PreSnapshot {
 }
 export type PreSnapshotOutcome =
   | { status: "snapshot"; snapshot: PreSnapshot }
-  | { status: "blocked"; reason: "not_population_member" | "not_horizon_eligible" | "t_unavailable" };
+  | { status: "blocked"; reason: "not_population_member" | "population_not_available_at_cutoff" | "not_horizon_eligible" | "t_unavailable" };
 
 export function snapshotExists(populationMemberAtCutoff: boolean, horizonEligible: boolean): boolean {
   return populationMemberAtCutoff && horizonEligible;
@@ -72,10 +74,16 @@ export function selectFeatureValue(feature: PreFeatureInput, cutoffUtc: Date): P
 
 export function buildPreSnapshot(input: PrePopulationInput): PreSnapshotOutcome {
   if (!input.populationMemberAtCutoff) return { status: "blocked", reason: "not_population_member" };
+  const availability = input.populationObservationAvailableAtUtc?.getTime();
+  const cutoff = input.predictionCutoffUtc?.getTime();
+  if (availability === undefined || !Number.isFinite(availability) ||
+      !Number.isFinite(cutoff) || availability > cutoff)
+    return { status: "blocked", reason: "population_not_available_at_cutoff" };
   if (!input.selectedTMilestoneUtc || !Number.isFinite(input.selectedTMilestoneUtc.getTime())) {
     return { status: "blocked", reason: "t_unavailable" };
   }
-  if (!input.horizonEligible) return { status: "blocked", reason: "not_horizon_eligible" };
+  if (!input.horizonEligible || !horizonEligibleForCutoff(input.selectedTMilestoneUtc, input.predictionCutoffUtc, input.horizon))
+    return { status: "blocked", reason: "not_horizon_eligible" };
   const features = input.features.map((f) => selectFeatureValue(f, input.predictionCutoffUtc));
   const missingnessFlags: Record<string, string | null> = {};
   for (const f of features) missingnessFlags[f.featureName] = f.missing ? (f.missingReason ?? "missing") : null;
@@ -147,21 +155,28 @@ export interface SelectedTMilestoneConfig {
   milestone: string;
   version: string;
   artifactHash: string;
+  /** Explicit reviewed admission; an arbitrary SHA string alone is NOT provenance. */
+  verifiedProviderNativeSchedule: true;
+  /** SHA256 of the independently reviewed source-semantics evidence artifact. */
+  semanticsEvidenceSha256: string;
 }
 
 export function resolveSelectedTMilestone(
-  row: { dep_scheduled_utc?: unknown },
+  row: { first_observed_schedule_utc?: unknown },
   config: SelectedTMilestoneConfig | null,
 ): Date | null {
-  if (!config || !/^[a-f0-9]{64}$/i.test(config.artifactHash) || !config.version.trim()) return null;
-  const allowed = new Set<SelectedTMilestone>([
-    "departure.scheduledTime.utc",
-    "scheduled_gate_out_utc",
-    "dep_scheduled_utc",
-  ]);
-  if (!allowed.has(config.milestone as SelectedTMilestone)) return null;
-  if (!row.dep_scheduled_utc) return null;
-  const d = new Date(row.dep_scheduled_utc as any);
+  if (!config || config.verifiedProviderNativeSchedule !== true ||
+      !/^[a-f0-9]{64}$/i.test(config.artifactHash) ||
+      !/^[a-f0-9]{64}$/i.test(config.semanticsEvidenceSha256 ?? "") ||
+      !config.version?.trim()) return null;
+  // f.8 §6.0: no FAA scheduled_gate_out alias or legacy DB-column selection.
+  // Semantic evidence must independently establish the chosen native schedule
+  // milestone; this reviewer-input flag is NOT itself an external certificate.
+  if (config.milestone !== "departure.scheduledTime.utc") return null;
+  if (!row.first_observed_schedule_utc) return null;
+  const raw = row.first_observed_schedule_utc;
+  if (!(raw instanceof Date) && typeof raw !== "string") return null;
+  const d = raw instanceof Date ? raw : new Date(raw);
   return Number.isFinite(d.getTime()) ? d : null;
 }
 
@@ -185,16 +200,40 @@ type QueryPool = { query: (text: string, params: unknown[]) => Promise<{ rows: a
 
 export function horizonEligibleForCutoff(selectedTUtc: Date | null, cutoffUtc: Date, horizon: PreHorizon): boolean {
   if (!selectedTUtc || !Number.isFinite(selectedTUtc.getTime())) return false;
-  return selectedTUtc.getTime() - cutoffUtc.getTime() >= PRE_HORIZON_OFFSET_MIN[horizon] * 60_000;
+  // Exact T-horizon equality, not >=: earlier/later cutoffs are *different
+  // predictions* and must not be mislabeled as this pre-registered horizon.
+  return Number.isFinite(cutoffUtc.getTime()) &&
+    selectedTUtc.getTime() - cutoffUtc.getTime() === PRE_HORIZON_OFFSET_MIN[horizon] * 60_000;
 }
 
 export async function materializePreSnapshotsForCutoff(pool: QueryPool, input: PreMaterializeInput): Promise<PreMaterializeResult> {
   const horizons = input.horizons ?? PRE_HORIZONS;
   const res = await pool.query(
-    `SELECT analytic_identity_id, dep_scheduled_utc, population_query_id,
-            response_hash, population_role, scope_classification
-       FROM clean.flight_population
-      WHERE cutoff_utc = $1 AND source_type = 'fids'`,
+    `WITH asof AS (
+       SELECT analytic_identity_id, population_query_id, response_hash,
+              population_role, scope_classification, codeshare_resolution_status,
+              available_at, fids_retrieval_utc, id,
+              FIRST_VALUE(dep_scheduled_utc) OVER (
+                PARTITION BY analytic_identity_id
+                ORDER BY available_at ASC, id ASC
+              ) AS first_observed_schedule_utc,
+              FIRST_VALUE(population_query_id) OVER (
+                PARTITION BY analytic_identity_id
+                ORDER BY available_at ASC, id ASC
+              ) AS first_schedule_query_id
+         FROM clean.flight_population
+        WHERE source_type = 'fids'
+          AND population_role = 'requested_airport_primary'
+          AND scope_classification = 'confirmed_core'
+          AND codeshare_resolution_status = 'confirmed_operating_leg'
+          AND dep_scheduled_utc IS NOT NULL
+          AND provider_content_expired_at_utc IS NULL
+          AND available_at IS NOT NULL AND available_at <= $1
+          AND cutoff_utc <= $1
+     )
+     SELECT DISTINCT ON (analytic_identity_id) *
+       FROM asof
+      ORDER BY analytic_identity_id, available_at DESC, id DESC`,
     [input.cutoffUtc],
   );
   const blocked: Record<string, number> = {};
@@ -205,17 +244,27 @@ export async function materializePreSnapshotsForCutoff(pool: QueryPool, input: P
 
   for (const row of res.rows) {
     if (row.population_role !== "requested_airport_primary") { tally("not_primary_role"); continue; }
+    if (row.scope_classification !== "confirmed_core") { tally("unverified_scope"); continue; }
+    if (row.codeshare_resolution_status !== "confirmed_operating_leg") { tally("unverified_operating_leg"); continue; }
+    const availableAt = row.available_at instanceof Date
+      ? row.available_at : typeof row.available_at === "string"
+      ? new Date(row.available_at) : null;
+    if (!availableAt || !Number.isFinite(availableAt.getTime()) ||
+        availableAt.getTime() > input.cutoffUtc.getTime()) {
+      tally("population_not_available_by_cutoff"); continue;
+    }
     const selectedT = resolveSelectedTMilestone(row, input.selectedTMilestoneConfig);
     for (const horizon of horizons) {
       const outcome = buildPreSnapshot({
         flightInstanceId: String(row.analytic_identity_id),
         populationQueryId: row.population_query_id ?? null,
         populationMemberAtCutoff: true,
+        populationObservationAvailableAtUtc: availableAt,
         horizonEligible: horizonEligibleForCutoff(selectedT, input.cutoffUtc, horizon),
         horizon,
         selectedTMilestoneUtc: selectedT,
         selectedTVersion: selectedT && input.selectedTMilestoneConfig
-          ? `${input.selectedTMilestoneConfig.milestone}:${input.selectedTMilestoneConfig.version}:${input.selectedTMilestoneConfig.artifactHash}`
+          ? `${input.selectedTMilestoneConfig.milestone}:${input.selectedTMilestoneConfig.version}:${input.selectedTMilestoneConfig.artifactHash}:${row.first_schedule_query_id ?? "no-first-id"}`
           : null,
         predictionCutoffUtc: input.cutoffUtc,
         features: [],

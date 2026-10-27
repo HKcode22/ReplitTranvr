@@ -69,6 +69,32 @@ describe("V3.9 FIDS service-date identity", () => {
     expect(persisted[0].depScheduledUtc).toBeNull();
   });
 
+  it("does not count a marketing codeshare as a confirmed physical operating leg",async()=>{
+    const persisted:PopulationRow[]=[];
+    const makeFlight=(number:string,status:"IsOperator"|"IsCodeshared")=>({
+      id:null,number,codeshareStatus:status,
+      isCargo:false,isPrivate:false,isCharter:false,
+      departure:{airport:{icao:"KLAX",iata:"LAX"},
+        scheduledTime:{utc:"2026-09-01 18:00Z"}},
+      arrival:{airport:{icao:"KSFO",iata:"SFO"},
+        scheduledTime:{utc:"2026-09-01 19:00Z"}}
+    });
+    await fetchFidsPopulation({...BASE,direction:"Departure"},{
+      fetchAirport:async()=>({departures:[
+        makeFlight("UA123","IsOperator"),makeFlight("AC999","IsCodeshared")
+      ],arrivals:[]}),
+      now:()=>new Date("2026-09-01T18:05:00Z"),
+      persist:async(_q,rows)=>{persisted.push(...rows);return rows.length;}
+    });
+    expect(persisted).toHaveLength(2);
+    const op=persisted.find(x=>x.flightNumber==="UA123");
+    const marketing=persisted.find(x=>x.flightNumber==="AC999");
+    expect(op?.codeshareResolutionStatus).toBe("confirmed_operating_leg");
+    expect(marketing?.codeshareResolutionStatus).toBe("resolved_marketing");
+    expect(marketing?.canonicalFlightInstanceId).toBeNull();
+    expect(marketing?.analyticIdentityId).toMatch(/^provisional:/);
+  });
+
   it("invalid airport timezone refuses the census before any provider call", async () => {
     let calls = 0;
     await expect(fetchFidsPopulation({ ...BASE, ianaTimezone: "not-a-zone" }, {

@@ -29,13 +29,13 @@ export interface TimestampTaxonomy {
  * actual_* aliases pre-Gate-0.5.
  */
 export const PROVIDER_TO_FAA_MAPPING: Record<string, { target: string; verified: boolean }> = {
-  "departure.scheduledTime.utc": { target: "scheduled_gate_out_utc", verified: true },
-  "departure.revisedTime.utc": { target: "revised_gate_out_utc", verified: true },
-  "departure.predictedTime.utc": { target: "predicted_gate_out_utc", verified: true },
+  "departure.scheduledTime.utc": { target: "scheduled_gate_out_utc", verified: false },
+  "departure.revisedTime.utc": { target: "revised_gate_out_utc", verified: false },
+  "departure.predictedTime.utc": { target: "predicted_gate_out_utc", verified: false },
   "departure.runwayTime.utc": { target: "actual_gate_out_utc", verified: false },
-  "arrival.scheduledTime.utc": { target: "scheduled_gate_in_utc", verified: true },
-  "arrival.revisedTime.utc": { target: "revised_gate_in_utc", verified: true },
-  "arrival.predictedTime.utc": { target: "predicted_gate_in_utc", verified: true },
+  "arrival.scheduledTime.utc": { target: "scheduled_gate_in_utc", verified: false },
+  "arrival.revisedTime.utc": { target: "revised_gate_in_utc", verified: false },
+  "arrival.predictedTime.utc": { target: "predicted_gate_in_utc", verified: false },
   "arrival.runwayTime.utc": { target: "actual_wheels_on_utc", verified: false },
 };
 
@@ -87,13 +87,13 @@ export function buildSnapshotTimestamps(
   receivedAtUtc: Date,
 ): TimestampTaxonomy {
   return {
-    scheduledGateOutUtc: flight.depScheduledUtc ?? null,
+    scheduledGateOutUtc: null, // provider-native scheduledTime is NOT a verified FAA gate-out alias
     scheduledWheelsOffUtc: null,
-    revisedGateOutUtc: flight.depRevisedUtc ?? null,
+    revisedGateOutUtc: null, // revisedTime may be estimated gate OR runway
     predictedGateOutUtc: null,
     actualGateOutUtc: null,
     actualWheelsOffUtc: null,
-    scheduledGateInUtc: flight.arrScheduledUtc ?? null,
+    scheduledGateInUtc: null, // provider schedule lacks verified FAA gate-in equivalence
     scheduledWheelsOnUtc: null,
     actualGateInUtc: null,
     actualWheelsOnUtc: null,
@@ -101,6 +101,6 @@ export function buildSnapshotTimestamps(
     lastUpdatedUtc: flight.lastUpdatedUtc ?? null,
     receivedAtUtc,
     availableAt: null,
-    providerPublishedUtc: flight.lastUpdatedUtc ?? null,
+    providerPublishedUtc: null, // cannot equate provider-state-update to published/available time
   };
 }

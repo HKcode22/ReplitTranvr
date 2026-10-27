@@ -14,7 +14,9 @@ function sha256(data: string): string {
 
 describe("V3.9 timestamp/leakage", () => {
   it("keeps actual runway aliases unverified before Gate 0.5", () => {
-    expect(PROVIDER_TO_FAA_MAPPING["departure.scheduledTime.utc"]).toEqual({ target: "scheduled_gate_out_utc", verified: true });
+    expect(PROVIDER_TO_FAA_MAPPING["departure.scheduledTime.utc"]).toEqual({ target: "scheduled_gate_out_utc", verified: false });
+    expect(PROVIDER_TO_FAA_MAPPING["arrival.scheduledTime.utc"].verified).toBe(false);
+    expect(PROVIDER_TO_FAA_MAPPING["departure.revisedTime.utc"].verified).toBe(false);
     expect(PROVIDER_TO_FAA_MAPPING["departure.runwayTime.utc"].verified).toBe(false);
     expect(PROVIDER_TO_FAA_MAPPING["arrival.runwayTime.utc"].verified).toBe(false);
   });
@@ -55,8 +57,11 @@ describe("V3.9 timestamp/leakage", () => {
     };
     const received = new Date("2026-08-15T15:30:10Z");
     const t = buildSnapshotTimestamps(flight, received);
-    expect(t.scheduledGateOutUtc).toEqual(flight.depScheduledUtc);
-    expect(t.revisedGateOutUtc).toEqual(flight.depRevisedUtc);
+    expect(t.scheduledGateOutUtc).toBeNull();
+    expect(t.revisedGateOutUtc).toBeNull();
+    expect(t.scheduledGateInUtc).toBeNull();
+    expect(t.lastUpdatedUtc).toEqual(flight.lastUpdatedUtc);
+    expect(t.providerPublishedUtc).toBeNull();
     expect(t.actualGateOutUtc).toBeNull();
     expect(t.actualWheelsOnUtc).toBeNull();
     expect(t.locReportedUtc).toEqual(flight.locReportedUtc);
