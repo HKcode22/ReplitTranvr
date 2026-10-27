@@ -139,7 +139,7 @@ if(now>Date.parse("2026-10-29T03:00:00.000Z") ||
 const fromLocal=sgLocal(now-30*60_000);
 const toLocal=sgLocal(now-10*60_000);
 const pre=numbersFromBalance(await get("/subscriptions/balance"));
-if(pre.api<4||pre.requests<1||pre.credits<1900)
+if(pre.api<4||pre.credits<1900)
  throw Error("GATE05B_HOLD_QUOTA_OR_ALERT_CREDIT_FLOOR");
 const root=join(homedir(),".config","replittranvr","gate05b-one-paid-20261027");
 mkdirSync(root,{recursive:true,mode:0o700});
