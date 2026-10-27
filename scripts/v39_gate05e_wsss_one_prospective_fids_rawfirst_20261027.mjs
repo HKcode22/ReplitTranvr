@@ -136,7 +136,7 @@ try{
   "p.available_at<=p.dep_scheduled_utc - interval '24 hours')::int AS before_t24,",
   "count(p.id) FILTER (WHERE p.dep_scheduled_utc IS NOT NULL AND",
   "p.available_at<=p.dep_scheduled_utc - interval '24 hours' AND",
-  "p.dep_scheduled_utc - interval '24 hours' - p.available_at<= interval '10 minutes')::int AS within10,",
+  "p.dep_scheduled_utc - interval '24 hours' - p.available_at<= interval '10 minutes')::int AS within10",
   "FROM_NONE_PLACEHOLDER"
  ].join(" ").replace("FROM_NONE_PLACEHOLDER",
   "FROM clean.fids_query_response q LEFT JOIN clean.flight_population p"+
