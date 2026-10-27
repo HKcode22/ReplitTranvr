@@ -156,7 +156,11 @@ export function utcIntervalToLocal(
 
 function parseFlightNumber(raw: string | null | undefined): { carrier: string; number: string } | null {
   if (!raw || typeof raw !== "string") return null;
-  const m = raw.trim().match(/^([A-Z0-9]{2})([0-9]{1,4})$/i);
+  // AeroDataBox WSSS FIDS used spaced two-character flight numbers in
+  // all 15 original Gate05e records. Accept an optional space or tab
+  // only before 1–4 digits; reject malformed / three-character formats.
+  // Codeshare role and origin-evidence checks remain independently strict.
+  const m = raw.trim().match(/^([A-Z0-9]{2})[ \t]*([0-9]{1,4})$/i);
   return m ? { carrier: m[1].toUpperCase(), number: m[2].replace(/^0+/, "") || "0" } : null;
 }
 
