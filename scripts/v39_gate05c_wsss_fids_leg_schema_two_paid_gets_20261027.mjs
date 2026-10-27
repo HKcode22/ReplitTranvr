@@ -150,7 +150,7 @@ function survey(data,withLeg){
   tallyTimeShape(d.runwayTime,timeShapes.runway);
   if(typeof x.lastUpdatedUtc==="string"&&x.lastUpdatedUtc.trim()){
    out.lastUpdatedTimeUtcNonempty++;
-   if(Number.isFinite(Date.parse(x.lastUpdatedUtc)))out.lastUpdatedTimeUtcValid++;
+   if(validTime({utc:x.lastUpdatedUtc}))out.lastUpdatedTimeUtcValid++;
   }
   if(dep)out.sourceDepartureObjects++;
   else if(mov)out.sourceMovementObjects++;
