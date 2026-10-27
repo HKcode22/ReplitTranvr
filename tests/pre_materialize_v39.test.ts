@@ -15,6 +15,7 @@ function row(over: Record<string, unknown> = {}) {
     response_hash: "r".repeat(64),
     population_role: "requested_airport_primary",
     scope_classification: "confirmed_core",
+    codeshare_resolution_status: "confirmed_operating_leg",
     ...over,
   };
 }
@@ -86,6 +87,15 @@ describe("materializePreSnapshotsForCutoff", () => {
     ]), { cutoffUtc: CUTOFF, batchId: null, frameHash: null, configHash: null, selectedTMilestoneConfig: FROZEN_T });
     expect(result.built).toBe(0);
     expect(result.blocked).toEqual({ not_primary_role: 1, t_unavailable: 3 });
+  });
+
+  it("refuses marketing codeshare from PRE denominator",async()=>{
+    const result=await materializePreSnapshotsForCutoff(
+      fakePool([row({codeshare_resolution_status:"resolved_marketing"})]),{
+        cutoffUtc:CUTOFF,batchId:null,frameHash:null,configHash:null,
+        selectedTMilestoneConfig:FROZEN_T,horizons:["T-24h"]});
+    expect(result.built).toBe(0);
+    expect(result.blocked.unverified_operating_leg).toBe(1);
   });
 
   it("filters post-cutoff and absent population availability despite mock SELECT",async()=>{
