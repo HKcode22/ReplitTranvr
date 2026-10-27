@@ -10,6 +10,8 @@ function row(over: Record<string, unknown> = {}) {
   return {
     analytic_identity_id: "UA123_KLAX_KSFO_20260908_ab12cd34",
     dep_scheduled_utc: new Date("2026-09-09T12:00:00Z"),
+    first_observed_schedule_utc: new Date("2026-09-09T12:00:00Z"),
+    first_schedule_query_id:"first-verified-population-query",
     available_at: new Date("2026-09-08T11:59:00Z"),
     population_query_id: "00000000-0000-0000-0000-000000000001",
     response_hash: "r".repeat(64),
@@ -37,6 +39,11 @@ describe("selected T and horizon eligibility", () => {
   it("uses the actual frozen selected-T resolver", () => {
     expect(resolveSelectedTMilestone(row(), FROZEN_T)?.toISOString()).toBe("2026-09-09T12:00:00.000Z");
     expect(resolveSelectedTMilestone(row(), { ...FROZEN_T, milestone: "unverified_field" })).toBeNull();
+    expect(resolveSelectedTMilestone(row({first_observed_schedule_utc:null}),FROZEN_T)).toBeNull();
+    // The latest retimed departure MUST NOT redefine T for prior snapshots.
+    expect(resolveSelectedTMilestone(row({
+      dep_scheduled_utc:new Date("2026-09-09T13:30:00Z")
+    }),FROZEN_T)?.toISOString()).toBe("2026-09-09T12:00:00.000Z");
     expect(resolveSelectedTMilestone(row(), { ...FROZEN_T, artifactHash: "not-a-hash" })).toBeNull();
   });
   it("computes horizon against selected T", () => {
