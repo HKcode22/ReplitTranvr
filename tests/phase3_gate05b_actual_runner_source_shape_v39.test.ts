@@ -33,7 +33,7 @@ describe("Actual one-use Gate05b parser, evaluated offline with no provider IO",
      arrival:{airport:{icao:"WADD"}}
    };
    const a=survey({departures:[record]},false);
-   expect(a.departureObjects).toBeUndefined();
+   expect(a.departureObjects).toBe(1);
    expect(a.sourceDepartureObjects).toBe(1);
    expect(a.scheduledUtcPresent).toBe(1);
    expect(a.scheduledUtcNonempty).toBe(1);
