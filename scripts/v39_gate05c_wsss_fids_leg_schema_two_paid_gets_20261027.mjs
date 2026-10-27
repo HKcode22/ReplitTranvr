@@ -223,6 +223,11 @@ try{
   save({status:"PAID_GET_DISPATCH_INTENT",paidAttempts:paidAttempts+1,
     completedVariants:outputs,currentlyDispatchingWithLeg:withLeg});
   const result=await get(q,true);
+  // Do not spend the second API call if the first returned an unexpected
+  // debit. Provider may still overcharge a single call; no hard price cap.
+  const observedRemaining=intHeader(result.h,"x-ratelimit-api-units-remaining");
+  if(pre.api-observedRemaining!==2*(outputs.length+1))
+   throw Error("GATE05C_HOLD_UNEXPECTED_PER_GET_API_UNIT_DEBIT_NO_SECOND_GET");
   outputs.push({...survey(result.obj,withLeg),receivedUtc:new Date().toISOString()});
   save({status:"PARTIAL_PAID_RETURN_RECEIVED",paidAttempts,completedVariants:outputs});
  }
