@@ -135,6 +135,54 @@ describe("V3.9 FIDS service-date identity", () => {
     expect(received[0].codeshareResolutionStatus).toBe("foreign_departure_origin_unverified");
     expect(received[0].canonicalFlightInstanceId).toBeNull();
   });
+
+  it("accepts ADB spaced two-character flight numbers but never upgrades context-only or marketing records",async()=>{
+    const observed: PopulationRow[]=[];
+    const dep=(number:string,status:"IsOperator"|"IsCodeshared",origin?:string)=>({
+      number,codeshareStatus:status,id:null,isCargo:false,isPrivate:false,isCharter:false,
+      departure:{
+        ...(origin?{airport:{icao:origin}}:{}),
+        scheduledTime:{utc:"2026-09-01 18:00Z"}
+      },
+      arrival:{
+        airport:{icao:"KSFO"},
+        scheduledTime:{utc:"2026-09-01 19:00Z"}
+      }
+    });
+    await fetchFidsPopulation({...BASE,direction:"Departure"},{
+      fetchAirport:async()=>({
+        departures:[
+          dep("UA 0123","IsOperator"),
+          dep("AC 0099","IsCodeshared"),
+          dep("UA0124","IsOperator","KLAX"),
+          dep("UA 12A","IsOperator"),
+          dep("ABC123","IsOperator")
+        ],
+        arrivals:[]
+      }),
+      now:()=>new Date("2026-09-01T18:05:00Z"),
+      persist:async(_q,rows)=>{observed.push(...rows);return rows.length;}
+    });
+    expect(observed).toHaveLength(5);
+    const context=observed[0];
+    expect(context.flightNumber).toBe("UA123");
+    expect(context.carrierIata).toBe("UA");
+    expect(context.codeshareResolutionStatus).toBe("context_departure_origin_unverified");
+    expect(context.canonicalFlightInstanceId).toBeNull();
+    expect(context.analyticIdentityId).toMatch(/^provisional:/);
+    expect(observed[1].flightNumber).toBe("AC99");
+    expect(observed[1].codeshareResolutionStatus).toBe("resolved_marketing");
+    expect(observed[1].canonicalFlightInstanceId).toBeNull();
+    expect(observed[2].flightNumber).toBe("UA124");
+    expect(observed[2].codeshareResolutionStatus).toBe("confirmed_operating_leg");
+    expect(observed[2].canonicalFlightInstanceId).not.toBeNull();
+    for(const x of observed.slice(3)){
+      expect(x.codeshareResolutionStatus).toBe("ambiguous_distinct_leg");
+      expect(x.canonicalFlightInstanceId).toBeNull();
+      expect(x.carrierIata).toBeNull();
+    }
+  });
+
   it("invalid airport timezone refuses the census before any provider call", async () => {
     let calls = 0;
     await expect(fetchFidsPopulation({ ...BASE, ianaTimezone: "not-a-zone" }, {
