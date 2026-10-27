@@ -91,7 +91,7 @@ export function assessPhase2gProviderReceiverGapV39(
   const billed = terminal ? input.externalBilledItemCredits! : null;
   const gap = billed === null ? null :
     billed - input.retainedOriginalItemCreditClaims;
-  const positiveFraction = gap === null || gap <= 0 || billed === 0 ?
+  const positiveFraction = gap === null || gap <= 0 || billed === null || billed === 0 ?
     null : gap / billed;
   const status: Phase2gGapAssessmentV39["status"] =
     gap === null ? "NO_TERMINAL_PROVIDER_COMPARISON" :
