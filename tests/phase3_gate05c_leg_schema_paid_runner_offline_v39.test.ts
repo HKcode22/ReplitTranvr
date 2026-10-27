@@ -8,10 +8,15 @@ const source=readFileSync(
 const a=source.indexOf("function validTime(");
 const b=source.indexOf("const now=Date.now();",a);
 if(a<0||b<0)throw Error("GATE05C_REVIEWED_SOURCE_FUNCTION_BOUNDARY_MISSING");
+type TimeBucket={missing:number;spaceUtc:number;tUtc:number;nonemptyInvalid:number};
+type Diagnostic={
+ [key:string]:unknown;
+ timestampUtcShapes:{scheduled:TimeBucket;revised:TimeBucket;runway:TimeBucket};
+};
 const tested = new Script(source.slice(a,b)+
  "\n;({validTime,survey})").runInContext(createContext({}),{timeout:1000}) as {
  validTime:(t:unknown)=>boolean;
- survey:(t:unknown,withLeg:boolean)=>Record<string,any>;
+ survey:(t:unknown,withLeg:boolean)=>Diagnostic;
 };
 
 const flight=(departureOrMovement:"departure"|"movement",when:string)=>({
