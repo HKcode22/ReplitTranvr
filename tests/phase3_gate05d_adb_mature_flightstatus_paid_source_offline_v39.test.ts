@@ -58,7 +58,7 @@ describe("Gate05d genuinely new AeroDataBox mature FIDS vs Flight Status experim
   expect(source).toContain("withLeg:\"true\"");
   expect(source).toContain("paidAttempts>=2");
   expect(source).toContain("flag:\"wx\"");
-  expect(source).toContain("GATE05D_FIRST_DEBIT_NOT_TWO_REFUSE_SECOND");
+  expect(source).toContain("G05D_FIRST_DEBIT_NOT_TWO_REFUSE_SECOND");
   expect(source).toContain("GATE05D_PAID_GO");
   expect(source).toContain("expectedApiUnits:2*paidAttempts");
   expect(source).not.toContain("https://api.cirium.com");
