@@ -362,11 +362,22 @@ function normalizeFidsRecord(input: {
       providerRecordKey,
       callsign: f?.callSign ?? null,
     };
-    canonical = canonicalFlightInstanceId(identityInput).flight_instance_id;
-    analyticIdentityId = canonical;
-    identityStatus = (f?.codeshareStatus === "Unknown" || f?.codeshareStatus === 0 || f?.codeshareStatus == null)
-      ? "ambiguous_codeshare"
-      : "confirmed_operating_leg";
+    // f.8 §7: marketing codeshares are attributes / contextual records, NOT
+    // independently confirmed physical operating legs. Provider sometimes
+    // encodes the status as integer 1/2 rather than a string.
+    const isOperator = f?.codeshareStatus === "IsOperator" || f?.codeshareStatus === 1;
+    const isMarketing = f?.codeshareStatus === "IsCodeshared" || f?.codeshareStatus === 2;
+    if (isOperator) {
+      canonical = canonicalFlightInstanceId(identityInput).flight_instance_id;
+      analyticIdentityId = canonical;
+      identityStatus = "confirmed_operating_leg";
+    } else {
+      analyticIdentityId = `provisional:${sha256(JSON.stringify({
+        providerRecordKey, number: f?.number ?? null,
+        depIcao, arrIcao, depSchedule, serviceDate,
+      })).slice(0, 24)}`;
+      identityStatus = isMarketing ? "resolved_marketing" : "ambiguous_codeshare";
+    }
   } else {
     analyticIdentityId = `provisional:${sha256(JSON.stringify({ providerRecordKey, number: f?.number ?? null, depIcao, arrIcao, depSchedule, serviceDate })).slice(0, 24)}`;
     identityStatus = "ambiguous_distinct_leg";
