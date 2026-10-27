@@ -162,7 +162,7 @@ export interface SelectedTMilestoneConfig {
 }
 
 export function resolveSelectedTMilestone(
-  row: { dep_scheduled_utc?: unknown },
+  row: { first_observed_schedule_utc?: unknown },
   config: SelectedTMilestoneConfig | null,
 ): Date | null {
   if (!config || config.verifiedProviderNativeSchedule !== true ||
@@ -173,8 +173,8 @@ export function resolveSelectedTMilestone(
   // Semantic evidence must independently establish the chosen native schedule
   // milestone; this reviewer-input flag is NOT itself an external certificate.
   if (config.milestone !== "departure.scheduledTime.utc") return null;
-  if (!row.dep_scheduled_utc) return null;
-  const raw = row.dep_scheduled_utc;
+  if (!row.first_observed_schedule_utc) return null;
+  const raw = row.first_observed_schedule_utc;
   if (!(raw instanceof Date) && typeof raw !== "string") return null;
   const d = raw instanceof Date ? raw : new Date(raw);
   return Number.isFinite(d.getTime()) ? d : null;
@@ -209,18 +209,30 @@ export function horizonEligibleForCutoff(selectedTUtc: Date | null, cutoffUtc: D
 export async function materializePreSnapshotsForCutoff(pool: QueryPool, input: PreMaterializeInput): Promise<PreMaterializeResult> {
   const horizons = input.horizons ?? PRE_HORIZONS;
   const res = await pool.query(
-    `SELECT DISTINCT ON (analytic_identity_id)
-            analytic_identity_id, dep_scheduled_utc, population_query_id,
-            response_hash, population_role, scope_classification, codeshare_resolution_status,
-            available_at, fids_retrieval_utc
-       FROM clean.flight_population
-      WHERE source_type = 'fids'
-        AND population_role = 'requested_airport_primary'
-        AND scope_classification = 'confirmed_core'
-        AND codeshare_resolution_status = 'confirmed_operating_leg'
-        AND provider_content_expired_at_utc IS NULL
-        AND available_at IS NOT NULL AND available_at <= $1
-        AND cutoff_utc <= $1
+    `WITH asof AS (
+       SELECT analytic_identity_id, population_query_id, response_hash,
+              population_role, scope_classification, codeshare_resolution_status,
+              available_at, fids_retrieval_utc, id,
+              FIRST_VALUE(dep_scheduled_utc) OVER (
+                PARTITION BY analytic_identity_id
+                ORDER BY available_at ASC, id ASC
+              ) AS first_observed_schedule_utc,
+              FIRST_VALUE(population_query_id) OVER (
+                PARTITION BY analytic_identity_id
+                ORDER BY available_at ASC, id ASC
+              ) AS first_schedule_query_id
+         FROM clean.flight_population
+        WHERE source_type = 'fids'
+          AND population_role = 'requested_airport_primary'
+          AND scope_classification = 'confirmed_core'
+          AND codeshare_resolution_status = 'confirmed_operating_leg'
+          AND dep_scheduled_utc IS NOT NULL
+          AND provider_content_expired_at_utc IS NULL
+          AND available_at IS NOT NULL AND available_at <= $1
+          AND cutoff_utc <= $1
+     )
+     SELECT DISTINCT ON (analytic_identity_id) *
+       FROM asof
       ORDER BY analytic_identity_id, available_at DESC, id DESC`,
     [input.cutoffUtc],
   );
@@ -252,7 +264,7 @@ export async function materializePreSnapshotsForCutoff(pool: QueryPool, input: P
         horizon,
         selectedTMilestoneUtc: selectedT,
         selectedTVersion: selectedT && input.selectedTMilestoneConfig
-          ? `${input.selectedTMilestoneConfig.milestone}:${input.selectedTMilestoneConfig.version}:${input.selectedTMilestoneConfig.artifactHash}`
+          ? `${input.selectedTMilestoneConfig.milestone}:${input.selectedTMilestoneConfig.version}:${input.selectedTMilestoneConfig.artifactHash}:${row.first_schedule_query_id ?? "no-first-id"}`
           : null,
         predictionCutoffUtc: input.cutoffUtc,
         features: [],
