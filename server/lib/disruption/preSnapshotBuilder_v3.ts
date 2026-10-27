@@ -211,12 +211,13 @@ export async function materializePreSnapshotsForCutoff(pool: QueryPool, input: P
   const res = await pool.query(
     `SELECT DISTINCT ON (analytic_identity_id)
             analytic_identity_id, dep_scheduled_utc, population_query_id,
-            response_hash, population_role, scope_classification,
+            response_hash, population_role, scope_classification, codeshare_resolution_status,
             available_at, fids_retrieval_utc
        FROM clean.flight_population
       WHERE source_type = 'fids'
         AND population_role = 'requested_airport_primary'
         AND scope_classification = 'confirmed_core'
+        AND codeshare_resolution_status = 'confirmed_operating_leg'
         AND provider_content_expired_at_utc IS NULL
         AND available_at IS NOT NULL AND available_at <= $1
         AND cutoff_utc <= $1
@@ -232,6 +233,7 @@ export async function materializePreSnapshotsForCutoff(pool: QueryPool, input: P
   for (const row of res.rows) {
     if (row.population_role !== "requested_airport_primary") { tally("not_primary_role"); continue; }
     if (row.scope_classification !== "confirmed_core") { tally("unverified_scope"); continue; }
+    if (row.codeshare_resolution_status !== "confirmed_operating_leg") { tally("unverified_operating_leg"); continue; }
     const availableAt = row.available_at instanceof Date
       ? row.available_at : typeof row.available_at === "string"
       ? new Date(row.available_at) : null;
