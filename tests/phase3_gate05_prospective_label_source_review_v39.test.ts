@@ -1,7 +1,7 @@
 import {describe,expect,it} from "vitest";
 import {aggregateGate05FidsPairV39}
   from "../server/lib/disruption/gate05FidsAggregateEvidence_v39";
-import {reviewGate05ProspectiveLabelSourceV39}
+import {reviewGate05ProspectiveLabelSourceV39,summarizeGate05NestedTimePresenceV39}
   from "../server/lib/disruption/gate05ProspectiveLabelSourceReview_v39";
 
 const bounds={
@@ -69,5 +69,41 @@ describe("Gate05 source review guard: provider responses and synthetics are NOT 
     expect(()=>reviewGate05ProspectiveLabelSourceV39(pair,{
       ...uncertain,evidenceReferenceIds:[""]
     })).toThrow("GATE05_SOURCE_REVIEW_INVALID_INPUT");
+  });
+});
+
+describe("Future separately authorized FIDS nested timing counts — privacy-safe and fixture-only",()=>{
+  it("summarizes nested time presence but never claims runway actual or persists records",()=>{
+    const rows=[
+      {number:"SQ999",departure:{
+        scheduledTime:{utc:"2026-10-27T04:05:00Z"},
+        revisedTime:{utc:"2026-10-27T04:07:00Z"},
+        runwayTime:{utc:"2026-10-27T04:08:00Z"}
+      },location:{lat:1.23,lon:2.34}},
+      {number:"SQ998",departure:{scheduledTime:{utc:"2026-10-27T04:09:00Z"}}},
+      {number:"SQ997",departure:{runwayTime:{utc:""}}},
+      null
+    ];
+    const result=summarizeGate05NestedTimePresenceV39(rows);
+    expect(result.responseObjects).toBe(4);
+    expect(result.malformedObjects).toBe(1);
+    expect(result.scheduledTimeUtcFieldsPresent).toBe(2);
+    expect(result.revisedTimeUtcFieldsPresent).toBe(1);
+    expect(result.runwayTimeUtcFieldsPresent).toBe(1);
+    expect(result.actualWheelsOffProven).toBe(false);
+    expect(result.scheduledWheelsOffProven).toBe(false);
+    expect(result.eventAsOfTProven).toBe(false);
+    expect(result.rawProviderRecordsPersisted).toBe(false);
+    expect(result.providerRequests).toBe(0);
+    const serialized=JSON.stringify(result);
+    expect(serialized).not.toContain("SQ999");
+    expect(serialized).not.toContain("2026-10-27T04:05");
+    expect(serialized).not.toContain("1.23");
+  });
+  it("rejects malformed response arrays and cannot promote empty observations",()=>{
+    expect(()=>summarizeGate05NestedTimePresenceV39(null))
+      .toThrow("GATE05_NESTED_FIELDS_INVALID_RESPONSE");
+    expect(summarizeGate05NestedTimePresenceV39([]).actualWheelsOffProven)
+      .toBe(false);
   });
 });
