@@ -77,8 +77,8 @@ export function assessGate05ExactRunwayDelayV39(
     scheduledVerified && actualVerified;
   const uncertainty=Boolean(
     !input.canonicalOperatingLegVerified ||
-    (scheduled!==null && !scheduledVerified) ||
-    (actual!==null && !actualVerified)
+    (input.scheduled.utc !== null && !scheduledVerified) ||
+    (input.actual.utc !== null && !actualVerified)
   );
   const status:Gate05RunwayDelayStatusV39=observed
     ? "OBSERVED_EXACT_RUNWAY_DELAY"
