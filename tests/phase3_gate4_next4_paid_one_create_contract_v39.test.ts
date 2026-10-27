@@ -40,7 +40,11 @@ describe("NEXT4 genuine one-shot paid trial: no scope replay",()=>{
  it("keeps monitored published callback-only source unchanged",()=>{
   expect(wrapper).toContain("V39_BUILD_GIT_HEAD");
   expect(wrapper).toContain("--verify-only");
-  expect(wrapper).toContain("git merge --ff-only FETCH_HEAD");
+  expect(wrapper).toContain("worktree add --detach");
+  expect(wrapper).toContain("worktree remove --force");
+  expect(wrapper).toContain("NEXT4_ORIGINAL_REPLIT_BRANCH_PRESERVED");
+  expect(wrapper).not.toContain("git merge --ff-only");
+  expect(wrapper).not.toContain("git reset --hard");
   expect(wrapper).toContain("gh auth status");
   expect(observer).toContain("method:\"GET\"");
   expect(observer).not.toContain("createGate4SingleWithRawReceiptV39");
