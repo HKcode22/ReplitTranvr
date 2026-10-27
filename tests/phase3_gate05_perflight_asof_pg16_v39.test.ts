@@ -66,7 +66,7 @@ async function put(id:string,T:string,at:string,q:string){
     VALUES($1,'fids','requested_airport_primary','confirmed_core','confirmed_operating_leg',$2,$3,$4,$5)`,
     [id,T,at,q,"a".repeat(64)]);
 }
-describe("Gate05 actual disposable PostgreSQL 16 flight-wise T and as-of",()=>{
+describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("Gate05 actual disposable PostgreSQL 16 flight-wise T and as-of",()=>{
  it("uses first observed T, latest source before each individual cutoff, no future backfill",async()=>{
    await put("A","2026-09-09T12:00:00Z","2026-09-08T11:40:00Z","A-first");
    await put("A","2026-09-09T12:00:00Z","2026-09-08T11:59:00Z","A-latest-before");
