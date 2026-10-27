@@ -45,7 +45,7 @@ describe("Gate05b new paid WSSS FIDS retake source contract — NO LIVE CALL IN 
     expect(s).toContain("spent===4&&creditsDelta===0");
   });
   it("rejects insufficient quota and protects 1900 Alert credit floor",()=>{
-    expect(s).toContain("if(pre.api<4||pre.requests<1||pre.credits<1900)");
+    expect(s).toContain("if(pre.api<4||pre.credits<1900)");
     expect(s).toContain("GATE05B_HOLD_QUOTA_OR_ALERT_CREDIT_FLOOR");
     expect(s).toContain("GATE05B_PAID_RECHECK_HOLD_DO_NOT_RERUN");
   });
