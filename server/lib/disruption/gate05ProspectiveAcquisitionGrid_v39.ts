@@ -75,7 +75,8 @@ export function planGate05ProspectiveGridV39(input:Gate05GridInput):Gate05GridRe
   const guardMs=input.populationAcquisitionGuardMinutes*60_000;
   const cadenceMs=input.populationRefreshCadenceMinutes*60_000;
   const grid:Gate05GridPoint[]=[];
-  for(const horizon of input.horizonSet){
+  for(const entry of input.horizonSet){
+    const horizon=entry as Gate05Horizon; // validated against OFFSET_MS above
     for(let cutoff=start-OFFSET_MS[horizon];cutoff<end-OFFSET_MS[horizon];cutoff+=cadenceMs){
       grid.push({
         horizon,
