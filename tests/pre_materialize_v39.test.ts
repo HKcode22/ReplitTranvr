@@ -90,7 +90,7 @@ describe("materializePreSnapshotsForCutoff", () => {
   it("opposite movement never snapshots and missing T blocks as t_unavailable", async () => {
     const result = await materializePreSnapshotsForCutoff(fakePool([
       row({ population_role: "opposite_movement_context" }),
-      row({ analytic_identity_id: "OTHER", dep_scheduled_utc: null }),
+      row({ analytic_identity_id: "OTHER", dep_scheduled_utc: null, first_observed_schedule_utc: null }),
     ]), { cutoffUtc: CUTOFF, batchId: null, frameHash: null, configHash: null, selectedTMilestoneConfig: FROZEN_T });
     expect(result.built).toBe(0);
     expect(result.blocked).toEqual({ not_primary_role: 1, t_unavailable: 3 });
