@@ -93,6 +93,8 @@ describe("Gate05c new paid runner pure survey — no network or file IO",()=>{
   expect(source).toContain("withLeg:String(withLeg)");
   expect(source).toContain("expectedMaximumApiUnits:4");
   expect(source).toContain("apiUnitsSpent:spent");
+  expect(source).toContain("GATE05C_HOLD_UNEXPECTED_PER_GET_API_UNIT_DEBIT_NO_SECOND_GET");
+  expect(source).toContain("if(pre.api-observedRemaining!==2*(outputs.length+1))");
   expect(source).toContain("hardProviderCostCap:false");
   expect(source).not.toContain("gate05b-one-paid-20261027");
   expect(source).not.toContain("withLocation:String(withLocation)");
