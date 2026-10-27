@@ -95,6 +95,46 @@ describe("V3.9 FIDS service-date identity", () => {
     expect(marketing?.analyticIdentityId).toMatch(/^provisional:/);
   });
 
+  it("retains a FIDS omitted origin via declared query context without falsely confirming physical identity",async()=>{
+    const received:PopulationRow[]=[];
+    await fetchFidsPopulation({...BASE,direction:"Departure"},{
+      fetchAirport:async()=>({
+        departures:[{
+          number:"UA123",id:null,codeshareStatus:"IsOperator",
+          isCargo:false,isPrivate:false,isCharter:false,
+          // Provider may omit the requested origin from departure.
+          departure:{scheduledTime:{utc:"2026-09-01 18:00Z"}},
+          arrival:{airport:{icao:"KSFO"},scheduledTime:{utc:"2026-09-01 19:00Z"}}
+        }],arrivals:[]
+      }),
+      now:()=>new Date("2026-09-01T18:05:00Z"),
+      persist:async(_q,rows)=>{received.push(...rows);return rows.length;}
+    });
+    expect(received).toHaveLength(1);
+    expect(received[0].depAirportIcao).toBe("KLAX");
+    expect(received[0].codeshareResolutionStatus).toBe("context_departure_origin_unverified");
+    expect(received[0].canonicalFlightInstanceId).toBeNull();
+    expect(received[0].analyticIdentityId).toMatch(/^provisional:/);
+  });
+  it("does not silently rewrite an explicitly foreign departure origin to the requested airport",async()=>{
+    const received:PopulationRow[]=[];
+    await fetchFidsPopulation({...BASE,direction:"Departure"},{
+      fetchAirport:async()=>({
+        departures:[{
+          number:"UA123",codeshareStatus:"IsOperator",id:null,
+          isCargo:false,isPrivate:false,isCharter:false,
+          departure:{airport:{icao:"KJFK"},scheduledTime:{utc:"2026-09-01 18:00Z"}},
+          arrival:{airport:{icao:"KSFO"},scheduledTime:{utc:"2026-09-01 19:00Z"}}
+        }],arrivals:[]
+      }),
+      now:()=>new Date("2026-09-01T18:05:00Z"),
+      persist:async(_q,rows)=>{received.push(...rows);return rows.length;}
+    });
+    expect(received).toHaveLength(1);
+    expect(received[0].depAirportIcao).toBe("KJFK");
+    expect(received[0].codeshareResolutionStatus).toBe("foreign_departure_origin_unverified");
+    expect(received[0].canonicalFlightInstanceId).toBeNull();
+  });
   it("invalid airport timezone refuses the census before any provider call", async () => {
     let calls = 0;
     await expect(fetchFidsPopulation({ ...BASE, ianaTimezone: "not-a-zone" }, {
