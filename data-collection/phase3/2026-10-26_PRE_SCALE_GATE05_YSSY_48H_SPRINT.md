@@ -59,3 +59,38 @@ Possible report statuses:
 - `PHASE4_OFFLINE_GO` and `PHASE4_PAID_NO_GO` until separate material quality, financial and source protections.
 
 Do not silently substitute a green PR for a live sender-side observation or future paid permission.
+
+## Oct 27 independent Gate05b and YSSY checkpoint (pre-deadline, no-provider)
+
+This section records **new direct GitHub Actions log verification**, rather than substituting an assumption about missing provider SEND attempts. Read alongside the earlier historical forensic section and [postpaid Gate05b parser review](2026-10-27_GATE05B_POSTPAID_UTC_FORMAT_AUDIT_AND_FIX.md). It does not replace P25's frozen failed/DELIVERY_GAP protocol.
+
+### Gate05b actual paid trial — source and account finalized
+
+The owner's Oct 27 07:23:13.778Z one-off WSSS FIDS trial at [PR #179 source/main ee6aa23](https://github.com/HKcode22/ReplitTranvr/pull/179) **already executed**: exactly two 200 GETs, 15 departures per withLocation variant, 5 operator and 10 marketing codeshares each, all 15 Live, **4 API units spent** (59,996 to 59,992), **0 Alert credits spent** (1,981 unchanged). The reported 0/0/0 parsed nested UTC values were **PARSER_UNVERIFIED** because the original T-only parser excluded a vendor-documented space-delimited UTC format; since raw flight responses were never retained, no historical field values can be inferred. [PR #180](https://github.com/HKcode22/ReplitTranvr/pull/180) merged parser/shape/field-presence regression repair to **main 1425c475f9136fe802cb5dd3635d7ed19f9a078d**, 4/4 no-provider CI checks successful. Do **not** replay the consumed one-shot private intent. The exact requested `actual_wheels_off - scheduled_wheels_off` remains unproven: provider FIDS runwayTime may be actual/estimated, scheduledTime does not prove a scheduled wheels-off baseline, and no source-as-of T/operating-leg certificate exists.
+
+### Direct replay of original YSSY P25 Oct 13 signed Actions logs
+
+Re-read original [P25 run #38339669348](https://github.com/HKcode22/ReplitTranvr/actions/runs/38339669348) watchdog job **115107790655** (its actual text log) and owner job **115107790678**, without any provider calls or raw-flight access. Parsed 232 `v39.phase2g-github-safety-watchdog.v1` `WATCHING` JSON observations between **03:02:25.180Z and 05:02:15.290Z**. The live observational difference `G(t)=2287 - provider_balance_last_seen(t) - internal_credits(t)` is **not** a fresh provider SEND-attempt ledger. Its signs/counts over those 232 snapshots: **67 positive, 127 zero, 38 negative**. First sampled positive gap: **04:21:16.832Z (+2)**.
+
+| Sustained +2 run UTC | Observations | Duration | Recorded callback failures |
+| --- | ---: | ---: | ---: |
+| 04:23:21.227–04:31:38.993 | 17 | 497.766 s | 0 |
+| 04:33:43.484–04:39:57.047 | 13 | 373.563 s | 0 |
+| 04:44:06.425–04:50:50.587 | 14 | 404.162 s | 0 |
+| 04:52:24.274–05:01:44.408 | 19 | 560.134 s | 0 |
+
+The **last WATCHING** row (05:02:15.290Z) showed 229 internal items, 58 callback requests, provider balance **last seen** 2063 and hence *interim* `G=-5`, demonstrating asynchronous balance/receiver snapshots. This is **not** the terminal account reconciliation. Owner job then explicitly failed **05:04:21.626Z**: `REFUSED_STAGE1_PROBE_FAILED: YSSY external_internal_delivery_gap`, with `callback_watchdog_triggered=false`. The separately reconciled **terminal** ledger remains **231 billed item units vs 229 received item claims (gap +2)**, as in the authoritative incident report. Watchdog reported `provider_subscription_isolation_lost` at **05:02:47.455Z**, **after** all four sustained sampled positive-gap runs. A late cleanup race **cannot alone account for the earlier observed divergence**, but this timing does not identify the original missing or extra SEND, response, retry, routing, or billing attribution.
+
+### Tuesday matrix and finite remaining dependencies
+
+| Layer | Independently evidenced | Still missing / decision |
+| --- | --- | --- |
+| Provider debit | Terminal 231 external item credits, plus several sustained *interim* +2 observations | No authenticated notification-level SEND attempt IDs, sent timestamps, per-attempt HTTP status, or flight-item counts |
+| Receiver ingest | 58 observed 2xx envelopes, 229 committed item claims, zero observed callback-processing failures | Nothing proves receipt of *every provider SEND*; do not map +2 billed item units to two missing POSTs |
+| Receiver health and STOP | 6+6 did not trigger; no observed sustained receiver outage; late independent watchdog cleanup race occurred | A clean heartbeat is not a provider SEND receipt; end-of-window race is a distinct operational incident |
+| Raw/historical custody | Original 58/58 verified when retained; scoped Oct22 TTL deletion/tombstone reported in project custody record | Historical raw objects must not be reconstructed or reimported |
+| Gate05 source / Phase4 | Parser defect fixed/tested and technical FIDS/billing PASS; NEXT4 5/5 separate microtrial remains accepted | Original runway label remains NOT_PROVEN, and P25 sender cause remains UNDETERMINED; Phase4 **offline GO**, Phase4 **new large paid NO-GO** |
+
+**Tuesday 8PM PDT forensic-matrix checkpoint is substantively completed early from retained GitHub evidence.** Remaining *external* fact is whether AeroDataBox can provide a sanitized scope-matched Oct13 YSSY attempt ledger, including provider send timestamp, per-attempt billed flight-item units, HTTP response class, retry sequence and pseudonymous delivery ID. Public documentation does **not** establish the existence/retention of such a ledger; [official billing guide](https://aerodatabox.com/flight-alert-api-2026/) confirms billed on SEND, including failed delivery, and per flight item. No provider support request has been sent by this checkpoint. If unavailable by the Wednesday 8PM PDT decision, record `CAUSE_NOT_IDENTIFIABLE_WITH_AVAILABLE_SOURCES` as finite unresolved external evidence, **not** a forced new paid retry.
+
+Next **offline implementation review by Wednesday noon PDT**: verify advisory `phase2gProviderReceiveGapAudit_v39.ts` / `phase2gSustainedCreditGapSignal_v39.ts` tests cover freshness, signed terminal settlement, transient negative lag and sustained +2 warning; confirm raw-before-2xx/quarantine in released NEXT4; design but do not silently deploy a warning-only, prospectively specified per-window accounting monitor. Require independent cost/STOP and human approval for any future paid scope. GitHub remains source of truth; no Cloudflare, Replit AI Agent, provider retries, schema changes, downloads of expired originals or published app changes were involved in this checkpoint.
