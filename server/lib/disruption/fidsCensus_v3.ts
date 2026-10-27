@@ -156,7 +156,7 @@ export function utcIntervalToLocal(
 
 function parseFlightNumber(raw: string | null | undefined): { carrier: string; number: string } | null {
   if (!raw || typeof raw !== "string") return null;
-  const m = raw.trim().match(/^([A-Z0-9]{2})([0-9]{1,4})$/i);
+  // AeroDataBox live WSSS FIDS returned "SQ 123"-style numbers in all\n  // 15 original Gate05e records. Accept only optional horizontal whitespace\n  // between an IATA-style two-character carrier and 1–4 numeric digits.\n  // This repairs string parsing only: codeshare role, omitted airport evidence\n  // and physical-leg canonicalization are still independently fail-closed.\n  const m = raw.trim().match(/^([A-Z0-9]{2})[ \\t]*([0-9]{1,4})$/i);
   return m ? { carrier: m[1].toUpperCase(), number: m[2].replace(/^0+/, "") || "0" } : null;
 }
 
