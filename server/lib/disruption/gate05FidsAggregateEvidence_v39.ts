@@ -17,16 +17,18 @@ const nonempty = (x: unknown): string | null =>
 
 function utcInstant(x: unknown): number | null {
   const s = nonempty(x);
-  // RFC3339 UTC permits fractional seconds beyond millisecond precision and
-  // an explicit +00:00 offset; both must not be counted as missingness.
-  // Reject nonzero offsets here because DateTimeContract.utc denotes UTC.
-  if (!s || !/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d{1,9})?)?(?:Z|\+00:00)$/.test(s))
+  // AeroDataBox DateTimeContract.utc is UTC but published real examples use
+  // "2023-10-04 18:01Z" (SPACE), as well as RFC3339 "T" examples.
+  // Previous T-only filter falsely counted legitimate nested fields as zero.
+  // Reject nonzero offsets: .utc must explicitly denote UTC.
+  if (!s || !/^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d(?:\.\d{1,9})?)?(?:Z|\+00:00)$/.test(s))
     return null;
-  const ms = Date.parse(s);
+  const canonical = s.replace(" ", "T");
+  const ms = Date.parse(canonical);
   if (!Number.isFinite(ms)) return null;
   const d = new Date(ms).toISOString();
-  // Reject dates which Date.parse silently normalizes.
-  return d.slice(0,16) === s.slice(0,16) ? ms : null;
+  // Reject calendar dates/time values which Date.parse silently normalizes.
+  return d.slice(0,16) === canonical.slice(0,16) ? ms : null;
 }
 
 export interface Gate05FidsBoundsV39 {
@@ -101,7 +103,9 @@ function variant(raw: unknown, enabled: boolean, bounds: Gate05FidsBoundsV39) {
   for (const item of raw) {
     const f = object(item);
     if (!f) { n.malformedRows++; n.scheduledWindowUnassessable++; continue; }
-    const d = object(f.departure);
+    // FIDS returns movement when withLeg=false, or departure+arrival
+    // when withLeg=true (per AirportFlightContract). Never infer presence.
+    const d = object(f.departure) ?? object(f.movement);
     const a = object(f.arrival);
     if (d) {
       n.departureMovementObjects++;
@@ -127,8 +131,12 @@ function variant(raw: unknown, enabled: boolean, bounds: Gate05FidsBoundsV39) {
     }
     if (object(f.location) || object(d?.location))
       n.locationObjectPresent++;
-    const from = nonempty(field(d?.airport, "icao"));
-    const to = nonempty(field(a?.airport, "icao"));
+    // movement.airport for requested-airport DEPARTURES is the OPPOSITE
+    // destination, never interpret it as the departure origin.
+    const from = object(f.movement) ?
+      null : nonempty(field(d?.airport, "icao"));
+    const to = nonempty(field(a?.airport, "icao")) ??
+      (object(f.movement) ? nonempty(field(d?.airport, "icao")) : null);
     if (from?.toUpperCase() === bounds.requestedAirportIcao)
       n.departureRequestedAirportConfirmed++;
     else n.departureAirportUnverified++;
