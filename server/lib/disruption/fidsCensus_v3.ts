@@ -336,7 +336,14 @@ function normalizeFidsRecord(input: {
   if (!params.withCodeshared && (f?.codeshareStatus === "IsCodeshared" || f?.codeshareStatus === 2)) return null;
 
   const parsed = parseFlightNumber(f?.number);
-  const depIcao = normalizeIcao(f?.departure?.airport?.icao);
+  const explicitDepIcao = normalizeIcao(f?.departure?.airport?.icao);
+  // Official FIDS may omit the requested airport in a departure's movement.
+  // Preserve provider-query context without promoting an unverified physical
+  // leg to a confirmed source identity.
+  const departureAirportFromContext = movement === "departure" &&
+    !explicitDepIcao && normalizeIcao(params.airportIcao) !== null;
+  const depIcao = explicitDepIcao ??
+    (departureAirportFromContext ? normalizeIcao(params.airportIcao) : null);
   const arrIcao = normalizeIcao(f?.arrival?.airport?.icao);
   const depSchedule = isoOrNull(f?.departure?.scheduledTime?.utc);
   const serviceDate = localServiceDateOrNull(depSchedule, params.ianaTimezone);
@@ -367,7 +374,8 @@ function normalizeFidsRecord(input: {
     // encodes the status as integer 1/2 rather than a string.
     const isOperator = f?.codeshareStatus === "IsOperator" || f?.codeshareStatus === 1;
     const isMarketing = f?.codeshareStatus === "IsCodeshared" || f?.codeshareStatus === 2;
-    if (isOperator) {
+    if (isOperator && !departureAirportFromContext &&
+        !(movement === "departure" && explicitDepIcao !== normalizeIcao(params.airportIcao))) {
       canonical = canonicalFlightInstanceId(identityInput).flight_instance_id;
       analyticIdentityId = canonical;
       identityStatus = "confirmed_operating_leg";
@@ -376,7 +384,10 @@ function normalizeFidsRecord(input: {
         providerRecordKey, number: f?.number ?? null,
         depIcao, arrIcao, depSchedule, serviceDate,
       })).slice(0, 24)}`;
-      identityStatus = isMarketing ? "resolved_marketing" : "ambiguous_codeshare";
+      identityStatus = isMarketing ? "resolved_marketing" :
+        !isOperator ? "ambiguous_codeshare" :
+        departureAirportFromContext ? "context_departure_origin_unverified" :
+        "foreign_departure_origin_unverified";
     }
   } else {
     analyticIdentityId = `provisional:${sha256(JSON.stringify({ providerRecordKey, number: f?.number ?? null, depIcao, arrIcao, depSchedule, serviceDate })).slice(0, 24)}`;
