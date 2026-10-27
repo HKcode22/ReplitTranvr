@@ -3,6 +3,7 @@ import {Pool} from "pg";
 import {readFileSync} from "node:fs";
 import {runInNewContext} from "node:vm";
 const incidentSource=readFileSync("scripts/v39_gate05e_wsss_one_prospective_fids_rawfirst_20261027.mjs","utf8");
+const independentT6Source=readFileSync("scripts/v39_gate05f_wsss_independent_t6_rawfirst_once_20261027.mjs","utf8");
 const forensicSource=readFileSync("scripts/v39_gate05e_paid_receipt_db_readonly_forensics_20261027.mjs","utf8");
 const cohortSource=readFileSync("scripts/v39_gate05e_cohort_aggregate_readonly_20261027.mjs","utf8");
 function sqlFromSource(source:string,start:string,end:string):string{
@@ -74,6 +75,18 @@ describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("Gate05e original p
    expect(q.rows[0].raw_present).toBe(true);
    expect(q.rows[0].rows).toBe(1);
    expect(q.rows[0].before_t24).toBe(1);
+ });
+ it("executes Gate05f independent T-6h paid operator postpersist SQL against ACTUAL PG16",async()=>{
+  const sql=sqlFromSource(independentT6Source,
+    "const readback=await pool.query(",
+    ",[observed.populationQueryId]);");
+  expect(sql).not.toMatch(/,\s*FROM\s+clean\./i);
+  const z=(await pool.query(sql,["282a663e-18ef-4af0-9181-c95cde9430e6"])).rows[0];
+  expect(z).toBeDefined();
+  expect(z.raw_present).toBe(true);
+  expect(z.rows).toBe(1);
+  expect(z.before_t6).toBe(1);
+  expect(z.within10).toBe(0);
  });
  it("executes NEW original-source aggregate identity and availability SELECTs on real PostgreSQL",async()=>{
    const summary=sqlFromSource(cohortSource,"const COHORT_SUMMARY_SELECT=",";\nconst GROUPED_SELECT=");
