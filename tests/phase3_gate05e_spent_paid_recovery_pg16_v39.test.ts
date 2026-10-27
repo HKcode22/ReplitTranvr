@@ -6,11 +6,12 @@ const incidentSource=readFileSync("scripts/v39_gate05e_wsss_one_prospective_fids
 const independentT6Source=readFileSync("scripts/v39_gate05f_wsss_independent_t6_rawfirst_once_20261027.mjs","utf8");
 const forensicSource=readFileSync("scripts/v39_gate05e_paid_receipt_db_readonly_forensics_20261027.mjs","utf8");
 const cohortSource=readFileSync("scripts/v39_gate05e_cohort_aggregate_readonly_20261027.mjs","utf8");
+const rawShapeSource=readFileSync("scripts/v39_gate05e_raw_schema_flags_readonly_20261027.mjs","utf8");
 function sqlFromSource(source:string,start:string,end:string):string{
  const a=source.indexOf(start),b=source.indexOf(end,a+start.length);
  if(a<0||b<0)throw Error("GATE05E_SQL_SOURCE_DRIFT");
  const sql=runInNewContext(source.slice(a+start.length,b),{}, {timeout:1000});
- if(typeof sql!=="string"||!/^SELECT\s/i.test(sql))throw Error("SQL_NOT_SELECT");
+ if(typeof sql!=="string"||!/^(SELECT|WITH)\s/i.test(sql))throw Error("SQL_NOT_SELECT");
  return sql;
 }
 let pool:Pool;
@@ -112,6 +113,50 @@ describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("Gate05e original p
      expect(b.rows[0].response_rows).toBe(1);
      expect(q.rows[0].raw_present).toBe(true);
    } finally {await c.query("ROLLBACK");c.release();}
+ });
+ it("compiles and executes anonymous original FIDS JSON shape census in READ ONLY PostgreSQL",async()=>{
+   const parent=sqlFromSource(rawShapeSource,"const PARENT_SQL=",";\nconst SHAPE_SQL=");
+   const shape=sqlFromSource(rawShapeSource,"const SHAPE_SQL=",";\nlet client=");
+   expect(parent).toMatch(/^SELECT\s/);
+   expect(shape).toMatch(/^WITH\s/);
+   for(const q of [parent,shape]){
+     expect(q).not.toMatch(/\b(INSERT|UPDATE|DELETE|TRUNCATE)\s/i);
+   }
+   // The parent SELECT only returns raw presence; CTE may inspect full
+   // provider JSON internally, but the shape query only projects counters.
+   expect(parent).toContain("(raw_payload IS NOT NULL) AS raw_present");
+   expect(shape).toMatch(/SELECT count\(\*\)::int AS raw_departure_objects/);
+   expect(shape).not.toMatch(/SELECT\s+raw_payload\s+FROM\s+flights/i);
+   const id="282a663e-18ef-4af0-9181-c95cde9430e6";
+   // Synthetic fixture only; no connection to user's operational database.
+   const fixture={departures:[
+     {number:"SQ 123",codeshareStatus:"IsOperator",
+      departure:{scheduledTime:{utc:"2026-10-28 11:30Z"}},
+      arrival:{scheduledTime:{utc:"2026-10-28 14:00Z"}}},
+     {number:"SQ124",codeshareStatus:"IsCodeshared",
+      departure:{scheduledTime:{utc:"2026-10-28 11:30Z"}},
+      arrival:{airport:{icao:"WADD"},scheduledTime:{utc:"2026-10-28 14:00Z"}}}
+   ]};
+   await pool.query("UPDATE clean.fids_query_response SET raw_payload=$2::jsonb WHERE population_query_id=$1",
+     [id,JSON.stringify(fixture)]);
+   const c=await pool.connect();
+   try{
+     await c.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+     expect((await c.query("SHOW transaction_read_only")).rows[0].transaction_read_only).toBe("on");
+     const p=(await c.query(parent,[id])).rows[0];
+     const z=(await c.query(shape,[id,"a".repeat(64)])).rows[0];
+     expect(p.raw_departures).toBe(2);
+     expect(z.raw_departure_objects).toBe(2);
+     expect(z.strict_number_parseable).toBe(1);
+     expect(z.spaced_number_pattern).toBe(1);
+     expect(z.operator_role).toBe(1);
+     expect(z.marketing_role).toBe(1);
+     expect(z.explicit_departure_icao).toBe(0);
+     expect(z.explicit_arrival_icao).toBe(1);
+     expect(z.departure_schedule_utc).toBe(2);
+     expect(z.arrival_schedule_utc).toBe(2);
+     expect(z.runway_utc_present).toBe(0);
+   }finally{await c.query("ROLLBACK");c.release();}
  });
  it("confirms strictly READ ONLY recovery query syntax and real returned source counts",async()=>{
    const sql=sqlFromSource(forensicSource,"const query=",";\nconst utc=");
