@@ -92,7 +92,7 @@ export function assessPhase2gSustainedCreditGapV39(
       row.observedAtMs - row.providerBalanceObservedAtMs;
     if (age > limits.maximumProviderBalanceAgeMs) runFresh = false;
     if (row.receiverFailureObserved) runFailure = true;
-    const ms = row.observedAtMs - runStart;
+    const ms = row.observedAtMs - (runStart ?? row.observedAtMs);
     if (runSamples > longest || (runSamples === longest && ms > longestMs)) {
       longest = runSamples;longestMs = ms;
     }
