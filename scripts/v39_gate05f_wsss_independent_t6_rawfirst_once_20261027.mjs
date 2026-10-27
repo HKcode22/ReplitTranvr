@@ -151,8 +151,8 @@ try{
    availableAtUtc:z.available_at?.toISOString?.()??null,
    rawPersistedAtUtc:z.raw_persisted_at_utc?.toISOString?.()??null,
    normalizedRows:z.rows,primaryRows:z.primary_rows,
-   operatorRows:z.operator_rows,preliminaryBeforeT24:z.before_t6,
-   preliminaryWithin10mAtT24:z.within10,
+   operatorRows:z.operator_rows,preliminaryBeforeT6:z.before_t6,
+   preliminaryWithin10mAtT6:z.within10,
    sourceNativeTStillUnverified:true};
  record({...receipt,status:"RAW_FIRST_DURABLE_READBACK_PASS",stored});
  let after=null,settlementError=null;
