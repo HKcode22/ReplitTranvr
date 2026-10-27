@@ -169,7 +169,7 @@ describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("Gate05e original p
      "const MEMBERS_SQL=",";\n\nlet db=");
    for(const sql of [parent,shape,members]){
      expect(sql).toMatch(/^(WITH|SELECT)\s/);
-     expect(sql).not.toMatch(/\\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE)\\s/i);
+     expect(sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE)\s/i);
    }
    expect(shape).toContain("provisional_operator_context_candidates");
    const id="282a663e-18ef-4af0-9181-c95cde9430e6";
