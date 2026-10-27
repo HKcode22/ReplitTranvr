@@ -31,14 +31,16 @@ async function onlyGet(path){
   return {body:obj,headers:r.headers};
 }
 function quotaRemaining(h){
-  const n=Number(h.get("x-ratelimit-api-units-remaining"));
+  const raw=h.get("x-ratelimit-api-units-remaining");
+  const n=raw===null?NaN:Number(raw);
   if(!Number.isSafeInteger(n)||n<0)
     throw Error("GATE05_FREE_FEED_QUOTA_HEADER_MISSING");
   return n;
 }
 function balanceCredits(obj){
   const value=obj?.balance??obj;
-  const n=value?.creditsRemaining??value?.credits;
+  const raw=value?.creditsRemaining??value?.credits;
+  const n=raw===null||raw===undefined?NaN:Number(raw);
   if(!Number.isSafeInteger(n)||n<0)
     throw Error("GATE05_FREE_FEED_BALANCE_SHAPE");
   return n;
