@@ -34,6 +34,7 @@ function preInput(over: Partial<PrePopulationInput> = {}): PrePopulationInput {
     flightInstanceId: "leg:abcd1234",
     populationQueryId: "pop_q_1",
     populationMemberAtCutoff: true,
+    populationObservationAvailableAtUtc: new Date("2026-08-31T23:00:00Z"),
     horizonEligible: true,
     horizon: "T-6h",
     selectedTMilestoneUtc: new Date("2026-09-01T10:00:00Z"),
@@ -67,6 +68,20 @@ describe("Phase 0F: PRE snapshot builder (§1.5.6)", () => {
   it("not horizon eligible → blocked", () => {
     const r = buildPreSnapshot(preInput({ horizonEligible: false }));
     expect(r).toEqual({ status: "blocked", reason: "not_horizon_eligible" });
+  });
+
+  it("late or unknown population availability cannot create a PRE snapshot",()=>{
+    expect(buildPreSnapshot(preInput({
+      populationObservationAvailableAtUtc:new Date("2026-09-01T04:00:01Z")
+    }))).toEqual({status:"blocked",reason:"population_not_available_at_cutoff"});
+    expect(buildPreSnapshot(preInput({
+      populationObservationAvailableAtUtc:null
+    }))).toEqual({status:"blocked",reason:"population_not_available_at_cutoff"});
+  });
+  it("strict horizon equality refuses earlier/later decision cutoffs",()=>{
+    expect(buildPreSnapshot(preInput({
+      predictionCutoffUtc:new Date("2026-09-01T03:59:59Z")
+    }))).toEqual({status:"blocked",reason:"not_horizon_eligible"});
   });
 
   it("T unavailable → horizon BLOCKED, never fabricated", () => {
@@ -279,6 +294,7 @@ describe("Phase 0F/0H: persistence wiring (builders → tables)", () => {
       flightInstanceId: "leg:abcd1234",
       populationQueryId: "pop_q_1",
       populationMemberAtCutoff: true,
+      populationObservationAvailableAtUtc: new Date("2026-08-31T23:00:00Z"),
       horizonEligible: true,
       horizon: "T-6h",
       selectedTMilestoneUtc: new Date("2026-09-01T10:00:00Z"),
@@ -302,6 +318,7 @@ describe("Phase 0F/0H: persistence wiring (builders → tables)", () => {
       flightInstanceId: "leg:abcd1234",
       populationQueryId: null,
       populationMemberAtCutoff: false,
+      populationObservationAvailableAtUtc: new Date("2026-08-31T23:00:00Z"),
       horizonEligible: true,
       horizon: "T-6h",
       selectedTMilestoneUtc: new Date("2026-09-01T10:00:00Z"),
