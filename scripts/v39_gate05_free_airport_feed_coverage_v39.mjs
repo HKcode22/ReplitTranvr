@@ -18,13 +18,48 @@ const auth={
   "x-rapidapi-host":"aerodatabox.p.rapidapi.com",
   "accept":"application/json"
 };
+// RapidAPI plans may limit FREE endpoints to ~1 request/s: the original
+// diagnostic immediately called the feed after GET balance and got HTTP 429.
+// Pace globally within this single process. NEVER auto-retry 429 or POST.
+const MIN_GET_START_SPACING_MS=2500;
+let lastGetStartMs=null;
+let attempts=0;
+const pause=(ms)=>new Promise(resolve=>setTimeout(resolve,ms));
+function safeHeader(h,name){
+  const value=h.get(name);
+  return value===null?null:value.slice(0,90).replace(/[^a-zA-Z0-9,:.; +\/-]/g,"");
+}
 async function onlyGet(path){
   if(!/^\/(?:subscriptions\/balance|health\/services\/airports\/(?:WSSS|YSSY)\/feeds)$/.test(path))
     throw Error("GATE05_FREE_FEED_UNREVIEWED_PATH");
+  if(lastGetStartMs!==null){
+    const delay=Math.max(0,MIN_GET_START_SPACING_MS-(Date.now()-lastGetStartMs));
+    if(delay>0)await pause(delay);
+  }
+  lastGetStartMs=Date.now();
+  attempts++;
   const r=await fetch(BASE+path,{
     method:"GET",headers:auth,redirect:"error",signal:AbortSignal.timeout(9000)
   });
-  if(r.status!==200)throw Error("GATE05_FREE_FEED_HTTP_"+r.status);
+  if(r.status!==200){
+    console.error(JSON.stringify({
+      status:"GATE05_FREE_FEED_HTTP_HOLD",
+      httpStatus:r.status,
+      requestKind:path.includes("/feeds")?"AIRPORT_FEED":"BALANCE",
+      airport:path.includes("WSSS")?"WSSS":path.includes("YSSY")?"YSSY":null,
+      requestsAttempted:attempts,
+      noPaidFidsRequests:true,noRetries:true,finalBalanceCompared:false,
+      rateLimit:{
+        retryAfter:safeHeader(r.headers,"retry-after"),
+        perWindowRemaining:safeHeader(r.headers,"x-ratelimit-remaining"),
+        perWindowReset:safeHeader(r.headers,"x-ratelimit-reset"),
+        requestsRemaining:safeHeader(r.headers,"x-ratelimit-requests-remaining"),
+        requestsReset:safeHeader(r.headers,"x-ratelimit-requests-reset"),
+        apiUnitsRemaining:safeHeader(r.headers,"x-ratelimit-api-units-remaining")
+      }
+    }));
+    throw Error("GATE05_FREE_FEED_HTTP_"+r.status+"_NO_AUTOMATIC_RETRY");
+  }
   const obj=await r.json();
   if(!obj||typeof obj!=="object"||Array.isArray(obj))
     throw Error("GATE05_FREE_FEED_BAD_RESPONSE_SHAPE");
