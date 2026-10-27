@@ -24,7 +24,7 @@ const headers={"x-rapidapi-key":key,"x-rapidapi-host":"aerodatabox.p.rapidapi.co
 let paidAttempts=0,previous=0;
 function remain(h){const n=h.get("x-ratelimit-api-units-remaining");if(!/^[0-9]{1,12}$/.test(n||""))throw Error("G05D_QUOTA_HEADER");return Number(n);}
 async function get(path,paid=false){
- if(!/^\/(?:subscriptions\/balance(?:$)|flights\/airports\/icao\/WSSS\/[0-9TZ%:-]+\/[0-9TZ%:-]+\?|flights\/number\/[A-Z0-9]+\/[0-9]{4}-[0-9]{2}-[0-9]{2}\?)/.test(path))throw Error("G05D_ROUTE_NOT_ALLOWED");
+ if(!/^\/(?:subscriptions\/balance(?:$)|flights\/airports\/icao\/WSSS\/[0-9A-Fa-fTZ%:-]+\/[0-9A-Fa-fTZ%:-]+\?|flights\/number\/[A-Z0-9]+\/[0-9]{4}-[0-9]{2}-[0-9]{2}\?)/.test(path))throw Error("G05D_ROUTE_NOT_ALLOWED");
  const pause=2600-(Date.now()-previous);
  if(previous&&pause>0)await new Promise(r=>setTimeout(r,pause));
  previous=Date.now();
