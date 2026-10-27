@@ -4,6 +4,7 @@ import {readFileSync} from "node:fs";
 import {runInNewContext} from "node:vm";
 const incidentSource=readFileSync("scripts/v39_gate05e_wsss_one_prospective_fids_rawfirst_20261027.mjs","utf8");
 const forensicSource=readFileSync("scripts/v39_gate05e_paid_receipt_db_readonly_forensics_20261027.mjs","utf8");
+const cohortSource=readFileSync("scripts/v39_gate05e_cohort_aggregate_readonly_20261027.mjs","utf8");
 function sqlFromSource(source:string,start:string,end:string):string{
  const a=source.indexOf(start),b=source.indexOf(end,a+start.length);
  if(a<0||b<0)throw Error("GATE05E_SQL_SOURCE_DRIFT");
@@ -31,6 +32,9 @@ beforeAll(async()=>{
  "CREATE TABLE clean.flight_population(",
  "id bigserial PRIMARY KEY,population_query_id uuid,",
  "population_role text,codeshare_resolution_status text,",
+ "scope_classification text, canonical_flight_instance_id text,",
+ "dep_airport_icao text, provider_record_key text, call_sign text,",
+ "analytic_identity_id text, flight_number text,",
  "dep_scheduled_utc timestamptz,available_at timestamptz,",
  "provider_content_expired_at_utc timestamptz);"
  ].join(" "));
@@ -70,6 +74,31 @@ describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("Gate05e original p
    expect(q.rows[0].raw_present).toBe(true);
    expect(q.rows[0].rows).toBe(1);
    expect(q.rows[0].before_t24).toBe(1);
+ });
+ it("executes NEW original-source aggregate identity and availability SELECTs on real PostgreSQL",async()=>{
+   const summary=sqlFromSource(cohortSource,"const COHORT_SUMMARY_SELECT=",";\nconst GROUPED_SELECT=");
+   const grouped=sqlFromSource(cohortSource,"const GROUPED_SELECT=",";\nconst PARENT_SELECT=");
+   const parent=sqlFromSource(cohortSource,"const PARENT_SELECT=",";\nlet client=");
+   for(const sql of [summary,grouped,parent]){
+     expect(sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE)\b/i);
+     expect(sql).not.toMatch(/SELECT\s+[^;]*raw_payload\s+AS\s+raw_payload/i);
+   }
+   const c=await pool.connect();
+   try{
+     await c.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+     expect((await c.query("SHOW transaction_read_only")).rows[0].transaction_read_only).toBe("on");
+     const id="282a663e-18ef-4af0-9181-c95cde9430e6";
+     const [a,b,q]=[await c.query(summary,[id]),await c.query(grouped,[id]),await c.query(parent,[id])];
+     expect(a.rows).toHaveLength(1);
+     expect(a.rows[0].rows).toBe(1);
+     expect(a.rows[0].available_before_candidate_t24).toBe(1);
+     expect(a.rows[0].lead_10_to_20m).toBe(1);
+     expect(a.rows[0].confirmed_canonical_rows).toBe(0);
+     expect(b.rows).toHaveLength(1);
+     expect(b.rows[0].identity_status).toBe("confirmed_operating_leg");
+     expect(b.rows[0].response_rows).toBe(1);
+     expect(q.rows[0].raw_present).toBe(true);
+   } finally {await c.query("ROLLBACK");c.release();}
  });
  it("confirms strictly READ ONLY recovery query syntax and real returned source counts",async()=>{
    const sql=sqlFromSource(forensicSource,"const query=",";\nconst utc=");
