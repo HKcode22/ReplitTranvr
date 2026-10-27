@@ -15,7 +15,7 @@
 | Where are original machine receipts? | [Evidence index](evidence/ARTIFACTS_START_HERE.md) |
 | Where can I find any specific research source? | [All 108 original SEPmd file links](ALL_SEPMD_FILES.md) |
 | Which past authorizations exist? | [Authorization index](authorizations/README.md), not authorization to run again |
-| What is happening in Phase 3? | [Gate 3 separate unmerged draft](phase3/README.md) |
+| What is the latest Phase 3 / Phase 4 readiness decision? | [Current Gate 3, Gate 0.5, Gate 4, YSSY gap and label audit](phase3/2026-10-26_GATE05_YSSY_FORENSICS_AND_PHASE4_RISK_DECISION.md) and [Phase 3 index](phase3/START_HERE.md) |
 | What tools can be run safely? | [Operations](operations/README.md) |
 | Where is the physical relocation and its safety review? | [Wave B compatibility gate](operations/WAVE_B_COMPATIBILITY_GATE.md) |
 
