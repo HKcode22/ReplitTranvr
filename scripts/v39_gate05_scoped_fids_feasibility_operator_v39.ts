@@ -23,6 +23,8 @@ import {
 import {
   fetchGate05ScopedFidsV39,gate05FidsQueryFingerprintV39
 } from "../server/lib/disruption/gate05ScopedFidsOwner_v39";
+import {summarizeGate05NestedTimePresenceV39}
+  from "../server/lib/disruption/gate05ProspectiveLabelSourceReview_v39";
 import {
   getBalanceEvidenceStrict,listSubscriptionsStrict
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
@@ -232,6 +234,10 @@ export async function runGate05SignedFidsOperatorV39(input:ReturnType<typeof cli
       output.push({withLocation,
         response:res===null?"MISSING":"RECEIVED",
         departures,
+        // Counts are derived in-memory; never store nested provider timestamps,
+        // flight IDs, identifiers, locations or raw source payload.
+        nestedTimePresence:res===null?null:
+          summarizeGate05NestedTimePresenceV39(res.departures),
         departureFieldNames:res===null?[]:[
           ...new Set(res.departures.flatMap((d:unknown)=>
             d!==null&&typeof d==="object"&&!Array.isArray(d)?
