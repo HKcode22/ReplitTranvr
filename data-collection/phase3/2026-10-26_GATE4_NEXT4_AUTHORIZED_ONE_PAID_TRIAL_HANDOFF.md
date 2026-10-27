@@ -1,3 +1,5 @@
+> **HISTORICAL PRE-TRIAL PLAN, NOW SUPERSEDED:** The NEXT4 WSSS one-paid trial has since **PASSED** the defined scientific end-to-end microtrial acceptance. See the [finished-trial closeout](2026-10-26_GATE4_NEXT4_GENUINE_WSSS_SCIENTIFIC_PASS.md). Older "not yet executed" remarks in this document describe its earlier preparation state, not the present project status.
+
 # Gate 4 NEXT4 — authorized one genuine WSSS paid trial
 
 Updated: October 26, 2026. **Trial has not been executed by this document.** Related [Gate4 issue #38](https://github.com/HKcode22/ReplitTranvr/issues/38), [NEXT3 historical root cause and settlement](2026-10-25_GATE4_NEXT3_422_ROOT_CAUSE_RAW_FIRST_REPAIR_AND_FINAL_SETTLEMENT.md), [NEXT4 SQL fix PR #167](https://github.com/HKcode22/ReplitTranvr/pull/167), [NEXT4 state-aware finish PR #168](https://github.com/HKcode22/ReplitTranvr/pull/168), [live read-only attestation PR #169](https://github.com/HKcode22/ReplitTranvr/pull/169).
