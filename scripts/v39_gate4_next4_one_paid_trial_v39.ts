@@ -283,8 +283,9 @@ async function run():Promise<void>{
   console.log(JSON.stringify({status:"NEXT4_INDEPENDENT_JOBS_DISPATCHED",
    protectedGitHubReviewMayBeRequired:true,onePaidCreateAttempted:false,
    softCreditTarget:5,hardCreditCap:false}));
-  let stopId=0,healthId=0,armed=false;
+  let stopId=0,healthId=0,armed=false,checks=0;
   stage="WAIT_INDEPENDENT_STOP_ARMED";
+  console.log("NEXT4_PROTECTED_GITHUB_APPROVAL_MAY_BE_REQUIRED: https://github.com/HKcode22/ReplitTranvr/actions");
   while(Date.now()<Date.parse(stop)-90_000){
    if(!stopId)stopId=runId(STOP_WORKFLOW,runner,mark);
    if(!healthId)healthId=runId(HEALTH_WORKFLOW,runner,mark);
@@ -293,6 +294,12 @@ async function run():Promise<void>{
       healthIsRunning(healthId,runner);
     if(armed)break;
    }
+   checks++;
+   if(checks%5===0)
+    console.log(JSON.stringify({status:"NEXT4_WAITING_FOR_INDEPENDENT_PROTECTED_STOP",
+     stopRunLocated:stopId>0,healthRunLocated:healthId>0,
+     withinApprovedTrialWindow:Date.now()>=Date.parse(start),
+     providerCreateAttempted:false,providerBillingAuthorizedButNotStarted:true}));
    await snooze(8000);
   }
   if(!armed)hold("GITHUB_STOP_OR_OBSERVER_NOT_ARMED");
