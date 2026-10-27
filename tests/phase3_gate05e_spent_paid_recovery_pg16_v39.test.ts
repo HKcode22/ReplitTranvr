@@ -108,10 +108,12 @@ describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("Gate05e original p
    expect(shape).toMatch(/^WITH\s/);
    for(const q of [parent,shape]){
      expect(q).not.toMatch(/\b(INSERT|UPDATE|DELETE|TRUNCATE)\s/i);
-     // CTE may inspect raw_payload inside SQL; final outer SELECT returns aggregates only.
-     expect(q).toMatch(/SELECT count\(\*\)::int AS raw_departure_objects/);
-     expect(q).not.toMatch(/SELECT\s+raw_payload\s+FROM\s+flights/i);
    }
+   // The parent SELECT only returns raw presence; CTE may inspect full
+   // provider JSON internally, but the shape query only projects counters.
+   expect(parent).toContain("(raw_payload IS NOT NULL) AS raw_present");
+   expect(shape).toMatch(/SELECT count\(\*\)::int AS raw_departure_objects/);
+   expect(shape).not.toMatch(/SELECT\s+raw_payload\s+FROM\s+flights/i);
    const id="282a663e-18ef-4af0-9181-c95cde9430e6";
    // Synthetic fixture only; no connection to user's operational database.
    const fixture={departures:[
