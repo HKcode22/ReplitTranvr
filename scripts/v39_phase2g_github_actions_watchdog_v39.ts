@@ -166,6 +166,9 @@ async function main(): Promise<void> {
   let probeSeenAt: number | null = null;
   let nextProviderPoll = 0;
   let lastProviderBalance: number | null = null;
+  // Provider balance snapshots are cached between polls; without this clock
+  // an apparent persistent gap can be nothing more than stale source state.
+  let lastProviderBalanceObservedAtMs: number | null = null;
   let providerReadFailures = 0;
   let noCallbackSpendProviderPolls = 0;
   let lastInternalCredits: number | null = null;
@@ -529,6 +532,7 @@ async function main(): Promise<void> {
 
         lastProviderBalance =
           currentProviderBalance;
+        lastProviderBalanceObservedAtMs = Date.now();
 
         const externalDelta =
           baseline - currentProviderBalance;
@@ -664,6 +668,14 @@ async function main(): Promise<void> {
       callback_requests_seen: callbackRequestsSeen,
       callback_failures: callbackFailures,
       provider_balance_last_seen: lastProviderBalance,
+      provider_balance_observed_at_utc: lastProviderBalanceObservedAtMs === null
+        ? null : new Date(lastProviderBalanceObservedAtMs).toISOString(),
+      // Advisory asynchronous *item-credit* difference, not provider SEND
+      // receipt count or inferred number of missing physical flight legs.
+      provisional_item_credit_difference: lastProviderBalance === null
+        ? null : baseline - lastProviderBalance - internalCredits,
+      provisional_gap_is_not_sender_proof: true,
+      provisional_gap_triggers_automatic_stop: false,
       provider_read_failures: providerReadFailures,
       no_callback_spend_provider_polls: noCallbackSpendProviderPolls,
       scientific_health_status: scientificHealth?.status ?? null,
