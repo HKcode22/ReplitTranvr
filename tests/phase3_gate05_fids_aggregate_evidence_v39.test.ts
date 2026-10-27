@@ -109,6 +109,52 @@ describe("Gate05 pair FIDS aggregate — fixture-only, zero provider IO", () => 
     expect(r.withoutLocation.scheduledWindowUnassessable).toBe(1);
     expect(r.withoutLocation.scheduledOutsideWindow).toBe(0);
   });
+  it("accepts documented AeroDataBox SPACE-formatted UTC, not just T ISO", () => {
+    const space = entry("2026-10-22 04:38Z",{
+      departure: {
+        airport:{icao:"WSSS"},scheduledTime:{utc:"2026-10-22 04:38Z"},
+        revisedTime:{utc:"2026-10-22 04:41Z"},
+        runwayTime:{utc:"2026-10-22 04:42Z"},quality:["Live"]
+      }
+    });
+    const r=aggregateGate05FidsPairV39([space],[space],bounds);
+    expect(r.withoutLocation.objectsReturned).toBe(1);
+    expect(r.withoutLocation.scheduledTimeUtcPresent).toBe(1);
+    expect(r.withoutLocation.revisedTimeUtcPresent).toBe(1);
+    expect(r.withoutLocation.runwayTimeUtcPresent).toBe(1);
+    expect(r.withoutLocation.scheduledInsideWindow).toBe(1);
+    expect(r.provisionalComparableOverlap).toBe(1);
+    expect(r.actualRunwayDelayLabelProven).toBe(false);
+  });
+  it("reads provider FIDS movement shape when withLeg is false", () => {
+    const movement={
+      number:"SQ123",codeshareStatus:"IsOperator",
+      movement:{
+        airport:{icao:"WADD"},scheduledTime:{utc:"2026-10-22 04:38Z"},
+        revisedTime:{utc:"2026-10-22 04:40Z"},
+        runwayTime:{utc:"2026-10-22 04:42Z"},
+        quality:["Live"]
+      }
+    };
+    const r=aggregateGate05FidsPairV39([movement],[movement],bounds);
+    expect(r.withoutLocation.departureMovementObjects).toBe(1);
+    expect(r.withoutLocation.scheduledTimeUtcPresent).toBe(1);
+    expect(r.withoutLocation.runwayTimeUtcPresent).toBe(1);
+    expect(r.withoutLocation.qualityLive).toBe(1);
+    expect(r.withoutLocation.departureRequestedAirportConfirmed).toBe(0);
+    expect(r.withoutLocation.provisionalDistinctKeys).toBe(1);
+    expect(r.actualRunwayDelayLabelProven).toBe(false);
+  });
+  it("does not count invalid SPACE dates, fabricated times or foreign UTC offsets", () => {
+    const rows=[
+      entry("2026-02-30 04:38Z"),
+      entry("2026-10-22 04:38+02:00"),
+      entry("not-a-date")
+    ];
+    const r=aggregateGate05FidsPairV39(rows,[],bounds);
+    expect(r.withoutLocation.scheduledTimeUtcPresent).toBe(0);
+    expect(r.withoutLocation.scheduledWindowUnassessable).toBe(3);
+  });
   it("uses a half-open UTC window; rejects the end boundary", () => {
     const x = aggregateGate05FidsPairV39(
       [entry("2026-10-22T04:45:00Z")], [], bounds);
