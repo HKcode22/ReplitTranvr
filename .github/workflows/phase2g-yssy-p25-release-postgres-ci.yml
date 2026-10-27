@@ -43,6 +43,7 @@ jobs:
           test -z "${V39_DATABASE_RUNTIME_URL:-}"
           npx vitest run tests/phase2g_yssy_p25_actual_postgres_release_v39.test.ts
           npx vitest run tests/phase3_gate05_perflight_asof_pg16_v39.test.ts
+          npx vitest run tests/phase3_gate05e_spent_paid_recovery_pg16_v39.test.ts
           echo "PAID_PROVIDER_CALLS=0"
           echo "PRODUCTION_DATABASE_QUERIES=0"
       - name: Real PG16 SIGKILL proves LOGGED versus UNLOGGED lifecycle
