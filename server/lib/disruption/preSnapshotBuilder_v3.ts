@@ -21,6 +21,8 @@ export interface PrePopulationInput {
   flightInstanceId: string;
   populationQueryId: string | null;
   populationMemberAtCutoff: boolean;
+  /** Durable system-availability of the qualifying population observation. */
+  populationObservationAvailableAtUtc: Date | null;
   horizonEligible: boolean;
   horizon: PreHorizon;
   selectedTMilestoneUtc: Date | null;
@@ -53,7 +55,7 @@ export interface PreSnapshot {
 }
 export type PreSnapshotOutcome =
   | { status: "snapshot"; snapshot: PreSnapshot }
-  | { status: "blocked"; reason: "not_population_member" | "not_horizon_eligible" | "t_unavailable" };
+  | { status: "blocked"; reason: "not_population_member" | "population_not_available_at_cutoff" | "not_horizon_eligible" | "t_unavailable" };
 
 export function snapshotExists(populationMemberAtCutoff: boolean, horizonEligible: boolean): boolean {
   return populationMemberAtCutoff && horizonEligible;
@@ -72,6 +74,11 @@ export function selectFeatureValue(feature: PreFeatureInput, cutoffUtc: Date): P
 
 export function buildPreSnapshot(input: PrePopulationInput): PreSnapshotOutcome {
   if (!input.populationMemberAtCutoff) return { status: "blocked", reason: "not_population_member" };
+  const availability = input.populationObservationAvailableAtUtc?.getTime();
+  const cutoff = input.predictionCutoffUtc?.getTime();
+  if (availability === undefined || !Number.isFinite(availability) ||
+      !Number.isFinite(cutoff) || availability > cutoff)
+    return { status: "blocked", reason: "population_not_available_at_cutoff" };
   if (!input.selectedTMilestoneUtc || !Number.isFinite(input.selectedTMilestoneUtc.getTime())) {
     return { status: "blocked", reason: "t_unavailable" };
   }
@@ -238,6 +245,7 @@ export async function materializePreSnapshotsForCutoff(pool: QueryPool, input: P
         flightInstanceId: String(row.analytic_identity_id),
         populationQueryId: row.population_query_id ?? null,
         populationMemberAtCutoff: true,
+        populationObservationAvailableAtUtc: availableAt,
         horizonEligible: horizonEligibleForCutoff(selectedT, input.cutoffUtc, horizon),
         horizon,
         selectedTMilestoneUtc: selectedT,
