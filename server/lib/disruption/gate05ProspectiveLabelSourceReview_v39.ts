@@ -87,3 +87,56 @@ export function reviewGate05ProspectiveLabelSourceV39(
     providerRequests: 0, databaseWrites: 0,
   };
 }
+
+
+/**
+ * Future, separately authorized FIDS operator use only:
+ * summarize nested time-field PRESENCE immediately while the parsed response
+ * is in memory. Output contains no flight IDs, coordinate, raw date/time,
+ * airline or provider source payload, and never asserts runway actuality.
+ */
+export function summarizeGate05NestedTimePresenceV39(rows: unknown): Readonly<{
+  schema: "v39.gate05.nested-fids-time-presence.v1";
+  responseObjects: number;
+  malformedObjects: number;
+  scheduledTimeUtcFieldsPresent: number;
+  revisedTimeUtcFieldsPresent: number;
+  runwayTimeUtcFieldsPresent: number;
+  actualWheelsOffProven: false;
+  scheduledWheelsOffProven: false;
+  flightIdentityProven: false;
+  eventAsOfTProven: false;
+  rawProviderRecordsPersisted: false;
+  providerRequests: 0;
+}> {
+  if (!Array.isArray(rows) || rows.length > 2000)
+    throw Error("GATE05_NESTED_FIELDS_INVALID_RESPONSE");
+  const object = (v: unknown): Record<string,unknown> | null =>
+    v !== null && typeof v === "object" && !Array.isArray(v) ?
+      v as Record<string,unknown> : null;
+  const timestampPresent = (v: unknown): boolean => {
+    const str=object(v)?.utc;
+    return typeof str === "string" && str.trim().length > 0;
+  };
+  let malformed=0,scheduled=0,revised=0,runway=0;
+  for(const row of rows){
+    const flight=object(row);
+    if(!flight){malformed++;continue;}
+    const departure=object(flight.departure);
+    if(timestampPresent(departure?.scheduledTime))scheduled++;
+    if(timestampPresent(departure?.revisedTime))revised++;
+    if(timestampPresent(departure?.runwayTime))runway++;
+  }
+  return {
+    schema:"v39.gate05.nested-fids-time-presence.v1",
+    responseObjects:rows.length,malformedObjects:malformed,
+    scheduledTimeUtcFieldsPresent:scheduled,
+    revisedTimeUtcFieldsPresent:revised,
+    runwayTimeUtcFieldsPresent:runway,
+    actualWheelsOffProven:false,
+    scheduledWheelsOffProven:false,
+    flightIdentityProven:false,
+    eventAsOfTProven:false,
+    rawProviderRecordsPersisted:false,providerRequests:0,
+  };
+}
