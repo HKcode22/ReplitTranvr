@@ -70,10 +70,10 @@ describe("TEST-012: AIRBORNE pipeline", () => {
         new Date("2026-09-01T10:00:05Z"),
       );
 
-      expect(timestamps.scheduledGateOutUtc).toEqual(new Date("2026-09-01T10:00:00Z"));
+      expect(timestamps.scheduledGateOutUtc).toBeNull(); // no verified provider→FAA gate alias
       // gptP0analyze4 #6: runway→actual UNVERIFIED until Gate 0.5 → stays NULL.
       expect(timestamps.actualGateOutUtc).toBeNull();
-      expect(timestamps.scheduledGateInUtc).toEqual(new Date("2026-09-01T11:30:00Z"));
+      expect(timestamps.scheduledGateInUtc).toBeNull(); // no verified provider→FAA gate alias
       expect(timestamps.receivedAtUtc).toEqual(new Date("2026-09-01T10:00:05Z"));
     });
 
