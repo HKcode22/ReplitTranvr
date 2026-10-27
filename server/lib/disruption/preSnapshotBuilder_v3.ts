@@ -262,10 +262,11 @@ export async function materializePreSnapshotsForCutoff(pool: QueryPool, input: P
   );
   const blocked: Record<string, number> = {};
   const tally = (reason: string) => { blocked[reason] = (blocked[reason] ?? 0) + 1; };
-  let built = 0, inserted = 0, alreadyExisting = 0;
+  let built = 0, inserted = 0, alreadyExisting = 0, evaluatedRows = 0;
 
   for (const row of res.rows) {
     if (!horizons.includes(row.horizon as PreHorizon)) continue;
+    evaluatedRows += 1;
     const horizon = row.horizon as PreHorizon;
     const selectedT = resolveSelectedTMilestone(row, input.selectedTMilestoneConfig);
     if (!selectedT) { tally("t_unavailable"); continue; }
@@ -313,6 +314,6 @@ export async function materializePreSnapshotsForCutoff(pool: QueryPool, input: P
     if (n > 0) inserted += n;
     else alreadyExisting += 1;
   }
-  return { cutoffUtc: input.cutoffUtc.toISOString(), populationRows: res.rows.length,
+  return { cutoffUtc: input.cutoffUtc.toISOString(), populationRows: evaluatedRows,
     built, blocked, inserted, alreadyExisting };
 }
