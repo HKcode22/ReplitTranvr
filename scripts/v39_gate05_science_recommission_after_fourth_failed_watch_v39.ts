@@ -181,9 +181,18 @@ export async function recommissionGate05AfterFourthUnbilledWatchV39(
    `repos/${REPO}/issues/173/comments?per_page=100`]);
  if(!Array.isArray(issueComments)||issueComments.length>=100)
    hold("RETRY4_ISSUE_INTENT_HISTORY_INCOMPLETE");
- if(issueComments.some((c:any)=>
-     typeof c?.body==="string"&&c.body.includes(PRIOR_SCOPE)&&
-     (/ONE_CREATE_ATTEMPT_IMMINENT_DO_NOT_REPEAT|science-paid-create-intent|ONE_PAID_WSSS_SCIENCE_ALERT_CREATED/.test(c.body))))
+ // Explanatory incident notes may quote the status string and prior scope.
+ // Match only the source-generated, machine-parseable JSON receipt, never a
+ // prose mention, so documentation cannot falsely look like a paid POST.
+ const priorPaidIntent=issueComments.some((c:any)=>{
+   if(typeof c?.body!=="string")return false;
+   let body:any;
+   try{body=JSON.parse(c.body);}catch{return false;}
+   return body?.schema==="v39.gate05.science-paid-create-intent.v1"&&
+     body?.status==="ONE_CREATE_ATTEMPT_IMMINENT_DO_NOT_REPEAT"&&
+     body?.scope===PRIOR_SCOPE;
+ });
+ if(priorPaidIntent)
    hold("RETRY4_PRIOR_PAID_INTENT_FOUND_NO_REUSE");
  const old={
    schema:"v39.gate05.science-private-one-use-commission.v1",
