@@ -24,7 +24,7 @@ import {existsSync,mkdirSync,openSync,writeSync,fsyncSync,closeSync,
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {execFileSync,spawnSync} from "node:child_process";
-import {getBalanceEvidenceStrict,listSubscriptionsStrict} from
+import {getBalanceEvidenceStrictWithRetry,listSubscriptionsStrictWithRetry} from
   "../server/lib/disruption/aerodataboxLimiter_v3";
 
 const REPO="HKcode22/ReplitTranvr";
@@ -204,13 +204,13 @@ export async function recommissionGate05AfterUnbilledWindowV39(
     health?.prepaid_route_registered!==true||
     health?.provider_mutation!==false)
    hold("PUBLISHED_SOURCE_NOT_EXACT");
- const before=await getBalanceEvidenceStrict();
+ const before=await getBalanceEvidenceStrictWithRetry();
  const credits=before.balance.creditsRemaining;
  if(credits!==old.startingCredits)
    hold("CREDIT_BALANCE_NOT_STABLE_AFTER_NO_PAID_WINDOW");
  if(!Number.isSafeInteger(credits)||credits<500||
     before.quota.apiUnitsRemaining<12)hold("BUDGET");
- const active=await listSubscriptionsStrict();
+ const active=await listSubscriptionsStrictWithRetry();
  if(active.some(x=>x.isActive))hold("FOREIGN_ACTIVE_PROVIDER");
  const raw=process.env.DATABASE_URL;
  const runtime=process.env.V39_DATABASE_RUNTIME_URL;
