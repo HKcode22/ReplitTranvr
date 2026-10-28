@@ -26,6 +26,8 @@ import {join} from "node:path";
 import {execFileSync,spawnSync} from "node:child_process";
 import {getBalanceEvidenceStrictWithRetry,listSubscriptionsStrictWithRetry} from
   "../server/lib/disruption/aerodataboxLimiter_v3";
+import {readGate05PublishedReceiverHealthV39} from
+  "../server/lib/disruption/gate05PublishedReceiverHealth_v39";
 
 const REPO="HKcode22/ReplitTranvr";
 const ENV="gate05-safety";
@@ -191,15 +193,10 @@ export async function recommissionGate05AfterThirdUnbilledWatchV39(
    encoding:"utf8",maxBuffer:1024*1024,stdio:["ignore","pipe","ignore"]
  });
  const sourceHash=sha256(source);
- const healthRes=await fetch(PUB,{method:"GET",redirect:"error",
-   signal:AbortSignal.timeout(8000)});
- if(healthRes.status!==200)hold("PUBLIC_RECEIVER_HTTP");
- const health=await healthRes.json();
- if(health?.status!=="PASS"||health?.git_head!==RECEIVER||
-    health?.published_deployment!==true||
-    health?.prepaid_route_registered!==true||
-    health?.provider_mutation!==false)
-   hold("PUBLISHED_SOURCE_NOT_EXACT");
+ // Prospective commission is FREE: tolerate transient published cold start.
+ await readGate05PublishedReceiverHealthV39({
+   url:PUB,expectedReceiver:RECEIVER,maxAttempts:3,timeoutMs:20000
+ });
  const before=await getBalanceEvidenceStrictWithRetry();
  const credits=before.balance.creditsRemaining;
  if(credits!==old.startingCredits)
@@ -227,7 +224,7 @@ export async function recommissionGate05AfterThirdUnbilledWatchV39(
    method:"POST",redirect:"error",
    headers:{"x-v39-phase2g-db-challenge":challenge,
      "x-v39-phase2g-db-proof":proof},
-   signal:AbortSignal.timeout(10000)
+   signal:AbortSignal.timeout(20000)
  });
  if(bound.status!==200)hold("PUBLISHED_DB_BIND_HTTP");
  const boundBody=await bound.json();
