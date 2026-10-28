@@ -40,11 +40,6 @@ jobs:
       GITHUB_REF: ${{ github.ref }}
       GITHUB_SHA: ${{ github.sha }}
       GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
-      GH_TOKEN: ${{ secrets.GATE05_GH_ADMIN_TOKEN }}
-      DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
-      V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
-      AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
-      AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
       NODE_ENV: production
     steps:
       - name: Validate main, exact one-use dispatch and protected secrets
@@ -57,10 +52,7 @@ jobs:
           test "$GITHUB_EVENT_NAME" = workflow_dispatch
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$CONFIRM" = RUN_ALREADY_APPROVED_WSSS_ONCE_GITHUB_AUTOMATED
-          for name in GH_TOKEN DATABASE_URL V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET; do
-            test -n "${!name:-}" || { echo "MISSING_PROTECTED_SECRET:$name" >&2; exit 2; }
-          done
-          echo "GATE05_GITHUB_OWNER_PROTECTED_PREFLIGHT=PASS"
+          echo "GATE05_GITHUB_OWNER_PROTECTED_METADATA_PREFLIGHT=PASS"
 
       - uses: actions/checkout@v4
         with:
@@ -78,9 +70,20 @@ jobs:
 
       - name: Single signed commission and one-use paid CREATE after REAL independent STOP
         shell: bash
+        # Privileged secrets NEVER enter npm ci, setup-node or checkout.
+        # The reviewed controller step alone receives them after installs.
+        env:
+          GH_TOKEN: ${{ secrets.GATE05_GH_ADMIN_TOKEN }}
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
         run: |
           set -Eeuo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          for name in GH_TOKEN DATABASE_URL V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET; do
+            test -n "${!name:-}" || { echo "MISSING_PROTECTED_SECRET:$name" >&2; exit 2; }
+          done
           node --import tsx scripts/v39_gate05_github_owner_controller_once_v39.ts
 
       - name: Preserve truthful scientific status
