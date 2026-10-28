@@ -10,14 +10,14 @@ const owner=()=>({
   authorization_sha256:"7c3c58076322986b97744c234e25223818f2dcbd73ac525e392f3a0294654061",
   reviewed_stop_ticket_sha256:"aa6d6c9374bcca7af6b6beea7589e42bbb648649ee1d3493bcf75144c5bc6a7f",
   airport_icao:"WSSS",
-  provider_subscription_id:"exactOwnedId-12345",
+  provider_subscription_id:"exactOwnedId-12345" as string|null,
   start_at_utc:new Date("2026-10-28T10:15:00.000Z"),
   stop_at_utc:new Date("2026-10-28T11:15:00.000Z"),
   alert_credit_ceiling:500,early_stop_credits:350,
   rest_api_units_ceiling:12,
-  exact_owned_delete_verified:null,
-  terminal_at_utc:null,
-  terminal_evidence_sha256:null
+  exact_owned_delete_verified:null as boolean|null,
+  terminal_at_utc:null as Date|null,
+  terminal_evidence_sha256:null as string|null
 });
 const input=()=>({
   owner:owner(),firstBalance:1981,lastBalance:1981,
