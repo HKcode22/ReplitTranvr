@@ -50,10 +50,12 @@ describe("Gate05 fourth scope, evidence-first resilient execution",()=>{
    'const precreateSelect=async', 'RECONNECTED_DB_IDENTITY_DRIFT',
    'if(providerAttempted||commitAttempted||existsSync(INTENT))',
    'await reconnectBeforeCreate()', 'precreateSelect(OWNER',
-   'maxDeliveryRetries:0', 'noBlindCreateRetry:true',
+   'const rearmPreparedCallback=async()', 'if(lastCallback.rowCount===0)',
+   'await rearmPreparedCallback()', 'maxDeliveryRetries:0', 'noBlindCreateRetry:true',
    'ONE_CREATE_ATTEMPT_IMMINENT_DO_NOT_REPEAT'
   ])expect(paid).toContain(t);
   expect(paid).not.toContain("maxDeliveryRetries:12");
+  expect(paid.split("await rearmPreparedCallback()").length-1).toBe(2);
  });
  it("lets transient free reads and pre-paid PG restarts recover without inventing scientific data",()=>{
   for(const t of [
