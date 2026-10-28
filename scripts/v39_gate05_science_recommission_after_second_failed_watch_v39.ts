@@ -129,7 +129,7 @@ export async function recommissionGate05AfterSecondUnbilledWatchV39(
  // controller final NO paid invocation and the STOP's NO provider id.
  const jsonLog=(run:string,marker:string):any=>{
    const logs=gh(["run","view",run,"--repo",REPO,"--log"]);
-   const matches=logs.split("\\n").filter(l=>l.includes(marker));
+   const matches=logs.split("\n").filter(l=>l.includes(marker));
    if(matches.length!==1)hold("RETRY2_PREVIOUS_LOG_EVENT_NOT_UNIQUE");
    const at=matches[0].indexOf("{");
    if(at<0)hold("RETRY2_PREVIOUS_LOG_EVENT_NOT_JSON");
