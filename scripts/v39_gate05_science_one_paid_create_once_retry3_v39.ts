@@ -144,7 +144,7 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
  const start=Date.parse(m.startUtc),stop=Date.parse(m.stopUtc);
  if(!Number.isFinite(start)||!Number.isFinite(stop)||
     stop-start!==3600000)hold("FROZEN_WINDOW_INVALID");
- if(Date.now()<start-5*60000)hold("TOO_EARLY_FOR_PAID_CREATE");
+ if(Date.now()<start-9*60000)hold("TOO_EARLY_FOR_PAID_CREATE");
  if(Date.now()>start+15000)hold("SIXTY_MINUTE_PILOT_WINDOW_ALREADY_LATE");
  const localSecret=String(process.env.AERODATABOX_WEBHOOK_SECRET??"");
  if(localSecret.length<32||!process.env.AERODATABOX_API_KEY)
@@ -168,19 +168,57 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
    hold("PUBLISHED_SECRET_NOT_MATCHED");
  const dbUrl=process.env.DATABASE_URL;
  if(!dbUrl)hold("DB_ADMIN_SECRET");
- const db=new pg.Client({connectionString:dbUrl,
-   connectionTimeoutMillis:7000,query_timeout:9000,
-   statement_timeout:9000,lock_timeout:3000,
-   application_name:"gate05_science_exact_once_paid_owner"});
+ // Neon can restart an idle pg.Client. Without an 'error' listener,
+ // Node exits abruptly, bypassing both recovery and exact-owned cleanup.
+ let dbFailed=false;
+ const makeClient=()=>{
+   const c=new pg.Client({connectionString:dbUrl,
+     connectionTimeoutMillis:7000,query_timeout:9000,
+     statement_timeout:9000,lock_timeout:3000,
+     application_name:"gate05_science_exact_once_paid_owner"});
+   c.on("error",()=>{
+     dbFailed=true;
+     console.warn("GATE05_PG_CONNECTION_INTERRUPTED_RECONCILE_BEFORE_PAID");
+   });
+   return c;
+ };
+ let db=makeClient();
  let created:string|null=null,providerAttempted=false,commitAttempted=false;
- await db.connect();
+ const reconnectBeforeCreate=async()=>{
+   // Reconnect only before the immutable paid intent and remote POST.
+   if(providerAttempted||commitAttempted||existsSync(INTENT))
+     hold("POST_INTENT_DATABASE_RECONNECT_FORBIDDEN");
+   await db.end().catch(()=>undefined);
+   dbFailed=false;
+   db=makeClient();
+   await db.connect();
+   const id=await db.query("SELECT current_database() AS db,current_user AS actor");
+   if(id.rows[0]?.db!=="neondb"||id.rows[0]?.actor!=="neondb_owner")
+     hold("RECONNECTED_DB_IDENTITY_DRIFT");
+   console.log("GATE05_PG_READ_ONLY_PREFLIGHT_RECONNECTED_NO_PROVIDER_CREATE");
+ };
+ const precreateSelect=async(sql:string,params:any[]=[]):Promise<pg.QueryResult<any>>=>{
+   if(providerAttempted||existsSync(INTENT))
+     hold("POST_INTENT_READ_ONLY_RETRY_FORBIDDEN");
+   if(dbFailed)await reconnectBeforeCreate();
+   try{return await db.query(sql,params);}
+   catch(error){
+     const e=error as {code?:string;message?:string};
+     const transient=["57P01","57P02","08006","08003"].includes(e?.code??"")||
+       /connection terminated|connection ended|connection closed/i.test(e?.message??"");
+     if(!transient)throw error;
+     await reconnectBeforeCreate();
+     return await db.query(sql,params);
+   }
+ };
  try{
-   const initial=await db.query(OWNER,[m.scope]);
+   await db.connect();
+   const initial=await precreateSelect(OWNER,[m.scope]);
    const o=initial.rows[0];
    if(initial.rowCount!==1||!exactOwner(o,m)||
       o.state!=="PREPARED"||o.provider_subscription_id!==null)
      hold("LOGGED_OWNER_NOT_PREPARED");
-   let session=await db.query(
+   let session=await precreateSelect(
      `SELECT state,owner_kind,icao,provider_subscription_id,expires_at_utc
       FROM clean.prepaid_probe_session_runtime WHERE session_id=$1::uuid`,
      [m.scope]);
@@ -232,7 +270,7 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
        }
      );
      console.log(JSON.stringify(repaired));
-     session=await db.query(
+     session=await precreateSelect(
        `SELECT state,owner_kind,icao,provider_subscription_id,expires_at_utc
         FROM clean.prepaid_probe_session_runtime WHERE session_id=$1::uuid`,
        [m.scope]);
@@ -259,7 +297,7 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
    liveSafety(input.stopRun,m,head);
    // Prevent billable CREATE if Neon cleared UNLOGGED identity again
    // between preflight and the frozen start. Never rearm after paid intent.
-   const lastCallback=await db.query(
+   const lastCallback=await precreateSelect(
       `SELECT state,owner_kind,icao,provider_subscription_id,expires_at_utc
          FROM clean.prepaid_probe_session_runtime
         WHERE session_id=$1::uuid`,[m.scope]);
