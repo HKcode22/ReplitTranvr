@@ -57,7 +57,9 @@ export function gate05SciencePlanWindowV39(nowMs:number):{
   start:string;stop:string;sessionExpires:string
 }{
  if(!Number.isSafeInteger(nowMs))hold("CLOCK");
- const start=Math.ceil((nowMs+45*60000)/(15*60000))*(15*60000);
+ // GH controller provisions a separate safety run immediately; allow >=35m
+ // of lead time for protected deployment approval before T-10m.
+ const start=Math.ceil((nowMs+35*60000)/(15*60000))*(15*60000);
  return {
    start:new Date(start).toISOString(),
    stop:new Date(start+60*60000).toISOString(),
