@@ -14,6 +14,8 @@ import {getBalanceEvidenceStrict,getBalanceEvidenceStrictWithRetry,listSubscript
   deleteSubscriptionVerifiedStrict} from
   "../server/lib/disruption/aerodataboxLimiter_v3";
 import {execFileSync} from "node:child_process";
+import {readGate05PublishedReceiverHealthV39} from
+  "../server/lib/disruption/gate05PublishedReceiverHealth_v39";
 
 const REPO="HKcode22/ReplitTranvr";
 const HEALTH="https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime";
@@ -95,15 +97,12 @@ export async function runGate05ScienceStopV39(
  if(execFileSync("git",["rev-parse","HEAD"],{
    encoding:"utf8",stdio:["ignore","pipe","ignore"]
  }).trim()!==p.runner)hold("SOURCE_HEAD");
- const res=await fetch(HEALTH,{method:"GET",redirect:"error",
-   cache:"no-store",signal:AbortSignal.timeout(8000)});
- if(res.status!==200)hold("PUBLISHED_RECEIVER_HTTP");
- const health=await res.json();
- if(health?.status!=="PASS"||health?.git_head!==p.receiver||
-    health?.published_deployment!==true||
-    health?.prepaid_route_registered!==true||
-    health?.provider_mutation!==false)
-   hold("RECEIVER_SOURCE_NOT_PUBLISHED");
+ // The first T-10 pre-CREATE GET is not part of the scientific sample.
+ // Give a cold published receiver up to 3 read-only attempts of 20s each;
+ // never retry a mismatched identity or a billable provider mutation.
+ await readGate05PublishedReceiverHealthV39({
+   url:HEALTH,expectedReceiver:p.receiver,maxAttempts:3,timeoutMs:20000
+ });
  const client=new pg.Client({
    connectionString:exact(e,"GATE05_SCIENCE_SAFETY_DATABASE_URL"),
    connectionTimeoutMillis:7000,query_timeout:7000,
