@@ -214,7 +214,10 @@ export async function runGate05ScienceStopV39(
      // before POST and never retries the non-idempotent subscription CREATE.
      const safePreCreate=current.state==="PREPARED"&&
        current.provider_subscription_id===null&&knownExactId===null&&
-       now<policy.startMs;
+       // Stop tolerating slow GETs BEFORE the separate paid operator's T-5m
+       // preflight; after this point even a PREPARED DB row could reflect
+       // an unbound non-idempotent remote CREATE in progress.
+       now<policy.startMs-5*60000;
      const balance=safePreCreate?
        await getBalanceEvidenceStrictWithRetry({maxAttempts:3}):
        await getBalanceEvidenceStrict();
