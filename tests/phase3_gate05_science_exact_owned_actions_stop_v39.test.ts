@@ -91,7 +91,7 @@ describe("Gate05 independent 60m exact-owned science DELETE worker",()=>{
     expect(yml).toContain("workflow_dispatch:");
     expect(yml).toContain("environment: gate05-safety");
     expect(yml).toContain("cancel-in-progress: false");
-    expect(yml).toContain("timeout-minutes: 90");
+    expect(yml).toContain("timeout-minutes: 165");
     expect(yml).not.toContain("schedule:");
     expect(yml).not.toContain("push:");
     expect(yml).not.toContain("RUN_CREATE");
