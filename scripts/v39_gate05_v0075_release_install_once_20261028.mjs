@@ -133,9 +133,19 @@ try{
    "JOIN pg_proc p ON p.oid=t.tgfoid "+
    "WHERE c.oid='clean.gate05_science_delivery_custody_v39'::regclass"
  )).rows;
+ // PostgreSQL renders a function-level search_path GUC in proconfig
+ // as e.g. "search_path=pg_catalog, clean" (a space after the comma).
+ // The old byte-exact string check was stricter than the DDL semantics and
+ // rolled back a valid V0075 transaction. Require precisely the two schema
+ // entries and no other GUCs; normalize only the SQL list whitespace.
+ const rawProconfig=meta[0]?.proconfig;
+ const normalizedProconfig=Array.isArray(rawProconfig)?
+   rawProconfig.map(x=>typeof x==="string"?
+     x.replace(/\s*,\s*/g,","):"INVALID"):[];
  if(meta.length!==1||meta[0].relpersistence!=="p"||
     meta[0].relkind!=="r"||meta[0].prosecdef!==true||
-    !(meta[0].proconfig??[]).some(x=>x==="search_path=pg_catalog,clean"))
+    normalizedProconfig.length!==1||
+    normalizedProconfig[0]!=="search_path=pg_catalog,clean")
    fail("TRIGGER_OR_LOGGED_DURABILITY_INCOMPLETE");
  const perms=(await db.query(
    "SELECT "+
