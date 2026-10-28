@@ -110,7 +110,13 @@ export function reviewNewGate05WsssSpendV39(
      !sample.exactOwnedScopeConfirmed||
      !sample.callbackRawFirstReady){
     reasons.push("EXACT_SOURCE_ACCOUNT_OR_SCOPE_UNCERTAIN");
-    state=sample.activeOwnedSubscriptions===1?"STOP_NOW":"HOLD_NO_CREATE";
+    state=(
+      !sample.exactOwnedScopeConfirmed||
+      sample.activeForeignSubscriptions!==0||
+      sample.activeOwnedSubscriptions>1
+    ) && sample.activeOwnedSubscriptions>0
+      ?"STOP_UNCONFIRMED":
+      sample.activeOwnedSubscriptions===1?"STOP_NOW":"HOLD_NO_CREATE";
   }else if(sample.stopConfirmed){
     reasons.push("STOP_CONFIRMED_NO_NEW_CREATE");
     state="STOP_NOW";
