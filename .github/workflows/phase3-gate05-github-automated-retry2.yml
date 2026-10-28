@@ -26,7 +26,12 @@ concurrency:
 
 jobs:
   github-owner-once:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'RUN_ALREADY_APPROVED_WSSS_ONCE_GITHUB_AUTOMATED' }}
+    # HISTORICAL one-use Gate05 paid controller retired 2026-10-28.
+    # Genuine retry5 WSSS CREATE already occurred in run #40667765747.
+    # Old provider exact inactive / DB owner STOPPED in #40678304918.
+    # All old-scoped manual dispatches now skip; fresh scope must have
+    # independently reviewed science + safety and NEW cost authority.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     # Existing reviewer-protected PAID environment; approval may be granted
