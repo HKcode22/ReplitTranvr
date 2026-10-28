@@ -3,6 +3,12 @@ run-name: Gate05 old-owner raw evidence inventory by ${{ github.actor }}
 
 # Exact prior owner, no provider API, no blob download, no live mutation.
 on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/v39_gate05_source_metadata_readonly_v39.ts"
+      - "server/lib/disruption/gate05RawCustodyEvidenceAdapter_v39.ts"
+      - ".github/workflows/phase3-gate05-old-source-metadata-readonly.yml"
   workflow_dispatch:
     inputs:
       confirmation:
@@ -21,7 +27,7 @@ concurrency:
 
 jobs:
   old-exact-source-metadata:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'AUDIT_OLD_GATE05_SOURCE_METADATA_ONLY_NO_PROVIDER' }}
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.confirmation == 'AUDIT_OLD_GATE05_SOURCE_METADATA_ONLY_NO_PROVIDER') }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     # Reuse the existing protected DB reader context, NOT authorization to
@@ -41,7 +47,7 @@ jobs:
       - name: Strict DB READ ONLY; safe aggregate counts only
         env:
           GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
-          GATE05_SOURCE_READONLY_CONFIRM: ${{ inputs.confirmation }}
+          GATE05_SOURCE_READONLY_CONFIRM: ${{ github.event_name == 'push' && 'AUTO_POSTMERGE_READONLY' || inputs.confirmation }}
         run: |
           set -Eeuo pipefail
           test "$GITHUB_REF" = refs/heads/main
