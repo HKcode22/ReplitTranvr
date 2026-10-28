@@ -240,6 +240,35 @@ export async function runGate05ScienceStopV39(
      fullSciencePassNotYetProven:true,
      noProviderCreates:true,providerDeletesKnownExactOnly:true
    }));
+ }catch(error){
+   // If the provider/list/balance monitor fails *after* an exact positive
+   // LOGGED owner has been observed, try an emergency DELETE of THAT ID
+   // only. Never search by airport/name or delete an unowned subscription.
+   let attempted=false,verified=false;
+   if(knownExactId){
+     try{
+       const x=await client.query(ONE,[p.scope]);
+       const o=x.rows[0];
+       if(x.rowCount===1&&o.provider_subscription_id===knownExactId&&
+          o.authorization_sha256===p.authorization&&
+          o.reviewed_stop_ticket_sha256===p.ticket&&
+          o.source_commit===p.receiver){
+         attempted=true;
+         verified=await deleteSubscriptionVerifiedStrict(knownExactId,{
+           maxAttempts:3
+         }).catch(()=>false);
+       }
+     }catch{}
+   }
+   console.error(JSON.stringify({
+     status:"GATE05_EMERGENCY_EXACT_STOP_ATTEMPT",
+     exactOwnedIdEstablished:Boolean(knownExactId),
+     exactOwnedDeleteAttempted:attempted,
+     exactOwnedDeleteVerified:verified,
+     providerHardCreditCap:false,
+     originalError:error instanceof Error?error.message:"UNKNOWN"
+   }));
+   throw error;
  }finally{
    await client.end().catch(()=>undefined);
  }
