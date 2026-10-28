@@ -36,7 +36,7 @@ describe("Gate05 owner commission: one WSSS 500-credit session, no paid provider
     expect(source).toContain("reviewed_stop_ticket_sha256");
     expect(source).toContain("CREATE ROLE");
     expect(source).toContain("GRANT SELECT ON TABLE");
-    expect(source).toContain("GATE05_SAFETY_DATABASE_URL");
+    expect(source).toContain("GATE05_SCIENCE_SAFETY_DATABASE_URL");
     expect(source).toContain("has_table_privilege");
     expect(source).toContain("commitAttempted=true");
     expect(source).toContain("COMMIT");
