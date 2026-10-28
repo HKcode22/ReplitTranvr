@@ -77,7 +77,7 @@ describe("one WSSS paid CREATE only after real exact-owned independent Actions S
     expect(atPost).toBeGreaterThan(atIntent);
     expect(code).toContain("providerCreateAttemptsAllowed:1");
     expect(code).toContain('maxDeliveryRetries:0');
-    expect(code).toContain("/prepaid/"+'"+m.scope'); 
+    expect(code).toContain('encodeURIComponent(localSecret)+"/prepaid/"+m.scope');
     expect(code).toContain("phase3_gate05_science_owner_v39");
     expect(code).toContain("prepaid_probe_session_runtime");
     expect(code).toContain("deleteSubscriptionVerifiedStrict(created");
