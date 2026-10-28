@@ -1,4 +1,5 @@
 import {readFileSync} from "node:fs";
+import {spawnSync} from "node:child_process";
 import {describe,it,expect} from "vitest";
 import {gate05SciencePlanWindowV39,hasExactGate05PaidIntentV39} from
  "../scripts/v39_gate05_science_recommission_after_fourth_failed_watch_v39";
@@ -100,6 +101,20 @@ describe("Gate05 fourth scope, evidence-first resilient execution",()=>{
     {...run,status:"completed"},jobs,scope,head,start-9*60000,start)).toBe(false);
   expect(gate05GithubStopIsReallyLiveV39(
     run,{jobs:[]},scope,head,start-9*60000,start)).toBe(false);
+ });
+ it("CLI smoke: executing retry4 without protected approval fails closed instead of silently succeeding",()=>{
+  const result=spawnSync(process.execPath,[
+    "--import","tsx","scripts/v39_gate05_github_owner_controller_retry4_v39.ts"
+  ],{
+    encoding:"utf8",timeout:20000,
+    env:{...process.env,GITHUB_ACTIONS:"",GITHUB_SHA:"",
+      GH_TOKEN:"",DATABASE_URL:"",V39_DATABASE_RUNTIME_URL:"",
+      AERODATABOX_API_KEY:"",AERODATABOX_WEBHOOK_SECRET:""}
+  });
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(2);
+  expect(result.stderr).toContain("GATE05_GITHUB_CONTROLLER_HELD_DO_NOT_RERUN");
+  expect(result.stderr).toContain("noProviderCreateFromThisControllerIfNotInvoked");
  });
  it("preserves separate protected GitHub runners, automatic approval and one-use identity",()=>{
   expect(controller).toContain('"gate05-science-retry4"');
