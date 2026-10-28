@@ -65,13 +65,13 @@ export function validateGate05ScienceStopPinsV39(
     new Date(startMs).toISOString()!==p.start||
     new Date(stopMs).toISOString()!==p.stop)
    hold("BAD_WINDOW");
- const u=new URL(exact(e,"GATE05_SAFETY_DATABASE_URL"));
+ const u=new URL(exact(e,"GATE05_SCIENCE_SAFETY_DATABASE_URL"));
  if(!["postgres:","postgresql:"].includes(u.protocol)||
     !/^gate05_science_safety_reader_[a-z0-9_]{6,50}$/.test(
        decodeURIComponent(u.username))||
     !u.password||u.pathname!=="/neondb"||
     u.searchParams.get("sslmode")!=="verify-full"||
-    u.hostname!==e.GATE05_SAFETY_EXPECTED_DB_HOST)
+    u.hostname!==e.GATE05_SCIENCE_SAFETY_EXPECTED_DB_HOST)
    hold("NONRESTRICTED_DB_ROLE");
  if(!e.AERODATABOX_API_KEY)hold("PROVIDER_KEY_ABSENT");
  return {startMs,stopMs,threshold:350,hardProviderCap:false};
@@ -105,7 +105,7 @@ export async function runGate05ScienceStopV39(
     health?.provider_mutation!==false)
    hold("RECEIVER_SOURCE_NOT_PUBLISHED");
  const client=new pg.Client({
-   connectionString:exact(e,"GATE05_SAFETY_DATABASE_URL"),
+   connectionString:exact(e,"GATE05_SCIENCE_SAFETY_DATABASE_URL"),
    connectionTimeoutMillis:7000,query_timeout:7000,
    statement_timeout:7000,
    application_name:"gate05_science_exact_owned_actions_stop",
