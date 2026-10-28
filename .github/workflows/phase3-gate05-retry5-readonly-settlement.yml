@@ -1,0 +1,58 @@
+name: Gate05 Retry5 FREE Exact Account Settlement (Read-Only)
+run-name: Gate05 retry5 settlement no paid provider mutation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "READ_ONLY_G05_ACCOUNT_AND_EXACT_OWNER_NO_PROVIDER_MUTATION"
+        required: true
+        type: choice
+        options:
+          - READ_ONLY_G05_ACCOUNT_AND_EXACT_OWNER_NO_PROVIDER_MUTATION
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate05-wsss-readonly-settlement
+  cancel-in-progress: false
+
+jobs:
+  account-no-provider-write:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'READ_ONLY_G05_ACCOUNT_AND_EXACT_OWNER_NO_PROVIDER_MUTATION' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: phase2g-paid
+    env:
+      GITHUB_ACTIONS: "true"
+      GITHUB_EVENT_NAME: ${{ github.event_name }}
+      GITHUB_REF: ${{ github.ref }}
+      GITHUB_SHA: ${{ github.sha }}
+      GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies without provider credentials
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify exactly owned DB record and FREE balance/LIST, no mutations
+        env:
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+        run: |
+          set -Eeuo pipefail
+          test -n "${DATABASE_URL:-}"
+          test -n "${AERODATABOX_API_KEY:-}"
+          node --import tsx scripts/v39_gate05_retry5_no_paid_settlement_readonly_v39.ts
+      - name: Explain science status even if account read failed
+        if: always()
+        run: |
+          echo 'This workflow calls only FREE provider balance/LIST and DB SELECT.'
+          echo 'No paid CREATE/DELETE/FIDS/refill, no DB UPDATE, no secret values logged.'
+          echo 'Earlier paid one-hour pilot was shortened; scientific PASS remains OPEN.'
