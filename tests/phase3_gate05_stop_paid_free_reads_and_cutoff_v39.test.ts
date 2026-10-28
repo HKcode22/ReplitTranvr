@@ -9,9 +9,10 @@ const count=(source:string,needle:string)=>source.split(needle).length-1;
 
 describe("Gate05 independent STOP + one paid CREATE: free read resilience and cutoff",()=>{
  it("read-only transient retry is bounded before AND during actual STOP",()=>{
-  expect(count(stop,"await getBalanceEvidenceStrictWithRetry({maxAttempts:2})")).toBe(3);
-  expect(count(stop,"listSubscriptionsStrictWithRetry({maxAttempts:2})")).toBe(3);
-  expect(stop).not.toContain("await getBalanceEvidenceStrict();");
+  expect(count(stop,"await getBalanceEvidenceStrictWithRetry({maxAttempts:2})")).toBe(2);
+  expect(count(stop,"listSubscriptionsStrictWithRetry({maxAttempts:2})")).toBe(2);
+  expect(stop).toContain("const balance=await getBalanceEvidenceStrict();");
+  expect(stop).toContain("const inv=await listSubscriptionsStrictWithRetry({maxAttempts:1})");
   expect(stop).toContain("GATE05_SCIENCE_STOP_UNCONFIRMED_REQUIRES_EXACT_OWNER_RESCUE");
   expect(stop).toContain("deleteSubscriptionVerifiedStrict(knownExactId");
   expect(stop).not.toContain("createGate4SingleWithRawReceiptV39(");
