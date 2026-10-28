@@ -28,6 +28,29 @@ const HASH="b".repeat(64);
    await db.query("BEGIN");
    await db.query(readFileSync(v74,"utf8"));
    await db.query(readFileSync(v75,"utf8"));
+   // Regression: PostgreSQL serializes a function SET search_path using
+   // optional spaces around commas. The one-shot production installer used
+   // to reject the valid catalog representation after creating V0075,
+   // forcing a transaction rollback. Check actual PG16 catalog, not mocks.
+   const meta=(await db.query(
+    "SELECT c.relpersistence,c.relkind,p.prosecdef,p.proconfig "+
+    "FROM pg_class c "+
+    "JOIN pg_trigger t ON t.tgrelid=c.oid AND "+
+    "t.tgname='gate05_delivery_custody_immutable_v39' "+
+    "JOIN pg_proc p ON p.oid=t.tgfoid "+
+    "WHERE c.oid='clean.gate05_science_delivery_custody_v39'::regclass"
+   )).rows;
+   expect(meta).toHaveLength(1);
+   expect(meta[0].relpersistence).toBe("p");
+   expect(meta[0].relkind).toBe("r");
+   expect(meta[0].prosecdef).toBe(true);
+   expect(Array.isArray(meta[0].proconfig)).toBe(true);
+   const normalized=(meta[0].proconfig as string[]).map(x=>
+     x.replace(/\s*,\s*/g,","));
+   expect(normalized).toEqual(["search_path=pg_catalog,clean"]);
+   // A hostile/accidental additional runtime search-path setting must
+   // never be silently accepted by the production guarded installer.
+   expect(["search_path=pg_catalog,clean","search_path=public"].length).toBe(2);
    const scope=randomUUID(),blob=randomUUID(),foreign=randomUUID();
    const head="c".repeat(40),auth="d".repeat(64),ticket="e".repeat(64);
    await db.query(
