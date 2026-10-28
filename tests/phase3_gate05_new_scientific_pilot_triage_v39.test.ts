@@ -56,6 +56,12 @@ describe("new Gate05 paid pilot: proper f8 PASS/insufficient/FAIL triage, no pro
     expect(z.status).toBe("FAIL");
     expect(z.failedScientificChecks).toContain("FREEZE_MUST_PRECEDE_PAID_ACTION");
   });
+  it("cannot report 60 observed pilot minutes from a 10-minute interval",()=>{
+    const x=base();x.lastObservationAtUtc="2026-10-27T19:10:00Z";
+    const z=triageGate05NewScientificPilotV39(x);
+    expect(z.status).toBe("FAIL");
+    expect(z.failedScientificChecks).toContain("PILOT_DURATION_EXCEEDS_OBSERVED_CLOCK_INTERVAL");
+  });
   it("truthy strings/undefined never turn a scientific flag into a pass",()=>{
     const x=base();
     (x as unknown as Record<string,unknown>).sourceAuthenticatedMilestoneEvidencePresent="true";
