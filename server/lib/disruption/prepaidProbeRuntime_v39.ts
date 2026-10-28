@@ -26,7 +26,9 @@ import type {
   WebhookIdentityPersistence,
 } from "./flightInstanceCanonical_v3";
 
-export type PrepaidProbeOwnerKindV39 = "phase2_safety_smoke" | "anchor_probe" | "phase3_credit_canary";
+export type PrepaidProbeOwnerKindV39 =
+  "phase2_safety_smoke" | "anchor_probe" | "phase3_credit_canary" |
+  "phase3_gate05_science";
 export type PrepaidProbeSessionStateV39 = "armed" | "active" | "settling" | "completed" | "failed" | "abandoned";
 
 export interface PrepaidProbeSessionV39 {
@@ -741,6 +743,11 @@ export async function armPrepaidProbeSessionV39(input: {
     // Gate3 has a separate LOGGED owner + same-ID UNLOGGED session transaction.
     // The generic historical Phase2 armer MUST NOT mint another UUID.
     throw new Error("GATE3_GENERIC_PHASE2_SESSION_ARM_FORBIDDEN");
+  }
+  if (input.ownerKind === "phase3_gate05_science") {
+    // New Gate05 scientific owner must be LOGGED and independently reviewed
+    // BEFORE the UNLOGGED receiver session can be armed with the same UUID.
+    throw new Error("GATE05_GENERIC_PREPAID_ARM_FORBIDDEN");
   }
   if (input.ownerKind === "anchor_probe") {
     if (!Number.isInteger(input.ownerProbeId) || !input.ownerProbeId || ![1, 2].includes(Number(input.stage)) || !input.icao) {
