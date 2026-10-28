@@ -94,6 +94,10 @@ describe("Gate05 live read-only metadata audit",()=>{
     expect(script).toContain("GATE05_SOURCE_AUDIT_UNAUTHORIZED_DISPATCH");
     expect(workflow).toContain("environment: phase2g-paid");
     expect(workflow).toContain("AUDIT_OLD_GATE05_SOURCE_METADATA_ONLY_NO_PROVIDER");
+    expect(workflow).toContain("branches: [main]");
+    expect(workflow).toContain("group: gate05-old-source-readonly");
+    expect(script).toContain("AUTO_POSTMERGE_READONLY");
+    expect(workflow).toContain("AUTO_POSTMERGE_READONLY");
     expect(workflow).not.toContain("AERODATABOX_API_KEY");
     expect(script).not.toMatch(/INSERT INTO|UPDATE clean\.|DELETE FROM|listSubscriptionsStrict|createGate4Single/i);
   });
