@@ -127,8 +127,18 @@ export async function recommissionGate05AfterFourthUnbilledWatchV39(
     priorRun?.head_sha!==PRIOR_SOURCE||
     priorRun?.display_title!=="Gate05 Science STOP "+PRIOR_SCOPE)
    hold("RETRY4_PREVIOUS_GITHUB_RUNS_NOT_TERMINAL_OR_EXACT");
- // Require the original signed, no-provider commission + the exact
- // controller final NO paid invocation and the STOP's NO provider id.
+ // The last source guards CREATE until exactly 08:15Z, while the failed
+ // controller TERMINATED at 08:13:04Z and STOP at 08:11:51Z. Verify both
+ // authenticated completed timestamps are strictly before that boundary.
+ // This is an independent chronological proof the guarded POST was unreachable.
+ const lastStartMs=Date.parse("2026-10-28T08:15:00.000Z");
+ if(!Number.isFinite(Date.parse(previousController?.updated_at))||
+    !Number.isFinite(Date.parse(priorRun?.updated_at))||
+    Date.parse(previousController.updated_at)>=lastStartMs||
+    Date.parse(priorRun.updated_at)>=lastStartMs)
+   hold("RETRY4_PRIOR_RUN_TERMINAL_NOT_BEFORE_FIRST_ALLOWED_CREATE");
+ // Require original signed commission, issue intent absence, and verified
+ // zero-provider account/owner status; an invoked operator is NOT a POST.
  const jsonLog=(run:string,marker:string):any=>{
    const logs=gh(["run","view",run,"--repo",REPO,"--log"]);
    const matches=logs.split("\n").filter(l=>l.includes(marker));
