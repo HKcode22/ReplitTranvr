@@ -89,6 +89,8 @@ async function main(){
     const target=pending.filter(d=>d.environment?.name==="gate05-safety");
     if(target.length>1)hold("MULTIPLE_PROTECTED_DEPLOYMENTS");
     if(target.length===0){await sleep(3000);continue;}
+    if(target[0].current_user_can_approve!==true)
+      hold("GITHUB_REVIEWER_PERMISSION_OR_SELF_APPROVAL_POLICY_BLOCKS_ONE_COMMAND");
     const envId=Number(target[0].environment.id);
     if(!Number.isSafeInteger(envId)||envId<1)hold("INVALID_ENVIRONMENT_ID");
     const approval={
