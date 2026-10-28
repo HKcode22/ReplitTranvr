@@ -13,7 +13,7 @@
  * requires real receiver event/ACK evidence DURING the prospective window.
  */
 import {createHash} from "node:crypto";
-import type {Gate05RawItemV39} from "./gate05ObservedSampleCensus_v39";
+
 
 export const GATE05_RECOVERY_VERSION_V39 =
   "v39.gate05.original-raw-recovery.v1" as const;
@@ -62,6 +62,24 @@ export type Gate05RawRehydrationInputV39=Readonly<{
   originalCanonicalBytes:Uint8Array;
   readBackAtUtc:string;
 }>;
+/**
+ * Deliberately NOT structurally compatible with Gate05RawItemV39:
+ * verified blob persistence time is not an authenticated receive/ACK clock.
+ */
+export type Gate05RecoveredObservationV39=Readonly<{
+  envelopeId:string;
+  itemOrdinal:number;
+  rawSha256:string;
+  blobPersistedAtUtc:string;
+  receivedAtUtc:null;
+  http2xxAtUtc:null;
+  physicalFlightId:null;
+  identityBasis:"UNKNOWN";
+  codeshareRole:"OPERATOR"|"MARKETING"|"UNKNOWN";
+  flightStage:"AIRBORNE"|"COMPLETED"|"OTHER";
+  airbornePointUtc:string|null;
+  terminalStateUpdatedAtUtc:null;
+}>;
 export type Gate05RawRehydrationV39=Readonly<{
   schema:typeof GATE05_RECOVERY_VERSION_V39;
   status:"PARTIAL_SOURCE_RECOVERED_IDENTITY_AND_ACK_UNVERIFIED";
@@ -74,7 +92,7 @@ export type Gate05RawRehydrationV39=Readonly<{
   callbackItemCount:number;
   airborneLocationCandidateItems:number;
   completedStatusCandidateItems:number;
-  observations:readonly Gate05RawItemV39[];
+  observations:readonly Gate05RecoveredObservationV39[];
   strictGate05SciencePassed:false;
   providerCalls:0;
   dbWrites:0;
@@ -127,7 +145,7 @@ export function recoverGate05SourceFromLoggedRefV39(
     throw Error("GATE05_RECOVERY_FLIGHTS_MISSING_OR_EXCESSIVE");
   const envelopeId=sha(x.expectedSessionId+"|"+b.sourceRecordId);
   const when=new Date(persisted).toISOString();
-  const observations:Gate05RawItemV39[]=[];
+  const observations:Gate05RecoveredObservationV39[]=[];
   let location=0,completed=0;
   for(let i=0;i<flights.length;i++){
     const f=record(flights[i]);
@@ -156,8 +174,8 @@ export function recoverGate05SourceFromLoggedRefV39(
     if(stage==="AIRBORNE")location++;
     observations.push({
       envelopeId,itemOrdinal:i,rawSha256:sha(canonical(f)),
-      receivedAtUtc:when, // BOUND: blob persisted timestamp, NOT request receive
-      rawDurableAtUtc:when,
+      blobPersistedAtUtc:when,
+      receivedAtUtc:null,
       http2xxAtUtc:null,
       physicalFlightId:null,identityBasis:"UNKNOWN",
       codeshareRole:role,flightStage:stage,
