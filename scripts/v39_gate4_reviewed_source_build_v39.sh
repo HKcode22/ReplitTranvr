@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Deterministic reviewed-content Gate4 raw-first + NEXT4 isolated receiver build, no provider/database calls.
-# New source verified in PR165; actual packaging commit is kept separately.
-# Runtime source was reviewed at 5c2eb8b2; post-merge docs-only commits
-# may have different packaging HEAD without changing any deployable inputs.
+# Gate05 prospective receiver source fully reviewed by PRs #230-232, frozen
+# at 84b7f156. A separate packaging commit changes only this build script,
+# staged migration and read-only installer; deployable inputs must remain
+# byte-identical to the frozen reviewed source commit. The earlier NEXT4
+# runtime remains a historical source, not the new Gate05 publish source.
 set -Eeuo pipefail
 set +x
 cd "$(git rev-parse --show-toplevel)"
-PIN=1885703c04ba8f24bf8d1183f873eb86d1f83d7c
+PIN=84b7f1565d0402facc8c3b9aacedc599eb6e2af1
 EXPECTED='build = ["bash", "scripts/v39_gate4_reviewed_source_build_v39.sh"]'
 hold(){ echo "GATE4_VERIFIED_BUILD_SOURCE_HOLD" >&2; exit 2; }
 test "$#" -eq 0 || { test "$#" -eq 1 && test "$1" = "--verify-only"; } || hold
