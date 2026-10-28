@@ -56,7 +56,9 @@ jobs:
   exact-owned-stop:
     if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'WATCH_GATE05_SCIENCE_500_STOP_NO_CREATE' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # Early human deployment review may occur up to 85m pre-start,
+    # followed by a 60m pilot + 4m grace. This must not time out!
+    timeout-minutes: 165
     environment: gate05-safety
     env:
       GATE05_SAFETY_ENV_NAME: gate05-safety
