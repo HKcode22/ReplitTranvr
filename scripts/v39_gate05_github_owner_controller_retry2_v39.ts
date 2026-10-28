@@ -197,7 +197,7 @@ async function main(){
    sciencePassed:false,exactProviderSettlementNotYetProven:true
  }));
 }
-if(process.argv[1]?.endsWith("v39_gate05_github_owner_controller_once_v39.ts"))
+if(process.argv[1]?.endsWith("v39_gate05_github_owner_controller_retry2_v39.ts"))
  void main().catch(error=>{
    console.error(JSON.stringify({
      status:"GATE05_GITHUB_CONTROLLER_HELD_DO_NOT_RERUN",
