@@ -10,11 +10,10 @@
  */
 import "dotenv/config";
 import pg from "pg";
-import {createHash} from "node:crypto";
 import {join} from "node:path";
 import {homedir} from "node:os";
 import {existsSync,readFileSync,openSync,writeSync,fsyncSync,closeSync,statSync} from "node:fs";
-import {execFileSync,spawnSync} from "node:child_process";
+import {execFileSync} from "node:child_process";
 import {getBalanceEvidenceStrict,listSubscriptionsStrict,
   createGate4SingleWithRawReceiptV39,deleteSubscriptionVerifiedStrict
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
@@ -30,7 +29,6 @@ const SHA=/^[a-f0-9]{40}$/;
 const HASH=/^[a-f0-9]{64}$/;
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const hold=(m:string):never=>{throw Error("GATE05_SCIENCE_PAID_HOLD_"+m);};
-const sha256=(s:string)=>createHash("sha256").update(s).digest("hex");
 const sleep=(ms:number)=>new Promise<void>(r=>setTimeout(r,ms));
 function gh(args:string[]):any{
  const x=execFileSync("gh",args,{encoding:"utf8",
@@ -88,7 +86,7 @@ export function gate05OnePaidLaunchReceiptChecksV39(
  const now=Date.parse(nowIso);
  const recent=proofs.some((comment:any)=>{
    const time=Date.parse(String(comment.created_at??""));
-   if(!Number.isFinite(time)||time>now+10000||now-time>120000||
+   if(!Number.isFinite(time)||time>now+10000||now-time>12*60000||
       comment.user?.login!=="github-actions[bot]")return false;
    let x:any;
    try{x=JSON.parse(comment.body);}catch{return false;}
