@@ -103,15 +103,60 @@ export async function runGate05ScienceStopV39(
  await readGate05PublishedReceiverHealthV39({
    url:HEALTH,expectedReceiver:p.receiver,maxAttempts:6,timeoutMs:20000
  });
- const client=new pg.Client({
-   connectionString:exact(e,"GATE05_SCIENCE_SAFETY_DATABASE_URL"),
-   connectionTimeoutMillis:7000,query_timeout:7000,
-   statement_timeout:7000,
-   application_name:"gate05_science_exact_owned_actions_stop",
-   options:"-c default_transaction_read_only=on"
- });
+ let clientDisconnected=false;
+ const makeClient=()=>{
+   const c=new pg.Client({
+     connectionString:exact(e,"GATE05_SCIENCE_SAFETY_DATABASE_URL"),
+     connectionTimeoutMillis:7000,query_timeout:7000,
+     statement_timeout:7000,
+     application_name:"gate05_science_exact_owned_actions_stop",
+     options:"-c default_transaction_read_only=on"
+   });
+   c.on("error",()=>{
+     clientDisconnected=true;
+     console.warn("GATE05_STOP_PG_CONNECTION_LOST_NO_PROVIDER_MUTATION");
+   });
+   return c;
+ };
+ let client=makeClient();
  let knownExactId:string|null=null;
  let providerCharged=0;
+ let firstProviderReadFaultAt:number|null=null;
+ const reconnectReader=async()=>{
+   // Transparent reconnection only BEFORE nominal paid start, with no
+   // owned provider ID. The normal exact-owned rescue path remains strict.
+   if(knownExactId||Date.now()>=policy.startMs)
+     hold("READER_RECONNECT_AFTER_PAID_WINDOW_FORBIDDEN");
+   await client.end().catch(()=>undefined);
+   clientDisconnected=false;
+   client=makeClient();
+   await client.connect();
+   const q=await client.query(
+     "SELECT current_database() AS db,current_user AS actor,"+
+     "has_table_privilege(current_user,"+
+     "'clean.phase3_gate05_science_owner_v39','SELECT') AS can_read,"+
+     "has_table_privilege(current_user,"+
+     "'clean.phase3_gate05_science_owner_v39','UPDATE') AS can_update"
+   );
+   if(q.rows[0]?.db!=="neondb"||q.rows[0]?.can_read!==true||
+      q.rows[0]?.can_update!==false)
+     hold("RECONNECTED_SAFETY_READER_IDENTITY");
+   console.log("GATE05_STOP_PG_READ_ONLY_RECONNECTED_NO_CREATE");
+ };
+ const ownerSelect=async(sql:string,params:any[]=[]):Promise<pg.QueryResult<any>>=>{
+   if(clientDisconnected&&!knownExactId&&Date.now()<policy.startMs)
+     await reconnectReader();
+   try{return await client.query(sql,params);}
+   catch(error){
+     const err=error as {code?:string;message?:string};
+     const transient=["57P01","57P02","08006","08003"].includes(err?.code??"")||
+       /connection terminated|connection closed|connection ended/i.test(err?.message??"");
+     if(!transient||knownExactId||Date.now()>=policy.startMs)
+       throw error;
+     await reconnectReader();
+     return await client.query(sql,params);
+   }
+ };
  await client.connect();
  try{
    const scope=await client.query(
@@ -131,7 +176,7 @@ export async function runGate05ScienceStopV39(
       o?.can_delete!==false)
      hold("DATABASE_NOT_SELECT_ONLY");
    async function owner(){
-     const q=await client.query(ONE,[p.scope]);
+     const q=await ownerSelect(ONE,[p.scope]);
      if(q.rowCount!==1)hold("EXACT_OWNER_NOT_FOUND");
      const r=q.rows[0];
      if(r.airport_icao!=="WSSS"||
@@ -160,7 +205,7 @@ export async function runGate05ScienceStopV39(
    if(initialPostmaster.rowCount!==1||
       !Number.isFinite(Date.parse(initialPostmaster.rows[0].server_started)))
      hold("INITIAL_POSTMASTER_EPOCH_UNAVAILABLE");
-   const firstPostmasterMs=Date.parse(initialPostmaster.rows[0].server_started);
+   let firstPostmasterMs=Date.parse(initialPostmaster.rows[0].server_started);
    const first=await getBalanceEvidenceStrictWithRetry({maxAttempts:2});
    if(first.balance.creditsRemaining!==p.startingCredits||
       first.quota.apiUnitsRemaining<12)hold("STARTING_BUDGET_CHANGED");
@@ -186,13 +231,18 @@ export async function runGate05ScienceStopV39(
      // PostgreSQL table. If this database restarts after WATCH ARM, the
      // paid raw-first callback identity may no longer exist. Stop the
      // already authenticated exact provider ID instead of billing blindly.
-     const restarted=await client.query(
+     const restarted=await ownerSelect(
        "SELECT pg_postmaster_start_time() AS server_started");
      if(restarted.rowCount!==1||
         !Number.isFinite(Date.parse(restarted.rows[0].server_started)))
        hold("POSTMASTER_EPOCH_UNAVAILABLE");
      if(Date.parse(restarted.rows[0].server_started)!==firstPostmasterMs){
-       if(knownExactId){
+       if(!knownExactId&&now<policy.startMs){
+         // PRE-CREATE restart erases UNLOGGED callback identity; paid owner
+         // independently restores and reauthenticates before any provider POST.
+         firstPostmasterMs=Date.parse(restarted.rows[0].server_started);
+         console.warn("GATE05_STOP_PRECREATE_POSTMASTER_CHANGED_WAIT_FOR_OWNER_REARM");
+       }else if(knownExactId){
          const deleted=await deleteSubscriptionVerifiedStrict(knownExactId,{
            maxAttempts:3
          });
@@ -200,9 +250,8 @@ export async function runGate05ScienceStopV39(
          terminal="POSTMASTER_RESET_EXACT_STOP_SCIENCE_INCOMPLETE";
          break;
        }
-       // Never guess a provider ID from airport or LIST. Without a known
-       // exact subscribed owner, fail admission and require rearm.
-       hold("POSTMASTER_RESET_BEFORE_EXACT_PAID_BIND");
+       if(now>=policy.startMs)
+         hold("POSTMASTER_RESET_BEFORE_EXACT_PAID_BIND");
      }
      const current=await owner();
      // PRE-CREATE has no owned paid ID yet. A brief free account-read
@@ -217,12 +266,46 @@ export async function runGate05ScienceStopV39(
        // preflight; after this point even a PREPARED DB row could reflect
        // an unbound non-idempotent remote CREATE in progress.
        now<policy.startMs-5*60000;
-     const balance=safePreCreate?
-       await getBalanceEvidenceStrictWithRetry({maxAttempts:3}):
-       await getBalanceEvidenceStrict();
-     const inv=await listSubscriptionsStrictWithRetry({
-       maxAttempts:safePreCreate?3:1
-     });
+     let balance:Awaited<ReturnType<typeof getBalanceEvidenceStrict>>;
+     let inv:Awaited<ReturnType<typeof listSubscriptionsStrictWithRetry>>;
+     try{
+       balance=safePreCreate?
+         await getBalanceEvidenceStrictWithRetry({maxAttempts:3}):
+         await getBalanceEvidenceStrictWithRetry({maxAttempts:2});
+       inv=await listSubscriptionsStrictWithRetry({
+         maxAttempts:safePreCreate?3:2
+       });
+       firstProviderReadFaultAt=null;
+     }catch(error){
+       const msg=error instanceof Error?error.message:"UNKNOWN";
+       const transport=/transport failure|HTTP 5[0-9][0-9]|R1_LIST_UNAVAILABLE_AFTER_RETRIES/.test(msg);
+       // Read-only provider telemetry can be temporarily unavailable. No
+       // scientific observation is inferred from this missed monitor poll.
+       // 30s grace after paid start fits the 150-credit reserve in normal
+       // observed WSSS traffic, but is NOT a provider-enforced hard cap.
+       if(!transport)throw error;
+       if(firstProviderReadFaultAt===null)firstProviderReadFaultAt=Date.now();
+       const graceMs=knownExactId?30000:
+         now<policy.startMs?300000:15000;
+       if(Date.now()-firstProviderReadFaultAt>graceMs)
+         throw error;
+       if(now>=policy.stopMs&&knownExactId){
+         const deleted=await deleteSubscriptionVerifiedStrict(knownExactId,{
+           maxAttempts:3
+         });
+         if(!deleted)hold("STOP_DEADLINE_EXACT_DELETE_UNCONFIRMED");
+         terminal="STOP_DEADLINE_DURING_TELEMETRY_OUTAGE";
+         break;
+       }
+       console.warn(JSON.stringify({
+         status:"GATE05_STOP_TRANSIENT_FREE_TELEMETRY_GAP",
+         exactOwnedIdKnown:Boolean(knownExactId),
+         elapsedMs:Date.now()-firstProviderReadFaultAt,
+         noCreditsAssumed:true
+       }));
+       await sleep(5000);
+       continue;
+     }
      providerCharged=p.startingCredits-balance.balance.creditsRemaining;
      if(!Number.isSafeInteger(providerCharged)||providerCharged<0)
        hold("BILLING_COUNTER_INVALID_OR_REFILLED");
