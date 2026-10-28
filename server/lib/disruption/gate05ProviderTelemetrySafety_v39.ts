@@ -40,6 +40,6 @@ export function gate05TelemetryDecisionV39(arg:{
 export function gate05ProviderReadFailureTransientV39(msg:string):boolean{
   // Do not hide 401/403, malformed account headers, changed billing counter,
   // wrong account or an invalid subscription ID as an ordinary network gap.
-  return /^(?:BALANCE_UNAVAILABLE|R1_LIST_UNAVAILABLE): (?:transport failure.*|HTTP 5[0-9][0-9].*)$/.test(msg) ||
+  return /^(?:BALANCE_UNAVAILABLE|R1_LIST_UNAVAILABLE): (?:transport failure.*|HTTP (?:5[0-9][0-9]|429|408).*)$/.test(msg) ||
     msg==="R1_LIST_UNAVAILABLE_AFTER_RETRIES";
 }
