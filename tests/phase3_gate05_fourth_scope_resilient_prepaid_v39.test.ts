@@ -2,7 +2,7 @@ import {readFileSync} from "node:fs";
 import {describe,it,expect} from "vitest";
 import {gate05SciencePlanWindowV39,hasExactGate05PaidIntentV39} from
  "../scripts/v39_gate05_science_recommission_after_fourth_failed_watch_v39";
-import {gate05GithubOwnerTimeAdmitV39} from
+import {gate05GithubOwnerTimeAdmitV39,gate05GithubStopIsReallyLiveV39} from
  "../scripts/v39_gate05_github_owner_controller_retry4_v39";
 
 const root="scripts/";
@@ -56,6 +56,20 @@ describe("Gate05 fourth scope, evidence-first resilient execution",()=>{
   gate05GithubOwnerTimeAdmitV39(Date.parse(w.start)-9*60000,Date.parse(w.start),Date.parse(w.stop),"paid");
   expect(()=>gate05GithubOwnerTimeAdmitV39(
     Date.parse(w.start)-10*60000,Date.parse(w.start),Date.parse(w.stop),"paid")).toThrow();
+ });
+ it("actually recognizes authenticated independent STOP at T-9, not only T-5",()=>{
+  const start=Date.parse("2026-10-28T11:00:00.000Z");
+  const head="a".repeat(40),scope="c631e164-feac-4550-b811-7585e88aaf0d";
+  const run={head_sha:head,event:"workflow_dispatch",run_attempt:1,
+    display_title:"Gate05 Science STOP "+scope,status:"in_progress"};
+  const jobs={jobs:[{name:"exact-owned-stop",status:"in_progress",
+    steps:[{name:"Run independently authorized exact-owned STOP, never CREATE",
+      status:"in_progress"}]}]};
+  expect(gate05GithubStopIsReallyLiveV39(run,jobs,scope,head,start-9*60000,start)).toBe(true);
+  expect(gate05GithubStopIsReallyLiveV39(run,jobs,scope,head,start-11*60000,start)).toBe(false);
+  expect(gate05GithubStopIsReallyLiveV39(run,jobs,scope,head,start+16000,start)).toBe(false);
+  expect(gate05GithubStopIsReallyLiveV39(
+    {...run,status:"completed"},jobs,scope,head,start-9*60000,start)).toBe(false);
  });
  it("converts pre-intent database disconnect into safe identity-checked select retry",()=>{
   for(const t of [
