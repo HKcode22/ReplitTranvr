@@ -22,7 +22,7 @@ describe("Gate05 FREE published prewarm on GitHub T-15, never ARMED proof",()=>{
  it("skips optional prewarm once mandatory T-10 time approaches",async()=>{
    const read=vi.fn(async()=>pass);
    expect(await prewarmGate05ReceiverV39({
-     startUtc:start,receiver,now:()=>Date.parse(start)-9*60000,
+     startUtc:start,receiver,now:()=>Date.parse(start)-10.5*60000,
      readImpl:read
    })).toBe("SKIPPED");
    expect(read).not.toHaveBeenCalled();
