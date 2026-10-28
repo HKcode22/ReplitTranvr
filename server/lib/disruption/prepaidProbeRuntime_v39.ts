@@ -1191,7 +1191,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
       await admission.query("BEGIN");
       const session=await timePrepaidStageV39(
         "db_session_lock",()=>admission.query(
-          `SELECT provider_subscription_id,state,expires_at_utc
+          `SELECT provider_subscription_id,state,expires_at_utc,owner_kind
              FROM clean.prepaid_probe_session_runtime
             WHERE session_id=$1
             FOR UPDATE`,[sessionId]));
@@ -1354,7 +1354,7 @@ export async function persistPrepaidProbeWebhookV39(input: {
     // Serialize admission, duplicate detection, raw blob persistence,
     // and all runtime writes for this exact session.
     const session = await timePrepaidStageV39("db_session_lock",()=>client.query(
-      `SELECT provider_subscription_id,state,expires_at_utc
+      `SELECT provider_subscription_id,state,expires_at_utc,owner_kind
          FROM clean.prepaid_probe_session_runtime
         WHERE session_id=$1
         FOR UPDATE`,
@@ -1521,6 +1521,16 @@ export async function persistPrepaidProbeWebhookV39(input: {
       now: receivedAt,
     }));
   }
+  // Future Gate05-only opt-in release: prove durable delivery counts from
+  // a LOGGED metadata journal in the SAME DB transaction as the LOGGED raw
+  // source-ref and UNLOGGED item rows. A PG crash may erase UNLOGGED identity,
+  // but never silently erase the committed item-count denominator.
+  // This feature is OFF until staged V0075 is applied and published source
+  // + live DB are jointly attested. On opted-in Gate05 it fails closed if the
+  // migration, same-scope original, or reference hash is missing.
+  const loggedGate05CustodyRequired =
+    String(process.env.V39_GATE05_DURABLE_CUSTODY_REQUIRED ?? "") === "1" &&
+    String(session.rows[0].owner_kind ?? "") === "phase3_gate05_science";
   // LOGGED source already exists when reusing a failed original, and must
   // NEVER be inserted twice for the same logical notification.
   if(!reusedFailedOriginal){
@@ -1534,6 +1544,16 @@ export async function persistPrepaidProbeWebhookV39(input: {
        blob.retentionHours, blob.expiresAtUtc],
     );
   }
+    if (loggedGate05CustodyRequired) {
+      await client.query(
+        `INSERT INTO clean.gate05_science_delivery_custody_v39
+          (session_id,delivery_id,blob_ref_id,body_sha256,item_count,
+           receiver_attempt_at_utc,blob_persisted_at_utc)
+         VALUES($1,$2,$3,$4,$5,$6,$7)`,
+        [sessionId,deliveryId,blob.blobRefId,bodySha256,flights.length,
+         receivedAt,blob.persistedAtUtc],
+      );
+    }
     await client.query(
       `INSERT INTO clean.prepaid_probe_delivery_runtime
        (session_id,delivery_id,blob_ref_id,raw_body_sha256,provider_subscription_id,received_at_utc,
