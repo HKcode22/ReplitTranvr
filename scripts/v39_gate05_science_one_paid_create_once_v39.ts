@@ -16,7 +16,7 @@ import {join} from "node:path";
 import {homedir} from "node:os";
 import {existsSync,readFileSync,openSync,writeSync,fsyncSync,closeSync,statSync} from "node:fs";
 import {execFileSync} from "node:child_process";
-import {getBalanceEvidenceStrict,listSubscriptionsStrict,
+import {getBalanceEvidenceStrictWithRetry,listSubscriptionsStrictWithRetry,
   createGate4SingleWithRawReceiptV39,deleteSubscriptionVerifiedStrict
 } from "../server/lib/disruption/aerodataboxLimiter_v3";
 
@@ -193,8 +193,8 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
      // provider subscriptions, unchanged balance, and published DB HMAC.
      // Never mint a new scope or recreate a PAID/ACTIVE session.
      liveSafety(input.stopRun,m,head);
-     const beforeRearm=await getBalanceEvidenceStrict();
-     const inventory=await listSubscriptionsStrict();
+     const beforeRearm=await getBalanceEvidenceStrictWithRetry({maxAttempts:2});
+     const inventory=await listSubscriptionsStrictWithRetry({maxAttempts:2});
      if(beforeRearm.balance.creditsRemaining!==m.startingCredits||
         beforeRearm.quota.apiUnitsRemaining<12||
         inventory.some(x=>x.isActive))
@@ -249,8 +249,8 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
         m.sessionExpiresUtc)
      hold("PREPAID_NEW_CALLBACK_SESSION_NOT_ARMED");
    liveSafety(input.stopRun,m,head);
-   const before=await getBalanceEvidenceStrict();
-   const active=await listSubscriptionsStrict();
+   const before=await getBalanceEvidenceStrictWithRetry({maxAttempts:2});
+   const active=await listSubscriptionsStrictWithRetry({maxAttempts:2});
    if(before.balance.creditsRemaining!==m.startingCredits||
       before.quota.apiUnitsRemaining<12||
       active.some(x=>x.isActive))hold("PROVIDER_ACCOUNT_CHANGED");
@@ -272,10 +272,15 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
       last.provider_subscription_id!==null||
       new Date(last.expires_at_utc).toISOString()!==m.sessionExpiresUtc)
      hold("LAST_MOMENT_CALLBACK_ROW_LOST_BEFORE_CREATE");
-   const fresh=await getBalanceEvidenceStrict();
-   const subs=await listSubscriptionsStrict();
+   const fresh=await getBalanceEvidenceStrictWithRetry({maxAttempts:2});
+   const subs=await listSubscriptionsStrictWithRetry({maxAttempts:2});
    if(fresh.balance.creditsRemaining!==m.startingCredits||
       subs.some(x=>x.isActive))hold("PREADMISSION_PROVIDER_DRIFT");
+   // Recheck AFTER all possibly slow provider GETs and BEFORE writing an
+   // irreversible one-shot intent. Do not start a scientifically invalid late
+   // observation window simply because the earlier clock guard passed.
+   if(!gate05MayCreateInTimeV39(Date.now(),start,stop))
+     hold("PAID_FINAL_PROVIDER_PREFLIGHT_FINISHED_AFTER_CUTOFF");
    privateOnce(INTENT,{
      schema:"v39.gate05.one-paid-create-intent.v1",
      source:head,scope:m.scope,auth:m.authorizationSha256,
@@ -297,6 +302,10 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
        createdAtUtc:new Date().toISOString()
      })]);
    if(!intent?.id)hold("PAID_INTENT_GITHUB_NOT_RECORDED");
+   // Issue POST can also be slow; never CREATE after the frozen tolerance.
+   // The durable intent remains consumed, so no blind second attempt.
+   if(!gate05MayCreateInTimeV39(Date.now(),start,stop))
+     hold("PAID_INTENT_RECORDED_BUT_START_WINDOW_EXPIRED_NO_CREATE");
    providerAttempted=true;
    const response=await createGate4SingleWithRawReceiptV39("WSSS",{
      url:PUB+"/api/v1/webhooks/aerodatabox/"+
