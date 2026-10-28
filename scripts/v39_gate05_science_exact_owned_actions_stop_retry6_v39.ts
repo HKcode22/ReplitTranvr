@@ -271,6 +271,9 @@ export async function runGate05ScienceStopV39(
      const safePreCreate=current.state==="PREPARED"&&
        current.provider_subscription_id===null&&knownExactId===null&&
        now<policy.startMs-9*60000;
+     // Start of this FREE telemetry cycle, not the end of its 15-second
+     // HTTP timeouts. Include the request's own wait in outage accounting.
+     const telemetryCycleStartedAt=Date.now();
      let balance:Awaited<ReturnType<typeof getBalanceEvidenceStrict>>;
      let inv:Awaited<ReturnType<typeof listSubscriptionsStrictWithRetry>>;
      try{
@@ -286,7 +289,7 @@ export async function runGate05ScienceStopV39(
        if(!gate05ProviderReadFailureTransientV39(msg))throw error;
        const observedAt=Date.now();
        if(firstProviderReadFaultAt===null)
-         firstProviderReadFaultAt=observedAt;
+         firstProviderReadFaultAt=telemetryCycleStartedAt;
        // An exact-id delete at the scheduled STOP deadline is mandatory,
        // even if the account-balance GET is temporarily unavailable.
        if(observedAt>=policy.stopMs&&knownExactId){
@@ -300,7 +303,8 @@ export async function runGate05ScienceStopV39(
            schema:"v39.gate05.science-exact-stop-with-unknown-billing.v1",
            status:"EXACT_OWNED_DELETE_VERIFIED_BILLING_UNKNOWN",
            reason:terminalReason,scope:p.scope,
-           exactOwnedDeleteVerified:true,finalAlertDebits:null,
+           exactOwnedDeleteVerified:true,
+           actualStopUtc:new Date().toISOString(),finalAlertDebits:null,
            accountSettlementPending:true,shortenedObservation:false,
            strictSciencePassed:false,noSyntheticCreditOrFlightEvidence:true
          }));
@@ -325,7 +329,8 @@ export async function runGate05ScienceStopV39(
            schema:"v39.gate05.science-exact-stop-with-unknown-billing.v1",
            status:"EXACT_OWNED_DELETE_VERIFIED_EARLY_SCIENCE_CENSORED",
            reason:terminalReason,scope:p.scope,
-           exactOwnedDeleteVerified:true,finalAlertDebits:null,
+           exactOwnedDeleteVerified:true,
+           actualStopUtc:new Date().toISOString(),finalAlertDebits:null,
            accountSettlementPending:true,shortenedObservation:true,
            strictSciencePassed:false,noSyntheticCreditOrFlightEvidence:true
          }));
@@ -448,7 +453,7 @@ export async function runGate05ScienceStopV39(
        status:"EXACT_OWNED_DELETE_VERIFIED_BILLING_SETTLEMENT_PENDING",
        reason:terminalReason??"FREE_PROVIDER_TELEMETRY_FAILURE",
        scope:p.scope,exactOwnedDeleteVerified:true,
-       finalAlertDebits:null,accountSettlementPending:true,
+       actualStopUtc:new Date().toISOString(),finalAlertDebits:null,accountSettlementPending:true,
        strictSciencePassed:false,observationCoverageNotYetAudited:true,
        noSyntheticCreditOrFlightEvidence:true
      }));
