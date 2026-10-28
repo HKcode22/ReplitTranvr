@@ -105,6 +105,8 @@ export function reviewNewGate05WsssSpendV39(
   if(spent===null||rest===null||spent<0||rest<0||
      sample.activeForeignSubscriptions!==0||
      sample.activeOwnedSubscriptions>1||
+     (!sample.stopConfirmed&&sample.activeOwnedSubscriptions!==1)||
+     sample.initialAuthoritativeCredits<policy.maximumAuthorizedAlertCredits||
      !sample.exactOwnedScopeConfirmed||
      !sample.callbackRawFirstReady){
     reasons.push("EXACT_SOURCE_ACCOUNT_OR_SCOPE_UNCERTAIN");
