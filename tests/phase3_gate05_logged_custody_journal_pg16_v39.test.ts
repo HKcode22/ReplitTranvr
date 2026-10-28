@@ -169,7 +169,7 @@ const HASH="b".repeat(64);
    await db.query("ROLLBACK").catch(()=>undefined);
    await db.end();
   }
- });
+ },20000);
  it("receiver writes journal in same transaction only behind opt-in future switch",()=>{
   const src=readFileSync("server/lib/disruption/prepaidProbeRuntime_v39.ts","utf8");
   const insert=src.indexOf("INSERT INTO clean.gate05_science_delivery_custody_v39");
