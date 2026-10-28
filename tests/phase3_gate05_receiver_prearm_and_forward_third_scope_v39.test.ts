@@ -70,6 +70,8 @@ describe("Third independent Gate05 scope: never rerun old CREATE / old timestamp
   expect(launcher).toContain('state:"approved"');
   expect(launcher).toContain('GATE05_ONE_COMMAND_HOLD_');
   expect(launcher).toContain('PROTECTED_REVIEWER_RULE_NOT_PRESENT');
+  expect(launcher).toContain("current_user_can_approve!==true");
+  expect(launcher).toContain("GITHUB_REVIEWER_PERMISSION_OR_SELF_APPROVAL_POLICY_BLOCKS_ONE_COMMAND");
   expect(launcher).not.toContain('environments/gate05-safety/protection_rules');
   expect(launcher).not.toContain("AERODATABOX_API_KEY");
   expect(launcher).not.toContain("deleteSubscriptionVerifiedStrict");
