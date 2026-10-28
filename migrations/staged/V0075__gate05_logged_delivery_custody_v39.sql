@@ -46,10 +46,11 @@ BEGIN
   IF TG_OP<>'INSERT' THEN
     RAISE EXCEPTION 'GATE05_CUSTODY_IMMUTABLE';
   END IF;
-  SELECT state INTO owner_record
+  SELECT state,session_expires_at_utc INTO owner_record
     FROM clean.phase3_gate05_science_owner_v39
    WHERE session_id=NEW.session_id;
-  IF NOT FOUND OR owner_record.state NOT IN ('PREPARED','ACTIVE') THEN
+  IF NOT FOUND OR (owner_record.state NOT IN ('PREPARED','ACTIVE','STOPPED') OR
+        clock_timestamp()>owner_record.session_expires_at_utc) THEN
     RAISE EXCEPTION 'GATE05_CUSTODY_EXACT_OPEN_OWNER_REQUIRED';
   END IF;
   SELECT source_kind,source_record_id,content_class,storage_kind,
