@@ -10,6 +10,8 @@
  */
 import "dotenv/config";
 import pg from "pg";
+import {readGate05PublishedReceiverHealthV39} from
+  "../server/lib/disruption/gate05PublishedReceiverHealth_v39";
 import {createHmac,randomUUID} from "node:crypto";
 import {restoreExactGate05PreparedCallbackAfterRestartV39} from "../server/lib/disruption/gate05PreparedCallbackRestartRecovery_v39";
 import {join} from "node:path";
@@ -147,20 +149,15 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
  const localSecret=String(process.env.AERODATABOX_WEBHOOK_SECRET??"");
  if(localSecret.length<32||!process.env.AERODATABOX_API_KEY)
    hold("PROVIDER_OR_CALLBACK_SECRET_MISSING");
- const publicRes=await fetch(PUB+"/__v39/workspace-runtime",{
-   method:"GET",redirect:"error",signal:AbortSignal.timeout(8000)
+ // Before paid intent, allow bounded read-only published receiver wake-up.
+ await readGate05PublishedReceiverHealthV39({
+   url:PUB+"/__v39/workspace-runtime",expectedReceiver:m.receiver,
+   maxAttempts:3,timeoutMs:20000
  });
- if(publicRes.status!==200)hold("PUBLISHED_RECEIVER");
- const health=await publicRes.json();
- if(health?.status!=="PASS"||health?.git_head!==m.receiver||
-    health?.prepaid_route_registered!==true||
-    health?.published_deployment!==true||
-    health?.provider_mutation!==false)
-   hold("PUBLISHED_RECEIVER_SOURCE");
  const authRes=await fetch(PUB+"/__v39/phase2g/webhook-secret-match",{
    method:"POST",redirect:"error",
    headers:{"x-v39-phase2g-webhook-secret":localSecret},
-   signal:AbortSignal.timeout(8000)
+   signal:AbortSignal.timeout(20000)
  });
  if(authRes.status!==200)hold("PUBLISHED_WEBHOOK_SECRET_BIND");
  const authBody=await authRes.json();
@@ -208,7 +205,7 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
        method:"POST",redirect:"error",
        headers:{"x-v39-phase2g-db-challenge":challenge,
          "x-v39-phase2g-db-proof":proof},
-       signal:AbortSignal.timeout(8000)
+       signal:AbortSignal.timeout(20000)
      });
      if(binding.status!==200)hold("NO_PAID_CALLBACK_RECOVERY_PUBLISHED_DB_NOT_PROVEN");
      const attestation=await binding.json();
