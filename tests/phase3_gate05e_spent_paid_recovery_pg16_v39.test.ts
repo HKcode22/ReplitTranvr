@@ -172,6 +172,8 @@ describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("Gate05e original p
      expect(sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE)\s/i);
    }
    expect(shape).toContain("provisional_operator_context_candidates");
+   expect(independentShapeSource).toContain("RAW_CONTENT_24H_DEADLINE_HOLD");
+   expect(independentShapeSource).toContain("Date.now()>=Math.min(availableMs,retrievalMs)+24*60*60*1000");
    const id="282a663e-18ef-4af0-9181-c95cde9430e6";
    const fixture={departures:[
      {number:"SQ 123",codeshareStatus:"IsOperator",
