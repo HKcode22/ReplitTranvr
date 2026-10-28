@@ -74,12 +74,16 @@ export function gate05OnePaidLaunchReceiptChecksV39(
  if(!Array.isArray(proofs)||!SHA.test(head)||!UUID.test(m.scope)||
     !HASH.test(m.authorizationSha256)||!HASH.test(m.stopTicketSha256))
    return false;
+ const standard=typeof run?.path==="string"&&
+   run.path.includes("phase3-gate05-science-exact-owned-stop.yml")&&
+   run?.display_title==="Gate05 Science STOP "+m.scope;
+ const automated=typeof run?.path==="string"&&
+   run.path.includes("phase3-gate05-science-github-automated.yml")&&
+   run?.display_title==="Gate05 Auto Science "+m.scope;
  const runValid=run?.status==="in_progress"&&
    run?.head_sha===head&&run?.head_branch==="main"&&
    run?.event==="workflow_dispatch"&&run?.run_attempt===1&&
-   typeof run?.path==="string"&&
-   run.path.includes("phase3-gate05-science-exact-owned-stop.yml")&&
-   run?.display_title==="Gate05 Science STOP "+m.scope;
+   (standard||automated);
  const stepValid=Array.isArray(jobs?.jobs)&&jobs.jobs.some(
    (j:any)=>j.name==="exact-owned-stop"&&j.status==="in_progress"&&
      Array.isArray(j.steps)&&j.steps.some((s:any)=>
@@ -139,6 +143,22 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
    hold("EXACT_OWNER_SOURCE_OR_PRIVATE_RECORD");
  if(existsSync(INTENT)||existsSync(RECEIPT))
    hold("PRIOR_PAID_CREATE_INTENT_EXISTS_NO_RETRY");
+ // GitHub runner filesystems are ephemeral. A charged attempt cannot be
+ // retried if its local 0600 intent disappeared in a fresh runner.
+ const journal=execFileSync("gh",[
+   "api","--paginate",`repos/${REPO}/issues/173/comments?per_page=100`,
+   "--jq",".[] | {body,created_at,user:{login:.user.login}}"
+ ],{encoding:"utf8",timeout:25000,maxBuffer:4*1024*1024,
+   stdio:["ignore","pipe","ignore"]});
+ for(const line of journal.split("\n").filter(Boolean)){
+   let record:any;
+   try{record=JSON.parse(line);}catch{hold("DURABLE_INTENT_JOURNAL_INVALID");}
+   let intent:any;
+   try{intent=JSON.parse(record.body);}catch{continue;}
+   if(intent?.schema==="v39.gate05.science-paid-create-intent.v1"&&
+      intent.scope===m.scope)
+     hold("DURABLE_GITHUB_CREATE_INTENT_EXISTS_NO_RETRY");
+ }
  const start=Date.parse(m.startUtc),stop=Date.parse(m.stopUtc);
  if(!Number.isFinite(start)||!Number.isFinite(stop)||
     stop-start!==3600000)hold("FROZEN_WINDOW_INVALID");
