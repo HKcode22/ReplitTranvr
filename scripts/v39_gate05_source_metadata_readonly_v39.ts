@@ -44,7 +44,20 @@ export async function auditGate05SourceMetadataV39(db:Reader,nowUtc:string){
     " FROM clean.prepaid_probe_item_runtime"+
     " WHERE session_id=$1::uuid ORDER BY delivery_id,item_index LIMIT 100001",
     [SCOPE]);
-  if(delivery.rows.length>5000||items.rows.length>100000)
+  // LOGGED original-blob refs outlive UNLOGGED delivery/item/session tables.
+  // This query is INDEPENDENT of any surviving prepaid runtime row. Its
+  // source_record_id is a strict historical session prefix, never foreign.
+  // A ref within its TTL is NOT proof its App Storage object still exists.
+  const rawRefs=await db.query(
+    "SELECT blob_ref_id::text,source_record_id,content_sha256,"+
+    " content_bytes,storage_kind,content_class,source_kind,"+
+    " persisted_at_utc,expires_at_utc,deleted_at_utc"+
+    " FROM clean.provider_content_blob_ref"+
+    " WHERE source_kind='webhook' AND source_record_id LIKE $1"+
+    " ORDER BY source_record_id LIMIT 5001",
+    ["prepaid:"+SCOPE+":%"]);
+  if(delivery.rows.length>5000||items.rows.length>100000||
+     rawRefs.rows.length>5000)
     throw Error("GATE05_SOURCE_AUDIT_UNBOUNDED_ROWS");
   const deliveries=new Set(delivery.rows.map(d=>String(d.delivery_id)));
   if(items.rows.some(i=>!deliveries.has(String(i.delivery_id))))
@@ -70,18 +83,53 @@ export async function auditGate05SourceMetadataV39(db:Reader,nowUtc:string){
   }
   if(delivery.rows.length>0&&sum!==items.rows.length)
     throw Error("GATE05_SOURCE_AUDIT_INCOMPLETE_ITEM_LEDGER");
+  let independentUnexpired=0,independentExpired=0,independentMalformed=0;
+  const refIds=new Set<string>();
+  for(const row of rawRefs.rows){
+    if(refIds.has(row.blob_ref_id))
+      throw Error("GATE05_SOURCE_AUDIT_DUPLICATE_LOGGED_BLOB_REF");
+    refIds.add(row.blob_ref_id);
+    const shape=typeof row.blob_ref_id==="string"&&
+      /^[a-f0-9-]{36}$/.test(row.blob_ref_id)&&
+      row.storage_kind==="replit_app_storage"&&
+      row.content_class==="raw_provider_content"&&
+      row.source_kind==="webhook"&&
+      typeof row.source_record_id==="string"&&
+      row.source_record_id.startsWith("prepaid:"+SCOPE+":ppd_")&&
+      /^[a-f0-9]{64}$/.test(row.content_sha256??"")&&
+      Number.isSafeInteger(Number(row.content_bytes))&&
+      Number(row.content_bytes)>0;
+    const until=Date.parse(String(row.expires_at_utc));
+    const since=Date.parse(String(row.persisted_at_utc));
+    if(!shape||!Number.isFinite(since)||since>now||
+       !Number.isFinite(until)||until<=since){independentMalformed++;continue;}
+    if(row.deleted_at_utc!==null||until<=now)independentExpired++;
+    else independentUnexpired++;
+  }
   return {
     schema:"v39.gate05.live-readonly-source-metadata.v1",
     priorOwnerStopped:true,unloggedSessionRetained:session.rowCount===1,
     deliveryRows:delivery.rows.length,itemRows:items.rows.length,
     loggedRawRefs:logged,validUnexpiredRawRefs:unexpired,
     missingOrExpiredRawRefs:missing,sourceHashDisagreements:mismatch,
+    // These counts are sourced from the independent durable LOGGED ledger.
+    independentLoggedRefs:rawRefs.rows.length,
+    independentUnexpiredLedgerRefs:independentUnexpired,
+    independentExpiredOrDeletedLedgerRefs:independentExpired,
+    independentMalformedLedgerRefs:independentMalformed,
+    loggedRefCountWithNoUnloggedDelivery:rawRefs.rows.length-delivery.rows.length>0?
+      rawRefs.rows.length-delivery.rows.length:0,
+    objectBytesIndependentlyReadBack:false,
     providerBlobReadAttempted:false,rawFlightStatusMeasured:false,
     rawBefore2xxAckMeasured:false,actualFlightWheelsOffMeasured:false,
     gate05ScientificPass:false,noProviderCalls:true,dbWrites:0,
     status:session.rowCount===1&&delivery.rows.length>0&&unexpired>0?
       "SOURCE_METADATA_AVAILABLE_NOT_RAW_CERTIFIED":
-      "UNLOGGED_SESSION_ROWS_UNAVAILABLE_OR_EXPIRED"
+      independentUnexpired>0?
+      "LOGGED_RAW_REFERENCES_SURVIVE_RUNTIME_LOSS_BYTES_UNVERIFIED":
+      rawRefs.rows.length>0?
+      "LOGGED_REFERENCES_EXPIRED_OR_INVALID_RUNTIME_LOST":
+      "NO_LOGGED_SOURCE_REFS_AND_UNLOGGED_RUNTIME_LOST"
   } as const;
 }
 async function cli(){
