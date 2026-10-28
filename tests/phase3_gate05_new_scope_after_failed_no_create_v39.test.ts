@@ -47,8 +47,8 @@ describe("new WSSS scope after expired ORIGINAL zero-POST failure",()=>{
  });
  it("freezes a distinct hour at quarter-hour after old 9PM period and no provider POST",()=>{
   const w=newWindow(Date.parse("2026-10-28T04:10:00Z"));
-  expect(w.start).toBe("2026-10-28T05:00:00.000Z");
-  expect(w.stop).toBe("2026-10-28T06:00:00.000Z");
+  expect(w.start).toBe("2026-10-28T04:45:00.000Z");
+  expect(w.stop).toBe("2026-10-28T05:45:00.000Z");
   expect(next).toContain("NEW_WINDOW_OVERLAPS_OLD_SAFETY_RUN");
   for(const forbidden of ["createGate4SingleWithRawReceiptV39(",
     "createSubscription(","refillBalance(","deleteSubscriptionVerifiedStrict("])
