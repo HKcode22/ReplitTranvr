@@ -85,11 +85,14 @@ export async function auditGate05SourceMetadataV39(db:Reader,nowUtc:string){
   } as const;
 }
 async function cli(){
-  if(process.env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
+  const manual=process.env.GITHUB_EVENT_NAME==="workflow_dispatch"&&
+    process.env.GATE05_SOURCE_READONLY_CONFIRM===
+      "AUDIT_OLD_GATE05_SOURCE_METADATA_ONLY_NO_PROVIDER";
+  const postmerge=process.env.GITHUB_EVENT_NAME==="push"&&
+    process.env.GATE05_SOURCE_READONLY_CONFIRM==="AUTO_POSTMERGE_READONLY";
+  if((!manual&&!postmerge)||
      process.env.GITHUB_REF!=="refs/heads/main"||
-     process.env.GITHUB_RUN_ATTEMPT!=="1"||
-     process.env.GATE05_SOURCE_READONLY_CONFIRM!==
-       "AUDIT_OLD_GATE05_SOURCE_METADATA_ONLY_NO_PROVIDER")
+     process.env.GITHUB_RUN_ATTEMPT!=="1")
     throw Error("GATE05_SOURCE_AUDIT_UNAUTHORIZED_DISPATCH");
   const url=process.env.GATE05_AUTOMATION_DATABASE_URL;
   if(!url)throw Error("GATE05_SOURCE_AUDIT_DATABASE_SECRET_MISSING");
