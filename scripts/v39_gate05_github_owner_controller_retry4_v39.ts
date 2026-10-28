@@ -28,7 +28,7 @@ import {recommissionGate05AfterFourthUnbilledWatchV39}
  from "./v39_gate05_science_recommission_after_fourth_failed_watch_v39";
 
 const REPO="HKcode22/ReplitTranvr";
-const WORKFLOW="phase3-gate05-science-exact-owned-stop.yml";
+const WORKFLOW="phase3-gate05-science-exact-owned-stop-retry4.yml";
 const DIR=join(homedir(),".config","replittranvr","gate05-science-retry4");
 const FILE=join(DIR,"recovery-before-commit.json");
 const STOP_NAME=(scope:string)=>"Gate05 Science STOP "+scope;
