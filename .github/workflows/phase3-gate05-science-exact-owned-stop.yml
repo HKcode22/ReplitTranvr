@@ -108,8 +108,8 @@ jobs:
           CREDITS: ${{ inputs.starting_credits }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
-          GATE05_SAFETY_DATABASE_URL: ${{ secrets.GATE05_SAFETY_DATABASE_URL }}
-          GATE05_SAFETY_EXPECTED_DB_HOST: ${{ secrets.GATE05_SAFETY_EXPECTED_DB_HOST }}
+          GATE05_SCIENCE_SAFETY_DATABASE_URL: ${{ secrets.GATE05_SCIENCE_SAFETY_DATABASE_URL }}
+          GATE05_SCIENCE_SAFETY_EXPECTED_DB_HOST: ${{ secrets.GATE05_SCIENCE_SAFETY_EXPECTED_DB_HOST }}
         shell: bash
         run: |
           set -Eeuo pipefail
