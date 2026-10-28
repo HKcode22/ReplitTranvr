@@ -125,6 +125,34 @@ try{
  await db.query(
    'GRANT INSERT ON TABLE clean.gate05_science_delivery_custody_v39 TO "'+
    runtimeRole+'"');
+ // PostgreSQL role DEFAULT PRIVILEGES applied UPDATE/DELETE to this
+ // freshly created table even though this release explicitly grants only
+ // INSERT. A GRANT INSERT does not remove existing inherited ACLs.
+ //
+ // Correct the NEW journal's own ACL ONLY, inside the same uncommitted
+ // transaction. Do not ALTER DEFAULT PRIVILEGES, touch older tables, alter
+ // role membership, or broaden the runtime role. Remove UPDATE/DELETE from
+ // every explicit non-owner grantee (including roles inherited by runtime).
+ // The owner retains its implicit rights for reviewed administration.
+ const overgranted=(await db.query(
+   "SELECT DISTINCT recipient.rolname AS grantee_role "+
+   "FROM pg_class c "+
+   "CROSS JOIN LATERAL aclexplode("+
+   "COALESCE(c.relacl,acldefault('r',c.relowner))) acl "+
+   "JOIN pg_roles recipient ON recipient.oid=acl.grantee "+
+   "WHERE c.oid='clean.gate05_science_delivery_custody_v39'::regclass "+
+   "AND acl.grantee<>c.relowner "+
+   "AND acl.privilege_type IN ('UPDATE','DELETE')"
+ )).rows;
+ for(const recipient of overgranted){
+   // Identifier arrives from trusted PostgreSQL pg_roles, never user input.
+   // Quote every double quote even for uncommon role names.
+   const ident='"'+String(recipient.grantee_role).replaceAll('"','""')+'"';
+   await db.query(
+     "REVOKE UPDATE, DELETE ON TABLE "+
+     "clean.gate05_science_delivery_custody_v39 FROM "+ident
+   );
+ }
  const meta=(await db.query(
    "SELECT c.relpersistence,c.relkind,p.prosecdef,p.proconfig "+
    "FROM pg_class c "+

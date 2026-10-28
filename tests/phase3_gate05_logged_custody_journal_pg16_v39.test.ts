@@ -21,6 +21,86 @@ const v75="migrations/staged/V0075__gate05_logged_delivery_custody_v39.sql";
 const DELIVERY="ppd_"+"a".repeat(64);
 const HASH="b".repeat(64);
 (local?describe:describe.skip)("Gate05 durable LOGGED raw callback custody (staged, rollback only)",()=>{
+ it("normalizes inherited DEFAULT UPDATE/DELETE only on newly created V0075 table",async()=>{
+  const db=new pg.Client({connectionString:url,connectionTimeoutMillis:10000});
+  await db.connect();
+  const tag=randomUUID().replaceAll("-","").slice(0,16);
+  const runtime="g05_acl_writer_"+tag;
+  const inherited="g05_acl_group_"+tag;
+  const ident=(name:string)=>'"'+name.replaceAll('"','""')+'"';
+  try{
+   await db.query("BEGIN");
+   await db.query(readFileSync(v74,"utf8"));
+   const beforeOwnerTableAcl=(await db.query(
+     "SELECT relacl::text AS acl FROM pg_class "+
+     "WHERE oid='clean.phase3_gate05_science_owner_v39'::regclass"
+   )).rows[0].acl;
+   await db.query('CREATE ROLE '+ident(runtime)+' NOLOGIN INHERIT');
+   await db.query('CREATE ROLE '+ident(inherited)+' NOLOGIN');
+   await db.query('GRANT '+ident(inherited)+' TO '+ident(runtime));
+   // Reproduce the live Neon condition: direct and inherited grantee
+   // DEFAULT privileges for new tables include UPDATE and DELETE.
+   await db.query('ALTER DEFAULT PRIVILEGES IN SCHEMA clean '+
+     'GRANT INSERT, UPDATE, DELETE ON TABLES TO '+
+     ident(runtime)+','+ident(inherited));
+   await db.query(readFileSync(v75,"utf8"));
+   await db.query('GRANT USAGE ON SCHEMA clean TO '+ident(runtime));
+   await db.query('GRANT INSERT ON TABLE '+
+     'clean.gate05_science_delivery_custody_v39 TO '+ident(runtime));
+   const rights=async(table:string)=>(
+     await db.query(
+       "SELECT has_table_privilege($1,$2,'INSERT') AS can_insert,"+
+       "has_table_privilege($1,$2,'UPDATE') AS can_update,"+
+       "has_table_privilege($1,$2,'DELETE') AS can_delete",
+       [runtime,table])
+   ).rows[0];
+   const journal="clean.gate05_science_delivery_custody_v39";
+   expect(await rights(journal)).toMatchObject({
+     can_insert:true,can_update:true,can_delete:true
+   });
+   // Exact catalog-driven normalization used by the production installer.
+   // It cannot touch default privileges or any historical table.
+   const overgranted=(await db.query(
+     "SELECT DISTINCT recipient.rolname AS grantee_role "+
+     "FROM pg_class c "+
+     "CROSS JOIN LATERAL aclexplode("+
+     "COALESCE(c.relacl,acldefault('r',c.relowner))) acl "+
+     "JOIN pg_roles recipient ON recipient.oid=acl.grantee "+
+     "WHERE c.oid='clean.gate05_science_delivery_custody_v39'::regclass "+
+     "AND acl.grantee<>c.relowner "+
+     "AND acl.privilege_type IN ('UPDATE','DELETE')"
+   )).rows;
+   expect(overgranted.map(x=>x.grantee_role).sort()).toEqual(
+     [runtime,inherited].sort());
+   for(const recipient of overgranted){
+     await db.query(
+       "REVOKE UPDATE, DELETE ON TABLE "+
+       "clean.gate05_science_delivery_custody_v39 FROM "+
+       ident(recipient.grantee_role)
+     );
+   }
+   expect(await rights(journal)).toMatchObject({
+     can_insert:true,can_update:false,can_delete:false
+   });
+   expect((await db.query(
+     "SELECT has_schema_privilege($1,'clean','USAGE') AS schema_use",
+     [runtime])).rows[0].schema_use).toBe(true);
+   expect((await db.query(
+     "SELECT relacl::text AS acl FROM pg_class "+
+     "WHERE oid='clean.phase3_gate05_science_owner_v39'::regclass"
+   )).rows[0].acl).toBe(beforeOwnerTableAcl);
+   // Default ACL policies are deliberately unchanged, verified by another
+   // newly created disposable table still inheriting the historical grant.
+   const probe="g05_acl_probe_"+tag;
+   await db.query("CREATE TABLE clean."+ident(probe)+" (id integer)");
+   expect(await rights("clean."+probe)).toMatchObject({
+     can_insert:true,can_update:true,can_delete:true
+   });
+  }finally{
+   await db.query("ROLLBACK").catch(()=>undefined);
+   await db.end();
+  }
+ },20000);
  it("survives erased UNLOGGED item history, rejects foreign refs and is immutable",async()=>{
   const db=new pg.Client({connectionString:url,connectionTimeoutMillis:10000});
   await db.connect();

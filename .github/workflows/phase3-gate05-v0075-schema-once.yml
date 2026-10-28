@@ -1,0 +1,171 @@
+name: Gate05 V0075 — One-Time LOGGED Custody Schema Release (No Provider)
+
+# Manual reviewed main only. Production DDL is NEVER launched by a push,
+# scheduled event, PR, test or application boot. Existing protected DB
+# credentials; no provider key or paid calls. Exact scoped future-schema only.
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_main_sha:
+        description: "Exact 40-hex reviewed main commit to install, from PR merge"
+        type: string
+        required: true
+      confirmation:
+        description: "Authorize exactly one schema-only V0075 installation"
+        type: choice
+        required: true
+        options:
+          - INSTALL_REVIEWED_V0075_ONE_DB_NO_PROVIDER
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate05-v0075-schema-only-production
+  cancel-in-progress: false
+
+jobs:
+  one-reviewed-v0075-schema:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'INSTALL_REVIEWED_V0075_ONE_DB_NO_PROVIDER' }}
+    runs-on: ubuntu-latest
+    environment: phase2g-paid
+    timeout-minutes: 12
+    steps:
+      - name: Checkout the exact reviewed main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked production dependencies, no lifecycle scripts or secrets
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Pin current GitHub main and installer byte source
+        shell: bash
+        env:
+          EXPECTED: ${{ inputs.reviewed_main_sha }}
+          CONFIRM: ${{ inputs.confirmation }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          [[ "${EXPECTED}" =~ ^[0-9a-f]{40}$ ]] || exit 2
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+          test "${GITHUB_REF}" = refs/heads/main
+          test "${GITHUB_RUN_ATTEMPT}" = 1
+          test "${CONFIRM}" = INSTALL_REVIEWED_V0075_ONE_DB_NO_PROVIDER
+          test "${EXPECTED}" = "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${EXPECTED}"
+          git fetch --no-tags origin refs/heads/main
+          test "$(git rev-parse FETCH_HEAD)" = "${EXPECTED}"
+          node --check scripts/v39_gate05_v0075_release_install_once_20261028.mjs
+      - name: One explicit transactional production V0075 DDL only
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          GATE05_V0075_REVIEWED_MAIN_SHA: ${{ inputs.reviewed_main_sha }}
+          GATE05_V0075_APPLY: INSTALL_REVIEWED_V0075_ONE_DB_NO_PROVIDER
+          AERODATABOX_API_KEY: ""
+          RAPIDAPI_KEY: ""
+          GH_TOKEN: ""
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -n "${DATABASE_URL:-}"
+          test -n "${V39_DATABASE_RUNTIME_URL:-}"
+          test -z "${AERODATABOX_API_KEY}"
+          test -z "${RAPIDAPI_KEY}"
+          test -z "${GH_TOKEN}"
+          node scripts/v39_gate05_v0075_release_install_once_20261028.mjs
+      - name: Independent post-attempt catalog READ ONLY (including ambiguous COMMIT)
+        if: always()
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          AERODATABOX_API_KEY: ""
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -n "${DATABASE_URL:-}"
+          test -n "${V39_DATABASE_RUNTIME_URL:-}"
+          node --input-type=module <<'NODE'
+          import pg from "pg";
+          let db;
+          const result={
+            schema:"v39.gate05.v0075.post-commit-readonly.v1",
+            status:"HOLD",journalPresent:false,logged:false,
+            immutableTrigger:false,schemaUsage:false,
+            runtimeInsert:false,runtimeUpdate:false,runtimeDelete:false,
+            publicInsert:false,dbWrites:0,providerCalls:0,paidTrialStarted:false
+          };
+          try{
+            const role=decodeURIComponent(new URL(process.env.V39_DATABASE_RUNTIME_URL).username);
+            db=new pg.Client({
+              connectionString:process.env.DATABASE_URL,
+              options:"-c default_transaction_read_only=on",
+              connectionTimeoutMillis:7000,query_timeout:8000,
+              statement_timeout:8000,
+              application_name:"gate05_v0075_post_attempt_readonly"
+            });
+            await db.connect();
+            await db.query("BEGIN TRANSACTION READ ONLY");
+            const rows=(await db.query(
+              "SELECT c.relpersistence,c.relkind,"+
+              "EXISTS (SELECT 1 FROM pg_trigger t JOIN pg_proc p "+
+              "ON p.oid=t.tgfoid WHERE t.tgrelid=c.oid "+
+              "AND t.tgname='gate05_delivery_custody_immutable_v39' "+
+              "AND p.prosecdef) AS immutable_trigger,"+
+              "has_schema_privilege($1,'clean','USAGE') AS usage,"+
+              "has_table_privilege($1,c.oid,'INSERT') AS ins,"+
+              "has_table_privilege($1,c.oid,'UPDATE') AS upd,"+
+              "has_table_privilege($1,c.oid,'DELETE') AS del,"+
+              "EXISTS (SELECT 1 FROM aclexplode("+
+              "COALESCE(c.relacl,acldefault('r',c.relowner))) a "+
+              "WHERE a.grantee=0 AND a.privilege_type='INSERT') AS pub "+
+              "FROM pg_class c WHERE c.oid="+
+              "to_regclass('clean.gate05_science_delivery_custody_v39')",
+              [role]
+            )).rows;
+            const x=rows[0];
+            result.journalPresent=Boolean(x);
+            if(x){
+              result.logged=x.relpersistence==="p"&&x.relkind==="r";
+              result.immutableTrigger=x.immutable_trigger===true;
+              result.schemaUsage=x.usage===true;
+              result.runtimeInsert=x.ins===true;
+              result.runtimeUpdate=x.upd===true;
+              result.runtimeDelete=x.del===true;
+              result.publicInsert=x.pub===true;
+            }
+            await db.query("ROLLBACK");
+            const valid=result.journalPresent&&result.logged&&
+              result.immutableTrigger&&result.schemaUsage&&
+              result.runtimeInsert&&!result.runtimeUpdate&&
+              !result.runtimeDelete&&!result.publicInsert;
+            result.status=valid?"V0075_POST_COMMIT_MINIMAL_ACL_VERIFIED":
+              "HOLD_POST_ATTEMPT_CATALOG_NOT_READY";
+          }catch{
+            result.status="HOLD_POST_ATTEMPT_READ_UNAVAILABLE";
+          }finally{
+            if(db)await db.end().catch(()=>undefined);
+            console.log(JSON.stringify(result,null,2));
+            if(result.status!=="V0075_POST_COMMIT_MINIMAL_ACL_VERIFIED")
+              process.exitCode=2;
+          }
+          NODE
+      - name: Preserve explicit scope boundary
+        if: always()
+        run: |
+          {
+            echo "## V0075 schema-only migration — never a paid/scientific GO"
+            echo "Manual main SHA and protected environment review; one DB transaction only."
+            echo "Post-attempt READ ONLY proof distinguishes absent vs installed table even after ambiguous COMMIT."
+            echo "A failure is NOT an instruction to blindly rerun; inspect actual V0075 status."
+            echo "No provider API credentials, Alert CREATE/DELETE, FIDS, refill, Replit publish or new pilot owner."
+            echo "New published receiver source parity, durable feature opt-in, STOP and real PRE/POST science remain separate."
+          } >> "${GITHUB_STEP_SUMMARY}"
