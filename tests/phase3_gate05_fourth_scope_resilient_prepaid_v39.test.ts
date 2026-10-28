@@ -2,7 +2,7 @@ import {readFileSync} from "node:fs";
 import {describe,it,expect} from "vitest";
 import {gate05SciencePlanWindowV39,hasExactGate05PaidIntentV39} from
  "../scripts/v39_gate05_science_recommission_after_fourth_failed_watch_v39";
-import {gate05GithubOwnerTimeAdmitV39} from
+import {gate05GithubOwnerTimeAdmitV39,gate05GithubStopIsReallyLiveV39} from
  "../scripts/v39_gate05_github_owner_controller_retry4_v39";
 
 const root="scripts/";
@@ -80,6 +80,26 @@ describe("Gate05 fourth scope, evidence-first resilient execution",()=>{
    'providerHardCap:false', 'LIVE_STOP_WATCH_ARMED_NO_PROVIDER_CREATE'
   ])expect(stop).toContain(t);
   expect(stop).not.toContain("createGate4SingleWithRawReceiptV39(");
+ });
+ it("actually runs retry4 entrypoint and admits independent live STOP at T-minus-nine",()=>{
+  expect(controller).toContain('if(process.argv[1]?.endsWith("v39_gate05_github_owner_controller_retry4_v39.ts"))');
+  expect(controller).not.toContain('if(process.argv[1]?.endsWith("v39_gate05_github_owner_controller_retry3_v39.ts"))');
+  const start=Date.parse("2026-10-28T10:30:00Z");
+  const scope="d31cdaf3-f64f-4fed-95b6-09d8c491f5d9";
+  const head="a".repeat(40);
+  const run={head_sha:head,event:"workflow_dispatch",run_attempt:1,
+    display_title:"Gate05 Science STOP "+scope,status:"in_progress"};
+  const jobs={jobs:[{name:"exact-owned-stop",status:"in_progress",
+    steps:[{name:"Run independently authorized exact-owned STOP, never CREATE",
+      status:"in_progress"}]}]};
+  expect(gate05GithubStopIsReallyLiveV39(
+    run,jobs,scope,head,start-9*60000,start)).toBe(true);
+  expect(gate05GithubStopIsReallyLiveV39(
+    run,jobs,scope,head,start-11*60000,start)).toBe(false);
+  expect(gate05GithubStopIsReallyLiveV39(
+    {...run,status:"completed"},jobs,scope,head,start-9*60000,start)).toBe(false);
+  expect(gate05GithubStopIsReallyLiveV39(
+    run,{jobs:[]},scope,head,start-9*60000,start)).toBe(false);
  });
  it("preserves separate protected GitHub runners, automatic approval and one-use identity",()=>{
   expect(controller).toContain('"gate05-science-retry4"');
