@@ -73,7 +73,7 @@ describe("Gate05 recovery2: verified failed watch, no paid POST and fresh ID",()
    expect(stop).toContain('current.state==="PREPARED"');
    expect(stop).toContain("current.provider_subscription_id===null");
    expect(stop).toContain("knownExactId===null");
-   expect(stop).toContain("now<policy.startMs");
+   expect(stop).toContain("now<policy.startMs-5*60000");
    expect(stop).toContain("getBalanceEvidenceStrictWithRetry({maxAttempts:3})");
    expect(stop).toContain("maxAttempts:safePreCreate?3:1");
    expect(stop).toContain("await getBalanceEvidenceStrict();");
