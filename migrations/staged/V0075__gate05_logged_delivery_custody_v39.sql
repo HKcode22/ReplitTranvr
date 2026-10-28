@@ -30,9 +30,11 @@ CREATE TABLE clean.gate05_science_delivery_custody_v39 (
   PRIMARY KEY(session_id,delivery_id),
   UNIQUE(blob_ref_id),
   CONSTRAINT gate05_custody_clock_order_v39
-    CHECK(blob_persisted_at_utc <= committed_at_utc),
+    -- Distributed receiver/Neon clocks may differ slightly. No clock
+    -- equivalence or certified HTTP-ACK claim is inferred from this bound.
+    CHECK(blob_persisted_at_utc <= committed_at_utc + INTERVAL '3 minutes'),
   CONSTRAINT gate05_custody_receiver_clock_v39
-    CHECK(receiver_attempt_at_utc <= committed_at_utc)
+    CHECK(receiver_attempt_at_utc <= committed_at_utc + INTERVAL '3 minutes')
 );
 COMMENT ON TABLE clean.gate05_science_delivery_custody_v39 IS
  'LOGGED metadata-only custody ledger, atomic with source-ref and prepaid rows; survives UNLOGGED restart; no flight identity and NO HTTP2xx proof';
