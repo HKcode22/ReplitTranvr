@@ -206,11 +206,24 @@ export async function runGate05ScienceStopV39(
        hold("POSTMASTER_RESET_BEFORE_EXACT_PAID_BIND");
      }
      const current=await owner();
-     // During PAID monitoring, fail fast: emergency delete the already
-     // authenticated exact ID rather than spend up to 30s re-polling an
-     // unreachable provider while SEND credits may continue accumulating.
-     const balance=await getBalanceEvidenceStrict();
-     const inv=await listSubscriptionsStrictWithRetry({maxAttempts:1});
+     // PRE-CREATE has no owned paid ID yet. A brief free account-read
+     // transport timeout must not kill an otherwise healthy safety worker.
+     // Do NOT extend this tolerance into ACTIVE or an ambiguous CREATE:
+     // with a known paid ID, fail fast into exact-owned emergency DELETE.
+     // The paid operator independently requires a fresh strict balance/LIST
+     // before POST and never retries the non-idempotent subscription CREATE.
+     const safePreCreate=current.state==="PREPARED"&&
+       current.provider_subscription_id===null&&knownExactId===null&&
+       // Stop tolerating slow GETs BEFORE the separate paid operator's T-5m
+       // preflight; after this point even a PREPARED DB row could reflect
+       // an unbound non-idempotent remote CREATE in progress.
+       now<policy.startMs-5*60000;
+     const balance=safePreCreate?
+       await getBalanceEvidenceStrictWithRetry({maxAttempts:3}):
+       await getBalanceEvidenceStrict();
+     const inv=await listSubscriptionsStrictWithRetry({
+       maxAttempts:safePreCreate?3:1
+     });
      providerCharged=p.startingCredits-balance.balance.creditsRemaining;
      if(!Number.isSafeInteger(providerCharged)||providerCharged<0)
        hold("BILLING_COUNTER_INVALID_OR_REFILLED");

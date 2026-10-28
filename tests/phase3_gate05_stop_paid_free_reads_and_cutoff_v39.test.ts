@@ -11,8 +11,9 @@ describe("Gate05 independent STOP + one paid CREATE: free read resilience and cu
  it("read-only transient retry is bounded before AND during actual STOP",()=>{
   expect(count(stop,"await getBalanceEvidenceStrictWithRetry({maxAttempts:2})")).toBe(2);
   expect(count(stop,"listSubscriptionsStrictWithRetry({maxAttempts:2})")).toBe(2);
-  expect(stop).toContain("const balance=await getBalanceEvidenceStrict();");
-  expect(stop).toContain("const inv=await listSubscriptionsStrictWithRetry({maxAttempts:1})");
+  expect(stop).toContain("await getBalanceEvidenceStrict();");
+  expect(stop).toContain("getBalanceEvidenceStrictWithRetry({maxAttempts:3})");
+  expect(stop).toContain("maxAttempts:safePreCreate?3:1");
   expect(stop).toContain("GATE05_SCIENCE_STOP_UNCONFIRMED_REQUIRES_EXACT_OWNER_RESCUE");
   expect(stop).toContain("deleteSubscriptionVerifiedStrict(knownExactId");
   expect(stop).not.toContain("createGate4SingleWithRawReceiptV39(");
