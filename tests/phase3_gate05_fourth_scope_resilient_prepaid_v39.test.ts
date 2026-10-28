@@ -9,8 +9,9 @@ const root="scripts/";
 const commission=readFileSync(root+"v39_gate05_science_recommission_after_fourth_failed_watch_v39.ts","utf8");
 const controller=readFileSync(root+"v39_gate05_github_owner_controller_retry4_v39.ts","utf8");
 const paid=readFileSync(root+"v39_gate05_science_one_paid_create_once_retry4_v39.ts","utf8");
-const stop=readFileSync(root+"v39_gate05_science_exact_owned_actions_stop_v39.ts","utf8");
+const stop=readFileSync(root+"v39_gate05_science_exact_owned_actions_stop_retry4_v39.ts","utf8");
 const workflow=readFileSync(".github/workflows/phase3-gate05-github-automated-retry4.yml","utf8");
+const stopWorkflow=readFileSync(".github/workflows/phase3-gate05-science-exact-owned-stop-retry4.yml","utf8");
 
 describe("Gate05 fourth scope, evidence-first resilient execution",()=>{
  it("requires reconciled previous ARMED paid-operator crash but no published CREATE intent",()=>{
@@ -71,6 +72,8 @@ describe("Gate05 fourth scope, evidence-first resilient execution",()=>{
   expect(controller).toContain('v39_gate05_science_one_paid_create_once_retry4_v39.ts');
   expect(controller).toContain("GATE05_SAFETY_EXACT_GITHUB_PROTECTED_REVIEW_APPROVED");
   expect(controller).toContain("timeout:720000");
+  expect(controller).toContain("phase3-gate05-science-exact-owned-stop-retry4.yml");
+  expect(stopWorkflow).toContain("scripts/v39_gate05_science_exact_owned_actions_stop_retry4_v39.ts");
   expect(workflow).toContain("workflow_dispatch:");
   expect(workflow).toContain("environment: phase2g-paid");
   expect(workflow).toContain("v39_gate05_github_owner_controller_retry4_v39.ts");
