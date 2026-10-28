@@ -101,13 +101,58 @@ export async function recommissionGate05AfterUnbilledWindowV39(
  // SUCCESSFULLY exited with exact zero-active, zero-billed provider evidence.
  // Never rerun the old permit or alter its frozen scope/window.
  const priorFile=join(PRIOR_ROOT,"recovery-before-commit.json");
- if(!existsSync(priorFile)||(statSync(priorFile).mode&0o077)!==0||
-    existsSync(join(PRIOR_ROOT,"one-paid-create-intent.json"))||
-    existsSync(join(PRIOR_ROOT,"one-positive-create-receipt.json")))
-   hold("PRIOR_PRIVATE_SCOPE_OR_PAID_INTENT_HOLD");
  let old:any;
- try{old=JSON.parse(readFileSync(priorFile,"utf8"));}
- catch{hold("PRIOR_PRIVATE_SCOPE_JSON");}
+ // A GitHub-hosted runner MUST NOT assume Replit's private home files are
+ // mounted. It substitutes independently filed immutable operator evidence,
+ // then REVALIDATES the old LOGGED PostgreSQL owner and exact terminal STOP
+ // against the real provider account before any next-scope creation.
+ const githubMode=process.env.GITHUB_ACTIONS==="true"&&
+   process.env.GITHUB_EVENT_NAME==="workflow_dispatch"&&
+   process.env.GITHUB_RUN_ATTEMPT==="1"&&
+   process.env.GITHUB_SHA===head&&
+   process.env.GATE05_AUTOMATION_APPROVED_ONCE===
+     "YES_ONE_WSSS_500_ALERT_12_REST";
+ if(githubMode){
+   if(existsSync(PRIOR_ROOT))
+     hold("GITHUB_RUNNER_PRIOR_REPLIT_FILES_UNEXPECTED");
+   const evidence=ghJson(["api",
+     `repos/${REPO}/issues/comments/6458844605`]);
+   const aborted=ghJson(["api",
+     `repos/${REPO}/issues/comments/6459454399`]);
+   if(evidence?.user?.login!=="HKcode22"||
+      aborted?.user?.login!=="HKcode22"||
+      !String(evidence.body??"").includes(
+        "98bbf760-6211-4eaa-908c-240be91e7b0d")||
+      !String(evidence.body??"").includes(
+        "ONE_NEW_OWNER_AND_SAFETY_ENV_PREPARED_NO_PAID_PROVIDER")||
+      !String(aborted.body??"").includes(
+        "providerCreateWasAttempted=false")||
+      !String(aborted.body??"").includes(
+        "GATE05_SCIENCE_PAID_HOLD_PREPAID_NEW_CALLBACK_SESSION_NOT_ARMED")||
+      !String(aborted.body??"").includes(
+        "positiveExactProviderIdKnown=false"))
+     hold("OLD_OPERATOR_GITHUB_EVIDENCE_NOT_VERIFIED");
+   old={
+     schema:"v39.gate05.science-private-one-use-commission.v1",
+     scope:PRIOR_SCOPE,
+     source:"dda0bf7ddc1ca1e4a3296d845d2277282ba8507a",
+     receiver:RECEIVER,
+     authorizationSha256:
+       "4e1e6a676172e22b260b476de9e09fdcbe30ecbe170f52e0dad1ffd617c287b3",
+     stopTicketSha256:
+       "05610b432f30a77415a1217606adcb9f9cc5b95d344f0752a2848b3b731a6b25",
+     startUtc:"2026-10-28T03:00:00.000Z",
+     stopUtc:"2026-10-28T04:00:00.000Z",
+     startingCredits:1981
+   };
+ }else{
+   if(!existsSync(priorFile)||(statSync(priorFile).mode&0o077)!==0||
+      existsSync(join(PRIOR_ROOT,"one-paid-create-intent.json"))||
+      existsSync(join(PRIOR_ROOT,"one-positive-create-receipt.json")))
+     hold("PRIOR_PRIVATE_SCOPE_OR_PAID_INTENT_HOLD");
+   try{old=JSON.parse(readFileSync(priorFile,"utf8"));}
+   catch{hold("PRIOR_PRIVATE_SCOPE_JSON");}
+ }
  if(old?.schema!=="v39.gate05.science-private-one-use-commission.v1"||
     old.scope!==PRIOR_SCOPE||
     old.source!=="dda0bf7ddc1ca1e4a3296d845d2277282ba8507a"||
@@ -237,6 +282,7 @@ export async function recommissionGate05AfterUnbilledWindowV39(
    sessionExpiresUtc:plan.sessionExpires,
    startingCredits:credits,sourceSqlSha256:sourceHash,
    priorClosedScope:PRIOR_SCOPE,priorSafetyRun:PRIOR_STOP_RUN,
+   priorEvidenceSource:githubMode?"GITHUB_ISSUE_LOGGED_OWNER_STOP_PROVIDER":"REPLIT_PRIVATE_RECEIPT",
    priorTerminalSha256:sha256(JSON.stringify(settled)),
    safetyReaderUrl:restricted.toString()
  };
