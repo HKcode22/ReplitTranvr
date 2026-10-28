@@ -273,8 +273,8 @@ export async function commissionOneGate05ScienceOwnerV39(
      "--body",v]);
  }
  for(const [k,v] of Object.entries({
-   GATE05_SAFETY_DATABASE_URL:restricted.toString(),
-   GATE05_SAFETY_EXPECTED_DB_HOST:adminUrl.hostname,
+   GATE05_SCIENCE_SAFETY_DATABASE_URL:restricted.toString(),
+   GATE05_SCIENCE_SAFETY_EXPECTED_DB_HOST:adminUrl.hostname,
    AERODATABOX_API_KEY:apiKey
  })){
    gh(["secret","set",k,"--repo",REPO,"--env",ENV],v+"\n");
