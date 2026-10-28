@@ -9,6 +9,8 @@ import pg from "pg";
 import {execFileSync} from "node:child_process";
 import {getBalanceEvidenceStrictWithRetry,listSubscriptionsStrictWithRetry} from
   "../server/lib/disruption/aerodataboxLimiter_v3";
+import {gate05ProviderReadFailureTransientV39} from
+  "../server/lib/disruption/gate05ProviderTelemetrySafety_v39";
 
 const REPO="HKcode22/ReplitTranvr";
 const SCOPE="e69ffa34-d8a6-456f-a49c-9dd459e6d294";
@@ -18,6 +20,29 @@ const TICKET="aa6d6c9374bcca7af6b6beea7589e42bbb648649ee1d3493bcf75144c5bc6a7f";
 const START="2026-10-28T10:15:00.000Z";
 const STOP="2026-10-28T11:15:00.000Z";
 const BASELINE=1981;
+const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
+const withFreeProviderReadRecovery=async<T>(fn:()=>Promise<T>):Promise<T>=>{
+  // Account balance is read-only. Permit 3 spaced recovery windows so
+  // a transient GitHub egress/provider fault does not require user timing.
+  // Never turn this pattern into a non-idempotent CREATE/DELETE retry.
+  let lastError:unknown;
+  for(let i=0;i<3;i++){
+    try{return await fn();}
+    catch(error){
+      lastError=error;
+      const message=error instanceof Error?error.message:"";
+      if(!gate05ProviderReadFailureTransientV39(message)||i===2)break;
+      console.warn(JSON.stringify({
+        status:"GATE05_FREE_SETTLEMENT_TELEMETRY_RETRY",
+        completedFailedReadWindow:i+1,
+        noProviderMutation:true,noCreditsAssumed:true
+      }));
+      await sleep(30_000);
+    }
+  }
+  throw lastError instanceof Error?lastError:
+    Error("GATE05_FREE_SETTLEMENT_READ_UNAVAILABLE");
+};
 const expect=(x:boolean,code:string)=>{if(!x)throw Error("GATE05_READONLY_SETTLEMENT_HOLD_"+code);};
 async function main(){
   expect(process.env.GITHUB_ACTIONS==="true"&&
@@ -60,16 +85,32 @@ async function main(){
     expect(typeof o.provider_subscription_id==="string"&&
       o.provider_subscription_id.length>=6,"OWNED_ID_NOT_LOGGED");
     // Both FREE provider calls are separate authenticated current evidence.
-    const balance=await getBalanceEvidenceStrictWithRetry({maxAttempts:3});
-    const subs=await listSubscriptionsStrictWithRetry({maxAttempts:3});
+    const balanceFirst=await withFreeProviderReadRecovery(()=>
+      getBalanceEvidenceStrictWithRetry({maxAttempts:3}));
+    const subs=await withFreeProviderReadRecovery(()=>
+      listSubscriptionsStrictWithRetry({maxAttempts:3}));
+    // Repeat the FREE account reading after a real spacing interval:
+    // stable counters are evidence, not a guaranteed final bill ledger.
+    await sleep(30_000);
+    const balance=await withFreeProviderReadRecovery(()=>
+      getBalanceEvidenceStrictWithRetry({maxAttempts:3}));
+    const secondSubs=await withFreeProviderReadRecovery(()=>
+      listSubscriptionsStrictWithRetry({maxAttempts:3}));
+    const creditsStableAcrossReads=
+      balanceFirst.balance.creditsRemaining===balance.balance.creditsRemaining;
+
     const active=subs.filter(x=>x.isActive);
-    const exactStillActive=active.some(x=>x.id===o.provider_subscription_id);
-    const foreignActive=active.filter(x=>x.id!==o.provider_subscription_id).length;
+    const activeLatest=secondSubs.filter(x=>x.isActive);
+    const exactStillActive=active.some(x=>x.id===o.provider_subscription_id)||
+      activeLatest.some(x=>x.id===o.provider_subscription_id);
+    const foreignActive=active.filter(x=>x.id!==o.provider_subscription_id).length+
+      activeLatest.filter(x=>x.id!==o.provider_subscription_id).length;
     const remaining=balance.balance.creditsRemaining;
     const spent=BASELINE-remaining;
     expect(Number.isSafeInteger(spent)&&spent>=0,"CREDIT_COUNTER_INVALID_OR_REFILLED");
     const status=exactStillActive?"PAID_EXACT_ID_STILL_ACTIVE_NO_RETRY":
       foreignActive>0?"FOREIGN_ACTIVE_PROVIDER_NO_RETRY":
+      !creditsStableAcrossReads?"PROVIDER_CREDIT_POSTING_IN_PROGRESS_NO_RETRY":
       "EXACT_OWNED_SUBSCRIPTION_INACTIVE_ACCOUNTING_PROVISIONAL";
     console.log(JSON.stringify({
       schema:"v39.gate05.retry5-readonly-settlement.v1",
@@ -78,6 +119,8 @@ async function main(){
       exactOwnedSubscriptionActive:exactStillActive,
       foreignActiveSubscriptions:foreignActive,
       observedAlertCreditsRemaining:remaining,
+      twoFreeBalanceReadsStable:creditsStableAcrossReads,
+      firstBalanceObservedAtUtc:balanceFirst.quota.observedAtUtc,
       netAccountDebitSincePreCreateBaseline:spent,
       cannotAttributeAllNetDebitToThisPilot:true,
       providerBalanceObservedAtUtc:balance.quota.observedAtUtc,
@@ -91,6 +134,7 @@ async function main(){
       noBlindCreateRetry:true
     }));
     expect(!exactStillActive&&foreignActive===0,"ACTIVE_SUBSCRIPTION_NO_RETRY");
+    expect(creditsStableAcrossReads,"BILLING_COUNTER_STILL_MOVING_NO_PAID_RETRY");
     expect(spent<=500,"SPENT_OVER_AUTHORIZED_ENVELOPE_REQUIRES_REVIEW");
   }finally{await db.end().catch(()=>undefined);}
 }
