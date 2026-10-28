@@ -79,7 +79,10 @@ export type Gate05ObservedCensusV39 = Readonly<{
     airbornePoints: 100;
     durationMinutes: 60;
   }>;
+  /** NUMERICAL sample thresholds only, never forged by custody proof. */
   deficits: readonly string[];
+  /** Science/provenance proof limitations, separate from sample sufficiency. */
+  integrityFindings: readonly string[];
   independentPhysicalIdentityConfirmed: false;
   scheduledWheelsOffReferenceConfirmed: false;
   actualWheelsOffSourceConfirmed: false;
@@ -211,13 +214,21 @@ export function censusGate05ObservedPilotV39(
   }
   const duration=(stopped-started)/60_000;
   const deficits:string[]=[];
-  if(custody<100)deficits.push("RAW_BEFORE_2XX_NOTIFICATION_ITEMS_LT_100");
+  const integrityFindings:string[]=[];
+  // The binding f.8 §16 100-item threshold is about observed notifications.
+  // Whether each was proved durably raw-before-2xx is a *separate* integrity
+  // measurement. Missing HTTP ACK clocks must not be misclassified as
+  // "insufficient flight sample" when a source audit found 100+ receipts.
+  if(custody+missing<100)deficits.push("RECEIVED_NOTIFICATION_ITEMS_LT_100");
+  if(missing>0)
+    integrityFindings.push("RAW_BEFORE_2XX_ITEM_ACK_PROOF_INCOMPLETE");
   if(legs.size<50)deficits.push("SOURCE_QUALIFIED_OPERATING_FLIGHTS_LT_50");
   if(completed.size<20)deficits.push("COMPLETED_OPERATING_FLIGHTS_LT_20");
   if(airborne.size<30)deficits.push("AIRBORNE_OPERATING_FLIGHTS_LT_30");
   if(pointCount<100)deficits.push("USABLE_UNIQUE_AIRBORNE_POINTS_LT_100");
   if(duration<60)deficits.push("EXACT_OBSERVED_SUBSCRIPTION_DURATION_LT_60_MIN");
-  if(!pilot.evidenceSourceReviewed)deficits.push("ITEM_SOURCE_NOT_INDEPENDENTLY_REVIEWED");
+  if(!pilot.evidenceSourceReviewed)
+    integrityFindings.push("ITEM_SOURCE_NOT_INDEPENDENTLY_REVIEWED");
   return {
     schema:GATE05_CENSUS_SCHEMA_V39,
     status:duration<60?"STOPPED_EARLY":"SAMPLE_ONLY_NEEDS_SOURCE_AUDIT",
@@ -244,7 +255,7 @@ export function censusGate05ObservedPilotV39(
     sampleMinima:{notifications:100,distinctOperatingFlights:50,
       completedFlights:20,airborneFlights:30,airbornePoints:100,
       durationMinutes:60},
-    deficits,
+    deficits,integrityFindings,
     independentPhysicalIdentityConfirmed:false,
     scheduledWheelsOffReferenceConfirmed:false,
     actualWheelsOffSourceConfirmed:false,
