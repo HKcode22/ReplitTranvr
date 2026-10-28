@@ -1,6 +1,6 @@
 import {readFileSync} from "node:fs";
 import {describe,it,expect} from "vitest";
-import {gate05SciencePlanWindowV39} from
+import {gate05SciencePlanWindowV39,hasExactGate05PaidIntentV39} from
  "../scripts/v39_gate05_science_recommission_after_fourth_failed_watch_v39";
 import {gate05GithubOwnerTimeAdmitV39} from
  "../scripts/v39_gate05_github_owner_controller_retry4_v39";
@@ -32,6 +32,19 @@ describe("Gate05 fourth scope, evidence-first resilient execution",()=>{
   ])expect(commission).toContain(evidence);
   expect(commission).not.toContain("createGate4SingleWithRawReceiptV39(");
   expect(commission).not.toContain("refillBalance(");
+ });
+ it("does not mistake incident prose mentioning old scope for an actual paid intent",()=>{
+  const scope="c631e164-feac-4550-b811-7585e88aaf0d";
+  const prose="scope "+scope+" had NO ONE_CREATE_ATTEMPT_IMMINENT_DO_NOT_REPEAT receipt";
+  expect(hasExactGate05PaidIntentV39([{body:prose}],scope)).toBe(false);
+  expect(hasExactGate05PaidIntentV39([{body:JSON.stringify({
+    schema:"v39.gate05.science-paid-create-intent.v1",
+    status:"ONE_CREATE_ATTEMPT_IMMINENT_DO_NOT_REPEAT",scope
+  })}],scope)).toBe(true);
+  expect(hasExactGate05PaidIntentV39([{body:JSON.stringify({
+    schema:"v39.gate05.science-paid-create-intent.v1",
+    status:"ONE_CREATE_ATTEMPT_IMMINENT_DO_NOT_REPEAT",scope:"other"
+  })}],scope)).toBe(false);
  });
  it("cuts pre-start wait to ~20-25m while preserving exactly 60m observation",()=>{
   const t=Date.parse("2026-10-28T10:02:00Z");
