@@ -80,7 +80,7 @@ export function validateGate05ScienceStopPinsV39(
 }
 function gh(args:string[]):unknown{
  const x=execFileSync("gh",args,{
-   encoding:"utf8",timeout:10000,maxBuffer:256000,
+   encoding:"utf8",timeout:20000,maxBuffer:256000,
    stdio:["ignore","pipe","ignore"]
  });
  try{return JSON.parse(x);}catch{return hold("GITHUB_METADATA_PARSE");}
