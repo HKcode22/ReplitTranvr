@@ -141,7 +141,7 @@ try{
  const rawProconfig=meta[0]?.proconfig;
  const normalizedProconfig=Array.isArray(rawProconfig)?
    rawProconfig.map(x=>typeof x==="string"?
-     x.replace(/\\s*,\\s*/g,","):"INVALID"):[];
+     x.replace(/\s*,\s*/g,","):"INVALID"):[];
  if(meta.length!==1||meta[0].relpersistence!=="p"||
     meta[0].relkind!=="r"||meta[0].prosecdef!==true||
     normalizedProconfig.length!==1||
