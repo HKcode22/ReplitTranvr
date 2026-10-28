@@ -82,6 +82,29 @@ function ghRun(id:number){
     event:string;
   };
 }
+/**
+ * Same-run authenticated detailed emergency receipt is required in addition
+ * to current provider inactivity. The old CLI's generic unconfirmed warning
+ * does NOT override the specific positive DELETE receipt.
+ */
+export function verifyHistoricalExactDeleteLogV39(log:string):string{
+  const receipts=log.split(/\r?\n/).filter(x=>
+    x.includes('"status":"GATE05_EMERGENCY_EXACT_STOP_ATTEMPT"'));
+  requireTrue(receipts.length===1,"EXACT_HISTORICAL_DELETE_RECEIPT_NOT_UNIQUE");
+  const json=receipts[0].match(/\{.*\}/)?.[0];
+  requireTrue(Boolean(json),"EXACT_HISTORICAL_DELETE_RECEIPT_PARSE");
+  let value:any;
+  try{value=JSON.parse(json!);}
+  catch{errorCode("EXACT_HISTORICAL_DELETE_RECEIPT_INVALID");}
+  requireTrue(value?.status==="GATE05_EMERGENCY_EXACT_STOP_ATTEMPT"&&
+    value.exactOwnedIdEstablished===true&&
+    value.exactOwnedDeleteAttempted===true&&
+    value.exactOwnedDeleteVerified===true&&
+    value.databaseReadbackUnavailable===false,
+    "HISTORICAL_EXACT_DELETE_NOT_VERIFIED");
+  return createHash("sha256").update(json!).digest("hex");
+}
+
 async function main(){
   requireTrue(process.env.GITHUB_ACTIONS==="true"&&
     process.env.GITHUB_EVENT_NAME==="workflow_dispatch"&&
@@ -107,6 +130,15 @@ async function main(){
     audited.status==="completed"&&audited.conclusion==="success"&&
     audited.event==="workflow_dispatch",
     "HISTORICAL_RUNS_CHANGED");
+  // Independently retrieve the detailed original STOP evidence, not merely
+  // the failed workflow's summary. The source-owning GitHub job is immutable.
+  const oldLog=execFileSync("gh",["run","view","40667867823",
+    "--repo",REPO,"--log"],{
+    encoding:"utf8",timeout:30000,stdio:["ignore","pipe","ignore"],
+    maxBuffer:4*1024*1024
+  });
+  const verifiedHistoricalDeleteReceiptSha256=
+    verifyHistoricalExactDeleteLogV39(oldLog);
   // Establish independent FREE provider facts BEFORE beginning any write TX.
   const first=await getBalanceEvidenceStrictWithRetry({maxAttempts:3}) as FreeBalance;
   const firstList=await listSubscriptionsStrictWithRetry({maxAttempts:3}) as FreeInventory;
@@ -159,6 +191,7 @@ async function main(){
       schema:"v39.gate05.retry5-early-exact-stop-db-closeout.v1",
       paidRun:40667765747,stopRun:40667867823,
       priorSettlementRun:40675181436,scope:SCOPE,
+      verifiedHistoricalDeleteReceiptSha256,
       providerIdSha256:createHash("sha256").update(decision.providerId).digest("hex"),
       exactProviderInactiveBothReads:true,
       noForeignActiveBothReads:true,
