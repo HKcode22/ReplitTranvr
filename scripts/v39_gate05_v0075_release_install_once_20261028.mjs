@@ -146,8 +146,10 @@ try{
    "'clean.gate05_science_delivery_custody_v39','UPDATE') AS can_update,"+
    "has_table_privilege($1,"+
    "'clean.gate05_science_delivery_custody_v39','DELETE') AS can_delete,"+
-   "has_table_privilege('public',"+
-   "'clean.gate05_science_delivery_custody_v39','INSERT') AS public_insert",
+   "EXISTS(SELECT 1 FROM pg_class c CROSS JOIN LATERAL "+
+   "aclexplode(COALESCE(c.relacl,acldefault('r',c.relowner))) a "+
+   "WHERE c.oid='clean.gate05_science_delivery_custody_v39'::regclass "+
+   "AND a.grantee=0 AND a.privilege_type='INSERT') AS public_insert",
    [runtimeRole])).rows[0];
  if(!perms.schema_use||!perms.can_insert||perms.can_update||
     perms.can_delete||perms.public_insert)
