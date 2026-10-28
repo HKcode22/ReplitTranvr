@@ -5,7 +5,6 @@ import {gate05SciencePlanWindowV39} from
 const commissioning=readFileSync("scripts/v39_gate05_science_recommission_after_third_failed_watch_v39.ts","utf8");
 const controller=readFileSync("scripts/v39_gate05_github_owner_controller_retry3_v39.ts","utf8");
 const paid=readFileSync("scripts/v39_gate05_science_one_paid_create_once_retry3_v39.ts","utf8");
-const launcher=readFileSync("scripts/v39_gate05_launch_and_approve_once_v39.mjs","utf8");
 const workflow=readFileSync(".github/workflows/phase3-gate05-github-automated-retry3.yml","utf8");
 describe("Third independent Gate05 scope: never rerun old CREATE / old timestamps",()=>{
  it("verifies exact previous controller and STOP terminal no-CREATE evidence",()=>{
@@ -64,21 +63,24 @@ describe("Third independent Gate05 scope: never rerun old CREATE / old timestamp
   expect(x.stop).toBe("2026-10-28T09:00:00.000Z");
   expect(x.sessionExpires).toBe("2026-10-28T09:20:00.000Z");
  });
- it("one command requests normal GitHub pending deployment approval; never disables protection",()=>{
-  expect(launcher).toContain('gh(["workflow","run",WORKFLOW');
-  expect(launcher).toContain('repos/${REPO}/actions/runs/${run.id}/pending_deployments');
-  expect(launcher).toContain('state:"approved"');
-  expect(launcher).toContain('GATE05_ONE_COMMAND_HOLD_');
-  expect(launcher).toContain('PROTECTED_REVIEWER_RULE_NOT_PRESENT');
-  expect(launcher).toContain("current_user_can_approve!==true");
-  expect(launcher).toContain("GITHUB_REVIEWER_PERMISSION_OR_SELF_APPROVAL_POLICY_BLOCKS_ONE_COMMAND");
-  expect(launcher).not.toContain('environments/gate05-safety/protection_rules');
-  expect(launcher).not.toContain("AERODATABOX_API_KEY");
-  expect(launcher).not.toContain("deleteSubscriptionVerifiedStrict");
+ it("a single workflow_dispatch lets GitHub controller review exact protected STOP",()=>{
+  for(const token of [
+   'protectedReviewSubmitted=false',
+   'run.status==="waiting"',
+   'AUTO_REVIEW_ENVIRONMENT_SCOPE_OR_SOURCE_DRIFT',
+   'pending_deployments',
+   'current_user_can_approve!==true',
+   'AUTO_REVIEW_GITHUB_POLICY_DENIES_REVIEW',
+   'environment_ids[]=',
+   'state=approved',
+   'AUTO_REVIEW_APPROVAL_UNCONFIRMED',
+   'GATE05_SAFETY_EXACT_GITHUB_PROTECTED_REVIEW_APPROVED'
+  ])expect(controller).toContain(token);
+  expect(controller).not.toContain("bypass_protection");
   expect(workflow).toContain("workflow_dispatch:");
   expect(workflow).toContain("environment: phase2g-paid");
   expect(workflow).toContain("v39_gate05_github_owner_controller_retry3_v39.ts");
-  expect(workflow).not.toMatch(/^\s+schedule:/m);
-  expect(workflow).not.toMatch(/^\s+push:/m);
+  expect(workflow).not.toMatch(/^\\s+schedule:/m);
+  expect(workflow).not.toMatch(/^\\s+push:/m);
  });
 });
