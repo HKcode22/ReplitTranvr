@@ -5,6 +5,8 @@ import {
 } from "../scripts/v39_gate05_github_owner_controller_once_v39";
 const controller=readFileSync(
  "scripts/v39_gate05_github_owner_controller_once_v39.ts","utf8");
+const bootstrap=readFileSync(
+ "scripts/v39_gate05_science_recommission_after_zero_create_v39.ts","utf8");
 const wf=readFileSync(
  ".github/workflows/phase3-gate05-github-automated-onepilot.yml","utf8");
 const stop=readFileSync(
@@ -56,6 +58,18 @@ describe("GitHub-only Gate05 one-use controller, no Replit Shell",()=>{
   expect(controller).not.toContain("setInterval(");
   expect(controller).not.toContain("deleteSubscriptionVerifiedStrict(");
   expect(controller).not.toContain("createGate4SingleWithRawReceiptV39(");
+ });
+ it("GitHub runner independently proves old paid failure without Replit home files",()=>{
+  expect(bootstrap).toContain('process.env.GITHUB_ACTIONS==="true"');
+  expect(bootstrap).toContain('process.env.GITHUB_EVENT_NAME==="workflow_dispatch"');
+  expect(bootstrap).toContain("PRIOR_REPLIT_FILES_UNEXPECTED");
+  expect(bootstrap).toContain("6458844605");
+  expect(bootstrap).toContain("6459454399");
+  expect(bootstrap).toContain("providerCreateWasAttempted=false");
+  expect(bootstrap).toContain("OLD_OPERATOR_GITHUB_EVIDENCE_NOT_VERIFIED");
+  expect(bootstrap).toContain("PRIOR_OWNER_ZERO_PROVIDER_SETTLEMENT_NOT_PROVEN");
+  expect(bootstrap).toContain("PRIOR_LOGGED_OWNER_NOT_UNBILLED_PREPARED");
+  expect(bootstrap).toContain("GITHUB_ISSUE_LOGGED_OWNER_STOP_PROVIDER");
  });
  it("uses one protected GitHub click rather than push/cron or Replit shell",()=>{
   expect(wf).toContain("workflow_dispatch:");
