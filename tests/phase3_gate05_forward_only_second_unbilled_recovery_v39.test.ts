@@ -2,8 +2,6 @@ import {readFileSync} from "node:fs";
 import {describe,it,expect} from "vitest";
 import {gate05SciencePlanWindowV39} from
   "../scripts/v39_gate05_science_recommission_after_second_failed_watch_v39";
-import {validateGate05ScienceStopPinsV39} from
-  "../scripts/v39_gate05_science_exact_owned_actions_stop_v39";
 const recover=readFileSync(
  "scripts/v39_gate05_science_recommission_after_second_failed_watch_v39.ts","utf8");
 const controller=readFileSync(
