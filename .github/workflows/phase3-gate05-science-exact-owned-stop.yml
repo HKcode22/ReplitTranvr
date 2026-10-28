@@ -96,6 +96,32 @@ jobs:
           cache: npm
       - name: Install exact lockfile and TypeScript runtime
         run: npm ci --include=dev --no-audit --no-fund
+      # Protected gate05-safety review can be approved EARLY.
+      # This runs on GitHub's UTC wall clock, not a Replit shell/timer.
+      # The runner's STOP script still enforces exact T-10..T+1m and its
+      # independently reviewed source & environment pins at ARM time.
+      - name: Wait on GitHub clock until T-10 minutes, never busy-wait on Replit
+        shell: bash
+        env:
+          START: ${{ inputs.start_utc }}
+        run: |
+          set -Eeuo pipefail
+          node --input-type=module <<'NODE'
+          const start=Date.parse(process.env.START??"");
+          const now=Date.now();
+          if(!Number.isFinite(start)||
+             new Date(start).toISOString()!==process.env.START||
+             start-now>85*60000||now>start+60000)
+            throw Error("GATE05_GITHUB_EARLY_ARM_WINDOW_INVALID");
+          const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+          while(Date.now()<start-10*60000){
+            await sleep(Math.min(3000,start-10*60000-Date.now()));
+          }
+          if(Date.now()>start+60000)
+            throw Error("GATE05_GITHUB_STOP_ARMED_TOO_LATE");
+          console.log("GATE05_GITHUB_STOP_AT_EXACT_T_MINUS_10_WINDOW");
+          NODE
+
       - name: Run independently authorized exact-owned STOP, never CREATE
         env:
           RUNNER: ${{ inputs.runner_sha }}
