@@ -64,7 +64,7 @@ export function gate05GithubStopIsReallyLiveV39(
  return run?.head_sha===head&&run?.event==="workflow_dispatch"&&
   run?.run_attempt===1&&run?.display_title===STOP_NAME(scope)&&
   run?.status==="in_progress"&&
-  Math.abs(now-start)<5*60000&&
+  now>=start-10*60000&&now<=start+15000&&
   jobs?.jobs?.some((j:any)=>
     j.name==="exact-owned-stop"&&j.status==="in_progress"&&
     j.steps?.some((s:any)=>
