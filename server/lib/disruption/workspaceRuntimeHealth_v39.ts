@@ -86,6 +86,13 @@ export function registerWorkspaceRuntimeHealthV39(
         // Public yes/no readiness only: no bucket ID, secret or credential.
         // These four immutable launch-gate flags control actual original
         // source custody, not merely whether its implementation is deployed.
+        // Forward Gate05 ONLY: signal source+published env opt-in, not an
+        // independent proof that staged V0075 is installed in live Neon.
+        // Fresh paid launch requires a separate READ-ONLY catalog and
+        // authenticated published-DB parity audit before any CREATE.
+        gate05_durable_custody_ready:
+          process.env.V39_CALLBACK_ONLY_RUNTIME==="1"&&
+          process.env.V39_GATE05_DURABLE_CUSTODY_REQUIRED==="1",
         prepaid_source_custody_ready:
           process.env.V39_CALLBACK_ONLY_RUNTIME==="1"&&
           process.env.V39_PREPAID_FAILED_SOURCE_JOURNAL_APPROVED==="1"&&
