@@ -346,7 +346,10 @@ export async function runGate05ScienceStopV39(
          providerCreditCounter:null,noCreditsAssumed:true,
          noFlightRecordsSynthesized:true
        }));
-       await sleep(5000);
+       // 429 is provider-side backpressure, not evidence of bad balance.
+       // Lower the FREE GET cadence further instead of hammering the API.
+       await sleep(msg.includes("HTTP 429")?
+         GATE05_PROVIDER_POLL_INTERVAL_MS:5000);
        continue;
      }
      providerCharged=p.startingCredits-balance.balance.creditsRemaining;
