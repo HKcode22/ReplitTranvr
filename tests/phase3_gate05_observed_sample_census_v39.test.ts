@@ -93,7 +93,8 @@ describe("Gate05 source-item census, independent offline verification only",()=>
     ]));
     expect(s.rawBefore2xxItems).toBe(0);
     expect(s.missingRawAckProofItems).toBe(1);
-    expect(s.deficits).toContain("RAW_BEFORE_2XX_NOTIFICATION_ITEMS_LT_100");
+    expect(s.deficits).toContain("RECEIVED_NOTIFICATION_ITEMS_LT_100");
+    expect(s.integrityFindings).toContain("RAW_BEFORE_2XX_ITEM_ACK_PROOF_INCOMPLETE");
   });
   it("does not count a stale or future-dated airborne point",()=>{
     const s=censusGate05ObservedPilotV39(pilot([
@@ -117,6 +118,33 @@ describe("Gate05 source-item census, independent offline verification only",()=>
     expect(s.latestPostStopReceiptDelaySeconds).toBe(180);
     expect(s.observedDurationMinutes).toBe(60);
   });
+  it("100+ genuine in-window items meet COUNT minimum even if per-item 2xx proofs are unavailable",()=>{
+    const rows=Array.from({length:120},(_,i)=>sample({
+      envelopeId:"env_"+String(i).padStart(9,"0"),
+      http2xxAtUtc:null,rawDurableAtUtc:time(5)
+    }));
+    const z=censusGate05ObservedPilotV39(pilot(rows));
+    expect(z.inWindowReceivedItemCount).toBe(120);
+    expect(z.rawBefore2xxItems).toBe(0);
+    expect(z.missingRawAckProofItems).toBe(120);
+    expect(z.deficits).not.toContain("RECEIVED_NOTIFICATION_ITEMS_LT_100");
+    expect(z.integrityFindings)
+      .toContain("RAW_BEFORE_2XX_ITEM_ACK_PROOF_INCOMPLETE");
+    expect(z.strictSciencePassed).toBe(false);
+  });
+  it("100+ poststop items do not falsely satisfy the 100-item in-window minimum",()=>{
+    const rows=Array.from({length:120},(_,i)=>sample({
+      envelopeId:"env_"+String(i).padStart(9,"0"),
+      receivedAtUtc:time(62),rawDurableAtUtc:time(62),
+      http2xxAtUtc:time(62),flightStage:"OTHER",airbornePointUtc:null
+    }));
+    const z=censusGate05ObservedPilotV39(pilot(rows));
+    expect(z.inWindowReceivedItemCount).toBe(0);
+    expect(z.postStopReceivedItemCount).toBe(120);
+    expect(z.deficits).toContain("RECEIVED_NOTIFICATION_ITEMS_LT_100");
+    expect(z.rawBefore2xxItems).toBe(0);
+    expect(z.strictSciencePassed).toBe(false);
+  });
   it("rejects duplicate receipt keys instead of overcounting deliveries",()=>{
     const x=sample();
     expect(()=>censusGate05ObservedPilotV39(pilot([x,x])))
@@ -137,7 +165,7 @@ describe("Gate05 source-item census, independent offline verification only",()=>
     const s=censusGate05ObservedPilotV39({
       ...pilot([sample()]),evidenceSourceReviewed:false
     });
-    expect(s.deficits).toContain("ITEM_SOURCE_NOT_INDEPENDENTLY_REVIEWED");
+    expect(s.integrityFindings).toContain("ITEM_SOURCE_NOT_INDEPENDENTLY_REVIEWED");
     expect(s.rawCustodyIndependentlyValidated).toBe(false);
     expect(s.strictSciencePassed).toBe(false);
   });
