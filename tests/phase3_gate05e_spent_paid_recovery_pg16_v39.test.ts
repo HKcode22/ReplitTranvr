@@ -7,6 +7,7 @@ const independentT6Source=readFileSync("scripts/v39_gate05f_wsss_independent_t6_
 const forensicSource=readFileSync("scripts/v39_gate05e_paid_receipt_db_readonly_forensics_20261027.mjs","utf8");
 const cohortSource=readFileSync("scripts/v39_gate05e_cohort_aggregate_readonly_20261027.mjs","utf8");
 const rawShapeSource=readFileSync("scripts/v39_gate05e_raw_schema_flags_readonly_20261027.mjs","utf8");
+const independentShapeSource=readFileSync("scripts/v39_gate05_independent_t6_shape_readonly_20261027.mjs","utf8");
 function sqlFromSource(source:string,start:string,end:string):string{
  const a=source.indexOf(start),b=source.indexOf(end,a+start.length);
  if(a<0||b<0)throw Error("GATE05E_SQL_SOURCE_DRIFT");
@@ -157,6 +158,50 @@ describe.skipIf(process.env.P2G_DISPOSABLE_POSTGRES!=="YES")("Gate05e original p
      expect(z.arrival_schedule_utc).toBe(2);
      expect(z.runway_utc_present).toBe(0);
    }finally{await c.query("ROLLBACK");c.release();}
+ });
+
+ it("checks independent T6 provider native field shapes on actual PG16 without leaking raw",async()=>{
+   const parent=sqlFromSource(independentShapeSource,
+     "const PARENT_SQL=",";\nconst SHAPE_SQL=");
+   const shape=sqlFromSource(independentShapeSource,
+     "const SHAPE_SQL=",";\nconst MEMBERS_SQL=");
+   const members=sqlFromSource(independentShapeSource,
+     "const MEMBERS_SQL=",";\n\nlet db=");
+   for(const sql of [parent,shape,members]){
+     expect(sql).toMatch(/^(WITH|SELECT)\s/);
+     expect(sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE)\s/i);
+   }
+   expect(shape).toContain("provisional_operator_context_candidates");
+   expect(independentShapeSource).toContain("RAW_CONTENT_24H_DEADLINE_HOLD");
+   expect(independentShapeSource).toContain("Date.now()>=Math.min(availableMs,retrievalMs)+24*60*60*1000");
+   const id="282a663e-18ef-4af0-9181-c95cde9430e6";
+   const fixture={departures:[
+     {number:"SQ 123",codeshareStatus:"IsOperator",
+      departure:{scheduledTime:{utc:"2026-10-28 11:30Z"}},
+      arrival:{airport:{icao:"WADD"},scheduledTime:{utc:"2026-10-28 14:00Z"}}},
+     {number:"SQ124",codeshareStatus:"IsCodeshared",
+      departure:{scheduledTime:{utc:"2026-10-28 11:31Z"}},
+      arrival:{airport:{icao:"WADD"},scheduledTime:{utc:"2026-10-28 14:01Z"}}}
+   ]};
+   await pool.query("UPDATE clean.fids_query_response SET raw_payload=$2::jsonb WHERE population_query_id=$1",
+     [id,JSON.stringify(fixture)]);
+   const client=await pool.connect();
+   try{
+     await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+     expect((await client.query("SHOW transaction_read_only")).rows[0].transaction_read_only).toBe("on");
+     const a=(await client.query(parent,[id])).rows[0];
+     const b=(await client.query(shape,[id,"a".repeat(64)])).rows[0];
+     const c=(await client.query(members,[id])).rows[0];
+     expect(a.raw_departures).toBe(2);
+     expect(b.response_objects).toBe(2);
+     expect(b.accepted_number_syntax).toBe(2);
+     expect(b.spaced_number_syntax).toBe(1);
+     expect(b.operator_role_objects).toBe(1);
+     expect(b.marketing_role_objects).toBe(1);
+     expect(b.provisional_operator_context_candidates).toBe(1);
+     expect(c.normalized_rows).toBe(1);
+     expect(c.candidate_before_t6).toBe(1);
+   }finally{await client.query("ROLLBACK");client.release();}
  });
  it("confirms strictly READ ONLY recovery query syntax and real returned source counts",async()=>{
    const sql=sqlFromSource(forensicSource,"const query=",";\nconst utc=");
