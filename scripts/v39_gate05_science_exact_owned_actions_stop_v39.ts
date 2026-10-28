@@ -98,10 +98,10 @@ export async function runGate05ScienceStopV39(
    encoding:"utf8",stdio:["ignore","pipe","ignore"]
  }).trim()!==p.runner)hold("SOURCE_HEAD");
  // The first T-10 pre-CREATE GET is not part of the scientific sample.
- // Give a cold published receiver up to 3 read-only attempts of 20s each;
+ // Give a cold published receiver up to 6 read-only attempts of 20s each;
  // never retry a mismatched identity or a billable provider mutation.
  await readGate05PublishedReceiverHealthV39({
-   url:HEALTH,expectedReceiver:p.receiver,maxAttempts:3,timeoutMs:20000
+   url:HEALTH,expectedReceiver:p.receiver,maxAttempts:6,timeoutMs:20000
  });
  const client=new pg.Client({
    connectionString:exact(e,"GATE05_SCIENCE_SAFETY_DATABASE_URL"),
