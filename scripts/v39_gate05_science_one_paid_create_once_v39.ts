@@ -23,7 +23,8 @@ import {getBalanceEvidenceStrict,listSubscriptionsStrict,
 const REPO="HKcode22/ReplitTranvr";
 const CONFIRM="EXACT_OWNER_APPROVED_GATE05_ONE_WSSS_500_ALERT_CREATE";
 const PUB="https://replit-tranvr--hk84164.replit.app";
-const DIR=join(homedir(),".config","replittranvr","gate05-science-onepilot");
+// Original 8PM scope was closed unbilled; never read/reuse its private intent.
+const DIR=join(homedir(),".config","replittranvr","gate05-science-retry1");
 const FILE=join(DIR,"recovery-before-commit.json");
 const INTENT=join(DIR,"one-paid-create-intent.json");
 const RECEIPT=join(DIR,"one-positive-create-receipt.json");
