@@ -1,0 +1,67 @@
+name: Gate05 retry5 exact-owner DB terminal closeout (NO paid provider writes)
+run-name: Gate05 retry5 DB-only exact owner closeout
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "TERMINALIZE_ONLY_RETRY5_EXACT_INACTIVE_OWNER_NO_PAID_PROVIDER_MUTATION"
+        required: true
+        type: choice
+        options:
+          - TERMINALIZE_ONLY_RETRY5_EXACT_INACTIVE_OWNER_NO_PAID_PROVIDER_MUTATION
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: gate05-one-wsss-scientific-alert-stop
+  cancel-in-progress: false
+
+jobs:
+  terminalize-only-exact-old-owner:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'TERMINALIZE_ONLY_RETRY5_EXACT_INACTIVE_OWNER_NO_PAID_PROVIDER_MUTATION' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: phase2g-paid
+    env:
+      GITHUB_ACTIONS: "true"
+      GITHUB_EVENT_NAME: ${{ github.event_name }}
+      GITHUB_REF: ${{ github.ref }}
+      GITHUB_SHA: ${{ github.sha }}
+      GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+      GATE05_EXACT_CLOSEOUT_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install pinned dependencies (no paid API operation)
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Two free provider LIST/balance readings then exact DB-only CAS
+        env:
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -n "${DATABASE_URL:-}"
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -n "${GH_TOKEN:-}"
+          node --import tsx scripts/v39_gate05_retry5_exact_owned_closeout_once_v39.ts
+      - name: Explain separate statuses even on failure
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Retry5 exact owner terminalization'
+            echo 'One historic LOGGED DB owner only, no provider CREATE/DELETE/FIDS/refill.'
+            echo 'STOPPED means exact provider ID verified inactive, NOT a 60-minute scientific PASS.'
+            echo 'Billing may settle later; retain prior source and account receipts.'
+            echo 'A failed/ambiguous DB COMMIT must be inspected read-only, never blindly rerun.'
+          } >> "$GITHUB_STEP_SUMMARY"
