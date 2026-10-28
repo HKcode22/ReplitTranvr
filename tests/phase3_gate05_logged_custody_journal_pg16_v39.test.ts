@@ -48,9 +48,6 @@ const HASH="b".repeat(64);
    const normalized=(meta[0].proconfig as string[]).map(x=>
      x.replace(/\s*,\s*/g,","));
    expect(normalized).toEqual(["search_path=pg_catalog,clean"]);
-   // A hostile/accidental additional runtime search-path setting must
-   // never be silently accepted by the production guarded installer.
-   expect(["search_path=pg_catalog,clean","search_path=public"].length).toBe(2);
    const scope=randomUUID(),blob=randomUUID(),foreign=randomUUID();
    const head="c".repeat(40),auth="d".repeat(64),ticket="e".repeat(64);
    await db.query(
