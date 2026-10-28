@@ -164,7 +164,7 @@ BEGIN
       RAISE EXCEPTION 'GATE05_SESSION_IDENTITY_IMMUTABLE';
     END IF;
     IF NEW.provider_subscription_id IS NOT NULL AND
-       (owner_record.state<>'ACTIVE' OR
+       (owner_record.state NOT IN ('ACTIVE','STOPPED') OR
         NEW.provider_subscription_id IS DISTINCT FROM
           owner_record.provider_subscription_id) THEN
       RAISE EXCEPTION 'GATE05_SESSION_BIND_MUST_EQUAL_EXACT_LOGGED_OWNER';
