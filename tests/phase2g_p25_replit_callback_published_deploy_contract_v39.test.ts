@@ -17,8 +17,10 @@ describe("P25 Replit published callback release configuration",()=>{
   const wrapper=readFileSync("scripts/v39_gate4_reviewed_source_build_v39.sh","utf8");
   expect(wrapper).toContain('V39_CALLBACK_ONLY_BUILD=1 V39_BUILD_GIT_HEAD="$PIN" npm run build');
   expect(wrapper).toContain('git diff --quiet "$PIN" HEAD');
-  expect(section).toContain('run = ["env", "V39_CALLBACK_ONLY_RUNTIME=1", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "V39_RUNTIME_DURABILITY_CLASS=autoscale", "node", "dist/index.mjs"]');
+  expect(section).toContain('run = ["env", "V39_CALLBACK_ONLY_RUNTIME=1", "V39_WORKSPACE_RUNTIME_OWNER_MODE=replit-published-deployment", "V39_RUNTIME_DURABILITY_CLASS=autoscale", "V39_GATE05_DURABLE_CUSTODY_REQUIRED=1", "node", "dist/index.mjs"]');
   expect(section).not.toContain('run = ["env", "V39_WORKSPACE_RUNTIME_OWNER_MODE=');
+  expect(wrapper).toContain('git show "$PIN:.replit"');
+  expect(wrapper).toContain("cmp -s - .replit");
   expect(deployment).toContain('V39_PROVIDER_BLOB_BUCKET_ID = "replit-objstore-5aa4d2c4-399b-4933-9acf-0292f79d6d59"');
   expect(deployment).toContain('defaultBucketID = "replit-objstore-5aa4d2c4-399b-4933-9acf-0292f79d6d59"');
   expect(deployment).not.toContain('replit-objstore-89d08290-bfed-4ba9-ab3a-517a47e8095f');
