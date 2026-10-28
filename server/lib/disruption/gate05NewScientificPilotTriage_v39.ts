@@ -78,11 +78,15 @@ export function triageGate05NewScientificPilotV39(
   const first=instant(input.firstPaidActionAtUtc);
   const last=instant(input.lastObservationAtUtc);
   const chronology=freeze<first && first<=last;
+  const durationPhysicallyPossible=chronology &&
+    input.measurements.pilotDurationMinutes*60_000<=last-first;
   const missing=counters.filter(([k,c])=>input.measurements[k]<input.criteria[c])
     .map(([k])=>k);
   // A deficit in population sample is not the same as a failed semantic rule.
   const failed:string[]=[...critical.filter(k=>input.measurements[k]!==true)];
   if(!chronology)failed.push("FREEZE_MUST_PRECEDE_PAID_ACTION");
+  if(chronology&&!durationPhysicallyPossible)
+    failed.push("PILOT_DURATION_EXCEEDS_OBSERVED_CLOCK_INTERVAL");
   if(!input.rawBefore2xxEvidencePresent)failed.push("RAW_BEFORE_2XX_NOT_EVIDENCED");
   if(!input.exactProviderSubscriptionStopEvidencePresent)failed.push("STOP_NOT_EVIDENCED");
   if(!input.sourceAuthenticatedMilestoneEvidencePresent)failed.push("NATIVE_T_NOT_VERIFIED");
