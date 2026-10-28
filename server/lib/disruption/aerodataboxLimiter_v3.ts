@@ -188,9 +188,31 @@ function requiredHeaderInteger(resp: Response, name: string, positive = false): 
 export async function getBalanceEvidenceStrict(): Promise<StrictBalanceEvidence> {
   if (!apiKey()) throw new Error("BALANCE_UNAVAILABLE: API key is not set");
   let resp: Response;
+  const balanceReadStartedAt = Date.now();
   try {
     resp = await throttledFetch(`${BASE_URL}/subscriptions/balance`, { headers: headers() });
-  } catch {
+  } catch (error) {
+    // SAFE diagnostic: classify a FREE account transport failure without
+    // printing API keys, headers, URL parameters, responses or stack traces.
+    // The public caller contract stays unchanged for bounded retry logic.
+    const e = error as { name?: unknown; code?: unknown;
+      cause?: { code?: unknown } };
+    const rawCode = String(e?.cause?.code ?? e?.code ?? "");
+    const allowedCodes = [
+      "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "EAI_AGAIN",
+      "ENOTFOUND", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT",
+      "UND_ERR_SOCKET"
+    ];
+    const faultClass = allowedCodes.includes(rawCode) ? rawCode :
+      (e?.name === "AbortError" || e?.name === "TimeoutError")
+        ? "ABORT_TIMEOUT" : "UNCLASSIFIED_NETWORK_FAILURE";
+    console.warn(JSON.stringify({
+      status: "ADB_FREE_BALANCE_TRANSPORT_DIAGNOSTIC",
+      faultClass,
+      elapsedMs: Math.max(0, Date.now() - balanceReadStartedAt),
+      providerMutation: false,
+      noAccountBalanceInferred: true
+    }));
     throw new Error("BALANCE_UNAVAILABLE: transport failure");
   }
   if (!resp.ok) throw new Error(`BALANCE_UNAVAILABLE: HTTP ${resp.status}`);
