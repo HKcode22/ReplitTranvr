@@ -11,7 +11,7 @@ import pg from "pg";
 const QUERY_ID="16dfcf40-f8df-42a3-b739-8110d7de2449";
 const SOURCE_SHA="5e901d257ce62672d384c30f88a0796b3667b0f9741720bd23eccbb4f3ab96db";
 const PARENT_SQL=[
-  "SELECT source_airport_icao,response_hash,available_at,raw_expired_at_utc,",
+  "SELECT source_airport_icao,response_hash,available_at,fids_retrieval_utc,raw_expired_at_utc,",
   "(raw_payload IS NOT NULL) AS raw_present,",
   "CASE WHEN jsonb_typeof(raw_payload->'departures')='array'",
   "THEN jsonb_array_length(raw_payload->'departures') ELSE NULL END AS raw_departures",
@@ -69,6 +69,14 @@ try{
      parent[0].raw_expired_at_utc!==null||
      !Number.isInteger(parent[0].raw_departures))
     throw Error("SOURCE_UNAVAILABLE_OR_EXPIRED");
+  // Fail closed on the contractual 24h raw-content window even if the
+  // background TTL worker has not yet tombstoned stale bytes. Metadata only
+  // has been read so far. Never inspect JSON content after this deadline.
+  const availableMs=Date.parse(parent[0].available_at);
+  const retrievalMs=Date.parse(parent[0].fids_retrieval_utc);
+  if(!Number.isFinite(availableMs)||!Number.isFinite(retrievalMs)||
+     Date.now()>=Math.min(availableMs,retrievalMs)+24*60*60*1000)
+    throw Error("RAW_CONTENT_24H_DEADLINE_HOLD");
   stage="AGGREGATE";
   const shape=(await db.query(SHAPE_SQL,[QUERY_ID,SOURCE_SHA])).rows[0];
   const member=(await db.query(MEMBERS_SQL,[QUERY_ID])).rows[0];
