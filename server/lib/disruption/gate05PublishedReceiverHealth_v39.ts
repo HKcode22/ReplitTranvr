@@ -4,8 +4,8 @@
  * invalidate a prospective one-hour scientific cohort; no source clock,
  * T label, provider credit or sample is modified by retrying this GET.
  *
- * Bounded exposure: max three 20-second physical GET attempts, separated by
- * 1.5/3-second pauses (<=64.5 seconds excluding JS scheduling).
+ * Bounded exposure: max six 20-second physical GET attempts, separated by
+ * 1.5/3-second pauses (<=133.5 seconds excluding JS scheduling).
  * On status 200 the response must verify immutable live receiver source.
  * A malformed/incorrect identity NEVER becomes a success and is not retried.
  */
@@ -30,7 +30,7 @@ export async function readGate05PublishedReceiverHealthV39(options:{
   const attempts=options.maxAttempts??3;
   const timeout=options.timeoutMs??20000;
   if(!HEX40.test(options.expectedReceiver)||
-     !Number.isSafeInteger(attempts)||attempts<1||attempts>3||
+     !Number.isSafeInteger(attempts)||attempts<1||attempts>6||
      !Number.isSafeInteger(timeout)||timeout<1000||timeout>20000)
     throw Error("GATE05_PUBLISHED_RECEIVER_RETRY_CONFIGURATION_INVALID");
   const endpoint=new URL(options.url);
