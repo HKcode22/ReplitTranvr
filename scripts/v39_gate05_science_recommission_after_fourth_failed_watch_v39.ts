@@ -56,6 +56,19 @@ const ghJson=(args:string[])=>{
 const sourceHead=()=>execFileSync("git",["rev-parse","HEAD"],{
   encoding:"utf8",stdio:["ignore","pipe","ignore"]
 }).trim();
+/** Only the exact source-generated structured receipt can consume the old intent. */
+export function hasExactGate05PaidIntentV39(comments:unknown,scope:string):boolean{
+ if(!Array.isArray(comments)||!/^[a-f0-9-]{36}$/.test(scope))
+   throw Error("GATE05_PAID_INTENT_EVIDENCE_INVALID");
+ return comments.some((c:any)=>{
+   if(typeof c?.body!=="string")return false;
+   let event:any;
+   try{event=JSON.parse(c.body);}catch{return false;}
+   return event?.schema==="v39.gate05.science-paid-create-intent.v1"&&
+     event?.status==="ONE_CREATE_ATTEMPT_IMMINENT_DO_NOT_REPEAT"&&
+     event?.scope===scope;
+ });
+}
 export function gate05SciencePlanWindowV39(nowMs:number):{
   start:string;stop:string;sessionExpires:string
 }{
@@ -184,15 +197,7 @@ export async function recommissionGate05AfterFourthUnbilledWatchV39(
  // Explanatory incident notes may quote the status string and prior scope.
  // Match only the source-generated, machine-parseable JSON receipt, never a
  // prose mention, so documentation cannot falsely look like a paid POST.
- const priorPaidIntent=issueComments.some((c:any)=>{
-   if(typeof c?.body!=="string")return false;
-   let body:any;
-   try{body=JSON.parse(c.body);}catch{return false;}
-   return body?.schema==="v39.gate05.science-paid-create-intent.v1"&&
-     body?.status==="ONE_CREATE_ATTEMPT_IMMINENT_DO_NOT_REPEAT"&&
-     body?.scope===PRIOR_SCOPE;
- });
- if(priorPaidIntent)
+ if(hasExactGate05PaidIntentV39(issueComments,PRIOR_SCOPE))
    hold("RETRY4_PRIOR_PAID_INTENT_FOUND_NO_REUSE");
  const old={
    schema:"v39.gate05.science-private-one-use-commission.v1",
