@@ -35,6 +35,7 @@ const SHA=/^[0-9a-f]{40}$/;
 const HASH=/^[0-9a-f]{64}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const hold=(m:string):never=>{throw Error("GATE05_ACTIONS_OWNER_HOLD_"+m);};
+let paidOperatorInvoked=false;
 const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
 function gh(args:string[]):string{
   const x=execFileSync("gh",args,{
@@ -178,6 +179,7 @@ async function main(){
  }));
  // One and ONLY ONE paid invocation. No retries: child writes fsynced
  // intent before non-idempotent provider CREATE, then exact owner receipt.
+ paidOperatorInvoked=true;
  const result=spawnSync("node",[
    "--import","tsx","scripts/v39_gate05_science_one_paid_create_once_v39.ts",
    "--head",head,"--safety-run",String(stopRunId),
@@ -200,7 +202,9 @@ if(process.argv[1]?.endsWith("v39_gate05_github_owner_controller_once_v39.ts"))
    console.error(JSON.stringify({
      status:"GATE05_GITHUB_CONTROLLER_HELD_DO_NOT_RERUN",
      reason:error instanceof Error?error.message:"UNKNOWN",
-     providerCreateOutcomeUnconfirmed:true,
+     paidOperatorInvoked,
+     providerCreateOutcomeUnconfirmed:paidOperatorInvoked,
+     noProviderCreateFromThisControllerIfNotInvoked:!paidOperatorInvoked,
      ownerScienceNotPassed:true
    }));
    process.exitCode=2;
