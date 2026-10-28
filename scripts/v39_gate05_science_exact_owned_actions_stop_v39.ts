@@ -156,6 +156,12 @@ export async function runGate05ScienceStopV39(
    const original=await owner();
    if(original.state!=="PREPARED"||original.provider_subscription_id)
      hold("OWNER_ALREADY_STARTED");
+   const initialPostmaster=await client.query(
+     "SELECT pg_postmaster_start_time() AS server_started");
+   if(initialPostmaster.rowCount!==1||
+      !Number.isFinite(Date.parse(initialPostmaster.rows[0].server_started)))
+     hold("INITIAL_POSTMASTER_EPOCH_UNAVAILABLE");
+   const firstPostmasterMs=Date.parse(initialPostmaster.rows[0].server_started);
    const first=await getBalanceEvidenceStrict();
    if(first.balance.creditsRemaining!==p.startingCredits||
       first.quota.apiUnitsRemaining<12)hold("STARTING_BUDGET_CHANGED");
@@ -177,6 +183,28 @@ export async function runGate05ScienceStopV39(
    let terminal="NO_CREATE";
    while(Date.now()<policy.stopMs+4*60000){
      const now=Date.now();
+     // All PREPAID callback session identity/counters live in an UNLOGGED
+     // PostgreSQL table. If this database restarts after WATCH ARM, the
+     // paid raw-first callback identity may no longer exist. Stop the
+     // already authenticated exact provider ID instead of billing blindly.
+     const restarted=await client.query(
+       "SELECT pg_postmaster_start_time() AS server_started");
+     if(restarted.rowCount!==1||
+        !Number.isFinite(Date.parse(restarted.rows[0].server_started)))
+       hold("POSTMASTER_EPOCH_UNAVAILABLE");
+     if(Date.parse(restarted.rows[0].server_started)!==firstPostmasterMs){
+       if(knownExactId){
+         const deleted=await deleteSubscriptionVerifiedStrict(knownExactId,{
+           maxAttempts:3
+         });
+         if(!deleted)hold("POSTMASTER_RESET_OWNED_DELETE_UNCONFIRMED");
+         terminal="POSTMASTER_RESET_EXACT_STOP_SCIENCE_INCOMPLETE";
+         break;
+       }
+       // Never guess a provider ID from airport or LIST. Without a known
+       // exact subscribed owner, fail admission and require rearm.
+       hold("POSTMASTER_RESET_BEFORE_EXACT_PAID_BIND");
+     }
      const current=await owner();
      const balance=await getBalanceEvidenceStrict();
      const inv=await listSubscriptionsStrictWithRetry({maxAttempts:1});
@@ -245,26 +273,37 @@ export async function runGate05ScienceStopV39(
    // LOGGED owner has been observed, try an emergency DELETE of THAT ID
    // only. Never search by airport/name or delete an unowned subscription.
    let attempted=false,verified=false;
+   let databaseReadbackUnavailable=false;
    if(knownExactId){
+     // knownExactId was captured ONLY from an earlier authenticated and
+     // immutable LOGGED exact-owner row. If PostgreSQL now crashes, delete
+     // this last trusted ID without trying to guess a different provider ID.
+     let conflict=false;
      try{
        const x=await client.query(ONE,[p.scope]);
        const o=x.rows[0];
-       if(x.rowCount===1&&o.provider_subscription_id===knownExactId&&
-          o.authorization_sha256===p.authorization&&
-          o.reviewed_stop_ticket_sha256===p.ticket&&
-          o.source_commit===p.receiver){
-         attempted=true;
-         verified=await deleteSubscriptionVerifiedStrict(knownExactId,{
-           maxAttempts:3
-         }).catch(()=>false);
-       }
-     }catch{}
+       if(x.rowCount!==1||
+          o.provider_subscription_id!==knownExactId||
+          o.authorization_sha256!==p.authorization||
+          o.reviewed_stop_ticket_sha256!==p.ticket||
+          o.source_commit!==p.receiver)
+         conflict=true;
+     }catch{
+       databaseReadbackUnavailable=true;
+     }
+     if(!conflict){
+       attempted=true;
+       verified=await deleteSubscriptionVerifiedStrict(knownExactId,{
+         maxAttempts:3
+       }).catch(()=>false);
+     }
    }
    console.error(JSON.stringify({
      status:"GATE05_EMERGENCY_EXACT_STOP_ATTEMPT",
      exactOwnedIdEstablished:Boolean(knownExactId),
      exactOwnedDeleteAttempted:attempted,
      exactOwnedDeleteVerified:verified,
+     databaseReadbackUnavailable,
      providerHardCreditCap:false,
      originalError:error instanceof Error?error.message:"UNKNOWN"
    }));
