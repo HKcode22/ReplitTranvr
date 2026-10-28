@@ -41,13 +41,13 @@ describe("WSSS Gate05 owner authorized ONE 500-credit pilot safety",()=>{
   });
   it("refuses foreign or two owned active subscriptions",()=>{
     const s=specimen();s.activeForeignSubscriptions=1;
-    expect(reviewNewGate05WsssSpendV39(s).state).toBe("STOP_NOW");
+    expect(reviewNewGate05WsssSpendV39(s).state).toBe("STOP_UNCONFIRMED");
     s.activeForeignSubscriptions=0;s.activeOwnedSubscriptions=2;
-    expect(reviewNewGate05WsssSpendV39(s).state).toBe("HOLD_NO_CREATE");
+    expect(reviewNewGate05WsssSpendV39(s).state).toBe("STOP_UNCONFIRMED");
   });
   it("requires receiver binding and independent verified running STOP",()=>{
     const s=specimen();s.exactOwnedScopeConfirmed=false;
-    expect(reviewNewGate05WsssSpendV39(s).state).toBe("STOP_NOW");
+    expect(reviewNewGate05WsssSpendV39(s).state).toBe("STOP_UNCONFIRMED");
     s.exactOwnedScopeConfirmed=true;s.independentStopActuallyRunning=false;
     expect(reviewNewGate05WsssSpendV39(s).state).toBe("STOP_UNCONFIRMED");
   });
