@@ -5,6 +5,7 @@ import {gate05ProviderReadFailureTransientV39,gate05TelemetryDecisionV39,
  GATE05_PROVIDER_POLL_INTERVAL_MS} from
  "../server/lib/disruption/gate05ProviderTelemetrySafety_v39";
 
+const provider=readFileSync("server/lib/disruption/aerodataboxLimiter_v3.ts","utf8");
 const audit=readFileSync(
  "scripts/v39_gate05_retry5_no_paid_settlement_readonly_v39.ts","utf8");
 const wf=readFileSync(
@@ -55,6 +56,15 @@ describe("Gate05 bounded provider telemetry faults are not fabricated scientific
     "BALANCE_UNAVAILABLE: invalid response",
     "R1_LIST_UNAVAILABLE: HTTP 403 (body redacted)",
     "GATE05_DB_OWNER_MISMATCH"])expect(gate05ProviderReadFailureTransientV39(e)).toBe(false);
+ });
+ it("records safe transport classification, not headers, secrets or speculative charges",()=>{
+  expect(provider).toContain("ADB_FREE_BALANCE_TRANSPORT_DIAGNOSTIC");
+  expect(provider).toContain("noAccountBalanceInferred: true");
+  expect(provider).toContain('throw new Error("BALANCE_UNAVAILABLE: transport failure")');
+  expect(provider).toContain('"UND_ERR_CONNECT_TIMEOUT"');
+  expect(provider).toContain('elapsedMs: Math.max(0, Date.now() - balanceReadStartedAt)');
+  expect(provider).not.toContain("console.warn(error)");
+  expect(provider).not.toContain("console.error(error)");
  });
  it("does not allow the settlement audit to create/delete/substitute billing evidence",()=>{
   expect(wf).toContain("workflow_dispatch:");
