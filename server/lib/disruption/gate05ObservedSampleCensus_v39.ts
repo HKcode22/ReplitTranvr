@@ -45,6 +45,7 @@ export type Gate05ObservedCensusV39 = Readonly<{
   rawBefore2xxItems: number;
   missingRawAckProofItems: number;
   distinctReceivedItems: number;
+  inWindowReceivedItemCount: number;
   sourceQualifiedPhysicalFlights: number;
   sourceQualifiedCompletedFlights: number;
   sourceQualifiedAirborneFlights: number;
@@ -169,10 +170,16 @@ export function censusGate05ObservedPilotV39(
       throw Error("GATE05_CENSUS_RAW_CLOCK_BEFORE_RECEIVE");
     if(ack!==null && ack<received-60_000)
       throw Error("GATE05_CENSUS_ACK_CLOCK_BEFORE_RECEIVE");
-    if(raw!==null && ack!==null && raw<=ack && received<=ack)custody++;
-    else missing++;
+    // Paid sample denominators are strictly within the authentic exposure
+    // window. Late receipts may inform grace/censoring, never increase sample.
+    const inside=received>=started && received<=stopped;
+    if(inside){
+      if(raw!==null && ack!==null && raw<=ack && received<=ack)custody++;
+      else missing++;
+    }
     first=Math.min(first,received);last=Math.max(last,received);
     if(received>stopped){postStop++;lastAfter=Math.max(lastAfter,received);}
+    if(!inside)continue;
     // A physically identified OPERATOR contributes once, regardless of
     // marketing aliases, repeated notifications and multiple live points.
     const verified=item.identityBasis==="VERIFIED_OPERATING_LEG" &&
@@ -218,6 +225,7 @@ export function censusGate05ObservedPilotV39(
     rawBefore2xxItems:custody,
     missingRawAckProofItems:missing,
     distinctReceivedItems:items.size,
+    inWindowReceivedItemCount:custody+missing,
     sourceQualifiedPhysicalFlights:legs.size,
     sourceQualifiedCompletedFlights:completed.size,
     sourceQualifiedAirborneFlights:airborne.size,
