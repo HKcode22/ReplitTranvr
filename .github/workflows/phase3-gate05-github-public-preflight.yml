@@ -1,0 +1,82 @@
+name: Gate05 GitHub-Only Public Preflight (No Paid Operations)
+run-name: Gate05 GitHub preflight by ${{ github.actor }}
+
+# Can be run at any convenient time. No Replit shell, timing requirement,
+# production DB access, provider token, paid CREATE or schedule.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: read
+
+concurrency:
+  group: gate05-public-preflight
+  cancel-in-progress: false
+
+jobs:
+  evidence-only:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Verify current GitHub main, historical STOP and existing approval
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PIN: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          test "$REPO" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          MAIN="$(gh api "repos/$REPO/git/ref/heads/main" --jq .object.sha)"
+          test "$MAIN" = "$PIN" || { echo 'MAIN_MOVED_NO_LAUNCH'; exit 2; }
+          STOP="$(gh api "repos/$REPO/actions/runs/40623244833" --jq .conclusion)"
+          test "$STOP" = success || { echo 'HISTORICAL_STOP_NOT_SUCCESS'; exit 2; }
+          APPROVAL="$(gh api "repos/$REPO/issues/comments/6458170487" --jq .user.login)"
+          test "$APPROVAL" = HKcode22 || { echo 'OWNER_APPROVAL_EVIDENCE_NOT_FOUND'; exit 2; }
+          {
+            echo '## Gate05 GitHub-only public evidence'
+            echo ''
+            echo '- Previous exact independent STOP run 40623244833: success'
+            echo '- Existing bounded one-pilot owner approval: found'
+            echo '- GitHub main: pinned to this run commit'
+            echo '- No proof of a NEW STOP, provider CREATE or scientific acceptance'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the published receiver source via public health GET only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          curl --fail --silent --show-error --max-time 10 \
+            'https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime' \
+            -o "$RUNNER_TEMP/gate05_public_health.json"
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          const response = JSON.parse(readFileSync(
+            process.env.RUNNER_TEMP+'/gate05_public_health.json','utf8'));
+          const good = response.status === 'PASS' &&
+            response.git_head === '1885703c04ba8f24bf8d1183f873eb86d1f83d7c' &&
+            response.published_deployment === true &&
+            response.prepaid_route_registered === true &&
+            response.provider_mutation === false;
+          console.log(good ? 'PUBLISHED_RECEIVER_PUBLIC_HEALTH_PASS' :
+            'PUBLISHED_RECEIVER_NOT_VERIFIED_NO_LAUNCH');
+          if (!good) process.exitCode = 2;
+          NODE
+
+      - name: Preserve non-paid state without implying a live trial
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo ''
+            echo '### Execution boundary'
+            echo 'Read-only GitHub/public HTTP preflight, no database credentials.'
+            echo 'No paid provider API calls, subscription or credit changes.'
+            echo 'No production DB mutations or GitHub environment changes.'
+            echo 'New pilot still requires independent STOP+same-scope commission'
+            echo 'and paid runner privileges. This preflight alone is not a GO.'
+          } >> "$GITHUB_STEP_SUMMARY"
