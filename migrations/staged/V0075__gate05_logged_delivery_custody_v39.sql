@@ -11,7 +11,9 @@
 -- actually reached the upstream sender; it proves DB COMMIT is eligible for
 -- the receiver's subsequent ACK path. No trigger touches prior cohorts.
 --
--- No GRANT, no ALTER old schema, no provider mutation and no retention extension.
+-- No blanket GRANT, no ALTER old schema, no provider mutation and no retention extension.
+-- One narrowly scoped INSERT grant to the exact live runtime role is applied
+-- separately by the verified one-use release installer AFTER the DDL succeeds.
 CREATE TABLE clean.gate05_science_delivery_custody_v39 (
   session_id UUID NOT NULL
     REFERENCES clean.phase3_gate05_science_owner_v39(session_id),
@@ -41,7 +43,8 @@ COMMENT ON TABLE clean.gate05_science_delivery_custody_v39 IS
 REVOKE ALL ON TABLE clean.gate05_science_delivery_custody_v39 FROM PUBLIC;
 
 CREATE FUNCTION clean.guard_gate05_delivery_custody_v39()
-RETURNS TRIGGER LANGUAGE plpgsql AS $gate05_custody$
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER
+SET search_path=pg_catalog,clean AS $gate05_custody$
 DECLARE ref_record RECORD;
 DECLARE owner_record RECORD;
 BEGIN
@@ -78,3 +81,8 @@ CREATE TRIGGER gate05_delivery_custody_immutable_v39
 BEFORE INSERT OR UPDATE OR DELETE
 ON clean.gate05_science_delivery_custody_v39
 FOR EACH ROW EXECUTE FUNCTION clean.guard_gate05_delivery_custody_v39();
+
+-- Trigger checks reference the owner/source-ref under the reviewed DDL owner,
+-- not under the low-privilege callback role. Revoke direct execution; the
+-- callback can INSERT into its exact guarded custody table only.
+REVOKE ALL ON FUNCTION clean.guard_gate05_delivery_custody_v39() FROM PUBLIC;
