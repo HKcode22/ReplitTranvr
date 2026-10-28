@@ -1,0 +1,61 @@
+name: Gate05 Old WSSS Source Metadata ReadOnly — No Provider
+run-name: Gate05 old-owner raw evidence inventory by ${{ github.actor }}
+
+# Exact prior owner, no provider API, no blob download, no live mutation.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Check old closed Gate05 custody only; no paid provider call"
+        required: true
+        type: choice
+        options:
+          - AUDIT_OLD_GATE05_SOURCE_METADATA_ONLY_NO_PROVIDER
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate05-old-source-readonly
+  cancel-in-progress: false
+
+jobs:
+  old-exact-source-metadata:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'AUDIT_OLD_GATE05_SOURCE_METADATA_ONLY_NO_PROVIDER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    # Reuse the existing protected DB reader context, NOT authorization to
+    # create any future provider subscription or to use the old paid scope.
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install lockfile (NO secrets)
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Strict DB READ ONLY; safe aggregate counts only
+        env:
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          GATE05_SOURCE_READONLY_CONFIRM: ${{ inputs.confirmation }}
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "$GATE05_AUTOMATION_DATABASE_URL"
+          node --import tsx scripts/v39_gate05_source_metadata_readonly_v39.ts
+      - name: Do not conflate custody with scientific PASS
+        if: always()
+        run: |
+          {
+            echo 'Only raw metadata presence was read, with a READ ONLY DB transaction.'
+            echo 'No blob bytes, FIDS GET, Alert CREATE/DELETE, refill or other mutation.'
+            echo 'UNLOGGED tables may be erased by postmaster restart.'
+            echo 'Actual callback flight states, runway labels and 2xx clocks are NOT certified.'
+            echo 'The original 254-second experiment remains right-censored and NOT PASSED.'
+          } >> "$GITHUB_STEP_SUMMARY"
