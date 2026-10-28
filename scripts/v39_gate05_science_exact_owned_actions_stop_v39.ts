@@ -10,7 +10,7 @@
  * NOT mean the environment, owner, or independent STOP has been armed.
  */
 import pg from "pg";
-import {getBalanceEvidenceStrictWithRetry,listSubscriptionsStrictWithRetry,
+import {getBalanceEvidenceStrict,getBalanceEvidenceStrictWithRetry,listSubscriptionsStrictWithRetry,
   deleteSubscriptionVerifiedStrict} from
   "../server/lib/disruption/aerodataboxLimiter_v3";
 import {execFileSync} from "node:child_process";
@@ -206,8 +206,11 @@ export async function runGate05ScienceStopV39(
        hold("POSTMASTER_RESET_BEFORE_EXACT_PAID_BIND");
      }
      const current=await owner();
-     const balance=await getBalanceEvidenceStrictWithRetry({maxAttempts:2});
-     const inv=await listSubscriptionsStrictWithRetry({maxAttempts:2});
+     // During PAID monitoring, fail fast: emergency delete the already
+     // authenticated exact ID rather than spend up to 30s re-polling an
+     // unreachable provider while SEND credits may continue accumulating.
+     const balance=await getBalanceEvidenceStrict();
+     const inv=await listSubscriptionsStrictWithRetry({maxAttempts:1});
      providerCharged=p.startingCredits-balance.balance.creditsRemaining;
      if(!Number.isSafeInteger(providerCharged)||providerCharged<0)
        hold("BILLING_COUNTER_INVALID_OR_REFILLED");
