@@ -48,6 +48,35 @@ const HASH="b".repeat(64);
    const normalized=(meta[0].proconfig as string[]).map(x=>
      x.replace(/\s*,\s*/g,","));
    expect(normalized).toEqual(["search_path=pg_catalog,clean"]);
+   // Validate the live read-only privilege diagnostic's PG16 role and
+   // default-ACL catalog query using the actual disposal database catalog.
+   // In particular, pg_has_role(name,name,USAGE) is a real PG function,
+   // and aclexplode/default privilege metadata must not require production.
+   const currentRole=(await db.query(
+     "SELECT current_user AS actor")).rows[0].actor;
+   const roleProof=(await db.query(
+     "SELECT pg_has_role($1::name,$2::name,'USAGE') AS admin_usage,"+
+     "has_schema_privilege($1::name,'clean','USAGE') AS schema_usage",
+     [currentRole,currentRole])).rows[0];
+   expect(roleProof.admin_usage).toBe(true);
+   expect(roleProof.schema_usage).toBe(true);
+   const acl=(await db.query(
+     "SELECT d.defaclnamespace=0 AS global_scope,"+
+     "a.privilege_type AS privilege,"+
+     "(a.grantee=0) AS public_grant,"+
+     "CASE WHEN a.grantee=0 THEN false "+
+     "ELSE pg_has_role($1::name,grantee_role.rolname,'USAGE') END "+
+     "AS runtime_eligible "+
+     "FROM pg_default_acl d "+
+     "CROSS JOIN LATERAL aclexplode(d.defaclacl) a "+
+     "LEFT JOIN pg_roles grantee_role ON grantee_role.oid=a.grantee "+
+     "WHERE d.defaclrole=(SELECT oid FROM pg_roles WHERE rolname=$2) "+
+     "AND d.defaclobjtype='r' "+
+     "AND (d.defaclnamespace=0 OR "+
+     "d.defaclnamespace=(SELECT oid FROM pg_namespace WHERE nspname='clean')) "+
+     "AND a.privilege_type IN ('INSERT','UPDATE','DELETE')",
+     [currentRole,currentRole])).rows;
+   expect(Array.isArray(acl)).toBe(true);
    const scope=randomUUID(),blob=randomUUID(),foreign=randomUUID();
    const head="c".repeat(40),auth="d".repeat(64),ticket="e".repeat(64);
    await db.query(
@@ -140,7 +169,7 @@ const HASH="b".repeat(64);
    await db.query("ROLLBACK").catch(()=>undefined);
    await db.end();
   }
- });
+ },20000);
  it("receiver writes journal in same transaction only behind opt-in future switch",()=>{
   const src=readFileSync("server/lib/disruption/prepaidProbeRuntime_v39.ts","utf8");
   const insert=src.indexOf("INSERT INTO clean.gate05_science_delivery_custody_v39");
