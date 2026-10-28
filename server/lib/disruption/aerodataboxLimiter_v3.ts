@@ -254,7 +254,7 @@ export async function getBalanceEvidenceStrictWithRetry(
       last = error;
       const msg = error instanceof Error ? error.message : "";
       const recoverable = msg === "BALANCE_UNAVAILABLE: transport failure" ||
-        /^BALANCE_UNAVAILABLE: HTTP 5\\d\\d$/.test(msg);
+        /^BALANCE_UNAVAILABLE: HTTP 5[0-9][0-9]$/.test(msg);
       if (!recoverable || attempt === maxAttempts) break;
       // No secret/URL/response body logged; never retry any paid POST.
       console.warn("[adb-v3] free strict balance read unavailable; bounded read-only retry " +
