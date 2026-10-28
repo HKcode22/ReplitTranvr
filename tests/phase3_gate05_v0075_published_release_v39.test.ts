@@ -5,6 +5,22 @@ const ddl=readFileSync("migrations/staged/V0075__gate05_logged_delivery_custody_
 const install=readFileSync("scripts/v39_gate05_v0075_release_install_once_20261028.mjs","utf8");
 const build=readFileSync("scripts/v39_gate4_reviewed_source_build_v39.sh","utf8");
 describe("Gate05 no-paid source-pinned V0075 published receiver release",()=>{
+  it("recognizes PG16 canonical search_path formatting without accepting extra GUC settings",()=>{
+    // This used to reject legitimate PostgreSQL catalog proconfig strings
+    // like "search_path=pg_catalog, clean" and roll back the transaction.
+    const exact=(entry:unknown[])=>entry.length===1&&
+      typeof entry[0]==="string"&&
+      entry[0].replace(/\s*,\s*/g,",")==="search_path=pg_catalog,clean";
+    expect(exact(["search_path=pg_catalog, clean"])).toBe(true);
+    expect(exact(["search_path=pg_catalog,clean"])).toBe(true);
+    expect(exact(["search_path=public, pg_catalog"])).toBe(false);
+    expect(exact(["search_path=pg_catalog, clean","statement_timeout=0"])).toBe(false);
+    expect(exact([])).toBe(false);
+    expect(install).toContain("normalizedProconfig.length!==1");
+    expect(install).toContain('normalizedProconfig[0]!=="search_path=pg_catalog,clean"');
+    expect(install).toContain("x.replace(/\\s*,\\s*/g");
+    expect(install).not.toContain('x==="search_path=pg_catalog,clean"');
+  });
   it("supports one native node stdin operator and survives syntax checks",()=>{
     const j=spawnSync(process.execPath,[
       "--check","scripts/v39_gate05_v0075_release_install_once_20261028.mjs"
