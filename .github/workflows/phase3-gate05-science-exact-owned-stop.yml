@@ -98,6 +98,19 @@ jobs:
           cache: npm
       - name: Install exact lockfile and TypeScript runtime
         run: npm ci --include=dev --no-audit --no-fund
+      # A cold published Replit receiver can require >8 seconds.
+      # Prewarm free GET on GitHub at T-15; the true T-10 STOP checks the
+      # published exact source again and must authenticate independently.
+      # This stage is not ARMED proof and never performs provider mutation.
+      - name: Prewarm exact published receiver at T-15, GitHub clock, FREE
+        shell: bash
+        env:
+          START: ${{ inputs.start_utc }}
+          RECEIVER: ${{ inputs.receiver_sha }}
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_gate05_receiver_prewarm_only_v39.ts "$START" "$RECEIVER"
       # Protected gate05-safety review can be approved EARLY.
       # This runs on GitHub's UTC wall clock, not a Replit shell/timer.
       # The runner's STOP script still enforces exact T-10..T+1m and its
