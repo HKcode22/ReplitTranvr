@@ -195,9 +195,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DATABASE_URL: ${{ secrets.GATE05_SCIENCE_OWNER_DATABASE_URL }}
-          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
-          AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
-          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.GATE05_OWNER_RUNTIME_DATABASE_URL }}
+          AERODATABOX_WEBHOOK_SECRET: ${{ secrets.GATE05_OWNER_WEBHOOK_SECRET }}
+          AERODATABOX_API_KEY: ${{ secrets.GATE05_OWNER_AERODATABOX_API_KEY }}
         run: |
           set -Eeuo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
