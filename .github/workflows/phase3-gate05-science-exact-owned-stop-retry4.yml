@@ -1,0 +1,173 @@
+name: Phase3 Gate05 WSSS Science Independent Exact-Owned STOP Retry4
+run-name: Gate05 Science STOP ${{ inputs.scope_id }}
+# Manual and protected. There is NO provider subscription CREATE or refill.
+# This workflow is not ready for live dispatch until NEW exact-owned LOGGED
+# V0074 receiver scope, limited DB safety-login and approved environment
+# pins are independently installed and witnessed.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Exact WATCH_GATE05_SCIENCE_500_STOP_NO_CREATE
+        required: true
+        type: string
+      runner_sha:
+        description: Reviewed GitHub main STOP runner SHA
+        required: true
+        type: string
+      receiver_sha:
+        description: Exact published receiver source SHA
+        required: true
+        type: string
+      scope_id:
+        description: Newly issued Gate05 science UUID
+        required: true
+        type: string
+      authorization_sha256:
+        description: Owner-reviewed one-pilot AUTH SHA
+        required: true
+        type: string
+      stop_ticket_sha256:
+        description: Independent STOP-ticket SHA
+        required: true
+        type: string
+      start_utc:
+        description: Exactly frozen 60-minute start UTC ISO 8601
+        required: true
+        type: string
+      stop_utc:
+        description: Exactly frozen 60-minute stop UTC ISO 8601
+        required: true
+        type: string
+      starting_credits:
+        description: Exact current Alert credits at pre-arm
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: gate05-one-wsss-scientific-alert-stop
+  cancel-in-progress: false
+
+jobs:
+  exact-owned-stop:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'WATCH_GATE05_SCIENCE_500_STOP_NO_CREATE' }}
+    runs-on: ubuntu-latest
+    # Early human deployment review may occur up to 85m pre-start,
+    # followed by a 60m pilot + 4m grace. This must not time out!
+    timeout-minutes: 165
+    environment: gate05-safety
+    env:
+      GATE05_SAFETY_ENV_NAME: gate05-safety
+      GATE05_SAFETY_APPROVED_RUNNER_SHA: ${{ vars.GATE05_SAFETY_APPROVED_RUNNER_SHA }}
+      GATE05_SAFETY_APPROVED_RECEIVER_SOURCE: ${{ vars.GATE05_SAFETY_APPROVED_RECEIVER_SOURCE }}
+      GATE05_SAFETY_APPROVED_SCOPE: ${{ vars.GATE05_SAFETY_APPROVED_SCOPE }}
+      GATE05_SAFETY_APPROVED_AUTH_SHA256: ${{ vars.GATE05_SAFETY_APPROVED_AUTH_SHA256 }}
+      GATE05_SAFETY_APPROVED_STOP_TICKET_SHA256: ${{ vars.GATE05_SAFETY_APPROVED_STOP_TICKET_SHA256 }}
+      GATE05_SAFETY_APPROVED_START_UTC: ${{ vars.GATE05_SAFETY_APPROVED_START_UTC }}
+      GATE05_SAFETY_APPROVED_STOP_UTC: ${{ vars.GATE05_SAFETY_APPROVED_STOP_UTC }}
+      GATE05_SAFETY_APPROVED_STARTING_CREDITS: ${{ vars.GATE05_SAFETY_APPROVED_STARTING_CREDITS }}
+      GATE05_SAFETY_APPROVED_LIMIT: ${{ vars.GATE05_SAFETY_APPROVED_LIMIT }}
+      GATE05_SAFETY_APPROVED_EARLY_STOP: ${{ vars.GATE05_SAFETY_APPROVED_EARLY_STOP }}
+      GATE05_SAFETY_APPROVED_REST_LIMIT: ${{ vars.GATE05_SAFETY_APPROVED_REST_LIMIT }}
+      GITHUB_EVENT_NAME: workflow_dispatch
+      DATABASE_URL: ""
+      V39_DATABASE_RUNTIME_URL: ""
+    steps:
+      - name: Pin reviewed GitHub main runner before installing dependencies
+        shell: bash
+        env:
+          EXPECTED: ${{ inputs.runner_sha }}
+          CONFIRM: ${{ inputs.confirmation }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$EXPECTED" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          test "$EXPECTED" = "$GITHUB_SHA"
+          test "$GATE05_SAFETY_APPROVED_RUNNER_SHA" = "$GITHUB_SHA"
+          test "$CONFIRM" = WATCH_GATE05_SCIENCE_500_STOP_NO_CREATE
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.runner_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install exact lockfile and TypeScript runtime
+        run: npm ci --include=dev --no-audit --no-fund
+      # A cold published Replit receiver can require >8 seconds.
+      # Prewarm free GET on GitHub at T-15; the true T-10 STOP checks the
+      # published exact source again and must authenticate independently.
+      # This stage is not ARMED proof and never performs provider mutation.
+      - name: Prewarm exact published receiver at T-15, GitHub clock, FREE
+        shell: bash
+        env:
+          START: ${{ inputs.start_utc }}
+          RECEIVER: ${{ inputs.receiver_sha }}
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_gate05_receiver_prewarm_only_v39.ts "$START" "$RECEIVER"
+      # Protected gate05-safety review can be approved EARLY.
+      # This runs on GitHub's UTC wall clock, not a Replit shell/timer.
+      # The runner's STOP script still enforces exact T-10..T+1m and its
+      # independently reviewed source & environment pins at ARM time.
+      - name: Wait on GitHub clock until T-10 minutes, never busy-wait on Replit
+        shell: bash
+        env:
+          START: ${{ inputs.start_utc }}
+        run: |
+          set -Eeuo pipefail
+          node --input-type=module <<'NODE'
+          const start=Date.parse(process.env.START??"");
+          const now=Date.now();
+          if(!Number.isFinite(start)||
+             new Date(start).toISOString()!==process.env.START||
+             start-now>85*60000||now>start+60000)
+            throw Error("GATE05_GITHUB_EARLY_ARM_WINDOW_INVALID");
+          const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+          while(Date.now()<start-10*60000){
+            await sleep(Math.min(3000,start-10*60000-Date.now()));
+          }
+          if(Date.now()>start+60000)
+            throw Error("GATE05_GITHUB_STOP_ARMED_TOO_LATE");
+          console.log("GATE05_GITHUB_STOP_AT_EXACT_T_MINUS_10_WINDOW");
+          NODE
+
+      - name: Run independently authorized exact-owned STOP, never CREATE
+        env:
+          RUNNER: ${{ inputs.runner_sha }}
+          RECEIVER: ${{ inputs.receiver_sha }}
+          SCOPE: ${{ inputs.scope_id }}
+          AUTH: ${{ inputs.authorization_sha256 }}
+          TICKET: ${{ inputs.stop_ticket_sha256 }}
+          START: ${{ inputs.start_utc }}
+          STOP: ${{ inputs.stop_utc }}
+          CREDITS: ${{ inputs.starting_credits }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          GATE05_SCIENCE_SAFETY_DATABASE_URL: ${{ secrets.GATE05_SCIENCE_SAFETY_DATABASE_URL }}
+          GATE05_SCIENCE_SAFETY_EXPECTED_DB_HOST: ${{ secrets.GATE05_SCIENCE_SAFETY_EXPECTED_DB_HOST }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_gate05_science_exact_owned_actions_stop_retry4_v39.ts \
+            --runner "$RUNNER" --receiver "$RECEIVER" --scope "$SCOPE" \
+            --auth "$AUTH" --ticket "$TICKET" --start "$START" \
+            --stop "$STOP" --credits "$CREDITS"
+      - name: Status is NEVER proof of complete scientific Gate05 pilot
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Gate05 WSSS scientific STOP'
+            echo 'A job queued/running is not proof of active exact-owned STOP.'
+            echo 'No provider CREATE, FIDS GET or balance refill exists in this workflow.'
+            echo 'A 350-credit early STOP with 150 reserve is NOT a hard credit cap.'
+            echo 'Unknown or foreign ID is an incident; never delete a guessed ID.'
+            echo 'A green STOP is not a scientific PASS nor settled ownership evidence.'
+          } >> "$GITHUB_STEP_SUMMARY"

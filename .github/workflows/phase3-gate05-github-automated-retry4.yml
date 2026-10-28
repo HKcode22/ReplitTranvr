@@ -1,0 +1,105 @@
+name: Gate05 WSSS Receiver/Provider Recovery Controller (GitHub Only)
+run-name: Gate05 recovered WSSS once by ${{ github.actor }}
+
+# Explicit single-use manual GitHub dispatch, never cron or a push trigger:
+# a push/PR/cron would spend existing user-authorized Alert credits without
+# an independent protected deployment review. Timing/activation/STOP polling
+# are subsequently owned exclusively by GitHub's cloud runner.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Explicit approved existing ONE WSSS 500 Alert + 12 REST pilot"
+        required: true
+        type: choice
+        options:
+          - RUN_ALREADY_APPROVED_WSSS_ONCE_GITHUB_AUTOMATED
+
+permissions:
+  contents: read
+  actions: read
+  issues: read
+
+concurrency:
+  group: gate05-wsss-single-github-owner-controller
+  cancel-in-progress: false
+
+jobs:
+  github-owner-once:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'RUN_ALREADY_APPROVED_WSSS_ONCE_GITHUB_AUTOMATED' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # Existing reviewer-protected PAID environment; approval may be granted
+    # when operator is ready, not at a precise clock instant.
+    # The future independent STOP still requires separate gate05-safety
+    # approval and only reads its own independent select-only PG role.
+    environment: phase2g-paid
+    env:
+      GATE05_AUTOMATION_APPROVED_ONCE: YES_ONE_WSSS_500_ALERT_12_REST
+      GITHUB_EVENT_NAME: ${{ github.event_name }}
+      GITHUB_REF: ${{ github.ref }}
+      GITHUB_SHA: ${{ github.sha }}
+      GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+      NODE_ENV: production
+    steps:
+      - name: Validate main, exact one-use dispatch and protected secrets
+        shell: bash
+        env:
+          CONFIRM: ${{ inputs.confirmation }}
+        run: |
+          set -Eeuo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$CONFIRM" = RUN_ALREADY_APPROVED_WSSS_ONCE_GITHUB_AUTOMATED
+          echo "GATE05_GITHUB_OWNER_PROTECTED_METADATA_PREFLIGHT=PASS"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install pinned lockfile and tsx
+        run: npm ci --include=dev --no-audit --no-fund
+
+      - name: Single signed commission and one-use paid CREATE after REAL independent STOP
+        shell: bash
+        # Privileged secrets NEVER enter npm ci, setup-node or checkout.
+        # The reviewed controller step alone receives them after installs.
+        env:
+          GH_TOKEN: ${{ secrets.GATE05_GH_ADMIN_TOKEN }}
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          for name in GH_TOKEN DATABASE_URL V39_DATABASE_RUNTIME_URL AERODATABOX_API_KEY AERODATABOX_WEBHOOK_SECRET; do
+            test -n "${!name:-}" || { echo "MISSING_PROTECTED_SECRET:$name" >&2; exit 2; }
+          done
+          node --import tsx scripts/v39_gate05_github_owner_controller_retry4_v39.ts
+
+      - name: Preserve truthful scientific status
+        if: always()
+        run: |
+          {
+            echo '## GitHub-native Gate05 WSSS one-use owner'
+            echo 'One protected controller handles free commission, STOP dispatch,'
+            echo 'provider CREATE exactly once after independent monitored ARMED.'
+            echo 'The separate protected STOP continues to 60m/350 soft credits.'
+            echo 'A job green does not prove source completeness, full 60m,'
+            echo 'exact stable provider settlement, PRE/POST native actual runway'
+            echo 'times, 100 callbacks, 50 flights, 20 done, 30 airborne,'
+            echo 'or 100 airborne points. Gate05 f.8 science stays OPEN.'
+            echo 'No blind provider CREATE retries after a failed/ambiguous attempt.'
+            echo 'Existing approval: ONE WSSS <=500 Alert / <=12 REST, no refill.'
+            echo 'Provider does not enforce 500 hard cap: asynchronous overshoot risk.'
+            echo 'No Replit Shell, Cloudflare or Replit AI Agent required.'
+          } >> "$GITHUB_STEP_SUMMARY"
