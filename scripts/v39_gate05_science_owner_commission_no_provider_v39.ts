@@ -18,9 +18,9 @@
  */
 import "dotenv/config";
 import pg from "pg";
-import {randomUUID,randomBytes,createHash} from "node:crypto";
+import {randomUUID,randomBytes,createHash,createHmac} from "node:crypto";
 import {existsSync,mkdirSync,openSync,writeSync,fsyncSync,closeSync,
-  readFileSync,statSync} from "node:fs";
+  statSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {execFileSync,spawnSync} from "node:child_process";
@@ -34,7 +34,6 @@ const PUB="https://replit-tranvr--hk84164.replit.app/__v39/workspace-runtime";
 const MIGRATION="migrations/staged/V0074__gate05_science_prepaid_owner_v39.sql";
 const CONFIRM="REVIEWED_GATE05_ONE_500_CREDIT_WSSS_NO_PROVIDER_COMMISSION";
 const SHA=/^[0-9a-f]{40}$/;
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const hold=(code:string):never=>{throw Error("GATE05_COMMISSION_HOLD_"+code);};
 const sha256=(x:string)=>createHash("sha256").update(x).digest("hex");
 const gh=(args:string[],input?:string)=>{
@@ -62,9 +61,6 @@ export function gate05SciencePlanWindowV39(nowMs:number):{
    sessionExpires:new Date(start+80*60000).toISOString()
  };
 }
-const parseSource=(s:string):Record<string,unknown>=>{
-  try{const j=JSON.parse(s);return j;}catch{return hold("SOURCE_JSON");}
-};
 const privateRoot=()=>{
  const root=join(homedir(),".config","replittranvr","gate05-science-onepilot");
  if(existsSync(root))hold("PRIOR_PRIVATE_SCOPE_EXISTS_NO_RETRY");
@@ -128,6 +124,26 @@ export async function commissionOneGate05ScienceOwnerV39(
     adminUrl.pathname!=="/neondb"||pubUrl.pathname!=="/neondb"||
     !["postgres:","postgresql:"].includes(adminUrl.protocol))
    hold("PRODUCTION_DATABASE_HOST_IDENTITY");
+ // Free published DB-key challenge: the local Neon host alone is not
+ // proof that THIS published callback receiver uses the same runtime DB.
+ const challenge="gate05-science-"+randomUUID();
+ const proof=createHmac("sha256",runtime)
+   .update("phase2g-db-binding:"+challenge).digest("hex");
+ const bound=await fetch(
+   "https://replit-tranvr--hk84164.replit.app/__v39/phase2g/runtime-db-binding",{
+   method:"POST",redirect:"error",
+   headers:{"x-v39-phase2g-db-challenge":challenge,
+     "x-v39-phase2g-db-proof":proof},
+   signal:AbortSignal.timeout(10000)
+ });
+ if(bound.status!==200)hold("PUBLISHED_DB_BIND_HTTP");
+ const boundBody=await bound.json();
+ if(boundBody?.schema!=="v39.phase2g-runtime-db-binding.v1"||
+    boundBody?.status!=="PASS"||boundBody?.provider_call!==false||
+    boundBody?.provider_mutation!==false||
+    boundBody?.database_mutation!==false||
+    Number(boundBody?.alert_credits_spent)!==0)
+   hold("PUBLISHED_DB_BIND_AUTHENTICATION");
  const plan=gate05SciencePlanWindowV39(Date.now());
  const scope=randomUUID();
  const auth=sha256(JSON.stringify({
@@ -135,6 +151,10 @@ export async function commissionOneGate05ScienceOwnerV39(
    approvalIssue173:"6458170487",
    source:head,receiver:RECEIVER,scope,
    maximumAlertCredits:500,earlyStop:350,maxRestUnits:12,
+   minNotifications:100,minDistinctOperatingFlights:50,
+   minCompletedFlights:20,minAirborneFlights:30,
+   minAirbornePoints:100,minPilotMinutes:60,
+   missingRunwayMayRemainNull:true,providerEstimatedIsNotObservedActual:true,
    startUtc:plan.start,stopUtc:plan.stop,noRefill:true
  }));
  const ticket=sha256(JSON.stringify({
