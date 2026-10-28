@@ -10,7 +10,7 @@
  * NOT mean the environment, owner, or independent STOP has been armed.
  */
 import pg from "pg";
-import {getBalanceEvidenceStrict,listSubscriptionsStrictWithRetry,
+import {getBalanceEvidenceStrictWithRetry,listSubscriptionsStrictWithRetry,
   deleteSubscriptionVerifiedStrict} from
   "../server/lib/disruption/aerodataboxLimiter_v3";
 import {execFileSync} from "node:child_process";
@@ -162,10 +162,10 @@ export async function runGate05ScienceStopV39(
       !Number.isFinite(Date.parse(initialPostmaster.rows[0].server_started)))
      hold("INITIAL_POSTMASTER_EPOCH_UNAVAILABLE");
    const firstPostmasterMs=Date.parse(initialPostmaster.rows[0].server_started);
-   const first=await getBalanceEvidenceStrict();
+   const first=await getBalanceEvidenceStrictWithRetry({maxAttempts:2});
    if(first.balance.creditsRemaining!==p.startingCredits||
       first.quota.apiUnitsRemaining<12)hold("STARTING_BUDGET_CHANGED");
-   const list=await listSubscriptionsStrictWithRetry({maxAttempts:1});
+   const list=await listSubscriptionsStrictWithRetry({maxAttempts:2});
    if(list.some(x=>x.isActive))hold("FOREIGN_SUBSCRIPTION_BEFORE_START");
    // This is a true, live worker admission, not a promise that it survives.
    const proof={schema:"v39.gate05.science-actions-stop-armed.v1",
@@ -206,8 +206,8 @@ export async function runGate05ScienceStopV39(
        hold("POSTMASTER_RESET_BEFORE_EXACT_PAID_BIND");
      }
      const current=await owner();
-     const balance=await getBalanceEvidenceStrict();
-     const inv=await listSubscriptionsStrictWithRetry({maxAttempts:1});
+     const balance=await getBalanceEvidenceStrictWithRetry({maxAttempts:2});
+     const inv=await listSubscriptionsStrictWithRetry({maxAttempts:2});
      providerCharged=p.startingCredits-balance.balance.creditsRemaining;
      if(!Number.isSafeInteger(providerCharged)||providerCharged<0)
        hold("BILLING_COUNTER_INVALID_OR_REFILLED");
@@ -252,10 +252,10 @@ export async function runGate05ScienceStopV39(
        hold("ACTIVE_OWNER_NOT_PRESENT_IN_PROVIDER_LIST");
      await sleep(5000);
    }
-   const after=await listSubscriptionsStrictWithRetry({maxAttempts:1});
+   const after=await listSubscriptionsStrictWithRetry({maxAttempts:2});
    const exactActive=knownExactId?after.some(x=>x.id===knownExactId&&x.isActive):false;
    if(exactActive)hold("STOP_UNCONFIRMED_PROVIDER_STILL_ACTIVE");
-   const final=await getBalanceEvidenceStrict();
+   const final=await getBalanceEvidenceStrictWithRetry({maxAttempts:2});
    console.log(JSON.stringify({
      schema:"v39.gate05.science-actions-stop-terminal.v1",
      status:"STOP_PROVIDER_EXACT_INACTIVE",
