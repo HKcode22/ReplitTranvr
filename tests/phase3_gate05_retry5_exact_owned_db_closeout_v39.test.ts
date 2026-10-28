@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {readFileSync} from "node:fs";
-import {validateRetry5CloseoutEvidenceV39} from
+import {validateRetry5CloseoutEvidenceV39,verifyHistoricalExactDeleteLogV39} from
   "../scripts/v39_gate05_retry5_exact_owned_closeout_once_v39";
 
 const owner=()=>({
@@ -67,6 +67,28 @@ describe("one-use exact retry5 DB-only closeout evidence",()=>{
       const x=input();x.owner={...owner(),...change};
       expect(()=>validateRetry5CloseoutEvidenceV39(x)).toThrow();
     }
+  });
+  it("requires the actual original authenticated exact-delete receipt, not just a failed run status",()=>{
+    const receipt=JSON.stringify({
+      status:"GATE05_EMERGENCY_EXACT_STOP_ATTEMPT",
+      exactOwnedIdEstablished:true,exactOwnedDeleteAttempted:true,
+      exactOwnedDeleteVerified:true,databaseReadbackUnavailable:false
+    });
+    const log="2026-10-28T10:19:14.2459145Z "+receipt;
+    expect(verifyHistoricalExactDeleteLogV39(log)).toMatch(/^[a-f0-9]{64}$/);
+    expect(()=>verifyHistoricalExactDeleteLogV39(log+"\n"+log)).toThrow();
+    expect(()=>verifyHistoricalExactDeleteLogV39("failed workflow")).toThrow();
+    for(const field of ["exactOwnedIdEstablished",
+       "exactOwnedDeleteAttempted","exactOwnedDeleteVerified"]){
+      const neg=JSON.stringify({
+        ...JSON.parse(receipt),[field]:false
+      });
+      expect(()=>verifyHistoricalExactDeleteLogV39(neg)).toThrow();
+    }
+    expect(()=>verifyHistoricalExactDeleteLogV39(
+      JSON.stringify({...JSON.parse(receipt),
+        databaseReadbackUnavailable:true})
+    )).toThrow();
   });
   it("keeps the workflow manually reviewed and the source free of paid provider writes",()=>{
     const workflow=readFileSync(
