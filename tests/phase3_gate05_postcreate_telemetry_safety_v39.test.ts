@@ -48,6 +48,8 @@ describe("Gate05 bounded provider telemetry faults are not fabricated scientific
  it("retries only transport and server errors; invalid account is not transient",()=>{
   for(const e of ["BALANCE_UNAVAILABLE: transport failure",
     "BALANCE_UNAVAILABLE: HTTP 503",
+    "BALANCE_UNAVAILABLE: HTTP 429",
+    "BALANCE_UNAVAILABLE: HTTP 408",
     "R1_LIST_UNAVAILABLE: transport failure (details redacted)",
     "R1_LIST_UNAVAILABLE: HTTP 502 (body redacted)"])
    expect(gate05ProviderReadFailureTransientV39(e)).toBe(true);
