@@ -126,10 +126,10 @@ export async function auditGate05SourceMetadataV39(db:Reader,nowUtc:string){
     status:session.rowCount===1&&delivery.rows.length>0&&unexpired>0?
       "SOURCE_METADATA_AVAILABLE_NOT_RAW_CERTIFIED":
       independentUnexpired>0?
-      "LOGGED_RAW_REFERENCES_SURVIVE_RUNTIME_LOSS_BYTES_UNVERIFIED":
+      "LOGGED_UNEXPIRED_REFERENCES_BYTES_UNVERIFIED":
       rawRefs.rows.length>0?
-      "LOGGED_REFERENCES_EXPIRED_OR_INVALID_RUNTIME_LOST":
-      "NO_LOGGED_SOURCE_REFS_AND_UNLOGGED_RUNTIME_LOST"
+      "LOGGED_REFERENCES_EXPIRED_OR_INVALID":
+      "NO_LOGGED_SOURCE_REFS_AVAILABLE"
   } as const;
 }
 async function cli(){
