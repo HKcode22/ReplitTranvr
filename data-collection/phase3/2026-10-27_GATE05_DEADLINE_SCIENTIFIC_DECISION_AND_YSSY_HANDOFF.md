@@ -2,6 +2,44 @@
 
 **Owner priority:** Finish Gate 0.5 scientifically, factually and mathematically, then investigate YSSY P25 sender accounting. This is a consolidated **decision** and checkpoint, not a new paid Gate05g/h pilot, not authorization to change the frozen f.8 plan, not a claim of strict PASS, and not a requirement to repeat old expensive requests. The original source of truth is `data-collection/plans/V3.9_DataCollectPlan_f.8.md` §§5.2, 6.0–6.6, 7, 16 and `data-collection/implementation/V3.9_IMPLEMENTATION_LOG.md`; see issue #173 and October 27 Gate05 identity checkpoint.
 
+## LIVE UPDATE — independent Gate05f 16-row raw shape now OWNER VERIFIED (Oct 27, after PR198)
+
+**Source evidence, not an inference:** user executed **the exact merged main** `dab275919da41ed5c283cd70a29e4f865d3b7d83` / script blob `1e64d7d4160bb1cd1af5b944f72ec731e2871e79`, returned `INDEPENDENT_T6_EXACT_RAW_AND_NORMALIZED_PROFILED`; no provider HTTP, no DB writes, no returned raw/flight IDs. Scoped source UUID `16dfcf40-f8df-42a3-b739-8110d7de2449`, SHA256 `5e901d257ce62672d384c30f88a0796b3667b0f9741720bd23eccbb4f3ab96db`, durable `available_at=2026-10-27T23:23:23.414Z`. Original Gate05e 15-row source is **another population**.
+
+| Exact actual Gate05f observed count | Value |
+| --- | ---: |
+| Original FIDS departure response objects / normalized rows / requested-primary rows | **16 / 16 / 16** |
+| Flight number matches newly accepted two-character carrier + optional whitespace + digits | **16** |
+| Numbers specifically have a space between carrier and digits | **16** |
+| Provider-designated `IsOperator` response rows | **6** |
+| Provider-designated `IsCodeshared` response rows | **10** |
+| Explicit departure origin ICAO in source | **0** |
+| Explicit arrival destination ICAO / departure scheduled UTC | **16 / 16** |
+| Provider `flight.id` / callsign / `departure.runwayTime.utc` present | **0 / 0 / 0** |
+| Operator-designated *provisional* context-origin candidates | **6** |
+| Historical original normalized canonical IDs | **0** (old strict parser/context policy; **not zero flights**) |
+| Durable source before individual *candidate* scheduled departure minus 6 hours | **16** |
+| Source within exploratory 10 minutes preceding each candidate T−6h | **0** |
+
+**Interpretation:** This is a genuine positive provider acquisition, source-availability and shape observation; the flight-number format bug has already been repaired under PR #197 and reproduced on both genuine cohorts, but persisted historical rows were NOT silently rewritten. The PRE snapshot need not contain a posttakeoff runway timestamp; zero runway times for this future service window does **not** establish missing future actual runway labels. The `candidate_within_10m_t6=0` is **not a late-data failure**: all 16 observations were available *more* than 10 minutes before their respective candidate T−6h cutoffs, whereas a validated nonadaptive max staleness has not been frozen. No arbitrary 10m window may now be made a post-hoc success requirement or a scientific release threshold.
+
+**Current exact operator/physical status:** Six records have provider `IsOperator` role; ten have marketing alias role. None provides explicit queried origin, native provider `flight.id` or callsign. The existing fail-closed canonical logic properly does not promote provisional context-based origin into *independently verified* physical-leg identity; neither `N_unique_physical=6` nor `N_unique_physical=16` is proven. The 15/16 cross-cohort row totals are not a sample of matched T−24/T−6 histories.
+
+**Material scientific blocker remains** (original f.8, no shortcuts): first source-verified `selected_t_milestone`, exact scheduled runway/gate semantics, a **provably actual** wheels-off observation, linked operating leg/retimes, and the complete §16 prospective dedicated pilot's prespecified duration/notifications/airborne cadence/target recovery. Official AeroDataBox ADS-B article (2020; updated 2022) describes possible retroactive actual takeoff estimates at selected covered airports, historically lists YSSY (not WSSS), explicitly warns data is not guaranteed and coverage can change; it is **not a 2026 WSSS or YSSY feed guarantee, per-observation actual/estimated flag, or scheduled wheels-off definition**. Source: https://aerodatabox.com/flight-take-off-and-landing-time-runway-detection-based-on-ads-b-data-more-flights-and-status-updates/ . Official current provider API contract still describes `runwayTime` actual OR estimated and `scheduledTime` general departure. We MUST NOT compute `runwayTime − scheduledTime` as exact original runway delay without independently verified operands.
+
+**Deadline decision contract:** Oct28 8PM PDT remains last written evidence/disposition checkpoint, *not* guaranteed full scientific PASS. If no authoritative source establishes both operands, unique physical-leg identity and the original §16 pilot adequacy, report `FULL_GATE05_SCIENTIFIC_PASS=NO`, `EXTERNAL_SOURCE_SEMANTICS_UNPROVEN`, and document finite external dependency, while allowing Phase4 offline work. Do not spend API units on another same-shape pilot or alter f.8 merely to mark complete. Only a pre-reviewed *new* research estimand with user-approved formal f.8 amendment could replace the unavailable original label. YSSY sender-gap investigation remains **next** once this honest Gate05 closeout decision is recorded, not a prerequisite to falsely calling Gate05 PASS. Issue #173 owner receipt: https://github.com/HKcode22/ReplitTranvr/issues/173#issuecomment-6457322182 .
+
+### Exact AeroDataBox clarification package — proposed, **not yet sent**
+
+Ask support to answer for AeroDataBox OpenAPI version `1.15.4.0` and the active RapidAPI account/airports WSSS and YSSY, without sharing raw flight records, tokens or account secrets:
+
+1. **Scheduled reference:** Is `departure.scheduledTime.utc` scheduled **gate-out**, scheduled **wheels-off**, or source-dependent? Is an independent `scheduled_wheels_off` milestone exposed anywhere, and on which field/endpoint with verified semantics?
+2. **Actual takeoff:** When `departure.runwayTime.utc` is filled, how does a client distinguish a physically **observed actual** wheels-off instant from an **estimate/prediction** for that *individual flight*? Is an ADS-B trajectory-derived actual flag, source provenance and event availability timestamp exposed?
+3. **As-of and identity:** Is there a source-authentic, first-frozen schedule history/available-at event, provider-operating leg identity/codeshare-parent mapping, and dated WSSS/YSSY actual-takeoff coverage to construct leakage-free per-flight T−24/T−6/T−90 decisions and later targets? If not, explicitly confirm limitations.
+4. **Retention:** Which allowed derived metadata/labels may be retained after the AeroDataBox FIDS raw-content 24h expiry under the current subscription terms?
+
+No provider answer has been received and no email/request has been sent. This checkpoint does not claim otherwise.
+
 ## 1. Deadline and progress expressed with correct pass/fail dimensions
 
 **Decision deadline:** Wednesday Oct 28 at **8 PM PDT** (`2026-10-29T03:00:00Z`). This is an evidence/acceptance deadline, not a guarantee a third-party provider can supply scientific definitions by then. Engineering PRs may land earlier. A failed/source-unverifiable criterion must remain named and must not be converted into a 'PASS' because 2 REST units were paid or a source JSON was durably saved.
