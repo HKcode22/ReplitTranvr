@@ -222,7 +222,10 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
      `SELECT state,owner_kind,icao,provider_subscription_id,expires_at_utc
       FROM clean.prepaid_probe_session_runtime WHERE session_id=$1::uuid`,
      [m.scope]);
-   if(session.rowCount===0){
+   // Shared by initial and final pre-CREATE admission: Neon UNLOGGED
+   // callback identity can disappear more than once in one proposed window.
+   // Every restore is same-scope, fully authenticated and pre-POST only.
+   const rearmPreparedCallback=async()=>{
      // After a PostgreSQL crash/restart, PREPAID runtime is UNLOGGED.
      // First authenticate the independently ARMED exact STOP, zero active
      // provider subscriptions, unchanged balance, and published DB HMAC.
@@ -270,6 +273,9 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
        }
      );
      console.log(JSON.stringify(repaired));
+   };
+   if(session.rowCount===0){
+     await rearmPreparedCallback();
      session=await precreateSelect(
        `SELECT state,owner_kind,icao,provider_subscription_id,expires_at_utc
         FROM clean.prepaid_probe_session_runtime WHERE session_id=$1::uuid`,
@@ -297,10 +303,20 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
    liveSafety(input.stopRun,m,head);
    // Prevent billable CREATE if Neon cleared UNLOGGED identity again
    // between preflight and the frozen start. Never rearm after paid intent.
-   const lastCallback=await precreateSelect(
+   let lastCallback=await precreateSelect(
       `SELECT state,owner_kind,icao,provider_subscription_id,expires_at_utc
          FROM clean.prepaid_probe_session_runtime
         WHERE session_id=$1::uuid`,[m.scope]);
+   if(lastCallback.rowCount===0){
+     // A second pre-POST restart is a recoverable infrastructure event.
+     // Revalidate zero active provider, unchanged balance, published DB
+     // HMAC and live independent STOP; never mint a different scope.
+     await rearmPreparedCallback();
+     lastCallback=await precreateSelect(
+       `SELECT state,owner_kind,icao,provider_subscription_id,expires_at_utc
+          FROM clean.prepaid_probe_session_runtime
+         WHERE session_id=$1::uuid`,[m.scope]);
+   }
    const last=lastCallback.rows[0];
    if(lastCallback.rowCount!==1||last.state!=="armed"||
       last.owner_kind!=="phase3_gate05_science"||last.icao!=="WSSS"||
