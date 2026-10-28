@@ -123,7 +123,8 @@ beforeAll(async()=>{
   await state.pool.query("CREATE SCHEMA clean");
   await state.pool.query([
     "CREATE UNLOGGED TABLE clean.prepaid_probe_session_runtime(",
-    "session_id uuid PRIMARY KEY,provider_subscription_id text,state text NOT NULL,",
+    "session_id uuid PRIMARY KEY,owner_kind text NOT NULL DEFAULT 'anchor_probe',",
+    "provider_subscription_id text,state text NOT NULL,",
     "expires_at_utc timestamptz NOT NULL,callback_requests_seen integer DEFAULT 0,",
     "callback_success_2xx integer DEFAULT 0,callback_failures integer DEFAULT 0,",
     "last_delivery_at_utc timestamptz)",
