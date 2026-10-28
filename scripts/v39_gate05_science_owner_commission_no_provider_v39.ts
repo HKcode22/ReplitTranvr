@@ -95,7 +95,14 @@ export async function commissionOneGate05ScienceOwnerV39(
       (p:any)=>p.type==="required_reviewers"&&
        Array.isArray(p.reviewers)&&p.reviewers.length>=1
     ))hold("GITHUB_MAIN_OWNER_OR_REVIEWER_PROTECTION");
- const source=readFileSync(MIGRATION,"utf8");
+ const dirty=execFileSync("git",[
+   "status","--porcelain=v1","--untracked-files=normal",
+   "--","server","scripts","migrations","tests",".github/workflows"
+ ],{encoding:"utf8",stdio:["ignore","pipe","ignore"]}).trim();
+ if(dirty)hold("PROTECTED_SOURCE_TREE_DIRTY");
+ const source=execFileSync("git",["show",head+":"+MIGRATION],{
+   encoding:"utf8",maxBuffer:1024*1024,stdio:["ignore","pipe","ignore"]
+ });
  const sourceHash=sha256(source);
  const healthRes=await fetch(PUB,{method:"GET",redirect:"error",
    signal:AbortSignal.timeout(8000)});
@@ -154,7 +161,7 @@ export async function commissionOneGate05ScienceOwnerV39(
    startUtc:plan.start,stopUtc:plan.stop,
    sessionExpiresUtc:plan.sessionExpires,
    startingCredits:credits,sourceSqlSha256:sourceHash,
-   safetyReaderUrl:restricted.toString(),providerKey:apiKey
+   safetyReaderUrl:restricted.toString()
  };
  privateWrite(join(root,"recovery-before-commit.json"),
    JSON.stringify(privateData)+"\n");
@@ -178,10 +185,6 @@ export async function commissionOneGate05ScienceOwnerV39(
    if(!previous.rows[0]?.gate3||previous.rows[0]?.gate05)
      hold("V0065_REQUIRED_V0074_MUST_BE_NEW");
    await db.query(source);
-   await db.query(
-     "COMMENT ON TABLE clean.phase3_gate05_science_owner_v39 IS $1",
-     ["Gate05 V0074 source "+head+" sha256 "+sourceHash]
-   ).catch(()=>undefined);
    await db.query(
      `INSERT INTO clean.phase3_gate05_science_owner_v39
       (session_id,airport_icao,source_commit,authorization_sha256,
