@@ -1,4 +1,5 @@
 import {readFileSync} from "node:fs";
+import {spawnSync} from "node:child_process";
 import {describe,it,expect} from "vitest";
 import {gate05ProviderReadFailureTransientV39,gate05TelemetryDecisionV39,
  GATE05_ACTIVE_BALANCE_TELEMETRY_GRACE_MS,
@@ -67,6 +68,19 @@ describe("Gate05 bounded provider telemetry faults are not fabricated scientific
   expect(provider).toContain('elapsedMs: Math.max(0, Date.now() - balanceReadStartedAt)');
   expect(provider).not.toContain("console.warn(error)");
   expect(provider).not.toContain("console.error(error)");
+ });
+ it("executes protected read-only audit CLI and fails closed outside GitHub",()=>{
+  const p=spawnSync(process.execPath,[
+    "--import","tsx",
+    "scripts/v39_gate05_retry5_no_paid_settlement_readonly_v39.ts"
+  ],{encoding:"utf8",timeout:20000,
+    env:{...process.env,GITHUB_ACTIONS:"",GITHUB_EVENT_NAME:"",
+      GITHUB_REF:"",GITHUB_SHA:"",DATABASE_URL:"",
+      AERODATABOX_API_KEY:""}});
+  expect(p.error).toBeUndefined();
+  expect(p.status).toBe(2);
+  expect(p.stderr).toContain("GATE05_NO_PAID_ACCOUNT_SETTLEMENT_UNRESOLVED");
+  expect(p.stderr).toContain("GATE05_READONLY_SETTLEMENT_HOLD_GITHUB_DISPATCH_ONLY");
  });
  it("does not allow the settlement audit to create/delete/substitute billing evidence",()=>{
   expect(wf).toContain("workflow_dispatch:");
