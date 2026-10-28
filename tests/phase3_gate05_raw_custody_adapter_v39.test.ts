@@ -94,7 +94,8 @@ describe("Gate05 authentic raw-backed observation source (no provider/SQL)",()=>
     rows[0]={...rows[0],rawItemSha256:"f".repeat(64)};
     expect(()=>adaptGate05CustodyBytesV39({...x,rows}))
       .toThrow("GATE05_CUSTODY_ITEM_HASH_MISMATCH");
-    rows[0]={...x.rows[0],itemIndex:1};
+    rows[0]={...x.rows[0]};
+    rows[1]={...x.rows[1],itemIndex:0}; // genuine duplicate ordinal
     expect(()=>adaptGate05CustodyBytesV39({...x,rows}))
       .toThrow("GATE05_CUSTODY_ITEM_IDENTITY_MISMATCH");
   });
