@@ -97,7 +97,14 @@ describe("retry5 exact named STOP paid handoff — full real validator fixtures"
   expect(ctl).toContain('endsWith("v39_gate05_github_owner_controller_retry5_v39.ts")');
   expect(ctl).toContain("v39_gate05_science_one_paid_create_once_retry5_v39.ts");
   expect(ownerWorkflow).toContain("v39_gate05_github_owner_controller_retry5_v39.ts");
-  expect(stopWorkflow).toContain("v39_gate05_science_exact_owned_actions_stop_retry5_v39.ts");
+  // The old one-use retry5 paid CREATE controller remains historical
+  // (it is job-disabled), while the EXISTING independent STOP action
+  // deliberately advances its control-plane resilience to retry6.
+  expect(stopWorkflow).toContain("v39_gate05_science_exact_owned_actions_stop_retry6_v39.ts");
+  expect(stopWorkflow).not.toContain(
+    "node --import tsx scripts/v39_gate05_science_exact_owned_actions_stop_retry5_v39.ts");
+  expect(readFileSync(p+"v39_gate05_science_exact_owned_actions_stop_retry5_v39.ts","utf8"))
+    .toContain("v39_gate05_science_exact_owned_actions_stop_retry5_v39.ts");
   const child=spawnSync(process.execPath,[
    "--import","tsx","scripts/v39_gate05_github_owner_controller_retry5_v39.ts"
   ],{encoding:"utf8",timeout:20000,
