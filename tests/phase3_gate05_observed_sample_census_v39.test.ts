@@ -111,6 +111,9 @@ describe("Gate05 source-item census, independent offline verification only",()=>
         airbornePointUtc:null,flightStage:"OTHER"})
     ]));
     expect(s.postStopReceivedItemCount).toBe(1);
+    expect(s.inWindowReceivedItemCount).toBe(0);
+    expect(s.rawBefore2xxItems).toBe(0);
+    expect(s.sourceQualifiedPhysicalFlights).toBe(0);
     expect(s.latestPostStopReceiptDelaySeconds).toBe(180);
     expect(s.observedDurationMinutes).toBe(60);
   });
