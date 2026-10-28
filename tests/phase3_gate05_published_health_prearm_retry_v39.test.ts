@@ -28,7 +28,8 @@ describe("Gate05 published receiver PRE-CREATE resilience, not billable data",()
    expect(result.git_head).toBe(sha);
    expect(f).toHaveBeenCalledTimes(3);
    expect(waits).toEqual([1500,3000]);
-   expect(f.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+   const calls=(f as unknown as {mock:{calls:Array<[unknown,RequestInit?]>}}).mock.calls;
+   expect(calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
  });
  it("recovers from two transient 5xx, never mutates provider",async()=>{
    const verbs:string[]=[];
