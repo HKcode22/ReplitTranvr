@@ -1,10 +1,18 @@
 import {readFileSync} from "node:fs";
+import {spawnSync} from "node:child_process";
 import {describe,it,expect} from "vitest";
 const audit=readFileSync(
   "scripts/v39_gate05_fresh_launch_readonly_20261028.mjs","utf8");
 const health=readFileSync(
   "server/lib/disruption/workspaceRuntimeHealth_v39.ts","utf8");
 describe("Gate05 one-shell source-pinned live readiness is free and fail-closed",()=>{
+  it("is valid native node ESM to run via git show | node --input-type=module",()=>{
+    const c=spawnSync(process.execPath,[
+      "--check","scripts/v39_gate05_fresh_launch_readonly_20261028.mjs"
+    ],{encoding:"utf8",timeout:10000});
+    expect(c.error).toBeUndefined();
+    expect(c.status).toBe(0);
+  });
   it("only uses read-only SQL and public published identity/zero-provider DB proof",()=>{
     expect(audit).toContain('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     expect(audit).toContain("default_transaction_read_only=on");
