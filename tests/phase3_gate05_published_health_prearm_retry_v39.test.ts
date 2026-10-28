@@ -65,6 +65,18 @@ describe("Gate05 published receiver PRE-CREATE resilience, not billable data",()
         sleepImpl:async()=>{}})).rejects.toThrow("SOURCE_OR_ADMISSION_UNVERIFIED");
    }
  });
+ it("survives five transient free GET outages and verifies sixth strict response",async()=>{
+    const errors=Array.from({length:5},()=>Error("timeout"));
+    const f=mock([...errors,response(good)]);
+    const waits:number[]=[];
+    await expect(read({url,expectedReceiver:sha,maxAttempts:6,
+       fetchImpl:f,sleepImpl:async ms=>{waits.push(ms);}})).resolves
+       .toMatchObject({git_head:sha});
+    expect(f).toHaveBeenCalledTimes(6);
+    expect(waits).toEqual([1500,3000,3000,3000,3000]);
+    // 6*20s + 13.5s bounded pauses = 133.5s, < the 5min T-10 to T-5 gate.
+    expect(6*20000+waits.reduce((a,b)=>a+b,0)).toBeLessThan(5*60000);
+ });
  it("enforces a bounded 20-second physical timeout and exact endpoint",async()=>{
    const f=mock([response(good)]);
    await expect(read({url,expectedReceiver:sha,timeoutMs:21000,fetchImpl:f}))
