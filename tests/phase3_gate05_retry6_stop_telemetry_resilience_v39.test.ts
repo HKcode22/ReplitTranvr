@@ -68,5 +68,6 @@ describe("Future Gate05 exact-owned STOP has bounded missing control telemetry",
   // Invalid CLI is rejected even before the in-process safety logger runs;
   // Node may exit 1 (uncaught CLI validation), or 2 (caught hold).
   expect(p.status).not.toBe(0);
+  expect(p.stderr).toContain("GATE05_SCIENCE_STOP_BAD_CLI");
  });
 });
