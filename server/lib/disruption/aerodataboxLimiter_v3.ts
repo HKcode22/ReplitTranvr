@@ -223,6 +223,49 @@ export async function getBalanceEvidenceStrict(): Promise<StrictBalanceEvidence>
   };
 }
 
+/**
+ * Strict FREE account-balance GET recovery for prospective Gate05 preflight.
+ * Unlike provider CREATE, this read-only request is safe to retry after a
+ * transport timeout; every attempt independently obtains a NEW complete
+ * balance + quota response. Never substitute a cached/partial balance.
+ *
+ * Retry ONLY transport failures or server HTTP 5xx. Bad credentials,
+ * malformed quota headers, and conflicting account state always fail closed.
+ * Bounded to 1..3 attempts and 2/3s inter-attempt pauses.
+ */
+export async function getBalanceEvidenceStrictWithRetry(
+  opts?: {
+    maxAttempts?: number;
+    sleepImpl?: (ms: number) => Promise<void>;
+    readImpl?: () => Promise<StrictBalanceEvidence>;
+  },
+): Promise<StrictBalanceEvidence> {
+  const maxAttempts = opts?.maxAttempts ?? 3;
+  const wait = opts?.sleepImpl ?? sleep;
+  const read = opts?.readImpl ?? getBalanceEvidenceStrict;
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3) {
+    throw new Error("BALANCE_GET_RETRY_ATTEMPTS_INVALID");
+  }
+  let last: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await read();
+    } catch (error) {
+      last = error;
+      const msg = error instanceof Error ? error.message : "";
+      const recoverable = msg === "BALANCE_UNAVAILABLE: transport failure" ||
+        /^BALANCE_UNAVAILABLE: HTTP 5\\d\\d$/.test(msg);
+      if (!recoverable || attempt === maxAttempts) break;
+      // No secret/URL/response body logged; never retry any paid POST.
+      console.warn("[adb-v3] free strict balance read unavailable; bounded read-only retry " +
+        attempt + "/" + (maxAttempts - 1));
+      await wait(attempt === 1 ? 2000 : 3000);
+    }
+  }
+  throw last instanceof Error ? last :
+    new Error("BALANCE_UNAVAILABLE_AFTER_READ_ONLY_RETRIES");
+}
+
 /** Gate/accounting reader: strict balance-only compatibility wrapper. */
 export async function getBalanceStrict(): Promise<SubscriptionBalance> {
   return (await getBalanceEvidenceStrict()).balance;
