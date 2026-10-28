@@ -133,8 +133,8 @@ export async function recommissionGate05AfterFifthUnbilledWatchV39(
     previousController?.run_attempt!==1||
     previousController?.event!=="workflow_dispatch"||
     previousController?.head_sha!==PRIOR_SOURCE||
-    !["completed","in_progress"].includes(priorRun?.status)||
-    (priorRun.status==="completed"&&!["success","failure"].includes(priorRun.conclusion))||
+    priorRun?.status!=="completed"||
+    priorRun?.conclusion!=="cancelled"||
     priorRun?.run_attempt!==1||
     priorRun?.event!=="workflow_dispatch"||
     priorRun?.head_sha!==PRIOR_SOURCE||
@@ -145,7 +145,9 @@ export async function recommissionGate05AfterFifthUnbilledWatchV39(
  // owner is retired; it will observe FAILED and exit without owning a POST.
  const lastStartMs=Date.parse("2026-10-28T09:35:00.000Z");
  if(!Number.isFinite(Date.parse(previousController?.updated_at))||
-    Date.parse(previousController.updated_at)>=lastStartMs)
+    !Number.isFinite(Date.parse(priorRun?.updated_at))||
+    Date.parse(previousController.updated_at)>=lastStartMs||
+    Date.parse(priorRun.updated_at)>=lastStartMs)
    hold("RETRY5_PREVIOUS_CONTROLLER_NOT_TERMINAL_BEFORE_CREATE");
  // Require original signed commission, issue intent absence, and verified
  // zero-provider account/owner status; an invoked operator is NOT a POST.
@@ -164,14 +166,15 @@ export async function recommissionGate05AfterFifthUnbilledWatchV39(
    '"status":"GATE05_GITHUB_CONTROLLER_HELD_DO_NOT_RERUN"');
  const paidFailure=jsonLog(PRIOR_CONTROLLER_RUN,
    '"status":"GATE05_ONE_PAID_CREATE_OR_BIND_UNCONFIRMED"');
- // Prior STOP was really armed. Its old, unbilled PREPARED/null owner will
- // be atomically closed only after independent provider and DB reconciliation.
- // If still running, it observes FAILED and exits before new paid start.
+ // Previous STOP was independently ARMED, then cancelled at 09:33:37Z
+ // before the only permitted 09:35Z provider CREATE. The controller
+ // terminated at 09:26Z with providerCreateWasAttempted=false. Confirm
+ // fresh balance, zero active and exact logged PREPARED/null before closing.
  const commentsRaw=gh(["api","--paginate",
    `repos/${REPO}/issues/173/comments?per_page=100`,
    "--jq",".[] | {body,created_at,user:{login:.user.login}}"]);
  let issueComments:any[];
- try{issueComments=commentsRaw.split("\\n").filter(Boolean).map(JSON.parse);}
+ try{issueComments=commentsRaw.split("\n").filter(Boolean).map(JSON.parse);}
  catch{hold("RETRY5_ISSUE_INTENT_HISTORY_INCOMPLETE");}
  if(issueComments.length===0||issueComments.length>2000)
    hold("RETRY5_ISSUE_INTENT_HISTORY_INCOMPLETE");
