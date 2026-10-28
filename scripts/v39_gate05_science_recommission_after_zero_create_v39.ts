@@ -57,7 +57,9 @@ export function gate05SciencePlanWindowV39(nowMs:number):{
   start:string;stop:string;sessionExpires:string
 }{
  if(!Number.isSafeInteger(nowMs))hold("CLOCK");
- const start=Math.ceil((nowMs+45*60000)/(15*60000))*(15*60000);
+ // GHA owner+STOP protected jobs launch concurrently and wait on GH-hosted
+ // clocks. 30m lead preserves at least 12m for independent approvals and CI.
+ const start=Math.ceil((nowMs+30*60000)/(15*60000))*(15*60000);
  return {
    start:new Date(start).toISOString(),
    stop:new Date(start+60*60000).toISOString(),
