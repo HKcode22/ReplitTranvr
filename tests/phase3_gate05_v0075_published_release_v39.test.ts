@@ -18,6 +18,13 @@ describe("Gate05 no-paid source-pinned V0075 published receiver release",()=>{
     expect(build).toContain('git merge-base --is-ancestor "$PIN" HEAD');
     expect(build).toContain('V39_BUILD_GIT_HEAD="$PIN" npm run build');
     expect(build).toContain("--verify-only");
+    const replit=readFileSync(".replit","utf8");
+    expect(replit).toContain('"V39_GATE05_DURABLE_CUSTODY_REQUIRED=1"');
+    expect(build).toContain('git show "$PIN:.replit"');
+    expect(build).toContain('cmp -s - .replit');
+    expect(build).toContain('edits!=1');
+    expect(build).toContain("OLD_RUN=");
+    expect(build).toContain("NEW_RUN=");
     expect(build).not.toContain("PIN=1885703c04ba8f24bf8d1183f873eb86d1f83d7c");
   });
   it("keeps minimal runtime INSERT rights and guarded immutable metadata only",()=>{
