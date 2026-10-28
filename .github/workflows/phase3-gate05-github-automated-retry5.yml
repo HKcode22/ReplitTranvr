@@ -26,7 +26,13 @@ concurrency:
 
 jobs:
   github-owner-once:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'RUN_ALREADY_APPROVED_WSSS_ONCE_GITHUB_AUTOMATED' }}
+    # PERMANENTLY RETIRED 2026-10-28: original one-use paid CREATE happened
+    # in run #40667765747; independent exact DELETE and the old owner
+    # STOPPED were verified by #40678304918. A fresh workflow_dispatch
+    # MUST NOT re-use that consumed 500 Alert / 12 REST authorization.
+    # Keep this job definition to preserve history, but skip ALL steps.
+    # A separate approved new-scope controller is required in the future.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     # Existing reviewer-protected PAID environment; approval may be granted
