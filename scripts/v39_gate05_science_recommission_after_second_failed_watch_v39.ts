@@ -20,7 +20,7 @@ import "dotenv/config";
 import pg from "pg";
 import {randomUUID,randomBytes,createHash,createHmac} from "node:crypto";
 import {existsSync,mkdirSync,openSync,writeSync,fsyncSync,closeSync,
-  statSync,readFileSync} from "node:fs";
+  statSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {execFileSync,spawnSync} from "node:child_process";
@@ -425,7 +425,7 @@ export async function recommissionGate05AfterSecondUnbilledWatchV39(
    noRetryOnPartial:true
  }));
 }
-if(process.argv[1]?.endsWith("v39_gate05_science_recommission_after_zero_create_v39.ts")){
+if(process.argv[1]?.endsWith("v39_gate05_science_recommission_after_second_failed_watch_v39.ts")){
  const a=process.argv.slice(2);
  if(a.length!==4||a[0]!=="--head"||a[2]!=="--confirm"){
    console.error("GATE05_COMMISSION_HOLD_CLI");process.exitCode=2;
