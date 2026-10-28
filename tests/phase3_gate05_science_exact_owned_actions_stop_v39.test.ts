@@ -30,9 +30,9 @@ function valid(){
     GATE05_SAFETY_APPROVED_LIMIT:"500",
     GATE05_SAFETY_APPROVED_EARLY_STOP:"350",
     GATE05_SAFETY_APPROVED_REST_LIMIT:"12",
-    GATE05_SAFETY_DATABASE_URL:
+    GATE05_SCIENCE_SAFETY_DATABASE_URL:
       "postgresql://gate05_science_safety_reader_ci012345:pw@db.example.com/neondb?sslmode=verify-full",
-    GATE05_SAFETY_EXPECTED_DB_HOST:"db.example.com",
+    GATE05_SCIENCE_SAFETY_EXPECTED_DB_HOST:"db.example.com",
     AERODATABOX_API_KEY:"synthetic-not-a-provider-key"
   };
   return {p,env,now};
@@ -69,10 +69,10 @@ describe("Gate05 independent 60m exact-owned science DELETE worker",()=>{
     env.GATE05_SAFETY_APPROVED_STARTING_CREDITS="499";
     expect(()=>validateGate05ScienceStopPinsV39(p,env,now)).toThrow();
     p.startingCredits=1981;env.GATE05_SAFETY_APPROVED_STARTING_CREDITS="1981";
-    env.GATE05_SAFETY_DATABASE_URL=
+    env.GATE05_SCIENCE_SAFETY_DATABASE_URL=
       "postgresql://neondb_owner:pw@db.example.com/neondb?sslmode=verify-full";
     expect(()=>validateGate05ScienceStopPinsV39(p,env,now)).toThrow();
-    env.GATE05_SAFETY_DATABASE_URL=
+    env.GATE05_SCIENCE_SAFETY_DATABASE_URL=
       "postgresql://gate05_science_safety_reader_ci012345:pw@db.example.com/neondb?sslmode=verify-full";
     env.GITHUB_ACTIONS="false";
     expect(()=>validateGate05ScienceStopPinsV39(p,env,now)).toThrow();
@@ -95,7 +95,7 @@ describe("Gate05 independent 60m exact-owned science DELETE worker",()=>{
     expect(yml).not.toContain("schedule:");
     expect(yml).not.toContain("push:");
     expect(yml).not.toContain("RUN_CREATE");
-    expect(yml).toContain("GATE05_SAFETY_DATABASE_URL:");
+    expect(yml).toContain("GATE05_SCIENCE_SAFETY_DATABASE_URL:");
     expect(yml).toContain("AERODATABOX_API_KEY:");
   });
 });
