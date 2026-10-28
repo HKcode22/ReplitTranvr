@@ -78,6 +78,36 @@ const HASH="b".repeat(64);
    expect(Object.fromEntries(persistence.rows.map(x=>[x.relname,x.relpersistence])))
      .toMatchObject({gate05_science_delivery_custody_v39:"p",
        prepaid_probe_item_runtime:"u"});
+   // A published receiver has only INSERT on this new table. The immutable
+   // trigger's ref/owner lookups must run under the reviewed DDL owner,
+   // not require broad SELECT privileges for the low-privilege runtime.
+   const restricted="g05_ci_"+randomUUID().replaceAll("-","").slice(0,18);
+   const limitedBlob=randomUUID();
+   const limitedDelivery="ppd_"+"d".repeat(64);
+   await addRef(limitedBlob,"prepaid:"+scope+":"+limitedDelivery);
+   await db.query('CREATE ROLE "'+restricted+'" NOLOGIN');
+   await db.query('GRANT USAGE ON SCHEMA clean TO "'+restricted+'"');
+   await db.query('GRANT INSERT ON clean.gate05_science_delivery_custody_v39 TO "'+restricted+'"');
+   expect((await db.query(
+     "SELECT has_table_privilege($1,"+
+     "'clean.phase3_gate05_science_owner_v39','SELECT') AS owner_read,"+
+     "has_table_privilege($1,"+
+     "'clean.provider_content_blob_ref','SELECT') AS raw_ref_read",
+     [restricted])).rows[0]).toMatchObject({
+       owner_read:false,raw_ref_read:false
+     });
+   await db.query('SET LOCAL ROLE "'+restricted+'"');
+   try {
+     await db.query(insert,[scope,limitedDelivery,limitedBlob,HASH,1]);
+   }finally{
+     await db.query("RESET ROLE");
+   }
+   const limited=(await db.query(
+     "SELECT item_count FROM clean.gate05_science_delivery_custody_v39 "+
+     "WHERE session_id=$1 AND delivery_id=$2",
+     [scope,limitedDelivery])).rows;
+   expect(limited).toHaveLength(1);
+   expect(limited[0].item_count).toBe(1);
    await db.query("SAVEPOINT immutability");
    await expect(db.query(
      "UPDATE clean.gate05_science_delivery_custody_v39 SET item_count=99 "+
