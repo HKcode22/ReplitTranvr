@@ -57,6 +57,16 @@ describe("Gate05 no-paid source-pinned V0075 published receiver release",()=>{
     expect(install).not.toContain("GRANT DELETE");
     expect(install).toContain("has_table_privilege");
     expect(install).toContain("aclexplode");
+    // Live default ACLs can grant UPDATE/DELETE through inherited roles.
+    // Strip those only from the NEW table's explicit non-owner grantees.
+    expect(install).toContain("SELECT DISTINCT recipient.rolname AS grantee_role");
+    expect(install).toContain("acl.grantee<>c.relowner");
+    expect(install).toContain("acl.privilege_type IN ('UPDATE','DELETE')");
+    expect(install).toContain("REVOKE UPDATE, DELETE ON TABLE ");
+    expect(install).toContain('String(recipient.grantee_role).replaceAll');
+    expect(install).toContain('fail("RUNTIME_MINIMAL_PERMISSION_CHECK")');
+    expect(install).not.toContain('await db.query("ALTER DEFAULT PRIVILEGES');
+
   });
   it("blocks production migration without explicit source pin + consent + immutable historical state",()=>{
     for(const s of [
