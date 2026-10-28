@@ -10,6 +10,8 @@
  */
 import "dotenv/config";
 import pg from "pg";
+import {createHmac,randomUUID} from "node:crypto";
+import {restoreExactGate05PreparedCallbackAfterRestartV39} from "../server/lib/disruption/gate05PreparedCallbackRestartRecovery_v39";
 import {join} from "node:path";
 import {homedir} from "node:os";
 import {existsSync,readFileSync,openSync,writeSync,fsyncSync,closeSync,statSync} from "node:fs";
@@ -180,15 +182,70 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
    if(initial.rowCount!==1||!exactOwner(o,m)||
       o.state!=="PREPARED"||o.provider_subscription_id!==null)
      hold("LOGGED_OWNER_NOT_PREPARED");
-   const session=await db.query(
+   let session=await db.query(
      `SELECT state,owner_kind,icao,provider_subscription_id,expires_at_utc
       FROM clean.prepaid_probe_session_runtime WHERE session_id=$1::uuid`,
      [m.scope]);
+   if(session.rowCount===0){
+     // After a PostgreSQL crash/restart, PREPAID runtime is UNLOGGED.
+     // First authenticate the independently ARMED exact STOP, zero active
+     // provider subscriptions, unchanged balance, and published DB HMAC.
+     // Never mint a new scope or recreate a PAID/ACTIVE session.
+     liveSafety(input.stopRun,m,head);
+     const beforeRearm=await getBalanceEvidenceStrict();
+     const inventory=await listSubscriptionsStrict();
+     if(beforeRearm.balance.creditsRemaining!==m.startingCredits||
+        beforeRearm.quota.apiUnitsRemaining<12||
+        inventory.some(x=>x.isActive))
+       hold("NO_PAID_CALLBACK_RECOVERY_ACCOUNT_NOT_STABLE");
+     const runtime=process.env.V39_DATABASE_RUNTIME_URL;
+     if(!runtime)hold("NO_PAID_CALLBACK_RECOVERY_RUNTIME_DB_SECRET_MISSING");
+     const challenge="gate05-recovery-"+randomUUID();
+     const proof=createHmac("sha256",runtime)
+       .update("phase2g-db-binding:"+challenge).digest("hex");
+     const binding=await fetch(PUB+"/__v39/phase2g/runtime-db-binding",{
+       method:"POST",redirect:"error",
+       headers:{"x-v39-phase2g-db-challenge":challenge,
+         "x-v39-phase2g-db-proof":proof},
+       signal:AbortSignal.timeout(8000)
+     });
+     if(binding.status!==200)hold("NO_PAID_CALLBACK_RECOVERY_PUBLISHED_DB_NOT_PROVEN");
+     const attestation=await binding.json();
+     if(attestation?.schema!=="v39.phase2g-runtime-db-binding.v1"||
+        attestation.status!=="PASS"||
+        attestation.provider_call!==false||
+        attestation.provider_mutation!==false||
+        attestation.database_mutation!==false||
+        Number(attestation.alert_credits_spent)!==0)
+       hold("NO_PAID_CALLBACK_RECOVERY_RUNTIME_DB_ATTESTATION");
+     const repaired=await restoreExactGate05PreparedCallbackAfterRestartV39(
+       db,{
+         sessionId:m.scope,receiverSource:m.receiver,
+         authorizationSha256:m.authorizationSha256,
+         stopTicketSha256:m.stopTicketSha256,
+         startAtUtc:m.startUtc,stopAtUtc:m.stopUtc,
+         expiresAtUtc:m.sessionExpiresUtc
+       },{
+         providerAccountHasNoActiveSubscriptions:true,
+         providerBalanceUnchanged:true,
+         exactSafetyStopRunningAndAuthenticated:true,
+         noPreviousPaidCreateIntent:true,
+         publishedRuntimeDbAndSecretAuthenticated:true
+       }
+     );
+     console.log(JSON.stringify(repaired));
+     session=await db.query(
+       `SELECT state,owner_kind,icao,provider_subscription_id,expires_at_utc
+        FROM clean.prepaid_probe_session_runtime WHERE session_id=$1::uuid`,
+       [m.scope]);
+   }
    if(session.rowCount!==1||
       session.rows[0].state!=="armed"||
       session.rows[0].owner_kind!=="phase3_gate05_science"||
       session.rows[0].icao!=="WSSS"||
-      session.rows[0].provider_subscription_id!==null)
+      session.rows[0].provider_subscription_id!==null||
+      new Date(session.rows[0].expires_at_utc).toISOString()!==
+        m.sessionExpiresUtc)
      hold("PREPAID_NEW_CALLBACK_SESSION_NOT_ARMED");
    liveSafety(input.stopRun,m,head);
    const before=await getBalanceEvidenceStrict();
@@ -202,6 +259,18 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
    if(!gate05MayCreateInTimeV39(Date.now(),start,stop))
      hold("PAID_START_WINDOW_INVALID");
    liveSafety(input.stopRun,m,head);
+   // Prevent billable CREATE if Neon cleared UNLOGGED identity again
+   // between preflight and the frozen start. Never rearm after paid intent.
+   const lastCallback=await db.query(
+      `SELECT state,owner_kind,icao,provider_subscription_id,expires_at_utc
+         FROM clean.prepaid_probe_session_runtime
+        WHERE session_id=$1::uuid`,[m.scope]);
+   const last=lastCallback.rows[0];
+   if(lastCallback.rowCount!==1||last.state!=="armed"||
+      last.owner_kind!=="phase3_gate05_science"||last.icao!=="WSSS"||
+      last.provider_subscription_id!==null||
+      new Date(last.expires_at_utc).toISOString()!==m.sessionExpiresUtc)
+     hold("LAST_MOMENT_CALLBACK_ROW_LOST_BEFORE_CREATE");
    const fresh=await getBalanceEvidenceStrict();
    const subs=await listSubscriptionsStrict();
    if(fresh.balance.creditsRemaining!==m.startingCredits||

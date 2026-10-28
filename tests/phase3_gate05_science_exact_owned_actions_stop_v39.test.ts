@@ -79,8 +79,8 @@ describe("Gate05 independent 60m exact-owned science DELETE worker",()=>{
   });
   it("does not contain subscription CREATE/refill and deletes only an exact LOGGED ID",()=>{
     expect(source).toContain("deleteSubscriptionVerifiedStrict(knownExactId");
-    expect(source).toContain("authorization_sha256===p.authorization");
-    expect(source).toContain("reviewed_stop_ticket_sha256===p.ticket");
+    expect(source).toContain("authorization_sha256!==p.authorization");
+    expect(source).toContain("reviewed_stop_ticket_sha256!==p.ticket");
     expect(source).toContain('FROM clean.phase3_gate05_science_owner_v39 WHERE session_id=$1::uuid');
     expect(source).not.toContain("createGate4SingleWithRawReceiptV39");
     expect(source).not.toContain("createSubscription(");
