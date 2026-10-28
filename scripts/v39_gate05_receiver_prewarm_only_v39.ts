@@ -24,8 +24,9 @@ export async function prewarmGate05ReceiverV39(options:{
  if(now()>start+60000)hold("ALREADY_EXPIRED");
  const target=start-15*60000;
  while(now()<target)await wait(Math.min(3000,target-now()));
- // Do not let the optional prewarm intrude on the mandatory T-10 ARM.
- if(now()>=start-10*60000){
+ // Reserve a full minute before mandatory T-10: optional prewarm must never
+ // delay exact independent ARM even after two 20s receiver timeouts.
+ if(now()>=start-11*60000){
    console.log("GATE05_PREWARM_SKIPPED_SAFE_MANDATORY_ARM_NEXT");
    return "SKIPPED";
  }
