@@ -1,0 +1,70 @@
+name: Gate05 V0075 Live Receiver + Neon — Automatic Read-Only Attestation
+
+# The owner already published the reviewed receiver. Automate remote proof
+# from GitHub; no owner Replit Shell timing, no provider credentials or spend.
+# Push runs only on reviewed verification changes merged into main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase3-gate05-v0075-live-readonly.yml"
+      - "scripts/v39_gate05_v0075_published_live_readonly_20261028.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate05-v0075-live-published-readonly
+  cancel-in-progress: false
+
+jobs:
+  verify-source-database-and-journal:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: phase2g-paid
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact reviewed source, no persistent GitHub credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked runtime dependencies without lifecycle scripts
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Check live published identity, HMAC DB parity, and immutable LOGGED journal READ ONLY
+        shell: bash
+        env:
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          AERODATABOX_API_KEY: ""
+          RAPIDAPI_KEY: ""
+          GH_TOKEN: ""
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test -n "${V39_DATABASE_RUNTIME_URL:-}"
+          test -z "${AERODATABOX_API_KEY}"
+          test -z "${RAPIDAPI_KEY}"
+          test -z "${GH_TOKEN}"
+          node --check scripts/v39_gate05_v0075_published_live_readonly_20261028.mjs
+          node scripts/v39_gate05_v0075_published_live_readonly_20261028.mjs
+      - name: Record the scientific and provider-spend boundary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Gate05 V0075 published receiver + live Neon attestation (read-only)"
+            echo "This is an automated free identity/HMAC SELECT check; it does not create paid subscriptions."
+            echo "Zero AeroDataBox GET/POST, Alert CREATE/DELETE, refill, database mutation or Replit publication."
+            echo "A PASS verifies published source, custody opt-in, hosted DB parity, LOGGED table and least privileges."
+            echo "It does NOT prove raw delivery, provider billing, scientific actual-vs-estimated labels or section-16 sample adequacy."
+            echo "Do not replay old paid retry5 workflows or rerun one-use V0075 migration."
+          } >> "${GITHUB_STEP_SUMMARY}"
