@@ -12,9 +12,16 @@ export const P4_G5_SOURCE_TIMING_SQL_V39=[
  "WHERE population_query_id=ANY($1::uuid[]) AND source_airport_icao=$2",
  "AND available_at<=$3::timestamptz",
  "AND raw_payload IS NOT NULL AND raw_expired_at_utc IS NULL),",
- "p AS (SELECT p.*,q.available_at AS receipt_available,q.response_hash AS receipt_hash",
+ "p AS (SELECT p.*,q.available_at AS receipt_available,q.response_hash AS receipt_hash,",
+ "GREATEST(p.available_at,q.available_at) AS effective_source_available,",
+ "(p.response_hash=q.response_hash AND",
+ "p.available_at<=$3::timestamptz AND q.available_at<=$3::timestamptz",
+ "AND (p.available_at>=q.available_at OR",
+ "(p.available_at<q.available_at AND",
+ "q.available_at-p.available_at<interval '1 millisecond'))) AS precision_compatible",
  "FROM clean.flight_population p JOIN q ON q.population_query_id=p.population_query_id",
- "WHERE p.source_type='fids' AND p.source_airport_icao=$2)",
+ "WHERE p.source_type='fids' AND p.source_airport_icao=$2",
+ "AND p.provider_content_expired_at_utc IS NULL)",
  "SELECT count(*)::int AS observations,",
  "count(*) FILTER (WHERE p.population_role='requested_airport_primary')::int AS primary_rows,",
  "count(*) FILTER (WHERE p.population_role='opposite_movement_context')::int AS context_rows,",
@@ -36,6 +43,9 @@ export const P4_G5_SOURCE_TIMING_SQL_V39=[
  "AND p.receipt_available-p.available_at>interval '1 minute')::int AS before_receipt_over_1m,",
  "count(*) FILTER (WHERE p.response_hash=p.receipt_hash AND",
  "p.available_at>=p.receipt_available AND p.available_at<=$3::timestamptz)::int AS consistent_source_rows,",
+ "count(*) FILTER (WHERE p.precision_compatible)::int AS precision_reconciled_rows,",
+ "count(*) FILTER (WHERE p.precision_compatible",
+ "AND p.available_at<p.receipt_available)::int AS precision_adjusted_rows,",
  "count(*) FILTER (WHERE p.dep_scheduled_utc IS NOT NULL",
  "AND p.available_at<=p.dep_scheduled_utc - interval '24 hours'",
  "AND p.receipt_available<=p.dep_scheduled_utc - interval '24 hours')::int AS before_24h,",
@@ -60,6 +70,15 @@ export const P4_G5_SOURCE_TIMING_SQL_V39=[
  "AND p.available_at<=$3::timestamptz",
  "AND p.receipt_available<=p.dep_scheduled_utc - interval '90 minutes'",
  "AND p.available_at<=p.dep_scheduled_utc - interval '90 minutes')::int AS safe_before_90m,",
+ "count(*) FILTER (WHERE p.precision_compatible",
+ "AND p.dep_scheduled_utc IS NOT NULL",
+ "AND p.effective_source_available<=p.dep_scheduled_utc - interval '24 hours')::int AS precision_before_24h,",
+ "count(*) FILTER (WHERE p.precision_compatible",
+ "AND p.dep_scheduled_utc IS NOT NULL",
+ "AND p.effective_source_available<=p.dep_scheduled_utc - interval '6 hours')::int AS precision_before_6h,",
+ "count(*) FILTER (WHERE p.precision_compatible",
+ "AND p.dep_scheduled_utc IS NOT NULL",
+ "AND p.effective_source_available<=p.dep_scheduled_utc - interval '90 minutes')::int AS precision_before_90m,",
  "count(*) FILTER (WHERE p.dep_scheduled_utc IS NOT NULL",
  "AND p.available_at>p.dep_scheduled_utc)::int AS after_candidate_schedule,",
  "count(*) FILTER (WHERE p.population_role='requested_airport_primary'",
@@ -156,6 +175,9 @@ export async function auditP4Gate5SourceCutoffsV39(
   missingCandidateScheduleRows:null,
   sourceHashOrAvailabilityViolations:null,
   sourceIntegrityBreakdown:null,
+  precisionReconciledSourceRows:null,
+  precisionAdjustedTimestampRows:null,
+  precisionReconciledCandidateTiming:{"T-24h":null,"T-6h":null,"T-90m":null},
   beforeCandidateScheduleWithSourceIntegrity:{"T-24h":null,"T-6h":null,"T-90m":null},
   beforeCandidateSchedule:{"T-24h":null,"T-6h":null,"T-90m":null},
   sourceRowsAfterCandidateSchedule:null,
@@ -171,6 +193,8 @@ export async function auditP4Gate5SourceCutoffsV39(
   "before_receipt_under_1s","before_receipt_under_1ms",
   "before_receipt_1ms_to_1s","before_receipt_1s_to_1m",
   "before_receipt_over_1m","consistent_source_rows",
+  "precision_reconciled_rows","precision_adjusted_rows",
+  "precision_before_24h","precision_before_6h","precision_before_90m",
   "safe_before_24h","safe_before_6h","safe_before_90m",
   "before_24h","before_6h",
   "before_90m","after_candidate_schedule","confirmed_core_operating_records"];
@@ -186,6 +210,15 @@ export async function auditP4Gate5SourceCutoffsV39(
   vals.safe_before_24h>vals.safe_before_6h||
   vals.safe_before_6h>vals.safe_before_90m||
   vals.safe_before_90m>vals.consistent_source_rows||
+  vals.precision_adjusted_rows>vals.before_receipt_under_1ms||
+  vals.precision_adjusted_rows>vals.precision_reconciled_rows||
+  vals.precision_reconciled_rows>vals.observations||
+  vals.precision_before_24h>vals.precision_before_6h||
+  vals.precision_before_6h>vals.precision_before_90m||
+  vals.precision_before_90m>vals.precision_reconciled_rows||
+  vals.precision_before_24h>vals.before_24h||
+  vals.precision_before_6h>vals.before_6h||
+  vals.precision_before_90m>vals.before_90m||
   vals.safe_before_24h>vals.before_24h||
   vals.safe_before_6h>vals.before_6h||
   vals.safe_before_90m>vals.before_90m||
@@ -225,6 +258,13 @@ export async function auditP4Gate5SourceCutoffsV39(
   contextRows:vals.context_rows,missingCandidateScheduleRows:vals.no_schedule,
   sourceHashOrAvailabilityViolations:vals.hash_mismatch+
    vals.available_before_receipt+vals.available_after_audit,
+  precisionReconciledSourceRows:vals.precision_reconciled_rows,
+  precisionAdjustedTimestampRows:vals.precision_adjusted_rows,
+  precisionReconciledCandidateTiming:{
+   "T-24h":vals.precision_before_24h,
+   "T-6h":vals.precision_before_6h,
+   "T-90m":vals.precision_before_90m
+  },
   sourceIntegrityBreakdown:{
    responseHashMismatchRows:vals.hash_mismatch,
    memberAvailableBeforeReceiptRows:vals.available_before_receipt,

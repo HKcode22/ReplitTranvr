@@ -15,6 +15,8 @@ const timing={
  before_receipt_1ms_to_1s:0,before_receipt_1s_to_1m:0,
  before_receipt_over_1m:0,consistent_source_rows:31,
  safe_before_24h:0,safe_before_6h:5,safe_before_90m:20,
+ precision_reconciled_rows:31,precision_adjusted_rows:0,
+ precision_before_24h:0,precision_before_6h:5,precision_before_90m:20,
  before_24h:0,before_6h:5,before_90m:20,
  after_candidate_schedule:0,confirmed_core_operating_records:0
 };
@@ -56,6 +58,11 @@ describe("Phase4 Gate5 actual retained source cutoff+PRE snapshot evidence",()=>
   expect(r.confirmedCoreOperatingRows).toBe(0);
   expect(r.sourceIntegrityBreakdown?.responseHashMismatchRows).toBe(0);
   expect(r.sourceIntegrityBreakdown?.sourceConsistentRows).toBe(31);
+  expect(r.precisionReconciledSourceRows).toBe(31);
+  expect(r.precisionAdjustedTimestampRows).toBe(0);
+  expect(r.precisionReconciledCandidateTiming).toEqual({
+   "T-24h":0,"T-6h":5,"T-90m":20
+  });
   expect(r.beforeCandidateScheduleWithSourceIntegrity).toEqual({
    "T-24h":0,"T-6h":5,"T-90m":20
   });
@@ -81,6 +88,8 @@ describe("Phase4 Gate5 actual retained source cutoff+PRE snapshot evidence",()=>
   expect(r.beforeCandidateSchedule["T-24h"]).toBeNull();
   expect(r.beforeCandidateScheduleWithSourceIntegrity["T-6h"]).toBeNull();
   expect(r.sourceIntegrityBreakdown).toBeNull();
+  expect(r.precisionReconciledSourceRows).toBeNull();
+  expect(r.precisionReconciledCandidateTiming["T-6h"]).toBeNull();
   expect(r.observedSnapshots).toBeNull();
  });
  it("expired original cannot enter source cohort",async()=>{
@@ -116,6 +125,8 @@ describe("Phase4 Gate5 actual retained source cutoff+PRE snapshot evidence",()=>
    before_receipt_1s_to_1m:0,
    before_receipt_over_1m:0,
    consistent_source_rows:0,
+   precision_reconciled_rows:31,precision_adjusted_rows:31,
+   precision_before_24h:0,precision_before_6h:5,precision_before_90m:20,
    safe_before_24h:0,safe_before_6h:0,safe_before_90m:0}});
   const x=await auditP4Gate5SourceCutoffsV39(db,scope);
   expect(x.sourceIntegrityBreakdown).toMatchObject({
@@ -128,12 +139,28 @@ describe("Phase4 Gate5 actual retained source cutoff+PRE snapshot evidence",()=>
   });
   expect(x.beforeCandidateSchedule["T-6h"]).toBe(5);
   expect(x.beforeCandidateScheduleWithSourceIntegrity["T-6h"]).toBe(0);
+  expect(x.precisionAdjustedTimestampRows).toBe(31);
+  expect(x.precisionReconciledCandidateTiming["T-6h"]).toBe(5);
   expect(x.strictGate5Passed).toBe(false);
  });
  it("receipt drift buckets must account for every timestamp violation",async()=>{
   await expect(auditP4Gate5SourceCutoffsV39(fake({timing:{
    ...timing,available_before_receipt:31,before_receipt_under_1s:30
   }}).db,scope)).rejects.toThrow("P4_G5_IMPOSSIBLE_SOURCE_COUNTERS");
+ });
+ it("greater than 1 ms drift cannot be precision-reconciled",async()=>{
+  const {db}=fake({timing:{...timing,
+   available_before_receipt:10,before_receipt_under_1s:10,
+   before_receipt_under_1ms:0,before_receipt_1ms_to_1s:10,
+   consistent_source_rows:21,precision_reconciled_rows:21,
+   precision_adjusted_rows:10,precision_before_24h:0,
+   precision_before_6h:5,precision_before_90m:20}});
+  await expect(auditP4Gate5SourceCutoffsV39(db,scope))
+   .rejects.toThrow("P4_G5_IMPOSSIBLE_SOURCE_COUNTERS");
+ });
+ it("a later receipt clock must not be replaced by the member clock",()=>{
+  expect(P4_G5_SOURCE_TIMING_SQL_V39).toContain("p.effective_source_available<=p.dep_scheduled_utc");
+  expect(P4_G5_SOURCE_TIMING_SQL_V39).toContain("q.available_at-p.available_at<interval '1 millisecond'");
  });
  it("snapshot totals must not exceed horizon counts",async()=>{
   const {db}=fake({snapshots:[{...snap,strict_lineage_candidates:3}]});
@@ -153,6 +180,9 @@ describe("Phase4 Gate5 actual retained source cutoff+PRE snapshot evidence",()=>
    expect(sql).not.toMatch(/\b(UPDATE|DELETE|INSERT|CREATE|TRUNCATE|DROP)\b/i);
    expect(sql).toContain("clean.");
   }
+  expect(P4_G5_SOURCE_TIMING_SQL_V39).toContain("GREATEST(p.available_at,q.available_at)");
+  expect(P4_G5_SOURCE_TIMING_SQL_V39).toContain("interval '1 millisecond'");
+  expect(P4_G5_SOURCE_TIMING_SQL_V39).toContain("p.provider_content_expired_at_utc IS NULL");
   expect(P4_G5_SNAPSHOT_SQL_V39).toContain("p.available_at<=s.prediction_cutoff_utc");
   expect(P4_G5_SNAPSHOT_SQL_V39).toContain("s.source_available<=s.prediction_cutoff_utc");
  });
