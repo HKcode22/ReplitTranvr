@@ -105,9 +105,13 @@ try{
   const headers={"x-rapidapi-key":key,
     "x-rapidapi-host":"aerodatabox.p.rapidapi.com",
     accept:"application/json"};
+  let lastFreeAt=0;
   async function free(path){
     if(!["/subscriptions/balance","/subscriptions/webhook"].includes(path))
       hold("NON_FREE_PROVIDER_ROUTE");
+    const pause=Math.max(0,lastFreeAt+2600-Date.now());
+    if(lastFreeAt&&pause)await new Promise(resolve=>setTimeout(resolve,pause));
+    lastFreeAt=Date.now();
     const response=await fetch("https://aerodatabox.p.rapidapi.com"+path,{
       method:"GET",headers,redirect:"error",
       signal:AbortSignal.timeout(15000)});
@@ -128,8 +132,19 @@ try{
   const list=Array.isArray(inventory.body)?inventory.body:
     inventory.body?.subscriptions??inventory.body?.items;
   if(!Array.isArray(list)||
-     list.some(x=>typeof x?.isActive!=="boolean"||x.isActive))
+     list.length>500||list.some(x=>typeof x?.id!=="string"||
+       typeof x?.isActive!=="boolean"||x.isActive))
     hold("ACTIVE_OR_UNVERIFIED_PROVIDER_SUBSCRIPTIONS");
+  // A second free balance read proves the account was stable during
+  // inventory discovery and catches foreign/posted credit drift.
+  const settled=await free("/subscriptions/balance");
+  const settledCredits=settled.body?.balance?.creditsRemaining??
+    settled.body?.creditsRemaining;
+  const settledRawUnits=settled.headers.get("x-ratelimit-api-units-remaining");
+  const settledUnits=/^\d+$/.test(settledRawUnits??"")?
+    Number(settledRawUnits):NaN;
+  if(settledCredits!==credits||settledUnits!==units)
+    hold("ACCOUNT_CHANGED_BEFORE_COMMISSION");
   stage="READ_ONLY_OWNER_AND_V0075";
   db=new pg.Client({connectionString:admin,connectionTimeoutMillis:8000,
     query_timeout:12000,statement_timeout:15000,lock_timeout:3000,
