@@ -19,7 +19,8 @@ describe("Gate05 single manual commission -> independent retry6 STOP dispatch",(
     expect(commission).toContain('if(out?.state!=="PREPARED"');
     expect(commission).toContain('stage="PUBLISH_NON_SECRET_POSTCOMMIT_STOP_HANDOFF"');
     expect(commission).toContain("appendFileSync(outputFile");
-    expect(commission).toContain("Object.entries(handoff)");
+    expect(commission).toContain("gate05NonsecretStopOutputV39(handoff)");
+    expect(commission).toContain("GITHUB_OUTPUT_NOT_WRITABLE_PRECOMMIT");
     expect(commission.indexOf('stage="PUBLISH_NON_SECRET_POSTCOMMIT_STOP_HANDOFF"'))
       .toBeGreaterThan(commission.indexOf('stage="READ_AFTER_COMMIT"'));
     for(const field of [
