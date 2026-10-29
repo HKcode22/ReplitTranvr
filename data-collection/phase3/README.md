@@ -1,3 +1,15 @@
+## 2026-10-28 22:xx PDT — NEW WSSS Gate05 60-minute paid hour: OPERATIONAL PASS / original f.8 science NOT PASS
+
+**Latest authoritative checkpoint:** [151-item WSSS paid-hour qualified operational acceptance and strict f.8 boundary](2026-10-28_GATE05_FINAL_151_ITEM_OPERATIONAL_ACCEPTANCE_AND_SCIENCE_BOUNDARY.md). This supersedes the *live status* of earlier Oct28 retry5/commission notes below without rewriting their history.
+
+**Verified actual production:** [one-use paid controller #40809300136](https://github.com/HKcode22/ReplitTranvr/actions/runs/40809300136) SUCCESS; exact independent [retry6 STOP #40809393874](https://github.com/HKcode22/ReplitTranvr/actions/runs/40809393874) SUCCESS after original frozen 8:45–9:45 PM Pacific hour; one paid CREATE, no CREATE retry, provider exact ID INACTIVE; 151 Alert credits consumed. [Automatic FREE-only production V0074/V0075 audit #40821045269](https://github.com/HKcode22/ReplitTranvr/actions/runs/40821045269) SUCCESS: 28 LOGGED delivery receipts / **151 in-window notification items** (minimum 100 met), 0 source-reference metadata mismatch, 0 active subscriptions, two stable credit reads 1,830 remaining / 59,980 REST units. Old historical retry5 owner is separate, not reused.
+
+**Still OPEN:** New exact V0074 owner was `ACTIVE` in read-only DB postrun; requires **independently verified one-use DB-only STOPPED closeout**, not another paid run. Original dedicated source bytes **not** independently read/verified; UNLOGGED item/delivery rows both 0, so 50/20/30 operating flight counts, 100 usable points and P95 latency remain uncertified. The earlier T−24/T−6 FIDS candidate cohorts were not the identical 60m WSSS cohort. Provider actual-vs-estimated runway semantics and scheduled wheels-off definition remain blocked in [issue #200](https://github.com/HKcode22/ReplitTranvr/issues/200). Do not mark original strict §16 PASS or bypass time/label source requirements.
+
+**Decision:** `TECHNICAL_CONTROL_PASS / SCIENTIFIC_ORIGINAL_NOT_PASS / QUALIFIED_DIAGNOSTIC_CLOSEOUT / PHASE4_OFFLINE_GO / NEW_PAID_SCALE_NO_GO`. No new paid CREATE or provider refill authorized by this checkpoint. No Replit AI Agent, no Cloudflare, GitHub main source of truth.
+
+---
+
 ## 2026-10-28 04:15 PDT — Gate05 exact old provider INACTIVE + DB owner STOPPED; science still OPEN
 
 The owner-launched protected [DB-only closeout #40678304918](https://github.com/HKcode22/ReplitTranvr/actions/runs/40678304918) **COMPLETED SUCCESS** after new free LIST/balance readings: exact old WSSS provider subscription inactive, 0 foreign active, Alert credits 1,981 observed (net 0 *at read*, billing may post later). Exact immutable V0074 LOGGED owner `e69ffa34-d8a6-456f-a49c-9dd459e6d294` now `STOPPED` with readback and terminal evidence SHA256 `ea95867872f013a6ec5c6aa5de1968e478dbbb9a4c5d05cf0c35f7bed5f819f7`. No paid provider CREATE/DELETE/FIDS/refill or callback mutation during closeout. The genuine previous paid CREATE lasted roughly 254 sec before independently verified exact DELETE; **NOT** a full 60m f.8 §16 scientific PASS. Do not rerun previous one-use paid workflows or DB closeout. No new paid authorization.
