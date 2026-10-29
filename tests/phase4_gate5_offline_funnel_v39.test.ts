@@ -22,7 +22,8 @@ describe("Gate5 as-of standalone mathematics, never paid/live",()=>{
  it("requires FIDS observed by horizon cutoff; webhook cannot establish membership",()=>{
    const r=run({fids:[f("a","2026-10-29T11:00:00.000Z")],webhooks:[w("a"),w("b")]});
    expect(r.horizons.map(h=>h.population)).toEqual([0,0,0]);
-   expect(r.horizons[1].capturedOutsidePopulation).toBe(2);
+   expect(r.horizons[1].capturedOutsidePopulation).toBe(1);
+   expect(r.horizons[1].capturedWithPrimaryButNotCutoffEligible).toBe(1);
    expect(r.horizons[1].rates.capture.value).toBeNull();
    expect(r.strictPassed).toBe(false);
  });
@@ -59,7 +60,8 @@ describe("Gate5 as-of standalone mathematics, never paid/live",()=>{
      webhooks:[w("a")]});
    expect(r.horizons[1].noVerifiedT).toBe(1);
    expect(r.horizons[1].population).toBe(0);
-   expect(r.horizons[1].capturedOutsidePopulation).toBe(1);
+   expect(r.horizons[1].capturedOutsidePopulation).toBe(0);
+   expect(r.horizons[1].capturedWithPrimaryButNotCutoffEligible).toBe(1);
  });
  it("quarantines unverified label instead of declaring it observed",()=>{
    const a=f("a","2026-10-29T04:00:00.000Z");
