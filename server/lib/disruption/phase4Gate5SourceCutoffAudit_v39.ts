@@ -25,6 +25,11 @@ export const P4_G5_SOURCE_TIMING_SQL_V39=[
  "count(*) FILTER (WHERE p.available_at<p.receipt_available",
  "AND p.receipt_available-p.available_at<=interval '1 second')::int AS before_receipt_under_1s,",
  "count(*) FILTER (WHERE p.available_at<p.receipt_available",
+ "AND p.receipt_available-p.available_at<=interval '1 millisecond')::int AS before_receipt_under_1ms,",
+ "count(*) FILTER (WHERE p.available_at<p.receipt_available",
+ "AND p.receipt_available-p.available_at>interval '1 millisecond'",
+ "AND p.receipt_available-p.available_at<=interval '1 second')::int AS before_receipt_1ms_to_1s,",
+ "count(*) FILTER (WHERE p.available_at<p.receipt_available",
  "AND p.receipt_available-p.available_at>interval '1 second'",
  "AND p.receipt_available-p.available_at<=interval '1 minute')::int AS before_receipt_1s_to_1m,",
  "count(*) FILTER (WHERE p.available_at<p.receipt_available",
@@ -163,7 +168,8 @@ export async function auditP4Gate5SourceCutoffsV39(
  const t=record(timing.rows[0]);
  const fields=["observations","primary_rows","context_rows","no_schedule","hash_mismatch",
   "available_before_receipt","available_after_audit",
-  "before_receipt_under_1s","before_receipt_1s_to_1m",
+  "before_receipt_under_1s","before_receipt_under_1ms",
+  "before_receipt_1ms_to_1s","before_receipt_1s_to_1m",
   "before_receipt_over_1m","consistent_source_rows",
   "safe_before_24h","safe_before_6h","safe_before_90m",
   "before_24h","before_6h",
@@ -173,6 +179,7 @@ export async function auditP4Gate5SourceCutoffsV39(
   vals.no_schedule>vals.observations||
   vals.before_24h>vals.before_6h||vals.before_6h>vals.before_90m||
   vals.before_90m>vals.observations||
+  vals.before_receipt_under_1ms+vals.before_receipt_1ms_to_1s!==vals.before_receipt_under_1s||
   vals.before_receipt_under_1s+vals.before_receipt_1s_to_1m+
    vals.before_receipt_over_1m!==vals.available_before_receipt||
   vals.consistent_source_rows>vals.observations||
@@ -224,6 +231,8 @@ export async function auditP4Gate5SourceCutoffsV39(
    memberAvailableAfterAuditRows:vals.available_after_audit,
    sourceConsistentRows:vals.consistent_source_rows,
    receiptAheadByAtMostOneSecond:vals.before_receipt_under_1s,
+   receiptAheadByAtMostOneMillisecond:vals.before_receipt_under_1ms,
+   receiptAheadByOneMillisecondToOneSecond:vals.before_receipt_1ms_to_1s,
    receiptAheadByOneSecondToOneMinute:vals.before_receipt_1s_to_1m,
    receiptAheadByMoreThanOneMinute:vals.before_receipt_over_1m
   },

@@ -11,7 +11,8 @@ const receipt={query_id:id,airport:"WSSS",raw_present:true,
 const timing={
  observations:31,primary_rows:31,context_rows:0,no_schedule:0,
  hash_mismatch:0,available_before_receipt:0,available_after_audit:0,
- before_receipt_under_1s:0,before_receipt_1s_to_1m:0,
+ before_receipt_under_1s:0,before_receipt_under_1ms:0,
+ before_receipt_1ms_to_1s:0,before_receipt_1s_to_1m:0,
  before_receipt_over_1m:0,consistent_source_rows:31,
  safe_before_24h:0,safe_before_6h:5,safe_before_90m:20,
  before_24h:0,before_6h:5,before_90m:20,
@@ -110,6 +111,8 @@ describe("Phase4 Gate5 actual retained source cutoff+PRE snapshot evidence",()=>
   const {db}=fake({timing:{...timing,
    available_before_receipt:31,
    before_receipt_under_1s:31,
+   before_receipt_under_1ms:31,
+   before_receipt_1ms_to_1s:0,
    before_receipt_1s_to_1m:0,
    before_receipt_over_1m:0,
    consistent_source_rows:0,
@@ -119,6 +122,8 @@ describe("Phase4 Gate5 actual retained source cutoff+PRE snapshot evidence",()=>
    memberAvailableBeforeReceiptRows:31,
    responseHashMismatchRows:0,
    receiptAheadByAtMostOneSecond:31,
+   receiptAheadByAtMostOneMillisecond:31,
+   receiptAheadByOneMillisecondToOneSecond:0,
    sourceConsistentRows:0
   });
   expect(x.beforeCandidateSchedule["T-6h"]).toBe(5);
