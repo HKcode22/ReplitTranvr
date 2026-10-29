@@ -7,7 +7,7 @@ on:
       - '.github/workflows/phase3-gate05-wsss-bounded-public-adsb-research.yml'
       - 'scripts/v39_gate05_adsb_lol_wsss_bounded_live_20261029.ts'
   schedule:
-    - cron: '13 0,8,16 * * *'
+    - cron: '13 0,8,16 29-31 10 *'
 
 permissions:
   contents: read

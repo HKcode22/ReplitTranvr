@@ -29,7 +29,7 @@ async function once():Promise<Gate05AdsbResultV39>{
   });
   if(response.status!==200)fail("UPSTREAM_NON_200");
   const length=response.headers.get("content-length");
-  if(length!==null&&(!/^\\d+$/.test(length)||Number(length)>8000000))
+  if(length!==null&&(!/^[0-9]+$/.test(length)||Number(length)>8000000))
     fail("RESPONSE_SIZE_HOLD");
   const body=await response.text();
   if(body.length>8000000)fail("RESPONSE_SIZE_HOLD");
