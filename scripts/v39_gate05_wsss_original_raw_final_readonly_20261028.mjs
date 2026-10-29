@@ -15,6 +15,8 @@ import {adaptGate05LoggedJournalToCensusV39} from
   "../server/lib/disruption/gate05LoggedJournalCensusAdapter_v39.ts";
 import {censusGate05ObservedPilotV39} from
   "../server/lib/disruption/gate05ObservedSampleCensus_v39.ts";
+import {diagnoseGate05OriginalFlightSourceShapeV39} from
+  "../server/lib/disruption/gate05PrivateSourceShapeDiagnostic_v39.ts";
 
 const SCOPE="618582a3-ea3f-4a10-a756-c974c472af3c";
 const RECEIVER="84b7f1565d0402facc8c3b9aacedc599eb6e2af1";
@@ -121,6 +123,7 @@ try{
  await client.end();client=null;
  info.stage="DEDICATED_STORAGE_RAW_BYTES_ONLY";
  const all=[];
+ const authenticatedPrivateFlightObjects=[]; // never log, export or persist
  for(const row of rows){
    info.processedJournalDeliveries++;
    const now=new Date().toISOString();
@@ -171,6 +174,12 @@ try{
      info.matchedOriginalBlobCount++;
      info.matchedOriginalItemCount+=value.loggedItemCount;
      all.push(...value.itemFacts);
+     // Only after authenticated original hash/canonical/schema verification.
+     const original=JSON.parse(Buffer.from(bytes).toString("utf8"));
+     yes(Array.isArray(original.flights)&&
+       original.flights.length===value.loggedItemCount,
+       "RAW_ORIGINAL_FLIGHT_ITEM_COUNT_CONFLICT");
+     authenticatedPrivateFlightObjects.push(...original.flights);
      // These are *candidate status items*, NOT unique physical flights.
      // Repeat notifications and codeshares may be duplicated.
      const seen=value.itemFacts;
@@ -204,6 +213,10 @@ try{
      c.sourceQualifiedPhysicalFlights===0;
    info.censusKnownEvidenceDeficits=c.deficits;
    info.censusSourceIntegrityFindings=c.integrityFindings;
+   info.anonymizedSourceShape=diagnoseGate05OriginalFlightSourceShapeV39(
+     authenticatedPrivateFlightObjects,START,STOP);
+   yes(info.anonymizedSourceShape.rawItemCount===151,
+     "ANONYMIZED_DIAGNOSTIC_COUNT_CONFLICT");
  }
  info.status=complete?
    "ALL_28_ORIGINAL_BYTES_SHA_AND_151_ITEMS_VERIFIED_SCIENCE_NOT_CERTIFIED":
