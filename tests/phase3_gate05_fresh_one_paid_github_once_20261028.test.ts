@@ -36,6 +36,11 @@ describe("Gate05 new source-bound GitHub ONE paid CREATE after independent STOP"
     expect(paid).toContain("GATE05_FRESH_STOP_TICKET_SHA256");
     expect(paid).toContain("sessionExpiresUtc:new Date(Date.parse(stopUtc)+20*60000).toISOString()");
     expect(paid).toContain("GATE05_FRESH_STARTING_CREDITS");
+    expect(paid).toContain('process.env.GITHUB_ACTOR!=="HKcode22"');
+    expect(paid).toContain("historicNext4Floor1900WaivedForThisScope:true");
+    expect(paid).toContain("providerHardCreditCap:false");
+    expect(paid).toContain("newOneUseFinancialConsent:CONFIRM");
+    expect(paid).toContain("protectedGithubWorkflowRunId:process.env.GITHUB_RUN_ID");
     expect(paid).toContain('openSync(path,"wx",0o600)');
   });
   it("only permits ONE new provider CREATE after real GitHub independent STOP proof",()=>{
