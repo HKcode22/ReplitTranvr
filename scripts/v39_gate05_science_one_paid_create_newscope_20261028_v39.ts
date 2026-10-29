@@ -13,7 +13,7 @@ import "dotenv/config";
 import pg from "pg";
 import {readGate05PublishedReceiverHealthV39} from
   "../server/lib/disruption/gate05PublishedReceiverHealth_v39";
-import {createHmac,randomUUID} from "node:crypto";
+import {createHmac,createHash,randomUUID} from "node:crypto";
 import {restoreExactGate05PreparedCallbackAfterRestartV39} from "../server/lib/disruption/gate05PreparedCallbackRestartRecovery_v39";
 import {join} from "node:path";
 import {homedir} from "node:os";
@@ -417,13 +417,25 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
    // successful, non-idempotent CREATE response and BEFORE DB binding.
    // Runner-local 0600 files alone do NOT survive a GitHub VM crash.
    // An ambiguous CREATE without a known ID is NEVER replayed.
+   // This repository is PUBLIC. Keep the exact nonsecret provider ID
+   // recoverable only by protected GitHub runners, never in issue text.
+   // Feed via stdin, never CLI arguments, output, or action summary.
+   if(typeof created!=="string"||created.length<6||created.length>256||
+      /[\\r\\n]/.test(created))hold("CREATE_ID_UNSAFE_RECOVERY_SHAPE");
+   execFileSync("gh",[
+     "secret","set","GATE05_NEW_EXACT_ID_RECOVERY",
+     "--repo",REPO,"--env","gate05-safety"
+   ],{input:created+"\\n",encoding:"utf8",timeout:20000,
+      maxBuffer:1024*1024,stdio:["pipe","pipe","ignore"]});
+   const providerIdSha256=createHash("sha256").update(created).digest("hex");
    const positive=gh(["api","-X","POST",
      `repos/${REPO}/issues/173/comments`,
      "-f","body="+JSON.stringify({
        schema:"v39.gate05.fresh-positive-exact-create-receipt.v1",
        scope:m.scope,runner:head,authorization:m.authorizationSha256,
        stopTicket:m.stopTicketSha256,safetyRunId:input.stopRun,
-       providerSubscriptionId:created,
+       providerSubscriptionIdSha256:providerIdSha256,
+       exactIdRecoverySecret:"gate05-safety/GATE05_NEW_EXACT_ID_RECOVERY",
        providerOriginalResponseSha256:response.rawCreateResponseSha256,
        createAttempts:1,noProviderCreateRetries:true,
        createdAtUtc:new Date().toISOString()
