@@ -421,11 +421,11 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
    // recoverable only by protected GitHub runners, never in issue text.
    // Feed via stdin, never CLI arguments, output, or action summary.
    if(typeof created!=="string"||created.length<6||created.length>256||
-      /[\\r\\n]/.test(created))hold("CREATE_ID_UNSAFE_RECOVERY_SHAPE");
+      /[\r\n]/.test(created))hold("CREATE_ID_UNSAFE_RECOVERY_SHAPE");
    execFileSync("gh",[
      "secret","set","GATE05_NEW_EXACT_ID_RECOVERY",
      "--repo",REPO,"--env","gate05-safety"
-   ],{input:created+"\\n",encoding:"utf8",timeout:20000,
+   ],{input:created+"\n",encoding:"utf8",timeout:20000,
       maxBuffer:1024*1024,stdio:["pipe","pipe","ignore"]});
    const providerIdSha256=createHash("sha256").update(created).digest("hex");
    const positive=gh(["api","-X","POST",
