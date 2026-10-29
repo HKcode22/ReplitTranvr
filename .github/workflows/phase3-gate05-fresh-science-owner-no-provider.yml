@@ -16,6 +16,14 @@ on:
         required: true
         options:
           - COMMISSION_FRESH_WSSS_OWNER_NO_PROVIDER_NO_PAID_CREATE
+      fresh_paid_confirmation:
+        description: "A NEW separate WSSS one-use Alert risk approval. Default NO SPEND."
+        type: choice
+        required: true
+        default: NO_NEW_PAID_SPEND
+        options:
+          - NO_NEW_PAID_SPEND
+          - AUTHORIZE_NEW_WSSS_ONE_ALERT_CREATE_350_SOFT_STOP_500_PLANNING_12_REST_ACK_OVERSHOOT_AND_1900_FLOOR_OVERRIDE
 
 permissions:
   contents: read
@@ -107,6 +115,8 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
   dispatch-independent-retry6-stop-no-provider:
+    outputs:
+      stop_run_id: ${{ steps.dispatch.outputs.stop_run_id }}
     # A commission's verified post-COMMIT GITHUB_OUTPUT is the ONLY source.
     # This dispatches the already existing separately reviewer-protected
     # retry6 STOP, not a provider CREATE, and cannot itself prove ARMED.
@@ -129,6 +139,7 @@ jobs:
       - name: Install dependencies without lifecycle scripts
         run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
       - name: Verify new LOGGED owner and issue one exact GitHub STOP dispatch, no provider
+        id: dispatch
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GATE05_GH_ADMIN_TOKEN }}
@@ -171,4 +182,93 @@ jobs:
             echo "Never launch a paid subscription unless independent exact worker issued authenticated LIVE_STOP_WATCH_ARMED_NO_PROVIDER_CREATE."
             echo "The separate 1900-credit floor and new paid consent are UNRESOLVED."
             echo "A near-term 60-minute technical session cannot claim missing prospective T-24h FIDS."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  new-one-use-paid-create-only-with-fresh-explicit-approval:
+    # This job is completely SKIPPED by default and has NO automatic push
+    # trigger. The owner's NEW consent is separate from expired retry5.
+    # Actual provider CREATE can happen only after the exact gate05-safety
+    # STOP worker is independently ARMED in a second protected GitHub run.
+    if: ${{ needs.one-new-owner-and-protected-stop.result == 'success' && needs.dispatch-independent-retry6-stop-no-provider.result == 'success' && inputs.fresh_paid_confirmation == 'AUTHORIZE_NEW_WSSS_ONE_ALERT_CREATE_350_SOFT_STOP_500_PLANNING_12_REST_ACK_OVERSHOOT_AND_1900_FLOOR_OVERRIDE' }}
+    needs: [one-new-owner-and-protected-stop, dispatch-independent-retry6-stop-no-provider]
+    environment: phase2g-paid
+    runs-on: ubuntu-latest
+    timeout-minutes: 95
+    steps:
+      - name: Checkout exact one-use reviewed new-scoped source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install exact TS runtime, no package lock drift
+        run: npm ci --include=dev --ignore-scripts --no-audit --no-fund
+      - name: Await exact T-minus-8 paid preflight clock on GitHub only
+        shell: bash
+        env:
+          WINDOW_START: ${{ needs.one-new-owner-and-protected-stop.outputs.start_utc }}
+          SAFETY_RUN: ${{ needs.dispatch-independent-retry6-stop-no-provider.outputs.stop_run_id }}
+          APPROVAL: ${{ inputs.fresh_paid_confirmation }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${APPROVAL}" = "AUTHORIZE_NEW_WSSS_ONE_ALERT_CREATE_350_SOFT_STOP_500_PLANNING_12_REST_ACK_OVERSHOOT_AND_1900_FLOOR_OVERRIDE"
+          test "${GITHUB_RUN_ATTEMPT}" = 1
+          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+          test "${GITHUB_REF}" = refs/heads/main
+          [[ "${SAFETY_RUN}" =~ ^[1-9][0-9]{7,13}$ ]]
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          node --input-type=module <<'CLOCK'
+          const start=Date.parse(process.env.WINDOW_START??"");
+          if(!Number.isFinite(start))throw Error("FROZEN_T_INVALID");
+          const end=start-8*60000;
+          if(end-Date.now()>75*60000||Date.now()>start-3*60000)
+            throw Error("FROZEN_T_GITHUB_PAID_PREFLIGHT_CLOCK_HOLD");
+          while(Date.now()<end)
+            await new Promise(resolve=>setTimeout(resolve,Math.min(5000,end-Date.now())));
+          if(Date.now()>start-3*60000)
+            throw Error("FROZEN_T_TOO_LATE_NO_PROVIDER");
+          CLOCK
+      - name: One source-bound protected paid CREATE with exact independently ARMED STOP only
+        shell: bash
+        env:
+          GATE05_FRESH_FINANCIAL_AUTH: ${{ inputs.fresh_paid_confirmation }}
+          GATE05_FRESH_SCOPE: ${{ needs.one-new-owner-and-protected-stop.outputs.scope_id }}
+          GATE05_FRESH_AUTH_SHA256: ${{ needs.one-new-owner-and-protected-stop.outputs.authorization_sha256 }}
+          GATE05_FRESH_STOP_TICKET_SHA256: ${{ needs.one-new-owner-and-protected-stop.outputs.stop_ticket_sha256 }}
+          GATE05_FRESH_START_UTC: ${{ needs.one-new-owner-and-protected-stop.outputs.start_utc }}
+          GATE05_FRESH_STOP_UTC: ${{ needs.one-new-owner-and-protected-stop.outputs.stop_utc }}
+          GATE05_FRESH_STARTING_CREDITS: ${{ needs.one-new-owner-and-protected-stop.outputs.starting_credits }}
+          GH_TOKEN: ${{ secrets.GATE05_GH_ADMIN_TOKEN }}
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          NODE_ENV: production
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${GITHUB_RUN_ATTEMPT}" = 1
+          test "${GITHUB_REF}" = refs/heads/main
+          test "${GITHUB_EVENT_NAME}" = workflow_dispatch
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          for key in GH_TOKEN DATABASE_URL V39_DATABASE_RUNTIME_URL AERODATABOX_WEBHOOK_SECRET AERODATABOX_API_KEY; do
+            test -n "${!key:-}" || { echo "HOLD_NEW_PAID_CREDENTIAL"; exit 2; }
+          done
+          node --import tsx scripts/v39_gate05_science_one_paid_create_newscope_20261028_v39.ts             --head "${GITHUB_SHA}"             --safety-run "${{ needs.dispatch-independent-retry6-stop-no-provider.outputs.stop_run_id }}"             --confirm "AUTHORIZE_NEW_WSSS_ONE_ALERT_CREATE_350_SOFT_STOP_500_PLANNING_12_REST_ACK_OVERSHOOT_AND_1900_FLOOR_OVERRIDE"
+      - name: Preserve no false financial or scientific PASS
+        if: always()
+        run: |
+          {
+            echo "## New ONE-use WSSS paid attempt — distinct from retired retry5"
+            echo "A green controller means only the exact one provider CREATE/owner binding, not delivery or 60m scientific PASS."
+            echo "The independently ARMED retry6 STOP job must continue and prove terminal exact-owned provider DELETE."
+            echo "500 Alert is planning exposure, 350 is SOFT stop, NOT provider enforced hard cap."
+            echo "A fresh spend consent overrides the previous 1900 NEXT4 floor for this new experiment; original retry5 consent remains consumed."
+            echo "No refill. No CREATE retry after GH issue intent, uncertain HTTP or ambiguity."
+            echo "PRE T-24h/T-6h/T-90m and actual vs estimated runway label semantics are NOT automatically proven."
           } >> "${GITHUB_STEP_SUMMARY}"
