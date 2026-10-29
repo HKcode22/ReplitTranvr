@@ -1,0 +1,59 @@
+name: Phase4 Gate5 WSSS Original Source Inventory - READ ONLY
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/v39_gate5_source_inventory_readonly_actions.ts"
+      - "server/lib/disruption/phase4Gate5SourceInventory_v39.ts"
+      - ".github/workflows/phase4-gate5-wsss-original-source-inventory-readonly.yml"
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "WSSS source metadata only. Not a Gate5 scientific PASS."
+        required: true
+        type: choice
+        options:
+          - GATE5_SOURCE_METADATA_NO_PROVIDER
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-readonly-source-inventory
+  cancel-in-progress: false
+jobs:
+  source-inventory:
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.confirmation == 'GATE5_SOURCE_METADATA_NO_PROVIDER') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies without source credentials
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: READ ONLY source metadata inventory (no provider)
+        env:
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          P4_GATE5_SOURCE_AIRPORT: WSSS
+          P4_GATE5_READONLY_APPROVAL: ${{ github.event_name == 'push' && 'GATE5_SOURCE_METADATA_NO_PROVIDER' || inputs.confirmation }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_gate5_source_inventory_readonly_actions.ts
+      - name: Audit is not scientific PASS
+        if: always()
+        run: |
+          {
+            echo 'Source metadata audit only: no provider, SQL DML, blob bytes or credit spend.'
+            echo 'Green Actions is NOT Gate5 PASS. Original T/flight/labels remain unverified.'
+            echo 'Phase5 final FREEZE and paid Phase6 remain blocked.'
+          } >> "$GITHUB_STEP_SUMMARY"
