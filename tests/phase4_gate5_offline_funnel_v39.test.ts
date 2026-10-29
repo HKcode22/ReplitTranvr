@@ -20,7 +20,7 @@ const s=(id:string,queryId:string)=>({flightId:id,populationQueryId:queryId,
 const run=(x:Partial<Gate5Input>)=>analyzeGate5Offline({...base,...x});
 describe("Gate5 as-of standalone mathematics, never paid/live",()=>{
  it("requires FIDS observed by horizon cutoff; webhook cannot establish membership",()=>{
-   const r=run({fids:[f("a","2026-10-29T10:00:00.000Z")],webhooks:[w("a"),w("b")]});
+   const r=run({fids:[f("a","2026-10-29T11:00:00.000Z")],webhooks:[w("a"),w("b")]});
    expect(r.horizons.map(h=>h.population)).toEqual([0,0,0]);
    expect(r.horizons[1].capturedOutsidePopulation).toBe(2);
    expect(r.horizons[1].rates.capture.value).toBeNull();
