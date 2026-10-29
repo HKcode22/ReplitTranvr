@@ -170,6 +170,7 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
  if(process.env.GITHUB_ACTIONS!=="true"||
     process.env.GITHUB_EVENT_NAME!=="workflow_dispatch"||
     process.env.GITHUB_RUN_ATTEMPT!=="1"||
+    process.env.GITHUB_ACTOR!=="HKcode22"||
     process.env.GITHUB_REF!=="refs/heads/main"||
     process.env.GATE05_FRESH_FINANCIAL_AUTH!==CONFIRM)
    hold("NEW_SCOPE_PAID_DISPATCH_OR_APPROVAL_MISSING");
@@ -393,6 +394,11 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
        stopTicket:m.stopTicketSha256,runner:head,
        safetyRunId:input.stopRun,
        creditCeiling:500,restUnitCeiling:12,
+       providerHardCreditCap:false,creditStopSoftAt350:true,
+       historicNext4Floor1900WaivedForThisScope:true,
+       newOneUseFinancialConsent:CONFIRM,
+       approvingGithubActor:process.env.GITHUB_ACTOR,
+       protectedGithubWorkflowRunId:process.env.GITHUB_RUN_ID,
        createdAtUtc:new Date().toISOString()
      })]);
    if(!intent?.id)hold("PAID_INTENT_GITHUB_NOT_RECORDED");
