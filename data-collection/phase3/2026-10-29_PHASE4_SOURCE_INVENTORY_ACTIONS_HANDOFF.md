@@ -8,3 +8,5 @@ GitHub uses existing protected phase2g-paid environment and GATE05_AUTOMATION_DA
 Each candidate horizon comparison tests durable available-at before a candidate scheduled departure minus the lag; this cannot independently certify initial selected T, operated-flight identity, source completeness, or valid original runway event.
 Webhooks are only blob-reference metadata. Even unexpired ledger refs are not proof App Storage still retains original bytes or that provider HTTP 2xx ACK succeeded.
 Workflow success means read-only metadata inventory executed, never scientific Gate5 PASS. Production run and results need to be checked after merge. Final Gate5 strict HOLD, Phase5 final FREEZE HOLD and paid Phase6 NO-GO.
+
+IMPORTANT: the webhook blob-reference metadata query is limited by source kind and recent retention time, not to the WSSS airport. The report always says webhookLedgerAirportAttributionVerified=false. These counts cannot be used for WSSS capture rate or matched population coverage without an independently verified join.
