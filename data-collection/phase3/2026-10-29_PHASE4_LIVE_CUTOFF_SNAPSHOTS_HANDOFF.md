@@ -1,0 +1,21 @@
+# Phase 4 / Gate 5: retained FIDS cutoff and PRE snapshot lineage audit
+**Date:** 2026-10-29
+
+**Binding source:** V3.9 Plan f.8 §§5, 5.1–5.4, 6.1, 7.1, 16 Gate5, 17 steps 17–19; Implementation Log §§1.9 and 2.22. This is additive to evidence in PRs #254–#261 and Issue #38, not a new acceptance rule.
+
+## Motivation
+The authenticated protected WSSS original-source audits verified two retained FIDS receipts, 31 source departure observations, nine source operator-tagged observations, 22 marketing, 0 independently certified canonical/core operated flight IDs, and 28 **airport-unattributed** original webhook blob-ref records. A candidate schedule textual fingerprint did not prove first provider-native selected T, flight uniqueness or passenger core scope. The preceding module therefore must not claim any three-horizon observed-flight denominator or actual runway target from those records.
+
+## Work performed
+- New `phase4Gate5SourceCutoffAudit_v39.ts` performs only parameterized bounded SQL **SELECT/WITH** queries inside the existing protected GitHub `REPEATABLE READ READ ONLY` transaction; it never dispatches billable provider traffic, writes/updates tables or fetches original payload bytes.
+- Reuse the exact latest-12 WSSS original query-receipt sample and exclude any expired/missing inline original from the *measurable source sample*. Missing original => all measures NULL / source unknown, not zero coverage. Count source rows and primary/context roles independently. Aggregate `available_at` evidence against candidate departure schedule minus 24h, 6h, 90m **only as source-observation clock diagnostics**, never certified first-T horizon eligibility.
+- Independently count PRE snapshot rows attached to the SAME receipt query IDs per horizon, source hash matches, internal T-cutoff arithmetic consistency, and a strict lineage-candidate join requiring confirmed operator/core primary ID, matching response hash and receipt/population available before cutoff. Do not derive snapshot existence from webhook-capture events or from feature completeness.
+- Flag impossible counters, invalid query receipts, duplicate IDs, unknown horizons and aggregate truncation. Outputs contain counts and status flags only; no flight IDs, provider schedule strings, raw JSON, SHA values, dates or route information.
+- Script now emits `sourceInventory` and `cutoffAndSnapshotEvidence` together from one consistent read-only snapshot. This preserves old findings while enriching them, and verifies the two inventory subqueries sample the same receipt count.
+- Explicit `sourceCutoffDenominatorsCertified=false`, `webhookCaptureOutsidePopulationMeasured=false`, `noVerifiedFirstT.certified=false`, `strictGate5Passed=false`, `phase6Authorized=false`. A measured zero snapshot row is a narrow factual database fact, NOT evidence of a perfect or zero rate for the original airport population.
+- Add eight offline negative and positive fake-DB tests. GitHub Actions source file path filter includes this module so checked `main` merges trigger the protected audit automatically, not via manual Replit command.
+
+## Phase 4 proper next steps and paid scope
+A prospective S1 sample still requires immutable source request parameters, correct official FIDS contract and observed source clocks, separately bounded Tier-2 API unit approval/account and retention checks, and an independent same-cohort T−24h/T−6h/T−90m cycle with population defined *before* callback capture. The user's new broad paid approval allows planning a bounded Gate5 pilot; it is **not** an automatic substitute for Plan f.8 Gate0.5 scientific target-source and Gate5 signed budget/manifest/account prerequisites, and does not independently start Phase6. If an exact service interval and safe existing paid runner cannot be reconstructed, HOLD and report rather than inventing a cohort.
+
+Do not silently upgrade nine source operator-records to nine independently confirmed flights, fix missing original fields retroactively, or infer provider actual wheels-off from revised times. Current strict Gate5 PASS, final Phase5 FREEZE and Phase6 start remain held pending the real scientific evidence and distinct Phase6 freeze/hash admission.
