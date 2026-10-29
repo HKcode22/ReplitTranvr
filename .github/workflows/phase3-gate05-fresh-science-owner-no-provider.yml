@@ -1,0 +1,97 @@
+name: Gate05 — Fresh Protected WSSS Owner and STOP Commission, No Provider
+
+# Not automatic: creates one NEW production LOGGED owner, same-ID PREPAID
+# session, restricted SELECT-only safety role and protected GitHub STOP pins.
+# This is never a paid trial or provider API subscription CREATE/DELETE.
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_main_sha:
+        description: Exact reviewed main 40-character Git commit
+        type: string
+        required: true
+      confirmation:
+        description: Explicitly commission one NEW no-provider owner, no billing
+        type: choice
+        required: true
+        options:
+          - COMMISSION_FRESH_WSSS_OWNER_NO_PROVIDER_NO_PAID_CREATE
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate05-fresh-no-provider-owner-commission
+  cancel-in-progress: false
+
+jobs:
+  one-new-owner-and-protected-stop:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.confirmation == 'COMMISSION_FRESH_WSSS_OWNER_NO_PROVIDER_NO_PAID_CREATE' }}
+    runs-on: ubuntu-latest
+    environment: phase2g-paid
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed GitHub main without persistent token
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install exact locked runtime deps, no lifecycle scripts
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Verify one-use source, GitHub main and NO provider billing
+        shell: bash
+        env:
+          REVIEWED: ${{ inputs.reviewed_main_sha }}
+          CONFIRM: ${{ inputs.confirmation }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          [[ "${REVIEWED}" =~ ^[0-9a-f]{40}$ ]]
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+          test "${GITHUB_RUN_ATTEMPT}" = 1
+          test "${CONFIRM}" = COMMISSION_FRESH_WSSS_OWNER_NO_PROVIDER_NO_PAID_CREATE
+          test "${REVIEWED}" = "${GITHUB_SHA}"
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          git fetch --no-tags origin refs/heads/main
+          test "$(git rev-parse FETCH_HEAD)" = "${REVIEWED}"
+          node --check scripts/v39_gate05_newscope_commission_github_no_provider_20261028.mjs
+      - name: NEW protected scope and independent safety credentials, no paid API
+        shell: bash
+        env:
+          GATE05_NEW_SCOPE_REVIEWED_SHA: ${{ inputs.reviewed_main_sha }}
+          GATE05_NEW_SCOPE_CONFIRMATION: ${{ inputs.confirmation }}
+          GH_TOKEN: ${{ secrets.GATE05_GH_ADMIN_TOKEN }}
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          GATE05_PROVIDER_CREATE_ALLOWED: ""
+          RAPIDAPI_KEY: ""
+        run: |
+          set -Eeuo pipefail
+          set +x
+          for key in GH_TOKEN DATABASE_URL V39_DATABASE_RUNTIME_URL AERODATABOX_WEBHOOK_SECRET AERODATABOX_API_KEY; do
+            test -n "${!key:-}" || { echo "HOLD_PROTECTED_CREDENTIAL_MISSING" ; exit 2; }
+          done
+          test -z "${GATE05_PROVIDER_CREATE_ALLOWED}"
+          test -z "${RAPIDAPI_KEY}"
+          node scripts/v39_gate05_newscope_commission_github_no_provider_20261028.mjs
+      - name: Keep exact commissioning boundary
+        if: always()
+        run: |
+          {
+            echo "## New Gate05 science owner setup — no provider and no paid authorization"
+            echo "Exactly one unique V0074 LOGGED owner + same-ID PREPAID session, NOT a reuse of retry5."
+            echo "A success provisions the restricted gate05-safety role and pins for independent STOP."
+            echo "The STOP is NOT yet ARMED; no paid CREATE, FIDS GET, refill, provider DELETE or science PASS."
+            echo "A missing source, terminal historical owner, active subscription or role privilege aborts."
+            echo "The historical NEXT4 1900 credit floor is not waived by this setup."
+            echo "Do not blindly rerun after any ambiguous COMMIT. No timing commands in Replit."
+          } >> "${GITHUB_STEP_SUMMARY}"

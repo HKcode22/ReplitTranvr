@@ -1,0 +1,30 @@
+# Gate 0.5 fresh-science owner — GitHub-only no-provider commission (2026-10-28)
+
+**Current state at source preparation:** V0075 production schema is already installed; published receiver build `84b7f1565d0402facc8c3b9aacedc599eb6e2af1` has independent hosted GitHub-attested `prepaid_route_registered=true`, webhook-secret match, durable custody, runtime DB HMAC and minimally privileged LOGGED journal. See successful [production attestation #40800379853](https://github.com/HKcode22/ReplitTranvr/actions/runs/40800379853). The free provider account prearm [#40800829059](https://github.com/HKcode22/ReplitTranvr/actions/runs/40800829059) proved **1,981 Alert credits, 59,980 REST units, zero active subscriptions, old owner STOPPED, zero new open owners**. No paid trial was begun by these checks.
+
+## New GitHub-only commission
+
+The workflow `.github/workflows/phase3-gate05-fresh-science-owner-no-provider.yml` is **manual-only** with inputs `reviewed_main_sha` and confirmation `COMMISSION_FRESH_WSSS_OWNER_NO_PROVIDER_NO_PAID_CREATE`. It must not run on push, schedule, or startup. Its privileged step is protected by existing `phase2g-paid` environment review. The exact GitHub main commit is pinned; the downloaded repo may not drift.
+
+**What it would change, if dispatched and all checks pass:**
+
+1. Require the existing GitHub `gate05-safety` environment to have reviewer protection and authenticate as GitHub owner. Independently prove published PREPAID callback source, secret and hosted DB binding.
+2. Use only three paced FREE provider account GETs (balance → subscription inventory → balance). Refuse malformed inventory, active/foreign subscriptions, unstable quota, insufficient 500 credits or 12 REST units.
+3. Verify existing V0074 owner table and V0075 LOGGED journal, the exact historical paid retry5 owner `e69ffa34-d8a6-456f-a49c-9dd459e6d294` is terminal STOPPED, and no other PREPARED/ACTIVE Gate05 owner exists. Never rerun the historical schema migrations.
+4. Generate a **new UUID, frozen 60-minute future WSSS interval**, distinct authorization SHA and STOP ticket. Bind planned numeric floors **100 received items / 50 distinct operating flights / 20 completed / 30 airborne / 100 observation points / 60 minutes** and the 350-credit early STOP / 500 credit planning envelope / 12 REST units to that plan. A SHA is only a plan identity; it is **not** new paid authority.
+5. Provision a NEW dedicated PostgreSQL reader with `CONNECT`, clean schema `USAGE`, and `SELECT` on one owner table, **no INSERT/UPDATE/DELETE**. Store that secret and exact runner/receiver/scope/window/budget pins in the existing reviewer-protected `gate05-safety` GitHub environment. A partial GitHub environment write before the DB transaction cannot arm the STOP because it has no matching owner.
+6. In one transaction and serialized advisory lock, insert exactly one immutable V0074 LOGGED owner and the same UUID in the previously existing UNLOGGED prepaid session table as `armed`; verify precise role privileges, COMMIT once, and read back. Commit ambiguity is a HOLD **without auto retry**; read actual DB to resolve it.
+
+**What commission alone emphatically does NOT do:** it does not ARM the independent STOP, create a provider subscription, pay any FIDS REST units, send an Alert, refill credits, change historic owners, prove 2xx delivery, prove unique flight trajectories or label semantics, or mark Gate05 scientific PASS.
+
+## Important outstanding financial decision
+
+The historical NEXT4 floor was **1,900 Alert credits**; the latest provider balance was **1,981**, so that older floor only allows 81 headroom. A proposed full new 500-credit exposure would leave 1,481, **below** 1,900. That old floor belongs to another trial; the new commission must neither silently treat it as permanently binding nor silently waive it. A new explicitly accepted floor/budget and a reviewed independent START/STOP plan must precede any new non-idempotent paid CREATE. The provider has no guaranteed hard cap of 500; 350+150 is a planned soft stop and unsettled reserve, not proof against excess.
+
+## Execution sequence (not yet executed)
+
+Review and merge this PR with exact-head CI. Only after the complementary end-to-end scientific pilot implementation and new exact financial acceptance are ready, use **one** simple Replit Shell `gh workflow run` to dispatch the no-provider commission with the reviewed main SHA (the Replit Shell does not run a timer). GitHub must then verify the produced immutable DB scope and independent protected STOP result and prepare new, not-old, paid CREATE. Existing spent `phase3-gate05-github-automated-retry5.yml` stays `if: false` permanently.
+
+Do not dispatch this NO-PROVIDER commission prematurely: its 60-minute prospective start/stop is frozen, and a merely PREPARED owner must be terminalized safely if the window passes without a valid paid/STOP workflow. A full scientific pilot additionally needs same-cohort prospective PRE/POST (cannot backfill T−24h), physical flight identity/codeshare matching, raw source SHA retention, terminal-latency and gap measurement. Official AeroDataBox runwayTime semantics **actual or estimated** and lack of proven scheduled wheels-off remain unresolved under [issue #200](https://github.com/HKcode22/ReplitTranvr/issues/200); do not transform missingness or semantic unknowns into full PASS.
+
+**Source of truth:** [issue #173](https://github.com/HKcode22/ReplitTranvr/issues/173), existing frozen `data-collection/plans/V3.9_DataCollectPlan_f.8.md`, Oct 27 one-pilot cost approval log, Oct 28 retry5 STOP closure, PRs #237–#241. No Cloudflare, no Replit AI Agent, no manual time-sensitive shell polling.
