@@ -19,12 +19,13 @@ const r={
   stage:"ENVIRONMENT",
   expectedSource,observedSource:null,
   publishedSourceMatches:false,durableCustodyReady:false,
-  alertIngressRegistered:false,publishedDeployment:false,
+  gate4AlertAddOnRegistered:false,gate05PrepaidRouteRegistered:false,
+  publishedWebhookSecretMatch:false,publishedDeployment:false,
   authenticatedDbBinding:false,authenticatedDbLive:false,
   loggedJournal:false,immutableTrigger:false,schemaUsage:false,
   runtimeInsert:false,runtimeUpdate:null,runtimeDelete:null,
   publicInsert:null,dbWrites:0,providerRequests:0,paidTrialStarted:false,
-  scienceGate05Passed:false
+  scienceGate05Passed:false,paidLaunchAuthorized:false
 };
 let db;
 const assert=(x,code)=>{if(!x)throw Error(code);};
@@ -41,6 +42,8 @@ async function remote(path,headers={}){
 }
 try{
   assert(url.length>20,"RUNTIME_URL_NOT_SET");
+  const webhookSecret=String(process.env.AERODATABOX_WEBHOOK_SECRET??"");
+  assert(webhookSecret.length>=32,"PUBLISHED_WEBHOOK_SECRET_NOT_SET");
   const parsed=new URL(url);
   assert(["postgres:","postgresql:"].includes(parsed.protocol),"RUNTIME_DB_PROTOCOL_HOLD");
   r.stage="PUBLISHED_SOURCE";
@@ -54,23 +57,39 @@ try{
       r.publishedSourceMatches=code===200&&body?.status==="PASS"&&
         body?.git_head===expectedSource;
       r.durableCustodyReady=body?.gate05_durable_custody_ready===true;
-      r.alertIngressRegistered=body?.gate4_alert_ingress_registered===true;
+      // Gate4 add-on is a DIFFERENT route from this Gate05 paid operator.
+      // Gate05 uses the already-registered session-specific PREPAID route.
+      r.gate4AlertAddOnRegistered=body?.gate4_alert_ingress_registered===true;
+      r.gate05PrepaidRouteRegistered=body?.prepaid_route_registered===true;
       r.publishedDeployment=body?.published_deployment===true&&
         body?.runtime_owner_mode==="replit-published-deployment";
       if(r.publishedSourceMatches&&r.durableCustodyReady&&
-        r.alertIngressRegistered&&r.publishedDeployment&&
-        body?.prepaid_route_registered===true&&
+        r.gate05PrepaidRouteRegistered&&r.publishedDeployment&&
         body?.provider_mutation===false)break;
     }catch{
       // Treat transient network errors as retryable; never infer identity.
     }
     if(n<4)await sleep(3000);
   }
-  // Published source, custody opt-in and Alert route are distinct facts.
-  // A missing separately commissioned ingress MUST hold a paid launch, but
-  // MUST NOT prevent the independent HMAC/DB read-only proof from running.
+  // Gate05 paid CREATE in the reviewed operator sends to
+  // /api/v1/webhooks/aerodatabox/:secret/prepaid/:sessionId.
+  // The unrelated Gate4 add-on flag must not veto that registered route.
+  // This remains only a technical route/source check, NOT an actual
+  // callback POST, new session owner, proof of ACK or approval to spend.
   const sourceReady=r.publishedSourceMatches&&r.durableCustodyReady&&
-    r.publishedDeployment;
+    r.gate05PrepaidRouteRegistered&&r.publishedDeployment;
+
+  r.stage="AUTHENTICATED_PUBLISHED_WEBHOOK_SECRET";
+  const secretCheck=await remote("/__v39/phase2g/webhook-secret-match",{
+    "x-v39-phase2g-webhook-secret":webhookSecret
+  });
+  r.publishedWebhookSecretMatch=secretCheck.code===200&&
+    secretCheck.body?.schema==="v39.phase2g-webhook-secret-match.v1"&&
+    secretCheck.body?.status==="PASS"&&
+    secretCheck.body?.provider_call===false&&
+    secretCheck.body?.provider_mutation===false&&
+    Number(secretCheck.body?.alert_credits_spent)===0;
+  assert(r.publishedWebhookSecretMatch,"WEBHOOK_SECRET_BINDING_HOLD");
 
   r.stage="AUTHENTICATED_PUBLISHED_DB_BINDING";
   const b=challenge();
@@ -138,14 +157,16 @@ try{
     r.runtimeInsert&&r.runtimeUpdate===false&&
     r.runtimeDelete===false&&r.publicInsert===false,
     "RUNTIME_V0075_MINIMAL_ACL_HOLD");
-  const approvedForReceiverSourceAndIngress=sourceReady&&
-    r.alertIngressRegistered;
-  r.stage=approvedForReceiverSourceAndIngress?"COMPLETE":
-    "SOURCE_OR_ALERT_INGRESS_NOT_COMMISSIONED";
-  r.status=approvedForReceiverSourceAndIngress?
-    "GATE05_V0075_LIVE_RECEIVER_DB_READONLY_PASS":
-    "GATE05_V0075_DATABASE_PARITY_PASS_RECEIVER_ADMISSION_HOLD";
-  if(!approvedForReceiverSourceAndIngress)process.exitCode=2;
+  const technicalRouteAndDbReady=sourceReady&&
+    r.publishedWebhookSecretMatch;
+  r.stage=technicalRouteAndDbReady?"COMPLETE":
+    "GATE05_PREPAID_ROUTE_OR_SOURCE_HOLD";
+  r.status=technicalRouteAndDbReady?
+    "GATE05_V0075_PREPAID_CALLBACK_DB_READONLY_PASS":
+    "GATE05_V0075_PREPAID_CALLBACK_ADMISSION_HOLD";
+  // This outcome cannot authorize a fresh scope, provider CREATE,
+  // scheduled PRE/POST FIDS, or any declaration of science PASS.
+  if(!technicalRouteAndDbReady)process.exitCode=2;
 }catch{
   r.status="GATE05_V0075_LIVE_RECEIVER_DB_READONLY_HOLD";
   process.exitCode=2;
