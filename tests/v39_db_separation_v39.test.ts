@@ -18,7 +18,6 @@ const active = [
   "scripts/v39_phase6_pause_v39.ts",
   "scripts/v39_probe_stage1_owner_v39.ts",
   "scripts/v39_probe_stage2_owner_v39.ts",
-  "scripts/v39_gate5_owner_v39.ts",
   "scripts/anchor_probe.ts",
   "scripts/credit_canary.ts",
   "scripts/check_collection_health.ts",
@@ -45,6 +44,13 @@ describe("V3.9 dedicated DB runtime separation", () => {
       expect(src, file).not.toMatch(/import\s*\{\s*pool\s*\}\s*from\s*["'][^"']*server\/db["']/);
       expect(src, file).not.toMatch(/import\s*\{\s*pool\s*\}\s*from\s*["']\.\.\/\.\.\/db["']/);
     }
+  });
+  it("holds Gate5 before accessing either shared or dedicated DB", () => {
+    const src = read("scripts/v39_gate5_owner_v39.ts");
+    expect(src).not.toContain("db_v39");
+    expect(src).not.toContain("server/db");
+    expect(src).toContain("BLOCKED_LIVE_INDEPENDENT_POPULATION_AND_OUTSIDE_JOIN_NOT_IMPLEMENTED");
+    expect(src).toContain("databaseWrites:0");
   });
   it("keeps boot migrations on owner DB and provisions the V3.9-specific secret", () => {
     expect(read("server/db.ts")).toContain("migrationPool");
