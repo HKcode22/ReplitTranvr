@@ -37,10 +37,11 @@ jobs:
           cache: npm
       - name: Install locked runtime dependencies without lifecycle scripts
         run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-      - name: Check live published identity, HMAC DB parity, and immutable LOGGED journal READ ONLY
+      - name: Verify actual Gate05 PREPAID callback registration and secret, HMAC DB parity, LOGGED journal READ ONLY
         shell: bash
         env:
           V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          AERODATABOX_WEBHOOK_SECRET: ${{ secrets.AERODATABOX_WEBHOOK_SECRET }}
           AERODATABOX_API_KEY: ""
           RAPIDAPI_KEY: ""
           GH_TOKEN: ""
@@ -51,6 +52,7 @@ jobs:
           test "${GITHUB_REF}" = "refs/heads/main"
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           test -n "${V39_DATABASE_RUNTIME_URL:-}"
+          test -n "${AERODATABOX_WEBHOOK_SECRET:-}"
           test -z "${AERODATABOX_API_KEY}"
           test -z "${RAPIDAPI_KEY}"
           test -z "${GH_TOKEN}"
@@ -64,7 +66,8 @@ jobs:
             echo "## Gate05 V0075 published receiver + live Neon attestation (read-only)"
             echo "This is an automated free identity/HMAC SELECT check; it does not create paid subscriptions."
             echo "Zero AeroDataBox GET/POST, Alert CREATE/DELETE, refill, database mutation or Replit publication."
-            echo "A PASS verifies published source, custody opt-in, hosted DB parity, LOGGED table and least privileges."
+            echo "A PASS verifies Gate05 session-specific prepaid route, exact protected webhook secret, published source, custody opt-in, hosted DB parity and LOGGED least-privilege table." 
+            echo "The separate Gate4 add-on is NOT the Gate05 prepaid callback and its flag is not paid admission."
             echo "It does NOT prove raw delivery, provider billing, scientific actual-vs-estimated labels or section-16 sample adequacy."
             echo "Do not replay old paid retry5 workflows or rerun one-use V0075 migration."
           } >> "${GITHUB_STEP_SUMMARY}"
