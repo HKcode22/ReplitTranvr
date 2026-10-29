@@ -701,6 +701,11 @@ export const fidsRestLedger: FidsAttemptBudgetOwner = {
 
 export interface FidsFetchOptions {
   direction?: "Departure" | "Arrival" | "Both";
+  /** Explicit source-frame query filters; existing defaults preserved. */
+  withCancelled?: boolean;
+  withCodeshared?: boolean;
+  withCargo?: boolean;
+  withPrivate?: boolean;
   withLeg?: boolean;
   /** Optional, explicitly requested. Default false, no silent position REST spend. */
   withLocation?: boolean;
@@ -723,17 +728,23 @@ export async function fetchFidsAirport(
   const direction = opts?.direction ?? "Both";
   const withLeg = opts?.withLeg ?? true;
   const withLocation = opts?.withLocation ?? false;
+  const withCancelled = opts?.withCancelled ?? true;
+  const withCodeshared = opts?.withCodeshared ?? true;
+  const withCargo = opts?.withCargo ?? false;
+  const withPrivate = opts?.withPrivate ?? false;
   if (typeof withLocation !== "boolean") throw new Error("FIDS_WITH_LOCATION_BOOLEAN_REQUIRED");
+  if ([withCancelled,withCodeshared,withCargo,withPrivate].some(v=>typeof v!=="boolean"))
+    throw new Error("FIDS_FRAME_FILTER_BOOLEAN_REQUIRED");
   const owner = opts?.budgetOwner ?? fidsRestLedger;
   const fetchImpl = opts?.fetchImpl ?? fetch;
   const sleepImpl = opts?.sleepImpl ?? sleep;
   try {
     const params = new URLSearchParams({
       direction,
-      withCancelled: "true",
-      withCodeshared: "true",
-      withCargo: "false",
-      withPrivate: "false",
+      withCancelled: withCancelled ? "true" : "false",
+      withCodeshared: withCodeshared ? "true" : "false",
+      withCargo: withCargo ? "true" : "false",
+      withPrivate: withPrivate ? "true" : "false",
       withLocation: withLocation ? "true" : "false",
       withLeg: withLeg ? "true" : "false",
     });

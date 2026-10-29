@@ -480,7 +480,7 @@ describe("§1.5.3 production FIDS path", () => {
 
   it("raw/provenance persistence failure rejects rather than returning success", async () => {
     await expect(fetchFidsPopulation({
-      airportIcao: "KLAX", fromLocal: "a", toLocal: "b", ianaTimezone: "America/Los_Angeles",
+      airportIcao: "KLAX", fromLocal: "2026-09-01T01:00", toLocal: "2026-09-01T02:00", ianaTimezone: "America/Los_Angeles",
       withCancelled: true, withCodeshared: true, serviceWindowStartUtc: new Date("2026-09-01T08:00:00Z"),
       serviceWindowEndUtc: new Date("2026-09-01T09:00:00Z"), cutoffUtc: new Date("2026-09-01T07:00:00Z"),
       providerApiVersion: "1", fidsProtocolVersion: "p", openapiSha256: "aa".repeat(32),
@@ -491,7 +491,7 @@ describe("§1.5.3 production FIDS path", () => {
   it("batch uses the same persistence path for every airport", async () => {
     const persist = vi.fn(async () => 0);
     const base = {
-      fromLocal: "a", toLocal: "b", ianaTimezone: "America/Los_Angeles", withCancelled: true,
+      fromLocal: "2026-09-01T01:00", toLocal: "2026-09-01T02:00", ianaTimezone: "America/Los_Angeles", withCancelled: true,
       withCodeshared: true, serviceWindowStartUtc: new Date("2026-09-01T08:00:00Z"),
       serviceWindowEndUtc: new Date("2026-09-01T09:00:00Z"), cutoffUtc: new Date("2026-09-01T07:00:00Z"),
       providerApiVersion: "1", fidsProtocolVersion: "p", openapiSha256: "aa".repeat(32),
