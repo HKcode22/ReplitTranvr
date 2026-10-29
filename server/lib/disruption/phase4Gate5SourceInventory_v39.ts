@@ -77,6 +77,7 @@ export interface P4InventoryReport{
   "FIDS_AND_WEBHOOK_METADATA_SAMPLE_NOT_SCIENCE_PASS"|
   "FIDS_METADATA_SAMPLE_NOT_SCIENCE_PASS";
  sourceAirport:string;
+ webhookLedgerAirportAttributionVerified:false;
  inspectedRelations:number;loggedAndReadableRelations:number;
  unavailableRelations:number;unloggedOrUnreadableRelations:number;
  latestFidsQuerySample:number;querySampleLimit:number;
@@ -86,7 +87,7 @@ export interface P4InventoryReport{
  candidateOperatingLegRows:number;
  candidateRowsBeforeScheduledHorizon:{"T-24h":number;"T-6h":number;"T-90m":number};
  ambiguousOrOtherPopulationRows:number;
- webhookOriginalBlobRefsSample:number;
+ webhookOriginalBlobRefsSample:number; // Unattributed to this source airport
  webhookUnexpiredLedgerRefs:number;
  webhookExpiredOrDeletedLedgerRefs:number;
  webhookInvalidLedgerRefs:number;
@@ -108,6 +109,7 @@ export async function auditP4Gate5OriginalSourceInventory(
  const now=date(scope.auditUtc);
  const base={
   schema:P4_SOURCE_INVENTORY_SCHEMA,sourceAirport:scope.airport,
+  webhookLedgerAirportAttributionVerified:false as const,
   latestFidsQuerySample:0,querySampleLimit:TOP,
   fidsQueriesWithUnexpiredInlineRaw:0,fidsQueriesWithExpiredOrMissingRaw:0,
   candidatePopulationRows:0,candidateOperatingLegRows:0,
