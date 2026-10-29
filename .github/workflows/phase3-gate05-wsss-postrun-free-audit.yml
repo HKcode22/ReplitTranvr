@@ -1,0 +1,71 @@
+name: Gate05 WSSS Completed-Paid-Run FREE Read-Only Scientific and Owner Audit
+
+# One protected, post-merge, ZERO-PAID automatic evidence check.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase3-gate05-wsss-postrun-free-audit.yml"
+      - "scripts/v39_gate05_wsss_postrun_free_readonly_audit_20261028.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate05-one-wsss-postrun-free-readonly-audit
+  cancel-in-progress: false
+
+jobs:
+  exact-scope-db-and-account-readonly:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: phase2g-paid
+    timeout-minutes: 12
+    steps:
+      - name: Checkout reviewed main without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install exact locked runtime only, no lifecycle
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Live read-only owner, source journal and three FREE provider GETs
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          GH_TOKEN: ""
+          GATE05_PROVIDER_CREATE_ALLOWED: ""
+          GATE05_FRESH_FINANCIAL_AUTH: ""
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${GITHUB_REF}" = refs/heads/main
+          test "${GITHUB_RUN_ATTEMPT}" = 1
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test -n "${DATABASE_URL:-}"
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -z "${GH_TOKEN}"
+          test -z "${GATE05_PROVIDER_CREATE_ALLOWED}"
+          test -z "${GATE05_FRESH_FINANCIAL_AUTH}"
+          node --check scripts/v39_gate05_wsss_postrun_free_readonly_audit_20261028.mjs
+          node scripts/v39_gate05_wsss_postrun_free_readonly_audit_20261028.mjs
+      - name: Correctly distinguish operational success from scientific conclusion
+        if: always()
+        run: |
+          {
+            echo "## Gate05 WSSS completed paid pilot — automatic FREE read-only audit"
+            echo "Provider exact-id STOP #40809393874 SUCCESS at 2026-10-29T04:45Z and 151 net Alert credits in the STOP terminal receipt."
+            echo "This run performs only FREE balance/list/balance and PostgreSQL SELECT in REPEATABLE READ READ ONLY."
+            echo "Zero Alert CREATE/DELETE, paid FIDS, refill, raw-body export, database writes or secret output."
+            echo "Raw metadata counts are not HTTP2xx ACK proof, independent operating flight identity, airborne trajectory nor runway-outcome semantics."
+            echo "An owner still ACTIVE after provider STOP is a separate DB settlement task; never repeat the paid CREATE."
+            echo "Original f.8 Gate05 science remains OPEN until PRE/POST/as-of labels, identity, raw byte custody and minima are independently verified."
+          } >> "${GITHUB_STEP_SUMMARY}"
