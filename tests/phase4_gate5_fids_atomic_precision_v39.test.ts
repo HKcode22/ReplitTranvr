@@ -28,8 +28,12 @@ describe("future FIDS raw receipt available-at microsecond custody",()=>{
  });
  it("cannot use a later FIDS response or silently redate other source columns",()=>{
   expect(FIDS_ATOMIC_POPULATION_VALUES_V39).toContain(
-   "WHERE population_query_id=$19::uuid");
+   "WHERE q.population_query_id=$19::uuid");
   expect(FIDS_ATOMIC_POPULATION_VALUES_V39).not.toMatch(/\bUPDATE\b|\bDELETE\b/);
+  // Only the matching query's original receipt is visible to this scalar read.
+  expect(FIDS_ATOMIC_POPULATION_VALUES_V39).toContain("FROM clean.fids_query_response q");
+  expect(FIDS_ATOMIC_POPULATION_VALUES_V39).toContain("q.available_at");
+  expect(FIDS_ATOMIC_POPULATION_VALUES_V39).not.toContain("COALESCE");
   expect(FIDS_ATOMIC_POPULATION_VALUES_V39).not.toContain("clock_timestamp");
  });
 });
