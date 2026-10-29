@@ -22,6 +22,15 @@ export const P4_G5_SOURCE_TIMING_SQL_V39=[
  "count(*) FILTER (WHERE p.response_hash<>p.receipt_hash)::int AS hash_mismatch,",
  "count(*) FILTER (WHERE p.available_at<p.receipt_available)::int AS available_before_receipt,",
  "count(*) FILTER (WHERE p.available_at>$3::timestamptz)::int AS available_after_audit,",
+ "count(*) FILTER (WHERE p.available_at<p.receipt_available",
+ "AND p.receipt_available-p.available_at<=interval '1 second')::int AS before_receipt_under_1s,",
+ "count(*) FILTER (WHERE p.available_at<p.receipt_available",
+ "AND p.receipt_available-p.available_at>interval '1 second'",
+ "AND p.receipt_available-p.available_at<=interval '1 minute')::int AS before_receipt_1s_to_1m,",
+ "count(*) FILTER (WHERE p.available_at<p.receipt_available",
+ "AND p.receipt_available-p.available_at>interval '1 minute')::int AS before_receipt_over_1m,",
+ "count(*) FILTER (WHERE p.response_hash=p.receipt_hash AND",
+ "p.available_at>=p.receipt_available AND p.available_at<=$3::timestamptz)::int AS consistent_source_rows,",
  "count(*) FILTER (WHERE p.dep_scheduled_utc IS NOT NULL",
  "AND p.available_at<=p.dep_scheduled_utc - interval '24 hours'",
  "AND p.receipt_available<=p.dep_scheduled_utc - interval '24 hours')::int AS before_24h,",
@@ -31,6 +40,21 @@ export const P4_G5_SOURCE_TIMING_SQL_V39=[
  "count(*) FILTER (WHERE p.dep_scheduled_utc IS NOT NULL",
  "AND p.available_at<=p.dep_scheduled_utc - interval '90 minutes'",
  "AND p.receipt_available<=p.dep_scheduled_utc - interval '90 minutes')::int AS before_90m,",
+ "count(*) FILTER (WHERE p.dep_scheduled_utc IS NOT NULL",
+ "AND p.response_hash=p.receipt_hash AND p.available_at>=p.receipt_available",
+ "AND p.available_at<=$3::timestamptz",
+ "AND p.receipt_available<=p.dep_scheduled_utc - interval '24 hours'",
+ "AND p.available_at<=p.dep_scheduled_utc - interval '24 hours')::int AS safe_before_24h,",
+ "count(*) FILTER (WHERE p.dep_scheduled_utc IS NOT NULL",
+ "AND p.response_hash=p.receipt_hash AND p.available_at>=p.receipt_available",
+ "AND p.available_at<=$3::timestamptz",
+ "AND p.receipt_available<=p.dep_scheduled_utc - interval '6 hours'",
+ "AND p.available_at<=p.dep_scheduled_utc - interval '6 hours')::int AS safe_before_6h,",
+ "count(*) FILTER (WHERE p.dep_scheduled_utc IS NOT NULL",
+ "AND p.response_hash=p.receipt_hash AND p.available_at>=p.receipt_available",
+ "AND p.available_at<=$3::timestamptz",
+ "AND p.receipt_available<=p.dep_scheduled_utc - interval '90 minutes'",
+ "AND p.available_at<=p.dep_scheduled_utc - interval '90 minutes')::int AS safe_before_90m,",
  "count(*) FILTER (WHERE p.dep_scheduled_utc IS NOT NULL",
  "AND p.available_at>p.dep_scheduled_utc)::int AS after_candidate_schedule,",
  "count(*) FILTER (WHERE p.population_role='requested_airport_primary'",
@@ -126,6 +150,8 @@ export async function auditP4Gate5SourceCutoffsV39(
   observedRows:null,primaryRows:null,contextRows:null,
   missingCandidateScheduleRows:null,
   sourceHashOrAvailabilityViolations:null,
+  sourceIntegrityBreakdown:null,
+  beforeCandidateScheduleWithSourceIntegrity:{"T-24h":null,"T-6h":null,"T-90m":null},
   beforeCandidateSchedule:{"T-24h":null,"T-6h":null,"T-90m":null},
   sourceRowsAfterCandidateSchedule:null,
   confirmedCoreOperatingRows:null,
@@ -136,13 +162,27 @@ export async function auditP4Gate5SourceCutoffsV39(
   throw Error("P4_G5_MISSING_SOURCE_AGGREGATE");
  const t=record(timing.rows[0]);
  const fields=["observations","primary_rows","context_rows","no_schedule","hash_mismatch",
-  "available_before_receipt","available_after_audit","before_24h","before_6h",
+  "available_before_receipt","available_after_audit",
+  "before_receipt_under_1s","before_receipt_1s_to_1m",
+  "before_receipt_over_1m","consistent_source_rows",
+  "safe_before_24h","safe_before_6h","safe_before_90m",
+  "before_24h","before_6h",
   "before_90m","after_candidate_schedule","confirmed_core_operating_records"];
  const vals=Object.fromEntries(fields.map(k=>[k,count(t,k)])) as Record<string,number>;
  if(vals.primary_rows+vals.context_rows>vals.observations||
   vals.no_schedule>vals.observations||
   vals.before_24h>vals.before_6h||vals.before_6h>vals.before_90m||
-  vals.before_90m>vals.observations||vals.confirmed_core_operating_records>vals.primary_rows)
+  vals.before_90m>vals.observations||
+  vals.before_receipt_under_1s+vals.before_receipt_1s_to_1m+
+   vals.before_receipt_over_1m!==vals.available_before_receipt||
+  vals.consistent_source_rows>vals.observations||
+  vals.safe_before_24h>vals.safe_before_6h||
+  vals.safe_before_6h>vals.safe_before_90m||
+  vals.safe_before_90m>vals.consistent_source_rows||
+  vals.safe_before_24h>vals.before_24h||
+  vals.safe_before_6h>vals.before_6h||
+  vals.safe_before_90m>vals.before_90m||
+  vals.confirmed_core_operating_records>vals.primary_rows)
   throw Error("P4_G5_IMPOSSIBLE_SOURCE_COUNTERS");
  const snaps=await db.query(P4_G5_SNAPSHOT_SQL_V39,[ids,scope.airport,scope.auditUtc]);
  if(!snaps||!Array.isArray(snaps.rows)||snaps.rows.length>3)
@@ -178,6 +218,19 @@ export async function auditP4Gate5SourceCutoffsV39(
   contextRows:vals.context_rows,missingCandidateScheduleRows:vals.no_schedule,
   sourceHashOrAvailabilityViolations:vals.hash_mismatch+
    vals.available_before_receipt+vals.available_after_audit,
+  sourceIntegrityBreakdown:{
+   responseHashMismatchRows:vals.hash_mismatch,
+   memberAvailableBeforeReceiptRows:vals.available_before_receipt,
+   memberAvailableAfterAuditRows:vals.available_after_audit,
+   sourceConsistentRows:vals.consistent_source_rows,
+   receiptAheadByAtMostOneSecond:vals.before_receipt_under_1s,
+   receiptAheadByOneSecondToOneMinute:vals.before_receipt_1s_to_1m,
+   receiptAheadByMoreThanOneMinute:vals.before_receipt_over_1m
+  },
+  beforeCandidateScheduleWithSourceIntegrity:{
+   "T-24h":vals.safe_before_24h,"T-6h":vals.safe_before_6h,
+   "T-90m":vals.safe_before_90m
+  },
   beforeCandidateSchedule:{"T-24h":vals.before_24h,"T-6h":vals.before_6h,
    "T-90m":vals.before_90m},
   sourceRowsAfterCandidateSchedule:vals.after_candidate_schedule,
