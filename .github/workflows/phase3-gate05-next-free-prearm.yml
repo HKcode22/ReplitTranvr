@@ -1,0 +1,71 @@
+name: Gate05 WSSS New-Scope Budget and Owner — Automatic FREE Prearm
+
+# Automatically observe CURRENT provider/free account facts when reviewed main
+# changes to this preflight. No owner Replit Shell and no paid API calls.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase3-gate05-next-free-prearm.yml"
+      - "scripts/v39_gate05_next_scope_free_prearm_20261028.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate05-next-scope-free-account-prearm
+  cancel-in-progress: false
+
+jobs:
+  readonly-fresh-account-facts:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    environment: phase2g-paid
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact main, no persistent token
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install runtime-only locked dependencies, no scripts
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Exact-reviewed FREE balance, subscription inventory and read-only owner state
+        shell: bash
+        env:
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          GH_TOKEN: ""
+          GATE05_PROVIDER_CREATE_ALLOWED: ""
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${GITHUB_REF}" = "refs/heads/main"
+          test "${GITHUB_RUN_ATTEMPT}" = 1
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test -n "${DATABASE_URL:-}"
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -z "${GH_TOKEN}"
+          test -z "${GATE05_PROVIDER_CREATE_ALLOWED}"
+          node --check scripts/v39_gate05_next_scope_free_prearm_20261028.mjs
+          node scripts/v39_gate05_next_scope_free_prearm_20261028.mjs
+      - name: Record budget-vs-authorization boundary
+        if: always()
+        run: |
+          {
+            echo "## Gate05 next-scope free-only account and owner prearm"
+            echo "Only three FREE API GETs: balance, webhook subscription inventory, balance."
+            echo "One public free health GET and protected PostgreSQL transaction READ ONLY."
+            echo "Zero paid FIDS, Alert CREATE/DELETE, refill, DB writes or old-owner changes."
+            echo "Observed balance and source readiness do NOT authorize another paid scope."
+            echo "Historical 1900-credit NEXT4 floor versus proposed new 500-credit reserve is reported; no silent waiver."
+            echo "Owner's earlier one-use retry5 paid authorization was consumed; a NEW exact scope, independent STOP and budget consent must be recorded before CREATE."
+            echo "Even a new paid operational trial does not automatically prove the f.8 runway-delay estimand."
+          } >> "${GITHUB_STEP_SUMMARY}"
