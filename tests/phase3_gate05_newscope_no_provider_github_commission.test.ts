@@ -12,7 +12,7 @@ describe("Gate05 NEW WSSS science owner and independent STOP no-provider prepara
     expect(flow).toContain("workflow_dispatch:");
     expect(flow).toContain("reviewed_main_sha:");
     expect(flow).toContain("COMMISSION_FRESH_WSSS_OWNER_NO_PROVIDER_NO_PAID_CREATE");
-    expect(flow).not.toMatch(/\n  push:|\n  schedule:|cron:/);
+    expect(flow).not.toMatch(/\n {2}(?:push|schedule):|cron:/);
     expect(flow).toContain("environment: phase2g-paid");
     expect(flow).toContain('test "${GITHUB_RUN_ATTEMPT}" = 1');
     expect(flow).toContain('test "$(git rev-parse FETCH_HEAD)" = "${REVIEWED}"');
