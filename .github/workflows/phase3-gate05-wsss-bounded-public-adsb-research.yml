@@ -1,0 +1,64 @@
+name: Gate05 WSSS Finite Free ADS-B Live Continuity RESEARCH ONLY
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase3-gate05-wsss-bounded-public-adsb-research.yml'
+      - 'scripts/v39_gate05_adsb_lol_wsss_bounded_live_20261029.ts'
+  schedule:
+    - cron: '13 0,8,16 29-31 10 *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate05-finite-wsss-public-adsb-research
+  cancel-in-progress: false
+
+jobs:
+  finite-six-get-source-research:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Exact current main checkout with no persisted token
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install reviewed dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Bounded no-key pilot; source automatically sunsets Nov 1 UTC
+        shell: bash
+        env:
+          GH_TOKEN: ''
+          AERODATABOX_API_KEY: ''
+          DATABASE_URL: ''
+          V39_DATABASE_RUNTIME_URL: ''
+          V39_PROVIDER_BLOB_BUCKET_ID: ''
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "${GITHUB_RUN_ATTEMPT}" = '1'
+          test -z "${GH_TOKEN}"
+          test -z "${AERODATABOX_API_KEY}"
+          test -z "${DATABASE_URL}"
+          node --import tsx scripts/v39_gate05_adsb_lol_wsss_bounded_live_20261029.ts
+      - name: Document research-only acceptance boundary
+        if: always()
+        run: |
+          {
+            echo '## Finite live ADS-B coverage research only'
+            echo 'Six or fewer public no-key GETs per run, no paid AeroDataBox calls.'
+            echo 'Programmatic HTTP rates may change. No automated retries.'
+            echo 'A positive window never certifies WSSS operating-leg linkage, exact runway clock, or Gate05 scientific PASS.'
+            echo 'Scheduled runs after 2026-11-01T00:00Z make ZERO external requests.'
+            echo 'API/data license: ODbL-1.0; https://api.adsb.lol/docs'
+          } >> "${GITHUB_STEP_SUMMARY}"
