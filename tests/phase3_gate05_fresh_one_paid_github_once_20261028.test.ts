@@ -53,7 +53,13 @@ describe("Gate05 new source-bound GitHub ONE paid CREATE after independent STOP"
     expect(paid).toContain("ONE_CREATE_ATTEMPT_IMMINENT_DO_NOT_REPEAT");
     expect(paid).toContain("v39.gate05.fresh-positive-exact-create-receipt.v1");
     expect(paid).toContain("POSITIVE_GITHUB_RECEIPT_NOT_DURABLE");
-    expect(paid).toContain("providerSubscriptionId:created");
+    const posted=paid.slice(paid.indexOf("const positive=gh(["),paid.indexOf('if(!positive?.id)'));
+    expect(posted).toContain("providerSubscriptionIdSha256:providerIdSha256");
+    expect(posted).not.toContain("providerSubscriptionId:created");
+    expect(paid).toContain('GATE05_NEW_EXACT_ID_RECOVERY');
+    expect(paid).toContain('"--repo",REPO,"--env","gate05-safety"');
+    expect(paid).toContain('input:created+"\\n"');
+    expect(paid).toContain("CREATE_ID_UNSAFE_RECOVERY_SHAPE");
     expect(paid.indexOf('const positive=gh(['))
       .toBeGreaterThan(paid.indexOf('created=response.subscription.id'));
     expect(paid.indexOf('const positive=gh(['))
