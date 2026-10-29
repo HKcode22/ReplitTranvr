@@ -7,6 +7,7 @@
 import pg from "pg";
 import {createHash,createHmac,randomBytes,randomUUID} from "node:crypto";
 import {spawnSync} from "node:child_process";
+import {appendFileSync} from "node:fs";
 
 const REPO="HKcode22/ReplitTranvr";
 const ENV="gate05-safety";
@@ -268,6 +269,20 @@ try{
     out?.reviewed_stop_ticket_sha256!==ticket||
     out?.provider_subscription_id!==null)
     hold("POSTCOMMIT_UNPROVEN");
+  // Only a VERIFIED post-COMMIT owner may publish this machine-readable
+  // handoff. It contains no passwords, DB URLs, API keys or provider ID.
+  // A failed/ambiguous commission never produces dispatchable STOP inputs.
+  stage="PUBLISH_NON_SECRET_POSTCOMMIT_STOP_HANDOFF";
+  const outputFile=String(process.env.GITHUB_OUTPUT??"");
+  if(!outputFile.startsWith("/"))hold("GITHUB_OUTPUT_MISSING");
+  const handoff={
+    scope_id:scope,runner_sha:runner,receiver_sha:RECEIVER,
+    authorization_sha256:auth,stop_ticket_sha256:ticket,
+    start_utc:times.start,stop_utc:times.stop,
+    starting_credits:String(credits)
+  };
+  appendFileSync(outputFile,
+    Object.entries(handoff).map(([k,v])=>k+"="+v+"\\n").join(""));
   stage="COMPLETE";
   console.log(JSON.stringify({
     schema:"v39.gate05.new-scope-github-no-provider-commission.v1",
