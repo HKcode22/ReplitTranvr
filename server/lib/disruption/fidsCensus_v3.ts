@@ -568,7 +568,7 @@ export async function persistPopulationRows(rows: PopulationRow[]): Promise<numb
         airport_iana_timezone, scope_classification, codeshare_resolution_status,
         fids_retrieval_utc, available_at, response_hash, canonical_flight_instance_id,
         analytic_identity_id, provider_api_version, fids_protocol_version, openapi_sha256)
-       VALUES (${FIDS_ATOMIC_POPULATION_VALUES_V39})
+       VALUES (${Array.from({ length: 34 }, (_, i) => `$${i + 1}`).join(",")})
        ON CONFLICT (population_query_id, analytic_identity_id, population_role) DO NOTHING`,
       [r.batchId,r.sourceAirportIcao,r.windowStartUtc,r.windowEndUtc,r.cutoffUtc,r.flightNumber,
        r.carrierIata,r.carrierIcao,r.callSign,r.depAirportIcao,r.depAirportIata,r.arrAirportIcao,
@@ -593,7 +593,7 @@ export async function persistPopulationRows(rows: PopulationRow[]): Promise<numb
 export const FIDS_ATOMIC_POPULATION_VALUES_V39 = Array.from(
   {length:34},(_,i)=>i===27
     ? "(SELECT GREATEST($28::timestamptz, q.available_at) FROM clean.fids_query_response q WHERE q.population_query_id=$19::uuid)"
-    : `${i+1}`
+    : `$${i+1}`
 ).join(",");
 
 /** Raw FIDS response and normalized membership persist atomically. */
@@ -630,7 +630,7 @@ export async function persistFidsObservation(
           codeshare_resolution_status, fids_retrieval_utc, available_at, response_hash,
           canonical_flight_instance_id, analytic_identity_id, provider_api_version,
           fids_protocol_version, openapi_sha256)
-         VALUES (${Array.from({ length: 34 }, (_, i) => `$${i + 1}`).join(",")})
+         VALUES (${FIDS_ATOMIC_POPULATION_VALUES_V39})
          ON CONFLICT (population_query_id, analytic_identity_id, population_role) DO NOTHING`,
         [r.batchId,r.sourceAirportIcao,r.windowStartUtc,r.windowEndUtc,r.cutoffUtc,r.flightNumber,
          r.carrierIata,r.carrierIcao,r.callSign,r.depAirportIcao,r.depAirportIata,r.arrAirportIcao,
