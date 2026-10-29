@@ -91,9 +91,21 @@ pgSuite("Gate3 read-only prearmed session in disposable PostgreSQL",()=>{
       );
       const good=await reviewGate3PreparedSessionV39(client,spec);
       expect(good).toMatchObject({
-        status:"OFFLINE_SOURCE_SHAPE_VALID",
         authorizedPaidCanary:false,providerCalls:0,databaseMutations:0,
       });
+      // This real-PG suite shares the disposable v39_ci database with
+      // concurrently running real-PG tests. A different test can briefly
+      // open another PREPARED Gate3 owner. In that case production MUST
+      // correctly return HOLD, never override the shared-owner invariant.
+      // Only that global-concurrency HOLD may differ from the positive
+      // exact-source snapshot expected in this test.
+      const globalConcurrencyReason="OTHER_UNSETTLED_GATE3_OWNER_PRESENT";
+      expect(good.reasons.filter(x=>x!==globalConcurrencyReason)).toEqual([]);
+      if(good.reasons.includes(globalConcurrencyReason)){
+        expect(good.status).toBe("HOLD");
+      }else{
+        expect(good.status).toBe("OFFLINE_SOURCE_SHAPE_VALID");
+      }
       const badHash=await reviewGate3PreparedSessionV39(client,{
         ...spec,authorizationEvidenceSha256:"a".repeat(64),
       });
