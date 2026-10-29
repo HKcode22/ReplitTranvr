@@ -5,6 +5,9 @@
  * != independently verified selected T; logged blob ref != original bytes.
  * Never outputs flight IDs, source hashes, airplane IDs or time windows.
  */
+import {assessP4QueryOriginSensitivityV39,type P4QueryOriginReportV39}
+ from "./phase4Gate5QueryOriginSensitivity_v39";
+
 export const P4_SOURCE_INVENTORY_SCHEMA="v39.phase4.gate5-live-source-inventory.v1" as const;
 const SHA=/^[a-f0-9]{64}$/;
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -119,6 +122,7 @@ export interface P4InventoryReport{
  normalizedCodeshareCounts:{confirmedOperating:number;marketing:number;other:number};
  canonicalIdentityPresentRows:number;
  departureSchedulePresentRows:number;
+ queryOriginOperatorSensitivity:P4QueryOriginReportV39|null;
  originalFidsFieldSample:{
   sourceItems:number;departureItems:number;arrivalItems:number;
   codeshareStatusPresent:number;providerOperatorTagged:number;
@@ -159,6 +163,7 @@ export async function auditP4Gate5OriginalSourceInventory(
   normalizedScopeCounts:{confirmedCore:0,other:0},
   normalizedCodeshareCounts:{confirmedOperating:0,marketing:0,other:0},
   canonicalIdentityPresentRows:0,departureSchedulePresentRows:0,
+  queryOriginOperatorSensitivity:null as P4QueryOriginReportV39|null,
   originalFidsFieldSample:{
    sourceItems:0,departureItems:0,arrivalItems:0,
    codeshareStatusPresent:0,providerOperatorTagged:0,
@@ -286,6 +291,11 @@ export async function auditP4Gate5OriginalSourceInventory(
     rawFlags.providerMarketingTagged>rawFlags.codeshareStatusPresent)
    throw Error("P4_INV_ORIGINAL_FIDS_AGGREGATE_CONTRADICTION");
  }
+ const originSensitivity=readyIds.length?
+   await assessP4QueryOriginSensitivityV39(db,{
+    airport:scope.airport,auditUtc:scope.auditUtc,
+    unexpiredQueryIds:readyIds
+   }):null;
  const since=new Date(now-7*86400000).toISOString();
  const blob=await db.query(P4_INV_BLOB_SQL,[since,scope.auditUtc]);
  if(!blob||!Array.isArray(blob.rows)||blob.rows.length>MAX_BLOBS)
@@ -318,6 +328,7 @@ export async function auditP4Gate5OriginalSourceInventory(
   canonicalIdentityPresentRows:canonical,
   departureSchedulePresentRows:scheduledPresent,
   originalFidsFieldSample:rawFlags,
+  queryOriginOperatorSensitivity:originSensitivity,
   webhookOriginalBlobRefsSample:blob.rows.length,
   webhookUnexpiredLedgerRefs:still,
   webhookExpiredOrDeletedLedgerRefs:expired,
