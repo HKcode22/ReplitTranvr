@@ -15,7 +15,7 @@ describe("WSSS Gate05 original 28-blob read-only final readiness",()=>{
    "2026-10-29T03:45:00.000Z","2026-10-29T04:45:00.000Z",
    "expectedJournalDeliveries:28,expectedJournalItems:151"
   ])expect(source).toContain(value);
-  expect(source).toContain("EXACT_OWNER");
+  expect(source).toContain("FOREIGN_OWNER_OR_UNBOUND");
   expect(source).not.toContain("e69ffa34-d8a6-456f-a49c-9dd459e6d294");
  });
  it("uses a PostgreSQL read-only transaction and only original dedicated bucket reads",()=>{
@@ -34,7 +34,7 @@ describe("WSSS Gate05 original 28-blob read-only final readiness",()=>{
  it("cryptographically validates original blob bytes against retained journal and contract",()=>{
   expect(source).toContain("adaptGate05LoggedJournalToCensusV39");
   expect(source).toContain("censusGate05ObservedPilotV39");
-  expect(source).toContain("source.contentSha256");
+  expect(source).toContain("contentSha256:row.content_sha256");
   expect(source).toContain("row.content_sha256!==row.body_sha256");
   expect(source).toContain('row.source_record_id!=="prepaid:"+SCOPE+":"+row.delivery_id');
   expect(source).toContain("row.deleted_at_utc!==null");
