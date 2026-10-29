@@ -69,6 +69,33 @@ export const P4_INV_BLOB_SQL=[
  "AND persisted_at_utc<=$2::timestamptz",
  "ORDER BY persisted_at_utc DESC LIMIT 20001"
 ].join(" ");
+export const P4_INV_RAW_FIDS_FLAGS_SQL=[
+ "WITH q AS (SELECT raw_payload FROM clean.fids_query_response",
+ "WHERE population_query_id=ANY($1::uuid[])",
+ "AND raw_payload IS NOT NULL AND raw_expired_at_utc IS NULL),",
+ "records AS (",
+ "SELECT a.value AS flight,'departure'::text AS movement FROM q",
+ "CROSS JOIN LATERAL jsonb_array_elements(",
+ "CASE WHEN jsonb_typeof(q.raw_payload->'departures')='array'",
+ "THEN q.raw_payload->'departures' ELSE '[]'::jsonb END) a",
+ "UNION ALL",
+ "SELECT a.value AS flight,'arrival'::text AS movement FROM q",
+ "CROSS JOIN LATERAL jsonb_array_elements(",
+ "CASE WHEN jsonb_typeof(q.raw_payload->'arrivals')='array'",
+ "THEN q.raw_payload->'arrivals' ELSE '[]'::jsonb END) a",
+ ")",
+ "SELECT COUNT(*)::int AS source_items,",
+ "COUNT(*) FILTER (WHERE movement='departure')::int AS departure_items,",
+ "COUNT(*) FILTER (WHERE movement='arrival')::int AS arrival_items,",
+ "COUNT(*) FILTER (WHERE flight ? 'codeshareStatus')::int AS codeshare_field_present,",
+ "COUNT(*) FILTER (WHERE flight->>'codeshareStatus' IN ('IsOperator','1'))::int AS provider_operator_tagged,",
+ "COUNT(*) FILTER (WHERE flight->>'codeshareStatus' IN ('IsCodeshared','2'))::int AS provider_marketing_tagged,",
+ "COUNT(*) FILTER (WHERE NULLIF(flight->>'id','') IS NOT NULL)::int AS provider_flight_id_present,",
+ "COUNT(*) FILTER (WHERE NULLIF(flight#>>'{departure,airport,icao}','') IS NOT NULL)::int AS explicit_departure_icao,",
+ "COUNT(*) FILTER (WHERE NULLIF(flight#>>'{arrival,airport,icao}','') IS NOT NULL)::int AS explicit_arrival_icao,",
+ "COUNT(*) FILTER (WHERE NULLIF(flight#>>'{departure,scheduledTime,utc}','') IS NOT NULL)::int AS explicit_departure_schedule",
+ "FROM records"
+].join(" ");
 export interface P4InventoryDb{query(sql:string,params:unknown[]):Promise<{rows:unknown[]}>}
 export interface P4InventoryReport{
  schema:typeof P4_SOURCE_INVENTORY_SCHEMA;
@@ -87,6 +114,19 @@ export interface P4InventoryReport{
  candidateOperatingLegRows:number;
  candidateRowsBeforeScheduledHorizon:{"T-24h":number;"T-6h":number;"T-90m":number};
  ambiguousOrOtherPopulationRows:number;
+ normalizedRoleCounts:{primary:number;context:number;other:number};
+ normalizedScopeCounts:{confirmedCore:number;other:number};
+ normalizedCodeshareCounts:{confirmedOperating:number;marketing:number;other:number};
+ canonicalIdentityPresentRows:number;
+ departureSchedulePresentRows:number;
+ originalFidsFieldSample:{
+  sourceItems:number;departureItems:number;arrivalItems:number;
+  codeshareStatusPresent:number;providerOperatorTagged:number;
+  providerMarketingTagged:number;providerFlightIdPresent:number;
+  explicitDepartureIcao:number;explicitArrivalIcao:number;
+  explicitDepartureSchedule:number;
+ };
+ 
  webhookOriginalBlobRefsSample:number; // Unattributed to this source airport
  webhookUnexpiredLedgerRefs:number;
  webhookExpiredOrDeletedLedgerRefs:number;
@@ -115,6 +155,18 @@ export async function auditP4Gate5OriginalSourceInventory(
   candidatePopulationRows:0,candidateOperatingLegRows:0,
   candidateRowsBeforeScheduledHorizon:{"T-24h":0,"T-6h":0,"T-90m":0},
   ambiguousOrOtherPopulationRows:0,webhookOriginalBlobRefsSample:0,
+  normalizedRoleCounts:{primary:0,context:0,other:0},
+  normalizedScopeCounts:{confirmedCore:0,other:0},
+  normalizedCodeshareCounts:{confirmedOperating:0,marketing:0,other:0},
+  canonicalIdentityPresentRows:0,departureSchedulePresentRows:0,
+  originalFidsFieldSample:{
+   sourceItems:0,departureItems:0,arrivalItems:0,
+   codeshareStatusPresent:0,providerOperatorTagged:0,
+   providerMarketingTagged:0,providerFlightIdPresent:0,
+   explicitDepartureIcao:0,explicitArrivalIcao:0,
+   explicitDepartureSchedule:0
+  },
+
   webhookUnexpiredLedgerRefs:0,webhookExpiredOrDeletedLedgerRefs:0,
   webhookInvalidLedgerRefs:0,
   missingFidsIsSourceUnknown:true as const,allSourceCompletenessVerified:false as const,
@@ -165,6 +217,10 @@ export async function auditP4Gate5OriginalSourceInventory(
   if(ready)rawReady++;else rawUnready++;
  }
  let total=0,operating=0,excluded=0;
+ const role={primary:0,context:0,other:0};
+ const scopeFlags={confirmedCore:0,other:0};
+ const codeshareFlags={confirmedOperating:0,marketing:0,other:0};
+ let canonical=0,scheduledPresent=0;
  const asOf={"T-24h":0,"T-6h":0,"T-90m":0};
  if(queries.size){
   const population=await db.query(P4_INV_POPULATION_SQL,[[...queries.keys()]]);
@@ -175,6 +231,16 @@ export async function auditP4Gate5OriginalSourceInventory(
    const p=r(val),q=queries.get(String(p.query_id));
    if(!q||typeof p.response_hash!=="string"||p.response_hash!==q.hash)
     throw Error("P4_INV_POPULATION_QUERY_LINEAGE_MISMATCH");
+   if(p.population_role==="requested_airport_primary")role.primary++;
+   else if(p.population_role==="opposite_movement_context")role.context++;
+   else role.other++;
+   if(p.scope==="confirmed_core")scopeFlags.confirmedCore++;
+   else scopeFlags.other++;
+   if(p.codeshare==="confirmed_operating_leg")codeshareFlags.confirmedOperating++;
+   else if(p.codeshare==="resolved_marketing")codeshareFlags.marketing++;
+   else codeshareFlags.other++;
+   if(typeof p.canonical_id==="string"&&p.canonical_id.length>0)canonical++;
+   if(p.dep_scheduled_utc!==null)scheduledPresent++;
    const legitimate=p.canonical_id!==null&&typeof p.canonical_id==="string"&&
     p.canonical_id.length>0&&
     p.population_role==="requested_airport_primary"&&
@@ -189,6 +255,36 @@ export async function auditP4Gate5OriginalSourceInventory(
    if(available<=scheduled-21600000)asOf["T-6h"]++;
    if(available<=scheduled-5400000)asOf["T-90m"]++;
   }
+ }
+ let rawFlags=base.originalFidsFieldSample;
+ const readyIds=[...queries.entries()].filter(([,value])=>value.rawReady)
+  .map(([id])=>id);
+ if(readyIds.length){
+  const original=await db.query(P4_INV_RAW_FIDS_FLAGS_SQL,[readyIds]);
+  if(!original||!Array.isArray(original.rows)||original.rows.length!==1)
+   throw Error("P4_INV_ORIGINAL_FIDS_AGGREGATE_MISSING");
+  const p=r(original.rows[0]);
+  const keys=[
+   "source_items","departure_items","arrival_items",
+   "codeshare_field_present","provider_operator_tagged",
+   "provider_marketing_tagged","provider_flight_id_present",
+   "explicit_departure_icao","explicit_arrival_icao",
+   "explicit_departure_schedule"
+  ];
+  const numbers=keys.map(key=>Number(p[key]));
+  if(numbers.some(x=>!Number.isSafeInteger(x)||x<0||x>MAX_MEMBER))
+   throw Error("P4_INV_ORIGINAL_FIDS_AGGREGATE_INVALID");
+  rawFlags={
+   sourceItems:numbers[0],departureItems:numbers[1],
+   arrivalItems:numbers[2],codeshareStatusPresent:numbers[3],
+   providerOperatorTagged:numbers[4],providerMarketingTagged:numbers[5],
+   providerFlightIdPresent:numbers[6],explicitDepartureIcao:numbers[7],
+   explicitArrivalIcao:numbers[8],explicitDepartureSchedule:numbers[9]
+  };
+  if(rawFlags.departureItems+rawFlags.arrivalItems!==rawFlags.sourceItems||
+    rawFlags.providerOperatorTagged>rawFlags.codeshareStatusPresent||
+    rawFlags.providerMarketingTagged>rawFlags.codeshareStatusPresent)
+   throw Error("P4_INV_ORIGINAL_FIDS_AGGREGATE_CONTRADICTION");
  }
  const since=new Date(now-7*86400000).toISOString();
  const blob=await db.query(P4_INV_BLOB_SQL,[since,scope.auditUtc]);
@@ -217,6 +313,11 @@ export async function auditP4Gate5OriginalSourceInventory(
   candidatePopulationRows:total,candidateOperatingLegRows:operating,
   candidateRowsBeforeScheduledHorizon:asOf,
   ambiguousOrOtherPopulationRows:excluded,
+  normalizedRoleCounts:role,normalizedScopeCounts:scopeFlags,
+  normalizedCodeshareCounts:codeshareFlags,
+  canonicalIdentityPresentRows:canonical,
+  departureSchedulePresentRows:scheduledPresent,
+  originalFidsFieldSample:rawFlags,
   webhookOriginalBlobRefsSample:blob.rows.length,
   webhookUnexpiredLedgerRefs:still,
   webhookExpiredOrDeletedLedgerRefs:expired,
