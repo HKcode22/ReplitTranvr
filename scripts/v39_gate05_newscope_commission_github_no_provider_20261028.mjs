@@ -7,7 +7,8 @@
 import pg from "pg";
 import {createHash,createHmac,randomBytes,randomUUID} from "node:crypto";
 import {spawnSync} from "node:child_process";
-import {appendFileSync} from "node:fs";
+import {appendFileSync,accessSync,constants as fsConstants} from "node:fs";
+import {gate05NonsecretStopOutputV39} from "./v39_gate05_nonsecret_stop_github_output_20261028.mjs";
 
 const REPO="HKcode22/ReplitTranvr";
 const ENV="gate05-safety";
@@ -69,6 +70,11 @@ async function publicProof(runtime,callback){
     hold("PUBLISHED_WEBHOOK_SECRET_NOT_READY");
 }
 try{
+  const outputFile=String(process.env.GITHUB_OUTPUT??"");
+  if(!outputFile.startsWith("/"))hold("GITHUB_OUTPUT_MISSING_PRECOMMIT");
+  try{accessSync(outputFile,fsConstants.W_OK);}catch{
+    hold("GITHUB_OUTPUT_NOT_WRITABLE_PRECOMMIT");
+  }
   stage="EXACT_REVIEWED_GITHUB_DISPATCH";
   const runner=env("GITHUB_SHA",40);
   if(!/^[0-9a-f]{40}$/.test(runner)||
@@ -273,16 +279,13 @@ try{
   // handoff. It contains no passwords, DB URLs, API keys or provider ID.
   // A failed/ambiguous commission never produces dispatchable STOP inputs.
   stage="PUBLISH_NON_SECRET_POSTCOMMIT_STOP_HANDOFF";
-  const outputFile=String(process.env.GITHUB_OUTPUT??"");
-  if(!outputFile.startsWith("/"))hold("GITHUB_OUTPUT_MISSING");
   const handoff={
     scope_id:scope,runner_sha:runner,receiver_sha:RECEIVER,
     authorization_sha256:auth,stop_ticket_sha256:ticket,
     start_utc:times.start,stop_utc:times.stop,
     starting_credits:String(credits)
   };
-  appendFileSync(outputFile,
-    Object.entries(handoff).map(([k,v])=>k+"="+v+"\\n").join(""));
+  appendFileSync(outputFile,gate05NonsecretStopOutputV39(handoff),{encoding:"utf8"});
   stage="COMPLETE";
   console.log(JSON.stringify({
     schema:"v39.gate05.new-scope-github-no-provider-commission.v1",
