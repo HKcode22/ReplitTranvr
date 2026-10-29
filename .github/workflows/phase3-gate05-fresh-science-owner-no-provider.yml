@@ -30,6 +30,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: phase2g-paid
     timeout-minutes: 15
+    outputs:
+      scope_id: ${{ steps.commission.outputs.scope_id }}
+      runner_sha: ${{ steps.commission.outputs.runner_sha }}
+      receiver_sha: ${{ steps.commission.outputs.receiver_sha }}
+      authorization_sha256: ${{ steps.commission.outputs.authorization_sha256 }}
+      stop_ticket_sha256: ${{ steps.commission.outputs.stop_ticket_sha256 }}
+      start_utc: ${{ steps.commission.outputs.start_utc }}
+      stop_utc: ${{ steps.commission.outputs.stop_utc }}
+      starting_credits: ${{ steps.commission.outputs.starting_credits }}
     steps:
       - name: Checkout reviewed GitHub main without persistent token
         uses: actions/checkout@v4
@@ -63,6 +72,7 @@ jobs:
           test "$(git rev-parse FETCH_HEAD)" = "${REVIEWED}"
           node --check scripts/v39_gate05_newscope_commission_github_no_provider_20261028.mjs
       - name: NEW protected scope and independent safety credentials, no paid API
+        id: commission
         shell: bash
         env:
           GATE05_NEW_SCOPE_REVIEWED_SHA: ${{ inputs.reviewed_main_sha }}
@@ -94,4 +104,71 @@ jobs:
             echo "A missing source, terminal historical owner, active subscription or role privilege aborts."
             echo "The historical NEXT4 1900 credit floor is not waived by this setup."
             echo "Do not blindly rerun after any ambiguous COMMIT. No timing commands in Replit."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  dispatch-independent-retry6-stop-no-provider:
+    # A commission's verified post-COMMIT GITHUB_OUTPUT is the ONLY source.
+    # This dispatches the already existing separately reviewer-protected
+    # retry6 STOP, not a provider CREATE, and cannot itself prove ARMED.
+    needs: one-new-owner-and-protected-stop
+    if: ${{ needs.one-new-owner-and-protected-stop.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: phase2g-paid
+    steps:
+      - name: Exact reviewed source, never old retry5 paid controller
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+      - name: Verify new LOGGED owner and issue one exact GitHub STOP dispatch, no provider
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GATE05_GH_ADMIN_TOKEN }}
+          DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          GATE05_STOP_SCOPE: ${{ needs.one-new-owner-and-protected-stop.outputs.scope_id }}
+          GATE05_STOP_RUNNER: ${{ needs.one-new-owner-and-protected-stop.outputs.runner_sha }}
+          GATE05_STOP_RECEIVER: ${{ needs.one-new-owner-and-protected-stop.outputs.receiver_sha }}
+          GATE05_STOP_AUTH: ${{ needs.one-new-owner-and-protected-stop.outputs.authorization_sha256 }}
+          GATE05_STOP_TICKET: ${{ needs.one-new-owner-and-protected-stop.outputs.stop_ticket_sha256 }}
+          GATE05_STOP_START: ${{ needs.one-new-owner-and-protected-stop.outputs.start_utc }}
+          GATE05_STOP_END: ${{ needs.one-new-owner-and-protected-stop.outputs.stop_utc }}
+          GATE05_STOP_CREDITS: ${{ needs.one-new-owner-and-protected-stop.outputs.starting_credits }}
+          AERODATABOX_API_KEY: ""
+          RAPIDAPI_KEY: ""
+          GATE05_PROVIDER_CREATE_ALLOWED: ""
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${GITHUB_ACTIONS}" = "true"
+          test "${GITHUB_RUN_ATTEMPT}" = 1
+          test "${GITHUB_EVENT_NAME}" = "workflow_dispatch"
+          test "${GITHUB_REF}" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test -n "${GH_TOKEN:-}"
+          test -n "${DATABASE_URL:-}"
+          test -z "${AERODATABOX_API_KEY}"
+          test -z "${RAPIDAPI_KEY}"
+          test -z "${GATE05_PROVIDER_CREATE_ALLOWED}"
+          node --check scripts/v39_gate05_dispatch_newscope_independent_stop_20261028.mjs
+          node scripts/v39_gate05_dispatch_newscope_independent_stop_20261028.mjs
+      - name: Scope and safety status must not be misreported as ARMED or scientific PASS
+        if: always()
+        run: |
+          {
+            echo "## GitHub dispatched exact protected independent retry6 STOP (no provider CREATE)"
+            echo "One DB-verified new scope with machine-readable post-COMMIT metadata."
+            echo "Dispatch success does NOT imply gate05-safety protected reviewer approval."
+            echo "A queued, waiting or in-progress STOP is NOT actual ARMED proof."
+            echo "NO paid AeroDataBox POST, FIDS GET, refill or historical owner reuse."
+            echo "Never launch a paid subscription unless independent exact worker issued authenticated LIVE_STOP_WATCH_ARMED_NO_PROVIDER_CREATE."
+            echo "The separate 1900-credit floor and new paid consent are UNRESOLVED."
+            echo "A near-term 60-minute technical session cannot claim missing prospective T-24h FIDS."
           } >> "${GITHUB_STEP_SUMMARY}"
