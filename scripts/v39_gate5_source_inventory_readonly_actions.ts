@@ -2,6 +2,8 @@
 import pg from "pg";
 import {auditP4Gate5OriginalSourceInventory}
  from "../server/lib/disruption/phase4Gate5SourceInventory_v39";
+import {auditP4Gate5SourceCutoffsV39}
+ from "../server/lib/disruption/phase4Gate5SourceCutoffAudit_v39";
 export function requireP4InventoryActionsContext(env:NodeJS.ProcessEnv):{airport:string}{
  if(env.GITHUB_ACTIONS!=="true"||
   env.GITHUB_REF!=="refs/heads/main"||
@@ -26,10 +28,17 @@ async function main():Promise<void>{
   await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
   transaction=true;
   await client.query("SET LOCAL statement_timeout = '10000ms'");
+  const readAt=new Date().toISOString();
   const report=await auditP4Gate5OriginalSourceInventory(client,{
-   airport:ctx.airport,auditUtc:new Date().toISOString()
+   airport:ctx.airport,auditUtc:readAt
   });
-  console.log(JSON.stringify(report));
+  // Same dedicated transaction and audit UTC; no provider access.
+  const cohort=await auditP4Gate5SourceCutoffsV39(client,{
+   airport:ctx.airport,auditUtc:readAt
+  });
+  if(cohort.latestSourceReceiptSample!==report.latestFidsQuerySample)
+   throw Error("P4_GATE5_SOURCE_SAMPLE_PARITY_HOLD");
+  console.log(JSON.stringify({sourceInventory:report,cutoffAndSnapshotEvidence:cohort}));
   console.log("PHASE4_GATE5_AUDIT_EXECUTED_ONLY_NOT_SCIENTIFIC_GATE5_PASS");
  }finally{
   if(transaction)await client.query("ROLLBACK").catch(()=>undefined);
