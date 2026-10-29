@@ -61,6 +61,7 @@ describe("Phase4 original-source metadata, no provider",()=>{
    "T-24h":0,"T-6h":1,"T-90m":1
   });
   expect(x.webhookUnexpiredLedgerRefs).toBe(1);
+  expect(x.webhookLedgerAirportAttributionVerified).toBe(false);
   expect(x.firstSelectedTIndependentlyVerified).toBe(false);
   expect(x.rawOriginalBytesHashReadbackProven).toBe(false);
   expect(x.strictGate5Passed).toBe(false);
