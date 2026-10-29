@@ -43,6 +43,7 @@ const originResult={
  query_origin_only_records:9,explicit_origin_agrees:0,conflicting_origins:0,
  missing_flight_number:0,missing_arrival_icao:0,missing_departure_schedule:0,
  explicit_auxiliary_scope:0,explicit_core_pattern:0,scope_unknown:9,
+ destination_icao_syntax_matches:9,strict_utc_lexical_matches:0,
  fingerprint_rows:9,unique_fingerprints:7
 };
 function fake(c:unknown[]=catalog(),qs:unknown[]=[qrow],
@@ -96,6 +97,9 @@ describe("Phase4 original-source metadata, no provider",()=>{
    providerOperatorRecords:9,operatorMissingExplicitOrigin:9,
    distinctSyntacticFingerprints:7,
    repeatedExactFingerprintObservations:2,
+   operatorStrictUtcLexicalMatches:0,
+   operatorDestinationIcaoSyntaxMatches:9,
+   scheduleTextIsNotVerifiedT:true,
    commercialCorePopulationCertified:false,
    physicalFlightUniquenessCertified:false,
    strictGate5Passed:false
@@ -237,6 +241,9 @@ describe("Provisional query-origin source candidate safety",()=>{
   expect(result.operatorMissingExplicitOrigin).toBe(9);
   expect(result.distinctSyntacticFingerprints).toBe(7);
   expect(result.repeatedExactFingerprintObservations).toBe(2);
+  expect(result.operatorStrictUtcLexicalMatches).toBe(0);
+  expect(result.completeSourceFingerprintObservations).toBe(9);
+  expect(result.scheduleTextIsNotVerifiedT).toBe(true);
   expect(result.physicalFlightUniquenessCertified).toBe(false);
   expect(result.commercialCorePopulationCertified).toBe(false);
   expect(result.prospectivelyAvailableAtAllHorizonsCertified).toBe(false);
@@ -258,6 +265,8 @@ describe("Provisional query-origin source candidate safety",()=>{
    {operator_records:32},
    {unique_fingerprints:10},
    {scope_unknown:8},
+   {strict_utc_lexical_matches:10},
+   {destination_icao_syntax_matches:10},
    {query_origin_only_records:10},
    {explicit_origin_agrees:9,conflicting_origins:1}
   ]){
@@ -280,10 +289,15 @@ describe("Provisional query-origin source candidate safety",()=>{
   expect(sql.startsWith("WITH")).toBe(true);
   expect(sql).toContain("jsonb_array_elements");
   expect(sql).toContain("COUNT(DISTINCT jsonb_build_array");
+  expect(sql).toContain("AND dep_schedule IS NOT NULL");
+  expect(sql).toContain("strict_utc_lexical_matches");
   expect(sql).toContain("available_at<=$3::timestamptz");
   expect(sql).not.toMatch(/\b(UPDATE|DELETE|INSERT|CREATE|TRUNCATE|DROP)\b/i);
   const file=readFileSync("server/lib/disruption/phase4Gate5QueryOriginSensitivity_v39.ts","utf8");
   expect(file).not.toContain("fetch(");
   expect(file).not.toContain("AERODATABOX_API_KEY");
+  const workflow=readFileSync(
+   ".github/workflows/phase4-gate5-wsss-original-source-inventory-readonly.yml","utf8");
+  expect(workflow).toContain("phase4Gate5QueryOriginSensitivity_v39.ts");
  });
 });

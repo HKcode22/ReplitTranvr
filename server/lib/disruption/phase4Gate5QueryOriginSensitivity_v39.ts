@@ -4,6 +4,8 @@
  * An airport-scoped FIDS Departure query withLeg and IsOperator can justify a
  * query-origin OPERATOR RECORD candidate. It CANNOT establish physical-flight
  * identity, commercially eligible scope, frozen first selected T, or labels.
+ * Fingerprints compare exact source schedule TEXT (not certified UTC or T).
+ * Strict lexical UTC matches are reported separately; no inferred time parsing.
  * Only bounded SQL aggregates of already-retained, nonexpired provider originals;
  * no row identifiers, schedules, routes or response bytes in the report.
  */
@@ -41,7 +43,7 @@ export const P4_ORIGIN_SENSITIVITY_SQL_V39=[
  "(dep_icao=source_airport_icao) AS explicit_origin_agrees,",
  "(dep_icao IS NOT NULL AND dep_icao<>source_airport_icao) AS origin_conflicts,",
  "(flight_no IS NOT NULL AND arr_icao ~ '^[A-Z0-9]{4}$'",
- " AND dep_schedule ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,3})?Z$')",
+ " AND dep_schedule IS NOT NULL)",
  " AS fingerprint_fields_present",
  "FROM f",
  ") SELECT",
@@ -54,6 +56,8 @@ export const P4_ORIGIN_SENSITIVITY_SQL_V39=[
  "COUNT(*) FILTER (WHERE operator_record AND flight_no IS NULL)::int AS missing_flight_number,",
  "COUNT(*) FILTER (WHERE operator_record AND arr_icao IS NULL)::int AS missing_arrival_icao,",
  "COUNT(*) FILTER (WHERE operator_record AND dep_schedule IS NULL)::int AS missing_departure_schedule,",
+ "COUNT(*) FILTER (WHERE operator_record AND arr_icao ~ '^[A-Z0-9]{4}$')::int AS destination_icao_syntax_matches,",
+ "COUNT(*) FILTER (WHERE operator_record AND dep_schedule ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,3})?Z$')::int AS strict_utc_lexical_matches,",
  "COUNT(*) FILTER (WHERE operator_record AND exclusion_flag)::int AS explicit_auxiliary_scope,",
  "COUNT(*) FILTER (WHERE operator_record AND NOT exclusion_flag AND explicit_core_pattern)::int AS explicit_core_pattern,",
  "COUNT(*) FILTER (WHERE operator_record AND NOT exclusion_flag AND NOT explicit_core_pattern)::int AS scope_unknown,",
@@ -81,6 +85,9 @@ export interface P4QueryOriginReportV39{
  operatorMissingFlightNumber:number;
  operatorMissingDestinationIcao:number;
  operatorMissingScheduledUtc:number;
+ operatorDestinationIcaoSyntaxMatches:number;
+ operatorStrictUtcLexicalMatches:number;
+ scheduleTextIsNotVerifiedT:true;
  operatorExplicitAuxiliaryFlags:number;
  operatorExplicitCoreBooleanPattern:number;
  operatorUnknownScope:number;
@@ -100,6 +107,7 @@ const METRICS=[
  "departures","operator_records","operator_query_departure_records",
  "query_origin_only_records","explicit_origin_agrees","conflicting_origins",
  "missing_flight_number","missing_arrival_icao","missing_departure_schedule",
+ "destination_icao_syntax_matches","strict_utc_lexical_matches",
  "explicit_auxiliary_scope","explicit_core_pattern","scope_unknown",
  "fingerprint_rows","unique_fingerprints"
 ] as const;
@@ -133,6 +141,8 @@ export async function assessP4QueryOriginSensitivityV39(
   m.missing_flight_number>m.operator_records||
   m.missing_arrival_icao>m.operator_records||
   m.missing_departure_schedule>m.operator_records||
+  m.destination_icao_syntax_matches>m.operator_records||
+  m.strict_utc_lexical_matches>m.operator_records||
   m.explicit_auxiliary_scope+m.explicit_core_pattern+m.scope_unknown!==m.operator_records||
   m.fingerprint_rows>m.operator_query_departure_records||
   m.unique_fingerprints>m.fingerprint_rows)
@@ -151,6 +161,9 @@ export async function assessP4QueryOriginSensitivityV39(
   operatorMissingFlightNumber:m.missing_flight_number,
   operatorMissingDestinationIcao:m.missing_arrival_icao,
   operatorMissingScheduledUtc:m.missing_departure_schedule,
+  operatorDestinationIcaoSyntaxMatches:m.destination_icao_syntax_matches,
+  operatorStrictUtcLexicalMatches:m.strict_utc_lexical_matches,
+  scheduleTextIsNotVerifiedT:true,
   operatorExplicitAuxiliaryFlags:m.explicit_auxiliary_scope,
   operatorExplicitCoreBooleanPattern:m.explicit_core_pattern,
   operatorUnknownScope:m.scope_unknown,
