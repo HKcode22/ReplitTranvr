@@ -1,5 +1,7 @@
 import {describe,it,expect,vi} from "vitest";
 import {readFileSync} from "node:fs";
+import {assessP4QueryOriginSensitivityV39,P4_ORIGIN_SENSITIVITY_SQL_V39}
+ from "../server/lib/disruption/phase4Gate5QueryOriginSensitivity_v39";
 import {auditP4Gate5OriginalSourceInventory,P4_REQUIRED_SOURCE_TABLES,
  P4_INV_CATALOG_SQL,P4_INV_FIDS_SQL,P4_INV_POPULATION_SQL,P4_INV_BLOB_SQL,
  P4_INV_RAW_FIDS_FLAGS_SQL}
@@ -36,6 +38,13 @@ const originalAggregate={
  explicit_departure_icao:0,explicit_arrival_icao:31,
  explicit_departure_schedule:31
 };
+const originResult={
+ departures:31,operator_records:9,operator_query_departure_records:9,
+ query_origin_only_records:9,explicit_origin_agrees:0,conflicting_origins:0,
+ missing_flight_number:0,missing_arrival_icao:0,missing_departure_schedule:0,
+ explicit_auxiliary_scope:0,explicit_core_pattern:0,scope_unknown:9,
+ fingerprint_rows:9,unique_fingerprints:7
+};
 function fake(c:unknown[]=catalog(),qs:unknown[]=[qrow],
  ps:unknown[]=[pRow],bs:unknown[]=[blob],
  original:unknown=originalAggregate){
@@ -55,6 +64,10 @@ function fake(c:unknown[]=catalog(),qs:unknown[]=[qrow],
   if(sql===P4_INV_RAW_FIDS_FLAGS_SQL){
    expect(args).toEqual([[qid]]);return {rows:[original]};
   }
+  if(sql===P4_ORIGIN_SENSITIVITY_SQL_V39){
+   expect(args).toEqual([[qid],"WSSS",scope.auditUtc]);
+   return {rows:[originResult]};
+  }
   if(sql===P4_INV_BLOB_SQL){
    expect(args[1]).toBe(scope.auditUtc);return {rows:bs};
   }
@@ -65,7 +78,7 @@ function fake(c:unknown[]=catalog(),qs:unknown[]=[qrow],
 describe("Phase4 original-source metadata, no provider",()=>{
  it("accounts for source query, time and hash only as candidate",async()=>{
   const {db,calls}=fake();const x=await auditP4Gate5OriginalSourceInventory(db,scope);
-  expect(calls).toHaveLength(5);
+  expect(calls).toHaveLength(6);
   expect(x.latestFidsQuerySample).toBe(1);
   expect(x.candidatePopulationRows).toBe(1);
   expect(x.candidateOperatingLegRows).toBe(1);
@@ -79,6 +92,14 @@ describe("Phase4 original-source metadata, no provider",()=>{
   expect(x.canonicalIdentityPresentRows).toBe(1);
   expect(x.originalFidsFieldSample.sourceItems).toBe(31);
   expect(x.originalFidsFieldSample.providerOperatorTagged).toBe(0);
+  expect(x.queryOriginOperatorSensitivity).toMatchObject({
+   providerOperatorRecords:9,operatorMissingExplicitOrigin:9,
+   distinctSyntacticFingerprints:7,
+   repeatedExactFingerprintObservations:2,
+   commercialCorePopulationCertified:false,
+   physicalFlightUniquenessCertified:false,
+   strictGate5Passed:false
+  });
   expect(x.webhookLedgerAirportAttributionVerified).toBe(false);
   expect(x.firstSelectedTIndependentlyVerified).toBe(false);
   expect(x.rawOriginalBytesHashReadbackProven).toBe(false);
@@ -201,5 +222,68 @@ describe("Phase4 original-source metadata, no provider",()=>{
    expect(sql.trim().startsWith("SELECT")).toBe(true);
    expect(sql).not.toMatch(/\b(UPDATE|INSERT|DELETE|CREATE|TRUNCATE)\b/i);
   }
+ });
+});
+
+describe("Provisional query-origin source candidate safety",()=>{
+ const args={airport:"WSSS",auditUtc:scope.auditUtc,unexpiredQueryIds:[qid]};
+ it("counts source operator observations and exact syntactic repeats ONLY",async()=>{
+  const db={query:vi.fn(async(sql:string,params:unknown[])=>{
+   expect(sql).toBe(P4_ORIGIN_SENSITIVITY_SQL_V39);
+   expect(params).toEqual([[qid],"WSSS",scope.auditUtc]);
+   return {rows:[originResult]};
+  })};
+  const result=await assessP4QueryOriginSensitivityV39(db,args);
+  expect(result.operatorMissingExplicitOrigin).toBe(9);
+  expect(result.distinctSyntacticFingerprints).toBe(7);
+  expect(result.repeatedExactFingerprintObservations).toBe(2);
+  expect(result.physicalFlightUniquenessCertified).toBe(false);
+  expect(result.commercialCorePopulationCertified).toBe(false);
+  expect(result.prospectivelyAvailableAtAllHorizonsCertified).toBe(false);
+  expect(result.strictGate5Passed).toBe(false);
+  expect(result.phase6Authorized).toBe(false);
+  expect(result.providerCalls).toBe(0);
+  expect(result.databaseWrites).toBe(0);
+  expect(JSON.stringify(result)).not.toContain(qid);
+ });
+ it("unknown source scope cannot be silently promoted to core",async()=>{
+  const db={query:vi.fn(async()=>({rows:[originResult]}))};
+  const result=await assessP4QueryOriginSensitivityV39(db,args);
+  expect(result.operatorUnknownScope).toBe(9);
+  expect(result.operatorExplicitCoreBooleanPattern).toBe(0);
+  expect(result.commercialCorePopulationCertified).toBe(false);
+ });
+ it("contradictory SQL aggregate, impossible repeats or fake scope totals fail",async()=>{
+  for(const change of [
+   {operator_records:32},
+   {unique_fingerprints:10},
+   {scope_unknown:8},
+   {query_origin_only_records:10},
+   {explicit_origin_agrees:9,conflicting_origins:1}
+  ]){
+   const db={query:vi.fn(async()=>({rows:[{...originResult,...change}]}))};
+   await expect(assessP4QueryOriginSensitivityV39(db,args))
+     .rejects.toThrow("P4_ORIGIN_SQL_AGGREGATE_CONTRADICTION");
+  }
+ });
+ it("no branch, fake query IDs or oversized scope may issue a SQL read",async()=>{
+  const db={query:vi.fn(async()=>({rows:[originResult]}))};
+  await expect(assessP4QueryOriginSensitivityV39(db,{...args,airport:"WSS"}))
+   .rejects.toThrow("P4_ORIGIN_SCOPE_INVALID");
+  await expect(assessP4QueryOriginSensitivityV39(db,{
+   ...args,unexpiredQueryIds:[qid,qid]}))
+   .rejects.toThrow("P4_ORIGIN_SCOPE_INVALID");
+  expect(db.query).not.toHaveBeenCalled();
+ });
+ it("SQL is read only, bounded original sources, returns aggregates not rows",()=>{
+  const sql=P4_ORIGIN_SENSITIVITY_SQL_V39;
+  expect(sql.startsWith("WITH")).toBe(true);
+  expect(sql).toContain("jsonb_array_elements");
+  expect(sql).toContain("COUNT(DISTINCT jsonb_build_array");
+  expect(sql).toContain("available_at<=$3::timestamptz");
+  expect(sql).not.toMatch(/\b(UPDATE|DELETE|INSERT|CREATE|TRUNCATE|DROP)\b/i);
+  const file=readFileSync("server/lib/disruption/phase4Gate5QueryOriginSensitivity_v39.ts","utf8");
+  expect(file).not.toContain("fetch(");
+  expect(file).not.toContain("AERODATABOX_API_KEY");
  });
 });
