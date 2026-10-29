@@ -413,6 +413,22 @@ async function run(input:{head:string;confirm:string;stopRun:string}):Promise<vo
      maxDeliveryRetries:0
    });
    created=response.subscription.id;
+   // Persist the exact positive provider ID immediately after the one
+   // successful, non-idempotent CREATE response and BEFORE DB binding.
+   // Runner-local 0600 files alone do NOT survive a GitHub VM crash.
+   // An ambiguous CREATE without a known ID is NEVER replayed.
+   const positive=gh(["api","-X","POST",
+     `repos/${REPO}/issues/173/comments`,
+     "-f","body="+JSON.stringify({
+       schema:"v39.gate05.fresh-positive-exact-create-receipt.v1",
+       scope:m.scope,runner:head,authorization:m.authorizationSha256,
+       stopTicket:m.stopTicketSha256,safetyRunId:input.stopRun,
+       providerSubscriptionId:created,
+       providerOriginalResponseSha256:response.rawCreateResponseSha256,
+       createAttempts:1,noProviderCreateRetries:true,
+       createdAtUtc:new Date().toISOString()
+     })]);
+   if(!positive?.id)hold("POSITIVE_GITHUB_RECEIPT_NOT_DURABLE");
    privateOnce(RECEIPT,{
      schema:"v39.gate05.positive-owned-create.v1",scope:m.scope,
      source:head,providerSubscriptionId:created,
