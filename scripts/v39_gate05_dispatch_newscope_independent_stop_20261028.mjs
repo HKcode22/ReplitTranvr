@@ -6,6 +6,7 @@
  */
 import pg from "pg";
 import {spawnSync} from "node:child_process";
+import {appendFileSync} from "node:fs";
 const REPO="HKcode22/ReplitTranvr";
 const STOP="phase3-gate05-science-exact-owned-stop-retry5.yml";
 const SHA=/^[0-9a-f]{40}$/;
@@ -113,12 +114,31 @@ try{
     "-f","stop_utc="+input.stop,
     "-f","starting_credits="+input.credits]);
   stage="RUN_EVENT_ACCEPTED_NOT_ARMED";
-  const after=ghJson(["run","list","--repo",REPO,
-    "--workflow",STOP,"--limit","100",
-    "--json","displayTitle,headSha,event,status"]);
-  watchRunFound=Array.isArray(after)&&after.some(x=>
-    x.displayTitle===expectedTitle&&x.headSha===input.runner&&
-    x.event==="workflow_dispatch");
+  let liveRun=null;
+  // GitHub workflow_dispatch is asynchronously indexed; a delayed run-list
+  // result is NOT permission to dispatch again. Reconcile this SINGLE event.
+  for(let attempt=0;attempt<10;attempt++){
+    if(attempt)await new Promise(resolve=>setTimeout(resolve,2500));
+    const after=ghJson(["run","list","--repo",REPO,
+      "--workflow",STOP,"--limit","100",
+      "--json","databaseId,displayTitle,headSha,event,status"]);
+    if(!Array.isArray(after))hold("STOP_LIST_SHAPE");
+    const matches=after.filter(x=>x.displayTitle===expectedTitle&&
+      x.headSha===input.runner&&x.event==="workflow_dispatch");
+    if(matches.length>1)hold("DUPLICATE_STOP_RUN_AMBIGUITY");
+    if(matches.length===1){
+      const id=matches[0].databaseId;
+      if(!Number.isSafeInteger(id)||id<=0)hold("STOP_RUN_ID_SHAPE");
+      liveRun=id;
+      break;
+    }
+  }
+  if(liveRun===null)hold("STOP_DISPATCH_NOT_VISIBLE_NO_REPLAY");
+  watchRunFound=true;
+  // Machine-readable nonsecret run ID is NOT an ARMED proof.
+  const output=String(process.env.GITHUB_OUTPUT??"");
+  if(!output.startsWith("/"))hold("STOP_OUTPUT_CHANNEL_MISSING");
+  appendFileSync(output,"stop_run_id="+String(liveRun)+"\n",{encoding:"utf8"});
   console.log(JSON.stringify({
     schema:"v39.gate05.next-science-scope-independent-stop-dispatch.v1",
     status:watchRunFound?
@@ -127,6 +147,7 @@ try{
     scopeId:input.scope,runnerSha:input.runner,
     startUtc:input.start,stopUtc:input.stop,
     independentStopRunVisible:watchRunFound,
+    independentStopRunId:liveRun,
     independentStopArmed:false,
     requiresProtectedSafetyReview:true,
     paidCreateAuthorized:false,paidControllerStarted:false,
