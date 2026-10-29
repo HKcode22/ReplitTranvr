@@ -1,0 +1,66 @@
+name: Gate05 WSSS One Free Public ADS-B Snapshot RESEARCH ONLY
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phase3-gate05-wsss-one-public-adsb-free-get.yml'
+      - 'scripts/v39_gate05_adsb_lol_wsss_one_free_get_20261029.ts'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate05-wsss-adsb-one-free-get-only
+  cancel-in-progress: false
+
+jobs:
+  one-free-research-get-no-prod-integration:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Review-pinned source checkout, no persisted GitHub token
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install exact npm source without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Exactly one FREE public research GET, no provider credentials or writes
+        shell: bash
+        env:
+          GH_TOKEN: ''
+          AERODATABOX_API_KEY: ''
+          DATABASE_URL: ''
+          V39_DATABASE_RUNTIME_URL: ''
+          V39_PROVIDER_BLOB_BUCKET_ID: ''
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "${GITHUB_ACTIONS}" = true
+          test "${GITHUB_REF}" = refs/heads/main
+          test "${GITHUB_EVENT_NAME}" = push
+          test "${GITHUB_RUN_ATTEMPT}" = 1
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          test -z "${GH_TOKEN}"
+          test -z "${AERODATABOX_API_KEY}"
+          test -z "${DATABASE_URL}"
+          test -z "${V39_DATABASE_RUNTIME_URL}"
+          test -z "${V39_PROVIDER_BLOB_BUCKET_ID}"
+          node --import tsx scripts/v39_gate05_adsb_lol_wsss_one_free_get_20261029.ts
+      - name: Explicit science decision boundary
+        if: always()
+        run: |
+          {
+            echo '## One FREE WSSS ADS-B provider-source feasibility snapshot'
+            echo 'Exactly one GET to documented adsb.lol v2 point endpoint; no new paid provider, secret, database, or app deployment.'
+            echo 'An anonymous aircraft position count does NOT demonstrate an independently verified airline flight, source continuous coverage, exact wheels-off actual, same-cohort PRE snapshot or original Gate05 science PASS.'
+            echo 'Source remains ODbL-1.0; provider coordination and licensing review REQUIRED before any long-running production automation.'
+            echo 'No retry, scheduled job, background monitor or actual app integration was created.'
+          } >> "$GITHUB_STEP_SUMMARY"
