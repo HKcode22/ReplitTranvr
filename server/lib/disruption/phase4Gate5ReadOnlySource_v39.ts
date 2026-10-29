@@ -20,7 +20,7 @@ export interface Gate5ReadScope {
  airport:string; tier:string;region:string;startUtc:string;endUtc:string;readAsOfUtc:string;
 }
 export interface Gate5ReadConnection {
- query(sql:string,params?:readonly unknown[]):Promise<{rows:unknown[]}>;
+ query(sql:string,params?:unknown[]):Promise<{rows:unknown[]}>;
 }
 function toUtc(x:unknown,reason:string):string{
  if(x instanceof Date){if(!Number.isFinite(x.getTime()))throw Error("GATE5_INVALID_DB_DATE_"+reason);return x.toISOString();}
@@ -130,7 +130,7 @@ export async function readPhase4Gate5CandidateEvidenceV39(
  connection:Gate5ReadConnection,scope:Gate5ReadScope
 ):Promise<Gate5ReadOnlyResult>{
  validateGate5ReadScopeV39(scope);
- const args=[scope.airport,scope.startUtc,scope.endUtc,scope.readAsOfUtc] as const;
+ const args=[scope.airport,scope.startUtc,scope.endUtc,scope.readAsOfUtc];
  // Sequential reads must be invoked inside ONE caller-owned read-only,
  // repeatable-read transaction; do not auto-synthesize consistency.
  const fResult=await connection.query(GATE5_READ_FIDS_SQL_V39,args);
