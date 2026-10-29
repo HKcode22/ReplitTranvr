@@ -43,6 +43,18 @@ describe("Gate05 automated published source + Neon V0075 read-only attestation",
     expect(src).toContain("authenticatedDbBinding");
     expect(src).toContain("authenticatedDbLive");
   });
+  it("does not turn an uncommissioned Alert ingress into a false database failure",()=>{
+    expect(src).toContain("const sourceReady=r.publishedSourceMatches");
+    expect(src).toContain("MUST NOT prevent the independent HMAC/DB read-only proof");
+    expect(src).toContain("r.alertIngressRegistered;");
+    expect(src).toContain("GATE05_V0075_DATABASE_PARITY_PASS_RECEIVER_ADMISSION_HOLD");
+    expect(src).toContain("if(!approvedForReceiverSourceAndIngress)process.exitCode=2");
+    expect(src.indexOf('r.stage="AUTHENTICATED_PUBLISHED_DB_BINDING"'))
+      .toBeLessThan(src.indexOf('const approvedForReceiverSourceAndIngress='));
+    expect(src.indexOf('r.stage="POSTGRESQL_RUNTIME_LOGGED_ACL_READONLY"'))
+      .toBeLessThan(src.indexOf('const approvedForReceiverSourceAndIngress='));
+    expect(src).not.toContain("SOURCE_OR_OPT_IN_HOLD");
+  });
   it("proves V0075 logged immutability and minimal privileges with PostgreSQL READ ONLY",()=>{
     expect(src).toContain("default_transaction_read_only=on");
     expect(src).toContain("BEGIN TRANSACTION READ ONLY");

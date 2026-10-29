@@ -66,9 +66,11 @@ try{
     }
     if(n<4)await sleep(3000);
   }
-  assert(r.publishedSourceMatches&&r.durableCustodyReady&&
-    r.alertIngressRegistered&&r.publishedDeployment,
-    "SOURCE_OR_OPT_IN_HOLD");
+  // Published source, custody opt-in and Alert route are distinct facts.
+  // A missing separately commissioned ingress MUST hold a paid launch, but
+  // MUST NOT prevent the independent HMAC/DB read-only proof from running.
+  const sourceReady=r.publishedSourceMatches&&r.durableCustodyReady&&
+    r.publishedDeployment;
 
   r.stage="AUTHENTICATED_PUBLISHED_DB_BINDING";
   const b=challenge();
@@ -136,8 +138,14 @@ try{
     r.runtimeInsert&&r.runtimeUpdate===false&&
     r.runtimeDelete===false&&r.publicInsert===false,
     "RUNTIME_V0075_MINIMAL_ACL_HOLD");
-  r.stage="COMPLETE";
-  r.status="GATE05_V0075_LIVE_RECEIVER_DB_READONLY_PASS";
+  const approvedForReceiverSourceAndIngress=sourceReady&&
+    r.alertIngressRegistered;
+  r.stage=approvedForReceiverSourceAndIngress?"COMPLETE":
+    "SOURCE_OR_ALERT_INGRESS_NOT_COMMISSIONED";
+  r.status=approvedForReceiverSourceAndIngress?
+    "GATE05_V0075_LIVE_RECEIVER_DB_READONLY_PASS":
+    "GATE05_V0075_DATABASE_PARITY_PASS_RECEIVER_ADMISSION_HOLD";
+  if(!approvedForReceiverSourceAndIngress)process.exitCode=2;
 }catch{
   r.status="GATE05_V0075_LIVE_RECEIVER_DB_READONLY_HOLD";
   process.exitCode=2;
