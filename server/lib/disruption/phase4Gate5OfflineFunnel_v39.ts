@@ -34,6 +34,7 @@ export type Rate=Readonly<{numerator:number;denominator:number;value:number|null
 export interface HorizonReport {
  horizon:Gate5Horizon;population:number;eligible:number;expectedSnapshots:number;
  createdSnapshots:number;webhookCaptured:number;capturedOutsidePopulation:number;
+ capturedWithPrimaryButNotCutoffEligible:number;
  requiredComplete:number;optionalMissing:number;targetApplicable:number;targetObserved:number;
  noVerifiedT:number;firstFidsAfterCutoff:number;
  countryMix:{domestic:number;international:number;unknown:number};
@@ -165,13 +166,17 @@ export function analyzeGate5Offline(input:Gate5Input):Gate5Report {
      }else if(s.targetObserved)errors.push("NONAPPLICABLE_TARGET_OBSERVED");
    }
    const inside=[...captured].filter(fid=>expected.has(fid)).length;
-   const outside=captured.size-inside;
+   // Independent outside-FIDS captures are not the same as FIDS flights
+   // whose cutoff was too early or whose selected-T was unavailable.
+   const outside=[...captured].filter(fid=>!rowsById.has(fid)).length;
+   const notCutoffEligible=captured.size-inside-outside;
    if(created>expected.size)errors.push("SNAPSHOTS_EXCEED_EXPECTED");
    violations.push(...errors.map(e=>horizon+":"+e));
    horizons.push({
      horizon,population:expected.size,eligible:expected.size,
      expectedSnapshots:expected.size,createdSnapshots:created,
      webhookCaptured:inside,capturedOutsidePopulation:outside,
+     capturedWithPrimaryButNotCutoffEligible:notCutoffEligible,
      requiredComplete:required,optionalMissing:optional,
      targetApplicable:applicable,targetObserved:observed,
      noVerifiedT:noT,firstFidsAfterCutoff:late,countryMix,
