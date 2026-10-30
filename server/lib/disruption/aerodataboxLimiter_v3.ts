@@ -719,8 +719,9 @@ export interface FidsFetchOptions {
   withLeg?: boolean;
   /** Optional, explicitly requested. Default false, no silent position REST spend. */
   withLocation?: boolean;
-  /** A null/missing departure list cannot stand for a measured zero-count. */
+  /** Missing requested-direction lists cannot stand for a measured zero. */
   strictDepartureList?: boolean;
+  strictArrivalList?: boolean;
   category?: "fids_base" | "fids_split" | "validation" | "outcome";
   budgetOwner?: FidsAttemptBudgetOwner;
   fetchImpl?: typeof fetch;
@@ -813,6 +814,8 @@ export async function fetchFidsAirport(
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("FIDS response schema invalid");
         if (opts?.strictDepartureList && !Array.isArray(raw.departures))
           throw new Error("FIDS_DEPARTURES_ARRAY_UNAVAILABLE");
+        if (opts?.strictArrivalList && !Array.isArray(raw.arrivals))
+          throw new Error("FIDS_ARRIVALS_ARRAY_UNAVAILABLE");
         const result: FidsAirportResult = {
           departures: Array.isArray(raw.departures) ? raw.departures : [],
           arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],

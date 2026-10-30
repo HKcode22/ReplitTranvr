@@ -201,16 +201,26 @@ function parseFlightNumber(raw: string | null | undefined): { carrier: string; n
 }
 
 export type ScopeClassification = "confirmed_core" | "unknown" | "auxiliary";
+/**
+ * Scope is a positive-evidence classification, not a negative inference.
+ * A provider query with withCargo=false/withPrivate=false does NOT establish
+ * that charter/unscheduled status is explicitly known on each returned row.
+ * An absent field is unknown, never the Boolean false.
+ */
 export function classifyScope(input: {
   isCargo?: boolean | null;
   isPrivate?: boolean | null;
+  isGeneralAviation?: boolean | null;
   isCharter?: boolean | null;
   status?: string | number | null;
 }): ScopeClassification {
-  if (input.isCargo === true || input.isPrivate === true) return "auxiliary";
+  if (input.isCargo === true || input.isPrivate === true ||
+      input.isGeneralAviation === true) return "auxiliary";
+  // Positive charter evidence remains outside confirmed core; charter flag
+  // semantics/availability must be verified before claiming exact exclusion.
   if (input.isCharter === true) return "unknown";
-  if (input.isCharter === false) return "confirmed_core";
-  if (input.isCargo === false && input.isPrivate === false) return "confirmed_core";
+  if (input.isCargo === false && input.isPrivate === false &&
+      input.isCharter === false) return "confirmed_core";
   return "unknown";
 }
 
@@ -497,7 +507,12 @@ export async function fetchFidsPopulation(
     { direction, withLeg: frame.withLeg,
       withCancelled: frame.withCancelled,withCodeshared: frame.withCodeshared,
       withCargo: frame.withCargo,withPrivate: frame.withPrivate,
-      withLocation: frame.withLocation,category: params.restCategory },
+      withLocation: frame.withLocation,
+      // A missing requested population list is UNKNOWN, never a zero-member
+      // census. With Both, both arrays must be independently available.
+      strictDepartureList: direction !== "Arrival",
+      strictArrivalList: direction !== "Departure",
+      category: params.restCategory },
   );
   if (!fids) return null;
 
