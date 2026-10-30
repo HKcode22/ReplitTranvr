@@ -1,9 +1,9 @@
 name: Phase4 Gate5 WSSS Three Prospective Source Cutoffs - Fixed 3 GETs
 on:
   schedule:
-    - cron: "0 16 30 10 *"
-    - cron: "0 10 31 10 *"
-    - cron: "30 14 31 10 *"
+    - cron: "7 16 30 10 *"
+    - cron: "7 10 31 10 *"
+    - cron: "37 14 31 10 *"
 permissions:
   contents: read
 concurrency:
@@ -44,6 +44,18 @@ jobs:
           test -n "${AERODATABOX_API_KEY:-}"
           test -n "${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
           node --import tsx scripts/v39_phase4_one_prospective_fids_paid_actions.ts
+      - name: Independent no-provider FIDS population/as-of and source-custody audit
+        if: success()
+        env:
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          P4_GATE5_SOURCE_AIRPORT: WSSS
+          P4_GATE5_READONLY_APPROVAL: GATE5_SOURCE_METADATA_NO_PROVIDER
+          P4_FIDS_SCHEDULE_CRON: ${{ github.event.schedule }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -n "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_gate5_source_inventory_readonly_actions.ts
       - name: Experimental evidence, not final Gate5 science PASS
         if: always()
         run: |
