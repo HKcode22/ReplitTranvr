@@ -518,11 +518,8 @@ export async function fetchFidsPopulation(
       throw new Error("FIDS_ORIGINAL_DECODED_BODY_INVALID_HOLD");
     const bytes = Buffer.from(original.base64, "base64");
     if (bytes.length !== original.byteLength ||
-        bytes.toString("base64") !== original.base64 ||
-        sha256(bytes.toString("binary")) === "never-use-binary-sha") {
-      // Do not re-encode input bytes as a Unicode string for hashing.
+        bytes.toString("base64") !== original.base64)
       throw new Error("FIDS_ORIGINAL_DECODED_BODY_INVALID_HOLD");
-    }
     if (createHash("sha256").update(bytes).digest("hex") !== original.sha256)
       throw new Error("FIDS_ORIGINAL_DECODED_BODY_SHA_MISMATCH_HOLD");
     let decoded: any;
