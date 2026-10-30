@@ -2,6 +2,8 @@ import {createHash} from "node:crypto";
 import {describe,expect,it,vi} from "vitest";
 import {fetchFidsAirport} from "../server/lib/disruption/aerodataboxLimiter_v3";
 import {fetchFidsPopulation} from "../server/lib/disruption/fidsCensus_v3";
+import {canonicalEnvelopeSha256V39,verifyCanonicalFidsEnvelopeV39}
+ from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {auditStoredDecodedFidsReadbackV39,verifyStoredDecodedFidsBodyV39,
  P4_FIDS_DECODED_READBACK_SQL_V39}
  from "../server/lib/disruption/phase4Gate5DecodedFidsReadback_v39";
@@ -49,6 +51,7 @@ describe("Phase4 FIDS decoded-body retained readback, offline only",()=>{
   expect(r).toMatchObject({
    status:"BOUNDED_SAMPLE_INTEGRITY_VERIFIED_NOT_SOURCE_AUTHENTICITY",
    sampled:1,bodyShaAndDecodedArraysVerified:1,
+   bodyAndEnvelopeShaVerified:1,bodyWithoutEnvelopeHash:0,
    legacyWithoutBodyEvidence:0,rejectedIntegrity:0,
    entirePopulationVerified:false,independentProviderHttpOriginCertified:false,
    originalHttpWireBytesCertified:false,persistedWrapperHashRecomputed:false,
@@ -64,6 +67,39 @@ describe("Phase4 FIDS decoded-body retained readback, offline only",()=>{
   expect(JSON.stringify(payload.departures)).not.toBe(
    JSON.stringify(JSON.parse(bodyString).departures));
   expect(verifyStoredDecodedFidsBodyV39(row)).toBe("verified");
+ });
+ it("canonical envelope survives JSONB object key reordering, but not source metadata mutation",async()=>{
+  const row=await genuine(),raw=row.payload as any;
+  expect(verifyCanonicalFidsEnvelopeV39(raw)).toBe("verified");
+  expect(raw.canonicalEnvelopeSha256).toBe(canonicalEnvelopeSha256V39(raw));
+  // Storage may reorder keys even inside request contract or arrays.
+  raw.fidsRequestContract=Object.fromEntries(
+    Object.entries(raw.fidsRequestContract).reverse());
+  raw.departures[0]=Object.fromEntries(
+    Object.entries(raw.departures[0]).reverse());
+  expect(verifyCanonicalFidsEnvelopeV39(raw)).toBe("verified");
+  expect(verifyStoredDecodedFidsBodyV39(row)).toBe("verified");
+  raw.fidsRequestContract.withCancelled=false;
+  expect(verifyCanonicalFidsEnvelopeV39(raw)).toBe("rejected");
+  expect(verifyStoredDecodedFidsBodyV39(row)).toBe("rejected");
+ });
+ it("historical body-only source is never counted as envelope-verified",async()=>{
+  const row=await genuine(),raw=row.payload as any;
+  delete raw.canonicalEnvelopeSha256;
+  delete raw.canonicalEnvelopeHashSchema;
+  expect(verifyCanonicalFidsEnvelopeV39(raw)).toBe("legacy_no_canonical_hash");
+  expect(verifyStoredDecodedFidsBodyV39(row)).toBe("verified");
+  const r=await auditStoredDecodedFidsReadbackV39(reader([row]),scope);
+  expect(r.bodyShaAndDecodedArraysVerified).toBe(1);
+  expect(r.bodyAndEnvelopeShaVerified).toBe(0);
+  expect(r.bodyWithoutEnvelopeHash).toBe(1);
+  expect(r.strictGate5Passed).toBe(false);
+ });
+ it("rejected malformed envelope cannot fall back to historical no-hash status",async()=>{
+  const row=await genuine(),raw=row.payload as any;
+  delete raw.canonicalEnvelopeSha256;
+  expect(verifyCanonicalFidsEnvelopeV39(raw)).toBe("rejected");
+  expect(verifyStoredDecodedFidsBodyV39(row)).toBe("rejected");
  });
  it("rejects corrupted base64, altered checksum, tampered normalized array and forged flag",async()=>{
   const r=await genuine();
@@ -85,6 +121,10 @@ describe("Phase4 FIDS decoded-body retained readback, offline only",()=>{
   const row=await genuine(),raw=row.payload as any;
   raw.originalDecodedEntityBodyPreserved=false;
   raw.originalDecodedEntityBodyEvidence=null;
+  // Simulate a genuinely older reconstructed-only row, not a mutated newer
+  // hash-bound envelope. Historical records have neither canonical field.
+  delete raw.canonicalEnvelopeHashSchema;
+  delete raw.canonicalEnvelopeSha256;
   expect(verifyStoredDecodedFidsBodyV39(row)).toBe("legacy");
   const r=await auditStoredDecodedFidsReadbackV39(reader([row]),scope);
   expect(r.status).toBe("LEGACY_ONLY_DECODED_BODY_UNVERIFIED");
