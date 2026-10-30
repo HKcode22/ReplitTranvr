@@ -1,0 +1,23 @@
+# Phase4 — live fresh FIDS one-shot, no email waiting
+
+Date: 2026-10-30 PDT. Binding source: `data-collection/plans/V3.9_DataCollectPlan_f.8.md` §§5.1–5.4,6,10.2,16–17; `data-collection/implementation/V3.9_IMPLEMENTATION_LOG.md` §1.9. The owner reaffirmed approval for bounded paid operations while insisting on deadline-driven execution and acceptance of scientifically reported missingness, censored records and bounded transient faults. No change to the frozen target or accounting tolerances is authorized by this report.
+
+## Verified live checkpoint (read-only, completed)
+
+PR #273 merged on `main` at `934ee1e6f772ff0fbb89fa1224c01e5a6cced602` after 4/4 CI checks passed. The new [protected real FIDS readback workflow #41063460438](https://github.com/HKcode22/ReplitTranvr/actions/runs/41063460438) **ran successfully** in protected `phase2g-paid` GitHub Actions. Its precise real result: WSSS **0** retained unexpired source receipts eligible in last 24h, YSSY **0**; `status=NO_LAWFULLY_RETAINED_SOURCE_UNMEASURABLE`, `sampleCount=0`, `providerCalls=0`, `databaseWrites=0`. This confirms the reader and protected credential can execute, **not** zero flight population or failed provider delivery. The separate PR273 postmerge `offline-safety` status is independently checked.
+
+## One materially useful paid follow-up
+
+The project needs a **fresh future-window FIDS original** that exists while the lawful 24h raw-content TTL is in force. Existing source rows are older, not recoverable as original prospective observations. This PR adds **one** GitHub-only WSSS AeroDataBox Tier2 FIDS request, expected **two REST API units**, **no retries**, **no Alert subscriptions**, then raw-before-normalized atomic persistence through the existing V3.9 FIDS census and immediate post-commit decoded original bytes + JSONB-stable envelope integrity readback. The request must use `direction=Departure`, `withLeg=true`, `withCancelled=true`, `withCodeshared=true`, `withCargo=false`, `withPrivate=false`, `withLocation=false`; no category drift. A rolling **one-hour** WSSS future service interval starts ≥26h after GET, with a prospective candidate T−24h cutoff **still in the future**. This is evidence of one pre-cutoff source observation, *not* a constructed full three-horizon sample or verified provider-native T.
+
+Only the exact #274 main merge triggers the one-shot protected workflow. It refuses before the provider if GitHub identity, deadline, account floor, DB INSERT rights, required raw immutability or expiry triggers, authoritative current public OpenAPI endpoint, source contract, credentials, or protected environment are missing. It records **one** physical request started before sending and has no automatic fallback/retry. If a network failure happens after dispatch, mark one ambiguous possibly paid attempt spent. A successful response must be bounded, shape-valid, and written atomically; the readback checks original fetch-decoded source body SHA and future stable envelope SHA. Logs contain only counts, time bounds, unit delta, guard status; no raw flight identities, keys, provider response, or DB URL. The strict deployment retention matrix remains binding. Never substitute an API GET for production webhook safety validation.
+
+No extra paid requests are requested to resolve semantics; the vendor support email remains optional and **never blocks this finite source-data step**. The existing draft was not sent as of latest check; waiting for a reply is **not** on the critical path. Scientific classification stays transparent:
+- `scope_classification=unknown` and ambiguous codeshares are separate classes, not discarded as nonexistent flights.
+- Missing optional features and exact runway actual labels remain NULL with observed coverage/missingness.
+- Gate 5 requires independent population/horizon/snapshot/webhook/outcome denominators and checks `captured_in_population≤population_total`. A green one-shot cannot alone establish all of these.
+- Phase 5 final FREEZE and the full paid 31-day Phase6 collection still require their documented acceptance steps; *small missingness is not itself a project-wide failure*, but no fabricated target or pre-cutoff state.
+
+## Handoff
+
+After the PR has all exact-head CI checks PASS, merge once. The *one-shot main push* should then either (a) produce a new prospective raw-FIDS source and immediate readback with measured debit, (b) harmlessly HOLD **before** paid GET on DB/secret/schema/budget preflight, or (c) record one possibly billable attempt then HOLD with no retry. Read the actual postmerge workflow logs and record only aggregate evidence. Do not insist on another support email or a series of manual Replit commands before this action.
