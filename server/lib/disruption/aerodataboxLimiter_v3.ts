@@ -719,8 +719,9 @@ export interface FidsFetchOptions {
   withLeg?: boolean;
   /** Optional, explicitly requested. Default false, no silent position REST spend. */
   withLocation?: boolean;
-  /** A null/missing departure list cannot stand for a measured zero-count. */
+  /** Missing requested-direction lists cannot stand for a measured zero. */
   strictDepartureList?: boolean;
+  strictArrivalList?: boolean;
   category?: "fids_base" | "fids_split" | "validation" | "outcome";
   budgetOwner?: FidsAttemptBudgetOwner;
   fetchImpl?: typeof fetch;
