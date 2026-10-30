@@ -39,7 +39,11 @@ describe("Phase4 one protected paid original FIDS source WSSS operator",()=>{
   const workflow=readFileSync(".github/workflows/phase4-gate5-one-prospective-wsss-fids-rawfirst.yml","utf8");
   const script=readFileSync("scripts/v39_phase4_one_prospective_fids_paid_actions.ts","utf8");
   expect(workflow).toContain("environment: phase2g-paid");
-  expect(workflow).toContain("Merge pull request #274");
+  expect(workflow).toContain("Merge pull request #275");
+  // A bare '#' inside a YAML plain scalar starts a comment, even if
+  // it appears between quotes *inside* an unquoted expression.
+  expect(workflow).toContain('if: "${{ github.ref');
+  expect(workflow).not.toContain("if: ${{ github.ref");
   expect(workflow).not.toContain("workflow_dispatch");
   expect(script).toContain("billableAttempts=1");
   expect(script).toContain("await checkWritableSchema(dbUrl)");
