@@ -163,4 +163,16 @@ describe("Phase4 FIDS request source-frame application intent",()=>{
   expect(owner.reserve).toHaveBeenCalledTimes(1);
   expect(fetchImpl).toHaveBeenCalledTimes(1);
  });
+
+ it("caps stream bytes even when decoded size has no Content-Length",async()=>{
+  const owner={reserve:vi.fn(async()=>undefined)};
+  const oversized='x'.repeat(4*1024*1024+1);
+  const fetchImpl=vi.fn(async()=>new Response(oversized,{status:200}));
+  const result=await fetchFidsAirport("WSSS",base.fromLocal,base.toLocal,{
+   budgetOwner:owner,fetchImpl:fetchImpl as typeof fetch
+  });
+  expect(result).toBeNull();
+  expect(owner.reserve).toHaveBeenCalledTimes(1);
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+ });
 });
