@@ -67,7 +67,7 @@ describe("Phase4 one protected paid original FIDS source WSSS operator",()=>{
   const workflow=readFileSync(".github/workflows/phase4-gate5-three-prospective-wsss-cutoffs.yml","utf8");
   const reader=readFileSync("scripts/v39_gate5_source_inventory_readonly_actions.ts","utf8");
   for(const cron of ["7 16 30 10 *","7 10 31 10 *","37 14 31 10 *"]){
-    expect(workflow).toContain("cron: '"+cron+"'");
+    expect(workflow).toContain('cron: "'+cron+'"');
     expect(reader).toContain('"'+cron+'"');
   }
   expect(workflow).toContain("P4_FIDS_SCHEDULE_CRON:");
