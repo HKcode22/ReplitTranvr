@@ -661,9 +661,19 @@ export async function listFeedAirports(service: FeedService): Promise<string[] |
   }
 }
 
+/** Decoded response bytes as exposed by fetch, NOT compressed HTTP wire bytes. */
+export interface FidsDecodedSourceBodyV39 {
+  representation: "FETCH_DECODED_RESPONSE_BODY_BYTES_NOT_HTTP_WIRE";
+  sha256: string;
+  byteLength: number;
+  base64: string;
+}
+
 export interface FidsAirportResult {
   departures: any[];
   arrivals: any[];
+  /** Non-enumerable transport evidence; only the FIDS persistence owner stores it. */
+  originalDecodedBody?: FidsDecodedSourceBodyV39;
 }
 
 export const fidsRestLedger: FidsAttemptBudgetOwner = {
@@ -769,14 +779,34 @@ export async function fetchFidsAirport(
         continue;
       }
       if (resp.ok) {
-        const raw: any = await readJsonOrNull(resp);
+        // Read exactly the response-body bytes delivered to Node fetch (after
+        // transparent HTTP decompression). Never call these HTTP wire bytes.
+        // A finite cap protects memory and prohibits unbounded raw custody.
+        const maximumBytes = 4 * 1024 * 1024;
+        const reportedLength = resp.headers.get("content-length");
+        if (reportedLength !== null &&
+            (!/^\\d+$/.test(reportedLength) || Number(reportedLength) > maximumBytes))
+          throw new Error("FIDS_DECODED_BODY_SIZE_HOLD");
+        const body = Buffer.from(await resp.arrayBuffer());
+        if (body.byteLength > maximumBytes) throw new Error("FIDS_DECODED_BODY_SIZE_HOLD");
+        const raw: any = JSON.parse(body.toString("utf8"));
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("FIDS response schema invalid");
         if (opts?.strictDepartureList && !Array.isArray(raw.departures))
           throw new Error("FIDS_DEPARTURES_ARRAY_UNAVAILABLE");
-        return {
+        const result: FidsAirportResult = {
           departures: Array.isArray(raw.departures) ? raw.departures : [],
           arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
         };
+        Object.defineProperty(result, "originalDecodedBody", {
+          enumerable: false, configurable: false, writable: false,
+          value: {
+            representation: "FETCH_DECODED_RESPONSE_BODY_BYTES_NOT_HTTP_WIRE",
+            sha256: createHash("sha256").update(body).digest("hex"),
+            byteLength: body.byteLength,
+            base64: body.toString("base64"),
+          } satisfies FidsDecodedSourceBodyV39,
+        });
+        return result;
       }
       const retryable = resp.status === 429 || [500, 502, 503, 504].includes(resp.status);
       if (!retryable || attempt === 3) return null;
