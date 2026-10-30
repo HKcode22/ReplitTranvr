@@ -7,14 +7,6 @@ on:
       - ".github/workflows/phase4-gate5-protected-fids-original-readback.yml"
       - "scripts/v39_gate5_decoded_fids_readback_actions.ts"
       - "server/lib/disruption/phase4Gate5DecodedFidsReadback_v39.ts"
-  workflow_dispatch:
-    inputs:
-      confirmation:
-        description: "Metadata-only WSSS/YSSY raw readback, no provider or writes"
-        required: true
-        type: choice
-        options:
-          - GATE5_FIDS_BODY_RETENTION_SCOPED_READONLY_NO_PROVIDER
 permissions:
   contents: read
 concurrency:
