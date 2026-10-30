@@ -35,6 +35,42 @@ export interface FidsCensusParams {
   openapiSha256: string;
 }
 
+/**
+ * Exact application-intended FIDS query frame for NEW observations.
+ * Frozen inside the reconstructed FIDS JSON and its existing response hash.
+ * This is NOT a network byte-for-byte receipt or operator-flight proof.
+ */
+export function buildFidsRequestContractV39(params:FidsCensusParams){
+ const direction=params.direction??"Both";
+ if(!["Departure","Arrival","Both"].includes(direction)||
+    typeof params.withCancelled!=="boolean"||
+    typeof params.withCodeshared!=="boolean"||
+    (params.withCargo!==undefined&&typeof params.withCargo!=="boolean")||
+    (params.withPrivate!==undefined&&typeof params.withPrivate!=="boolean"))
+  throw new Error("FIDS_REQUEST_FRAME_INVALID");
+ if(!/^[A-Z]{4}$/.test(params.airportIcao)||
+    !/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}$/.test(params.fromLocal)||
+    !/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}$/.test(params.toLocal))
+  throw new Error("FIDS_REQUEST_AIRPORT_OR_LOCAL_RANGE_INVALID");
+ return {
+  schema:"v39.fids-request-frame.application-intent.v1" as const,
+  originalHttpBytesPreserved:false as const,
+  sourceTransportRequestReceiptVerified:false as const,
+  endpointKind:"airport_local_fids" as const,
+  airportIcao:params.airportIcao,
+  fromLocal:params.fromLocal,toLocal:params.toLocal,
+  direction,withLeg:true as const,
+  withCancelled:params.withCancelled,
+  withCodeshared:params.withCodeshared,
+  withCargo:params.withCargo??false,
+  withPrivate:params.withPrivate??false,
+  withLocation:false as const,
+  providerApiVersion:params.providerApiVersion,
+  fidsProtocolVersion:params.fidsProtocolVersion,
+  openapiSha256:params.openapiSha256
+ };
+}
+
 export type PopulationRole = "requested_airport_primary" | "opposite_movement_context";
 export const FIDS_TRUNCATION_HEURISTIC_COUNT = 500;
 export const FIDS_MAX_TOTAL_ATTEMPTS = 3;
@@ -452,12 +488,16 @@ export async function fetchFidsPopulation(
     throw new Error("FIDS population refused: invalid service window");
   }
 
-  const direction = params.direction ?? "Both";
+  const frame=buildFidsRequestContractV39(params);
+  const direction = frame.direction;
   const fids = await (deps.fetchAirport ?? fetchFidsAirport)(
     params.airportIcao,
     params.fromLocal,
     params.toLocal,
-    { direction, withLeg: true, category: params.restCategory },
+    { direction, withLeg: frame.withLeg,
+      withCancelled: frame.withCancelled,withCodeshared: frame.withCodeshared,
+      withCargo: frame.withCargo,withPrivate: frame.withPrivate,
+      withLocation: frame.withLocation,category: params.restCategory },
   );
   if (!fids) return null;
 
@@ -467,6 +507,9 @@ export async function fetchFidsPopulation(
     fromLocal: params.fromLocal,
     toLocal: params.toLocal,
     ianaTimezone: params.ianaTimezone,
+    // Hash-bound application request intent, NOT original provider HTTP bytes.
+    fidsRequestContract:frame,
+    payloadRepresentation:"RECONSTRUCTED_RESPONSE_JSON_NOT_VERBATIM_HTTP_BYTES",
     departures: fids.departures,
     arrivals: fids.arrivals,
     fetchedAtUtc: retrievalUtc.toISOString(),
