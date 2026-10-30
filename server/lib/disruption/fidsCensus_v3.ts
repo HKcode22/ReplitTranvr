@@ -501,6 +501,42 @@ export async function fetchFidsPopulation(
   );
   if (!fids) return null;
 
+  // Verify that the bytes actually parsed at the fetch boundary agree with
+  // the normalized lists. Missing evidence (e.g. injected legacy fetchers)
+  // stays explicitly NOT VERIFIED. Never fabricate body custody from JSON.
+  const original = fids.originalDecodedBody;
+  let originalBodyEvidence: {
+    schema: string; representation: string; bodySha256: string;
+    bodyLengthBytes: number; bodyBase64: string;
+  } | null = null;
+  if (original !== undefined) {
+    if (original.representation !== "FETCH_DECODED_RESPONSE_BODY_BYTES_NOT_HTTP_WIRE" ||
+        !Number.isSafeInteger(original.byteLength) || original.byteLength < 1 ||
+        original.byteLength > 4 * 1024 * 1024 ||
+        !/^[a-f0-9]{64}$/.test(original.sha256) ||
+        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(original.base64))
+      throw new Error("FIDS_ORIGINAL_DECODED_BODY_INVALID_HOLD");
+    const bytes = Buffer.from(original.base64, "base64");
+    if (bytes.length !== original.byteLength ||
+        bytes.toString("base64") !== original.base64)
+      throw new Error("FIDS_ORIGINAL_DECODED_BODY_INVALID_HOLD");
+    if (createHash("sha256").update(bytes).digest("hex") !== original.sha256)
+      throw new Error("FIDS_ORIGINAL_DECODED_BODY_SHA_MISMATCH_HOLD");
+    let decoded: any;
+    try { decoded = JSON.parse(bytes.toString("utf8")); }
+    catch { throw new Error("FIDS_ORIGINAL_DECODED_BODY_JSON_INVALID_HOLD"); }
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded) ||
+        JSON.stringify(Array.isArray(decoded.departures) ? decoded.departures : []) !== JSON.stringify(fids.departures) ||
+        JSON.stringify(Array.isArray(decoded.arrivals) ? decoded.arrivals : []) !== JSON.stringify(fids.arrivals))
+      throw new Error("FIDS_ORIGINAL_DECODED_BODY_NORMALIZATION_MISMATCH_HOLD");
+    originalBodyEvidence = {
+      schema: "v39.fids-fetch-decoded-source-body.v1",
+      representation: original.representation,
+      bodySha256: original.sha256,
+      bodyLengthBytes: original.byteLength,
+      bodyBase64: original.base64,
+    };
+  }
   const retrievalUtc = (deps.now ?? (() => new Date()))();
   const rawPayload = {
     airport: params.airportIcao,
@@ -510,6 +546,9 @@ export async function fetchFidsPopulation(
     // Hash-bound application request intent, NOT original provider HTTP bytes.
     fidsRequestContract:frame,
     payloadRepresentation:"RECONSTRUCTED_RESPONSE_JSON_NOT_VERBATIM_HTTP_BYTES",
+    originalDecodedEntityBodyPreserved: originalBodyEvidence !== null,
+    originalHttpWireBytesPreserved: false,
+    originalDecodedEntityBodyEvidence: originalBodyEvidence,
     departures: fids.departures,
     arrivals: fids.arrivals,
     fetchedAtUtc: retrievalUtc.toISOString(),
