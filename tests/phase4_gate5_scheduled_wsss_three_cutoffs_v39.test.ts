@@ -10,11 +10,11 @@ const env={
  P4_ONE_FIDS_EXACT_INTENT:"PHASE4_WSSS_THREE_HORIZON_SINGLE_GET_PER_CRON_NO_RETRIES"
 } as NodeJS.ProcessEnv;
 const slots=[
- {cron:"0 16 30 10 *",t:"2026-10-30T16:00:00Z",
+ {cron:"7 16 30 10 *",t:"2026-10-30T16:07:00Z",
   cutoff:"2026-10-30T17:00:00.000Z",h:"T-24h"},
- {cron:"0 10 31 10 *",t:"2026-10-31T10:00:00Z",
+ {cron:"7 10 31 10 *",t:"2026-10-31T10:07:00Z",
   cutoff:"2026-10-31T11:00:00.000Z",h:"T-6h"},
- {cron:"30 14 31 10 *",t:"2026-10-31T14:30:00Z",
+ {cron:"37 14 31 10 *",t:"2026-10-31T14:37:00Z",
   cutoff:"2026-10-31T15:30:00.000Z",h:"T-90m"}
 ] as const;
 describe("Three automated source cutoff observation opportunities",()=>{
@@ -27,7 +27,7 @@ describe("Three automated source cutoff observation opportunities",()=>{
    expect(r.window.end.toISOString()).toBe("2026-10-31T18:00:00.000Z");
    expect(r.cutoffUtc.toISOString()).toBe(v.cutoff);
    expect(r.horizon).toBe(v.h);
-   expect(r.cutoffUtc.getTime()-Date.parse(v.t)).toBe(3600_000);
+   expect(r.cutoffUtc.getTime()-Date.parse(v.t)).toBe(53*60_000);
    seen.add(r.horizon);
   }
   expect(seen.size).toBe(3);
