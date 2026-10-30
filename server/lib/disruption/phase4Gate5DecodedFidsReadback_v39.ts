@@ -9,6 +9,7 @@
  */
 import {createHash} from "node:crypto";
 import {isDeepStrictEqual} from "node:util";
+import {verifyCanonicalFidsEnvelopeV39} from "./fidsEnvelopeCanonical_v39";
 
 export const P4_FIDS_READBACK_SCHEMA_V39 =
   "v39.phase4.fids-decoded-body-readback.v1" as const;
@@ -44,6 +45,8 @@ export interface P4FidsReadbackReport {
   status:P4FidsBodyReadbackStatus;
   sampled:number;
   bodyShaAndDecodedArraysVerified:number;
+  bodyAndEnvelopeShaVerified:number;
+  bodyWithoutEnvelopeHash:number;
   legacyWithoutBodyEvidence:number;
   rejectedIntegrity:number;
   moreRetainedRowsBeyondSample:boolean;
@@ -74,6 +77,10 @@ export function verifyStoredDecodedFidsBodyV39(value:unknown):Verdict {
      raw.originalHttpWireBytesPreserved!==false ||
      !Array.isArray(raw.departures) || !Array.isArray(raw.arrivals))
     return "rejected";
+  // Additional checksum covers the entire persisted source envelope, not
+  // merely the original decoded provider response-body bytes. Historical
+  // pre-hash rows remain explicitly unverified for envelope custody.
+  if(verifyCanonicalFidsEnvelopeV39(raw)==="rejected")return "rejected";
   const flag=raw.originalDecodedEntityBodyPreserved;
   const evidence=raw.originalDecodedEntityBodyEvidence;
   if(flag===false && evidence===null) return "legacy";
@@ -130,11 +137,15 @@ export async function auditStoredDecodedFidsReadbackV39(
      result.rows.length>P4_FIDS_READBACK_MAX_RECORDS+1)
     throw Error("P4_FIDS_READBACK_UNBOUNDED_RESULT");
   const rows=result.rows.slice(0,P4_FIDS_READBACK_MAX_RECORDS);
-  let verified=0,legacy=0,rejected=0;
+  let verified=0,envelopeVerified=0,bodyOnly=0,legacy=0,rejected=0;
   for(const r of rows){
     const verdict=verifyStoredDecodedFidsBodyV39(r);
-    if(verdict==="verified")verified++;
-    else if(verdict==="legacy")legacy++;
+    if(verdict==="verified"){
+      verified++;
+      const raw=obj(obj(r)?.payload);
+      if(verifyCanonicalFidsEnvelopeV39(raw)==="verified")envelopeVerified++;
+      else bodyOnly++;
+    }else if(verdict==="legacy")legacy++;
     else rejected++;
   }
   const status:P4FidsBodyReadbackStatus=rejected>0
@@ -145,6 +156,8 @@ export async function auditStoredDecodedFidsReadbackV39(
   return {
     schema:P4_FIDS_READBACK_SCHEMA_V39,status,sampled:rows.length,
     bodyShaAndDecodedArraysVerified:verified,
+    bodyAndEnvelopeShaVerified:envelopeVerified,
+    bodyWithoutEnvelopeHash:bodyOnly,
     legacyWithoutBodyEvidence:legacy,rejectedIntegrity:rejected,
     moreRetainedRowsBeyondSample:result.rows.length>P4_FIDS_READBACK_MAX_RECORDS,
     entirePopulationVerified:false,
