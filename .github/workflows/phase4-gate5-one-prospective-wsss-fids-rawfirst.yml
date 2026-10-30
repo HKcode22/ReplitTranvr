@@ -12,7 +12,7 @@ concurrency:
 jobs:
   one-prospective-fids:
     # ONE intended main merge, not a general future paid-on-push workflow.
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, 'Merge pull request #274') }}
+    if: "${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, 'Merge pull request #275') }}"
     runs-on: ubuntu-latest
     timeout-minutes: 8
     environment: phase2g-paid
