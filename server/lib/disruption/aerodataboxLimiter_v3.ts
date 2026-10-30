@@ -785,7 +785,7 @@ export async function fetchFidsAirport(
         const maximumBytes = 4 * 1024 * 1024;
         const reportedLength = resp.headers.get("content-length");
         if (reportedLength !== null &&
-            (!/^\\d+$/.test(reportedLength) || Number(reportedLength) > maximumBytes))
+            (!/^\d+$/.test(reportedLength) || Number(reportedLength) > maximumBytes))
           throw new Error("FIDS_DECODED_BODY_SIZE_HOLD");
         const body = Buffer.from(await resp.arrayBuffer());
         if (body.byteLength > maximumBytes) throw new Error("FIDS_DECODED_BODY_SIZE_HOLD");
