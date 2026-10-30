@@ -14,6 +14,8 @@ const fids={
  scheduled:new Date("2026-10-29T12:00:00Z"),
  member_available:new Date("2026-10-29T04:00:00Z"),
  query_available:new Date("2026-10-29T04:00:00Z"),
+ effective_available:new Date("2026-10-29T04:00:00Z"),
+ source_clock_precision_compatible:true,
  row_hash:sha,query_hash:sha,airport:"WSSS"
 };
 const webhook={flight_id:"flight-1",received_at:new Date("2026-10-29T13:00:00Z"),
@@ -74,6 +76,48 @@ describe("Phase4 read-only B0062 source adapter",()=>{
    }],[],[]),scope);
    expect(r.report.horizons[1].population).toBe(0);
    expect(r.report.ambiguousExcluded).toBe(1);
+ });
+ it("accepts DB-certified submillisecond receipt-clock rounding without inventing source history",async()=>{
+   // PG can distinguish 04:00:00.000001 from 04:00:00.000002, while
+   // the JS Date fixtures collapse both into an identical millisecond.
+   // The database-provided exact-precision verdict controls admission.
+   const r=await readPhase4Gate5CandidateEvidenceV39(db([{
+     ...fids,source_clock_precision_compatible:true
+   }],[],[]),scope);
+   expect(r.counts.fidsRowsMapped).toBe(1);
+   expect(r.counts.fidsRejectedHashesOrTime).toBe(0);
+   expect(r.report.strictPassed).toBe(false);
+   expect(GATE5_READ_FIDS_SQL_V39).toContain("q.available_at-p.available_at<interval '1 millisecond'");
+   expect(GATE5_READ_FIDS_SQL_V39).toContain("GREATEST(p.available_at,q.available_at)");
+ });
+ it("rejects database-certified inversion >=1ms despite JS Date rounding",async()=>{
+   const r=await readPhase4Gate5CandidateEvidenceV39(db([{
+     ...fids,source_clock_precision_compatible:false
+   }],[],[]),scope);
+   expect(r.counts.fidsRowsMapped).toBe(0);
+   expect(r.counts.fidsRejectedHashesOrTime).toBe(1);
+   expect(r.report.horizons[1].rates.capture.value).toBeNull();
+ });
+ it("uses later effective source clock, not just member clock, for cutoff eligibility",async()=>{
+   const r=await readPhase4Gate5CandidateEvidenceV39(db([{
+     ...fids,
+     member_available:new Date("2026-10-29T05:59:59.999Z"),
+     query_available:new Date("2026-10-29T06:00:00.001Z"),
+     effective_available:new Date("2026-10-29T06:00:00.001Z"),
+     source_clock_precision_compatible:true
+   }],[],[]),scope);
+   // This synthetic fixture exercises the effective timestamp only.
+   // The SQL-certified flag is authoritative about unrounded DB clocks.
+   expect(r.counts.fidsRowsMapped).toBe(1);
+   expect(r.report.horizons[1].population).toBe(0);
+   expect(r.report.horizons[2].population).toBe(1);
+ });
+ it("fails closed if the effective timestamp is earlier than either source clock",async()=>{
+   const r=await readPhase4Gate5CandidateEvidenceV39(db([{
+     ...fids,query_available:new Date("2026-10-29T04:00:00.500Z"),
+     effective_available:new Date("2026-10-29T04:00:00.000Z")
+   }],[],[]),scope);
+   expect(r.counts.fidsRejectedHashesOrTime).toBe(1);
  });
  it("query available after durable row or invalid UTC is rejected",async()=>{
    const r=await readPhase4Gate5CandidateEvidenceV39(
