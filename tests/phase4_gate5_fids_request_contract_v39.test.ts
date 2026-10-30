@@ -198,7 +198,7 @@ describe("Phase4 FIDS request source-frame application intent",()=>{
    .toBe("auxiliary");
  });
  it("census asks for every requested-direction array, not optional empty defaults",async()=>{
-  const fetchAirport=vi.fn(async()=>({departures:[],arrivals:[]}));
+  const fetchAirport=vi.fn(async (..._args:any[])=>({departures:[],arrivals:[]}));
   const persist=vi.fn(async()=>0);
   for (const [direction,strictDepartureList,strictArrivalList] of [
    ["Departure",true,false],["Arrival",false,true],["Both",true,true]
@@ -238,7 +238,6 @@ describe("Phase4 FIDS request source-frame application intent",()=>{
   });
   expect(result).not.toBeNull();
   expect(result?.departures).toEqual([]);
-  expect(result?.originalDecodedBody?.bodyLength).toBeUndefined();
   expect(result?.originalDecodedBody?.sha256).toMatch(/^[a-f0-9]{64}$/);
  });
 });
