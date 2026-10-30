@@ -93,7 +93,7 @@ describe("Phase4 FIDS request source-frame application intent",()=>{
  });
 
  it("retains authentic fetch-decoded body bytes and SHA without calling the provider",async()=>{
-  const originalText=' {\\n "departures": [], "arrivals": [] \\n}  ';
+  const originalText=' {\n "departures": [], "arrivals": [] \n}  ';
   const bodyBytes=Buffer.from(originalText,"utf8");
   const fetchImpl=vi.fn(async()=>new Response(bodyBytes,{status:200}));
   const owner={reserve:vi.fn(async()=>undefined)};
