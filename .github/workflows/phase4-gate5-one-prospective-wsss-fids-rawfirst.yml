@@ -1,0 +1,57 @@
+name: Phase4 Gate5 WSSS One Prospective FIDS Raw-First (2 REST Units Max)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-one-prospective-wsss-fids-rawfirst.yml"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-single-prospective-wsss-fids-paid
+  cancel-in-progress: false
+jobs:
+  one-prospective-fids:
+    # ONE intended main merge, not a general future paid-on-push workflow.
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, 'Merge pull request #274') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies without account credentials
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: One protected WSSS prospective original FIDS GET + atomic store and readback
+        env:
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          P4_ONE_FIDS_EXACT_INTENT: PHASE4_ONE_WSSS_ORIGINAL_FIDS_2_API_UNITS_ZERO_RETRIES
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -n "${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_phase4_one_prospective_fids_paid_actions.ts
+      - name: Preserve science and billing distinctions
+        if: always()
+        run: |
+          {
+            echo 'Bounded one-request provider FIDS experiment: expected 2 REST API units, zero retries, no Alert subscriptions.'
+            echo 'If DB writer/retention/account preflight failed, there was no paid request.'
+            echo 'If GET was attempted, ambiguous transport failure consumes its one attempt, never retries.'
+            echo 'Fresh population source is not a certified scheduled-wheels-off T or actual takeoff label.'
+            echo 'Unknown scope/missingness are reported, not silently treated as valid core or zero coverage.'
+            echo 'This does not authorize Phase6 or claim full original Gate5 PASS.'
+          } >> "$GITHUB_STEP_SUMMARY"
