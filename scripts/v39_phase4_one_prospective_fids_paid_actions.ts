@@ -28,11 +28,11 @@ const SCHEDULED_INTENT="PHASE4_WSSS_THREE_HORIZON_SINGLE_GET_PER_CRON_NO_RETRIES
 // Three predeclared, finite source-receipt times for the SAME service window.
 // Every time is UTC and earlier than the earliest candidate cutoff.
 const HORIZON_SLOTS={
- "0 16 30 10 *":{horizon:"T-24h",runUtc:"2026-10-30T16:00:00.000Z",
+ "7 16 30 10 *":{horizon:"T-24h",runUtc:"2026-10-30T16:07:00.000Z",
                   cutoffUtc:"2026-10-30T17:00:00.000Z"},
- "0 10 31 10 *":{horizon:"T-6h",runUtc:"2026-10-31T10:00:00.000Z",
+ "7 10 31 10 *":{horizon:"T-6h",runUtc:"2026-10-31T10:07:00.000Z",
                   cutoffUtc:"2026-10-31T11:00:00.000Z"},
- "30 14 31 10 *":{horizon:"T-90m",runUtc:"2026-10-31T14:30:00.000Z",
+ "37 14 31 10 *":{horizon:"T-90m",runUtc:"2026-10-31T14:37:00.000Z",
                     cutoffUtc:"2026-10-31T15:30:00.000Z"}
 } as const;
 export function scheduledWsssHorizonV39(env:NodeJS.ProcessEnv,now:number){
