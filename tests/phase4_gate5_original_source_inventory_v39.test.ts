@@ -218,6 +218,11 @@ describe("Phase4 original-source metadata, no provider",()=>{
   expect(workflow).not.toContain("node scripts/v39_gate05_science_one_paid");
   expect(script).toContain("REPEATABLE READ READ ONLY");
   expect(script).toContain('client.query("ROLLBACK")');
+  // Joint evidence from one production READ ONLY snapshot after real FIDS.
+  expect(script).toContain("auditStoredDecodedFidsReadbackV39");
+  expect(script).toContain("originalBodyAndEnvelopeReadback");
+  expect(script).toContain("strictGate5Passed:false");
+  expect(script).toContain("providerCalls:0,databaseWrites:0");
   expect(P4_INV_RAW_FIDS_FLAGS_SQL.startsWith("WITH")).toBe(true);
   expect(P4_INV_RAW_FIDS_FLAGS_SQL).toContain("jsonb_array_elements");
   expect(P4_INV_RAW_FIDS_FLAGS_SQL).not.toMatch(/\b(UPDATE|INSERT|DELETE|CREATE|TRUNCATE)\b/i);
