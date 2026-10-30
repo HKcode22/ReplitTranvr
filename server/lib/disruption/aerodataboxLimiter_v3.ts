@@ -814,6 +814,8 @@ export async function fetchFidsAirport(
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("FIDS response schema invalid");
         if (opts?.strictDepartureList && !Array.isArray(raw.departures))
           throw new Error("FIDS_DEPARTURES_ARRAY_UNAVAILABLE");
+        if (opts?.strictArrivalList && !Array.isArray(raw.arrivals))
+          throw new Error("FIDS_ARRIVALS_ARRAY_UNAVAILABLE");
         const result: FidsAirportResult = {
           departures: Array.isArray(raw.departures) ? raw.departures : [],
           arrivals: Array.isArray(raw.arrivals) ? raw.arrivals : [],
