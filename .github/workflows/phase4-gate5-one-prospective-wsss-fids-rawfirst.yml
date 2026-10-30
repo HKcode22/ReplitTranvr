@@ -4,12 +4,6 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/phase4-gate5-one-prospective-wsss-fids-rawfirst.yml"
-  # Exactly three 2026 prospective source receipts for one frozen WSSS window.
-  # Next-year repeats are refused by the fixed 2026 deadline in the runner.
-  schedule:
-    - cron: '7 16 30 10 *'
-    - cron: '7 10 31 10 *'
-    - cron: '37 14 31 10 *'
 permissions:
   contents: read
 concurrency:
@@ -60,60 +54,4 @@ jobs:
             echo 'Fresh population source is not a certified scheduled-wheels-off T or actual takeoff label.'
             echo 'Unknown scope/missingness are reported, not silently treated as valid core or zero coverage.'
             echo 'This does not authorize Phase6 or claim full original Gate5 PASS.'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  scheduled-prospective-fids:
-    if: "${{ github.event_name == 'schedule' && github.ref == 'refs/heads/main' }}"
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    environment: phase2g-paid
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-      - name: Install locked dependencies, no provider secrets
-        run: npm ci --include=dev --no-audit --no-fund
-      - name: Scheduled one FIDS GET, raw-first and immediate readback
-        env:
-          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
-          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
-          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
-          P4_ONE_FIDS_EXACT_INTENT: PHASE4_WSSS_THREE_HORIZON_SINGLE_GET_PER_CRON_NO_RETRIES
-          P4_FIDS_SCHEDULE_CRON: ${{ github.event.schedule }}
-        run: |
-          set -Eeuo pipefail
-          set +x
-          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
-          test "$GITHUB_REF" = refs/heads/main
-          test "$GITHUB_EVENT_NAME" = schedule
-          test "$GITHUB_RUN_ATTEMPT" = 1
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test -n "${AERODATABOX_API_KEY:-}"
-          test -n "${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
-          node --import tsx scripts/v39_phase4_one_prospective_fids_paid_actions.ts
-      - name: Read-only independent cohort audit immediately after paid FIDS
-        if: success()
-        env:
-          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
-          P4_GATE5_SOURCE_AIRPORT: WSSS
-          P4_GATE5_READONLY_APPROVAL: GATE5_SOURCE_METADATA_NO_PROVIDER
-          P4_FIDS_SCHEDULE_CRON: ${{ github.event.schedule }}
-        run: |
-          set -Eeuo pipefail
-          set +x
-          test -n "${GATE05_AUTOMATION_DATABASE_URL:-}"
-          node --import tsx scripts/v39_gate5_source_inventory_readonly_actions.ts
-      - name: Preserve actual scientific and billing disposition
-        if: always()
-        run: |
-          {
-            echo 'WSSS one fixed service window, three finite candidate horizon source reads. Max 1 paid FIDS GET per cron event, expected 2 API units each, zero retries, zero Alert Creates.'
-            echo 'Missing/unknown/ambiguous population or absent snapshots are explicitly separate diagnostic categories.'
-            echo 'T-24h/T-6h/T-90m schedule cutoffs are candidate calculations, not independently certified provider-native T.'
-            echo 'No final Gate5 PASS, Phase5 FREEZE or Phase6 GO is asserted by this diagnostic workflow.'
           } >> "$GITHUB_STEP_SUMMARY"
