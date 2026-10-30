@@ -4,6 +4,8 @@ import {auditP4Gate5OriginalSourceInventory}
  from "../server/lib/disruption/phase4Gate5SourceInventory_v39";
 import {auditP4Gate5SourceCutoffsV39}
  from "../server/lib/disruption/phase4Gate5SourceCutoffAudit_v39";
+import {auditStoredDecodedFidsReadbackV39}
+ from "../server/lib/disruption/phase4Gate5DecodedFidsReadback_v39";
 export function requireP4InventoryActionsContext(env:NodeJS.ProcessEnv):{airport:string}{
  if(env.GITHUB_ACTIONS!=="true"||
   env.GITHUB_REF!=="refs/heads/main"||
@@ -38,7 +40,20 @@ async function main():Promise<void>{
   });
   if(cohort.latestSourceReceiptSample!==report.latestFidsQuerySample)
    throw Error("P4_GATE5_SOURCE_SAMPLE_PARITY_HOLD");
-  console.log(JSON.stringify({sourceInventory:report,cutoffAndSnapshotEvidence:cohort}));
+  // Same repeatable-read snapshot and 24h raw source age guard. This
+  // immediately verifies the newly stored prospective source body; older
+  // rows must remain LEGACY or EXPIRED, never be reconstructed.
+  const bodyReadback=await auditStoredDecodedFidsReadbackV39(client,{
+    airport:ctx.airport,readAsOfUtc:readAt
+  });
+  console.log(JSON.stringify({sourceInventory:report,
+    cutoffAndSnapshotEvidence:cohort,
+    originalBodyAndEnvelopeReadback:bodyReadback,
+    strictGate5Passed:false,phase6Authorized:false,
+    providerCalls:0,databaseWrites:0
+  }));
+  if(bodyReadback.rejectedIntegrity>0)
+    throw Error("P4_GATE5_SOURCE_READBACK_INTEGRITY_HOLD");
   console.log("PHASE4_GATE5_AUDIT_EXECUTED_ONLY_NOT_SCIENTIFIC_GATE5_PASS");
  }finally{
   if(transaction)await client.query("ROLLBACK").catch(()=>undefined);
