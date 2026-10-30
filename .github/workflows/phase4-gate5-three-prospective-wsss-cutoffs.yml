@@ -1,0 +1,68 @@
+name: Phase4 Gate5 WSSS Three Prospective Source Cutoffs - Fixed 3 GETs
+on:
+  schedule:
+    - cron: "7 16 30 10 *"
+    - cron: "7 10 31 10 *"
+    - cron: "37 14 31 10 *"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-wsss-three-horizon-one-get-per-cutoff
+  cancel-in-progress: false
+jobs:
+  one-fids-horizon:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies without secrets
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: One prospective WSSS FIDS GET at scheduled horizon, atomic source storage
+        env:
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          P4_FIDS_SCHEDULE_CRON: ${{ github.event.schedule }}
+          P4_ONE_FIDS_EXACT_INTENT: PHASE4_WSSS_THREE_HORIZON_SINGLE_GET_PER_CRON_NO_RETRIES
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = schedule
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -n "${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_phase4_one_prospective_fids_paid_actions.ts
+      - name: Independent no-provider FIDS population/as-of and source-custody audit
+        if: success()
+        env:
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          P4_GATE5_SOURCE_AIRPORT: WSSS
+          P4_GATE5_READONLY_APPROVAL: GATE5_SOURCE_METADATA_NO_PROVIDER
+          P4_FIDS_SCHEDULE_CRON: ${{ github.event.schedule }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -n "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_gate5_source_inventory_readonly_actions.ts
+      - name: Experimental evidence, not final Gate5 science PASS
+        if: always()
+        run: |
+          {
+            echo 'Exactly three dated prospective FIDS opportunities, one paid GET per horizon, maximum six expected additional REST API units total.'
+            echo 'No Alert create; no repeat/catch-up after missed cutoff; no use of future receipts at an earlier PRE horizon.'
+            echo 'An unavailable/late scheduled slot is UNOBSERVED, not a zero-flight denominator.'
+            echo 'Body+envelope readback only certifies locally stored source integrity, not actual wheels-off label semantics.'
+            echo 'No Phase5 final FREEZE / Phase6 collection authorization.'
+          } >> "$GITHUB_STEP_SUMMARY"

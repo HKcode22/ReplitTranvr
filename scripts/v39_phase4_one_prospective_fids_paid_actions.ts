@@ -24,6 +24,37 @@ const AIRPORT="WSSS";
 const MAX_BYTES=4*1024*1024;
 const DEADLINE=Date.parse("2026-11-01T23:59:59.000Z");
 const PLAN_FIDS_MIN_SOURCE_LEAD_MS=26*3600_000;
+const SCHEDULED_INTENT="PHASE4_WSSS_THREE_HORIZON_SINGLE_GET_PER_CRON_NO_RETRIES";
+// Three predeclared, finite source-receipt times for the SAME service window.
+// Every time is UTC and earlier than the earliest candidate cutoff.
+const HORIZON_SLOTS={
+ "7 16 30 10 *":{horizon:"T-24h",runUtc:"2026-10-30T16:07:00.000Z",
+                  cutoffUtc:"2026-10-30T17:00:00.000Z"},
+ "7 10 31 10 *":{horizon:"T-6h",runUtc:"2026-10-31T10:07:00.000Z",
+                  cutoffUtc:"2026-10-31T11:00:00.000Z"},
+ "37 14 31 10 *":{horizon:"T-90m",runUtc:"2026-10-31T14:37:00.000Z",
+                    cutoffUtc:"2026-10-31T15:30:00.000Z"}
+} as const;
+export function scheduledWsssHorizonV39(env:NodeJS.ProcessEnv,now:number){
+ const slot=HORIZON_SLOTS[
+   env.P4_FIDS_SCHEDULE_CRON as keyof typeof HORIZON_SLOTS
+ ];
+ if(!slot||env.GITHUB_ACTIONS!=="true"||
+    env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
+    env.GITHUB_REF!=="refs/heads/main"||
+    env.GITHUB_EVENT_NAME!=="schedule"||
+    env.GITHUB_RUN_ATTEMPT!=="1"||
+    !/^[0-9a-f]{40}$/.test(env.GITHUB_SHA??"")||
+    env.P4_ONE_FIDS_EXACT_INTENT!==SCHEDULED_INTENT||
+    !Number.isFinite(now)||now>=DEADLINE||
+    now<Date.parse(slot.runUtc)-10*60_000||
+    now>Date.parse(slot.cutoffUtc)-15*60_000)
+   throw Error("P4_FIDS_SCHEDULED_HORIZON_WINDOW_HOLD");
+ const start=new Date("2026-10-31T17:00:00.000Z");
+ const end=new Date("2026-10-31T18:00:00.000Z");
+ return {horizon:slot.horizon,cutoffUtc:new Date(slot.cutoffUtc),
+         window:{start,end}};
+}
 export function requireP4OneFidsSourceActionsV39(
  env:NodeJS.ProcessEnv,now:number
 ):void{
@@ -109,7 +140,9 @@ async function main():Promise<void>{
  let pool:ReturnType<typeof getV39Pool>|null=null;
  try{
    const now=Date.now();
-   requireP4OneFidsSourceActionsV39(process.env,now);
+   const scheduled=process.env.GITHUB_EVENT_NAME==="schedule"
+     ?scheduledWsssHorizonV39(process.env,now):null;
+   if(!scheduled)requireP4OneFidsSourceActionsV39(process.env,now);
    const dbUrl=process.env.V39_DATABASE_RUNTIME_URL||
      process.env.GATE05_AUTOMATION_DATABASE_URL;
    const key=process.env.AERODATABOX_API_KEY;
@@ -119,7 +152,7 @@ async function main():Promise<void>{
    // BEFORE even reserving/issuing the one billable GET.
    await checkWritableSchema(dbUrl);
    process.env.V39_DATABASE_RUNTIME_URL=dbUrl;
-   const window=futureWsssPopulationWindowV39(now);
+   const window=scheduled?.window??futureWsssPopulationWindowV39(now);
    const locals=utcIntervalToLocal(window.start,window.end,"Asia/Singapore");
    const doc=await fetch("https://doc.aerodatabox.com/docs/openapi-rapidapi-v1.json",{
      redirect:"error",signal:AbortSignal.timeout(12000)
@@ -192,7 +225,7 @@ async function main():Promise<void>{
      direction:"Departure" as const,withCancelled:true,
      withCodeshared:true,withCargo:false,withPrivate:false,
      serviceWindowStartUtc:window.start,serviceWindowEndUtc:window.end,
-     cutoffUtc:new Date(window.start.getTime()-24*3600_000),
+     cutoffUtc:scheduled?.cutoffUtc??new Date(window.start.getTime()-24*3600_000),
      providerApiVersion:spec.version,
      fidsProtocolVersion:"v3.9-f.8",
      openapiSha256:spec.sha256,
@@ -217,7 +250,7 @@ async function main():Promise<void>{
      airport:AIRPORT,
      windowStartUtc:window.start.toISOString(),
      windowEndUtc:window.end.toISOString(),
-     preliminaryHorizon:"T-24h",
+     preliminaryHorizon:scheduled?.horizon??"T-24h",
      candidateFirstCutoffUtc:params.cutoffUtc.toISOString(),
      providerAttempted:billableAttempts,
      expectedApiUnits:2,measuredApiUnitDelta:debit,
