@@ -56,6 +56,10 @@ export const GATE5_READ_FIDS_SQL_V39=[
  " p.population_role AS role, p.scope_classification AS scope,",
  " p.codeshare_resolution_status AS codeshare, p.dep_scheduled_utc AS scheduled,",
  " p.available_at AS member_available, q.available_at AS query_available,",
+ " GREATEST(p.available_at,q.available_at) AS effective_available,",
+ " (p.available_at>=q.available_at OR (p.available_at<q.available_at",
+ " AND q.available_at-p.available_at<interval '1 millisecond'))",
+ " AS source_clock_precision_compatible,",
  " p.response_hash AS row_hash, q.response_hash AS query_hash,",
  " p.source_airport_icao AS airport",
  "FROM clean.flight_population p",
@@ -154,14 +158,21 @@ export async function readPhase4Gate5CandidateEvidenceV39(
    if(!flightId||!id(r.query_id)||r.airport!==scope.airport){
      missing++;continue;
    }
-   let available:string,queryAt:string;
+   let available:string,queryAt:string,effectiveAt:string;
    try{
      available=toUtc(r.member_available,"fids_member");
      queryAt=toUtc(r.query_available,"fids_query");
+     effectiveAt=toUtc(r.effective_available,"fids_effective");
    }catch{missing++;continue;}
-   if(Date.parse(queryAt)>Date.parse(available)||Date.parse(available)>latest){
-     bad++;continue;
-   }
+   // PostgreSQL retains microseconds; the JS Date adapter does not. A source
+   // record may predate its parent receipt by <1ms from serialization alone.
+   // Require the DB's exact-precision comparison, then use GREATEST of BOTH
+   // original source clocks for every cutoff and first-sighting decision.
+   // A >=1ms inversion remains invalid; no historical field is rewritten.
+   const effectiveMs=Date.parse(effectiveAt);
+   if(r.source_clock_precision_compatible!==true||
+      effectiveMs<Math.max(Date.parse(available),Date.parse(queryAt))||
+      effectiveMs>latest){bad++;continue;}
    if(typeof r.row_hash!=="string"||!SHA.test(r.row_hash)||
       r.query_hash!==r.row_hash){bad++;continue;}
    const role=r.role==="requested_airport_primary"||r.role==="opposite_movement_context"?
@@ -176,14 +187,14 @@ export async function readPhase4Gate5CandidateEvidenceV39(
    try{t=optionalUtc(r.scheduled,"schedule");}catch{bad++;continue;}
    if(id(rawId)&&t!==null&&role==="requested_airport_primary"){
      const old=firstByFlight.get(flightId);
-     if(!old||Date.parse(available)<old.when)
-       firstByFlight.set(flightId,{when:Date.parse(available),t});
+     if(!old||effectiveMs<old.when)
+       firstByFlight.set(flightId,{when:effectiveMs,t});
    }
    sourceHashByQuery.set(String(r.query_id),String(r.query_hash));
    pending.push({
      flightId,queryId:String(r.query_id),airport:scope.airport,
      role,scope:sc,codeshare:cs,firstSelectedTUtc:null,
-     movementScheduledUtc:t,availableAtUtc:available,
+     movementScheduledUtc:t,availableAtUtc:effectiveAt,
      departureCountry:null,arrivalCountry:null
    });
  }
