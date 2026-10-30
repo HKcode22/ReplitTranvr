@@ -1,0 +1,54 @@
+name: Phase4 Gate5 WSSS One Paid Flight Status Source Feasibility
+# One source-field feasibility GET, no alert create, no retries, no schedule.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-one-paid-wsss-status-feasibility.yml"
+      - "scripts/v39_phase4_wsss_one_paid_status_probe_20261029.ts"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-one-wsss-status-feasibility
+  cancel-in-progress: false
+jobs:
+  one-status-source-feasibility:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies without API secrets
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: One WSSS original-source status GET (Tier 2, no retries)
+        env:
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          P4_ONE_STATUS_EXACT_INTENT: ONE_PROTECTED_FIDS_OPERATOR_STATUS_TIER2_NO_RETRY
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test -n "${AERODATABOX_API_KEY:-}"
+          node --import tsx scripts/v39_phase4_wsss_one_paid_status_probe_20261029.ts
+      - name: Scientific status is still HOLD
+        if: always()
+        run: |
+          {
+            echo 'One-flight-number original-source feasibility check only, expected 2 Tier-2 API units maximum one attempted GET.'
+            echo 'No provider alert CREATE, subscription, DB writes, or retry on ambiguous charge.'
+            echo 'No source identifiers or raw provider response in workflow logs. Missing provider evidence remains UNKNOWN.'
+            echo 'A runwayTime field is not independently validated actual wheels-off; this is NOT Gate5 PASS.'
+            echo 'Phase5 final freeze and Phase6 collection stay gated.'
+          } >> "$GITHUB_STEP_SUMMARY"
