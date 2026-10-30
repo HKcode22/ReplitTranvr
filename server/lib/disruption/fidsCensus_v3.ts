@@ -10,6 +10,7 @@
 import { createHash, randomUUID } from "crypto";
 import { v39Pool as pool } from "./db_v39";
 import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
+import { addCanonicalFidsEnvelopeHashV39 } from "./fidsEnvelopeCanonical_v39";
 import {
   canonicalFlightInstanceId,
   type CanonicalFlightInstanceInput,
@@ -553,7 +554,7 @@ export async function fetchFidsPopulation(
     };
   }
   const retrievalUtc = (deps.now ?? (() => new Date()))();
-  const rawPayload = {
+  const rawPayload = addCanonicalFidsEnvelopeHashV39({
     airport: params.airportIcao,
     fromLocal: params.fromLocal,
     toLocal: params.toLocal,
@@ -567,7 +568,9 @@ export async function fetchFidsPopulation(
     departures: fids.departures,
     arrivals: fids.arrivals,
     fetchedAtUtc: retrievalUtc.toISOString(),
-  };
+  });
+  // Supplemental JSONB-stable hash covers request metadata and stored
+  // decoded provider body. Existing response_hash remains unchanged in role.
   const responseHash = sha256(JSON.stringify(rawPayload));
   const populationQueryId = randomUUID();
   // Pre-persistence timestamp is only a lower bound. persistFidsObservation
