@@ -1,0 +1,54 @@
+name: Phase4 Gate5 Retained FIDS Original Body Readback - Protected READ ONLY
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-protected-fids-original-readback.yml"
+      - "scripts/v39_gate5_decoded_fids_readback_actions.ts"
+      - "server/lib/disruption/phase4Gate5DecodedFidsReadback_v39.ts"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-original-body-readback-readonly
+  cancel-in-progress: false
+
+jobs:
+  protected-original-body-readback:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies without provider credentials
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Bounded read-only original-body audit against retained DB
+        env:
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          P4_FIDS_READBACK_EXACT_INTENT: GATE5_FIDS_BODY_RETENTION_SCOPED_READONLY_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_gate5_decoded_fids_readback_actions.ts
+      - name: Science and spend remain gated
+        if: always()
+        run: |
+          {
+            echo 'Protected retained-content readback; no paid API or Alert, no DB writes.'
+            echo 'One green readback run never establishes population completeness, flight operator identity, scheduled T or actual runway target.'
+            echo 'Missing or expired originals are UNKNOWN, not zero measured coverage.'
+            echo 'Strict Gate5 HOLD; Phase5 final FREEZE and Phase6 remain NO-GO.'
+          } >> "$GITHUB_STEP_SUMMARY"

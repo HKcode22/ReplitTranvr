@@ -24,6 +24,10 @@ export const P4_FIDS_DECODED_READBACK_SQL_V39 = [
   "FROM clean.fids_query_response",
   "WHERE source_airport_icao=$1 AND available_at<=$2::timestamptz",
   "AND raw_expired_at_utc IS NULL AND raw_payload IS NOT NULL",
+  // A delayed expiry worker must not cause an older-than-policy original
+  // body to be read merely because raw_expired_at_utc was not yet set.
+  // 24h is the project hard *upper bound*, not proof of a subscription right.
+  "AND raw_persisted_at_utc >= $2::timestamptz - interval '24 hours'",
   "ORDER BY available_at DESC, population_query_id DESC",
   "LIMIT 5"
 ].join(" ");
