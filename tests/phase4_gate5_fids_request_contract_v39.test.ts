@@ -1,7 +1,7 @@
 import {describe,it,expect,vi} from "vitest";
 import {createHash} from "node:crypto";
 import {fetchFidsAirport} from "../server/lib/disruption/aerodataboxLimiter_v3";
-import {buildFidsRequestContractV39,fetchFidsPopulation}
+import {buildFidsRequestContractV39,fetchFidsPopulation,classifyScope}
  from "../server/lib/disruption/fidsCensus_v3";
 const base={
  airportIcao:"WSSS",fromLocal:"2026-10-31T08:00",toLocal:"2026-10-31T12:00",
@@ -174,5 +174,71 @@ describe("Phase4 FIDS request source-frame application intent",()=>{
   expect(result).toBeNull();
   expect(owner.reserve).toHaveBeenCalledTimes(1);
   expect(fetchImpl).toHaveBeenCalledTimes(1);
+ });
+
+ it("missing charter classification must not turn noncargo/nonprivate into confirmed passenger core",()=>{
+  const unknown=[
+   {},{isCargo:false},{isPrivate:false},{isCharter:false},
+   {isCargo:false,isPrivate:false},
+   {isCargo:false,isCharter:false},
+   {isPrivate:false,isCharter:false},
+   {isCargo:false,isPrivate:false,isCharter:null},
+   {isCargo:null,isPrivate:false,isCharter:false},
+   {isCargo:false,isPrivate:null,isCharter:false},
+   {isCharter:true,isCargo:false,isPrivate:false},
+  ];
+  for(const v of unknown)expect(classifyScope(v)).toBe("unknown");
+  expect(classifyScope({isCargo:false,isPrivate:false,isCharter:false}))
+   .toBe("confirmed_core");
+  expect(classifyScope({isGeneralAviation:true,isCargo:false,isPrivate:false,isCharter:false}))
+   .toBe("auxiliary");
+  expect(classifyScope({isCargo:true,isPrivate:false,isCharter:false}))
+   .toBe("auxiliary");
+  expect(classifyScope({isPrivate:true,isCargo:false,isCharter:false}))
+   .toBe("auxiliary");
+ });
+ it("census asks for every requested-direction array, not optional empty defaults",async()=>{
+  const fetchAirport=vi.fn(async()=>({departures:[],arrivals:[]}));
+  const persist=vi.fn(async()=>0);
+  for (const [direction,strictDepartureList,strictArrivalList] of [
+   ["Departure",true,false],["Arrival",false,true],["Both",true,true]
+  ] as const){
+   await fetchFidsPopulation({...base,direction},{fetchAirport,persist});
+   const opts=fetchAirport.mock.calls.at(-1)?.[3];
+   expect(opts).toMatchObject({strictDepartureList,strictArrivalList});
+  }
+ });
+ it("rejects missing or nonarray original requested list before claiming zero",async()=>{
+  for(const [direction,payload] of [
+   ["Departure",{arrivals:[]}],
+   ["Arrival",{departures:[]}],
+   ["Both",{departures:[]}],
+   ["Both",{arrivals:[]}],
+   ["Departure",{departures:null,arrivals:[]}],
+   ["Arrival",{departures:[],arrivals:"bad"}],
+  ] as const){
+   const owner={reserve:vi.fn(async()=>undefined)};
+   const fetchImpl=vi.fn(async()=>new Response(JSON.stringify(payload),{status:200}));
+   const result=await fetchFidsAirport("WSSS",base.fromLocal,base.toLocal,{
+    direction,strictDepartureList:direction!=="Arrival",
+    strictArrivalList:direction!=="Departure",
+    budgetOwner:owner,fetchImpl:fetchImpl as typeof fetch
+   });
+   expect(result).toBeNull();
+   expect(fetchImpl).toHaveBeenCalledTimes(1);
+   expect(owner.reserve).toHaveBeenCalledTimes(1);
+  }
+ });
+ it("accepts a measured empty array in the requested direction",async()=>{
+  const owner={reserve:vi.fn(async()=>undefined)};
+  const fetchImpl=vi.fn(async()=>new Response(JSON.stringify({departures:[]}),{status:200}));
+  const result=await fetchFidsAirport("WSSS",base.fromLocal,base.toLocal,{
+    direction:"Departure",strictDepartureList:true,
+    budgetOwner:owner,fetchImpl:fetchImpl as typeof fetch
+  });
+  expect(result).not.toBeNull();
+  expect(result?.departures).toEqual([]);
+  expect(result?.originalDecodedBody?.bodyLength).toBeUndefined();
+  expect(result?.originalDecodedBody?.sha256).toMatch(/^[a-f0-9]{64}$/);
  });
 });
