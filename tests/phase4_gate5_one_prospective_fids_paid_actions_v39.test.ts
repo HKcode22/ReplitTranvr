@@ -64,7 +64,7 @@ describe("Phase4 one protected paid original FIDS source WSSS operator",()=>{
   }
  });
  it("workflow binds three cron slots with the protected one-shot no-retry control",()=>{
-  const workflow=readFileSync(".github/workflows/phase4-gate5-one-prospective-wsss-fids-rawfirst.yml","utf8");
+  const workflow=readFileSync(".github/workflows/phase4-gate5-three-prospective-wsss-cutoffs.yml","utf8");
   const reader=readFileSync("scripts/v39_gate5_source_inventory_readonly_actions.ts","utf8");
   for(const cron of ["7 16 30 10 *","7 10 31 10 *","37 14 31 10 *"]){
     expect(workflow).toContain("cron: '"+cron+"'");
