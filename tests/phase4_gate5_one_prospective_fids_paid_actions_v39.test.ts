@@ -73,7 +73,7 @@ describe("Phase4 one protected paid original FIDS source WSSS operator",()=>{
   expect(workflow).toContain("P4_FIDS_SCHEDULE_CRON:");
   expect(workflow).toContain("PHASE4_WSSS_THREE_HORIZON_SINGLE_GET_PER_CRON_NO_RETRIES");
   expect(workflow).toContain("audit");
-  expect(workflow).toContain("scheduled-prospective-fids:");
+  expect(workflow).toContain("one-fids-horizon:");
   expect(workflow).toContain("environment: phase2g-paid");
   expect(workflow).not.toContain("workflow_dispatch");
  });
