@@ -101,13 +101,13 @@ describe("Phase4 read-only B0062 source adapter",()=>{
  it("uses later effective source clock, not just member clock, for cutoff eligibility",async()=>{
    const r=await readPhase4Gate5CandidateEvidenceV39(db([{
      ...fids,
-     member_available:new Date("2026-10-29T05:59:59.999Z"),
-     query_available:new Date("2026-10-29T06:00:00.001Z"),
+     member_available:new Date("2026-10-29T06:00:00.001Z"),
+     query_available:new Date("2026-10-29T06:00:00.000Z"),
      effective_available:new Date("2026-10-29T06:00:00.001Z"),
      source_clock_precision_compatible:true
    }],[],[]),scope);
-   // This synthetic fixture exercises the effective timestamp only.
-   // The SQL-certified flag is authoritative about unrounded DB clocks.
+   // The member receipt is later than the query receipt: effective time
+   // must preserve that later time and exclude the earlier T-6h cutoff.
    expect(r.counts.fidsRowsMapped).toBe(1);
    expect(r.report.horizons[1].population).toBe(0);
    expect(r.report.horizons[2].population).toBe(1);
