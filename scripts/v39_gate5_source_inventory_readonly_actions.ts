@@ -9,7 +9,10 @@ export function requireP4InventoryActionsContext(env:NodeJS.ProcessEnv):{airport
   env.GITHUB_REF!=="refs/heads/main"||
   env.GITHUB_RUN_ATTEMPT!=="1"||
   !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||
-  !["push","workflow_dispatch"].includes(env.GITHUB_EVENT_NAME??"")||
+  !["push","workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME??"")||
+ (env.GITHUB_EVENT_NAME==="schedule" && ![
+   "7 16 30 10 *","7 10 31 10 *","37 14 31 10 *"
+ ].includes(env.P4_FIDS_SCHEDULE_CRON??""))||
   env.P4_GATE5_READONLY_APPROVAL!=="GATE5_SOURCE_METADATA_NO_PROVIDER"||
   env.P4_GATE5_SOURCE_AIRPORT!=="WSSS")
   throw Error("P4_GATE5_INVENTORY_ACTIONS_CONTEXT_HOLD");
