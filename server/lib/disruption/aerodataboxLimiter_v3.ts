@@ -787,8 +787,28 @@ export async function fetchFidsAirport(
         if (reportedLength !== null &&
             (!/^\d+$/.test(reportedLength) || Number(reportedLength) > maximumBytes))
           throw new Error("FIDS_DECODED_BODY_SIZE_HOLD");
-        const body = Buffer.from(await resp.arrayBuffer());
-        if (body.byteLength > maximumBytes) throw new Error("FIDS_DECODED_BODY_SIZE_HOLD");
+        // Stream the response with a hard *incremental* decoded-byte limit;
+        // arrayBuffer() followed by a size check would be unbounded if the
+        // provider omitted Content-Length or transparently compressed data.
+        if (!resp.body) throw new Error("FIDS_DECODED_BODY_UNAVAILABLE_HOLD");
+        const reader = resp.body.getReader();
+        const chunks: Buffer[] = [];
+        let byteCount = 0;
+        try {
+          while (true) {
+            const part = await reader.read();
+            if (part.done) break;
+            byteCount += part.value.byteLength;
+            if (byteCount > maximumBytes) {
+              await reader.cancel().catch(() => undefined);
+              throw new Error("FIDS_DECODED_BODY_SIZE_HOLD");
+            }
+            chunks.push(Buffer.from(part.value));
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        const body = Buffer.concat(chunks, byteCount);
         const raw: any = JSON.parse(body.toString("utf8"));
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("FIDS response schema invalid");
         if (opts?.strictDepartureList && !Array.isArray(raw.departures))
