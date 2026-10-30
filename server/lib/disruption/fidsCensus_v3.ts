@@ -507,7 +507,12 @@ export async function fetchFidsPopulation(
     { direction, withLeg: frame.withLeg,
       withCancelled: frame.withCancelled,withCodeshared: frame.withCodeshared,
       withCargo: frame.withCargo,withPrivate: frame.withPrivate,
-      withLocation: frame.withLocation,category: params.restCategory },
+      withLocation: frame.withLocation,
+      // A missing requested population list is UNKNOWN, never a zero-member
+      // census. With Both, both arrays must be independently available.
+      strictDepartureList: direction !== "Arrival",
+      strictArrivalList: direction !== "Departure",
+      category: params.restCategory },
   );
   if (!fids) return null;
 
