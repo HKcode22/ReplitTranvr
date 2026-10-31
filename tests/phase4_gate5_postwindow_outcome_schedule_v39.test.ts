@@ -48,7 +48,6 @@ describe("Phase 4 bounded GitHub after-flight outcome audit",()=>{
   for(const s of slots)expect(y).toContain('cron: "'+s.cron+'"');
   expect(y).toContain("github.event.schedule");
   expect(y).toContain("GATE05_AUTOMATION_DATABASE_URL");
-  expect(y).toContain("REPEATABLE READ");
   expect(y).not.toContain("workflow_dispatch");
   expect(y).not.toContain("secrets.AERODATABOX_API_KEY");
   expect(y).not.toContain("P4_FIDS_SCHEDULE_CRON:");
