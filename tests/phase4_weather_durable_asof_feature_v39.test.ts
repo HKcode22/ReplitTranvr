@@ -83,6 +83,17 @@ describe("Phase 4 as-known-at-cutoff durable weather boundary",()=>{
    {issueTimeUtc:new Date("2026-10-31T11:00:01Z")}
   ])expect(selectP4DurableWeatherAsOf([grid(change)],o).weatherMissing).toBe(true);
  });
+ it("only admits finite numeric or boolean flat derived metrics, never raw bodies",()=>{
+  for(const value of [null,undefined,{}, {windSpeedKt:Infinity},
+   {windSpeedKt:NaN},{rawMetar:"METAR WSSS"},{nested:{temperature:20}},
+   {windSpeedKt:null},{windSpeedKt:1,raw:"payload"}]){
+   expect(selectP4DurableWeatherAsOf([c({featureValue:value})],o).weatherMissing)
+    .toBe(true);
+  }
+  expect(selectP4DurableWeatherAsOf([
+   c({featureValue:{windSpeedKt:15,hasThunderstorm:false,visibilityMiles:null}})
+  ],o).weatherMissing).toBe(false);
+ });
  it("ERA5 never enters operational as-of; incomplete provenance remains missing",()=>{
   for(const change of [
    {source:"era5" as const},{contentSha256:"bad"},
