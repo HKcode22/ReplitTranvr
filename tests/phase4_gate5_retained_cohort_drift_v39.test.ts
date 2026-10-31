@@ -62,6 +62,19 @@ describe("Phase4 WSSS retained as-of same-cohort FIDS candidate turnover",()=>{
   expect(r.providerCalls).toBe(0);
   expect(r.databaseWrites).toBe(0);
  });
+ it("forbids members that became durable after the cutoff even if parent receipt predates it",async()=>{
+  const late="2026-10-30T17:00:00.001Z";
+  const r=await run([
+   q(Q0,a,"late-member",null,{member_available:late}),
+   q(Q0,a,"early-member"),
+  ],{...DAY,auditUtc:"2026-10-31T11:10:00.000Z"});
+  expect(r.asOf["T-24h"].primaryProvisionalIdentities).toBe(1);
+  expect(r.asOf["T-6h"].primaryProvisionalIdentities).toBe(2);
+  expect(r.transitions.T24_to_T6).toMatchObject({
+   appearingCandidateIds:1,reappearingCandidateIds:1,
+   absentFromLaterSourceCandidateIds:0
+  });
+ });
  it("expired T24 is UNKNOWN, not zero, and its transition cannot be computed",async()=>{
   // Database query already excludes source content outside project 24h ceiling;
   // no historical backfill from today's newer source is permitted.
