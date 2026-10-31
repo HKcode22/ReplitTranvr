@@ -1,4 +1,4 @@
-> **Phase 4 has its own folder.** All dated `*_PHASE4_*.md` runbooks and Gate 5 checkpoints formerly here were moved **without editing their original Git blob content** to [../phase4/](../phase4/README.md). Read that Phase 4 index for the current GitHub-only WSSS source collection, PRE builder, and October 31 timings. This folder remains the historical home of Phase 3's Gate 3, Gate 0.5 and Gate 4 work.
+> **Phase 4 has its own folder.** The 24 Gate 5 / Phase 4-specific dated runbooks and checkpoints formerly here were moved **without editing their original Git blob content** to [../phase4/](../phase4/README.md). Read that Phase 4 index for the current GitHub-only WSSS source collection, PRE builder, and October 31 timings. This folder remains the historical home of Phase 3's Gate 3, Gate 0.5 and Gate 4 work.
 
 ## 2026-10-28 evening PDT — NEW WSSS Gate05 60-minute paid hour: OPERATIONAL PASS / original f.8 science NOT PASS
 

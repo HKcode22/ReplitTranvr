@@ -1,6 +1,6 @@
 # Phase 4 — Gate 5 (population-observability validation)
 
-**Home for the actual Phase 4 work and checkpoints.** Earlier notes were accidentally filed under Phase 3. All 25 Phase-4-specific runbooks and checkpoint files were **moved here with their exact original Git blob hashes unchanged**. Phase 3 remains historical Gates 3 / 0.5 / 4. The relocation changes documentation paths only; it does not move production source code, alter an approved provider schedule or authorize Phase 6.
+**Home for the actual Phase 4 work and checkpoints.** Earlier notes were accidentally filed under Phase 3. All 24 Phase-4-specific runbooks and checkpoint files were **moved here with their exact original Git blob hashes unchanged**. Phase 3 remains historical Gates 3 / 0.5 / 4. The relocation changes documentation paths only; it does not move production source code, alter an approved provider schedule or authorize Phase 6.
 
 ## Start here — live source of truth
 
@@ -18,9 +18,8 @@
 - [GitHub production PRE/callback/FIDS read-only success](https://github.com/HKcode22/ReplitTranvr/actions/runs/41153035873) — original body SHA verified, 24 candidate identities, all three cutoff source joins matched, 72 PRE previews, no DB writes
 - [Source-semantics issue #200 checkpoint](https://github.com/HKcode22/ReplitTranvr/issues/200#issuecomment-6536861166) — current scientific limitations; Gate5 and Phase6 are not declared PASS
 
-## All historical Phase 4 runbooks and checkpoints (25 original files)
+## All historical Phase 4 runbooks and checkpoints (24 original files)
 
-- [GATE05 YSSY FORENSICS AND PHASE4 RISK DECISION](2026-10-26_GATE05_YSSY_FORENSICS_AND_PHASE4_RISK_DECISION.md)
 - [PHASE4 AIRCRAFT LINKAGE DURABILITY HANDOFF](2026-10-29_PHASE4_AIRCRAFT_LINKAGE_DURABILITY_HANDOFF.md)
 - [PHASE4 ASOF SOURCE CLOCK PRECISION CHECKPOINT](2026-10-29_PHASE4_ASOF_SOURCE_CLOCK_PRECISION_CHECKPOINT.md)
 - [PHASE4 DECODED FIDS BODY CUSTODY AND STATUS RESULT](2026-10-29_PHASE4_DECODED_FIDS_BODY_CUSTODY_AND_STATUS_RESULT.md)
