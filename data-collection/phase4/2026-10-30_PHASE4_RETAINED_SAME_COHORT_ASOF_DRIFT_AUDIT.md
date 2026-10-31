@@ -18,6 +18,18 @@ The existing live funnel and PRE engine can count original FIDS observations and
 
 The already successful first WSSS source receipt was at **October 30 13:49Z**. By the T−90m sample on October 31 14:37Z, it will be **24 hours 48 minutes old** and therefore outside this audit's fixed 24-hour raw-read ceiling. **We cannot claim complete T−24h vs T−90m original-source turnover from retained original bytes at the later audit**, even if both successful later requests run. No retention rule will be stretched to hide this; T−24→T−6 turnover may be computable in the earlier audit, while T−6→T−90 turnover may be computable in the later audit. This is explicit missingness, not zero yield.
 
+## Actual protected production audit — PASS (read-only, not Gate 5 PASS)
+
+After PR #286 merged as `8ed459e4f90d8b9c289b09432b581bb8ff96d137` (four PR checks PASS), [GitHub protected no-provider run #41164454290](https://github.com/HKcode22/ReplitTranvr/actions/runs/41164454290) **SUCCEEDED** at `2026-10-31T03:27:56.634Z`. It executed the new FIDS cohort-turnover SQL alongside the existing real live PRE/capture audits in one read-only transaction:
+
+- **1** original retained WSSS query receipt, **24** primary normalized source observations, **0** rejected source lineage rows.
+- Fixed earliest T−24h cutoff: **24** provisional candidate analytic identities from source observed `2026-10-30T13:49:10.056Z`, **0** confirmed operating/core identities.
+- Fixed earliest T−6h and T−90m cutoffs: correctly marked `FIXED_EARLIEST_CUTOFF_NOT_YET_REACHED`; no apparent 0-flight count or future receipt.
+- Both inter-horizon turnover comparisons are `UNOBSERVED_RETAINED_RECEIPT_MISSING` until the later cutoff evidence exists. The preexisting builder independently reported 24 provisional PRE previews at each horizon, **not persisted certified snapshots**.
+- `providerCalls=0`, `databaseWrites=0`, `strictGate5Passed=false`, `phase6Authorized=false`.
+
+**Interpretation:** the audit truly executed against the protected actual PostgreSQL source, but it does not certify true physical-leg identities, future cutoff receipt scheduling, webhook capture, or the departure target. Source unavailability after 24h must remain unknown, never rewritten as zero.
+
 ## Science hold
 
 The comparison reports source-observation diagnostics only. Provider-native selected T, confirmed operating/codeshare identity, sampled commercial population, actual-only wheels-off semantics, certified persisted PRE and webhook/target coverage remain unverified; no Gate 5 PASS, Phase 5 FREEZE or Phase 6 authorization. The user accepts bounded missingness but does not authorize invented values, backdating, or fabricated coverage rates. The latest live audit run URL and test result should be added after the PR checks/merge.
