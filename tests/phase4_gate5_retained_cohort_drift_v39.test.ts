@@ -27,7 +27,8 @@ const q=(id:string, at:string, analytic:string|null, sched:string|null=null,
 const a="2026-10-30T16:07:00.000Z";
 const b="2026-10-31T10:07:00.000Z";
 const c="2026-10-31T14:37:00.000Z";
-const run=async(rows:unknown[],scope:typeof DAY=DAY)=>{
+type Scope={airport:"WSSS";windowStartUtc:string;windowEndUtc:string;auditUtc:string};
+const run=async(rows:unknown[],scope:Scope=DAY)=>{
  const query=vi.fn(async()=>({rows}));
  const result=await auditP4WsssRetainedAsOfDriftV39({query},scope);
  expect(query).toHaveBeenCalledWith(P4_WSSS_RETAINED_DRIFT_SQL,
