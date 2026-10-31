@@ -61,7 +61,8 @@ function rec(x:unknown):Record<string,unknown>{
   throw Error("P4_DRIFT_INVALID_DB_ROW");
  return x as Record<string,unknown>;
 }
-type Receipt={when:number; ids:Map<string,number|null>; rejected:number; memberships:number; core:number};
+type Member={schedule:number|null;availableAt:number;core:boolean};
+type Receipt={when:number; ids:Map<string,Member>; rejected:number; memberships:number; core:number};
 const noSource=(horizon:Horizon)=>({
  horizon,status:"NO_RETAINED_SOURCE_AVAILABLE_AT_FIXED_EARLIEST_CUTOFF" as const,
  cutoffUtc:CUTS[horizon],sourceReceiptAvailableUtc:null,
@@ -92,7 +93,7 @@ function delta(a:Receipt|null,b:Receipt|null){
  let keep=0,added=0,removed=0,changed=0;
  for(const [id,t] of b.ids){
   if(!a.ids.has(id))added++;
-  else{keep++;const old=a.ids.get(id);if(t!==null&&old!==null&&t!==old)changed++;}
+  else{keep++;const old=a.ids.get(id);if(t.schedule!==null&&old?.schedule!==null&&t.schedule!==old?.schedule)changed++;}
  }
  for(const id of a.ids.keys())if(!b.ids.has(id))removed++;
  if(keep+removed!==a.ids.size||keep+added!==b.ids.size)
@@ -142,22 +143,31 @@ export async function auditP4WsssRetainedAsOfDriftV39(
   if(q.ids.has(analytic)){
    // Duplicate identity inside the same response is not additional flight.
    const old=q.ids.get(analytic);
-   if(schedule!==old)q.rejected++;
+   if(schedule!==old?.schedule)q.rejected++;
    continue;
   }
-  q.ids.set(analytic,schedule);
-  if(r.scope_class==="confirmed_core"&&
+  const core=r.scope_class==="confirmed_core"&&
     r.codeshare==="confirmed_operating_leg"&&
     typeof r.canonical_id==="string"&&
-    r.canonical_id===analytic)q.core++;
+    r.canonical_id===analytic;
+  q.ids.set(analytic,{schedule,availableAt:Math.max(memberAt,at),core});
+  if(core)q.core++;
  }
  const ordered=[...qs.values()].sort((a,b)=>a.when-b.when);
+ // Query receipt is necessary but not sufficient: a member can be made
+ // durable later, so apply the member's own cutoff for every horizon.
+ const memberAsOf=(q:Receipt,cut:number):Receipt=>{
+  const ids=new Map<string,Member>();
+  for(const [id,m] of q.ids)if(m.availableAt<=cut)ids.set(id,m);
+  return {...q,ids,core:[...ids.values()].filter(m=>m.core).length};
+ };
  const per=new Map<Horizon,Receipt|null>();
  for(const h of HORIZONS){
   const cut=Date.parse(CUTS[h]);
   // No source retrieved after this prediction cutoff can appear at it.
-  const latest=audit>=cut
+  const selected=audit>=cut
    ? ordered.filter(q=>q.when<=cut).at(-1)??null : null;
+  const latest=selected?memberAsOf(selected,cut):null;
   per.set(h,latest);
  }
  const t24=per.get("T-24h")!,t6=per.get("T-6h")!,t90=per.get("T-90m")!;
