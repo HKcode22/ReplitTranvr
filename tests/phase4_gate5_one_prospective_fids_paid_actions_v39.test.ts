@@ -92,13 +92,20 @@ describe("Phase4 one protected paid original FIDS source WSSS operator",()=>{
       .toThrow("P4_FIDS_SCHEDULED_HORIZON_WINDOW_HOLD");
   }
  });
- it("workflow binds three cron slots with the protected one-shot no-retry control",()=>{
+ it("workflow keeps old dated cron slots and transfers T90 exclusively to push prearm",()=>{
   const workflow=readFileSync(".github/workflows/phase4-gate5-three-prospective-wsss-cutoffs.yml","utf8");
   const reader=readFileSync("scripts/v39_gate5_source_inventory_readonly_actions.ts","utf8");
-  for(const cron of ["7 16 30 10 *","7 10 31 10 *","37 14 31 10 *"]){
+  for(const cron of ["7 16 30 10 *","7 10 31 10 *"]){
     expect(workflow).toContain('cron: "'+cron+'"');
     expect(reader).toContain('"'+cron+'"');
   }
+  expect(workflow).not.toContain('cron: "37 14 31 10 *"');
+  const rescue=readFileSync(".github/workflows/phase4-gate5-wsss-t90-push-prearm-20261031.yml","utf8");
+  expect(rescue).toContain("Phase4 WSSS T90 PREARMED GitHub One Paid FIDS GET");
+  expect(rescue).toContain("branches: [main]");
+  expect(rescue).toContain("P4_FIDS_SCHEDULE_CRON: \"37 14 31 10 *\"");
+  expect(rescue).not.toContain("on:\n  schedule:");
+  expect(rescue).not.toContain("workflow_dispatch");
   expect(workflow).toContain("P4_FIDS_SCHEDULE_CRON:");
   expect(workflow).toContain("PHASE4_WSSS_THREE_HORIZON_SINGLE_GET_PER_CRON_NO_RETRIES");
   expect(workflow).toContain("audit");
