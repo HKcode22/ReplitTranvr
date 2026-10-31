@@ -1,10 +1,11 @@
 /** V3.9-f.8 weather/history cutoff-safety tests. */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   isWeatherAvailableAtCutoff,
   validateTafIssueTime,
   selectOperationalWeather,
   iataToIcao,
+  getAirportWeather,
   type WeatherCandidate,
 } from "../server/lib/disruption/weatherSignal";
 import {
@@ -43,6 +44,39 @@ describe("weather availability", () => {
     expect(iataToIcao("SIN")).toBe("WSSS");
     expect(iataToIcao(" sin ")).toBe("WSSS");
     expect(iataToIcao("XYZ")).toBe("");
+  });
+  it("does not call a live API to backdate weather into an elapsed PRE cutoff", async () => {
+    const spy=vi.fn();
+    vi.stubGlobal("fetch",spy);
+    try {
+      const r=await getAirportWeather("SIN",{
+        cutoffUtc:new Date(Date.now()-60_000),mode:"operational",allowEra5:false,
+      });
+      expect(r.weatherMissing).toBe(true);
+      expect(r.source).toBe("none");
+      expect(spy).not.toHaveBeenCalled();
+    } finally {vi.unstubAllGlobals();}
+  });
+  it("records the receipt-completion time for a live report rather than the request start", async () => {
+    const issued=new Date(Date.now()-5*60_000).toISOString();
+    const spy=vi.fn(async()=>({
+      ok:true,json:async()=>[{reportTime:issued,wspd:4,visib:10,rawOb:"METAR WSSS"}],
+    }));
+    vi.stubGlobal("fetch",spy);
+    try {
+      const before=Date.now();
+      const cutoff=new Date(before+60*60_000);
+      const r=await getAirportWeather("SIN",{
+        cutoffUtc:cutoff,mode:"operational",allowEra5:false,
+      });
+      expect(r.weatherMissing).toBe(false);
+      expect(r.icaoCode).toBe("WSSS");
+      expect(r.availableAt).toBeInstanceOf(Date);
+      expect(r.availableAt!.getTime()).toBeGreaterThanOrEqual(before);
+      expect(r.availableAt!.getTime()).toBeLessThanOrEqual(cutoff.getTime());
+      expect(r.retrievedAt.getTime()).toBe(r.availableAt!.getTime());
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {vi.unstubAllGlobals();}
   });
 });
 
