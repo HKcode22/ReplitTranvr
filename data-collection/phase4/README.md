@@ -4,6 +4,7 @@
 
 ## Start here — live source of truth
 
+- [Durable weather as-of optional PRE feature boundary](2026-10-30_PHASE4_WEATHER_DURABLE_ASOF_PRE_FEATURE_BOUNDARY.md) — strict issue/physical-observation/availability/commit/forecast-validity checks; feature code only, **not operational weather ingestion or historic enrichment**
 - [Retained same-cohort as-of candidate turnover audit](2026-10-30_PHASE4_RETAINED_SAME_COHORT_ASOF_DRIFT_AUDIT.md) — bounded, protected DB-only candidate appearance/disappearance and schedule revisions across tomorrow's cutoff observations; never unique physical-flight denominator
 - [Final paid FIDS physical-dispatch cutoff recheck](2026-10-30_PHASE4_FINAL_PAID_DISPATCH_CUTOFF_GUARD.md) — ensures slow preflight can never dispatch a paid FIDS GET after the protected 15-minute cutoff guard; no change to GitHub schedule
 - [Night-before no-provider infrastructure readiness](2026-10-30_PHASE4_NIGHT_BEFORE_INFRASTRUCTURE_READINESS.md) — protected READ ONLY DB writer/trigger preflight on main; **not quota or scientific PASS**
