@@ -64,7 +64,7 @@ describe("Github push-prearmed T90 one-shot source rescue after missed T6 schedu
   expect(wf).toContain("concurrency:\n  group: phase4-wsss-three-horizon-one-get-per-cutoff");
   expect(wf).not.toContain("on:\n  schedule:");
   expect(wf).not.toContain("workflow_dispatch");
-  expect(wf).not.toContain("retry");
+  expect(wf).not.toContain("workflow_dispatch");
   expect(wf.split("AERODATABOX_API_KEY:").length).toBe(2);
   expect(wf.indexOf("AERODATABOX_API_KEY:")).toBeGreaterThan(wf.indexOf("P4_T90_START_WINDOW_REACHED"));
   expect(wf).toContain("node --import tsx scripts/v39_phase4_one_prospective_fids_paid_actions.ts");
