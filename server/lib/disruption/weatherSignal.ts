@@ -24,7 +24,7 @@ export interface WeatherRetrievalContext { cutoffUtc: Date; mode: "operational" 
 const VERIFIED_IATA_ICAO: Record<string, string> = {
   HNL:"PHNL", OGG:"PHOG", KOA:"PHKO", LIH:"PHLI", ANC:"PANC", FAI:"PAFA", JNU:"PAJN", SJU:"TJSJ",
   YYZ:"CYYZ", YVR:"CYVR", YUL:"CYUL", YYC:"CYYC", LHR:"EGLL", CDG:"LFPG", FRA:"EDDF", AMS:"EHAM",
-  DXB:"OMDB", NRT:"RJAA", HND:"RJTT", ICN:"RKSI", SYD:"YSSY", MEX:"MMMX", LAX:"KLAX", SFO:"KSFO",
+  DXB:"OMDB", NRT:"RJAA", HND:"RJTT", ICN:"RKSI", SIN:"WSSS", SYD:"YSSY", MEX:"MMMX", LAX:"KLAX", SFO:"KSFO",
   JFK:"KJFK", ORD:"KORD", ATL:"KATL", DFW:"KDFW", DEN:"KDEN", SEA:"KSEA",
 };
 export function iataToIcao(iata: string): string { return VERIFIED_IATA_ICAO[(iata || "").trim().toUpperCase()] ?? ""; }
@@ -57,13 +57,21 @@ export interface WeatherSelection { selected:WeatherCandidate|null; weatherMissi
 export function selectOperationalWeather(candidates: WeatherCandidate[], cutoffUtc: Date): WeatherSelection {
   const cutoff=cutoffUtc.getTime(), precedence=WEATHER_OPERATIONAL_PRECEDENCE as readonly string[];
   if (!Number.isFinite(cutoff)) return {selected:null,weatherMissing:true,sourceUsed:"none",reason:"invalid cutoff"};
-  const eligible=candidates.filter(c=>precedence.includes(c.source)&&c.source!=="era5"&&!!c.issueTime&&!!c.availableAt&&
-    Number.isFinite(c.issueTime!.getTime())&&Number.isFinite(c.availableAt!.getTime())&&c.issueTime!.getTime()<=cutoff&&c.availableAt!.getTime()<=cutoff);
-  if (!eligible.length) return {selected:null,weatherMissing:true,sourceUsed:"none",reason:"no cutoff-safe operational observation"};
-  eligible.sort((a,b)=>precedence.indexOf(a.source)-precedence.indexOf(b.source)||b.issueTime!.getTime()-a.issueTime!.getTime());
-  const winner=eligible[0], age=(cutoff-winner.issueTime!.getTime())/3_600_000;
-  if (age>WEATHER_OPERATIONAL_LOOKBACK_HOURS) return {selected:null,weatherMissing:true,sourceUsed:"none",reason:"latest qualifying observation older than 6h"};
-  return {selected:winner,weatherMissing:false,sourceUsed:winner.source as WeatherOperationalSource,reason:"selected by frozen operational precedence and cutoff clocks"};
+  // Apply the six-hour freshness constraint BEFORE choosing a preferred source.
+  // Otherwise an expired live METAR masks a valid archive/grid fallback.
+  // A later archive retrieval is not evidence of availability at an earlier PRE cutoff.
+  const earliestIssue=cutoff-WEATHER_OPERATIONAL_LOOKBACK_HOURS*3_600_000;
+  const eligible=candidates.filter(c=>precedence.includes(c.source)&&
+    c.issueTime instanceof Date&&c.availableAt instanceof Date&&
+    Number.isFinite(c.issueTime.getTime())&&Number.isFinite(c.availableAt.getTime())&&
+    c.issueTime.getTime()>=earliestIssue&&c.issueTime.getTime()<=cutoff&&
+    c.availableAt.getTime()>=c.issueTime.getTime()&&c.availableAt.getTime()<=cutoff);
+  if (!eligible.length) return {selected:null,weatherMissing:true,sourceUsed:"none",reason:"no cutoff-safe operational observation within 6h"};
+  eligible.sort((a,b)=>precedence.indexOf(a.source)-precedence.indexOf(b.source)||
+    b.issueTime!.getTime()-a.issueTime!.getTime()||
+    b.availableAt!.getTime()-a.availableAt!.getTime());
+  const winner=eligible[0];
+  return {selected:winner,weatherMissing:false,sourceUsed:winner.source as WeatherOperationalSource,reason:"selected by frozen operational precedence, freshness and both cutoff clocks"};
 }
 
 export async function getAirportWeather(iataCode: string, context?: WeatherRetrievalContext): Promise<WeatherSignal> {
