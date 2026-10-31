@@ -177,6 +177,12 @@ async function main():Promise<void>{
         opts.withCodeshared!==true||opts.withCargo!==false||
         opts.withPrivate!==false||opts.withLocation!==false)
        throw Error("P4_FIDS_ONE_FETCH_SCOPE_OR_REPLAY_HOLD");
+     // Preflight includes DB, public OpenAPI and free quota reads. If any of
+     // those are delayed, the initial schedule check can become stale.
+     // Recheck the exact same scientifically approved horizon/deadline AT
+     // PHYSICAL DISPATCH, before counting a possibly billable attempt.
+     // A late scheduled fetch MUST HOLD with 0 billable provider attempts.
+     if(scheduled)scheduledWsssHorizonV39(process.env,Date.now());
      billableAttempts=1; // ambiguous dispatch is SPENT: no retry
      console.log("P4_FIDS_ONE_BILLABLE_GET_STARTED_NO_RETRY_EXPECTED_2_UNITS");
      const args=new URLSearchParams({
