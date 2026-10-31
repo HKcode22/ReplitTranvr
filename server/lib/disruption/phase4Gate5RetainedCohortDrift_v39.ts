@@ -129,7 +129,7 @@ export async function auditP4WsssRetainedAsOfDriftV39(
   else if(q.when!==at)throw Error("P4_DRIFT_QUERY_CLOCK_CONFLICT");
   if(qs.size>MAX_QUERIES)throw Error("P4_DRIFT_QUERY_SAMPLE_TRUNCATED");
   if(r.analytic_id===null)continue; // legitimate empty original query
-  q.memberships++;
+  if(r.role==="requested_airport_primary")q.memberships++;
   // Preserve FIDS membership integrity: query and member hashes/roles,
   // availability no earlier than parent receipt (except PostgreSQL sub-ms
   // serialization), and exclusion of content-expired normalized members.
