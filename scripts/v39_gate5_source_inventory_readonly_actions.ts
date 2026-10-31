@@ -12,6 +12,8 @@ import {auditP4LiveCaptureOutcomeV39}
  from "../server/lib/disruption/phase4Gate5LiveCaptureOutcome_v39";
 import {auditP4LivePreBuilderCandidatesV39}
  from "../server/lib/disruption/phase4Gate5LivePreBuilderCandidates_v39";
+import {auditP4WsssRetainedAsOfDriftV39}
+ from "../server/lib/disruption/phase4Gate5RetainedCohortDrift_v39";
 // The two fixed, no-provider post-service audits are distinct from the
 // three paid FIDS source cutoffs. GitHub schedule delay never creates a new
 // paid authorization or an undated retrospective observation.
@@ -109,6 +111,15 @@ async function main():Promise<void>{
     windowEndUtc:"2026-10-31T18:00:00.000Z",
     auditUtc:readAt
   });
+  // Report actual retained FIDS candidate turnover between the SAME
+  // service cohort's three earliest fixed sampling cutoffs. The 24h hard
+  // ceiling may erase T-24h source by T-90m; that is UNKNOWN, not zero.
+  const prospectiveCandidateTurnover=await auditP4WsssRetainedAsOfDriftV39(client,{
+    airport:"WSSS",
+    windowStartUtc:"2026-10-31T17:00:00.000Z",
+    windowEndUtc:"2026-10-31T18:00:00.000Z",
+    auditUtc:readAt
+  });
   if(preBuilderCandidates.provisionalDistinctIdentityCount!==
      liveFunnel.horizons[0].candidateDistinctAnalyticIds)
     throw Error("P4_GATE5_PRE_BUILDER_COHORT_POPULATION_PARITY_HOLD");
@@ -124,6 +135,7 @@ async function main():Promise<void>{
     sameCohortOperationalFunnel:liveFunnel,
     sameCohortResolvedCaptureAndOutcomes:captureAndOutcomes,
     sameCohortPreBuilderCandidates:preBuilderCandidates,
+    sameCohortRetainedAsOfCandidateTurnover:prospectiveCandidateTurnover,
     strictGate5Passed:false,phase6Authorized:false,
     providerCalls:0,databaseWrites:0
   }));
