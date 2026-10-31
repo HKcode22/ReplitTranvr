@@ -63,6 +63,35 @@ describe("Phase4 one protected paid original FIDS source WSSS operator",()=>{
       .toThrow("P4_FIDS_SCHEDULED_HORIZON_WINDOW_HOLD");
   }
  });
+ it("revalidates cutoff at final physical GET, even if DB/OpenAPI/quota preflight was slow",()=>{
+  const script=readFileSync("scripts/v39_phase4_one_prospective_fids_paid_actions.ts","utf8");
+  const start=script.indexOf("const fetchOnce:");
+  const end=script.indexOf("const params=",start);
+  expect(start).toBeGreaterThan(0);
+  expect(end).toBeGreaterThan(start);
+  const paid=script.slice(start,end);
+  const recheck=paid.indexOf("if(scheduled)scheduledWsssHorizonV39(process.env,Date.now())");
+  const attempt=paid.indexOf("billableAttempts=1");
+  const network=paid.indexOf("await fetch(url,");
+  expect(recheck).toBeGreaterThan(0);
+  expect(recheck).toBeLessThan(attempt);
+  expect(attempt).toBeLessThan(network);
+  expect(paid.match(/billableAttempts=1/g)).toHaveLength(1);
+  for(const [cron,cutoff] of [
+   ["7 10 31 10 *","2026-10-31T11:00:00Z"],
+   ["37 14 31 10 *","2026-10-31T15:30:00Z"]
+  ] as const){
+   const c=Date.parse(cutoff);
+   const env={...intent,GITHUB_EVENT_NAME:"schedule",
+      P4_FIDS_SCHEDULE_CRON:cron,
+      P4_ONE_FIDS_EXACT_INTENT:"PHASE4_WSSS_THREE_HORIZON_SINGLE_GET_PER_CRON_NO_RETRIES"};
+   expect(()=>scheduledWsssHorizonV39(env,c-15*60000)).not.toThrow();
+   expect(()=>scheduledWsssHorizonV39(env,c-15*60000+1))
+      .toThrow("P4_FIDS_SCHEDULED_HORIZON_WINDOW_HOLD");
+   expect(()=>scheduledWsssHorizonV39(env,c+1000))
+      .toThrow("P4_FIDS_SCHEDULED_HORIZON_WINDOW_HOLD");
+  }
+ });
  it("workflow binds three cron slots with the protected one-shot no-retry control",()=>{
   const workflow=readFileSync(".github/workflows/phase4-gate5-three-prospective-wsss-cutoffs.yml","utf8");
   const reader=readFileSync("scripts/v39_gate5_source_inventory_readonly_actions.ts","utf8");
