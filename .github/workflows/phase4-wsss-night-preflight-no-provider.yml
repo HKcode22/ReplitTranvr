@@ -1,0 +1,53 @@
+name: Phase4 WSSS Night-Before FIDS Infrastructure Preflight - NO PROVIDER
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/v39_phase4_night_preflight_no_provider_actions.ts"
+      - ".github/workflows/phase4-wsss-night-preflight-no-provider.yml"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-wsss-night-preflight-readonly
+  cancel-in-progress: false
+jobs:
+  infrastructure-readiness:
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies (no provider secrets)
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Check real protected DB writer grants/triggers using SQL READ ONLY
+        env:
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          P4_NIGHT_PRECHECK_INTENT: PHASE4_WSSS_DB_READONLY_INFRASTRUCTURE_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -n "${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_phase4_night_preflight_no_provider_actions.ts
+      - name: Important limitations
+        if: always()
+        run: |
+          {
+            echo 'Zero provider/API credits and no SQL writes. This only verifies protected DB connectivity, writer grant, immutable/expiry triggers and retained original FIDS receipt count.'
+            echo 'Tomorrow paid GET must still re-check endpoint contract, live API quota, account balance and exact 15-minute cutoff guard.'
+            echo 'A HOLD never authorizes a retry, earlier/backfilled source, or Phase6.'
+          } >> "$GITHUB_STEP_SUMMARY"
