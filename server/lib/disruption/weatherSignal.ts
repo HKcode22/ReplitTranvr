@@ -24,7 +24,7 @@ export interface WeatherRetrievalContext { cutoffUtc: Date; mode: "operational" 
 const VERIFIED_IATA_ICAO: Record<string, string> = {
   HNL:"PHNL", OGG:"PHOG", KOA:"PHKO", LIH:"PHLI", ANC:"PANC", FAI:"PAFA", JNU:"PAJN", SJU:"TJSJ",
   YYZ:"CYYZ", YVR:"CYVR", YUL:"CYUL", YYC:"CYYC", LHR:"EGLL", CDG:"LFPG", FRA:"EDDF", AMS:"EHAM",
-  DXB:"OMDB", NRT:"RJAA", HND:"RJTT", ICN:"RKSI", SYD:"YSSY", MEX:"MMMX", LAX:"KLAX", SFO:"KSFO",
+  DXB:"OMDB", NRT:"RJAA", HND:"RJTT", ICN:"RKSI", SIN:"WSSS", SYD:"YSSY", MEX:"MMMX", LAX:"KLAX", SFO:"KSFO",
   JFK:"KJFK", ORD:"KORD", ATL:"KATL", DFW:"KDFW", DEN:"KDEN", SEA:"KSEA",
 };
 export function iataToIcao(iata: string): string { return VERIFIED_IATA_ICAO[(iata || "").trim().toUpperCase()] ?? ""; }
@@ -57,28 +57,51 @@ export interface WeatherSelection { selected:WeatherCandidate|null; weatherMissi
 export function selectOperationalWeather(candidates: WeatherCandidate[], cutoffUtc: Date): WeatherSelection {
   const cutoff=cutoffUtc.getTime(), precedence=WEATHER_OPERATIONAL_PRECEDENCE as readonly string[];
   if (!Number.isFinite(cutoff)) return {selected:null,weatherMissing:true,sourceUsed:"none",reason:"invalid cutoff"};
-  const eligible=candidates.filter(c=>precedence.includes(c.source)&&c.source!=="era5"&&!!c.issueTime&&!!c.availableAt&&
-    Number.isFinite(c.issueTime!.getTime())&&Number.isFinite(c.availableAt!.getTime())&&c.issueTime!.getTime()<=cutoff&&c.availableAt!.getTime()<=cutoff);
-  if (!eligible.length) return {selected:null,weatherMissing:true,sourceUsed:"none",reason:"no cutoff-safe operational observation"};
-  eligible.sort((a,b)=>precedence.indexOf(a.source)-precedence.indexOf(b.source)||b.issueTime!.getTime()-a.issueTime!.getTime());
-  const winner=eligible[0], age=(cutoff-winner.issueTime!.getTime())/3_600_000;
-  if (age>WEATHER_OPERATIONAL_LOOKBACK_HOURS) return {selected:null,weatherMissing:true,sourceUsed:"none",reason:"latest qualifying observation older than 6h"};
-  return {selected:winner,weatherMissing:false,sourceUsed:winner.source as WeatherOperationalSource,reason:"selected by frozen operational precedence and cutoff clocks"};
+  // Apply the six-hour freshness constraint BEFORE choosing a preferred source.
+  // Otherwise an expired live METAR masks a valid archive/grid fallback.
+  // A later archive retrieval is not evidence of availability at an earlier PRE cutoff.
+  const earliestIssue=cutoff-WEATHER_OPERATIONAL_LOOKBACK_HOURS*3_600_000;
+  const eligible=candidates.filter(c=>precedence.includes(c.source)&&
+    c.issueTime instanceof Date&&c.availableAt instanceof Date&&
+    Number.isFinite(c.issueTime.getTime())&&Number.isFinite(c.availableAt.getTime())&&
+    c.issueTime.getTime()>=earliestIssue&&c.issueTime.getTime()<=cutoff&&
+    c.availableAt.getTime()>=c.issueTime.getTime()&&c.availableAt.getTime()<=cutoff);
+  if (!eligible.length) return {selected:null,weatherMissing:true,sourceUsed:"none",reason:"no cutoff-safe operational observation within 6h"};
+  eligible.sort((a,b)=>precedence.indexOf(a.source)-precedence.indexOf(b.source)||
+    b.issueTime!.getTime()-a.issueTime!.getTime()||
+    b.availableAt!.getTime()-a.availableAt!.getTime());
+  const winner=eligible[0];
+  return {selected:winner,weatherMissing:false,sourceUsed:winner.source as WeatherOperationalSource,reason:"selected by frozen operational precedence, freshness and both cutoff clocks"};
 }
 
 export async function getAirportWeather(iataCode: string, context?: WeatherRetrievalContext): Promise<WeatherSignal> {
   const code=(iataCode||"").trim().toUpperCase(), retrievedAt=new Date(), icao=iataToIcao(code);
   if (!code||!icao) return missingSignal(code,retrievedAt);
   if ((context?.mode??"operational")==="retrospective") return missingSignal(code,retrievedAt);
-  return fetchMetarWeather(code,icao,context?.cutoffUtc??retrievedAt);
+  // A live fetch performed AFTER a requested PRE cutoff cannot reconstruct
+  // what was known then. Historical joins must use persisted as-of receipts.
+  if(context?.cutoffUtc && (!Number.isFinite(context.cutoffUtc.getTime())||
+      retrievedAt.getTime()>=context.cutoffUtc.getTime()))
+    return missingSignal(code,retrievedAt);
+  return fetchMetarWeather(code,icao,context?.cutoffUtc??null);
 }
-async function fetchMetarWeather(code:string,icao:string,cutoffUtc:Date):Promise<WeatherSignal>{
+async function fetchMetarWeather(code:string,icao:string,cutoffUtc:Date|null):Promise<WeatherSignal>{
   const retrievedAt=new Date();
   try{
     const resp=await fetch(`https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(icao)}&format=json`,{headers:{Accept:"application/json","User-Agent":"Travnr-Disruption-Monitor/1.0"}});
-    if(!resp.ok)return missingSignal(code,retrievedAt); const data:any=await resp.json(); const row=Array.isArray(data)?data[0]:null; if(!row)return missingSignal(code,retrievedAt);
+    if(!resp.ok)return missingSignal(code,retrievedAt);
+    const data:any=await resp.json();
+    // This is the first timestamp at which this fetch has the decoded report;
+    // it is NOT a durable source-availability receipt until persisted.
+    const receivedAt=new Date();
+    if(cutoffUtc && receivedAt.getTime()>cutoffUtc.getTime())
+      return missingSignal(code,receivedAt);
+    const row=Array.isArray(data)?data[0]:null;
+    if(!row)return missingSignal(code,receivedAt);
     const rawIssue=row.reportTime??row.observation_time??null, parsed=rawIssue?new Date(rawIssue):null;
-    const issueTime=parsed&&Number.isFinite(parsed.getTime())?parsed:null; if(!isWeatherAvailableAtCutoff(issueTime,cutoffUtc,"metar","operational"))return missingSignal(code,retrievedAt);
+    const issueTime=parsed&&Number.isFinite(parsed.getTime())?parsed:null;
+    if(!isWeatherAvailableAtCutoff(issueTime,cutoffUtc??receivedAt,"metar","operational"))
+      return missingSignal(code,receivedAt);
     const num=(v:unknown):number|null=>{if(v===null||v===undefined||v==="")return null;const n=Number(v);return Number.isFinite(n)?n:null};
     const windSpeedKt=num(row.wspd??row.wind_speed_kt),gustSpeedKt=num(row.wgst??row.wind_gust_kt);
     let visibilityMiles:number|null=null; const rv=row.visib??row.visibility_statute_mi;
@@ -86,6 +109,6 @@ async function fetchMetarWeather(code:string,icao:string,cutoffUtc:Date):Promise
     let ceilingFt:number|null=null; for(const l of Array.isArray(row.clouds)?row.clouds:[]){const cover=String(l?.cover??"").toUpperCase(),base=Number(l?.base);if((cover==="BKN"||cover==="OVC")&&Number.isFinite(base))ceilingFt=ceilingFt===null?base:Math.min(ceilingFt,base)}
     const wx=String(row.wxString??row.wx_string??"").toUpperCase(),hasThunderstorm=/\bTS\b|TSRA|TSGR/.test(wx),hasFreezing=/\bFZ\b|FZRA|FZDZ|FZFG|\bSN\b|\bPL\b/.test(wx),flightCategory=categoryFromMetar(visibilityMiles,ceilingFt);
     let riskContribution=categoryPoints(flightCategory)+(hasThunderstorm?10:0)+(hasFreezing?5:0)+(((gustSpeedKt??0)>=25||(windSpeedKt??0)>=30)?3:0);riskContribution=Math.min(25,riskContribution);
-    return {iataCode:code,icaoCode:icao,flightCategory,windSpeedKt,gustSpeedKt,visibilityMiles,ceilingFt,hasThunderstorm,hasFreezing,rawMetar:String(row.rawOb??row.raw_text??row.metar??"")||null,riskContribution,source:"live_metar",sourceVersion:"aviationweather-data-api",issueTime,availableAt:retrievedAt,retrievedAt,weatherMissing:false};
+    return {iataCode:code,icaoCode:icao,flightCategory,windSpeedKt,gustSpeedKt,visibilityMiles,ceilingFt,hasThunderstorm,hasFreezing,rawMetar:String(row.rawOb??row.raw_text??row.metar??"")||null,riskContribution,source:"live_metar",sourceVersion:"aviationweather-data-api",issueTime,availableAt:receivedAt,retrievedAt:receivedAt,weatherMissing:false};
   }catch{return missingSignal(code,retrievedAt)}
 }

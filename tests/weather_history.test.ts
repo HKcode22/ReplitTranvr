@@ -1,10 +1,11 @@
 /** V3.9-f.8 weather/history cutoff-safety tests. */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   isWeatherAvailableAtCutoff,
   validateTafIssueTime,
   selectOperationalWeather,
   iataToIcao,
+  getAirportWeather,
   type WeatherCandidate,
 } from "../server/lib/disruption/weatherSignal";
 import {
@@ -40,7 +41,42 @@ describe("weather availability", () => {
   });
   it("does not invent a global K-prefix ICAO", () => {
     expect(iataToIcao("LAX")).toBe("KLAX");
+    expect(iataToIcao("SIN")).toBe("WSSS");
+    expect(iataToIcao(" sin ")).toBe("WSSS");
     expect(iataToIcao("XYZ")).toBe("");
+  });
+  it("does not call a live API to backdate weather into an elapsed PRE cutoff", async () => {
+    const spy=vi.fn();
+    vi.stubGlobal("fetch",spy);
+    try {
+      const r=await getAirportWeather("SIN",{
+        cutoffUtc:new Date(Date.now()-60_000),mode:"operational",allowEra5:false,
+      });
+      expect(r.weatherMissing).toBe(true);
+      expect(r.source).toBe("none");
+      expect(spy).not.toHaveBeenCalled();
+    } finally {vi.unstubAllGlobals();}
+  });
+  it("records the receipt-completion time for a live report rather than the request start", async () => {
+    const issued=new Date(Date.now()-5*60_000).toISOString();
+    const spy=vi.fn(async()=>({
+      ok:true,json:async()=>[{reportTime:issued,wspd:4,visib:10,rawOb:"METAR WSSS"}],
+    }));
+    vi.stubGlobal("fetch",spy);
+    try {
+      const before=Date.now();
+      const cutoff=new Date(before+60*60_000);
+      const r=await getAirportWeather("SIN",{
+        cutoffUtc:cutoff,mode:"operational",allowEra5:false,
+      });
+      expect(r.weatherMissing).toBe(false);
+      expect(r.icaoCode).toBe("WSSS");
+      expect(r.availableAt).toBeInstanceOf(Date);
+      expect(r.availableAt!.getTime()).toBeGreaterThanOrEqual(before);
+      expect(r.availableAt!.getTime()).toBeLessThanOrEqual(cutoff.getTime());
+      expect(r.retrievedAt.getTime()).toBe(r.availableAt!.getTime());
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {vi.unstubAllGlobals();}
   });
 });
 
@@ -72,6 +108,27 @@ describe("operational as-known weather selection", () => {
     const r = selectOperationalWeather([cand("live_metar", 7, 7)], cutoff);
     expect(r.weatherMissing).toBe(true);
     expect(r.selected).toBeNull();
+  });
+  it("falls back to a fresh lower-priority source when a preferred METAR is stale", () => {
+    const r = selectOperationalWeather([
+      cand("live_metar", 7, 7), cand("archive_metar", 2, 1), cand("gfs", 1, 1),
+    ], cutoff);
+    expect(r.weatherMissing).toBe(false);
+    expect(r.sourceUsed).toBe("archive_metar");
+  });
+  it("uses a forecast fallback when both METAR sources are too old", () => {
+    const r = selectOperationalWeather([
+      cand("live_metar", 8, 8), cand("archive_metar", 7, 7), cand("gfs", 3, 2),
+    ], cutoff);
+    expect(r.sourceUsed).toBe("gfs");
+    expect(r.weatherMissing).toBe(false);
+  });
+  it("accepts exactly the frozen six-hour boundary", () => {
+    expect(selectOperationalWeather([cand("live_metar", 6, 1)], cutoff).weatherMissing).toBe(false);
+  });
+  it("rejects impossible receipt clocks and never uses post-cutoff retrievals", () => {
+    expect(selectOperationalWeather([cand("live_metar", 1, 2)], cutoff).weatherMissing).toBe(true);
+    expect(selectOperationalWeather([cand("live_metar", 2, -1)], cutoff).weatherMissing).toBe(true);
   });
   it("empty input remains missing rather than benign weather", () => {
     expect(selectOperationalWeather([], cutoff)).toMatchObject({ weatherMissing: true, selected: null, sourceUsed: "none" });
