@@ -22,3 +22,7 @@ Wire real weather receipts to an immutable, license/retention-checked store with
 ## Safety and acceptance
 
 CI must pass offline tests/typechecks; no provider calls and no database writes in this change. Existing October 31 finite one-GET-per-horizon protected GitHub schedules are untouched. Selected-T, actual wheels-off, operating identity, certified persisted PRE and outcome coverage remain independent Gate 5 blockers per Plan f.8 and issue #200.
+
+## Additional live-fetch as-of guard
+
+The existing `getAirportWeather` caller now refuses explicit PRE cutoffs that have already passed **before making any live HTTP request**. For an allowed future cutoff, the returned in-memory `availableAt` and `retrievedAt` now represent when the JSON response finished decoding rather than when the GET began; even that is **not** proof of durable weather archive first-availability until independently persisted. The missingness and future-cutoff rule are tested with mocked fetch, with **zero** external weather requests. Current product weather without a PRE context remains supported as current observation, not certified as historical training data.
