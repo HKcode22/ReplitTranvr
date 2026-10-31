@@ -1,0 +1,102 @@
+name: Phase4 WSSS T90 PREARMED GitHub One Paid FIDS GET
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-wsss-t90-push-prearm-20261031.yml"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-wsss-three-horizon-one-get-per-cutoff
+  cancel-in-progress: false
+jobs:
+  prearmed-one-fids:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 195
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked code, without provider credentials
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Prearm by GitHub PUSH now, wait until actual T90 collection window
+        timeout-minutes: 185
+        env:
+          PREARM_TARGET_UTC: "2026-10-31T14:37:00Z"
+          PREARM_LAST_START_UTC: "2026-10-31T15:15:00Z"
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_WORKFLOW" = "Phase4 WSSS T90 PREARMED GitHub One Paid FIDS GET"
+          test "$GITHUB_JOB" = prearmed-one-fids
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_WORKFLOW_REF" = "HKcode22/ReplitTranvr/.github/workflows/phase4-gate5-wsss-t90-push-prearm-20261031.yml@refs/heads/main"
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          import time
+          target=datetime.fromisoformat("2026-10-31T14:37:00+00:00").timestamp()
+          last=datetime.fromisoformat("2026-10-31T15:15:00+00:00").timestamp()
+          now=time.time()
+          if now>last:
+              raise SystemExit("P4_T90_PREARM_TOO_LATE_NO_SPEND")
+          if now<datetime.fromisoformat("2026-10-31T05:30:00+00:00").timestamp():
+              raise SystemExit("P4_T90_PREARM_TOO_EARLY_NO_SPEND")
+          print("P4_T90_PREARM_GITHUB_RUNNER_ALIVE_NO_PROVIDER_CALLS", flush=True)
+          while time.time()<target:
+              remaining=target-time.time()
+              print(f"P4_T90_WAITING_GITHUB_ONLY_SECONDS={max(0,int(remaining))}",flush=True)
+              time.sleep(min(30,max(0.2,remaining)))
+          if time.time()>last:
+              raise SystemExit("P4_T90_PREARM_LATE_NO_SPEND")
+          print("P4_T90_START_WINDOW_REACHED_PROTECTED_PAID_PREFLIGHT_NEXT", flush=True)
+          PY
+      - name: Exactly one T90 FIDS GET, atomic raw first persist - no provider retry
+        timeout-minutes: 8
+        env:
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          P4_FIDS_SCHEDULE_CRON: "37 14 31 10 *"
+          P4_ONE_FIDS_EXACT_INTENT: PHASE4_WSSS_OCT31_T90_PUSH_PREARM_ONE_GET_NO_RETRY
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test -n "${AERODATABOX_API_KEY:-}"
+          node --import tsx scripts/v39_phase4_one_prospective_fids_paid_actions.ts
+      - name: Independent read only T90 source/PRE and drift audit
+        if: success()
+        env:
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          P4_GATE5_SOURCE_AIRPORT: WSSS
+          P4_GATE5_READONLY_APPROVAL: GATE5_SOURCE_METADATA_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -n "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_gate5_source_inventory_readonly_actions.ts
+      - name: Source observation is not final Gate5 acceptance
+        if: always()
+        run: |
+          {
+            echo 'This one-time prearmed push runner replaces the missed/reliability-risky T90 dated cron on October 31; it is not a fabricated scheduled event.'
+            echo 'Actual physical GET is date-gated, cutoff-gated and unique by workflow path, main branch, first attempt and duplicate-source query.'
+            echo 'No T6 catch-up. No retry, no Alert create; expected 2 REST units only if physical GET actually happens.'
+            echo 'Missing/expired source => UNOBSERVED, not zero; strict Gate5 PASS remains false; no Phase5/6.'
+          } >> "$GITHUB_STEP_SUMMARY"
