@@ -4,6 +4,7 @@
 
 ## Start here — live source of truth
 
+- [Final paid FIDS physical-dispatch cutoff recheck](2026-10-30_PHASE4_FINAL_PAID_DISPATCH_CUTOFF_GUARD.md) — ensures slow preflight can never dispatch a paid FIDS GET after the protected 15-minute cutoff guard; no change to GitHub schedule
 - [Night-before no-provider infrastructure readiness](2026-10-30_PHASE4_NIGHT_BEFORE_INFRASTRUCTURE_READINESS.md) — protected READ ONLY DB writer/trigger preflight on main; **not quota or scientific PASS**
 - [**Operational runbook for October 31 WSSS**](OPERATIONS_AND_WEATHER.md) — user instructions, costs, GitHub schedule and fallbacks, weather source, what still remains
 - [Scientific Plan f.8 §5, §10 and §17](../plans/V3.9_DataCollectPlan_f.8.md) — binding eligibility, weather source and Gate 5 acceptance rules
