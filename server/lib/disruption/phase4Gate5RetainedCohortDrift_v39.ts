@@ -68,6 +68,12 @@ const noSource=(horizon:Horizon)=>({
  primaryProvisionalIdentities:null,confirmedCoreTaggedIdentities:null,
  sourceLineageRejectedRows:null
 });
+const notYet=(horizon:Horizon)=>({
+ horizon,status:"FIXED_EARLIEST_CUTOFF_NOT_YET_REACHED" as const,
+ cutoffUtc:CUTS[horizon],sourceReceiptAvailableUtc:null,
+ primaryProvisionalIdentities:null,confirmedCoreTaggedIdentities:null,
+ sourceLineageRejectedRows:null
+});
 const sourceReport=(horizon:Horizon,r:Receipt)=>({
  horizon,status:"RETAINED_PROVIDER_SOURCE_CANDIDATES_NOT_PHYSICAL_FLIGHTS" as const,
  cutoffUtc:CUTS[horizon],
@@ -76,7 +82,7 @@ const sourceReport=(horizon:Horizon,r:Receipt)=>({
  confirmedCoreTaggedIdentities:r.core,
  sourceLineageRejectedRows:r.rejected
 });
-type HorizonState=ReturnType<typeof noSource>|ReturnType<typeof sourceReport>;
+type HorizonState=ReturnType<typeof noSource>|ReturnType<typeof notYet>|ReturnType<typeof sourceReport>;
 function delta(a:Receipt|null,b:Receipt|null){
  if(!a||!b)return {
   status:"UNOBSERVED_RETAINED_RECEIPT_MISSING" as const,
@@ -150,13 +156,14 @@ export async function auditP4WsssRetainedAsOfDriftV39(
  for(const h of HORIZONS){
   const cut=Date.parse(CUTS[h]);
   // No source retrieved after this prediction cutoff can appear at it.
-  const latest=ordered.filter(q=>q.when<=cut).at(-1)??null;
+  const latest=audit>=cut
+   ? ordered.filter(q=>q.when<=cut).at(-1)??null : null;
   per.set(h,latest);
  }
  const t24=per.get("T-24h")!,t6=per.get("T-6h")!,t90=per.get("T-90m")!;
  const asOf=Object.fromEntries(HORIZONS.map(h=>{
   const q=per.get(h)!;
-  return [h,q?sourceReport(h,q):noSource(h)];
+  return [h,q?sourceReport(h,q):audit<Date.parse(CUTS[h])?notYet(h):noSource(h)];
  })) as Record<Horizon,HorizonState>;
  const transitions={
   "T24_to_T6":delta(t24,t6),
