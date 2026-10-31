@@ -4,6 +4,7 @@
 
 ## Start here — live source of truth
 
+- [Night-before no-provider infrastructure readiness](2026-10-30_PHASE4_NIGHT_BEFORE_INFRASTRUCTURE_READINESS.md) — protected READ ONLY DB writer/trigger preflight on main; **not quota or scientific PASS**
 - [**Operational runbook for October 31 WSSS**](OPERATIONS_AND_WEATHER.md) — user instructions, costs, GitHub schedule and fallbacks, weather source, what still remains
 - [Scientific Plan f.8 §5, §10 and §17](../plans/V3.9_DataCollectPlan_f.8.md) — binding eligibility, weather source and Gate 5 acceptance rules
 - [Implementation Log §A1.15](../implementation/V3.9_IMPLEMENTATION_LOG.md) — engineering state and outcomes
