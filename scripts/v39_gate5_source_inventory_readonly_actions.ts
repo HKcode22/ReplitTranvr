@@ -12,18 +12,44 @@ import {auditP4LiveCaptureOutcomeV39}
  from "../server/lib/disruption/phase4Gate5LiveCaptureOutcome_v39";
 import {auditP4LivePreBuilderCandidatesV39}
  from "../server/lib/disruption/phase4Gate5LivePreBuilderCandidates_v39";
-export function requireP4InventoryActionsContext(env:NodeJS.ProcessEnv):{airport:string}{
+// The two fixed, no-provider post-service audits are distinct from the
+// three paid FIDS source cutoffs. GitHub schedule delay never creates a new
+// paid authorization or an undated retrospective observation.
+export const P4_WSSS_POSTWINDOW_AUDIT_SLOTS_V39={
+ "15 19 31 10 *":"2026-10-31T19:15:00.000Z",
+ "15 22 31 10 *":"2026-10-31T22:15:00.000Z"
+} as const;
+export function requireP4PostWindowAuditScheduleV39(
+ env:NodeJS.ProcessEnv,now:number
+):void {
+ const cron=env.P4_GATE5_POSTWINDOW_CRON as
+   keyof typeof P4_WSSS_POSTWINDOW_AUDIT_SLOTS_V39;
+ const slot=P4_WSSS_POSTWINDOW_AUDIT_SLOTS_V39[cron];
+ if(!slot||env.P4_FIDS_SCHEDULE_CRON||
+    env.GITHUB_EVENT_NAME!=="schedule"||
+    env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
+    !Number.isFinite(now)||
+    now<Date.parse(slot)||
+    now>Date.parse(slot)+4*3_600_000)
+   throw Error("P4_GATE5_POSTWINDOW_AUDIT_SCHEDULE_HOLD");
+}
+export function requireP4InventoryActionsContext(
+ env:NodeJS.ProcessEnv,now=Date.now()
+):{airport:string}{
  if(env.GITHUB_ACTIONS!=="true"||
   env.GITHUB_REF!=="refs/heads/main"||
   env.GITHUB_RUN_ATTEMPT!=="1"||
   !/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??"")||
   !["push","workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME??"")||
- (env.GITHUB_EVENT_NAME==="schedule" && ![
-   "7 16 30 10 *","7 10 31 10 *","37 14 31 10 *"
- ].includes(env.P4_FIDS_SCHEDULE_CRON??""))||
+ (env.GITHUB_EVENT_NAME==="schedule" &&
+   !["7 16 30 10 *","7 10 31 10 *","37 14 31 10 *"]
+     .includes(env.P4_FIDS_SCHEDULE_CRON??"") &&
+   !env.P4_GATE5_POSTWINDOW_CRON)||
   env.P4_GATE5_READONLY_APPROVAL!=="GATE5_SOURCE_METADATA_NO_PROVIDER"||
   env.P4_GATE5_SOURCE_AIRPORT!=="WSSS")
   throw Error("P4_GATE5_INVENTORY_ACTIONS_CONTEXT_HOLD");
+ if(env.GITHUB_EVENT_NAME==="schedule"&&env.P4_GATE5_POSTWINDOW_CRON)
+  requireP4PostWindowAuditScheduleV39(env,now);
  return {airport:"WSSS"};
 }
 async function main():Promise<void>{
