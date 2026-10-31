@@ -10,6 +10,8 @@ import {auditP4LiveGate5FunnelV39}
  from "../server/lib/disruption/phase4Gate5LiveFunnel_v39";
 import {auditP4LiveCaptureOutcomeV39}
  from "../server/lib/disruption/phase4Gate5LiveCaptureOutcome_v39";
+import {auditP4LivePreBuilderCandidatesV39}
+ from "../server/lib/disruption/phase4Gate5LivePreBuilderCandidates_v39";
 export function requireP4InventoryActionsContext(env:NodeJS.ProcessEnv):{airport:string}{
  if(env.GITHUB_ACTIONS!=="true"||
   env.GITHUB_REF!=="refs/heads/main"||
@@ -71,11 +73,30 @@ async function main():Promise<void>{
   if(captureAndOutcomes.retainedFidsReceipts!==
      liveFunnel.sourceQueryReceipts)
     throw Error("P4_GATE5_CAPTURE_COHORT_FIDS_RECEIPT_PARITY_HOLD");
+  // Exercise the actual PRE cutoff/feature builder on immutable source
+  // observations, independent of callbacks. No INSERT/UPDATE is possible
+  // inside this protected repeatable-read, read-only transaction.
+  const preBuilderCandidates=await auditP4LivePreBuilderCandidatesV39(client,{
+    airport:"WSSS",
+    windowStartUtc:"2026-10-31T17:00:00.000Z",
+    windowEndUtc:"2026-10-31T18:00:00.000Z",
+    auditUtc:readAt
+  });
+  if(preBuilderCandidates.provisionalDistinctIdentityCount!==
+     liveFunnel.horizons[0].candidateDistinctAnalyticIds)
+    throw Error("P4_GATE5_PRE_BUILDER_COHORT_POPULATION_PARITY_HOLD");
+  for(const candidate of preBuilderCandidates.horizons){
+    const compare=liveFunnel.horizons.find(x=>x.horizon===candidate.horizon);
+    if(!compare ||
+       candidate.previewBuilt!==compare.candidateAsOfEligibleIds)
+      throw Error("P4_GATE5_PRE_BUILDER_CUTOFF_PARITY_HOLD");
+  }
   console.log(JSON.stringify({sourceInventory:report,
     cutoffAndSnapshotEvidence:cohort,
     originalBodyAndEnvelopeReadback:bodyReadback,
     sameCohortOperationalFunnel:liveFunnel,
     sameCohortResolvedCaptureAndOutcomes:captureAndOutcomes,
+    sameCohortPreBuilderCandidates:preBuilderCandidates,
     strictGate5Passed:false,phase6Authorized:false,
     providerCalls:0,databaseWrites:0
   }));
