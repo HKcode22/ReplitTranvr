@@ -78,15 +78,30 @@ export async function getAirportWeather(iataCode: string, context?: WeatherRetri
   const code=(iataCode||"").trim().toUpperCase(), retrievedAt=new Date(), icao=iataToIcao(code);
   if (!code||!icao) return missingSignal(code,retrievedAt);
   if ((context?.mode??"operational")==="retrospective") return missingSignal(code,retrievedAt);
-  return fetchMetarWeather(code,icao,context?.cutoffUtc??retrievedAt);
+  // A live fetch performed AFTER a requested PRE cutoff cannot reconstruct
+  // what was known then. Historical joins must use persisted as-of receipts.
+  if(context?.cutoffUtc && (!Number.isFinite(context.cutoffUtc.getTime())||
+      retrievedAt.getTime()>=context.cutoffUtc.getTime()))
+    return missingSignal(code,retrievedAt);
+  return fetchMetarWeather(code,icao,context?.cutoffUtc??null);
 }
-async function fetchMetarWeather(code:string,icao:string,cutoffUtc:Date):Promise<WeatherSignal>{
+async function fetchMetarWeather(code:string,icao:string,cutoffUtc:Date|null):Promise<WeatherSignal>{
   const retrievedAt=new Date();
   try{
     const resp=await fetch(`https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(icao)}&format=json`,{headers:{Accept:"application/json","User-Agent":"Travnr-Disruption-Monitor/1.0"}});
-    if(!resp.ok)return missingSignal(code,retrievedAt); const data:any=await resp.json(); const row=Array.isArray(data)?data[0]:null; if(!row)return missingSignal(code,retrievedAt);
+    if(!resp.ok)return missingSignal(code,retrievedAt);
+    const data:any=await resp.json();
+    // This is the first timestamp at which this fetch has the decoded report;
+    // it is NOT a durable source-availability receipt until persisted.
+    const receivedAt=new Date();
+    if(cutoffUtc && receivedAt.getTime()>cutoffUtc.getTime())
+      return missingSignal(code,receivedAt);
+    const row=Array.isArray(data)?data[0]:null;
+    if(!row)return missingSignal(code,receivedAt);
     const rawIssue=row.reportTime??row.observation_time??null, parsed=rawIssue?new Date(rawIssue):null;
-    const issueTime=parsed&&Number.isFinite(parsed.getTime())?parsed:null; if(!isWeatherAvailableAtCutoff(issueTime,cutoffUtc,"metar","operational"))return missingSignal(code,retrievedAt);
+    const issueTime=parsed&&Number.isFinite(parsed.getTime())?parsed:null;
+    if(!isWeatherAvailableAtCutoff(issueTime,cutoffUtc??receivedAt,"metar","operational"))
+      return missingSignal(code,receivedAt);
     const num=(v:unknown):number|null=>{if(v===null||v===undefined||v==="")return null;const n=Number(v);return Number.isFinite(n)?n:null};
     const windSpeedKt=num(row.wspd??row.wind_speed_kt),gustSpeedKt=num(row.wgst??row.wind_gust_kt);
     let visibilityMiles:number|null=null; const rv=row.visib??row.visibility_statute_mi;
@@ -94,6 +109,6 @@ async function fetchMetarWeather(code:string,icao:string,cutoffUtc:Date):Promise
     let ceilingFt:number|null=null; for(const l of Array.isArray(row.clouds)?row.clouds:[]){const cover=String(l?.cover??"").toUpperCase(),base=Number(l?.base);if((cover==="BKN"||cover==="OVC")&&Number.isFinite(base))ceilingFt=ceilingFt===null?base:Math.min(ceilingFt,base)}
     const wx=String(row.wxString??row.wx_string??"").toUpperCase(),hasThunderstorm=/\bTS\b|TSRA|TSGR/.test(wx),hasFreezing=/\bFZ\b|FZRA|FZDZ|FZFG|\bSN\b|\bPL\b/.test(wx),flightCategory=categoryFromMetar(visibilityMiles,ceilingFt);
     let riskContribution=categoryPoints(flightCategory)+(hasThunderstorm?10:0)+(hasFreezing?5:0)+(((gustSpeedKt??0)>=25||(windSpeedKt??0)>=30)?3:0);riskContribution=Math.min(25,riskContribution);
-    return {iataCode:code,icaoCode:icao,flightCategory,windSpeedKt,gustSpeedKt,visibilityMiles,ceilingFt,hasThunderstorm,hasFreezing,rawMetar:String(row.rawOb??row.raw_text??row.metar??"")||null,riskContribution,source:"live_metar",sourceVersion:"aviationweather-data-api",issueTime,availableAt:retrievedAt,retrievedAt,weatherMissing:false};
+    return {iataCode:code,icaoCode:icao,flightCategory,windSpeedKt,gustSpeedKt,visibilityMiles,ceilingFt,hasThunderstorm,hasFreezing,rawMetar:String(row.rawOb??row.raw_text??row.metar??"")||null,riskContribution,source:"live_metar",sourceVersion:"aviationweather-data-api",issueTime,availableAt:receivedAt,retrievedAt:receivedAt,weatherMissing:false};
   }catch{return missingSignal(code,retrievedAt)}
 }
