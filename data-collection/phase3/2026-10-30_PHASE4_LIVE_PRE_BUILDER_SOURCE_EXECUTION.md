@@ -1,0 +1,19 @@
+# Phase4 WSSS PRE snapshot builder — actual source execution checkpoint
+
+Date: 2026-10-30 PDT, before WSSS 2026-10-31 17:00–18:00 UTC service window. Binding reference: `data-collection/plans/V3.9_DataCollectPlan_f.8.md` §5 and §17 step 17; `data-collection/implementation/V3.9_IMPLEMENTATION_LOG.md` §A1.15.
+
+## Already completed live implementation
+
+Production main at `2c1352a90d888fd42344e449cb7bf3c8157d2eda` (PR #279), with [protected read-only production audit #41151679608](https://github.com/HKcode22/ReplitTranvr/actions/runs/41151679608) **SUCCESS** and [post-merge V3.9 Offline Safety #41151679714](https://github.com/HKcode22/ReplitTranvr/actions/runs/41151679714) **SUCCESS**. WSSS fixed same-service cohort: 1 unexpired FIDS receipt; 24 original primary population observations; 24 provisional distinct analytic IDs with source evidence available before each candidate T−24h/T−6h/T−90m; 0 original source corruption. 0 verified operating core classifications, 0 persisted certified PRE snapshots. Resolved WSSS capture and wheels-off outcome count 0 as-of 2026-10-31 00:43Z **before** the service window; coverage rate is unknown, not 0.
+
+## This PR: execute real PRE feature engine, no false labels
+
+`server/lib/disruption/phase4Gate5LivePreBuilderCandidates_v39.ts` now calls the production `buildPreSnapshot` (from `preSnapshotBuilder_v3.ts`) for every surviving candidate flight × cutoff from **actual retained FIDS original responses**. It first constructs distinct identities and original first-observed departure schedule, then chooses the latest role-correct, receipt-hash-matching, physically available-before-cutoff source observation for that horizon. It uses the receipt and member system clocks and reconciles only sub-ms Postgres precision differences. The input contains an available, mandatory departure schedule and explicitly missing optional webhook and weather features. The builder MUST yield an available first feature and null+missing for both unavailable optional features. Aggregate counters include PRE previews built; missing source/T; candidate versus confirmed-scope classification; optional feature missingness; and whether the nominal cutoff has already passed at the audit.
+
+The same existing protected `REPEATABLE READ READ ONLY` GitHub source-inventory workflow executes this in addition to the true WSSS population+snapshot/capture+outcome audits. Assert exact provisional-ID and per-horizon source-eligibility parity with the independently computed live funnel. No data leaves the process except aggregate counts. **No write** to `clean.flight_snapshots`, no paid request, no new Alert, no semantic changes, no retention extensions, no Replit shell.
+
+This is **actual production-engine execution on actual collection source**, not a fake mock. But the native schedule has not been independently certified as the selected-T milestone; no physical operating-leg scope is confirmed and no snapshots are persisted or certified. A preliminary candidate builder preview does not establish future GitHub T−6/T−90 refresh success or a future final snapshot. The final certified PRE snapshot writing stage remains gated by source semantics and operating-leg membership.
+
+## Next operational milestones
+
+Three fixed WSSS FIDS GitHub-only scheduled attempts: first T−24 read was delayed and held before paid (0 spend; earlier original 13:49Z source remains pre-cutoff), future T−6 (2026-10-31 10:07Z) and T−90m (2026-10-31 14:37Z) each allow one GET expected 2 units, no retries. For strict Gate5 PASS we still need verifiable provider T and actual runway meaning, source-qualified core population, persisted PRE snapshots with feature completeness, post-window capture and labels, and required population spot-checks. Existing small missingness tolerance does not justify claiming unknown constructs as certified.
