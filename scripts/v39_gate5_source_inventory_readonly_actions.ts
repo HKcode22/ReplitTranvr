@@ -6,6 +6,8 @@ import {auditP4Gate5SourceCutoffsV39}
  from "../server/lib/disruption/phase4Gate5SourceCutoffAudit_v39";
 import {auditStoredDecodedFidsReadbackV39}
  from "../server/lib/disruption/phase4Gate5DecodedFidsReadback_v39";
+import {auditP4LiveGate5FunnelV39}
+ from "../server/lib/disruption/phase4Gate5LiveFunnel_v39";
 export function requireP4InventoryActionsContext(env:NodeJS.ProcessEnv):{airport:string}{
  if(env.GITHUB_ACTIONS!=="true"||
   env.GITHUB_REF!=="refs/heads/main"||
@@ -49,9 +51,19 @@ async function main():Promise<void>{
   const bodyReadback=await auditStoredDecodedFidsReadbackV39(client,{
     airport:ctx.airport,readAsOfUtc:readAt
   });
+  // Phase4 production implementation: one real, same-service-window funnel.
+  // Unlike the broad airport inventory, this counts candidate identities,
+  // pre-cutoff source availability and persisted snapshots for ONE cohort.
+  const liveFunnel=await auditP4LiveGate5FunnelV39(client,{
+    airport:"WSSS",
+    windowStartUtc:"2026-10-31T17:00:00.000Z",
+    windowEndUtc:"2026-10-31T18:00:00.000Z",
+    auditUtc:readAt
+  });
   console.log(JSON.stringify({sourceInventory:report,
     cutoffAndSnapshotEvidence:cohort,
     originalBodyAndEnvelopeReadback:bodyReadback,
+    sameCohortOperationalFunnel:liveFunnel,
     strictGate5Passed:false,phase6Authorized:false,
     providerCalls:0,databaseWrites:0
   }));
