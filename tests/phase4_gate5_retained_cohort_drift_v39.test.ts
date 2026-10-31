@@ -23,7 +23,8 @@ const q=(id:string, at:string, analytic:string|null, sched:string|null=null,
  scope_class:"unknown",codeshare:"ambiguous_unknown",
  canonical_id:null,observed_schedule:sched,...overwrite
 });
-const a="2026-10-30T13:49:00.000Z";
+// Hypothetical on-time T24 receipt (real 13:49Z source expires before T90).
+const a="2026-10-30T16:07:00.000Z";
 const b="2026-10-31T10:07:00.000Z";
 const c="2026-10-31T14:37:00.000Z";
 const run=async(rows:unknown[],scope:typeof DAY=DAY)=>{
@@ -87,10 +88,11 @@ describe("Phase4 WSSS retained as-of same-cohort FIDS candidate turnover",()=>{
   const r=await run([q(Q0,a,"one"),q(Q1,b,"one")],
     {...DAY,auditUtc:"2026-10-31T11:05:00.000Z"});
   expect(r.asOf["T-24h"].sourceReceiptAvailableUtc).toBe(a);
-  expect(r.asOf["T-90m"].sourceReceiptAvailableUtc).toBe(b);
-  // T90 cutoff has not happened yet, so this is a source-as-of candidate
-  // based on last retained source, not a claim the T90 scheduled GET ran.
-  expect(r.asOf["T-90m"].primaryProvisionalIdentities).toBe(1);
+  expect(r.asOf["T-90m"]).toMatchObject({
+   status:"FIXED_EARLIEST_CUTOFF_NOT_YET_REACHED",
+   primaryProvisionalIdentities:null,sourceReceiptAvailableUtc:null
+  });
+  expect(r.transitions.T6_to_T90.status).toBe("UNOBSERVED_RETAINED_RECEIPT_MISSING");
  });
  it("one empty returned source list is a recorded receipt, not proof of zero flights",async()=>{
   const r=await run([q(Q1,b,null)]);
