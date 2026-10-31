@@ -52,3 +52,7 @@ Runtime TypeScript modules stay in [`server/lib/disruption/`](../../server/lib/d
 ## Phase 4 versus later phases
 
 **Gate 5 remaining:** independently qualified operating flight population + selected-T milestone, actual departure outcome semantics, certified persisted PRE snapshots, complete after-window capture/target coverage, and weather archive/as-known-at-cutoff readiness for later experimental freeze. Missing optional weather or callback features are measured and NULL, not an automatic failure of a valid population snapshot. **Do not run the full 31-batch Phase 6 from these checkpoints.**
+
+## After-service outcome evidence (GitHub-only automation)
+
+- [October 31 WSSS post-window read-only outcome audits](2026-10-30_PHASE4_POSTWINDOW_OUTCOME_AUTOMATION.md) — **12:15 PM** and **3:15 PM PDT**, original frozen cohort; both no-provider/no-write, deadline-gated. They measure what the existing database knows after the service interval without certifying unresolved selected-T, operating identity, actual wheels-off or a complete capture rate.
