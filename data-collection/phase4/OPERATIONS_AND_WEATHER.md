@@ -23,6 +23,8 @@ Useful workflow links: [all Phase 4 fixed prospective FIDS runs](https://github.
 
 **What is actually connected now?** The repo has a weather service module at `server/lib/disruption/weatherSignal.ts` that calls AviationWeather.gov METAR for known IATA/ICAO mappings and enforces an issue-time check. But it does **not yet establish historical receipt availability or production PRE cohort weather joins**, and its current mapping does not include SIN→WSSS. The October 30 WSSS live PRE builder **explicitly populated optional `airport_weather` with NULL/missing for all 72 candidate snapshots** rather than inventing weather. This is honest missingness, not a claim that the airport had no weather. The next practical work is a verified as-known-at-cutoff weather reader for WSSS and later wider airports, plus optional forecast support; do not retroactively fill T−24 with a METAR fetched after the cutoff.
 
+**October 30 implementation follow-up:** [Phase 4 weather as-of selector hardening](2026-10-30_PHASE4_WEATHER_ASOF_SELECTION_HARDENING.md) adds `SIN → WSSS` and fixes stale-primary blocking of fresh archive/grid fallback; it requires verified issue and stored first-availability clocks. This does **not** mean weather was ingested for WSSS or that any old candidate PRE can be retroactively enriched. The paid October 31 FIDS workflow is unchanged.
+
 ## What remains after these two FIDS attempts?
 
 1. Finish scientific source identity/milestone proof for the target population and real runway labels. Existing FIDS returns cannot on their own certify all codeshares or actual-versus-estimated `runwayTime` semantics; provider support response is useful but not a reason to stop implementing other independent layers.
