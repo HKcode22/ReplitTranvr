@@ -4,6 +4,7 @@
 
 ## Start here — live source of truth
 
+- [October 31 actual T−90m 86-row source receipt and two push-prearmed postflight audits](2026-10-31_WSSS_T90_ACTUAL_SUCCESS_AND_POSTFLIGHT_PUSH_PREARM.md) — measured 1 paid GET/2 API units, 86 persisted provisional source observations; read-only GitHub fallback for 12:15 and 3:15 PDT while the original read-only crons remain backup
 - [2026-10-31 T−6 GitHub scheduler miss / T−90 push-prearm recovery](2026-10-31_WSSS_T6_GITHUB_SCHEDULER_MISS_T90_PUSH_PREARM_RECOVERY.md) — 3:07 AM paid cron missing; 7:37 AM guarded push-triggered GitHub runner, no backfill or duplicate request
 - [Durable weather as-of optional PRE feature boundary](2026-10-30_PHASE4_WEATHER_DURABLE_ASOF_PRE_FEATURE_BOUNDARY.md) — strict issue/physical-observation/availability/commit/forecast-validity checks; feature code only, **not operational weather ingestion or historic enrichment**
 - [Retained same-cohort as-of candidate turnover audit](2026-10-30_PHASE4_RETAINED_SAME_COHORT_ASOF_DRIFT_AUDIT.md) — bounded, protected DB-only candidate appearance/disappearance and schedule revisions across tomorrow's cutoff observations; never unique physical-flight denominator
