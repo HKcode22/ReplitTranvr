@@ -1,0 +1,159 @@
+name: Phase4 WSSS POSTFLIGHT PUSH PREARMED Read Only Audits
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-wsss-postflight-push-prearm-20261031.yml"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-wsss-postflight-push-prearm-no-provider
+  cancel-in-progress: false
+jobs:
+  early-postflight-audit:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked read-only audit code
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Prearm on GitHub until Oct31 19:15Z - NO PROVIDER
+        env:
+          P4_POST_AUDIT_TARGET_UTC: "2026-10-31T19:15:00Z"
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_JOB" = early-postflight-audit
+          test "$GITHUB_WORKFLOW" = "Phase4 WSSS POSTFLIGHT PUSH PREARMED Read Only Audits"
+          test "$GITHUB_WORKFLOW_REF" = "HKcode22/ReplitTranvr/.github/workflows/phase4-wsss-postflight-push-prearm-20261031.yml@refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${AERODATABOX_API_KEY:-}"
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          import time
+          target=datetime.fromisoformat("2026-10-31T19:15:00+00:00").timestamp()
+          now=time.time()
+          if now < datetime.fromisoformat("2026-10-31T14:30:00+00:00").timestamp():
+              raise SystemExit("P4_POSTFLIGHT_UNEXPECTED_EARLY_WORKFLOW")
+          if now > target + 4*3600:
+              raise SystemExit("P4_POSTFLIGHT_READONLY_TOO_LATE")
+          print("P4_EARLY_POSTFLIGHT_RUNNER_LIVE_NO_PROVIDER_CREDENTIALS",flush=True)
+          while time.time()<target:
+              remaining=target-time.time()
+              print(f"P4_EARLY_POSTFLIGHT_WAITING_SECONDS={max(0,int(remaining))}",flush=True)
+              time.sleep(min(60,max(0.2,remaining)))
+          print("P4_EARLY_POSTFLIGHT_AUDIT_WINDOW_REACHED",flush=True)
+          PY
+      - name: Real WSSS postservice original source and outcomes audit - READ ONLY
+        env:
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          P4_GATE5_SOURCE_AIRPORT: WSSS
+          P4_GATE5_READONLY_APPROVAL: GATE5_SOURCE_METADATA_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_JOB" = early-postflight-audit
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test -z "${AERODATABOX_API_KEY:-}"
+          python3 - <<'PY'
+          import time
+          from datetime import datetime
+          target=datetime.fromisoformat("2026-10-31T19:15:00+00:00").timestamp()
+          if not target <= time.time() <= target+4*3600:
+              raise SystemExit("P4_EARLY_POSTFLIGHT_REAL_AUDIT_DATE_HOLD")
+          PY
+          node --import tsx scripts/v39_gate5_source_inventory_readonly_actions.ts
+      - name: Evidence only - do not promote unknown labels
+        if: always()
+        run: |
+          echo 'Oct31 WSSS 19:15Z push-prearmed real PostgreSQL READ ONLY audit only; no provider. Existing cron remains optional read-only backup. Actual job timestamps, not scheduled labels, define as-of evidence; strict Gate5 PASS false.' >> "$GITHUB_STEP_SUMMARY"
+
+  later-postflight-audit:
+    needs: [early-postflight-audit]
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked read-only audit code
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Prearm second GitHub runner until Oct31 22:15Z - NO PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_JOB" = later-postflight-audit
+          test "$GITHUB_WORKFLOW" = "Phase4 WSSS POSTFLIGHT PUSH PREARMED Read Only Audits"
+          test "$GITHUB_WORKFLOW_REF" = "HKcode22/ReplitTranvr/.github/workflows/phase4-wsss-postflight-push-prearm-20261031.yml@refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${AERODATABOX_API_KEY:-}"
+          python3 - <<'PY'
+          from datetime import datetime
+          import time
+          target=datetime.fromisoformat("2026-10-31T22:15:00+00:00").timestamp()
+          if time.time()>target+4*3600:
+              raise SystemExit("P4_LATER_POSTFLIGHT_READONLY_TOO_LATE")
+          print("P4_LATER_POSTFLIGHT_RUNNER_LIVE_NO_PROVIDER_CREDENTIALS",flush=True)
+          while time.time()<target:
+              remaining=target-time.time()
+              print(f"P4_LATER_POSTFLIGHT_WAITING_SECONDS={max(0,int(remaining))}",flush=True)
+              time.sleep(min(60,max(0.2,remaining)))
+          print("P4_LATER_POSTFLIGHT_AUDIT_WINDOW_REACHED",flush=True)
+          PY
+      - name: Repeat actual WSSS capture and departure outcome inventory - READ ONLY
+        env:
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          P4_GATE5_SOURCE_AIRPORT: WSSS
+          P4_GATE5_READONLY_APPROVAL: GATE5_SOURCE_METADATA_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_JOB" = later-postflight-audit
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test -z "${AERODATABOX_API_KEY:-}"
+          python3 - <<'PY'
+          import time
+          from datetime import datetime
+          target=datetime.fromisoformat("2026-10-31T22:15:00+00:00").timestamp()
+          if not target <= time.time() <= target+4*3600:
+              raise SystemExit("P4_LATER_POSTFLIGHT_REAL_AUDIT_DATE_HOLD")
+          PY
+          node --import tsx scripts/v39_gate5_source_inventory_readonly_actions.ts
+      - name: Zero-provider evidence not Gate5 scientific PASS
+        if: always()
+        run: |
+          echo 'Oct31 WSSS 22:15Z push-prearmed second READ ONLY audit; no provider key or GET. Later callbacks may change measured inventory; missing physical identity and actual-only wheels-off remain unknown. No Phase5 freeze or Phase6 authorization.' >> "$GITHUB_STEP_SUMMARY"
