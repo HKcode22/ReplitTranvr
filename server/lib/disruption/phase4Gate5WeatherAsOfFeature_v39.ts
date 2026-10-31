@@ -116,7 +116,7 @@ export function preWeatherFeatureAsOfV39(
  feature:PreFeatureInput;
  weatherMissing:boolean;
  source:P4OperationalWeatherSource|null;
- validatedDurableWeatherReceipt:boolean;
+ asOfMetadataEligible:boolean;
 }{
  const result=selectP4DurableWeatherAsOf(records,options);
  return {
@@ -129,6 +129,6 @@ export function preWeatherFeatureAsOfV39(
   weatherMissing:result.weatherMissing,source:result.source,
   // Local validation of supplied source receipt metadata is not independent
   // proof of authenticity, legal retention, or archive completeness.
-  validatedDurableWeatherReceipt:!result.weatherMissing
+  asOfMetadataEligible:!result.weatherMissing
  };
 }
