@@ -14,6 +14,7 @@
 - [Original prospective WSSS FIDS provider request](2026-10-30_PHASE4_ONE_PAID_PROSPECTIVE_FIDS_REAL_EVIDENCE.md) — one paid GET / 2 measured API units and 24 primary source observations
 - [One same-cohort scheduled collection runbook](2026-10-30_PHASE4_WSSS_THREE_HORIZON_ONE_COHORT_RUNBOOK.md) — exact FIDS timestamps and refund/stop rules
 - [Live callback/outcome production implementation](2026-10-30_PHASE4_LIVE_CAPTURE_OUTCOME_IMPLEMENTATION.md) — actual PostgreSQL capture and outcomes read-only SQL
+- [WSSS weather as-of selection hardening](2026-10-30_PHASE4_WEATHER_ASOF_SELECTION_HARDENING.md) — SIN→WSSS, stale-source fallback, issue+receipt clock checks; **code/tests only, no historical weather ingestion or certified join**
 - [Live PRE builder source execution](2026-10-30_PHASE4_LIVE_PRE_BUILDER_SOURCE_EXECUTION.md) — **72 candidate in-memory PRE features constructed** using 24 WSSS source observations × 3 horizons, optional weather and webhook data marked missing, **0 certified persisted PRE**
 - [GitHub production PRE/callback/FIDS read-only success](https://github.com/HKcode22/ReplitTranvr/actions/runs/41153035873) — original body SHA verified, 24 candidate identities, all three cutoff source joins matched, 72 PRE previews, no DB writes
 - [Source-semantics issue #200 checkpoint](https://github.com/HKcode22/ReplitTranvr/issues/200#issuecomment-6536861166) — current scientific limitations; Gate5 and Phase6 are not declared PASS
