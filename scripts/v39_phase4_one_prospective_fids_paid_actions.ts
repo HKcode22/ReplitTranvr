@@ -25,6 +25,11 @@ const MAX_BYTES=4*1024*1024;
 const DEADLINE=Date.parse("2026-11-01T23:59:59.000Z");
 const PLAN_FIDS_MIN_SOURCE_LEAD_MS=26*3600_000;
 const SCHEDULED_INTENT="PHASE4_WSSS_THREE_HORIZON_SINGLE_GET_PER_CRON_NO_RETRIES";
+// The Oct31 03:07 PDT GitHub cron was not dispatched; the 07:37 PDT
+// remaining event is push-prearmed explicitly, NOT disguised as a schedule.
+const PREARMED_T90_INTENT="PHASE4_WSSS_OCT31_T90_PUSH_PREARM_ONE_GET_NO_RETRY";
+const PREARMED_T90_WORKFLOW=
+ "HKcode22/ReplitTranvr/.github/workflows/phase4-gate5-wsss-t90-push-prearm-20261031.yml@refs/heads/main";
 // Three predeclared, finite source-receipt times for the SAME service window.
 // Every time is UTC and earlier than the earliest candidate cutoff.
 const HORIZON_SLOTS={
@@ -54,6 +59,52 @@ export function scheduledWsssHorizonV39(env:NodeJS.ProcessEnv,now:number){
  const end=new Date("2026-10-31T18:00:00.000Z");
  return {horizon:slot.horizon,cutoffUtc:new Date(slot.cutoffUtc),
          window:{start,end}};
+}
+export function prearmedWsssT90HorizonV39(env:NodeJS.ProcessEnv,now:number){
+ if(env.GITHUB_ACTIONS!=="true"||
+    env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
+    env.GITHUB_REF!=="refs/heads/main"||
+    env.GITHUB_EVENT_NAME!=="push"||
+    env.GITHUB_RUN_ATTEMPT!=="1"||
+    env.GITHUB_WORKFLOW!=="Phase4 WSSS T90 PREARMED GitHub One Paid FIDS GET"||
+    env.GITHUB_WORKFLOW_REF!==PREARMED_T90_WORKFLOW||
+    env.GITHUB_JOB!=="prearmed-one-fids"||
+    !/^[0-9a-f]{40}$/.test(env.GITHUB_SHA??"")||
+    env.P4_ONE_FIDS_EXACT_INTENT!==PREARMED_T90_INTENT||
+    env.P4_FIDS_SCHEDULE_CRON!=="37 14 31 10 *"||
+    !Number.isFinite(now)||
+    now<Date.parse("2026-10-31T14:27:00.000Z")||
+    now>Date.parse("2026-10-31T15:15:00.000Z"))
+   throw Error("P4_FIDS_PUSH_PREARM_T90_CONTEXT_OR_CUTOFF_HOLD");
+ const slot=HORIZON_SLOTS["37 14 31 10 *"];
+ return {horizon:slot.horizon,cutoffUtc:new Date(slot.cutoffUtc),
+  window:{start:new Date("2026-10-31T17:00:00.000Z"),
+          end:new Date("2026-10-31T18:00:00.000Z")}};
+}
+/** Separate preflight for one exclusive T90 cohort/interval; no source values logged. */
+async function refuseExistingT90ReceiptV39(dbUrl:string):Promise<void>{
+ const c=new pg.Client({connectionString:dbUrl,
+  application_name:"phase4_wsss_t90_prearm_duplicate_readonly",
+  connectionTimeoutMillis:9000,query_timeout:8000});
+ let begun=false,opened=false;
+ try{
+  await c.connect();opened=true;
+  await c.query("BEGIN TRANSACTION READ ONLY");begun=true;
+  const res=await c.query(`SELECT EXISTS(
+    SELECT 1 FROM clean.fids_query_response
+    WHERE source_airport_icao='WSSS'
+      AND service_window_start_utc='2026-10-31T17:00:00.000Z'::timestamptz
+      AND service_window_end_utc='2026-10-31T18:00:00.000Z'::timestamptz
+      AND available_at>='2026-10-31T14:27:00.000Z'::timestamptz
+      AND available_at<='2026-10-31T15:15:00.000Z'::timestamptz
+  ) AS already_stored`);
+  if(res.rows.length!==1||typeof res.rows[0]?.already_stored!=="boolean"||
+     res.rows[0].already_stored)
+    throw Error("P4_FIDS_T90_PREARM_DUPLICATE_SOURCE_HOLD");
+ }finally{
+  if(begun)await c.query("ROLLBACK").catch(()=>undefined);
+  if(opened)await c.end().catch(()=>undefined);
+ }
 }
 export function requireP4OneFidsSourceActionsV39(
  env:NodeJS.ProcessEnv,now:number
@@ -140,8 +191,11 @@ async function main():Promise<void>{
  let pool:ReturnType<typeof getV39Pool>|null=null;
  try{
    const now=Date.now();
-   const scheduled=process.env.GITHUB_EVENT_NAME==="schedule"
-     ?scheduledWsssHorizonV39(process.env,now):null;
+   const isT90Prearmed=process.env.P4_ONE_FIDS_EXACT_INTENT===PREARMED_T90_INTENT;
+   const scheduled=isT90Prearmed
+     ?prearmedWsssT90HorizonV39(process.env,now)
+     :process.env.GITHUB_EVENT_NAME==="schedule"
+       ?scheduledWsssHorizonV39(process.env,now):null;
    if(!scheduled)requireP4OneFidsSourceActionsV39(process.env,now);
    const dbUrl=process.env.V39_DATABASE_RUNTIME_URL||
      process.env.GATE05_AUTOMATION_DATABASE_URL;
@@ -151,6 +205,7 @@ async function main():Promise<void>{
    // Preflight live schema, writer grants, immutable raw, expiry trigger
    // BEFORE even reserving/issuing the one billable GET.
    await checkWritableSchema(dbUrl);
+   if(isT90Prearmed)await refuseExistingT90ReceiptV39(dbUrl);
    process.env.V39_DATABASE_RUNTIME_URL=dbUrl;
    const window=scheduled?.window??futureWsssPopulationWindowV39(now);
    const locals=utcIntervalToLocal(window.start,window.end,"Asia/Singapore");
@@ -182,7 +237,11 @@ async function main():Promise<void>{
      // Recheck the exact same scientifically approved horizon/deadline AT
      // PHYSICAL DISPATCH, before counting a possibly billable attempt.
      // A late scheduled fetch MUST HOLD with 0 billable provider attempts.
-     if(scheduled)scheduledWsssHorizonV39(process.env,Date.now());
+     if(isT90Prearmed){
+       prearmedWsssT90HorizonV39(process.env,Date.now());
+       await refuseExistingT90ReceiptV39(dbUrl);
+       prearmedWsssT90HorizonV39(process.env,Date.now());
+     }else if(scheduled)scheduledWsssHorizonV39(process.env,Date.now());
      billableAttempts=1; // ambiguous dispatch is SPENT: no retry
      console.log("P4_FIDS_ONE_BILLABLE_GET_STARTED_NO_RETRY_EXPECTED_2_UNITS");
      const args=new URLSearchParams({

@@ -57,7 +57,16 @@ describe("Three automated source cutoff observation opportunities",()=>{
   expect(wf).toContain("github.event.schedule");
   expect(wf).not.toContain("workflow_dispatch");
   expect(wf).not.toContain("branches: [main]");
-  for(const x of slots)expect(wf).toContain('cron: "'+x.cron+'"');
+  for(const x of slots.slice(0,2))expect(wf).toContain('cron: "'+x.cron+'"');
+  expect(wf).not.toContain('cron: "37 14 31 10 *"');
+  const prearm=readFileSync(
+    ".github/workflows/phase4-gate5-wsss-t90-push-prearm-20261031.yml","utf8"
+  );
+  expect(prearm).toContain("branches: [main]");
+  expect(prearm).toContain("2026-10-31T14:37:00Z");
+  expect(prearm).toContain("2026-10-31T15:15:00Z");
+  expect(prearm).toContain("PHASE4_WSSS_OCT31_T90_PUSH_PREARM_ONE_GET_NO_RETRY");
+  expect(prearm).not.toContain("on:\n  schedule:");
   expect(wf).not.toContain("on:\n  push:");
   expect(op).toContain("billableAttempts=1;");
   expect(op).toContain("providerRetries:0");

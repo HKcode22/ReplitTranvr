@@ -2,6 +2,10 @@
 
 _Last reviewed against production main on October 30, 2026 (Pacific time). This is a runbook, not proof that a future job executed._
 
+## October 31 05:31 PDT INCIDENT OVERRIDE — T6 MISSED
+
+**The originally scheduled 03:07 PDT / 10:07Z T−6h GitHub paid FIDS event did not dispatch before its scientific 03:45 PDT latest-safe start. That refresh is UNOBSERVED.** The 07:37 PDT / 14:37Z remaining T−90m opportunity has moved to the explicitly GitHub PUSH-prearmed, one-shot workflow `.github/workflows/phase4-gate5-wsss-t90-push-prearm-20261031.yml`. The original T90 cron is removed to prevent duplicates. Do not assume "ready" until the new push-run is visibly active in GitHub Actions. The runner waits in GitHub, never Replit, until 07:37 PDT, verifies the same frozen WSSS cohort and 08:15 PDT latest-safe paid start, with one protected provider request maximum. See [incident checkpoint](2026-10-31_WSSS_T6_GITHUB_SCHEDULER_MISS_T90_PUSH_PREARM_RECOVERY.md). Historical old schedules in the table below are **not** the current active T90 owner.
+
 ## What to do now
 
 **No Replit shell command. No manual 3 AM action. No Cloudflare or Replit Agent.** GitHub's main-branch workflow `.github/workflows/phase4-gate5-three-prospective-wsss-cutoffs.yml` is the autonomous owner. The existing `phase2g-paid` protected GitHub environment previously completed a one-shot FIDS GET and original-source write, so the workflow demonstrated working credentials **at that time**. Current budget and credentials will be rechecked automatically immediately before any billable request; they cannot be guaranteed in advance.

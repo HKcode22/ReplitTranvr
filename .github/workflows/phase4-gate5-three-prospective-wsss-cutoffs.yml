@@ -3,7 +3,8 @@ on:
   schedule:
     - cron: "7 16 30 10 *"
     - cron: "7 10 31 10 *"
-    - cron: "37 14 31 10 *"
+    # Oct31 14:37Z T90 paid event is now exclusively owned by the
+    # long-running GitHub PUSH prearm workflow, avoiding duplicate GETs.
 permissions:
   contents: read
 concurrency:
