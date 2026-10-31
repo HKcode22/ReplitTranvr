@@ -14,7 +14,8 @@
 | Implementation and original ledger | [Implementation](implementation/README.md) |
 | Earlier gate proofs and Phase 2 | [Phase 2](phase2/README.md) |
 | Airport pilots, reports and methods | [Phase 2G](phase2g/README.md) |
-| Next engineering phase, separate draft PR36 | [Phase 3](phase3/README.md) |
+| Phase 3 — Gates 3, 0.5, and 4 historical engineering | [Phase 3](phase3/README.md) |
+| **Phase 4 — Gate 5 operational collection, source, PRE, and outcomes** | **[Phase 4](phase4/README.md)** |
 | Signed original historical AUTH | [Authorizations](authorizations/README.md) |
 | Scientific evidence and original machine records | [Evidence](evidence/README.md) |
 | Replit shell-only boundaries | [Operations](operations/README.md) |
