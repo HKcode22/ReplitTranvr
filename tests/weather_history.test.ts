@@ -40,6 +40,8 @@ describe("weather availability", () => {
   });
   it("does not invent a global K-prefix ICAO", () => {
     expect(iataToIcao("LAX")).toBe("KLAX");
+    expect(iataToIcao("SIN")).toBe("WSSS");
+    expect(iataToIcao(" sin ")).toBe("WSSS");
     expect(iataToIcao("XYZ")).toBe("");
   });
 });
@@ -72,6 +74,27 @@ describe("operational as-known weather selection", () => {
     const r = selectOperationalWeather([cand("live_metar", 7, 7)], cutoff);
     expect(r.weatherMissing).toBe(true);
     expect(r.selected).toBeNull();
+  });
+  it("falls back to a fresh lower-priority source when a preferred METAR is stale", () => {
+    const r = selectOperationalWeather([
+      cand("live_metar", 7, 7), cand("archive_metar", 2, 1), cand("gfs", 1, 1),
+    ], cutoff);
+    expect(r.weatherMissing).toBe(false);
+    expect(r.sourceUsed).toBe("archive_metar");
+  });
+  it("uses a forecast fallback when both METAR sources are too old", () => {
+    const r = selectOperationalWeather([
+      cand("live_metar", 8, 8), cand("archive_metar", 7, 7), cand("gfs", 3, 2),
+    ], cutoff);
+    expect(r.sourceUsed).toBe("gfs");
+    expect(r.weatherMissing).toBe(false);
+  });
+  it("accepts exactly the frozen six-hour boundary", () => {
+    expect(selectOperationalWeather([cand("live_metar", 6, 1)], cutoff).weatherMissing).toBe(false);
+  });
+  it("rejects impossible receipt clocks and never uses post-cutoff retrievals", () => {
+    expect(selectOperationalWeather([cand("live_metar", 1, 2)], cutoff).weatherMissing).toBe(true);
+    expect(selectOperationalWeather([cand("live_metar", 2, -1)], cutoff).weatherMissing).toBe(true);
   });
   it("empty input remains missing rather than benign weather", () => {
     expect(selectOperationalWeather([], cutoff)).toMatchObject({ weatherMissing: true, selected: null, sourceUsed: "none" });
