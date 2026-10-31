@@ -52,6 +52,16 @@ function time(x:Date|null):number|null{
  if(!(x instanceof Date))return null;
  const n=x.getTime();return Number.isFinite(n)?n:null;
 }
+function normalizedWeatherMetrics(x:unknown):boolean{
+ if(!x||typeof x!=="object"||Array.isArray(x))return false;
+ const values=Object.entries(x as Record<string,unknown>);
+ return values.length>0&&values.length<=12&&
+  values.every(([k,v])=>
+   /^[a-z][A-Za-z0-9]{0,39}$/.test(k)&&
+   (v===null||typeof v==="boolean"||
+    (typeof v==="number"&&Number.isFinite(v))))&&
+  values.some(([,v])=>v!==null);
+}
 function eligible(
  r:P4DurableWeatherReceipt,
  cutoff:number,
@@ -60,7 +70,8 @@ function eligible(
 ):boolean{
  if(!r||r.airportIcao!==airport||
     !ORDER.includes(r.source as P4OperationalWeatherSource)||
-    !r.sourceVersion?.trim()||!SHA.test(r.contentSha256??""))
+    !r.sourceVersion?.trim()||!SHA.test(r.contentSha256??"")||
+    !normalizedWeatherMetrics(r.featureValue))
   return false;
  const issued=time(r.issueTimeUtc),first=time(r.firstAvailableAtUtc),
        durable=time(r.durablyStoredAtUtc);
