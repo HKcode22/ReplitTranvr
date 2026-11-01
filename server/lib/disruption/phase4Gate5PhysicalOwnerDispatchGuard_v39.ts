@@ -174,8 +174,16 @@ export function assessP4G5PhysicalAttemptV39(x:P4G5PhysicalAttemptInputV39){
  const per=x.owner.perAttemptApiUnits;
  if(x.currentAccountApiUnitsRemaining<per||
     x.currentProjectApiUnitsRemaining<per||
+    // A full-grid worst-case ceiling is fixed *at manifest review*. Do not
+    // add it again to already-spent T-24h/T-6h units; that would make later
+    // horizons fail as soon as the first legitimate request is reserved.
+    // "other" excludes this owner's already-reserved units. This remains
+    // an advisory preflight; V0076 enforces the real authoritative budget
+    // against committed nonrefundable reservations under row locks.
+    x.owner.fullGridWorstCaseApiUnits>x.owner.projectRestApiUnitsBudget||
     x.projectUnitsAlreadyReservedForOtherSourceQueries+
-     x.owner.fullGridWorstCaseApiUnits>x.owner.projectRestApiUnitsBudget||
+     x.accountedThisOwnerPhysicalAttemptUnits+per>
+       x.owner.projectRestApiUnitsBudget||
     x.accountedThisOwnerPhysicalAttemptUnits+per>
       x.owner.horizonWorstCaseApiUnits)
   throw Error("P4_PHYSICAL_CYCLE_OR_PROJECT_BUDGET_HOLD");
