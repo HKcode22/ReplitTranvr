@@ -1,0 +1,16 @@
+{
+  "schema": "v39.phase4.gate5-next-independent-readonly-audit-manifest.v1",
+  "mode": "HOLD_NO_REVIEWED_NEXT_COHORT",
+  "cohortId": null,
+  "airportIcao": null,
+  "serviceWindowStartUtc": null,
+  "serviceWindowEndUtc": null,
+  "reviewedFrozenGridSha256": null,
+  "sourceRetentionReviewArtifactSha256": null,
+  "providerNativeSemanticsEvidenceSha256": null,
+  "providerCallsAuthorized": false,
+  "databaseWritesAuthorized": false,
+  "strictGate5Passed": false,
+  "phase5FreezeAuthorized": false,
+  "phase6Authorized": false
+}

@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**NEW — future cohort independent read-only GitHub audit admission**](2026-10-31_GATE5_FUTURE_INDEPENDENT_AUDIT_WORKFLOW_WIRING.md) — main-push two-stage SHA-locked source/PRE/capture/outcome audit workflow; manifest currently unassigned/explicit HOLD, no paid provider/DB writer, no false PASS
+
 - [**NEW — Three future GitHub horizon prearm owners, code + tests**](2026-10-31_GATE5_THREE_HORIZON_GITHUB_PREARM_ENGINEERING.md) — complete synthetic grid compiled to separate T−24h/T−6h/T−90m owner windows and budgeted hard cutoffs; **offline only, no provider or production schedule activated**
 
 - [**Owner-executed Oct31 free 60k balance + metadata-only original retention audit checkpoint**](2026-10-31_GATE5_CURRENT_QUOTA_AND_TECHNICAL_EXPIRY_AUDIT.md) — 59,974 remaining, 1,830 Alert credits, no paid provider; adds protected historical cohort expiry metadata-only counts, NOT terms approval or Gate5 PASS
