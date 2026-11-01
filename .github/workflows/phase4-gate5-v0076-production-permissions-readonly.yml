@@ -1,0 +1,55 @@
+name: Phase4 Gate5 V0076 Production Permissions READ ONLY
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0076-production-permissions-readonly.yml"
+      - "scripts/v39_phase4_gate5_v0076_prod_permissions_readonly_actions.ts"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-v0076-live-db-privileges-zero-provider-readonly
+  cancel-in-progress: false
+jobs:
+  v0076-readonly-permission:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    environment: phase2g-paid
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install exact locked dependencies without provider privileges
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Probe runtime clean-schema installer privileges, no writes
+        env:
+          V39_DATABASE_RUNTIME_URL: ${{ secrets.V39_DATABASE_RUNTIME_URL }}
+          P4_G5_V0076_PROBE_INTENT: METADATA_ONLY_READONLY
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${V39_DATABASE_RUNTIME_URL:-}"
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_v0076_prod_permissions_readonly_actions.ts
+      - name: No actual install, grant, provider or paid test
+        if: always()
+        run: |
+          {
+            echo 'Production V0076 metadata-only preflight, zero DDL; REPEATABLE READ READ ONLY / ROLLBACK.'
+            echo 'Current role privileges and V0076 object existence are informational, not admission or a migration.'
+            echo 'No AeroDataBox credentials, provider request, Alert, or production database write.'
+            echo 'Staged V0076 installation requires a separate exact-role, reviewed release and evidence.'
+            echo 'Scientific Gate5, Phase5 and Phase6 remain HOLD.'
+          } >> "$GITHUB_STEP_SUMMARY"
