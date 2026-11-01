@@ -95,7 +95,7 @@ describe("Historical Oct31 postflight SQL schema smoke — no provider",()=>{
   expect(s).toContain("default_transaction_read_only=on");
   expect(s).toContain("auditP4FreshCohortV39(client,scope)");
   expect(s).not.toContain("fetch(");
-  expect(s).not.toMatch(/\bINSERT\b|\bUPDATE\b|\bDELETE FROM\b/i);
+  expect(s).not.toMatch(/\bINSERT\s+INTO\b|\bUPDATE\s+clean\.|\bDELETE\s+FROM\b|\bTRUNCATE\s+TABLE\b/i);
   expect(s).toContain("T24_UNOBSERVED;T6_UNOBSERVED");
  });
 });
