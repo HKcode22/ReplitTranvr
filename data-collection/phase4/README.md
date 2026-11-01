@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Nov 1 — Gate5 post-PR318 verified checkpoint and exact-query V0076 activation regression**](2026-11-01_GATE5_POST_PR318_CHECKPOINT_AND_EXACT_QUERY_REVIEW.md) — actual merged SHA, successful disposable main-push workflow, provider/email/quota evidence boundaries, remaining BLOCK/HOLD, and new exact-query-row verification. **No paid activation or new cohort.**
+
 - [**Nov 1 — guarded V0076 PREPARED→ACTIVE transaction tested on disposable PostgreSQL only**](2026-11-01_GATE5_V0076_ACTIVE_DISPOSABLE_ONLY.md) — DB-clock prearm check, exact owner/run/cutoff, idempotence and early-request refusal; **live activation SHA NULL, no production role grants, provider requests or scientific approval**.
 
 - [**Nov 1 — fix for real T−24h budget reservation blocking subsequent T−6h/T−90m PREPARED owners**](2026-11-01_GATE5_V0076_CROSS_HORIZON_RESERVATION_CONTINUATION_FIX.md) — require consistent manifest/ceiling and bounded cumulative reserved units, not an incorrect zero balance; disposable PG16 exercises later horizons after simulated prior paid units. No actual provider dispatch, real prearm or scientific PASS.

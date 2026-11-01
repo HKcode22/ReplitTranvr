@@ -73,6 +73,13 @@ describe("V0076 low-level PREPARED -> ACTIVE remains production CLOSED",()=>{
   expect(s).toContain("clock_timestamp()");
   expect(s).toContain("state='PREPARED'");
   expect(s).toContain("state='ACTIVE'");
+  expect(s).toContain("ORDER BY query_index ASC FOR UPDATE");
+  expect(s).toContain("r.query_digest!==e.queryDigest");
+  expect(s).toContain("r.hard_latest_dispatch_utc");
+  expect(s).toContain("r.prediction_cutoff_utc");
+  expect(s).toContain("r.max_physical_attempts");
+  expect(script).toContain("P4_G5_ACTIVE_DISPOSABLE_DRIFT_ALLOWED");
+  expect(script).toContain("P4_G5_ACTIVE_DISPOSABLE_DRIFT_NOT_ROLLED_BACK");
   expect(s).toContain("ROLLBACK");
   expect(s).not.toContain("https://aerodatabox");
   expect(w).toContain("image: postgres:16");

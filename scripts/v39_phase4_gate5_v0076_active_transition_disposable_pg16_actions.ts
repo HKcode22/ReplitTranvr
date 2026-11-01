@@ -80,6 +80,30 @@ export async function main(){
   const staged=await stageP4G5PreparedOwnerDbOnlyV39(c,input);
   if(staged.ownerRowsNewlyInserted!==1)
    throw Error("P4_G5_ACTIVE_DISPOSABLE_STAGING_NOT_NEW");
+  // A same-count but tampered query grid MUST not activate. This is
+  // disposable PostgreSQL only; restore the exact original after rollback.
+  const driftSlot=owner.entries[1];
+  if(owner.maxAttemptsPerQuery!==3)
+   throw Error("P4_G5_ACTIVE_DISPOSABLE_EXPECTED_THREE_ATTEMPT_CAP");
+  await c.query(
+   "UPDATE clean.phase4_g5_fids_allowed_query_v39 "+
+   "SET max_physical_attempts=2 WHERE query_digest=$1",
+   [driftSlot.queryDigest]);
+  let driftDenied=false;
+  try{await activateP4G5PreparedOwnerDbOnlyV39(c,input);}
+  catch(err){driftDenied=err instanceof Error&&
+   err.message==="P4_G5_ACTIVE_QUERY_GRID_OR_ATTEMPT_DRIFT";}
+  if(!driftDenied)
+   throw Error("P4_G5_ACTIVE_DISPOSABLE_DRIFT_ALLOWED");
+  const before=await c.query(
+   "SELECT state FROM clean.phase4_g5_fids_physical_owner_v39 "+
+   "WHERE owner_digest=$1",[owner.ownerDigest]);
+  if(before.rows.length!==1||before.rows[0].state!=="PREPARED")
+   throw Error("P4_G5_ACTIVE_DISPOSABLE_DRIFT_NOT_ROLLED_BACK");
+  await c.query(
+   "UPDATE clean.phase4_g5_fids_allowed_query_v39 "+
+   "SET max_physical_attempts=$2 WHERE query_digest=$1",
+   [driftSlot.queryDigest,owner.maxAttemptsPerQuery]);
   const active=await activateP4G5PreparedOwnerDbOnlyV39(c,input);
   if(active.ownerRowActivated!==1||active.providerCalls!==0||
      active.authorizedProviderDispatch!==false)
