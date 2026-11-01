@@ -52,7 +52,8 @@ export function compileP4G5OfflinePrearms(input:P4G5OfflineTemplate, originalByt
  try{parsed=JSON.parse(originalBytes);}catch{
   throw Error("P4_PREARM_TEMPLATE_BYTES_HOLD");
  }
- if(JSON.stringify(parsed)!==JSON.stringify(input))
+ if(JSON.stringify(parsed)!==JSON.stringify(input)||
+    originalBytes!==JSON.stringify(parsed,null,2)+"\n")
   throw Error("P4_PREARM_ORIGINAL_TEMPLATE_CHANGED_HOLD");
  const grid=draftP4Gate5ThreeHorizonGridV39(input.grid);
  if(input.grid.acquisitionGuardMinutes<15)
