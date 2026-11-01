@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**NEW — actual production DB READ ONLY V0076 installer-privilege audit**](2026-10-31_GATE5_V0076_PRODUCTION_PERMISSIONS_READONLY_CHECK.md) — queries current GitHub runtime role metadata for clean schema CREATE and object collision; zero DDL, provider credits or role grants; determines whether a manual Replit installer might be necessary
+
 - [**NEW — Node-side SERIALIZABLE durable physical FIDS attempt adapter**](2026-10-31_GATE5_DB_COMMITTED_PHYSICAL_FIDS_ADAPTER.md) — fresh free quota → reviewed owner physical timing → irrevocable V0076 DB COMMIT → postcommit cutoff recheck; **no provider sender wired or paid release pin**
 
 - [**NEW — staged V0076 irreversible physical paid FIDS attempt PostgreSQL ledger**](2026-10-31_GATE5_STAGED_V0076_PHYSICAL_FIDS_ATTEMPT_LEDGER.md) — shared budget/unique source retry reservations, 15-minute DB-clock cutoff, disposable PG16 tests; NOT installed production or a paid permit
