@@ -36,7 +36,8 @@ function fakeDb(overrides?:{
    if(sql.includes("WHERE manifest_sha256<>$1"))
     return {rows:[{n:overrides?.foreign?1:0}]};
    if(sql.includes("SELECT reserved_units"))
-    return {rows:[{reserved_units:overrides?.budgetReserved??0}]};
+    return {rows:[{reserved_units:overrides?.budgetReserved??0,
+      project_unit_ceiling:54}]};
    if(sql.includes("AND github_run_id=$2")&&sql.includes("owner_digest<>$3"))
     return {rows:[{n:0}]};
    if(sql.includes("RETURNING owner_digest"))
@@ -96,6 +97,14 @@ describe("Gate5 V0076 exact future horizon PREPARED owner database staging",()=>
   expect(sql).not.toContain("fetch(");
   expect(db.calls.at(-1)?.sql).toBe("COMMIT");
  });
+ it("continuing later T-6/T-90 prearm after prior horizon spend is valid",async()=>{
+  const db=fakeDb({budgetReserved:18});
+  const result=await stageP4G5PreparedOwnerDbOnlyV39(db,fixture());
+  expect(result.status).toBe("OWNER_AND_QUERY_GRID_PERSISTED_PREPARED_ONLY_NO_PROVIDER");
+  expect(db.calls.at(-1)?.sql).toBe("COMMIT");
+  expect(result.activeOwnersCreated).toBe(0);
+  expect(result.paidAttemptsCreated).toBe(0);
+ });
  it("replaying the identical owner/query digest is idempotent, not active",async()=>{
   const db=fakeDb({ownerNew:false});
   const x=await stageP4G5PreparedOwnerDbOnlyV39(db,fixture());
@@ -104,7 +113,7 @@ describe("Gate5 V0076 exact future horizon PREPARED owner database staging",()=>
  });
  it("foreign cohort, paid activity, query mutation and preflight refusal all fail closed",async()=>{
   for(const o of [
-   {foreign:true},{budgetReserved:2},{queryMismatch:true}
+   {foreign:true},{budgetReserved:55},{queryMismatch:true}
   ]){
    const db=fakeDb(o);
    await expect(stageP4G5PreparedOwnerDbOnlyV39(db,fixture())).rejects.toThrow(/P4_G5_PREPARED_OWNER_/);

@@ -74,6 +74,14 @@ export async function main(){
    const retry=await stageP4G5PreparedOwnerDbOnlyV39(c,inp);
    if(retry.ownerRowsNewlyInserted!==0)
     throw Error("P4_G5_DISPOSABLE_IDEMPOTENCE_HOLD");
+   if(idx===0){
+    // Disposable-only simulation of T-24h reservation consumption. It is
+    // intentionally NOT claimed to be a real V0076 physical attempt:
+    // no ACTIVE owner, HTTP, or charged attempt row is created.
+    await c.query(
+     "UPDATE clean.phase4_g5_fids_cohort_budget_v39 "+
+     "SET reserved_units=2 WHERE manifest_sha256=$1",[hash]);
+   }
    summary.push({horizon:h,queries:firstRes.plannedQueryCount});
   }
   const check=await c.query([
@@ -87,7 +95,7 @@ export async function main(){
   ].join(" "));
   const n=check.rows[0];
   if(n.cohorts!==1||n.owners!==3||n.active!==0||n.queries!==9||
-     n.attempts!==0||n.reserved!==0)
+     n.attempts!==0||n.reserved!==2)
    throw Error("P4_G5_DISPOSABLE_THREE_HORIZON_DB_RECONCILIATION_HOLD");
   // The protected DB function cannot reserve from a PREPARED owner,
   // even when called directly by a fully privileged disposable DB owner.
@@ -109,7 +117,8 @@ export async function main(){
   if(!refused)throw Error("P4_G5_DISPOSABLE_PREPARED_OWNER_COULD_RESERVE_HOLD");
   console.log(JSON.stringify({
    status:"V0076_DISPOSABLE_THREE_HORIZONS_PREPARED_IDEMPOTENT_NO_PAID",
-   ...n,horizons:summary,providerCalls:0,realPrearmEvidence:false,
+   ...n,horizons:summary,syntheticPriorHorizonBudgetReservationUnits:2,
+   realPhysicalReservationRows:0,providerCalls:0,realPrearmEvidence:false,
    strictGate5Passed:false,phase5FreezeAuthorized:false,phase6Authorized:false
   }));
  }finally{await c.end().catch(()=>{});}
