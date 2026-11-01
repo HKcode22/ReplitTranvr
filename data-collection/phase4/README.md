@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Nov 1 — independent exact three-horizon V0076 READ ONLY ledger reconciliation**](2026-11-01_GATE5_V0076_INDEPENDENT_THREE_HORIZON_LEDGER_AUDIT.md) — checks immutable attempt sequence, source-query grid, GitHub owner identity and all nonrefundable reserved units with a disposable PG16 tamper test; no paid source, real future prearm, certified PRE or scientific PASS.
+
 - [**Nov 1 — bind actual GitHub API running-job identity/time to V0076 disposable PostgreSQL PREPARED→ACTIVE**](2026-11-01_GATE5_GITHUB_API_TO_V0076_DB_DISPOSABLE_BINDING.md) — real run ID and start are persisted/read back; still a synthetic future source plan, zero provider, live release NULL and scientific Gate5 HOLD.
 
 - [**Nov 1 — fix dispatch budget double-counting after real earlier horizon spending**](2026-11-01_GATE5_PHYSICAL_DISPATCH_BUDGET_CONTINUATION_FIX.md) — follow-up to PREPARED-stage #317: do not add prior reservations to the entire already-frozen worst-case grid; test T−6h and T−90m continuation, retain V0076 locked authoritative cap. No paid request or scientific promotion.
