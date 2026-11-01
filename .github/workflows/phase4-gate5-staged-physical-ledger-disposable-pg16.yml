@@ -1,0 +1,67 @@
+name: Phase4 Gate5 STAGED V0076 Physical Attempt Ledger Disposable PG16
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-staged-physical-ledger-disposable-pg16.yml"
+      - "migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql"
+      - "tests/sql/phase4_gate5_staged_physical_attempt_ledger_v39.sql"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-g5-staged-v0076-physical-unique-reservation-pg16-no-provider
+  cancel-in-progress: false
+jobs:
+  staged-v0076-disposable-pg16:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gate5_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gate5_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify immutable staging migration and job provenance; zero paid provider
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_JOB" = staged-v0076-disposable-pg16
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          psql -h localhost -U postgres -d gate5_disposable -v ON_ERROR_STOP=1 \
+            -c 'CREATE SCHEMA clean;'
+          psql -h localhost -U postgres -d gate5_disposable -v ON_ERROR_STOP=1 \
+            -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
+          psql -h localhost -U postgres -d gate5_disposable -v ON_ERROR_STOP=1 \
+            -f tests/sql/phase4_gate5_staged_physical_attempt_ledger_v39.sql
+      - name: No production schema, provider calls, source content or authorized real owner
+        if: always()
+        run: |
+          {
+            echo 'Disposable PostgreSQL 16 only. Staged V0076 never applied to production.'
+            echo 'The test-only synthetic owner does not grant scientific/source retention rights.'
+            echo 'No AeroDataBox or Alert call, no live DB secret, no FIDS raw bytes or actual flight identity.'
+            echo 'A production database installer and exact restricted role grant must be reviewed separately.'
+            echo 'Scientific Gate5/Phase5/Phase6 remain HOLD.'
+          } >> "$GITHUB_STEP_SUMMARY"
