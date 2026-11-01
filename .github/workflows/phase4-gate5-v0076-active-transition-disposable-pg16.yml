@@ -5,11 +5,16 @@ on:
     paths:
       - ".github/workflows/phase4-gate5-v0076-active-transition-disposable-pg16.yml"
       - "server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts"
+      - "server/lib/disruption/phase4Gate5V0076DisposableRunningOwner_v39.ts"
+      - "scripts/v39_phase4_gate5_v0076_gh_running_disposable_attestation.ts"
+      - "tests/phase4_gate5_v0076_disposable_running_owner_v39.test.ts"
+      - "data-collection/phase4/2026-11-01_GATE5_GITHUB_API_TO_V0076_DB_DISPOSABLE_BINDING.md"
       - "scripts/v39_phase4_gate5_v0076_active_transition_disposable_pg16_actions.ts"
       - "tests/phase4_gate5_owner_active_transition_v39.test.ts"
       - "data-collection/phase4/2026-11-01_GATE5_V0076_ACTIVE_DISPOSABLE_ONLY.md"
 permissions:
   contents: read
+  actions: read
 jobs:
   disposable-v0076-activation:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
@@ -59,6 +64,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gate5_activation
           P4_G5_ACTIVE_DISPOSABLE_INTENT: SYNTHETIC_ZERO_PROVIDER_NULL_RELEASE
+          P4_G5_GH_READ_ONLY_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
           set +x
