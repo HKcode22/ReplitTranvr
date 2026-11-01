@@ -1,0 +1,24 @@
+# Phase 4 Gate 5 — current FREE quota and technical retention metadata audit
+
+**Owner-reported run output at 2026-11-01T04:33:48.000Z (October 31 21:33 PDT).** Source: merged [PR #301](https://github.com/HKcode22/ReplitTranvr/pull/301), reviewed main SHA \`1a62b11395f0b4887491503532a1ab8a6b264152\`, user-executed one-time pinned Replit temporary-worktree read; sanitized provider quota JSON pasted to the conversation. This is an **owner-transcribed tool result**, not an archived independently verified provider HTTP response. The free script reported zero billable calls and zero DB writes. [Issue #300 evidence update](https://github.com/HKcode22/ReplitTranvr/issues/300#issuecomment-6553458421).
+
+## Measured free-account snapshot (as-of, NOT September historical balance)
+- AeroDataBox through original RapidAPI credential: provider limit **60,000 API units**, **59,974 remaining**, resets **2026-11-04T02:21:21Z**; requests **240,000 allowed / 234,999 remaining**; Alert credits **1,830**.
+- September 10 original owner-attested grandfathered Team Ultra account + measured 60k limit were already in the immutable Gate0 and Plan; **do not ask owner again for the original account name**. The current matching 60k quota does NOT authenticate current subscription terms, raw caching rights, request-origin/account identifiers or the latest balance after this timestamp.
+- Independent project API-unit ceiling was **50,000 per billing cycle** at Gate0; remaining provider units must never be treated as the amount authorized for science spending. API units and Alert credits are different ledgers. Do not infer spend or missing Alert credits from the difference between separate historical snapshots.
+
+## Newly added retention metadata audit (zero-provider; pending actual CI/DB evidence)
+
+- Pure aggregate SQL: \`server/lib/disruption/phase4Gate5OriginalRetentionMetadata_v39.ts\`. Reads **metadata predicates/counters only** for original FIDS receipt rows and normalized source population rows; it does not SELECT original raw bytes or flight IDs, nor call provider or change TTL. The supplied cohort and readUTC are mandatory and independently validated. Counts source records with or without raw payload, expiry marker present/absent, suspicious payload still present when marked expired, missing raw with missing tombstone, clock anomalies, and age review candidates at 24h and 168h. Per-flight normalized expiry markers are separately counted.
+- Old historical, source-manifest-pinned \`scripts/v39_phase4_gate5_historical_cohort_smoke_readonly_actions.ts\` adds this metadata check **inside the same existing PostgreSQL REPEATABLE READ READ ONLY + ROLLBACK transaction**. On post-merge main push, the protected existing workflow runs this one historical WSSS October 31 cohort only. It uses the existing protected DB reader credential and **no AeroDataBox key**, paid GET, Alert, database mutation, or changed original/source timestamps.
+- Regression tests: \`tests/phase4_gate5_original_retention_metadata_v39.test.ts\` for exact source scope, nullable unknown denominators, inconsistent counter HOLD, no raw payload SELECT or mutation, and no provider/rights self-certification.
+- A payload older than a **24h review threshold** is NOT automatically proof that the stored object is a vendor-defined *live-FIDS cache*, and a 168h threshold is NOT blanket permission to retain every provider Content. The exact data class, permitted purpose, HTTP Cache-Control, current Nov7 rights, backup PITR, replica/log expiry and source-native flight semantics remain independently unverified. These are candidate **technical** risk counters, never a legal judgment or automatic deletion authorization.
+
+## Non-negotiable next steps
+
+1. Wait for mandatory four PR checks, then merge. Obtain the actual protected main-push PostgreSQL job and inspect metadata counts; **no live counts are claimed in this checkpoint before execution**.
+2. Review [issue #300](https://github.com/HKcode22/ReplitTranvr/issues/300) for account-specific 2026-11-07 contractual rights, effective transition, source class, backup PITR (original 168h), cache header/TTL and data-use purpose; do not revise raw source or deletion triggers without separate verified authorization.
+3. [Issue #200](https://github.com/HKcode22/ReplitTranvr/issues/200): authenticated provider-native scheduled selected-T / per-value actual-only runway plus codeshare/operating identity still unproven. Provider support email already sent October 30; do not send duplicates.
+4. [Issue #293](https://github.com/HKcode22/ReplitTranvr/issues/293): future genuine 24h/6h/90m full nonadaptive frozen cohort, prearmed GitHub-only owners, retained source, actual persisted PRE, independent results. Oct31 missed T−6h can never be backfilled.
+
+**Current decision:** Gate5 scientific HOLD; Phase5 freeze HOLD; Phase6 NO-GO. No additional Replit command, paid FIDS or new timed Action authorized by this change.

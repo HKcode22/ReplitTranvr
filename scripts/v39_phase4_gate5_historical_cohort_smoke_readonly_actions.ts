@@ -16,6 +16,8 @@ import {auditP4OriginalNativeFieldPresenceV39}
  from "../server/lib/disruption/phase4Gate5NativeFidsFieldPresence_v39";
 import {auditP4RawNormalizedReceiptParityV39}
  from "../server/lib/disruption/phase4Gate5RawNormalizedReceiptParity_v39";
+import {auditP4OriginalRetentionMetadataV39}
+ from "../server/lib/disruption/phase4Gate5OriginalRetentionMetadata_v39";
 import {auditP4HistoricalOriginalFilterReplayV39}
  from "../server/lib/disruption/phase4Gate5HistoricalOriginalFilterReplay_v39";
 
@@ -106,6 +108,9 @@ export async function mainP4HistoricalSmokeV39(){
   const native=await auditP4OriginalNativeFieldPresenceV39(client,scope);
   const parity=await auditP4RawNormalizedReceiptParityV39(client,scope);
   const replay=await auditP4HistoricalOriginalFilterReplayV39(client,scope);
+  const retentionMetadata=await auditP4OriginalRetentionMetadataV39(client,scope);
+  if(retentionMetadata.originalReceiptMetadataRows!==report.historicalQueryReceiptsMeasured)
+   throw Error("P4_HIST_RETENTION_METADATA_SOURCE_COUNT_HOLD");
   if(native.eligibleOriginalReceipts!==report.retainedOriginalQueryReceiptsMeasured)
    throw Error("P4_HIST_NATIVE_FIELD_SOURCE_RECEIPT_PARITY_HOLD");
   if((parity.totalRetainedOriginalReceipts!==null&&
@@ -123,6 +128,7 @@ export async function mainP4HistoricalSmokeV39(){
     item.filterCounts.would_be_normalized===
      parity.perReceipt[index].normalizedObservations);
   console.log(JSON.stringify({
+   originalAndNormalizedSourceRetentionMetadata:retentionMetadata,
    currentProducerFilterReplay:replay,
    currentFilterReplayMatchesPersistedCounts:filterReplayMatchesPersistedCounts,
    originalRawToNormalizedReceiptParity:parity,
