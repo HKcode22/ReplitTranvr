@@ -95,8 +95,7 @@ export async function auditP4RawNormalizedReceiptParityV39(
   // Raw departures missing or non-array = UNKNOWN, never a measured zero.
   for(const k of KEYS) if(r[k]===null||r[k]===undefined)
    throw Error("P4_RECEIPT_PARITY_MISSING_RAW_OR_COUNT:"+k);
-  const m=Object.fromEntries(KEYS.map(k=>[k,count(r,k)]))
-   as Record<typeof KEYS[number],number>;
+  const m=Object.fromEntries(KEYS.map(k=>[k,count(r,k)])) as Record<typeof KEYS[number],number>;
   index++;
   if(m.receipt_rank!==index||
      (totalOriginals!==null&&totalOriginals!==m.total_retained_original_receipts)||
