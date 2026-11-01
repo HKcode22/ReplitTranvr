@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Nov 1 — execute exactly one real paid AeroDataBox FIDS source-semantics check without storing provider Contents**](2026-11-01_GATE5_REAL_PAID_FIDS_ONE_NONRETAINED_SEMANTIC_CHECK.md) — expected 2 REST units; no retries, database, source-body retention or scientific Gate5 promotion; original three-horizon campaign remains distinct.
+
 - [**Nov 1 — independent exact three-horizon V0076 READ ONLY ledger reconciliation**](2026-11-01_GATE5_V0076_INDEPENDENT_THREE_HORIZON_LEDGER_AUDIT.md) — checks immutable attempt sequence, source-query grid, GitHub owner identity and all nonrefundable reserved units with a disposable PG16 tamper test; no paid source, real future prearm, certified PRE or scientific PASS.
 
 - [**Nov 1 — bind actual GitHub API running-job identity/time to V0076 disposable PostgreSQL PREPARED→ACTIVE**](2026-11-01_GATE5_GITHUB_API_TO_V0076_DB_DISPOSABLE_BINDING.md) — real run ID and start are persisted/read back; still a synthetic future source plan, zero provider, live release NULL and scientific Gate5 HOLD.
