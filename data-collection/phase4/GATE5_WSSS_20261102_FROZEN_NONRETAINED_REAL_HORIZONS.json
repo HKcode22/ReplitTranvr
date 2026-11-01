@@ -1,0 +1,38 @@
+{
+  "schema": "v39.phase4.gate5-real-nonretained-three-horizon-field-coverage.v1",
+  "mode": "PAID_EPHEMERAL_SOURCE_FIELDS_ONLY_NOT_SCIENTIFIC_GATE5",
+  "cohortId": "WSSS_20261102_1700Z_REAL_NONRETAINED_AGGREGATE",
+  "grid": {
+    "airportIcao": "WSSS",
+    "airportIanaTimezone": "Asia/Singapore",
+    "serviceWindowStartUtc": "2026-11-02T17:00:00.000Z",
+    "serviceWindowEndUtc": "2026-11-02T18:00:00.000Z",
+    "assignmentFrozenAtUtc": "2026-11-01T13:00:00.000Z",
+    "acquisitionGuardMinutes": 30,
+    "refreshCadenceMinutes": 30,
+    "maxStalenessMinutes": 45,
+    "githubPrearmLeadMinutes": 60,
+    "apiUnitsPerPhysicalAttempt": 2,
+    "maxAttemptsPerQuery": 1,
+    "projectRestApiUnitsBudget": 18,
+    "maxSourceQueries": 9
+  },
+  "sourceFlags": {
+    "direction": "Departure",
+    "withLeg": true,
+    "withCancelled": true,
+    "withCodeshared": true,
+    "withCargo": false,
+    "withPrivate": false,
+    "withLocation": false
+  },
+  "physicalAttemptsMax": 9,
+  "expectedRestUnitsMax": 18,
+  "authorizedSingleAttemptPerExactSlot": true,
+  "rawOriginalRetentionAuthorized": false,
+  "persistPerFlightProviderRecords": false,
+  "providerNativeScheduledRunwayTVerified": false,
+  "perRecordActualOnlyWheelsOffVerified": false,
+  "physicalOperatingIdentityVerified": false,
+  "scientificGate5PassAuthorized": false
+}
