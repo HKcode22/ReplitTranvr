@@ -4,6 +4,7 @@
 
 ## Start here — live source of truth
 
+- [**October 31 provider rights/retention checkpoint — Nov 7 existing-subscriber terms transition**](2026-10-31_GATE5_PROVIDER_RETENTION_NOV7_RIGHTS_REVIEW.md) — default seven-day source-content ceiling versus qualified actual plan exceptions; pure offline rights check, not a license or science PASS
 - [**Historical FIDS raw-to-normalizer filter replay — pending live proof**](2026-10-31_GATE5_RETAINED_NORMALIZER_FILTER_REPLAY.md) — actual protected Oct31 per-receipt 24/24 and 87/86; candidate original software exclusion-reason audit, no backfill/no actual target certificate
 - [**CURRENT — SHA-locked October 31 historical real-DB schema smoke**](2026-10-31_GATE5_HISTORICAL_READONLY_DB_SMOKE_HANDOFF.md) — new GitHub main-only protected reader (no provider) validates generic audit SQL on old retained originals only; cannot backfill missed horizons or certify a future cohort
 - [**Fresh frozen-cohort generic read-only source/PRE/capture/outcome audit**](2026-10-31_GATE5_FRESH_COHORT_READONLY_AUDIT_HANDOFF.md) — parameterized three-query diagnostic for the NEXT approved service interval, preserves Oct31 historical runner, unknown stays NULL; code only, not yet a deployed new-cohort Actions job
