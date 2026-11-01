@@ -141,9 +141,12 @@ export async function installV0076ReviewedMetadataV39(){
    "(SELECT count(*)::int FROM clean.phase4_g5_fids_physical_owner_v39) AS o,",
    "(SELECT count(*)::int FROM clean.phase4_g5_fids_allowed_query_v39) AS q,",
    "(SELECT count(*)::int FROM clean.phase4_g5_fids_physical_attempt_v39) AS a,",
-   "has_function_privilege('PUBLIC',",
-   "'clean.reserve_phase4_g5_fids_physical_attempt_v39(text,text,text,text,integer,text)',",
-   "'EXECUTE') AS public_execute"
+   "EXISTS (SELECT 1 FROM pg_catalog.pg_proc p",
+   "CROSS JOIN LATERAL pg_catalog.aclexplode(",
+   "coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl",
+   "WHERE p.oid=",
+   "'clean.reserve_phase4_g5_fids_physical_attempt_v39(text,text,text,text,integer,text)'::regprocedure",
+   "AND acl.grantee=0 AND acl.privilege_type='EXECUTE') AS public_execute"
   ].join(" "));
   if(counts.rows.length!==1||
      counts.rows[0].public_execute!==false||
