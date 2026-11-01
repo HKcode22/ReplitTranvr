@@ -6,7 +6,8 @@ import {
  P4_G5_HISTORICAL_WORKFLOW_REF_V39,
  P4_G5_HISTORICAL_WORKFLOW_NAME_V39,
  P4_G5_HISTORICAL_INTENT_V39,
- requireP4HistoricalSmokeContextV39
+ requireP4HistoricalSmokeContextV39,
+ p4HistoricalSafeFailureCodeV39
 } from "../scripts/v39_phase4_gate5_historical_cohort_smoke_readonly_actions";
 
 const bytes=()=>readFileSync(P4_G5_HISTORICAL_MANIFEST_PATH_V39,"utf8");
@@ -75,6 +76,16 @@ describe("Historical Oct31 postflight SQL schema smoke — no provider",()=>{
   expect(s).not.toContain("secrets.AERODATABOX_API_KEY");
   expect(s).not.toContain("secrets.V39_DATABASE_RUNTIME_URL");
   expect(s).not.toContain("node --import tsx scripts/v39_gate5_source_inventory_readonly_actions.ts");
+ });
+ it("failure codes never leak raw SQL, source flight identifiers or database URLs",()=>{
+  const secretError={code:"42703",message:"secret-flight123 postgres://password"};
+  expect(p4HistoricalSafeFailureCodeV39(secretError))
+   .toBe("P4_HIST_READONLY_HOLD_SQLSTATE_42703");
+  expect(p4HistoricalSafeFailureCodeV39({
+   code:"sql password secret",message:"private"
+  })).toBe("P4_HIST_READONLY_HOLD_NO_PROVIDER");
+  expect(p4HistoricalSafeFailureCodeV39(null))
+   .toBe("P4_HIST_READONLY_HOLD_NO_PROVIDER");
  });
  it("script opens repeatable-read READ ONLY transaction and rollback, no provider or SQL writes",()=>{
   const s=readFileSync(
