@@ -1,0 +1,27 @@
+{
+  "schema": "v39.phase4.gate5-offline-three-owners.v1",
+  "mode": "HOLD_NO_PROVIDER",
+  "cohortId": "SYNTHETIC_WSSS_20270115_NOT_APPROVED",
+  "grid": {
+    "airportIcao": "WSSS",
+    "airportIanaTimezone": "Asia/Singapore",
+    "serviceWindowStartUtc": "2027-01-15T17:00:00.000Z",
+    "serviceWindowEndUtc": "2027-01-15T18:00:00.000Z",
+    "assignmentFrozenAtUtc": "2027-01-13T12:00:00.000Z",
+    "acquisitionGuardMinutes": 30,
+    "refreshCadenceMinutes": 30,
+    "maxStalenessMinutes": 45,
+    "githubPrearmLeadMinutes": 60,
+    "apiUnitsPerPhysicalAttempt": 2,
+    "maxAttemptsPerQuery": 3,
+    "projectRestApiUnitsBudget": 54,
+    "maxSourceQueries": 15
+  },
+  "verifiedFirstNativeT": false,
+  "actualOnlyWheelsOffVerified": false,
+  "physicalOperatingLegVerified": false,
+  "legallyPermittedSourceRetentionVerified": false,
+  "providerBoundaryVerified": false,
+  "currentCycleRestBudgetVerified": false,
+  "paidSourceActivationAuthorized": false
+}
