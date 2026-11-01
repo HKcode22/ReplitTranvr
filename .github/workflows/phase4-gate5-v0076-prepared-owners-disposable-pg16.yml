@@ -1,0 +1,81 @@
+name: Phase4 Gate5 V0076 Disposable Prepared Three Horizon Owners
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-v0076-prepared-owners-disposable-pg16.yml"
+      - "server/lib/disruption/phase4Gate5DurablePreparedOwner_v39.ts"
+      - "scripts/v39_phase4_gate5_v0076_prepared_owners_disposable_pg16_actions.ts"
+      - "tests/phase4_gate5_v0076_durable_prepared_owner_v39.test.ts"
+      - "data-collection/phase4/2026-11-01_GATE5_V0076_DURABLE_PREPARED_OWNER_ENGINEERING.md"
+permissions:
+  contents: read
+jobs:
+  disposable-v0076-prepared:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gate5_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d gate5_disposable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: Create isolated placeholder historical schema and exact staged V0076 metadata
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${RAPIDAPI_KEY:-}"
+          psql -h localhost -U postgres -d gate5_disposable -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE SCHEMA clean;
+          CREATE TABLE clean.fids_query_response(id integer);
+          CREATE TABLE clean.flight_population(id integer);
+          CREATE TABLE clean.provider_content_blob_ref(id integer);
+          CREATE TABLE clean.phase3_gate05_science_owner_v39(id integer);
+          SQL
+          psql -h localhost -U postgres -d gate5_disposable -v ON_ERROR_STOP=1 -f migrations/staged/V0076__phase4_gate5_logged_physical_fids_attempt_owner_v39.sql
+      - name: Stage three nonpaid prepared owners in disposable V0076 with idempotent replay
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gate5_disposable
+          P4_G5_PREPARED_DISPOSABLE_INTENT: SYNTHETIC_PG16_ZERO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEM" != "2"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${RAPIDAPI_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_v0076_prepared_owners_disposable_pg16_actions.ts
+      - name: Run V0076-only SQL admission checks and no paid provider
+        if: always()
+        run: |
+          {
+            echo 'DISPOSABLE PG16 only, synthetic Jan2027 source times, three horizon rows PREPARED, none ACTIVE.'
+            echo 'No actual GitHub timed prearm, no production DB credential, no AeroDataBox key or paid REST.'
+            echo 'Live release pin NULL, source #200 and rights #300 remain HOLD; Gate5 and Phase5/6 NO-GO.'
+          } >> "$GITHUB_STEP_SUMMARY"
