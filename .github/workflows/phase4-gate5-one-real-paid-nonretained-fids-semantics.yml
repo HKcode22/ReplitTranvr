@@ -1,0 +1,54 @@
+name: Phase4 Gate5 One Real Paid Nonretained FIDS Semantics Probe
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-one-real-paid-nonretained-fids-semantics.yml"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-one-nonretained-paid-source-feasibility-pr324
+  cancel-in-progress: false
+jobs:
+  one-real-paid-nonretained-fids:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && contains(github.event.head_commit.message, 'Merge pull request #324') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install frozen dependencies without provider token
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: One real Tier2 AeroDataBox GET, in-memory only, exactly zero persistence
+        env:
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          P4_G5_PAID_EXACT_INTENT: GATE5_ONE_PAID_FIDS_SEMANTIC_FEASIBILITY_2_UNITS_NO_RETENTION
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -z "${DATABASE_URL:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_one_paid_nonretained_fids_semantics_actions.ts
+      - name: Preserve source evidence boundaries (never Gate5 PASS)
+        if: always()
+        run: |
+          {
+            echo 'One WSSS recently completed one-hour FIDS interval, at most one AeroDataBox paid Tier2 GET (~2 REST API units); no retry, Alert or DB.'
+            echo 'Ephemeral body is summarized into aggregate field-presence counters only. No source body/identifier/time persisted.'
+            echo 'Not a new prospective three-horizon Gate5 cohort. No certified actual-only wheels-off, selected scheduled T, physical leg, retention exception or persisted PRE.'
+            echo 'Source semantics and Nov7 rights remain issue #200 and #300. Gate5 science HOLD, Phase5/6 NO-GO.'
+          } >> "$GITHUB_STEP_SUMMARY"
