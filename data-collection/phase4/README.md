@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**NEW — V0076 durable future GitHub horizon owner PREPARED-only integration**](2026-11-01_GATE5_V0076_DURABLE_PREPARED_OWNER_ENGINEERING.md) — exact 3-horizon source query ledger staged under SERIALIZABLE with idempotent owner/run/digest matching, rollback on drift, and disposable PG16 cross-horizon rehearsal. **No ACTIVE owner, provider GET, actual prearm, paid permission, scientific Gate5 PASS or Phase5/6 release.**
+
 - [**CURRENT — actual V0076 four-table runtime ACL repair, independently confirmed on GitHub**](2026-11-01_GATE5_V0076_EXACT_ROLE_REVOKE_POSTREPAIR.md) — operator-reported exact four-table-only REVOKE succeeded; protected main GitHub [#41290500861](https://github.com/HKcode22/ReplitTranvr/actions/runs/41290500861) independently **SUCCESS**, confirming four LOGGED metadata tables, restricted runtime cannot read/write those tables, secure function and immutable trigger, no provider/database writes. **Do not rerun V0076 installer or REVOKE.** This verifies DB isolation only: **no owner activated, no paid permit, scientific Gate5 HOLD, Phase5/6 NO-GO**.
 
 - [**November 1 independent installed-schema audit background**](2026-11-01_GATE5_V0076_LIVE_POSTINSTALL_READONLY.md) — initial protected read-only failure traced to direct worker grants on V0076 tables, not missing installation; includes audit design and earlier checks.

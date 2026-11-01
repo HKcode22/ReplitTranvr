@@ -1,0 +1,24 @@
+# November 1, 2026 — Gate 5 durable prospective PREPARED owner admission (V0076)
+
+**Scientific status: HOLD.** Binding Plan V3.9-f.8 §§5.1–5.4, 6.0–7, 16–17. Phase4 directory is the checkpoint home; the hash-locked implementation log and earlier October 31 receipts are unchanged.
+
+## Why this is needed
+
+After exact production V0076 metadata installation and restricted-role isolation were independently verified by protected [GitHub #41290500861](https://github.com/HKcode22/ReplitTranvr/actions/runs/41290500861), Gate 5 still lacked a durable per-horizon **PREPARED-only** ownership stage. Synthetic offline three-owner plans could not become authenticated, durable, query-specific future GitHub owners, and cron had already missed the October 31 T−6h opportunity. Duplicate or late replays must not silently activate source GETs.
+
+## What this PR adds
+
+- `server/lib/disruption/phase4Gate5DurablePreparedOwner_v39.ts` validates an existing exact canonical manifest+owner object from `prepareP4G5PhysicalOwnerV39`, one GitHub run identifier, reviewed authorization digest, same horizon, ordered query digests, physical-source cutoff at least fifteen minutes before the prediction time, a bounded six-hour owner lifetime, explicit maximum **three physical FIDS attempts** per query and exactly **two REST units** per physical attempt. Bad run/owner/clock and invalid query/cost fail before database mutation.
+- Explicit injected PostgreSQL `SERIALIZABLE READ WRITE` transaction, 12s statement / 2s lock deadline, `pg_advisory_xact_lock(76,40)`, one-manifest project-budget exclusivity, prior reserved-unit must be zero, no foreign/replayed run ID, exact idempotent insert/readback of one `state='PREPARED'` owner and its immutable source-query grid in V0076 tables. Any existing ACTIVE owner, budget debit, drifted query timestamp, or foreign cohort causes rollback. Each horizon is a **different** owner record and run ID, sharing a single manifest+budget.
+- There is **NO ACTIVE state transition**, SQL grants, source endpoint, network GET, raw content, PRE writer, or workflow dispatch in the module. The live release SHA pin is `null` and fails closed. `stageP4G5PreparedOwnerDbOnlyV39` is an intentionally low-level DB-only building block; it does **not independently authenticate** the supplied future GitHub runner/authorization/source/retention evidence, and is **not imported by production jobs**. It cannot authorize provider dispatch or scientific PASS.
+- Offline Vitest negative tests assert scope/time/budget/refusal, SQL rollback, duplicate idempotence, and no LIVE promotion. A separate GitHub **disposable PostgreSQL 16** main-push workflow constructs the identical reviewed staged V0076 SQL in `gate5_disposable`, instantiates three distinct **synthetic 2027** owners (T−24h/T−6h/T−90m) each twice, verifies exactly one cohort/three PREPARED owners/nine query rows and **zero ACTIVE or paid attempt rows**, and requires the release gate remain null. Uses fake `postgres` localhost only; **zero production secrets/provider keys/provider calls**. This is not a real physical GitHub prearm—simulated 2027 clocks are explicitly not presented as observations.
+- All four mandatory PR CI must pass before merge; after merge review the actual disposable PG16 job receipt. A green test does not satisfy provider rights or scientific target semantics.
+
+## Remaining critical path to real Gate 5
+
+1. Source-native selected prediction T, genuinely actual-only departure runway outcome and operating flight leg/codeshare proof remain unverified under [issue #200](https://github.com/HKcode22/ReplitTranvr/issues/200). A syntactically valid SHA or `scheduledTime` field does not resolve this.
+2. Account-specific current source-content use, cache/normalized original lifecycle and backups/PITR retention rights—including November 7 terms—remain under [issue #300](https://github.com/HKcode22/ReplitTranvr/issues/300). Grandfathered RapidAPI Team Ultra plan/quota was already recorded; do not re-ask identification or reinterpret quota as license.
+3. Versioned actual future cohort manifest, **true running GitHub process prearm attestation**, reviewed PREPARED→ACTIVE activation, narrowly scoped role/function privileges, exact budgeted FIDS sender that COMMITs each DB reservation before network, raw-first persistence, real full three-horizon queries with ≤3 physical GETs and <=15m protected cutoff, certified persisted PRE and complete after-flight independent audits need integration and evidence under [issue #293](https://github.com/HKcode22/ReplitTranvr/issues/293).
+4. The missed October 31 T−6h remains UNOBSERVED; it cannot be backfilled. Do not activate existing historic dated workflows, Cloudflare/Replit timers, Replit Agent, or Phase6.
+
+**No additional Replit shell required for this code/test work. No live privileges or billing changed. Gate5 HOLD, Phase5 FREEZE HOLD, Phase6 NO-GO.**
