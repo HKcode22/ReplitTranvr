@@ -16,3 +16,11 @@ PR #317 fixed PREPARED-stage continuation after T−24h reserved units. A **sepa
 
 ## Acceptance and follow-up
 Review all four standard PR checks, merge only after green, inspect the GitHub main-push three-job physical owner rehearsal. This is necessary engineering but insufficient for Gate5 scientific PASS: the external selected-T/actual-only physical-leg semantic issue [#200](https://github.com/HKcode22/ReplitTranvr/issues/200), account retention rights [#300](https://github.com/HKcode22/ReplitTranvr/issues/300), and real future cohort persisted PRE/source/callback/outcome read-only audit [#293](https://github.com/HKcode22/ReplitTranvr/issues/293) remain blockers. Never backfill the missing Oct31 T−6h or call a synthetic GitHub rehearsal actual flight collection.
+
+
+## Verified merged evidence — Nov 1, 2026, after #321
+
+- [PR #321](https://github.com/HKcode22/ReplitTranvr/pull/321) passed all **four required PR CI checks**, then merged into `main` at **`d94b886a1d7bda91f5a87070896d55f8a2543cb7`**.
+- The independent [main-push three-owner GitHub rehearsal run #41299189793](https://github.com/HKcode22/ReplitTranvr/actions/runs/41299189793) completed **SUCCESS for owner-t24, owner-t6, owner-t90 separately**, each including both the real Actions API self-attestation and synthetic physical cutoff step. No provider, production database writer or paid source was activated.
+- Regression tests explicitly accepted the after-prior-spend T−6h/T−90m cases and rejected actual overspend. This does **not** establish external provider semantics/rights, future live early prearms, actual provider GET or scientific Gate5 PASS.
+- The previously verified [#320 actual job attestation checkpoint](2026-11-01_GATE5_REAL_GITHUB_RUNNING_JOB_ATTESTATION.md) remains authoritative for real running GitHub job identity/started-time evidence. Next critical engineering dependency is the separately reviewed real frozen future cohort + paid sender **after** external source/right certification, immutable original/PRE durability and independent cohort-scoped audit. Never promote historical Oct31 missed T−6h.
