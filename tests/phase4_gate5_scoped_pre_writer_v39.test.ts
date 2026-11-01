@@ -17,6 +17,8 @@ const permit=()=>({
  independentPhysicalOperatingIdentityEvidenceSha256:sha("c"),
  independentlyReviewedSourceRetentionEvidenceSha256:sha("d"),
  reviewedRunAuthorizationSha256:sha("e"),
+ frozenBuilderSourceSha256:sha("8"),
+ builderFrozenAtUtc:"2027-01-13T12:00:00.000Z",
  verifiedExternalSourceAndRightsReview:true as const,
  selectedTConfig:{
   milestone:"departure.scheduledTime.utc",version:"source-reviewed@1",
@@ -105,6 +107,14 @@ describe("Scoped Gate5 PRE writer requires independently reviewed native T and r
   await expect(persistP4G5ReviewedPreForCohortV39(bad,scope(),permit()))
    .rejects.toThrow("P4_G5_PRE_EXISTING_SNAPSHOT_PROVENANCE_CONFLICT");
   expect(bad.calls.at(-1)?.sql).toBe("ROLLBACK");
+ });
+ it("holds every write when a feature transform was frozen after a flight prediction cutoff",async()=>{
+  const c=db();
+  await expect(persistP4G5ReviewedPreForCohortV39(c,scope(),{
+   ...permit(),builderFrozenAtUtc:"2027-01-14T17:11:00.000Z"
+  })).rejects.toThrow("P4_G5_PRE_TRANSFORM_NOT_FROZEN_BY_CUTOFF");
+  expect(c.calls.at(-1)?.sql).toBe("ROLLBACK");
+  expect(c.calls.some(x=>x.sql.startsWith("INSERT INTO clean.flight_snapshots"))).toBe(false);
  });
  it("rollback on DB failure and never declare a partial successful PRE write",async()=>{
   const c=db({failInsertAt:2});
