@@ -4,6 +4,7 @@
 
 ## Start here — live source of truth
 
+- [**Provider-native selected-T / actual-only runway semantic lineage guard (OFFLINE)**](2026-10-31_GATE5_PROVIDER_NATIVE_SEMANTIC_LINEAGE_GUARD.md) — current OpenAPI ambiguity, first-seen schedule/retime preservation, role-aware provisional source cutoffs, and pending authenticated source proof; no self-PASS or provider spend
 - [**Gate5 redo reusable three-horizon nonadaptive grid (OFFLINE ONLY)**](2026-10-31_GATE5_FROZEN_GRID_OFFLINE_PLANNER.md) — future source cutoff grid, bounded API-unit cost, IANA/DST and GitHub prearm constraints; **not a paid schedule or provider/selected-T certificate**
 - [**CURRENT Oct31 Gate5 redo root cause and restart handoff**](2026-10-31_GATE5_REDO_ROOTCAUSE_AND_RESTART_HANDOFF.md) — late 08:42 PDT T−6h cron fail-closed, measured paid/zero-paid ledger, 3 real postflight audits, new cohort scientific/prerequisite checklist, offline admission tests. **Read this first before any new paid operation.**
 - [October 31 actual T−90m 86-row source receipt and two push-prearmed postflight audits](2026-10-31_WSSS_T90_ACTUAL_SUCCESS_AND_POSTFLIGHT_PUSH_PREARM.md) — measured 1 paid GET/2 API units, 86 persisted provisional source observations; read-only GitHub fallback for 12:15 and 3:15 PDT while the original read-only crons remain backup
