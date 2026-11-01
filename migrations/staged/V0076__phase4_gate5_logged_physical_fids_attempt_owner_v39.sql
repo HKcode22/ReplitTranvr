@@ -150,10 +150,10 @@ BEGIN
  END IF;
  -- Check against independently generated canonical reservation key.
  IF p_expected_reservation_sha256 <> encode(
-   digest(
+   sha256(convert_to(
      p_manifest_sha256||'|'||p_owner_digest||'|'||
-     p_query_digest||'|'||p_physical_attempt_number::text,'sha256'
-   ),'hex'
+     p_query_digest||'|'||p_physical_attempt_number::text,'UTF8'
+   )),'hex'
  ) THEN
    RAISE EXCEPTION 'P4_G5_PHYSICAL_RESERVATION_DIGEST_MISMATCH';
  END IF;
