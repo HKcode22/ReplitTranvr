@@ -4,13 +4,17 @@
 
 ## Start here — live source of truth
 
-- [**NEW — reviewed one-use privileged V0076 metadata-only installer**](2026-10-31_GATE5_V0076_METADATA_ONLY_PRIVILEGED_INSTALLER_HANDOFF.md) — exact pinned staged SQL, distinct admin/runtime role checks, transactional all-or-nothing and disposable two-role PG16; no live install pending Replit read-only role result
+- [**CURRENT — actual V0076 four-table runtime ACL repair, independently confirmed on GitHub**](2026-11-01_GATE5_V0076_EXACT_ROLE_REVOKE_POSTREPAIR.md) — operator-reported exact four-table-only REVOKE succeeded; protected main GitHub [#41290500861](https://github.com/HKcode22/ReplitTranvr/actions/runs/41290500861) independently **SUCCESS**, confirming four LOGGED metadata tables, restricted runtime cannot read/write those tables, secure function and immutable trigger, no provider/database writes. **Do not rerun V0076 installer or REVOKE.** This verifies DB isolation only: **no owner activated, no paid permit, scientific Gate5 HOLD, Phase5/6 NO-GO**.
+
+- [**November 1 independent installed-schema audit background**](2026-11-01_GATE5_V0076_LIVE_POSTINSTALL_READONLY.md) — initial protected read-only failure traced to direct worker grants on V0076 tables, not missing installation; includes audit design and earlier checks.
+
+- [**NEW — reviewed one-use privileged V0076 metadata-only installer**](2026-10-31_GATE5_V0076_METADATA_ONLY_PRIVILEGED_INSTALLER_HANDOFF.md) — exact pinned staged SQL, distinct admin/runtime role checks, transactional all-or-nothing and disposable two-role PG16; historical installer preparation; **actual installation and restricted-role isolation verified Nov 1 (above)**
 
 - [**NEW — actual production DB READ ONLY V0076 installer-privilege audit**](2026-10-31_GATE5_V0076_PRODUCTION_PERMISSIONS_READONLY_CHECK.md) — queries current GitHub runtime role metadata for clean schema CREATE and object collision; zero DDL, provider credits or role grants; determines whether a manual Replit installer might be necessary
 
 - [**NEW — Node-side SERIALIZABLE durable physical FIDS attempt adapter**](2026-10-31_GATE5_DB_COMMITTED_PHYSICAL_FIDS_ADAPTER.md) — fresh free quota → reviewed owner physical timing → irrevocable V0076 DB COMMIT → postcommit cutoff recheck; **no provider sender wired or paid release pin**
 
-- [**NEW — staged V0076 irreversible physical paid FIDS attempt PostgreSQL ledger**](2026-10-31_GATE5_STAGED_V0076_PHYSICAL_FIDS_ATTEMPT_LEDGER.md) — shared budget/unique source retry reservations, 15-minute DB-clock cutoff, disposable PG16 tests; NOT installed production or a paid permit
+- [**NEW — staged V0076 irreversible physical paid FIDS attempt PostgreSQL ledger**](2026-10-31_GATE5_STAGED_V0076_PHYSICAL_FIDS_ATTEMPT_LEDGER.md) — shared budget/unique source retry reservations, 15-minute DB-clock cutoff, disposable PG16 tests; **installed Nov 1, restricted worker ACL corrected; still NOT a paid permit**
 
 - [**NEW — physical FIDS dispatch/cutoff/budget guard and 3 actual GitHub owner jobs rehearsal**](2026-10-31_GATE5_PHYSICAL_DISPATCH_GUARD_THREE_GITHUB_OWNER_REHEARSAL.md) — SHA/owner/physical-start/late-retry/idempotence checks exercised via three synthetic, zero-provider jobs; atomic database reservation and real paid owner scheduling **not yet wired**
 
