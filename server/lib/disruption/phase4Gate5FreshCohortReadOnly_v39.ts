@@ -186,8 +186,7 @@ export async function auditP4FreshCohortV39(
  const matched=count(o,"provisional_matched_core_callback_identities");
  const outside=count(o,"provisional_outside_sampled_core_callback_identities");
  const statuses=["observed","pending","censored","missing","not_applicable"] as const;
- const outcome=Object.fromEntries(statuses.map(k=>[k,count(o,"outcome_status_"+k)]))
-  as Record<typeof statuses[number],number>;
+ const outcome=Object.fromEntries(statuses.map(k=>[k,count(o,"outcome_status_"+k)])) as Record<typeof statuses[number],number>;
  const outcomeRows=count(o,"outcome_rows");
  if(retained>ever||invalid>sample||primary>sample||provisional>primary||
     tagged>provisional||matched>tagged||matched>resolved||
