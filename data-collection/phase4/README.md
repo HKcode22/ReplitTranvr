@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**NEW — Node-side SERIALIZABLE durable physical FIDS attempt adapter**](2026-10-31_GATE5_DB_COMMITTED_PHYSICAL_FIDS_ADAPTER.md) — fresh free quota → reviewed owner physical timing → irrevocable V0076 DB COMMIT → postcommit cutoff recheck; **no provider sender wired or paid release pin**
+
 - [**NEW — staged V0076 irreversible physical paid FIDS attempt PostgreSQL ledger**](2026-10-31_GATE5_STAGED_V0076_PHYSICAL_FIDS_ATTEMPT_LEDGER.md) — shared budget/unique source retry reservations, 15-minute DB-clock cutoff, disposable PG16 tests; NOT installed production or a paid permit
 
 - [**NEW — physical FIDS dispatch/cutoff/budget guard and 3 actual GitHub owner jobs rehearsal**](2026-10-31_GATE5_PHYSICAL_DISPATCH_GUARD_THREE_GITHUB_OWNER_REHEARSAL.md) — SHA/owner/physical-start/late-retry/idempotence checks exercised via three synthetic, zero-provider jobs; atomic database reservation and real paid owner scheduling **not yet wired**
