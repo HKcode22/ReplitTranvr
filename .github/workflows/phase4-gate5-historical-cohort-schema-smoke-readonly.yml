@@ -1,0 +1,60 @@
+name: Phase4 Gate5 Historical Cohort SQL Smoke - READ ONLY
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-historical-cohort-schema-smoke-readonly.yml"
+      - "scripts/v39_phase4_gate5_historical_cohort_smoke_readonly_actions.ts"
+      - "server/lib/disruption/phase4Gate5FreshCohortReadOnly_v39.ts"
+      - "data-collection/phase4/2026-10-31_GATE5_HISTORICAL_SCHEMA_SMOKE_MANIFEST.json"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-fixed-historical-cohort-smoke-no-provider
+  cancel-in-progress: false
+jobs:
+  historical-cohort-smoke:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies with no provider credentials
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Real production PostgreSQL original Oct31 cohort schema smoke - READ ONLY
+        env:
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+          P4_G5_HISTORICAL_SMOKE_INTENT: OCT31_HISTORICAL_SCHEMA_ONLY_ZERO_PROVIDER_NO_BACKFILL
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$GITHUB_JOB" = historical-cohort-smoke
+          test "$GITHUB_WORKFLOW_REF" = "HKcode22/ReplitTranvr/.github/workflows/phase4-gate5-historical-cohort-schema-smoke-readonly.yml@refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -n "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${RAPIDAPI_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_historical_cohort_smoke_readonly_actions.ts
+      - name: Historical audit only - source semantics and unknown denominators
+        if: always()
+        run: |
+          {
+            echo 'HISTORICAL WSSS OCT31 17:00–18:00Z cohort schema smoke only, not a new prospective Gate5 observation.'
+            echo 'Original 03:07 PDT T-6h remains UNOBSERVED, never backfilled. T-24h as-of fixed window was not verified.'
+            echo 'No AeroDataBox, Alert, provider credential or SQL writes. All SELECTs in a repeatable-read READ ONLY transaction and rollback.'
+            echo 'Source receipt/identity and PRE counts are candidate diagnostics, not proof of actual-only wheels-off or full universe.'
+            echo 'A missing/expired original remains unknown, not a measured zero. No Phase5 freeze or Phase6 authorization.'
+          } >> "$GITHUB_STEP_SUMMARY"

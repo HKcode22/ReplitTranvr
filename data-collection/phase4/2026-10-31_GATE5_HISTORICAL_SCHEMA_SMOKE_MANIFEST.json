@@ -1,0 +1,12 @@
+{
+  "schema": "v39.phase4.gate5-historical-readonly-smoke-manifest.v1",
+  "mode": "HISTORICAL_SOURCE_SCHEMA_SMOKE_ONLY",
+  "airportIcao": "WSSS",
+  "serviceWindowStartUtc": "2026-10-31T17:00:00.000Z",
+  "serviceWindowEndUtc": "2026-10-31T18:00:00.000Z",
+  "sourcePaidRunId": 41202671665,
+  "sourceOriginalT6h": "UNOBSERVED",
+  "sourceOriginalT24h": "UNOBSERVED_AS_OF_FIXED_CUTOFF",
+  "phase5FreezeAuthorized": false,
+  "phase6Authorized": false
+}

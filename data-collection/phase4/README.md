@@ -4,6 +4,7 @@
 
 ## Start here — live source of truth
 
+- [**CURRENT — SHA-locked October 31 historical real-DB schema smoke**](2026-10-31_GATE5_HISTORICAL_READONLY_DB_SMOKE_HANDOFF.md) — new GitHub main-only protected reader (no provider) validates generic audit SQL on old retained originals only; cannot backfill missed horizons or certify a future cohort
 - [**Fresh frozen-cohort generic read-only source/PRE/capture/outcome audit**](2026-10-31_GATE5_FRESH_COHORT_READONLY_AUDIT_HANDOFF.md) — parameterized three-query diagnostic for the NEXT approved service interval, preserves Oct31 historical runner, unknown stays NULL; code only, not yet a deployed new-cohort Actions job
 - [**Provider-native selected-T / actual-only runway semantic lineage guard (OFFLINE)**](2026-10-31_GATE5_PROVIDER_NATIVE_SEMANTIC_LINEAGE_GUARD.md) — current OpenAPI ambiguity, first-seen schedule/retime preservation, role-aware provisional source cutoffs, and pending authenticated source proof; no self-PASS or provider spend
 - [**Gate5 redo reusable three-horizon nonadaptive grid (OFFLINE ONLY)**](2026-10-31_GATE5_FROZEN_GRID_OFFLINE_PLANNER.md) — future source cutoff grid, bounded API-unit cost, IANA/DST and GitHub prearm constraints; **not a paid schedule or provider/selected-T certificate**
