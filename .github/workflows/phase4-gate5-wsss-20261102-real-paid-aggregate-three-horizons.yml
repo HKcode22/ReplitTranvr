@@ -1,0 +1,108 @@
+name: Phase4 Gate5 WSSS Nov2 Three Horizon Real Paid Aggregate
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-wsss-20261102-real-paid-aggregate-three-horizons.yml"
+  schedule:
+    # GitHub cron is an opportunity only; late jobs fail CLOSED.
+    # Nov2 T-6h physical slots 10:30/11:00/11:30 UTC. Prearm by 09:30.
+    - cron: "15 8 2 11 *"
+    # Nov2 T-90m physical slots 15:00/15:30/16:00 UTC. Prearm by 14:00.
+    - cron: "17 12 2 11 *"
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: phase4-gate5-wsss-nov2-2026-real-aggregate-18unit-global
+  cancel-in-progress: false
+jobs:
+  owner-t24:
+    if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && contains(github.event.head_commit.message, 'Merge pull request #326') }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: REAL T-24h WSSS source field availability, 3 fixed zero-retention calls max
+        timeout-minutes: 330
+        env:
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          P4_G5_GH_READ_ONLY_TOKEN: ${{ github.token }}
+          P4_G5_NOV2_HORIZON: T-24h
+          P4_G5_NOV2_INTENT: WSSS_NOV2_THREE_HORIZON_REAL_9_GET_18_UNIT_MAX_NO_PROVIDER_CONTENT
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}${DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_wsss_20261102_three_horizon_real_aggregate_paid_actions.ts
+  owner-t6:
+    if: "${{ github.event_name == 'schedule' && github.event.schedule == '15 8 2 11 *' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: REAL T-6h WSSS source field availability, 3 fixed zero-retention calls max
+        timeout-minutes: 330
+        env:
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          P4_G5_GH_READ_ONLY_TOKEN: ${{ github.token }}
+          P4_G5_NOV2_HORIZON: T-6h
+          P4_G5_CRON: ${{ github.event.schedule }}
+          P4_G5_NOV2_INTENT: WSSS_NOV2_THREE_HORIZON_REAL_9_GET_18_UNIT_MAX_NO_PROVIDER_CONTENT
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}${DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_wsss_20261102_three_horizon_real_aggregate_paid_actions.ts
+  owner-t90:
+    if: "${{ github.event_name == 'schedule' && github.event.schedule == '17 12 2 11 *' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: REAL T-90m WSSS source field availability, 3 fixed zero-retention calls max
+        timeout-minutes: 330
+        env:
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          P4_G5_GH_READ_ONLY_TOKEN: ${{ github.token }}
+          P4_G5_NOV2_HORIZON: T-90m
+          P4_G5_CRON: ${{ github.event.schedule }}
+          P4_G5_NOV2_INTENT: WSSS_NOV2_THREE_HORIZON_REAL_9_GET_18_UNIT_MAX_NO_PROVIDER_CONTENT
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -n "${AERODATABOX_API_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}${GATE05_AUTOMATION_DATABASE_URL:-}${DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_wsss_20261102_three_horizon_real_aggregate_paid_actions.ts
