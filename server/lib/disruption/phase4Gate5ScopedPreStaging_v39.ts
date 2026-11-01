@@ -66,6 +66,11 @@ export const P4_G5_SCOPED_PRE_SOURCE_SQL=[
  "AND m.window_end_utc=$3::timestamptz",
  "AND m.provider_content_expired_at_utc IS NULL",
  "AND m.available_at<=$4::timestamptz),",
+ "source_integrity AS (SELECT analytic_identity_id,",
+ "bool_and(response_hash=original_hash AND",
+ "member_available>=source_available) AS all_parent_member_provenance_valid",
+ "FROM p WHERE analytic_identity_id IS NOT NULL",
+ "GROUP BY analytic_identity_id),",
  "firsts AS (SELECT DISTINCT ON (analytic_identity_id)",
  "analytic_identity_id,dep_scheduled_utc AS first_schedule",
  "FROM p WHERE population_role='requested_airport_primary'",
@@ -75,13 +80,15 @@ export const P4_G5_SCOPED_PRE_SOURCE_SQL=[
  "('T-6h'::text,interval '6 hours'),",
  "('T-90m'::text,interval '90 minutes')) AS g(horizon,lag))",
  "SELECT f.analytic_identity_id,f.first_schedule,h.horizon,",
+ "si.all_parent_member_provenance_valid,",
  "f.first_schedule-h.lag AS prediction_cutoff_utc,",
  "obs.canonical_flight_instance_id,obs.population_member_id,",
  "obs.population_query_id,obs.response_hash,obs.dep_scheduled_utc,",
  "obs.effective_available,obs.member_available,obs.source_available,",
  "obs.original_hash,obs.population_role,obs.scope_classification,",
  "obs.codeshare_resolution_status",
- "FROM firsts f CROSS JOIN h",
+ "FROM firsts f JOIN source_integrity si",
+ "ON si.analytic_identity_id=f.analytic_identity_id CROSS JOIN h",
  "LEFT JOIN LATERAL (SELECT * FROM p WHERE",
  "p.analytic_identity_id=f.analytic_identity_id",
  "AND p.population_role='requested_airport_primary'",
@@ -119,6 +126,8 @@ export async function stageP4G5ScopedPreV39(db:P4G5PreDb,scope:P4G5ScopedPreScop
     typeof r.analytic_identity_id!=="string"||
     !H.includes(r.horizon as PreHorizon))
    throw Error("P4_G5_PRE_MALFORMED_ID_OR_HORIZON");
+  if(r.all_parent_member_provenance_valid!==true)
+   throw Error("P4_G5_PRE_HISTORICAL_SOURCE_LINEAGE_HOLD");
   const h=r.horizon as PreHorizon;
   const key=r.analytic_identity_id+"|"+h;
   if(seen.has(key))throw Error("P4_G5_PRE_DUPLICATE_FLIGHT_HORIZON");
