@@ -51,7 +51,13 @@ function requireProof(permit:P4G5CertifiedPrePermit,
 export const P4_G5_PRE_CONFLICT_READ_SQL=[
  "SELECT flight_instance_id,horizon,prediction_cutoff_utc,",
  "selected_t_milestone_utc,selected_t_version,population_query_id,",
- "fids_response_hash,builder_version FROM clean.flight_snapshots",
+ "fids_response_hash,builder_version,",
+ "features_json=$4::jsonb AS same_features,",
+ "missingness_flags=$5::jsonb AS same_missingness,",
+ "frame_hash IS NOT DISTINCT FROM $6 AS same_frame,",
+ "config_hash IS NOT DISTINCT FROM $7 AS same_config,",
+ "provenance_json=$8::jsonb AS same_provenance",
+ "FROM clean.flight_snapshots",
  "WHERE flight_instance_id=$1 AND horizon=$2",
  "AND prediction_cutoff_utc=$3::timestamptz",
  "AND prediction_state='PRE_DEPARTURE'"
@@ -100,7 +106,11 @@ export async function persistP4G5ReviewedPreForCohortV39(
    if(n===1){inserted++;continue;}
    if(n!==0)throw Error("P4_G5_PRE_INSERT_RESULT_HOLD");
    const prior=await client.query(P4_G5_PRE_CONFLICT_READ_SQL,[
-    snap.flightInstanceId,snap.horizon,snap.predictionCutoffUtc
+    snap.flightInstanceId,snap.horizon,snap.predictionCutoffUtc,
+    JSON.stringify(snap.features.map(f=>({name:f.featureName,value:f.value}))),
+    JSON.stringify(snap.provenance.missingnessFlags),
+    snap.provenance.frameHash,snap.provenance.configHash,
+    JSON.stringify(snap.provenance)
    ]);
    if(prior.rows.length!==1)throw Error("P4_G5_PRE_CONFLICT_UNVERIFIABLE");
    const x=prior.rows[0] as Record<string,unknown>;
@@ -112,7 +122,10 @@ export async function persistP4G5ReviewedPreForCohortV39(
     x.selected_t_version!==snap.selectedTVersion||
     x.population_query_id!==snap.populationQueryId||
     x.fids_response_hash!==snap.provenance.fidsResponseHash||
-    x.builder_version!==snap.provenance.builderVersion)
+    x.builder_version!==snap.provenance.builderVersion||
+    x.same_features!==true||x.same_missingness!==true||
+    x.same_frame!==true||x.same_config!==true||
+    x.same_provenance!==true)
     throw Error("P4_G5_PRE_EXISTING_SNAPSHOT_PROVENANCE_CONFLICT");
    existing++;
   }
