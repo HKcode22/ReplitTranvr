@@ -5,11 +5,15 @@ on:
     paths:
       - ".github/workflows/phase4-gate5-three-physical-owner-rehearsal.yml"
       - "server/lib/disruption/phase4Gate5PhysicalOwnerDispatchGuard_v39.ts"
+      - "server/lib/disruption/phase4Gate5GitHubRunningJobEvidence_v39.ts"
+      - "tests/phase4_gate5_github_running_job_evidence_v39.test.ts"
+      - "scripts/v39_phase4_gate5_github_live_job_attestation_actions.ts"
       - "server/lib/disruption/phase4Gate5FrozenGridDraft_v39.ts"
       - "scripts/v39_phase4_gate5_three_owner_physical_rehearsal_actions.ts"
       - "data-collection/phase4/GATE5_NEXT_COHORT_PREARM_SYNTHETIC_HOLD.json"
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: phase4-gate5-three-physical-owner-dryrun-no-provider
   cancel-in-progress: false
@@ -28,6 +32,17 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify this ACTUAL running GitHub job via Actions API (read-only, no provider)
+        env:
+          P4_G5_OWNER_REHEARSAL_INTENT: SIMULATED_TIMES_NO_PROVIDER
+          P4_G5_GH_READ_ONLY_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_github_live_job_attestation_actions.ts
       - name: T-24h independent job / synthetic physical cutoff rehearsal ONLY
         env:
           P4_G5_OWNER_REHEARSAL_INTENT: SIMULATED_TIMES_NO_PROVIDER
@@ -52,6 +67,17 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify this ACTUAL running GitHub job via Actions API (read-only, no provider)
+        env:
+          P4_G5_OWNER_REHEARSAL_INTENT: SIMULATED_TIMES_NO_PROVIDER
+          P4_G5_GH_READ_ONLY_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_github_live_job_attestation_actions.ts
       - name: T-6h independent job / synthetic physical cutoff rehearsal ONLY
         env:
           P4_G5_OWNER_REHEARSAL_INTENT: SIMULATED_TIMES_NO_PROVIDER
@@ -76,6 +102,17 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify this ACTUAL running GitHub job via Actions API (read-only, no provider)
+        env:
+          P4_G5_OWNER_REHEARSAL_INTENT: SIMULATED_TIMES_NO_PROVIDER
+          P4_G5_GH_READ_ONLY_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_github_live_job_attestation_actions.ts
       - name: T-90m independent job / synthetic physical cutoff rehearsal ONLY
         env:
           P4_G5_OWNER_REHEARSAL_INTENT: SIMULATED_TIMES_NO_PROVIDER
