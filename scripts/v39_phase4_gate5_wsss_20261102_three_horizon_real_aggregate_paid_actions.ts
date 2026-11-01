@@ -35,7 +35,7 @@ function ms(x:unknown):number{
     !Number.isFinite(Date.parse(x)))throw Error("P4_G5_REAL_NOV2_TIME_INVALID");
  return Date.parse(x);
 }
-function validatedContext(env:NodeJS.ProcessEnv,sha:string,now:number){
+export function validatedContext(env:NodeJS.ProcessEnv,sha:string,now:number){
  const horizon=env.P4_G5_NOV2_HORIZON as typeof H[number];
  const job=JOBS[horizon];
  if(!H.includes(horizon)||!job||
