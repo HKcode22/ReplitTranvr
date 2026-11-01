@@ -1,0 +1,17 @@
+# November 1, 2026 — Gate 5 V0076 gated PREPARED→ACTIVE transaction (disposable only)
+
+**Authority:** V3.9-f.8 §§5–7, 16 Gate 0.5 and 5, §17. **Status: engineering test only; live release pin NULL.** Phase5 FREEZE HOLD, Phase6 NO-GO.
+
+## Safety design
+
+Real production V0076 has four LOGGED metadata tables and isolated runtime permissions, independently verified in GitHub #41290500861. Its owner state starts PREPARED; only ACTIVE may reserve a *nonrefundable* FIDS physical request under the locked function. The production source/rights proof is NOT yet established and no actual GitHub horizon prearm is running.
+
+This change implements a **low-level transaction boundary only** in `server/lib/disruption/phase4Gate5OwnerActiveTransition_v39.ts`. The public production activation release pin is **`P4_G5_ACTIVE_LIVE_RELEASE_SHA_V39=null`** and any hypothetical entrypoint calling `requireP4G5ActiveLiveReleaseV39` fails. No production workflow imports the low-level transition, and existing restricted production runtime role lacks any V0076 DML/execute permissions. No role GRANT is included.
+
+The injected-db routine requires a pre-staged exact manifest/owner/horizon, run ID, reviewed authorization digest, and five distinct source/right/GitHub-attestation evidence *references*. **These SHA-shaped references are not themselves independently authenticated proof** and therefore cannot authorize a live transition. Within a SERIALIZABLE transaction, DB clock must fall between the stored actual runner start and frozen verified-prearm deadline, strictly earlier than first physical dispatch, and no later than expiration. It locks the exact owner, verifies PREPARED state and immutable owner/run/start/deadline/dispatch binding, checks the matching cohort budget, unreserved same-owner exact query count, absence of physical attempt rows, and atomically updates only that owner to ACTIVE once. A stale/crash/replay or foreign run fails closed and rolls back.
+
+The new main-push-only zero-secret disposable PostgreSQL16 GitHub workflow uses **synthetic near-future** 26-hour-ahead times selected from actual test-run clock only to exercise this timing boundary, not the immutable future study manifest. It stages T−24h as PREPARED and exercises the low-level ACTIVE transaction in an isolated `gate5_activation` database, proves second transition is refused, and verifies that the V0076 provider reservation function **still refuses** an attempt before the planned physical window. Expected: 1 ACTIVE *disposable* owner, 3 query rows, zero physical reservation rows, 0 units, 0 provider requests, 0 production changes. This never attests a real GitHub owner running early, actual selected-T, actual-only runway, operating leg identity, lawful content retention, real PRE, or afterflight outcomes.
+
+## What is still needed
+
+A future independently reviewed production activation must authenticate the **external source semantics/rights** and the actual GitHub runner identity/start independently (#200/#300); freeze one true future cohort and owner/physical windows, bind the manifest to exact code SHA and exact restricted role grants (none yet), and use a provider sender that commits each V0076 physical attempt BEFORE any paid HTTP while preserving raw-first/as-of PRE and callback/outcome audits (#293). No fake `verified=true` flag or random SHA can replace those facts; the code pin remains NULL. Do not rerun historical Oct31 missed T−6h, which remains UNOBSERVED. No Replit command is needed for this offline change.
