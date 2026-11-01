@@ -44,6 +44,9 @@ The red Actions event was **correct fail-closed behavior**; do NOT rerun #412161
 - **Scientific Gate5 PASS requires qualified independent denominators and original provider/target semantics**, not just a green workflow, an 86-count source query, or a successful postflight read-only SELECT. Retain bounded missingness with its cause; it cannot stand in for an entire missing horizon. No Phase5 manifest FREEZE or Phase6 31-batch-day start until Plan prerequisites and separate authorization.
 - A new paid call is NOT authorized merely by this checkpoint or an offline `READY_FOR_SEPARATE_EXPLICIT_AUTHORIZATION_REVIEW` decision. One future workflow must carry its own exact authorization and immutable scope, cost/reservations and account evidence.
 
+## Canonical documentation integrity
+- The canonical `data-collection/implementation/V3.9_IMPLEMENTATION_LOG.md` is included in an exact-Git-blob relocation/source catalog. An initial attempt to prepend a status line changed its blob hash and caused four repository-integrity tests to fail. That edit was reversed byte-for-byte, preserving the original blob SHA `0a5e4bedfa7c743feaf05ec2dc66f22084f39236`. The current status must reside in this dated Phase 4 checkpoint and Phase 4 README; do not weaken source integrity tests or re-edit the locked document.
+
 ## Engineering checkpoint in this PR
 - New **pure, offline, zero-I/O** `server/lib/disruption/phase4Gate5RedoReadiness_v39.ts` returns separate prepaid-admission review and scientific-evidence completeness states. Neither can self-authorize Phase5/6. It refuses absent selected-T, unknown actuality, unarmed full grids, unknown rights or cost, missing/expired horizons, incomplete PRE persistence and contradictory denominators.
 - `tests/phase4_gate5_redo_readiness_v39.test.ts` replays the **real delayed 15:42Z T−6h** as a refusal and verifies Oct31 evidence remains HOLD, plus adversarial missing/duplicate sources and contradiction cases. Synthetic complete evidence still requests independent review and authorizes **zero** paid work.
@@ -51,7 +54,7 @@ The red Actions event was **correct fail-closed behavior**; do NOT rerun #412161
 
 ## Next immediate operator/agent actions
 1. Inspect current GitHub checks for this PR, investigate any failure without rerunning paid workflows; merge only with required passes.
-2. Preserve a dated pointer in `data-collection/phase4/README.md` and main implementation log to this checkpoint; do not move Phase4 content under Phase3.
+2. Preserve the dated pointer in `data-collection/phase4/README.md`; the canonical implementation log is a HASH-LOCKED original and MUST NOT be edited in-place. Use this additive checkpoint as the current handoff while respecting the unchanged original log and source-catalog identity tests. Do not move Phase4 content under Phase3.
 3. Complete a separate provider-semantic feasibility determination and tests for immutable schedule milestone and actual-only runway labeling, or explicitly document impossible/unproven fields.
 4. Implement a future GitHub-only prearmed **three-horizon nonadaptive grid** with no paid activation until provider, rights, DB, hash, budget and target gates pass. Require date-exact, one-owner physical dispatch guards and independent postflight audit.
 5. No Replit shell required for this review. Never expose API keys, provider identities or raw flight identifiers in GitHub issue logs.
