@@ -1,0 +1,89 @@
+name: Phase4 Gate5 Future Cohort Independent Read-Only Audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-future-independent-readonly.yml"
+      - "data-collection/phase4/GATE5_NEXT_FROZEN_COHORT_READONLY_AUDIT_HOLD.json"
+      - "server/lib/disruption/phase4Gate5NextIndependentAuditAdmission_v39.ts"
+      - "server/lib/disruption/phase4Gate5FreshCohortReadOnly_v39.ts"
+      - "scripts/v39_phase4_gate5_future_independent_audit_actions.ts"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-next-independent-readonly-zero-provider
+  cancel-in-progress: false
+jobs:
+  validate-next-cohort-manifest:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    outputs:
+      ready: ${{ steps.admission.outputs.ready }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Locked install without provider and database secrets
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Verify pinned future cohort SHA and zero-provider GitHub context
+        id: admission
+        env:
+          P4_NEXT_AUDIT_EXACT_INTENT: NO_PROVIDER_NEW_COHORT_READONLY
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_future_independent_audit_actions.ts
+  independent-next-cohort-readonly:
+    needs: [validate-next-cohort-manifest]
+    if: ${{ needs.validate-next-cohort-manifest.outputs.ready == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    environment: phase2g-paid
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install locked dependencies without provider credentials
+        run: npm ci --include=dev --no-audit --no-fund
+      - name: Three source/PRE/callback/outcome SQL queries in one READ ONLY transaction
+        env:
+          P4_NEXT_AUDIT_EXACT_INTENT: NO_PROVIDER_NEW_COHORT_READONLY
+          GATE05_AUTOMATION_DATABASE_URL: ${{ secrets.GATE05_AUTOMATION_DATABASE_URL }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test "$GITHUB_REPOSITORY" = HKcode22/ReplitTranvr
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${RAPIDAPI_KEY:-}"
+          test -z "${V39_DATABASE_RUNTIME_URL:-}"
+          node --import tsx scripts/v39_phase4_gate5_future_independent_audit_actions.ts
+      - name: No provider or database writes; neither PRE nor labels certified
+        if: always()
+        run: |
+          {
+            echo 'A SHA-reviewed future cohort alone may reach protected READ ONLY PostgreSQL.'
+            echo 'No provider, Alert, INSERT or unreviewed backfill. Missing source is unknown, not zero.'
+            echo 'Scientific Gate5 PASS, Phase5 and Phase6 remain HOLD.'
+          } >> "$GITHUB_STEP_SUMMARY"
