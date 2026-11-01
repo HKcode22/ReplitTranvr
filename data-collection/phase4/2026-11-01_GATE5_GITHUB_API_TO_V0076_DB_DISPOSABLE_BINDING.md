@@ -28,3 +28,12 @@
 Require **four mandatory PR CI success checks**, merge only with verified head SHA, and independently inspect the main-push disposable PG16 job logs for `githubApiRunningVerified:true`, actual verified job time and run ID, exactly one ACTIVE test owner, three exact queries, zero physical attempts, zero reserved REST units, zero provider calls, zero production writes and explicit strict Gate5 false. Record the resulting PR and GitHub run IDs here once verified. A green CI does not certify real flight science.
 
 No Replit shell command or additional paid approval is necessary for this engineering slice.
+
+## Independently verified post-merge evidence — November 1, 2026, 11:28Z
+
+- [PR #322](https://github.com/HKcode22/ReplitTranvr/pull/322) passed all **four required PR CI** checks and merged at commit `fcae75f9202cab020a063bb98f042ce4ce349666`.
+- Separate [main-push V0076 disposable PostgreSQL run #41301954353](https://github.com/HKcode22/ReplitTranvr/actions/runs/41301954353), job `124834565412`, completed **SUCCESS**. I inspected the actual job log line rather than interpreting the green badge as data.
+- Real independent Actions API job clock: `actualGithubJobStartedAtUtc=2026-11-01T11:27:23.000Z`, `githubRunId=41301954353`, `githubApiRunningVerified=true`. The job persistently bound and read back this ID and clock from its **disposable** V0076 owner row, passed tampered-grid rollback and stale/early reservation refusal.
+- Reconciled disposable database: exactly **1 ACTIVE test owner, 3 allowed queries, 0 physical attempt rows, 0 reserved REST units**. Explicit logged `providerCalls=0`, `physicalGetRequests=0`, `productionDbWrites=0`.
+- The job independently reported `githubRealPrearmIndependentlyProven=false`, `sourceSemanticsVerified=false`, `retentionRightsVerified=false`, `liveReleaseShaAssigned=false`, `strictGate5Passed=false`, Phase5/6 false. The running GH job proof does **not** prove a genuinely future real flight cohort, scientific selected T, per-record actual-only wheels-off, operator/marketing physical-leg identity, legal data storage, persisted PRE or postflight outcome evidence.
+- Review project continuation from this checkpoint. No Replit shell command is needed for current engineering; the historical October 31 T−6h remains permanently **UNOBSERVED**. Do not reactivate the original dated cron or rewrite the hash-locked Implementation Log.
