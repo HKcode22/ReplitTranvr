@@ -5,6 +5,7 @@
  * no real frozen study cohort, source, rights, provider key or paid dispatch.
  */
 import pg from "pg";
+import {requireP4G5V0076DisposableGitHubProof} from "./v39_phase4_gate5_v0076_gh_running_disposable_attestation";
 import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
 import {prepareP4G5PhysicalOwnerV39}
@@ -36,6 +37,7 @@ export async function main(){
   throw Error("P4_G5_ACTIVE_DISPOSABLE_CONTEXT_OR_PRODUCTION_SECRET_HOLD");
  if(P4_G5_ACTIVE_LIVE_RELEASE_SHA_V39!==null)
   throw Error("P4_G5_ACTIVE_LIVE_RELEASE_UNEXPECTED");
+ const gh=await requireP4G5V0076DisposableGitHubProof(e,sha);
  const started=Date.now();
  const start=Date.parse(exactAt(started+26*3600000));
  const windowStart=new Date(start).toISOString();
@@ -60,19 +62,24 @@ export async function main(){
      err.message!=="P4_G5_ACTIVE_LIVE_RELEASE_SOURCE_RIGHTS_NOT_APPROVED")
    throw err;
  }
- // Simulate an early process start only in an isolated disposable database.
+ // Bind real Actions job-start to a disposable V0076 synthetic owner.
+ // No real future flight cohort, independently verified source or paid permit.
  const owner=prepareP4G5PhysicalOwnerV39({
   cohortId:manifest.cohortId,frozenManifestBytes:bytes,
   reviewedManifestSha256:digest,grid,horizon:"T-24h",
-  actualOwnerProcessStartedAtUtc:new Date(started).toISOString()
+  actualOwnerProcessStartedAtUtc:gh.actualGitHubJobStartedAtUtc
  });
- const input={owner,githubRunId:"9900112200",
+ const ghDigest=createHash("sha256").update(JSON.stringify({
+  runId:gh.githubRunId,sha,jobStart:gh.actualGitHubJobStartedAtUtc,
+  verifiedAt:gh.verifiedAtUtc
+ })).digest("hex");
+ const input={owner,githubRunId:gh.githubRunId,
   reviewedRunAuthorizationSha256:SHA,
   providerNativeSelectedTEvidenceSha256:SHA,
   perRecordActualOnlyRunwayEvidenceSha256:SHA,
   operatingPhysicalLegEvidenceSha256:SHA,
   lawfulContentRetentionEvidenceSha256:SHA,
-  independentlyAuthenticatedGitHubRunnerEvidenceSha256:SHA};
+  independentlyAuthenticatedGitHubRunnerEvidenceSha256:ghDigest};
  const c=new pg.Client({connectionString:e.DATABASE_URL,
   connectionTimeoutMillis:8000,query_timeout:15000});
  await c.connect();
@@ -80,6 +87,18 @@ export async function main(){
   const staged=await stageP4G5PreparedOwnerDbOnlyV39(c,input);
   if(staged.ownerRowsNewlyInserted!==1)
    throw Error("P4_G5_ACTIVE_DISPOSABLE_STAGING_NOT_NEW");
+  // Prove the actual API-verified GitHub run ID and job-start clock
+  // were durably stored, not merely printed next to a simulated owner.
+  const bound=await c.query(
+   "SELECT github_run_id,actual_github_runner_started_at_utc "+
+   "FROM clean.phase4_g5_fids_physical_owner_v39 "+
+   "WHERE owner_digest=$1",[owner.ownerDigest]);
+  if(bound.rows.length!==1||
+     bound.rows[0].github_run_id!==gh.githubRunId||
+     !(bound.rows[0].actual_github_runner_started_at_utc instanceof Date)||
+     bound.rows[0].actual_github_runner_started_at_utc.toISOString()!==
+      gh.actualGitHubJobStartedAtUtc)
+   throw Error("P4_G5_ACTIVE_DISPOSABLE_REAL_GITHUB_DB_BINDING_HOLD");
   // A same-count but tampered query grid MUST not activate. This is
   // disposable PostgreSQL only; restore the exact original after rollback.
   const driftSlot=owner.entries[1];
@@ -142,8 +161,10 @@ export async function main(){
   if(f.active!==1||f.queries!==3||f.attempts!==0||f.reserved!==0)
    throw Error("P4_G5_ACTIVE_DISPOSABLE_PG16_RECONCILIATION_HOLD");
   console.log(JSON.stringify({
-   status:"V0076_DISPOSABLE_PREPARED_TO_ACTIVE_BOUNDED_NO_GET",
-   ...f,githubRealPrearmIndependentlyProven:false,
+   status:"V0076_DISPOSABLE_REAL_GITHUB_JOB_TO_DB_ACTIVE_NO_GET",
+   ...f,githubApiRunningVerified:gh.githubRunningJobApiVerified,
+   actualGithubJobStartedAtUtc:gh.actualGitHubJobStartedAtUtc,
+   githubRunId:gh.githubRunId,githubRealPrearmIndependentlyProven:false,
    sourceSemanticsVerified:false,retentionRightsVerified:false,
    liveReleaseShaAssigned:false,providerCalls:0,
    physicalGetRequests:0,productionDbWrites:0,
