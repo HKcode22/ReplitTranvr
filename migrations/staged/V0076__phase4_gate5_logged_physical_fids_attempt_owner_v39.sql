@@ -135,7 +135,9 @@ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'P4_G5_EXACT_QUERY_REQUIRED'; END IF;
 
  v_now=clock_timestamp();
- IF v_now<v_query.planned_dispatch_utc OR
+ IF v_query.planned_dispatch_utc<v_owner.first_planned_dispatch_utc OR
+    v_query.planned_dispatch_utc>v_owner.last_planned_dispatch_utc OR
+    v_now<v_query.planned_dispatch_utc OR
     v_now>v_query.hard_latest_dispatch_utc OR
     v_now>=v_query.prediction_cutoff_utc-INTERVAL '15 minutes' OR
     v_now>=v_owner.hard_owner_expires_at_utc THEN
