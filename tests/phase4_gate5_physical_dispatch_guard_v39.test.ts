@@ -127,7 +127,7 @@ describe("Gate5 real physical attempt guard / simulated three-job GitHub owners"
   for(const patch of [
    {currentAccountApiUnitsRemaining:1},
    {currentProjectApiUnitsRemaining:1},
-   {projectUnitsAlreadyReservedForOtherSourceQueries:1},
+   {projectUnitsAlreadyReservedForOtherSourceQueries:53},
    {accountedThisOwnerPhysicalAttemptUnits:18},
    {currentAccountApiUnitsRemaining:-1}
   ]){
