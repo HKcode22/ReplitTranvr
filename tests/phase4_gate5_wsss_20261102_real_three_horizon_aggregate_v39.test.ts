@@ -17,7 +17,7 @@ function env(h:"T-24h"|"T-6h"|"T-90m"="T-24h"):NodeJS.ProcessEnv{
   GITHUB_JOB:h==="T-24h"?"owner-t24":h==="T-6h"?"owner-t6":"owner-t90",
   P4_G5_NOV2_HORIZON:h,
   P4_G5_NOV2_INTENT:"WSSS_NOV2_THREE_HORIZON_REAL_9_GET_18_UNIT_MAX_NO_PROVIDER_CONTENT",
-  P4_G5_CRON:h==="T-6h"?"15 8 2 11 *":h==="T-90m"?"17 12 2 11 *":"",
+  P4_G5_CRON:h==="T-6h"?"37 6 2 11 *":h==="T-90m"?"17 11 2 11 *":"",
   P4_G5_GH_READ_ONLY_TOKEN:"FAKE_READ_ONLY_TOKEN_NOT_REAL",
   AERODATABOX_API_KEY:"FAKE_TEST_KEY_NOT_REAL"
  };
@@ -91,7 +91,7 @@ describe("Gate5 real Nov2 future paid GH three-horizon source opportunities",()=
   const w=readFileSync(
    ".github/workflows/phase4-gate5-wsss-20261102-real-paid-aggregate-three-horizons.yml","utf8");
   for(const required of ["Merge pull request #326",
-   "cron: \"15 8 2 11 *\"","cron: \"17 12 2 11 *\"",
+   "cron: \"37 6 2 11 *\"","cron: \"17 11 2 11 *\"",
    "  owner-t24:","  owner-t6:","  owner-t90:",
    "actions: read","phase2g-paid","timeout-minutes: 345",
    "secrets.AERODATABOX_API_KEY"])
