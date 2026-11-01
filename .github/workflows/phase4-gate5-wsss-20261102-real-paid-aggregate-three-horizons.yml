@@ -6,10 +6,10 @@ on:
       - ".github/workflows/phase4-gate5-wsss-20261102-real-paid-aggregate-three-horizons.yml"
   schedule:
     # GitHub cron is an opportunity only; late jobs fail CLOSED.
-    # Nov2 T-6h physical slots 10:30/11:00/11:30 UTC. Prearm by 09:30.
-    - cron: "15 8 2 11 *"
-    # Nov2 T-90m physical slots 15:00/15:30/16:00 UTC. Prearm by 14:00.
-    - cron: "17 12 2 11 *"
+    # Nov2 T-6h physical slots 10:30/11:00/11:30 UTC. Prearm by 09:30. Cron 06:37Z = Nov1 22:37 PST, AFTER earliest allowed 06:30Z and within 330-minute step limit.
+    - cron: "37 6 2 11 *"
+    # Nov2 T-90m physical slots 15:00/15:30/16:00 UTC. Prearm by 14:00. Cron 11:17Z is AFTER earliest allowed 11:00Z and within 330-minute step limit.
+    - cron: "17 11 2 11 *"
 permissions:
   contents: read
   actions: read
@@ -47,7 +47,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node --import tsx scripts/v39_phase4_gate5_wsss_20261102_three_horizon_real_aggregate_paid_actions.ts
   owner-t6:
-    if: "${{ github.event_name == 'schedule' && github.event.schedule == '15 8 2 11 *' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}"
+    if: "${{ github.event_name == 'schedule' && github.event.schedule == '37 6 2 11 *' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}"
     runs-on: ubuntu-latest
     timeout-minutes: 345
     environment: phase2g-paid
@@ -77,7 +77,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           node --import tsx scripts/v39_phase4_gate5_wsss_20261102_three_horizon_real_aggregate_paid_actions.ts
   owner-t90:
-    if: "${{ github.event_name == 'schedule' && github.event.schedule == '17 12 2 11 *' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}"
+    if: "${{ github.event_name == 'schedule' && github.event.schedule == '17 11 2 11 *' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}"
     runs-on: ubuntu-latest
     timeout-minutes: 345
     environment: phase2g-paid
