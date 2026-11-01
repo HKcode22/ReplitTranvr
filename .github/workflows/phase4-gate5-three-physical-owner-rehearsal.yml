@@ -1,0 +1,88 @@
+name: Phase4 Gate5 Three GitHub Physical Owner Rehearsal
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/phase4-gate5-three-physical-owner-rehearsal.yml"
+      - "server/lib/disruption/phase4Gate5PhysicalOwnerDispatchGuard_v39.ts"
+      - "server/lib/disruption/phase4Gate5FrozenGridDraft_v39.ts"
+      - "scripts/v39_phase4_gate5_three_owner_physical_rehearsal_actions.ts"
+      - "data-collection/phase4/GATE5_NEXT_COHORT_PREARM_SYNTHETIC_HOLD.json"
+permissions:
+  contents: read
+concurrency:
+  group: phase4-gate5-three-physical-owner-dryrun-no-provider
+  cancel-in-progress: false
+jobs:
+  owner-t24:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: T-24h independent job / synthetic physical cutoff rehearsal ONLY
+        env:
+          P4_G5_OWNER_REHEARSAL_INTENT: SIMULATED_TIMES_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_three_owner_physical_rehearsal_actions.ts
+  owner-t6:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: T-6h independent job / synthetic physical cutoff rehearsal ONLY
+        env:
+          P4_G5_OWNER_REHEARSAL_INTENT: SIMULATED_TIMES_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_three_owner_physical_rehearsal_actions.ts
+  owner-t90:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci --include=dev --no-audit --no-fund
+      - name: T-90m independent job / synthetic physical cutoff rehearsal ONLY
+        env:
+          P4_G5_OWNER_REHEARSAL_INTENT: SIMULATED_TIMES_NO_PROVIDER
+        run: |
+          set -Eeuo pipefail
+          set +x
+          test -z "${AERODATABOX_API_KEY:-}"
+          test -z "${GATE05_AUTOMATION_DATABASE_URL:-}"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          node --import tsx scripts/v39_phase4_gate5_three_owner_physical_rehearsal_actions.ts
