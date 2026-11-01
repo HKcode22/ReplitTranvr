@@ -23,7 +23,7 @@ const H=["T-24h","T-6h","T-90m"] as const;
 const INTENT="WSSS_NOV2_THREE_HORIZON_REAL_9_GET_18_UNIT_MAX_NO_PROVIDER_CONTENT";
 const MAX_BODY=4*1024*1024;
 const JOBS={"T-24h":"owner-t24","T-6h":"owner-t6","T-90m":"owner-t90"} as const;
-const CRON={"T-6h":"15 8 2 11 *","T-90m":"17 12 2 11 *"} as const;
+const CRON={"T-6h":"37 6 2 11 *","T-90m":"17 11 2 11 *"} as const;
 function iso(ms:number){return new Date(ms).toISOString();}
 function rec(x:unknown):Record<string,unknown>{
  if(x===null||typeof x!=="object"||Array.isArray(x))

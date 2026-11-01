@@ -17,7 +17,7 @@ function env(h:"T-24h"|"T-6h"|"T-90m"="T-24h"):NodeJS.ProcessEnv{
   GITHUB_JOB:h==="T-24h"?"owner-t24":h==="T-6h"?"owner-t6":"owner-t90",
   P4_G5_NOV2_HORIZON:h,
   P4_G5_NOV2_INTENT:"WSSS_NOV2_THREE_HORIZON_REAL_9_GET_18_UNIT_MAX_NO_PROVIDER_CONTENT",
-  P4_G5_CRON:h==="T-6h"?"15 8 2 11 *":h==="T-90m"?"17 12 2 11 *":"",
+  P4_G5_CRON:h==="T-6h"?"37 6 2 11 *":h==="T-90m"?"17 11 2 11 *":"",
   P4_G5_GH_READ_ONLY_TOKEN:"FAKE_READ_ONLY_TOKEN_NOT_REAL",
   AERODATABOX_API_KEY:"FAKE_TEST_KEY_NOT_REAL"
  };
@@ -87,11 +87,32 @@ describe("Gate5 real Nov2 future paid GH three-horizon source opportunities",()=
   expect(()=>validatedContext({...env("T-6h"),P4_G5_CRON:"bad"},SHA,now))
    .toThrow();
  });
+ it("earliest scheduled job on Nov1 evening is within actual GitHub lifetime and before cutoff",()=>{
+  const g=draftP4Gate5ThreeHorizonGridV39(m.grid);
+  const scheduled=[
+   {horizon:"T-6h", cronUtc:"2026-11-02T06:37:00.000Z"},
+   {horizon:"T-90m",cronUtc:"2026-11-02T11:17:00.000Z"}
+  ];
+  for(const {horizon,cronUtc} of scheduled){
+   const owner=g.horizonOwners.find(x=>x.horizon===horizon)!;
+   const first=Date.parse(owner.earliestPhysicalStartUtc);
+   const last=Date.parse(owner.latestPhysicalStartUtc);
+   const prearmDeadline=Date.parse(owner.verifiedPrearmDeadlineUtc);
+   const wait=Math.min(240,330-(last-first)/60000);
+   const earliest=first-wait*60000;
+   const started=Date.parse(cronUtc);
+   expect(started).toBeGreaterThanOrEqual(earliest);
+   expect(started).toBeLessThan(prearmDeadline);
+   expect((last-started)/60000).toBeLessThan(330-10);
+  }
+  expect(new Date(Date.parse("2026-11-02T06:37:00.000Z")-
+    8*3600000).toISOString()).toBe("2026-11-01T22:37:00.000Z");
+ });
  it("GitHub paid trigger is one exact PR, with 2 early scheduled jobs",()=>{
   const w=readFileSync(
    ".github/workflows/phase4-gate5-wsss-20261102-real-paid-aggregate-three-horizons.yml","utf8");
   for(const required of ["Merge pull request #326",
-   "cron: \"15 8 2 11 *\"","cron: \"17 12 2 11 *\"",
+   "cron: \"37 6 2 11 *\"","cron: \"17 11 2 11 *\"",
    "  owner-t24:","  owner-t6:","  owner-t90:",
    "actions: read","phase2g-paid","timeout-minutes: 345",
    "secrets.AERODATABOX_API_KEY"])
