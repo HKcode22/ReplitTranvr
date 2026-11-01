@@ -1,0 +1,12 @@
+# November 1, 2026 — Phase 4 Gate 5 V0076 production metadata install and independent post-install check
+
+## Verified operator receipt (no secrets)
+One-use Replit shell, exact reviewed main `a108532822f87235ef4135c8d5b925806dde5171`, installer Git blob `d8390fc4452b2c2a51eedff02351c508ed634368`, staged SQL blob `c74b3d9d2cc635e8fa604f81f6c91595ea558f2f`. Read-only two-connection identity check gave `PASS_SAME_DATABASE_DISTINCT_PRIVILEGED_AND_RESTRICTED_ROLES`, verifying matching source-object fingerprints in the two role connections. Installer returned `V0076_METADATA_ONLY_INSTALLED_PRIVATE_UNGRANTED_NO_OWNER`: 4 metadata tables, 1 reservation function, 0 active owners, 0 physical attempts, 0 runtime role grants, 0 provider calls and 0 flight data writes. The SSL compatibility warning did not affect outcome. Receipt indexed in issue #293; avoid rerunning the one-use installer.
+
+## Independent main-push-only protected production verification
+New `.github/workflows/phase4-gate5-v0076-postinstall-readonly.yml` invokes the existing protected restricted `V39_DATABASE_RUNTIME_URL` only, with no `DATABASE_URL`, provider key, or paid-owner workflow. The companion script performs a PostgreSQL `REPEATABLE READ READ ONLY` transaction and `ROLLBACK`, reading system catalogs to assert precisely four LOGGED metadata tables; one SECURITY DEFINER reservation function with fixed `pg_catalog,clean` search path, with PUBLIC and runtime role unable to execute; no runtime SELECT/DML/TRUNCATE privileges on the four tables; no clean CREATE; and one enabled immutable-attempt trigger. Unit tests fail-closed on incomplete objects, incorrect grants, missing triggers, or an unauthorized GitHub context.
+
+This job **does not independently inspect record counts**, because the restricted runtime role deliberately lacks table SELECT. The user-provided install receipt is the source for zero owners and zero physical attempts until a separately reviewed owner-metadata reader is prepared.
+
+## Scientific state
+V0076 installed ≠ durable physical attempt owner ACTIVE, paid provider permit, or source certified. Issue #200 provider native selected T / actual-only wheels off / operating-leg lineage, issue #300 account-specific retention/caching rights, and issue #293 genuine future T−24h/T−6h/T−90m physical collections and persisted PRE/outcomes remain **HOLD**. Phase5 FREEZE HOLD, Phase6 NO-GO. Phase 4 files stay under data-collection/phase4.
