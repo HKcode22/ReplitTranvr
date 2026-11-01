@@ -119,12 +119,20 @@ export async function stageP4G5PreparedOwnerDbOnlyV39(
    "ON CONFLICT DO NOTHING",
    [o.manifestSha256,o.cohortId,o.projectRestApiUnitsBudget]);
   const budget=await db.query(
-   "SELECT reserved_units FROM clean.phase4_g5_fids_cohort_budget_v39 "+
+   "SELECT reserved_units,project_unit_ceiling FROM clean.phase4_g5_fids_cohort_budget_v39 "+
    "WHERE manifest_sha256=$1 AND cohort_id=$2 AND project_unit_ceiling=$3 "+
    "FOR UPDATE",
    [o.manifestSha256,o.cohortId,o.projectRestApiUnitsBudget]);
-  if(budget.rows.length!==1||Number(budget.rows[0].reserved_units)!==0)
-   throw Error("P4_G5_PREPARED_OWNER_BUDGET_DRIFT_OR_PAID_ACTIVITY_HOLD");
+  // A previously dispatched earlier horizon must NEVER prevent the later
+  // T-6h or T-90m owners from being admitted into the SAME frozen cohort.
+  // The V0076 database reservation function, not this PREPARED-only stage,
+  // controls actual physical spend and enforces its reserved-unit ceiling.
+  const reserved=Number(budget.rows[0]?.reserved_units);
+  const ceiling=Number(budget.rows[0]?.project_unit_ceiling);
+  if(budget.rows.length!==1||!Number.isSafeInteger(reserved)||
+     !Number.isSafeInteger(ceiling)||reserved<0||
+     ceiling!==o.projectRestApiUnitsBudget||reserved>ceiling)
+   throw Error("P4_G5_PREPARED_OWNER_BUDGET_DRIFT_OR_INVALID_CAP_HOLD");
   // An unrelated/replayed GitHub run cannot be used for another horizon.
   const replay=await db.query(
    "SELECT count(*)::int AS n FROM clean.phase4_g5_fids_physical_owner_v39 "+
