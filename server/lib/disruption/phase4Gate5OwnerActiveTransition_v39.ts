@@ -120,14 +120,30 @@ export async function activateP4G5PreparedOwnerDbOnlyV39(
      count(budget.rows[0].project_unit_ceiling)!==x.owner.projectRestApiUnitsBudget)
    throw Error("P4_G5_ACTIVE_COHORT_BUDGET_DRIFT");
 
+  // Do not admit a count-only query grid: immutable manifest binding needs
+  // exact digest, ordinal, source window, cutoff, and per-query attempt cap.
+  // A changed row with the same count must not receive ACTIVE privileges.
   const q=await db.query(
-   "SELECT count(*)::int AS n, "+
-   "count(*) FILTER(WHERE last_reserved_attempt<>0)::int AS attempted "+
+   "SELECT query_digest,query_index,planned_dispatch_utc,"+
+   "hard_latest_dispatch_utc,prediction_cutoff_utc,"+
+   "max_physical_attempts,last_reserved_attempt "+
    "FROM clean.phase4_g5_fids_allowed_query_v39 "+
-   "WHERE owner_digest=$1",[x.owner.ownerDigest]);
-  if(q.rows.length!==1||count(q.rows[0].n)!==x.owner.expectedQueries||
-     count(q.rows[0].attempted)!==0)
+   "WHERE owner_digest=$1 ORDER BY query_index ASC FOR UPDATE",
+   [x.owner.ownerDigest]);
+  if(q.rows.length!==x.owner.entries.length||
+     q.rows.length!==x.owner.expectedQueries)
    throw Error("P4_G5_ACTIVE_QUERY_GRID_OR_ATTEMPT_DRIFT");
+  for(const [i,e] of x.owner.entries.entries()){
+   const r=q.rows[i];
+   if(!r||r.query_digest!==e.queryDigest||
+      count(r.query_index)!==e.queryIndex||
+      pgIso(r.planned_dispatch_utc)!==e.plannedPhysicalStartUtc||
+      pgIso(r.hard_latest_dispatch_utc)!==e.hardLatestPhysicalStartUtc||
+      pgIso(r.prediction_cutoff_utc)!==e.cutoffUtc||
+      count(r.max_physical_attempts)!==x.owner.maxAttemptsPerQuery||
+      count(r.last_reserved_attempt)!==0)
+    throw Error("P4_G5_ACTIVE_QUERY_GRID_OR_ATTEMPT_DRIFT");
+  }
 
   const a=await db.query(
    "SELECT count(*)::int AS n FROM clean.phase4_g5_fids_physical_attempt_v39 "+
