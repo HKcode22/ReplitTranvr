@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**NEW — Three future GitHub horizon prearm owners, code + tests**](2026-10-31_GATE5_THREE_HORIZON_GITHUB_PREARM_ENGINEERING.md) — complete synthetic grid compiled to separate T−24h/T−6h/T−90m owner windows and budgeted hard cutoffs; **offline only, no provider or production schedule activated**
+
 - [**Owner-executed Oct31 free 60k balance + metadata-only original retention audit checkpoint**](2026-10-31_GATE5_CURRENT_QUOTA_AND_TECHNICAL_EXPIRY_AUDIT.md) — 59,974 remaining, 1,830 Alert credits, no paid provider; adds protected historical cohort expiry metadata-only counts, NOT terms approval or Gate5 PASS
 
 - [**DO NOT ASK AGAIN: original grandfathered RapidAPI Team Ultra verified in Gate0**](2026-10-31_GATE5_TEAM_ULTRA_ORIGINAL_ACCOUNT_RECALL_AND_FREE_QUOTA_CHECK.md) — September 10 live 60k entitlement plus owner-attested plan/$32 renewal, September 11 7-day raw/24-hour FIDS owner retention and 168-hour PITR warning; one optional zero-paid current free quota check; new rights not auto-PASS
