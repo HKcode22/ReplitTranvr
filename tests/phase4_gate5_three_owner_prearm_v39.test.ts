@@ -51,13 +51,13 @@ describe("Phase4 Gate5 three independent GitHub horizon owner plans",()=>{
  });
  it("rejects insufficient 15-minute guard, budget, and late freeze",()=>{
   const a=base();a.grid.acquisitionGuardMinutes=14;
-  expect(()=>compileP4G5OfflinePrearms(a,JSON.stringify(a)))
+  expect(()=>compileP4G5OfflinePrearms(a,JSON.stringify(a,null,2)+"\n"))
    .toThrow("P4_PREARM_DISPATCH_GUARD_BELOW_15M");
   const b=base();b.grid.projectRestApiUnitsBudget=53;
-  expect(()=>compileP4G5OfflinePrearms(b,JSON.stringify(b)))
+  expect(()=>compileP4G5OfflinePrearms(b,JSON.stringify(b,null,2)+"\n"))
    .toThrow("P4_GRID_WORST_CASE_API_UNITS_OVER_BUDGET");
   const c=base();c.grid.assignmentFrozenAtUtc="2027-01-14T16:00:00.000Z";
-  expect(()=>compileP4G5OfflinePrearms(c,JSON.stringify(c)))
+  expect(()=>compileP4G5OfflinePrearms(c,JSON.stringify(c,null,2)+"\n"))
    .toThrow("P4_GRID_FREEZE_TOO_LATE_FOR_EARLIEST_PREARM");
  });
  it("rejects wrong GitHub event, retry, checkout, provider or database credentials",()=>{
