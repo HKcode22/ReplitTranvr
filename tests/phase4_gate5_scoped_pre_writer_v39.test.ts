@@ -48,7 +48,7 @@ function rows(){
   codeshare_resolution_status:"confirmed_operating_leg"
  }));
 }
-function db(opts:{insertRowCount?:number;failInsertAt?:number;conflict?:boolean}={}){
+function db(opts:{insertRowCount?:number;failInsertAt?:number;conflict?:boolean;featureDrift?:boolean}={}){
  const calls:{sql:string;args:unknown[]}[]=[];let insertCalls=0;
  return {calls,query:async(sql:string,args:unknown[]=[])=>{
   calls.push({sql,args});
@@ -66,7 +66,9 @@ function db(opts:{insertRowCount?:number;failInsertAt?:number;conflict?:boolean}
      "departure.scheduledTime.utc:source-reviewed@1:"+sha("f"),
     population_query_id:"22222222-2222-2222-2222-222222222222",
     fids_response_hash:sha("a"),
-    builder_version:PRE_SNAPSHOT_BUILDER_VERSION
+    builder_version:PRE_SNAPSHOT_BUILDER_VERSION,
+    same_features:!opts.featureDrift,same_missingness:true,
+    same_frame:true,same_config:true,same_provenance:true
    }],rowCount:1};
   }
   return {rows:[],rowCount:0};
@@ -107,6 +109,10 @@ describe("Scoped Gate5 PRE writer requires independently reviewed native T and r
   await expect(persistP4G5ReviewedPreForCohortV39(bad,scope(),permit()))
    .rejects.toThrow("P4_G5_PRE_EXISTING_SNAPSHOT_PROVENANCE_CONFLICT");
   expect(bad.calls.at(-1)?.sql).toBe("ROLLBACK");
+  const changedFeatures=db({insertRowCount:0,featureDrift:true});
+  await expect(persistP4G5ReviewedPreForCohortV39(changedFeatures,scope(),permit()))
+   .rejects.toThrow("P4_G5_PRE_EXISTING_SNAPSHOT_PROVENANCE_CONFLICT");
+  expect(changedFeatures.calls.at(-1)?.sql).toBe("ROLLBACK");
  });
  it("holds every write when a feature transform was frozen after a flight prediction cutoff",async()=>{
   const c=db();
