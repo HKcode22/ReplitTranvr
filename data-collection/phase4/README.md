@@ -4,6 +4,7 @@
 
 ## Start here — live source of truth
 
+- [**Gate5 redo reusable three-horizon nonadaptive grid (OFFLINE ONLY)**](2026-10-31_GATE5_FROZEN_GRID_OFFLINE_PLANNER.md) — future source cutoff grid, bounded API-unit cost, IANA/DST and GitHub prearm constraints; **not a paid schedule or provider/selected-T certificate**
 - [**CURRENT Oct31 Gate5 redo root cause and restart handoff**](2026-10-31_GATE5_REDO_ROOTCAUSE_AND_RESTART_HANDOFF.md) — late 08:42 PDT T−6h cron fail-closed, measured paid/zero-paid ledger, 3 real postflight audits, new cohort scientific/prerequisite checklist, offline admission tests. **Read this first before any new paid operation.**
 - [October 31 actual T−90m 86-row source receipt and two push-prearmed postflight audits](2026-10-31_WSSS_T90_ACTUAL_SUCCESS_AND_POSTFLIGHT_PUSH_PREARM.md) — measured 1 paid GET/2 API units, 86 persisted provisional source observations; read-only GitHub fallback for 12:15 and 3:15 PDT while the original read-only crons remain backup
 - [2026-10-31 T−6 GitHub scheduler miss / T−90 push-prearm recovery](2026-10-31_WSSS_T6_GITHUB_SCHEDULER_MISS_T90_PUSH_PREARM_RECOVERY.md) — 3:07 AM paid cron missing; 7:37 AM guarded push-triggered GitHub runner, no backfill or duplicate request
