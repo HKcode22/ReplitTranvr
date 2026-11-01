@@ -4,6 +4,7 @@
 
 ## Start here — live source of truth
 
+- [**Fresh frozen-cohort generic read-only source/PRE/capture/outcome audit**](2026-10-31_GATE5_FRESH_COHORT_READONLY_AUDIT_HANDOFF.md) — parameterized three-query diagnostic for the NEXT approved service interval, preserves Oct31 historical runner, unknown stays NULL; code only, not yet a deployed new-cohort Actions job
 - [**Provider-native selected-T / actual-only runway semantic lineage guard (OFFLINE)**](2026-10-31_GATE5_PROVIDER_NATIVE_SEMANTIC_LINEAGE_GUARD.md) — current OpenAPI ambiguity, first-seen schedule/retime preservation, role-aware provisional source cutoffs, and pending authenticated source proof; no self-PASS or provider spend
 - [**Gate5 redo reusable three-horizon nonadaptive grid (OFFLINE ONLY)**](2026-10-31_GATE5_FROZEN_GRID_OFFLINE_PLANNER.md) — future source cutoff grid, bounded API-unit cost, IANA/DST and GitHub prearm constraints; **not a paid schedule or provider/selected-T certificate**
 - [**CURRENT Oct31 Gate5 redo root cause and restart handoff**](2026-10-31_GATE5_REDO_ROOTCAUSE_AND_RESTART_HANDOFF.md) — late 08:42 PDT T−6h cron fail-closed, measured paid/zero-paid ledger, 3 real postflight audits, new cohort scientific/prerequisite checklist, offline admission tests. **Read this first before any new paid operation.**
