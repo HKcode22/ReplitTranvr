@@ -82,7 +82,8 @@ describe("One actual paid FIDS probe, zero retention, no false science",()=>{
    ".github/workflows/phase4-gate5-one-real-paid-nonretained-fids-semantics.yml","utf8");
   const script=readFileSync(
    "scripts/v39_phase4_gate5_one_paid_nonretained_fids_semantics_actions.ts","utf8");
-  expect(workflow).toContain("Merge pull request #324");
+  expect(workflow).toContain("Merge pull request #325");
+  expect(workflow).toContain('if: "${{ github.event_name');
   expect(workflow).not.toContain("workflow_dispatch:");
   expect(workflow).not.toContain("schedule:");
   expect(workflow).not.toContain("secrets.V39_DATABASE_RUNTIME_URL");
