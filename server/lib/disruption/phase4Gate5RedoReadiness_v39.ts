@@ -20,8 +20,15 @@ export interface Gate5RedoHorizonEvidenceV39 {
   horizonEligibleCount: number | null;
   persistedCertifiedPreCount: number | null;
   webhookCapturedCount: number | null;
+  capturedOutsidePopulationCount: number | null;
+  requiredFeaturesCompleteCount: number | null;
+  optionalFeaturesMissingCount: number | null;
   targetApplicableCount: number | null;
   actualOutcomeObservedCount: number | null;
+  targetPendingCount: number | null;
+  targetCensoredCount: number | null;
+  targetMissingCount: number | null;
+  targetNotApplicableCount: number | null;
 }
 
 export interface Gate5RedoEvidenceV39 {
@@ -88,15 +95,23 @@ export function assessPhase4Gate5RedoEvidenceV39(e:Gate5RedoEvidenceV39):Gate5Re
     const counts=[
       h.candidatePopulationCount,h.confirmedOperatingCount,
       h.horizonEligibleCount,h.persistedCertifiedPreCount,
-      h.webhookCapturedCount,h.targetApplicableCount,
-      h.actualOutcomeObservedCount
+      h.webhookCapturedCount,h.capturedOutsidePopulationCount,
+      h.requiredFeaturesCompleteCount,h.optionalFeaturesMissingCount,
+      h.targetApplicableCount,h.actualOutcomeObservedCount,
+      h.targetPendingCount,h.targetCensoredCount,h.targetMissingCount,
+      h.targetNotApplicableCount
     ];
     if(counts.some(v=>v===null||!Number.isSafeInteger(v)||v<0)){
       horizonBlockers.push("UNMEASURED_COUNTERS:"+p);continue;
     }
-    const [population,confirmed,eligible,pre,captured,applicable,observed]=counts as number[];
+    const [population,confirmed,eligible,pre,captured,_outside,
+      requiredComplete,optionalMissing,applicable,observed,pending,censored,
+      missing,notApplicable]=counts as number[];
     if(confirmed>population||eligible>population||pre>eligible||
-       captured>population||applicable>pre||observed>applicable)
+       captured>population||applicable>pre||observed>applicable||
+       requiredComplete>pre||optionalMissing>pre||
+       applicable+notApplicable!==pre||
+       observed+pending+censored+missing!==applicable)
       horizonBlockers.push("COUNTER_CONTRADICTION:"+p);
     if(eligible===0)horizonBlockers.push("UNESTABLISHED_ELIGIBLE_DENOMINATOR:"+p);
     // The source may legitimately lack webhook/weather features; nevertheless
