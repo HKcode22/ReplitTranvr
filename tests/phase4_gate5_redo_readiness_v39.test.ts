@@ -14,7 +14,11 @@ const completeHorizon=(h:Gate5RedoHorizonEvidenceV39["horizon"]):Gate5RedoHorizo
  sourceAvailableBeforeCutoff:true,sourceIntegrityVerified:true,
  candidatePopulationCount:20,confirmedOperatingCount:14,
  horizonEligibleCount:14,persistedCertifiedPreCount:14,
- webhookCapturedCount:0,targetApplicableCount:14,actualOutcomeObservedCount:0
+ webhookCapturedCount:0,capturedOutsidePopulationCount:0,
+ requiredFeaturesCompleteCount:10,optionalFeaturesMissingCount:4,
+ targetApplicableCount:14,actualOutcomeObservedCount:0,
+ targetPendingCount:14,targetCensoredCount:0,targetMissingCount:0,
+ targetNotApplicableCount:0
 });
 const complete=():Gate5RedoEvidenceV39=>({
  frozenSingleCohort:"VERIFIED",
@@ -62,7 +66,9 @@ describe("Phase4 Gate5 next cohort redo evidence — offline only",()=>{
     {...completeHorizon("T-90m"),candidatePopulationCount:86,
       confirmedOperatingCount:0,horizonEligibleCount:null,
       persistedCertifiedPreCount:0,webhookCapturedCount:null,
-      targetApplicableCount:null,actualOutcomeObservedCount:null}
+      targetApplicableCount:null,actualOutcomeObservedCount:null,
+      targetPendingCount:null,targetCensoredCount:null,targetMissingCount:null,
+      targetNotApplicableCount:null}
   ];
   const a=assessPhase4Gate5RedoEvidenceV39(e);
   expect(a.sourcePilotAdmission).toBe("HOLD");
