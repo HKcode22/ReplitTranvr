@@ -103,14 +103,15 @@ export async function mainP4HistoricalSmokeV39(){
   const report=await auditP4FreshCohortV39(client,scope);
   const native=await auditP4OriginalNativeFieldPresenceV39(client,scope);
   const parity=await auditP4RawNormalizedReceiptParityV39(client,scope);
-  if(native.eligibleOriginalReceipts!==report.retainedOriginalQueryReceiptsMeasured||
-     (parity.totalRetainedOriginalReceipts!==null&&
+  if(native.eligibleOriginalReceipts!==report.retainedOriginalQueryReceiptsMeasured)
+   throw Error("P4_HIST_NATIVE_FIELD_SOURCE_RECEIPT_PARITY_HOLD");
+  if((parity.totalRetainedOriginalReceipts!==null&&
       parity.totalRetainedOriginalReceipts!==report.retainedOriginalQueryReceiptsMeasured)||
      (!parity.sampleTruncated&&parity.rawDepartures!==null&&
       parity.rawDepartures!==native.departureSourceObservations)||
      (!parity.sampleTruncated&&parity.normalizedPopulationRows!==null&&
       parity.normalizedPopulationRows!==report.sourcePopulationRowsMeasured))
-   throw Error("P4_HIST_NATIVE_RECEIPT_AND_NORMALIZATION_PARITY_HOLD");
+   throw Error("P4_HIST_RAW_NORMALIZATION_PARITY_HOLD");
   console.log(JSON.stringify({
    originalRawToNormalizedReceiptParity:parity,
    providerNativeOriginalFieldPresence:native,
