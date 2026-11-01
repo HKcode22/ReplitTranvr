@@ -4,6 +4,8 @@
 
 ## Start here — live source of truth
 
+- [**Owner-executed Oct31 free 60k balance + metadata-only original retention audit checkpoint**](2026-10-31_GATE5_CURRENT_QUOTA_AND_TECHNICAL_EXPIRY_AUDIT.md) — 59,974 remaining, 1,830 Alert credits, no paid provider; adds protected historical cohort expiry metadata-only counts, NOT terms approval or Gate5 PASS
+
 - [**DO NOT ASK AGAIN: original grandfathered RapidAPI Team Ultra verified in Gate0**](2026-10-31_GATE5_TEAM_ULTRA_ORIGINAL_ACCOUNT_RECALL_AND_FREE_QUOTA_CHECK.md) — September 10 live 60k entitlement plus owner-attested plan/$32 renewal, September 11 7-day raw/24-hour FIDS owner retention and 168-hour PITR warning; one optional zero-paid current free quota check; new rights not auto-PASS
 - [**October 31 provider rights/retention checkpoint — Nov 7 existing-subscriber terms transition**](2026-10-31_GATE5_PROVIDER_RETENTION_NOV7_RIGHTS_REVIEW.md) — default seven-day source-content ceiling versus qualified actual plan exceptions; pure offline rights check, not a license or science PASS
 - [**Historical FIDS raw-to-normalizer filter replay — pending live proof**](2026-10-31_GATE5_RETAINED_NORMALIZER_FILTER_REPLAY.md) — actual protected Oct31 per-receipt 24/24 and 87/86; candidate original software exclusion-reason audit, no backfill/no actual target certificate
