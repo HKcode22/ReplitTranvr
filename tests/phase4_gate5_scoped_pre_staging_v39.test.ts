@@ -108,6 +108,8 @@ describe("Gate5 new-cohort PRE as-of staging, not falsely certified persistence"
    "raw_expired_at_utc IS NULL","p.effective_available<=f.first_schedule-h.lag",
    "DISTINCT ON (analytic_identity_id)","LEFT JOIN LATERAL"])
    expect(sql).toContain(t);
+  expect(sql).toContain("response_hash IS NOT NULL AND original_hash IS NOT NULL");
+  expect(sql).toContain("member_available IS NOT NULL AND source_available IS NOT NULL");
   expect(sql).not.toContain("2026-10-31");
   expect(sql).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|TRUNCATE|CREATE|DROP)\b/i);
  });
