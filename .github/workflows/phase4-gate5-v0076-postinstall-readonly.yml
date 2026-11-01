@@ -6,6 +6,7 @@ on:
       - ".github/workflows/phase4-gate5-v0076-postinstall-readonly.yml"
       - "scripts/v39_phase4_gate5_v0076_postinstall_readonly_actions.ts"
       - "tests/phase4_gate5_v0076_postinstall_readonly_v39.test.ts"
+      - "data-collection/phase4/2026-11-01_GATE5_V0076_EXACT_ROLE_REVOKE_POSTREPAIR.md"
 permissions:
   contents: read
 concurrency:
