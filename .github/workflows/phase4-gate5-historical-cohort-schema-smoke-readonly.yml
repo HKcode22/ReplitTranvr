@@ -8,6 +8,7 @@ on:
       - "server/lib/disruption/phase4Gate5FreshCohortReadOnly_v39.ts"
       - "server/lib/disruption/phase4Gate5NativeFidsFieldPresence_v39.ts"
       - "server/lib/disruption/phase4Gate5RawNormalizedReceiptParity_v39.ts"
+      - "server/lib/disruption/phase4Gate5HistoricalOriginalFilterReplay_v39.ts"
       - "data-collection/phase4/2026-10-31_GATE5_HISTORICAL_SCHEMA_SMOKE_MANIFEST.json"
 permissions:
   contents: read
