@@ -54,17 +54,18 @@ function integer(n:number,min:number,max:number,label:string):number {
   return n;
 }
 function localStamp(time:number,zone:string){
+  const minuteTime=Math.floor(time/60000)*60000;
   const dtf=new Intl.DateTimeFormat("en-GB",{
     timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit",
     hour:"2-digit",minute:"2-digit",hourCycle:"h23"
   });
-  const p=Object.fromEntries(dtf.formatToParts(new Date(time))
+  const p=Object.fromEntries(dtf.formatToParts(new Date(minuteTime))
     .filter(x=>x.type!=="literal").map(x=>[x.type,x.value]));
   const stamp=`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
   // Local-zone offset cannot be inferred from a formatted clock alone.
   // Use ONLY to identify changing offsets and conservatively HOLD the
   // interval; never resolve DST overlap by a guessed UTC conversion.
-  const offset=(Date.parse(stamp+":00.000Z")-time)/60000;
+  const offset=(Date.parse(stamp+":00.000Z")-minuteTime)/60000;
   if(!Number.isFinite(offset))throw Error("P4_GRID_LOCAL_STAMP_INVALID");
   return {stamp,offset};
 }
